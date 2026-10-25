@@ -1,7 +1,6 @@
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { FileCheck2 } from 'lucide-react'
-import { NotRecordedFold } from './NotRecordedFold'
-import { plural } from '@/lib/format'
+import { FixedListFrame } from './FixedListFrame'
 import { useParticipantConsents, useUpsertConsent } from '@/api/hooks'
 import { Modal } from '@/components/Modal'
 import { FormField } from '@/components/FormField'
@@ -100,10 +99,6 @@ export default function ParticipantConsentsSection({ participantId }: { particip
     }
   }
 
-  // VISUAL-1 V2: seven "Not recorded" rows on a new participant fold into one line that opens to them.
-  const foldIfNoneRecorded = (list: ReactNode) =>
-    ordered.every((c) => c.granted == null) ? <NotRecordedFold summary={plural(ordered.length, 'consent')}>{list}</NotRecordedFold> : list
-
   return (
     <div className="space-y-4">
       <h3 className="font-semibold text-[var(--color-foreground)] flex items-center gap-2">
@@ -118,12 +113,22 @@ export default function ParticipantConsentsSection({ participantId }: { particip
         // GetForParticipant normally returns a row per ConsentType, but a still-empty list must not
         // leave a titled card with an empty body — say so in one muted line (density spec §5).
         <p className="text-sm text-[var(--color-muted-foreground)]">No consents recorded</p>
-      ) : foldIfNoneRecorded(
+      ) : (
+        <FixedListFrame
+          title="Consents"
+          rows={ordered}
+          isAnswered={(c) => c.granted != null}
+          unit="not recorded"
+          addLabel="Record a consent"
+          canAdd={canWriteConsents}
+          rowSelector="[data-consent-row]"
+        >
+          {(visible) => (
         <div className="space-y-2">
-          {ordered.map((consent) => {
+          {visible.map((consent) => {
             const { status, label } = consentStatus(consent.granted)
             return (
-              <div key={consent.consentType} className="flex items-center justify-between gap-3 p-3 rounded-lg border border-[var(--color-border)]">
+              <div key={consent.consentType} data-consent-row className="flex items-center justify-between gap-3 p-3 rounded-lg border border-[var(--color-border)]">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-[var(--color-foreground)] truncate">{CONSENT_TYPE_LABELS[consent.consentType]}</p>
                   {consent.granted === true && consent.signedByName && (
@@ -148,6 +153,8 @@ export default function ParticipantConsentsSection({ participantId }: { particip
             )
           })}
         </div>
+          )}
+        </FixedListFrame>
       )}
 
       <Modal

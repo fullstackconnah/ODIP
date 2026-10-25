@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import ContactsTab from './ContactsTab'
 import type { ParticipantContactRoleDto, PersonDto } from '@/api/types/contacts'
 import type { ParticipantDetailDto } from '@/api/types/participants'
@@ -200,5 +201,47 @@ describe('ContactsTab', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Remove' }))
 
     expect(mockDeleteMutateAsync).toHaveBeenCalledWith({ id: 'role-1', participantId: 'participant-1' })
+  })
+})
+
+describe('ContactsTab — long list (T10)', () => {
+  it('shows 5 of 23 rows, then all 23 with focus on the 6th row', async () => {
+    const user = userEvent.setup()
+    mockUseParticipantContactRoles.mockReturnValue({
+      data: Array.from({ length: 23 }, (_, i) => makeRole({ id: `c${i}`, personFullName: `Person ${i}` })),
+      isLoading: false,
+    })
+    const { container } = render(<ContactsTab participantId="participant-1" />)
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(5)
+    await user.click(screen.getByRole('button', { name: 'Show all 23' }))
+    const rows = container.querySelectorAll('tbody tr')
+    expect(rows).toHaveLength(23)
+    expect(rows[5]).toHaveFocus()
+  })
+})
+
+describe('ContactsTab — one-home copies (T11)', () => {
+  const renderRouted = (p = makeParticipant()) => render(<MemoryRouter><ContactsTab participantId="participant-1" participant={p} /></MemoryRouter>)
+
+  it('shows Preferred staff with a link worded by the viewer gate on Identity', () => {
+    const p = makeParticipant({ preferredStaffName: 'Alex Rivera' })
+    setUserRole('SupportWorker')
+    const { unmount } = renderRouted(p)
+    expect(screen.getByText(/Preferred staff: Alex Rivera/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'See Identity' })).toHaveAttribute('href', '/?tab=about#identity')
+    unmount()
+    setUserRole('Coordinator')
+    renderRouted(p)
+    expect(screen.getByRole('link', { name: 'Edit in Identity' })).toBeInTheDocument()
+  })
+
+  it('shows the Home and living hint only when a main support person or SIL provider is recorded', () => {
+    const { unmount } = renderRouted()
+    expect(screen.queryByText(/Recorded in Home and living/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Preferred staff/)).not.toBeInTheDocument()
+    unmount()
+    renderRouted(makeParticipant({ mainSupportPersonName: 'Jo Brown' }))
+    expect(screen.getByText(/Recorded in Home and living: Jo Brown. Add them as a contact to keep their details./)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Home and living/ })).toHaveAttribute('href', '/?tab=about#home-and-living')
   })
 })

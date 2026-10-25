@@ -80,6 +80,38 @@ describe('Dropdown — 44px option rows under a coarse pointer', () => {
   })
 })
 
+// Finish review 2026-10-26: a tall list (Jump to) has no 320px cap and, when it still overflows, ends on half a row so the cut says it scrolls.
+describe('Dropdown — maxPanelHeight', () => {
+  function openWith(maxPanelHeight?: number) {
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 844 })
+    const scroll = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight')
+    const offset = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight')
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, get() { return this.getAttribute('role') === 'listbox' ? 440 : 0 } })
+    Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, get() { return this.getAttribute('role') === 'option' ? 44 : 0 } })
+    render(<Dropdown variant="menu" onSelect={() => {}} label="Jump" items={ITEMS} maxPanelHeight={maxPanelHeight} />)
+    const trigger = screen.getByRole('button', { name: 'Jump' })
+    trigger.getBoundingClientRect = () => ({ top: 400, bottom: 430, height: 30, left: 300, right: 340, width: 40, x: 300, y: 400, toJSON: () => ({}) })
+    fireEvent.click(trigger)
+    return () => {
+      if (scroll) Object.defineProperty(HTMLElement.prototype, 'scrollHeight', scroll)
+      if (offset) Object.defineProperty(HTMLElement.prototype, 'offsetHeight', offset)
+    }
+  }
+
+  it('keeps the 320px cap when the prop is not passed', async () => {
+    const restore = openWith()
+    try { expect((await screen.findByRole('listbox')).style.maxHeight).toBe('320px') } finally { restore() }
+  })
+
+  it('lifts the cap, and trims an overflowing list to end on half a row', async () => {
+    const restore = openWith(Number.POSITIVE_INFINITY)
+    try {
+      // 406px of room below: 8 whole rows (352) plus half of the ninth (22).
+      expect((await screen.findByRole('listbox')).style.maxHeight).toBe('374px')
+    } finally { restore() }
+  })
+})
+
 // Finish review 2026-10-16: on a phone the chip menu (6 items) opened down over the fixed bottom nav and lost Delete. The panel opens on the side that holds all of it, the nav not counted as room.
 describe('Dropdown — which way the panel opens', () => {
   it('opens upward when the panel would run under the bottom nav, though 120px are free below', async () => {

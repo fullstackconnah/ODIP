@@ -8,7 +8,7 @@ describe('resolveTabKey', () => {
   it('maps all 11 old keys to the old-keys table', () => {
     expect(Object.keys(OLD_KEY_TARGET)).toHaveLength(11)
     const expected: Record<string, string> = {
-      details: 'about#ndis-plan', contacts: 'people#contacts', bookings: 'people#trips', support: 'daily#support-profile',
+      details: 'about#ndis-plan', contacts: 'people#contacts', bookings: 'people#trips', support: 'daily#support-needs',
       medications: 'health#medications', notes: 'records#notes', routines: 'daily#routines', 'restrictive-practices': 'health#restrictive-practices',
       claims: 'funding#claims', rostering: 'people#roster', history: 'records#history',
     }

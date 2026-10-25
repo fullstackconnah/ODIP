@@ -377,6 +377,12 @@ describe('PageHeaderMeta', () => {
     expect(container.textContent).toBe('Confirmed·14–17 Aug 2026')
   })
 
+  it('also skips whitespace-only strings, so an empty plan type never leaves a double dot', () => {
+    const { container } = render(<PageHeaderMeta><span>Active</span>{'  '}<span>Updated today</span></PageHeaderMeta>)
+    expect(dots(container)).toHaveLength(1)
+    expect(container.textContent).toBe('Active·Updated today')
+  })
+
   it('accepts plain strings as items', () => {
     const { container } = render(<PageHeaderMeta>{'Caloundra QLD'}{'4 days'}</PageHeaderMeta>)
     expect(container.textContent).toBe('Caloundra QLD·4 days')
@@ -403,5 +409,22 @@ describe('PageHeaderMeta', () => {
     const firstItem = screen.getByTestId('first').parentElement!
     expect(firstItem.querySelector('[aria-hidden="true"]')).toBeTruthy()
     expect(firstItem).toHaveClass('min-w-0')
+  })
+})
+
+describe('PageHeader actionsBesideTitle', () => {
+  // The title row is the h1 block's parent: [h1 block, actions] are its children.
+  const titleRow = () => screen.getByRole('heading', { level: 1 }).parentElement!.parentElement!
+
+  it('keeps the actions on the title row below md', () => {
+    render(<PageHeader title="Sophie Brown" action={<button>More</button>} actionsBesideTitle />)
+    expect(titleRow().className).toContain('flex-row')
+    expect(titleRow().className).not.toContain('flex-col')
+    expect(screen.getByRole('button', { name: 'More' }).parentElement!.className).toContain('shrink-0')
+  })
+
+  it('stacks the actions under the title by default', () => {
+    render(<PageHeader title="Sophie Brown" action={<button>More</button>} />)
+    expect(titleRow().className).toContain('flex-col')
   })
 })

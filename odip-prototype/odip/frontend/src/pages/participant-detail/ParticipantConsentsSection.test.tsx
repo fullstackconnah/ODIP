@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, within, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import ParticipantConsentsSection from './ParticipantConsentsSection'
 import { CONSENT_TYPES } from '@/api/types/enums'
@@ -80,7 +80,7 @@ describe('ParticipantConsentsSection', () => {
 
     expect(screen.getByText('Granted')).toBeInTheDocument()
     expect(screen.getByText('Declined')).toBeInTheDocument()
-    expect(screen.getAllByText('Not recorded')).toHaveLength(5)
+    expect(screen.getByText('5 of 7 not recorded')).toBeInTheDocument()
     expect(screen.getByText(/Signed by Sophie Brown/)).toBeInTheDocument()
   })
 
@@ -169,12 +169,43 @@ describe('ParticipantConsentsSection', () => {
 })
 
 // VISUAL-1 V2: seven "Not recorded" rows on a new participant fold into one line that opens to them.
-describe('ParticipantConsentsSection — nothing recorded yet', () => {
-  it('folds the list into one closed "Not recorded" line that holds the rows and their Edit', () => {
+describe('ParticipantConsentsSection — fixed list (T9)', () => {
+  function threeAnswered() {
+    const data = unansweredConsents()
+    for (let i = 0; i < 3; i++) data[i] = makeConsent({ id: 'c' + i, consentType: data[i].consentType, granted: i !== 1 })
+    mockUseParticipantConsents.mockReturnValue({ data, isLoading: false })
+  }
+
+  it('shows 3 answered rows and the count line; the editor reveals the rest and focuses the 4th row', async () => {
+    const user = userEvent.setup()
+    threeAnswered()
+    const { container } = render(<ParticipantConsentsSection participantId="participant-1" />)
+    expect(container.querySelectorAll('[data-consent-row]')).toHaveLength(3)
+    expect(screen.getByText('4 of 7 not recorded')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Record a consent' }))
+    const rows = container.querySelectorAll('[data-consent-row]')
+    expect(rows).toHaveLength(7)
+    await waitFor(() => expect(within(rows[3] as HTMLElement).getByRole('button', { name: 'Edit' })).toHaveFocus())
+  })
+
+  it('offers no reveal button to a role that cannot edit', () => {
+    setUserRole('SupportWorker')
+    threeAnswered()
     render(<ParticipantConsentsSection participantId="participant-1" />)
-    const fold = screen.getByText('Not recorded: 7 consents').closest('details')!
+    expect(screen.queryByRole('button', { name: 'Record a consent' })).not.toBeInTheDocument()
+  })
+
+  it('with nothing recorded: an editor gets a closed fold holding the rows, a viewer one plain line', () => {
+    const { unmount } = render(<ParticipantConsentsSection participantId="participant-1" />)
+    const fold = screen.getByText('Not recorded: Consents').closest('details')!
     expect(fold).not.toHaveAttribute('open')
     expect(fold).toContainElement(screen.getByText('Terms & Conditions'))
-    expect(within(fold).getAllByRole('button', { name: /edit/i }).length).toBeGreaterThan(0)
+    unmount()
+
+    setUserRole('SupportWorker')
+    render(<ParticipantConsentsSection participantId="participant-1" />)
+    expect(screen.getByText('Not recorded: Consents').closest('details')).toBeNull()
+    expect(screen.queryByText('Terms & Conditions')).not.toBeInTheDocument()
   })
 })

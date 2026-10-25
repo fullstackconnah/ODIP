@@ -1,7 +1,6 @@
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { HeartPulse } from 'lucide-react'
-import { NotRecordedFold } from './NotRecordedFold'
-import { plural } from '@/lib/format'
+import { FixedListFrame } from './FixedListFrame'
 import { useParticipantHealthConditions, useUpsertHealthCondition } from '@/api/hooks'
 import { Modal } from '@/components/Modal'
 import { FormField } from '@/components/FormField'
@@ -130,28 +129,31 @@ export default function ParticipantHealthConditionsSection({ participantId }: { 
     },
   ]
 
-  // VISUAL-1 V2: ten "Not recorded" rows on a new participant fold into one line that opens to them.
-  const foldIfNoneRecorded = (table: ReactNode) =>
-    ordered.length > 0 && ordered.every((c) => c.has == null) ? <NotRecordedFold summary={plural(ordered.length, 'health condition')}>{table}</NotRecordedFold> : table
-
   return (
     <div className="space-y-4">
-      <h3 className="font-semibold text-[var(--color-foreground)] flex items-center gap-2">
-        <HeartPulse className="w-4 h-4" /> Health Conditions
-      </h3>
-
       {phase === 'loading' ? (
         <PageState kind="loading" noun="health condition list" />
       ) : phase === 'error' ? (
         <PageState kind="error" noun="health condition list" onRetry={() => conditionsQuery.refetch()} />
-      ) : foldIfNoneRecorded(
-        <DataTable
-          data={ordered}
-          columns={columns}
-          keyField="conditionType"
-          emptyMessage="No health conditions recorded."
-          compact
-        />
+      ) : (
+        <FixedListFrame
+          title="Health conditions"
+          rows={ordered}
+          isAnswered={(c) => c.has != null}
+          unit="not recorded"
+          addLabel="Add a condition"
+          canAdd={canWriteHealthConditions}
+          rowSelector="tbody tr"
+        >
+          {(visible) => (
+            <>
+              <h3 className="font-semibold text-[var(--color-foreground)] flex items-center gap-2">
+                <HeartPulse className="w-4 h-4" /> Health conditions
+              </h3>
+              <DataTable data={visible} columns={columns} keyField="conditionType" emptyMessage="No health conditions recorded." compact />
+            </>
+          )}
+        </FixedListFrame>
       )}
 
       <Modal

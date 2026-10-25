@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import { useShowAll } from '@/components/ShowAllButton'
 import { Link, useNavigate } from 'react-router-dom'
 import { FileText } from 'lucide-react'
 import { useParticipantClaims, usePreviewShiftClaim, useGenerateShiftClaim } from '@/api/hooks'
@@ -56,6 +57,8 @@ export default function ClaimsTab({ participantId, canWrite }: { participantId: 
   // A failed or paused request is not an empty list: "No claims yet" is only for one that succeeded and came back empty.
   const phase = queryPhase(claimsQuery)
   const [showGenerateModal, setShowGenerateModal] = useState(false)
+  const tableRef = useRef<HTMLDivElement>(null)
+  const showAll = useShowAll(claims.length, tableRef, 'tbody tr')
 
   return (
     <Card
@@ -79,10 +82,12 @@ export default function ClaimsTab({ participantId, canWrite }: { participantId: 
           description="Generate a claim once this participant has completed, unclaimed shifts — or from a trip's own Claims tab."
         />
       ) : (
+        <div ref={tableRef}>
         <DataTable
           data={claims}
           keyField="id"
           sortable
+          limit={showAll.limit}
           emptyMessage="No claims yet"
           columns={[
             {
@@ -134,6 +139,8 @@ export default function ClaimsTab({ participantId, canWrite }: { participantId: 
             },
           ]}
         />
+        {showAll.button}
+        </div>
       )}
 
       {showGenerateModal && (

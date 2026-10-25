@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { useShowAll } from '@/components/ShowAllButton'
 import { Contact2, Plus } from 'lucide-react'
 import { useParticipantContactRoles, useDeleteContactRole } from '@/api/hooks'
 import { Modal } from '@/components/Modal'
@@ -14,9 +15,11 @@ import {
   CONTACT_ROLE_TYPE_LABELS, CONTACT_ROLE_STATUS_LABELS, NOMINEE_SCOPE_LABELS,
 } from '@/api/types/contacts'
 import type { ParticipantContactRoleDto } from '@/api/types/contacts'
+import type { ParticipantDetailDto } from '@/api/types/participants'
 import { extractErrorMessage } from '@/lib/utils'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
+import { SeeSectionLink } from './SeeSectionLink'
 
 // A row's actions repeat on every row, and one person can hold several roles, so their names carry both.
 const subject = (role: ParticipantContactRoleDto) => `${role.personFullName}, ${CONTACT_ROLE_TYPE_LABELS[role.roleType]}`
@@ -46,13 +49,16 @@ function roleSummaryLine(role: ParticipantContactRoleDto): string {
   }
 }
 
-export default function ContactsTab({ participantId }: { participantId: string | undefined }) {
-  const { canWriteContacts: canWrite } = usePermissions()
+/** `participant` is given on the participant page, which shows read-only copies of facts whose home is About (plan section 9); the profile wizard omits it. */
+export default function ContactsTab({ participantId, participant }: { participantId: string | undefined; participant?: ParticipantDetailDto }) {
+  const { canWriteContacts: canWrite, canWriteParticipantDetails } = usePermissions()
   const rolesQuery = useParticipantContactRoles(participantId)
   const roles = rolesQuery.data ?? []
   // A failed or paused request is not an empty list: "No contacts recorded" is only for one that succeeded and came back empty.
   const phase = queryPhase(rolesQuery)
   const deleteRole = useDeleteContactRole()
+  const tableRef = useRef<HTMLDivElement>(null)
+  const showAll = useShowAll(roles.length, tableRef, 'tbody tr')
 
   const [modalState, setModalState] = useState<{ mode: 'create' | 'edit'; role?: ParticipantContactRoleDto } | null>(null)
   const [deletingRole, setDeletingRole] = useState<ParticipantContactRoleDto | null>(null)
@@ -149,6 +155,19 @@ export default function ContactsTab({ participantId }: { participantId: string |
         )}
       </div>
 
+      {participant?.preferredStaffName && (
+        <p className="flex flex-wrap items-center gap-x-2 text-sm text-[var(--color-foreground)]">
+          Preferred staff: {participant.preferredStaffName}
+          <SeeSectionLink tab="about" hash="identity" section="Identity" canEdit={canWriteParticipantDetails} />
+        </p>
+      )}
+      {(participant?.mainSupportPersonName || participant?.silProviderName) && (
+        <p className="flex flex-wrap items-center gap-x-2 text-sm text-[var(--color-muted-foreground)]">
+          Recorded in Home and living: {[participant.mainSupportPersonName, participant.silProviderName].filter(Boolean).join(', ')}. Add them as a contact to keep their details.
+          <SeeSectionLink tab="about" hash="home-and-living" section="Home and living" canEdit={canWriteParticipantDetails} />
+        </p>
+      )}
+
       {listError && (
         <Callout tone="error"
           actions={<Button variant="ghost" size="sm" onClick={() => setListError(null)}>Dismiss</Button>}>
@@ -167,13 +186,17 @@ export default function ContactsTab({ participantId }: { participantId: string |
           description="Add next of kin, guardians, support coordinators, plan managers, and other key contacts for this participant."
         />
       ) : (
-        <DataTable
-          data={roles}
-          columns={columns}
-          keyField="id"
-          sortable
-          emptyMessage="No contacts recorded"
-        />
+        <div ref={tableRef}>
+          <DataTable
+            data={roles}
+            columns={columns}
+            keyField="id"
+            sortable
+            limit={showAll.limit}
+            emptyMessage="No contacts recorded"
+          />
+          {showAll.button}
+        </div>
       )}
 
       <Modal

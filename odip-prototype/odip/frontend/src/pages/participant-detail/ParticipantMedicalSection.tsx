@@ -103,7 +103,7 @@ export function ParticipantMedicalSection({ p, participantId, canEdit }: { p: Pa
 
   return (
     <SectionEditPanel title="Medical" canEdit={canEdit} isDirty={isDirty} onEditStart={() => { setDraft(saved); setCustomDiagnosisInput('') }} onCancel={() => { setDraft(saved); setCustomDiagnosisInput('') }} onSave={handleSave}>
-      {(editing) => editing ? (
+      {(editing, startEdit) => editing ? (
         <div className={formGrid}>
           <FormField label="Primary Diagnosis" className={span.medium}>
             <select value={draft.primaryDiagnosis} onChange={(e) => setDraft((d) => ({ ...d, primaryDiagnosis: e.target.value }))}>
@@ -214,7 +214,7 @@ export function ParticipantMedicalSection({ p, participantId, canEdit }: { p: Pa
           </FormField>
         </div>
       ) : (
-        <FactList
+        <FactList hideEmpty onAdd={canEdit ? () => startEdit('first-empty') : undefined}
           items={[
             { label: 'Primary Diagnosis', value: p.primaryDiagnosis },
             { label: 'Other Diagnoses', value: p.otherDiagnoses?.length ? <span className="flex flex-wrap gap-1">{p.otherDiagnoses.map((d) => <Tag key={d} label={d} />)}</span> : undefined },

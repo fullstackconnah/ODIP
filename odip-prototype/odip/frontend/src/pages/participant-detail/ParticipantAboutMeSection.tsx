@@ -54,7 +54,7 @@ export function ParticipantAboutMeSection({ p, participantId, canEdit }: { p: Pa
 
   return (
     <SectionEditPanel title="About Me" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
-      {(editing) => editing ? (
+      {(editing, startEdit) => editing ? (
         <div className={formGrid}>
           <FormField label="Goals" className={span.medium}>
             <textarea value={draft.goals} onChange={(e) => setDraft((d) => ({ ...d, goals: e.target.value }))} rows={2} />
@@ -76,7 +76,7 @@ export function ParticipantAboutMeSection({ p, participantId, canEdit }: { p: Pa
           </FormField>
         </div>
       ) : (
-        <FactList
+        <FactList hideEmpty onAdd={canEdit ? () => startEdit('first-empty') : undefined}
           items={[
             { label: 'Goals', value: pl(p.goals) },
             { label: 'Support Areas', value: pl(p.supportAreas) },

@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import MedicationsTab from './MedicationsTab'
-import type { AdministrationDto } from '@/api/types/medications'
+import type { AdministrationDto, MedicationListDto } from '@/api/types/medications'
 import { TONE } from '@/lib/tone'
 
 const { mockUseParticipantMedications, mockUseParticipantAdministrations, mockNavigate, permissionsOverride } = vi.hoisted(() => ({
@@ -167,5 +167,53 @@ describe('MedicationsTab — the medication card by role', () => {
     const link = screen.getByText('Metformin').closest('a')
     if (links) expect(link).toHaveAttribute('href', '/medications/med-1/edit')
     else expect(link).toBeNull()
+  })
+})
+
+function makeMedication(overrides: Partial<MedicationListDto> = {}): MedicationListDto {
+  return {
+    id: 'med-1',
+    participantId: 'participant-1',
+    participantName: 'Sophie Brown',
+    name: 'Risperidone',
+    strength: '1mg',
+    form: 'Tablet',
+    route: 'Oral',
+    doseDescription: '1 tablet',
+    type: 'Regular',
+    timesOfDay: '08:00',
+    frequency: 'Daily',
+    daysOfWeek: [],
+    intervalDays: null,
+    anchorDate: null,
+    status: 'Active',
+    isHighRisk: false,
+    isPsychotropic: true,
+    isChemicalRestraint: true,
+    drugSchedule: 'Schedule4',
+    supportLevel: 'Administer',
+    packaging: 'OriginalPackaging',
+    startDate: '2026-01-01',
+    endDate: null,
+    nextReviewDue: null,
+    complianceFlags: [],
+    ...overrides,
+  }
+}
+
+describe('participant-detail/MedicationsTab — long list (T10)', () => {
+  it('shows 5 of 23 active medications, then all 23 with focus on the 6th row', async () => {
+    const user = userEvent.setup()
+    mockUseParticipantAdministrations.mockReturnValue({ data: [] })
+    mockUseParticipantMedications.mockReturnValue({
+      data: Array.from({ length: 23 }, (_, i) => makeMedication({ id: `m${i}`, name: `Med ${i}` })),
+      isLoading: false,
+    })
+    const { container } = renderTab()
+    expect(container.querySelectorAll('[data-show-row]')).toHaveLength(5)
+    await user.click(screen.getByRole('button', { name: 'Show all 23' }))
+    const rows = container.querySelectorAll('[data-show-row]')
+    expect(rows).toHaveLength(23)
+    expect(rows[5]).toHaveFocus()
   })
 })

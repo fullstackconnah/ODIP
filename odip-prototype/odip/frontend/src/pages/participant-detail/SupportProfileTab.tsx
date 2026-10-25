@@ -1,15 +1,12 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { ShieldAlert } from 'lucide-react'
-import { useParticipant, usePatchParticipant, useSupportProfile, useUpdateSupportProfile } from '@/api/hooks'
-import { usePermissions } from '@/lib/permissions'
-import { formatDateAu, extractErrorMessage } from '@/lib/utils'
+import { useQueryClient } from '@tanstack/react-query'
+import { usePatchParticipant } from '@/api/hooks'
+import { extractErrorMessage } from '@/lib/utils'
 import { FormField, labelClass } from '@/components/FormField'
 import { Dropdown } from '@/components/Dropdown'
 import { FactList } from '@/components/FactList'
-import { PageState } from '@/components/PageState'
-import { isNotFoundError } from '@/lib/httpStatus'
 import { ToggleGroup } from '@/components/ToggleGroup'
-import { TAP_AREA } from '@/components/tapArea'
 import { SectionEditPanel } from './SectionEditPanel'
 import {
   MOBILITY_SUPPORT_OPTIONS, OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS,
@@ -17,9 +14,8 @@ import {
 } from '@/api/types/participants'
 import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS, AMBULANT_STATUSES, PERSONAL_CARE_LEVELS, RISK_RATING_LEVELS } from '@/api/types/enums'
 import type { AmbulantStatus, PersonalCareLevel, RiskRatingLevel, OvernightSupportType, SupportRatio } from '@/api/types/enums'
-import type { ParticipantDetailDto, SupportProfileDto } from '@/api/types/participants'
+import type { ParticipantDetailDto } from '@/api/types/participants'
 import type { PatchSupportNeedsMobilityDto } from '@/api/types/participant-patch'
-import { retryingAfterError } from '@/lib/queryPhase'
 
 function Tag({ label }: { label: string }) {
   return (
@@ -93,6 +89,22 @@ function snmSnapshot(p: ParticipantDetailDto): PatchSupportNeedsMobilityDto {
   }
 }
 
+/**
+ * Saves one card's slice of the shared supportNeedsMobility group. The group is rebuilt from the LATEST cached participant when the
+ * save runs (not from the props the card rendered with), and the save stays pending until the refetch lands: usePatchParticipant only
+ * invalidates, so a second card saved straight after the first would otherwise put the first card's old value back.
+ * shortcut: two cards saved within one refetch of each other can still race; upgrade to a page-level save queue if users hit it.
+ */
+function useSaveSnm(participantId: string, p: ParticipantDetailDto) {
+  const qc = useQueryClient()
+  const patch = usePatchParticipant()
+  return async (draft: Partial<PatchSupportNeedsMobilityDto>) => {
+    const latest = qc.getQueryData<ParticipantDetailDto>(['participant', participantId]) ?? p
+    await patch.mutateAsync({ id: participantId, data: { supportNeedsMobility: { ...snmSnapshot(latest), ...draft } } })
+    await qc.invalidateQueries({ queryKey: ['participant', participantId] })
+  }
+}
+
 type CommonSectionProps = {
   p: ParticipantDetailDto
   participantId: string
@@ -107,18 +119,15 @@ function readSupportNeeds(p: ParticipantDetailDto): SupportNeedsDraft {
   return { isHighSupport: p.isHighSupport, isIntensiveSupport: p.isIntensiveSupport, supportRatio: p.supportRatio }
 }
 
-function SupportNeedsSection({ p, participantId, canEdit, onViewRestrictivePractices }: CommonSectionProps & { onViewRestrictivePractices: () => void }) {
-  const patchParticipant = usePatchParticipant()
+export function SupportNeedsSection({ p, participantId, canEdit, restrictiveLink }: CommonSectionProps & { restrictiveLink: ReactNode }) {
+  const saveSnm = useSaveSnm(participantId, p)
   const saved = readSupportNeeds(p)
   const [draft, setDraft] = useState<SupportNeedsDraft>(saved)
   const isDirty = draft.isHighSupport !== saved.isHighSupport || draft.isIntensiveSupport !== saved.isIntensiveSupport || draft.supportRatio !== saved.supportRatio
 
   async function handleSave() {
     try {
-      await patchParticipant.mutateAsync({
-        id: participantId,
-        data: { supportNeedsMobility: { ...snmSnapshot(p), ...draft } },
-      })
+      await saveSnm(draft)
     } catch (err) {
       throw new Error(extractErrorMessage(err, 'Failed to save Support Needs.'))
     }
@@ -126,7 +135,7 @@ function SupportNeedsSection({ p, participantId, canEdit, onViewRestrictivePract
 
   return (
     <SectionEditPanel title="Support Needs" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
-      {(editing) => editing ? (
+      {(editing, startEdit) => editing ? (
         <div className="space-y-4">
           <FormField label="High Support" layout="checkbox">
             <input type="checkbox" checked={draft.isHighSupport} onChange={(e) => setDraft((d) => ({ ...d, isHighSupport: e.target.checked }))} className="w-4 h-4 rounded border-[var(--color-border)]" />
@@ -144,7 +153,7 @@ function SupportNeedsSection({ p, participantId, canEdit, onViewRestrictivePract
           </FormField>
         </div>
       ) : (
-        <FactList
+        <FactList hideEmpty onAdd={canEdit ? () => startEdit('first-empty') : undefined}
           items={[
             { label: 'High Support', value: p.isHighSupport ? 'Yes' : 'No' },
             { label: 'Intensive Support', value: p.isIntensiveSupport ? 'Yes' : 'No' },
@@ -158,9 +167,7 @@ function SupportNeedsSection({ p, participantId, canEdit, onViewRestrictivePract
                   {p.hasRestrictivePracticeFlag
                     ? <span className="inline-flex items-center gap-1"><ShieldAlert className="w-4 h-4 text-[var(--color-warning)]" aria-hidden="true" /> Yes</span>
                     : 'No'}
-                  <button type="button" onClick={onViewRestrictivePractices} className={`${TAP_AREA} text-xs text-[var(--color-primary)] hover:underline`}>
-                    View Restrictive Practices tab
-                  </button>
+                  {restrictiveLink}
                 </span>
               ),
             },
@@ -179,8 +186,8 @@ function readMobilityAids(p: ParticipantDetailDto): MobilityAidsDraft {
   return { mobilityAidWheelchair: p.mobilityAidWheelchair, mobilityAidWalker: p.mobilityAidWalker, mobilitySupportOptions: p.mobilitySupportOptions ?? [] }
 }
 
-function MobilityAidsSection({ p, participantId, canEdit }: CommonSectionProps) {
-  const patchParticipant = usePatchParticipant()
+export function MobilityAidsSection({ p, participantId, canEdit }: CommonSectionProps) {
+  const saveSnm = useSaveSnm(participantId, p)
   const saved = readMobilityAids(p)
   const [draft, setDraft] = useState<MobilityAidsDraft>(saved)
   const isDirty = draft.mobilityAidWheelchair !== saved.mobilityAidWheelchair
@@ -190,10 +197,7 @@ function MobilityAidsSection({ p, participantId, canEdit }: CommonSectionProps) 
 
   async function handleSave() {
     try {
-      await patchParticipant.mutateAsync({
-        id: participantId,
-        data: { supportNeedsMobility: { ...snmSnapshot(p), ...draft } },
-      })
+      await saveSnm(draft)
     } catch (err) {
       throw new Error(extractErrorMessage(err, 'Failed to save Mobility Aids & Support.'))
     }
@@ -204,7 +208,7 @@ function MobilityAidsSection({ p, participantId, canEdit }: CommonSectionProps) 
 
   return (
     <SectionEditPanel title="Mobility Aids & Support" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
-      {(editing) => editing ? (
+      {(editing, startEdit) => editing ? (
         <div className="space-y-4">
           <fieldset className="m-0 p-0 border-0">
             <legend className={labelClass}>Mobility Aids</legend>
@@ -242,7 +246,7 @@ function MobilityAidsSection({ p, participantId, canEdit }: CommonSectionProps) 
           </fieldset>
         </div>
       ) : (
-        <FactList
+        <FactList hideEmpty onAdd={canEdit ? () => startEdit('first-empty') : undefined}
           items={[
             { label: 'Mobility Aids', value: readMobilityAidBadges.length ? <TagList labels={readMobilityAidBadges} /> : undefined },
             { label: 'Mobility Support', value: p.mobilitySupportOptions?.length ? <TagList labels={p.mobilitySupportOptions} /> : undefined },
@@ -277,18 +281,15 @@ function overnightSupportText(p: ParticipantDetailDto): string | undefined {
   return ratioLabel ? `${typeLabel} (${ratioLabel})` : typeLabel
 }
 
-function OvernightSupportSection({ p, participantId, canEdit }: CommonSectionProps) {
-  const patchParticipant = usePatchParticipant()
+export function OvernightSupportSection({ p, participantId, canEdit }: CommonSectionProps) {
+  const saveSnm = useSaveSnm(participantId, p)
   const saved = readOvernight(p)
   const [draft, setDraft] = useState<OvernightDraft>(saved)
   const isDirty = draft.overnightSupport !== saved.overnightSupport || draft.overnightRatio !== saved.overnightRatio
 
   async function handleSave() {
     try {
-      await patchParticipant.mutateAsync({
-        id: participantId,
-        data: { supportNeedsMobility: { ...snmSnapshot(p), ...draft } },
-      })
+      await saveSnm(draft)
     } catch (err) {
       throw new Error(extractErrorMessage(err, 'Failed to save Overnight Support.'))
     }
@@ -296,7 +297,7 @@ function OvernightSupportSection({ p, participantId, canEdit }: CommonSectionPro
 
   return (
     <SectionEditPanel title="Overnight Support" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
-      {(editing) => editing ? (
+      {(editing, startEdit) => editing ? (
         <div className="space-y-4">
           <FormField label="Overnight Support">
             <Dropdown
@@ -318,7 +319,7 @@ function OvernightSupportSection({ p, participantId, canEdit }: CommonSectionPro
           )}
         </div>
       ) : (
-        <FactList items={[{ label: 'Overnight Support', value: overnightSupportText(p) }]} />
+        <FactList hideEmpty onAdd={canEdit ? () => startEdit('first-empty') : undefined} items={[{ label: 'Overnight Support', value: overnightSupportText(p) }]} />
       )}
     </SectionEditPanel>
   )
@@ -346,18 +347,15 @@ const EQUIPMENT_FIELDS: { key: keyof EquipmentDraft; label: string }[] = [
   { key: 'requiresStandingMachine', label: 'Standing Machine' },
 ]
 
-function EquipmentSection({ p, participantId, canEdit }: CommonSectionProps) {
-  const patchParticipant = usePatchParticipant()
+export function EquipmentSection({ p, participantId, canEdit }: CommonSectionProps) {
+  const saveSnm = useSaveSnm(participantId, p)
   const saved = readEquipment(p)
   const [draft, setDraft] = useState<EquipmentDraft>(saved)
   const isDirty = EQUIPMENT_FIELDS.some((f) => draft[f.key] !== saved[f.key])
 
   async function handleSave() {
     try {
-      await patchParticipant.mutateAsync({
-        id: participantId,
-        data: { supportNeedsMobility: { ...snmSnapshot(p), ...draft } },
-      })
+      await saveSnm(draft)
     } catch (err) {
       throw new Error(extractErrorMessage(err, 'Failed to save Equipment.'))
     }
@@ -367,7 +365,7 @@ function EquipmentSection({ p, participantId, canEdit }: CommonSectionProps) {
 
   return (
     <SectionEditPanel title="Equipment" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
-      {(editing) => editing ? (
+      {(editing, startEdit) => editing ? (
         <fieldset className="m-0 p-0 border-0 space-y-2">
           <legend className="sr-only">Equipment</legend>
           {EQUIPMENT_FIELDS.map((f) => (
@@ -377,7 +375,7 @@ function EquipmentSection({ p, participantId, canEdit }: CommonSectionProps) {
           ))}
         </fieldset>
       ) : (
-        <FactList items={[{ label: 'Equipment', value: equipmentBadges.length ? <TagList labels={equipmentBadges} /> : undefined }]} />
+        <FactList hideEmpty onAdd={canEdit ? () => startEdit('first-empty') : undefined} items={[{ label: 'Equipment', value: equipmentBadges.length ? <TagList labels={equipmentBadges} /> : undefined }]} />
       )}
     </SectionEditPanel>
   )
@@ -385,63 +383,39 @@ function EquipmentSection({ p, participantId, canEdit }: CommonSectionProps) {
 
 // ─── Support Notes ──────────────────────────────────────────────────────────────────────────
 
-type SupportNotesDraft = { mobilityNotes: string; equipmentRequirements: string; transportRequirements: string }
+export type SupportNotesField = 'mobilityNotes' | 'equipmentRequirements' | 'transportRequirements'
 
-function readSupportNotes(p: ParticipantDetailDto): SupportNotesDraft {
-  return {
-    mobilityNotes: p.mobilityNotes ?? '', equipmentRequirements: p.equipmentRequirements ?? '', transportRequirements: p.transportRequirements ?? '',
-  }
+const SUPPORT_NOTES_CARD: Record<SupportNotesField, { title: string; placeholder: string }> = {
+  mobilityNotes: { title: 'Mobility notes', placeholder: 'Any mobility considerations...' },
+  equipmentRequirements: { title: 'Equipment notes', placeholder: 'Required equipment...' },
+  transportRequirements: { title: 'Transport notes', placeholder: 'Transport needs...' },
 }
 
-function SupportNotesSection({ p, participantId, canEdit }: CommonSectionProps) {
-  const patchParticipant = usePatchParticipant()
-  const saved = readSupportNotes(p)
-  const [draft, setDraft] = useState<SupportNotesDraft>(saved)
-  const isDirty = draft.mobilityNotes !== saved.mobilityNotes || draft.equipmentRequirements !== saved.equipmentRequirements || draft.transportRequirements !== saved.transportRequirements
+/** One of the three free-text notes of the supportNeedsMobility group, as its own card. */
+export function SupportNotesSection({ p, participantId, canEdit, field }: CommonSectionProps & { field: SupportNotesField }) {
+  const saveSnm = useSaveSnm(participantId, p)
+  const { title, placeholder } = SUPPORT_NOTES_CARD[field]
+  const saved = p[field] ?? ''
+  const [draft, setDraft] = useState(saved)
 
   async function handleSave() {
     try {
-      await patchParticipant.mutateAsync({
-        id: participantId,
-        data: {
-          supportNeedsMobility: {
-            ...snmSnapshot(p),
-            mobilityNotes: draft.mobilityNotes.trim() || null,
-            equipmentRequirements: draft.equipmentRequirements.trim() || null,
-            transportRequirements: draft.transportRequirements.trim() || null,
-          },
-        },
-      })
+      await saveSnm({ [field]: draft.trim() || null })
     } catch (err) {
-      throw new Error(extractErrorMessage(err, 'Failed to save Support Notes.'))
+      throw new Error(extractErrorMessage(err, `Failed to save ${title.toLowerCase()}.`))
     }
   }
 
-  // Only the notes that exist get a row; none at all collapses to the card's own line below.
-  const noteItems = [
-    { label: 'Mobility Notes', text: p.mobilityNotes },
-    { label: 'Equipment Requirements', text: p.equipmentRequirements },
-    { label: 'Transport Requirements', text: p.transportRequirements },
-  ]
-    .filter((n) => n.text)
-    .map((n) => ({ label: n.label, value: <span className="whitespace-pre-line">{n.text}</span> }))
-
   return (
-    <SectionEditPanel title="Support Notes" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
-      {(editing) => editing ? (
-        <div className="space-y-4">
-          <FormField label="Mobility Notes">
-            <textarea value={draft.mobilityNotes} onChange={(e) => setDraft((d) => ({ ...d, mobilityNotes: e.target.value }))} rows={2} placeholder="Any mobility considerations..." />
-          </FormField>
-          <FormField label="Equipment Requirements">
-            <textarea value={draft.equipmentRequirements} onChange={(e) => setDraft((d) => ({ ...d, equipmentRequirements: e.target.value }))} rows={2} placeholder="Required equipment..." />
-          </FormField>
-          <FormField label="Transport Requirements">
-            <textarea value={draft.transportRequirements} onChange={(e) => setDraft((d) => ({ ...d, transportRequirements: e.target.value }))} rows={2} placeholder="Transport needs..." />
-          </FormField>
-        </div>
+    <SectionEditPanel title={title} canEdit={canEdit} isDirty={draft !== saved} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
+      {(editing, startEdit) => editing ? (
+        <FormField label={title}>
+          <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={2} placeholder={placeholder} />
+        </FormField>
+      ) : saved ? (
+        <p className="whitespace-pre-line text-sm">{saved}</p>
       ) : (
-        <FactList items={noteItems} emptyMessage="No support notes recorded" />
+        <FactList hideEmpty items={[{ label: title, value: '' }]} onAdd={canEdit ? () => startEdit('first-empty') : undefined} />
       )}
     </SectionEditPanel>
   )
@@ -475,38 +449,31 @@ function readMobilityFunctional(p: ParticipantDetailDto): MobilityFunctionalDraf
   }
 }
 
-function MobilityFunctionalSection({ p, participantId, canEdit }: CommonSectionProps) {
-  const patchParticipant = usePatchParticipant()
+export function MobilityFunctionalSection({ p, participantId, canEdit }: CommonSectionProps) {
+  const saveSnm = useSaveSnm(participantId, p)
   const saved = readMobilityFunctional(p)
   const [draft, setDraft] = useState<MobilityFunctionalDraft>(saved)
   const isDirty = (Object.keys(saved) as (keyof MobilityFunctionalDraft)[]).some((k) => draft[k] !== saved[k])
 
   async function handleSave() {
     try {
-      await patchParticipant.mutateAsync({
-        id: participantId,
-        data: {
-          supportNeedsMobility: {
-            ...snmSnapshot(p),
-            ambulantStatus: (draft.ambulantStatus || null) as AmbulantStatus | null,
-            fallsRiskRating: (draft.fallsRiskRating || null) as RiskRatingLevel | null,
-            levelOfPersonalCare: (draft.levelOfPersonalCare || null) as PersonalCareLevel | null,
-            unevenGroundFlag: keyToTri(draft.unevenGroundFlag),
-            orthotics: draft.orthotics.trim() || null,
-            continenceSupportDetail: draft.continenceSupportDetail.trim() || null,
-            bowelCareDetail: draft.bowelCareDetail.trim() || null,
-            menstruationSupport: draft.menstruationSupport.trim() || null,
-            skinIntegrity: draft.skinIntegrity.trim() || null,
-          },
-        },
+      await saveSnm({
+        ambulantStatus: (draft.ambulantStatus || null) as AmbulantStatus | null,
+        fallsRiskRating: (draft.fallsRiskRating || null) as RiskRatingLevel | null,
+        levelOfPersonalCare: (draft.levelOfPersonalCare || null) as PersonalCareLevel | null,
+        unevenGroundFlag: keyToTri(draft.unevenGroundFlag),
+        orthotics: draft.orthotics.trim() || null,
+        continenceSupportDetail: draft.continenceSupportDetail.trim() || null,
+        bowelCareDetail: draft.bowelCareDetail.trim() || null,
+        menstruationSupport: draft.menstruationSupport.trim() || null,
+        skinIntegrity: draft.skinIntegrity.trim() || null,
       })
     } catch (err) {
       throw new Error(extractErrorMessage(err, 'Failed to save Mobility & Functional.'))
     }
   }
 
-  // The four core ratings always get a row ('—' when unrecorded); the free-text detail rows only
-  // appear once they have content. With every value empty, FactList collapses to "Not recorded".
+  // Every row is a fact; hideEmpty drops the unrecorded ones and names them in the foot line, where Add reaches them.
   const detailItems = [
     { label: 'Orthotics', text: p.orthotics },
     { label: 'Continence Support', text: p.continenceSupportDetail },
@@ -514,12 +481,11 @@ function MobilityFunctionalSection({ p, participantId, canEdit }: CommonSectionP
     { label: 'Menstruation Support', text: p.menstruationSupport },
     { label: 'Skin Integrity', text: p.skinIntegrity },
   ]
-    .filter((d) => d.text)
-    .map((d) => ({ label: d.label, value: <span className="whitespace-pre-line">{d.text}</span> }))
+    .map((d) => ({ label: d.label, value: d.text ? <span className="whitespace-pre-line">{d.text}</span> : undefined }))
 
   return (
     <SectionEditPanel title="Mobility & Functional" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
-      {(editing) => editing ? (
+      {(editing, startEdit) => editing ? (
         <div className="space-y-4">
           <div className="grid md:grid-cols-2 gap-4">
             <FormField label="Ambulant Status">
@@ -575,173 +541,10 @@ function MobilityFunctionalSection({ p, participantId, canEdit }: CommonSectionP
             { label: 'Level of Personal Care', value: p.levelOfPersonalCare ? PERSONAL_CARE_LEVEL_LABELS[p.levelOfPersonalCare] : undefined },
             ...detailItems,
           ]}
+          hideEmpty
+          onAdd={canEdit ? () => startEdit('first-empty') : undefined}
         />
       )}
     </SectionEditPanel>
-  )
-}
-
-// ─── Support Profile (the /support-profile sub-resource) ───────────────────────────────────
-
-type SupportProfileDraft = {
-  communicationNotes: string
-  behaviourSupportNotes: string
-  manualHandlingNotes: string
-  medicationHealthSummary: string
-  emergencyConsiderations: string
-  travelSpecificNotes: string
-  reviewDate: string
-}
-
-function readSupportProfile(sp: SupportProfileDto | undefined): SupportProfileDraft {
-  return {
-    communicationNotes: sp?.communicationNotes ?? '',
-    behaviourSupportNotes: sp?.behaviourSupportNotes ?? '',
-    manualHandlingNotes: sp?.manualHandlingNotes ?? '',
-    medicationHealthSummary: sp?.medicationHealthSummary ?? '',
-    emergencyConsiderations: sp?.emergencyConsiderations ?? '',
-    travelSpecificNotes: sp?.travelSpecificNotes ?? '',
-    reviewDate: sp?.reviewDate ? sp.reviewDate.split('T')[0] : '',
-  }
-}
-
-function SupportProfileSection({ participantId, canEdit, onViewRestrictivePractices }: { participantId: string; canEdit: boolean; onViewRestrictivePractices: () => void }) {
-  const { data: supportProfile } = useSupportProfile(participantId)
-  const updateSupportProfile = useUpdateSupportProfile()
-  const saved = readSupportProfile(supportProfile)
-  const [draft, setDraft] = useState<SupportProfileDraft>(saved)
-  const isDirty = (Object.keys(saved) as (keyof SupportProfileDraft)[]).some((k) => draft[k] !== saved[k])
-
-  async function handleSave() {
-    try {
-      await updateSupportProfile.mutateAsync({
-        id: participantId,
-        data: {
-          communicationNotes: draft.communicationNotes.trim() || undefined,
-          behaviourSupportNotes: draft.behaviourSupportNotes.trim() || undefined,
-          manualHandlingNotes: draft.manualHandlingNotes.trim() || undefined,
-          medicationHealthSummary: draft.medicationHealthSummary.trim() || undefined,
-          emergencyConsiderations: draft.emergencyConsiderations.trim() || undefined,
-          travelSpecificNotes: draft.travelSpecificNotes.trim() || undefined,
-          reviewDate: draft.reviewDate || undefined,
-        },
-      })
-    } catch (err) {
-      throw new Error(extractErrorMessage(err, 'Failed to save Support Profile.'))
-    }
-  }
-
-  const fields: { label: string; value: string | null | undefined }[] = [
-    { label: 'Communication Notes', value: supportProfile?.communicationNotes },
-    { label: 'Behaviour Support', value: supportProfile?.behaviourSupportNotes },
-    { label: 'Manual Handling', value: supportProfile?.manualHandlingNotes },
-    { label: 'Medication & Health', value: supportProfile?.medicationHealthSummary },
-    { label: 'Emergency Considerations', value: supportProfile?.emergencyConsiderations },
-    { label: 'Travel-Specific', value: supportProfile?.travelSpecificNotes },
-  ]
-
-  return (
-    <SectionEditPanel title="Support Profile" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
-      {(editing) => editing ? (
-        <div className="space-y-4">
-          {/* RestrictivePracticeDetails is server-side read-only-by-design (UpdateSupportProfileDto
-              has no field for it) — rendered here too, alongside the editable fields, so it isn't
-              lost from the section while it's mid-edit. */}
-          {supportProfile?.restrictivePracticeDetails && (
-            <FormField label="Restrictive Practice Details" hint="Read-only — managed from the Restrictive Practices register.">
-              <p className="whitespace-pre-line text-sm text-[var(--color-muted-foreground)] p-2.5 rounded-lg bg-[var(--color-muted)]">{supportProfile.restrictivePracticeDetails}</p>
-            </FormField>
-          )}
-          <FormField label="Communication Notes">
-            <textarea value={draft.communicationNotes} onChange={(e) => setDraft((d) => ({ ...d, communicationNotes: e.target.value }))} rows={3} placeholder="How this participant communicates..." />
-          </FormField>
-          <FormField label="Behaviour Support">
-            <textarea value={draft.behaviourSupportNotes} onChange={(e) => setDraft((d) => ({ ...d, behaviourSupportNotes: e.target.value }))} rows={3} placeholder="Behaviour support notes..." />
-          </FormField>
-          <FormField label="Manual Handling">
-            <textarea value={draft.manualHandlingNotes} onChange={(e) => setDraft((d) => ({ ...d, manualHandlingNotes: e.target.value }))} rows={3} placeholder="Manual handling requirements..." />
-          </FormField>
-          <FormField label="Medication & Health">
-            <textarea value={draft.medicationHealthSummary} onChange={(e) => setDraft((d) => ({ ...d, medicationHealthSummary: e.target.value }))} rows={3} placeholder="Medication and health summary..." />
-          </FormField>
-          <FormField label="Emergency Considerations">
-            <textarea value={draft.emergencyConsiderations} onChange={(e) => setDraft((d) => ({ ...d, emergencyConsiderations: e.target.value }))} rows={3} placeholder="Emergency considerations..." />
-          </FormField>
-          <FormField label="Travel-Specific">
-            <textarea value={draft.travelSpecificNotes} onChange={(e) => setDraft((d) => ({ ...d, travelSpecificNotes: e.target.value }))} rows={3} placeholder="Travel-specific notes..." />
-          </FormField>
-          <FormField label="Review Date">
-            <input type="date" value={draft.reviewDate} onChange={(e) => setDraft((d) => ({ ...d, reviewDate: e.target.value }))} />
-          </FormField>
-        </div>
-      ) : (
-        <div className="space-y-4 text-sm">
-          {supportProfile?.restrictivePracticeDetails && (
-            <div>
-              <p className="font-medium text-[var(--color-muted-foreground)] mb-1 flex items-center gap-2">
-                Restrictive Practice Details
-                <button type="button" onClick={onViewRestrictivePractices} className={`${TAP_AREA} text-xs text-[var(--color-primary)] hover:underline font-normal`}>
-                  View Restrictive Practices tab
-                </button>
-              </p>
-              <p className="whitespace-pre-line">{supportProfile.restrictivePracticeDetails}</p>
-            </div>
-          )}
-          {fields.filter((f) => f.value).map((f) => (
-            <div key={f.label}>
-              <p className="font-medium text-[var(--color-muted-foreground)] mb-1">{f.label}</p>
-              <p className="whitespace-pre-line">{f.value}</p>
-            </div>
-          ))}
-          {supportProfile?.reviewDate && <p className="text-xs text-[var(--color-muted-foreground)]">Review Date: {formatDateAu(supportProfile.reviewDate)}</p>}
-          {!supportProfile?.restrictivePracticeDetails && fields.every((f) => !f.value) && !supportProfile?.reviewDate && (
-            <p className="text-[var(--color-muted-foreground)]">No support profile recorded</p>
-          )}
-        </div>
-      )}
-    </SectionEditPanel>
-  )
-}
-
-// ─── Tab ──────────────────────────────────────────────────────────────────────────────────────
-
-/**
- * PD-6: the single editable home for every support-related field — merges the previously
- * read-only `/support-profile` sub-resource tab with the wizard's "Support Needs & Mobility" step
- * (now removed from the Details tab and turned read-only-in-edit-mode on the wizard itself, per
- * SPEC-03's PD-6). Six of the seven cards below share ONE core02 `supportNeedsMobility` PATCH
- * group (see snmSnapshot's doc); the seventh (Support Profile) reuses the existing, unchanged
- * `PUT /participants/{id}/support-profile`.
- */
-export default function SupportProfileTab({ participantId, onNavigateToTab }: { participantId: string | undefined; onNavigateToTab?: (tab: string) => void }) {
-  const { canWriteParticipantDetails, canWriteSupportProfile } = usePermissions()
-  const pageQuery = useParticipant(participantId)
-  const { data: p, isLoading, isError, error, refetch } = pageQuery
-  if (isLoading && !retryingAfterError(pageQuery)) return <PageState kind="loading" noun="support profile" />
-  if (!p || !participantId) {
-    return (isError || retryingAfterError(pageQuery)) && !isNotFoundError(error)
-      ? <PageState kind="error" noun="support profile" onRetry={() => refetch()} />
-      : <PageState kind="not-found" noun="participant" />
-  }
-
-  function viewRestrictivePractices() {
-    onNavigateToTab?.('restrictive-practices')
-  }
-
-  // Same section grid as the participant Details tab (density spec §5): auto-fill columns with
-  // `align-items:start`, so a short card never stretches to a tall neighbour's height, and a
-  // `min(26rem,100%)` track floor so it collapses to one column on a phone instead of overflowing.
-  // Every card is a plain grid cell — the two long ones (Mobility & Functional, Support Profile)
-  // no longer span the row, so a fact list isn't stretched across 1600px.
-  return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(min(26rem,100%),1fr))] items-start gap-[var(--section-gap)]">
-      <SupportNeedsSection p={p} participantId={participantId} canEdit={canWriteParticipantDetails} onViewRestrictivePractices={viewRestrictivePractices} />
-      <MobilityAidsSection p={p} participantId={participantId} canEdit={canWriteParticipantDetails} />
-      <OvernightSupportSection p={p} participantId={participantId} canEdit={canWriteParticipantDetails} />
-      <EquipmentSection p={p} participantId={participantId} canEdit={canWriteParticipantDetails} />
-      <SupportNotesSection p={p} participantId={participantId} canEdit={canWriteParticipantDetails} />
-      <MobilityFunctionalSection p={p} participantId={participantId} canEdit={canWriteParticipantDetails} />
-      <SupportProfileSection participantId={participantId} canEdit={canWriteSupportProfile} onViewRestrictivePractices={viewRestrictivePractices} />
-    </div>
   )
 }

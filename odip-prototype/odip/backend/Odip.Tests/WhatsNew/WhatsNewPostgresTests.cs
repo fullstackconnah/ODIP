@@ -169,7 +169,7 @@ public class WhatsNewPostgresTests : IClassFixture<PostgresFixture>
         var sql = read.WhatsNewEntries.Where(e => (e.Roles & audience) != 0).ToQueryString();
         Assert.Contains("&", sql);
         var support = Feed(await WithCaller(new WhatsNewController(read), userId, "SupportWorker").GetFeed(CancellationToken.None));
-        Assert.Equal(new[] { "Participant pages are now split into tabs", "Dark mode is here" }, support.Entries.Select(e => e.Title));
+        Assert.Equal(new[] { "Participant pages are easier to scan", "Participant pages are now split into tabs", "Dark mode is here" }, support.Entries.Select(e => e.Title));
     }
 
     [SkippableFact]

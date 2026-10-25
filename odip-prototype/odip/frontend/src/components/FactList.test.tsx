@@ -73,3 +73,50 @@ describe('FactList', () => {
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
   })
 })
+
+describe('FactList hideEmpty', () => {
+  const five = (empty: number) => Array.from({ length: 5 }, (_, i) => ({ label: String.fromCharCode(65 + i), value: i < empty ? '' : `v${i}` }))
+
+  it('drops empty rows and lists their names in one Not recorded line', () => {
+    const { container } = render(<FactList hideEmpty items={five(3)} />)
+    expect(container.querySelectorAll('dd')).toHaveLength(2)
+    expect(screen.queryByText('—')).not.toBeInTheDocument()
+    expect(screen.getByText('Not recorded: A, B, C')).toBeInTheDocument()
+  })
+
+  it('names six and counts the rest', () => {
+    const items = Array.from({ length: 10 }, (_, i) => ({ label: `L${i}`, value: i === 9 ? 'x' : '' }))
+    render(<FactList hideEmpty items={items} />)
+    expect(screen.getByText('Not recorded: L0, L1, L2, L3, L4, L5 and 3 more')).toBeInTheDocument()
+  })
+
+  it('shows Add only when onAdd is given, and calls it', async () => {
+    const onAdd = vi.fn()
+    const { rerender } = render(<FactList hideEmpty items={five(2)} />)
+    expect(screen.queryByRole('button', { name: 'Add' })).not.toBeInTheDocument()
+    rerender(<FactList hideEmpty onAdd={onAdd} items={five(2)} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }))
+    expect(onAdd).toHaveBeenCalledTimes(1)
+  })
+
+  it('reads Not recorded alone, with no Add or Edit, when every row is empty: the card header Edit is the one action', () => {
+    render(<FactList hideEmpty onAdd={() => {}} onEdit={() => {}} items={five(5)} />)
+    expect(screen.getByText('Not recorded')).toBeInTheDocument()
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  })
+
+  it('shows no foot line when every row is answered', () => {
+    render(<FactList hideEmpty items={five(0)} />)
+    expect(screen.queryByText(/Not recorded/)).not.toBeInTheDocument()
+  })
+
+  it('keeps None and No as answers', () => {
+    render(<FactList hideEmpty items={[{ label: 'A', value: 'None' }, { label: 'B', value: 'No' }]} />)
+    expect(screen.queryByText(/Not recorded/)).not.toBeInTheDocument()
+  })
+
+  it('without hideEmpty still renders the em dash rows', () => {
+    render(<FactList items={five(3)} />)
+    expect(screen.getAllByText('—')).toHaveLength(3)
+  })
+})

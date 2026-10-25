@@ -87,6 +87,8 @@ export type DataTableProps<T> = {
   keyField: keyof T & string
   sortable?: boolean
   defaultSort?: SortState
+  /** Renders only the first N rows after sorting (the "Show all" collapse). Selection and counts still use every row. */
+  limit?: number
   sort?: SortState
   onSortChange?: (sort: SortState | null) => void
   onRowClick?: (row: T) => void
@@ -290,6 +292,7 @@ export function DataTable<T>({
   keyField,
   sortable = false,
   defaultSort,
+  limit,
   sort: controlledSort,
   onSortChange,
   onRowClick,
@@ -531,7 +534,7 @@ export function DataTable<T>({
               </td>
             </tr>
           )}
-          {sortedData.map((row, rowIndex) => {
+          {(limit ? sortedData.slice(0, limit) : sortedData).map((row, rowIndex) => {
             const rowKey = String((row as any)[keyField])
             const isEditing = (editingRow != null && rowKey === String(editingRow)) || (editingRows?.has(rowKey) ?? false)
             const extraClass = rowClassName?.(row) ?? ''

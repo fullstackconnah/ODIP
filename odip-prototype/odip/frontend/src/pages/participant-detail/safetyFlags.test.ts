@@ -46,7 +46,7 @@ describe('safetyFlags', () => {
   it('links each chip to its home section', () => {
     const links = Object.fromEntries(safetyFlags(all).map(f => [f.key, `${f.tab}#${f.hash}`]))
     expect(links).toEqual({
-      anaphylaxis: 'health#medical', choking: 'daily#meals', falls: 'daily#support-profile',
+      anaphylaxis: 'health#medical', choking: 'daily#meals', falls: 'daily#mobility-and-personal-care',
       behaviour: 'health#behaviour-and-communication', restrictive: 'health#restrictive-practices',
     })
   })

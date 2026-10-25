@@ -33,7 +33,7 @@ export function safetyFlags(p: Source): SafetyFlag[] {
     if (value !== 'High' && value !== 'Critical') return
     flags.push({ key, label: `${name}: ${value}`, tone: value === 'Critical' ? 'danger' : 'negative', tab, hash, section, detail: `${name} rated ${value}` })
   }
-  rating('falls', 'Falls risk', p.fallsRiskRating, 'daily', 'support-profile', 'Support Profile')
+  rating('falls', 'Falls risk', p.fallsRiskRating, 'daily', 'mobility-and-personal-care', 'Mobility and personal care')
   rating('behaviour', 'Behaviour risk', p.behaviourRiskRating, 'health', 'behaviour-and-communication', 'Behaviour & Communication')
   if (p.hasRestrictivePracticeFlag) {
     flags.push({ key: 'restrictive', label: 'Restrictive practices', tone: 'warning', tab: 'health', hash: 'restrictive-practices', section: 'Restrictive Practices', detail: 'Restrictive practices in place' })

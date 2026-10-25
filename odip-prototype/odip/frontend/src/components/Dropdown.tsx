@@ -36,6 +36,8 @@ type DropdownProps = {
   colorClass?: string       // Tailwind color classes for pill trigger background
   disabled?: boolean        // caller controls — not auto-applied on empty items
   loading?: boolean
+  /** Panel height cap in px (default 320). A tall list passes a larger cap; the room on screen then limits it, and an overflowing list is trimmed to end on half a row so the cut says it scrolls. */
+  maxPanelHeight?: number
 
   // Panel alignment — default varies by variant: pill='right', form='left', menu='right'
   align?: 'left' | 'right'
@@ -65,6 +67,7 @@ export function Dropdown({
   colorClass = '',
   disabled = false,
   loading = false,
+  maxPanelHeight,
   align,
   searchable = false,
   id,
@@ -92,25 +95,25 @@ export function Dropdown({
   const updatePosition = useCallback(() => {
     if (!triggerRef.current) return
     const rect = triggerRef.current.getBoundingClientRect()
-    const maxPanelHeight = 320
+    const cap = maxPanelHeight ?? 320
     // A fixed bottom bar (the phone nav) is not room: a panel opened over it loses its last options.
     const nav = document.querySelector('nav[aria-label="Mobile"]')?.getBoundingClientRect()
     const floor = nav && nav.height > 0 && nav.top < window.innerHeight ? nav.top : window.innerHeight
     const spaceBelow = floor - rect.bottom - 8
     const spaceAbove = rect.top - 8
     // The panel's whole height (scrollHeight ignores the max-height cap): open on the side that holds all of it, below first; the cap only bites when neither does.
-    const needed = Math.min(maxPanelHeight, panelRef.current?.scrollHeight ?? 0)
+    const needed = Math.min(cap, panelRef.current?.scrollHeight ?? 0)
     const style: CSSProperties = {
       position: 'fixed',
       zIndex: 9999,
     }
-    if (needed <= spaceBelow || (needed > spaceAbove && spaceBelow >= spaceAbove)) {
-      style.top = rect.bottom + 8
-      style.maxHeight = Math.min(maxPanelHeight, spaceBelow)
-    } else {
-      style.bottom = window.innerHeight - rect.top + 8
-      style.maxHeight = Math.min(maxPanelHeight, spaceAbove)
-    }
+    const below = needed <= spaceBelow || (needed > spaceAbove && spaceBelow >= spaceAbove)
+    let max = Math.min(cap, below ? spaceBelow : spaceAbove)
+    const row = panelRef.current?.querySelector<HTMLElement>('[role="option"]')?.offsetHeight
+    if (maxPanelHeight !== undefined && row && (panelRef.current?.scrollHeight ?? 0) > max) max = Math.floor(max / row - 0.5) * row + row / 2
+    if (below) style.top = rect.bottom + 8
+    else style.bottom = window.innerHeight - rect.top + 8
+    style.maxHeight = max
     style.overflowY = 'auto'
     if (resolvedAlign === 'left') {
       style.left = rect.left
@@ -119,7 +122,7 @@ export function Dropdown({
       style.right = window.innerWidth - rect.right
     }
     setPanelStyle(style)
-  }, [resolvedAlign, variant])
+  }, [resolvedAlign, variant, maxPanelHeight])
 
   // Position the portal panel relative to the trigger on open,
   // and reposition on scroll / resize so it tracks the trigger.

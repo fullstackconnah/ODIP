@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import { useShowAll } from '@/components/ShowAllButton'
 import { StickyNote, Pin, ChevronDown, Plus, Sparkles, AlertTriangle } from 'lucide-react'
 import { useParticipantNotes, useCreateNote, useUpdateNote, useDismissNoteDrift, useRegenerateNote } from '@/api/hooks'
 import { Modal } from '@/components/Modal'
@@ -129,6 +130,8 @@ export default function NotesTab({ participantId }: { participantId: string | un
 
   const activeNotes = useMemo(() => notes.filter(n => !n.isArchived), [notes])
   const archivedNotes = useMemo(() => notes.filter(n => n.isArchived), [notes])
+  const activeRef = useRef<HTMLDivElement>(null)
+  const showAll = useShowAll(activeNotes.length, activeRef, '[data-show-row]')
 
   function openCreate() {
     setForm(EMPTY_FORM)
@@ -271,10 +274,15 @@ export default function NotesTab({ participantId }: { participantId: string | un
           action={canWriteNotes && participantId ? { label: 'New note', onClick: openCreate } : undefined}
         />
       ) : (
-        <div className="space-y-3">
-          {activeNotes.map(n => (
-            <NoteCard key={n.id} note={n} canWrite={canWriteNotes} onEdit={() => openEdit(n)} onArchive={() => setArchivingNote(n)} onRestore={() => restoreNote(n)} onDismissDrift={() => handleDismissDrift(n)} onRegenerate={() => handleRegenerate(n)} isDriftActionPending={isDriftActionPending} />
+        <div>
+        <div ref={activeRef} className="space-y-3">
+          {activeNotes.slice(0, showAll.limit).map(n => (
+            <div key={n.id} tabIndex={-1} data-show-row className="rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]">
+            <NoteCard note={n} canWrite={canWriteNotes} onEdit={() => openEdit(n)} onArchive={() => setArchivingNote(n)} onRestore={() => restoreNote(n)} onDismissDrift={() => handleDismissDrift(n)} onRegenerate={() => handleRegenerate(n)} isDriftActionPending={isDriftActionPending} />
+            </div>
           ))}
+        </div>
+        {showAll.button}
         </div>
       )}
 
@@ -283,7 +291,7 @@ export default function NotesTab({ participantId }: { participantId: string | un
           <button
             type="button"
             onClick={() => setShowArchivedSection(v => !v)}
-            className="flex items-center gap-2 text-sm font-medium text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded transition-colors"
+            className="flex min-h-[var(--tap-min)] items-center gap-2 text-sm font-medium text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded transition-colors"
             aria-expanded={showArchivedSection}
           >
             <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showArchivedSection ? 'rotate-180' : ''}`} />

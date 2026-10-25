@@ -46,7 +46,7 @@ export function ParticipantRisksHazardsSummarySection({ p, participantId, canEdi
 
   return (
     <SectionEditPanel title="Risks & Hazards Summary" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
-      {(editing) => editing ? (
+      {(editing, startEdit) => editing ? (
         <div className={formGrid}>
           <FormField label="Behaviour Risk Summary" className={span.long}>
             <textarea value={draft.behaviourRiskSummary} onChange={(e) => setDraft((d) => ({ ...d, behaviourRiskSummary: e.target.value }))} rows={3} />
@@ -56,7 +56,7 @@ export function ParticipantRisksHazardsSummarySection({ p, participantId, canEdi
           </FormField>
         </div>
       ) : (
-        <FactList
+        <FactList hideEmpty onAdd={canEdit ? () => startEdit('first-empty') : undefined}
           items={[
             { label: 'Behaviour Risk Summary', value: p.behaviourRiskSummary },
             { label: 'General Notes', value: p.notes },

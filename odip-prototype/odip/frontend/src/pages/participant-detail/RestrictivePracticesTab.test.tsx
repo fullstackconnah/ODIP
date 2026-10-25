@@ -246,7 +246,7 @@ describe('RestrictivePracticesTab', () => {
     })
 
     render(<RestrictivePracticesTab participantId="participant-1" />)
-    await user.click(screen.getByText('Inactive entries (1)'))
+    await user.click(screen.getByText('Inactive (1)'))
 
     expect(screen.getByText('Authorised by Dr Lee')).toBeInTheDocument()
     expect(screen.getByText('Inactive')).toBeInTheDocument()
@@ -263,7 +263,7 @@ describe('RestrictivePracticesTab', () => {
 
     render(<RestrictivePracticesTab participantId="participant-1" />)
 
-    expect(screen.getByText('Inactive entries (1)')).toBeInTheDocument()
+    expect(screen.getByText('Inactive (1)')).toBeInTheDocument()
     expect(screen.queryByText('Retired entry')).not.toBeInTheDocument()
   })
 })
@@ -545,5 +545,21 @@ describe('RestrictivePracticesTab — Add entries (bulk add, PD-2)', () => {
 
     expect(screen.getByRole('dialog', { name: /add entries/i })).toBeInTheDocument()
     expect(screen.getByLabelText(/number of entries/i)).toBeInTheDocument()
+  })
+})
+
+describe('RestrictivePracticesTab — long list (T10)', () => {
+  it('shows 5 of 23 active rows, then all 23 with focus on the 6th row', async () => {
+    const user = userEvent.setup()
+    mockUseRestrictivePractices.mockReturnValue({
+      data: Array.from({ length: 23 }, (_, i) => makePractice({ id: `p${i}` })),
+      isLoading: false,
+    })
+    const { container } = render(<RestrictivePracticesTab participantId="participant-1" />)
+    expect(container.querySelectorAll('[data-show-row]')).toHaveLength(5)
+    await user.click(screen.getByRole('button', { name: 'Show all 23' }))
+    const rows = container.querySelectorAll('[data-show-row]')
+    expect(rows).toHaveLength(23)
+    expect(rows[5]).toHaveFocus()
   })
 })

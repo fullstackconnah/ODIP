@@ -49,7 +49,6 @@ const PAGE_STATE_SITES = [
   'pages/OnboardingDetailPage.tsx',
   'pages/caregiver-admin/CaregiverSubmissionReviewPage.tsx',
   'pages/participant-detail/MedicationsTab.tsx',
-  'pages/participant-detail/SupportProfileTab.tsx',
   'components/ItineraryTab.tsx',
 ]
 

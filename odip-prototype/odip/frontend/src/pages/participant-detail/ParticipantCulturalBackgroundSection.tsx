@@ -21,8 +21,8 @@ function triToKey(v: boolean | null | undefined): string {
 function keyToTri(k: string): boolean | null {
   return k === 'true' ? true : k === 'false' ? false : null
 }
-function yesNoUnset(value: boolean | null | undefined): string {
-  return value === true ? 'Yes' : value === false ? 'No' : '—'
+function yesNoUnset(value: boolean | null | undefined): string | undefined {
+  return value === true ? 'Yes' : value === false ? 'No' : undefined
 }
 
 const pl = (v?: string | null) => (v ? <span className="whitespace-pre-line">{v}</span> : undefined)
@@ -79,7 +79,7 @@ export function ParticipantCulturalBackgroundSection({ p, participantId, canEdit
 
   return (
     <SectionEditPanel title="Cultural Background" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
-      {(editing) => editing ? (
+      {(editing, startEdit) => editing ? (
         <div className="space-y-4">
           <div className={formGrid}>
             <FormField label="Culturally and Linguistically Diverse (CALD)" className={`mb-0 ${span.medium}`}>
@@ -120,7 +120,7 @@ export function ParticipantCulturalBackgroundSection({ p, participantId, canEdit
           </FormField>
         </div>
       ) : (
-        <FactList
+        <FactList hideEmpty onAdd={canEdit ? () => startEdit('first-empty') : undefined}
           items={[
             { label: 'CALD', value: yesNoUnset(p.isCald) },
             { label: 'LGBTIQA+', value: yesNoUnset(p.isLgbtqi) },

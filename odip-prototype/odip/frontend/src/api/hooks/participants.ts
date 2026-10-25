@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiPostRaw, apiPutRaw, apiPatchRaw, apiDeleteRaw, apiClient } from '../client'
 import { toTruncatableList } from './pagedList'
+import { isNotFoundError } from '@/lib/httpStatus'
 import type {
   ParticipantListDto,
   ParticipantDetailDto,
@@ -75,23 +76,43 @@ export function useSupportProfile(id: string | undefined) {
   })
 }
 
+/** The seven fields the whole-record PUT carries; `restrictivePracticeDetails` is deliberately not one (the register owns it). */
+function pickUpdateFields(sp: SupportProfileDto | undefined): UpdateSupportProfileDto {
+  return {
+    communicationNotes: sp?.communicationNotes ?? undefined,
+    behaviourSupportNotes: sp?.behaviourSupportNotes ?? undefined,
+    manualHandlingNotes: sp?.manualHandlingNotes ?? undefined,
+    medicationHealthSummary: sp?.medicationHealthSummary ?? undefined,
+    emergencyConsiderations: sp?.emergencyConsiderations ?? undefined,
+    travelSpecificNotes: sp?.travelSpecificNotes ?? undefined,
+    reviewDate: sp?.reviewDate?.split('T')[0] ?? undefined,
+  }
+}
+
 /**
- * PD-6: wraps the existing, previously-unused `PUT /participants/{id}/support-profile` (see
- * ParticipantsController.UpdateSupportProfile) — the sub-resource half of the merged Support
- * Profile tab. Every consumer must gate on `canWriteSupportProfile` (mirrors that endpoint's own
- * `Authorize(Roles = "Admin,Coordinator,SuperAdmin")` gate), not `canWriteParticipantDetails` —
- * they're two different resources with two different (currently identical, but independently
- * named) role gates. Note the endpoint's response body only echoes Id/ParticipantId, not the
- * saved fields, so this hook invalidates the `support-profile` query rather than relying on the
- * mutation's own response to refresh the read side.
+ * PUT replaces the whole support profile (a field left out is nulled), so a topic card passes only its own `fields` and this builds the body
+ * when the save RUNS: the cached record plus those fields. `scope` runs saves one after another, so a second card saved while the first PUT
+ * is in flight still reads the first one's text. The PUT answers only Id/ParticipantId, so the full body is written to the cache before
+ * the refetch; otherwise the next card would build on a stale (or, for a first save, a 404) cache. Every consumer must gate on
+ * `canWriteSupportProfile` (the endpoint's own `Admin,Coordinator,SuperAdmin` gate), not `canWriteParticipantDetails`.
  */
 export function useUpdateSupportProfile() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: UpdateSupportProfileDto }) =>
-      apiPutRaw<SupportProfileDto>(`/participants/${id}/support-profile`, data),
-    onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ['support-profile', vars.id] })
+    scope: { id: 'support-profile' },
+    mutationFn: async ({ id, fields }: { id: string; fields: Partial<UpdateSupportProfileDto> }) => {
+      const key = ['support-profile', id]
+      const state = qc.getQueryState(key)
+      const cached = qc.getQueryData<SupportProfileDto>(key) // kept even when a background refetch failed
+      const noProfileYet = state?.status === 'error' && isNotFoundError(state.error) // the PUT creates it
+      if (!cached && !noProfileYet) throw new Error('Support profile has not loaded')
+      const body: UpdateSupportProfileDto = { ...pickUpdateFields(cached), ...fields }
+      const r = await apiPutRaw<SupportProfileDto>(`/participants/${id}/support-profile`, body)
+      return { ...cached, ...body, id: r.data!.id, participantId: id } as SupportProfileDto
+    },
+    onSuccess: (saved, { id }) => {
+      qc.setQueryData<SupportProfileDto>(['support-profile', id], saved)
+      return qc.invalidateQueries({ queryKey: ['support-profile', id] })
     },
   })
 }
