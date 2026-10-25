@@ -217,30 +217,42 @@ describe('RestrictivePracticesTab', () => {
     expect(mockDeleteMutateAsync).toHaveBeenCalledWith({ id: 'rp-1', participantId: 'participant-1' })
   })
 
+  const EXPLANATIONS = ['No authorisation date on file', 'No authoriser on file', 'No authorisation recorded']
+
   it.each([
-    ['active with name and date', { authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01' }, 'Authorised'],
-    ['active with a name but no date', { authorisedBy: 'Dr Lee' }, 'Not authorised'],
-    ['active with neither', {}, 'Not authorised'],
-  ])('shows the authorisation badge on the row: %s', (_label, overrides, badge) => {
+    ['active with name and date', { authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01' }, 'Authorised', null],
+    ['active with a name but no date', { authorisedBy: 'Dr Lee' }, 'Not authorised', 'No authorisation date on file'],
+    ['active with a date but no name', { authorisationDate: '2026-03-01' }, 'Not authorised', 'No authoriser on file'],
+    ['active with neither', {}, 'Not authorised', 'No authorisation recorded'],
+  ])('shows the authorisation badge on the row: %s', (_label, overrides, badge, explanation) => {
     mockUseRestrictivePractices.mockReturnValue({ data: [makePractice(overrides)], isLoading: false })
 
     render(<RestrictivePracticesTab participantId="participant-1" />)
 
     expect(screen.getByText(badge)).toBeInTheDocument()
     expect(screen.queryByText(badge === 'Authorised' ? 'Not authorised' : 'Authorised')).not.toBeInTheDocument()
+    // Only the line that says why, and none at all for an authorised row.
+    for (const line of EXPLANATIONS) {
+      if (line === explanation) expect(screen.getByText(line)).toBeInTheDocument()
+      else expect(screen.queryByText(line)).not.toBeInTheDocument()
+    }
   })
 
-  it('reads Not authorised on an inactive entry even with name and date (the shared rule needs it active)', async () => {
+  it('shows no authorisation badge or explanation on an inactive entry (the Inactive pill carries its state, as in the wizard)', async () => {
     const user = userEvent.setup()
     mockUseRestrictivePractices.mockReturnValue({
-      data: [makePractice({ isActive: false, authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01' })],
+      data: [makePractice({ isActive: false, authorisedBy: 'Dr Lee' })],
       isLoading: false,
     })
 
     render(<RestrictivePracticesTab participantId="participant-1" />)
     await user.click(screen.getByText('Inactive entries (1)'))
 
-    expect(screen.getByText('Not authorised')).toBeInTheDocument()
+    expect(screen.getByText('Authorised by Dr Lee')).toBeInTheDocument()
+    expect(screen.getByText('Inactive')).toBeInTheDocument()
+    expect(screen.queryByText('Not authorised')).not.toBeInTheDocument()
+    expect(screen.queryByText('Authorised')).not.toBeInTheDocument()
+    for (const line of EXPLANATIONS) expect(screen.queryByText(line)).not.toBeInTheDocument()
   })
 
   it('groups inactive entries behind a collapsed toggle', () => {
