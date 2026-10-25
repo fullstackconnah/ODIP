@@ -37,7 +37,7 @@ cd ../frontend && npm ci && npm run dev
 
 ## Next steps (in order)
 
-1. Local `dotnet build` + `dotnet test` on net10 (done) — confirm the xunit port passes.
+1. Local `dotnet build` + `dotnet test` on net10 (done): the xunit port passes.
 2. EF configuration + migration for Billing/Dictionary entities; seed DataDictionarySeed.json on tenant provisioning.
 3. Characterisation tests around Participant before starting overhaul #1 (plan 08 §3.1) — the go/no-go checkpoint.
 4. First real-data test: rebuild one past PRODA upload (e.g. a May 2025 batch from the rejection log) through ProdaBulkFileWriter and diff against the file actually submitted.

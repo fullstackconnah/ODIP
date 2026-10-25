@@ -73,6 +73,18 @@ public class EarlyAccessHttpTests
         var response = await host.PostAsync(ValidJson.Replace("\"name\":\"Jane Citizen\",", "\"name\":\"Jane Citizen\",\"name\":\"Other\","));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType!.MediaType);
+        Assert.Equal(0, await host.CountRowsAsync());
+    }
+
+    [Fact]
+    public async Task ABodyWithKeysDifferingOnlyByCase_Returns400()
+    {
+        await using var host = await TestHost.StartAsync();
+
+        var response = await host.PostAsync(ValidJson.Replace("\"name\":\"Jane Citizen\",", "\"name\":\"Jane Citizen\",\"Name\":\"Other\","));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal(0, await host.CountRowsAsync());
     }
 
