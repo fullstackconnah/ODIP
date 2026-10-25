@@ -377,7 +377,7 @@ public class PortalHandoverTests
         var unique = Assert.Single(entity.GetIndexes(), i => i.GetDatabaseName() == HandoverAcknowledgement.UniqueReaderIndexName);
         Assert.True(unique.IsUnique);
         Assert.Equal(new[] { "SourceCompletionId", "UserId" }, unique.Properties.Select(p => p.Name));
-        Assert.NotNull(entity.GetQueryFilter());
+        Assert.NotEmpty(entity.GetDeclaredQueryFilters());
     }
 }
 

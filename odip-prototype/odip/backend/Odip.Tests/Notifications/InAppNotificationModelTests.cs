@@ -29,7 +29,7 @@ public class InAppNotificationModelTests
         Assert.Equal(new[] { false, true }, index.IsDescending);
         Assert.Null(entity.FindProperty(nameof(InAppNotification.Title))!.GetMaxLength());
         Assert.Null(entity.FindProperty(nameof(InAppNotification.LinkTo))!.GetMaxLength());
-        Assert.NotNull(entity.GetQueryFilter());
+        Assert.NotEmpty(entity.GetDeclaredQueryFilters());
     }
 
     /// <summary>Fix round 1 (deep review S1): the badge count has a partial index over unread rows only.</summary>

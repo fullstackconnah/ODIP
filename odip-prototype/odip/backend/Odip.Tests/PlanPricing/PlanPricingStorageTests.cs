@@ -104,8 +104,8 @@ public class PlanPricingStorageTests
         Assert.Equal(40, entity.FindProperty("RegistrationGroupsHeld")!.GetMaxLength());
         Assert.Equal(100, entity.FindProperty("ApproverRoles")!.GetMaxLength());
         Assert.Contains(entity.GetIndexes(), i => i.IsUnique && i.Properties.Select(p => p.Name).SequenceEqual(new[] { "TenantId" }));
-        Assert.NotNull(entity.GetQueryFilter());
-        Assert.Null(db.Model.FindEntityType(typeof(PublicHolidayOverride))!.GetQueryFilter());   // like PublicHoliday, the override table is global
+        Assert.NotEmpty(entity.GetDeclaredQueryFilters());
+        Assert.Empty(db.Model.FindEntityType(typeof(PublicHolidayOverride))!.GetDeclaredQueryFilters());   // like PublicHoliday, the override table is global
     }
 
     // ── The override table and its seed ───────────────────────────────────────────

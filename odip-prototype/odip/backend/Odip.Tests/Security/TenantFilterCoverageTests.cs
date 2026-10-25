@@ -60,7 +60,7 @@ public class TenantFilterCoverageTests
         using var db = new OdipDbContext(options, tenant.Object);
 
         var unfiltered = db.Model.GetEntityTypes()
-            .Where(t => t.BaseType == null && t.GetQueryFilter() == null)
+            .Where(t => t.BaseType == null && t.GetDeclaredQueryFilters().Count == 0)
             .Select(t => t.ClrType.Name)
             .ToHashSet();
 
@@ -69,7 +69,7 @@ public class TenantFilterCoverageTests
 
         // A filter that is not about the tenant (a soft-delete filter, say) must not take a table off the list.
         var notTenantFilters = db.Model.GetEntityTypes()
-            .Where(t => t.BaseType == null && t.GetQueryFilter() is { } filter && !ComparesTenantId(filter))
+            .Where(t => t.BaseType == null && t.GetDeclaredQueryFilters().Any(f => f.Expression is { } filter && !ComparesTenantId(filter)))
             .Select(t => t.ClrType.Name).Order().ToList();
         Assert.True(notTenantFilters.Count == 0, "Has a query filter that does not compare the entity's TenantId: " + string.Join(", ", notTenantFilters));
 
