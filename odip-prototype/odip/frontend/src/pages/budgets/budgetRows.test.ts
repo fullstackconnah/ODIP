@@ -20,6 +20,11 @@ describe('budgetRiskRow', () => {
     expect([row.available, row.used, row.bookedAhead, row.forecast]).toEqual([0, 0, 0, 0])
   })
 
+  it('carries the pace run-out date only when the server sent one', () => {
+    expect(budgetRiskRow(budgetRow({ paceRunsOutOn: '2026-12-08' }), visible)).toHaveProperty('paceRunsOutOn', '2026-12-08')
+    expect(budgetRiskRow(budgetRow(), visible)).not.toHaveProperty('paceRunsOutOn')
+  })
+
   it('carries how many shifts the forecast leaves out because no price can be worked out for them yet, and nothing at all when there are none', () => {
     expect(budgetRiskRow(budgetRow({ unpricedShiftCount: 3 }), visible)).toHaveProperty('unpricedShifts', 3)
     expect(budgetRiskRow(budgetRow({ unpricedShiftCount: 0 }), visible)).not.toHaveProperty('unpricedShifts')

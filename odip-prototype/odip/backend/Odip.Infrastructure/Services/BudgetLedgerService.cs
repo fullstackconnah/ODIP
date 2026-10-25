@@ -572,15 +572,15 @@ public sealed class BudgetLedgerService
         {
             PlanId = plan.Plan.Id, PlanStart = plan.Plan.PlanStart, PlanEnd = plan.Plan.PlanEnd, PlanIsCurrent = plan.PlanIsCurrent, AsOf = plan.AsOf, TimeBasis = ledger.TimeBasis,
             ApproachingPercent = ledger.ApproachingPercent,
-            Pools = plan.Pools.Select(PoolDto).ToList(),
+            Pools = plan.Pools.Select(pool => PoolDto(pool, plan.AsOf)).ToList(),
             NotInARecordedPool = BucketDto(plan.NotInAPool), OutsideThePlanDates = BucketDto(plan.OutsideThePlan),
         };
     }
 
-    private static LedgerPoolDto PoolDto(PoolLedger pool) => new()
+    private static LedgerPoolDto PoolDto(PoolLedger pool, DateOnly today) => new()
     {
         Id = pool.Pool.Id, Name = pool.Pool.Name, Kind = pool.Pool.Kind, PaceCategory = pool.Pool.PaceCategory, ManagementType = pool.Pool.ManagementType, HasSetAside = pool.HasSetAside,
-        Periods = pool.Periods.Select(PeriodDto).ToList(), PastUnresolvedCount = pool.Total.PastUnresolvedCount, StartedUnclaimedTripCount = pool.Total.StartedUnclaimedTripCount,
+        Periods = pool.Periods.Select(period => PeriodDto(period, today)).ToList(), PastUnresolvedCount = pool.Total.PastUnresolvedCount, StartedUnclaimedTripCount = pool.Total.StartedUnclaimedTripCount,
         UnpricedShiftCount = pool.Total.UnpricedShiftCount,
         PlanTotal = new LedgerFiguresDto
         {
@@ -590,9 +590,10 @@ public sealed class BudgetLedgerService
         },
     };
 
-    private static LedgerPeriodDto PeriodDto(PeriodLedger period) => new()
+    private static LedgerPeriodDto PeriodDto(PeriodLedger period, DateOnly today) => new()
     {
         Id = period.Period.Id, Position = period.Period.Position, PeriodStart = period.Period.PeriodStart, PeriodEnd = period.Period.PeriodEnd, IsCurrent = period.IsCurrent,
+        PaceRunsOutOn = period.PaceAt(today)?.RunsOutOn,
         Limit = period.Limit, Carried = period.Carried, Available = period.Available, Claimed = period.Claimed, Pending = period.Pending, Used = period.Used, BookedAhead = period.BookedAhead,
         Forecast = period.Forecast, UnpricedTripDayCount = period.UnpricedTripDayCount,
         Remaining = period.Available - period.Used, ForecastRemaining = period.Available - period.Forecast, Status = period.Status,

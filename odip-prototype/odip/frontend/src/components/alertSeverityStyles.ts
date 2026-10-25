@@ -33,4 +33,5 @@ export const ALERT_TYPE_LABELS: Record<string, string> = {
   'budget-forecast-over': 'Forecast over budget',
   'budget-approaching': 'Approaching budget',
   'budget-ndia-exhausted': 'NDIA says the funds ran out',
+  'budget-pace': 'Spending fast',
 }
