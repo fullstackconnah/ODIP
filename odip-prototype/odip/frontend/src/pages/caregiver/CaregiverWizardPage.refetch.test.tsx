@@ -272,3 +272,72 @@ describe('CaregiverWizardPage - a failed read', () => {
     expect(await screen.findByText(/this link is no longer valid/i)).toBeInTheDocument()
   })
 })
+
+/** The held-open PUT that fails once released. */
+function holdNextPutThenFail() {
+  let fail!: () => void
+  const gate = new Promise<void>((_, rej) => { fail = () => rej(new Error('Network Error')) })
+  mockPut.mockImplementationOnce(async () => { await gate })
+  return fail
+}
+
+describe('CaregiverWizardPage - one save per click', () => {
+  it('sends one request for a double click, locks Save later and Submit while it is in flight, then unlocks', async () => {
+    const { user } = await open()
+    await user.type(nameField(), 'Jane Doe')
+    const release = holdNextPut()
+    await user.dblClick(saveLater())
+
+    expect(mockPut).toHaveBeenCalledTimes(1)
+    const saving = await screen.findByRole('button', { name: 'Saving your progress…' })
+    expect(saving).toBeDisabled()
+
+    release()
+    await screen.findByText(/Progress saved/)
+    expect(saveLater()).toBeEnabled()
+    expect(mockPut).toHaveBeenCalledTimes(1)
+  })
+
+  it('disables Submit for review while a draft save is in flight', async () => {
+    server = makeDto({ current: projection as Record<string, unknown>, caregiverName: 'Jane Doe' })
+    const { user } = await open()
+    for (let i = 0; i < 7; i++) {
+      await user.click(nextButton())
+      await waitFor(() => expect(puts).toHaveLength(i + 1))
+    }
+    const submitButton = await screen.findByRole('button', { name: 'Submit for review' })
+    const release = holdNextPut()
+    await user.click(saveLater())
+    expect(submitButton).toBeDisabled()
+    release()
+    await screen.findByText(/Progress saved/)
+    expect(submitButton).toBeEnabled()
+  })
+
+  it('after a failed save: enabled again, failure copy shown, text typed in flight kept', async () => {
+    const { user } = await open()
+    await user.type(nameField(), 'Jane Doe')
+    const fail = holdNextPutThenFail()
+    await user.click(saveLater())
+    await user.type(relationshipField(), 'Mother')
+    fail()
+
+    await screen.findByText(/couldn't save your progress/i)
+    expect(saveLater()).toBeEnabled()
+    expect(relationshipField()).toHaveValue('Mother')
+    expect(nameField()).toHaveValue('Jane Doe')
+  })
+
+  it('disables Save later while a submit is in flight', async () => {
+    server = makeDto({ current: projection as Record<string, unknown>, caregiverName: 'Jane Doe' })
+    const { user } = await open()
+    for (let i = 0; i < 7; i++) {
+      await user.click(nextButton())
+      await waitFor(() => expect(puts).toHaveLength(i + 1))
+    }
+    mockPost.mockImplementationOnce(() => new Promise(() => {}))
+    await user.click(await screen.findByRole('button', { name: 'Submit for review' }))
+    expect(await screen.findByRole('button', { name: 'Submitting…' })).toBeDisabled()
+    expect(saveLater()).toBeDisabled()
+  })
+})
