@@ -108,7 +108,7 @@ export default function CaregiverSubmissionReviewPage() {
       {!s.base && rows.length > 0 && <Callout tone="info">Sent before change tracking: every value shown here will be applied.</Callout>}
 
       {rows.length === 0 ? (
-        <p className="text-sm text-[var(--color-muted-foreground)]">No changes from the caregiver.</p>
+        <p className="min-h-[60px] flex items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border)] px-[var(--card-pad)] py-2 text-center text-sm text-[var(--color-muted-foreground)]">No changes from the caregiver.</p>
       ) : (
         Object.entries(byGroup).map(([group, groupRows]) => (
           <section key={group} className="rounded-[var(--radius-md)] border border-[var(--color-border)] overflow-hidden">
@@ -129,9 +129,9 @@ export default function CaregiverSubmissionReviewPage() {
                       <td className="px-[var(--cell-px)] py-[7px]">
                         {r.current}
                         {flagStaffChanges && r.staffChanged && (
-                          <p className="mt-1 flex items-center gap-1 text-xs font-medium text-[var(--color-on-warning-container)]">
-                            <AlertCircle aria-hidden className="h-3.5 w-3.5 shrink-0" />
-                            Changed by staff since the form was opened
+                          <p className="mt-1 flex items-start gap-1 text-xs font-medium text-[var(--color-on-warning-container)]">
+                            <AlertCircle aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                            Staff edited this since the caregiver started. Accept replaces it.
                           </p>
                         )}
                       </td>

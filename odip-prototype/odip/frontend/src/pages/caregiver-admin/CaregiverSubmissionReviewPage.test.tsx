@@ -111,20 +111,20 @@ describe('CaregiverSubmissionReviewPage', () => {
   it("flags a row staff changed since the form was opened, while the submission is waiting", () => {
     withBase()
     renderPage()
-    expect(screen.getByText("Changed by staff since the form was opened")).toBeInTheDocument()
+    expect(screen.getByText("Staff edited this since the caregiver started. Accept replaces it.")).toBeInTheDocument()
     expect(screen.queryByText(/sent before change tracking/i)).not.toBeInTheDocument()
   })
 
   it("does not flag once the submission is no longer waiting", () => {
     withBase({ status: "Accepted" })
     renderPage()
-    expect(screen.queryByText("Changed by staff since the form was opened")).not.toBeInTheDocument()
+    expect(screen.queryByText("Staff edited this since the caregiver started. Accept replaces it.")).not.toBeInTheDocument()
   })
 
   it("says a submission without a base applies every value shown", () => {
     renderPage()
     expect(screen.getByText("Sent before change tracking: every value shown here will be applied.")).toBeInTheDocument()
-    expect(screen.queryByText("Changed by staff since the form was opened")).not.toBeInTheDocument()
+    expect(screen.queryByText("Staff edited this since the caregiver started. Accept replaces it.")).not.toBeInTheDocument()
   })
 
   it("shows no changes from the caregiver when payload equals base, even if the live record differs", () => {

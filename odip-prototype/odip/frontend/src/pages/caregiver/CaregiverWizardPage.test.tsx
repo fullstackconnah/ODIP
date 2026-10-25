@@ -390,12 +390,12 @@ describe('CaregiverWizardPage — sends the base it loaded', () => {
     expect(body.payload).toEqual(body.base)
   })
 
-  it('shows the draft for the field the caregiver changed and the live value for the rest', async () => {
+  it('shows the draft for the field the caregiver changed and the live value for the rest, even when the draft still equals the stored base', async () => {
     const user = userEvent.setup()
     mockUsePublicCaregiverForm.mockReturnValue({
       isLoading: false, isError: false,
       data: makeDto({
-        current: { firstName: 'Sophie', lastName: 'Rivers', medicareNumber: '111111111', pensionCardNumber: '222222222' },
+        current: { firstName: 'Sophie', lastName: 'Rivers', medicareNumber: '111111111', pensionCardNumber: '333333333' },
         base: { keyIdentifiers: { medicareNumber: '000000000', pensionCardNumber: '222222222' } } as never,
         draft: { keyIdentifiers: { medicareNumber: '999888777', pensionCardNumber: '222222222' } } as never,
       }),
@@ -405,7 +405,7 @@ describe('CaregiverWizardPage — sends the base it loaded', () => {
     await user.type(screen.getByLabelText(/your name/i), 'Jane Doe')
     await user.click(screen.getByRole('button', { name: /^next$/i }))
     await waitFor(() => expect(screen.getByLabelText(/medicare number/i)).toHaveValue('999888777'))
-    expect(screen.getByLabelText(/pension card number/i)).toHaveValue('222222222')
+    expect(screen.getByLabelText(/pension card number/i)).toHaveValue('333333333')
     const saved = mockSaveDraftMutateAsync.mock.calls[0][0]
     expect(saved.base.keyIdentifiers).toMatchObject({ medicareNumber: '000000000' })
   })
