@@ -51,7 +51,7 @@ type FormState = {
 const blank = (): FormState => ({
   firstName: '', lastName: '', phone: '', email: '', source: 'Phone', provenance: '',
   contactIsParticipant: false, contactFirstName: '', contactLastName: '', contactRelationship: '', contactRole: '',
-  dateOfBirth: '', ndisNumber: '', addressStreet: '', addressSuburb: '', addressState: '', addressPostcode: '', planType: '', planStartDate: '', planEndDate: '',
+  dateOfBirth: '', ndisNumber: '', addressStreet: '', addressSuburb: '', addressState: '', addressPostcode: '', planType: 'PlanManaged', planStartDate: '', planEndDate: '',
 })
 
 const fromInquiry = (row: ParticipantInquiryDetailDto): FormState => ({

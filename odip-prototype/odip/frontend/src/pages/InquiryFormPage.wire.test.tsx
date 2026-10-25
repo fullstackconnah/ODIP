@@ -42,7 +42,7 @@ const byId = (id: string) => document.getElementById(id) as HTMLInputElement
 const NO_DETAILS = {
   contactIsParticipant: false, contactFirstName: null, contactLastName: null, contactRelationship: null, contactRole: null,
   dateOfBirth: null, ndisNumber: null, addressStreet: null, addressSuburb: null, addressState: null, addressPostcode: null,
-  planType: null, planStartDate: null, planEndDate: null,
+  planType: 'PlanManaged', planStartDate: null, planEndDate: null,
 }
 
 /** The Enquiries tab, as far as the form can see: where it went, and the summary it carried there as router state. */
@@ -188,7 +188,7 @@ describe('InquiryFormPage (wire) — editing an enquiry opened cold', () => {
     await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
     expect(mockApiPut).toHaveBeenCalledWith('/inquiries/i1', {
       firstName: 'Ro', lastName: 'Blake', phone: '0400 000 999', email: 'rowan@example.com', source: 'Web',
-      provenance: 'Referred by Dr Patel, Brisbane', ...NO_DETAILS, contacts: [],
+      provenance: 'Referred by Dr Patel, Brisbane', ...NO_DETAILS, planType: null, contacts: [],
     })
     expect(await screen.findByTestId('notice')).toHaveTextContent("Enquiry saved: Rowan Blake's changes are saved.")
   })
@@ -310,7 +310,7 @@ describe('InquiryFormPage (wire) — contacts', () => {
 
     await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
     expect(mockApiPut).toHaveBeenCalledWith('/inquiries/i1', {
-      firstName: 'Rowan', lastName: 'Blake', phone: '0400 000 999', email: 'rowan@example.com', source: 'Web', provenance: 'Referred by Dr Patel, Brisbane', ...NO_DETAILS,
+      firstName: 'Rowan', lastName: 'Blake', phone: '0400 000 999', email: 'rowan@example.com', source: 'Web', provenance: 'Referred by Dr Patel, Brisbane', ...NO_DETAILS, planType: null,
       contacts: [{ role: 'EmergencyContact', firstName: 'Tom', lastName: 'Ng', relationship: null, phone: null, email: null, notes: null }],
       expectedUpdatedAt: '2026-10-16T01:02:03.456789Z',
     })
@@ -971,5 +971,28 @@ describe('InquiryFormPage (wire) — a new enquiry\'s visit is checked in the pr
     await bookAt('14:00')
     expect(await screen.findByText("Choose a time that hasn't passed.")).toBeInTheDocument()
     expect(mockApiPost).not.toHaveBeenCalled()
+  })
+})
+
+describe('InquiryFormPage (wire) — plan management default (O5)', () => {
+  it('a new enquiry starts on Plan Managed and sends it', async () => {
+    const user = userEvent.setup()
+    renderForm()
+    expect((document.getElementById('inquiry-plan-type') as HTMLSelectElement).value).toBe('PlanManaged')
+    await user.type(firstName(), 'Ava')
+    await user.click(screen.getByRole('button', { name: 'Capture enquiry' }))
+    await waitFor(() => expect(mockApiPost).toHaveBeenCalledTimes(1))
+    expect(mockApiPost.mock.calls[0][1]).toMatchObject({ planType: 'PlanManaged' })
+  })
+
+  it('a stored enquiry keeps its own plan type, and a stored blank stays blank: the default never overwrites', async () => {
+    serve({ '/inquiries/i1': detail({ planType: 'SelfManaged' }), '/inquiries/i2': detail({ id: 'i2', planType: null }) })
+    renderForm('/participants/new-inquiry?id=i1')
+    await waitFor(() => expect(firstName()).toHaveValue('Rowan'))
+    expect((document.getElementById('inquiry-plan-type') as HTMLSelectElement).value).toBe('SelfManaged')
+    cleanup()
+    renderForm('/participants/new-inquiry?id=i2')
+    await waitFor(() => expect(firstName()).toHaveValue('Rowan'))
+    expect((document.getElementById('inquiry-plan-type') as HTMLSelectElement).value).toBe('')
   })
 })
