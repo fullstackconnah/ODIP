@@ -124,7 +124,7 @@ export default function InvoicesPage() {
               aria-disabled={!!downloading}
               aria-busy={busy}
               onClick={() => download(row)}
-              className={`${TAP_AREA} inline-flex items-center gap-1 whitespace-nowrap font-medium tabular-nums text-[var(--color-primary)] hover:underline focus-visible:underline aria-disabled:cursor-default aria-disabled:opacity-60`}
+              className={`${TAP_AREA} inline-flex items-center gap-1 whitespace-nowrap rounded-sm font-medium tabular-nums text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:underline focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] aria-disabled:cursor-default aria-disabled:opacity-60`}
             >
               {row.displayNumber}
               {busy ? <Loader2 className="size-3.5 motion-safe:animate-spin" aria-hidden="true" /> : <Download className="size-3.5" aria-hidden="true" />}
@@ -175,7 +175,7 @@ export default function InvoicesPage() {
       ) : (
         <div>
           <CellText className="text-[var(--color-muted-foreground)]" title={row.claimReference}>{row.claimReference || '—'}</CellText>
-          <span className={`${MUTED_LINE} max-md:before:content-['_·_'] md:block`}>Claim deleted</span>
+          <span className={`${MUTED_LINE} block`}>Claim deleted</span>
         </div>
       ),
     },
@@ -186,8 +186,8 @@ export default function InvoicesPage() {
       align: 'right',
       mobile: 'meta',
       render: row => (
-        // A voided invoice no longer stands, so its total is muted; a credit note shows negative whatever sign the API sends.
-        <span className={`whitespace-nowrap font-medium tabular-nums ${row.status === 'Voided' ? 'text-[var(--color-muted-foreground)]' : ''}`}>
+        // A voided invoice no longer stands, so its total is muted and struck through; a credit note shows negative whatever sign the API sends.
+        <span className={`whitespace-nowrap font-medium tabular-nums ${row.status === 'Voided' ? 'text-[var(--color-muted-foreground)] line-through' : ''}`}>
           {row.kind === 'CreditNote' ? `-${formatCurrency(Math.abs(row.total))}` : formatCurrency(row.total)}
         </span>
       ),
@@ -200,8 +200,8 @@ export default function InvoicesPage() {
       <AnnouncementRegion message={downloadError?.message ?? ''} />
       <PageHeader title="Invoices" subtitle={!failed && rows.length > 0 ? subtitleFor(totalCount, kind, showOrganisation) : undefined}>
         {filtersDrawn && (
-          <>
-            <div ref={searchBox} className="max-md:w-full md:max-w-xs">
+          <div className="flex w-full flex-wrap items-end gap-2 pointer-coarse:gap-y-3">
+            <div ref={searchBox} className="max-md:w-full md:w-80">
               <SearchInput
                 value={search}
                 onChange={value => setFilters({ search: value })}
@@ -210,17 +210,21 @@ export default function InvoicesPage() {
                 className="w-full"
               />
             </div>
-            <Dropdown variant="pill" value={kind} onChange={value => setFilters({ kind: value })} label="All Types" items={KIND_ITEMS} colorClass={FILTER_PILL} />
-            <Dropdown variant="pill" value={status} onChange={value => setFilters({ status: value })} label="All Statuses" items={STATUS_ITEMS} colorClass={FILTER_PILL} />
-            <TextField label="Issued from" type="date" value={from} max={to || undefined} onChange={e => setFilters({ from: e.target.value })} />
-            <TextField label="Issued to" type="date" value={to} min={from || undefined} onChange={e => setFilters({ to: e.target.value })} />
+            <div className="flex gap-2">
+              <Dropdown variant="pill" value={kind} onChange={value => setFilters({ kind: value })} label="All Types" items={KIND_ITEMS} colorClass={FILTER_PILL} />
+              <Dropdown variant="pill" value={status} onChange={value => setFilters({ status: value })} label="All Statuses" items={STATUS_ITEMS} colorClass={FILTER_PILL} />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <TextField label="Issued from" type="date" value={from} max={to || undefined} onChange={e => setFilters({ from: e.target.value })} />
+              <TextField label="Issued to" type="date" value={to} min={from || undefined} onChange={e => setFilters({ to: e.target.value })} />
+            </div>
             <CheckboxField label="Deleted claims only" checked={deletedOnly} onChange={e => setFilters({ deletedClaimOnly: e.target.checked ? 'true' : '' })} />
-          </>
+          </div>
         )}
       </PageHeader>
 
       {!isLoading && !failed && rows.length === 0 ? (
-        hasFilters ? (
+        hasFilters || page > 1 ? (
           <EmptyState
             icon={ReceiptText}
             title="No invoices match these filters"

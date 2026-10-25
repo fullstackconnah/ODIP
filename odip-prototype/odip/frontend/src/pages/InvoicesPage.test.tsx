@@ -78,6 +78,18 @@ describe('InvoicesPage: the list', () => {
     expect(screen.getByText('TC-9-20260101')).toBeInTheDocument()
   })
 
+  it('mutes and strikes through the total of a voided invoice, and leaves a credited one in full ink', () => {
+    mockUseInvoiceRegister.mockReturnValue(ready([
+      row({ id: 'v', displayNumber: 'INV-0001', status: 'Voided', total: 111 }),
+      row({ id: 'c', displayNumber: 'INV-0002', status: 'Credited', total: 222 }),
+    ]))
+    renderPage()
+
+    expect(screen.getByText('$111.00')).toHaveClass('line-through', 'text-[var(--color-muted-foreground)]')
+    expect(screen.getByText('$222.00')).not.toHaveClass('line-through')
+    expect(screen.getByText('$222.00')).not.toHaveClass('text-[var(--color-muted-foreground)]')
+  })
+
   it('writes the subtitle for the type filter, and the plural', () => {
     mockUseInvoiceRegister.mockReturnValue(ready([row(), row({ id: 'inv-2' })], 1234))
     renderPage('/invoices?kind=CreditNote')
@@ -150,6 +162,17 @@ describe('InvoicesPage: states', () => {
     expect(screen.getByText('No invoices yet')).toBeInTheDocument()
     expect(screen.getByText('An invoice is numbered here when a claim is marked as submitted, and stays here even if its claim is later deleted.')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /clear filters/i })).not.toBeInTheDocument()
+  })
+
+  it('says nothing matches, with Clear filters, for a page past the end with no filter set', async () => {
+    const user = userEvent.setup()
+    mockUseInvoiceRegister.mockReturnValue(ready([]))
+    renderPage('/invoices?page=9')
+
+    expect(screen.getByText('No invoices match these filters')).toBeInTheDocument()
+    expect(screen.queryByText('No invoices yet')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Clear filters' }))
+    expect(screen.getByTestId('where').textContent).toBe('')
   })
 
   it('says nothing matches, and Clear filters empties every filter and the page', async () => {
