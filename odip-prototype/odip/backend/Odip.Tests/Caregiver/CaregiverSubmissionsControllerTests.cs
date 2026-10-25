@@ -236,6 +236,7 @@ public class CaregiverSubmissionsControllerTests
     private static async Task<Participant> AcceptAsync(OdipDbContext db, Guid tenantId, Participant p, PatchParticipantDto payload, PatchParticipantDto? basePayload)
     {
         var s = SeedSubmission(db, tenantId, p.Id, CaregiverSubmissionStatus.Submitted, payload, basePayload);
+        db.ChangeTracker.Clear();   // Accept reads from the database as in production, so a missing Include shows
         var result = await MakeController(db, tenantId, Guid.NewGuid()).Accept(s.Id, CancellationToken.None);
         Assert.IsType<NoContentResult>(result);
         return await db.Participants.IgnoreQueryFilters().SingleAsync(x => x.Id == p.Id);
@@ -408,6 +409,24 @@ public class CaregiverSubmissionsControllerTests
             new PatchParticipantDto { BehaviourCommunication = new PatchBehaviourCommunicationDto() });
         Assert.Equal(RiskRatingLevel.Low, reloaded.BehaviourRiskRating);
         Assert.Equal(MemoryLevel.Excellent, reloaded.Memory);
+    }
+
+    [Fact]
+    public async Task Accept_CraftedNdisPlanInPayloadAndBase_Returns200AndLeavesPlanUnchanged()
+    {
+        var (db, tenantId) = CreateTenantDb();
+        var p = SeedParticipant(db, tenantId);
+        p.NdisNumber = "430000001"; p.PlanType = PlanType.PlanManaged;
+        await db.SaveChangesAsync();
+        var s = SeedSubmission(db, tenantId, p.Id, CaregiverSubmissionStatus.Submitted,
+            new PatchParticipantDto { NdisPlan = new PatchNdisPlanDto { NdisNumber = "999999999" } },
+            new PatchParticipantDto { NdisPlan = new PatchNdisPlanDto { NdisNumber = "111111111" } });
+        db.ChangeTracker.Clear();
+        var result = await MakeController(db, tenantId, Guid.NewGuid()).Accept(s.Id, CancellationToken.None);
+        Assert.IsType<NoContentResult>(result);
+        var reloaded = await db.Participants.IgnoreQueryFilters().SingleAsync(x => x.Id == p.Id);
+        Assert.Equal("430000001", reloaded.NdisNumber);
+        Assert.Equal(PlanType.PlanManaged, reloaded.PlanType);
     }
 
     [Fact]

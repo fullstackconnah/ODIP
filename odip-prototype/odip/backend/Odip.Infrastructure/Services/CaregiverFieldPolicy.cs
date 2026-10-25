@@ -96,29 +96,13 @@ public static class CaregiverFieldPolicy
     }
 
     /// <summary>
-    /// Make a caregiver payload safe to apply. Internal GROUPS become null (absent = untouched by
-    /// PATCH's group-level atomicity). Internal SCALARS that live inside caregiver-editable groups
-    /// are overwritten with the participant's current value — nulling them would CLEAR them, since
-    /// a present group with a null member clears that member exactly as a full Create/Update would.
-    ///
-    /// The four internal groups nulled here are exactly InternalFields' ndisPlan/serviceProfile/
-    /// preferredStaff/risksHazardsSummary members, mapped to their PatchParticipantDto group:
-    ///   PreferredStaff          — preferredStaffId (+ preferredStaffName, read-only/derived, has
-    ///                             no Patch member at all)
-    ///   NdisPlan                — ndisNumber, planStartDate, planEndDate, planType, fundingSource,
-    ///                             fundingOrganisation, isDsoa, isRepeatClient
-    ///   ServiceProfile          — region (serviceStreams is NOT internal, but the whole group is
-    ///                             still server-controlled — the caregiver never edits serviceStreams
-    ///                             via this form either)
-    ///   RisksHazardsSummary     — behaviourRiskSummary, notes
-    ///
-    /// Cross-checking InternalFields against every member of PatchParticipantDto's other 12
-    /// (caregiver-editable) groups — PersonalDetails, Address, LivingArrangement, KeyIdentifiers,
-    /// CulturalBackground, SupportNeedsMobility, Medical, BehaviourCommunication,
-    /// CommunityAccessBehaviour, MealsAndDiet, AboutMe, SupportsLookLike — finds exactly ONE
-    /// overlap: BehaviourRiskRating inside BehaviourCommunication. hasRestrictivePracticeFlag has
-    /// no Patch member anywhere (derived, read-only), so there is nothing to preserve for it beyond
-    /// the fact that PATCH never reads it.
+    /// Make a caregiver payload safe to apply: an allow-list of the groups the caregiver form sends (PersonalDetails,
+    /// KeyIdentifiers, CulturalBackground, SupportNeedsMobility, Medical, BehaviourCommunication, MealsAndDiet, AboutMe,
+    /// Consents, HealthConditions, AdlAssessments). Every other group (NdisPlan, ServiceProfile, PreferredStaff,
+    /// RisksHazardsSummary, and any group added to PatchParticipantDto later) becomes null, which PATCH treats as untouched.
+    /// Inside the allowed BehaviourCommunication group, BehaviourRiskRating is internal, so it is overwritten with the
+    /// participant's current value: nulling it would clear it, since a present group with a null member clears that member.
+    /// Accept runs this on the payload and the base before the merge, and again on the merged result.
     /// </summary>
     public static PatchParticipantDto Sanitise(PatchParticipantDto payload, Participant current)
     {

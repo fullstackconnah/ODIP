@@ -158,11 +158,12 @@ public class CaregiverSubmissionsController : ControllerBase
         if (s.Payload is null)
             return BadRequest(ApiResponse<object>.Fail("This submission has no content."));
 
-        var payload = JsonSerializer.Deserialize<PatchParticipantDto>(s.Payload, Json) ?? new PatchParticipantDto();
+        // Allow-list before the merge: a crafted group (ndisPlan) must not reach it, since the projection lacks that group's internal members.
+        var payload = CaregiverFieldPolicy.Sanitise(JsonSerializer.Deserialize<PatchParticipantDto>(s.Payload, Json) ?? new PatchParticipantDto(), s.Participant);
         // A stored base means apply only what the caregiver changed from it; without one (sent before change tracking) the whole payload applies.
         if (s.BasePayload is not null)
         {
-            var baseDto = JsonSerializer.Deserialize<PatchParticipantDto>(s.BasePayload, Json) ?? new PatchParticipantDto();
+            var baseDto = CaregiverFieldPolicy.Sanitise(JsonSerializer.Deserialize<PatchParticipantDto>(s.BasePayload, Json) ?? new PatchParticipantDto(), s.Participant);
             payload = CaregiverFieldPolicy.MergeAgainstBase(await BuildProjectionAsync(s.Participant, ct), payload, baseDto);
         }
         payload = CaregiverFieldPolicy.Sanitise(payload, s.Participant);
