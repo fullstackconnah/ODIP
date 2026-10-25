@@ -40,8 +40,8 @@ public static class WhatsNewSeed
         new Item("2026-10-caregiver-form-keeps-typing", "Caregiver forms keep what you type while saving",
             "If a caregiver keeps typing while their form is saving, what they typed is now kept instead of being cleared when the save finishes.",
             Staff, false),
-        new Item("2026-10-forms-keep-typing", "Forms keep what you type when the record updates",
-            "When someone else saves the same participant or task while you are editing it, what you have typed stays and their other changes still come through.\n\nA saved task now opens with its latest details.",
+        new Item("2026-10-forms-keep-typing", "The intake and task forms keep what you type",
+            "If the participant or task you are editing refreshes in the background, for example when you come back to the tab, what you have typed now stays.\n\nAfter you save a task, it opens with its latest details.",
             Staff, false),
     };
 
