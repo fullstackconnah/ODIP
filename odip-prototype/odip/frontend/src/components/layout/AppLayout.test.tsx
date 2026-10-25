@@ -724,6 +724,7 @@ describe('AppLayout — the menu each role sees is generated from navConfig', ()
     'Staff & roster: Roster board | Shift patterns | Compatibility | Leave | Completions | Staff | Qualifications',
     'Tasks',
     'Budgets',
+    'Invoices',
     'Incidents',
     'Settings',
   ]
