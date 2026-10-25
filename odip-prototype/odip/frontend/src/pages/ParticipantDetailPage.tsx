@@ -31,15 +31,15 @@ import {
   ParticipantIdentitySection, ParticipantAddressLivingSection, ParticipantNdisFundingSection, ParticipantKeyIdentifiersSection,
   ParticipantCulturalBackgroundSection, ParticipantMedicalSection, ParticipantBehaviourCommunicationSection,
   ParticipantMealsDietSection, ParticipantAboutMeSection, ParticipantRisksHazardsSummarySection,
-  hasAddressLiving, hasKeyIdentifiers, hasCulturalBackground, hasMedical, hasBehaviourCommunication, hasMealsDiet, hasAboutMe, hasRisksHazardsSummary,
+  hasAddressLiving, hasTopic, answeredChecklist, hasKeyIdentifiers, hasCulturalBackground, hasMedical, hasBehaviourCommunication, hasMealsDiet, hasAboutMe, hasRisksHazardsSummary,
   hasMobilityPersonalCare, hasEquipmentOvernight, hasTypicalDay, hasTransportTravel, hasSupportNeeds,
   NotRecordedFold,
 } from './participant-detail'
 import {
   SupportNeedsSection, MobilityAidsSection, OvernightSupportSection, EquipmentSection, MobilityFunctionalSection, SupportNotesSection,
 } from './participant-detail/SupportProfileTab'
-import { BehaviourSupportCard, TypicalDayCard, EarlierChecklistFold, answeredChecklist } from './participant-detail/ParticipantCommunityAccessSection'
-import { SupportProfileTopicCard, hasTopic, type SupportProfileState, type TopicField } from './participant-detail/SupportProfileTopicCard'
+import { BehaviourSupportCard, TypicalDayCard, EarlierChecklistFold } from './participant-detail/ParticipantCommunityAccessSection'
+import { SupportProfileTopicCard, type SupportProfileState, type TopicField } from './participant-detail/SupportProfileTopicCard'
 import { SeeSectionLink } from './participant-detail/SeeSectionLink'
 import { managementLabel } from '@/lib/fundingPlan'
 import { ServicesCard } from './participant-detail/ServicesCard'

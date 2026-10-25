@@ -206,7 +206,10 @@ export default function RoutinesTab({ participantId }: { participantId: string |
   const rowCount = groups.reduce((n, g) => n + g.items.length, 0)
   const activeRef = useRef<HTMLDivElement>(null)
   const showAll = useShowAll(rowCount, activeRef, '[data-show-row]')
-  let budget = showAll.limit
+  // Day groups trimmed to the rows still visible; a group with no visible row is dropped.
+  const visibleGroups = groups
+    .map((group, i) => ({ group, items: group.items.slice(0, Math.max(showAll.limit - groups.slice(0, i).reduce((n, g) => n + g.items.length, 0), 0)) }))
+    .filter(g => g.items.length > 0)
 
   function openCreate() {
     setForm(EMPTY_FORM)
@@ -318,11 +321,7 @@ export default function RoutinesTab({ participantId }: { participantId: string |
       ) : (
         <div>
         <div ref={activeRef} className="space-y-5">
-          {groups.map(group => {
-            const items = group.items.slice(0, Math.max(budget, 0))
-            budget -= items.length
-            // A day group renders only if one of its rows is visible.
-            if (items.length === 0) return null
+          {visibleGroups.map(({ group, items }) => {
             return (
             <div key={group.label}>
               <h3 className="text-sm font-semibold text-[var(--color-muted-foreground)] mb-2">

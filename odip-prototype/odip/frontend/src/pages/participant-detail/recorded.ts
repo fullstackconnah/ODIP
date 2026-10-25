@@ -1,4 +1,7 @@
 import { parseHidpaCategories, type ParticipantDetailDto } from '@/api/types/participants'
+import type { SupportProfileDto } from '@/api/types/participants'
+import { CHECKLIST_ITEM_TYPES } from '@/api/types/enums'
+import type { TopicField } from './SupportProfileTopicCard'
 
 // Whether anything in a Details card is recorded. The card hides itself from a role that cannot edit when this is false, and the
 // Details tab folds an editor's empty cards into one "Not recorded" line (VISUAL-1 V2). A module of its own, not the card files:
@@ -85,4 +88,16 @@ export function hasTypicalDay(p: ParticipantDetailDto): boolean {
 
 export function hasEmergency(emergencyConsiderations?: string | null): boolean {
   return !!emergencyConsiderations?.trim()
+}
+
+/** The legacy Community Mobility & Transport Risk / Behaviours of Concern checklist rows that were answered. */
+export function answeredChecklist(p: ParticipantDetailDto) {
+  return CHECKLIST_ITEM_TYPES
+    .map((type) => p.checklistItems?.find((row) => row.itemType === type))
+    .filter((row): row is NonNullable<typeof row> => !!row?.value)
+}
+
+/** Whether the profile has any text in the given fields (the page's fold decision for a topic card). */
+export function hasTopic(profile: SupportProfileDto | undefined, ...fields: TopicField[]): boolean {
+  return fields.some(f => !!profile?.[f])
 }

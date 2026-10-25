@@ -16,7 +16,7 @@ export function useShowAll(count: number, containerRef: RefObject<HTMLElement | 
   const long = count > COLLAPSED_ROWS
 
   // A list that shrinks back under the threshold starts collapsed the next time it grows.
-  useEffect(() => { if (!long) setExpanded(false) }, [long])
+  if (!long && expanded) setExpanded(false)
 
   useEffect(() => {
     if (!focusRow.current) return

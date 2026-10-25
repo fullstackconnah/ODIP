@@ -43,7 +43,7 @@ export function FactList({ items, emptyMessage = 'Not recorded', onEdit, hideEmp
       <div className={`flex items-center justify-between gap-2 ${className ?? ''}`}>
         <p className="text-sm text-[var(--color-muted-foreground)]">{emptyMessage}</p>
         {hideEmpty && onAdd ? (
-          <Button variant="ghost" size="sm" onClick={onAdd}>
+          <Button variant="ghost" size="sm" className="min-h-[var(--tap-min)]" onClick={onAdd}>
             Add
           </Button>
         ) : onEdit && (
@@ -81,7 +81,7 @@ export function FactList({ items, emptyMessage = 'Not recorded', onEdit, hideEmp
       <div className="mt-1 flex items-center justify-between gap-2">
         <p className="text-[13px] leading-6 text-[var(--color-muted-foreground)]">Not recorded: {names}</p>
         {onAdd && (
-          <Button variant="ghost" size="sm" onClick={onAdd}>
+          <Button variant="ghost" size="sm" className="min-h-[var(--tap-min)]" onClick={onAdd}>
             Add
           </Button>
         )}

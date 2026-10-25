@@ -33,7 +33,10 @@ function useScrollSpy(ids: string[]): string | undefined {
     if (typeof IntersectionObserver === 'undefined' || !key) return
     const seen = new Set<string>()
     const io = new IntersectionObserver(entries => {
-      for (const e of entries) (e.isIntersecting ? seen.add(e.target.id) : seen.delete(e.target.id))
+      for (const e of entries) {
+        if (e.isIntersecting) seen.add(e.target.id)
+        else seen.delete(e.target.id)
+      }
       setCurrent(key.split('|').find(id => seen.has(id)) ?? undefined)
     }, { rootMargin: '0px 0px -70% 0px' })
     for (const id of key.split('|')) { const el = document.getElementById(id); if (el) io.observe(el) }

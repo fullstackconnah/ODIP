@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { SupportProfileTopicCard, hasTopic, type SupportProfileState } from './SupportProfileTopicCard'
+import { SupportProfileTopicCard, type SupportProfileState } from './SupportProfileTopicCard'
+import { hasTopic } from './recorded'
 import type { SupportProfileDto } from '@/api/types/participants'
 
 const { mockUpdate } = vi.hoisted(() => ({ mockUpdate: vi.fn() }))

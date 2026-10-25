@@ -47,7 +47,6 @@ export function SectionEditPanel({ title, className, canEdit, isDirty, onEditSta
 
   useEffect(() => {
     if (!editing || !focusEmpty) return
-    setFocusEmpty(false)
     const fields = bodyRef.current?.querySelectorAll<HTMLInputElement>('input, select, textarea') ?? []
     for (const el of fields) {
       if (el.value === '' && el.type !== 'hidden') { el.focus(); break }

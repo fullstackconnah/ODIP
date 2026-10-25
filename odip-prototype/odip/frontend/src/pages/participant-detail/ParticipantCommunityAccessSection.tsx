@@ -5,7 +5,8 @@ import { FormField } from '@/components/FormField'
 import { FactList } from '@/components/FactList'
 import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
-import { CHECKLIST_ITEM_TYPES, CHECKLIST_ITEM_TYPE_LABELS, CHECKLIST_ITEM_VALUE_LABELS } from '@/api/types/enums'
+import { answeredChecklist } from './recorded'
+import { CHECKLIST_ITEM_TYPE_LABELS, CHECKLIST_ITEM_VALUE_LABELS } from '@/api/types/enums'
 import type { ChecklistItemType } from '@/api/types/enums'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 import { extractErrorMessage } from '@/lib/utils'
@@ -166,13 +167,6 @@ export function TypicalDayCard({ p, participantId, canEdit }: { p: ParticipantDe
       )}
     </SectionEditPanel>
   )
-}
-
-/** The legacy Community Mobility & Transport Risk / Behaviours of Concern checklist rows that were answered. */
-export function answeredChecklist(p: ParticipantDetailDto) {
-  return CHECKLIST_ITEM_TYPES
-    .map((type) => p.checklistItems?.find((row) => row.itemType === type))
-    .filter((row): row is NonNullable<typeof row> => !!row?.value)
 }
 
 /** Read-only, closed by default: "Earlier checklist (n)". Renders nothing when no row was answered. */

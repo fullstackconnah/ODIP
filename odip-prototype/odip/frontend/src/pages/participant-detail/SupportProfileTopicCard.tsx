@@ -90,8 +90,3 @@ export function SupportProfileTopicCard({ title, field, participantId, canEdit, 
     </SectionEditPanel>
   )
 }
-
-/** Whether the profile has any text in the given fields (the page's fold decision for a topic card). */
-export function hasTopic(profile: SupportProfileDto | undefined, ...fields: TopicField[]): boolean {
-  return fields.some(f => !!profile?.[f])
-}

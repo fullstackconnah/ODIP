@@ -26,4 +26,4 @@ export { default as ParticipantAboutMeSection } from './ParticipantAboutMeSectio
 export { default as ParticipantRisksHazardsSummarySection } from './ParticipantRisksHazardsSummarySection'
 export { NotRecordedFold } from './NotRecordedFold'
 export { hasAddressLiving, hasKeyIdentifiers, hasCulturalBackground, hasMedical, hasBehaviourCommunication, hasMealsDiet, hasAboutMe, hasRisksHazardsSummary,
-  hasEmergency, hasMobilityPersonalCare, hasEquipmentOvernight, hasTypicalDay, hasTransportTravel, hasSupportNeeds }  from './recorded'
+  hasEmergency, hasMobilityPersonalCare, hasEquipmentOvernight, hasTypicalDay, hasTransportTravel, hasSupportNeeds, hasTopic, answeredChecklist }  from './recorded'
