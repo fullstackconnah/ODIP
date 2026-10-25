@@ -86,6 +86,7 @@ public class CaregiverController : ControllerBase
             Current = await BuildProjectionAsync(p, ct),
             Editable = EditableFields(),
             Draft = sub.Payload is null ? null : JsonSerializer.Deserialize<PatchParticipantDto>(sub.Payload, Json),
+            Base = sub.BasePayload is null ? null : JsonSerializer.Deserialize<PatchParticipantDto>(sub.BasePayload, Json),
         };
         return Ok(ApiResponse<CaregiverFormDto>.Ok(dto));
     }
@@ -112,6 +113,7 @@ public class CaregiverController : ControllerBase
         sub.CaregiverName = body.CaregiverName.Trim();
         sub.CaregiverRelationship = string.IsNullOrWhiteSpace(body.CaregiverRelationship) ? null : body.CaregiverRelationship.Trim();
         sub.Payload = JsonSerializer.Serialize(body.Payload, Json);
+        sub.BasePayload = body.Base is null ? null : JsonSerializer.Serialize(body.Base, Json);
         if (submit)
         {
             sub.Status = CaregiverSubmissionStatus.Submitted;

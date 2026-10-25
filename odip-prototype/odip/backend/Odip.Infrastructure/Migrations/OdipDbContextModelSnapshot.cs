@@ -457,6 +457,9 @@ namespace Odip.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("BasePayload")
+                        .HasColumnType("jsonb");
+
                     b.Property<string>("CaregiverName")
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");

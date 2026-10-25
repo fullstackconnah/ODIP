@@ -189,6 +189,38 @@ public class CaregiverControllerTests
     }
 
     [Fact]
+    public async Task Draft_StoresBase_AndGetReturnsIt()
+    {
+        using var db = CreateDb();
+        var (_, s, raw) = Seed(db);
+        var payload = new PatchParticipantDto { CulturalBackground = new PatchCulturalBackgroundDto { PersonalInterests = "Gardening" } };
+        var baseDto = new PatchParticipantDto { CulturalBackground = new PatchCulturalBackgroundDto { PersonalInterests = "Fishing" } };
+        var controller = MakeController(db);
+        Assert.IsType<NoContentResult>(await controller.SaveDraft(raw,
+            new CaregiverDraftDto { CaregiverName = "Jane Smith", Payload = payload, Base = baseDto }, CancellationToken.None));
+
+        var stored = await db.CaregiverProfileSubmissions.IgnoreQueryFilters().SingleAsync(x => x.Id == s.Id);
+        Assert.Contains("Fishing", stored.BasePayload);
+        var ok = Assert.IsType<OkObjectResult>((await controller.Get(raw, CancellationToken.None)).Result);
+        var form = Assert.IsType<ApiResponse<CaregiverFormDto>>(ok.Value).Data!;
+        Assert.Equal("Fishing", form.Base!.CulturalBackground!.PersonalInterests);
+        Assert.Equal("Gardening", form.Draft!.CulturalBackground!.PersonalInterests);
+    }
+
+    [Fact]
+    public async Task Draft_WithoutBase_ClearsStoredBase()
+    {
+        using var db = CreateDb();
+        var (_, s, raw) = Seed(db);
+        var controller = MakeController(db);
+        var payload = new PatchParticipantDto { CulturalBackground = new PatchCulturalBackgroundDto { PersonalInterests = "Gardening" } };
+        await controller.SaveDraft(raw, new CaregiverDraftDto { CaregiverName = "Jane Smith", Payload = payload, Base = payload }, CancellationToken.None);
+        await controller.SaveDraft(raw, new CaregiverDraftDto { CaregiverName = "Jane Smith", Payload = payload }, CancellationToken.None);
+        var stored = await db.CaregiverProfileSubmissions.IgnoreQueryFilters().SingleAsync(x => x.Id == s.Id);
+        Assert.Null(stored.BasePayload);   // null, not the text "null"
+    }
+
+    [Fact]
     public async Task SaveDraft_AfterSubmit_Returns409()
     {
         using var db = CreateDb();

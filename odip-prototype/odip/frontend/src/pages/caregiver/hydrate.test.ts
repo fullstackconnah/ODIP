@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { hydrateFormFromProjection } from './hydrate'
+import { hydrateFormFromProjection, hydrateBase, liveWire } from './hydrate'
 import type { CaregiverFormDto } from '@/api/types/caregiver'
 import { PROFILE_STEP_SCHEMAS_BY_KEY, type ParticipantFormData } from '@/lib/participantSchema'
 import { buildProfileStepPatch } from '@/lib/participantPatchGroups'
@@ -115,5 +115,51 @@ describe('hydrateFormFromProjection on the projection the API really sends', () 
     }
     // Not vacuous: the answers the review cared about are among what was compared.
     expect(sentBack).toEqual(expect.arrayContaining(['hidpaSupportCategories', 'ambulantStatus', 'memoryAids', 'isCald', 'medicareNumber']))
+  })
+})
+
+// A staff edit made while the form was open must not come back as the caregiver's change: the form keeps the caregiver's own edits
+// and shows everything else live, and the base it sends is what the caregiver started from.
+describe('hydrate with a stored base', () => {
+  const current = {
+    firstName: 'Sophie', lastName: 'Brown', phone: '0400000002', personalInterests: 'Reading',
+    consents: [{ consentType: 'PhotoVideo', granted: false, signedByName: 'Staff', signedDate: null }],
+  }
+  const pd = (phone: string) => ({ firstName: 'Sophie', lastName: 'Brown', phone })
+  const storedBase = { personalDetails: pd('0400000001'), consents: [{ consentType: 'PhotoVideo', granted: null, signedByName: null, signedDate: null }] } as never
+
+  it('without a draft the base is the live wire patch', () => {
+    const dto = makeDto({ current })
+    expect(hydrateBase(dto)).toEqual(liveWire(current))
+    expect((hydrateBase(dto).personalDetails as { phone: string }).phone).toBe('0400000002')
+  })
+
+  it("a legacy draft (no stored base) keeps today's overlay and takes the live base", () => {
+    const dto = makeDto({ current, draft: { personalDetails: pd('0400000003') } as never })
+    expect(hydrateFormFromProjection(dto).phone).toBe('0400000003')
+    expect(hydrateBase(dto)).toEqual(liveWire(current))
+  })
+
+  it('a field the caregiver changed shows the draft and keeps the stored base; one they did not change shows the live value', () => {
+    const changed = makeDto({ current, base: storedBase, draft: { personalDetails: pd('0400000003') } as never })
+    expect(hydrateFormFromProjection(changed).phone).toBe('0400000003')
+    expect((hydrateBase(changed).personalDetails as { phone: string }).phone).toBe('0400000001')
+
+    const untouched = makeDto({ current, base: storedBase, draft: { personalDetails: pd('0400000001') } as never })
+    expect(hydrateFormFromProjection(untouched).phone).toBe('0400000002')
+    expect((hydrateBase(untouched).personalDetails as { phone: string }).phone).toBe('0400000002')
+  })
+
+  it('collection rows merge by key: only the changed column comes from the draft, every live row stays', () => {
+    const dto = makeDto({
+      current: { ...current, consents: [...current.consents, { consentType: 'Privacy', granted: true, signedByName: null, signedDate: null }] },
+      base: storedBase,
+      draft: { consents: [{ consentType: 'PhotoVideo', granted: true, signedByName: null, signedDate: null }] } as never,
+    })
+    const rows = hydrateFormFromProjection(dto).consents as Record<string, unknown>[]
+    expect(rows).toHaveLength(2)
+    expect(rows.find((r) => r.consentType === 'PhotoVideo')).toMatchObject({ granted: 'true', signedByName: 'Staff' })
+    const baseRows = hydrateBase(dto).consents as unknown as Record<string, unknown>[]
+    expect(baseRows.find((r) => r.consentType === 'PhotoVideo')).toMatchObject({ granted: null })
   })
 })
