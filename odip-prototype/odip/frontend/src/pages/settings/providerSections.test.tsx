@@ -247,16 +247,28 @@ describe('Billing details', () => {
     expect(putBody()).toEqual(rowWithoutModes(makeSettings({ bankAccountName: null, invoiceFooterNotes: null }), { gstRegistered: false }))
   })
 
+  it('sends a stored PACE flag back as it was, though the section no longer shows it', async () => {
+    const user = userEvent.setup()
+    server = makeSettings({ isPaceProvider: true })
+    renderSection('billing')
+
+    await user.click(await screen.findByRole('checkbox', { name: 'Registered for GST' }))
+    await user.click(saveButton())
+
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    expect(putBody()).toEqual(rowWithoutModes(makeSettings({ isPaceProvider: true }), { gstRegistered: false }))
+  })
+
   it('names its groups and fields in the words of the brief, and gives the invoice note three rows', async () => {
     renderSection('billing')
     expect(await screen.findByLabelText('Account name')).toHaveValue('Sunrise Support')
     expect(screen.getByLabelText('BSB')).toHaveValue('064-000')
     expect(screen.getByLabelText('Account number')).toHaveValue('12345678')
-    expect(screen.getByRole('checkbox', { name: /PACE provider/ })).not.toBeChecked()
+    expect(screen.queryByRole('checkbox', { name: /PACE/ })).not.toBeInTheDocument()   // nothing reads it, so it is not asked
     const note = screen.getByLabelText('Note at the foot of every invoice')
     expect(note).toHaveAttribute('rows', '3')
     expect(note).toHaveClass('h-auto')
-    for (const group of ['Bank account', 'Tax and claiming', 'Invoice note']) expect(screen.getByRole('heading', { level: 3, name: group })).toBeInTheDocument()
+    for (const group of ['Bank account', 'Tax', 'Invoice note']) expect(screen.getByRole('heading', { level: 3, name: group })).toBeInTheDocument()
   })
 
   it('waits for the organisation profile when its required fields are blank: a note with a link, locked fields, no Save', async () => {
@@ -372,12 +384,12 @@ describe('Billing details: invoice numbers and payment terms', () => {
     expect(screen.getByLabelText('Credit note prefix')).toHaveValue('CN-')
     expect(startNumber()).toHaveValue(1)
     expect(daysToPay()).toHaveValue(14)
-    expect(screen.getAllByRole('heading', { level: 3 }).map(h => h.textContent)).toEqual(['Bank account', 'Invoice numbers', 'Payment terms', 'Tax and claiming', 'Invoice note'])
+    expect(screen.getAllByRole('heading', { level: 3 }).map(h => h.textContent)).toEqual(['Bank account', 'Invoice numbers', 'Payment terms', 'Tax', 'Invoice note'])
     expect(screen.getByText('Printed before the number, as in INV-0042. New invoices only.')).toBeInTheDocument()
     expect(screen.getByText('As in CN-0007. New credit notes only.')).toBeInTheDocument()
     expect(startNumber()).toHaveAccessibleDescription("Carry on from your old system's numbers. It can't change once an invoice is issued.")
     expect(screen.getByText("Each invoice is due this many days after it's issued. 0 means due on issue.")).toBeInTheDocument()
-    expect(screen.getByText("The bank account on your invoices, how they're numbered and when they're due, your GST and PACE status, and the note printed at the foot of every invoice.")).toBeInTheDocument()
+    expect(screen.getByText("The bank account on your invoices, how they're numbered and when they're due, your GST status, and the note printed at the foot of every invoice.")).toBeInTheDocument()
   })
 
   it.each([
