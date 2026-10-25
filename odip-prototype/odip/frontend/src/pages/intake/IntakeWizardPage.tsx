@@ -57,7 +57,7 @@ import {
   STEP_PARTICIPANT_DETAILS_FIELDS, STEP_NDIS_FUNDING_FIELDS, STEP_CONTACTS_FIELDS,
   STEP_CULTURAL_FIELDS, STEP_SUPPORT_FIELDS, STEP_MEDICAL_FIELDS, STEP_BEHAVIOUR_FIELDS, STEP_RISKS_FIELDS,
 } from '@/lib/participantSchema'
-import { formatServiceStreams, parseServiceStreams } from '@/api/types/participants'
+import { LIVING_ARRANGEMENT_LABELS, formatServiceStreams, parseServiceStreams } from '@/api/types/participants'
 import { newCompletionRequestId } from '@/lib/completionRequestId'
 import { ONBOARDING_TABLE_PATH, ENQUIRIES_TABLE_PATH, intakeCompleteState } from './intakeComplete'
 import { planTypeComplianceWarning } from '@/api/types/contacts'
@@ -366,7 +366,7 @@ export default function IntakeWizardPage() {
           { label: 'Phone', value: values.phone || '—' },
           { label: 'Email', value: values.email || '—' },
           { label: 'Address', value: [values.addressStreet, values.addressSuburb, values.addressState, values.addressPostcode].filter(Boolean).join(', ') || '—' },
-          { label: 'Living Arrangement', value: values.livingArrangement || '—' },
+          { label: 'Living Arrangement', value: LIVING_ARRANGEMENT_LABELS[values.livingArrangement as keyof typeof LIVING_ARRANGEMENT_LABELS] ?? '—' },
         )
       } else if (step.key === 'ndisFunding') {
         rows.push(

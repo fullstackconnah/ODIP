@@ -271,7 +271,6 @@ export function SearchableSelect({
               <Button
                 type="button"
                 variant="ghost"
-                size="sm"
                 // Keeps focus in the input, like the options' mousedown guard below.
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => { noMatchAction.onSelect(trimmedQuery); closePopup() }}

@@ -526,6 +526,7 @@ describe('IntakeWizardPage — meeting quick wins', () => {
     await user.type(screen.getByLabelText(/first name/i), 'Jamie')
     await user.type(screen.getByLabelText(/last name/i), 'Rivers')
     for (let i = 0; i < 8; i++) await next(user)
+    expect(screen.getByText('Shared household with other tenants')).toBeInTheDocument() // Review shows the label, not the enum name
     await user.click(screen.getByRole('button', { name: /complete intake/i }))
     expect(mockCreate.mock.calls[0][0]).toEqual(expect.objectContaining({ livingArrangement: 'SharedHousehold' }))
   })
