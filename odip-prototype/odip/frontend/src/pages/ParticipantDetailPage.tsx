@@ -239,7 +239,8 @@ export default function ParticipantDetailPage() {
           const n = t.id === 'health' ? counts.health : t.id === 'daily' ? counts.daily : t.id === 'people' ? counts.people : t.id === 'records' ? counts.records : undefined
           return {
             id: t.id,
-            label: <>{t.label}{n && t.noun ? <span className="sr-only">, {plural(n, t.noun[0], t.noun[1])}</span> : null}</>,
+            // relative: the absolutely positioned sr-only text would otherwise escape the strip's overflow clip and widen the page
+            label: <span className="relative">{t.label}{n && t.noun ? <span className="sr-only">, {plural(n, t.noun[0], t.noun[1])}</span> : null}</span>,
             badge: n,
           }
         })}
