@@ -73,6 +73,19 @@ describe('ParticipantCommunityAccessSection — edit/save cycle', () => {
     })
   })
 
+  it('echoes the overall community access risk rating back so a save does not clear it', async () => {
+    const user = userEvent.setup()
+    mockPatchMutateAsync.mockResolvedValue({ success: true })
+    render(<ParticipantCommunityAccessSection p={makeParticipant({ overallCommunityAccessRiskRating: 'High' })} participantId="participant-1" canEdit />)
+
+    await user.click(screen.getByRole('button', { name: /edit/i }))
+    await user.type(screen.getByLabelText('Signs I Am Happy and Settled'), 'Smiles and hums.')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    const body = mockPatchMutateAsync.mock.calls[0][0].data
+    expect(body.communityAccessBehaviour.overallCommunityAccessRiskRating).toBe('High')
+  })
+
   it('cancel restores the previous values with no network call', async () => {
     const user = userEvent.setup()
     const p = makeParticipant({ signsHappyAndSettled: 'Hums quietly.' })
