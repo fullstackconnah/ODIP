@@ -48,6 +48,7 @@ import { BehaviourCognitionStep } from '../profile/steps/BehaviourCognitionStep'
 import { DailyLivingStep } from '../profile/steps/DailyLivingStep'
 import { AboutYouStep } from './steps/AboutYouStep'
 import { hydrateFormFromProjection, hydrateBase } from './hydrate'
+import { changedLeaves } from './changedLeaves'
 
 export type CaregiverFormData = ParticipantFormData & { caregiverName: string; caregiverRelationship?: string }
 
@@ -62,7 +63,7 @@ export default function CaregiverWizardPage() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [progressSaved, setProgressSaved] = useState(false)
 
-  const { control, register, getValues, setError, clearErrors, reset, formState: { errors, isDirty } } = useForm<CaregiverFormData>({
+  const { control, register, getValues, setValue, setError, clearErrors, reset, formState: { errors, isDirty } } = useForm<CaregiverFormData>({
     defaultValues: {
       caregiverName: '', caregiverRelationship: '',
       consents: [], healthConditions: [], adlAssessments: [], checklistItems: [], communityAccessRiskItems: [],
@@ -92,12 +93,18 @@ export default function CaregiverWizardPage() {
   // over the projection for the fields/groups it carries — see hydrate.ts.
   // The form the caregiver started from, sent with every save so Accept can tell their edits from the record's later ones.
   const baseRef = useRef<PatchParticipantDto | null>(null)
+  // The form as it was at the last sync point: the snapshot a save sent, or what the form showed after the last refetch.
+  const syncRef = useRef<CaregiverFormData | null>(null)
   useEffect(() => {
     if (!form.data) return
     baseRef.current = hydrateBase(form.data)
-    // keepDirtyValues: what was typed while the save was in flight survives. baseRef and reset must stay in this one effect.
-    reset(hydrateFormFromProjection(form.data) as unknown as CaregiverFormData, { keepDefaultValues: false, keepDirtyValues: true })
-  }, [form.data, reset])
+    const sync = syncRef.current, now = getValues()
+    // baseRef and reset must stay in this one effect.
+    reset(hydrateFormFromProjection(form.data) as unknown as CaregiverFormData, { keepDefaultValues: false })
+    // Only what was typed after the save's snapshot survives, and stays dirty so leaving still asks.
+    if (sync) for (const [path, value] of changedLeaves(sync, now)) setValue(path as never, value as never, { shouldDirty: true })
+    syncRef.current = structuredClone(getValues())
+  }, [form.data, reset, getValues, setValue])
 
   const steps: WizardStepDef<CaregiverFormData>[] = useMemo(() => [
     { key: 'aboutYou', label: 'About you', fields: ABOUT_YOU_FIELDS },
@@ -111,7 +118,8 @@ export default function CaregiverWizardPage() {
   const stepsForRail = useMemo(() => [...steps, { key: REVIEW_STEP_KEY, label: 'Review', fields: [] }], [steps])
 
   const buildDraftBody = () => {
-    const values = getValues()
+    const values = structuredClone(getValues())
+    syncRef.current = values
     // One PatchParticipantDto for the whole form: merge every editable step's group patch. The
     // backend's accept-time sanitiser drops internal groups/scalars regardless — the frontend
     // additionally never renders them (hiddenFields), so nothing internal is ever user-editable.

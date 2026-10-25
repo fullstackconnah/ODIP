@@ -163,6 +163,29 @@ describe('CaregiverWizardPage - the base survives a refetch', () => {
     expect(body.payload).toEqual(body.base)
   })
 
+  it('does not send a staff edit back as the caregiver own after they revert a field', async () => {
+    server = makeDto({ current: { firstName: 'Sophie', lastName: 'Rivers', medicareNumber: '111111111' } })
+    const { user } = await open()
+    await user.type(nameField(), 'Jane Doe')
+    await user.click(nextButton())
+    await waitFor(() => expect(puts).toHaveLength(1))
+    const medicare = () => screen.getByLabelText(/medicare number/i)
+    await waitFor(() => expect(medicare()).toHaveValue('111111111'))
+    await user.clear(medicare()); await user.type(medicare(), '222222222')
+    await user.click(saveLater())
+    await waitFor(() => expect(puts).toHaveLength(2))
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(3))
+    await user.clear(medicare()); await user.type(medicare(), '111111111')
+    server = { ...server, current: { ...server.current, medicareNumber: '555555555' } }
+    await user.click(saveLater())
+    await waitFor(() => expect(puts).toHaveLength(3))
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(4))
+    await user.click(saveLater())
+    await waitFor(() => expect(puts).toHaveLength(4))
+    const b = puts[3] as unknown as { payload: { keyIdentifiers: { medicareNumber: string } }; base: { keyIdentifiers: { medicareNumber: string } } }
+    expect(b.payload.keyIdentifiers.medicareNumber).toBe(b.base.keyIdentifiers.medicareNumber)
+  })
+
   it('after a refetch: the caregiver draft stays, the staff edit shows, and a field typed in flight keeps its text', async () => {
     const keyIdentifiers = (medicare: string, pension: string) => ({ keyIdentifiers: { medicareNumber: medicare, pensionCardNumber: pension } }) as never
     server = makeDto({
@@ -191,6 +214,13 @@ describe('CaregiverWizardPage - the base survives a refetch', () => {
     await user.click(nextButton())
     await waitFor(() => expect(screen.getByLabelText(/medicare number/i)).toHaveValue('999888777'))
     expect(screen.getByLabelText(/pension card number/i)).toHaveValue('444444444')
+
+    // The Next click above saved again: its base follows the refetch, so staff's pension number is not sent as the caregiver's own edit.
+    await waitFor(() => expect(puts).toHaveLength(2))
+    const ki = (o: unknown) => (o as { keyIdentifiers: { pensionCardNumber: string; medicareNumber: string } }).keyIdentifiers
+    expect(ki(puts[1].base).pensionCardNumber).toBe('444444444')
+    expect(ki(puts[1].base).medicareNumber).toBe('000000000')
+    expect(ki(puts[1].payload).pensionCardNumber).toBe('444444444')
   })
 })
 
@@ -205,6 +235,21 @@ describe('CaregiverWizardPage - after a clean save', () => {
     await act(async () => { await router.navigate('/gone') })
     expect(screen.queryByText(/leave without saving/i)).not.toBeInTheDocument()
     expect(screen.getByText('Elsewhere')).toBeInTheDocument()
+  })
+
+  it('still asks before leaving when a field was typed in flight and the refetch has landed', async () => {
+    const { user, router } = await open()
+    await user.type(nameField(), 'Jane Doe')
+    const release = holdNextPut()
+    await user.click(saveLater())
+    await user.type(relationshipField(), 'Mother')
+    release()
+    await screen.findByText(/Progress saved/)
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2))
+
+    await act(async () => { await router.navigate('/gone') })
+    expect(await screen.findByText(/leave without saving/i)).toBeInTheDocument()
+    expect(screen.queryByText('Elsewhere')).not.toBeInTheDocument()
   })
 })
 
