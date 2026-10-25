@@ -189,7 +189,7 @@ npm run lint
 - Neither Dockerfile runs tests (owner decision 2026-10-25): they run in CI (pr-validation.yml) on the PR merge ref, and merge-chain
   merges only when Backend, Frontend and E2E pass. A failing deploy build is now a build or restore error; diagnose a red deploy
   with `gh run view <id> --log-failed`. Time-dependent tests that fail only in some daily window now surface in CI, not the deploy.
-  main is not branch-protected: a direct push or a manual deploy run now ships untested code, so run the suites first.
+  Branch protection (from 2026-10-26) requires the three pr-validation checks on main (Backend, Frontend, E2E); a PR that touches no CI path gets them as skipped, which counts as passing. A direct push or a manual deploy run now ships untested code, so run the suites first.
 
 - `Program.cs` contains raw-SQL self-healing logic for `__EFMigrationsHistory` that is tied to
   specific migration IDs. Renaming or reordering existing migrations can break application
