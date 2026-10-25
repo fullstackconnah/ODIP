@@ -26,6 +26,8 @@ export const test = base.extend<Options & Fixtures>({
       if (m.text().includes('Content Security Policy')) problems.push(`CSP violation: ${m.text()}`);
     });
     page.on('pageerror', e => problems.push(`uncaught page error: ${e.message}`));
+    // The important-entry pop-up would cover every spec once, so mark it seen first (a failed call just leaves the pop-up, which only a spec on the pop-up needs).
+    await call(session, 'POST', '/whats-new/popup-seen').catch(() => undefined);
     await use(page);
     expect(problems, 'CSP violations or uncaught page errors').toEqual([]);
   },

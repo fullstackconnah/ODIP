@@ -2,7 +2,7 @@ import { useRef, useState, type RefObject } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { useDialogBehavior, type DialogBehaviorOptions } from './useDialogBehavior'
+import { openDialogLayerCount, subscribeDialogLayers, useDialogBehavior, type DialogBehaviorOptions } from './useDialogBehavior'
 
 type LayerProps = Partial<Omit<DialogBehaviorOptions, 'containerRef' | 'initialFocusRef'>> & {
   name: string
@@ -536,5 +536,27 @@ describe('useDialogBehavior: a field with autoFocus inside the layer', () => {
     await user.click(screen.getByRole('button', { name: 'open' }))
     await user.keyboard('{Escape}')
     expect(screen.getByRole('button', { name: 'open' })).toHaveFocus()
+  })
+})
+
+describe('useDialogBehavior: the layer count', () => {
+  it('counts open layers and tells a subscriber on each change, until it unsubscribes', () => {
+    const listener = vi.fn()
+    const unsubscribe = subscribeDialogLayers(listener)
+    expect(openDialogLayerCount()).toBe(0)
+
+    const { rerender } = render(<Layer name="a" />)
+    expect(openDialogLayerCount()).toBe(1)
+    const afterOpen = listener.mock.calls.length
+    expect(afterOpen).toBeGreaterThan(0)
+
+    rerender(<Layer name="a" open={false} />)
+    expect(openDialogLayerCount()).toBe(0)
+    expect(listener.mock.calls.length).toBeGreaterThan(afterOpen)
+
+    unsubscribe()
+    const afterUnsubscribe = listener.mock.calls.length
+    rerender(<Layer name="a" />)
+    expect(listener.mock.calls.length).toBe(afterUnsubscribe)
   })
 })

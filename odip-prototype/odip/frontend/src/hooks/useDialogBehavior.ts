@@ -27,6 +27,15 @@ type Layer = {
 }
 
 const layers: Layer[] = []
+const layerListeners = new Set<() => void>()
+const notifyLayers = () => layerListeners.forEach(l => l())
+
+/** How many layers are open now, and a subscription to changes: for `useSyncExternalStore`, so something that must not open over a dialog (the What's new pop-up) can wait for zero. */
+export const openDialogLayerCount = () => layers.length
+export function subscribeDialogLayers(listener: () => void): () => void {
+  layerListeners.add(listener)
+  return () => { layerListeners.delete(listener) }
+}
 let scrollLocks = 0
 let overflowBeforeLock = ''
 
@@ -78,12 +87,14 @@ function trapTab(event: KeyboardEvent, layer: Layer) {
 function pushLayer(layer: Layer) {
   layers.push(layer)
   if (layers.length === 1) document.addEventListener('keydown', onKeyDown)
+  notifyLayers()
 }
 
 function removeLayer(layer: Layer) {
   const index = layers.indexOf(layer)
   if (index !== -1) layers.splice(index, 1)
   if (layers.length === 0) document.removeEventListener('keydown', onKeyDown)
+  notifyLayers()
 }
 
 function acquireScrollLock() {

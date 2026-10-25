@@ -49,6 +49,8 @@ public static class ExportTables
         [typeof(SupportActivityGroup)] = "The support catalogue's activity groups, which are the same for every organisation.",
         [typeof(PublicHoliday)] = "The public holiday calendar, which is the same for every organisation.",
         [typeof(PublicHolidayOverride)] = "Changes to the public holiday calendar, which apply to every organisation.",
+        [typeof(WhatsNewEntry)] = "Release notes from Bunya Support, which are the same for every organisation.",
+        [typeof(WhatsNewUserState)] = "When each person last opened What's new, which is screen state, not your organisation's records.",
         [typeof(EarlyAccessRequest)] = "Early access requests from the ODIP website, which aren't your organisation's records.",
         [typeof(InvoiceNumberCounter)] = "ODIP's next-number counter; the numbers themselves are in invoices.csv.",
         [typeof(EarlyAccessLaterSubmission)] = "Repeat early access requests from the ODIP website, which aren't your organisation's records.",
