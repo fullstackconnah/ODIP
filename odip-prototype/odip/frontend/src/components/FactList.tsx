@@ -13,9 +13,9 @@ export type FactListProps = {
   emptyMessage?: string
   /** Renders a ghost "Edit" button next to the empty-state message when every value is empty. */
   onEdit?: () => void
-  /** Drops empty rows and names them in one "Not recorded: A, B …" foot line (up to 6, then "… and n more"). */
+  /** Drops empty rows and names them in one "Not recorded: A, B …" foot line (up to 6, then "and n more"). */
   hideEmpty?: boolean
-  /** With hideEmpty: a ghost "Add" button on the foot line (or beside the all-empty message). */
+  /** With hideEmpty: a ghost "Add" button on the foot line of a part-recorded list. An all-empty list has none: the card header Edit is its one action. */
   onAdd?: () => void
   className?: string
 }
@@ -42,11 +42,7 @@ export function FactList({ items, emptyMessage = 'Not recorded', onEdit, hideEmp
     return (
       <div className={`flex items-center justify-between gap-2 ${className ?? ''}`}>
         <p className="text-sm text-[var(--color-muted-foreground)]">{emptyMessage}</p>
-        {hideEmpty && onAdd ? (
-          <Button variant="ghost" size="sm" className="min-h-[var(--tap-min)]" onClick={onAdd}>
-            Add
-          </Button>
-        ) : onEdit && (
+        {!(hideEmpty && onAdd) && onEdit && (
           <Button variant="ghost" size="sm" onClick={onEdit}>
             Edit
           </Button>
@@ -57,7 +53,7 @@ export function FactList({ items, emptyMessage = 'Not recorded', onEdit, hideEmp
 
   const shown = hideEmpty ? items.filter(item => !isEmptyValue(item.value)) : items
   const missing = hideEmpty ? items.filter(item => isEmptyValue(item.value)).map(item => item.label) : []
-  const names = missing.slice(0, 6).join(', ') + (missing.length > 6 ? ` … and ${missing.length - 6} more` : '')
+  const names = missing.slice(0, 6).join(', ') + (missing.length > 6 ? ` and ${missing.length - 6} more` : '')
 
   const rows = (
     <dl className={`grid grid-cols-[10rem_1fr] gap-x-4 ${hideEmpty ? '' : className ?? ''}`}>

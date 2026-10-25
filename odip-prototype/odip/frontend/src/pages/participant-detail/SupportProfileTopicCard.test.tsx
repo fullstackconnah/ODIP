@@ -46,8 +46,20 @@ describe('SupportProfileTopicCard (T15)', () => {
     const state = { ...ready(), error: true }
     render(<SupportProfileTopicCard title="Emergency" field="emergencyConsiderations" participantId="participant-1" canEdit state={state} />)
     expect(screen.getByRole('button', { name: 'Edit' })).toBeDisabled()
-    await user.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(screen.getByText(/Couldn't load the support profile\./)).toBeInTheDocument()
+    const retry = screen.getByRole('button', { name: 'Try again' })
+    expect(retry).toHaveClass('min-h-[var(--tap-min)]')
+    await user.click(retry)
     expect(state.retry).toHaveBeenCalled()
+  })
+
+  it('an all-empty card has the header Edit and no Add; viewers get neither', () => {
+    const { unmount } = render(<SupportProfileTopicCard title="Emergency" field="emergencyConsiderations" participantId="participant-1" canEdit state={ready(undefined)} />)
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add' })).not.toBeInTheDocument()
+    unmount()
+    render(<SupportProfileTopicCard title="Emergency" field="emergencyConsiderations" participantId="participant-1" canEdit={false} state={ready(undefined)} />)
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
 
   it('formats the review date and edits it as a date', async () => {

@@ -87,7 +87,7 @@ describe('FactList hideEmpty', () => {
   it('names six and counts the rest', () => {
     const items = Array.from({ length: 10 }, (_, i) => ({ label: `L${i}`, value: i === 9 ? 'x' : '' }))
     render(<FactList hideEmpty items={items} />)
-    expect(screen.getByText('Not recorded: L0, L1, L2, L3, L4, L5 … and 3 more')).toBeInTheDocument()
+    expect(screen.getByText('Not recorded: L0, L1, L2, L3, L4, L5 and 3 more')).toBeInTheDocument()
   })
 
   it('shows Add only when onAdd is given, and calls it', async () => {
@@ -99,10 +99,10 @@ describe('FactList hideEmpty', () => {
     expect(onAdd).toHaveBeenCalledTimes(1)
   })
 
-  it('reads Not recorded alone, plus Add, when every row is empty', () => {
-    render(<FactList hideEmpty onAdd={() => {}} items={five(5)} />)
+  it('reads Not recorded alone, with no Add or Edit, when every row is empty: the card header Edit is the one action', () => {
+    render(<FactList hideEmpty onAdd={() => {}} onEdit={() => {}} items={five(5)} />)
     expect(screen.getByText('Not recorded')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Add' })).toBeInTheDocument()
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
 
   it('shows no foot line when every row is answered', () => {

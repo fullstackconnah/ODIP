@@ -59,8 +59,8 @@ export function SupportProfileTopicCard({ title, field, participantId, canEdit, 
     return (
       <Card title={title} action={canEdit ? <Button variant="ghost" size="sm" disabled>Edit</Button> : undefined}>
         <Callout tone="error">
-          Couldn't load {title.toLowerCase()}.{' '}
-          <Button variant="ghost" size="sm" onClick={state.retry}>Retry</Button>
+          Couldn't load the support profile.{' '}
+          <Button variant="ghost" size="sm" className="min-h-[var(--tap-min)]" onClick={state.retry}>Try again</Button>
         </Callout>
       </Card>
     )
