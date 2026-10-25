@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { useParticipant, usePersons, useCreateContactRole, useUpdateContactRole } from '@/api/hooks'
 import { FormField } from '@/components/FormField'
@@ -409,6 +409,7 @@ function RoleFieldsBlock({ role, values, planType, onChange }: {
  * role, whose Person is fixed.
  */
 export default function AddContactRoleForm({ participantId, mode, role, onSaved, onCancel }: AddContactRoleFormProps) {
+  const primaryHintId = useId()
   const { data: participant } = useParticipant(participantId)
   const createRole = useCreateContactRole()
   const updateRole = useUpdateContactRole()
@@ -692,9 +693,13 @@ export default function AddContactRoleForm({ participantId, mode, role, onSaved,
         <FormField label="Relationship to participant">
           <input value={form.relationshipToParticipant} onChange={e => setForm(f => ({ ...f, relationshipToParticipant: e.target.value }))} placeholder="e.g. Mother, Father / Guardian" />
         </FormField>
-        <FormField label="Primary" layout="checkbox" hint="Only one active primary allowed per role type where relevant">
-          <input type="checkbox" checked={form.isPrimary} onChange={e => setForm(f => ({ ...f, isPrimary: e.target.checked }))} className="w-4 h-4 rounded border-[var(--color-border)]" />
-        </FormField>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <label className="inline-flex items-center gap-2 min-h-[var(--control-h)] px-3 text-sm rounded-full border border-[var(--color-border)] cursor-pointer transition-colors has-[:checked]:border-[var(--color-primary)] has-[:checked]:bg-[var(--color-primary)]/10 has-[:checked]:text-[var(--color-primary)] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--color-ring)]">
+            <input type="checkbox" aria-describedby={primaryHintId} checked={form.isPrimary} onChange={e => setForm(f => ({ ...f, isPrimary: e.target.checked }))} className="w-4 h-4 rounded border-[var(--color-border)]" />
+            Primary contact
+          </label>
+          <span id={primaryHintId} className="text-xs text-[var(--color-muted-foreground)]">Only one primary Next of Kin at a time</span>
+        </div>
       </div>
 
       {/* PF-5: field union across every selected role, rendered as one grouped block per role

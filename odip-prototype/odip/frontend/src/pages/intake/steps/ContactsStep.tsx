@@ -178,7 +178,13 @@ export function ContactsStep({
                       {...register(`contactRoles.${index}.registeredProviderFlag`)}
                     />
                   )}
-                  <CheckboxField label="Primary" className="mb-0" {...register(`contactRoles.${index}.isPrimary`)} />
+                  <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <label className="inline-flex items-center gap-2 min-h-[var(--control-h)] px-3 text-sm rounded-full border border-[var(--color-border)] cursor-pointer transition-colors has-[:checked]:border-[var(--color-primary)] has-[:checked]:bg-[var(--color-primary)]/10 has-[:checked]:text-[var(--color-primary)] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--color-ring)]">
+                      <input type="checkbox" aria-describedby={`contact-${field.id}-primary-hint`} className="w-4 h-4 rounded border-[var(--color-border)]" {...register(`contactRoles.${index}.isPrimary`)} />
+                      Primary contact
+                    </label>
+                    <span id={`contact-${field.id}-primary-hint`} className="text-xs text-[var(--color-muted-foreground)]">Only one primary Next of Kin at a time</span>
+                  </div>
                 </div>
               )
             })}

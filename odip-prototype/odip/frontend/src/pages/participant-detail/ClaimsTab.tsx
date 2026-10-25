@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { FileText } from 'lucide-react'
 import { useParticipantClaims, usePreviewShiftClaim, useGenerateShiftClaim } from '@/api/hooks'
 import { Callout } from '@/components/Callout'
+import { LeftOutCallout } from '@/components/LeftOutCallout'
 import { PageState } from '@/components/PageState'
 import { queryPhase } from '@/lib/queryPhase'
 import { Card } from '@/components/Card'
@@ -297,7 +298,7 @@ function GenerateShiftClaimModal({ participantId, onClose }: { participantId: st
           {/* A completed shift this claim cannot price is left out and stays waiting: never dropped silently. */}
           {previewData.leftOut && previewData.leftOut.length > 0 && (
             <div className="mt-[var(--section-gap)]">
-              <LeftOutShifts shifts={previewData.leftOut} heading={`${plural(previewData.leftOut.length, 'shift')} will be left out of this claim`} />
+              <LeftOutCallout items={shiftItems(previewData.leftOut)} heading={`${plural(previewData.leftOut.length, 'shift')} will be left out of this claim`} footer={SHIFT_LEFT_OUT_FOOTER} />
             </div>
           )}
 
@@ -317,7 +318,7 @@ function GenerateShiftClaimModal({ participantId, onClose }: { participantId: st
             {(generated.leftOut?.length ?? 0) > 0 ? ', from the shifts that could be priced' : ''}.
           </p>
           {generated.leftOut && generated.leftOut.length > 0 && (
-            <LeftOutShifts shifts={generated.leftOut} heading={`${plural(generated.leftOut.length, 'shift')} ${generated.leftOut.length === 1 ? 'was' : 'were'} left out of the claim`} />
+            <LeftOutCallout items={shiftItems(generated.leftOut)} heading={`${plural(generated.leftOut.length, 'shift')} ${generated.leftOut.length === 1 ? 'was' : 'were'} left out of the claim`} footer={SHIFT_LEFT_OUT_FOOTER} />
           )}
           {generated.flagged && generated.flagged.length > 0 && <FlaggedShifts shifts={generated.flagged} />}
         </div>
@@ -343,19 +344,8 @@ function FlaggedShifts({ shifts }: { shifts: ShiftClaimFlaggedDto[] }) {
   )
 }
 
-/** The completed shifts a shift claim leaves out: each with its date, what it is and why. They are not part of the claim, and they stay completed and unclaimed. */
-function LeftOutShifts({ shifts, heading }: { shifts: ShiftClaimLeftOutDto[]; heading: string }) {
-  return (
-    <Callout tone="warning">
-      <p className="font-medium">{heading}</p>
-      <ul className="mt-2 flex flex-col gap-1 text-sm">
-        {shifts.map(shift => (
-          <li key={shift.shiftId}>
-            <span className="tabular-nums">{formatDateAu(shift.serviceDate)}</span> · {shift.description} · {shift.reason}
-          </li>
-        ))}
-      </ul>
-      <p className="mt-2 text-[13px]">They stay completed and unclaimed. Nothing here is billed for them.</p>
-    </Callout>
-  )
-}
+const SHIFT_LEFT_OUT_FOOTER = 'They stay completed and unclaimed. Nothing here is billed for them.'
+
+/** The completed shifts a shift claim leaves out: each with its date, what it is and why. */
+const shiftItems = (shifts: ShiftClaimLeftOutDto[]) =>
+  shifts.map(s => ({ key: s.shiftId, lead: <span className="tabular-nums">{formatDateAu(s.serviceDate)}</span>, description: s.description, reason: s.reason }))

@@ -1665,7 +1665,13 @@ public class RosteringController : ControllerBase
             // A person's own window: it only moves how far the pattern has been generated when it joins on to what was covered (or, when nothing was yet, to the first day the top-up would make: the provider's today),
             // so the daily top-up can still fill a gap before it.
             var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
-            var generated = await _generator.GenerateAsync(_db, pattern.ParticipantId, new[] { pattern.Id }, from, to, ct, onlyWhenContiguous: true, providerToday: today, availability: _availability);
+            // The board's lock order, as Start week: the organisation's board lock first, so a plain create for the same worker is taken in turn with this; the generator's participant lock joins that transaction, so the board lock commits.
+            ShiftGeneration generated;
+            await using (var held = await RosterBoardLockAsync(ct))
+            {
+                generated = await _generator.GenerateAsync(_db, pattern.ParticipantId, new[] { pattern.Id }, from, to, ct, onlyWhenContiguous: true, providerToday: today, availability: _availability);
+                await held.CommitAsync(ct);
+            }
             await MarkWeeksStartedAsync(pattern.TenantId, generated.MadeShifts, ct);
             var warnings = await BudgetWarningsAsync(pattern.ParticipantId, generated.MadeShifts, ct);
             return Ok(ApiResponse<GeneratePatternResultDto>.Ok(new GeneratePatternResultDto { Created = generated.Created, Skipped = generated.Skipped, BudgetWarnings = warnings }));
