@@ -78,6 +78,8 @@ export function ParticipantCommunityAccessSection({ p, participantId, canEdit }:
             bocEarlyWarningSigns: draft.bocEarlyWarningSigns.trim() || null,
             bocDeEscalationStrategies: draft.bocDeEscalationStrategies.trim() || null,
             bocWhatNotToDo: draft.bocWhatNotToDo.trim() || null,
+            // Not edited here (wizard-owned), but a present group clears omitted members: echo it.
+            overallCommunityAccessRiskRating: p.overallCommunityAccessRiskRating ?? null,
           },
           supportsLookLike: {
             supportsLookLikeMorning: draft.supportsLookLikeMorning.trim() || null,

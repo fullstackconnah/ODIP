@@ -639,6 +639,30 @@ public class ParticipantsControllerPatchTests
         Assert.Equal("Always accompanied near roads.", roadAwareness.StrategyNotes);
     }
 
+    [Fact]
+    public async Task Patch_CommunityAccessBehaviourGroup_WithRatingOmitted_ClearsTheRating()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+        var id = await CreateFullyPopulatedParticipantAsync(controller);
+
+        await controller.Patch(id, new PatchParticipantDto
+        {
+            CommunityAccessBehaviour = new PatchCommunityAccessBehaviourDto { OverallCommunityAccessRiskRating = RiskRatingLevel.High },
+        }, CancellationToken.None);
+
+        // A present group is a mini full-submit: a sender that leaves the rating out clears it, so
+        // every sender of this group must echo the current rating (the participant-detail card did not).
+        var result = await controller.Patch(id, new PatchParticipantDto
+        {
+            CommunityAccessBehaviour = new PatchCommunityAccessBehaviourDto { SignsHappyAndSettled = "Humming quietly." },
+        }, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(result.Result);
+
+        var detail = await GetByIdData(controller, id);
+        Assert.Null(detail.OverallCommunityAccessRiskRating);
+    }
+
     // ── PD-5 item 5c: the 4 safety-critical partial-save groups sync the auto-note ──────────
 
     [Fact]
