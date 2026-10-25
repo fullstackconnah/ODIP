@@ -122,13 +122,13 @@ export function PageHeader({ title, titleNote, documentTitle, subtitle, action, 
  *     14–17 Aug 2026
  *   </PageHeaderMeta>
  *
- * A child that is `null`, `undefined`, `false` or an empty string is skipped BEFORE the separators are placed, so a
+ * A child that is `null`, `undefined`, `false` or an empty or blank string is skipped BEFORE the separators are placed, so a
  * missing fact never leaves a dangling dot. Each separator belongs to the item before it, so a wrapped line can end
  * with a dot but never begins with one. The dots are `aria-hidden`; the row's own typography (13px, muted) comes from
  * `PageHeader`.
  */
 export function PageHeaderMeta({ children }: { children: ReactNode }) {
-  const items = Children.toArray(children).filter(item => item !== '')
+  const items = Children.toArray(children).filter(item => typeof item !== 'string' || item.trim() !== '')
   return (
     <div className="flex flex-wrap items-center gap-y-1">
       {items.map((item, i) => (

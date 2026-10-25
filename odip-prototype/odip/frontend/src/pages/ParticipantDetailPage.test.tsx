@@ -430,7 +430,19 @@ describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
     expect(panel.querySelector('details')).toBeNull()
   })
 
-  // T7: the same page for editors; Add on a part-filled Home and living card opens edit with focus in its first empty input.
+  it('a sparse Coordinator About leaves the folded sections out of Jump to', async () => {
+    const user = userEvent.setup()
+    setUserRole('Coordinator')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ medicareNumber: 'MED123', mainSupportPersonName: 'Jo Brown' }), isLoading: false })
+    renderAtTab('participant-1', 'about')
+    const folded = [...document.querySelectorAll('details [data-jump]')].map(s => s.getAttribute('aria-label'))
+    expect(folded.length).toBeGreaterThan(0)
+    await user.click(await screen.findByRole('button', { name: /Jump to/ }))
+    const labels = screen.getAllByRole('option').map(o => o.textContent)
+    for (const label of folded) expect(labels).not.toContain(label)
+  })
+
+  // T7: the same page for editors; Add on a part-recorded card opens edit with focus in its first empty input.
   it.each(['Coordinator', 'Admin', 'SuperAdmin'])('%s gets Add buttons and a fold of empty cards in a sparse About', async role => {
     const user = userEvent.setup()
     setUserRole(role)
@@ -441,11 +453,14 @@ describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
     expect(fold).not.toHaveAttribute('open')
     expect(fold.textContent).toContain('Cultural Background')
 
-    const home = panel.querySelector('#home-and-living') as HTMLElement
-    await user.click(within(home).getByRole('button', { name: 'Add' }))
+    // Add sits beside a part-recorded card's "Not recorded: A, B" list; an all-empty card has only its header Edit.
+    expect([...fold.querySelectorAll('button')].some(b => b.textContent?.trim() === 'Add')).toBe(false)
+    const add = within(panel).getAllByRole('button', { name: 'Add' })[0]
+    const card = add.closest('section') as HTMLElement
+    await user.click(add)
     await waitFor(() => {
       const active = document.activeElement as HTMLInputElement
-      expect(home).toContainElement(active)
+      expect(card).toContainElement(active)
       expect(active.value).toBe('')
     })
   })
@@ -487,6 +502,15 @@ describe('ParticipantDetailPage — header meta row', () => {
     const time = meta.querySelector('time')
     expect(time).toHaveAttribute('datetime', '2026-01-01T00:00:00Z')
     expect(meta.textContent).toMatch(/No region.*Self Managed.*Ratio .*Updated/)
+  })
+
+  it('drops a missing plan type or ratio instead of leaving a double dot in the meta row', () => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ planType: '' as never, supportRatio: '' as never, serviceStreams: 'None' }), isLoading: false })
+    renderAt('participant-1')
+    const meta = screen.getByText(/^Updated/).parentElement!.parentElement as HTMLElement
+    expect(meta.textContent).not.toMatch(/··/)
+    expect(meta.textContent).not.toMatch(/Ratio/)
+    expect(meta.textContent).toMatch(/No region·Updated/)
   })
 
   // Landing-spotted: the header printed the raw enums "PlanManaged" and "TwoToOne".
@@ -1124,7 +1148,16 @@ describe('ParticipantDetailPage — support profile refetch and Health Jump to',
     mockUseSupportProfile.mockReturnValue({ ...defaultProfile(), isError: true, error: new Error('Network Error') })
     renderHealth()
     expect(screen.getAllByText(/Couldn't load/).length).toBeGreaterThan(0)
-    expect(screen.getAllByRole('button', { name: 'Retry' }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: 'Try again' }).length).toBeGreaterThan(0)
+  })
+
+  it('does not list the nested Risks & Hazards Summary in Jump to', async () => {
+    const user = userEvent.setup()
+    renderHealth()
+    await user.click(await screen.findByRole('button', { name: /Jump to/ }))
+    const labels = screen.getAllByRole('option').map(o => o.textContent)
+    expect(labels).toContain('Risks and hazards')
+    expect(labels).not.toContain('Risks & Hazards Summary')
   })
 
   it('lists Restrictive practices, with the other top-level Health sections, in Jump to', async () => {
@@ -1330,7 +1363,7 @@ describe('ParticipantDetailPage — copying the caregiver link on a page that is
       // This test's own `user`: another userEvent.setup() would put its clipboard stub back on navigator.
       await user.click(documentsTrigger())
       await user.click(screen.getByRole('option', { name: /Generate/ }))
-      await user.click(await screen.findByRole('button', { name: 'Copy' }))
+      await user.click(await screen.findByRole('button', { name: 'Copy link' }))
 
       expect(execCommand).toHaveBeenCalledWith('copy')
     } finally {

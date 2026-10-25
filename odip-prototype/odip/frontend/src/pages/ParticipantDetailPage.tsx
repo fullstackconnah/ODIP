@@ -264,8 +264,8 @@ export default function ParticipantDetailPage() {
                 {/* What is still missing, as a quiet warning-tone chip beside the status. Informational: nothing on this page is gated on it. */}
                 {p.readinessIssues?.length ? <ReadinessNote issues={p.readinessIssues} variant="chip" /> : null}
                 <span>{p.region || 'No region'}</span>
-                <span>{PLAN_TYPE_LABELS[p.planType] ?? p.planType}</span>
-                <span>Ratio {SUPPORT_RATIO_LABELS[p.supportRatio] ?? p.supportRatio}</span>
+                {p.planType ? <span>{PLAN_TYPE_LABELS[p.planType] ?? p.planType}</span> : null}
+                {p.supportRatio ? <span>Ratio {SUPPORT_RATIO_LABELS[p.supportRatio] ?? p.supportRatio}</span> : null}
                 <span>Updated <time dateTime={p.updatedAt}>{formatRelative(p.updatedAt, { style: 'long' })}</time></span>
                 {parseServiceStreams(p.serviceStreams).length > 0 ? <ServiceStreamBadges value={p.serviceStreams} /> : null}
               </PageHeaderMeta>
@@ -299,7 +299,7 @@ export default function ParticipantDetailPage() {
           >
             {/* The download error and the caregiver-link panel sit here, full width, so the title row stays one line at 390 px. */}
             {(downloadIntakeForm.isError || downloadParticipantProfile.isError || downloadClientOverview.isError) && (
-              <p role="alert" className="text-xs text-[var(--color-destructive)]">
+              <p role="alert" className="w-full text-xs text-[var(--color-destructive)]">
                 Couldn't download the file. Try again, or contact support if this keeps happening.
               </p>
             )}
@@ -575,15 +575,15 @@ function useCaregiverLink(participantId: string): CaregiverLink {
   const panel = (
     <div data-testid="caregiver-link-control" className="contents">
       {issued && (
-        <div role="status" className="text-xs p-2 rounded bg-[var(--color-accent)] break-all">
+        <div role="status" className="w-full text-xs p-2 rounded bg-[var(--color-accent)] break-all">
           <span>Copy this link now — it won't be shown again. Expires {formatDateAu(issued.expiresAt)}.</span>
           <code className="block mt-1">{issued.url}</code>
-          <button type="button" className="mt-1 underline" onClick={() => { void copyText(issued.url) }}>
-            Copy
-          </button>
+          <Button variant="secondary" size="sm" className="mt-2 min-h-[var(--tap-min)]" onClick={() => { void copyText(issued.url) }}>
+            Copy link
+          </Button>
         </div>
       )}
-      {linkError && <p role="alert" className="text-xs text-[var(--color-destructive)]">{linkError}</p>}
+      {linkError && <p role="alert" className="w-full text-xs text-[var(--color-destructive)]">{linkError}</p>}
       <ConfirmDialog
         open={confirmingRevoke}
         onCancel={() => setConfirmingRevoke(false)}
