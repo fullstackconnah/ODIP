@@ -37,6 +37,9 @@ public static class WhatsNewSeed
         new Item("2026-10-participant-page-tidy", "Participant pages are easier to scan",
             "Each card now shows only what has been recorded. Anything missing is listed in one short Not recorded line at the bottom of the card.\n\nLong lists show the first five, with Show all to see the rest. Use Jump to at the top of a tab to go straight to a section.",
             WhatsNewAudience.All, false),
+        new Item("2026-10-caregiver-form-keeps-typing", "Caregiver forms keep what you type while saving",
+            "If a caregiver keeps typing while their form is saving, what they typed is now kept instead of being cleared when the save finishes.",
+            Staff, false),
     };
 
     /// <summary>Inserts the keys the table lacks, one save each, so a key another instance inserted first costs only that row.</summary>
