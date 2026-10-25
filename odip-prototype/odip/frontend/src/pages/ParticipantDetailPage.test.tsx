@@ -1718,3 +1718,23 @@ describe('ParticipantDetailPage — seven tabs (slice 1)', () => {
     expect(within(document.getElementById('community-access')!).getByRole('heading', { name: 'Community Access' })).toBeInTheDocument()
   })
 })
+
+describe('ParticipantDetailPage — masked IDs for screen readers', () => {
+  it('keeps the masked NDIS number visible but speaks "Hidden, ends in 7" instead of bullets', () => {
+    mockUseParticipant.mockReturnValue({
+      data: makeParticipant({ ndisNumber: '••••••••7', maskedNdisNumber: '••••••••7', medicareNumber: '••••••••5' }),
+      isLoading: false,
+    })
+    renderAtTab('participant-1', 'about')
+
+    const visible = screen.getAllByText('••••••••7')[0]
+    expect(visible).toHaveAttribute('aria-hidden', 'true')
+    const row = visible.closest('dd') as HTMLElement
+    expect(row).toHaveTextContent('••••••••7Hidden, ends in 7')
+    expect(within(row).getByText('Hidden, ends in 7')).toHaveClass('sr-only')
+    expect(screen.getByText('Hidden, ends in 5')).toBeInTheDocument()
+    // What a screen reader gets: everything that is not aria-hidden. No bullets in it.
+    const spoken = Array.from(row.childNodes).filter(n => !(n instanceof HTMLElement && n.getAttribute('aria-hidden') === 'true')).map(n => n.textContent).join('')
+    expect(spoken).toBe('Hidden, ends in 7')
+  })
+})

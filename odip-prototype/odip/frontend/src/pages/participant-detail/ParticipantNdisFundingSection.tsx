@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { usePatchParticipant } from '@/api/hooks'
 import { formatDateAu, maskNdisNumber, extractErrorMessage } from '@/lib/utils'
+import { MaskedValue } from '@/components/MaskedValue'
 import { FormField } from '@/components/FormField'
 import { FactList } from '@/components/FactList'
 import { formGrid, span } from '@/lib/formGrid'
@@ -102,7 +103,7 @@ export function ParticipantNdisFundingSection({ p, participantId, canEdit }: { p
           items={[
             { label: 'Funding Source', value: FUNDING_SOURCE_LABELS[(p.fundingSource as FundingSource) ?? 'Ndis'] },
             ...(p.fundingSource !== 'Other' ? [
-              { label: 'NDIS Number', value: p.ndisNumber ? maskNdisNumber(p.maskedNdisNumber || p.ndisNumber) : undefined },
+              { label: 'NDIS Number', value: p.ndisNumber ? <MaskedValue value={maskNdisNumber(p.maskedNdisNumber || p.ndisNumber)} /> : undefined },
               { label: 'Plan Start Date', value: p.planStartDate ? formatDateAu(p.planStartDate) : undefined },
               { label: 'Plan End Date', value: p.planEndDate ? formatDateAu(p.planEndDate) : undefined },
             ] : [{ label: 'Funding Organisation', value: p.fundingOrganisation }]),

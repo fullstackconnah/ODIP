@@ -700,7 +700,8 @@ describe('ParticipantsPage — density row actions', () => {
     renderPage()
 
     const row = screen.getByText('Jamie Smith').closest('tr') as HTMLElement
-    const ndis = within(row).getByText('••••••••9')
+    const ndis = within(row).getByText('••••••••9').parentElement as HTMLElement
+    expect(within(ndis).getByText('Hidden, ends in 9')).toHaveClass('sr-only')
     expect(ndis).toHaveClass('text-[13px]')
     expect(ndis).not.toHaveClass('text-xs')
     // The chips used to wrap (and their cell needed py-1 to breathe); now they sit in one row
