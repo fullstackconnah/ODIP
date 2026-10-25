@@ -3,12 +3,6 @@ name: Pull request validation
 on:
   pull_request:
     branches: [main]
-    paths:
-      - 'odip-prototype/odip/backend/**'
-      - 'odip-prototype/odip/frontend/**'
-      - 'odip-prototype/odip/e2e/**'
-      - 'odip-prototype/odip/nginx/**'
-      - '.github/workflows/pr-validation.yml'
 
 # PR validation only needs to read its source. It never receives deployment or cloud credentials.
 permissions:
@@ -19,7 +13,38 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Runs on every PR so the three required checks always report: when no CI path changed they are skipped (a skipped job counts as passing for branch protection).
+  changes:
+    name: Detect CI paths
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      ci: ${{ steps.diff.outputs.ci }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Any CI path changed
+        id: diff
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          # keep in step with ci_re in .claude/tools/odip-ship/merge-chain.sh
+          # capture first: grep -q exiting early can SIGPIPE git, and pipefail would then read a real match as "no match"
+          files=$(git diff --name-only "$BASE...$HEAD")
+          if grep -qE '^(odip-prototype/odip/(backend|frontend|e2e|nginx)/|\.github/workflows/pr-validation\.yml$)' <<<"$files"; then
+            echo ci=true >> "$GITHUB_OUTPUT"
+          else
+            echo ci=false >> "$GITHUB_OUTPUT"
+          fi
+
   backend:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.ci != 'false' }}
     # the job name is pinned by the merge tooling (merge-chain.sh); keep it
     name: Backend (.NET 8, EF, PostgreSQL)
     runs-on: ubuntu-24.04
@@ -74,6 +99,8 @@ jobs:
           "$RUNNER_TEMP/dotnet-tools/dotnet-ef" database update --configuration Release --no-build --project Odip.Infrastructure --startup-project Odip.Api
 
   frontend:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.ci != 'false' }}
     name: Frontend (Node 20)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -101,6 +128,8 @@ jobs:
   # Informational (not a required check yet): the real API + PostgreSQL + built frontend, driven by Playwright.
   # DEV_AUTH_ENABLED / VITE_DEV_AUTH are set only inside this job. Production keeps them off (deploy/compose.yaml).
   e2e:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.ci != 'false' }}
     name: E2E (Playwright, real API + PostgreSQL)
     runs-on: ubuntu-24.04
     timeout-minutes: 20

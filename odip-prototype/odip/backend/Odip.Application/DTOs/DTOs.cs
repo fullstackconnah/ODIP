@@ -304,7 +304,7 @@ public record CreateParticipantDto
     /// blocks a draft.</summary>
     [StringLength(200)]
     public string? Email { get; init; }
-    [StringLength(20)]
+    [NoMaskedId, StringLength(20)]
     public string? NdisNumber { get; init; }
     public DateOnly? PlanStartDate { get; init; }
     public DateOnly? PlanEndDate { get; init; }
@@ -421,20 +421,20 @@ public record CreateParticipantDto
     // INTAKE sub-wave A — Key Identifiers step (Master Data Dictionary CARD-*/PHY-*). All
     // optional; see Participant.cs's field group doc for the full rationale and the
     // deliberately-deferred/omitted fields (Photo, a second Plan Number).
-    [StringLength(50)]
+    [NoMaskedId, StringLength(50)]
     public string? PensionCardNumber { get; init; }
     public DateOnly? PensionCardExpiry { get; init; }
-    [StringLength(50)]
+    [NoMaskedId, StringLength(50)]
     public string? MedicareNumber { get; init; }
     public DateOnly? MedicareExpiry { get; init; }
-    [StringLength(50)]
+    [NoMaskedId, StringLength(50)]
     public string? CompanionCardNumber { get; init; }
     public DateOnly? CompanionCardExpiry { get; init; }
     [StringLength(100)]
     public string? PrivateHealthFund { get; init; }
-    [StringLength(50)]
+    [NoMaskedId, StringLength(50)]
     public string? PrivateHealthMembershipNumber { get; init; }
-    [StringLength(50)]
+    [NoMaskedId, StringLength(50)]
     public string? TaxiCardNumber { get; init; }
     [StringLength(50)]
     public string? HairColour { get; init; }

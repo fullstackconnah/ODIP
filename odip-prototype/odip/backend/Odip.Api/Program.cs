@@ -289,7 +289,7 @@ builder.Services.AddScoped<Odip.Application.Interfaces.IObligationTaskService, O
 // below (partitioned by IP) collapses into a single global bucket shared by every
 // client — five failed logins from any one person locks out the whole platform.
 //
-// We deliberately do NOT clear KnownProxies/KnownNetworks (the common "just make it
+// We deliberately do NOT clear KnownProxies/KnownIPNetworks (the common "just make it
 // work" fix): an empty trust list makes ForwardedHeadersMiddleware accept
 // X-Forwarded-For from ANY upstream, so a direct client could set that header itself
 // and spoof an arbitrary IP to dodge the rate limiter entirely. Instead we trust only
@@ -300,9 +300,9 @@ builder.Services.AddScoped<Odip.Application.Interfaces.IObligationTaskService, O
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    options.KnownNetworks.Clear();
+    options.KnownIPNetworks.Clear();
     options.KnownProxies.Clear();
-    options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(IPAddress.Parse("172.16.0.0"), 12));
+    options.KnownIPNetworks.Add(new System.Net.IPNetwork(IPAddress.Parse("172.16.0.0"), 12));
 });
 
 // ── Rate Limiting ────────────────────────────────────────────

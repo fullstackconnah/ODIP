@@ -50,7 +50,7 @@ internal static class ParticipantDetailMapper
             InquiryId = inquiry?.Id, InquirySource = inquiry?.Source, InquiryProvenance = inquiry?.Provenance,
             MiddleName = p.MiddleName,
             FullName = string.IsNullOrEmpty(p.PreferredName) ? (p.FirstName + " " + p.LastName).Trim() : (p.PreferredName + " " + p.LastName).Trim(),
-            MaskedNdisNumber = p.NdisNumber != null ? p.NdisNumber.Length > 0 ? "••••••••" + p.NdisNumber[^1] : "•••" : null,
+            MaskedNdisNumber = ParticipantIdMask.Mask(p.NdisNumber),
             NdisNumber = p.NdisNumber, DateOfBirth = p.DateOfBirth, Gender = p.Gender, GenderSelfDescription = p.GenderSelfDescription,
             PlaceOfBirth = p.PlaceOfBirth, Country = p.Country, Phone = p.Phone, Email = p.Email,
             PlanStartDate = p.PlanStartDate, PlanEndDate = p.PlanEndDate, PlanType = p.PlanType, Region = p.Region, IsDsoa = p.IsDsoa,
