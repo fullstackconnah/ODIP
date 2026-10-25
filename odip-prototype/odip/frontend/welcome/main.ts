@@ -1,3 +1,4 @@
+import '../src/fonts.css'
 import { initEarlyAccessForm } from './form'
 import { initDay } from './motion'
 import { initPlatformFacts } from './platform'

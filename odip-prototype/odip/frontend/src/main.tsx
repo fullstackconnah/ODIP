@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
+import './fonts.css'
 
 // Local dev auto-login: with VITE_MOCK_PREVIEW=1 (set in .env.local) a fake token/user is seeded so the UI is
 // browsable against the mock API (mock-api/server.js) without going through the real sign-in form.

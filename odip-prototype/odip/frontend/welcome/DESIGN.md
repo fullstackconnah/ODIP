@@ -239,7 +239,7 @@ A white ground, ink text, and one green family in three depths (olive, deep, lim
 **Display Font:** Plus Jakarta Sans (500, 700, 800), fallback system-ui.
 **Body Font:** Manrope (400 to 700), fallback system-ui.
 
-**Character:** Heavy, tightly tracked headings over a calm body, so the times and slot names read like diary headings. Both faces load from Google Fonts with a woff2 preload for each.
+**Character:** Heavy, tightly tracked headings over a calm body, so the times and slot names read like diary headings. Both faces are bundled with the site (no Google Fonts call) with a woff2 preload for each.
 
 ### Hierarchy
 - **Display** (800, clamp(2.5rem, 1.2rem + 4.4vw, 5rem), 0.98, -0.035em): the hero h1, two lines, max 19ch, `em` in olive.
