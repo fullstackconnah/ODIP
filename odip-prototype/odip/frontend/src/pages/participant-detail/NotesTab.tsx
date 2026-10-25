@@ -291,7 +291,7 @@ export default function NotesTab({ participantId }: { participantId: string | un
           <button
             type="button"
             onClick={() => setShowArchivedSection(v => !v)}
-            className="flex items-center gap-2 text-sm font-medium text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded transition-colors"
+            className="flex min-h-[var(--tap-min)] items-center gap-2 text-sm font-medium text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded transition-colors"
             aria-expanded={showArchivedSection}
           >
             <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showArchivedSection ? 'rotate-180' : ''}`} />
