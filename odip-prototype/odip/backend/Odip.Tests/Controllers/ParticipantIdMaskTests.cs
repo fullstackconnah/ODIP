@@ -129,6 +129,61 @@ public class ParticipantIdMaskTests
     public async Task GetById_NoPrincipal_IsMasked() =>
         Assert.Equal(FullValues.Select(ParticipantIdMask.Mask), Numbers(await Detail(null)));
 
+    // ── T5: the three participant PDFs per role ──────────────────────────
+
+    private static string PdfText(byte[] bytes)
+    {
+        using var pdf = UglyToad.PdfPig.PdfDocument.Open(bytes);
+        return string.Concat(pdf.GetPages().Select(p => p.Text)).Replace(" ", "").Replace("\n", "");
+    }
+
+    [Theory]
+    [InlineData("SuperAdmin", "intake", false)]
+    [InlineData("Admin", "profile", false)]
+    [InlineData("Coordinator", "overview", false)]
+    [InlineData("SupportWorker", "intake", true)]
+    [InlineData("SupportWorker", "profile", true)]
+    [InlineData("SupportWorker", "overview", true)]
+    [InlineData("ReadOnly", "intake", true)]
+    [InlineData("ReadOnly", "profile", true)]
+    [InlineData("ReadOnly", "overview", true)]
+    [InlineData(null, "profile", true)]
+    public async Task DocumentPdfs_PerRole(string? role, string document, bool masked)
+    {
+        using var db = CreateDb();
+        var p = Seed(db);
+        var controller = ControllerFor(db, role);
+        var result = document switch
+        {
+            "intake" => await controller.DownloadIntakeFormPdf(p.Id, CancellationToken.None),
+            "profile" => await controller.DownloadParticipantProfilePdf(p.Id, CancellationToken.None),
+            _ => await controller.DownloadClientOverviewPdf(p.Id, null, CancellationToken.None),
+        };
+        var text = PdfText(Assert.IsType<FileContentResult>(result).FileContents);
+
+        // Positive control: the office copy carries the full NDIS number, so a broken extractor can't pass the masked checks.
+        if (!masked) Assert.Contains("430000017", text);
+        if (!masked && document == "profile") Assert.All(FullValues, v => Assert.Contains(v, text));
+        if (masked) Assert.All(FullValues, v => Assert.DoesNotContain(v, text));
+        if (masked) Assert.Contains("7", text);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ComposeProfile_MaskFlag_MasksHeaderAndKeyIdentifiersOnly(bool mask)
+    {
+        using var db = CreateDb();
+        var p = Seed(db);
+        var model = (await new ParticipantDocumentService(db).ComposeParticipantProfileAsync(p.Id, mask, CancellationToken.None))!;
+        string F(string label) => model.Sections.SelectMany(s => s.Fields).Single(f => f.Label == label).Value;
+        Assert.Equal(mask ? ParticipantIdMask.Mask("430000017") : "430000017", model.NdisNumber);
+        Assert.Equal(mask ? ParticipantIdMask.Mask("2951123451") : "2951123451", F("Medicare Number"));
+        Assert.Equal("Medibank", F("Private Health Fund"));
+        // The tracked entity is never written to.
+        Assert.Equal("2951123451", db.Participants.Single().MedicareNumber);
+    }
+
     // ── T8: every participant write is office-only ───────────────────────
 
     [Fact]

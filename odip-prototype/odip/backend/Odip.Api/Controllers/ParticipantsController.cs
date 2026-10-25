@@ -916,7 +916,7 @@ public class ParticipantsController : ControllerBase
     [HttpGet("{id:guid}/documents/intake")]
     public async Task<IActionResult> DownloadIntakeFormPdf(Guid id, CancellationToken ct)
     {
-        var result = await _documentService.GenerateIntakeFormAsync(id, ct);
+        var result = await _documentService.GenerateIntakeFormAsync(id, ParticipantIdMask.AppliesTo(User), ct);
         if (result == null) return NotFound(ApiResponse<bool>.Fail("Participant not found"));
         return File(result.Value.Content, "application/pdf", result.Value.FileName);
     }
@@ -948,7 +948,7 @@ public class ParticipantsController : ControllerBase
     [HttpGet("{id:guid}/documents/profile")]
     public async Task<IActionResult> DownloadParticipantProfilePdf(Guid id, CancellationToken ct)
     {
-        var result = await _documentService.GenerateParticipantProfileAsync(id, ct);
+        var result = await _documentService.GenerateParticipantProfileAsync(id, ParticipantIdMask.AppliesTo(User), ct);
         if (result == null) return NotFound(ApiResponse<bool>.Fail("Participant not found"));
         return File(result.Value.Content, "application/pdf", result.Value.FileName);
     }
@@ -963,7 +963,7 @@ public class ParticipantsController : ControllerBase
     [HttpGet("{id:guid}/documents/client-overview")]
     public async Task<IActionResult> DownloadClientOverviewPdf(Guid id, [FromQuery] Guid? tripId, CancellationToken ct)
     {
-        var result = await _documentService.GenerateClientOverviewAsync(id, tripId, ct);
+        var result = await _documentService.GenerateClientOverviewAsync(id, tripId, ParticipantIdMask.AppliesTo(User), ct);
         if (result == null) return NotFound(ApiResponse<bool>.Fail("Participant not found"));
         return File(result.Value.Content, "application/pdf", result.Value.FileName);
     }

@@ -145,7 +145,7 @@ public class ParticipantDocumentServiceHydrationTests
         using var db = CreateDb(dbName);
         var service = new ParticipantDocumentService(db);
 
-        var model = await service.ComposeParticipantProfileAsync(participantId, CancellationToken.None);
+        var model = await service.ComposeParticipantProfileAsync(participantId, maskIdNumbers: false, CancellationToken.None);
 
         Assert.NotNull(model);
         // Contacts is Shared (both documents) per ParticipantDocumentFieldMap — the rest
@@ -168,7 +168,7 @@ public class ParticipantDocumentServiceHydrationTests
         using var db = CreateDb(dbName);
         var service = new ParticipantDocumentService(db);
 
-        var model = await service.ComposeIntakeFormAsync(participantId, CancellationToken.None);
+        var model = await service.ComposeIntakeFormAsync(participantId, maskIdNumbers: false, CancellationToken.None);
 
         Assert.NotNull(model);
         Assert.True(ModelContainsMarker(model!, ContactMarker), "Contacts table (Shared, present on the Intake Form too) did not surface the seeded contact — .Include(ContactRoles)/ThenInclude(Person) not hydrating?");
