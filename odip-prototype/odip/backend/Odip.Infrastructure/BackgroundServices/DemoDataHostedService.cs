@@ -15,7 +15,7 @@ namespace Odip.Infrastructure.BackgroundServices;
 ///
 /// It runs after startup and never inside the Program.cs migrate-and-seed retry loop, so readiness is not delayed and a non-transient
 /// failure cannot crash the API at boot: <see cref="ExecuteAsync"/> never throws (a BackgroundService that throws takes the host down in
-/// .NET 8), and a tick that fails is logged and followed by the next one. The loop itself is guarded too: whatever escapes a wait or a tick
+/// .NET 6+), and a tick that fails is logged and followed by the next one. The loop itself is guarded too: whatever escapes a wait or a tick
 /// (in practice only a delay Task.Delay cannot take, which the clamped config knobs cannot produce but code-built options can) is logged
 /// at Error and the loop carries on, so the worst a bad value costs is an error line.
 /// </summary>

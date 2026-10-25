@@ -280,7 +280,7 @@ public class DemoDataWiringTests
         Assert.True(service.ExecuteTask is { IsFaulted: false });
     }
 
-    // Review L2: ExecuteAsync must never throw, because a BackgroundService that throws stops the host in .NET 8 and restart: unless-stopped
+    // Review L2: ExecuteAsync must never throw, because a BackgroundService that throws stops the host since .NET 6 and restart: unless-stopped
     // would then crash-loop the API. Task.Delay throws ArgumentOutOfRangeException for a delay beyond about 49.7 days; the config knobs are
     // clamped, but options can also be built in code, so the loop itself has to survive a wait it cannot make.
     private static async Task<bool> WaitForErrorAsync(CapturingLogger<DemoDataHostedService> log, int timeoutMs = 5000)
