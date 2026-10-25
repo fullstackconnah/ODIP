@@ -66,6 +66,29 @@ public class EarlyAccessHttpTests
     }
 
     [Fact]
+    public async Task ABodyWithADuplicateKey_Returns400()
+    {
+        await using var host = await TestHost.StartAsync();
+
+        var response = await host.PostAsync(ValidJson.Replace("\"name\":\"Jane Citizen\",", "\"name\":\"Jane Citizen\",\"name\":\"Other\","));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType!.MediaType);
+        Assert.Equal(0, await host.CountRowsAsync());
+    }
+
+    [Fact]
+    public async Task ABodyWithKeysDifferingOnlyByCase_Returns400()
+    {
+        await using var host = await TestHost.StartAsync();
+
+        var response = await host.PostAsync(ValidJson.Replace("\"name\":\"Jane Citizen\",", "\"name\":\"Jane Citizen\",\"Name\":\"Other\","));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(0, await host.CountRowsAsync());
+    }
+
+    [Fact]
     public async Task Duplicate_Returns_TheSame202Body_AndOneRowWithCountTwo()
     {
         await using var host = await TestHost.StartAsync();
@@ -509,12 +532,7 @@ public class EarlyAccessHttpTests
                     m.ApplicationParts.Clear();
                     m.ApplicationParts.Add(new OnlyEarlyAccessController());
                 })
-                .AddJsonOptions(o =>
-                {
-                    // Same as Program.cs.
-                    o.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
-                    o.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
-                });
+                .AddJsonOptions(o => Odip.Api.Serialization.ApiJsonOptions.Configure(o.JsonSerializerOptions));
             builder.Services.AddRateLimiter(o =>
             {
                 o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;

@@ -65,7 +65,7 @@ public class AuthControllerProxyPartitionTests
     private static ForwardedHeadersOptions DeployedOptions() => new()
     {
         ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
-        KnownNetworks = { new Microsoft.AspNetCore.HttpOverrides.IPNetwork(IPAddress.Parse("172.16.0.0"), 12) },
+        KnownIPNetworks = { new System.Net.IPNetwork(IPAddress.Parse("172.16.0.0"), 12) },
     };
 
     /// <summary>

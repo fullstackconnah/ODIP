@@ -18,7 +18,7 @@ namespace Odip.Infrastructure.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "8.0.11")
+                .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -1989,7 +1989,7 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<string>("MobilityNotes")
                         .HasColumnType("text");
 
-                    b.Property<List<string>>("MobilitySupportOptions")
+                    b.PrimitiveCollection<List<string>>("MobilitySupportOptions")
                         .IsRequired()
                         .HasColumnType("text[]");
 
@@ -2010,7 +2010,7 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<string>("Orthotics")
                         .HasColumnType("text");
 
-                    b.Property<List<string>>("OtherDiagnoses")
+                    b.PrimitiveCollection<List<string>>("OtherDiagnoses")
                         .IsRequired()
                         .HasColumnType("text[]");
 
@@ -2575,7 +2575,7 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateOnly?>("OrderReviewDate")
                         .HasColumnType("date");
 
-                    b.Property<List<string>>("OrderScopeDomains")
+                    b.PrimitiveCollection<List<string>>("OrderScopeDomains")
                         .IsRequired()
                         .HasColumnType("text[]");
 
@@ -5022,6 +5022,78 @@ namespace Odip.Infrastructure.Migrations
                     b.ToTable("VehicleAssignments");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Entities.WhatsNewEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ArchivedAtUtc")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(600)
+                        .HasColumnType("character varying(600)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<bool>("Important")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("PublishedAtUtc")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("Roles")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Key")
+                        .IsUnique();
+
+                    b.HasIndex("PublishedAtUtc");
+
+                    b.ToTable("WhatsNewEntries");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.WhatsNewUserState", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("LastSeenAtUtc")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("PopupSeenThroughUtc")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
+                    b.ToTable("WhatsNewUserStates");
+                });
+
             modelBuilder.Entity("Odip.Domain.Funding.BudgetSettings", b =>
                 {
                     b.Property<Guid>("Id")
@@ -7371,6 +7443,15 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("TripInstance");
 
                     b.Navigation("Vehicle");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.WhatsNewUserState", b =>
+                {
+                    b.HasOne("Odip.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Odip.Domain.Funding.BudgetSettings", b =>

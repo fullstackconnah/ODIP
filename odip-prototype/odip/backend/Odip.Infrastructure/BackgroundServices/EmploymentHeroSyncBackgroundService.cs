@@ -57,7 +57,7 @@ public sealed class EmploymentHeroSyncBackgroundService : BackgroundService
             }
             catch (Exception ex)
             {
-                // A BackgroundService that throws takes the host down in .NET 8: log it, and the next tick tries again.
+                // A BackgroundService that throws takes the host down since .NET 6: log it, and the next tick tries again.
                 _logger.LogError(ex, "Employment Hero sync failed unexpectedly; the next run will try again");
             }
 

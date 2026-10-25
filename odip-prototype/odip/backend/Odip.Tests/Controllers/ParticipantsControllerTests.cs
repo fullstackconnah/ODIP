@@ -2579,6 +2579,7 @@ public class ParticipantsControllerTests
         // null, and nothing about that partial fill blocks the save.
         using var db = CreateDb(Guid.NewGuid().ToString());
         var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+        ParticipantIdMaskTests.AsOffice(controller); // GetById masks ID numbers for non-office principals
 
         var dto = new CreateParticipantDto
         {

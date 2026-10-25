@@ -25,9 +25,9 @@ public class ParticipantDocumentService
     }
 
     /// <summary>Returns null when no participant with <paramref name="participantId"/> exists (or isn't visible to the current tenant — the ambient OdipDbContext query filter handles that automatically, no manual tenant check here).</summary>
-    public async Task<(byte[] Content, string FileName)?> GenerateIntakeFormAsync(Guid participantId, CancellationToken ct = default)
+    public async Task<(byte[] Content, string FileName)?> GenerateIntakeFormAsync(Guid participantId, bool maskIdNumbers, CancellationToken ct = default)
     {
-        var model = await ComposeIntakeFormAsync(participantId, ct);
+        var model = await ComposeIntakeFormAsync(participantId, maskIdNumbers, ct);
         if (model == null) return null;
 
         var bytes = ParticipantDocumentRenderer.Render(model);
@@ -35,9 +35,9 @@ public class ParticipantDocumentService
     }
 
     /// <summary>Returns null when no participant with <paramref name="participantId"/> exists (or isn't visible to the current tenant).</summary>
-    public async Task<(byte[] Content, string FileName)?> GenerateParticipantProfileAsync(Guid participantId, CancellationToken ct = default)
+    public async Task<(byte[] Content, string FileName)?> GenerateParticipantProfileAsync(Guid participantId, bool maskIdNumbers, CancellationToken ct = default)
     {
-        var model = await ComposeParticipantProfileAsync(participantId, ct);
+        var model = await ComposeParticipantProfileAsync(participantId, maskIdNumbers, ct);
         if (model == null) return null;
 
         var bytes = ParticipantDocumentRenderer.Render(model);
@@ -57,29 +57,29 @@ public class ParticipantDocumentService
     /// <c>ParticipantDocumentComposerTests</c> already calls directly the same way.
     /// Returns null under the same conditions as <see cref="GenerateIntakeFormAsync"/>.
     /// </summary>
-    public async Task<ParticipantDocumentModel?> ComposeIntakeFormAsync(Guid participantId, CancellationToken ct = default)
+    public async Task<ParticipantDocumentModel?> ComposeIntakeFormAsync(Guid participantId, bool maskIdNumbers, CancellationToken ct = default)
     {
         var participant = await LoadParticipantAsync(participantId, ct);
         if (participant == null) return null;
 
         var riskEntries = await LoadRiskEntriesAsync(participantId, ct);
-        return ParticipantDocumentComposer.ComposeIntakeForm(participant, riskEntries);
+        return ParticipantDocumentComposer.ComposeIntakeForm(participant, riskEntries, maskIdNumbers);
     }
 
     /// <summary>See <see cref="ComposeIntakeFormAsync"/>'s doc comment — same reasoning, Participant Profile variant.</summary>
-    public async Task<ParticipantDocumentModel?> ComposeParticipantProfileAsync(Guid participantId, CancellationToken ct = default)
+    public async Task<ParticipantDocumentModel?> ComposeParticipantProfileAsync(Guid participantId, bool maskIdNumbers, CancellationToken ct = default)
     {
         var participant = await LoadParticipantAsync(participantId, ct);
         if (participant == null) return null;
 
         var riskEntries = await LoadRiskEntriesAsync(participantId, ct);
-        return ParticipantDocumentComposer.ComposeParticipantProfile(participant, riskEntries);
+        return ParticipantDocumentComposer.ComposeParticipantProfile(participant, riskEntries, maskIdNumbers);
     }
 
     /// <summary>PF-10.6: returns null when no participant with <paramref name="participantId"/> exists (or isn't visible to the current tenant).</summary>
-    public async Task<(byte[] Content, string FileName)?> GenerateClientOverviewAsync(Guid participantId, Guid? tripId, CancellationToken ct = default)
+    public async Task<(byte[] Content, string FileName)?> GenerateClientOverviewAsync(Guid participantId, Guid? tripId, bool maskIdNumbers, CancellationToken ct = default)
     {
-        var model = await ComposeClientOverviewAsync(participantId, tripId, ct);
+        var model = await ComposeClientOverviewAsync(participantId, tripId, maskIdNumbers, ct);
         if (model == null) return null;
 
         var bytes = ParticipantDocumentRenderer.Render(model);
@@ -94,7 +94,7 @@ public class ParticipantDocumentService
     /// (not omitted) TRIP/DATE/GROUP header — never a 404, since the participant itself still
     /// resolved.
     /// </summary>
-    public async Task<ParticipantDocumentModel?> ComposeClientOverviewAsync(Guid participantId, Guid? tripId, CancellationToken ct = default)
+    public async Task<ParticipantDocumentModel?> ComposeClientOverviewAsync(Guid participantId, Guid? tripId, bool maskIdNumbers, CancellationToken ct = default)
     {
         var participant = await LoadParticipantAsync(participantId, ct);
         if (participant == null) return null;
@@ -105,7 +105,7 @@ public class ParticipantDocumentService
                 .FirstOrDefaultAsync(t => t.Id == tripId.Value, ct)
             : null;
 
-        return ParticipantDocumentComposer.ComposeClientOverview(participant, trip);
+        return ParticipantDocumentComposer.ComposeClientOverview(participant, trip, maskIdNumbers);
     }
 
     private async Task<Participant?> LoadParticipantAsync(Guid participantId, CancellationToken ct) =>

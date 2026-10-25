@@ -26,6 +26,8 @@ public class ReadOnlyInboxAllowListTests
     [InlineData("POST", "/api/v1/notifications/inbox/" + Id + "/read")]
     [InlineData("POST", "/api/v1/notifications/inbox/read-all")]
     [InlineData("POST", "/API/V1/Notifications/Inbox/Read-All")]
+    [InlineData("POST", "/api/v1/whats-new/seen")]
+    [InlineData("POST", "/API/V1/WHATS-NEW/popup-seen")]
     public async Task AReadOnlyUsersOwnReadMarks_ReachTheController(string method, string path)
     {
         var (reached, _) = await SendAsReadOnly(method, path);
@@ -42,6 +44,11 @@ public class ReadOnlyInboxAllowListTests
     [InlineData("POST", "/api/v1/notifications/inbox")]
     [InlineData("POST", "/api/v1/notifications/inbox/read-all/extra")]
     [InlineData("POST", "/api/v1/admin/notifications/" + Id + "/retry")]
+    [InlineData("POST", "/api/v1/whats-new/seen/extra")]
+    [InlineData("POST", "/api/v1/whats-new")]
+    [InlineData("PUT", "/api/v1/whats-new/seen")]
+    [InlineData("POST", "/api/v1/admin/whats-new")]
+    [InlineData("POST", "/api/v1/whats-new/popup-seen-x")]
     [InlineData("POST", "/api/v1/leave/" + Id + "/approve")]
     public async Task EveryOtherWriteFromReadOnly_IsStill403(string method, string path)
     {

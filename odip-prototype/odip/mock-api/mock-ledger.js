@@ -29,6 +29,22 @@ function statusOf(available, used, forecast, approachingPercent) {
   return 'OnTrack'
 }
 
+const dayNumber = (iso) => Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10)) / 86400000
+const isoOf = (n) => new Date(n * 86400000).toISOString().slice(0, 10)
+
+/** The pace warning (BudgetLedgerCalculator.PaceOf): the date the money runs out at the pace so far, when that is before the period ends. Calendar days, whole cents, only On track or Approaching, only from 25% of the period. */
+function paceOf(status, periodStart, periodEnd, today, available, used) {
+  if (status !== 'OnTrack' && status !== 'Approaching') return null
+  if (today < periodStart || today > periodEnd) return null
+  const a = cents(available), u = cents(used)
+  if (a <= 0 || u <= 0) return null
+  const total = dayNumber(periodEnd) - dayNumber(periodStart) + 1
+  const elapsed = dayNumber(today) - dayNumber(periodStart)
+  if (elapsed * 4 < total) return null
+  const days = Math.floor((a * elapsed) / u)
+  return days < total - 1 ? isoOf(dayNumber(periodStart) + days) : null
+}
+
 /** One period's figures from its parts, so available/used/forecast cannot disagree with them. */
 function figures(limit, carried, claimed, pending, bookedAhead, approachingPercent, unpricedTripDayCount = 0) {
   const available = round2(limit + carried)
@@ -87,6 +103,7 @@ function computeLedger(plan, today, approachingPercent, items, rejections = []) 
   const pools = [...plan.pools].sort((a, b) => a.position - b.position).map((pool) => {
     const hasSetAside = pool.periods.length > 0 && pool.periods.every((p) => p.setAside !== undefined)
     let carried = 0
+    const paceFor = (start, end, now, f) => { const d = start <= now && now <= end ? paceOf(f.status, start, end, now, f.available, f.used) : null; return d ? { paceRunsOutOn: d } : {} }
     const periods = [...pool.periods].sort((a, b) => (a.periodStart < b.periodStart ? -1 : 1)).map((period, position) => {
       const rows = order(held.get(`${pool.id}|${period.id}`) || [])
       const limit = hasSetAside ? period.setAside : period.planAmount
@@ -102,6 +119,7 @@ function computeLedger(plan, today, approachingPercent, items, rejections = []) 
         unpricedShiftCount: unpricedShifts(rows).length,
         unpricedShiftReasons: unpricedReasons(rows),
         rowCount: rows.length, rows: rows.slice(0, 200), ...f,
+        ...paceFor(period.periodStart, period.periodEnd, today, f),
       }
     })
     const limit = add(periods.map((p) => p.limit))

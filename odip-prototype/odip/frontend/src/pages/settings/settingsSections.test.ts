@@ -29,14 +29,15 @@ describe('who sees which section', () => {
   it('gives each role its sections in rail order', () => {
     expect(keysOf('Admin')).toEqual(['profile', 'notifications', 'appearance', 'setup', 'workspace-visibility', 'organisation', 'billing', 'safety', 'alerts', 'pricing', 'budgets', 'templates', 'activities', 'holidays', 'import', 'export', 'integrations', 'failed-sends'])
     expect(keysOf('Coordinator')).toEqual(['profile', 'notifications', 'appearance', 'organisation', 'billing', 'safety', 'alerts', 'templates', 'activities', 'holidays'])
-    expect(keysOf('SuperAdmin')).toEqual(['profile', 'notifications', 'appearance', 'setup', 'workspace-visibility', 'organisation', 'billing', 'safety', 'alerts', 'pricing', 'budgets', 'templates', 'activities', 'import', 'export', 'integrations', 'tenants', 'users', 'catalogue', 'holidays', 'failed-sends', 'alpha-signups'])
-    expect(keysOf('SuperAdminNoOrg')).toEqual(['profile', 'notifications', 'appearance', 'tenants', 'users', 'catalogue', 'holidays', 'failed-sends', 'alpha-signups'])
+    expect(keysOf('SuperAdmin')).toEqual(['profile', 'notifications', 'appearance', 'setup', 'workspace-visibility', 'organisation', 'billing', 'safety', 'alerts', 'pricing', 'budgets', 'templates', 'activities', 'import', 'export', 'integrations', 'tenants', 'users', 'catalogue', 'holidays', 'failed-sends', 'alpha-signups', 'whats-new'])
+    expect(keysOf('SuperAdminNoOrg')).toEqual(['profile', 'notifications', 'appearance', 'tenants', 'users', 'catalogue', 'holidays', 'failed-sends', 'alpha-signups', 'whats-new'])
   })
 
-  it('shows Alpha sign-ups to a SuperAdmin only, last in Platform', () => {
+  it("shows Alpha sign-ups and What's new to a SuperAdmin only, What's new last in Platform", () => {
     expect(keysOf('Admin')).not.toContain('alpha-signups')
+    expect(keysOf('Admin')).not.toContain('whats-new')
     const platform = visibleSections(ROLES.SuperAdmin()).filter(s => s.group === 'Platform')
-    expect(platform.at(-1)?.key).toBe('alpha-signups')
+    expect(platform.at(-1)?.key).toBe('whats-new')
   })
 
   it('groups them, with My account first for everyone and only My account and Platform for a SuperAdmin with no organisation', () => {

@@ -139,7 +139,8 @@ public class ParticipantsController : ControllerBase
                 Id = p.Id, FirstName = p.FirstName, LastName = p.LastName,
                 PreferredName = p.PreferredName,
                 FullName = string.IsNullOrEmpty(p.PreferredName) ? (p.FirstName + " " + p.LastName).Trim() : (p.PreferredName + " " + p.LastName).Trim(),
-                MaskedNdisNumber = p.NdisNumber != null ? p.NdisNumber.Length > 0 ? "••••••••" + p.NdisNumber.Substring(p.NdisNumber.Length - 1) : "•••" : null,
+                // same rule as ParticipantIdMask.Mask; kept inline so EF translates it
+                MaskedNdisNumber = string.IsNullOrWhiteSpace(p.NdisNumber) ? p.NdisNumber : p.NdisNumber.Trim().Length < 2 ? "••••••••" : "••••••••" + p.NdisNumber.Trim().Substring(p.NdisNumber.Trim().Length - 1),
                 PlanType = p.PlanType, Region = p.Region, IsRepeatClient = p.IsRepeatClient,
                 IsActive = p.IsActive, MobilityAidWheelchair = p.MobilityAidWheelchair, MobilityAidWalker = p.MobilityAidWalker,
                 IsHighSupport = p.IsHighSupport, IsIntensiveSupport = p.IsIntensiveSupport, SupportRatio = p.SupportRatio,
@@ -190,6 +191,8 @@ public class ParticipantsController : ControllerBase
         // set here and nowhere else.
         var readinessIssues = await ParticipantReadiness.IssuesAsync(_db, new[] { p.Id }, ct);
         dto = dto with { ReadinessIssues = ParticipantReadiness.IssuesOrNull(readinessIssues, p.Id) };
+        // Masked here and not in the mapper, which the caregiver forms share. Only the office roles see full ID numbers.
+        if (ParticipantIdMask.AppliesTo(User)) dto = ParticipantIdMask.Apply(dto);
         return Ok(ApiResponse<ParticipantDetailDto>.Ok(dto));
     }
 
@@ -913,7 +916,7 @@ public class ParticipantsController : ControllerBase
     [HttpGet("{id:guid}/documents/intake")]
     public async Task<IActionResult> DownloadIntakeFormPdf(Guid id, CancellationToken ct)
     {
-        var result = await _documentService.GenerateIntakeFormAsync(id, ct);
+        var result = await _documentService.GenerateIntakeFormAsync(id, ParticipantIdMask.AppliesTo(User), ct);
         if (result == null) return NotFound(ApiResponse<bool>.Fail("Participant not found"));
         return File(result.Value.Content, "application/pdf", result.Value.FileName);
     }
@@ -935,17 +938,21 @@ public class ParticipantsController : ControllerBase
     [HttpGet("{id:guid}/intake-snapshots/{revision:int}/download")]
     public async Task<IActionResult> DownloadIntakeSnapshotPdf(Guid id, int revision, CancellationToken ct)
     {
-        if (!await _db.Participants.AnyAsync(p => p.Id == id, ct)) return NotFound(ApiResponse<bool>.Fail("Participant not found"));
+        var participant = await _db.Participants.AsNoTracking().FirstOrDefaultAsync(p => p.Id == id, ct);
+        if (participant == null) return NotFound(ApiResponse<bool>.Fail("Participant not found"));
         var snapshot = await _intakeSnapshots.FindAsync(id, revision, ct);
         if (snapshot == null) return NotFound(ApiResponse<bool>.Fail("Intake snapshot not found"));
-        return File(snapshot.PdfContent, "application/pdf", $"Intake-Completion-r{snapshot.Revision}-{snapshot.CompletedAtUtc:yyyyMMdd}.pdf");
+        // The stored evidence PDF prints the full ID numbers and a hash over them, so masked roles get a re-rendered copy instead.
+        var masked = ParticipantIdMask.AppliesTo(User);
+        var bytes = masked ? ParticipantIntakeSnapshotService.RenderMaskedCopy(snapshot, participant.FullName) : snapshot.PdfContent;
+        return File(bytes, "application/pdf", $"Intake-Completion-r{snapshot.Revision}-{snapshot.CompletedAtUtc:yyyyMMdd}{(masked ? "-copy" : "")}.pdf");
     }
 
     /// <summary>DOC-01: download the Participant Profile PDF for a participant.</summary>
     [HttpGet("{id:guid}/documents/profile")]
     public async Task<IActionResult> DownloadParticipantProfilePdf(Guid id, CancellationToken ct)
     {
-        var result = await _documentService.GenerateParticipantProfileAsync(id, ct);
+        var result = await _documentService.GenerateParticipantProfileAsync(id, ParticipantIdMask.AppliesTo(User), ct);
         if (result == null) return NotFound(ApiResponse<bool>.Fail("Participant not found"));
         return File(result.Value.Content, "application/pdf", result.Value.FileName);
     }
@@ -960,7 +967,7 @@ public class ParticipantsController : ControllerBase
     [HttpGet("{id:guid}/documents/client-overview")]
     public async Task<IActionResult> DownloadClientOverviewPdf(Guid id, [FromQuery] Guid? tripId, CancellationToken ct)
     {
-        var result = await _documentService.GenerateClientOverviewAsync(id, tripId, ct);
+        var result = await _documentService.GenerateClientOverviewAsync(id, tripId, ParticipantIdMask.AppliesTo(User), ct);
         if (result == null) return NotFound(ApiResponse<bool>.Fail("Participant not found"));
         return File(result.Value.Content, "application/pdf", result.Value.FileName);
     }

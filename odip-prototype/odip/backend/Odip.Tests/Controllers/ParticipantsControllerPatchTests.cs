@@ -164,6 +164,7 @@ public class ParticipantsControllerPatchTests
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+        ParticipantIdMaskTests.AsOffice(controller);
         var id = await CreateFullyPopulatedParticipantAsync(controller);
 
         var patchDto = new PatchParticipantDto
@@ -189,6 +190,7 @@ public class ParticipantsControllerPatchTests
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+        ParticipantIdMaskTests.AsOffice(controller);
         var id = await CreateFullyPopulatedParticipantAsync(controller);
 
         // Patch only KeyIdentifiers — every other group (including PersonalDetails' MiddleName/
@@ -215,6 +217,7 @@ public class ParticipantsControllerPatchTests
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+        ParticipantIdMaskTests.AsOffice(controller);
         var id = await CreateFullyPopulatedParticipantAsync(controller);
 
         // PersonalDetails is present, but MiddleName/PreferredName are omitted (null) from this

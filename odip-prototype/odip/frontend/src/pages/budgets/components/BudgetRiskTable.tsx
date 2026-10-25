@@ -6,6 +6,7 @@ import { CellText, DataTable, type Column } from '@/components/DataTable'
 import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { TONE } from '@/lib/tone'
+import { paceSentence } from '@/lib/budgetLedger'
 import { writtenDay, writtenSpan } from '@/lib/fundingPlan'
 import { formatCurrency } from '@/lib/utils'
 import { BUDGET_RISK_STATUS, budgetRiskRank, type BudgetAttentionAction, type BudgetRiskRow, type BudgetRiskTableState, type NoBudgetEntry } from './viewModel'
@@ -70,6 +71,13 @@ function StatusCell({ row }: { row: BudgetRiskRow }) {
           </span>
         )}
       </span>
+      {row.paceRunsOutOn && (
+        // On its own line, under the status words: beside them it widened the Status column, and Forecast must stay on screen at 1366 and 1440. The sentence is dates only, so it shows to a viewer who may not see money. `title` does not exist on touch and is read unreliably, so the sentence is also in the pill's hidden text.
+        <span title={paceSentence(row.paceRunsOutOn, row.periodEnd)} className="max-w-[6.5rem] whitespace-normal leading-tight">
+          <StatusBadge tone="warning" label="Spending fast" className="inline-block" />
+          <span className="sr-only">{paceSentence(row.paceRunsOutOn, row.periodEnd)}</span>
+        </span>
+      )}
       {row.figures.visible && remaining !== null && (
         <span className="text-xs text-[var(--color-muted-foreground)]">
           {remaining < 0 ? <><BudgetFigure figures={row.figures} amount={-remaining} /> over</> : <><BudgetFigure figures={row.figures} amount={remaining} /> left</>}

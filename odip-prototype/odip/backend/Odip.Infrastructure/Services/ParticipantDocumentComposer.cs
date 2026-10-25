@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Text.RegularExpressions;
+using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using static Odip.Infrastructure.Services.ParticipantDocumentValueFormatting;
@@ -19,21 +20,23 @@ namespace Odip.Infrastructure.Services;
 /// </summary>
 public static class ParticipantDocumentComposer
 {
-    public static ParticipantDocumentModel ComposeIntakeForm(Participant participant, IReadOnlyList<ParticipantRiskEntry> riskEntries) =>
+    public static ParticipantDocumentModel ComposeIntakeForm(Participant participant, IReadOnlyList<ParticipantRiskEntry> riskEntries, bool maskIdNumbers = false) =>
         Compose(
             "Intake Form",
             participant,
             riskEntries,
             tag => tag is ParticipantDocumentTag.Intake or ParticipantDocumentTag.Shared,
-            includeCommunityAccess: false);
+            includeCommunityAccess: false,
+            maskIdNumbers);
 
-    public static ParticipantDocumentModel ComposeParticipantProfile(Participant participant, IReadOnlyList<ParticipantRiskEntry> riskEntries) =>
+    public static ParticipantDocumentModel ComposeParticipantProfile(Participant participant, IReadOnlyList<ParticipantRiskEntry> riskEntries, bool maskIdNumbers = false) =>
         Compose(
             "Participant Profile",
             participant,
             riskEntries,
             tag => tag is ParticipantDocumentTag.Profile or ParticipantDocumentTag.Shared,
-            includeCommunityAccess: participant.ServiceStreams.HasFlag(ServiceStreams.CommunityAccessDailyLiving));
+            includeCommunityAccess: participant.ServiceStreams.HasFlag(ServiceStreams.CommunityAccessDailyLiving),
+            maskIdNumbers);
 
     /// <summary>
     /// PF-10.6 — the "CLIENT SUPPORT NEEDS SUMMARY" per-trip staff cheat-sheet. Unlike
@@ -47,7 +50,7 @@ public static class ParticipantDocumentComposer
     /// when null the TRIP/DATE/GROUP header line still renders with the placeholder dash rather
     /// than being omitted, since it's a fixed cheat-sheet layout, not a conditional section.
     /// </summary>
-    public static ParticipantDocumentModel ComposeClientOverview(Participant participant, TripInstance? trip)
+    public static ParticipantDocumentModel ComposeClientOverview(Participant participant, TripInstance? trip, bool maskIdNumbers = false)
     {
         var fields = new List<ParticipantDocumentField>
         {
@@ -85,7 +88,7 @@ public static class ParticipantDocumentComposer
         return new ParticipantDocumentModel(
             "Client Support Needs Summary",
             participant.FullName,
-            participant.NdisNumber,
+            maskIdNumbers ? ParticipantIdMask.Mask(participant.NdisNumber) : participant.NdisNumber,
             DateTime.UtcNow,
             sections,
             TripName: trip != null ? OrPlaceholder(trip.TripName) : EmptyPlaceholder,
@@ -98,7 +101,8 @@ public static class ParticipantDocumentComposer
         Participant participant,
         IReadOnlyList<ParticipantRiskEntry> riskEntries,
         Func<ParticipantDocumentTag, bool> tagMatches,
-        bool includeCommunityAccess)
+        bool includeCommunityAccess,
+        bool maskIdNumbers)
     {
         var sections = new List<ParticipantDocumentSection>();
 
@@ -121,7 +125,9 @@ public static class ParticipantDocumentComposer
                 }
                 else
                 {
-                    var value = FormatParticipantProperty(participant, entry.ParticipantPropertyName!);
+                    // Masked on the way out only: the tracked entity is never written to.
+                    var value = FormatParticipantProperty(participant, entry.ParticipantPropertyName!,
+                        maskIdNumbers && ParticipantIdMask.PropertyNames.Contains(entry.ParticipantPropertyName!));
                     fields.Add(new ParticipantDocumentField(entry.Label, value));
                 }
             }
@@ -134,16 +140,19 @@ public static class ParticipantDocumentComposer
             sections.Add(new ParticipantDocumentSection(group.Key, fields, tables));
         }
 
-        return new ParticipantDocumentModel(title, participant.FullName, participant.NdisNumber, DateTime.UtcNow, sections);
+        return new ParticipantDocumentModel(title, participant.FullName,
+            maskIdNumbers ? ParticipantIdMask.Mask(participant.NdisNumber) : participant.NdisNumber, DateTime.UtcNow, sections);
     }
 
     // ── Scalar field formatting ──────────────────────────────────────────────────────────
 
-    private static string FormatParticipantProperty(Participant participant, string propertyName)
+    private static string FormatParticipantProperty(Participant participant, string propertyName, bool mask = false)
     {
         var property = typeof(Participant).GetProperty(propertyName)
             ?? throw new InvalidOperationException($"ParticipantDocumentFieldMap references unknown Participant property '{propertyName}'.");
-        return FormatValue(property.GetValue(participant));
+        var raw = property.GetValue(participant);
+        if (mask && raw is string s) raw = ParticipantIdMask.Mask(s);
+        return FormatValue(raw);
     }
 
     private static string FormatValue(object? raw)
