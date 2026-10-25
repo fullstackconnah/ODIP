@@ -215,7 +215,7 @@ export const DOCUMENT_MAPPING: DocumentMappingEntry[] = [
   { entryPhase: 'intake', field: 'requiresStandingMachine', label: 'Standing Machine', sources: ['shared'], dictionaryId: 'MOB-017' },
   { entryPhase: 'intake', field: 'supportRatio', label: 'Support Ratio', sources: ['shared'], dictionaryId: 'GOAL-013', notes: 'Intake\'s informal Day/Evening free-text cells vs. Profile\'s structured 1:1..1:5 × Morning/Day/Evening checkbox grid — same concept, different shape (§2 flags this as a delta, not a straight dupe).' },
   { entryPhase: 'profile', field: 'mobilityNotes', label: 'Mobility Notes', sources: ['profile'], notes: 'Free-text elaboration; loosely maps to Profile\'s Functional Information notes.' },
-  { entryPhase: 'intake', field: 'equipmentRequirements', label: 'Equipment Requirements', sources: ['profile'], notes: 'Free-text elaboration alongside the equipment checkboxes above.' },
+  { entryPhase: 'intake', field: 'equipmentRequirements', label: 'Equipment Requirements', sources: ['shared'], notes: 'Free-text elaboration alongside the equipment checkboxes above.' },
   { entryPhase: 'profile', field: 'transportRequirements', label: 'Transport Requirements', sources: ['profile'], notes: 'Free-text elaboration; loosely maps to Profile\'s Transportation/wheelchair-in-vehicle notes.' },
 
   // ── Mobility & Functional (NEW, sub-wave C1) — §4.7/§5. Step renamed "Support Needs &
@@ -314,7 +314,7 @@ export const DOCUMENT_MAPPING: DocumentMappingEntry[] = [
   { entryPhase: 'profile', field: 'bspPlanProvided', label: 'BSP Plan Provided', sources: ['profile'], dictionaryId: 'COG-009', notes: 'NEW (sub-wave C1).' },
   { entryPhase: 'profile', field: 'bocChartProvided', label: 'BOC Chart Provided', sources: ['profile'], dictionaryId: 'COG-010', notes: 'NEW (sub-wave C1).' },
   { entryPhase: 'intake', field: 'expressiveSkills', label: 'Expressive Skills', sources: ['shared'], dictionaryId: 'COM-001', notes: 'NEW (sub-wave C1). Free text — source form combines High/Med/Low + Verbal/Non-verbal/Restrictions/Sign, too varied for one enum. Intake\'s free-text "Expressive and Receptive Skills" is the shared-set companion (§2).' },
-  { entryPhase: 'intake', field: 'receptiveSkills', label: 'Receptive Skills', sources: ['profile'], dictionaryId: 'COM-002', notes: 'NEW (sub-wave C1). Free text — source form combines High/Med/Low.' },
+  { entryPhase: 'intake', field: 'receptiveSkills', label: 'Receptive Skills', sources: ['shared'], dictionaryId: 'COM-002', notes: 'NEW (sub-wave C1). Free text — source form combines High/Med/Low.' },
   { entryPhase: 'profile', field: 'readingAbility', label: 'Reading Ability', sources: ['profile'], dictionaryId: 'COM-003', notes: 'NEW (sub-wave C1). Free text — source form combines Y/N + Good/Med/Low.' },
   { entryPhase: 'profile', field: 'communicationAids', label: 'Communication Aids', sources: ['profile'], dictionaryId: 'COM-004', notes: 'NEW (sub-wave C1). Free text — source form combines Y/N + specify.' },
 

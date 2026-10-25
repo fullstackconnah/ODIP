@@ -12,7 +12,7 @@
  * Progression model (SPEC-05 §PF-10.5, fixed): a normal `POST /api/participants` creates the
  * Participant immediately with `IsDraft = true` and `completeIntake: true` (stamping the new
  * `IntakeCompletedAt` server-side) on final submit; "Save as draft" omits `completeIntake` so a
- * mid-intake abandon doesn't falsely mark intake complete. On success ("Complete Intake" only —
+ * mid-intake abandon doesn't falsely mark intake complete. On success ("Complete intake" only —
  * "Save as draft" lands on the Enquiries tab, where the draft is listed), the server has also put the participant on the
  * onboarding worklist, so the wizard navigates to the Onboarding table
  * (`/participants?tab=onboarding`, or back to `/onboarding/{id}` when the intake was opened from that checklist) with a one-off "Intake complete" confirmation — see the
@@ -22,7 +22,7 @@
  * detail page's "Resume intake" banner, routed to `/participants/{id}/intake`): this same
  * component, keyed off an optional `:id` route param. Loads the existing row via `useParticipant`,
  * hydrates every Intake-owned field via `reset()` (mirrors ProfileWizardPage.tsx's own hydration
- * effect), and both "Save as draft"/"Complete Intake" go through `PUT /api/participants/{id}/intake`
+ * effect), and both "Save as draft"/"Complete intake" go through `PUT /api/participants/{id}/intake`
  * (`useSaveParticipantIntake`) instead of `POST`. That endpoint is SCOPED: the server writes only the
  * intake fields and never reads whether the participant is a draft or active, so resuming an intake
  * cannot wipe what the Profile wizard recorded (it used to go through the full-record PUT and did).
@@ -441,7 +441,7 @@ export default function IntakeWizardPage() {
 
       {saveMutation.isError && (
         // The server's own reason when it gave one ("Postcode must be exactly 4 digits.", "Plan Manager contacts are only available for
-        // plan-managed participants."), a plain sentence when it did not. "Save as draft" below always did this; Complete Intake did not.
+        // plan-managed participants."), a plain sentence when it did not. "Save as draft" below always did this; Complete intake did not.
         <Callout tone="error">
           {extractErrorMessage(saveMutation.error, "Failed to save this participant's intake details. Please check your input and try again.")}
         </Callout>
@@ -568,7 +568,7 @@ export default function IntakeWizardPage() {
           reviewActionsRight
           secondaryActions={secondaryActions}
           cancelTo={isEditMode ? `/participants/${id}` : '/participants'}
-          submitLabel={saveMutation.isPending ? (isEditMode ? 'Saving...' : 'Creating...') : 'Complete Intake'}
+          submitLabel={saveMutation.isPending ? (isEditMode ? 'Saving...' : 'Creating...') : 'Complete intake'}
           isSubmitting={saveMutation.isPending || wizard.isAdvancing}
         />
         </form>

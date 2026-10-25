@@ -67,8 +67,8 @@ export function WizardNavFooter({
   ))
   // z-[4]: above a DataTable's pinned columns (z-[2], z-[3]) scrolling under it, below every menu and dialog (z-50 and up).
   return (
-    <div className={`sticky bottom-[var(--mobile-nav-h)] lg:bottom-0 z-[4] md:col-span-2 mt-[var(--section-gap)] flex w-full min-w-0 flex-row flex-wrap items-center justify-between gap-3 border-t border-[var(--color-border)] bg-[var(--color-background)] py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]`}>
-      <div className="flex min-w-0 flex-wrap items-center gap-3">
+    <div className={`sticky bottom-[var(--mobile-nav-h)] lg:bottom-0 z-[4] md:col-span-2 mt-[var(--section-gap)] flex w-full min-w-0 flex-row flex-wrap items-center ${groupRight ? 'justify-end' : 'justify-between'} gap-3 border-t border-[var(--color-border)] bg-[var(--color-background)] py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]`}>
+      <div className={`flex min-w-0 flex-wrap items-center gap-3${groupRight ? ' mr-auto' : ''}`}>
         {/* The first step has no Back, so the way out takes its place (the review step has its own Cancel). */}
         {showBack ? (
           <Button type="button" variant="secondary" onClick={onBack}>Back</Button>
@@ -78,7 +78,8 @@ export function WizardNavFooter({
         {!groupRight && secondary}
       </div>
       {summary && <div className="order-first basis-full min-w-0 sm:order-none sm:basis-auto sm:flex-1 sm:px-3">{summary}</div>}
-      <div className="flex min-w-0 flex-wrap justify-end gap-3">
+      {/* Review step: below sm the right group dissolves into the outer wrap row, so Back, Save as draft and Cancel share row 1 and Submit sits alone, right, on row 2. */}
+      <div className={`flex min-w-0 flex-wrap justify-end gap-3${groupRight ? ' max-sm:contents' : ''}`}>
         {!isReviewStep && (
           <Button type="button" onClick={onNext}>Next</Button>
         )}
@@ -86,7 +87,7 @@ export function WizardNavFooter({
           <>
             {groupRight && secondary}
             <Button variant="secondary" to={cancelHref}>Cancel</Button>
-            <Button type="submit" disabled={isSubmitting}>{submitLabel}</Button>
+            <Button type="submit" disabled={isSubmitting} className={groupRight ? 'max-sm:ml-auto' : undefined}>{submitLabel}</Button>
           </>
         )}
       </div>

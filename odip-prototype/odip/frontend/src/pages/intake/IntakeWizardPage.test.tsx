@@ -382,7 +382,7 @@ describe('IntakeWizardPage', () => {
     expect(document.getElementById('livesWithOthers')).not.toBeNull()
     await user.click(document.getElementById('livesWithOthers') as HTMLElement)
     expect(document.getElementById('whoLivesWith')).not.toBeNull()
-    await select('Supported Accommodation')
+    await select('Supported accommodation')
     for (const field of ['silProviderName', 'silProviderContactPhone', 'accommodationType', 'onSiteSupportHours']) {
       expect(document.getElementById(field)).not.toBeNull()
     }
@@ -562,7 +562,7 @@ describe('IntakeWizardPage — meeting quick wins', () => {
     expect(screen.getByLabelText('Receptive Skills')).toHaveValue('Medium')
   })
 
-  it('I4: a contact search with no match offers "+ Add new person", which switches to New person with the typed name', async () => {
+  it('I4: a contact search with no match offers "Add new person", which switches to New person with the typed name and focuses First name', async () => {
     const user = userEvent.setup()
     renderPage()
     await fillNameAndAdvance(user)
@@ -570,10 +570,24 @@ describe('IntakeWizardPage — meeting quick wins', () => {
     await expectStep(/contacts/i)
     await user.click(screen.getByRole('button', { name: /add contact/i }))
     await user.type(screen.getByRole('combobox'), 'Zed Nobody')
-    await user.click(screen.getByRole('button', { name: '+ Add new person' }))
+    await user.click(screen.getByRole('option', { name: 'Add new person' }))
     expect(screen.getByLabelText(/first name/i)).toHaveValue('Zed')
     expect(screen.getByLabelText(/last name/i)).toHaveValue('Nobody')
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByLabelText(/first name/i)).toHaveFocus())
+  })
+
+  it('I4: the no-match action works from the keyboard and leaves focus on First name', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await fillNameAndAdvance(user)
+    await next(user)
+    await expectStep(/contacts/i)
+    await user.click(screen.getByRole('button', { name: /add contact/i }))
+    await user.type(screen.getByRole('combobox'), 'Zed')
+    await user.keyboard('{ArrowDown}{Enter}')
+    await waitFor(() => expect(screen.getByLabelText(/first name/i)).toHaveFocus())
+    expect(screen.getByLabelText(/first name/i)).toHaveValue('Zed')
   })
 
   it('I11: on Review, Back is on the left and Save as draft, Cancel, Complete intake are together on the right', async () => {

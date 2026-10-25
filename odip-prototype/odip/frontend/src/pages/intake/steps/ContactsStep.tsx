@@ -91,12 +91,14 @@ export function ContactsStep({
                                 placeholder="Search people…"
                                 emptyMessage="No people yet — add a new person instead"
                                 noMatchAction={{
-                                  label: '+ Add new person',
+                                  label: 'Add new person',
                                   onSelect: (query) => {
                                     const [first, ...rest] = query.split(/\s+/)
                                     setValue(`contactRoles.${index}.personMode`, 'new', { shouldDirty: true })
                                     setValue(`contactRoles.${index}.newPersonFirstName`, first, { shouldDirty: true })
                                     setValue(`contactRoles.${index}.newPersonLastName`, rest.join(' '), { shouldDirty: true })
+                                    // The combobox unmounts with the mode switch, which would drop focus to <body>.
+                                    requestAnimationFrame(() => document.querySelector<HTMLInputElement>(`[name="contactRoles.${index}.newPersonFirstName"]`)?.focus())
                                   },
                                 }}
                               />
