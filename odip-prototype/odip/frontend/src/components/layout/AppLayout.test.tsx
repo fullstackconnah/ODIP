@@ -664,7 +664,7 @@ describe('AppLayout — no New Trip shortcut in the sidebar, the drawer or the b
       '/trips', '/schedule', '/bookings', '/accommodation', '/vehicles',
       '/participants', '/medications', '/caregiver-submissions',
       '/rostering', '/rostering/patterns', '/rostering/compatibility', '/rostering/leave', '/rostering/completions', '/staff', '/qualifications',
-      '/tasks', '/budgets',
+      '/tasks', '/budgets', '/invoices',
       '/incidents', '/settings',
     ])
   })
@@ -873,12 +873,12 @@ describe('AppLayout — open groups are remembered (U1)', () => {
     localStorage.setItem(KEY, JSON.stringify(['gone-group', 42, 'trips']))
     const { unmount } = renderAt('/')
     expect(expanded(/Trips$/)).toBe('true')
-    expect(navShape()).toHaveLength(9)
+    expect(navShape()).toHaveLength(10)
     unmount()
 
     localStorage.setItem(KEY, '{not json')
     renderAt('/')
-    expect(navShape()).toHaveLength(9)
+    expect(navShape()).toHaveLength(10)
     expect(expanded(/Trips$/)).toBe('false')
   })
 

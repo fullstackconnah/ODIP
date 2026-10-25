@@ -191,7 +191,7 @@ describe('InvoicesPage: the number downloads the PDF', () => {
 
     await user.click(screen.getByRole('button', { name: 'Download INV-0042 PDF' }))
     expect(await screen.findAllByText("Couldn't download INV-0042. Try again.")).toHaveLength(2) // the visible line and the live region
-    expect(screen.getByRole('status')).toHaveTextContent("Couldn't download INV-0042. Try again.")
+    expect(screen.getAllByRole('status').some(el => el.textContent === "Couldn't download INV-0042. Try again.")).toBe(true)
   })
 
   it('refuses a second download while one runs, with aria-disabled rather than a silent no-op', async () => {

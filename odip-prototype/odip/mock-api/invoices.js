@@ -20,6 +20,46 @@ const PDF = Buffer.from(
   '3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n',
 )
 
+// The invoice register (GET invoices): 120 rows in three pages, worst case first (SHAPE.md section 6). Independent of the per-claim book above; ids start "reg-" so the PDF route answers them
+// ("reg-nopdf" is the one that refuses, for the download-error capture). Newest first, then number, as ClaimsController.GetInvoiceRegister orders them.
+const REGISTER = (() => {
+  const orgs = ['Oassist Disability Services', 'Harbour Respite Co']
+  const names = ['Sam Lee', 'Ava Nguyen', 'Jo Carter', 'Mia Chen', 'Ravi Patel', 'Lena Novak']
+  const rows = []
+  for (let i = 0; i < 120; i++) {
+    const day = new Date(Date.UTC(2026, 9, 22 - Math.floor(i / 3)))
+    const n = 10000 - i
+    const self = i % 3 === 0
+    const row = {
+      id: `reg-${i}`, kind: 'Invoice', displayNumber: `INV-${String(n).padStart(4, '0')}`, status: i % 7 === 3 ? 'Voided' : i % 7 === 5 ? 'Credited' : 'Issued',
+      issueDate: day.toISOString().slice(0, 10), dueDate: '2026-11-05', participantName: names[i % names.length], payerKind: self ? 'SelfManaged' : 'PlanManaged',
+      claimReference: `TC-${43000 + i}-20261020`, tripClaimId: `claim-reg-${i}`, total: 100 + i * 13.37, organisationName: orgs[i % 2],
+    }
+    row.billToName = self ? row.participantName : `Plan Manager ${i} Pty Ltd`
+    rows.push(row)
+  }
+  Object.assign(rows[0], { participantName: 'Wolfeschlegelsteinhausenberger-Fotheringham Participant Name', billToName: 'Plan Management Services of the Greater Wolfeschlegelsteinhausenberger Region' })
+  Object.assign(rows[1], { id: 'reg-credit', kind: 'CreditNote', displayNumber: 'CN-0007', status: 'Issued', creditsDisplayNumber: 'INV-0012', total: -123456.78 })
+  Object.assign(rows[2], { id: 'reg-deleted', status: 'Voided', tripClaimId: undefined })
+  Object.assign(rows[3], { id: 'reg-nopdf' })
+  return rows
+})()
+
+function registerPage(params) {
+  const q = (params.get('search') ?? '').trim().toLowerCase()
+  const kind = params.get('kind'), status = params.get('status'), from = params.get('from'), to = params.get('to')
+  const matches = REGISTER.filter((r) => (!kind || r.kind === kind) && (!status || r.status === status) && (!from || r.issueDate >= from) && (!to || r.issueDate <= to)
+    && (params.get('deletedClaimOnly') !== 'true' || !r.tripClaimId)
+    && (!q || [r.displayNumber, r.participantName, r.billToName, r.claimReference].some((v) => v.toLowerCase().includes(q))))
+  const pageSize = Number(params.get('pageSize')) || 50
+  const page = Math.max(1, Number(params.get('page')) || 1)
+  const totalPages = Math.max(1, Math.ceil(matches.length / pageSize))
+  return {
+    items: matches.slice((page - 1) * pageSize, page * pageSize), totalCount: matches.length, page, pageSize, totalPages,
+    hasNext: page < totalPages, hasPrevious: page > 1,
+  }
+}
+
 function create({ respond, failEnvelope, claims, lineItemsByClaimId }) {
   const fail = (status, message) => respond(status, failEnvelope(null, [message]))
   const payer = (id, participantName, billToName, payerKind, total) => ({ groupId: id, participantName, billToName, payerKind, total })
@@ -188,7 +228,8 @@ function create({ respond, failEnvelope, claims, lineItemsByClaimId }) {
         return claim ? claimInvoices(claim) : fail(404, 'Claim not found')
       }],
       ['claims/:id/invoices/:id', () => file()],
-      ['invoices/:id/pdf', (id) => (find(id) ? file() : fail(404, 'Invoice not found.'))],
+      ['invoices', (params) => registerPage(params)],
+      ['invoices/:id/pdf', (id) => (find(id) || (id.startsWith('reg-') && id !== 'reg-nopdf') ? file() : fail(404, 'Invoice not found.'))],
     ],
     delete: [['claims/:id', (id) => refuseDelete(id) ?? true]],
     post: [
