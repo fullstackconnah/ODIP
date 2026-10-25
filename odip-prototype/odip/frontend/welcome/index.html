@@ -6,18 +6,15 @@
 <title>Bunya Support: NDIS and disability service provider software</title>
 <meta name="description" content="Next-generation NDIS and disability service provider software: approvals, rosters, intake, agreements, incidents and the claims file in one place, so your admin team gets time back. Now in alpha.">
 <meta name="theme-color" content="#ffffff">
-    <!-- Same-origin scripts only, no inline script; images from self/data/blob; fonts from Google Fonts; fetch to self.
+    <!-- Same-origin scripts only, no inline script; images from self/data/blob; fonts bundled (self); fetch to self.
          Matches the nginx CSP in nginx/default.conf (which additionally allows the Firebase hosts the app needs). -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; img-src 'self' data: blob:; object-src 'none'; base-uri 'self'; form-action 'self';" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self'; img-src 'self' data: blob:; object-src 'none'; base-uri 'self'; form-action 'self';" />
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<!-- Preload the Latin files the first viewport sets (Jakarta 800 for the h1, Manrope 400 for the body); each family serves one
-     variable file for every weight. Checked against the live Google Fonts CSS on 2026-10-17. -->
-<link rel="preload" as="font" type="font/woff2" href="https://fonts.gstatic.com/s/plusjakartasans/v12/LDIoaomQNQcsA88c7O9yZ4KMCoOg4Ko20yw.woff2" crossorigin>
-<link rel="preload" as="font" type="font/woff2" href="https://fonts.gstatic.com/s/manrope/v20/xn7gYHE41ni1AdIRggexSg.woff2" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;700;800&amp;family=Manrope:wght@400;500;600;700&amp;display=swap">
+<!-- Preload the Latin files the first viewport sets (Jakarta 800 for the h1, Manrope 400 for the body); each family is one
+     variable file for every weight, bundled by src/fonts.css, imported in main.ts. -->
+<link rel="preload" as="font" type="font/woff2" href="/node_modules/@fontsource-variable/plus-jakarta-sans/files/plus-jakarta-sans-latin-wght-normal.woff2" crossorigin>
+<link rel="preload" as="font" type="font/woff2" href="/node_modules/@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2" crossorigin>
 <link rel="stylesheet" href="./welcome.css">
 <script type="module" src="./main.ts"></script>
 </head>

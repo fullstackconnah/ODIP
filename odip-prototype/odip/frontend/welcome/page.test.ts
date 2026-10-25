@@ -2,6 +2,9 @@ import { readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import indexHtml from './index.html?raw'
+import mainTs from './main.ts?raw'
+import fontsCss from '../src/fonts.css?raw'
+import appMainTsx from '../src/main.tsx?raw'
 import appIndexHtml from '../index.html?raw'
 import manifestRaw from './assets/screens/manifest.json?raw'
 import { ACKNOWLEDGEMENT_OF_COUNTRY } from '../src/lib/platformFacts'
@@ -44,46 +47,54 @@ describe('CSP: what the page may load', () => {
     expect(doc.querySelectorAll('[onclick], [onload], [onerror], [onsubmit]').length).toBe(0)
   })
 
-  it('images only from self, data: or blob:; fetch only to self; fonts from Google Fonts', () => {
+  it('images only from self, data: or blob:; fetch only to self; fonts only from self', () => {
     expect(directive('img-src')).toBe("img-src 'self' data: blob:")
     expect(directive('connect-src')).toBe("connect-src 'self'")
-    expect(directive('font-src')).toBe("font-src 'self' https://fonts.gstatic.com")
-    expect(directive('style-src')).toContain('https://fonts.googleapis.com')
+    expect(directive('font-src')).toBe("font-src 'self'")
+    expect(directive('style-src')).toBe("style-src 'self' 'unsafe-inline'")
+    expect(csp).not.toMatch(/googleapis|gstatic/)
     expect(directive('form-action')).toBe("form-action 'self'")
     expect(directive('object-src')).toBe("object-src 'none'")
   })
 
-  it('every image ships with the site, the icons are the app\'s own, and every stylesheet is Google Fonts or local', () => {
+  it('every image ships with the site, the icons are the app\'s own, and every stylesheet is local', () => {
     for (const img of Array.from(doc.querySelectorAll('img'))) {
       expect(img.getAttribute('src')).not.toMatch(/^(https?:)?\/\//)
       expect(img.getAttribute('srcset') ?? '').not.toMatch(/https?:\/\//)
     }
     for (const link of Array.from(doc.querySelectorAll('link[rel="stylesheet"]'))) {
-      expect(link.getAttribute('href')).toMatch(/^(\.\/|https:\/\/fonts\.googleapis\.com\/)/)
+      expect(link.getAttribute('href')).toMatch(/^\.\//)
     }
     expect([attrs('link[rel="icon"]', 'href'), attrs('link[rel="apple-touch-icon"]', 'href')]).toEqual([['/favicon.svg'], ['/apple-touch-icon.png']])
     expect(css).not.toMatch(/url\((['"])?https?:/)
   })
 })
 
-describe('the app\'s own type: the same two families as the app, critical files preloaded', () => {
-  it('loads Plus Jakarta Sans and Manrope, as the app does, and no other family', () => {
-    const href = doc.querySelector('link[rel="stylesheet"][href^="https://fonts.googleapis.com"]')!.getAttribute('href')!
-    const families = [...href.matchAll(/family=([^:&]+)/g)].map((m) => m[1].replace(/\+/g, ' '))
-    expect(families).toEqual(['Plus Jakarta Sans', 'Manrope'])
-    for (const f of families) expect(appIndexHtml).toContain(`family=${f.replace(/ /g, '+')}`)
+describe('the app\'s own type: the same two families as the app, bundled, critical files preloaded', () => {
+  it('bundles Plus Jakarta Sans and Manrope as the app does, with no request to Google', () => {
+    expect(mainTs).toContain("import '../src/fonts.css'")
+    expect(appMainTsx).toContain("import './fonts.css'")
+    expect(indexHtml).not.toMatch(/googleapis|gstatic/)
+    expect(appIndexHtml).not.toMatch(/fonts\.(googleapis|gstatic)/) // the Firebase identity hosts stay in connect-src
+    expect(fontsCss).not.toMatch(/https?:/)
+    expect([...new Set([...fontsCss.matchAll(/font-family: '([^']+)'/g)].map((m) => m[1]))]).toEqual(['Plus Jakarta Sans', 'Manrope'])
   })
 
-  it('preloads only the two Latin woff2 files, crossorigin, from fonts.gstatic.com', () => {
+  it('keeps the weights Google served: Jakarta 400-500 and 700-800 (600 renders as 700), Manrope 400-700', () => {
+    const rangesOf = (family: string) => new Set([...fontsCss.matchAll(new RegExp(`font-family: '${family}';[^}]*?font-weight: ([^;]+);`, 'g'))].map((m) => m[1]))
+    expect(rangesOf('Plus Jakarta Sans')).toEqual(new Set(['400 500', '700 800']))
+    expect(rangesOf('Manrope')).toEqual(new Set(['400 700']))
+  })
+
+  it('preloads only the two Latin woff2 files, crossorigin, from the bundled packages', () => {
     const preloads = Array.from(doc.querySelectorAll('link[rel="preload"][as="font"]'))
-    expect(preloads.map((l) => l.getAttribute('href')!.split('/s/')[1].split('/')[0])).toEqual(['plusjakartasans', 'manrope'])
+    expect(preloads.map((l) => l.getAttribute('href')!.split('@fontsource-variable/')[1].split('/')[0])).toEqual(['plus-jakarta-sans', 'manrope'])
     for (const l of preloads) {
-      expect(l.getAttribute('href')).toMatch(/^https:\/\/fonts\.gstatic\.com\/s\/.+\.woff2$/)
+      expect(l.getAttribute('href')).toMatch(/^\/node_modules\/@fontsource-variable\/.+-latin-wght-normal\.woff2$/)
       expect(l.hasAttribute('crossorigin')).toBe(true)
     }
   })
 })
-
 
 describe('claims (spec L4)', () => {
   it('makes no outcome claim, even in a file name; "compliance work" and one Employment Hero line are allowed', () => {

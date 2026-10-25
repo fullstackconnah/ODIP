@@ -50,7 +50,7 @@ Currently used as an internal/dogfood tool only for Oassist itself; no external 
 The working system already covers: Trips (create/detail/list), Participants (create/detail/list), Accommodation/Bookings (create/detail/list), Vehicles & Staff scheduling (with qualifications/expiry dashboard), Schedule, NDIS Claims (PRODA bulk-file claim generation, claim detail), Incidents (create/list, QSC reportable-status tracking), a Tasks dashboard, an Audit log, a Support Catalogue (pricing), Provider Settings, Public Holiday sync, Admin Users, Tenants management, general Settings, Auth/Login, and internal Dev tooling.
 
 Constraints:
-- A strict Content-Security-Policy is already enforced in production (`default-src 'self'`, only Firebase identity endpoints and Google Fonts permitted) — any new external asset/font/script requires a CSP policy update before it will load in prod.
+- A strict Content-Security-Policy is already enforced in production (`default-src 'self'`, only Firebase identity endpoints permitted; fonts are self-hosted) — any new external asset/font/script requires a CSP policy update before it will load in prod.
 - Role-based access control and the ReadOnly role's write-blocking behavior must not regress.
 
 Open item: the product name's capitalization is inconsistent across the codebase — CLAUDE.md uses "ODIP", `index.html` uses "Odip" — and has not been resolved.
