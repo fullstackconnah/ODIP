@@ -3,6 +3,7 @@ import { usePatchParticipant } from '@/api/hooks'
 import { formatDateAu, extractErrorMessage } from '@/lib/utils'
 import { FormField } from '@/components/FormField'
 import { FactList } from '@/components/FactList'
+import { MaskedValue } from '@/components/MaskedValue'
 import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
 import { hasKeyIdentifiers } from './recorded'
@@ -112,11 +113,11 @@ export function ParticipantKeyIdentifiersSection({ p, participantId, canEdit }: 
       ) : (
         <FactList
           items={[
-            { label: 'Pension Card', value: p.pensionCardNumber ? `${p.pensionCardNumber}${p.pensionCardExpiry ? ` (expires ${formatDateAu(p.pensionCardExpiry)})` : ''}` : undefined },
-            { label: 'Medicare', value: p.medicareNumber ? `${p.medicareNumber}${p.medicareExpiry ? ` (expires ${formatDateAu(p.medicareExpiry)})` : ''}` : undefined },
-            { label: 'Companion Card', value: p.companionCardNumber ? `${p.companionCardNumber}${p.companionCardExpiry ? ` (expires ${formatDateAu(p.companionCardExpiry)})` : ''}` : undefined },
-            { label: 'Private Health Fund', value: p.privateHealthFund ? `${p.privateHealthFund}${p.privateHealthMembershipNumber ? ` (${p.privateHealthMembershipNumber})` : ''}` : undefined },
-            { label: 'Taxi Card', value: p.taxiCardNumber },
+            { label: 'Pension Card', value: p.pensionCardNumber ? <MaskedValue value={`${p.pensionCardNumber}${p.pensionCardExpiry ? ` (expires ${formatDateAu(p.pensionCardExpiry)})` : ''}`} /> : undefined },
+            { label: 'Medicare', value: p.medicareNumber ? <MaskedValue value={`${p.medicareNumber}${p.medicareExpiry ? ` (expires ${formatDateAu(p.medicareExpiry)})` : ''}`} /> : undefined },
+            { label: 'Companion Card', value: p.companionCardNumber ? <MaskedValue value={`${p.companionCardNumber}${p.companionCardExpiry ? ` (expires ${formatDateAu(p.companionCardExpiry)})` : ''}`} /> : undefined },
+            { label: 'Private Health Fund', value: p.privateHealthFund ? <MaskedValue value={`${p.privateHealthFund}${p.privateHealthMembershipNumber ? ` (${p.privateHealthMembershipNumber})` : ''}`} /> : undefined },
+            { label: 'Taxi Card', value: p.taxiCardNumber ? <MaskedValue value={p.taxiCardNumber} /> : undefined },
             { label: 'Hair / Eye Colour', value: [p.hairColour, p.eyeColour].filter(Boolean).join(' / ') },
             { label: 'Weight / Height', value: [p.weightKg != null ? `${p.weightKg} kg` : null, p.heightCm != null ? `${p.heightCm} cm` : null].filter(Boolean).join(' / ') },
           ].filter((item) => item.value)}

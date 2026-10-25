@@ -1,5 +1,6 @@
 import { useParticipants, useDeleteParticipant, useRestoreParticipant, useUpdateParticipantStatus, useParticipantAlertsAggregate } from '@/api/hooks'
 import { extractErrorMessage, maskNdisNumber } from '@/lib/utils'
+import { MaskedValue } from '@/components/MaskedValue'
 import { DataTable, RowActions, type Column } from '@/components/DataTable'
 import { SearchInput } from '@/components/SearchInput'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
@@ -233,7 +234,7 @@ function useParticipantsScreen() {
         </Link>
       ),
     },
-    { key: 'ndisNumber', header: 'NDIS Number', mobile: 'hidden', render: (p) => <span className="font-mono text-[13px] text-[var(--color-muted-foreground)]">{maskNdisNumber(p.maskedNdisNumber ?? p.ndisNumber)}</span> },
+    { key: 'ndisNumber', header: 'NDIS Number', mobile: 'hidden', render: (p) => <span className="font-mono text-[13px] text-[var(--color-muted-foreground)]"><MaskedValue value={maskNdisNumber(p.maskedNdisNumber ?? p.ndisNumber)} /></span> },
     { key: 'planType', header: 'Plan Type', maxWidth: '10rem', mobile: 'meta', render: (p) => PLAN_TYPE_LABELS[p.planType] ?? p.planType },
     { key: 'region', header: 'Region', sortable: true, maxWidth: '11rem', mobile: 'meta' },
     {
