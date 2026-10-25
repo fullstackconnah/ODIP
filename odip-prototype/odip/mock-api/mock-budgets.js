@@ -61,7 +61,7 @@ function budgetAlertsOf(ledger) {
     if (period.status === 'Over') alerts.push(alert('budget-over', 'Critical', withTheGap(`${label} is ${money(period.used - period.available)} over this period's ${money(period.available)} (to ${end})`, period)))
     else if (period.status === 'ForecastOver') alerts.push(alert('budget-forecast-over', 'Warning', withTheGap(`Booked shifts would take ${label} ${money(period.forecast - period.available)} over this period's ${money(period.available)} by ${end}`, period)))
     else if (period.status === 'Approaching') alerts.push(alert('budget-approaching', 'Warning', withTheGap(`${label} is at ${approachingAt(period.used, period.available, 0)}% of this period's ${money(period.available)} (to ${end})`, period)))
-    else if (period.paceRunsOutOn) alerts.push(alert('budget-pace', 'Warning', `${label} is spending faster than its period allows: at this rate it runs out around ${say(period.paceRunsOutOn)}, before the period ends on ${end}`))
+    else if (period.paceRunsOutOn) alerts.push(alert('budget-pace', 'Warning', `${label} runs out around ${say(period.paceRunsOutOn)} at this rate, before the period ends on ${end}`))
     if (pool.ndiaRejection) alerts.push(alert('budget-ndia-exhausted', 'Critical', `NDIA rejected a claim for ${label} on ${say(pool.ndiaRejection.date)}: not enough funds${fundsScope(pool.ndiaRejection.code)} (${pool.ndiaRejection.code})`))
   }
   return alerts

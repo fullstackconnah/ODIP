@@ -183,4 +183,8 @@ describe('the pace sentence', () => {
   it('says when the money runs out at this rate, and when the period ends, in the same short dates as the pool sentence', () => {
     expect(paceSentence('2026-12-08', '2026-12-31')).toBe('At this rate the budget runs out around 8 Dec, before the period ends on 31 Dec.')
   })
+
+  it('writes both dates in full when the money runs out in an earlier year than the period ends, so "8 Dec" is not read as the wrong year', () => {
+    expect(paceSentence('2026-12-08', '2027-06-30')).toBe('At this rate the budget runs out around 8\u00a0Dec\u00a02026, before the period ends on 30\u00a0Jun\u00a02027.')
+  })
 })

@@ -76,9 +76,9 @@ public static class BudgetAlertRules
         }
     }
 
-    /// <summary>A pool that is on track but spending faster than its period allows. No money in it, so no gap sentence.</summary>
+    /// <summary>A pool that is on track but spending faster than its period allows: when it runs out at this rate, and when the period ends. Dates only, no money, so no gap sentence.</summary>
     private static ParticipantAlertDto PaceAlert(string label, PaceWarning pace, PeriodLedger period) =>
-        Alert(PaceType, AlertSeverity.Warning, $"{label} is spending faster than its period allows: at this rate it runs out around {BudgetText.Day(pace.RunsOutOn)}, before the period ends on {BudgetText.Day(period.Period.PeriodEnd)}");
+        Alert(PaceType, AlertSeverity.Warning, $"{label} runs out around {BudgetText.Day(pace.RunsOutOn)} at this rate, before the period ends on {BudgetText.Day(period.Period.PeriodEnd)}");
 
     /// <summary>
     /// Shifts the shift claim cannot price are $0 in every figure, so the figures leave them out: an alert about a status says so, rather than reading as the whole picture. Only the period the alert is

@@ -371,7 +371,7 @@ public class BudgetAlertRulesTests
 
         Assert.Equal("budget-pace", alert.Type);
         Assert.Equal(AlertSeverity.Warning, alert.Severity);
-        Assert.Equal("Core is spending faster than its period allows: at this rate it runs out around 8 Dec 2026, before the period ends on 31 Dec 2026", alert.Message);
+        Assert.Equal("Core runs out around 8 Dec 2026 at this rate, before the period ends on 31 Dec 2026", alert.Message);
         Assert.Equal("funding", alert.DeepLinkTab);
         Assert.DoesNotContain("$", alert.Message);
     }

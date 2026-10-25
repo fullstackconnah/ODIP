@@ -39,7 +39,7 @@ function paceOf(status, periodStart, periodEnd, today, available, used) {
   const a = cents(available), u = cents(used)
   if (a <= 0 || u <= 0) return null
   const total = dayNumber(periodEnd) - dayNumber(periodStart) + 1
-  const elapsed = dayNumber(today) - dayNumber(periodStart) + 1
+  const elapsed = dayNumber(today) - dayNumber(periodStart)
   if (elapsed * 4 < total) return null
   const days = Math.floor((a * elapsed) / u)
   return days < total - 1 ? isoOf(dayNumber(periodStart) + days) : null
