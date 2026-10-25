@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, useId } from 'react'
 import type { CSSProperties, KeyboardEvent, ChangeEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown } from 'lucide-react'
+import { Button } from '@/components/Button'
 import { inputClass } from '@/components/FormField'
 import type { DropdownItem } from '@/components/Dropdown'
 
@@ -29,6 +30,8 @@ export type SearchableSelectProps = {
   emptyMessage?: string
   /** Message shown when a query is typed and nothing matches. Defaults to 'No results found'. */
   noMatchMessage?: string
+  /** Offered under the no-match message when a query is typed: calls `onSelect` with the typed text and closes. */
+  noMatchAction?: { label: string; onSelect: (query: string) => void }
   className?: string
 
   // Labelling — lets a wrapping component (e.g. FormField) associate an external <label>
@@ -68,6 +71,7 @@ export function SearchableSelect({
   openOnFocus = true,
   emptyMessage = 'No options available',
   noMatchMessage = 'No results found',
+  noMatchAction,
   className,
   id,
   'aria-labelledby': ariaLabelledBy,
@@ -258,9 +262,25 @@ export function SearchableSelect({
           Loading options…
         </p>
       ) : showEmptyRow ? (
-        <p role="presentation" className="px-4 py-3 text-sm text-[var(--color-muted-foreground)] opacity-70">
-          {trimmedQuery ? noMatchMessage : emptyMessage}
-        </p>
+        <div role="presentation">
+          <p role="presentation" className="px-4 py-3 text-sm text-[var(--color-muted-foreground)] opacity-70">
+            {trimmedQuery ? noMatchMessage : emptyMessage}
+          </p>
+          {trimmedQuery && noMatchAction && (
+            <div role="presentation" className="px-2 pb-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                // Keeps focus in the input, like the options' mousedown guard below.
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => { noMatchAction.onSelect(trimmedQuery); closePopup() }}
+              >
+                {noMatchAction.label}
+              </Button>
+            </div>
+          )}
+        </div>
       ) : (
         filteredItems.map((item, idx) => (
           <div

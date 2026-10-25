@@ -23,6 +23,8 @@ export type WizardNavFooterProps = {
   isSubmitting: boolean
   /** Shown between the actions (above them on a phone): the agreement wizard's running total. */
   summary?: ReactNode
+  /** Review step only: Back stays left; the secondary actions (Save as draft), Cancel and the submit group on the right, submit last. */
+  reviewActionsRight?: boolean
 }
 
 /**
@@ -46,10 +48,23 @@ export function WizardNavFooter({
   submitLabel,
   isSubmitting,
   summary,
+  reviewActionsRight = false,
 }: WizardNavFooterProps) {
   const back = useBackTarget(cancelTo)
   // A router link either way, so the unsaved-changes blocker still asks before leaving.
   const cancelHref = history ? back.to : cancelTo
+  const groupRight = isReviewStep && reviewActionsRight
+  const secondary = secondaryActions.map((action) => (
+    <Button
+      key={action.key}
+      type="button"
+      variant="secondary"
+      onClick={action.onClick}
+      disabled={action.disabled}
+    >
+      {action.label}
+    </Button>
+  ))
   // z-[4]: above a DataTable's pinned columns (z-[2], z-[3]) scrolling under it, below every menu and dialog (z-50 and up).
   return (
     <div className={`sticky bottom-[var(--mobile-nav-h)] lg:bottom-0 z-[4] md:col-span-2 mt-[var(--section-gap)] flex w-full min-w-0 flex-row flex-wrap items-center justify-between gap-3 border-t border-[var(--color-border)] bg-[var(--color-background)] py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]`}>
@@ -60,17 +75,7 @@ export function WizardNavFooter({
         ) : !isReviewStep && (
           <Button variant="secondary" to={cancelHref}>Cancel</Button>
         )}
-        {secondaryActions.map((action) => (
-          <Button
-            key={action.key}
-            type="button"
-            variant="secondary"
-            onClick={action.onClick}
-            disabled={action.disabled}
-          >
-            {action.label}
-          </Button>
-        ))}
+        {!groupRight && secondary}
       </div>
       {summary && <div className="order-first basis-full min-w-0 sm:order-none sm:basis-auto sm:flex-1 sm:px-3">{summary}</div>}
       <div className="flex min-w-0 flex-wrap justify-end gap-3">
@@ -79,6 +84,7 @@ export function WizardNavFooter({
         )}
         {isReviewStep && (
           <>
+            {groupRight && secondary}
             <Button variant="secondary" to={cancelHref}>Cancel</Button>
             <Button type="submit" disabled={isSubmitting}>{submitLabel}</Button>
           </>

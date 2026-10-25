@@ -513,3 +513,77 @@ describe('IntakeWizardPage — wizard shell + history-aware back', () => {
     expect(screen.queryByText('Participants list')).not.toBeInTheDocument()
   })
 })
+
+describe('IntakeWizardPage — meeting quick wins', () => {
+  const next = (user: ReturnType<typeof userEvent.setup>) => user.click(screen.getByRole('button', { name: /^next$/i }))
+
+  it('I1: offers "Shared household with other tenants" as a living arrangement and sends it', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(document.getElementById('livingArrangement') as HTMLElement)
+    await user.click(screen.getByRole('option', { name: 'Shared household with other tenants' }))
+    // Last in the list, appended after the existing three.
+    await user.type(screen.getByLabelText(/first name/i), 'Jamie')
+    await user.type(screen.getByLabelText(/last name/i), 'Rivers')
+    for (let i = 0; i < 8; i++) await next(user)
+    await user.click(screen.getByRole('button', { name: /complete intake/i }))
+    expect(mockCreate.mock.calls[0][0]).toEqual(expect.objectContaining({ livingArrangement: 'SharedHousehold' }))
+  })
+
+  it('I7 + I10: receptive skills on Behaviour Summary and equipment notes on Support Needs are sent, and shown on Review', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await fillNameAndAdvance(user)
+    await next(user); await next(user); await next(user) // contacts, cultural, support
+    await expectStep(/support needs/i)
+    expect(screen.getByText('For example, armrests or back support')).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Equipment notes'), 'Armrests')
+    await next(user); await next(user) // medical, behaviour
+    await expectStep(/behaviour summary/i)
+    await user.type(screen.getByLabelText('Receptive Skills'), 'High')
+    await next(user); await next(user)
+    await expectStep(/review/i)
+    expect(screen.getByText('Armrests')).toBeInTheDocument()
+    expect(screen.getByText('High')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /complete intake/i }))
+    expect(mockCreate.mock.calls[0][0]).toEqual(expect.objectContaining({ equipmentRequirements: 'Armrests', receptiveSkills: 'High' }))
+  })
+
+  it('I7 + I10: a resumed draft shows the saved receptive skills and equipment notes', async () => {
+    mockParticipant.mockReturnValue({ data: draft({ receptiveSkills: 'Medium', equipmentRequirements: 'Back support' }), isLoading: false })
+    const user = userEvent.setup()
+    renderPage('/participants/draft-1/intake')
+    for (let i = 0; i < 4; i++) await user.click(await screen.findByRole('button', { name: /^next$/i }))
+    await expectStep(/support needs/i)
+    expect(screen.getByLabelText('Equipment notes')).toHaveValue('Back support')
+    for (let i = 0; i < 2; i++) await user.click(screen.getByRole('button', { name: /^next$/i }))
+    await expectStep(/behaviour summary/i)
+    expect(screen.getByLabelText('Receptive Skills')).toHaveValue('Medium')
+  })
+
+  it('I4: a contact search with no match offers "+ Add new person", which switches to New person with the typed name', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await fillNameAndAdvance(user)
+    await next(user)
+    await expectStep(/contacts/i)
+    await user.click(screen.getByRole('button', { name: /add contact/i }))
+    await user.type(screen.getByRole('combobox'), 'Zed Nobody')
+    await user.click(screen.getByRole('button', { name: '+ Add new person' }))
+    expect(screen.getByLabelText(/first name/i)).toHaveValue('Zed')
+    expect(screen.getByLabelText(/last name/i)).toHaveValue('Nobody')
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+  })
+
+  it('I11: on Review, Back is on the left and Save as draft, Cancel, Complete intake are together on the right', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await walkToReview(user)
+    const back = screen.getByRole('button', { name: 'Back' })
+    const draftBtn = screen.getByRole('button', { name: /save as draft/i })
+    const cancel = screen.getByRole('link', { name: 'Cancel' })
+    const complete = screen.getByRole('button', { name: /complete intake/i })
+    expect(Array.from(cancel.parentElement!.children)).toEqual([draftBtn, cancel, complete])
+    expect(back.parentElement).not.toBe(cancel.parentElement)
+  })
+})

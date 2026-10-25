@@ -142,3 +142,30 @@ describe('WizardNavFooter — Cancel goes where Back goes', () => {
     expect(router.state.location.pathname).toBe('/wizard')
   })
 })
+
+describe('WizardNavFooter — reviewActionsRight', () => {
+  const secondaryActions = [{ key: 'save-draft', label: 'Save as draft', onClick: vi.fn(), disabled: false }]
+
+  it('keeps Back alone on the left and puts Save as draft, Cancel, Submit on the right, in that order, on the review step', () => {
+    renderFooter({ isReviewStep: true, showBack: true, secondaryActions, reviewActionsRight: true, submitLabel: 'Complete intake' })
+    const back = screen.getByRole('button', { name: 'Back' })
+    const draft = screen.getByRole('button', { name: 'Save as draft' })
+    const cancel = screen.getByRole('link', { name: 'Cancel' })
+    const submit = screen.getByRole('button', { name: 'Complete intake' })
+    expect(draft.parentElement).toBe(cancel.parentElement)
+    expect(submit.parentElement).toBe(cancel.parentElement)
+    expect(back.parentElement).not.toBe(cancel.parentElement)
+    expect([draft, cancel, submit].map((el) => el.textContent)).toEqual(['Save as draft', 'Cancel', 'Complete intake'])
+    expect(Array.from(cancel.parentElement!.children)).toEqual([draft, cancel, submit])
+  })
+
+  it('leaves the default footer alone: Save as draft stays beside Back', () => {
+    renderFooter({ isReviewStep: true, showBack: true, secondaryActions })
+    expect(screen.getByRole('button', { name: 'Save as draft' }).parentElement).toBe(screen.getByRole('button', { name: 'Back' }).parentElement)
+  })
+
+  it('does not move the secondary actions off the left on a non-review step', () => {
+    renderFooter({ isReviewStep: false, showBack: true, secondaryActions, reviewActionsRight: true })
+    expect(screen.getByRole('button', { name: 'Save as draft' }).parentElement).toBe(screen.getByRole('button', { name: 'Back' }).parentElement)
+  })
+})

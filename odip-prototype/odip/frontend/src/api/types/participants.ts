@@ -32,6 +32,7 @@ export const LIVING_ARRANGEMENT_LABELS: Record<LivingArrangement, string> = {
   Family: 'Family',
   Independent: 'Independent',
   SupportedAccommodation: 'Supported Accommodation',
+  SharedHousehold: 'Shared household with other tenants',
 }
 
 export const MOBILITY_SUPPORT_OPTIONS = [

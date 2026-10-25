@@ -197,6 +197,8 @@ export default function IntakeWizardPage() {
       behavioursOfConcernCurrent: boolToTriState(participant.behavioursOfConcernCurrent),
       behavioursOfConcernFiveYearHistory: boolToTriState(participant.behavioursOfConcernFiveYearHistory),
       expressiveSkills: participant.expressiveSkills ?? '',
+      receptiveSkills: participant.receptiveSkills ?? '',
+      equipmentRequirements: participant.equipmentRequirements ?? '',
       behaviourRiskSummary: participant.behaviourRiskSummary ?? '', notes: participant.notes ?? '',
       riskEntries: [], contactRoles: [],
     } as unknown as Parameters<typeof reset>[0])
@@ -391,12 +393,14 @@ export default function IntakeWizardPage() {
           { label: 'High Support', value: values.isHighSupport ? 'Yes' : 'No' },
           { label: 'Support Ratio', value: values.supportRatio || '—' },
           { label: 'Overnight Support', value: values.overnightSupport || '—' },
+          { label: 'Equipment notes', value: values.equipmentRequirements || '—' },
         )
       } else if (step.key === 'medical') {
         rows.push({ label: 'Medical Summary', value: values.medicalSummary || '—' })
       } else if (step.key === 'behaviour') {
         rows.push(
           { label: 'Behaviours of Concern (Current)', value: yesNoUnknown(values.behavioursOfConcernCurrent) },
+          { label: 'Receptive Skills', value: values.receptiveSkills || '—' },
           { label: 'Expressive Skills', value: values.expressiveSkills || '—' },
         )
       } else if (step.key === 'risks') {
@@ -561,6 +565,7 @@ export default function IntakeWizardPage() {
           onBack={wizard.handleBack}
           onNext={wizard.handleNext}
           isReviewStep={isReviewStep}
+          reviewActionsRight
           secondaryActions={secondaryActions}
           cancelTo={isEditMode ? `/participants/${id}` : '/participants'}
           submitLabel={saveMutation.isPending ? (isEditMode ? 'Saving...' : 'Creating...') : 'Complete Intake'}

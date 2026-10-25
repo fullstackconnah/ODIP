@@ -367,3 +367,31 @@ describe('SearchableSelect — FormField integration', () => {
     expect(field).toBeInTheDocument()
   })
 })
+
+describe('SearchableSelect — noMatchAction', () => {
+  it('offers the action only when a typed query matches nothing, and hands the typed text to it', async () => {
+    const user = userEvent.setup()
+    const onSelect = vi.fn()
+    render(<SearchableSelect items={items} value="" onChange={vi.fn()} noMatchAction={{ label: '+ Add new person', onSelect }} />)
+    const combobox = screen.getByRole('combobox')
+
+    await user.click(combobox)
+    expect(screen.queryByRole('button', { name: '+ Add new person' })).not.toBeInTheDocument()
+    await user.type(combobox, 'Alex')
+    expect(screen.queryByRole('button', { name: '+ Add new person' })).not.toBeInTheDocument()
+    await user.clear(combobox)
+    await user.type(combobox, 'Zed Nobody')
+    await user.click(screen.getByRole('button', { name: '+ Add new person' }))
+
+    expect(onSelect).toHaveBeenCalledWith('Zed Nobody')
+    expect(combobox).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('shows no action without the prop (every other caller)', async () => {
+    const user = userEvent.setup()
+    render(<SearchableSelect items={items} value="" onChange={vi.fn()} />)
+    await user.type(screen.getByRole('combobox'), 'Zed')
+    expect(screen.getByText('No results found')).toBeInTheDocument()
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  })
+})
