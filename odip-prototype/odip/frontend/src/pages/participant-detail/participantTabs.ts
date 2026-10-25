@@ -92,10 +92,10 @@ export function useScrollToHash(participantId: string | undefined) {
       if (typeof ResizeObserver === 'undefined') return
       let moved = false
       const stop = () => { moved = true }
-      for (const ev of ['wheel', 'touchstart', 'keydown']) window.addEventListener(ev, stop, { once: true, passive: true })
+      for (const ev of ['wheel', 'touchstart', 'keydown', 'pointerdown']) window.addEventListener(ev, stop, { once: true, passive: true })
       const ro = new ResizeObserver(() => { if (!moved) el.scrollIntoView({ block: 'start', behavior: 'auto' }) })
       ro.observe(document.body)
-      holds.push(() => { ro.disconnect(); for (const ev of ['wheel', 'touchstart', 'keydown']) window.removeEventListener(ev, stop) })
+      holds.push(() => { ro.disconnect(); for (const ev of ['wheel', 'touchstart', 'keydown', 'pointerdown']) window.removeEventListener(ev, stop) })
       setTimeout(() => ro.disconnect(), 3000)
     }
     const first = setTimeout(() => go(false), 0) // after the tab's first render, so queries that have not started do not read as settled

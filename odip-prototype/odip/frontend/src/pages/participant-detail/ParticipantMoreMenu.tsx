@@ -34,6 +34,7 @@ export function ParticipantMoreMenu({ participantId, canEditProfile, canArchive,
       variant="menu"
       triggerVariant="secondary"
       label="More actions"
+      iconOnlyBelowSm
       icon={<MoreHorizontal className="w-4 h-4" />}
       items={items}
       onSelect={onSelect}

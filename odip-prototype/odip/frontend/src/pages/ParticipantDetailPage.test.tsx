@@ -1410,6 +1410,30 @@ describe('ParticipantDetailPage — seven tabs (slice 1)', () => {
     expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(1)
   })
 
+  it('T5b: the 3 s hold on a hash target lets go on pointerdown (scrollbar drag, click), and also on wheel, touchstart and keydown', async () => {
+    const callbacks: (() => void)[] = []
+    class RO { constructor(cb: () => void) { callbacks.push(cb) } observe() {} disconnect() {} }
+    vi.stubGlobal('ResizeObserver', RO)
+    try {
+      for (const ev of ['pointerdown', 'wheel', 'touchstart', 'keydown']) {
+        callbacks.length = 0
+        vi.mocked(Element.prototype.scrollIntoView).mockClear()
+        setUserRole('Coordinator')
+        mockUseParticipant.mockReturnValue({ data: makeParticipant({ medicareNumber: undefined }), isLoading: false })
+        const view = renderWithProbe('/participants/p-1?tab=about#key-identifiers')
+        await waitFor(() => expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(1))
+        callbacks.forEach(cb => cb()) // the page grew while held: snaps back to the target
+        expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(2)
+        window.dispatchEvent(new Event(ev))
+        callbacks.forEach(cb => cb()) // the person took over: no more snapping
+        expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(2)
+        view.unmount()
+      }
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('T6: ?tab=history is Notes & records#history, present and focused for Admin, absent without an error for a Coordinator', async () => {
     setUserRole('Coordinator')
     const first = renderWithProbe('/participants/p-1?tab=history')
@@ -1540,6 +1564,30 @@ describe('ParticipantDetailPage — seven tabs (slice 1)', () => {
       await userEvent.setup().click(screen.getByRole('button', { name: 'More actions' }))
       expect(screen.getByRole('option', { name: 'Restore participant' })).toBeInTheDocument()
       expect(screen.queryByRole('option', { name: 'Archive participant' })).not.toBeInTheDocument()
+    })
+
+    it('offers a Coordinator no Archive on an active draft (Onboarding owns that), and Archive on an active non-draft', async () => {
+      setUserRole('Coordinator')
+      mockUseParticipant.mockReturnValue({ data: makeParticipant({ isDraft: true, isActive: true }), isLoading: false })
+      const draft = renderAt('participant-1')
+      await userEvent.setup().click(screen.getByRole('button', { name: 'More actions' }))
+      expect(screen.getByRole('option', { name: 'Edit full profile (wizard)' })).toBeInTheDocument()
+      expect(screen.queryByRole('option', { name: 'Archive participant' })).not.toBeInTheDocument()
+      draft.unmount()
+
+      mockUseParticipant.mockReturnValue({ data: makeParticipant({ isDraft: false, isActive: true }), isLoading: false })
+      renderAt('participant-1')
+      await userEvent.setup().click(screen.getByRole('button', { name: 'More actions' }))
+      expect(screen.getByRole('option', { name: 'Archive participant' })).toBeInTheDocument()
+    })
+
+    it('keeps the "More actions" name when the label collapses to an icon below sm: the text is sr-only there and visible from sm', () => {
+      setUserRole('Admin')
+      renderAt('participant-1')
+      const trigger = screen.getByRole('button', { name: 'More actions' })
+      const text = within(trigger).getByText('More actions')
+      expect(text).toHaveClass('sr-only', 'sm:not-sr-only')
+      expect(trigger).toHaveClass('max-sm:w-[var(--control-h)]', 'max-sm:px-0')
     })
 
     it.each(['SupportWorker', 'ReadOnly'])('has no More actions for %s', role => {

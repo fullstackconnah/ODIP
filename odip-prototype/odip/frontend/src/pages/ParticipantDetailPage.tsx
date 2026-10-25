@@ -214,7 +214,7 @@ export default function ParticipantDetailPage() {
                 <ParticipantMoreMenu
                   participantId={id!}
                   canEditProfile={canWrite}
-                  canArchive={canManageParticipantLifecycle && p.isActive}
+                  canArchive={canManageParticipantLifecycle && p.isActive && !p.isDraft}
                   canRestore={canManageParticipantLifecycle && !p.isActive && !p.isDraft}
                   onArchive={() => archiveRestore.requestArchive(p)}
                   onRestore={() => archiveRestore.requestRestore(p)}
