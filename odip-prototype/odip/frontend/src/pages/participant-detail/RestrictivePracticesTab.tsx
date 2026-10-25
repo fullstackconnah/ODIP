@@ -21,6 +21,8 @@ import { AddRestrictivePracticeDialog } from './AddRestrictivePracticeDialog'
 import { isPastDue } from '@/lib/deadline'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
+import { RpAuthorisationBadge } from '@/pages/incidents/RpAuthorisationBadge'
+import { isRpAuthorised } from '@/lib/incidentPrefill'
 
 // Overdue from the day AFTER the review date (a DateOnly), the rule the server's own alert uses (ReviewDate < today), not from UTC midnight.
 const isReviewOverdue = (dateStr: string | null) => isPastDue(dateStr)
@@ -69,6 +71,7 @@ function PracticeCard({ practice, canWrite, onEdit, onDelete }: {
           <span className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${TYPE_BADGE_STYLES[practice.type]}`}>
             {RESTRICTIVE_PRACTICE_TYPE_LABELS[practice.type]}
           </span>
+          <RpAuthorisationBadge authorised={isRpAuthorised(practice)} />
           {practice.type === 'Unclassified' && (
             <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]">
               <AlertTriangle className="w-3 h-3" /> Needs classification

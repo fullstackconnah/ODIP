@@ -217,6 +217,32 @@ describe('RestrictivePracticesTab', () => {
     expect(mockDeleteMutateAsync).toHaveBeenCalledWith({ id: 'rp-1', participantId: 'participant-1' })
   })
 
+  it.each([
+    ['active with name and date', { authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01' }, 'Authorised'],
+    ['active with a name but no date', { authorisedBy: 'Dr Lee' }, 'Not authorised'],
+    ['active with neither', {}, 'Not authorised'],
+  ])('shows the authorisation badge on the row: %s', (_label, overrides, badge) => {
+    mockUseRestrictivePractices.mockReturnValue({ data: [makePractice(overrides)], isLoading: false })
+
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    expect(screen.getByText(badge)).toBeInTheDocument()
+    expect(screen.queryByText(badge === 'Authorised' ? 'Not authorised' : 'Authorised')).not.toBeInTheDocument()
+  })
+
+  it('reads Not authorised on an inactive entry even with name and date (the shared rule needs it active)', async () => {
+    const user = userEvent.setup()
+    mockUseRestrictivePractices.mockReturnValue({
+      data: [makePractice({ isActive: false, authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01' })],
+      isLoading: false,
+    })
+
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+    await user.click(screen.getByText('Inactive entries (1)'))
+
+    expect(screen.getByText('Not authorised')).toBeInTheDocument()
+  })
+
   it('groups inactive entries behind a collapsed toggle', () => {
     mockUseRestrictivePractices.mockReturnValue({
       data: [makePractice({ id: 'active-1', isActive: true }), makePractice({ id: 'inactive-1', isActive: false, description: 'Retired entry' })],
