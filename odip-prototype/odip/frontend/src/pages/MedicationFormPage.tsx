@@ -480,7 +480,7 @@ export default function MedicationFormPage() {
                               aria-pressed={active}
                               className={`h-[var(--control-h)] min-w-[var(--control-h)] flex items-center justify-center px-3 rounded-[var(--radius-md)] text-sm border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 ${
                                 active
-                                  ? 'bg-[var(--color-primary)] text-white border-[var(--color-primary)]'
+                                  ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)] border-[var(--color-primary)]'
                                   : 'border-[var(--color-border)] hover:bg-[var(--color-accent)]'
                               }`}
                             >

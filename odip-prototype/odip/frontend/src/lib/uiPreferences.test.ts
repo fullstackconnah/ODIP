@@ -8,13 +8,13 @@ describe('uiPreferences', () => {
   })
 
   it('round-trips a written preference back out for the same user', () => {
-    writeUiPreferences('user-1', { tableVerticalDividers: true })
+    writeUiPreferences('user-1', { tableVerticalDividers: true, theme: 'system' })
 
-    expect(readUiPreferences('user-1')).toEqual({ tableVerticalDividers: true })
+    expect(readUiPreferences('user-1')).toEqual({ tableVerticalDividers: true, theme: 'system' })
   })
 
   it('does not leak one user\'s preference onto another user id', () => {
-    writeUiPreferences('user-1', { tableVerticalDividers: true })
+    writeUiPreferences('user-1', { tableVerticalDividers: true, theme: 'system' })
 
     expect(readUiPreferences('user-2')).toEqual(DEFAULT_UI_PREFERENCES)
   })
@@ -61,15 +61,53 @@ describe('uiPreferences', () => {
       throw new Error('QuotaExceededError')
     })
 
-    expect(() => writeUiPreferences('user-1', { tableVerticalDividers: true })).not.toThrow()
+    expect(() => writeUiPreferences('user-1', { tableVerticalDividers: true, theme: 'system' })).not.toThrow()
   })
 
   it('returns defaults and performs no write for a null userId', () => {
     const setItemSpy = vi.spyOn(Storage.prototype, 'setItem')
 
     expect(readUiPreferences(null)).toEqual(DEFAULT_UI_PREFERENCES)
-    writeUiPreferences(null, { tableVerticalDividers: true })
+    writeUiPreferences(null, { tableVerticalDividers: true, theme: 'system' })
 
     expect(setItemSpy).not.toHaveBeenCalled()
+  })
+})
+
+describe('uiPreferences theme', () => {
+  afterEach(() => {
+    localStorage.clear()
+    vi.restoreAllMocks()
+  })
+
+  it('defaults to following the device (System)', () => {
+    expect(DEFAULT_UI_PREFERENCES.theme).toBe('system')
+    expect(readUiPreferences('nobody').theme).toBe('system')
+  })
+
+  it('reads prefs saved before the theme existed as System, keeping the dividers setting', () => {
+    localStorage.setItem('odip_ui_prefs:user-1', JSON.stringify({ tableVerticalDividers: true }))
+
+    expect(readUiPreferences('user-1')).toEqual({ tableVerticalDividers: true, theme: 'system' })
+  })
+
+  it.each([['sepia', '"sepia"'], ['a number', '1'], ['null', 'null']])('reads a stored theme of %s as System', (_name, json) => {
+    localStorage.setItem('odip_ui_prefs:user-1', `{"theme":${json}}`)
+
+    expect(readUiPreferences('user-1').theme).toBe('system')
+  })
+
+  it('reads bad JSON and a throwing getItem as System', () => {
+    localStorage.setItem('odip_ui_prefs:user-1', '{nope')
+    expect(readUiPreferences('user-1').theme).toBe('system')
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('denied') })
+    expect(readUiPreferences('user-1').theme).toBe('system')
+  })
+
+  it('keeps Dark per user: user A on Dark leaves user B on System', () => {
+    writeUiPreferences('user-a', { tableVerticalDividers: false, theme: 'dark' })
+
+    expect(readUiPreferences('user-a').theme).toBe('dark')
+    expect(readUiPreferences('user-b').theme).toBe('system')
   })
 })

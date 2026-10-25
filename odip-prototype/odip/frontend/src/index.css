@@ -45,6 +45,9 @@
   --color-conflict: #ba1a1a;
   --color-accessible-container: #ffd7ef;
   --color-on-accessible-container: #7a2169;
+  --color-warning-foreground: #1b1c1a;
+  --color-hover-wash: rgba(0,0,0,0.05);
+  --color-focus-ring-soft: rgba(57,98,0,0.18);
 
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
@@ -107,6 +110,14 @@
     --tap-min: 44px;
     --mobile-nav-h: 68px;  /* the links reach the 44px --tap-min floor here: 12px + 44px + 12px */
   }
+}
+
+/* Shadow tokens: whole box-shadow values so dark mode can re-point them (DESIGN.md Elevation). */
+:root {
+  --shadow-float: 0 24px 40px -12px rgba(27,28,26,0.14);
+  --shadow-hairline: 0 24px 32px -12px rgba(27,28,26,0.04);
+  --shadow-hairline-up: 0 -8px 24px -4px rgba(27,28,26,0.04);
+  --shadow-lift: 0 24px 32px -12px rgba(27,28,26,0.08);
 }
 
 /*
@@ -357,4 +368,61 @@
     transition-delay: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+:root { --wordmark-dot: var(--color-primary-fixed); }
+
+/* Dark theme (dark-mode-2026-10): the same tokens re-pointed; set by public/theme.js. Values: DESIGN.md "Dark theme". */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --color-background: #131512;
+  --color-foreground: #e4e5dd;
+  --color-card: #1c1f1a;
+  --color-card-foreground: #e4e5dd;
+  --color-popover: #262a24;
+  --color-popover-foreground: #e4e5dd;
+  --color-primary: #a6d66b;
+  --color-primary-foreground: #0f2000;
+  --color-primary-container: #8fc254;
+  --color-primary-fixed: #2b4712;
+  --color-on-primary-fixed: #cdf3a4;
+  --color-secondary: #b3c1d8;
+  --color-secondary-foreground: #1a2433;
+  --color-secondary-container: #2a374b;
+  --color-muted: #262a24;
+  --color-muted-foreground: #b5bcaa;
+  --color-accent: #262a24;
+  --color-accent-foreground: #e4e5dd;
+  --color-destructive: #ff8f84;
+  --color-destructive-foreground: #3b0906;
+  --color-error-container: #4d1612;
+  --color-on-error-container: #ffb4ab;
+  --color-border: #434a3e;
+  --color-input: #2b2f28;
+  --color-ring: #a6d66b;
+  --color-sidebar: #171a15;
+  --color-sidebar-foreground: #e4e5dd;
+  --color-sidebar-accent: rgba(255,255,255,0.06);
+  --color-surface: #1c1f1a;
+  --color-surface-container: #262a24;
+  --color-surface-container-low: #171a15;
+  --color-surface-container-high: #2e322b;
+  --color-surface-container-lowest: #1c1f1a;
+  --color-outline-variant: #434a3e;
+  --color-success: #a6d66b;
+  --color-warning: #f59e0b;
+  --color-warning-container: #3f2f0b;
+  --color-on-warning-container: #f8cd76;
+  --color-info: #b3c1d8;
+  --color-conflict: #ff8f84;
+  --color-accessible-container: #4a1b40;
+  --color-on-accessible-container: #ffb3e6;
+  --color-warning-foreground: #1b1c1a;
+  --color-hover-wash: rgba(255,255,255,0.06);
+  --color-focus-ring-soft: rgba(166,214,107,0.28);
+  --wordmark-dot: var(--color-primary);
+  --shadow-float: 0 0 0 1px rgba(255,255,255,0.08), 0 24px 40px -12px rgba(0,0,0,0.6);
+  --shadow-hairline: 0 24px 32px -12px rgba(0,0,0,0.35);
+  --shadow-hairline-up: 0 -8px 24px -4px rgba(0,0,0,0.35);
+  --shadow-lift: 0 0 0 1px rgba(255,255,255,0.06), 0 24px 32px -12px rgba(0,0,0,0.5);
 }

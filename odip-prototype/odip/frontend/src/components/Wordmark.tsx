@@ -25,7 +25,7 @@ export function Wordmark({ size, tone = 'light', className = '' }: WordmarkProps
         <svg viewBox="0 0 16 16" style={{ width: '0.3em', height: '0.3em', marginLeft: '0.12em' }}>
           <circle
             cx="8" cy="8" r={dark ? 7 : 6.5}
-            style={{ fill: 'var(--color-primary-fixed)', stroke: dark ? 'none' : 'var(--color-primary)', strokeWidth: 2 }}
+            style={{ fill: dark ? 'var(--color-primary-fixed)' : 'var(--wordmark-dot)', stroke: dark ? 'none' : 'var(--color-primary)', strokeWidth: 2 }}
           />
         </svg>
       </span>

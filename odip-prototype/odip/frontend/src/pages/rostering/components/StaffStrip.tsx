@@ -92,7 +92,7 @@ export function CarriedPuck({ carry, hours }: { carry: DragCarry; hours: number 
   const line = carriedLine(carry, dropOutcome(carry, over?.data.current as DropTarget | undefined))
   // The Floating Panel shadow (DESIGN.md), its tint taken from --color-foreground (27,28,26 at 14%) so no literal colour joins the uiStandards baseline.
   return (
-    <div className="flex w-max max-w-64 cursor-grabbing flex-col rounded-sm border border-border bg-card px-2 py-1 text-[13px] shadow-[0_24px_40px_-12px_color-mix(in_srgb,var(--color-foreground)_14%,transparent)]">
+    <div className="flex w-max max-w-64 cursor-grabbing flex-col rounded-sm border border-border bg-card px-2 py-1 text-[13px] shadow-[var(--shadow-float)]">
       <span className="flex items-center gap-1.5">
         <span className="min-w-0 truncate font-medium text-foreground">{carry.staffName}</span>
         <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{formatHoursMeter(hours, weeklyHours)}</span>

@@ -42,7 +42,7 @@ function PhoneLink({ phone, children }: { phone: string; children: ReactNode }) 
   return (
     <a
       href={telHref(phone)}
-      className="inline-flex items-center gap-2 min-h-[44px] -mx-2 px-2 rounded-lg font-medium underline decoration-1 underline-offset-2 hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
+      className="inline-flex items-center gap-2 min-h-[44px] -mx-2 px-2 rounded-lg font-medium underline decoration-1 underline-offset-2 hover:bg-[var(--color-hover-wash)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
     >
       <PhoneCall className="w-4 h-4 shrink-0" aria-hidden="true" />
       <span>{children}</span>

@@ -108,7 +108,7 @@ export function WizardStepRail<V>({
       // shape without locking the mobile/tablet horizontal mode.
       (forceVertical || isVerticalAtLg) && 'lg:w-full lg:justify-start lg:rounded-lg lg:text-left',
       filled && {
-        'bg-[var(--color-primary)] text-white': isCurrent,
+        'bg-[var(--color-primary)] text-[var(--color-primary-foreground)]': isCurrent,
         'bg-[var(--color-primary)]/10 text-[var(--color-primary)]': isCompleted && !isCurrent,
         // A step that cannot be opened yet is the lighter fill, not a faded one: opacity-60 over this fill was about 2.9:1.
         'bg-[var(--color-accent)] text-[var(--color-muted-foreground)]': !isCurrent && !isCompleted && isClickable,
@@ -165,7 +165,7 @@ export function WizardStepRail<V>({
                   className={`flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold shrink-0 ${
                     isCurrent
                       ? filled ? 'bg-[var(--color-primary-foreground)] text-[var(--color-primary)]' : 'bg-[var(--color-primary-foreground)]/20'      // filled: white over the olive, 7.2:1; the 20% veil was 4.46:1
-                      : isCompleted ? 'bg-[var(--color-primary)] text-white' : 'bg-[var(--color-border)]'
+                      : isCompleted ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)]' : 'bg-[var(--color-border)]'
                   }`}
                 >
                   {isCompleted ? <Check className="w-3 h-3" /> : idx + 1}

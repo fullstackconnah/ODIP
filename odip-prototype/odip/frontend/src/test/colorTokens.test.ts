@@ -39,3 +39,30 @@ describe('every --color-* token the source names is defined in index.css', () =>
     expect([...new Set(undefinedUses)]).toEqual([])
   })
 })
+
+describe('dark theme block', () => {
+  const themeStart = css.indexOf('@theme')
+  const names = (block: string) => [...block.matchAll(/--color-([a-z0-9-]+)\s*:/g)].map(m => m[1])
+  const darkStart = css.indexOf('/* Dark theme (dark-mode-2026-10)')
+
+  it('re-points exactly the tokens @theme defines: none missing, none extra', () => {
+    const light = names(css.slice(themeStart, css.indexOf('}', themeStart)))
+    const dark = names(css.slice(darkStart, css.indexOf('}', darkStart)))
+    expect(light).toHaveLength(45)
+    expect([...dark].sort()).toEqual([...light].sort())
+  })
+
+  it('leaves no hard-coded white, ledger shadow, halo or black wash in components (they break in dark)', () => {
+    const allowed = new Set(['components/ItineraryPdf.tsx', 'index.css'])
+    const leaks: string[] = []
+    for (const file of sourceFiles(SRC)) {
+      const rel = relative(SRC, file).split(sep).join('/')
+      if (allowed.has(rel)) continue
+      const source = readFileSync(file, 'utf-8')
+      for (const needle of [/text-white/, /rgba\(27,28,26/, /rgba\(57,98,0/, /bg-black\/5\b/, /color-mix\(in_srgb,var\(--color-foreground\)/]) {
+        if (needle.test(source)) leaks.push(`${rel}: ${needle}`)
+      }
+    }
+    expect(leaks).toEqual([])
+  })
+})

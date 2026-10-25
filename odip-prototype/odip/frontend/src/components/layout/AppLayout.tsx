@@ -142,7 +142,7 @@ function BottomBar({ items, moreActive, menuOpen, onOpenMenu }: {
 }) {
   const colour = (active: boolean) => (active ? 'text-[var(--color-primary)]' : 'text-[var(--color-secondary)]')
   return (
-    <nav aria-label="Mobile" className="lg:hidden fixed bottom-0 left-0 right-0 h-[var(--mobile-nav-h)] bg-[var(--color-background)]/90 backdrop-blur-xl shadow-[0_-8px_24px_-4px_rgba(27,28,26,0.04)] px-2 flex items-center z-50">
+    <nav aria-label="Mobile" className="lg:hidden fixed bottom-0 left-0 right-0 h-[var(--mobile-nav-h)] bg-[var(--color-background)]/90 backdrop-blur-xl shadow-[var(--shadow-hairline-up)] px-2 flex items-center z-50">
       {items.map(item => (
         <Link
           key={item.key}
@@ -331,7 +331,7 @@ export default function AppLayout() {
       {/* Main area */}
       <div className="flex-1 min-w-0 lg:ml-[232px] flex flex-col min-h-screen">
         {/* Top bar — fixed 48px */}
-        <header className="sticky top-0 z-30 h-12 bg-[var(--color-background)]/80 backdrop-blur-xl shadow-[0_24px_32px_-12px_rgba(27,28,26,0.04)]">
+        <header className="sticky top-0 z-30 h-12 bg-[var(--color-background)]/80 backdrop-blur-xl shadow-[var(--shadow-hairline)]">
           <div className="flex items-center justify-between h-full px-[var(--gutter,20px)]">
             <div className="flex min-w-0 items-center gap-4">
               <button
@@ -356,7 +356,7 @@ export default function AppLayout() {
               {isSuperAdmin && <TenantSwitcher />}
               {isSuperAdmin && viewingTenantId && <UserSwitcher />}
               <NotificationBell />
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] flex items-center justify-center text-white font-bold text-sm shadow-md">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] flex items-center justify-center text-[var(--color-primary-foreground)] font-bold text-sm shadow-md">
                 {initial}
               </div>
             </div>

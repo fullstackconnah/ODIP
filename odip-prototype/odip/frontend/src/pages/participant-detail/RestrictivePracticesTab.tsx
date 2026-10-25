@@ -90,7 +90,7 @@ function PracticeCard({ practice, canWrite, onEdit, onDelete }: {
           {practice.reviewDate && (
             <span
               className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${
-                overdue ? 'bg-[var(--color-destructive)] text-white' : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
+                overdue ? 'bg-[var(--color-destructive)] text-[var(--color-destructive-foreground)]' : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
               }`}
             >
               {overdue && <AlertTriangle className="w-3 h-3" />}
