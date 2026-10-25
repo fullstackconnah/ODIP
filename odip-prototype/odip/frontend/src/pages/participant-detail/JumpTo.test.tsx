@@ -44,6 +44,22 @@ describe('JumpPanel (T12)', () => {
     expect(screen.getByTestId('search')).toHaveTextContent('?tab=health')
   })
 
+  it('skips sections inside a fold and sections nested in another jump section', async () => {
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter initialEntries={['/p/1?tab=health']}>
+        <JumpPanel>
+          <section id="a" data-jump aria-label="A"><h2>a</h2></section>
+          <section id="b" data-jump aria-label="B"><section id="b-inner" data-jump aria-label="B inner"><h3>inner</h3></section></section>
+          <details><summary>fold</summary><section id="folded" data-jump aria-label="Folded"><h2>f</h2></section></details>
+          <section id="c" data-jump aria-label="C"><h2>c</h2></section>
+        </JumpPanel>
+      </MemoryRouter>,
+    )
+    await user.click(screen.getByRole('button', { name: /Jump to/ }))
+    expect(screen.getAllByRole('option').map(o => o.textContent)).toEqual(['A', 'B', 'C'])
+  })
+
   it('shows nothing under three sections', () => {
     renderPanel(['a', 'b'])
     expect(screen.queryByRole('button', { name: /Jump to/ })).not.toBeInTheDocument()

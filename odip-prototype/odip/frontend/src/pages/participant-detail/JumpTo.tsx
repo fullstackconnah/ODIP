@@ -14,7 +14,8 @@ function useJumpItems(ref: React.RefObject<HTMLElement | null>): JumpItem[] {
     const el = ref.current
     if (!el) return
     const read = () => {
-      const next = [...el.querySelectorAll<HTMLElement>('[data-jump]')].map(s => ({ id: s.id, label: s.getAttribute('aria-label') ?? s.id }))
+      // A section inside a fold or nested in another jump section is not a place to go: it is hidden, or lands where its parent does.
+      const next = [...el.querySelectorAll<HTMLElement>('[data-jump]')].filter(s => !s.parentElement?.closest('[data-jump], details')).map(s => ({ id: s.id, label: s.getAttribute('aria-label') ?? s.id }))
       setItems(prev => (prev.map(i => i.id).join('|') === next.map(i => i.id).join('|') ? prev : next))
     }
     read()
@@ -66,7 +67,7 @@ export function JumpPanel({ children }: { children: ReactNode }) {
           {show && (
             <div className="mb-[var(--section-gap)] flex justify-end @min-[1100px]:hidden">
               <Dropdown variant="menu" triggerVariant="secondary" label="Jump to" icon={<ListTree className="w-4 h-4" />}
-                items={items.map(i => ({ value: i.id, label: i.label }))} onSelect={go} />
+                items={items.map(i => ({ value: i.id, label: i.label }))} onSelect={go} maxPanelHeight={Number.POSITIVE_INFINITY} />
             </div>
           )}
           {children}
