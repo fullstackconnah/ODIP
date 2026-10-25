@@ -20,6 +20,7 @@ concurrency:
 
 jobs:
   backend:
+    # the job name is pinned by the merge tooling (merge-chain.sh); keep it
     name: Backend (.NET 8, EF, PostgreSQL)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -50,7 +51,7 @@ jobs:
 
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: 10.0.x
 
       - name: Verify real ICU globalization support
         run: |
@@ -68,7 +69,7 @@ jobs:
       - name: Verify EF model and migrations on a fresh PostgreSQL database
         run: |
           set -euo pipefail
-          dotnet tool install --tool-path "$RUNNER_TEMP/dotnet-tools" dotnet-ef --version 8.0.11
+          dotnet tool install --tool-path "$RUNNER_TEMP/dotnet-tools" dotnet-ef --version 10.0.13
           "$RUNNER_TEMP/dotnet-tools/dotnet-ef" migrations has-pending-model-changes --configuration Release --no-build --project Odip.Infrastructure --startup-project Odip.Api
           "$RUNNER_TEMP/dotnet-tools/dotnet-ef" database update --configuration Release --no-build --project Odip.Infrastructure --startup-project Odip.Api
 
@@ -128,7 +129,7 @@ jobs:
 
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: 10.0.x
 
       - uses: actions/setup-node@v4
         with:

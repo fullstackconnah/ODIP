@@ -83,7 +83,8 @@ public class EmploymentHeroSyncBackgroundServiceTests
 
         await service.StartAsync(CancellationToken.None);
 
-        Assert.True(service.ExecuteTask!.IsCompleted);
+        await service.ExecuteTask!;   // .NET 10 runs ExecuteAsync off the caller's thread
+        Assert.True(service.ExecuteTask.IsCompleted);
         Assert.Empty(eh.Requests);
         await service.StopAsync(CancellationToken.None);
     }
