@@ -101,7 +101,7 @@ npm run lint
   (`F:/Projects/.claude/tools/odip-server-test/odip-test.sh`), never on this PC.
 - Docker: the deployed stack is `deploy/compose.yaml` (repo root), built from source on the
   homelab by `.github/workflows/deploy.yml` — a self-hosted runner that rsyncs the tree,
-  runs `docker compose build` as the test gate, then `up -d` with a health check and
+  runs `docker compose build` (compile only; the tests are the CI gate in pr-validation.yml), then `up -d` with a health check and
   automatic rollback. Nothing is pulled from ghcr.io. The inherited TripCore
   `odip-prototype/odip/docker-compose.yml` was deleted: rsync copied it into the stack
   root next to `compose.yaml`, and Compose picking the wrong one would have silently
@@ -171,7 +171,7 @@ npm run lint
   AutoMapper profiles "to match the pattern," and do not assume either one is wired up just
   because the package reference exists.
 
-- CI runs `dotnet test` under invariant globalization; the dev machine is en-AU.
+- CI runs `dotnet test` with real ICU (pr-validation.yml sets DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=0) but no en-AU locale; the dev machine is en-AU.
   Culture-dependent formatting differs ("Sept" locally, "Sep" in the container) and a test that
   hard-codes the local form passes locally then fails in CI (2026-09-13, run 34753911258).
   Format every server-rendered string (emails, exports, findings) with
@@ -188,6 +188,7 @@ npm run lint
 - Neither Dockerfile runs tests (owner decision 2026-10-25): they run in CI (pr-validation.yml) on the PR merge ref, and merge-chain
   merges only when Backend, Frontend and E2E pass. A failing deploy build is now a build or restore error; diagnose a red deploy
   with `gh run view <id> --log-failed`. Time-dependent tests that fail only in some daily window now surface in CI, not the deploy.
+  main is not branch-protected: a direct push or a manual deploy run now ships untested code, so run the suites first.
 
 - `Program.cs` contains raw-SQL self-healing logic for `__EFMigrationsHistory` that is tied to
   specific migration IDs. Renaming or reordering existing migrations can break application

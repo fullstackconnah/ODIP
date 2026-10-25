@@ -15,6 +15,8 @@ describe.skipIf(!existsSync(DOCKERFILE))('frontend/Dockerfile: the build sha', (
     const at = (line: string) => lines.indexOf(line)
     const arg = at('ARG VITE_BUILD_SHA')
     const env = at('ENV VITE_BUILD_SHA=$VITE_BUILD_SHA')
+    expect(at('COPY frontend/ .')).toBeGreaterThanOrEqual(0)
+    expect(at('RUN npm run build')).toBeGreaterThanOrEqual(0)
     expect(arg).toBeGreaterThan(at('COPY frontend/ .'))
     expect(env).toBeGreaterThan(arg)
     expect(env).toBeLessThan(at('RUN npm run build'))
