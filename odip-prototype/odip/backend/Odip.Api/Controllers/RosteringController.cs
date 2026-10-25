@@ -626,6 +626,8 @@ public class RosteringController : ControllerBase
     {
         var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == id, ct);
         if (shift == null) return NotFound(ApiResponse<ShiftDto>.Fail("Shift not found."));
+        if (dto.ExpectsStaff && dto.ExpectedStaffId != shift.UserId)
+            return Conflict(ApiResponse<ShiftDto>.Fail(BoardChangedMessage, ShiftErrorCodes.ShiftBoardChanged));
         // A started, finished or cancelled shift keeps its worker here too, as /assign and a drop do (decision 8; post-merge review S2): its completion and timesheet
         // belong to that worker. Every other edit the rules below allow still saves.
         if (dto.StaffId != shift.UserId && IsLockedForStaffChange(shift.Status) && !(shift.Status == ShiftStatus.Cancelled && dto.Status != ShiftStatus.Cancelled))

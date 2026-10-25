@@ -521,6 +521,11 @@ the number of uncovered days on the amber tint, or a check when the week is full
 and "Fully covered" are the badge's title and accessible name, not text in the row, so the name is what keeps
 the room ("Grace Palmer-Hughes" reads whole at 1920).
 
+**A Draft shift on the roster board.** The chip takes the warning tray (`TONE.warning.soft`) plus the word "Draft" (`TONE.warning.ink`), because the shift is waiting for the
+coordinator to publish it, and its menu offers Publish. Findings keep priority over that tint: on a Draft chip the severity marker sits in an `ON_TINT` pill (card fill, the
+tone's ink, a 20px circle with a 14px icon), so a problem is louder than the waiting. A published chip is unchanged, with the bare 12px marker. This is the one exception to
+"a healthy chip is neutral"; the status badge for a Draft shift everywhere else stays neutral (see the status words).
+
 ### Navigation
 
 - **Menu:** one config (`components/layout/navConfig.ts`) feeds the sidebar, the drawer and the bottom bar, so a page is added, moved or
@@ -751,7 +756,7 @@ on-container text), a soft wash (a tile or a row, paired with the ink) and an in
   Resolved success, Closed neutral. Claims and payments: Draft neutral, Ready, Submitted info, Approved, Claimed, Paid success,
   Partially paid warning, Rejected and Cancelled danger. Bookings, reservations, vehicle requests and activities: Enquiry, Held, Waitlist, Requested, Booked warning
   (not yet on the trip, or not yet confirmed), Researching and Planned neutral, Confirmed and Completed success, Cancelled and Unavailable danger. Shifts and tasks:
-  Draft and Not started neutral, Published and In progress info, Pending review warning, Completed success, Overdue and Cancelled danger. Payments: Not invoiced neutral,
+  Draft and Not started neutral (the roster board's chip is the one place a Draft shift is warning: see Boards), Published and In progress info, Pending review warning, Completed success, Overdue and Cancelled danger. Payments: Not invoiced neutral,
   Invoice sent info, Partial warning, Paid success, Overdue danger. Medication: Administered success, Withheld and On hold warning, Refused, Missed, Wrong medication
   and Ceased danger. Notifications and submissions: Sent and Accepted success, Skipped neutral, Failed, Revoked and Rejected danger.
 - **Contrast.** Every pair above is held to WCAG AA (4.5:1) by `src/test/toneContrast.test.ts`, which reads the palette from `src/index.css`; the closest is the info

@@ -475,7 +475,10 @@ export interface CreateShiftDto {
   moveFromShiftId?: string
 }
 
-export type UpdateShiftDto = CreateShiftDto
+export type UpdateShiftDto = CreateShiftDto & {
+  /** The chip's Publish: who the board showed on the shift (null for nobody). The server answers 409 when the shift has another worker now. Left out by the slide-over, which is not checked. */
+  expectedStaffId?: string | null
+}
 
 export interface AssignShiftDto {
   staffId: string | null
