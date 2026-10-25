@@ -97,6 +97,7 @@ public class AdminWhatsNewController : ControllerBase
         if (body.Length == 0) errors.Add("Enter the text people will read.");
         else if (body.Length > BodyMax) errors.Add("The text can be up to 600 characters.");
         if (roles == WhatsNewAudience.None) errors.Add("Choose at least one role.");
+        errors.AddRange(WhatsNewAudienceNames.Unknown(dto.Roles).Select(n => $"Unknown role: {n}."));
         return errors.Count == 0;
     }
 
@@ -118,9 +119,11 @@ internal static class WhatsNewAudienceNames
         ("SupportWorker", WhatsNewAudience.SupportWorker), ("ReadOnly", WhatsNewAudience.ReadOnly),
     };
 
-    /// <summary>Unknown names are ignored, so a list with none valid gives None.</summary>
+    /// <summary>Unknown names add no flag; the admin writes reject them with <see cref="Unknown"/>.</summary>
     public static WhatsNewAudience ToFlags(IEnumerable<string>? names) =>
         Map.Where(m => names?.Contains(m.Name) == true).Aggregate(WhatsNewAudience.None, (acc, m) => acc | m.Flag);
+
+    public static IEnumerable<string> Unknown(IEnumerable<string>? names) => (names ?? Enumerable.Empty<string>()).Where(n => Map.All(m => m.Name != n)).Distinct();
 
     public static List<string> ToNames(WhatsNewAudience flags) => Map.Where(m => (flags & m.Flag) != 0).Select(m => m.Name).ToList();
 

@@ -26,6 +26,7 @@ public class WhatsNewSeedTests
         Assert.Equal(WhatsNewSeed.All.Count, WhatsNewSeed.All.Select(i => i.Key).Distinct().Count());
         foreach (var i in WhatsNewSeed.All)
         {
+            Assert.InRange(i.Key.Length, 1, 64); // the Key column is HasMaxLength(64)
             Assert.Matches(new Regex("^[0-9]{4}-[0-9]{2}-[a-z0-9-]+$"), i.Key);
             Assert.False(i.Key.StartsWith("admin-", StringComparison.Ordinal));
         }

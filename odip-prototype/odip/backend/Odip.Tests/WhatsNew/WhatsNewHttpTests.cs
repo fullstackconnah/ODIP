@@ -54,6 +54,16 @@ public class WhatsNewHttpTests
     }
 
     [Fact]
+    public async Task SuperAdmin_MisspeltRole_Returns400_AndSavesNoRow()
+    {
+        await using var host = await TestHost.StartAsync();
+        var response = await host.SendAsync(HttpMethod.Post, "/api/v1/admin/whats-new", "SuperAdmin", "{\"title\":\"T\",\"body\":\"B\",\"roles\":[\"Admin\",\"Cordinator\"],\"important\":false}");
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("Cordinator", await response.Content.ReadAsStringAsync());
+        Assert.Equal(0, await host.EntryCountAsync());
+    }
+
+    [Fact]
     public async Task ReadOnly_CannotEditAnEntry()
     {
         await using var host = await TestHost.StartAsync();
@@ -124,6 +134,12 @@ public class WhatsNewHttpTests
             await app.StartAsync();
 
             return new TestHost(app, new HttpClient { BaseAddress = new Uri(app.Urls.Single()), Timeout = TimeSpan.FromSeconds(30) });
+        }
+
+        public async Task<int> EntryCountAsync()
+        {
+            using var scope = _app.Services.CreateScope();
+            return await scope.ServiceProvider.GetRequiredService<OdipDbContext>().WhatsNewEntries.CountAsync();
         }
 
         public Task<HttpResponseMessage> SendAsync(HttpMethod method, string path, string role, string? json)

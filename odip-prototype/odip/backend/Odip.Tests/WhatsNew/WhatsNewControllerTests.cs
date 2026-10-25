@@ -287,6 +287,19 @@ public class WhatsNewControllerTests
     }
 
     [Fact]
+    public async Task Save_MisspeltRole_Returns400_OnCreateAndUpdate_AndChangesNothing()
+    {
+        var c = SetUp("SuperAdmin");
+        var bad = Assert.IsType<BadRequestObjectResult>((await c.Admin.Create(Save(roles: new[] { "Admin", "Cordinator" }), default)).Result);
+        Assert.Contains("Unknown role: Cordinator.", Assert.IsType<ApiResponse<AdminWhatsNewEntryDto>>(bad.Value).Errors!);
+        Assert.Empty(c.Db.WhatsNewEntries.ToList());
+
+        var id = Saved(await c.Admin.Create(Save(), default)).Id;
+        Assert.IsType<BadRequestObjectResult>((await c.Admin.Update(id, Save(roles: new[] { "Admin", "Cordinator" }), default)).Result);
+        Assert.Equal(WhatsNewAudience.Admin, c.Db.WhatsNewEntries.Single().Roles);
+    }
+
+    [Fact]
     public async Task Save_BodyOver600_Returns400()
     {
         var c = SetUp("SuperAdmin");

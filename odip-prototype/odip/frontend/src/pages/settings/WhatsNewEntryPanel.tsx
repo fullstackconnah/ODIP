@@ -75,7 +75,10 @@ function EntryForm({ entry, onClose }: FormProps) {
     else create.mutate(dto, options)
   }
 
-  const toggleRole = (role: WhatsNewRole) => setRoles(current => (current.includes(role) ? current.filter(r => r !== role) : [...current, role]))
+  const toggleRole = (role: WhatsNewRole) => {
+    setRoles(current => (current.includes(role) ? current.filter(r => r !== role) : [...current, role]))
+    if (errors.roles) setErrors(x => ({ ...x, roles: undefined }))
+  }
   const rolesHintId = 'whats-new-roles-hint'
   const rolesErrorId = 'whats-new-roles-error'
 
@@ -85,10 +88,11 @@ function EntryForm({ entry, onClose }: FormProps) {
       onClose={onClose}
       dirty={dirty}
       size="md"
+      footerClassName="flex flex-wrap items-center justify-end gap-3"
       title={editing ? 'Edit entry' : 'Add entry'}
       footer={(
         <>
-          {editing && <p className="mr-auto text-xs text-[var(--color-muted-foreground)]">Edits don't mark it as new again.</p>}
+          {editing && <p className="basis-full text-xs text-[var(--color-muted-foreground)]">Edits don't mark it as new again.</p>}
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
           <Button onClick={submit} aria-disabled={pending || undefined} aria-busy={pending || undefined} className={DISABLED_LOOK}>
             {editing ? (pending ? 'Saving…' : 'Save changes') : (pending ? 'Publishing…' : 'Publish')}
@@ -99,11 +103,11 @@ function EntryForm({ entry, onClose }: FormProps) {
       <div ref={formRef} className="space-y-4">
         {refused && <Callout tone="danger">Couldn't save the entry. Check the fields and try again.</Callout>}
         <div>
-          <TextField label="Title" required value={title} maxLength={TITLE_MAX} error={errors.title} descriptionId="whats-new-title-count" onChange={e => setTitle(e.target.value)} />
+          <TextField label="Title" required value={title} maxLength={TITLE_MAX} error={errors.title} descriptionId="whats-new-title-count" onChange={e => { setTitle(e.target.value); if (errors.title) setErrors(x => ({ ...x, title: undefined })) }} />
           <CharCount id="whats-new-title-count" used={title.length} max={TITLE_MAX} />
         </div>
         <div>
-          <TextAreaField label="Text" required rows={8} value={text} maxLength={BODY_MAX} error={errors.text} hint="Plain text. Leave a blank line between paragraphs." descriptionId="whats-new-text-count" onChange={e => setText(e.target.value)} />
+          <TextAreaField label="Text" required rows={8} value={text} maxLength={BODY_MAX} error={errors.text} hint="Plain text. Leave a blank line between paragraphs." descriptionId="whats-new-text-count" onChange={e => { setText(e.target.value); if (errors.text) setErrors(x => ({ ...x, text: undefined })) }} />
           <CharCount id="whats-new-text-count" used={text.length} max={BODY_MAX} />
         </div>
         <fieldset aria-describedby={[rolesHintId, errors.roles && rolesErrorId].filter(Boolean).join(' ')}>

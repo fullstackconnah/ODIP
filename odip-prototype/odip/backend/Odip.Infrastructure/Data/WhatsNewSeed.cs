@@ -20,13 +20,13 @@ public static class WhatsNewSeed
             "Open Invoices in the menu to see every invoice and credit note in one list, including those for claims that were later deleted.\n\nSearch by number, participant, bill-to or claim, and filter by type, status and issue date. Select an invoice number to download its PDF.",
             Staff, false),
         new Item("2026-10-roster-draft-shifts", "Draft shifts stand out on the roster, and you can publish one at a time",
-            "Draft shifts on the roster board now have an amber background and the word Draft, so you can tell them from published shifts at a glance.\n\nTo publish a single shift, open its menu and choose Publish. Publishing the whole week works as before.\n\nIf someone changed a shift's worker after you opened the board, Bunya Support now asks you to refresh the board instead of saving over their change.",
+            "Draft shifts on the roster board now have an amber background and the word Draft, so you can tell them from published shifts at a glance.\n\nTo publish a single shift, open its menu and choose Publish. Publishing the whole week works as before.",
             Staff, false),
         new Item("2026-10-rp-authorisation-badge", "Restrictive practices show whether they're authorised",
             "On a participant's Restrictive Practices tab, every active practice now shows Authorised or Not authorised, the same badge you see when reporting an incident.\n\nWhen a practice isn't authorised, the line under it says what's missing, such as the authorisation date or the authoriser.",
             Staff, false),
         new Item("2026-10-dark-mode", "Dark mode is here",
-            "Bunya Support now has a dark theme. Go to Settings, then Appearance, and choose Light, Dark or System under Theme. System follows your device's own setting and is where everyone starts.\n\nYour choice is saved on this device, so another computer or phone keeps its own.",
+            "Bunya Support now has a dark theme. Go to Settings, then Appearance, and choose Light, Dark or System under Theme.\n\nYour choice is saved on this device, so another computer or phone keeps its own.",
             WhatsNewAudience.All, true),
     };
 

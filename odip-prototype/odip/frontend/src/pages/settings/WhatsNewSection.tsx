@@ -65,8 +65,8 @@ export default function WhatsNewSection() {
         columns={[
           { key: 'publishedAtUtc', header: 'Published', mobile: 'meta', className: 'whitespace-nowrap', render: (e: AdminWhatsNewEntry) => <span className={muted(e)}>{formatWhatsNewDate(e.publishedAtUtc)}</span> },
           { key: 'title', header: 'Title', mobile: 'primary', className: 'font-medium', render: (e: AdminWhatsNewEntry) => <span className={muted(e)}>{e.title}</span> },
-          { key: 'roles', header: 'Who sees it', mobile: 'meta', render: (e: AdminWhatsNewEntry) => <span className={muted(e)}>{audience(e)}</span> },
-          { key: 'important', header: 'Important', mobile: 'meta', render: (e: AdminWhatsNewEntry) => <span className={muted(e)}>{e.important ? 'Yes' : 'No'}</span> },
+          { key: 'roles', header: 'Who sees it', mobile: 'meta', render: (e: AdminWhatsNewEntry) => <span className={muted(e)}>{audience(e)}{e.important && <span className="md:hidden"> · Important</span>}</span> },
+          { key: 'important', header: 'Important', mobile: 'hidden', render: (e: AdminWhatsNewEntry) => <span className={muted(e)}>{e.important ? 'Yes' : 'No'}</span> },
           {
             key: 'status',
             header: 'Status',

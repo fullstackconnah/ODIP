@@ -91,6 +91,23 @@ describe('WhatsNewSection', () => {
     expect(screen.getByText('540 / 600')).toHaveClass('text-[var(--color-destructive)]')
   })
 
+  it('V-S3b: typing into a field, or ticking a role, clears its own message', async () => {
+    renderSection()
+    await ready()
+    fireEvent.click(screen.getByRole('button', { name: 'Add entry' }))
+    for (const name of ['Admin', 'Coordinator', 'Support worker', 'Read-only']) fireEvent.click(screen.getByRole('checkbox', { name }))
+    fireEvent.click(screen.getByRole('button', { name: 'Publish' }))
+    expect(await screen.findByText('Enter a title.')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText(/Title/), { target: { value: 'Hello' } })
+    expect(screen.queryByText('Enter a title.')).not.toBeInTheDocument()
+    expect(screen.getByText('Enter the text people will read.')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText(/^Text/), { target: { value: 'World' } })
+    expect(screen.queryByText('Enter the text people will read.')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Admin' }))
+    expect(screen.queryByText('Choose at least one role.')).not.toBeInTheDocument()
+  })
+
   it('V-S4: a refused save shows the form message and keeps what was typed', async () => {
     mockApiPost.mockRejectedValueOnce(new Error('400'))
     renderSection()
