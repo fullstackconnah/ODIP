@@ -75,6 +75,7 @@ export function useScrollToHash(participantId: string | undefined) {
     if (!hash) return
     const id = decodeURIComponent(hash.slice(1))
     let done = false
+    const holds: (() => void)[] = []
     const go = (force: boolean) => {
       if (done) return
       const el = document.getElementById(id)
@@ -87,10 +88,19 @@ export function useScrollToHash(participantId: string | undefined) {
       const target = el.querySelector<HTMLElement>('h2,h3') ?? el
       target.tabIndex = -1
       target.focus({ preventScroll: true })
+      // Sections above the target can still grow after this (their own lists load late): hold the target at the top for 3 s unless the person scrolls.
+      if (typeof ResizeObserver === 'undefined') return
+      let moved = false
+      const stop = () => { moved = true }
+      for (const ev of ['wheel', 'touchstart', 'keydown']) window.addEventListener(ev, stop, { once: true, passive: true })
+      const ro = new ResizeObserver(() => { if (!moved) el.scrollIntoView({ block: 'start', behavior: 'auto' }) })
+      ro.observe(document.body)
+      holds.push(() => { ro.disconnect(); for (const ev of ['wheel', 'touchstart', 'keydown']) window.removeEventListener(ev, stop) })
+      setTimeout(() => ro.disconnect(), 3000)
     }
     const first = setTimeout(() => go(false), 0) // after the tab's first render, so queries that have not started do not read as settled
     const unsubscribe = qc.getQueryCache().subscribe(() => go(false))
     const giveUp = setTimeout(() => go(true), 5000)
-    return () => { done = true; clearTimeout(first); clearTimeout(giveUp); unsubscribe() }
+    return () => { done = true; holds.forEach(h => h()); clearTimeout(first); clearTimeout(giveUp); unsubscribe() }
   }, [hash, key, participantId, qc])
 }
