@@ -32,6 +32,9 @@ public record CaregiverFormDto
 
     /// <summary>The caregiver's saved draft, if any.</summary>
     public PatchParticipantDto? Draft { get; init; }
+
+    /// <summary>What the caregiver loaded when the draft was saved, in the same shape as Draft. Null = a legacy draft.</summary>
+    public PatchParticipantDto? Base { get; init; }
 }
 
 public record CaregiverDraftDto
@@ -39,6 +42,9 @@ public record CaregiverDraftDto
     [Required, StringLength(300)] public string CaregiverName { get; init; } = string.Empty;
     [StringLength(100)] public string? CaregiverRelationship { get; init; }
     [Required] public PatchParticipantDto Payload { get; init; } = new();
+
+    /// <summary>The values the form loaded, shaped like Payload. Accept applies only the Payload fields that differ from it. Omitted = legacy (applied in full).</summary>
+    public PatchParticipantDto? Base { get; init; }
 }
 
 // ── Admin ─────────────────────────────────────────────────
@@ -81,6 +87,9 @@ public record CaregiverSubmissionDetailDto
 
     /// <summary>The caregiver's submitted payload — the "proposed" side of the diff.</summary>
     public PatchParticipantDto? Payload { get; init; }
+
+    /// <summary>What the caregiver loaded. Null = submitted before change tracking, so every payload value applies.</summary>
+    public PatchParticipantDto? Base { get; init; }
 }
 
 public record RejectCaregiverSubmissionDto

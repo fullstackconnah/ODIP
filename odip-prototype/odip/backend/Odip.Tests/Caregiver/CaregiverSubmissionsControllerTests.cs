@@ -47,7 +47,7 @@ public class CaregiverSubmissionsControllerTests
 
     private static CaregiverProfileSubmission SeedSubmission(
         OdipDbContext db, Guid tenantId, Guid participantId, CaregiverSubmissionStatus status,
-        PatchParticipantDto? payload = null)
+        PatchParticipantDto? payload = null, PatchParticipantDto? basePayload = null)
     {
         var s = new CaregiverProfileSubmission
         {
@@ -56,6 +56,7 @@ public class CaregiverSubmissionsControllerTests
             Status = status, CreatedByUserId = Guid.NewGuid(), ExpiresAt = DateTime.UtcNow.AddDays(14),
             CaregiverName = "Jane Smith",
             Payload = payload is null ? null : JsonSerializer.Serialize(payload, Json),
+            BasePayload = basePayload is null ? null : JsonSerializer.Serialize(basePayload, Json),
             SubmittedAt = status == CaregiverSubmissionStatus.Submitted ? DateTime.UtcNow : null,
         };
         db.CaregiverProfileSubmissions.Add(s);
@@ -226,6 +227,199 @@ public class CaregiverSubmissionsControllerTests
         var reloaded = await db.Participants.IgnoreQueryFilters().SingleAsync(x => x.Id == p.Id);
         Assert.Equal(RiskRatingLevel.Low, reloaded.BehaviourRiskRating);
         Assert.Null(reloaded.PreferredUserId);
+    }
+
+
+    private static PatchPersonalDetailsDto Pd(string? phone, string? email = null) =>
+        new() { FirstName = "Sophie", LastName = "Brown", Phone = phone, Email = email };
+
+    private static async Task<Participant> AcceptAsync(OdipDbContext db, Guid tenantId, Participant p, PatchParticipantDto payload, PatchParticipantDto? basePayload)
+    {
+        var s = SeedSubmission(db, tenantId, p.Id, CaregiverSubmissionStatus.Submitted, payload, basePayload);
+        var result = await MakeController(db, tenantId, Guid.NewGuid()).Accept(s.Id, CancellationToken.None);
+        Assert.IsType<NoContentResult>(result);
+        return await db.Participants.IgnoreQueryFilters().SingleAsync(x => x.Id == p.Id);
+    }
+
+    [Fact]
+    public async Task Accept_KeepsStaffEditMadeAfterFormOpened()
+    {
+        var (db, tenantId) = CreateTenantDb();
+        var p = SeedParticipant(db, tenantId);
+        p.Phone = "0400000002"; p.Email = "old@example.test";   // staff set the phone to B after the caregiver loaded A
+        await db.SaveChangesAsync();
+        var reloaded = await AcceptAsync(db, tenantId, p,
+            new PatchParticipantDto { PersonalDetails = Pd("0400000001", "new@example.test") },
+            new PatchParticipantDto { PersonalDetails = Pd("0400000001", "old@example.test") });
+        Assert.Equal("0400000002", reloaded.Phone);
+        Assert.Equal("new@example.test", reloaded.Email);
+        Assert.Equal("Sophie", reloaded.FirstName);
+    }
+
+    [Fact]
+    public async Task Accept_BothChanged_CaregiverWins()
+    {
+        var (db, tenantId) = CreateTenantDb();
+        var p = SeedParticipant(db, tenantId);
+        p.Phone = "0400000002";
+        await db.SaveChangesAsync();
+        var reloaded = await AcceptAsync(db, tenantId, p,
+            new PatchParticipantDto { PersonalDetails = Pd("0400000003") },
+            new PatchParticipantDto { PersonalDetails = Pd("0400000001") });
+        Assert.Equal("0400000003", reloaded.Phone);
+    }
+
+    [Fact]
+    public async Task Accept_LegacySubmissionWithoutBase_AppliesFullPayload()
+    {
+        var (db, tenantId) = CreateTenantDb();
+        var p = SeedParticipant(db, tenantId);
+        p.Phone = "0400000002";
+        await db.SaveChangesAsync();
+        var reloaded = await AcceptAsync(db, tenantId, p, new PatchParticipantDto { PersonalDetails = Pd("0400000001") }, basePayload: null);
+        Assert.Equal("0400000001", reloaded.Phone);
+    }
+
+    [Fact]
+    public async Task Accept_NullAndEmptyStringAreTheSameValue()
+    {
+        var (db, tenantId) = CreateTenantDb();
+        var p = SeedParticipant(db, tenantId);
+        p.Phone = "0400000002";
+        await db.SaveChangesAsync();
+        var reloaded = await AcceptAsync(db, tenantId, p,
+            new PatchParticipantDto { PersonalDetails = Pd("") },
+            new PatchParticipantDto { PersonalDetails = Pd(null) });
+        Assert.Equal("0400000002", reloaded.Phone);
+    }
+
+    [Fact]
+    public async Task Accept_RowsUnchangedFromBaseAreLeftAlone()
+    {
+        var (db, tenantId) = CreateTenantDb();
+        var p = SeedParticipant(db, tenantId);
+        // Staff edited both rows after the caregiver loaded the form.
+        db.ParticipantConsents.Add(new ParticipantConsent { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = p.Id, ConsentType = ConsentType.PhotoVideo, Granted = true, SignedByName = "Staff Signer" });
+        db.ParticipantHealthConditions.Add(new ParticipantHealthCondition { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = p.Id, ConditionType = HealthConditionType.MentalHealth, Has = true, Severity = "Mild", Notes = "staff notes" });
+        await db.SaveChangesAsync();
+        var consentBase = new CreateParticipantConsentDto { ConsentType = ConsentType.PhotoVideo, Granted = null };
+        var healthBase = new CreateParticipantHealthConditionDto { ConditionType = HealthConditionType.MentalHealth, Has = true, Severity = "Mild", Notes = "old notes" };
+        await AcceptAsync(db, tenantId, p,
+            new PatchParticipantDto
+            {
+                Consents = [consentBase],
+                HealthConditions = [healthBase with { Severity = "Severe" }],
+            },
+            new PatchParticipantDto { Consents = [consentBase], HealthConditions = [healthBase] });
+        var consent = await db.ParticipantConsents.IgnoreQueryFilters().SingleAsync(c => c.ParticipantId == p.Id && c.ConsentType == ConsentType.PhotoVideo);
+        Assert.True(consent.Granted);
+        Assert.Equal("Staff Signer", consent.SignedByName);
+        var health = await db.ParticipantHealthConditions.IgnoreQueryFilters().SingleAsync(c => c.ParticipantId == p.Id && c.ConditionType == HealthConditionType.MentalHealth);
+        Assert.Equal("Severe", health.Severity);
+        Assert.Equal("staff notes", health.Notes);
+        Assert.True(health.Has);
+    }
+
+    [Fact]
+    public async Task Accept_LeavesSeededConsentRowsWhenPayloadChangesOtherField()
+    {
+        var (db, tenantId) = CreateTenantDb();
+        var p = SeedParticipant(db, tenantId);
+        foreach (var t in Enum.GetValues<ConsentType>())
+            db.ParticipantConsents.Add(new ParticipantConsent { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = p.Id, ConsentType = t, Granted = true, SignedByName = "Staff Signer" });
+        await db.SaveChangesAsync();
+        var rows = Enum.GetValues<ConsentType>().Select(t => new CreateParticipantConsentDto { ConsentType = t }).ToList();
+        await AcceptAsync(db, tenantId, p,
+            new PatchParticipantDto { Consents = rows, CulturalBackground = new PatchCulturalBackgroundDto { PersonalInterests = "Gardening" } },
+            new PatchParticipantDto { Consents = rows, CulturalBackground = new PatchCulturalBackgroundDto() });
+        var after = await db.ParticipantConsents.IgnoreQueryFilters().Where(c => c.ParticipantId == p.Id).ToListAsync();
+        Assert.Equal(Enum.GetValues<ConsentType>().Length, after.Count);
+        Assert.All(after, c => { Assert.True(c.Granted); Assert.Equal("Staff Signer", c.SignedByName); });
+        Assert.Equal("Gardening", (await db.Participants.IgnoreQueryFilters().SingleAsync(x => x.Id == p.Id)).PersonalInterests);
+    }
+
+    [Fact]
+    public async Task Accept_PayloadRowNotInBase_BlankRowDoesNotClearStaffRow_RealChangeApplies()
+    {
+        var (db, tenantId) = CreateTenantDb();
+        var p = SeedParticipant(db, tenantId);
+        db.ParticipantConsents.Add(new ParticipantConsent { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = p.Id, ConsentType = ConsentType.PhotoVideo, Granted = true, SignedByName = "Staff Signer" });
+        db.ParticipantConsents.Add(new ParticipantConsent { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = p.Id, ConsentType = ConsentType.Alcohol });
+        await db.SaveChangesAsync();
+        await AcceptAsync(db, tenantId, p,
+            new PatchParticipantDto
+            {
+                Consents = [
+                    new CreateParticipantConsentDto { ConsentType = ConsentType.PhotoVideo },
+                    new CreateParticipantConsentDto { ConsentType = ConsentType.Alcohol, Granted = false }],
+            },
+            new PatchParticipantDto { Consents = [] });
+        var photo = await db.ParticipantConsents.IgnoreQueryFilters().SingleAsync(c => c.ParticipantId == p.Id && c.ConsentType == ConsentType.PhotoVideo);
+        var alcohol = await db.ParticipantConsents.IgnoreQueryFilters().SingleAsync(c => c.ParticipantId == p.Id && c.ConsentType == ConsentType.Alcohol);
+        Assert.True(photo.Granted);
+        Assert.Equal("Staff Signer", photo.SignedByName);
+        Assert.False(alcohol.Granted);
+    }
+
+    [Fact]
+    public async Task Accept_DuplicateRowKeysDoNotThrow()
+    {
+        var (db, tenantId) = CreateTenantDb();
+        var p = SeedParticipant(db, tenantId);
+        var dup = new CreateParticipantConsentDto { ConsentType = ConsentType.Privacy, Granted = true };
+        await AcceptAsync(db, tenantId, p,
+            new PatchParticipantDto { Consents = [dup, dup] },
+            new PatchParticipantDto { Consents = [dup, dup with { Granted = false }] });
+    }
+
+    [Fact]
+    public async Task Accept_PayloadGroupMissingFromBase_AppliesWholeGroup()
+    {
+        var (db, tenantId) = CreateTenantDb();
+        var p = SeedParticipant(db, tenantId);
+        p.Phone = "0400000002";
+        await db.SaveChangesAsync();
+        var reloaded = await AcceptAsync(db, tenantId, p, new PatchParticipantDto { PersonalDetails = Pd("0400000001") }, new PatchParticipantDto());
+        Assert.Equal("0400000001", reloaded.Phone);
+    }
+
+    [Fact]
+    public async Task Accept_NothingChanged_StillAcceptsAndKeepsEverything()
+    {
+        var (db, tenantId) = CreateTenantDb();
+        var p = SeedParticipant(db, tenantId);
+        p.Phone = "0400000002"; p.BehaviourRiskRating = RiskRatingLevel.Low;
+        await db.SaveChangesAsync();
+        var same = new PatchParticipantDto { PersonalDetails = Pd("0400000001"), BehaviourCommunication = new PatchBehaviourCommunicationDto { Memory = MemoryLevel.Excellent } };
+        var reloaded = await AcceptAsync(db, tenantId, p, same, same);
+        Assert.Equal("0400000002", reloaded.Phone);
+        Assert.Equal(RiskRatingLevel.Low, reloaded.BehaviourRiskRating);
+    }
+
+    [Fact]
+    public async Task Accept_RatingStillRestored_WhenGroupHasABaseAndChange()
+    {
+        var (db, tenantId) = CreateTenantDb();
+        var p = SeedParticipant(db, tenantId);
+        p.BehaviourRiskRating = RiskRatingLevel.Low;
+        await db.SaveChangesAsync();
+        var reloaded = await AcceptAsync(db, tenantId, p,
+            new PatchParticipantDto { BehaviourCommunication = new PatchBehaviourCommunicationDto { Memory = MemoryLevel.Excellent, BehaviourRiskRating = RiskRatingLevel.Critical } },
+            new PatchParticipantDto { BehaviourCommunication = new PatchBehaviourCommunicationDto() });
+        Assert.Equal(RiskRatingLevel.Low, reloaded.BehaviourRiskRating);
+        Assert.Equal(MemoryLevel.Excellent, reloaded.Memory);
+    }
+
+    [Fact]
+    public async Task Get_ReturnsStoredBaseToStaff()
+    {
+        var (db, tenantId) = CreateTenantDb();
+        var p = SeedParticipant(db, tenantId);
+        var s = SeedSubmission(db, tenantId, p.Id, CaregiverSubmissionStatus.Submitted, new PatchParticipantDto { PersonalDetails = Pd("0400000003") }, new PatchParticipantDto { PersonalDetails = Pd("0400000001") });
+        var result = await MakeController(db, tenantId, Guid.NewGuid()).Get(s.Id, CancellationToken.None);
+        var body = Assert.IsType<ApiResponse<CaregiverSubmissionDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal("0400000001", body.Data!.Base!.PersonalDetails!.Phone);
+        Assert.Equal("0400000003", body.Data.Payload!.PersonalDetails!.Phone);
     }
 
     [Fact]

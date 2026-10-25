@@ -748,6 +748,7 @@ public class OdipDbContext : DbContext
             e.Property(x => x.CaregiverName).HasMaxLength(300);
             e.Property(x => x.CaregiverRelationship).HasMaxLength(100);
             e.Property(x => x.Payload).HasColumnType("jsonb");
+            e.Property(x => x.BasePayload).HasColumnType("jsonb");
             e.Property(x => x.RejectionNote).HasMaxLength(4000);
 
             e.HasOne(x => x.Participant)

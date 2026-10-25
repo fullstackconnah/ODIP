@@ -31,6 +31,9 @@ public static class WhatsNewSeed
         new Item("2026-10-participant-tabs", "Participant pages are now split into tabs",
             "Open a participant to see their page in tabs, with Overview first.\n\nOverview starts with Before you start: the things to know before a shift, such as allergies and choking risk. Select one to go straight to its details in Health & safety.",
             WhatsNewAudience.All, true),
+        new Item("2026-10-caregiver-accept-keeps-edits", "Accepting a caregiver's form keeps your team's newer edits",
+            "Accepting a caregiver's form now applies only what the caregiver changed. Details your team edited after the caregiver opened the form are kept.\n\nIf your team and the caregiver changed the same detail, the caregiver's value is applied and the review screen flags that row.",
+            Staff, false),
     };
 
     /// <summary>Inserts the keys the table lacks, one save each, so a key another instance inserted first costs only that row.</summary>
