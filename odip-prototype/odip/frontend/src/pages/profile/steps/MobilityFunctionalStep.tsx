@@ -78,7 +78,6 @@ export function MobilityFunctionalStep({ control, register, participant, errors,
             />
           </FormField>
           <TextAreaField label="Mobility Notes" id="mobilityNotes" rows={2} {...register('mobilityNotes')} className={span.long} />
-          <TextAreaField label="Equipment Requirements" id="equipmentRequirements" rows={2} {...register('equipmentRequirements')} className={span.long} />
           <TextAreaField label="Transport Requirements" id="transportRequirements" rows={2} {...register('transportRequirements')} className={span.long} />
         </div>
       </Card>
@@ -139,6 +138,7 @@ function ReadOnlySupportNeedsCard({ participant }: { participant: ParticipantDet
         <ReadOnlyField field="requiresShowerChair" label="Shower Chair" value={yesNoUnknown(String(participant.requiresShowerChair))} className={span.short} />
         <ReadOnlyField field="requiresCommode" label="Commode" value={yesNoUnknown(String(participant.requiresCommode))} className={span.short} />
         <ReadOnlyField field="requiresStandingMachine" label="Standing Machine" value={yesNoUnknown(String(participant.requiresStandingMachine))} className={span.short} />
+        <ReadOnlyField field="equipmentRequirements" label="Equipment notes" value={participant.equipmentRequirements || '—'} className={span.long} />
       </div>
     </Card>
   )

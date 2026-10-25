@@ -12,7 +12,7 @@
  * Progression model (SPEC-05 §PF-10.5, fixed): a normal `POST /api/participants` creates the
  * Participant immediately with `IsDraft = true` and `completeIntake: true` (stamping the new
  * `IntakeCompletedAt` server-side) on final submit; "Save as draft" omits `completeIntake` so a
- * mid-intake abandon doesn't falsely mark intake complete. On success ("Complete Intake" only —
+ * mid-intake abandon doesn't falsely mark intake complete. On success ("Complete intake" only —
  * "Save as draft" lands on the Enquiries tab, where the draft is listed), the server has also put the participant on the
  * onboarding worklist, so the wizard navigates to the Onboarding table
  * (`/participants?tab=onboarding`, or back to `/onboarding/{id}` when the intake was opened from that checklist) with a one-off "Intake complete" confirmation — see the
@@ -22,7 +22,7 @@
  * detail page's "Resume intake" banner, routed to `/participants/{id}/intake`): this same
  * component, keyed off an optional `:id` route param. Loads the existing row via `useParticipant`,
  * hydrates every Intake-owned field via `reset()` (mirrors ProfileWizardPage.tsx's own hydration
- * effect), and both "Save as draft"/"Complete Intake" go through `PUT /api/participants/{id}/intake`
+ * effect), and both "Save as draft"/"Complete intake" go through `PUT /api/participants/{id}/intake`
  * (`useSaveParticipantIntake`) instead of `POST`. That endpoint is SCOPED: the server writes only the
  * intake fields and never reads whether the participant is a draft or active, so resuming an intake
  * cannot wipe what the Profile wizard recorded (it used to go through the full-record PUT and did).
@@ -57,7 +57,7 @@ import {
   STEP_PARTICIPANT_DETAILS_FIELDS, STEP_NDIS_FUNDING_FIELDS, STEP_CONTACTS_FIELDS,
   STEP_CULTURAL_FIELDS, STEP_SUPPORT_FIELDS, STEP_MEDICAL_FIELDS, STEP_BEHAVIOUR_FIELDS, STEP_RISKS_FIELDS,
 } from '@/lib/participantSchema'
-import { formatServiceStreams, parseServiceStreams } from '@/api/types/participants'
+import { LIVING_ARRANGEMENT_LABELS, formatServiceStreams, parseServiceStreams } from '@/api/types/participants'
 import { newCompletionRequestId } from '@/lib/completionRequestId'
 import { ONBOARDING_TABLE_PATH, ENQUIRIES_TABLE_PATH, intakeCompleteState } from './intakeComplete'
 import { planTypeComplianceWarning } from '@/api/types/contacts'
@@ -113,7 +113,7 @@ export default function IntakeWizardPage() {
       livingArrangement: '',
       livesWithOthers: false,
       fundingSource: 'Ndis',
-      planType: 'SelfManaged',
+      planType: 'PlanManaged',
       isRepeatClient: false,
       serviceStreams: [],
       mobilityAidWheelchair: false,
@@ -175,7 +175,7 @@ export default function IntakeWizardPage() {
       ndisNumber: participant.ndisNumber ?? '',
       planStartDate: participant.planStartDate ? participant.planStartDate.split('T')[0] : '',
       planEndDate: participant.planEndDate ? participant.planEndDate.split('T')[0] : '',
-      planType: participant.planType ?? 'SelfManaged', fundingSource: participant.fundingSource ?? 'Ndis',
+      planType: participant.planType ?? 'PlanManaged', fundingSource: participant.fundingSource ?? 'Ndis',
       fundingOrganisation: participant.fundingOrganisation ?? '', region: participant.region ?? '',
       isRepeatClient: participant.isRepeatClient ?? false,
       serviceStreams: parseServiceStreams(participant.serviceStreams),
@@ -197,6 +197,8 @@ export default function IntakeWizardPage() {
       behavioursOfConcernCurrent: boolToTriState(participant.behavioursOfConcernCurrent),
       behavioursOfConcernFiveYearHistory: boolToTriState(participant.behavioursOfConcernFiveYearHistory),
       expressiveSkills: participant.expressiveSkills ?? '',
+      receptiveSkills: participant.receptiveSkills ?? '',
+      equipmentRequirements: participant.equipmentRequirements ?? '',
       behaviourRiskSummary: participant.behaviourRiskSummary ?? '', notes: participant.notes ?? '',
       riskEntries: [], contactRoles: [],
     } as unknown as Parameters<typeof reset>[0])
@@ -364,7 +366,7 @@ export default function IntakeWizardPage() {
           { label: 'Phone', value: values.phone || '—' },
           { label: 'Email', value: values.email || '—' },
           { label: 'Address', value: [values.addressStreet, values.addressSuburb, values.addressState, values.addressPostcode].filter(Boolean).join(', ') || '—' },
-          { label: 'Living Arrangement', value: values.livingArrangement || '—' },
+          { label: 'Living Arrangement', value: LIVING_ARRANGEMENT_LABELS[values.livingArrangement as keyof typeof LIVING_ARRANGEMENT_LABELS] ?? '—' },
         )
       } else if (step.key === 'ndisFunding') {
         rows.push(
@@ -391,12 +393,14 @@ export default function IntakeWizardPage() {
           { label: 'High Support', value: values.isHighSupport ? 'Yes' : 'No' },
           { label: 'Support Ratio', value: values.supportRatio || '—' },
           { label: 'Overnight Support', value: values.overnightSupport || '—' },
+          { label: 'Equipment notes', value: values.equipmentRequirements || '—' },
         )
       } else if (step.key === 'medical') {
         rows.push({ label: 'Medical Summary', value: values.medicalSummary || '—' })
       } else if (step.key === 'behaviour') {
         rows.push(
           { label: 'Behaviours of Concern (Current)', value: yesNoUnknown(values.behavioursOfConcernCurrent) },
+          { label: 'Receptive Skills', value: values.receptiveSkills || '—' },
           { label: 'Expressive Skills', value: values.expressiveSkills || '—' },
         )
       } else if (step.key === 'risks') {
@@ -437,7 +441,7 @@ export default function IntakeWizardPage() {
 
       {saveMutation.isError && (
         // The server's own reason when it gave one ("Postcode must be exactly 4 digits.", "Plan Manager contacts are only available for
-        // plan-managed participants."), a plain sentence when it did not. "Save as draft" below always did this; Complete Intake did not.
+        // plan-managed participants."), a plain sentence when it did not. "Save as draft" below always did this; Complete intake did not.
         <Callout tone="error">
           {extractErrorMessage(saveMutation.error, "Failed to save this participant's intake details. Please check your input and try again.")}
         </Callout>
@@ -561,9 +565,10 @@ export default function IntakeWizardPage() {
           onBack={wizard.handleBack}
           onNext={wizard.handleNext}
           isReviewStep={isReviewStep}
+          reviewActionsRight
           secondaryActions={secondaryActions}
           cancelTo={isEditMode ? `/participants/${id}` : '/participants'}
-          submitLabel={saveMutation.isPending ? (isEditMode ? 'Saving...' : 'Creating...') : 'Complete Intake'}
+          submitLabel={saveMutation.isPending ? (isEditMode ? 'Saving...' : 'Creating...') : 'Complete intake'}
           isSubmitting={saveMutation.isPending || wizard.isAdvancing}
         />
         </form>

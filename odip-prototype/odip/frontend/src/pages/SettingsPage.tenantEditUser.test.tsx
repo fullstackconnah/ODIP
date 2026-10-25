@@ -69,7 +69,7 @@ describe('Settings > Tenants > tenant detail user actions', () => {
     await u.click(await screen.findByRole('button', { name: 'Edit: Ann One' }))
 
     expect(await screen.findByRole('dialog', { name: 'Edit User' })).toBeInTheDocument()
-    expect(screen.getByLabelText(/first name/i)).toHaveValue('Ann')
+    await waitFor(() => expect(screen.getByLabelText(/first name/i)).toHaveValue('Ann'))
     expect(screen.getByLabelText(/last name/i)).toHaveValue('One')
     expect(screen.getByLabelText(/email/i)).toHaveValue('ann@jocare.example')
 
@@ -145,7 +145,7 @@ describe('Settings > Tenants > tenant detail user actions', () => {
       await annArrives()
 
       expect(await screen.findByRole('dialog', { name: 'Edit User' })).toBeInTheDocument()
-      expect(screen.getByLabelText(/first name/i)).toHaveValue('Ann')
+      await waitFor(() => expect(screen.getByLabelText(/first name/i)).toHaveValue('Ann'))
       expect(userGets).toEqual(['/admin/users/u-1'])
       expect(bob).not.toHaveAttribute('aria-disabled')
       expect(ann).not.toHaveAttribute('aria-busy')

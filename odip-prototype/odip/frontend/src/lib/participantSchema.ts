@@ -269,9 +269,8 @@ export function pickShape<T extends readonly (keyof ParticipantFormData)[]>(fiel
 // Dropped (not ported): genderRefine (gender/genderSelfDescription — both Profile-entry),
 // weightHeightRefine (weightKg/heightCm — Key Identifiers step is entirely Profile-entry),
 // diagnosisOtherRefine (primaryDiagnosis/primaryDiagnosisOther — Profile-entry),
-// equipmentRefine (its issue-target field, equipmentRequirements, is Profile-entry; the checkbox
-// fields it reads are Intake but the refine has nothing to validate without the Profile-only
-// notes field it gates).
+// equipmentRefine (equipmentRequirements is now Intake-entry too, but the refine has nothing to
+// validate: the notes field is optional free text).
 type FundingFields = { fundingSource?: string; fundingOrganisation?: string; planType?: string }
 export function fundingSourceRefine(data: FundingFields, ctx: z.RefinementCtx) {
   if (data.fundingSource === 'Other' && !data.fundingOrganisation?.trim()) {
@@ -414,13 +413,13 @@ export const STEP_SUPPORT_FIELDS = [
   'mobilityAidWheelchair', 'mobilityAidWalker', 'isHighSupport', 'isIntensiveSupport',
   'overnightSupport', 'overnightRatio',
   'requiresHiLoBed', 'requiresHoist', 'requiresShowerChair', 'requiresCommode', 'requiresStandingMachine',
-  'supportRatio',
+  'equipmentRequirements', 'supportRatio',
 ] as const satisfies readonly (keyof ParticipantFormData)[]
 
 export const STEP_MEDICAL_FIELDS = ['medicalSummary', 'hidpaNotes'] as const satisfies readonly (keyof ParticipantFormData)[]
 
 export const STEP_BEHAVIOUR_FIELDS = [
-  'behavioursOfConcernCurrent', 'behavioursOfConcernFiveYearHistory', 'expressiveSkills',
+  'behavioursOfConcernCurrent', 'behavioursOfConcernFiveYearHistory', 'expressiveSkills', 'receptiveSkills',
 ] as const satisfies readonly (keyof ParticipantFormData)[]
 
 export const STEP_RISKS_FIELDS = ['behaviourRiskSummary', 'notes', 'riskEntries'] as const satisfies readonly (keyof ParticipantFormData)[]
@@ -508,7 +507,7 @@ export const PROFILE_STEP_MEDICAL_FIELDS = [
 ] as const satisfies readonly (keyof ParticipantFormData)[]
 
 export const PROFILE_STEP_MOBILITY_FIELDS = [
-  'mobilitySupportOptions', 'mobilityNotes', 'equipmentRequirements', 'transportRequirements',
+  'mobilitySupportOptions', 'mobilityNotes', 'transportRequirements',
   'ambulantStatus', 'fallsRiskRating', 'unevenGroundFlag', 'levelOfPersonalCare', 'orthotics',
   'continenceSupportDetail', 'bowelCareDetail', 'menstruationSupport', 'skinIntegrity',
 ] as const satisfies readonly (keyof ParticipantFormData)[]
@@ -516,7 +515,7 @@ export const PROFILE_STEP_MOBILITY_FIELDS = [
 export const PROFILE_STEP_BEHAVIOUR_FIELDS = [
   'memory', 'memoryAids', 'impairedUnderstanding', 'impairedJudgementReasoning',
   'behaviourRiskRating', 'ridsLogged', 'bspPlanProvided', 'bocChartProvided',
-  'receptiveSkills', 'readingAbility', 'communicationAids',
+  'readingAbility', 'communicationAids',
 ] as const satisfies readonly (keyof ParticipantFormData)[]
 
 export const PROFILE_STEP_DAILY_LIVING_FIELDS = [
@@ -570,9 +569,9 @@ export const PROFILE_STEP_SHARED_FIELDS = {
   medical: ['medicalSummary'],
   mobility: [
     'mobilityAidWheelchair', 'overnightSupport', 'overnightRatio', 'supportRatio',
-    'requiresHiLoBed', 'requiresHoist', 'requiresShowerChair', 'requiresCommode', 'requiresStandingMachine',
+    'requiresHiLoBed', 'requiresHoist', 'requiresShowerChair', 'requiresCommode', 'requiresStandingMachine', 'equipmentRequirements',
   ],
-  behaviourCognition: ['behavioursOfConcernCurrent', 'behavioursOfConcernFiveYearHistory', 'expressiveSkills', 'behaviourRiskSummary'],
+  behaviourCognition: ['behavioursOfConcernCurrent', 'behavioursOfConcernFiveYearHistory', 'expressiveSkills', 'receptiveSkills', 'behaviourRiskSummary'],
 } as const satisfies Record<string, readonly (keyof ParticipantFormData)[]>
 
 /**

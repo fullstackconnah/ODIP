@@ -1,5 +1,6 @@
-import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { apiGet, apiPost, apiPutRaw, apiPatchRaw, apiDeleteRaw } from '../client'
+import { fetchPagedList } from './pagedList'
 import { refreshBudgetWarnings, refreshLedgers } from './funding-ledger'
 import type {
   TripClaimListDto,
@@ -16,6 +17,7 @@ import type {
   ClaimInvoicesDto,
   SubmitPreviewDto,
   InvoiceSummaryDto,
+  InvoiceRegisterRowDto,
 } from '../types'
 
 /** PP-61: `options.enabled` lets a caller (e.g. a tab that only needs this once visited) defer
@@ -97,6 +99,7 @@ export function useUpdateClaim() {
       qc.invalidateQueries({ queryKey: ['trip-claims'] })
       // Submitting issues the claim's invoices.
       qc.invalidateQueries({ queryKey: ['claim-invoices', claimId] })
+      qc.invalidateQueries({ queryKey: ['invoice-register'] })
       refreshLedgers(qc, participants)
       // Marking a claim Rejected (with the NDIA's code, which starts the "funds ran out" signal), Paid or back to Draft moves what the alerts, the dashboard's tile and the Budgets list say.
       refreshBudgetWarnings(qc)
@@ -138,6 +141,7 @@ export function useDeleteClaim() {
       const participants = claimParticipantIds(cachedClaim(qc, claimId))
       qc.invalidateQueries({ queryKey: ['trip-claims'] })
       qc.invalidateQueries({ queryKey: ['claim-invoices', claimId] })
+      qc.invalidateQueries({ queryKey: ['invoice-register'] })
       refreshLedgers(qc, participants)
       refreshBudgetWarnings(qc)
     },
@@ -177,7 +181,10 @@ function useInvoiceCorrection(action: 'void' | 'credit-note') {
   return useMutation({
     mutationFn: ({ invoiceId, reason }: InvoiceCorrection) => apiPost<InvoiceSummaryDto>(`/invoices/${invoiceId}/${action}`, { reason }),
     // A refusal can mean the row moved under us (voided or credited elsewhere): read it again either way.
-    onSettled: (_, __, { claimId }) => qc.invalidateQueries({ queryKey: ['claim-invoices', claimId] }),
+    onSettled: (_, __, { claimId }) => {
+      qc.invalidateQueries({ queryKey: ['claim-invoices', claimId] })
+      qc.invalidateQueries({ queryKey: ['invoice-register'] })
+    },
   })
 }
 
@@ -227,5 +234,14 @@ export function useGenerateShiftClaim() {
       refreshLedgers(qc, [participantId])
       refreshBudgetWarnings(qc)
     },
+  })
+}
+
+/** GET /invoices: the invoice register, one server-paged slice. The previous page stays on screen while the next one loads. */
+export function useInvoiceRegister(params: Record<string, string>) {
+  return useQuery({
+    queryKey: ['invoice-register', params],
+    queryFn: () => fetchPagedList<InvoiceRegisterRowDto>('/invoices', params),
+    placeholderData: keepPreviousData,
   })
 }

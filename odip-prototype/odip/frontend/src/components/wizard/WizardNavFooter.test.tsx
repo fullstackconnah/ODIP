@@ -142,3 +142,51 @@ describe('WizardNavFooter — Cancel goes where Back goes', () => {
     expect(router.state.location.pathname).toBe('/wizard')
   })
 })
+
+describe('WizardNavFooter — reviewActionsRight', () => {
+  const secondaryActions = [{ key: 'save-draft', label: 'Save as draft', onClick: vi.fn(), disabled: false }]
+
+  it('keeps Back alone on the left and puts Save as draft, Cancel, Submit on the right, in that order, on the review step', () => {
+    renderFooter({ isReviewStep: true, showBack: true, secondaryActions, reviewActionsRight: true, submitLabel: 'Complete intake' })
+    const back = screen.getByRole('button', { name: 'Back' })
+    const draft = screen.getByRole('button', { name: 'Save as draft' })
+    const cancel = screen.getByRole('link', { name: 'Cancel' })
+    const submit = screen.getByRole('button', { name: 'Complete intake' })
+    expect(draft.parentElement).toBe(cancel.parentElement)
+    expect(submit.parentElement).toBe(cancel.parentElement)
+    expect(back.parentElement).not.toBe(cancel.parentElement)
+    expect([draft, cancel, submit].map((el) => el.textContent)).toEqual(['Save as draft', 'Cancel', 'Complete intake'])
+    expect(Array.from(cancel.parentElement!.children)).toEqual([draft, cancel, submit])
+  })
+
+  it('wraps to two rows on a phone: the right group dissolves into the row and Submit sits right on its own row', () => {
+    renderFooter({ isReviewStep: true, showBack: true, secondaryActions, reviewActionsRight: true, submitLabel: 'Complete intake' })
+    const submit = screen.getByRole('button', { name: 'Complete intake' })
+    const rightGroup = submit.parentElement!
+    const outer = rightGroup.parentElement!
+    expect(rightGroup).toHaveClass('max-sm:contents')
+    expect(submit).toHaveClass('max-sm:ml-auto')
+    expect(outer).toHaveClass('justify-end')
+    expect(outer.firstElementChild).toHaveClass('mr-auto')
+  })
+
+  it('applies none of the review-step layout classes by default', () => {
+    renderFooter({ isReviewStep: true, showBack: true, secondaryActions, submitLabel: 'Complete intake' })
+    const submit = screen.getByRole('button', { name: 'Complete intake' })
+    const rightGroup = submit.parentElement!
+    expect(rightGroup).not.toHaveClass('max-sm:contents')
+    expect(submit).not.toHaveClass('max-sm:ml-auto')
+    expect(rightGroup.parentElement).toHaveClass('justify-between')
+    expect(rightGroup.parentElement!.firstElementChild).not.toHaveClass('mr-auto')
+  })
+
+  it('leaves the default footer alone: Save as draft stays beside Back', () => {
+    renderFooter({ isReviewStep: true, showBack: true, secondaryActions })
+    expect(screen.getByRole('button', { name: 'Save as draft' }).parentElement).toBe(screen.getByRole('button', { name: 'Back' }).parentElement)
+  })
+
+  it('does not move the secondary actions off the left on a non-review step', () => {
+    renderFooter({ isReviewStep: false, showBack: true, secondaryActions, reviewActionsRight: true })
+    expect(screen.getByRole('button', { name: 'Save as draft' }).parentElement).toBe(screen.getByRole('button', { name: 'Back' }).parentElement)
+  })
+})
