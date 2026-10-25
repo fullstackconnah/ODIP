@@ -45,3 +45,13 @@ export function hasAboutMe(p: ParticipantDetailDto): boolean {
 export function hasRisksHazardsSummary(p: ParticipantDetailDto): boolean {
   return !!(p.behaviourRiskSummary || p.notes)
 }
+
+// shortcut: whole-value match against a fixed list of "nothing" phrases (lead G6/G7); any other wording raises a flag.
+// Upgrade to a structured yes/no field in slice 3.
+const NOTHING = /^(nil|none|n\/a|na|-|nka|nkda|nil known|none known|no known( (drug|food))? (allergies|allergy|conditions|issues))\.?$/i
+
+/** True for a blank value or one that, as a whole, says there is nothing ("Nil", "None.", "NKDA"). "Nil by mouth" is not nothing. */
+export const meansNothing = (t?: string | null) => {
+  const s = (t ?? '').trim().replace(/\s+/g, ' ')
+  return s === '' || NOTHING.test(s)
+}

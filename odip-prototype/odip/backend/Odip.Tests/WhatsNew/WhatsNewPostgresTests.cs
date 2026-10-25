@@ -164,12 +164,12 @@ public class WhatsNewPostgresTests : IClassFixture<PostgresFixture>
         var feed = Feed(await WithCaller(new WhatsNewController(read), userId, "Admin").GetFeed(CancellationToken.None));
         Assert.Equal(WhatsNewSeed.All.Select(i => i.Title).Reverse(), feed.Entries.Select(e => e.Title));
 
-        // A role none of the seeded Admin/Coordinator entries targets still gets the dark-mode entry for everyone, via a bitwise filter.
+        // A role none of the seeded Admin/Coordinator entries targets still gets the entries for everyone (dark mode, participant tabs), via a bitwise filter.
         var audience = WhatsNewAudience.SupportWorker;
         var sql = read.WhatsNewEntries.Where(e => (e.Roles & audience) != 0).ToQueryString();
         Assert.Contains("&", sql);
         var support = Feed(await WithCaller(new WhatsNewController(read), userId, "SupportWorker").GetFeed(CancellationToken.None));
-        Assert.Equal(new[] { "Dark mode is here" }, support.Entries.Select(e => e.Title));
+        Assert.Equal(new[] { "Participant pages are now split into tabs", "Dark mode is here" }, support.Entries.Select(e => e.Title));
     }
 
     [SkippableFact]

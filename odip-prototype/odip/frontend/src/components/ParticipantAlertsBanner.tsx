@@ -9,6 +9,8 @@ export type ParticipantAlertsBannerProps = {
   alerts: ParticipantAlertDto[]
   /** Called with the alert's deepLinkTab when a row is activated — switch ParticipantDetailPage's tab state. */
   onSelectTab?: (tab: string) => void
+  /** Which rows to show. 'critical' shows every Critical row (no cap, so none hides behind a toggle); 'other' shows the rest, capped. Omitted shows all. */
+  severity?: 'critical' | 'other'
 }
 
 // Header stays scannable even for a participant with many alerts — show the top-ranked few and
@@ -20,11 +22,14 @@ const VISIBLE_ALERT_LIMIT = 3
  * no alerts — this sits alongside the existing status/service-stream badges rather than
  * duplicating them; it only ever shows computed risk alerts.
  */
-export function ParticipantAlertsBanner({ alerts, onSelectTab }: ParticipantAlertsBannerProps) {
+export function ParticipantAlertsBanner({ alerts: all, onSelectTab, severity }: ParticipantAlertsBannerProps) {
   const [expanded, setExpanded] = useState(false)
-  if (!alerts || alerts.length === 0) return null
+  // Filter first, then cap: a Critical alert never hides behind the toggle.
+  const alerts = (all ?? []).filter(a => !severity || (severity === 'critical') === (a.severity === 'Critical'))
+  if (alerts.length === 0) return null
 
-  const visibleAlerts = expanded ? alerts : alerts.slice(0, VISIBLE_ALERT_LIMIT)
+  const limit = severity === 'critical' ? alerts.length : VISIBLE_ALERT_LIMIT
+  const visibleAlerts = expanded ? alerts : alerts.slice(0, limit)
   const hiddenCount = alerts.length - visibleAlerts.length
 
   return (
@@ -78,7 +83,7 @@ export function ParticipantAlertsBanner({ alerts, onSelectTab }: ParticipantAler
           +{plural(hiddenCount, 'more alert')}
         </button>
       )}
-      {expanded && alerts.length > VISIBLE_ALERT_LIMIT && (
+      {expanded && alerts.length > limit && (
         <button
           type="button"
           onClick={() => setExpanded(false)}

@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   useParticipant, useParticipantAlerts, useDownloadIntakeFormPdf, useDownloadParticipantProfilePdf, useDownloadClientOverviewPdf,
-  useGenerateCaregiverLink, useRevokeCaregiverLink, useCaregiverSubmissions,
+  useGenerateCaregiverLink, useRevokeCaregiverLink, useCaregiverSubmissions, useDeleteParticipant, useRestoreParticipant,
 } from '@/api/hooks'
 import { PLAN_TYPE_LABELS, SUPPORT_RATIO_LABELS } from '@/api/types/enums'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
@@ -9,14 +9,16 @@ import { Tabs } from '@/components/Tabs'
 import { StatusBadge } from '@/components/StatusBadge'
 import { ReadinessNote } from '@/components/ReadinessNote'
 import { ServiceStreamBadges } from '@/components/ServiceStreamBadges'
+import { parseServiceStreams } from '@/api/types/participants'
 import { ParticipantAlertsBanner } from '@/components/ParticipantAlertsBanner'
-import { PageHeader } from '@/components/PageHeader'
+import { PageHeader, PageHeaderMeta } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
 import { BackButton } from '@/components/BackButton'
 import { useTabParam } from '@/hooks/useTabParam'
+import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { PageState } from '@/components/PageState'
 import { isNotFoundError } from '@/lib/httpStatus'
-import { Users, Shield, ClipboardList, Pencil, Pill, StickyNote, ListChecks, ShieldAlert, FileEdit, Contact2, Download, Loader2, Link2, Link2Off, FileText, ClipboardCheck, CalendarRange, Wallet } from 'lucide-react'
+import { FileEdit, Pencil, Download, Loader2, Link2, Link2Off, FileText, ClipboardCheck } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
 import AuditHistoryTab from '@/components/AuditHistoryTab'
 import { usePermissions } from '@/lib/permissions'
@@ -32,7 +34,14 @@ import {
   hasAddressLiving, hasKeyIdentifiers, hasCulturalBackground, hasMedical, hasBehaviourCommunication, hasMealsDiet, hasAboutMe, hasRisksHazardsSummary,
   NotRecordedFold,
 } from './participant-detail'
-import { joinList } from '@/lib/format'
+import { ParticipantSafetyFlags } from './participant-detail/ParticipantSafetyFlags'
+import { BeforeYouStartCard } from './participant-detail/BeforeYouStartCard'
+import { ParticipantMoreMenu } from './participant-detail/ParticipantMoreMenu'
+import { useParticipantTabCounts } from './participant-detail/useParticipantTabCounts'
+import {
+  NEW_TABS, PARTICIPANT_TAB_KEYS, useParticipantTabRedirect, useParticipantGoTo, useScrollToHash, type ParticipantTabKey,
+} from './participant-detail/participantTabs'
+import { joinList, plural, formatRelative } from '@/lib/format'
 import { Card } from '@/components/Card'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { retryingAfterError } from '@/lib/queryPhase'
@@ -47,26 +56,64 @@ import { retryingAfterError } from '@/lib/queryPhase'
  */
 const COMPACT_EMPTY_TABLE = '[&_table:has(td[colspan])_thead]:hidden [&_td[colspan]]:py-5'
 
-/** The tabs, in strip order. The active one is `?tab=` (`useTabParam`), so a reload or a shared link keeps it; an unknown value reads as Details. */
-const TAB_KEYS = ['details', 'contacts', 'bookings', 'support', 'medications', 'notes', 'routines', 'restrictive-practices', 'claims', 'funding', 'rostering', 'history'] as const
+/**
+ * The cards pack into auto-fill columns (align-items:start, so no stretched siblings); the `min(26rem,100%)` track floor lets the grid
+ * collapse to one column on a phone, where a bare 26rem (416px) minimum would overflow a 390px viewport and scroll the page sideways.
+ */
+const CARD_GRID = 'grid grid-cols-[repeat(auto-fill,minmax(min(26rem,100%),1fr))] items-start gap-[var(--section-gap)]'
+
+/**
+ * One anchored section of a tab. `id` is the deep-link target (`#medical`), so it is the contract with the flag chips, the alerts and the
+ * old `?tab=` keys. A component with no heading of its own gets a screen-reader-only one, which is also where focus lands after a jump.
+ */
+function Section({ id, label, srHeading, wide, children }: { id: string; label: string; srHeading?: boolean; wide?: boolean; children: ReactNode }) {
+  return (
+    <section id={id} aria-label={label} className={`scroll-mt-12 ${wide ? 'col-span-full' : ''}`}>
+      {srHeading && <h3 className="sr-only">{label}</h3>}
+      {children}
+    </section>
+  )
+}
+
+type ShortCard = { id: string; title: string; has: boolean; node: ReactNode }
+
+/** The cards with something recorded, then (for an editor) the empty ones folded into one line. Only an editor has empty cards to fold: each one returns null without canEdit. */
+function ShortCards({ cards, canEdit }: { cards: ShortCard[]; canEdit: boolean }) {
+  const empty = cards.filter(c => !c.has)
+  return (
+    <>
+      {cards.filter(c => c.has).map(c => c.node)}
+      {canEdit && empty.length > 0 && (
+        <NotRecordedFold className="col-span-full" summary={joinList(empty.map(c => c.title))}>
+          <div className={CARD_GRID}>{empty.map(c => c.node)}</div>
+        </NotRecordedFold>
+      )}
+    </>
+  )
+}
 
 export default function ParticipantDetailPage() {
-  const { canWrite, canViewAlerts, canWriteParticipantDetails, canManageFunding, canAccessPage, isAdmin, isSuperAdmin } = usePermissions()
+  const { canWrite, canViewAlerts, canWriteParticipantDetails, canManageFunding, canManageParticipantLifecycle, canAccessPage, isAdmin, isSuperAdmin } = usePermissions()
   const { id } = useParams()
   const canAccessClaims = canAccessPage('claims')
   // The agreement draft carries money: only the roles the API admits to its GETs are offered it (ReadOnly would only meet a 403).
   const canOpenAgreementDraft = canAccessPage('agreement-drafts')
-  // Connection map item 12 — the Rostering tab, same canAccessPage gate RosterBoardPage itself
+  // Connection map item 12 — the Rostering section, same canAccessPage gate RosterBoardPage itself
   // uses (see lib/permissions.ts's SUPPORT_WORKER_PAGES — SupportWorker is excluded).
   const canAccessRostering = canAccessPage('rostering')
   const canSeeHistory = isSuperAdmin || isAdmin
-  // Only the tabs this role can see are valid ?tab= keys (L5-05): a link to History, Claims, Funding or Rostering opened by a role without that tab
-  // reads as Details, instead of selecting nothing over an empty body. Funding is money (a participant's plan budget), so it has its own gate and never `canWrite`.
+  // Only the tabs this role can see are valid ?tab= keys: a link to Funding opened by a role without it reads as Overview, instead of selecting nothing
+  // over an empty body. Funding is money (a participant's plan budget, the claims), so it has its own gates and never `canWrite`.
+  const showFunding = canManageFunding || canAccessClaims
   const tabKeys = useMemo(
-    () => TAB_KEYS.filter(key => (key === 'claims' ? canAccessClaims : key === 'funding' ? canManageFunding : key === 'rostering' ? canAccessRostering : key === 'history' ? canSeeHistory : true)),
-    [canAccessClaims, canManageFunding, canAccessRostering, canSeeHistory],
+    () => PARTICIPANT_TAB_KEYS.filter(key => key !== 'funding' || showFunding),
+    [showFunding],
   )
-  const [tab, setTab] = useTabParam(tabKeys, 'details')
+  const [tab, setTab] = useTabParam(tabKeys, 'overview')
+  const goTo = useParticipantGoTo(tabKeys)
+  useParticipantTabRedirect(tabKeys)
+  useScrollToHash(id)
+  const counts = useParticipantTabCounts(id)
   const pageQuery = useParticipant(id)
   const { data: p, isLoading, isError, error, refetch } = pageQuery
   const { data: alertsData } = useParticipantAlerts(id, canViewAlerts)
@@ -80,6 +127,15 @@ export default function ParticipantDetailPage() {
   // header. See this branch's report for the reversible product call.
   const downloadClientOverview = useDownloadClientOverviewPdf()
   const caregiverLink = useCaregiverLink(id!)
+  // The same confirm dialog and failure banner the participant list uses; the More menu opens it without a row button.
+  const archiveRestore = useArchiveRestore<{ id: string; fullName: string }>({
+    deleteMutation: useDeleteParticipant(),
+    restoreMutation: useRestoreParticipant(),
+    // Restore reactivates and changes nothing else, so the endpoint takes an empty body.
+    restoreData: () => ({}),
+    entityName: row => row.fullName,
+    entityId: row => row.id,
+  })
 
   if (isLoading && !retryingAfterError(pageQuery)) return <PageState kind="loading" noun="participant" />
   if (!p) {
@@ -88,28 +144,34 @@ export default function ParticipantDetailPage() {
       : <PageState kind="not-found" noun="participant" backTo="/participants" backLabel="participants" />
   }
 
-  // The Details tab's short cards in wizard order; `has` is false for a card with nothing recorded yet (Identity, NDIS & Funding and
-  // Community Access always have something: a name, a funding source, and a card that only shows for that stream).
   const edit = { p, participantId: id!, canEdit: canWriteParticipantDetails }
-  const shortCards = [
-    { title: 'Identity', has: true, card: <ParticipantIdentitySection key="identity" {...edit} /> },
-    { title: 'Address & Living Arrangements', has: hasAddressLiving(p), card: <ParticipantAddressLivingSection key="address" {...edit} /> },
-    { title: 'NDIS & Funding', has: true, card: <ParticipantNdisFundingSection key="ndis" {...edit} /> },
-    { title: 'Key Identifiers', has: hasKeyIdentifiers(p), card: <ParticipantKeyIdentifiersSection key="identifiers" {...edit} /> },
-    { title: 'Cultural Background', has: hasCulturalBackground(p), card: <ParticipantCulturalBackgroundSection key="cultural" {...edit} /> },
-    { title: 'Medical', has: hasMedical(p), card: <ParticipantMedicalSection key="medical" {...edit} /> },
-    { title: 'Behaviour & Communication', has: hasBehaviourCommunication(p), card: <ParticipantBehaviourCommunicationSection key="behaviour" {...edit} /> },
-    { title: 'Community Access', has: true, card: <ParticipantCommunityAccessSection key="community" {...edit} /> },
-    { title: 'Meals & Diet', has: hasMealsDiet(p), card: <ParticipantMealsDietSection key="meals" {...edit} /> },
-    { title: 'About Me', has: hasAboutMe(p), card: <ParticipantAboutMeSection key="about" {...edit} /> },
-    { title: 'Risks & Hazards Summary', has: hasRisksHazardsSummary(p), card: <ParticipantRisksHazardsSummarySection key="risks" {...edit} /> },
+  // The short cards in wizard order within each tab. `has` is false for a card with nothing recorded yet (Identity and NDIS & Funding always have
+  // something: a name and a funding source).
+  const card = (cid: string, title: string, has: boolean, node: ReactNode): ShortCard => ({
+    id: cid, title, has, node: <Section key={cid} id={cid} label={title}>{node}</Section>,
+  })
+  const aboutCards = [
+    card('identity', 'Identity', true, <ParticipantIdentitySection {...edit} />),
+    card('home-and-living', 'Address & Living Arrangements', hasAddressLiving(p), <ParticipantAddressLivingSection {...edit} />),
+    card('ndis-plan', 'NDIS & Funding', true, <ParticipantNdisFundingSection {...edit} />),
+    card('key-identifiers', 'Key Identifiers', hasKeyIdentifiers(p), <ParticipantKeyIdentifiersSection {...edit} />),
+    card('culture-and-rights', 'Cultural Background', hasCulturalBackground(p), <ParticipantCulturalBackgroundSection {...edit} />),
+    card('about-me', 'About Me', hasAboutMe(p), <ParticipantAboutMeSection {...edit} />),
   ]
+  // Community Access returns null without its service stream, so it gets no wrapper and no grid cell at all.
+  const hasCommunityAccess = parseServiceStreams(p.serviceStreams).includes('CommunityAccessDailyLiving')
+  const risksSummary = card('risks-summary', 'Risks & Hazards Summary', hasRisksHazardsSummary(p), <ParticipantRisksHazardsSummarySection {...edit} />)
+  const healthCards = [
+    card('medical', 'Medical', hasMedical(p), <ParticipantMedicalSection {...edit} />),
+    card('behaviour-and-communication', 'Behaviour & Communication', hasBehaviourCommunication(p), <ParticipantBehaviourCommunicationSection {...edit} />),
+    ...(hasCommunityAccess ? [card('community-access', 'Community Access', true, <ParticipantCommunityAccessSection {...edit} />)] : []),
+  ]
+  const dailyCards = [card('meals', 'Meals & Diet', hasMealsDiet(p), <ParticipantMealsDietSection {...edit} />)]
   // Back goes where the user came from; with no history (a deep link) it falls back to the list this participant is on. A draft is never on
   // Active participants: before intake is complete it is a Draft intake row on Enquiries, after it a row on Onboarding.
   const [backTo, backLabel] = !p.isDraft ? ['/participants', 'participants']
     : p.intakeCompletedAt ? ['/participants?tab=onboarding', 'onboarding'] : ['/participants?tab=enquiries', 'enquiries']
-  const recordedCards = shortCards.filter(c => c.has)
-  const emptyCards = shortCards.filter(c => !c.has)
+  const otherAlerts = canViewAlerts && (alertsData?.alerts ?? []).some(a => a.severity !== 'Critical')
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
@@ -119,21 +181,25 @@ export default function ParticipantDetailPage() {
         <BackButton to={backTo} label={backLabel} variant="icon" className="mt-1" />
         <div className="flex-1 min-w-0">
           <PageHeader
+            variant="detail"
             title={p.fullName}
             subtitle={
-              <div className="flex flex-wrap items-center gap-3 text-[13px] text-[var(--color-muted-foreground)]">
+              <PageHeaderMeta>
                 <StatusBadge status={p.isActive ? 'Active' : 'Inactive'} />
                 {/* What is still missing, as a quiet warning-tone chip beside the status. Informational: nothing on this page is gated on it. */}
-                <ReadinessNote issues={p.readinessIssues} variant="chip" />
-                <span>{p.region || 'No region'} · {PLAN_TYPE_LABELS[p.planType] ?? p.planType} · Support Ratio: {SUPPORT_RATIO_LABELS[p.supportRatio] ?? p.supportRatio}</span>
-                <ServiceStreamBadges value={p.serviceStreams} />
-              </div>
+                {p.readinessIssues?.length ? <ReadinessNote issues={p.readinessIssues} variant="chip" /> : null}
+                <span>{p.region || 'No region'}</span>
+                <span>{PLAN_TYPE_LABELS[p.planType] ?? p.planType}</span>
+                <span>Ratio {SUPPORT_RATIO_LABELS[p.supportRatio] ?? p.supportRatio}</span>
+                <span>Updated <time dateTime={p.updatedAt}>{formatRelative(p.updatedAt, { style: 'long' })}</time></span>
+                {parseServiceStreams(p.serviceStreams).length > 0 ? <ServiceStreamBadges value={p.serviceStreams} /> : null}
+              </PageHeaderMeta>
             }
             action={
-              // One menu and one primary at every width (VISUAL-1 V2): the documents, the agreement draft and the caregiver link fold into
-              // the menu, and Edit is the visible action. justify-start below md (the cluster sits under the title); justify-end from md up.
+              // The documents menu and the More menu: no filled primary here, the page's actions are all in menus. justify-start below md
+              // (the cluster sits under the title); justify-end from md up.
               <div className="flex flex-wrap items-start justify-start gap-2 md:justify-end">
-                {/* DOC-01 — the downloads are ungated, unlike Edit: downloading/printing documents is a read action, and this page has no
+                {/* DOC-01 — the downloads are ungated: downloading/printing documents is a read action, and this page has no
                     more specific canView... flag of its own to gate read-level content on. The caregiver-link items inside are gated on
                     canWriteParticipantDetails (a write action) — see B15 in the discovery fact sheet. */}
                 <DocumentsMenu
@@ -145,177 +211,161 @@ export default function ParticipantDetailPage() {
                   overview={downloadClientOverview}
                   caregiverLink={caregiverLink}
                 />
-                {canWrite && (
-                  // PF-10.7 (SPEC-05): the old single-step wizard is retired — this now
-                  // points straight at the Profile-wizard edit entry point (PF-10.4) rather than the
-                  // now-redirecting /edit route.
-                  <Button to={`/participants/${id}/profile`} variant="primary" size="md">
-                    <Pencil className="w-4 h-4" /> Edit
-                  </Button>
-                )}
+                <ParticipantMoreMenu
+                  participantId={id!}
+                  canEditProfile={canWrite}
+                  canArchive={canManageParticipantLifecycle && p.isActive && !p.isDraft}
+                  canRestore={canManageParticipantLifecycle && !p.isActive && !p.isDraft}
+                  onArchive={() => archiveRestore.requestArchive(p)}
+                  onRestore={() => archiveRestore.requestRestore(p)}
+                />
               </div>
             }
-          />
+          >
+            <ParticipantSafetyFlags participant={p} />
+          </PageHeader>
+        </div>
+      </div>
+
+      {archiveRestore.errorNotice}
+      {/* Every critical alert, on every tab and with no cap: a worker who deep-links to any tab still sees it. The rest are on Overview. */}
+      {canViewAlerts && alertsData && (
+        <ParticipantAlertsBanner severity="critical" alerts={alertsData.alerts} onSelectTab={goTo} />
+      )}
+
+      <Tabs
+        overflow="scroll"
+        tabs={NEW_TABS.filter(t => tabKeys.includes(t.id)).map(t => {
+          const n = t.id === 'health' ? counts.health : t.id === 'daily' ? counts.daily : t.id === 'people' ? counts.people : t.id === 'records' ? counts.records : undefined
+          return {
+            id: t.id,
+            // relative: the absolutely positioned sr-only text would otherwise escape the strip's overflow clip and widen the page
+            label: <span className="relative">{t.label}{n && t.noun ? <span className="sr-only">, {plural(n, t.noun[0], t.noun[1])}</span> : null}</span>,
+            badge: n,
+          }
+        })}
+        active={tab}
+        onChange={setTab}
+        ariaLabel="Participant sections"
+      />
+
+      <TabPanel tab={tab} id="overview">
+        <div className="flex flex-col gap-[var(--section-gap)]">
           {/* SPEC-05 PF-10.5 — three-way resume-banner state, derived from IntakeCompletedAt/IsDraft:
               no IntakeCompletedAt -> "Resume intake" (fresh Intake start, pre-filled from this row);
               IntakeCompletedAt set + IsDraft -> "Continue profile"; IsDraft false -> no banner at all. */}
           {p.isDraft && (
-            <div role="status" className="mt-3 flex flex-wrap items-center justify-between gap-3 p-3 rounded-[var(--radius-sm)] bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)] text-sm border border-[var(--color-on-warning-container)]/20">
-              <span className="flex items-center gap-2">
-                <FileEdit className="w-4 h-4 shrink-0" aria-hidden="true" />
-                {p.servicesStartedAt && p.isActive
-                  ? 'Services have started, and onboarding is still open. They can be rostered and supported; the checklist shows what is left before they are made active.'
-                  : p.intakeCompletedAt
-                  ? "Intake is complete, but this participant's profile isn't finished yet. Excluded from rosters, claims, and other operational lists until finalised."
-                  : "This participant is a draft — intake hasn't been completed yet. Excluded from rosters, claims, and other operational lists until finalised."}
-              </span>
-              {p.servicesStartedAt && p.isActive ? (
-                <Button variant="secondary" size="sm" className="shrink-0" to={`/onboarding/${id}`}>Open checklist</Button>
-              ) : canWrite && (
-                <Button variant="secondary" size="sm" className="shrink-0" to={p.intakeCompletedAt ? `/participants/${id}/profile` : `/participants/${id}/intake`}>
-                  <Pencil className="w-4 h-4" /> {p.intakeCompletedAt ? 'Continue profile' : 'Resume intake'}
-                </Button>
+            <section id="onboarding" aria-label="Onboarding" className="scroll-mt-12">
+              <div role="status" className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-[var(--radius-sm)] bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)] text-sm border border-[var(--color-on-warning-container)]/20">
+                <span className="flex items-center gap-2">
+                  <FileEdit className="w-4 h-4 shrink-0" aria-hidden="true" />
+                  {p.servicesStartedAt && p.isActive
+                    ? 'Services have started, and onboarding is still open. They can be rostered and supported; the checklist shows what is left before they are made active.'
+                    : p.intakeCompletedAt
+                    ? "Intake is complete, but this participant's profile isn't finished yet. Excluded from rosters, claims, and other operational lists until finalised."
+                    : "This participant is a draft — intake hasn't been completed yet. Excluded from rosters, claims, and other operational lists until finalised."}
+                </span>
+                {p.servicesStartedAt && p.isActive ? (
+                  <Button variant="secondary" size="sm" className="shrink-0" to={`/onboarding/${id}`}>Open checklist</Button>
+                ) : canWrite && (
+                  <Button variant="secondary" size="sm" className="shrink-0" to={p.intakeCompletedAt ? `/participants/${id}/profile` : `/participants/${id}/intake`}>
+                    <Pencil className="w-4 h-4" /> {p.intakeCompletedAt ? 'Continue profile' : 'Resume intake'}
+                  </Button>
+                )}
+              </div>
+            </section>
+          )}
+          {otherAlerts && alertsData && (
+            <section id="alerts" aria-label="Alerts" className="scroll-mt-12">
+              <ParticipantAlertsBanner severity="other" alerts={alertsData.alerts} onSelectTab={goTo} />
+            </section>
+          )}
+          <BeforeYouStartCard participant={p} />
+        </div>
+      </TabPanel>
+
+      <TabPanel tab={tab} id="about">
+        <div className={CARD_GRID}>
+          <ShortCards cards={aboutCards} canEdit={canWriteParticipantDetails} />
+        </div>
+      </TabPanel>
+
+      <TabPanel tab={tab} id="health">
+        <div className={CARD_GRID}>
+          <ShortCards cards={healthCards.slice(0, 1)} canEdit={canWriteParticipantDetails} />
+          {/* INTAKE sub-wave C1 — the structured health-condition grid, always rendered: GetForParticipant always returns all ten
+              HealthConditionType entries, so there is no genuinely-empty state to hide behind a condition. A bare wrapper, not a Card:
+              the DataTable already draws its own border. */}
+          <Section id="health-conditions" label="Health conditions" wide>
+            <div className={COMPACT_EMPTY_TABLE}><ParticipantHealthConditionsSection participantId={id} /></div>
+          </Section>
+          <Section id="medications" label="Medications" srHeading wide><MedicationsTab participantId={id} /></Section>
+          <ShortCards cards={healthCards.slice(1)} canEdit={canWriteParticipantDetails} />
+          {/* INTAKE-09 — the risk entries are a compact section rather than their own tab; the summary card shares the section's inner grid. */}
+          <Section id="risks" label="Risks and hazards" wide>
+            <div className={CARD_GRID}>
+              {risksSummary.has && risksSummary.node}
+              <Card className="col-span-full"><RiskEntriesSection participantId={id} /></Card>
+              {canWriteParticipantDetails && !risksSummary.has && (
+                <NotRecordedFold className="col-span-full" summary={risksSummary.title}>
+                  <div className={CARD_GRID}>{risksSummary.node}</div>
+                </NotRecordedFold>
               )}
             </div>
-          )}
-          {canViewAlerts && alertsData && (
-            <ParticipantAlertsBanner alerts={alertsData.alerts} onSelectTab={setTab} />
+          </Section>
+          <Section id="restrictive-practices" label="Restrictive practices" srHeading wide><RestrictivePracticesTab participantId={id} /></Section>
+        </div>
+      </TabPanel>
+
+      <TabPanel tab={tab} id="daily">
+        <div className={CARD_GRID}>
+          <Section id="support-profile" label="Support profile" srHeading wide><SupportProfileTab participantId={id} onNavigateToTab={goTo} /></Section>
+          {/* INTAKE sub-wave C2 — the structured ADL rating grid, always rendered (GetForParticipant always returns all twenty AdlType entries). */}
+          <Section id="daily-living" label="Daily living" wide>
+            <div className={COMPACT_EMPTY_TABLE}><ParticipantAdlAssessmentsSection participantId={id} /></div>
+          </Section>
+          <Section id="routines" label="Routines" srHeading wide><RoutinesTab participantId={id} /></Section>
+          <ShortCards cards={dailyCards} canEdit={canWriteParticipantDetails} />
+        </div>
+      </TabPanel>
+
+      <TabPanel tab={tab} id="people">
+        <div className={CARD_GRID}>
+          <Section id="contacts" label="Contacts" srHeading wide><ContactsTab participantId={id} /></Section>
+          {canAccessRostering && <Section id="roster" label="Rostering" srHeading wide><RosteringTab participantId={id!} /></Section>}
+          <Section id="trips" label="Bookings" srHeading wide><BookingsTab participantId={id} /></Section>
+        </div>
+      </TabPanel>
+
+      <TabPanel tab={tab} id="funding">
+        <div className={CARD_GRID}>
+          {canManageFunding && <Section id="plan-budget" label="Plan budget" srHeading wide><FundingTab participantId={id!} planType={p.planType} /></Section>}
+          {canAccessClaims && <Section id="claims" label="Claims" srHeading wide><ClaimsTab participantId={id!} canWrite={canWrite} /></Section>}
+        </div>
+      </TabPanel>
+
+      <TabPanel tab={tab} id="records">
+        <div className={CARD_GRID}>
+          <Section id="notes" label="Notes" srHeading wide><NotesTab participantId={id} /></Section>
+          <Section id="consents" label="Consents" wide>
+            <Card><ParticipantConsentsSection participantId={id} /></Card>
+          </Section>
+          {canSeeHistory && (
+            <Section id="history" label="History" srHeading wide><AuditHistoryTab entityType="Participant" entityId={String(p.id)} /></Section>
           )}
         </div>
-      </div>
+      </TabPanel>
 
-      <Tabs
-        tabs={[
-          { id: 'details', label: 'Details', icon: Users },
-          { id: 'contacts', label: 'Contacts', icon: Contact2 },
-          { id: 'bookings', label: 'Bookings', icon: ClipboardList },
-          { id: 'support', label: 'Support Profile', icon: Shield },
-          { id: 'medications', label: 'Medications', icon: Pill },
-          { id: 'notes', label: 'Notes', icon: StickyNote },
-          { id: 'routines', label: 'Routines', icon: ListChecks },
-          { id: 'restrictive-practices', label: 'Restrictive Practices', icon: ShieldAlert },
-          ...(canAccessClaims ? [{ id: 'claims' as const, label: 'Claims', icon: FileText }] : []),
-          ...(canManageFunding ? [{ id: 'funding' as const, label: 'Funding', icon: Wallet }] : []),
-          ...(canAccessRostering ? [{ id: 'rostering' as const, label: 'Rostering', icon: CalendarRange }] : []),
-          ...(canSeeHistory ? [{ id: 'history' as const, label: 'History' }] : []),
-        ]}
-        active={tab}
-        onChange={setTab}
-        ariaLabel="Participant detail sections"
-      />
-
-      {/* PDETAIL-01 — the short cards keep the original single-wizard's step-family order among
-          themselves (retired by PF-10.7; now split across the Intake/Profile wizards): Identity,
-          Address & Living Arrangements, NDIS & Funding, Key Identifiers, [Contacts has its own
-          sibling tab, matching CONTACT-01/02/03's own wizard step], Cultural & Consent, [Support
-          Needs & Mobility moved to the Support Profile tab under PD-6], Medical, Behaviour &
-          Communication, Community Access, Meals & Diet (Daily Living), About Me, Risks & Hazards.
-          Density review — the nested-CRUD sections (Consents, Health Conditions, ADLs, Risk
-          entries) span the whole row, so they come AFTER every short card: interleaved, a
-          full-width section strands the short card beside it in a row-wide void. The short cards
-          therefore pack into the auto-fill columns first (align-items:start, no stretched
-          siblings) and the full-width sections stack underneath.
-          The `min(26rem,100%)` track floor lets the grid collapse to one column on a phone: a bare
-          26rem (416px) minimum would overflow a 390px viewport and scroll the page sideways.
-          PD-7 — every short card is a `SectionEditPanel`-backed component under
-          `pages/participant-detail/`, gated on `canWriteParticipantDetails` (SPEC-03's PD-7):
-          see this branch's report for the section → CORE-02 patch-group mapping and how each
-          section avoids nulling fields it doesn't render. */}
-      {tab === 'details' && (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(min(26rem,100%),1fr))] items-start gap-[var(--section-gap)]">
-          {/* PD-6 — the "Support Needs & Mobility" card that used to live after Cultural Background has moved to the
-              Support Profile tab (SupportProfileTab.tsx), merged with the `/support-profile`
-              sub-resource fields and made editable there. See SPEC-03's PD-6: having the same
-              fields editable/displayed in two places would repeat the dual-write-path
-              inconsistency discovery already flagged for consents/health/ADL. */}
-          {recordedCards.map(c => c.card)}
-          {/* VISUAL-1 V2: the cards with nothing recorded fold into one line naming them. Only an editor has empty cards to fold:
-              each one returns null without canEdit. */}
-          {canWriteParticipantDetails && emptyCards.length > 0 && (
-            <NotRecordedFold className="col-span-full" summary={joinList(emptyCards.map(c => c.title))}>
-              <div className="grid grid-cols-[repeat(auto-fill,minmax(min(26rem,100%),1fr))] items-start gap-[var(--section-gap)]">
-                {emptyCards.map(c => c.card)}
-              </div>
-            </NotRecordedFold>
-          )}
-
-          {/* ── Full-width sections ── */}
-          <Card className="col-span-full">
-            <ParticipantConsentsSection participantId={id} />
-          </Card>
-          {/* INTAKE sub-wave C1 — the structured health-condition grid (research spec §4.6/§5),
-              always rendered (unlike the whole-card-conditional cards above): GetForParticipant
-              always returns all ten HealthConditionType entries, so there is no genuinely-empty
-              state to hide behind a condition — DataTable's own emptyMessage handles a
-              still-loading/zero-row edge case instead. A bare wrapper, not a Card: the DataTable
-              already draws its own border, and a Card around it made two nested borders. */}
-          <div className={`col-span-full ${COMPACT_EMPTY_TABLE}`}>
-            <ParticipantHealthConditionsSection participantId={id} />
-          </div>
-          {/* INTAKE sub-wave C2 — the structured ADL rating grid (research spec §4.9/§5), always
-              rendered (unlike the whole-card-conditional cards above): GetForParticipant always
-              returns all twenty AdlType entries, so there is no genuinely-empty state to hide
-              behind a condition — DataTable's own emptyMessage handles a still-loading/zero-row
-              edge case instead. Same convention (and same bare wrapper) as
-              ParticipantHealthConditionsSection above. */}
-          <div className={`col-span-full ${COMPACT_EMPTY_TABLE}`}>
-            <ParticipantAdlAssessmentsSection participantId={id} />
-          </div>
-          {/* INTAKE-09 — a compact section rather than its own tab; see RiskEntriesSection's
-              module doc for the tab-count call. */}
-          <Card className="col-span-full">
-            <RiskEntriesSection participantId={id} />
-          </Card>
-        </div>
-      )}
-
-
-      {tab === 'contacts' && (
-        <ContactsTab participantId={id} />
-      )}
-
-      {tab === 'bookings' && (
-        <BookingsTab participantId={id} />
-      )}
-
-      {tab === 'support' && (
-        <SupportProfileTab participantId={id} onNavigateToTab={setTab} />
-      )}
-
-      {tab === 'medications' && (
-        <MedicationsTab participantId={id} />
-      )}
-
-      {tab === 'notes' && (
-        <NotesTab participantId={id} />
-      )}
-
-      {tab === 'routines' && (
-        <RoutinesTab participantId={id} />
-      )}
-
-      {tab === 'restrictive-practices' && (
-        <RestrictivePracticesTab participantId={id} />
-      )}
-
-      {tab === 'claims' && canAccessClaims && (
-        <ClaimsTab participantId={id!} canWrite={canWrite} />
-      )}
-
-      {tab === 'funding' && canManageFunding && (
-        <FundingTab participantId={id!} planType={p.planType} />
-      )}
-
-      {tab === 'rostering' && canAccessRostering && (
-        <RosteringTab participantId={id!} />
-      )}
-
-      {tab === 'history' && canSeeHistory && p && (
-        <AuditHistoryTab entityType="Participant" entityId={String(p.id)} />
-      )}
+      {archiveRestore.confirmDialog}
     </div>
   )
 }
+
+/** A tab's panel: only the active one is mounted, so the other tabs make no requests until opened. */
+function TabPanel({ tab, id, children }: { tab: ParticipantTabKey; id: ParticipantTabKey; children: ReactNode }) {
+  return tab === id ? <>{children}</> : null
+}
+
 
 /**
  * Dropdown option rows are `py-1.5` around a 20px line = 32px, and take no height prop. The row is a

@@ -29,6 +29,8 @@ type DropdownProps = {
   // Trigger appearance
   label?: string            // button text (menu), placeholder text (form)
   icon?: ReactNode          // leading icon on trigger (menu variant)
+  /** Menu variant: below `sm` the trigger is a square icon button (the label stays as its accessible name, the chevron goes); from `sm` up it is the normal labelled trigger. */
+  iconOnlyBelowSm?: boolean
   /** Menu variant: the Button look of the trigger. Primary for a header action; secondary for an in-page menu, so a page keeps one filled primary. */
   triggerVariant?: Extract<ButtonVariant, 'primary' | 'secondary'>
   colorClass?: string       // Tailwind color classes for pill trigger background
@@ -58,6 +60,7 @@ export function Dropdown({
   onBlur,
   label,
   icon,
+  iconOnlyBelowSm,
   triggerVariant = 'primary',
   colorClass = '',
   disabled = false,
@@ -473,11 +476,11 @@ export function Dropdown({
         onClick={() => setOpen(v => !v)}
         onKeyDown={handleKeyDown}
         // An md Button (primary is the header-action standard), 44px on a touch screen like any md Button, so no pad.
-        className={buttonClasses(triggerVariant, 'md')}
+        className={buttonClasses(triggerVariant, 'md', false, iconOnlyBelowSm ? 'max-sm:w-[var(--control-h)] max-sm:px-0' : undefined)}
       >
         {icon}
-        {label}
-        {chevron}
+        {iconOnlyBelowSm ? <span className="sr-only sm:not-sr-only">{label}</span> : label}
+        {iconOnlyBelowSm ? <span className="hidden sm:contents">{chevron}</span> : chevron}
       </button>
       {panel}
     </div>

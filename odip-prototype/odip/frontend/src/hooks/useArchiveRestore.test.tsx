@@ -159,3 +159,25 @@ describe('useArchiveRestore — what a restore sends', () => {
     expect(restoreMutate.mock.calls[0][0]).toEqual({ id: 'a1', data: {} })
   })
 })
+
+describe('useArchiveRestore — opening the dialog without a row button', () => {
+  it('exposes requestArchive and requestRestore; requestArchive opens the archive dialog', async () => {
+    const deleteMutate = vi.fn()
+    function Probe() {
+      const { requestArchive, requestRestore, confirmDialog } = useArchiveRestore<Item>({
+        deleteMutation: { mutate: deleteMutate, isPending: false },
+        entityName: row => row.name,
+        entityId: row => row.id,
+      })
+      expect(typeof requestRestore).toBe('function')
+      return <>{confirmDialog}<button onClick={() => requestArchive(item)}>Open</button></>
+    }
+    const user = userEvent.setup()
+    render(<Probe />)
+    await user.click(screen.getByRole('button', { name: 'Open' }))
+    const dialog = screen.getByRole('alertdialog')
+    expect(within(dialog).getByText('Archive "Alex Rivera"?')).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Archive' }))
+    expect(deleteMutate).toHaveBeenCalledWith('a1', expect.anything())
+  })
+})

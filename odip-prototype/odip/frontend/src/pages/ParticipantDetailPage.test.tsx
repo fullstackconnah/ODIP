@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
+import { MemoryRouter, Routes, Route, useLocation, useNavigationType } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import ParticipantDetailPage from './ParticipantDetailPage'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 import type { ParticipantChecklistItemDto } from '@/api/types/checklist-items'
+import { OLD_KEY_TARGET, NEW_TABS } from './participant-detail/participantTabs'
 import { TONE } from '@/lib/tone'
 import { __testHooks } from '@/hooks/useBackNavigation'
 
@@ -13,10 +15,11 @@ const {
   mockUseDownloadIntakeFormPdf, mockUseDownloadParticipantProfilePdf, mockUseDownloadClientOverviewPdf,
   mockPatchMutateAsync, mockUseStaff,
   mockUseGenerateCaregiverLink, mockUseRevokeCaregiverLink, mockUseCaregiverSubmissions,
+  mockDeleteMutate, mockNotes, mockRisks,
 } = vi.hoisted(() => ({
   mockUseParticipant: vi.fn(),
   mockUseParticipantBookings: vi.fn<() => { data: Record<string, unknown>[] }>(() => ({ data: [] })),
-  mockUseParticipantAlerts: vi.fn(() => ({ data: undefined })),
+  mockUseParticipantAlerts: vi.fn<() => { data: unknown }>(() => ({ data: undefined })),
   // DOC-01 — mocked like every other hook this file already stubs, so the button-render/click
   // tests never run the real axios/blob mutationFn body (see the page's own hooks for that body).
   mockUseDownloadIntakeFormPdf: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false })),
@@ -33,6 +36,9 @@ const {
   // above so its own tests never run the real axios mutationFn body.
   mockUseGenerateCaregiverLink: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false, isError: false })),
   mockUseRevokeCaregiverLink: vi.fn(() => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false, isError: false })),
+  mockDeleteMutate: vi.fn(),
+  mockNotes: vi.fn<() => { data: Record<string, unknown>[] }>(() => ({ data: [] })),
+  mockRisks: vi.fn<() => { data: Record<string, unknown>[] }>(() => ({ data: [] })),
   mockUseCaregiverSubmissions: vi.fn<(status?: string, options?: { participantId?: string; enabled?: boolean }) => { data: Record<string, unknown>[] }>(() => ({ data: [] })),
 }))
 
@@ -53,7 +59,16 @@ vi.mock('@/api/hooks', () => ({
   useGenerateCaregiverLink: mockUseGenerateCaregiverLink,
   useRevokeCaregiverLink: mockUseRevokeCaregiverLink,
   useCaregiverSubmissions: mockUseCaregiverSubmissions,
+  // The More menu's archive/restore and the tab-strip counts (the lists the Health, Daily, People and Records tabs badge).
+  useDeleteParticipant: () => ({ mutate: mockDeleteMutate, mutateAsync: vi.fn(), isPending: false }),
+  useRestoreParticipant: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useParticipantRiskEntries: mockRisks,
+  useParticipantRoutines: () => ({ data: [] }),
+  useParticipantContactRoles: () => ({ data: [] }),
+  useParticipantNotes: mockNotes,
 }))
+
+vi.mock('@/components/AuditHistoryTab', () => ({ default: () => <div data-testid="history-tab" /> }))
 
 vi.mock('./participant-detail', async () => {
   // PD-7 — the 11 Details-tab section-edit components (ParticipantIdentitySection etc.) are kept
@@ -89,6 +104,11 @@ vi.mock('./participant-detail', async () => {
   }
 })
 
+// The page reads the query client (tab counts, the list refetch on archive), which the mocked hooks do not need but the page itself does.
+function PageWithClient() {
+  return <QueryClientProvider client={new QueryClient()}><ParticipantDetailPage /></QueryClientProvider>
+}
+
 function setUserRole(role: string) {
   localStorage.setItem('odip_user', JSON.stringify({ role }))
 }
@@ -97,7 +117,7 @@ function renderAt(id: string) {
   return render(
     <MemoryRouter initialEntries={[`/participants/${id}`]}>
       <Routes>
-        <Route path="/participants/:id" element={<ParticipantDetailPage />} />
+        <Route path="/participants/:id" element={<PageWithClient />} />
       </Routes>
     </MemoryRouter>,
   )
@@ -107,7 +127,7 @@ function renderAtTab(id: string, tab: string) {
   return render(
     <MemoryRouter initialEntries={[`/participants/${id}?tab=${tab}`]}>
       <Routes>
-        <Route path="/participants/:id" element={<ParticipantDetailPage />} />
+        <Route path="/participants/:id" element={<PageWithClient />} />
       </Routes>
     </MemoryRouter>,
   )
@@ -198,7 +218,7 @@ describe('ParticipantDetailPage — INTAKE-03 Community Access card', () => {
       }),
       isLoading: false,
     })
-    renderAt('participant-1')
+    renderAtTab('participant-1', 'health')
 
     expect(screen.getByRole('heading', { name: 'Community Access' })).toBeInTheDocument()
     expect(screen.getByText('Smiles and hums when content.')).toBeInTheDocument()
@@ -229,7 +249,7 @@ describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
       }),
       isLoading: false,
     })
-    renderAt('participant-1')
+    renderAtTab('participant-1', 'about')
 
     expect(screen.getByRole('heading', { name: 'Identity' })).toBeInTheDocument()
     // The header <h1> only ever shows the single computed FullName string ("Soph Brown" once a
@@ -252,7 +272,7 @@ describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
       data: makeParticipant({ preferredName: null }),
       isLoading: false,
     })
-    renderAt('participant-1')
+    renderAtTab('participant-1', 'about')
 
     const row = screen.getByText('Preferred Name').nextElementSibling
     expect(row).toHaveTextContent('—')
@@ -266,7 +286,7 @@ describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
       }),
       isLoading: false,
     })
-    renderAt('participant-1')
+    renderAtTab('participant-1', 'about')
 
     expect(screen.getByRole('heading', { name: 'NDIS & Funding' })).toBeInTheDocument()
     expect(screen.getByText('NDIS')).toBeInTheDocument()
@@ -282,7 +302,7 @@ describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
       data: makeParticipant({ fundingSource: 'Other', fundingOrganisation: 'Local Council' }),
       isLoading: false,
     })
-    renderAt('participant-1')
+    renderAtTab('participant-1', 'about')
 
     expect(screen.getByText('Local Council')).toBeInTheDocument()
     expect(screen.queryByText('NDIS Number')).not.toBeInTheDocument()
@@ -296,7 +316,7 @@ describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
       }),
       isLoading: false,
     })
-    renderAt('participant-1')
+    renderAtTab('participant-1', 'about')
 
     expect(screen.queryByRole('heading', { name: 'Support Needs & Mobility' })).not.toBeInTheDocument()
     // No longer under a generic "Notes" heading either — PDETAIL-01 already retired that card;
@@ -309,30 +329,16 @@ describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
       data: makeParticipant({ behaviourRiskSummary: 'Escalates when routine changes without warning.', notes: 'Prefers morning visits.' }),
       isLoading: false,
     })
-    renderAt('participant-1')
+    renderAtTab('participant-1', 'health')
 
     expect(screen.getByRole('heading', { name: 'Risks & Hazards Summary' })).toBeInTheDocument()
     expect(screen.getByText(/Escalates when routine changes without warning\./)).toBeInTheDocument()
     expect(screen.getByText(/Prefers morning visits\./)).toBeInTheDocument()
   })
 
-  it('orders the remaining Details-tab step-family groups to mirror the wizard step order end to end: Identity, NDIS & Funding, Key Identifiers, Cultural Background, Medical, Behaviour & Communication, Community Access, Daily Living, Risks & Hazards (Support Needs & Mobility moved to the Support Profile tab under PD-6)', () => {
-    mockUseParticipant.mockReturnValue({
-      // One field (or the CommunityAccessDailyLiving stream itself, for the stream-gated card)
-      // per whole-card-conditional group, so every group's Card actually renders and can be
-      // located in the heading list — same minimal-trigger approach as each group's own test above.
-      data: makeParticipant({
-        medicareNumber: 'MED123',                              // Key Identifiers
-        isCald: true,                                          // Cultural Background
-        primaryDiagnosis: 'Autism',                            // Medical
-        memory: 'Fair',                                        // Behaviour & Communication
-        serviceStreams: 'CommunityAccessDailyLiving',          // Community Access (stream-gated — see the card's own doc comment: gated on the flag itself, no field needed)
-        favouriteBreakfast: 'Toast',                           // Daily Living (Meals & Diet)
-        behaviourRiskSummary: 'Escalates when routine changes.', // Risks & Hazards Summary
-      }),
-      isLoading: false,
-    })
-    renderAt('participant-1')
+  it('orders the About tab like the wizard: Identity, NDIS & Funding, Key Identifiers, Cultural Background', () => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ medicareNumber: 'MED123', isCald: true }), isLoading: false })
+    renderAtTab('participant-1', 'about')
 
     const headings = screen.getAllByRole('heading', { level: 3 }).map(h => h.textContent)
     const idx = (name: string) => headings.indexOf(name)
@@ -340,74 +346,67 @@ describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
     expect(idx('Identity')).toBeLessThan(idx('NDIS & Funding'))
     expect(idx('NDIS & Funding')).toBeLessThan(idx('Key Identifiers'))
     expect(idx('Key Identifiers')).toBeLessThan(idx('Cultural Background'))
-    // PD-6: "Support Needs & Mobility" no longer sits between Cultural Background and Medical —
-    // that card was removed from this tab entirely.
+    // PD-6: "Support Needs & Mobility" is not on this tab (nor anywhere on the page).
     expect(idx('Support Needs & Mobility')).toBe(-1)
-    expect(idx('Cultural Background')).toBeLessThan(idx('Medical'))
-    expect(idx('Medical')).toBeLessThan(idx('Behaviour & Communication'))
-    // Community Access is stream-gated overflow content belonging to the Support Needs & Mobility /
-    // Behaviour & Communication steps (see the Community Access card's own doc comment) —
-    // positioned directly after Behaviour & Communication, matching where it actually renders.
-    expect(idx('Behaviour & Communication')).toBeLessThan(idx('Community Access'))
-    // Daily Living has no single card of its own (its ADL grid section carries no title) — Meals &
-    // Diet is one of its constituent cards and stands in as the group's position marker here.
-    expect(idx('Community Access')).toBeLessThan(idx('Meals & Diet'))
-    expect(idx('Meals & Diet')).toBeLessThan(idx('Risks & Hazards Summary'))
   })
 
-  it('still renders every nested CRUD section (consents/health-conditions/ADL/risk-entries) after the reorg', () => {
-    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
-    renderAt('participant-1')
-
-    expect(screen.getByTestId('consents-section')).toBeInTheDocument()
-    expect(screen.getByTestId('health-conditions-section')).toBeInTheDocument()
-    expect(screen.getByTestId('adl-assessments-section')).toBeInTheDocument()
-    expect(screen.getByTestId('risk-entries-section')).toBeInTheDocument()
-  })
-
-  it('packs every short card first and stacks the full-width sections (Consents, Health, ADLs, Risk entries) after them, so none is stranded beside a row-wide void', () => {
+  it('stacks the Health tab in order: Medical, health conditions, Behaviour & Communication, Community Access, then the risks (summary card, entries)', () => {
     mockUseParticipant.mockReturnValue({
-      // Same one-trigger-per-conditional-card data as the wizard-order test above.
       data: makeParticipant({
-        medicareNumber: 'MED123', isCald: true, primaryDiagnosis: 'Autism', memory: 'Fair',
-        serviceStreams: 'CommunityAccessDailyLiving', favouriteBreakfast: 'Toast',
-        behaviourRiskSummary: 'Escalates when routine changes.', addressSuburb: 'Ipswich',
+        primaryDiagnosis: 'Autism', memory: 'Fair', serviceStreams: 'CommunityAccessDailyLiving',
+        behaviourRiskSummary: 'Escalates when routine changes.',
       }),
       isLoading: false,
     })
-    renderAt('participant-1')
+    renderAtTab('participant-1', 'health')
 
     const expectedOrder = [
-      ...['Identity', 'Address & Living Arrangements', 'NDIS & Funding', 'Key Identifiers', 'Cultural Background',
-        'Medical', 'Behaviour & Communication', 'Community Access', 'Meals & Diet', 'Risks & Hazards Summary']
-        .map((name) => screen.getByRole('heading', { name })),
-      ...['consents-section', 'health-conditions-section', 'adl-assessments-section', 'risk-entries-section']
-        .map((testId) => screen.getByTestId(testId)),
+      screen.getByRole('heading', { name: 'Medical' }),
+      screen.getByTestId('health-conditions-section'),
+      screen.getByRole('heading', { name: 'Behaviour & Communication' }),
+      screen.getByRole('heading', { name: 'Community Access' }),
+      screen.getByRole('heading', { name: 'Risks & Hazards Summary' }),
+      screen.getByTestId('risk-entries-section'),
+      screen.getByTestId('restrictive-practices-tab'),
     ]
-    const inDocumentOrder = [...expectedOrder].sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1))
+    const inDocumentOrder = [...expectedOrder].sort((x, y) => (x.compareDocumentPosition(y) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1))
     expect(inDocumentOrder).toEqual(expectedOrder)
+    expect(screen.getByTestId('medications-tab')).toBeInTheDocument()
+  })
+
+  it('keeps each nested CRUD section on the tab that owns it', () => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    const owned: Record<string, string[]> = {
+      health: ['health-conditions-section', 'risk-entries-section', 'medications-tab', 'restrictive-practices-tab'],
+      daily: ['adl-assessments-section', 'routines-tab', 'support-profile-tab'],
+      people: ['contacts-tab'],
+      records: ['consents-section', 'notes-tab'],
+    }
+    for (const [tab, ids] of Object.entries(owned)) {
+      const { unmount } = renderAtTab('participant-1', tab)
+      for (const id of ids) expect(screen.getByTestId(id), tab + ' ' + id).toBeInTheDocument()
+      unmount()
+    }
   })
 
   // VISUAL-1 V2: a card with nothing recorded was a block of "Not recorded" or a wall of dashes; they fold into one line naming them.
   it('folds the cards with nothing recorded into one "Not recorded" line that opens to them, for an editor', async () => {
     setUserRole('Coordinator')
     mockUseParticipant.mockReturnValue({ data: makeParticipant({ medicareNumber: 'MED123' }), isLoading: false })
-    renderAt('participant-1')
+    renderAtTab('participant-1', 'about')
 
     const fold = screen.getByText(/^Not recorded:/).closest('details') as HTMLElement
     expect(fold).not.toHaveAttribute('open')
-    expect(fold.querySelector('summary')).toHaveTextContent(
-      'Not recorded: Address & Living Arrangements, Cultural Background, Medical, Behaviour & Communication, Meals & Diet, About Me and Risks & Hazards Summary',
-    )
+    expect(fold.querySelector('summary')).toHaveTextContent('Not recorded: Address & Living Arrangements, Cultural Background and About Me')
     // The cards inside are the real ones, Edit and all; a card with something recorded stays in the grid.
-    expect(within(fold).getByRole('heading', { name: 'Medical' })).toBeInTheDocument()
+    expect(within(fold).getByRole('heading', { name: 'Cultural Background' })).toBeInTheDocument()
     expect(within(fold).queryByRole('heading', { name: 'Key Identifiers' })).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Key Identifiers' }).closest('details')).toBeNull()
   })
 
   it('has nothing to fold for a role that cannot edit: an empty card is not shown to it at all', () => {
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
-    renderAt('participant-1')
+    renderAtTab('participant-1', 'health')
 
     expect(screen.queryByText(/^Not recorded:/)).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Medical' })).not.toBeInTheDocument()
@@ -415,33 +414,41 @@ describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
 
   it('uses the auto-fill items-start section grid with a min(26rem,100%) floor, and gives the table-based Health/ADL sections a bare wrapper instead of a second bordered Card', () => {
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
-    renderAt('participant-1')
+    const { unmount } = renderAtTab('participant-1', 'health')
 
     // jsdom has no layout, so the class is the only observable proof of the mobile fix: a bare
     // minmax(26rem,1fr) floor (416px) overflows a 390px viewport and scrolls the page sideways.
-    const health = screen.getByTestId('health-conditions-section').parentElement as HTMLElement
-    const grid = health.parentElement as HTMLElement
+    const wrapper = screen.getByTestId('health-conditions-section').parentElement as HTMLElement
+    const section = wrapper.parentElement as HTMLElement
+    const grid = section.parentElement as HTMLElement
     expect(grid).toHaveClass('grid', 'items-start')
     expect(grid).toHaveClass('grid-cols-[repeat(auto-fill,minmax(min(26rem,100%),1fr))]')
 
     // DataTable draws its own border — a Card around it nested a second one (one border, not two).
-    for (const testId of ['health-conditions-section', 'adl-assessments-section']) {
-      const wrapper = screen.getByTestId(testId).parentElement as HTMLElement
-      expect(wrapper).toHaveClass('col-span-full')
-      expect(wrapper).not.toHaveClass('border')
-      expect(wrapper).not.toHaveClass('rounded-md')
-    }
+    expect(section).toHaveClass('col-span-full')
+    expect(wrapper).not.toHaveClass('border')
+    unmount()
+
+    renderAtTab('participant-1', 'daily')
+    const adlWrapper = screen.getByTestId('adl-assessments-section').parentElement as HTMLElement
+    expect(adlWrapper.parentElement).toHaveClass('col-span-full')
+    expect(adlWrapper).not.toHaveClass('border')
   })
 })
 
 describe('ParticipantDetailPage — header meta row', () => {
-  it('ends the meta row at the last real fact: no trailing "—" when the participant has no service streams', () => {
+  // The quiet line under the name: status, region, plan, ratio, updated, then the stream chips. The page's single h1 sits above it.
+  const metaOf = () => screen.getByText(/^Ratio /).parentElement!.parentElement as HTMLElement
+
+  it('reads region, plan type, ratio and when the record last changed, in that order', () => {
     mockUseParticipant.mockReturnValue({ data: makeParticipant({ serviceStreams: 'None' }), isLoading: false })
     renderAt('participant-1')
 
-    const meta = screen.getByText(/Support Ratio:/).parentElement as HTMLElement
+    const meta = metaOf()
     expect(within(meta).queryByText('—')).not.toBeInTheDocument()
-    expect(meta.lastElementChild).toHaveTextContent(/Support Ratio:/)
+    const time = meta.querySelector('time')
+    expect(time).toHaveAttribute('datetime', '2026-01-01T00:00:00Z')
+    expect(meta.textContent).toMatch(/No region.*Self Managed.*Ratio .*Updated/)
   })
 
   // Landing-spotted: the header printed the raw enums "PlanManaged" and "TwoToOne".
@@ -452,18 +459,18 @@ describe('ParticipantDetailPage — header meta row', () => {
     })
     renderAt('participant-1')
 
-    const meta = screen.getByText(/Support Ratio:/)
-    expect(meta).toHaveTextContent('Gold Coast · Plan Managed · Support Ratio: 2:1')
+    expect(metaOf()).toHaveTextContent('Gold Coast')
+    expect(metaOf()).toHaveTextContent('Plan Managed')
+    expect(screen.getByText('Ratio 2:1')).toBeInTheDocument()
     expect(screen.queryByText(/PlanManaged|TwoToOne/)).not.toBeInTheDocument()
   })
 
-  it('still shows a chip per service stream at the end of the meta row', () => {
+  it('still shows a chip per service stream in the meta row', () => {
     mockUseParticipant.mockReturnValue({ data: makeParticipant({ serviceStreams: 'STA,InHomeSupport' }), isLoading: false })
     renderAt('participant-1')
 
-    const meta = screen.getByText(/Support Ratio:/).parentElement as HTMLElement
-    expect(within(meta).getByText('STA')).toBeInTheDocument()
-    expect(within(meta).getByText('In-Home Support')).toBeInTheDocument()
+    expect(within(metaOf()).getByText('STA')).toBeInTheDocument()
+    expect(within(metaOf()).getByText('In-Home Support')).toBeInTheDocument()
   })
 })
 
@@ -500,7 +507,7 @@ describe('ParticipantDetailPage — PD-1 header warning pill', () => {
     mockUseParticipant.mockReturnValue({ data: makeParticipant({ isDraft: true }), isLoading: false })
     renderAt('participant-1')
 
-    expect(screen.queryByRole('link', { name: /^edit$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'More actions' })).not.toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent(/this participant is a draft/i)
     expect(screen.queryByRole('link', { name: /resume intake/i })).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Sophie Brown' })).toBeInTheDocument()
@@ -513,27 +520,28 @@ describe('ParticipantDetailPage — PD-1 header warning pill', () => {
     renderAt('participant-1')
 
     expect(screen.getByRole('status')).toHaveTextContent(/this participant is a draft/i)
-    expect(screen.queryByRole('link', { name: /^edit$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'More actions' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /resume intake/i })).not.toBeInTheDocument()
   })
 
-  it.each(['Admin', 'Coordinator'])('offers %s Edit and Resume intake on a draft', role => {
+  it.each(['Admin', 'Coordinator'])('offers %s the wizard (in More actions) and Resume intake on a draft', async role => {
     setUserRole(role)
     mockUseParticipant.mockReturnValue({ data: makeParticipant({ isDraft: true }), isLoading: false })
     renderAt('participant-1')
 
-    expect(screen.getByRole('link', { name: /^edit$/i })).toBeInTheDocument()
+    await userEvent.setup().click(screen.getByRole('button', { name: 'More actions' }))
+    expect(screen.getByRole('option', { name: /edit full profile/i })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /resume intake/i })).toBeInTheDocument()
   })
 
-  it('keeps the draft banner and its Resume intake action regardless of the button cluster width (Edit button present, PDF download pending)', () => {
+  it('keeps the draft banner and its Resume intake action regardless of the button cluster width (More menu present, PDF download pending)', () => {
     setUserRole('Admin')
     mockUseDownloadIntakeFormPdf.mockReturnValue({ mutate: vi.fn(), isPending: true, isError: false })
     mockUseParticipant.mockReturnValue({ data: makeParticipant({ isDraft: true }), isLoading: false })
     renderAt('participant-1')
 
-    // Widened cluster: Edit button shown, one download button in its longer "Preparing…" state.
-    expect(screen.getByRole('link', { name: /^edit$/i })).toBeInTheDocument()
+    // Widened cluster: the More menu shown, one download button in its longer "Preparing…" state.
+    expect(screen.getByRole('button', { name: 'More actions' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /preparing/i })).toBeInTheDocument()
 
     expect(screen.getByRole('status')).toHaveTextContent(/this participant is a draft/i)
@@ -740,77 +748,68 @@ describe('ParticipantDetailPage — cg04 Task 9 caregiver link control', () => {
 
 // PP-39 — the History tab (and its content) must be gated on usePermissions()'s isAdmin/isSuperAdmin,
 // not a raw localStorage-derived role check, so SuperAdmin also sees it.
-describe('ParticipantDetailPage — PP-39 History tab permissions', () => {
-  it('shows the History tab for a SuperAdmin role', () => {
-    setUserRole('SuperAdmin')
+describe('ParticipantDetailPage — PP-39 History section permissions', () => {
+  it.each(['SuperAdmin', 'Admin'])('shows the History section at the end of Notes & records for %s', role => {
+    setUserRole(role)
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
-    renderAt('participant-1')
+    renderAtTab('participant-1', 'records')
 
-    expect(screen.getByRole('tab', { name: 'History' })).toBeInTheDocument()
+    expect(screen.getByTestId('history-tab')).toBeInTheDocument()
+    expect(document.getElementById('history')).toContainElement(screen.getByTestId('history-tab'))
   })
 
-  it('shows the History tab for an Admin role', () => {
-    setUserRole('Admin')
+  it.each(['SupportWorker', 'Coordinator'])('hides the History section for %s', role => {
+    setUserRole(role)
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
-    renderAt('participant-1')
+    renderAtTab('participant-1', 'records')
 
-    expect(screen.getByRole('tab', { name: 'History' })).toBeInTheDocument()
-  })
-
-  it('hides the History tab for a SupportWorker role', () => {
-    setUserRole('SupportWorker')
-    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
-    renderAt('participant-1')
-
-    expect(screen.queryByRole('button', { name: 'History' })).not.toBeInTheDocument()
+    expect(screen.queryByTestId('history-tab')).not.toBeInTheDocument()
+    expect(document.getElementById('history')).toBeNull()
   })
 })
 
-// Shift-completion design spec §4 "Claims entry point" — the Claims tab is gated on
+// Shift-completion design spec §4 "Claims entry point" — the Claims section is gated on
 // canAccessPage('claims'), which SupportWorker's restricted page set excludes (see
-// SUPPORT_WORKER_PAGES in lib/permissions.ts), unlike every other role.
-describe('ParticipantDetailPage — Claims tab', () => {
-  it('shows the Claims tab and deep-links to it via ?tab=claims for a Coordinator', () => {
+// SUPPORT_WORKER_PAGES in lib/permissions.ts), unlike every other role. It lives on Funding & claims.
+describe('ParticipantDetailPage — Claims section', () => {
+  it('shows Funding & claims and the Claims section there for a Coordinator', () => {
     setUserRole('Coordinator')
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
-    renderAtTab('participant-1', 'claims')
+    renderAtTab('participant-1', 'funding')
 
-    expect(screen.getByRole('tab', { name: 'Claims' })).toBeInTheDocument()
-    expect(screen.getByTestId('claims-tab')).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Funding & claims' })).toBeInTheDocument()
+    expect(document.getElementById('claims')).toContainElement(screen.getByTestId('claims-tab'))
   })
 
-  it('hides the Claims tab for a SupportWorker role', () => {
+  it('has no Funding & claims tab for a SupportWorker, and ?tab=funding reads as Overview', () => {
     setUserRole('SupportWorker')
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
-    renderAtTab('participant-1', 'claims')
+    renderAtTab('participant-1', 'funding')
 
-    expect(screen.queryByRole('button', { name: 'Claims' })).not.toBeInTheDocument()
-    // Same "deep-linked to a tab this role can't see" behaviour as the pre-existing History tab
-    // (PP-39 above): the tab content is simply not rendered, matching that established pattern.
+    expect(screen.queryByRole('tab', { name: /Funding & claims/ })).not.toBeInTheDocument()
     expect(screen.queryByTestId('claims-tab')).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')
   })
 })
 
-// Connection map item 12 — the Rostering tab is gated on canAccessPage('rostering'), which
-// SupportWorker's restricted page set excludes (see SUPPORT_WORKER_PAGES in lib/permissions.ts),
-// same gating pattern as the Claims tab above.
-describe('ParticipantDetailPage — Rostering tab', () => {
-  it('shows the Rostering tab and deep-links to it via ?tab=rostering for a Coordinator', () => {
+// Connection map item 12 — the Rostering section is gated on canAccessPage('rostering'), which
+// SupportWorker's restricted page set excludes, same gating pattern as the Claims section above. It lives on People & roster.
+describe('ParticipantDetailPage — Rostering section', () => {
+  it('shows the Rostering section on People & roster for a Coordinator', () => {
     setUserRole('Coordinator')
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
-    renderAtTab('participant-1', 'rostering')
+    renderAtTab('participant-1', 'people')
 
-    expect(screen.getByRole('tab', { name: 'Rostering' })).toBeInTheDocument()
-    expect(screen.getByTestId('rostering-tab')).toBeInTheDocument()
+    expect(document.getElementById('roster')).toContainElement(screen.getByTestId('rostering-tab'))
   })
 
-  it('hides the Rostering tab for a SupportWorker role', () => {
+  it('hides the Rostering section for a SupportWorker role', () => {
     setUserRole('SupportWorker')
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
-    renderAtTab('participant-1', 'rostering')
+    renderAtTab('participant-1', 'people')
 
-    expect(screen.queryByRole('button', { name: 'Rostering' })).not.toBeInTheDocument()
     expect(screen.queryByTestId('rostering-tab')).not.toBeInTheDocument()
+    expect(document.getElementById('roster')).toBeNull()
   })
 })
 
@@ -829,7 +828,7 @@ describe('ParticipantDetailPage — Documents menu', () => {
     return render(
       <MemoryRouter initialEntries={['/participants/participant-1']}>
         <Routes>
-          <Route path="/participants/:id" element={<ParticipantDetailPage />} />
+          <Route path="/participants/:id" element={<PageWithClient />} />
           <Route path="/participants/:id/agreement-draft" element={<div data-testid="agreement-draft-route" />} />
         </Routes>
       </MemoryRouter>,
@@ -847,7 +846,7 @@ describe('ParticipantDetailPage — Documents menu', () => {
     idleDownloads()
   })
 
-  it('holds the PDFs, Agreement draft and the caregiver link in one secondary-look menu, and keeps Edit the one primary', () => {
+  it('holds the PDFs, Agreement draft and the caregiver link in one secondary-look menu, beside a secondary More actions menu (no filled primary)', () => {
     renderAt('participant-1')
 
     expect(screen.getByRole('button', { name: 'Documents' })).toHaveClass('bg-[var(--color-card)]', 'border')
@@ -856,7 +855,8 @@ describe('ParticipantDetailPage — Documents menu', () => {
       expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
     }
     expect(screen.queryByRole('link', { name: /agreement draft/i })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /^edit$/i })).toHaveAttribute('href', '/participants/participant-1/profile')
+    expect(screen.getByRole('button', { name: 'More actions' })).not.toHaveClass('bg-[var(--color-primary)]')
+    expect(screen.queryByRole('link', { name: /^edit$/i })).not.toBeInTheDocument()
   })
 
   // Round 1b (review F18, decided): an agreement draft carries money, which is never visible to ReadOnly or SupportWorker (the API refuses them its GETs). ReadOnly satisfies canWrite, so it was offered the page.
@@ -1005,11 +1005,12 @@ describe('ParticipantDetailPage — coarse-pointer targets and empty tables', ()
 
   it('collapses a zero-row Health Conditions / ADL table to a strip (header hidden, py-5 message cell)', () => {
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
-    renderAt('participant-1')
-
-    for (const testId of ['health-conditions-section', 'adl-assessments-section']) {
+    for (const [tab, testId] of [['health', 'health-conditions-section'], ['daily', 'adl-assessments-section']]) {
+      const { unmount } = renderAtTab('participant-1', tab)
       const wrapper = screen.getByTestId(testId).parentElement!
-      expect(wrapper).toHaveClass('col-span-full', '[&_table:has(td[colspan])_thead]:hidden', '[&_td[colspan]]:py-5')
+      expect(wrapper).toHaveClass('[&_table:has(td[colspan])_thead]:hidden', '[&_td[colspan]]:py-5')
+      expect(wrapper.parentElement).toHaveClass('col-span-full')
+      unmount()
     }
   })
 })
@@ -1060,7 +1061,7 @@ describe('ParticipantDetailPage — the tab lives in the URL (useTabParam)', () 
       <MemoryRouter initialEntries={[url]}>
         <LocationProbe onChange={value => { current = value }} />
         <Routes>
-          <Route path="/participants/:id" element={<ParticipantDetailPage />} />
+          <Route path="/participants/:id" element={<PageWithClient />} />
         </Routes>
       </MemoryRouter>,
     )
@@ -1074,33 +1075,33 @@ describe('ParticipantDetailPage — the tab lives in the URL (useTabParam)', () 
   it('writes ?tab= when a tab is chosen, and the chosen tab is the selected one', async () => {
     const user = userEvent.setup()
     const page = renderWithUrl('/participants/x-1')
-    await user.click(screen.getByRole('tab', { name: 'Bookings' }))
-    expect(page.url()).toBe('/participants/x-1?tab=bookings')
-    expect(screen.getByRole('tab', { name: 'Bookings' })).toHaveAttribute('aria-selected', 'true')
+    await user.click(screen.getByRole('tab', { name: /^Daily support/ }))
+    expect(page.url()).toBe('/participants/x-1?tab=daily')
+    expect(screen.getByRole('tab', { name: /^Daily support/ })).toHaveAttribute('aria-selected', 'true')
   })
 
   it('keeps the tab across a reload or a shared link: a fresh render of the written URL lands on the same tab', async () => {
     const user = userEvent.setup()
     const first = renderWithUrl('/participants/x-1')
-    await user.click(screen.getByRole('tab', { name: 'Bookings' }))
+    await user.click(screen.getByRole('tab', { name: /^Daily support/ }))
     const written = first.url()
     first.unmount()
     renderWithUrl(written)
-    expect(screen.getByRole('tab', { name: 'Bookings' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: /^Daily support/ })).toHaveAttribute('aria-selected', 'true')
   })
 
   it('drops the param when the default tab is chosen, and every other param survives both ways', async () => {
     const user = userEvent.setup()
-    const page = renderWithUrl('/participants/x-1?from=dash&tab=bookings')
-    await user.click(screen.getByRole('tab', { name: 'Details' }))
+    const page = renderWithUrl('/participants/x-1?from=dash&tab=daily')
+    await user.click(screen.getByRole('tab', { name: 'Overview' }))
     expect(page.url()).toBe('/participants/x-1?from=dash')
-    await user.click(screen.getByRole('tab', { name: 'Bookings' }))
-    expect(page.url()).toBe('/participants/x-1?from=dash&tab=bookings')
+    await user.click(screen.getByRole('tab', { name: /^Daily support/ }))
+    expect(page.url()).toBe('/participants/x-1?from=dash&tab=daily')
   })
 
   it('reads an unknown ?tab= as the default tab', () => {
     renderWithUrl('/participants/x-1?tab=bogus')
-    expect(screen.getByRole('tab', { name: 'Details' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')
   })
 })
 
@@ -1110,6 +1111,8 @@ describe('ParticipantDetailPage — the tab lives in the URL (useTabParam)', () 
 describe('ParticipantDetailPage — readiness chip in the header', () => {
   const ISSUES = ['Intake not complete', 'Onboarding not complete: service type']
   const WARNING = 'Not ready: Intake not complete · Onboarding not complete: service type'
+  // PageHeaderMeta wraps each fact in its own span; the chip is the very next fact after the status badge.
+  const itemOf = (el: HTMLElement) => { let n = el; while (n.parentElement && !n.parentElement.classList.contains('gap-y-1')) n = n.parentElement; return n }
 
   it('shows the chip beside the status badge when the server lists issues', () => {
     mockUseParticipant.mockReturnValue({ data: makeParticipant({ isActive: true, readinessIssues: ISSUES }), isLoading: false })
@@ -1118,10 +1121,7 @@ describe('ParticipantDetailPage — readiness chip in the header', () => {
     const chip = screen.getByText(WARNING).closest('[title]') as HTMLElement
     expect(chip).toHaveAttribute('title', WARNING)
     for (const cls of TONE.warning.solid.split(' ')) expect(chip).toHaveClass(cls)
-    // In the same meta row as the Active badge, straight after it.
-    const badge = screen.getByText('Active')
-    expect(chip.parentElement).toBe(badge.parentElement)
-    expect(badge.nextElementSibling).toBe(chip)
+    expect(itemOf(screen.getByText('Active')).nextElementSibling).toBe(itemOf(chip))
     // Not an alert, and the page's actions are untouched by it.
     expect(chip.closest('[role="alert"]')).toBeNull()
     expect(screen.getByRole('heading', { level: 1, name: 'Sophie Brown' })).toBeInTheDocument()
@@ -1131,8 +1131,8 @@ describe('ParticipantDetailPage — readiness chip in the header', () => {
     mockUseParticipant.mockReturnValue({ data: makeParticipant({ isActive: false, readinessIssues: ['No signed service agreement'] }), isLoading: false })
     renderAt('participant-1')
 
-    const badge = screen.getByText('Inactive')
-    expect(badge.nextElementSibling).toBe(screen.getByText('Not ready: No signed service agreement').closest('[title]'))
+    const chip = screen.getByText('Not ready: No signed service agreement').closest('[title]') as HTMLElement
+    expect(itemOf(screen.getByText('Inactive')).nextElementSibling).toBe(itemOf(chip))
   })
 
   it.each([
@@ -1147,63 +1147,73 @@ describe('ParticipantDetailPage — readiness chip in the header', () => {
   })
 })
 
-// L5-05: the tab keys were a static whitelist while the strip and the panels are role-gated, so ?tab=history (or claims, rostering) for a role
-// without that tab matched a key but showed no tab: nothing selected, an empty body. A key the role cannot see reads as the default tab.
+// L5-05: a tab key the role cannot see reads as the default tab, never a selected-nothing strip. Under the seven-tab layout only Funding & claims is role-gated;
+// History, Claims and Rostering are sections now, so their old keys are redirected (participantTabs.test.ts) and a role without them lands on the tab that would hold them.
 describe('ParticipantDetailPage — a role-gated tab key in the URL', () => {
   const selectedTab = () => screen.getAllByRole('tab').filter(tab => tab.getAttribute('aria-selected') === 'true')
 
-  it.each(['claims', 'rostering', 'history'])('reads ?tab=%s as Details for a SupportWorker, who has no such tab', (tab) => {
+  it('reads ?tab=funding as Overview for a SupportWorker, who has no such tab', () => {
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
-    renderAtTab('participant-1', tab)
+    renderAtTab('participant-1', 'funding')
 
-    expect(selectedTab().map(t => t.textContent)).toEqual([expect.stringMatching(/^Details/)])
+    expect(selectedTab().map(t => t.textContent)).toEqual(['Overview'])
   })
 
-  it('reads ?tab=history as Details for a Coordinator (History is Admin only), and still opens a tab the Coordinator has', () => {
+  it('opens a tab the Coordinator has, and keeps the History section out of Notes & records', () => {
     setUserRole('Coordinator')
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
-    const { unmount } = renderAtTab('participant-1', 'history')
+    const { unmount } = renderAtTab('participant-1', 'records')
 
-    expect(selectedTab().map(t => t.textContent)).toEqual([expect.stringMatching(/^Details/)])
+    expect(selectedTab().map(t => t.textContent)).toEqual([expect.stringMatching(/^Notes & records/)])
+    expect(screen.queryByTestId('history-tab')).not.toBeInTheDocument()
     unmount()
 
-    renderAtTab('participant-1', 'claims')
-    expect(selectedTab().map(t => t.textContent)).toEqual([expect.stringMatching(/^Claims/)])
+    renderAtTab('participant-1', 'funding')
+    expect(selectedTab().map(t => t.textContent)).toEqual([expect.stringMatching(/^Funding & claims/)])
   })
 })
 
-// Budget phase 1: the Funding tab holds a participant's plan budget, which is money. It is for the roles the funding API admits (SuperAdmin, Admin, Coordinator) and never rides on canWrite.
-describe('ParticipantDetailPage — Funding tab', () => {
+// Budget phase 1: the plan budget is money. It is for the roles the funding API admits (SuperAdmin, Admin, Coordinator) and never rides on canWrite.
+describe('ParticipantDetailPage — Funding & claims tab', () => {
   const selectedTab = () => screen.getAllByRole('tab').filter(tab => tab.getAttribute('aria-selected') === 'true')
 
-  it.each(['Coordinator', 'Admin', 'SuperAdmin'])('shows the Funding tab to a %s, and opens it from ?tab=funding with the participant and their plan type', role => {
+  it.each(['Coordinator', 'Admin', 'SuperAdmin'])('shows Funding & claims to a %s, and opens it from ?tab=funding with the participant and their plan type', role => {
     setUserRole(role)
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
     renderAtTab('participant-1', 'funding')
 
-    expect(screen.getByRole('tab', { name: 'Funding' })).toBeInTheDocument()
-    expect(selectedTab().map(t => t.textContent)).toEqual([expect.stringMatching(/^Funding/)])
+    expect(screen.getByRole('tab', { name: 'Funding & claims' })).toBeInTheDocument()
+    expect(selectedTab().map(t => t.textContent)).toEqual([expect.stringMatching(/^Funding & claims/)])
     const tab = screen.getByTestId('funding-tab')
     expect(tab).toHaveAttribute('data-participant', 'participant-1')
     expect(tab).toHaveAttribute('data-plan-type', makeParticipant().planType)
   })
 
-  it.each(['SupportWorker', 'ReadOnly'])('has no Funding tab for a %s (neither may see money), and reads ?tab=funding as Details', role => {
-    setUserRole(role)
+  it('has no Funding & claims tab for a SupportWorker (neither may see money), and reads ?tab=funding as Overview', () => {
+    setUserRole('SupportWorker')
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
     renderAtTab('participant-1', 'funding')
 
-    expect(screen.queryByRole('tab', { name: 'Funding' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: /Funding & claims/ })).not.toBeInTheDocument()
     expect(screen.queryByTestId('funding-tab')).not.toBeInTheDocument()
-    expect(selectedTab().map(t => t.textContent)).toEqual([expect.stringMatching(/^Details/)])
+    expect(selectedTab().map(t => t.textContent)).toEqual(['Overview'])
   })
 
-  it('does not mount the Funding tab on another tab', () => {
+  it('never shows the plan budget to a ReadOnly, who can only reach the Claims section', () => {
+    setUserRole('ReadOnly')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    renderAtTab('participant-1', 'funding')
+
+    expect(screen.queryByTestId('funding-tab')).not.toBeInTheDocument()
+    expect(document.getElementById('plan-budget')).toBeNull()
+  })
+
+  it('does not mount the Funding section on another tab', () => {
     setUserRole('Coordinator')
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
     renderAt('participant-1')
 
-    expect(screen.getByRole('tab', { name: 'Funding' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Funding & claims' })).toBeInTheDocument()
     expect(screen.queryByTestId('funding-tab')).not.toBeInTheDocument()
   })
 })
@@ -1275,12 +1285,14 @@ describe('ParticipantDetailPage — a refused caregiver link Generate', () => {
 // VD1 design review: a one-row scrolling strip hid Funding, Rostering and History at 1440 with no cue on macOS or iPad. From md up
 // the strip wraps, so every tab stays on screen; below md it is the default one scrolling row.
 describe('ParticipantDetailPage — every tab visible from md up', () => {
-  it('renders all twelve Admin tabs in a strip that wraps from md up', () => {
+  it('renders all seven tabs for an Admin in one row that scrolls sideways, never wrapping to a second row', () => {
     setUserRole('Admin')
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
     renderAt('participant-1')
-    expect(screen.getAllByRole('tab')).toHaveLength(12)
-    expect(screen.getByRole('tablist', { name: 'Participant detail sections' })).toHaveClass('md:flex-wrap')
+    expect(screen.getAllByRole('tab').map(t => t.textContent?.replace(/d+$/, '').trim())).toEqual([
+      'Overview', 'About', 'Health & safety', 'Daily support', 'People & roster', 'Funding & claims', 'Notes & records',
+    ])
+    expect(screen.getByRole('tablist', { name: 'Participant sections' })).not.toHaveClass('md:flex-wrap')
   })
 })
 
@@ -1327,7 +1339,7 @@ describe('ParticipantDetailPage — Review caregiver form', () => {
     render(
       <MemoryRouter initialEntries={['/participants/participant-1']}>
         <Routes>
-          <Route path="/participants/:id" element={<ParticipantDetailPage />} />
+          <Route path="/participants/:id" element={<PageWithClient />} />
           <Route path="/caregiver-submissions/:id" element={<div data-testid="review-route" />} />
         </Routes>
       </MemoryRouter>,
@@ -1348,13 +1360,372 @@ describe('ParticipantDetailPage — Review caregiver form', () => {
   })
 })
 
+// ── Slice 1: seven tabs, the safety header, the Overview card, old-key redirects ─────────────────────────────────────────────────────
+function ProbeAndRoutes({ onChange }: { onChange: (v: { path: string; type: string }) => void }) {
+  const { search, hash } = useLocation()
+  const type = useNavigationType()
+  onChange({ path: `${search}${hash}`, type })
+  return null
+}
+
+function renderWithProbe(url: string) {
+  let current = { path: '', type: '' }
+  const view = render(
+    <MemoryRouter initialEntries={[url]}>
+      <ProbeAndRoutes onChange={v => { current = v }} />
+      <Routes>
+        <Route path="/participants/:id" element={<PageWithClient />} />
+        <Route path="/participants/:id/profile" element={<div data-testid="profile-route" />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+  return { ...view, probe: () => current }
+}
+
+const selectedTabName = () => screen.getAllByRole('tab').filter(t => t.getAttribute('aria-selected') === 'true').map(t => t.textContent)
+const before = (a: Element, b: Element) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
+
+describe('ParticipantDetailPage — seven tabs (slice 1)', () => {
+  beforeEach(() => {
+    Element.prototype.scrollIntoView = vi.fn()
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    mockDeleteMutate.mockReset()
+    mockNotes.mockReturnValue({ data: [] })
+  })
+
+  it('T4: ?tab=funding as Admin is a current key: Funding & claims is selected and nothing is rewritten', () => {
+    setUserRole('Admin')
+    const { probe } = renderWithProbe('/participants/p-1?tab=funding')
+    expect(selectedTabName()).toEqual([expect.stringMatching(/^Funding & claims/)])
+    expect(probe().path).toBe('?tab=funding')
+  })
+
+  it('T5: a hash on a folded card opens the fold, scrolls once and focuses inside the section', async () => {
+    setUserRole('Coordinator')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ medicareNumber: undefined }), isLoading: false })
+    renderWithProbe('/participants/p-1?tab=about#key-identifiers')
+    const section = document.getElementById('key-identifiers')!
+    await waitFor(() => expect(section.closest('details')).toHaveAttribute('open'))
+    await waitFor(() => expect(section.contains(document.activeElement)).toBe(true))
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(1)
+  })
+
+  it('T5b: the 3 s hold on a hash target lets go on pointerdown (scrollbar drag, click), and also on wheel, touchstart and keydown', async () => {
+    const callbacks: (() => void)[] = []
+    class RO { constructor(cb: () => void) { callbacks.push(cb) } observe() {} disconnect() {} }
+    vi.stubGlobal('ResizeObserver', RO)
+    try {
+      for (const ev of ['pointerdown', 'wheel', 'touchstart', 'keydown']) {
+        callbacks.length = 0
+        vi.mocked(Element.prototype.scrollIntoView).mockClear()
+        setUserRole('Coordinator')
+        mockUseParticipant.mockReturnValue({ data: makeParticipant({ medicareNumber: undefined }), isLoading: false })
+        const view = renderWithProbe('/participants/p-1?tab=about#key-identifiers')
+        await waitFor(() => expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(1))
+        callbacks.forEach(cb => cb()) // the page grew while held: snaps back to the target
+        expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(2)
+        window.dispatchEvent(new Event(ev))
+        callbacks.forEach(cb => cb()) // the person took over: no more snapping
+        expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(2)
+        view.unmount()
+      }
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('T6: ?tab=history is Notes & records#history, present and focused for Admin, absent without an error for a Coordinator', async () => {
+    setUserRole('Coordinator')
+    const first = renderWithProbe('/participants/p-1?tab=history')
+    await waitFor(() => expect(first.probe().path).toBe('?tab=records#history'))
+    expect(selectedTabName()).toEqual([expect.stringMatching(/^Notes & records/)])
+    expect(document.getElementById('history')).toBeNull()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    first.unmount()
+
+    setUserRole('Admin')
+    renderWithProbe('/participants/p-1?tab=history')
+    await waitFor(() => expect(document.getElementById('history')!.contains(document.activeElement)).toBe(true))
+  })
+
+  it.each(Object.entries(OLD_KEY_TARGET).filter(([k]) => k !== 'funding'))('T7: old key ?tab=%s lands on its new tab and section', async (key, target) => {
+    setUserRole('Admin')
+    const { probe } = renderWithProbe(`/participants/p-1?tab=${key}`)
+    const want = `${target.tab === 'overview' ? '' : `?tab=${target.tab}`}${target.hash ? `#${target.hash}` : ''}`
+    await waitFor(() => expect(probe().path).toBe(want))
+    expect(probe().type).toBe('REPLACE')
+    const tabName = NEW_TABS.find(t => t.id === target.tab)!.label
+    expect(selectedTabName()).toEqual([expect.stringMatching(new RegExp(`^${tabName}`))])
+    if (target.hash) await waitFor(() => expect(document.getElementById(target.hash!)!.contains(document.activeElement)).toBe(true))
+  })
+
+  it('T8: ?tab=claims as Support Worker has no Funding & claims tab and reads as Overview with no ?tab=', async () => {
+    setUserRole('SupportWorker')
+    const { probe } = renderWithProbe('/participants/p-1?tab=claims')
+    await waitFor(() => expect(selectedTabName()).toEqual(['Overview']))
+    expect(screen.queryByRole('tab', { name: /Funding & claims/ })).not.toBeInTheDocument()
+    expect(probe().path).not.toContain('tab=')
+  })
+
+  it('T9: the strip has seven icon-free tabs in order, a count noun and badge only when the count is above zero, six for a Support Worker', () => {
+    setUserRole('SuperAdmin')
+    mockNotes.mockReturnValue({ data: [{ isArchived: false }, { isArchived: false }, { isArchived: false }, { isArchived: true }] })
+    renderAt('participant-1')
+    const tabs = screen.getAllByRole('tab')
+    expect(tabs).toHaveLength(7)
+    for (const t of tabs) expect(t.querySelector('svg')).toBeNull()
+    expect(screen.getByRole('tab', { name: /Notes & records +, 3 notes/ })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Health & safety' })).toBeInTheDocument()
+    cleanup()
+
+    setUserRole('SupportWorker')
+    renderAt('participant-1')
+    expect(screen.getAllByRole('tab')).toHaveLength(6)
+  })
+
+  it('T10: every card keeps a section id on the tab that owns it, and #risks holds both the summary and the entries', () => {
+    setUserRole('Admin')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ serviceStreams: 'CommunityAccessDailyLiving', behaviourRiskSummary: 'x' }), isLoading: false })
+    const inventory: Record<string, string[]> = {
+      overview: ['before-you-start'],
+      about: ['identity', 'home-and-living', 'ndis-plan', 'key-identifiers', 'culture-and-rights', 'about-me'],
+      health: ['medical', 'health-conditions', 'medications', 'behaviour-and-communication', 'community-access', 'risks', 'restrictive-practices'],
+      daily: ['support-profile', 'daily-living', 'routines', 'meals'],
+      people: ['contacts', 'roster', 'trips'],
+      funding: ['plan-budget', 'claims'],
+      records: ['notes', 'consents', 'history'],
+    }
+    for (const [tab, ids] of Object.entries(inventory)) {
+      const { unmount } = renderAtTab('participant-1', tab)
+      for (const id of ids) expect(document.getElementById(id), `${tab}#${id}`).not.toBeNull()
+      if (tab === 'health') {
+        const risks = document.getElementById('risks')!
+        expect(within(risks).getByRole('heading', { name: 'Risks & Hazards Summary' })).toBeInTheDocument()
+        expect(within(risks).getByTestId('risk-entries-section')).toBeInTheDocument()
+      }
+      unmount()
+    }
+  })
+
+  describe('T11: critical alerts', () => {
+    const critical = (n: number) => Array.from({ length: n }, (_, i) => ({ type: 'c' + i, severity: 'Critical', message: `Critical thing ${i}`, deepLinkTab: 'details', linkTo: null }))
+    const warning = { type: 'w', severity: 'Warning', message: 'Warning thing', deepLinkTab: 'routines', linkTo: null }
+
+    it.each(['records', 'about'])('shows the critical alert above the tab strip on %s and keeps the warning off that tab', tab => {
+      setUserRole('Admin')
+      mockUseParticipantAlerts.mockReturnValue({ data: { alerts: [...critical(1), warning] } })
+      renderAtTab('participant-1', tab)
+      const row = screen.getByText('Critical thing 0').closest('[role="alert"]')!
+      expect(before(row, screen.getByRole('tablist'))).toBe(true)
+      expect(screen.queryByText('Warning thing')).not.toBeInTheDocument()
+    })
+
+    it('on Overview shows the critical alert once and the warning too', () => {
+      setUserRole('Admin')
+      mockUseParticipantAlerts.mockReturnValue({ data: { alerts: [...critical(1), warning] } })
+      renderAt('participant-1')
+      expect(screen.getAllByText('Critical thing 0')).toHaveLength(1)
+      expect(screen.getByText('Warning thing')).toBeInTheDocument()
+    })
+
+    it('shows all four critical alerts above the tab strip with no more-toggle', () => {
+      setUserRole('Admin')
+      mockUseParticipantAlerts.mockReturnValue({ data: { alerts: critical(4) } })
+      renderAtTab('participant-1', 'records')
+      for (let i = 0; i < 4; i++) expect(before(screen.getByText(`Critical thing ${i}`), screen.getByRole('tablist'))).toBe(true)
+      expect(screen.queryByText(/more alert/)).not.toBeInTheDocument()
+    })
+  })
+
+  it('T12: the draft banner is on Overview and not on About', () => {
+    setUserRole('Admin')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ isDraft: true }), isLoading: false })
+    const { unmount } = renderAt('participant-1')
+    expect(screen.getByRole('status')).toHaveTextContent(/draft/i)
+    unmount()
+    renderAtTab('participant-1', 'about')
+    expect(screen.queryByText(/this participant is a draft/i)).not.toBeInTheDocument()
+  })
+
+  describe('T13: the More menu', () => {
+    it('gives an Admin the wizard and Archive on an active participant, and no Restore', async () => {
+      setUserRole('Admin')
+      renderAt('participant-1')
+      await userEvent.setup().click(screen.getByRole('button', { name: 'More actions' }))
+      expect(screen.getByRole('option', { name: 'Edit full profile (wizard)' })).toBeInTheDocument()
+      expect(screen.getByRole('option', { name: 'Archive participant' })).toBeInTheDocument()
+      expect(screen.queryByRole('option', { name: 'Restore participant' })).not.toBeInTheDocument()
+    })
+
+    it('gives an Admin Restore and no Archive on an archived participant that is not a draft', async () => {
+      setUserRole('Admin')
+      mockUseParticipant.mockReturnValue({ data: makeParticipant({ isActive: false }), isLoading: false })
+      renderAt('participant-1')
+      await userEvent.setup().click(screen.getByRole('button', { name: 'More actions' }))
+      expect(screen.getByRole('option', { name: 'Restore participant' })).toBeInTheDocument()
+      expect(screen.queryByRole('option', { name: 'Archive participant' })).not.toBeInTheDocument()
+    })
+
+    it('offers a Coordinator no Archive on an active draft (Onboarding owns that), and Archive on an active non-draft', async () => {
+      setUserRole('Coordinator')
+      mockUseParticipant.mockReturnValue({ data: makeParticipant({ isDraft: true, isActive: true }), isLoading: false })
+      const draft = renderAt('participant-1')
+      await userEvent.setup().click(screen.getByRole('button', { name: 'More actions' }))
+      expect(screen.getByRole('option', { name: 'Edit full profile (wizard)' })).toBeInTheDocument()
+      expect(screen.queryByRole('option', { name: 'Archive participant' })).not.toBeInTheDocument()
+      draft.unmount()
+
+      mockUseParticipant.mockReturnValue({ data: makeParticipant({ isDraft: false, isActive: true }), isLoading: false })
+      renderAt('participant-1')
+      await userEvent.setup().click(screen.getByRole('button', { name: 'More actions' }))
+      expect(screen.getByRole('option', { name: 'Archive participant' })).toBeInTheDocument()
+    })
+
+    it('keeps the "More actions" name when the label collapses to an icon below sm: the text is sr-only there and visible from sm', () => {
+      setUserRole('Admin')
+      renderAt('participant-1')
+      const trigger = screen.getByRole('button', { name: 'More actions' })
+      const text = within(trigger).getByText('More actions')
+      expect(text).toHaveClass('sr-only', 'sm:not-sr-only')
+      expect(trigger).toHaveClass('max-sm:w-[var(--control-h)]', 'max-sm:px-0')
+    })
+
+    it.each(['SupportWorker', 'ReadOnly'])('has no More actions for %s', role => {
+      setUserRole(role)
+      renderAt('participant-1')
+      expect(screen.queryByRole('button', { name: 'More actions' })).not.toBeInTheDocument()
+    })
+
+    it('opens the profile wizard from the wizard item', async () => {
+      setUserRole('Admin')
+      renderWithProbe('/participants/p-1')
+      const user = userEvent.setup()
+      await user.click(screen.getByRole('button', { name: 'More actions' }))
+      await user.click(screen.getByRole('option', { name: 'Edit full profile (wizard)' }))
+      expect(screen.getByTestId('profile-route')).toBeInTheDocument()
+    })
+  })
+
+  describe('T14: archive from the More menu', () => {
+    async function archive() {
+      const user = userEvent.setup()
+      await user.click(screen.getByRole('button', { name: 'More actions' }))
+      await user.click(screen.getByRole('option', { name: 'Archive participant' }))
+      await user.click(screen.getByRole('button', { name: 'Archive' }))
+    }
+
+    it('calls the delete with the participant id on confirm', async () => {
+      setUserRole('Admin')
+      renderAt('participant-1')
+      await archive()
+      expect(mockDeleteMutate).toHaveBeenCalledWith('participant-1', expect.anything())
+    })
+
+    it('puts a refusal above the tab strip', async () => {
+      setUserRole('Admin')
+      mockDeleteMutate.mockImplementation((_id: string, opts: { onError: (e: Error) => void }) => opts.onError(new Error('Not allowed')))
+      renderAt('participant-1')
+      await archive()
+      const notice = await screen.findByText(/Not allowed|Could not archive/)
+      expect(before(notice, screen.getByRole('tablist'))).toBe(true)
+    })
+  })
+
+  describe('T15: funding gates', () => {
+    it('shows the plan budget and the claims to an Admin', () => {
+      setUserRole('Admin')
+      renderAtTab('participant-1', 'funding')
+      expect(document.getElementById('plan-budget')).not.toBeNull()
+      expect(document.getElementById('claims')).not.toBeNull()
+    })
+
+    it('shows ReadOnly no plan budget, and a Support Worker no Funding & claims tab', () => {
+      setUserRole('ReadOnly')
+      const { unmount } = renderAtTab('participant-1', 'funding')
+      expect(document.getElementById('plan-budget')).toBeNull()
+      unmount()
+      setUserRole('SupportWorker')
+      renderAtTab('participant-1', 'funding')
+      expect(screen.queryByRole('tab', { name: /Funding & claims/ })).not.toBeInTheDocument()
+    })
+  })
+
+  it('T16: the header has no Edit, reads Ratio, carries the updated time and links each flag to its section', () => {
+    setUserRole('Admin')
+    mockUseParticipant.mockReturnValue({
+      data: makeParticipant({ supportRatio: 'OneToTwo', updatedAt: '2026-01-01T00:00:00Z', isAnaphylaxisRisk: true, allergiesDetail: 'Nil' }),
+      isLoading: false,
+    })
+    renderAt('participant-1')
+    const banner = document.body
+    expect(within(banner).queryByRole('link', { name: /^Edit$/ })).not.toBeInTheDocument()
+    expect(within(banner).queryByRole('button', { name: /^Edit$/ })).not.toBeInTheDocument()
+    expect(screen.getByText('Ratio 1:2')).toBeInTheDocument()
+    expect(screen.queryByText(/Support Ratio:/)).not.toBeInTheDocument()
+    expect(document.querySelector('time')).toHaveAttribute('datetime', '2026-01-01T00:00:00Z')
+    const flags = within(screen.getByRole('list', { name: 'Safety flags' }))
+    expect(flags.getByRole('link', { name: /Anaphylaxis risk/ })).toHaveAttribute('href', '/participants/participant-1?tab=health#medical')
+  })
+
+  describe('T17: Before you start', () => {
+    const answered = { isAnaphylaxisRisk: false, allergiesDetail: 'Nil', chokingRiskMealDetail: 'None', fallsRiskRating: 'Low', behaviourRiskRating: 'Low' } as const
+
+    it('names every unanswered safety field and never says all clear', () => {
+      renderAt('participant-1')
+      const card = document.getElementById('before-you-start')!
+      expect(card).toHaveTextContent('Not recorded: Anaphylaxis risk, Allergies, Choking risk, Falls risk and Behaviour risk')
+      expect(card).not.toHaveTextContent('No safety flags')
+    })
+
+    it('says only that the profile fields flag nothing when all are answered, even with active risk entries on Health', () => {
+      mockRisks.mockReturnValue({ data: [{ isActive: true }, { isActive: true }, { isActive: true }] })
+      mockUseParticipant.mockReturnValue({ data: makeParticipant(answered), isLoading: false })
+      renderAt('participant-1')
+      const card = document.getElementById('before-you-start')!
+      expect(card).toHaveTextContent('No safety flags in the profile fields.')
+      expect(card).not.toHaveTextContent('Nothing flagged')
+    })
+
+    it('shows the allergy text in full', () => {
+      mockUseParticipant.mockReturnValue({ data: makeParticipant({ ...answered, allergiesDetail: 'No known allergies except penicillin' }), isLoading: false })
+      renderAt('participant-1')
+      expect(document.getElementById('before-you-start')).toHaveTextContent('No known allergies except penicillin')
+    })
+  })
+
+  it('T20: the neutral "Safety details not recorded" chip links to Before you start on every tab, and is gone once all is answered', () => {
+    const { unmount } = renderAtTab('participant-1', 'about')
+    const chip = within(screen.getByRole('list', { name: 'Safety flags' })).getByRole('link', { name: 'Safety details not recorded' })
+    expect(chip).toHaveAttribute('href', '/participants/participant-1?tab=overview#before-you-start')
+    unmount()
+
+    mockUseParticipant.mockReturnValue({
+      data: makeParticipant({ isAnaphylaxisRisk: false, allergiesDetail: 'Nil', chokingRiskMealDetail: 'None', fallsRiskRating: 'Low', behaviourRiskRating: 'Low' }),
+      isLoading: false,
+    })
+    renderAtTab('participant-1', 'about')
+    expect(screen.queryByRole('list', { name: 'Safety flags' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Safety details not recorded')).not.toBeInTheDocument()
+  })
+
+  it('T21: Community Access has no wrapper without the stream, and the card sits in #community-access with it', () => {
+    renderAtTab('participant-1', 'health')
+    expect(document.getElementById('community-access')).toBeNull()
+    cleanup()
+
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ serviceStreams: 'CommunityAccessDailyLiving' }), isLoading: false })
+    renderAtTab('participant-1', 'health')
+    expect(within(document.getElementById('community-access')!).getByRole('heading', { name: 'Community Access' })).toBeInTheDocument()
+  })
+})
+
 describe('ParticipantDetailPage — masked IDs for screen readers', () => {
   it('keeps the masked NDIS number visible but speaks "Hidden, ends in 7" instead of bullets', () => {
     mockUseParticipant.mockReturnValue({
       data: makeParticipant({ ndisNumber: '••••••••7', maskedNdisNumber: '••••••••7', medicareNumber: '••••••••5' }),
       isLoading: false,
     })
-    renderAt('participant-1')
+    renderAtTab('participant-1', 'about')
 
     const visible = screen.getAllByText('••••••••7')[0]
     expect(visible).toHaveAttribute('aria-hidden', 'true')

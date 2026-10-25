@@ -43,10 +43,10 @@ public class WhatsNewSeedTests
     }
 
     [Fact]
-    public void ExactlyOneImportantEntry_DarkMode_ForEveryone()
+    public void ImportantEntries_AreDarkModeAndParticipantTabs_ForEveryone()
     {
-        var important = Assert.Single(WhatsNewSeed.All, i => i.Important);
-        Assert.Equal("2026-10-dark-mode", important.Key);
-        Assert.Equal(WhatsNewAudience.All, important.Roles);
+        var important = WhatsNewSeed.All.Where(i => i.Important).ToList();
+        Assert.Equal(new[] { "2026-10-dark-mode", "2026-10-participant-tabs" }, important.Select(i => i.Key));
+        Assert.All(important, i => Assert.Equal(WhatsNewAudience.All, i.Roles));
     }
 }
