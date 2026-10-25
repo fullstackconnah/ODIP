@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { ListTree } from 'lucide-react'
 import { Dropdown } from '@/components/Dropdown'
 
@@ -53,10 +53,11 @@ function useScrollSpy(ids: string[]): string | undefined {
 export function JumpPanel({ children }: { children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
+  const { search } = useLocation()
   const items = useJumpItems(ref)
   const current = useScrollSpy(items.map(i => i.id))
   const show = items.length >= MIN_ITEMS
-  const go = (id: string) => navigate({ hash: `#${id}` }, { replace: true })
+  const go = (id: string) => navigate({ search, hash: `#${id}` }, { replace: true })
 
   return (
     <div ref={ref} className="@container">

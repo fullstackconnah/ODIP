@@ -5,7 +5,8 @@ import { MemoryRouter, useLocation } from 'react-router-dom'
 import { JumpPanel } from './JumpTo'
 
 function Hash() {
-  return <p data-testid="hash">{useLocation().hash}</p>
+  const { hash, search } = useLocation()
+  return <><p data-testid="hash">{hash}</p><p data-testid="search">{search}</p></>
 }
 
 function renderPanel(ids: string[]) {
@@ -33,6 +34,14 @@ describe('JumpPanel (T12)', () => {
     await user.click(screen.getByRole('button', { name: /Jump to/ }))
     await user.click(screen.getByRole('option', { name: 'RISKS' }))
     expect(screen.getByTestId('hash')).toHaveTextContent('#risks')
+  })
+
+  it('keeps the tab in the query string when it jumps', async () => {
+    const user = userEvent.setup()
+    renderPanel(['allergies', 'risks', 'medications'])
+    await user.click(screen.getByRole('button', { name: /Jump to/ }))
+    await user.click(screen.getByRole('option', { name: 'RISKS' }))
+    expect(screen.getByTestId('search')).toHaveTextContent('?tab=health')
   })
 
   it('shows nothing under three sections', () => {

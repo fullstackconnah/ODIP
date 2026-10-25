@@ -23,8 +23,8 @@ function triToKey(v: boolean | null | undefined): string {
 function keyToTri(k: string): boolean | null {
   return k === 'true' ? true : k === 'false' ? false : null
 }
-function yesNoUnset(value: boolean | null | undefined): string {
-  return value === true ? 'Yes' : value === false ? 'No' : '—'
+function yesNoUnset(value: boolean | null | undefined): string | undefined {
+  return value === true ? 'Yes' : value === false ? 'No' : undefined
 }
 
 const NOT_RECORDED = ''

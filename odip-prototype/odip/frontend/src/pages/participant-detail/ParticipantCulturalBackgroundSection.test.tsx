@@ -96,3 +96,12 @@ describe('ParticipantCulturalBackgroundSection — edit/save cycle', () => {
     expect((screen.getByLabelText('Personal Interests') as HTMLTextAreaElement).value).toBe('Gardening')
   })
 })
+
+describe('ParticipantCulturalBackgroundSection — unanswered yes/no (N11)', () => {
+  it('lists an unanswered yes/no fact in the Not recorded line, never as a dash row', () => {
+    const { container } = render(<ParticipantCulturalBackgroundSection p={makeParticipant({ isCald: true })} participantId="participant-1" canEdit />)
+    expect(screen.getByText('Yes')).toBeInTheDocument()
+    expect([...container.querySelectorAll('dd')].filter(d => d.textContent?.trim() === '\u2014')).toHaveLength(0)
+    expect(screen.getByText(/Not recorded:.*LGBTIQA\+/)).toBeInTheDocument()
+  })
+})

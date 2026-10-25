@@ -95,3 +95,11 @@ describe('ParticipantBehaviourCommunicationSection — edit/save cycle', () => {
     expect((screen.getByLabelText('Expressive Skills') as HTMLTextAreaElement).value).toBe('High')
   })
 })
+
+describe('ParticipantBehaviourCommunicationSection — unanswered yes/no (N11)', () => {
+  it('lists an unanswered yes/no fact in the Not recorded line, never as a dash row', () => {
+    const { container } = render(<ParticipantBehaviourCommunicationSection p={makeParticipant({ memoryAids: true })} participantId="participant-1" canEdit />)
+    expect([...container.querySelectorAll('dd')].filter(d => d.textContent?.trim() === '\u2014')).toHaveLength(0)
+    expect(screen.getByText(/Not recorded:.*Impaired Understanding/)).toBeInTheDocument()
+  })
+})
