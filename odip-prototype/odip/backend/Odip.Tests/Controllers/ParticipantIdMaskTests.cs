@@ -4,6 +4,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Odip.Api.Controllers;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
@@ -131,10 +132,14 @@ public class ParticipantIdMaskTests
 
     // ── T5: the three participant PDFs per role ──────────────────────────
 
+    // The longest run of the hash with no 'f': an "ff" or "fi" extracts as a ligature, so a window containing one never matches.
+    private static string HashProbe(string hash) =>
+        hash.Split('f').OrderByDescending(part => part.Length).First();
+
     private static string PdfText(byte[] bytes)
     {
         using var pdf = UglyToad.PdfPig.PdfDocument.Open(bytes);
-        return string.Concat(pdf.GetPages().Select(p => p.Text)).Replace(" ", "").Replace("\n", "");
+        return string.Concat(pdf.GetPages().Select(p => p.Text)).Replace(" ", "").Replace("\n", "").Replace(((char)0).ToString(), "");
     }
 
     [Theory]
@@ -183,6 +188,58 @@ public class ParticipantIdMaskTests
         // The tracked entity is never written to.
         Assert.Equal("2951123451", db.Participants.Single().MedicareNumber);
     }
+
+    // ── T6: the intake completion copy per role ──────────────────────────
+
+    [Theory]
+    [InlineData("SuperAdmin", false)]
+    [InlineData("Admin", false)]
+    [InlineData("Coordinator", false)]
+    [InlineData("SupportWorker", true)]
+    [InlineData("ReadOnly", true)]
+    [InlineData(null, true)]
+    public async Task IntakeSnapshot_PerRole(string? role, bool masked)
+    {
+        using var db = CreateDb();
+        var p = Seed(db);
+        var snapshot = await new ParticipantIntakeSnapshotService(db).CaptureAsync(p, "tester", null, CancellationToken.None);
+        var (json, hash, pdf) = (snapshot.SnapshotJson, snapshot.ContentHash, snapshot.PdfContent.ToArray());
+
+        // Decisive check on the string: 7pt unspaced JSON can wrap mid-number in the PDF text.
+        var maskedJson = ParticipantIntakeSnapshotService.MaskSnapshotJson(json);
+        Assert.DoesNotContain("430000017", maskedJson);
+        Assert.Contains("\"ndisNumber\":\"" + Dots + "7\"", maskedJson);
+
+        // Positive control: the stored office copy carries the new title. The 8pt hash line does not extract reliably, so the hash itself is a negative check only.
+        var stored = PdfText(pdf);
+        var probe = HashProbe(hash);
+        Assert.Equal(64, hash.Length);
+        Assert.Contains("BunyaSupportIntakeComple", stored); // the "ti" ligature extracts as NUL
+
+        var result = await ControllerFor(db, role).DownloadIntakeSnapshotPdf(p.Id, snapshot.Revision, CancellationToken.None);
+        var bytes = Assert.IsType<FileContentResult>(result).FileContents;
+        if (!masked) { Assert.True(bytes.SequenceEqual(pdf)); }
+        else
+        {
+            var text = PdfText(bytes);
+            Assert.DoesNotContain("430000017", text);
+            Assert.DoesNotContain("SHA-256", text);
+            Assert.DoesNotContain(probe, text);
+            Assert.Contains("BunyaSupportintakecomple", text);
+            Assert.Contains("copy", text);
+            Assert.Contains("hiddenforyourrole", text);
+        }
+
+        // The stored evidence is never changed.
+        var row = db.ParticipantIntakeSnapshots.AsNoTracking().Single();
+        Assert.Equal(json, row.SnapshotJson);
+        Assert.Equal(hash, row.ContentHash);
+        Assert.True(row.PdfContent.SequenceEqual(pdf));
+    }
+
+    [Fact]
+    public void IntakeSnapshotDto_HasOnlyRevisionAndCompletedAt() =>
+        Assert.Equal(["CompletedAtUtc", "Revision"], typeof(ParticipantIntakeSnapshotDto).GetProperties().Select(x => x.Name).Order());
 
     // ── T8: every participant write is office-only ───────────────────────
 

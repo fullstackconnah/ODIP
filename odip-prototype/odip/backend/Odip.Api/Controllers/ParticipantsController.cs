@@ -938,10 +938,13 @@ public class ParticipantsController : ControllerBase
     [HttpGet("{id:guid}/intake-snapshots/{revision:int}/download")]
     public async Task<IActionResult> DownloadIntakeSnapshotPdf(Guid id, int revision, CancellationToken ct)
     {
-        if (!await _db.Participants.AnyAsync(p => p.Id == id, ct)) return NotFound(ApiResponse<bool>.Fail("Participant not found"));
+        var participant = await _db.Participants.AsNoTracking().FirstOrDefaultAsync(p => p.Id == id, ct);
+        if (participant == null) return NotFound(ApiResponse<bool>.Fail("Participant not found"));
         var snapshot = await _intakeSnapshots.FindAsync(id, revision, ct);
         if (snapshot == null) return NotFound(ApiResponse<bool>.Fail("Intake snapshot not found"));
-        return File(snapshot.PdfContent, "application/pdf", $"Intake-Completion-r{snapshot.Revision}-{snapshot.CompletedAtUtc:yyyyMMdd}.pdf");
+        // The stored evidence PDF prints the full ID numbers and a hash over them, so masked roles get a re-rendered copy instead.
+        var bytes = ParticipantIdMask.AppliesTo(User) ? ParticipantIntakeSnapshotService.RenderMaskedCopy(snapshot, participant.FullName) : snapshot.PdfContent;
+        return File(bytes, "application/pdf", $"Intake-Completion-r{snapshot.Revision}-{snapshot.CompletedAtUtc:yyyyMMdd}.pdf");
     }
 
     /// <summary>DOC-01: download the Participant Profile PDF for a participant.</summary>
