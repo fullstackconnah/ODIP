@@ -152,7 +152,7 @@ export default function InvoicesPage() {
       key: 'participantName',
       header: 'Participant',
       render: row => (
-        <div className="md:max-w-[9rem] xl:max-w-[14rem] 2xl:max-w-[18rem]">
+        <div className="md:max-w-[8rem] xl:max-w-[14rem] 2xl:max-w-[18rem]">
           <CellText>{row.participantName}</CellText>
           <CellText className={MUTED_LINE}>
             {row.billToName && row.billToName !== row.participantName ? `Bill to ${row.billToName}` : row.payerKind === 'SelfManaged' ? 'Self managed' : 'Plan managed'}
