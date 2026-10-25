@@ -40,7 +40,7 @@ function prefixProblem(value: string) {
 
 const wholeFrom = (n: number, min: number, max: number) => Number.isInteger(n) && n >= min && n <= max
 
-/** Organisation › Billing details: the bank account on invoices (hidden from Coordinators here; invoices still print it), invoice numbering and payment terms, GST and PACE, and the invoice note. */
+/** Organisation › Billing details: the bank account on invoices (hidden from Coordinators here; invoices still print it), invoice numbering and payment terms, GST status, and the invoice note. */
 export default function BillingDetailsSection(frame: SectionFrame) {
   const { showBankDetails } = usePermissions()
   const p = useProviderRow(row => ({
@@ -48,7 +48,6 @@ export default function BillingDetailsSection(frame: SectionFrame) {
     bsb: row?.bsb ?? '',
     accountNumber: row?.accountNumber ?? '',
     gstRegistered: row?.gstRegistered ?? false,
-    isPaceProvider: row?.isPaceProvider ?? false,
     invoiceFooterNotes: row?.invoiceFooterNotes ?? '',
     invoiceNumberPrefix: row?.invoiceNumberPrefix ?? 'INV-',
     creditNotePrefix: row?.creditNotePrefix ?? 'CN-',
@@ -107,9 +106,8 @@ export default function BillingDetailsSection(frame: SectionFrame) {
                 <NumberField label="Days to pay" hint={p.hint('paymentTermsDays', "Each invoice is due this many days after it's issued. 0 means due on issue.")} min={0} max={365} step={1} className={span.short} value={p.form.paymentTermsDays} error={errors.paymentTermsDays} readOnly={locked} onChange={n => p.edit({ paymentTermsDays: n })} />
               </div>
             </SettingsGroup>
-            <SettingsGroup title="Tax and claiming">
+            <SettingsGroup title="Tax">
               <CheckboxField label="Registered for GST" hint={p.hint('gstRegistered')} checked={p.form.gstRegistered} disabled={locked} onChange={e => p.edit({ gstRegistered: e.target.checked })} />
-              <CheckboxField label="PACE provider" hint={p.hint('isPaceProvider', 'Claim files use the 16-column PACE bulk payment request layout.')} checked={p.form.isPaceProvider} disabled={locked} onChange={e => p.edit({ isPaceProvider: e.target.checked })} />
             </SettingsGroup>
             <SettingsGroup title="Invoice note">
               <TextAreaField
