@@ -1560,6 +1560,32 @@ describe('ParticipantDetailPage — seven tabs (slice 1)', () => {
     }
   })
 
+  it('T8: Health and Daily sections follow the plan order, and the stream-gated ones go with the stream', () => {
+    setUserRole('Admin')
+    const order = {
+      health: ['emergency', 'medical', 'health-conditions', 'medications', 'behaviour-and-communication', 'behaviour-support', 'risks', 'restrictive-practices'],
+      daily: ['support-needs', 'mobility-and-personal-care', 'equipment-and-overnight', 'daily-living', 'routines', 'meals', 'typical-day', 'transport-and-travel'],
+    }
+    const ids = () => Array.from(document.querySelectorAll('section[id]')).filter(el => !el.closest('details')).map(el => el.id)
+    for (const stream of ['CommunityAccessDailyLiving', 'None'] as const) {
+      mockUseParticipant.mockReturnValue({ data: makeParticipant({ serviceStreams: stream, behaviourRiskSummary: 'x' }), isLoading: false })
+      for (const [tab, expected] of Object.entries(order)) {
+        const { unmount } = renderAtTab('participant-1', tab)
+        const want = expected.filter(id => stream !== 'None' || id !== 'typical-day')
+        // Sections with nothing recorded sit in the closing fold, so only the ones in the grid are compared.
+        const present = ids().filter(id => want.includes(id))
+        expect(present.length).toBeGreaterThanOrEqual(3)
+        expect(present, stream + ' ' + tab).toEqual(want.filter(id => present.includes(id)))
+        if (stream === 'None') {
+          expect(document.getElementById('typical-day')).toBeNull()
+          expect(document.getElementById('community-access-risk')).toBeNull()
+          if (tab === 'health') expect(document.getElementById('behaviour-support')).not.toBeNull()
+        }
+        unmount()
+      }
+    }
+  })
+
   describe('T11: critical alerts', () => {
     const critical = (n: number) => Array.from({ length: n }, (_, i) => ({ type: 'c' + i, severity: 'Critical', message: `Critical thing ${i}`, deepLinkTab: 'details', linkTo: null }))
     const warning = { type: 'w', severity: 'Warning', message: 'Warning thing', deepLinkTab: 'routines', linkTo: null }
