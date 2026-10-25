@@ -34,16 +34,21 @@ public class ReadOnlyMiddleware
     }
 
     private static readonly string[] InboxPrefix = { "api", "v1", "notifications", "inbox" };
+    private static readonly string[] WhatsNewPrefix = { "api", "v1", "whats-new" };
 
     /// <summary>
     /// The bell's two read marks change only the caller's own read state (NotificationsController keys them on the JWT
     /// subject), so a ReadOnly user can clear their own badge (dashboard SHAPE call 9). Exactly
     /// POST api/v1/notifications/inbox/{guid}/read and POST api/v1/notifications/inbox/read-all, matched segment by segment.
+    /// What's new works the same way: POST api/v1/whats-new/seen and POST api/v1/whats-new/popup-seen only change the caller's own read marks.
     /// </summary>
     private static bool IsOwnReadMark(HttpRequest request)
     {
         if (!HttpMethods.IsPost(request.Method)) return false;
         var segments = (request.Path.Value ?? string.Empty).Trim('/').Split('/');
+        if (segments.Length == 4 && segments.Take(3).SequenceEqual(WhatsNewPrefix, StringComparer.OrdinalIgnoreCase))
+            return string.Equals(segments[3], "seen", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(segments[3], "popup-seen", StringComparison.OrdinalIgnoreCase);
         if (segments.Length < 5 || !segments.Take(4).SequenceEqual(InboxPrefix, StringComparer.OrdinalIgnoreCase)) return false;
         return segments.Length == 5
             ? string.Equals(segments[4], "read-all", StringComparison.OrdinalIgnoreCase)

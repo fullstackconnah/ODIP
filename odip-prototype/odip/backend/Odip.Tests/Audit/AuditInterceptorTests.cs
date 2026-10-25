@@ -183,6 +183,27 @@ public class AuditInterceptorTests
     }
 
     [Fact]
+    public async Task SaveChanges_WhatsNewEntry_IsAudited_ButAReadMarkIsNot()
+    {
+        Assert.Contains(typeof(WhatsNewEntry), AuditedEntities.Types);
+        Assert.DoesNotContain(typeof(WhatsNewUserState), AuditedEntities.Types);
+
+        using var db = CreateDb(userId: Guid.NewGuid());
+        var now = DateTime.UtcNow;
+        db.WhatsNewEntries.Add(new WhatsNewEntry
+        {
+            Id = Guid.NewGuid(), Key = "admin-12345678", Title = "T", Body = "B", Roles = WhatsNewAudience.All,
+            PublishedAtUtc = now, CreatedAt = now, UpdatedAt = now,
+        });
+        db.WhatsNewUserStates.Add(new WhatsNewUserState { Id = Guid.NewGuid(), UserId = Guid.NewGuid(), LastSeenAtUtc = now });
+        await db.SaveChangesAsync();
+
+        var rows = db.AuditLogs.ToList();
+        Assert.Single(rows);
+        Assert.Equal("WhatsNewEntry", rows[0].EntityType);
+    }
+
+    [Fact]
     public async Task SaveChanges_PublicHoliday_IsAudited_BecauseTheRowsDecideWhichDaysArePricedAtTheHolidayRate()
     {
         // Review M6 (plan builder phase B): the table is global and a row moves every tenant's quotes (+122% on a weekday),

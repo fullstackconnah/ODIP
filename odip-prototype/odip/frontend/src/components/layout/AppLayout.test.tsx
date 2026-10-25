@@ -37,6 +37,10 @@ vi.mock('@/api/hooks', async (importOriginal) => {
     useInbox: mockUseInbox,
     useMarkInboxRead: () => ({ mutate: vi.fn() }),
     useMarkAllInboxRead: () => ({ mutate: vi.fn(), reset: vi.fn(), isError: false }),
+    // The What's new button reads its feed and marks it seen: nothing new here.
+    useWhatsNew: () => ({ data: { entries: [], unreadCount: 0, popup: [] }, isError: false, refetch: vi.fn() }),
+    useMarkWhatsNewSeen: () => ({ mutate: vi.fn() }),
+    useMarkWhatsNewPopupSeen: () => ({ mutate: vi.fn() }),
   }
 })
 
@@ -396,6 +400,24 @@ describe('AppLayout — 44px coarse-pointer hit areas', () => {
     const bell = screen.getByRole('button', { name: 'Notifications' })
     expect(bell).toHaveClass('w-8', 'h-8', ...box)
     expect(bell).toBeEnabled()
+  })
+
+  it("puts the What's new button (32px, a real 44px box under touch) just before the bell, and hides the avatar below lg to make room", () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin', firstName: 'Sam' }))
+    renderAt('/trips')
+    const whatsNew = screen.getByRole('button', { name: "What's new" })
+    const bell = screen.getByRole('button', { name: 'Notifications' })
+    expect(whatsNew).toHaveClass('w-8', 'h-8', ...box)
+    expect(whatsNew).toBeEnabled()
+    expect(whatsNew.parentElement?.nextElementSibling).toBe(bell.parentElement)
+    expect(bell.parentElement?.nextElementSibling).toHaveClass('max-lg:hidden')
+    expect(bell.parentElement?.parentElement).toHaveClass('gap-3', 'max-lg:gap-2')
+  })
+
+  it('keeps the menu toggle and the page finder at full size from 390px so the tenant chip, not they, gives way', () => {
+    renderAt('/trips')
+    expect(screen.getByRole('button', { name: 'Open menu' })).toHaveClass('min-[390px]:shrink-0')
+    expect(screen.getByRole('button', { name: /Find a page/ }).parentElement).toHaveClass('min-[390px]:shrink-0')
   })
 
   it('gives every mobile bottom-nav cell, "More" included, a --tap-min floor each way, its content centred, so the 42px cells are 44px', () => {

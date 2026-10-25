@@ -115,6 +115,12 @@ public class OdipDbContext : DbContext
 
     /// <summary>Public landing-page early-access requests. NOT tenant-scoped: see <see cref="Entities.EarlyAccessRequest"/>'s type doc.</summary>
     public DbSet<EarlyAccessRequest> EarlyAccessRequests => Set<EarlyAccessRequest>();
+
+    /// <summary>Release notes shown in What's new. NOT tenant-scoped: see <see cref="Entities.WhatsNewEntry"/>'s type doc.</summary>
+    public DbSet<WhatsNewEntry> WhatsNewEntries => Set<WhatsNewEntry>();
+
+    /// <summary>When each person last opened What's new. Keyed on the user, NOT tenant-scoped.</summary>
+    public DbSet<WhatsNewUserState> WhatsNewUserStates => Set<WhatsNewUserState>();
     public DbSet<EarlyAccessLaterSubmission> EarlyAccessLaterSubmissions => Set<EarlyAccessLaterSubmission>();
 
     // Rostering (M4)
@@ -1842,6 +1848,27 @@ public class OdipDbContext : DbContext
 
             entity.HasIndex(e => e.ParticipantId);
             entity.HasIndex(e => e.RelatedMedicationId);
+        });
+
+        // ── What's new ──────────────────────────────────────────────────────────────
+        // Release notes are the same for every organisation, and a read mark belongs to one user, so neither table
+        // is an ITenantEntity and neither gets a query filter. Do not add a filter here.
+        modelBuilder.Entity<WhatsNewEntry>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Key).HasMaxLength(64).IsRequired();
+            entity.HasIndex(e => e.Key).IsUnique();
+            entity.Property(e => e.Title).HasMaxLength(80).IsRequired();
+            entity.Property(e => e.Body).HasMaxLength(600).IsRequired();
+            entity.Property(e => e.Roles).HasConversion<int>();
+            entity.HasIndex(e => e.PublishedAtUtc);
+        });
+
+        modelBuilder.Entity<WhatsNewUserState>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.UserId).IsUnique();
+            entity.HasOne<User>().WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         // ── Early-access requests (public landing page) ─────────────────────────────

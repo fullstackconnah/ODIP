@@ -113,6 +113,9 @@ public static class AuditedEntities
         typeof(PublicHoliday),
         typeof(PublicHolidayOverride),
 
+        // What's new: what every user reads, so a SuperAdmin edit must be traceable. WhatsNewUserState is NOT audited: every open would write a row.
+        typeof(WhatsNewEntry),
+
         // Plan builder phase D: approving an agreement revision for rostering makes the weekly patterns that shifts are generated from, and ends the patterns of the revision before it.
         // The approval row is the one record of who did that and when (the patterns and shifts it makes are audited as they are saved, with the same actor), so it is audited like them.
         typeof(ServiceAgreementDraftApproval),

@@ -8,6 +8,7 @@ import ErrorBoundary from '@/components/ErrorBoundary'
 import TenantSwitcher from '@/components/layout/TenantSwitcher'
 import UserSwitcher from '@/components/layout/UserSwitcher'
 import NotificationBell from '@/components/layout/NotificationBell'
+import WhatsNewButton from '@/components/layout/WhatsNewButton'
 import { NavCountBadge } from '@/components/layout/NavCountBadge'
 import { navBadgeLabel } from '@/components/layout/navBadgeLabel'
 import PlatformFooter from '@/components/layout/PlatformFooter'
@@ -546,7 +547,7 @@ export default function AppLayout() {
           <div className="flex items-center justify-between h-full px-[var(--gutter,20px)]">
             <div className="flex min-w-0 items-center gap-4">
               <button
-                className="flex items-center justify-center lg:hidden p-2 pointer-coarse:size-[var(--tap-min)] pointer-coarse:p-0 rounded-md hover:bg-[var(--color-accent)] transition-colors"
+                className="flex items-center justify-center lg:hidden min-[390px]:shrink-0 p-2 pointer-coarse:size-[var(--tap-min)] pointer-coarse:p-0 rounded-md hover:bg-[var(--color-accent)] transition-colors"
                 onClick={() => setSidebarOpen(!sidebarOpen)}
                 title={sidebarOpen ? 'Close menu' : 'Open menu'}
                 aria-label={sidebarOpen ? 'Close menu' : 'Open menu'}
@@ -561,13 +562,16 @@ export default function AppLayout() {
                 </span>
               )}
               {/* Page navigation only: the old entity-search field had no query or results behaviour. */}
-              <PlatformDirectoryTrigger compact entries={platformNavigation(permissions, savedVisibility)} />
+              <div className="min-[390px]:shrink-0">
+                <PlatformDirectoryTrigger compact entries={platformNavigation(permissions, savedVisibility)} />
+              </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 max-lg:gap-2">
               {isSuperAdmin && <TenantSwitcher />}
               {isSuperAdmin && viewingTenantId && <UserSwitcher />}
+              <WhatsNewButton />
               <NotificationBell />
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] flex items-center justify-center text-[var(--color-primary-foreground)] font-bold text-sm shadow-md">
+              <div className="max-lg:hidden w-8 h-8 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] flex items-center justify-center text-[var(--color-primary-foreground)] font-bold text-sm shadow-md">
                 {initial}
               </div>
             </div>
