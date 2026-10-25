@@ -1,11 +1,12 @@
 import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { usePatchParticipant } from '@/api/hooks'
 import { FormField } from '@/components/FormField'
 import { FactList } from '@/components/FactList'
 import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
-import { CHECKLIST_ITEM_TYPES, CHECKLIST_ITEM_TYPE_LABELS, CHECKLIST_ITEM_VALUE_LABELS } from '@/api/types/enums'
-import { parseServiceStreams } from '@/api/types/participants'
+import { answeredChecklist } from './recorded'
+import { CHECKLIST_ITEM_TYPE_LABELS, CHECKLIST_ITEM_VALUE_LABELS } from '@/api/types/enums'
 import type { ChecklistItemType } from '@/api/types/enums'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 import { extractErrorMessage } from '@/lib/utils'
@@ -21,53 +22,48 @@ function Tag({ label }: { label: string }) {
 }
 
 /**
- * PD-7: Community Access card — covers TWO CORE-02 groups fully rendered by this one section:
- * `communityAccessBehaviour` (signsHappyAndSettled..bocWhatNotToDo) and `supportsLookLike`
- * (supportsLookLikeMorning/Day/AfternoonEvening/Overnight). Both saved together in one PATCH.
+ * The old Community Access card covered two CORE-02 groups in one PATCH. Slice 2 splits it by topic:
+ * `BehaviourSupportCard` (Health > Behaviour support) owns `communityAccessBehaviour`, `TypicalDayCard` (Daily > Typical day) owns
+ * `supportsLookLike`, and `EarlierChecklistFold` shows the legacy checklist read-only. The stream gate (CommunityAccessDailyLiving)
+ * is the page's: these cards are only rendered for a participant in that stream.
  *
- * The `checklistItems` collection (Community Mobility & Transport Risk / Behaviours of Concern
- * checklist) is deliberately OUT OF SCOPE here, same as `RiskEntriesSection` is out of scope for
- * the Risks & Hazards Summary card — SPEC-03's PD-7 field table does not list it under this
- * card's "Key fields", and it's a collection with its own upsert-by-key/split-ownership
- * semantics (rows 9-20 of a 21-row array shared with the wizard's Behaviour & Communication
- * step) that a section-level edit panel isn't a safe fit for without its own dedicated pass.
- * Left read-only, matching the pre-PD-7 behaviour.
- *
- * Gated on the CommunityAccessDailyLiving service stream itself (unaffected by `canEdit`) — this
- * card's fields are meaningless for a participant outside that stream, so the gate is about
- * relevance, not write-permission, and stays exactly as it was pre-PD-7.
+ * Each save sends ONLY its own group. A present group assigns all its members, so a group is always sent whole, built when the
+ * save runs from the latest cached participant overlaid by the draft: `BehaviourSupportCard` carries `overallCommunityAccessRiskRating`
+ * (no editor on this page, only in the wizard) because leaving it out nulls it server-side. The save then waits for the refetch.
  */
-type CommunityAccessDraft = {
+
+type BehaviourDraft = {
   signsHappyAndSettled: string; whatHelpsMeCalmDown: string
   bocTriggers: string; bocEarlyWarningSigns: string; bocDeEscalationStrategies: string; bocWhatNotToDo: string
-  supportsLookLikeMorning: string; supportsLookLikeDay: string; supportsLookLikeAfternoonEvening: string; supportsLookLikeOvernight: string
 }
 
-function readCommunityAccess(p: ParticipantDetailDto): CommunityAccessDraft {
+function readBehaviour(p: ParticipantDetailDto): BehaviourDraft {
   return {
     signsHappyAndSettled: p.signsHappyAndSettled ?? '', whatHelpsMeCalmDown: p.whatHelpsMeCalmDown ?? '',
     bocTriggers: p.bocTriggers ?? '', bocEarlyWarningSigns: p.bocEarlyWarningSigns ?? '',
     bocDeEscalationStrategies: p.bocDeEscalationStrategies ?? '', bocWhatNotToDo: p.bocWhatNotToDo ?? '',
-    supportsLookLikeMorning: p.supportsLookLikeMorning ?? '', supportsLookLikeDay: p.supportsLookLikeDay ?? '',
-    supportsLookLikeAfternoonEvening: p.supportsLookLikeAfternoonEvening ?? '', supportsLookLikeOvernight: p.supportsLookLikeOvernight ?? '',
   }
 }
 
-export function ParticipantCommunityAccessSection({ p, participantId, canEdit }: { p: ParticipantDetailDto; participantId: string; canEdit: boolean }) {
+const BEHAVIOUR_FIELDS: { key: keyof BehaviourDraft; label: string }[] = [
+  { key: 'signsHappyAndSettled', label: 'Signs I Am Happy and Settled' },
+  { key: 'whatHelpsMeCalmDown', label: 'What Helps Me Calm Down' },
+  { key: 'bocTriggers', label: 'BOC — Triggers' },
+  { key: 'bocEarlyWarningSigns', label: 'BOC — Early Warning Signs' },
+  { key: 'bocDeEscalationStrategies', label: 'BOC — De-Escalation Strategies' },
+  { key: 'bocWhatNotToDo', label: 'BOC — What Not To Do' },
+]
+
+export function BehaviourSupportCard({ p, participantId, canEdit }: { p: ParticipantDetailDto; participantId: string; canEdit: boolean }) {
+  const qc = useQueryClient()
   const patchParticipant = usePatchParticipant()
-  const saved = readCommunityAccess(p)
-  const [draft, setDraft] = useState<CommunityAccessDraft>(saved)
-  const isDirty = (Object.keys(saved) as (keyof CommunityAccessDraft)[]).some((k) => draft[k] !== saved[k])
-
-  const isCommunityAccess = parseServiceStreams(p.serviceStreams).includes('CommunityAccessDailyLiving')
-  if (!isCommunityAccess) return null
-
-  const answeredChecklistItems = CHECKLIST_ITEM_TYPES
-    .map((type) => p.checklistItems?.find((row) => row.itemType === type))
-    .filter((row): row is NonNullable<typeof row> => !!row?.value)
+  const saved = readBehaviour(p)
+  const [draft, setDraft] = useState<BehaviourDraft>(saved)
+  const isDirty = BEHAVIOUR_FIELDS.some(({ key }) => draft[key] !== saved[key])
 
   async function handleSave() {
     try {
+      const latest = qc.getQueryData<ParticipantDetailDto>(['participant', participantId]) ?? p
       await patchParticipant.mutateAsync({
         id: participantId,
         data: {
@@ -78,9 +74,66 @@ export function ParticipantCommunityAccessSection({ p, participantId, canEdit }:
             bocEarlyWarningSigns: draft.bocEarlyWarningSigns.trim() || null,
             bocDeEscalationStrategies: draft.bocDeEscalationStrategies.trim() || null,
             bocWhatNotToDo: draft.bocWhatNotToDo.trim() || null,
-            // Not edited here (wizard-owned), but a present group clears omitted members: echo it.
-            overallCommunityAccessRiskRating: p.overallCommunityAccessRiskRating ?? null,
+            // Not edited here (wizard-owned), but a present group clears omitted members: echo the latest value.
+            overallCommunityAccessRiskRating: latest.overallCommunityAccessRiskRating ?? null,
           },
+        },
+      })
+      await qc.invalidateQueries({ queryKey: ['participant', participantId] })
+    } catch (err) {
+      throw new Error(extractErrorMessage(err, 'Failed to save Behaviour support.'))
+    }
+  }
+
+  return (
+    <SectionEditPanel title="Behaviour support" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
+      {(editing, startEdit) => editing ? (
+        <div className={formGrid}>
+          {BEHAVIOUR_FIELDS.map(({ key, label }) => (
+            <FormField key={key} label={label} className={span.medium}>
+              <textarea value={draft[key]} onChange={(e) => setDraft((d) => ({ ...d, [key]: e.target.value }))} rows={2} />
+            </FormField>
+          ))}
+        </div>
+      ) : (
+        <FactList
+          hideEmpty
+          onAdd={canEdit ? () => startEdit('first-empty') : undefined}
+          items={BEHAVIOUR_FIELDS.map(({ key, label }) => ({ label, value: pl(p[key]) }))}
+        />
+      )}
+    </SectionEditPanel>
+  )
+}
+
+type TypicalDayDraft = { supportsLookLikeMorning: string; supportsLookLikeDay: string; supportsLookLikeAfternoonEvening: string; supportsLookLikeOvernight: string }
+
+const TYPICAL_DAY_FIELDS: { key: keyof TypicalDayDraft; label: string }[] = [
+  { key: 'supportsLookLikeMorning', label: 'Morning' },
+  { key: 'supportsLookLikeDay', label: 'Day' },
+  { key: 'supportsLookLikeAfternoonEvening', label: 'Afternoon-Evening' },
+  { key: 'supportsLookLikeOvernight', label: 'Overnight' },
+]
+
+function readTypicalDay(p: ParticipantDetailDto): TypicalDayDraft {
+  return {
+    supportsLookLikeMorning: p.supportsLookLikeMorning ?? '', supportsLookLikeDay: p.supportsLookLikeDay ?? '',
+    supportsLookLikeAfternoonEvening: p.supportsLookLikeAfternoonEvening ?? '', supportsLookLikeOvernight: p.supportsLookLikeOvernight ?? '',
+  }
+}
+
+export function TypicalDayCard({ p, participantId, canEdit }: { p: ParticipantDetailDto; participantId: string; canEdit: boolean }) {
+  const qc = useQueryClient()
+  const patchParticipant = usePatchParticipant()
+  const saved = readTypicalDay(p)
+  const [draft, setDraft] = useState<TypicalDayDraft>(saved)
+  const isDirty = TYPICAL_DAY_FIELDS.some(({ key }) => draft[key] !== saved[key])
+
+  async function handleSave() {
+    try {
+      await patchParticipant.mutateAsync({
+        id: participantId,
+        data: {
           supportsLookLike: {
             supportsLookLikeMorning: draft.supportsLookLikeMorning.trim() || null,
             supportsLookLikeDay: draft.supportsLookLikeDay.trim() || null,
@@ -89,91 +142,53 @@ export function ParticipantCommunityAccessSection({ p, participantId, canEdit }:
           },
         },
       })
+      await qc.invalidateQueries({ queryKey: ['participant', participantId] })
     } catch (err) {
-      throw new Error(extractErrorMessage(err, 'Failed to save Community Access.'))
+      throw new Error(extractErrorMessage(err, 'Failed to save Typical day.'))
     }
   }
 
   return (
-    <SectionEditPanel title="Community Access" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
-      {(editing) => editing ? (
+    <SectionEditPanel title="What my supports look like" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
+      {(editing, startEdit) => editing ? (
         <div className={formGrid}>
-          <FormField label="Signs I Am Happy and Settled" className={span.medium}>
-            <textarea value={draft.signsHappyAndSettled} onChange={(e) => setDraft((d) => ({ ...d, signsHappyAndSettled: e.target.value }))} rows={2} />
-          </FormField>
-          <FormField label="What Helps Me Calm Down" className={span.medium}>
-            <textarea value={draft.whatHelpsMeCalmDown} onChange={(e) => setDraft((d) => ({ ...d, whatHelpsMeCalmDown: e.target.value }))} rows={2} />
-          </FormField>
-          <FormField label="BOC — Triggers" className={span.medium}>
-            <textarea value={draft.bocTriggers} onChange={(e) => setDraft((d) => ({ ...d, bocTriggers: e.target.value }))} rows={2} />
-          </FormField>
-          <FormField label="BOC — Early Warning Signs" className={span.medium}>
-            <textarea value={draft.bocEarlyWarningSigns} onChange={(e) => setDraft((d) => ({ ...d, bocEarlyWarningSigns: e.target.value }))} rows={2} />
-          </FormField>
-          <FormField label="BOC — De-Escalation Strategies" className={span.medium}>
-            <textarea value={draft.bocDeEscalationStrategies} onChange={(e) => setDraft((d) => ({ ...d, bocDeEscalationStrategies: e.target.value }))} rows={2} />
-          </FormField>
-          <FormField label="BOC — What Not To Do" className={span.medium}>
-            <textarea value={draft.bocWhatNotToDo} onChange={(e) => setDraft((d) => ({ ...d, bocWhatNotToDo: e.target.value }))} rows={2} />
-          </FormField>
-          <p className={`text-sm font-medium text-[var(--color-muted-foreground)] ${span.long}`}>What My Supports Look Like</p>
-          <FormField label="Morning" className={span.medium}>
-            <textarea value={draft.supportsLookLikeMorning} onChange={(e) => setDraft((d) => ({ ...d, supportsLookLikeMorning: e.target.value }))} rows={2} />
-          </FormField>
-          <FormField label="Day" className={span.medium}>
-            <textarea value={draft.supportsLookLikeDay} onChange={(e) => setDraft((d) => ({ ...d, supportsLookLikeDay: e.target.value }))} rows={2} />
-          </FormField>
-          <FormField label="Afternoon-Evening" className={span.medium}>
-            <textarea value={draft.supportsLookLikeAfternoonEvening} onChange={(e) => setDraft((d) => ({ ...d, supportsLookLikeAfternoonEvening: e.target.value }))} rows={2} />
-          </FormField>
-          <FormField label="Overnight" className={span.medium}>
-            <textarea value={draft.supportsLookLikeOvernight} onChange={(e) => setDraft((d) => ({ ...d, supportsLookLikeOvernight: e.target.value }))} rows={2} />
-          </FormField>
+          {TYPICAL_DAY_FIELDS.map(({ key, label }) => (
+            <FormField key={key} label={label} className={span.medium}>
+              <textarea value={draft[key]} onChange={(e) => setDraft((d) => ({ ...d, [key]: e.target.value }))} rows={2} />
+            </FormField>
+          ))}
         </div>
       ) : (
-        <>
-          <FactList
-            items={[
-              ...(p.signsHappyAndSettled ? [{ label: 'Signs I Am Happy and Settled', value: pl(p.signsHappyAndSettled) }] : []),
-              ...(p.whatHelpsMeCalmDown ? [{ label: 'What Helps Me Calm Down', value: pl(p.whatHelpsMeCalmDown) }] : []),
-              ...(p.bocTriggers ? [{ label: 'BOC — Triggers', value: pl(p.bocTriggers) }] : []),
-              ...(p.bocEarlyWarningSigns ? [{ label: 'BOC — Early Warning Signs', value: pl(p.bocEarlyWarningSigns) }] : []),
-              ...(p.bocDeEscalationStrategies ? [{ label: 'BOC — De-Escalation Strategies', value: pl(p.bocDeEscalationStrategies) }] : []),
-              ...(p.bocWhatNotToDo ? [{ label: 'BOC — What Not To Do', value: pl(p.bocWhatNotToDo) }] : []),
-              ...((p.supportsLookLikeMorning || p.supportsLookLikeDay || p.supportsLookLikeAfternoonEvening || p.supportsLookLikeOvernight)
-                ? [{
-                    label: 'What My Supports Look Like',
-                    value: pl([
-                      p.supportsLookLikeMorning && `Morning: ${p.supportsLookLikeMorning}`,
-                      p.supportsLookLikeDay && `Day: ${p.supportsLookLikeDay}`,
-                      p.supportsLookLikeAfternoonEvening && `Afternoon-Evening: ${p.supportsLookLikeAfternoonEvening}`,
-                      p.supportsLookLikeOvernight && `Overnight: ${p.supportsLookLikeOvernight}`,
-                    ].filter(Boolean).join('\n')),
-                  }]
-                : []),
-            ]}
-            emptyMessage={answeredChecklistItems.length > 0 ? 'No behaviour details recorded' : undefined}
-          />
-          {answeredChecklistItems.length > 0 && (
-            <div className="mt-4 space-y-2 text-sm">
-              <p className="font-medium text-[var(--color-muted-foreground)]">Community Mobility &amp; Transport Risk / Behaviours of Concern Checklist</p>
-              <div className="divide-y divide-[var(--color-border)]">
-                {answeredChecklistItems.map((row) => (
-                  <div key={row.itemType} className="py-2 flex items-start justify-between gap-4">
-                    <span>{CHECKLIST_ITEM_TYPE_LABELS[row.itemType as ChecklistItemType]}</span>
-                    <span className="text-right">
-                      <Tag label={CHECKLIST_ITEM_VALUE_LABELS[row.value!] ?? row.value!} />
-                      {row.notes && <span className="block text-xs text-[var(--color-muted-foreground)] mt-1 max-w-xs">{row.notes}</span>}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </>
+        <FactList
+          hideEmpty
+          onAdd={canEdit ? () => startEdit('first-empty') : undefined}
+          items={TYPICAL_DAY_FIELDS.map(({ key, label }) => ({ label, value: pl(p[key]) }))}
+        />
       )}
     </SectionEditPanel>
   )
 }
 
-export default ParticipantCommunityAccessSection
+/** Read-only, closed by default: "Earlier checklist (n)". Renders nothing when no row was answered. */
+export function EarlierChecklistFold({ p }: { p: ParticipantDetailDto }) {
+  const rows = answeredChecklist(p)
+  if (rows.length === 0) return null
+  return (
+    <details className="group text-sm">
+      <summary className="min-h-[var(--control-h)] cursor-pointer select-none py-1.5 text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]">
+        Earlier checklist ({rows.length})
+      </summary>
+      <div className="mt-2 divide-y divide-[var(--color-border)]">
+        {rows.map((row) => (
+          <div key={row.itemType} className="py-2 flex items-start justify-between gap-4">
+            <span>{CHECKLIST_ITEM_TYPE_LABELS[row.itemType as ChecklistItemType]}</span>
+            <span className="text-right">
+              <Tag label={CHECKLIST_ITEM_VALUE_LABELS[row.value!] ?? row.value!} />
+              {row.notes && <span className="block text-xs text-[var(--color-muted-foreground)] mt-1 max-w-xs">{row.notes}</span>}
+            </span>
+          </div>
+        ))}
+      </div>
+    </details>
+  )
+}

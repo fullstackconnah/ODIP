@@ -317,3 +317,19 @@ describe('ClaimsTab — shifts priced with a caveat (review F2)', () => {
     expect(await screen.findByText('Claim detail page')).toBeInTheDocument()
   })
 })
+
+describe('ClaimsTab — long list (T10)', () => {
+  it('shows 5 of 23 rows, then all 23 with focus on the 6th row', async () => {
+    const user = userEvent.setup()
+    mockUseParticipantClaims.mockReturnValue({
+      data: Array.from({ length: 23 }, (_, i) => tripClaim({ id: `t${i}`, claimReference: `CLM-${i}` })),
+      isLoading: false,
+    })
+    const { container } = renderTab()
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(5)
+    await user.click(screen.getByRole('button', { name: 'Show all 23' }))
+    const rows = container.querySelectorAll('tbody tr')
+    expect(rows).toHaveLength(23)
+    expect(rows[5]).toHaveFocus()
+  })
+})

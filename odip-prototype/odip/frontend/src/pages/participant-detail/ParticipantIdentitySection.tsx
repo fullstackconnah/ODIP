@@ -79,7 +79,7 @@ export function ParticipantIdentitySection({ p, participantId, canEdit }: { p: P
 
   return (
     <SectionEditPanel title="Identity" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
-      {(editing) => editing ? (
+      {(editing, startEdit) => editing ? (
         <div className="space-y-4">
           <div className={formGrid}>
             <FormField label="First Name" required className={span.medium}>
@@ -130,7 +130,7 @@ export function ParticipantIdentitySection({ p, participantId, canEdit }: { p: P
           </FormField>
         </div>
       ) : (
-        <FactList
+        <FactList hideEmpty onAdd={canEdit ? () => startEdit('first-empty') : undefined}
           items={[
             { label: 'First Name', value: p.firstName },
             { label: 'Last Name', value: p.lastName },

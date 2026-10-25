@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, within, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { ParticipantCommunityAccessSection } from './ParticipantCommunityAccessSection'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import type { ReactNode } from 'react'
+import { BehaviourSupportCard, TypicalDayCard, EarlierChecklistFold } from './ParticipantCommunityAccessSection'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 
 const { mockPatchMutateAsync } = vi.hoisted(() => ({ mockPatchMutateAsync: vi.fn() }))
@@ -28,7 +30,11 @@ function makeParticipant(overrides: Partial<ParticipantDetailDto> = {}): Partici
   } as ParticipantDetailDto
 }
 
+let qc: QueryClient
+const wrap = (ui: ReactNode) => <QueryClientProvider client={qc}>{ui}</QueryClientProvider>
+
 beforeEach(() => {
+  qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   mockPatchMutateAsync.mockReset()
   setUserRole('Coordinator')
 })
@@ -37,81 +43,75 @@ afterEach(() => {
   localStorage.clear()
 })
 
-describe('ParticipantCommunityAccessSection — stream gate (relevance, not permission)', () => {
-  it('renders nothing at all when the participant is not in the CommunityAccessDailyLiving stream, regardless of canEdit', () => {
-    render(<ParticipantCommunityAccessSection p={makeParticipant({ serviceStreams: 'InHomeSupport' })} participantId="participant-1" canEdit />)
-    expect(screen.queryByRole('heading', { name: 'Community Access' })).not.toBeInTheDocument()
-  })
-})
-
-describe('ParticipantCommunityAccessSection — permission gate', () => {
-  it('hides the Edit button for a role without canWriteParticipantDetails but still shows the card (stream-relevant)', () => {
-    setUserRole('SupportWorker')
-    render(<ParticipantCommunityAccessSection p={makeParticipant()} participantId="participant-1" canEdit={false} />)
-    expect(screen.getByRole('heading', { name: 'Community Access' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /edit/i })).not.toBeInTheDocument()
-  })
-})
-
-describe('ParticipantCommunityAccessSection — edit/save cycle', () => {
-  it('saves the communityAccessBehaviour group and supportsLookLike group together in one PATCH', async () => {
+describe('BehaviourSupportCard (T17: community access split)', () => {
+  it('saves ONLY communityAccessBehaviour, carrying the latest cached overall rating', async () => {
     const user = userEvent.setup()
     mockPatchMutateAsync.mockResolvedValue({ success: true })
-    render(<ParticipantCommunityAccessSection p={makeParticipant()} participantId="participant-1" canEdit />)
+    const p = makeParticipant({ overallCommunityAccessRiskRating: 'High' as never, bocTriggers: 'Loud noise' })
+    // The cache is newer than the props the card rendered with.
+    qc.setQueryData(['participant', 'participant-1'], { ...p, overallCommunityAccessRiskRating: 'Medium' })
+    render(wrap(<BehaviourSupportCard p={p} participantId="participant-1" canEdit />))
 
     await user.click(screen.getByRole('button', { name: /edit/i }))
-    await user.type(screen.getByLabelText('Signs I Am Happy and Settled'), 'Smiles and hums.')
-    await user.type(screen.getByLabelText('Morning'), 'Gentle wake.')
+    await user.type(screen.getByLabelText('Signs I Am Happy and Settled'), 'Humming')
     await user.click(screen.getByRole('button', { name: 'Save' }))
 
-    expect(mockPatchMutateAsync).toHaveBeenCalledWith({
-      id: 'participant-1',
-      data: {
-        communityAccessBehaviour: expect.objectContaining({ signsHappyAndSettled: 'Smiles and hums.' }),
-        supportsLookLike: expect.objectContaining({ supportsLookLikeMorning: 'Gentle wake.' }),
-      },
+    await waitFor(() => expect(mockPatchMutateAsync).toHaveBeenCalledTimes(1))
+    const { data } = mockPatchMutateAsync.mock.calls[0][0]
+    expect(Object.keys(data)).toEqual(['communityAccessBehaviour'])
+    expect(data.communityAccessBehaviour).toEqual(expect.objectContaining({
+      signsHappyAndSettled: 'Humming', bocTriggers: 'Loud noise', overallCommunityAccessRiskRating: 'Medium',
+    }))
+  })
+
+  it('carries the rating on the participant record when the cache is empty', async () => {
+    const user = userEvent.setup()
+    mockPatchMutateAsync.mockResolvedValue({ success: true })
+    render(wrap(<BehaviourSupportCard p={makeParticipant({ overallCommunityAccessRiskRating: 'High' as never })} participantId="participant-1" canEdit />))
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.type(screen.getByLabelText('What Helps Me Calm Down'), 'Music')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(mockPatchMutateAsync).toHaveBeenCalled())
+    expect(mockPatchMutateAsync.mock.calls[0][0].data.communityAccessBehaviour.overallCommunityAccessRiskRating).toBe('High')
+  })
+
+  it('has no Edit or Add for a role that cannot edit', () => {
+    render(wrap(<BehaviourSupportCard p={makeParticipant({ bocTriggers: 'Loud noise' })} participantId="participant-1" canEdit={false} />))
+    expect(screen.getByText('Loud noise')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /edit|add/i })).not.toBeInTheDocument()
+  })
+})
+
+describe('TypicalDayCard', () => {
+  it('saves ONLY supportsLookLike, all four parts', async () => {
+    const user = userEvent.setup()
+    mockPatchMutateAsync.mockResolvedValue({ success: true })
+    render(wrap(<TypicalDayCard p={makeParticipant({ supportsLookLikeDay: 'Walk' })} participantId="participant-1" canEdit />))
+    await user.click(screen.getByRole('button', { name: /edit/i }))
+    await user.type(screen.getByLabelText('Morning'), 'Breakfast')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(mockPatchMutateAsync).toHaveBeenCalledTimes(1))
+    const { data } = mockPatchMutateAsync.mock.calls[0][0]
+    expect(Object.keys(data)).toEqual(['supportsLookLike'])
+    expect(data.supportsLookLike).toEqual({
+      supportsLookLikeMorning: 'Breakfast', supportsLookLikeDay: 'Walk', supportsLookLikeAfternoonEvening: null, supportsLookLikeOvernight: null,
     })
   })
+})
 
-  it('echoes the overall community access risk rating back so a save does not clear it', async () => {
-    const user = userEvent.setup()
-    mockPatchMutateAsync.mockResolvedValue({ success: true })
-    render(<ParticipantCommunityAccessSection p={makeParticipant({ overallCommunityAccessRiskRating: 'High' })} participantId="participant-1" canEdit />)
-
-    await user.click(screen.getByRole('button', { name: /edit/i }))
-    await user.type(screen.getByLabelText('Signs I Am Happy and Settled'), 'Smiles and hums.')
-    await user.click(screen.getByRole('button', { name: 'Save' }))
-
-    const body = mockPatchMutateAsync.mock.calls[0][0].data
-    expect(body.communityAccessBehaviour.overallCommunityAccessRiskRating).toBe('High')
-  })
-
-  it('cancel restores the previous values with no network call', async () => {
-    const user = userEvent.setup()
-    const p = makeParticipant({ signsHappyAndSettled: 'Hums quietly.' })
-    render(<ParticipantCommunityAccessSection p={p} participantId="participant-1" canEdit />)
-
-    await user.click(screen.getByRole('button', { name: /edit/i }))
-    await user.clear(screen.getByLabelText('Signs I Am Happy and Settled'))
-    await user.type(screen.getByLabelText('Signs I Am Happy and Settled'), 'Changed')
-    await user.click(screen.getByRole('button', { name: 'Cancel' }))
-    const dialog = screen.getByRole('alertdialog', { name: /discard changes/i })
-    await user.click(within(dialog).getByRole('button', { name: 'Discard' }))
-
-    expect(mockPatchMutateAsync).not.toHaveBeenCalled()
-    expect(screen.getByText('Hums quietly.')).toBeInTheDocument()
-  })
-
-  it('a failed save keeps the section in edit mode with the typed input intact', async () => {
-    const user = userEvent.setup()
-    mockPatchMutateAsync.mockRejectedValue({ response: { data: { message: 'Network error, please retry.' } } })
-    render(<ParticipantCommunityAccessSection p={makeParticipant()} participantId="participant-1" canEdit />)
-
-    await user.click(screen.getByRole('button', { name: /edit/i }))
-    await user.type(screen.getByLabelText('Signs I Am Happy and Settled'), 'Smiles.')
-    await user.click(screen.getByRole('button', { name: 'Save' }))
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('Network error, please retry.')
-    expect((screen.getByLabelText('Signs I Am Happy and Settled') as HTMLTextAreaElement).value).toBe('Smiles.')
+describe('EarlierChecklistFold', () => {
+  it('is a closed fold counting the answered rows, and absent at 0', () => {
+    const answered = makeParticipant({
+      checklistItems: [
+        { itemType: 'UsesWheelchair', value: 'Yes', notes: 'Bus only' },
+        { itemType: 'HarmToSelf', value: 'No' },
+      ],
+    } as never)
+    const { container, rerender } = render(<EarlierChecklistFold p={answered} />)
+    const fold = container.querySelector('details') as HTMLDetailsElement
+    expect(fold.open).toBe(false)
+    expect(within(fold).getByText('Earlier checklist (2)')).toBeInTheDocument()
+    rerender(<EarlierChecklistFold p={makeParticipant()} />)
+    expect(container.querySelector('details')).toBeNull()
   })
 })

@@ -1,7 +1,6 @@
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { Activity } from 'lucide-react'
-import { NotRecordedFold } from './NotRecordedFold'
-import { plural } from '@/lib/format'
+import { FixedListFrame } from './FixedListFrame'
 import { useParticipantAdlAssessments, useUpsertAdlAssessment } from '@/api/hooks'
 import { Modal } from '@/components/Modal'
 import { FormField } from '@/components/FormField'
@@ -144,42 +143,37 @@ export default function ParticipantAdlAssessmentsSection({ participantId }: { pa
   if (phase === 'loading') return <PageState kind="loading" noun="ADL assessment list" />
   if (phase === 'error') return <PageState kind="error" noun="ADL assessment list" onRetry={() => assessmentsQuery.refetch()} />
 
-  // VISUAL-1 V2: a table of "Not recorded" rows on a new participant folds into one line that opens to it.
-  function foldIfNoneRecorded(rows: ParticipantAdlAssessmentDto[], noun: string, table: ReactNode) {
-    return rows.length > 0 && rows.every((a) => a.level == null && !a.notes) ? <NotRecordedFold summary={plural(rows.length, noun)}>{table}</NotRecordedFold> : table
-  }
+  const personal = orderedFor('Personal')
+  const communityDomestic = orderedFor('CommunityDomestic')
+  const groups = [
+    { rows: personal, title: 'Personal ADLs', empty: 'No personal ADLs recorded.' },
+    { rows: communityDomestic, title: 'Community & Domestic ADLs', empty: 'No community/domestic ADLs recorded.' },
+  ]
 
   return (
     <div className="space-y-6">
-      <div className="space-y-4">
-        <h3 className="font-semibold text-[var(--color-foreground)] flex items-center gap-2">
-          <Activity className="w-4 h-4" /> Personal ADLs
-        </h3>
-        {foldIfNoneRecorded(orderedFor('Personal'), 'personal ADL', (
-          <DataTable
-            data={orderedFor('Personal')}
-            columns={columns()}
-            keyField="adlType"
-            emptyMessage="No personal ADLs recorded."
-            compact
-          />
-        ))}
-      </div>
-
-      <div className="space-y-4">
-        <h3 className="font-semibold text-[var(--color-foreground)] flex items-center gap-2">
-          <Activity className="w-4 h-4" /> Community &amp; Domestic ADLs
-        </h3>
-        {foldIfNoneRecorded(orderedFor('CommunityDomestic'), 'community or domestic ADL', (
-          <DataTable
-            data={orderedFor('CommunityDomestic')}
-            columns={columns()}
-            keyField="adlType"
-            emptyMessage="No community/domestic ADLs recorded."
-            compact
-          />
-        ))}
-      </div>
+      <FixedListFrame
+        title="Daily living"
+        rows={[...personal, ...communityDomestic]}
+        isAnswered={(a) => a.level != null || !!a.notes?.trim()}
+        unit="not assessed"
+        addLabel="Add an assessment"
+        canAdd={canWriteAdlAssessments}
+        rowSelector="tbody tr"
+      >
+        {(visible) => groups.map((g) => {
+          const data = g.rows.filter((r) => visible.includes(r))
+          // A group with no visible row has no header either.
+          return data.length === 0 && g.rows.length > 0 ? null : (
+            <div key={g.title} className="space-y-4">
+              <h3 className="font-semibold text-[var(--color-foreground)] flex items-center gap-2">
+                <Activity className="w-4 h-4" /> {g.title}
+              </h3>
+              <DataTable data={data} columns={columns()} keyField="adlType" emptyMessage={g.empty} compact />
+            </div>
+          )
+        })}
+      </FixedListFrame>
 
       <Modal
         open={!!editing}

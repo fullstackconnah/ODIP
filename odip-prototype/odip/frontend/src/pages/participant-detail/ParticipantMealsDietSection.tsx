@@ -65,7 +65,7 @@ export function ParticipantMealsDietSection({ p, participantId, canEdit }: { p: 
 
   return (
     <SectionEditPanel title="Meals & Diet" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
-      {(editing) => editing ? (
+      {(editing, startEdit) => editing ? (
         <div className="space-y-4">
           <FormField label="Meal Assistance">
             <textarea value={draft.mealAssistanceDetail} onChange={(e) => setDraft((d) => ({ ...d, mealAssistanceDetail: e.target.value }))} rows={2} />
@@ -104,7 +104,7 @@ export function ParticipantMealsDietSection({ p, participantId, canEdit }: { p: 
           </FormField>
         </div>
       ) : (
-        <FactList
+        <FactList hideEmpty onAdd={canEdit ? () => startEdit('first-empty') : undefined}
           items={[
             { label: 'Meal Assistance', value: pl(p.mealAssistanceDetail) },
             { label: 'Choking Risk — Meal Management', value: pl(p.chokingRiskMealDetail) },

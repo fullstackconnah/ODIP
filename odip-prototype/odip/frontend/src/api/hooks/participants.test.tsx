@@ -2,13 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import { useBeginServices, useCreateParticipant, useDeleteParticipant, useMakeParticipantActive, usePatchParticipant, useParticipants } from './participants'
-import type { PatchParticipantDto } from '../types'
+import { useBeginServices, useCreateParticipant, useDeleteParticipant, useMakeParticipantActive, usePatchParticipant, useParticipants, useSupportProfile, useUpdateSupportProfile } from './participants'
+import type { PatchParticipantDto, SupportProfileDto } from '../types'
 
 // CORE-02: usePatchParticipant is a thin TanStack Query mutation wrapper around apiPatchRaw — only
 // that named export needs mocking (the rest of the module, e.g. apiPutRaw used by
 // useUpdateParticipant, stays real).
-const { mockApiPatchRaw, mockApiPostRaw, mockApiGet, mockApiDeleteRaw } = vi.hoisted(() => ({
+const { mockApiPatchRaw, mockApiPostRaw, mockApiGet, mockApiDeleteRaw, mockApiPutRaw } = vi.hoisted(() => ({
+  mockApiPutRaw: vi.fn(),
   mockApiDeleteRaw: vi.fn(),
   mockApiPatchRaw: vi.fn(),
   mockApiPostRaw: vi.fn(),
@@ -17,7 +18,7 @@ const { mockApiPatchRaw, mockApiPostRaw, mockApiGet, mockApiDeleteRaw } = vi.hoi
 
 vi.mock('../client', async () => {
   const actual = await vi.importActual<typeof import('../client')>('../client')
-  return { ...actual, apiPatchRaw: mockApiPatchRaw, apiPostRaw: mockApiPostRaw, apiGet: mockApiGet, apiDeleteRaw: mockApiDeleteRaw }
+  return { ...actual, apiPatchRaw: mockApiPatchRaw, apiPostRaw: mockApiPostRaw, apiGet: mockApiGet, apiDeleteRaw: mockApiDeleteRaw, apiPutRaw: mockApiPutRaw }
 })
 
 function createWrapper(queryClient: QueryClient) {
@@ -211,5 +212,103 @@ describe('useDeleteParticipant', () => {
     expect(mockApiDeleteRaw).toHaveBeenCalledWith('/participants/p9')
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['participants'] })
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['participant', 'p9'] })
+  })
+})
+
+// PP-S2 D9: every support-profile topic card PUTs the WHOLE record (the PUT nulls any field left out), so the body is built when the
+// mutation runs from the cache, and each save writes its full body back into the cache before the refetch.
+describe('useUpdateSupportProfile', () => {
+  const notFound = () => Object.assign(new Error('Support profile not found'), { response: { status: 404 } })
+  const profile: SupportProfileDto = {
+    id: 'sp1', participantId: 'p1', communicationNotes: 'Uses Auslan', behaviourSupportNotes: 'Quiet room', restrictivePracticeDetails: 'legacy',
+    manualHandlingNotes: 'Two person', medicationHealthSummary: 'Daily tablets', emergencyConsiderations: null, travelSpecificNotes: null, reviewDate: '2026-03-01T00:00:00',
+  }
+  const ok = { success: true, data: { id: 'sp1', participantId: 'p1' }, message: null, errors: null }
+  function setup() {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const hook = renderHook(() => ({ query: useSupportProfile('p1'), save: useUpdateSupportProfile() }), { wrapper: createWrapper(queryClient) })
+    return { queryClient, ...hook }
+  }
+  const save = (r: ReturnType<typeof setup>['result'], fields: object) => r.current.save.mutateAsync({ id: 'p1', fields })
+
+  beforeEach(() => {
+    mockApiPutRaw.mockReset()
+    mockApiGet.mockReset()
+    mockApiPutRaw.mockResolvedValue(ok)
+  })
+
+  it('carries every other topic when two cards are saved back to back and the GET stays 404', async () => {
+    mockApiGet.mockRejectedValue(notFound())
+    const { result, queryClient } = setup()
+    await waitFor(() => expect(result.current.query.isError).toBe(true))
+
+    await save(result, { emergencyConsiderations: 'X' })
+    await save(result, { travelSpecificNotes: 'Y' })
+
+    expect(mockApiPutRaw).toHaveBeenNthCalledWith(1, '/participants/p1/support-profile', expect.objectContaining({ emergencyConsiderations: 'X' }))
+    expect(mockApiPutRaw.mock.calls[1][1]).toEqual({ emergencyConsiderations: 'X', travelSpecificNotes: 'Y' })
+    expect(queryClient.getQueryData<SupportProfileDto>(['support-profile', 'p1'])?.id).toBe('sp1')
+  })
+
+  it('keeps both cards text when the second is saved while the first PUT is still in flight', async () => {
+    mockApiGet.mockResolvedValueOnce(profile).mockRejectedValue(notFound())
+    const { result } = setup()
+    await waitFor(() => expect(result.current.query.data).toBeDefined())
+    let release!: () => void
+    mockApiPutRaw.mockImplementationOnce(() => new Promise((res) => { release = () => res(ok) }))
+
+    const first = save(result, { emergencyConsiderations: 'X' })
+    const second = save(result, { travelSpecificNotes: 'Y' })
+    await waitFor(() => expect(mockApiPutRaw).toHaveBeenCalledTimes(1))
+    release()
+    await Promise.all([first, second])
+
+    expect(mockApiPutRaw).toHaveBeenCalledTimes(2)
+    expect(mockApiPutRaw.mock.calls[1][1]).toMatchObject({ emergencyConsiderations: 'X', travelSpecificNotes: 'Y', communicationNotes: 'Uses Auslan', reviewDate: '2026-03-01' })
+  })
+
+  it('sends the whole record, leaving no loaded topic out', async () => {
+    mockApiGet.mockResolvedValue(profile)
+    const { result } = setup()
+    await waitFor(() => expect(result.current.query.data).toBeDefined())
+
+    await save(result, { manualHandlingNotes: 'Hoist' })
+
+    expect(mockApiPutRaw.mock.calls[0][1]).toEqual({
+      communicationNotes: 'Uses Auslan', behaviourSupportNotes: 'Quiet room', manualHandlingNotes: 'Hoist', medicationHealthSummary: 'Daily tablets',
+      emergencyConsiderations: undefined, travelSpecificNotes: undefined, reviewDate: '2026-03-01',
+    })
+  })
+
+  it('refuses to save, and sends no PUT, while the profile is still loading', async () => {
+    mockApiGet.mockReturnValue(new Promise(() => {}))
+    const { result } = setup()
+
+    await expect(save(result, { emergencyConsiderations: 'X' })).rejects.toThrow('Support profile has not loaded')
+    expect(mockApiPutRaw).not.toHaveBeenCalled()
+  })
+
+  it('creates the profile on a first save when the GET is 404', async () => {
+    mockApiGet.mockRejectedValue(notFound())
+    const { result } = setup()
+    await waitFor(() => expect(result.current.query.isError).toBe(true))
+
+    await save(result, { communicationNotes: 'Pictures' })
+
+    expect(mockApiPutRaw.mock.calls[0][1]).toEqual({ communicationNotes: 'Pictures' })
+  })
+
+  it('still saves from the cached record after a background refetch failed', async () => {
+    mockApiGet.mockResolvedValueOnce(profile)
+    const { result, queryClient } = setup()
+    await waitFor(() => expect(result.current.query.data).toBeDefined())
+    mockApiGet.mockRejectedValue(new Error('boom'))
+    await queryClient.refetchQueries({ queryKey: ['support-profile', 'p1'] })
+    expect(queryClient.getQueryState(['support-profile', 'p1'])?.status).toBe('error')
+    expect(queryClient.getQueryData(['support-profile', 'p1'])).toBeDefined()
+
+    await save(result, { emergencyConsiderations: 'X' })
+
+    expect(mockApiPutRaw.mock.calls[0][1]).toMatchObject({ emergencyConsiderations: 'X', communicationNotes: 'Uses Auslan' })
   })
 })

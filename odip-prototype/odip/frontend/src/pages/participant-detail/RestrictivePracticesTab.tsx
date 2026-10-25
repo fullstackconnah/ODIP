@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import { useShowAll } from '@/components/ShowAllButton'
 import { ShieldAlert, AlertTriangle, ChevronDown, Plus, Pill } from 'lucide-react'
 import {
   useRestrictivePractices, useUpdateRestrictivePractice, useDeleteRestrictivePractice,
@@ -156,6 +157,8 @@ export default function RestrictivePracticesTab({ participantId }: { participant
 
   const activePractices = useMemo(() => practices.filter(p => p.isActive), [practices])
   const inactivePractices = useMemo(() => practices.filter(p => !p.isActive), [practices])
+  const activeRef = useRef<HTMLDivElement>(null)
+  const showAll = useShowAll(activePractices.length, activeRef, '[data-show-row]')
 
   function openEdit(practice: RestrictivePracticeDto) {
     setForm({
@@ -251,10 +254,15 @@ export default function RestrictivePracticesTab({ participantId }: { participant
           action={canWriteRestrictivePractices && participantId ? { label: 'Add entries', onClick: () => setAdding(true) } : undefined}
         />
       ) : (
-        <div className="space-y-3">
-          {activePractices.map(p => (
-            <PracticeCard key={p.id} practice={p} canWrite={canWriteRestrictivePractices} onEdit={() => openEdit(p)} onDelete={() => setDeletingPractice(p)} />
+        <div>
+        <div ref={activeRef} className="space-y-3">
+          {activePractices.slice(0, showAll.limit).map(p => (
+            <div key={p.id} tabIndex={-1} data-show-row className="rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]">
+            <PracticeCard practice={p} canWrite={canWriteRestrictivePractices} onEdit={() => openEdit(p)} onDelete={() => setDeletingPractice(p)} />
+            </div>
           ))}
+        </div>
+        {showAll.button}
         </div>
       )}
 
@@ -267,7 +275,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
             aria-expanded={showInactive}
           >
             <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showInactive ? 'rotate-180' : ''}`} />
-            Inactive entries ({inactivePractices.length})
+            Inactive ({inactivePractices.length})
           </button>
           {showInactive && (
             <div className="space-y-3 mt-3">

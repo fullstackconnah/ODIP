@@ -83,7 +83,7 @@ export function ParticipantAddressLivingSection({ p, participantId, canEdit }: {
 
   return (
     <SectionEditPanel title="Address & Living Arrangements" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
-      {(editing) => editing ? (
+      {(editing, startEdit) => editing ? (
         <div className="space-y-4">
           <div className={formGrid}>
             <FormField label="Street" className={span.medium}>
@@ -159,7 +159,7 @@ export function ParticipantAddressLivingSection({ p, participantId, canEdit }: {
           )}
         </div>
       ) : (
-        <FactList
+        <FactList hideEmpty onAdd={canEdit ? () => startEdit('first-empty') : undefined}
           items={[
             { label: 'Address', value: [p.addressStreet, p.addressSuburb, p.addressState, p.addressPostcode, p.country].filter(Boolean).join(', ') || undefined },
             { label: 'Living Arrangement', value: p.livingArrangement ? LIVING_ARRANGEMENT_LABELS[p.livingArrangement as LivingArrangement] : undefined },

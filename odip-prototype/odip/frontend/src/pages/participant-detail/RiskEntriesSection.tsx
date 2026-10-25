@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import { useShowAll } from '@/components/ShowAllButton'
 import { AlertTriangle, ChevronDown, Plus } from 'lucide-react'
 import { useParticipantRiskEntries, useCreateRiskEntry, useUpdateRiskEntry, useDeleteRiskEntry } from '@/api/hooks'
 import { Modal } from '@/components/Modal'
@@ -104,6 +105,8 @@ export default function RiskEntriesSection({ participantId }: { participantId: s
 
   const activeEntries = useMemo(() => entries.filter(e => e.isActive), [entries])
   const inactiveEntries = useMemo(() => entries.filter(e => !e.isActive), [entries])
+  const activeRef = useRef<HTMLDivElement>(null)
+  const showAll = useShowAll(activeEntries.length, activeRef, '[data-show-row]')
 
   function openCreate() {
     setForm(EMPTY_FORM)
@@ -208,10 +211,15 @@ export default function RiskEntriesSection({ participantId }: { participantId: s
           No risks recorded
         </p>
       ) : (
-        <div className="space-y-3">
-          {activeEntries.map(entry => (
-            <RiskEntryRow key={entry.id} entry={entry} canWrite={canWriteRisks} onEdit={() => openEdit(entry)} onDelete={() => setDeletingEntry(entry)} />
+        <div>
+        <div ref={activeRef} className="space-y-3">
+          {activeEntries.slice(0, showAll.limit).map(entry => (
+            <div key={entry.id} tabIndex={-1} data-show-row className="rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]">
+            <RiskEntryRow entry={entry} canWrite={canWriteRisks} onEdit={() => openEdit(entry)} onDelete={() => setDeletingEntry(entry)} />
+            </div>
           ))}
+        </div>
+        {showAll.button}
         </div>
       )}
 
@@ -224,7 +232,7 @@ export default function RiskEntriesSection({ participantId }: { participantId: s
             aria-expanded={showInactive}
           >
             <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showInactive ? 'rotate-180' : ''}`} />
-            Inactive risks ({inactiveEntries.length})
+            Inactive ({inactiveEntries.length})
           </button>
           {showInactive && (
             <div className="space-y-3 mt-3">

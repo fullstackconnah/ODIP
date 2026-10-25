@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   useParticipant, useParticipantAlerts, useDownloadIntakeFormPdf, useDownloadParticipantProfilePdf, useDownloadClientOverviewPdf,
-  useGenerateCaregiverLink, useRevokeCaregiverLink, useCaregiverSubmissions, useDeleteParticipant, useRestoreParticipant,
+  useGenerateCaregiverLink, useRevokeCaregiverLink, useSupportProfile, useCaregiverSubmissions, useDeleteParticipant, useRestoreParticipant,
 } from '@/api/hooks'
 import { PLAN_TYPE_LABELS, SUPPORT_RATIO_LABELS } from '@/api/types/enums'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
@@ -26,14 +26,24 @@ import { formatDateAu, extractErrorMessage } from '@/lib/utils'
 import { copyText } from '@/lib/clipboard'
 import {
   MedicationsTab, NotesTab, RoutinesTab, RestrictivePracticesTab, RiskEntriesSection, ParticipantConsentsSection,
-  ParticipantHealthConditionsSection, ParticipantAdlAssessmentsSection, ContactsTab, SupportProfileTab, ClaimsTab,
+  ParticipantHealthConditionsSection, ParticipantAdlAssessmentsSection, ContactsTab, ClaimsTab,
   RosteringTab, FundingTab, BookingsTab,
   ParticipantIdentitySection, ParticipantAddressLivingSection, ParticipantNdisFundingSection, ParticipantKeyIdentifiersSection,
   ParticipantCulturalBackgroundSection, ParticipantMedicalSection, ParticipantBehaviourCommunicationSection,
-  ParticipantCommunityAccessSection, ParticipantMealsDietSection, ParticipantAboutMeSection, ParticipantRisksHazardsSummarySection,
-  hasAddressLiving, hasKeyIdentifiers, hasCulturalBackground, hasMedical, hasBehaviourCommunication, hasMealsDiet, hasAboutMe, hasRisksHazardsSummary,
+  ParticipantMealsDietSection, ParticipantAboutMeSection, ParticipantRisksHazardsSummarySection,
+  hasAddressLiving, hasTopic, answeredChecklist, hasKeyIdentifiers, hasCulturalBackground, hasMedical, hasBehaviourCommunication, hasMealsDiet, hasAboutMe, hasRisksHazardsSummary,
+  hasMobilityPersonalCare, hasEquipmentOvernight, hasTypicalDay, hasTransportTravel, hasSupportNeeds,
   NotRecordedFold,
 } from './participant-detail'
+import {
+  SupportNeedsSection, MobilityAidsSection, OvernightSupportSection, EquipmentSection, MobilityFunctionalSection, SupportNotesSection,
+} from './participant-detail/SupportProfileTab'
+import { BehaviourSupportCard, TypicalDayCard, EarlierChecklistFold } from './participant-detail/ParticipantCommunityAccessSection'
+import { SupportProfileTopicCard, type SupportProfileState, type TopicField } from './participant-detail/SupportProfileTopicCard'
+import { SeeSectionLink } from './participant-detail/SeeSectionLink'
+import { managementLabel } from '@/lib/fundingPlan'
+import { ServicesCard } from './participant-detail/ServicesCard'
+import { JumpPanel } from './participant-detail/JumpTo'
 import { ParticipantSafetyFlags } from './participant-detail/ParticipantSafetyFlags'
 import { BeforeYouStartCard } from './participant-detail/BeforeYouStartCard'
 import { ParticipantMoreMenu } from './participant-detail/ParticipantMoreMenu'
@@ -65,10 +75,11 @@ const CARD_GRID = 'grid grid-cols-[repeat(auto-fill,minmax(min(26rem,100%),1fr))
 /**
  * One anchored section of a tab. `id` is the deep-link target (`#medical`), so it is the contract with the flag chips, the alerts and the
  * old `?tab=` keys. A component with no heading of its own gets a screen-reader-only one, which is also where focus lands after a jump.
+ * `data-jump` lists it in the tab's Jump to menu and rail.
  */
 function Section({ id, label, srHeading, wide, children }: { id: string; label: string; srHeading?: boolean; wide?: boolean; children: ReactNode }) {
   return (
-    <section id={id} aria-label={label} className={`scroll-mt-12 ${wide ? 'col-span-full' : ''}`}>
+    <section id={id} aria-label={label} data-jump className={`scroll-mt-12 ${wide ? 'col-span-full' : ''}`}>
       {srHeading && <h3 className="sr-only">{label}</h3>}
       {children}
     </section>
@@ -77,23 +88,28 @@ function Section({ id, label, srHeading, wide, children }: { id: string; label: 
 
 type ShortCard = { id: string; title: string; has: boolean; node: ReactNode }
 
-/** The cards with something recorded, then (for an editor) the empty ones folded into one line. Only an editor has empty cards to fold: each one returns null without canEdit. */
+/**
+ * The sections with something recorded, in order, then the empty ones folded into one line for every role (D2): an editor opens the fold to
+ * reach each card's Add, a viewer reads the line. A section that is still loading counts as recorded, so nothing folds before its data is in.
+ */
 function ShortCards({ cards, canEdit }: { cards: ShortCard[]; canEdit: boolean }) {
   const empty = cards.filter(c => !c.has)
   return (
     <>
       {cards.filter(c => c.has).map(c => c.node)}
-      {canEdit && empty.length > 0 && (
+      {empty.length > 0 && (canEdit ? (
         <NotRecordedFold className="col-span-full" summary={joinList(empty.map(c => c.title))}>
           <div className={CARD_GRID}>{empty.map(c => c.node)}</div>
         </NotRecordedFold>
-      )}
+      ) : (
+        <p className="col-span-full text-[13px] text-[var(--color-muted-foreground)]">Not recorded: {joinList(empty.map(c => c.title))}</p>
+      ))}
     </>
   )
 }
 
 export default function ParticipantDetailPage() {
-  const { canWrite, canViewAlerts, canWriteParticipantDetails, canManageFunding, canManageParticipantLifecycle, canAccessPage, isAdmin, isSuperAdmin } = usePermissions()
+  const { canWrite, canViewAlerts, canWriteParticipantDetails, canWriteSupportProfile, canWriteRestrictivePractices, canManageFunding, canManageParticipantLifecycle, canAccessPage, isAdmin, isSuperAdmin } = usePermissions()
   const { id } = useParams()
   const canAccessClaims = canAccessPage('claims')
   // The agreement draft carries money: only the roles the API admits to its GETs are offered it (ReadOnly would only meet a 403).
@@ -115,6 +131,7 @@ export default function ParticipantDetailPage() {
   useScrollToHash(id)
   const counts = useParticipantTabCounts(id)
   const pageQuery = useParticipant(id)
+  const supportProfile = useSupportProfile(id)
   const { data: p, isLoading, isError, error, refetch } = pageQuery
   const { data: alertsData } = useParticipantAlerts(id, canViewAlerts)
   // DOC-01 — Documents header buttons. Hooks called unconditionally, ahead of the isLoading/!p
@@ -145,28 +162,85 @@ export default function ParticipantDetailPage() {
   }
 
   const edit = { p, participantId: id!, canEdit: canWriteParticipantDetails }
-  // The short cards in wizard order within each tab. `has` is false for a card with nothing recorded yet (Identity and NDIS & Funding always have
-  // something: a name and a funding source).
-  const card = (cid: string, title: string, has: boolean, node: ReactNode): ShortCard => ({
-    id: cid, title, has, node: <Section key={cid} id={cid} label={title}>{node}</Section>,
+  // The sections of a tab in page order. `has` is false for one with nothing recorded yet; it folds (ShortCards). A section that always has
+  // content (Identity, NDIS & Funding, the lists that fold themselves) passes true. `wide` spans the grid.
+  const card = (cid: string, title: string, has: boolean, node: ReactNode, opts?: { wide?: boolean; srHeading?: boolean }): ShortCard => ({
+    id: cid, title, has, node: <Section key={cid} id={cid} label={title} wide={opts?.wide} srHeading={opts?.srHeading}>{node}</Section>,
   })
+  // The support profile, read once for Health, Daily and Overview. A 404 is a participant with no profile yet, so an empty one, not an error.
+  // While it loads (or failed) the cards built from it count as recorded, so nothing folds on data that has not arrived.
+  const sp: SupportProfileState = {
+    profile: supportProfile.data, loading: supportProfile.isLoading, error: supportProfile.isError && !supportProfile.data && !isNotFoundError(supportProfile.error),
+    retry: () => { void supportProfile.refetch() },
+  }
+  const spSettled = !sp.loading && !sp.error
+  const spHas = (...fields: TopicField[]) => !spSettled || hasTopic(sp.profile, ...fields)
+  const topic = (title: string, field: TopicField) => (
+    <SupportProfileTopicCard title={title} field={field} participantId={id!} canEdit={canWriteSupportProfile} state={sp} />
+  )
+  const stack = (...nodes: ReactNode[]) => <div className="flex flex-col gap-[var(--section-gap)]">{nodes.filter(Boolean).map((n, i) => <div key={i}>{n}</div>)}</div>
   const aboutCards = [
     card('identity', 'Identity', true, <ParticipantIdentitySection {...edit} />),
     card('home-and-living', 'Address & Living Arrangements', hasAddressLiving(p), <ParticipantAddressLivingSection {...edit} />),
     card('ndis-plan', 'NDIS & Funding', true, <ParticipantNdisFundingSection {...edit} />),
+    card('services', 'Services', true, <ServicesCard p={p} />),
     card('key-identifiers', 'Key Identifiers', hasKeyIdentifiers(p), <ParticipantKeyIdentifiersSection {...edit} />),
     card('culture-and-rights', 'Cultural Background', hasCulturalBackground(p), <ParticipantCulturalBackgroundSection {...edit} />),
     card('about-me', 'About Me', hasAboutMe(p), <ParticipantAboutMeSection {...edit} />),
   ]
-  // Community Access returns null without its service stream, so it gets no wrapper and no grid cell at all.
-  const hasCommunityAccess = parseServiceStreams(p.serviceStreams).includes('CommunityAccessDailyLiving')
+  // The Community Access stream gates the two cards that were its one card: behaviour support (Health) and the typical day (Daily).
+  const inCommunityStream = parseServiceStreams(p.serviceStreams).includes('CommunityAccessDailyLiving')
   const risksSummary = card('risks-summary', 'Risks & Hazards Summary', hasRisksHazardsSummary(p), <ParticipantRisksHazardsSummarySection {...edit} />)
+  const earlierChecklist = inCommunityStream ? answeredChecklist(p).length : 0
   const healthCards = [
-    card('medical', 'Medical', hasMedical(p), <ParticipantMedicalSection {...edit} />),
-    card('behaviour-and-communication', 'Behaviour & Communication', hasBehaviourCommunication(p), <ParticipantBehaviourCommunicationSection {...edit} />),
-    ...(hasCommunityAccess ? [card('community-access', 'Community Access', true, <ParticipantCommunityAccessSection {...edit} />)] : []),
+    card('emergency', 'Emergency', spHas('emergencyConsiderations'), topic('Emergency', 'emergencyConsiderations')),
+    card('medical', 'Medical', hasMedical(p) || spHas('medicationHealthSummary'),
+      stack(<ParticipantMedicalSection {...edit} />, topic('Medication and health summary', 'medicationHealthSummary'))),
+    // INTAKE sub-wave C1 — the structured health-condition grid. It folds itself from its own rows, so the page always renders it. A bare
+    // wrapper, not a Card: the DataTable already draws its own border.
+    card('health-conditions', 'Health conditions', true, <div className={COMPACT_EMPTY_TABLE}><ParticipantHealthConditionsSection participantId={id} /></div>, { wide: true }),
+    card('medications', 'Medications', true, <MedicationsTab participantId={id} />, { wide: true, srHeading: true }),
+    card('behaviour-and-communication', 'Behaviour & Communication', hasBehaviourCommunication(p) || spHas('communicationNotes'),
+      stack(<ParticipantBehaviourCommunicationSection {...edit} />, topic('Communication notes', 'communicationNotes'))),
+    card('behaviour-support', 'Behaviour support', true,
+      stack(topic('Behaviour support notes', 'behaviourSupportNotes'),
+        inCommunityStream && <BehaviourSupportCard p={p} participantId={id!} canEdit={canWriteParticipantDetails} />)),
+    // INTAKE-09 — the risk entries are a compact section rather than their own tab; the summary card shares the section's inner grid.
+    card('risks', 'Risks and hazards', true, (
+      <div className={CARD_GRID}>
+        {risksSummary.has && risksSummary.node}
+        <Card className="col-span-full"><RiskEntriesSection participantId={id} /></Card>
+        {canWriteParticipantDetails && !risksSummary.has && (
+          <NotRecordedFold className="col-span-full" summary={risksSummary.title}>
+            <div className={CARD_GRID}>{risksSummary.node}</div>
+          </NotRecordedFold>
+        )}
+      </div>
+    ), { wide: true }),
+    card('restrictive-practices', 'Restrictive practices', true, stack(
+      <RestrictivePracticesTab participantId={id} />,
+      sp.profile?.restrictivePracticeDetails && (
+        <Card title="Practice details (from support profile)"><p className="whitespace-pre-line text-sm">{sp.profile.restrictivePracticeDetails}</p></Card>
+      )), { wide: true, srHeading: true }),
+    ...(earlierChecklist > 0 ? [card('community-access-risk', 'Earlier checklist', true, <EarlierChecklistFold p={p} />, { wide: true })] : []),
   ]
-  const dailyCards = [card('meals', 'Meals & Diet', hasMealsDiet(p), <ParticipantMealsDietSection {...edit} />)]
+  const dailyCards = [
+    card('support-needs', 'Support needs', hasSupportNeeds(p), (
+      <SupportNeedsSection {...edit} restrictiveLink={<SeeSectionLink tab="health" hash="restrictive-practices" section="Restrictive practices" canEdit={canWriteRestrictivePractices} />} />
+    )),
+    card('mobility-and-personal-care', 'Mobility and personal care', hasMobilityPersonalCare(p) || spHas('manualHandlingNotes'), stack(
+      <MobilityAidsSection {...edit} />, <MobilityFunctionalSection {...edit} />,
+      <SupportNotesSection {...edit} field="mobilityNotes" />, topic('Manual handling notes', 'manualHandlingNotes'))),
+    card('equipment-and-overnight', 'Equipment and overnight', hasEquipmentOvernight(p), stack(
+      <EquipmentSection {...edit} />, <OvernightSupportSection {...edit} />, <SupportNotesSection {...edit} field="equipmentRequirements" />)),
+    // INTAKE sub-wave C2 — the structured ADL rating grid; it folds itself from its own rows.
+    card('daily-living', 'Daily living', true, <div className={COMPACT_EMPTY_TABLE}><ParticipantAdlAssessmentsSection participantId={id} /></div>, { wide: true }),
+    card('routines', 'Routines', true, <RoutinesTab participantId={id} />, { wide: true, srHeading: true }),
+    card('meals', 'Meals & Diet', hasMealsDiet(p), <ParticipantMealsDietSection {...edit} />),
+    ...(inCommunityStream ? [card('typical-day', 'Typical day', hasTypicalDay(p), <TypicalDayCard p={p} participantId={id!} canEdit={canWriteParticipantDetails} />)] : []),
+    card('transport-and-travel', 'Transport and travel', hasTransportTravel(p) || spHas('travelSpecificNotes'), stack(
+      <SupportNotesSection {...edit} field="transportRequirements" />, topic('Travel-specific notes', 'travelSpecificNotes'))),
+  ]
   // Back goes where the user came from; with no history (a deep link) it falls back to the list this participant is on. A draft is never on
   // Active participants: before intake is complete it is a Draft intake row on Enquiries, after it a row on Onboarding.
   const [backTo, backLabel] = !p.isDraft ? ['/participants', 'participants']
@@ -183,14 +257,15 @@ export default function ParticipantDetailPage() {
           <PageHeader
             variant="detail"
             title={p.fullName}
+            actionsBesideTitle
             subtitle={
               <PageHeaderMeta>
                 <StatusBadge status={p.isActive ? 'Active' : 'Inactive'} />
                 {/* What is still missing, as a quiet warning-tone chip beside the status. Informational: nothing on this page is gated on it. */}
                 {p.readinessIssues?.length ? <ReadinessNote issues={p.readinessIssues} variant="chip" /> : null}
                 <span>{p.region || 'No region'}</span>
-                <span>{PLAN_TYPE_LABELS[p.planType] ?? p.planType}</span>
-                <span>Ratio {SUPPORT_RATIO_LABELS[p.supportRatio] ?? p.supportRatio}</span>
+                {p.planType ? <span>{PLAN_TYPE_LABELS[p.planType] ?? p.planType}</span> : null}
+                {p.supportRatio ? <span>Ratio {SUPPORT_RATIO_LABELS[p.supportRatio] ?? p.supportRatio}</span> : null}
                 <span>Updated <time dateTime={p.updatedAt}>{formatRelative(p.updatedAt, { style: 'long' })}</time></span>
                 {parseServiceStreams(p.serviceStreams).length > 0 ? <ServiceStreamBadges value={p.serviceStreams} /> : null}
               </PageHeaderMeta>
@@ -222,6 +297,13 @@ export default function ParticipantDetailPage() {
               </div>
             }
           >
+            {/* The download error and the caregiver-link panel sit here, full width, so the title row stays one line at 390 px. */}
+            {(downloadIntakeForm.isError || downloadParticipantProfile.isError || downloadClientOverview.isError) && (
+              <p role="alert" className="w-full text-xs text-[var(--color-destructive)]">
+                Couldn't download the file. Try again, or contact support if this keeps happening.
+              </p>
+            )}
+            {caregiverLink.panel}
             <ParticipantSafetyFlags participant={p} />
           </PageHeader>
         </div>
@@ -281,79 +363,71 @@ export default function ParticipantDetailPage() {
             </section>
           )}
           <BeforeYouStartCard participant={p} />
+          {topic('Support profile review', 'reviewDate')}
         </div>
       </TabPanel>
 
       <TabPanel tab={tab} id="about">
-        <div className={CARD_GRID}>
-          <ShortCards cards={aboutCards} canEdit={canWriteParticipantDetails} />
-        </div>
+        <JumpPanel>
+          <div className={CARD_GRID}>
+            <ShortCards cards={aboutCards} canEdit={canWriteParticipantDetails} />
+          </div>
+        </JumpPanel>
       </TabPanel>
 
       <TabPanel tab={tab} id="health">
-        <div className={CARD_GRID}>
-          <ShortCards cards={healthCards.slice(0, 1)} canEdit={canWriteParticipantDetails} />
-          {/* INTAKE sub-wave C1 — the structured health-condition grid, always rendered: GetForParticipant always returns all ten
-              HealthConditionType entries, so there is no genuinely-empty state to hide behind a condition. A bare wrapper, not a Card:
-              the DataTable already draws its own border. */}
-          <Section id="health-conditions" label="Health conditions" wide>
-            <div className={COMPACT_EMPTY_TABLE}><ParticipantHealthConditionsSection participantId={id} /></div>
-          </Section>
-          <Section id="medications" label="Medications" srHeading wide><MedicationsTab participantId={id} /></Section>
-          <ShortCards cards={healthCards.slice(1)} canEdit={canWriteParticipantDetails} />
-          {/* INTAKE-09 — the risk entries are a compact section rather than their own tab; the summary card shares the section's inner grid. */}
-          <Section id="risks" label="Risks and hazards" wide>
-            <div className={CARD_GRID}>
-              {risksSummary.has && risksSummary.node}
-              <Card className="col-span-full"><RiskEntriesSection participantId={id} /></Card>
-              {canWriteParticipantDetails && !risksSummary.has && (
-                <NotRecordedFold className="col-span-full" summary={risksSummary.title}>
-                  <div className={CARD_GRID}>{risksSummary.node}</div>
-                </NotRecordedFold>
-              )}
-            </div>
-          </Section>
-          <Section id="restrictive-practices" label="Restrictive practices" srHeading wide><RestrictivePracticesTab participantId={id} /></Section>
-        </div>
+        <JumpPanel>
+          <div className={CARD_GRID}>
+            <ShortCards cards={healthCards} canEdit={canWriteParticipantDetails} />
+          </div>
+        </JumpPanel>
       </TabPanel>
 
       <TabPanel tab={tab} id="daily">
-        <div className={CARD_GRID}>
-          <Section id="support-profile" label="Support profile" srHeading wide><SupportProfileTab participantId={id} onNavigateToTab={goTo} /></Section>
-          {/* INTAKE sub-wave C2 — the structured ADL rating grid, always rendered (GetForParticipant always returns all twenty AdlType entries). */}
-          <Section id="daily-living" label="Daily living" wide>
-            <div className={COMPACT_EMPTY_TABLE}><ParticipantAdlAssessmentsSection participantId={id} /></div>
-          </Section>
-          <Section id="routines" label="Routines" srHeading wide><RoutinesTab participantId={id} /></Section>
-          <ShortCards cards={dailyCards} canEdit={canWriteParticipantDetails} />
-        </div>
+        <JumpPanel>
+          <div className={CARD_GRID}>
+            <ShortCards cards={dailyCards} canEdit={canWriteParticipantDetails} />
+          </div>
+        </JumpPanel>
       </TabPanel>
 
       <TabPanel tab={tab} id="people">
-        <div className={CARD_GRID}>
-          <Section id="contacts" label="Contacts" srHeading wide><ContactsTab participantId={id} /></Section>
-          {canAccessRostering && <Section id="roster" label="Rostering" srHeading wide><RosteringTab participantId={id!} /></Section>}
-          <Section id="trips" label="Bookings" srHeading wide><BookingsTab participantId={id} /></Section>
-        </div>
+        <JumpPanel>
+          <div className={CARD_GRID}>
+            <Section id="contacts" label="Contacts" srHeading wide><ContactsTab participantId={id} participant={p} /></Section>
+            {canAccessRostering && <Section id="roster" label="Rostering" srHeading wide><RosteringTab participantId={id!} /></Section>}
+            <Section id="trips" label="Bookings" srHeading wide><BookingsTab participantId={id} /></Section>
+          </div>
+        </JumpPanel>
       </TabPanel>
 
       <TabPanel tab={tab} id="funding">
-        <div className={CARD_GRID}>
-          {canManageFunding && <Section id="plan-budget" label="Plan budget" srHeading wide><FundingTab participantId={id!} planType={p.planType} /></Section>}
-          {canAccessClaims && <Section id="claims" label="Claims" srHeading wide><ClaimsTab participantId={id!} canWrite={canWrite} /></Section>}
-        </div>
+        <JumpPanel>
+          <div className={CARD_GRID}>
+            {canManageFunding && <Section id="plan-budget" label="Plan budget" srHeading wide>
+              <p className="mb-3 flex flex-wrap items-center gap-x-2 text-sm">
+                Plan type: {managementLabel(p.planType)}
+                <SeeSectionLink tab="about" hash="ndis-plan" section="NDIS plan" canEdit={canWriteParticipantDetails} />
+              </p>
+              <FundingTab participantId={id!} planType={p.planType} />
+            </Section>}
+            {canAccessClaims && <Section id="claims" label="Claims" srHeading wide><ClaimsTab participantId={id!} canWrite={canWrite} /></Section>}
+          </div>
+        </JumpPanel>
       </TabPanel>
 
       <TabPanel tab={tab} id="records">
-        <div className={CARD_GRID}>
-          <Section id="notes" label="Notes" srHeading wide><NotesTab participantId={id} /></Section>
-          <Section id="consents" label="Consents" wide>
-            <Card><ParticipantConsentsSection participantId={id} /></Card>
-          </Section>
-          {canSeeHistory && (
-            <Section id="history" label="History" srHeading wide><AuditHistoryTab entityType="Participant" entityId={String(p.id)} /></Section>
-          )}
-        </div>
+        <JumpPanel>
+          <div className={CARD_GRID}>
+            <Section id="notes" label="Notes" srHeading wide><NotesTab participantId={id} /></Section>
+            <Section id="consents" label="Consents" wide>
+              <Card><ParticipantConsentsSection participantId={id} /></Card>
+            </Section>
+            {canSeeHistory && (
+              <Section id="history" label="History" srHeading wide><AuditHistoryTab entityType="Participant" entityId={String(p.id)} /></Section>
+            )}
+          </div>
+        </JumpPanel>
       </TabPanel>
 
       {archiveRestore.confirmDialog}
@@ -386,8 +460,8 @@ type PdfDownload = {
 /**
  * The header's one menu, at every width (VISUAL-1 V2: seven header controls at 1440 became one menu and Edit). A secondary-look
  * trigger, so Edit stays the page's one filled primary. It holds the three PDF downloads, "Agreement draft" (same gate as before) and
- * the caregiver-link actions. Each download keeps its file name and pending state; their error lines collapse into one shared
- * `role="alert"` under the trigger, and the caregiver link's own panel (the issued URL, its error, the Revoke confirm) sits there too.
+ * the caregiver-link actions. Each download keeps its file name and pending state. Their shared `role="alert"` error line and the caregiver link's
+ * panel (the issued URL, its error, the Revoke confirm) render in the PageHeader children, outside the action cluster.
  */
 function DocumentsMenu({
   participantId, fullName, canOpenAgreementDraft, intake, profile, overview, caregiverLink,
@@ -407,7 +481,6 @@ function DocumentsMenu({
     { value: 'overview', label: 'Client Overview PDF', fileName: `${fullName} - Client Overview.pdf`, mutation: overview },
   ]
   const busy = downloads.some(d => d.mutation.isPending)
-  const failed = downloads.some(d => d.mutation.isError)
 
   const items: DropdownItem[] = [
     ...downloads.map(d => ({
@@ -431,22 +504,15 @@ function DocumentsMenu({
   }
 
   return (
-    <div className="flex flex-col items-start gap-1">
-      <Dropdown
-        variant="menu"
-        triggerVariant="secondary"
-        label={busy ? 'Preparing…' : 'Documents'}
-        icon={busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-        items={items}
-        onSelect={onSelect}
-      />
-      {failed && (
-        <p role="alert" className="text-xs text-[var(--color-destructive)]">
-          Couldn't download the file. Try again, or contact support if this keeps happening.
-        </p>
-      )}
-      {caregiverLink.panel}
-    </div>
+    <Dropdown
+      variant="menu"
+      triggerVariant="secondary"
+      iconOnlyBelowSm
+      label={busy ? 'Preparing…' : 'Documents'}
+      icon={busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+      items={items}
+      onSelect={onSelect}
+    />
   )
 }
 
@@ -509,15 +575,15 @@ function useCaregiverLink(participantId: string): CaregiverLink {
   const panel = (
     <div data-testid="caregiver-link-control" className="contents">
       {issued && (
-        <div role="status" className="text-xs p-2 rounded bg-[var(--color-accent)] break-all">
+        <div role="status" className="w-full text-xs p-2 rounded bg-[var(--color-accent)] break-all">
           <span>Copy this link now — it won't be shown again. Expires {formatDateAu(issued.expiresAt)}.</span>
           <code className="block mt-1">{issued.url}</code>
-          <button type="button" className="mt-1 underline" onClick={() => { void copyText(issued.url) }}>
-            Copy
-          </button>
+          <Button variant="secondary" size="sm" className="mt-2 min-h-[var(--tap-min)]" onClick={() => { void copyText(issued.url) }}>
+            Copy link
+          </Button>
         </div>
       )}
-      {linkError && <p role="alert" className="text-xs text-[var(--color-destructive)]">{linkError}</p>}
+      {linkError && <p role="alert" className="w-full text-xs text-[var(--color-destructive)]">{linkError}</p>}
       <ConfirmDialog
         open={confirmingRevoke}
         onCancel={() => setConfirmingRevoke(false)}

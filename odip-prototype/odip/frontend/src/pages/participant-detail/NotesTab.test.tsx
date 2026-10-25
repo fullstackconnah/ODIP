@@ -266,3 +266,19 @@ describe('NotesTab — how long ago', () => {
     expect(screen.getByText(/Sam Coordinator · 3 months ago/)).toBeInTheDocument()
   })
 })
+
+describe('NotesTab — long list (T10)', () => {
+  it('shows 5 of 23 active notes, then all 23 with focus on the 6th row', async () => {
+    const user = userEvent.setup()
+    mockUseParticipantNotes.mockReturnValue({
+      data: Array.from({ length: 23 }, (_, i) => makeNote({ id: `n${i}`, title: `Note ${i}` })),
+      isLoading: false,
+    })
+    const { container } = render(<NotesTab participantId="participant-1" />)
+    expect(container.querySelectorAll('[data-show-row]')).toHaveLength(5)
+    await user.click(screen.getByRole('button', { name: 'Show all 23' }))
+    const rows = container.querySelectorAll('[data-show-row]')
+    expect(rows).toHaveLength(23)
+    expect(rows[5]).toHaveFocus()
+  })
+})

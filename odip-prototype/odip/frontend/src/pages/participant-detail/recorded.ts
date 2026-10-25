@@ -1,4 +1,7 @@
 import { parseHidpaCategories, type ParticipantDetailDto } from '@/api/types/participants'
+import type { SupportProfileDto } from '@/api/types/participants'
+import { CHECKLIST_ITEM_TYPES } from '@/api/types/enums'
+import type { TopicField } from './SupportProfileTopicCard'
 
 // Whether anything in a Details card is recorded. The card hides itself from a role that cannot edit when this is false, and the
 // Details tab folds an editor's empty cards into one "Not recorded" line (VISUAL-1 V2). A module of its own, not the card files:
@@ -54,4 +57,47 @@ const NOTHING = /^(nil|none|n\/a|na|-|nka|nkda|nil known|none known|no known( (d
 export const meansNothing = (t?: string | null) => {
   const s = (t ?? '').trim().replace(/\s+/g, ' ')
   return s === '' || NOTHING.test(s)
+}
+
+// Slice 2: the Health and Daily sections. Each is true when any of its fields is non-empty; the page folds a section for which it is false.
+// Support-profile text fields are checked on the profile itself (see hasTopic); these cover the participant record.
+
+export function hasSupportNeeds(p: ParticipantDetailDto): boolean {
+  return !!(p.isHighSupport || p.isIntensiveSupport || p.hasRestrictivePracticeFlag || p.supportRatio)
+}
+
+export function hasMobilityPersonalCare(p: ParticipantDetailDto): boolean {
+  return !!(p.mobilityAidWheelchair || p.mobilityAidWalker || p.mobilitySupportOptions?.length || p.mobilityNotes || p.ambulantStatus
+    || p.fallsRiskRating || p.unevenGroundFlag != null || p.levelOfPersonalCare || p.orthotics || p.bowelCareDetail
+    || p.continenceSupportDetail || p.menstruationSupport || p.skinIntegrity)
+}
+
+export function hasEquipmentOvernight(p: ParticipantDetailDto): boolean {
+  return !!(p.requiresHiLoBed || p.requiresHoist || p.requiresShowerChair || p.requiresCommode || p.requiresStandingMachine
+    || p.equipmentRequirements || (p.overnightSupport && p.overnightSupport !== 'None'))
+}
+
+export function hasTransportTravel(p: ParticipantDetailDto): boolean {
+  return !!p.transportRequirements
+}
+
+
+export function hasTypicalDay(p: ParticipantDetailDto): boolean {
+  return !!(p.supportsLookLikeMorning || p.supportsLookLikeDay || p.supportsLookLikeAfternoonEvening || p.supportsLookLikeOvernight)
+}
+
+export function hasEmergency(emergencyConsiderations?: string | null): boolean {
+  return !!emergencyConsiderations?.trim()
+}
+
+/** The legacy Community Mobility & Transport Risk / Behaviours of Concern checklist rows that were answered. */
+export function answeredChecklist(p: ParticipantDetailDto) {
+  return CHECKLIST_ITEM_TYPES
+    .map((type) => p.checklistItems?.find((row) => row.itemType === type))
+    .filter((row): row is NonNullable<typeof row> => !!row?.value)
+}
+
+/** Whether the profile has any text in the given fields (the page's fold decision for a topic card). */
+export function hasTopic(profile: SupportProfileDto | undefined, ...fields: TopicField[]): boolean {
+  return fields.some(f => !!profile?.[f])
 }
