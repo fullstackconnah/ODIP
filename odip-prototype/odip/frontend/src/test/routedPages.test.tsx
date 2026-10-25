@@ -91,6 +91,7 @@ const ROUTES: Route[] = [
   { path: '/qualifications', url: '/qualifications', load: () => import('@/pages/QualificationsPage') },
   { path: '/claims/:id', url: `/claims/${ID}`, load: () => import('@/pages/ClaimDetailPage') },
   { path: '/budgets', url: '/budgets', load: () => import('@/pages/BudgetsPage') },
+  { path: '/invoices', url: '/invoices', load: () => import('@/pages/InvoicesPage') },
   { path: '/rostering', url: '/rostering', load: () => import('@/pages/rostering/RosterBoardPage') },
   { path: '/rostering/patterns', url: '/rostering/patterns', load: () => import('@/pages/rostering/PatternsPage') },
   { path: '/rostering/compatibility', url: '/rostering/compatibility', load: () => import('@/pages/rostering/CompatibilityPage') },

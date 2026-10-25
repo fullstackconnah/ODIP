@@ -31,7 +31,8 @@ export const FUNDING_SOURCE_LABELS: Record<FundingSource, string> = {
 export const LIVING_ARRANGEMENT_LABELS: Record<LivingArrangement, string> = {
   Family: 'Family',
   Independent: 'Independent',
-  SupportedAccommodation: 'Supported Accommodation',
+  SupportedAccommodation: 'Supported accommodation',
+  SharedHousehold: 'Shared household with other tenants',
 }
 
 export const MOBILITY_SUPPORT_OPTIONS = [

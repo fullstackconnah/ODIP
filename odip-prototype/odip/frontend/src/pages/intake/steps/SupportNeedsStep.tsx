@@ -2,8 +2,8 @@
  * PF-10.3 — Intake wizard, "Support Needs" step: the day-one physical-support/mobility-aid subset
  * of the old "Support Needs & Mobility" step. Per PF-10.1's fission table, only
  * mobilityAidWheelchair/mobilityAidWalker/overnightSupport/overnightRatio/the 5 equipment
- * checkboxes/supportRatio/isHighSupport/isIntensiveSupport are `entryPhase: 'intake'` — every
- * Profile-only field (mobilitySupportOptions, mobilityNotes, equipmentRequirements,
+ * checkboxes/equipmentRequirements/supportRatio/isHighSupport/isIntensiveSupport are `entryPhase: 'intake'` — every
+ * Profile-only field (mobilitySupportOptions, mobilityNotes,
  * transportRequirements, ambulantStatus, fallsRiskRating, unevenGroundFlag,
  * levelOfPersonalCare, orthotics, continenceSupportDetail, bowelCareDetail, menstruationSupport,
  * skinIntegrity) is absent — it moves to the Profile wizard (PF-10.4).
@@ -12,6 +12,7 @@ import type { Control, FieldErrors, UseFormRegister } from 'react-hook-form'
 import { Controller } from 'react-hook-form'
 import { Dropdown } from '@/components/Dropdown'
 import { FormField } from '@/components/FormField'
+import { TextAreaField } from '@/components/TextAreaField'
 import { CheckboxField } from '@/components/CheckboxField'
 import { Card } from '@/components/Card'
 import type { ParticipantFormData } from '@/lib/participantSchema'
@@ -108,6 +109,7 @@ export function SupportNeedsStep({ control, register, errors, overnightSupportVa
           <CheckboxField label="Commode" id="requiresCommode" {...register('requiresCommode')} />
           <CheckboxField label="Standing Machine" id="requiresStandingMachine" {...register('requiresStandingMachine')} />
         </fieldset>
+        <TextAreaField label="Equipment notes" id="equipmentRequirements" {...register('equipmentRequirements')} rows={2} hint="For example, armrests or back support" />
       </Card>
     </div>
   )

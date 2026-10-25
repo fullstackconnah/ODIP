@@ -357,6 +357,14 @@ public record CreateShiftDto
 public record UpdateShiftDto : CreateShiftDto
 {
     public ShiftStatus Status { get; init; } = ShiftStatus.Draft;
+
+    private readonly Guid? _expectedStaffId;
+    /// <summary>
+    /// The chip's Publish (roster-draft-publish): who the board showed on the shift. When named and the shift's worker is someone else now, the update is refused (409) so a stale chip
+    /// cannot write its worker back. A request that leaves it out (the slide-over) is not checked. Same left-out-versus-null rule as <see cref="AssignShiftDto.ExpectedStaffId"/>.
+    /// </summary>
+    public Guid? ExpectedStaffId { get => _expectedStaffId; init { _expectedStaffId = value; ExpectsStaff = true; } }
+    [System.Text.Json.Serialization.JsonIgnore] public bool ExpectsStaff { get; private init; }
 }
 
 public record AssignShiftDto
