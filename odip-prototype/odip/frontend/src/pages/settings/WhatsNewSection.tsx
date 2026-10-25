@@ -6,8 +6,8 @@ import { Callout } from '@/components/Callout'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { DataTable } from '@/components/DataTable'
 import { StatusBadge } from '@/components/StatusBadge'
-import { formatWhatsNewDate } from '@/components/layout/WhatsNewEntryList'
-import { WhatsNewEntryPanel, WHATS_NEW_ROLES } from '@/pages/settings/WhatsNewEntryPanel'
+import { WhatsNewEntryPanel } from '@/pages/settings/WhatsNewEntryPanel'
+import { WHATS_NEW_ROLES, formatWhatsNewDate } from '@/lib/whatsNew'
 import { retryingAfterError } from '@/lib/queryPhase'
 
 const audience = (e: AdminWhatsNewEntry) =>

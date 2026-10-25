@@ -1,13 +1,10 @@
 import { useState } from 'react'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
-import { formatWithTimeZone } from '@/lib/utils'
+import { formatWhatsNewDate } from '@/lib/whatsNew'
 import type { WhatsNewEntry } from '@/api/types'
 
 const MUTED = 'text-[var(--color-muted-foreground)]'
-
-/** `25 Oct 2026`, in Sydney time. en-AU prints September as "Sept": no test may hard-code a September date. */
-export const formatWhatsNewDate = (iso: string) => formatWithTimeZone(iso, 'Australia/Sydney', { day: 'numeric', month: 'short', year: 'numeric' })
 
 /** One release note, drawn the same in the panel and the pop-up. Title and body are plain text written by Bunya Support: React escapes them. */
 export function WhatsNewEntryItem({ entry, isNew = false }: { entry: WhatsNewEntry; isNew?: boolean }) {

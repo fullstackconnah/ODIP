@@ -8,17 +8,10 @@ import { labelClass } from '@/components/FormField'
 import { SlideOver } from '@/components/SlideOver'
 import { TextAreaField } from '@/components/TextAreaField'
 import { TextField } from '@/components/TextField'
+import { WHATS_NEW_ROLES } from '@/lib/whatsNew'
 
 export const TITLE_MAX = 80
 export const BODY_MAX = 600
-
-/** House order: the order the roles are saved and listed in. */
-export const WHATS_NEW_ROLES: { role: WhatsNewRole; label: string }[] = [
-  { role: 'Admin', label: 'Admin' },
-  { role: 'Coordinator', label: 'Coordinator' },
-  { role: 'SupportWorker', label: 'Support worker' },
-  { role: 'ReadOnly', label: 'Read-only' },
-]
 
 const DISABLED_LOOK = 'aria-disabled:opacity-50 aria-disabled:cursor-not-allowed'
 
