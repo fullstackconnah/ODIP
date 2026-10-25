@@ -11,13 +11,15 @@ import { TONE } from '@/lib/tone'
 import { __testHooks } from '@/hooks/useBackNavigation'
 
 const {
-  mockUseParticipant, mockUseParticipantBookings, mockUseParticipantAlerts,
+  mockUseParticipant, mockUseSupportProfile, mockUseParticipantBookings, mockUseParticipantAlerts,
   mockUseDownloadIntakeFormPdf, mockUseDownloadParticipantProfilePdf, mockUseDownloadClientOverviewPdf,
   mockPatchMutateAsync, mockUseStaff,
   mockUseGenerateCaregiverLink, mockUseRevokeCaregiverLink, mockUseCaregiverSubmissions,
   mockDeleteMutate, mockNotes, mockRisks,
 } = vi.hoisted(() => ({
   mockUseParticipant: vi.fn(),
+  // The page reads the support profile once for Health, Daily and Overview; 404 / empty by default.
+  mockUseSupportProfile: vi.fn<() => Record<string, unknown>>(() => ({ data: undefined, isLoading: false, isError: false, error: null, refetch: vi.fn() })),
   mockUseParticipantBookings: vi.fn<() => { data: Record<string, unknown>[] }>(() => ({ data: [] })),
   mockUseParticipantAlerts: vi.fn<() => { data: unknown }>(() => ({ data: undefined })),
   // DOC-01 — mocked like every other hook this file already stubs, so the button-render/click
@@ -49,6 +51,8 @@ const {
 // PortalShiftDetailPage.test.tsx's ShiftNotesSection stub" approach used there).
 vi.mock('@/api/hooks', () => ({
   useParticipant: mockUseParticipant,
+  useSupportProfile: mockUseSupportProfile,
+  useUpdateSupportProfile: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useParticipantBookings: mockUseParticipantBookings,
   useParticipantAlerts: mockUseParticipantAlerts,
   useDownloadIntakeFormPdf: mockUseDownloadIntakeFormPdf,
@@ -92,7 +96,6 @@ vi.mock('./participant-detail', async () => {
     // PD-6 — the Support Profile tab has its own dedicated test file (SupportProfileTab.test.tsx);
     // stubbed here so this page's tests stay about page composition/tab wiring, same "own hooks
     // have their own test file" approach as every other nested-CRUD section above.
-    SupportProfileTab: () => <div data-testid="support-profile-tab" />,
     // Shift-completion design spec §4 — Claims tab has its own dedicated test file
     // (ClaimsTab.test.tsx); stubbed here for the same reason as every nested-CRUD tab above.
     ClaimsTab: () => <div data-testid="claims-tab" />,
@@ -185,7 +188,7 @@ async function chooseFromDocuments(name: RegExp | string) {
   await user.click(screen.getByRole('option', { name }))
 }
 
-describe('ParticipantDetailPage — INTAKE-03 Community Access card', () => {
+describe('ParticipantDetailPage — INTAKE-03 Community Access cards (behaviour support, typical day)', () => {
   it('is absent when the participant does not have the CommunityAccessDailyLiving stream', () => {
     mockUseParticipant.mockReturnValue({
       data: makeParticipant({ serviceStreams: 'InHomeSupport', signsHappyAndSettled: 'Hums quietly.' }),
@@ -193,7 +196,7 @@ describe('ParticipantDetailPage — INTAKE-03 Community Access card', () => {
     })
     renderAt('participant-1')
 
-    expect(screen.queryByRole('heading', { name: 'Community Access' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'What my supports look like' })).not.toBeInTheDocument()
     // Even stray data saved while the stream was briefly on must not surface once it's off — the
     // card's own gate is the stream flag itself, not field presence (see the component's doc).
     expect(screen.queryByText('Hums quietly.')).not.toBeInTheDocument()
@@ -220,18 +223,21 @@ describe('ParticipantDetailPage — INTAKE-03 Community Access card', () => {
     })
     renderAtTab('participant-1', 'health')
 
-    expect(screen.getByRole('heading', { name: 'Community Access' })).toBeInTheDocument()
     expect(screen.getByText('Smiles and hums when content.')).toBeInTheDocument()
     expect(screen.getByText('Quiet room, weighted blanket.')).toBeInTheDocument()
     expect(screen.getByText('Loud unexpected noises.')).toBeInTheDocument()
-    expect(screen.getByText(/Morning: Gentle wake, warm drink\./)).toBeInTheDocument()
-    expect(screen.getByText(/Day: Community outing with 1:1 support\./)).toBeInTheDocument()
+    expect(screen.getByText('Earlier checklist (2)')).toBeInTheDocument()
 
     // Only the two rows with an actual Value show — not a wall of 19 unanswered placeholder rows.
     expect(screen.getByText('Uses wheelchair')).toBeInTheDocument()
     expect(screen.getByText('Manual wheelchair, needs ramp access.')).toBeInTheDocument()
     expect(screen.getByText('Harm to self')).toBeInTheDocument()
     expect(screen.queryByText('Falls risk')).not.toBeInTheDocument()
+    cleanup()
+    renderAtTab('participant-1', 'daily')
+    expect(screen.getByRole('heading', { name: 'What my supports look like' })).toBeInTheDocument()
+    expect(screen.getByText('Gentle wake, warm drink.')).toBeInTheDocument()
+    expect(screen.getByText('Community outing with 1:1 support.')).toBeInTheDocument()
   })
 })
 
@@ -350,7 +356,7 @@ describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
     expect(idx('Support Needs & Mobility')).toBe(-1)
   })
 
-  it('stacks the Health tab in order: Medical, health conditions, Behaviour & Communication, Community Access, then the risks (summary card, entries)', () => {
+  it('stacks the Health tab in order: Medical, health conditions, Behaviour & Communication, Behaviour support, then the risks (summary card, entries)', () => {
     mockUseParticipant.mockReturnValue({
       data: makeParticipant({
         primaryDiagnosis: 'Autism', memory: 'Fair', serviceStreams: 'CommunityAccessDailyLiving',
@@ -364,7 +370,7 @@ describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
       screen.getByRole('heading', { name: 'Medical' }),
       screen.getByTestId('health-conditions-section'),
       screen.getByRole('heading', { name: 'Behaviour & Communication' }),
-      screen.getByRole('heading', { name: 'Community Access' }),
+      screen.getByRole('heading', { name: 'Behaviour support' }),
       screen.getByRole('heading', { name: 'Risks & Hazards Summary' }),
       screen.getByTestId('risk-entries-section'),
       screen.getByTestId('restrictive-practices-tab'),
@@ -378,7 +384,7 @@ describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
     const owned: Record<string, string[]> = {
       health: ['health-conditions-section', 'risk-entries-section', 'medications-tab', 'restrictive-practices-tab'],
-      daily: ['adl-assessments-section', 'routines-tab', 'support-profile-tab'],
+      daily: ['adl-assessments-section', 'routines-tab'],
       people: ['contacts-tab'],
       records: ['consents-section', 'notes-tab'],
     }
@@ -404,11 +410,11 @@ describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
     expect(screen.getByRole('heading', { name: 'Key Identifiers' }).closest('details')).toBeNull()
   })
 
-  it('has nothing to fold for a role that cannot edit: an empty card is not shown to it at all', () => {
+  it('shows a role that cannot edit one plain "Not recorded" line, with no fold and no empty card', () => {
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
     renderAtTab('participant-1', 'health')
 
-    expect(screen.queryByText(/^Not recorded:/)).not.toBeInTheDocument()
+    expect(screen.getByText(/^Not recorded:/).closest('details')).toBeNull()
     expect(screen.queryByRole('heading', { name: 'Medical' })).not.toBeInTheDocument()
   })
 
@@ -1489,8 +1495,8 @@ describe('ParticipantDetailPage — seven tabs (slice 1)', () => {
     const inventory: Record<string, string[]> = {
       overview: ['before-you-start'],
       about: ['identity', 'home-and-living', 'ndis-plan', 'key-identifiers', 'culture-and-rights', 'about-me'],
-      health: ['medical', 'health-conditions', 'medications', 'behaviour-and-communication', 'community-access', 'risks', 'restrictive-practices'],
-      daily: ['support-profile', 'daily-living', 'routines', 'meals'],
+      health: ['medical', 'health-conditions', 'medications', 'behaviour-and-communication', 'behaviour-support', 'risks', 'restrictive-practices'],
+      daily: ['support-needs', 'mobility-and-personal-care', 'equipment-and-overnight', 'daily-living', 'routines', 'meals', 'typical-day', 'transport-and-travel'],
       people: ['contacts', 'roster', 'trips'],
       funding: ['plan-budget', 'claims'],
       records: ['notes', 'consents', 'history'],
@@ -1657,9 +1663,8 @@ describe('ParticipantDetailPage — seven tabs (slice 1)', () => {
       isLoading: false,
     })
     renderAt('participant-1')
-    const banner = document.body
-    expect(within(banner).queryByRole('link', { name: /^Edit$/ })).not.toBeInTheDocument()
-    expect(within(banner).queryByRole('button', { name: /^Edit$/ })).not.toBeInTheDocument()
+        const strip = screen.getByRole('tablist')
+    for (const el of screen.queryAllByRole('button', { name: /^Edit$/ }).concat(screen.queryAllByRole('link', { name: /^Edit$/ }))) expect(before(el, strip)).toBe(false)
     expect(screen.getByText('Ratio 1:2')).toBeInTheDocument()
     expect(screen.queryByText(/Support Ratio:/)).not.toBeInTheDocument()
     expect(document.querySelector('time')).toHaveAttribute('datetime', '2026-01-01T00:00:00Z')
@@ -1708,14 +1713,14 @@ describe('ParticipantDetailPage — seven tabs (slice 1)', () => {
     expect(screen.queryByText('Safety details not recorded')).not.toBeInTheDocument()
   })
 
-  it('T21: Community Access has no wrapper without the stream, and the card sits in #community-access with it', () => {
+  it('T21: the Earlier checklist wrapper needs the stream and an answered checklist', () => {
     renderAtTab('participant-1', 'health')
-    expect(document.getElementById('community-access')).toBeNull()
+    expect(document.getElementById('community-access-risk')).toBeNull()
     cleanup()
 
-    mockUseParticipant.mockReturnValue({ data: makeParticipant({ serviceStreams: 'CommunityAccessDailyLiving' }), isLoading: false })
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ serviceStreams: 'CommunityAccessDailyLiving', checklistItems: [makeChecklistItem({ itemType: 'HarmToSelf', value: 'No' })] }), isLoading: false })
     renderAtTab('participant-1', 'health')
-    expect(within(document.getElementById('community-access')!).getByRole('heading', { name: 'Community Access' })).toBeInTheDocument()
+    expect(within(document.getElementById('community-access-risk')!).getByText('Earlier checklist (1)')).toBeInTheDocument()
   })
 })
 

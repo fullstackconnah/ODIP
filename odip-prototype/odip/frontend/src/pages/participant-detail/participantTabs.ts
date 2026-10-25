@@ -21,7 +21,7 @@ const isTabKey = (k: string): k is ParticipantTabKey => (PARTICIPANT_TAB_KEYS as
 // The tabs before the regroup. Every link that carries one still works (alerts, e-mails, bookmarks). `funding` is also a new key, so it is not here.
 export const OLD_KEY_TARGET: Record<string, { tab: ParticipantTabKey; hash?: string }> = {
   details: { tab: 'about', hash: 'ndis-plan' }, contacts: { tab: 'people', hash: 'contacts' },
-  bookings: { tab: 'people', hash: 'trips' }, support: { tab: 'daily', hash: 'support-profile' },
+  bookings: { tab: 'people', hash: 'trips' }, support: { tab: 'daily', hash: 'support-needs' },
   medications: { tab: 'health', hash: 'medications' }, notes: { tab: 'records', hash: 'notes' },
   routines: { tab: 'daily', hash: 'routines' },
   'restrictive-practices': { tab: 'health', hash: 'restrictive-practices' },

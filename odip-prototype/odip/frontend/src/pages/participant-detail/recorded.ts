@@ -55,3 +55,34 @@ export const meansNothing = (t?: string | null) => {
   const s = (t ?? '').trim().replace(/\s+/g, ' ')
   return s === '' || NOTHING.test(s)
 }
+
+// Slice 2: the Health and Daily sections. Each is true when any of its fields is non-empty; the page folds a section for which it is false.
+// Support-profile text fields are checked on the profile itself (see hasTopic); these cover the participant record.
+
+export function hasSupportNeeds(p: ParticipantDetailDto): boolean {
+  return !!(p.isHighSupport || p.isIntensiveSupport || p.hasRestrictivePracticeFlag || p.supportRatio)
+}
+
+export function hasMobilityPersonalCare(p: ParticipantDetailDto): boolean {
+  return !!(p.mobilityAidWheelchair || p.mobilityAidWalker || p.mobilitySupportOptions?.length || p.mobilityNotes || p.ambulantStatus
+    || p.fallsRiskRating || p.unevenGroundFlag != null || p.levelOfPersonalCare || p.orthotics || p.bowelCareDetail
+    || p.continenceSupportDetail || p.menstruationSupport || p.skinIntegrity)
+}
+
+export function hasEquipmentOvernight(p: ParticipantDetailDto): boolean {
+  return !!(p.requiresHiLoBed || p.requiresHoist || p.requiresShowerChair || p.requiresCommode || p.requiresStandingMachine
+    || p.equipmentRequirements || (p.overnightSupport && p.overnightSupport !== 'None'))
+}
+
+export function hasTransportTravel(p: ParticipantDetailDto): boolean {
+  return !!p.transportRequirements
+}
+
+
+export function hasTypicalDay(p: ParticipantDetailDto): boolean {
+  return !!(p.supportsLookLikeMorning || p.supportsLookLikeDay || p.supportsLookLikeAfternoonEvening || p.supportsLookLikeOvernight)
+}
+
+export function hasEmergency(emergencyConsiderations?: string | null): boolean {
+  return !!emergencyConsiderations?.trim()
+}
