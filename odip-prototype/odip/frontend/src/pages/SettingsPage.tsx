@@ -1,5 +1,5 @@
 import WorkspaceVisibilitySection from '@/pages/settings/WorkspaceVisibilitySection'
-import { Fragment, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Navigate, useSearchParams } from 'react-router-dom'
 import { apiGet } from '@/api/client'
 import type { AdminUserDto, TenantSummaryDto, TenantUserDto } from '@/api/types'
@@ -81,8 +81,10 @@ export default function SettingsPage() {
   const [openingUserId, setOpeningUserId] = useState<string | null>(null)
   const editSeq = useRef(0)
   const cancelEdit = () => { editSeq.current++; setOpeningUserId(null) }
-  // Leaving Tenants closes a tenant's detail view, as leaving the tab did, and with it any user still loading.
-  if (tenantDetail && key !== 'tenants') { cancelEdit(); setTenantDetail(undefined) }
+  // Leaving Tenants closes a tenant's detail view, as leaving the tab did, and with it any user still loading. State resets during render; the
+  // ref bump waits for the commit (a layout effect, so no late load can slip in first), because a ref is not read or written while rendering.
+  if (tenantDetail && key !== 'tenants') { setOpeningUserId(null); setTenantDetail(undefined) }
+  useLayoutEffect(() => { if (key !== 'tenants') editSeq.current++ }, [key])
   async function editTenantUser(user: TenantUserDto) {
     if (openingUserId !== null) return
     const seq = ++editSeq.current

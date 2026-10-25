@@ -117,6 +117,27 @@ public class InvoiceRenderTests
         Assert.DoesNotContain("Trip:", raw);
     }
 
+    // New invoices are refused without a registration number (ProviderSettingsGuard), so a blank one reaches the renderer only on an invoice or credit note snapshotted before that.
+    [Theory]
+    [InlineData("PR001", true)]
+    [InlineData("", false)]
+    [InlineData("   ", false)]
+    public void TheNdisRegistrationLine_IsPrintedOnlyWhenARegistrationNumberIsSet(string registration, bool printed)
+    {
+        var invoice = new Invoice
+        {
+            Kind = InvoiceKind.Invoice, Status = InvoiceStatus.Issued, DisplayNumber = "INV-1", IssueDate = new DateOnly(2026, 10, 23), DueDate = new DateOnly(2026, 11, 6),
+            BillToName = "Sam Lee", ParticipantName = "Sam Lee", ServiceReference = "Trip: Coastal weekend", SellerOrganisationName = "Test Provider", SellerAbn = "12345678901",
+            SellerRegistrationNumber = registration, SellerAddress = "1 Test St", SellerState = "NSW", PaymentTermsDays = 14, Subtotal = 100m, Total = 100m,
+            Lines = [new InvoiceLine { SupportItemCode = "04_104_0125_6_1", ServiceFrom = new DateOnly(2026, 10, 3), ServiceTo = new DateOnly(2026, 10, 4), Hours = 1m, UnitPrice = 100m, LineTotal = 100m }],
+        };
+
+        var text = TextOf(InvoiceService.Render(invoice));
+
+        Assert.Equal(printed, text.Contains(Skeleton("NDIS Registration")));
+        Assert.Contains(Skeleton("ABN: 12345678901"), text);   // the lines around it are untouched
+    }
+
     [Fact]
     public void LongestValues_RenderWithoutALayoutException()
     {

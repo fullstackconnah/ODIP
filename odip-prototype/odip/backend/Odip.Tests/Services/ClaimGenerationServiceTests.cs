@@ -177,6 +177,52 @@ public class ClaimGenerationServiceTests
         Assert.Equal(1440m, result.TotalAmount);
     }
 
+    [Theory]
+    [InlineData(ParticipantFundingSource.Ndis, "NDIS number missing. Add it to their profile, then preview the claim again to include them.")]
+    [InlineData(ParticipantFundingSource.Other, "Invoice them directly")]
+    public async Task PreviewClaimAsync_ABookingWithNoNdisNumber_IsListedAsLeftOutWithTheReason_AndTheClaimIsUnchanged(ParticipantFundingSource funding, string reasonContains)
+    {
+        using var db = CreateDb();
+        var group = SeedActivityGroup(db);
+        SeedProviderSettings(db);
+        SeedCatalogueItem(db, group.Id, ClaimDayType.Weekday, false, vicPrice: 60m);
+        var claimed = CreateParticipant();
+        var leftOut = CreateParticipant();
+        leftOut.FirstName = "Lee"; leftOut.LastName = "Left"; leftOut.NdisNumber = null; leftOut.FundingSource = funding;
+        db.Participants.AddRange(claimed, leftOut);
+        var trip = SeedCompletedTrip(db, new DateOnly(2026, 1, 5), 3, claimed, activityGroupId: group.Id, activeHoursPerDay: 8m);
+        db.ParticipantBookings.Add(new ParticipantBooking
+        {
+            Id = Guid.NewGuid(), TripInstanceId = trip.Id, ParticipantId = leftOut.Id, Participant = leftOut,
+            BookingStatus = BookingStatus.Confirmed, BookingDate = DateOnly.FromDateTime(DateTime.UtcNow)
+        });
+        await db.SaveChangesAsync();
+
+        var result = await new ClaimGenerationService(db).PreviewClaimAsync(trip.Id, null);
+
+        var left = Assert.Single(result.LeftOut);
+        Assert.Equal((leftOut.Id, "Lee Left"), (left.ParticipantId, left.Description));
+        Assert.Contains(reasonContains, left.Reason);
+        // Message only: the claimed participant's lines and the total are what they were.
+        Assert.Equal(1440m, result.TotalAmount);
+        Assert.Equal("Jane Doe", Assert.Single(result.LineItems).ParticipantName);
+    }
+
+    [Fact]
+    public async Task PreviewClaimAsync_EveryoneHasAnNdisNumber_LeavesNobodyOut()
+    {
+        using var db = CreateDb();
+        var group = SeedActivityGroup(db);
+        SeedProviderSettings(db);
+        SeedCatalogueItem(db, group.Id, ClaimDayType.Weekday, false);
+        var participant = CreateParticipant();
+        db.Participants.Add(participant);
+        var trip = SeedCompletedTrip(db, new DateOnly(2026, 1, 5), 1, participant, activityGroupId: group.Id);
+        await db.SaveChangesAsync();
+
+        Assert.Empty((await new ClaimGenerationService(db).PreviewClaimAsync(trip.Id, null)).LeftOut);
+    }
+
     [Fact]
     public async Task PreviewClaimAsync_TripNotFound_ThrowsInvalidOperation()
     {
