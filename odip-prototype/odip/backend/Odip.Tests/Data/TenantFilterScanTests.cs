@@ -46,7 +46,7 @@ public class TenantFilterScanTests
 
         var offences = new List<string>();
         var scanned = 0;
-        foreach (var project in new[] { "Odip.Api", "Odip.Infrastructure" })
+        foreach (var project in new[] { "Odip.Api", "Odip.Application", "Odip.Infrastructure" })
         {
             foreach (var path in Directory.EnumerateFiles(Path.Combine(root!, project), "*.cs", SearchOption.AllDirectories))
             {
@@ -54,14 +54,28 @@ public class TenantFilterScanTests
                 if (rel.Contains("/bin/") || rel.Contains("/obj/") || rel.Contains("/Migrations/")) continue;
                 scanned++;
                 if (BareBypassAllowed.Contains(rel)) continue;
-                var code = Regex.Replace(Regex.Replace(File.ReadAllText(path), @"/\*.*?\*/", string.Empty, RegexOptions.Singleline), @"//.*$", string.Empty, RegexOptions.Multiline);
-                if (Regex.IsMatch(code, @"\bIgnoreQueryFilters\s*\(\s*\)")) offences.Add(rel);
+                if (CallsIgnoreQueryFiltersWithoutNames(File.ReadAllText(path))) offences.Add(rel);
             }
         }
 
         Assert.True(scanned > 100, $"expected the backend sources, scanned {scanned}");
         Assert.True(offences.Count == 0, "name the filter you bypass, IgnoreQueryFilters([TenantFilter.Name]):\n" + string.Join("\n", offences));
     }
+
+    private static bool CallsIgnoreQueryFiltersWithoutNames(string source)
+    {
+        // shortcut: a "//" after a space inside a string literal still hides the rest of that line, upgrade to a real lexer if a bypass ever hides there
+        var code = Regex.Replace(Regex.Replace(source, @"/\*.*?\*/", string.Empty, RegexOptions.Singleline), @"(?<!\S)//.*$", string.Empty, RegexOptions.Multiline);
+        return Regex.IsMatch(code, @"\bIgnoreQueryFilters\s*(<[^()]*>)?\s*\(\s*\)");
+    }
+
+    [Theory]
+    [InlineData("db.Users.IgnoreQueryFilters();", true)]
+    [InlineData("db.Users.IgnoreQueryFilters<User>();", true)]
+    [InlineData("db.Users.IgnoreQueryFilters([TenantFilter.Name]);", false)]
+    [InlineData("var u = \"https://example.test\"; db.Users.IgnoreQueryFilters();", true)]
+    public void BypassMatcher_CatchesUnnamedCalls_AndPassesNamedOnes(string line, bool expected) =>
+        Assert.Equal(expected, CallsIgnoreQueryFiltersWithoutNames(line));
 
     [Fact]
     public void EveryTenantEntity_HasTheNamedTenantFilter()
