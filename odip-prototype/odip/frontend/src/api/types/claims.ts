@@ -111,6 +111,15 @@ export interface ClaimPreviewResponseDto {
   totalAmount: number
   /** What generating this claim would do to each participant's budget (budget phase 2a). Absent when none has a plan that has started. A warning, never a block. */
   budget?: ClaimBudgetDto
+  /** The confirmed participants this claim leaves out and why: never dropped silently. The server always sends it (empty when nobody is left out). */
+  leftOut?: TripClaimLeftOutDto[]
+}
+
+/** A confirmed participant a trip claim leaves out. `description` is their name; `reason` is a sentence that does not repeat it. */
+export interface TripClaimLeftOutDto {
+  participantId: string
+  description: string
+  reason: string
 }
 
 export interface ClaimPreviewLineItemDto {

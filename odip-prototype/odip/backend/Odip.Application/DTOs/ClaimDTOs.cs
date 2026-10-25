@@ -133,6 +133,18 @@ public record ClaimPreviewResponseDto
     public decimal TotalAmount { get; init; }
     /// <summary>What generating this claim would do to each participant's budget (budget feature, phase 2a); omitted when none has a plan that has started. A warning, never a block.</summary>
     public ClaimBudgetDto? Budget { get; init; }
+    /// <summary>The confirmed participants this claim leaves out, and why (no NDIS number; funded another way): never dropped silently. Empty when nobody is left out.</summary>
+    public List<TripClaimLeftOutDto> LeftOut { get; init; } = new();
+}
+
+/// <summary>A confirmed participant a trip claim leaves out, in the shape of <see cref="ShiftClaimLeftOutDto"/>: who (Description) and why (Reason). Their booking is not claimed.</summary>
+public record TripClaimLeftOutDto
+{
+    public Guid ParticipantId { get; init; }
+    /// <summary>The participant's name.</summary>
+    public string Description { get; init; } = string.Empty;
+    /// <summary>Why, as a sentence that does not repeat the name ("NDIS number missing. Add it to their profile, then preview the claim again to include them.").</summary>
+    public string Reason { get; init; } = string.Empty;
 }
 
 public record ClaimPreviewLineItemDto
@@ -256,6 +268,31 @@ public record InvoiceSummaryDto
     public string? CreditedByDisplayNumber { get; init; }
     /// <summary>A payment is recorded against it (a covered line paid or part paid, or the claim marked paid): it can only be credited, never voided.</summary>
     public bool PaymentRecorded { get; init; }
+}
+
+/// <summary>One row of the invoice register (GET invoices). Additive only: PR 2 (the page) reads it. Never the bank details or the void reason.</summary>
+public record InvoiceRegisterRowDto
+{
+    public Guid Id { get; init; }
+    public InvoiceKind Kind { get; init; }
+    public string DisplayNumber { get; init; } = string.Empty;
+    public InvoiceStatus Status { get; init; }
+    public DateOnly IssueDate { get; init; }
+    public DateOnly? DueDate { get; init; }
+    public string ParticipantName { get; init; } = string.Empty;
+    public string BillToName { get; init; } = string.Empty;
+    public PlanType PayerKind { get; init; }
+    public string ClaimReference { get; init; } = string.Empty;
+    /// <summary>Null once the claim is deleted (the row and its number stay).</summary>
+    public Guid? TripClaimId { get; init; }
+    /// <summary>On a credit note: the invoice it credits.</summary>
+    public string? CreditsDisplayNumber { get; init; }
+    /// <summary>On a credited invoice: its credit note.</summary>
+    public string? CreditedByDisplayNumber { get; init; }
+    /// <summary>Signed as the PDF prints it: a credit note is negative.</summary>
+    public decimal Total { get; init; }
+    /// <summary>The seller organisation at issue; the page shows it to a SuperAdmin with no organisation chosen.</summary>
+    public string OrganisationName { get; init; } = string.Empty;
 }
 
 public record PayerGroupDto
