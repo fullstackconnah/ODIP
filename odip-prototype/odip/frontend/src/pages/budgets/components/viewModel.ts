@@ -46,11 +46,12 @@ export const BUDGET_RISK_ORDER: Record<BudgetRiskStatus, number> = {
 /**
  * Where a ROW stands in the one risk order, for the Status column's sort: the same rule the server ranks the list by (`BudgetListService.Rank`). Over is first; a pool the NDIA has refused for want of
  * funds comes straight after it (the NDIA's word outranks ODIP's forecast and approaching, and ODIP's own status can say On track beside it); then Forecast over, Approaching, On track, and no budget
- * recorded last. Declared here, once, so the header's sort and the list's own order cannot drift apart.
+ * recorded last. An On track pool with a pace warning sits between Approaching and On track (the server's `Rank` says the same). Declared here, once, so the header's sort and the list's own order cannot drift apart.
  */
-export function budgetRiskRank(row: Pick<BudgetRiskRow, 'status' | 'ndiaWord'>): number {
+export function budgetRiskRank(row: Pick<BudgetRiskRow, 'status' | 'ndiaWord' | 'paceRunsOutOn'>): number {
   if (row.status === 'Over') return 0
   if (row.ndiaWord) return 1
+  if (row.status === 'OnTrack' && row.paceRunsOutOn) return BUDGET_RISK_ORDER.Approaching + 1.5
   return BUDGET_RISK_ORDER[row.status] + 1
 }
 
@@ -120,6 +121,8 @@ export type BudgetRiskRow = {
    * beside it, so the row says it in its own pill. Omitted when the NDIA has said nothing.
    */
   ndiaWord?: { date: string; code: string }
+  /** The date the money runs out at the pace so far, before the period ends, when the server found one; omitted otherwise. A projection, not a status: it shows as its own pill. */
+  paceRunsOutOn?: string
   /** Why a figure or the forecast is missing, in the server's words. Shown beside the dash; never a generic "error". */
   unavailableReason?: string
   /** Where this row's next action goes. Omitted entirely when the viewer may not act on the row. */

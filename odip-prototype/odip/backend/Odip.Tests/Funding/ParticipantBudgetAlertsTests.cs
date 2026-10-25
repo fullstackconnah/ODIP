@@ -284,6 +284,22 @@ public class ParticipantBudgetAlertsTests
         Assert.Equal(new[] { "budget-forecast-over", "budget-approaching" }, alerts.Select(a => a.Type));
     }
 
+    // The pace alert is the mildest budget warning, so on the banner it comes after approaching.
+    [Fact]
+    public async Task ThePaceAlertComesAfterApproaching()
+    {
+        using var s = Setup.Create(now: new DateTimeOffset(2026, 11, 4, 3, 0, 0, TimeSpan.Zero));   // 34 days into the quarter's 92
+        s.Kit.SeedItem("15_001", 15);
+        var participant = s.Kit.SeedParticipant();
+        OctoberPlan(s.Kit, participant, 8000m, Stated(15, PlanType.AgencyManaged, Q(2, 1000m), Q(3, 1000m), Q(4, 1000m)));
+        ClaimOf(s.Kit, participant, TripClaimStatus.Paid, 4000m, D(2026, 10, 10));                 // Core: half used, so on track, but at this rate it runs out on 8 Dec
+        ClaimOf(s.Kit, participant, TripClaimStatus.Paid, 850m, D(2026, 10, 12), "15_001");        // the stated pool: 85%, approaching
+
+        var alerts = await s.BudgetAlertsAsync(participant.Id);
+
+        Assert.Equal(new[] { "budget-approaching", "budget-pace" }, alerts.Select(a => a.Type));
+    }
+
     // ── Whose money ─────────────────────────────────────────────────────────
 
     [Fact]

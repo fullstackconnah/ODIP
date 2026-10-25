@@ -37,6 +37,8 @@ public record BudgetListRowDto
     /// <summary>Used plus booked ahead.</summary>
     public decimal Forecast { get; init; }
     public BudgetStatus Status { get; init; }
+    /// <summary>The date the money runs out at the pace so far, when that is before the period ends; not a status, so filters and counts ignore it. Left out when null.</summary>
+    public DateOnly? PaceRunsOutOn { get; init; }
     /// <summary>
     /// How many shifts in this period the shift claim cannot price yet (a sleepover, a passive night, a group or shared shift, or a shift no catalogue rate covers). Each is $0 in every figure above, so
     /// they leave those shifts out: this says how many, and the row says so. The ledger's own count for the period; zero when every shift priced.

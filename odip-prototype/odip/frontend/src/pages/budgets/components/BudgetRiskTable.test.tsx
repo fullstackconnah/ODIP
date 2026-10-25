@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { BudgetRiskTable } from './BudgetRiskTable'
 import { hiddenRow, noBudgetEntry, noBudgetRow, readyTable, riskRow } from './fixtures'
-import type { BudgetRiskRow } from './viewModel'
+import { budgetRiskRank, type BudgetRiskRow } from './viewModel'
 import { NO_FIGURE, ROLLED_OVER_LEGEND, UNPRICED_LEGEND, configuredZero, noBudgetHiddenLabel, unavailableFigure } from './wording'
 
 // The Budgets list body. What these tests hold:
@@ -246,6 +246,43 @@ describe('BudgetRiskTable: a real row', () => {
     expect(pill.className).toContain('bg-[var(--color-error-container)]')
     expect(within(cellOf('Refused Person', 'Status')).getByText('On track')).toBeInTheDocument()
     expect(within(cellOf('Quiet Person', 'Status')).queryByText('NDIA says the funds ran out')).not.toBeInTheDocument()
+  })
+
+  // Pace is not a status: the pill sits beside the status word, carries dates not money, and the row keeps its tone.
+  const SPENDING_FAST = 'Spending fast'
+  const PACE_SENTENCE = 'At this rate the budget runs out around 8 Dec, before the period ends on 31 Dec.'
+  const pacedRow = (overrides: Partial<BudgetRiskRow> = {}) => riskRow({ participantLabel: 'Paced Person', periodEnd: '2026-12-31', paceRunsOutOn: '2026-12-08', ...overrides })
+
+  it('says Spending fast in a warning pill beside the status, with the sentence as its title and as hidden text', () => {
+    renderTable(readyTable([pacedRow(), riskRow({ id: 'q', participantLabel: 'Quiet Person' })]))
+
+    const status = cellOf('Paced Person', 'Status')
+    const pill = within(status).getByText(SPENDING_FAST)
+    expect(pill.className).toContain('bg-[var(--color-warning-container)]')
+    expect(pill.closest('[title]')?.getAttribute('title')).toBe(PACE_SENTENCE)
+    expect(within(status).getByText(PACE_SENTENCE)).toHaveClass('sr-only')
+    expect(within(status).getByText('On track')).toBeInTheDocument()
+    expect(within(cellOf('Quiet Person', 'Status')).queryByText(SPENDING_FAST)).not.toBeInTheDocument()
+  })
+
+  it('shows beside the NDIA pill when both apply', () => {
+    renderTable(readyTable([pacedRow({ ndiaWord: { date: '2026-10-08', code: 'V27' } })]))
+
+    const status = cellOf('Paced Person', 'Status')
+    expect(within(status).getByText(SPENDING_FAST)).toBeInTheDocument()
+    expect(within(status).getByText('NDIA says the funds ran out')).toBeInTheDocument()
+  })
+
+  it('still shows to a viewer who may not see the money, with no figure in the row', () => {
+    renderTable(readyTable([hiddenRow({ participantLabel: 'Paced Person', periodEnd: '2026-12-31', paceRunsOutOn: '2026-12-08' })]))
+
+    expect(within(cellOf('Paced Person', 'Status')).getByText(SPENDING_FAST)).toBeInTheDocument()
+    expect(figuresIn(rowFor('Paced Person'))).toEqual([])
+  })
+
+  it('ranks a paced On track row between Approaching and On track', () => {
+    expect(budgetRiskRank(riskRow({ status: 'Approaching' }))).toBeLessThan(budgetRiskRank(pacedRow()))
+    expect(budgetRiskRank(pacedRow())).toBeLessThan(budgetRiskRank(riskRow({ status: 'OnTrack' })))
   })
 
   it('names the NDIA claim date and code to a pointer and a screen reader, and carries no money', () => {

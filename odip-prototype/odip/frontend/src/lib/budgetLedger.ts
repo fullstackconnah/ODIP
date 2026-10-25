@@ -1,6 +1,7 @@
 import type { BudgetStatus, ClaimBudgetRowDto, LedgerGroup, LedgerPeriod, LedgerPool, LedgerRow } from '@/api/types'
 import { formatDateRange, formatDayMonth } from './dateRange'
 import { joinList, plural } from './format'
+import { writtenDay } from './fundingPlan'
 import type { FactChipTone } from '@/components/FactBar'
 
 // How the budget ledger reads in words and figures (phase 2a). The server works every figure out; nothing here adds anything up. These only decide how a figure is written, which period a
@@ -21,6 +22,13 @@ export function money(amount: number): string {
 /** The period a pool's strip and sentence are about: the one holding today, or, once the plan has ended and none does, the last one. */
 export function focusPeriodOf(pool: LedgerPool): LedgerPeriod | undefined {
   return pool.periods.find(period => period.isCurrent) ?? pool.periods[pool.periods.length - 1]
+}
+
+/** The pace warning in one sentence, for the Funding tab line and the Budgets list pill's title: dates only, no money. "At this rate", never "will": it is a projection from the spending so far. */
+export function paceSentence(runsOutOn: string, periodEnd: string): string {
+  // Across a year boundary "8 Dec" would read as the period's own year, so both dates carry theirs.
+  const day = runsOutOn.slice(0, 4) === periodEnd.slice(0, 4) ? formatDayMonth : writtenDay
+  return `At this rate the budget runs out around ${day(runsOutOn)}, before the period ends on ${day(periodEnd)}.`
 }
 
 /** The chip's tone for a status: on track is go, approaching and forecast over ask for attention (nothing is past the limit yet), over has gone past it. */
