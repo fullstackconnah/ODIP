@@ -248,7 +248,7 @@ export default function MarTab() {
                           {entry.participantName}
                         </Link>
                         {entry.isOverdue && (
-                          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[var(--color-destructive)] text-white">Overdue</span>
+                          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[var(--color-destructive)] text-[var(--color-destructive-foreground)]">Overdue</span>
                         )}
                       </div>
                       <p className="text-sm text-[var(--color-foreground)]">

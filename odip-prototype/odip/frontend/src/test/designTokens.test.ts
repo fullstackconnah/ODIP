@@ -59,3 +59,71 @@ describe('mobile card-table captions (density polish)', () => {
     for (const px of sizes) expect(px).toBeGreaterThanOrEqual(12)
   })
 })
+
+describe('light palette unchanged (dark-mode-2026-10)', () => {
+  const css = readFileSync(INDEX_CSS_PATH, 'utf-8')
+  const themeStart = css.indexOf('@theme')
+  const themeBlock = css.slice(themeStart, css.indexOf('}', themeStart))
+  const parsed = Object.fromEntries([...themeBlock.matchAll(/--color-([a-z0-9-]+):\s*([^;]+);/g)].map(m => [m[1], m[2].trim()]))
+
+  // origin/main's 42 light values, verbatim, plus the three tokens dark mode adds with light values equal to today's pixels.
+  const LIGHT = {
+    'background': '#fbf9f5',
+    'foreground': '#1b1c1a',
+    'card': '#ffffff',
+    'card-foreground': '#1b1c1a',
+    'popover': '#ffffff',
+    'popover-foreground': '#1b1c1a',
+    'primary': '#396200',
+    'primary-foreground': '#ffffff',
+    'primary-container': '#4d7c0f',
+    'primary-fixed': '#bbf37c',
+    'on-primary-fixed': '#0f2000',
+    'secondary': '#515f74',
+    'secondary-foreground': '#ffffff',
+    'secondary-container': '#d5e3fc',
+    'muted': '#efeeea',
+    'muted-foreground': '#43493a',
+    'accent': '#efeeea',
+    'accent-foreground': '#1b1c1a',
+    'destructive': '#ba1a1a',
+    'destructive-foreground': '#ffffff',
+    'error-container': '#ffdad6',
+    'on-error-container': '#93000a',
+    'border': '#c3c9b5',
+    'input': '#e4e2de',
+    'ring': '#396200',
+    'sidebar': '#f5f3ef',
+    'sidebar-foreground': '#1b1c1a',
+    'sidebar-accent': 'rgba(255,255,255,0.4)',
+    'surface': '#ffffff',
+    'surface-container': '#efeeea',
+    'surface-container-low': '#f5f3ef',
+    'surface-container-high': '#eae8e4',
+    'surface-container-lowest': '#ffffff',
+    'outline-variant': '#c3c9b5',
+    'success': '#396200',
+    'warning': '#f59e0b',
+    'warning-container': '#fef3c7',
+    'on-warning-container': '#92400e',
+    'info': '#515f74',
+    'conflict': '#ba1a1a',
+    'accessible-container': '#ffd7ef',
+    'on-accessible-container': '#7a2169',
+    'warning-foreground': '#1b1c1a',
+    'hover-wash': 'rgba(0,0,0,0.05)',
+    'focus-ring-soft': 'rgba(57,98,0,0.18)',
+  }
+
+  it('keeps every light value, and adds only the three new tokens', () => {
+    expect(parsed).toEqual(LIGHT)
+  })
+
+  it('keeps the four shadow tokens equal to the literals they replaced', () => {
+    const shadow = (name: string) => css.match(new RegExp('^\\s*--shadow-' + name + ':\\s*([^;]+);', 'm'))?.[1]
+    expect(shadow('float')).toBe('0 24px 40px -12px rgba(27,28,26,0.14)')
+    expect(shadow('hairline')).toBe('0 24px 32px -12px rgba(27,28,26,0.04)')
+    expect(shadow('hairline-up')).toBe('0 -8px 24px -4px rgba(27,28,26,0.04)')
+    expect(shadow('lift')).toBe('0 24px 32px -12px rgba(27,28,26,0.08)')
+  })
+})

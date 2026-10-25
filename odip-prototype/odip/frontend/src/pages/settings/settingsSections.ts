@@ -45,7 +45,7 @@ const HOLIDAYS = 'The public holiday calendar that sets holiday rates on plans a
 export const SECTIONS: SectionDef[] = [
   { key: 'profile', label: 'Profile', group: 'My account', visible: everyone, description: "Who you're signed in as." },
   { key: 'notifications', label: 'Notifications', group: 'My account', visible: everyone, description: "Which events ODIP emails you about. Your choices don't change anyone else's." },
-  { key: 'appearance', label: 'Appearance', group: 'My account', visible: everyone, description: 'How tables look for you. Saved on this device only, so another computer keeps its own.' },
+  { key: 'appearance', label: 'Appearance', group: 'My account', visible: everyone, description: 'How ODIP looks for you. Saved on this device only, so another computer keeps its own.' },
   { key: 'setup', label: 'Organisation setup', group: 'Organisation', visible: managesOrganisation, description: "Review your organisation's existing settings. You can leave and return at any time." },
   { key: 'workspace-visibility', label: 'Workspace visibility', group: 'Organisation', visible: managesOrganisation, description: 'Choose which optional workspaces appear in the usual menu for your organisation.' },
   { key: 'organisation', label: 'Organisation profile', group: 'Organisation', visible: withOrganisation, readOnly: onlyAdminsChange, description: "Your organisation's legal details and address, as they appear on NDIS claims, bulk payment files and invoices." },

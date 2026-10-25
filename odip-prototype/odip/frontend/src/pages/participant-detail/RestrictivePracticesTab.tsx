@@ -21,6 +21,8 @@ import { AddRestrictivePracticeDialog } from './AddRestrictivePracticeDialog'
 import { isPastDue } from '@/lib/deadline'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
+import { RpAuthorisationBadge } from '@/pages/incidents/RpAuthorisationBadge'
+import { isRpAuthorised } from '@/lib/incidentPrefill'
 
 // Overdue from the day AFTER the review date (a DateOnly), the rule the server's own alert uses (ReviewDate < today), not from UTC midnight.
 const isReviewOverdue = (dateStr: string | null) => isPastDue(dateStr)
@@ -56,6 +58,11 @@ function PracticeCard({ practice, canWrite, onEdit, onDelete }: {
   onDelete: () => void
 }) {
   const overdue = practice.isActive && isReviewOverdue(practice.reviewDate)
+  // Retired entries aren't badged (the wizard doesn't either); the Inactive pill carries their state.
+  const unauthorised = practice.isActive && !isRpAuthorised(practice)
+  const whyUnauthorised = !practice.authorisedBy?.trim()
+    ? (practice.authorisationDate ? 'No authoriser on file' : 'No authorisation recorded')
+    : 'No authorisation date on file'
   return (
     <div
       className={`p-4 rounded-xl border transition-colors ${
@@ -69,6 +76,7 @@ function PracticeCard({ practice, canWrite, onEdit, onDelete }: {
           <span className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${TYPE_BADGE_STYLES[practice.type]}`}>
             {RESTRICTIVE_PRACTICE_TYPE_LABELS[practice.type]}
           </span>
+          {practice.isActive && <RpAuthorisationBadge authorised={!unauthorised} />}
           {practice.type === 'Unclassified' && (
             <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]">
               <AlertTriangle className="w-3 h-3" /> Needs classification
@@ -82,7 +90,7 @@ function PracticeCard({ practice, canWrite, onEdit, onDelete }: {
           {practice.reviewDate && (
             <span
               className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${
-                overdue ? 'bg-[var(--color-destructive)] text-white' : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
+                overdue ? 'bg-[var(--color-destructive)] text-[var(--color-destructive-foreground)]' : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
               }`}
             >
               {overdue && <AlertTriangle className="w-3 h-3" />}
@@ -113,6 +121,7 @@ function PracticeCard({ practice, canWrite, onEdit, onDelete }: {
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs text-[var(--color-muted-foreground)]">
         {practice.authorisedBy && <span>Authorised by {practice.authorisedBy}</span>}
         {practice.authorisationDate && <span>Authorised {formatDateAu(practice.authorisationDate)}</span>}
+        {unauthorised && <span>{whyUnauthorised}</span>}
         {practice.type === 'ChemicalRestraint' && practice.relatedMedicationName && (
           <span className="inline-flex items-center gap-1">
             <Pill className="w-3 h-3" /> Linked to {practice.relatedMedicationName}

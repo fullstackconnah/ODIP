@@ -30,9 +30,14 @@ function parseColour(value: string): Rgba {
   throw new Error(`Unsupported colour value in index.css: ${value}`)
 }
 
-const TOKENS: Record<string, Rgba> = Object.fromEntries(
-  [...themeBlock.matchAll(/--color-([a-z0-9-]+):\s*([^;]+);/g)].map(m => [m[1], parseColour(m[2].trim())]),
-)
+const readTokens = (block: string): Record<string, Rgba> =>
+  Object.fromEntries([...block.matchAll(/--color-([a-z0-9-]+):\s*([^;]+);/g)].map(m => [m[1], parseColour(m[2].trim())]))
+
+const TOKENS = readTokens(themeBlock)
+// The dark theme re-points the same tokens in one flat block at the end of index.css, opened by this marker comment.
+const darkStart = css.indexOf('/* Dark theme (dark-mode-2026-10)')
+const DARK_TOKENS = { ...TOKENS, ...readTokens(css.slice(darkStart, css.indexOf('}', darkStart))) }
+const THEMES: [string, Record<string, Rgba>][] = [['light', TOKENS], ['dark', DARK_TOKENS]]
 
 const channel = (c: number) => {
   const s = c / 255
@@ -48,17 +53,17 @@ const over = (fg: Rgba, bg: Rgba): Rgba => ({
 })
 
 /** `bg-[var(--color-x)]` or `bg-[var(--color-x)]/30` (an optional `!`) to the token's colour at that opacity. */
-function fill(cls: string): Rgba {
+function fill(cls: string, tokens: Record<string, Rgba>): Rgba {
   const m = cls.match(/^!?bg-\[var\(--color-([a-z0-9-]+)\)\](?:\/(\d+))?$/)
   if (!m) throw new Error(`Not a background class: ${cls}`)
-  const token = TOKENS[m[1]]
+  const token = tokens[m[1]]
   if (!token) throw new Error(`--color-${m[1]} is not defined in index.css`)
   return { ...token, a: token.a * (m[2] === undefined ? 1 : +m[2] / 100) }
 }
-function text(cls: string): Rgba {
+function text(cls: string, tokens: Record<string, Rgba>): Rgba {
   const m = cls.match(/^text-\[var\(--color-([a-z0-9-]+)\)\]$/)
   if (!m) throw new Error(`Not a text class: ${cls}`)
-  const token = TOKENS[m[1]]
+  const token = tokens[m[1]]
   if (!token) throw new Error(`--color-${m[1]} is not defined in index.css`)
   return token
 }
@@ -66,45 +71,71 @@ const parts = (pair: string) => ({ bg: pair.split(' ').find(c => c.startsWith('b
 
 const AA = 4.5
 const TONES = Object.keys(TONE) as Tone[]
-// The two surfaces a wash can sit on: the card, and the page behind it.
-const SURFACES = { card: TOKENS['card'], page: TOKENS['background'] }
 
-describe('tone contrast (WCAG AA, 4.5:1)', () => {
+describe.each(THEMES)('tone contrast (WCAG AA, 4.5:1), %s theme', (_theme, tokens) => {
+  // The two surfaces a wash can sit on: the card, and the page behind it.
+  const SURFACES = { card: tokens['card'], page: tokens['background'] }
+
   it('reads the palette out of index.css (so the checks below cannot pass on an empty parse)', () => {
     for (const name of ['card', 'background', 'primary-fixed', 'on-primary-fixed', 'warning-container', 'on-warning-container', 'error-container', 'on-error-container', 'destructive', 'muted-foreground', 'info', 'secondary-container', 'accessible-container', 'on-accessible-container', 'input']) {
-      expect(TOKENS[name], name).toBeDefined()
+      expect(tokens[name], name).toBeDefined()
     }
-    expect(Object.keys(TOKENS).length).toBeGreaterThan(30)
+    expect(Object.keys(tokens).length).toBeGreaterThan(30)
   })
 
   it.each(TONES)('%s solid: the fill and its text', tone => {
     const { bg, text: fg } = parts(TONE[tone].solid)
-    expect(contrast(over(fill(bg), SURFACES.card), text(fg)), `${tone} solid ${TONE[tone].solid}`).toBeGreaterThanOrEqual(AA)
+    expect(contrast(over(fill(bg, tokens), SURFACES.card), text(fg, tokens)), `${tone} solid ${TONE[tone].solid}`).toBeGreaterThanOrEqual(AA)
   })
 
   it.each(TONES)('%s soft wash with its ink, over the card and over the page', tone => {
     const wash = TONE[tone].soft
     for (const [name, surface] of Object.entries(SURFACES)) {
-      const ratio = contrast(over(fill(wash), surface), text(TONE[tone].ink))
+      const ratio = contrast(over(fill(wash, tokens), surface), text(TONE[tone].ink, tokens))
       expect(ratio, `${tone}: ${TONE[tone].ink} on ${wash} over the ${name}`).toBeGreaterThanOrEqual(AA)
     }
   })
 
   it.each(TONES)('%s ink on the card and on the page', tone => {
     for (const [name, surface] of Object.entries(SURFACES)) {
-      expect(contrast(surface, text(TONE[tone].ink)), `${tone} ink on the ${name}`).toBeGreaterThanOrEqual(AA)
+      expect(contrast(surface, text(TONE[tone].ink, tokens)), `${tone} ink on the ${name}`).toBeGreaterThanOrEqual(AA)
     }
   })
 
   it.each(Object.keys(ON_TINT) as Tone[])('%s pill on a tint: the tone\'s text on the card fill', tone => {
     const { bg, text: fg } = parts(ON_TINT[tone]!)
-    expect(contrast(over(fill(bg), SURFACES.card), text(fg))).toBeGreaterThanOrEqual(AA)
+    expect(contrast(over(fill(bg, tokens), SURFACES.card), text(fg, tokens))).toBeGreaterThanOrEqual(AA)
   })
 
+
+  describe('fills and surfaces', () => {
+    const t = (name: string) => tokens[name]
+    const textPairs: [string, string][] = [
+      ['primary-foreground', 'primary'], ['primary-foreground', 'primary-container'], ['destructive-foreground', 'destructive'],
+      ['secondary-foreground', 'secondary'], ['card', 'on-accessible-container'], ['warning-foreground', 'warning'],
+      ['on-primary-fixed', 'primary-fixed'], ['primary', 'background'],
+      ...['background', 'card', 'popover', 'sidebar', 'surface-container', 'surface-container-low', 'surface-container-high', 'input'].flatMap(
+        surface => [['foreground', surface], ['muted-foreground', surface]] as [string, string][]),
+    ]
+    it.each(textPairs)('%s on %s is legible text', (fg, bg) => {
+      expect(contrast(t(bg), t(fg))).toBeGreaterThanOrEqual(AA)
+    })
+    it.each(['card', 'background', 'popover', 'input'])('the focus ring is visible on %s (3:1)', surface => {
+      expect(contrast(t(surface), t('ring'))).toBeGreaterThanOrEqual(3)
+    })
+    it.each(['primary', 'destructive', 'warning'])('the %s fill is visible against the card (3:1, light warning excepted: R2-12)', name => {
+      if (_theme === 'light' && name === 'warning') return
+      expect(contrast(t('card'), t(name))).toBeGreaterThanOrEqual(3)
+    })
+  })
+})
+
+describe('light theme facts', () => {
+  const SURFACES = { card: TOKENS['card'], page: TOKENS['background'] }
   it('explains itself: --color-warning is a fill, not a text colour (2.15:1 on the card)', () => {
     // R2-12. The amber is for fills, borders and rings; warning text is `on-warning-container` (TONE.warning.ink).
     expect(contrast(SURFACES.card, TOKENS['warning'])).toBeLessThan(AA)
-    expect(contrast(SURFACES.card, text(TONE.warning.ink))).toBeGreaterThanOrEqual(AA)
+    expect(contrast(SURFACES.card, text(TONE.warning.ink, TOKENS))).toBeGreaterThanOrEqual(AA)
   })
 })
 

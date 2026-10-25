@@ -130,7 +130,7 @@ function PickerPanel({ target, name, onClose, children }: Omit<ShellProps, 'shee
       role="dialog"
       aria-label={name}
       // Positioned by the layout effect above. The Floating Panel: card fill, --radius-md, the house shadow (StaffStrip's CarriedPuck), no border.
-      className="fixed z-50 flex flex-col overflow-hidden rounded-[var(--radius-md)] bg-[var(--color-card)] shadow-[0_24px_40px_-12px_color-mix(in_srgb,var(--color-foreground)_14%,transparent)]"
+      className="fixed z-50 flex flex-col overflow-hidden rounded-[var(--radius-md)] bg-[var(--color-card)] shadow-[var(--shadow-float)]"
     >
       {children(inputRef)}
     </div>,

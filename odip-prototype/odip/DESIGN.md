@@ -262,6 +262,62 @@ for the secondary and accessibility roles. Unchanged by the density work.
 - **Ruled Line** (`#c3c9b5`): all borders and outlines. Slightly green-grey.
 - **Field Grey** (`#e4e2de`): input backgrounds, so a field reads as writable.
 
+### Dark theme
+"The ledger after hours": the same Organic Ledger under a desk lamp, chosen in Settings > My account > Appearance as Light, Dark or System (the default; System follows the device). Saved per device in `odip_ui_prefs:<userId>`; `public/theme.js` applies it before first paint. The signed-in app, /login, /caregiver/:token and /accessibility follow it; /welcome, the itinerary PDF and email stay light.
+- Surfaces are a deep green-tinted neutral, never black (page `#131512`), and text is a warm off-white, never `#ffffff`. The Warm Base Rule holds in both themes.
+- Depth stays tonal and inverts: a raised surface is lighter (page < sidebar < card < fill/popover < high). Dropdown and SearchableSelect panels use `popover` so they stand off a card; shadows go near-black and only help.
+- `primary` is light olive-lime as ink (success text, links, the ring) and takes dark ink through `primary-foreground` as a fill. Never write `text-white` or a literal colour in a component: use the foreground tokens.
+- Tones become deep tints with pale inks; amber stays amber (a fill in both themes, ink on it is `warning-foreground`). No new hues.
+- Every pair is held to WCAG AA (4.5:1 text, 3:1 non-text) in both themes by `toneContrast.test.ts`. The dark block at the end of `src/index.css` is the source of truth; the table is a copy.
+
+| Token | Light | Dark |
+|---|---|---|
+| `background` | `#fbf9f5` | `#131512` |
+| `foreground` | `#1b1c1a` | `#e4e5dd` |
+| `card` | `#ffffff` | `#1c1f1a` |
+| `card-foreground` | `#1b1c1a` | `#e4e5dd` |
+| `popover` | `#ffffff` | `#262a24` |
+| `popover-foreground` | `#1b1c1a` | `#e4e5dd` |
+| `primary` | `#396200` | `#a6d66b` |
+| `primary-foreground` | `#ffffff` | `#0f2000` |
+| `primary-container` | `#4d7c0f` | `#8fc254` |
+| `primary-fixed` | `#bbf37c` | `#2b4712` |
+| `on-primary-fixed` | `#0f2000` | `#cdf3a4` |
+| `secondary` | `#515f74` | `#b3c1d8` |
+| `secondary-foreground` | `#ffffff` | `#1a2433` |
+| `secondary-container` | `#d5e3fc` | `#2a374b` |
+| `muted` | `#efeeea` | `#262a24` |
+| `muted-foreground` | `#43493a` | `#b5bcaa` |
+| `accent` | `#efeeea` | `#262a24` |
+| `accent-foreground` | `#1b1c1a` | `#e4e5dd` |
+| `destructive` | `#ba1a1a` | `#ff8f84` |
+| `destructive-foreground` | `#ffffff` | `#3b0906` |
+| `error-container` | `#ffdad6` | `#4d1612` |
+| `on-error-container` | `#93000a` | `#ffb4ab` |
+| `border` | `#c3c9b5` | `#434a3e` |
+| `input` | `#e4e2de` | `#2b2f28` |
+| `ring` | `#396200` | `#a6d66b` |
+| `sidebar` | `#f5f3ef` | `#171a15` |
+| `sidebar-foreground` | `#1b1c1a` | `#e4e5dd` |
+| `sidebar-accent` | `rgba(255,255,255,0.4)` | `rgba(255,255,255,0.06)` |
+| `surface` | `#ffffff` | `#1c1f1a` |
+| `surface-container` | `#efeeea` | `#262a24` |
+| `surface-container-low` | `#f5f3ef` | `#171a15` |
+| `surface-container-high` | `#eae8e4` | `#2e322b` |
+| `surface-container-lowest` | `#ffffff` | `#1c1f1a` |
+| `outline-variant` | `#c3c9b5` | `#434a3e` |
+| `success` | `#396200` | `#a6d66b` |
+| `warning` | `#f59e0b` | `#f59e0b` |
+| `warning-container` | `#fef3c7` | `#3f2f0b` |
+| `on-warning-container` | `#92400e` | `#f8cd76` |
+| `info` | `#515f74` | `#b3c1d8` |
+| `conflict` | `#ba1a1a` | `#ff8f84` |
+| `accessible-container` | `#ffd7ef` | `#4a1b40` |
+| `on-accessible-container` | `#7a2169` | `#ffb3e6` |
+| `warning-foreground` | `#1b1c1a` | `#1b1c1a` |
+| `hover-wash` | `rgba(0,0,0,0.05)` | `rgba(255,255,255,0.06)` |
+| `focus-ring-soft` | `rgba(57,98,0,0.18)` | `rgba(166,214,107,0.28)` |
+
 ### Named Rules
 
 **The Semantic Colour Rule.** A colour never carries meaning twice. `primary` is "go / selected /
@@ -328,7 +384,7 @@ column has `--gutter` side padding (20px fine, 16px coarse), a 16px top pad, and
 
 ### The density token block
 One block of plain CSS custom properties at the top of `index.css`, deliberately not `@theme` so
-they can flip at runtime under `@media (pointer: coarse)`. Components consume them with arbitrary-value
+they can flip at runtime under `@media (pointer: coarse)`. Only spacing and type tokens need this: `@theme` colours are runtime `var()`s too, which is how the dark block re-points them. Components consume them with arbitrary-value
 syntax (`h-[var(--control-h)]`) and never restate the pixel value.
 
 | Token | Fine pointer | Coarse pointer |
@@ -420,10 +476,11 @@ against white and the warm-grey container steps. Shadows belong to elements that
 
 ### Shadow Vocabulary
 - **Tinted Button Halo** (`shadow-md shadow-[var(--color-primary)]/20`): primary buttons.
-- **Floating Panel** (`0 24px 40px -12px rgba(27,28,26,0.14)`): dropdown and searchable-select panels.
+- **Floating Panel** (`--shadow-float`, light `0 24px 40px -12px rgba(27,28,26,0.14)`): dropdown and searchable-select panels, on `popover`. Dark adds a 1px light hairline.
 - **Side Panel** (`shadow-xl`): the `SlideOver` panel docked to the right edge over its scrim.
-- **Header Hairline** (`0 24px 32px -12px rgba(27,28,26,0.04)`): the sticky 48px header, a near-invisible
-  ambient lift over scrolling content.
+- **Header Hairline** (`--shadow-hairline`, light `0 24px 32px -12px rgba(27,28,26,0.04)`): the sticky 48px header, a near-invisible
+  ambient lift over scrolling content. `--shadow-hairline-up` is its mirror for the mobile bottom nav, `--shadow-lift` the login cards and trip card hover.
+  The four `--shadow-*` tokens are whole box-shadow values in `index.css`, re-pointed in dark.
 - **Focus Ring** (`ring-2 ring-[var(--color-ring)]`): every focusable element; ring only, the border does
   not move.
 
@@ -520,6 +577,11 @@ marker, which survives truncation), the support-ratio chip, and a compact covera
 the number of uncovered days on the amber tint, or a check when the week is fully covered. "6 days uncovered"
 and "Fully covered" are the badge's title and accessible name, not text in the row, so the name is what keeps
 the room ("Grace Palmer-Hughes" reads whole at 1920).
+
+**A Draft shift on the roster board.** The chip takes the warning tray (`TONE.warning.soft`) plus the word "Draft" (`TONE.warning.ink`), because the shift is waiting for the
+coordinator to publish it, and its menu offers Publish. Findings keep priority over that tint: on a Draft chip the severity marker sits in an `ON_TINT` pill (card fill, the
+tone's ink, a 20px circle with a 14px icon), so a problem is louder than the waiting. A published chip is unchanged, with the bare 12px marker. This is the one exception to
+"a healthy chip is neutral"; the status badge for a Draft shift everywhere else stays neutral (see the status words).
 
 ### Navigation
 
@@ -751,7 +813,7 @@ on-container text), a soft wash (a tile or a row, paired with the ink) and an in
   Resolved success, Closed neutral. Claims and payments: Draft neutral, Ready, Submitted info, Approved, Claimed, Paid success,
   Partially paid warning, Rejected and Cancelled danger. Bookings, reservations, vehicle requests and activities: Enquiry, Held, Waitlist, Requested, Booked warning
   (not yet on the trip, or not yet confirmed), Researching and Planned neutral, Confirmed and Completed success, Cancelled and Unavailable danger. Shifts and tasks:
-  Draft and Not started neutral, Published and In progress info, Pending review warning, Completed success, Overdue and Cancelled danger. Payments: Not invoiced neutral,
+  Draft and Not started neutral (the roster board's chip is the one place a Draft shift is warning: see Boards), Published and In progress info, Pending review warning, Completed success, Overdue and Cancelled danger. Payments: Not invoiced neutral,
   Invoice sent info, Partial warning, Paid success, Overdue danger. Medication: Administered success, Withheld and On hold warning, Refused, Missed, Wrong medication
   and Ceased danger. Notifications and submissions: Sent and Accepted success, Skipped neutral, Failed, Revoked and Rejected danger.
 - **Contrast.** Every pair above is held to WCAG AA (4.5:1) by `src/test/toneContrast.test.ts`, which reads the palette from `src/index.css`; the closest is the info

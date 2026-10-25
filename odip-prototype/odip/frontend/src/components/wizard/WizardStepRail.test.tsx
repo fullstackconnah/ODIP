@@ -27,7 +27,7 @@ describe('WizardStepRail', () => {
       render(<WizardStepRail steps={steps} visitedSteps={new Set(['a', 'b', 'c'])} currentKey="b" onSelect={vi.fn()} filled />)
 
       const [alpha, beta, gamma] = screen.getAllByRole('button')
-      expect(beta.className).toContain('bg-[var(--color-primary)] text-white')
+      expect(beta.className).toContain('bg-[var(--color-primary)] text-[var(--color-primary-foreground)]')
       expect(alpha.className).toContain('bg-[var(--color-primary)]/10')
       expect(alpha.className).toContain('text-[var(--color-primary)]')
       expect(gamma.className).toContain('bg-[var(--color-accent)]')
@@ -104,7 +104,7 @@ describe('WizardStepRail', () => {
 
       for (const pill of screen.getAllByRole('button')) {
         expect(pill.className).not.toMatch(/(^|\s)bg-\[var\(--color-(primary|accent)\)\]/)
-        expect(pill.className).not.toContain('text-white')
+        expect(pill.className).not.toContain('text-[var(--color-primary-foreground)]')
         expect(pill.className).not.toContain('ring-offset')
         expect(pill.className).not.toContain('[object Object]')
       }

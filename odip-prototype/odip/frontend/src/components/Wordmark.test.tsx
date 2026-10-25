@@ -15,4 +15,11 @@ describe('Wordmark', () => {
     rerender(<Wordmark size={21} tone="dark" />)
     expect(screen.getByText('support').getAttribute('style')).toContain('color: var(--color-primary-fixed)')
   })
+
+  it('fills the light dot from --wordmark-dot (a solid disc in dark), and the dark tone from primary-fixed', () => {
+    const { container, rerender } = render(<Wordmark size={21} />)
+    expect(container.querySelector('circle')!.getAttribute('style')).toContain('fill: var(--wordmark-dot)')
+    rerender(<Wordmark size={21} tone="dark" />)
+    expect(container.querySelector('circle')!.getAttribute('style')).toContain('fill: var(--color-primary-fixed)')
+  })
 })

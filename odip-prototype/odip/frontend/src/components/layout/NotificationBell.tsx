@@ -10,7 +10,7 @@ import { NotificationList } from '@/components/layout/NotificationList'
 import { useIsBelowLg } from '@/hooks/useIsBelowLg'
 
 /** DESIGN's Floating Panel shadow (0 24px 40px -12px at 14% ink), from the ink token: the source scan refuses a literal rgba(). */
-const FLOATING_PANEL = 'shadow-[0_24px_40px_-12px_color-mix(in_srgb,var(--color-foreground)_14%,transparent)]'
+const FLOATING_PANEL = 'shadow-[var(--shadow-float)]'
 
 /**
  * The header bell (dashboard SHAPE section 9), for every signed-in role. The button's name carries the unread count, and a

@@ -316,7 +316,7 @@ export default function SchedulePage() {
                                 />
                                 {prefEntry && (
                                   <span
-                                    className="inline-flex h-5 shrink-0 items-center rounded-full bg-[var(--color-warning)] px-1.5 text-xs font-bold leading-none text-[var(--color-foreground)]"
+                                    className="inline-flex h-5 shrink-0 items-center rounded-full bg-[var(--color-warning)] px-1.5 text-xs font-bold leading-none text-[var(--color-warning-foreground)]"
                                     title={`${plural(prefEntry.participantCount, 'participant')} prefer this staff member`}
                                   >
                                     ★{prefEntry.participantCount > 1 ? ` ${prefEntry.participantCount}` : ''}

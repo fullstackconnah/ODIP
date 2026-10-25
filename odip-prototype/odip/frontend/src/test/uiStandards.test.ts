@@ -58,16 +58,8 @@ const EXEMPT: Record<Rule, string[]> = {
 
 /** What is left, file by file, and why it may stay. Lower a number when you remove one; never raise it. */
 const BASELINE: Record<Rule, Record<string, number>> = {
-  // Each one is the rgba() tint of a `shadow-[...]` (the DESIGN ambient shadow, 27,28,26 = --color-foreground, and Dropdown's primary
-  // hover ring): index.css has no shadow tokens yet. Add them there and these go.
-  colour: {
-    'components/Dropdown.tsx': 3,
-    'components/ItineraryTab.tsx': 1,
-    'components/SearchableSelect.tsx': 1,
-    'components/layout/AppLayout.tsx': 2,
-    'pages/LoginPage.tsx': 2,
-    'pages/TripsPage.tsx': 1,
-  },
+  // The shadow tints moved to the --shadow-* tokens in index.css (dark-mode-2026-10); nothing is left.
+  colour: {},
   button: {},
   overlay: {
     // Anchored non-modal staff picker on useDialogBehavior (lead, 2026-10-15): below md it is the house SlideOver.

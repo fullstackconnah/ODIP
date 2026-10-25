@@ -200,7 +200,7 @@ export default function LoginPage() {
             <h1><Wordmark size={32} /></h1>
           </div>
 
-          <form onSubmit={handleSubmit} className="bg-[var(--color-card)] rounded-[var(--radius-lg)] p-8 shadow-[0_24px_32px_-12px_rgba(27,28,26,0.08)]">
+          <form onSubmit={handleSubmit} className="bg-[var(--color-card)] rounded-[var(--radius-lg)] p-8 shadow-[var(--shadow-lift)]">
             <h2 className="text-xl font-semibold mb-6 text-[var(--color-foreground)]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Sign in to your account</h2>
 
             {problem && (
@@ -296,7 +296,7 @@ export default function LoginPage() {
                 id="login-submit"
                 type="submit"
                 disabled={login.isPending || resend === 'sending'}
-                className="w-full py-2.5 rounded-[var(--radius-lg)] bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] text-white font-bold hover:opacity-90 disabled:opacity-50 transition-all shadow-lg shadow-[var(--color-primary)]/20"
+                className="w-full py-2.5 rounded-[var(--radius-lg)] bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] text-[var(--color-primary-foreground)] font-bold hover:opacity-90 disabled:opacity-50 transition-all shadow-lg shadow-[var(--color-primary)]/20"
               >
                 {login.isPending ? 'Signing in…' : 'Sign in'}
               </button>
@@ -317,7 +317,7 @@ export default function LoginPage() {
           </form>
 
           {devAuthEnabled && (
-            <div className="mt-6 bg-[var(--color-card)] rounded-[var(--radius-lg)] p-8 shadow-[0_24px_32px_-12px_rgba(27,28,26,0.08)]">
+            <div className="mt-6 bg-[var(--color-card)] rounded-[var(--radius-lg)] p-8 shadow-[var(--shadow-lift)]">
               <div className="flex items-center gap-3 mb-4">
                 <div className="h-px flex-1 bg-[var(--color-border)]" />
                 <span className="text-xs text-[var(--color-muted-foreground)] uppercase tracking-wide">Developer sign-in</span>
@@ -366,7 +366,7 @@ export default function LoginPage() {
                   type="button"
                   onClick={handleDevLogin}
                   disabled={devLogin.isPending}
-                  className="w-full py-2.5 rounded-[var(--radius-lg)] bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] text-white font-bold hover:opacity-90 disabled:opacity-50 transition-all shadow-lg shadow-[var(--color-primary)]/20"
+                  className="w-full py-2.5 rounded-[var(--radius-lg)] bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] text-[var(--color-primary-foreground)] font-bold hover:opacity-90 disabled:opacity-50 transition-all shadow-lg shadow-[var(--color-primary)]/20"
                 >
                   {devLogin.isPending ? 'Signing in…' : 'Sign in as selected user'}
                 </button>

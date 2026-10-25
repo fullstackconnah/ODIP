@@ -11,7 +11,7 @@ export function NavCountBadge({ count }: { count: number }) {
   return (
     <span
       aria-hidden="true"
-      className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-[var(--color-destructive)] text-white text-xs font-medium"
+      className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-[var(--color-destructive)] text-[var(--color-destructive-foreground)] text-xs font-medium"
     >
       {count > 99 ? '99+' : count}
     </span>
