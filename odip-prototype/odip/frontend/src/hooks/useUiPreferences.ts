@@ -47,10 +47,10 @@ export function UiPreferencesProvider({ children }: { children: ReactNode }) {
   }, [userId])
 
   // public/theme.js painted the saved theme before React mounted; this keeps it in step with a change, and the cleanup
-  // hands the page back to System when the shell unmounts (sign-out reloads, so pre-paint then finds no user).
+  // re-resolves from the stored prefs, so a route that unmounts the shell keeps the theme and a signed-out page falls back to System.
   useEffect(() => {
     window.odipTheme?.set(prefs.theme)
-    return () => window.odipTheme?.set('system')
+    return () => window.odipTheme?.reset()
   }, [prefs.theme])
 
   const value = useMemo(() => ({ prefs, setPref }), [prefs, setPref])

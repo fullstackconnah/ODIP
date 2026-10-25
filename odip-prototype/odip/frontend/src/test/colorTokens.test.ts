@@ -59,7 +59,7 @@ describe('dark theme block', () => {
       const rel = relative(SRC, file).split(sep).join('/')
       if (allowed.has(rel)) continue
       const source = readFileSync(file, 'utf-8')
-      for (const needle of [/text-white/, /rgba\(27,28,26/, /rgba\(57,98,0/, /bg-black\/5\b/]) {
+      for (const needle of [/text-white/, /rgba\(27,28,26/, /rgba\(57,98,0/, /bg-black\/5\b/, /color-mix\(in_srgb,var\(--color-foreground\)/]) {
         if (needle.test(source)) leaks.push(`${rel}: ${needle}`)
       }
     }

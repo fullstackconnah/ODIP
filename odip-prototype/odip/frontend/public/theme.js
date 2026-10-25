@@ -17,6 +17,7 @@
     } catch (e) { return undefined } // corrupt JSON, a null blob, or storage that throws: System
   }
   if (media && media.addEventListener) media.addEventListener('change', function () { if (choice === 'system') set('system') })
-  window.odipTheme = { set: set }
+  // reset re-resolves from the signed-in user's stored prefs (System when signed out): the provider's cleanup uses it so an SPA route change keeps the theme
+  window.odipTheme = { set: set, reset: function () { set(stored()) } }
   set(stored())
 })()

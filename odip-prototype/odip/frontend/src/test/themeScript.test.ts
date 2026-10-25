@@ -98,6 +98,28 @@ describe('public/theme.js (pre-paint)', () => {
   })
 })
 
+describe('odipTheme.reset (provider unmount)', () => {
+  afterEach(() => localStorage.clear())
+
+  it('re-resolves from the stored prefs of the signed-in user', () => {
+    osDark = false
+    signIn(JSON.stringify({ theme: 'dark' }))
+    run()
+    window.odipTheme!.set('light')
+    window.odipTheme!.reset!()
+    expect(theme()).toBe('dark')
+  })
+
+  it('falls back to System once nobody is signed in', () => {
+    osDark = false
+    signIn(JSON.stringify({ theme: 'dark' }))
+    run()
+    localStorage.removeItem('odip_user')
+    window.odipTheme!.reset!()
+    expect(theme()).toBe('light')
+  })
+})
+
 describe('index.html and nginx wire the script in', () => {
   const html = readFileSync(join(FRONTEND, 'index.html'), 'utf-8')
 

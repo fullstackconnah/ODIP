@@ -16,7 +16,7 @@ export type UiPreferences = {
 // public/theme.js applies the theme before first paint and exposes set() for React; keep its validation in step with readUiPreferences.
 declare global {
   interface Window {
-    odipTheme?: { set(pref: ThemePreference): void }
+    odipTheme?: { set(pref: ThemePreference): void; reset(): void }
   }
 }
 
