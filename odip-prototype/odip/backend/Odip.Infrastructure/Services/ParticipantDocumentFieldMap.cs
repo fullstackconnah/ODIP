@@ -128,7 +128,7 @@ public static class ParticipantDocumentFieldMap
         S("requiresStandingMachine", "Support Needs & Mobility", "Standing Machine", ParticipantDocumentTag.Shared, "RequiresStandingMachine"),
         S("supportRatio", "Support Needs & Mobility", "Support Ratio", ParticipantDocumentTag.Shared, "SupportRatio"),
         S("mobilityNotes", "Support Needs & Mobility", "Mobility Notes", ParticipantDocumentTag.Profile, "MobilityNotes"),
-        S("equipmentRequirements", "Support Needs & Mobility", "Equipment Requirements", ParticipantDocumentTag.Profile, "EquipmentRequirements"),
+        S("equipmentRequirements", "Support Needs & Mobility", "Equipment Requirements", ParticipantDocumentTag.Shared, "EquipmentRequirements"),
         S("transportRequirements", "Support Needs & Mobility", "Transport Requirements", ParticipantDocumentTag.Profile, "TransportRequirements"),
         S("ambulantStatus", "Support Needs & Mobility", "Ambulant Status", ParticipantDocumentTag.Profile, "AmbulantStatus"),
         S("fallsRiskRating", "Support Needs & Mobility", "Falls Risk Rating", ParticipantDocumentTag.Profile, "FallsRiskRating"),
@@ -179,7 +179,7 @@ public static class ParticipantDocumentFieldMap
         S("bspPlanProvided", "Behaviour & Communication", "BSP Plan Provided", ParticipantDocumentTag.Profile, "BspPlanProvided"),
         S("bocChartProvided", "Behaviour & Communication", "BOC Chart Provided", ParticipantDocumentTag.Profile, "BocChartProvided"),
         S("expressiveSkills", "Behaviour & Communication", "Expressive Skills", ParticipantDocumentTag.Shared, "ExpressiveSkills"),
-        S("receptiveSkills", "Behaviour & Communication", "Receptive Skills", ParticipantDocumentTag.Profile, "ReceptiveSkills"),
+        S("receptiveSkills", "Behaviour & Communication", "Receptive Skills", ParticipantDocumentTag.Shared, "ReceptiveSkills"),
         S("readingAbility", "Behaviour & Communication", "Reading Ability", ParticipantDocumentTag.Profile, "ReadingAbility"),
         S("communicationAids", "Behaviour & Communication", "Communication Aids", ParticipantDocumentTag.Profile, "CommunicationAids"),
 

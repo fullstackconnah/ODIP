@@ -119,7 +119,6 @@ export function BehaviourCognitionStep({ control, register, participant, hiddenF
 
       <Card title="Communication">
         <div className={formGrid}>
-          <TextAreaField label="Receptive Skills" id="receptiveSkills" rows={2} {...register('receptiveSkills')} className={span.long} />
           <TextAreaField label="Reading Ability" id="readingAbility" rows={2} {...register('readingAbility')} className={span.long} />
           <TextAreaField label="Communication Aids" id="communicationAids" rows={2} {...register('communicationAids')} className={span.long} />
         </div>
@@ -135,6 +134,7 @@ function ReadOnlyBehaviourSummaryCard({ participant }: { participant: Participan
       <div className={formGrid}>
         <ReadOnlyField field="behavioursOfConcernCurrent" label="Behaviours of Concern (Current)" value={yesNoUnknown(participant.behavioursOfConcernCurrent === null ? '' : String(participant.behavioursOfConcernCurrent))} className={span.medium} />
         <ReadOnlyField field="behavioursOfConcernFiveYearHistory" label="Behaviours of Concern (5-Year History)" value={yesNoUnknown(participant.behavioursOfConcernFiveYearHistory === null ? '' : String(participant.behavioursOfConcernFiveYearHistory))} className={span.medium} />
+        <ReadOnlyField field="receptiveSkills" label="Receptive Skills" value={participant.receptiveSkills || '—'} className={span.medium} />
         <ReadOnlyField field="expressiveSkills" label="Expressive Skills" value={participant.expressiveSkills || '—'} className={span.medium} />
         <ReadOnlyField field="behaviourRiskSummary" label="Behaviour Risk Summary" value={participant.behaviourRiskSummary || '—'} className={span.long} />
       </div>

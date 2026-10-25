@@ -86,7 +86,7 @@ const TEXT_CONTROLS = [
   'firstName', 'lastName', 'preferredName', 'dateOfBirth', 'phone', 'email',
   'addressStreet', 'addressSuburb', 'addressPostcode',
   'ndisNumber', 'planStartDate', 'planEndDate',
-  'medicalSummary', 'expressiveSkills', 'behaviourRiskSummary',
+  'medicalSummary', 'expressiveSkills', 'receptiveSkills', 'equipmentRequirements', 'behaviourRiskSummary',
   'mobilityAidWheelchair', 'requiresHiLoBed', 'requiresHoist', 'requiresShowerChair', 'requiresCommode', 'requiresStandingMachine',
 ]
 const DROPDOWNS = ['addressState', 'fundingSource', 'planType', 'supportRatio', 'overnightSupport', 'overnightRatio']

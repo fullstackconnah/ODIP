@@ -598,7 +598,7 @@ public class ParticipantsController : ControllerBase
         p.ReceivedFeedbackInfo = dto.ReceivedFeedbackInfo; p.ReceivedBeingSafeInfo = dto.ReceivedBeingSafeInfo;
         p.ReceivedAdvocacyInfo = dto.ReceivedAdvocacyInfo;
         p.BehavioursOfConcernCurrent = dto.BehavioursOfConcernCurrent; p.BehavioursOfConcernFiveYearHistory = dto.BehavioursOfConcernFiveYearHistory;
-        p.ExpressiveSkills = dto.ExpressiveSkills; p.HidpaNotes = dto.HidpaNotes;
+        p.ExpressiveSkills = dto.ExpressiveSkills; p.ReceptiveSkills = dto.ReceptiveSkills; p.EquipmentRequirements = dto.EquipmentRequirements; p.HidpaNotes = dto.HidpaNotes;
         p.BehaviourRiskSummary = dto.BehaviourRiskSummary; p.Notes = dto.Notes;
     }
 
