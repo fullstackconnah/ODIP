@@ -50,7 +50,7 @@ public class TenantFilterScanTests
         {
             foreach (var path in Directory.EnumerateFiles(Path.Combine(root!, project), "*.cs", SearchOption.AllDirectories))
             {
-                var rel = Path.GetRelativePath(root!, path).Replace('\', '/');
+                var rel = Path.GetRelativePath(root!, path).Replace('\\', '/');
                 if (rel.Contains("/bin/") || rel.Contains("/obj/") || rel.Contains("/Migrations/")) continue;
                 scanned++;
                 if (BareBypassAllowed.Contains(rel)) continue;
