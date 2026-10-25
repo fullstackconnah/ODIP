@@ -20,11 +20,11 @@ public class ParticipantIdMaskPostgresTests : IClassFixture<PostgresFixture>
     {
         Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
 
-        var (db, _) = await _pg.NewTenantContextAsync();
+        var (db, tenantId) = await _pg.NewTenantContextAsync();
         await using var _ = db;
         // "430000017 " is the trailing-space case: Npgsql's btrim strips spaces only, which is accepted (stored numbers carry no tabs or newlines).
         var cases = new[] { "", "  ", "5", "12", "430000017", "430000017 " };
-        foreach (var c in cases) ParticipantIdMaskTests.Seed(db, ndis: c);
+        foreach (var c in cases) ParticipantIdMaskTests.Seed(db, ndis: c, tenantId: tenantId);
 
         var result = await ParticipantIdMaskTests.ControllerFor(db, "SupportWorker").GetAll(null, null, null, null, null, null, 1, 50, CancellationToken.None);
         var items = Assert.IsType<ApiResponse<PagedResult<ParticipantListDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!.Items;

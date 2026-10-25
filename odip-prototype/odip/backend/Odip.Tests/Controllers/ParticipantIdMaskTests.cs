@@ -61,11 +61,11 @@ public class ParticipantIdMaskTests
         return controller;
     }
 
-    internal static Participant Seed(OdipDbContext db, string? ndis = "430000017", string? taxi = "TXI775534")
+    internal static Participant Seed(OdipDbContext db, string? ndis = "430000017", string? taxi = "TXI775534", Guid tenantId = default)
     {
         var p = new Participant
         {
-            Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true, NdisNumber = ndis,
+            Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Sophie", LastName = "Brown", IsActive = true, NdisNumber = ndis,
             MedicareNumber = "2951123451", MedicareExpiry = new DateOnly(2030, 1, 31), PensionCardNumber = "PEN998877",
             CompanionCardNumber = "CMP556612", PrivateHealthFund = "Medibank", PrivateHealthMembershipNumber = "HFM443323",
             TaxiCardNumber = taxi, MedicalSummary = "Asthma",
