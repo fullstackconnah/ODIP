@@ -132,7 +132,8 @@ npm run lint
   `ExceptionHandlingMiddleware` → rate limiter ("login"/"api" policies) → CORS → Auth →
   `ReadOnlyMiddleware` (403s writes for the "ReadOnly" role) → controllers. Because the order
   matters, inserting new middleware in the wrong slot can silently change what gets
-  rate-limited, authenticated, or blocked.
+  rate-limited, authenticated, or blocked. On live the timing log can be silenced without a deploy with env
+  `Logging__LogLevel__Odip.RequestTiming=Warning`; container logs rotate at 10 MB (`deploy/compose.yaml`).
 
 - Multi-tenancy is implemented through `ICurrentTenant`/`ITenantEntity`, with super-admin tenant
   switching handled via the `X-View-As-Tenant`/`X-View-As-User` request headers — tenant-scoped

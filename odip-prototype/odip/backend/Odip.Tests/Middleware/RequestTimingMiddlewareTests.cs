@@ -53,6 +53,8 @@ public class RequestTimingMiddlewareTests : IClassFixture<PostgresFixture>
 
         var app = builder.Build();
         app.UseMiddleware<RequestTimingMiddleware>();
+        app.UseMiddleware<ExceptionHandlingMiddleware>(); // same order as Program.cs: the throw is turned into a 500 inside the timing middleware
+        app.MapGet("/api/v1/boom", () => { throw new Exception("boom"); });
         app.MapGet("/api/v1/things/{id:guid}", (Guid id) => "ok");
         app.MapGet("/api/v1/query", async (OdipDbContext db) =>
         {
@@ -83,6 +85,19 @@ public class RequestTimingMiddlewareTests : IClassFixture<PostgresFixture>
         Assert.StartsWith("Information|GET /api/v1/things/{id:guid} 200 ", line);
         Assert.DoesNotContain(id.ToString(), line);
         Assert.EndsWith(" db=0", line);
+    }
+
+    [Fact]
+    public async Task ARequestThatThrows_LogsOneLine_WithTheHandledStatus()
+    {
+        var (sink, app, client) = await StartAsync();
+        await using var _ = app;
+
+        var response = await client.GetAsync("/api/v1/boom");
+
+        Assert.Equal(System.Net.HttpStatusCode.InternalServerError, response.StatusCode);
+        var line = Assert.Single(Lines(sink));
+        Assert.StartsWith("Information|GET /api/v1/boom 500 ", line);
     }
 
     [Fact]
@@ -163,6 +178,7 @@ public class RequestTimingMiddlewareTests : IClassFixture<PostgresFixture>
 
         string[] order =
         [
+            "sp.GetRequiredService<Odip.Api.Middleware.DbCommandCountInterceptor>()",
             "app.UseForwardedHeaders();",
             "// Security headers middleware",
             "app.UseMiddleware<Odip.Api.Middleware.RequestTimingMiddleware>();",

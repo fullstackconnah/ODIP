@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Odip.Api.Middleware;
 using Odip.Api.RateLimiting;
 using Odip.Api.Services;
 using Odip.Domain.Interfaces;
@@ -41,7 +42,7 @@ if (args.Contains("--seed-demo-participant-fixtures"))
 // referenced from Program.cs, so no audit rows were ever written.
 builder.Services.AddScoped<Odip.Infrastructure.Audit.AuditInterceptor>();
 
-Odip.Api.Middleware.RequestTimingExtensions.AddRequestTiming(builder.Services);
+builder.Services.AddRequestTiming();
 builder.Services.AddDbContext<OdipDbContext>((sp, options) =>
     options.UseNpgsql(connectionString)
         .AddInterceptors(sp.GetRequiredService<Odip.Infrastructure.Audit.AuditInterceptor>(),
