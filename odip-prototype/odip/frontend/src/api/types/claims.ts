@@ -288,3 +288,25 @@ export interface PendingInvoiceDto {
   /** Absent when the settings are missing. */
   predictedNumber?: string
 }
+
+/** GET /invoices: one row of the invoice register. Null fields are omitted from the JSON. */
+export interface InvoiceRegisterRowDto {
+  id: string
+  kind: InvoiceKind
+  displayNumber: string
+  status: InvoiceStatus
+  issueDate: string
+  dueDate?: string
+  participantName: string
+  billToName: string
+  payerKind: PlanType
+  claimReference: string
+  /** Absent once the claim is deleted: the row and its number stay. */
+  tripClaimId?: string
+  /** On a credit note: the invoice it credits. */
+  creditsDisplayNumber?: string
+  creditedByDisplayNumber?: string
+  /** Signed as the PDF prints it: a credit note is negative. */
+  total: number
+  organisationName: string
+}

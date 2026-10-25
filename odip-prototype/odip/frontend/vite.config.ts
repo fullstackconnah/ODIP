@@ -42,6 +42,8 @@ export default defineConfig({
     },
   },
   build: {
+    // Fonts are never inlined as data: URIs: font-src is 'self' only, so a data: face would be blocked.
+    assetsInlineLimit: (file) => (file.endsWith('.woff2') ? false : undefined),
     rollupOptions: {
       input: {
         index: path.resolve(__dirname, 'index.html'),

@@ -83,8 +83,8 @@
 
   /*
    * Type: the ONE display step, above the 20px headline. Opt-in and reserved for detail pages: the title of
-   * PageHeader variant="detail" and the figures of FactBar variant="glance". Plus Jakarta Sans 800 (loaded in
-   * index.html). It does not flip with the pointer. Consume it through the `text-display` utility below; never
+   * PageHeader variant="detail" and the figures of FactBar variant="glance". Plus Jakarta Sans 800 (bundled by
+   * fonts.css). It does not flip with the pointer. Consume it through the `text-display` utility below; never
    * restate the values in a component.
    */
   --text-display: 1.75rem;           /* 28px */
@@ -276,8 +276,27 @@
 }
 
 /* Material Symbols support */
+/* Self-hosted, FILL axis only: the app sets FILL 0/1 and wght 400, GRAD 0, opsz 24 and nothing else. `block` so a ligature name never flashes as text. */
+@font-face {
+  font-family: 'Material Symbols Outlined';
+  font-style: normal;
+  font-weight: 100 700;
+  font-display: block;
+  src: url(../node_modules/@fontsource-variable/material-symbols-outlined/files/material-symbols-outlined-latin-fill-normal.woff2) format('woff2-variations');
+}
+
 .material-symbols-outlined {
   font-family: 'Material Symbols Outlined';
+  /* The rest of Google's own .material-symbols-outlined rule, which the hosted stylesheet used to bring: without it an icon inherits its parent's weight, spacing and wrapping. */
+  font-weight: normal;
+  font-style: normal;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
   font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
   font-size: 24px;
   line-height: 1;
