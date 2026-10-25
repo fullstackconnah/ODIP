@@ -95,7 +95,8 @@ export default function CaregiverWizardPage() {
   useEffect(() => {
     if (!form.data) return
     baseRef.current = hydrateBase(form.data)
-    reset(hydrateFormFromProjection(form.data) as unknown as CaregiverFormData, { keepDefaultValues: false })
+    // keepDirtyValues: what was typed while the save was in flight survives. baseRef and reset must stay in this one effect.
+    reset(hydrateFormFromProjection(form.data) as unknown as CaregiverFormData, { keepDefaultValues: false, keepDirtyValues: true })
   }, [form.data, reset])
 
   const steps: WizardStepDef<CaregiverFormData>[] = useMemo(() => [
@@ -180,7 +181,7 @@ export default function CaregiverWizardPage() {
   }
 
   if (form.isLoading) return <PublicShell><p>Loading…</p></PublicShell>
-  if (form.isError || !form.data) return <InvalidLinkPage />
+  if (!form.data) return <InvalidLinkPage />
   if (form.data.status === 'Submitted') return <SubmittedPage caregiverName={form.data.caregiverName} />
 
   const hidden = CAREGIVER_INTERNAL_FIELDS
