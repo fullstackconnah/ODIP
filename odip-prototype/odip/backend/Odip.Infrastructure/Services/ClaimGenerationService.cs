@@ -61,6 +61,7 @@ public class ClaimGenerationService
             State = context.State,
             ConfirmedParticipantCount = context.ConfirmedParticipantCount,
             TotalAmount = lineItems.Sum(l => l.TotalAmount),
+            LeftOut = context.LeftOut,
             LineItems = lineItems.Select(l => new ClaimPreviewLineItemDto
             {
                 ParticipantName = l.Booking.Participant?.FullName ?? string.Empty,
@@ -264,8 +265,21 @@ public class ClaimGenerationService
 
         foreach (var booking in confirmedBookings)
         {
-            if (booking.Participant == null || string.IsNullOrWhiteSpace(booking.Participant.NdisNumber))
+            if (booking.Participant == null)
                 continue;
+            if (string.IsNullOrWhiteSpace(booking.Participant.NdisNumber))
+            {
+                // Message only: the booking is skipped as before; the claim says who it left out and why.
+                context.LeftOut.Add(new TripClaimLeftOutDto
+                {
+                    ParticipantId = booking.Participant.Id,
+                    Description = booking.Participant.FullName,
+                    Reason = booking.Participant.FundingSource == ParticipantFundingSource.Other
+                        ? "Funded another way, so not claimed to the NDIS. Invoice them directly."
+                        : "NDIS number missing. Add it to their profile, then preview the claim again to include them."
+                });
+                continue;
+            }
 
             var price = estimator.Price(booking.Participant.IsIntensiveSupport);
             foreach (var line in price.Lines)
@@ -322,6 +336,8 @@ public class ClaimGenerationService
         public int ConfirmedWithNdisNumberCount { get; set; }
         /// <summary>How many days the trip has (rows in TripDays): none means nothing can be priced.</summary>
         public int TripDayCount { get; set; }
+        /// <summary>Confirmed participants skipped for want of an NDIS number, with the reason shown to the person generating the claim.</summary>
+        public List<TripClaimLeftOutDto> LeftOut { get; } = new();
         /// <summary>Day types a line was wanted for but no catalogue item was valid on its dates (what stops the claim when it ends up with no lines).</summary>
         public SortedSet<ClaimDayType> UnpricedDayTypes { get; } = new();
     }
