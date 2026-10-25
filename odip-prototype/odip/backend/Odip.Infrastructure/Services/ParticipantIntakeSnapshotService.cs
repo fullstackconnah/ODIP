@@ -1,10 +1,13 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
+using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Infrastructure.Data;
 
@@ -79,25 +82,52 @@ public sealed class ParticipantIntakeSnapshotService
         }).ToList();
         var snapshotJson = JsonSerializer.Serialize(new { completedAtUtc = completedAt, actor, revision, participantId = participant.Id, tenantId = participant.TenantId, fields, contactRoles, riskEntries });
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(snapshotJson))).ToLowerInvariant();
-        var pdf = Document.Create(container => container.Page(page =>
-        {
-            page.Margin(36); page.Size(PageSizes.A4); page.DefaultTextStyle(x => x.FontSize(10));
-            page.Header().Text("ODIP Intake Completion Evidence").Bold().FontSize(18);
-            page.Content().Column(c =>
-            {
-                c.Spacing(8);
-                c.Item().Text($"Completed (UTC): {completedAt:O}");
-                c.Item().Text($"Revision: {revision}   Actor: {actor}");
-                c.Item().Text($"Participant: {participant.FullName} ({participant.Id})");
-                c.Item().Text($"SHA-256: {hash}").FontSize(8);
-                c.Item().LineHorizontal(1);
-                c.Item().Text(snapshotJson).FontSize(7);
-            });
-        })).GeneratePdf();
+        var pdf = RenderPdf("Bunya Support Intake Completion Evidence", completedAt, revision, actor, participant.FullName, participant.Id, hash, snapshotJson);
         var snapshot = new ParticipantIntakeSnapshot { Id = Guid.NewGuid(), TenantId = participant.TenantId, ParticipantId = participant.Id, Revision = revision, CompletedAtUtc = completedAt, CompletedBy = actor, RequestId = requestId, SnapshotJson = snapshotJson, ContentHash = hash, PdfContent = pdf };
         _db.ParticipantIntakeSnapshots.Add(snapshot);
         return snapshot;
     }
+
+    private static byte[] RenderPdf(string title, DateTime completedAt, int revision, string actor, string participantName, Guid participantId, string? hash, string? json, string? note = null) =>
+        Document.Create(container => container.Page(page =>
+        {
+            page.Margin(36); page.Size(PageSizes.A4); page.DefaultTextStyle(x => x.FontSize(10));
+            page.Header().Text(title).Bold().FontSize(18);
+            page.Content().Column(c =>
+            {
+                c.Spacing(8);
+                if (note != null) c.Item().Text(note).Italic();
+                c.Item().Text($"Completed (UTC): {completedAt:O}");
+                c.Item().Text($"Revision: {revision}   Actor: {actor}");
+                c.Item().Text($"Participant: {participantName} ({participantId})");
+                if (hash != null) c.Item().Text($"SHA-256: {hash}").FontSize(8);
+                c.Item().LineHorizontal(1);
+                if (json != null) c.Item().Text(json).FontSize(7);
+            });
+        })).GeneratePdf();
+
+    /// <summary>
+    /// The snapshot JSON with every ID-number field masked (keys match case-insensitively); the stored row is never changed.
+    /// Null when there is no `fields` object to mask: the caller must then print no JSON rather than the raw one.
+    /// </summary>
+    public static string? MaskSnapshotJson(string json)
+    {
+        var root = JsonNode.Parse(json) as JsonObject;
+        var fields = root?.FirstOrDefault(p => string.Equals(p.Key, "fields", StringComparison.OrdinalIgnoreCase)).Value as JsonObject;
+        if (fields == null) return null;
+        foreach (var key in fields.Select(p => p.Key).ToList())
+            if (ParticipantIdMask.PropertyNames.Contains(key, StringComparer.OrdinalIgnoreCase) && fields[key] is JsonValue v)
+                fields[key] = ParticipantIdMask.Mask(v.ToString());
+        return root!.ToJsonString(new JsonSerializerOptions { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
+    }
+
+    /// <summary>
+    /// The completion copy shown to roles that must not see ID numbers. It carries no SHA-256: eight masked digits plus the
+    /// hash of the full JSON could be brute-forced back to the number. The office keeps the stored PDF, hash included.
+    /// </summary>
+    public static byte[] RenderMaskedCopy(ParticipantIntakeSnapshot s, string participantName) =>
+        RenderPdf("Bunya Support Intake Completion Copy", s.CompletedAtUtc, s.Revision, s.CompletedBy, participantName, s.ParticipantId,
+            hash: null, MaskSnapshotJson(s.SnapshotJson), note: "ID numbers are hidden for your role. Stored evidence is untouched.");
 
     /// <summary>Creates and persists a completion snapshot for standalone callers.</summary>
     public async Task<ParticipantIntakeSnapshot> CaptureAsync(Participant participant, string actor, string? requestId, CancellationToken ct)

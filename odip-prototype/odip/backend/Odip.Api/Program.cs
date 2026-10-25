@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Odip.Api.Middleware;
 using Odip.Api.RateLimiting;
 using Odip.Api.Services;
 using Odip.Domain.Interfaces;
@@ -41,9 +42,11 @@ if (args.Contains("--seed-demo-participant-fixtures"))
 // referenced from Program.cs, so no audit rows were ever written.
 builder.Services.AddScoped<Odip.Infrastructure.Audit.AuditInterceptor>();
 
+builder.Services.AddRequestTiming();
 builder.Services.AddDbContext<OdipDbContext>((sp, options) =>
     options.UseNpgsql(connectionString)
-        .AddInterceptors(sp.GetRequiredService<Odip.Infrastructure.Audit.AuditInterceptor>()));
+        .AddInterceptors(sp.GetRequiredService<Odip.Infrastructure.Audit.AuditInterceptor>(),
+            sp.GetRequiredService<Odip.Api.Middleware.DbCommandCountInterceptor>()));
 
 // ── JWT Authentication ───────────────────────────────────────
 var jwtSecret = builder.Configuration["Jwt:Secret"];
@@ -286,7 +289,7 @@ builder.Services.AddScoped<Odip.Application.Interfaces.IObligationTaskService, O
 // below (partitioned by IP) collapses into a single global bucket shared by every
 // client — five failed logins from any one person locks out the whole platform.
 //
-// We deliberately do NOT clear KnownProxies/KnownNetworks (the common "just make it
+// We deliberately do NOT clear KnownProxies/KnownIPNetworks (the common "just make it
 // work" fix): an empty trust list makes ForwardedHeadersMiddleware accept
 // X-Forwarded-For from ANY upstream, so a direct client could set that header itself
 // and spoof an arbitrary IP to dodge the rate limiter entirely. Instead we trust only
@@ -297,9 +300,9 @@ builder.Services.AddScoped<Odip.Application.Interfaces.IObligationTaskService, O
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    options.KnownNetworks.Clear();
+    options.KnownIPNetworks.Clear();
     options.KnownProxies.Clear();
-    options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(IPAddress.Parse("172.16.0.0"), 12));
+    options.KnownIPNetworks.Add(new System.Net.IPNetwork(IPAddress.Parse("172.16.0.0"), 12));
 });
 
 // ── Rate Limiting ────────────────────────────────────────────
@@ -603,6 +606,10 @@ app.Use(async (context, next) =>
     context.Response.Headers["Pragma"] = "no-cache";
     await next();
 });
+
+// Timing only observes: it sits outside exception handling, the rate limiter and auth so it logs the final status (429, 401, 403
+// included) without changing what any of them do. Implicit routing runs first, so the endpoint's route template is already known.
+app.UseMiddleware<Odip.Api.Middleware.RequestTimingMiddleware>();
 
 app.UseMiddleware<Odip.Api.Middleware.ExceptionHandlingMiddleware>();
 

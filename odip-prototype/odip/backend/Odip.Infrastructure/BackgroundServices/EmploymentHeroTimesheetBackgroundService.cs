@@ -58,7 +58,7 @@ public sealed class EmploymentHeroTimesheetBackgroundService : BackgroundService
             }
             catch (Exception ex)
             {
-                // A BackgroundService that throws takes the host down in .NET 8: log the type only, and the next tick tries again.
+                // A BackgroundService that throws takes the host down since .NET 6: log the type only, and the next tick tries again.
                 _logger.LogError("Employment Hero timesheet loop failed unexpectedly ({Error}); the next run will try again", ex.GetType().Name);
             }
 

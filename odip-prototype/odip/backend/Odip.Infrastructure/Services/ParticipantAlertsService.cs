@@ -334,6 +334,7 @@ public class ParticipantAlertsService
         BudgetAlertRules.OverType => "budget-1",
         BudgetAlertRules.ForecastOverType => "budget-2",
         BudgetAlertRules.ApproachingType => "budget-3",
+        BudgetAlertRules.PaceType => "budget-4",
         _ => type,
     };
 }

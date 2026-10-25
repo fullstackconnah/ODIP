@@ -353,6 +353,25 @@
 }
 
 /*
+ * The icon rail (AppLayout): its tooltip fades in over 100ms with no movement; its group flyout grows out of the rail over 150ms
+ * (opacity and a 4px slide from the left). Close is instant. Reduced motion keeps opacity only, at 100ms.
+ */
+@keyframes railFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes railFlyoutIn {
+  from { opacity: 0; transform: translateX(-4px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.rail-tooltip { animation: railFadeIn 0.1s ease-out; }
+.rail-flyout { transform-origin: left; animation: railFlyoutIn 0.15s cubic-bezier(0.2, 0, 0, 1); }
+@media (prefers-reduced-motion: reduce) {
+  .rail-tooltip { animation: none; }
+  .rail-flyout { animation: railFadeIn 0.1s linear; }
+}
+
+/*
  * Reduced motion — applied product-wide rather than per-component. Neutralises animation and
  * transition *duration/delay* so state changes (colour, opacity, width, transform) still happen
  * and are still perceivable, they just resolve instantly instead of animating. This deliberately

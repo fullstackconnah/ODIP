@@ -25,9 +25,7 @@ RUN npm ci --no-audit --no-fund \
  || (echo "ERROR: npm ci left an incomplete node_modules (tsc missing)" >&2; exit 1)
 
 COPY frontend/ .
-# 4 workers, as the test runner uses: the deploy host also runs the test runner's jobs, and an uncapped run starved it (deploy of #244, 2026-10-15).
-RUN npm test -- --maxWorkers=4
-# The deployed commit, for the platform footer's "Build 1a2b3c4" (src/lib/platformInfo.ts). Declared after the tests on purpose:
+# The deployed commit, for the platform footer's "Build 1a2b3c4" (src/lib/platformInfo.ts). Declared after `npm ci` on purpose:
 # every later RUN sees an ARG, so above `npm ci` a new sha each deploy would throw away the cached install. The ARG/ENV pair is
 # needed for the same reason as VITE_DEV_AUTH's above: without the ENV, Vite never sees the value.
 ARG VITE_BUILD_SHA

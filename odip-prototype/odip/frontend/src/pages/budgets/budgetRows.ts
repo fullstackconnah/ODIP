@@ -36,6 +36,8 @@ export function budgetRiskRow(row: BudgetListRow, figures: BudgetFigureVisibilit
     forecast: row.forecast,
     // Only when there are some: a row with none has complete figures and says nothing.
     ...(row.unpricedShiftCount > 0 ? { unpricedShifts: row.unpricedShiftCount } : {}),
+    // The pace warning's date, only when the server sent one: a row without it says nothing.
+    ...(row.paceRunsOutOn ? { paceRunsOutOn: row.paceRunsOutOn } : {}),
     // The NDIA's word, only when it has one: a row it has said nothing about carries nothing.
     ...(row.ndiaRejection ? { ndiaWord: { date: row.ndiaRejection.date, code: row.ndiaRejection.code } } : {}),
     action: { label: 'Open funding', to: fundingTabPath(row.participantId) },

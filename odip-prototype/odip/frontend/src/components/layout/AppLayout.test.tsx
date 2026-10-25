@@ -5,6 +5,7 @@ import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Routes, Route, RouterProvider, createMemoryRouter } from 'react-router-dom'
 import AppLayout from './AppLayout'
+import { UiPreferencesProvider } from '@/hooks/useUiPreferences'
 
 // AppLayout renders the portal nav's pending-witness-count badge and the Rostering nav's
 // pending-leave-count badge via TanStack Query hooks — stub just those exports (keeping the
@@ -1370,5 +1371,225 @@ describe('optional workspace recovery', () => {
     expect(screen.queryByText('Other workspaces')).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Vehicles$/ })).not.toBeInTheDocument()
     expect(screen.getAllByRole('link', { name: /Incidents$/ }).length).toBeGreaterThan(0)
+  })
+})
+
+describe('AppLayout — the sidebar collapses to an icon rail (from lg)', () => {
+  const PREFS_KEY = 'odip_ui_prefs:u1'
+  const GROUPS_KEY = 'odip_nav_open_groups'
+
+  /** matchMedia for the three queries the shell asks: lg (min-width), a mouse (hover: hover + pointer: fine) and reduced motion. */
+  function stubMedia({ lg = true, mouse = true, reduce = false } = {}) {
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query.includes('min-width') ? lg : query.includes('hover') ? mouse : query.includes('reduced-motion') ? reduce : false,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia
+  }
+  function renderRail(path: string, saved?: Record<string, unknown>) {
+    localStorage.setItem('odip_user', JSON.stringify({ id: 'u1', role: 'Admin' }))
+    if (saved) localStorage.setItem(PREFS_KEY, JSON.stringify(saved))
+    return render(
+      <UiPreferencesProvider>
+        <MemoryRouter initialEntries={[path]}>
+          <Routes>
+            <Route path="*" element={<AppLayout />} />
+          </Routes>
+        </MemoryRouter>
+      </UiPreferencesProvider>,
+    )
+  }
+  const stored = () => JSON.parse(localStorage.getItem(PREFS_KEY)!)
+  const trigger = (name: RegExp | string) => within(mainNav()).getByRole('button', { name })
+  const panel = (name: string) => screen.queryByRole('group', { name })
+  const tooltip = () => document.querySelector('[data-testid="rail-tooltip"]')
+  const dashboard = () => within(mainNav()).getByRole('link', { name: /Dashboard$/ })
+
+  // This jsdom has no PointerEvent, so a fired pointerenter would carry no pointerType.
+  class TestPointerEvent extends MouseEvent {
+    pointerType: string
+    constructor(type: string, init: PointerEventInit = {}) {
+      super(type, init)
+      this.pointerType = init.pointerType ?? ''
+    }
+  }
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.stubGlobal('PointerEvent', TestPointerEvent)
+    stubMedia()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+    localStorage.clear()
+    Reflect.deleteProperty(window, 'matchMedia')
+    mockUsePendingLeaveCount.mockReturnValue(0)
+  })
+
+  it('T1 paints the rail on the very first render when the choice was saved (no wide-then-collapse)', () => {
+    renderRail('/', { sidebarCollapsed: true })
+    expect(aside()).toHaveClass('lg:w-16')
+    expect(dashboard()).toHaveClass('size-10')
+    expect(screen.getByRole('button', { name: 'Expand sidebar' })).toBeInTheDocument()
+  })
+
+  it('T2 the toggle collapses and expands, keeps its focus, and saves beside the other preferences', () => {
+    renderRail('/', { tableVerticalDividers: true, theme: 'dark', sidebarCollapsed: false })
+    expect(aside()).not.toHaveClass('lg:w-16')
+    const toggle = screen.getByRole('button', { name: 'Collapse sidebar' })
+    expect(toggle).not.toHaveAttribute('aria-expanded')
+    toggle.focus()
+    fireEvent.click(toggle)
+    expect(stored()).toEqual({ tableVerticalDividers: true, theme: 'dark', sidebarCollapsed: true })
+    const same = screen.getByRole('button', { name: 'Expand sidebar' })
+    expect(same).toBe(toggle)
+    expect(document.activeElement).toBe(toggle)
+    expect(aside()).toHaveClass('lg:w-16')
+    // The item layout follows once the width has settled (jsdom never fires transitionend: the 260ms fallback does).
+    expect(dashboard()).not.toHaveClass('size-10')
+    act(() => { vi.advanceTimersByTime(300) })
+    expect(dashboard()).toHaveClass('size-10')
+    fireEvent.click(same)
+    expect(stored().sidebarCollapsed).toBe(false)
+    expect(dashboard()).not.toHaveClass('size-10')
+  })
+
+  it('T2b reduced motion switches the item layout at once', () => {
+    stubMedia({ reduce: true })
+    renderRail('/')
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }))
+    expect(dashboard()).toHaveClass('size-10')
+  })
+
+  it('T3 every rail link keeps its accessible name, and a group keeps its count in the name', () => {
+    mockUsePendingLeaveCount.mockReturnValue(3)
+    renderRail('/', { sidebarCollapsed: true })
+    expect(dashboard()).toBeInTheDocument()
+    expect(trigger(/pending, Staff & roster$/)).toBeInTheDocument()
+    expect(trigger(/Trips$/)).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('T4 a group opens a flyout: focus goes to its first link, Escape closes it and returns focus to the group', () => {
+    renderRail('/', { sidebarCollapsed: true })
+    const trips = trigger(/Trips$/)
+    fireEvent.click(trips)
+    expect(trips).toHaveAttribute('aria-expanded', 'true')
+    const flyout = panel('Trips')!
+    expect(flyout).toBeInTheDocument()
+    expect(document.activeElement).toBe(within(flyout).getAllByRole('link')[0])
+    // Not a saved open group.
+    expect(localStorage.getItem(GROUPS_KEY)).toBeNull()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(panel('Trips')).not.toBeInTheDocument()
+    expect(trips).toHaveAttribute('aria-expanded', 'false')
+    expect(document.activeElement).toBe(trips)
+  })
+
+  it('T4b only one flyout is open at a time; an outside click closes it; the toggle closes it', () => {
+    renderRail('/', { sidebarCollapsed: true })
+    fireEvent.click(trigger(/Trips$/))
+    fireEvent.click(trigger(/Participants$/))
+    expect(panel('Trips')).not.toBeInTheDocument()
+    expect(panel('Participants')).toBeInTheDocument()
+    fireEvent.mouseDown(document.body)
+    expect(panel('Participants')).not.toBeInTheDocument()
+    fireEvent.click(trigger(/Trips$/))
+    fireEvent.click(screen.getByRole('button', { name: 'Expand sidebar' }))
+    expect(panel('Trips')).not.toBeInTheDocument()
+  })
+
+  it('T4c choosing a page closes the flyout and leaves focus on its group; the group holding the page is marked', () => {
+    renderRail('/', { sidebarCollapsed: true })
+    expect(trigger(/Trips$/)).not.toHaveAttribute('aria-current')
+    fireEvent.click(trigger(/Trips$/))
+    fireEvent.click(within(panel('Trips')!).getAllByRole('link')[0])
+    expect(panel('Trips')).not.toBeInTheDocument()
+    expect(trigger(/Trips$/)).toHaveAttribute('aria-current', 'true')
+    expect(document.activeElement).toBe(trigger(/Trips$/))
+  })
+
+  it('T4d Tab from the last link closes the flyout and moves on to the next rail control', () => {
+    renderRail('/', { sidebarCollapsed: true })
+    fireEvent.click(trigger(/Trips$/))
+    const links = within(panel('Trips')!).getAllByRole('link')
+    const last = links[links.length - 1]
+    last.focus()
+    fireEvent.keyDown(last, { key: 'Tab' })
+    expect(panel('Trips')).not.toBeInTheDocument()
+    expect(document.activeElement).toBe(trigger(/Participants$/))
+  })
+
+  it('T5 below lg the drawer keeps its wide rows and has no collapse button, whatever was saved', () => {
+    stubMedia({ lg: false })
+    renderRail('/', { sidebarCollapsed: true })
+    expect(screen.queryByRole('button', { name: /(Collapse|Expand) sidebar/ })).not.toBeInTheDocument()
+    expect(aside()).not.toHaveClass('lg:w-16')
+    expect(dashboard()).not.toHaveClass('size-10')
+  })
+
+  it('shows a tooltip after 500ms for a mouse, never for touch, and Escape hides it', () => {
+    renderRail('/', { sidebarCollapsed: true })
+    fireEvent.pointerEnter(dashboard(), { pointerType: 'touch' })
+    act(() => { vi.advanceTimersByTime(700) })
+    expect(tooltip()).toBeNull()
+    fireEvent.pointerEnter(dashboard(), { pointerType: 'mouse' })
+    act(() => { vi.advanceTimersByTime(400) })
+    expect(tooltip()).toBeNull()
+    act(() => { vi.advanceTimersByTime(150) })
+    expect(tooltip()).toHaveTextContent('Dashboard')
+    expect(tooltip()).toHaveAttribute('aria-hidden', 'true')
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(tooltip()).toBeNull()
+  })
+
+  it('a second item shows its tooltip at once while one is showing', () => {
+    renderRail('/', { sidebarCollapsed: true })
+    fireEvent.pointerEnter(dashboard(), { pointerType: 'mouse' })
+    act(() => { vi.advanceTimersByTime(550) })
+    fireEvent.pointerLeave(dashboard(), { pointerType: 'mouse' })
+    fireEvent.pointerEnter(trigger(/Trips$/), { pointerType: 'mouse' })
+    act(() => { vi.advanceTimersByTime(1) })
+    expect(tooltip()).toHaveTextContent('Trips')
+  })
+
+  it('a wide sidebar has no tooltips', () => {
+    renderRail('/')
+    fireEvent.pointerEnter(dashboard(), { pointerType: 'mouse' })
+    act(() => { vi.advanceTimersByTime(700) })
+    expect(tooltip()).toBeNull()
+  })
+
+  it('shows no tooltip when its item unmounts during the 500ms delay (it would strand at the corner)', () => {
+    renderRail('/', { sidebarCollapsed: true })
+    const item = dashboard()
+    fireEvent.pointerEnter(item, { pointerType: 'mouse' })
+    act(() => { vi.advanceTimersByTime(300) })
+    item.remove()
+    act(() => { vi.advanceTimersByTime(300) })
+    expect(tooltip()).toBeNull()
+  })
+
+  it('opens a flyout with its header level with the trigger icon (trigger top + 2px)', () => {
+    renderRail('/', { sidebarCollapsed: true })
+    const group = trigger(/Trips$/)
+    group.getBoundingClientRect = () => ({ top: 100, bottom: 140, left: 12, right: 52, width: 40, height: 40, x: 12, y: 100, toJSON: () => ({}) })
+    fireEvent.click(group)
+    expect(panel('Trips')!.style.top).toBe('102px')
+  })
+
+  it('the wide Sign out icon sits in an 18px slot so its label lines up with the nav labels; the rail one does not', () => {
+    const { unmount } = renderRail('/')
+    const icon = () => within(aside()).getByRole('button', { name: /Sign out$/ }).querySelector('svg')!
+    expect(icon().parentElement).toHaveClass('w-[18px]')
+    unmount()
+    renderRail('/', { sidebarCollapsed: true })
+    expect(icon().parentElement).not.toHaveClass('w-[18px]')
+  })
+
+  it('the width and margin transitions are off under reduced motion', () => {
+    renderRail('/')
+    expect(aside().className).toContain('motion-reduce:lg:transition-none')
+    expect(document.getElementById('main')!.parentElement!.className).toContain('motion-reduce:lg:transition-none')
   })
 })
