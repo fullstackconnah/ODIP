@@ -405,3 +405,20 @@ describe('PageHeaderMeta', () => {
     expect(firstItem).toHaveClass('min-w-0')
   })
 })
+
+describe('PageHeader actionsBesideTitle', () => {
+  // The title row is the h1 block's parent: [h1 block, actions] are its children.
+  const titleRow = () => screen.getByRole('heading', { level: 1 }).parentElement!.parentElement!
+
+  it('keeps the actions on the title row below md', () => {
+    render(<PageHeader title="Sophie Brown" action={<button>More</button>} actionsBesideTitle />)
+    expect(titleRow().className).toContain('flex-row')
+    expect(titleRow().className).not.toContain('flex-col')
+    expect(screen.getByRole('button', { name: 'More' }).parentElement!.className).toContain('shrink-0')
+  })
+
+  it('stacks the actions under the title by default', () => {
+    render(<PageHeader title="Sophie Brown" action={<button>More</button>} />)
+    expect(titleRow().className).toContain('flex-col')
+  })
+})

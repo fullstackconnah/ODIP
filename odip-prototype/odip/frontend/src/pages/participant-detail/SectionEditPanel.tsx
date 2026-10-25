@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Pencil } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { Card } from '@/components/Card'
@@ -19,8 +19,9 @@ import { Callout } from '@/components/Callout'
  * - `onSave`: perform the mutation. Resolving ends edit mode; a thrown Error's `.message` (or the
  *   fallback below) is shown in an inline banner and edit mode stays open with the caller's draft
  *   state untouched — losing typed input on a failed save is exactly what this guards against.
- * - `children(editing)`: render-prop — read-only fields when `editing` is false, input controls
- *   bound to the caller's own draft state when true.
+ * - `children(editing, startEdit)`: render-prop — read-only fields when `editing` is false, input controls
+ *   bound to the caller's own draft state when true. `startEdit('first-empty')` opens edit and focuses
+ *   the first empty field (the "Add" link on a FactList foot line).
  */
 export type SectionEditPanelProps = {
   title?: string
@@ -32,7 +33,7 @@ export type SectionEditPanelProps = {
   onEditStart: () => void
   onCancel: () => void
   onSave: () => Promise<void>
-  children: (editing: boolean) => ReactNode
+  children: (editing: boolean, startEdit: (focus?: 'first-empty') => void) => ReactNode
 }
 
 export function SectionEditPanel({ title, className, canEdit, isDirty, onEditStart, onCancel, onSave, children }: SectionEditPanelProps) {
@@ -41,6 +42,17 @@ export function SectionEditPanel({ title, className, canEdit, isDirty, onEditSta
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
   const [confirmDiscard, setConfirmDiscard] = useState(false)
+  const bodyRef = useRef<HTMLDivElement>(null)
+  const [focusEmpty, setFocusEmpty] = useState(false)
+
+  useEffect(() => {
+    if (!editing || !focusEmpty) return
+    setFocusEmpty(false)
+    const fields = bodyRef.current?.querySelectorAll<HTMLInputElement>('input, select, textarea') ?? []
+    for (const el of fields) {
+      if (el.value === '' && el.type !== 'hidden') { el.focus(); break }
+    }
+  }, [editing, focusEmpty])
 
   useEffect(() => {
     if (!saved) return
@@ -48,11 +60,12 @@ export function SectionEditPanel({ title, className, canEdit, isDirty, onEditSta
     return () => clearTimeout(timer)
   }, [saved])
 
-  function handleEdit() {
+  function handleEdit(focus?: 'first-empty') {
     setError(null)
     setSaved(false)
     onEditStart()
     setEditing(true)
+    setFocusEmpty(focus === 'first-empty')
   }
 
   function discardAndClose() {
@@ -90,7 +103,7 @@ export function SectionEditPanel({ title, className, canEdit, isDirty, onEditSta
       className={className}
       action={
         canEdit && !editing ? (
-          <Button variant="ghost" size="sm" onClick={handleEdit}>
+          <Button variant="ghost" size="sm" onClick={() => handleEdit()}>
             <Pencil className="w-3.5 h-3.5" /> Edit
           </Button>
         ) : undefined
@@ -106,7 +119,7 @@ export function SectionEditPanel({ title, className, canEdit, isDirty, onEditSta
         </div>
       )}
 
-      {children(editing)}
+      <div ref={bodyRef}>{children(editing, handleEdit)}</div>
 
       {editing && (
         <div className="mt-[var(--section-gap)] flex items-center justify-end gap-2 border-t border-[var(--color-border)] pt-[var(--card-pad)]">

@@ -1062,3 +1062,19 @@ describe('DataTable — rowDetail', () => {
     expect(bodyRows[2]).toHaveTextContent('Alex')
   })
 })
+
+describe('DataTable — limit', () => {
+  const many: Row[] = Array.from({ length: 8 }, (_, i) => ({ id: String(i), name: `Name${i}`, age: i }))
+
+  it('applies after the sort, so a descending sort shows the top five of all eight', () => {
+    render(<DataTable data={many} columns={columns} keyField="id" sortable defaultSort={{ key: 'name', direction: 'desc' }} limit={5} />)
+    for (const n of [7, 6, 5, 4, 3]) expect(screen.getAllByText(`Name${n}`).length).toBeGreaterThan(0)
+    expect(screen.queryByText('Name2')).not.toBeInTheDocument()
+    expect(screen.queryByText('Name0')).not.toBeInTheDocument()
+  })
+
+  it('renders every row without a limit', () => {
+    render(<DataTable data={many} columns={columns} keyField="id" />)
+    for (let i = 0; i < 8; i++) expect(screen.getAllByText(`Name${i}`).length).toBeGreaterThan(0)
+  })
+})
