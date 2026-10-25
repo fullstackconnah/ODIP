@@ -64,13 +64,6 @@ function StatusCell({ row }: { row: BudgetRiskRow }) {
     <span className="flex flex-col items-start gap-0.5">
       <span className="flex flex-wrap items-center gap-1">
         <RiskPill status={row.status} />
-        {row.paceRunsOutOn && (
-          // The sentence is dates only, so it shows to a viewer who may not see money. `title` does not exist on touch and is read unreliably, so the sentence is also in the pill's hidden text.
-          <span title={paceSentence(row.paceRunsOutOn, row.periodEnd)} className="max-w-[6.5rem] whitespace-normal leading-tight">
-            <StatusBadge tone="warning" label="Spending fast" className="inline-block" />
-            <span className="sr-only">{paceSentence(row.paceRunsOutOn, row.periodEnd)}</span>
-          </span>
-        )}
         {ndiaWord && (
           // Two short lines, not one long one: the Status column is the one the table can least afford to widen, and Forecast must stay on screen at 1366 and 1440.
           <span title={`NDIA rejected a claim on ${writtenDay(ndiaWord.date)} (${ndiaWord.code})`} className="max-w-[6.5rem] whitespace-normal leading-tight">
@@ -78,6 +71,13 @@ function StatusCell({ row }: { row: BudgetRiskRow }) {
           </span>
         )}
       </span>
+      {row.paceRunsOutOn && (
+        // On its own line, under the status words: beside them it widened the Status column, and Forecast must stay on screen at 1366 and 1440. The sentence is dates only, so it shows to a viewer who may not see money. `title` does not exist on touch and is read unreliably, so the sentence is also in the pill's hidden text.
+        <span title={paceSentence(row.paceRunsOutOn, row.periodEnd)} className="max-w-[6.5rem] whitespace-normal leading-tight">
+          <StatusBadge tone="warning" label="Spending fast" className="inline-block" />
+          <span className="sr-only">{paceSentence(row.paceRunsOutOn, row.periodEnd)}</span>
+        </span>
+      )}
       {row.figures.visible && remaining !== null && (
         <span className="text-xs text-[var(--color-muted-foreground)]">
           {remaining < 0 ? <><BudgetFigure figures={row.figures} amount={-remaining} /> over</> : <><BudgetFigure figures={row.figures} amount={remaining} /> left</>}
