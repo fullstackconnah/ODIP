@@ -6,7 +6,7 @@ import { NotRecordedFold } from './NotRecordedFold'
  * A fixed list (ADL, health conditions, consents) has one row per type whether or not anything is recorded, so most rows are
  * "not recorded". The frame shows the answered rows with a count line for the rest; an editor can reveal the others to fill them in
  * (the button focuses the first newly shown row). With nothing answered, an editor gets a fold holding every row and a viewer one
- * plain line. `rows` are in DOM order, so the first unanswered one is the first row that appears on reveal.
+ * plain line; with no rows at all there is nothing to fill in, so both get the plain line. `rows` are in DOM order, so the first unanswered one is the first row that appears on reveal.
  */
 export function FixedListFrame<T>({
   title, rows, isAnswered, unit, addLabel, canAdd, rowSelector, children,
@@ -31,7 +31,7 @@ export function FixedListFrame<T>({
   ) : null
 
   if (answered.length === 0) {
-    if (!canAdd) return <p className="text-[13px] text-[var(--color-muted-foreground)]">Not recorded: {title}</p>
+    if (!canAdd || rows.length === 0) return <p className="text-[13px] text-[var(--color-muted-foreground)]">Not recorded: {title}</p>
     return <NotRecordedFold summary={title}>{children(rows)}{count}</NotRecordedFold>
   }
 

@@ -206,6 +206,23 @@ describe('ParticipantHealthConditionsSection — fixed list (T9)', () => {
     await waitFor(() => expect(within(rows[3] as HTMLElement).getByRole('button', { name: 'Edit' })).toHaveFocus())
   })
 
+  it('with no rows at all, both roles get the plain line, no fold and no second heading', () => {
+    mockUseParticipantHealthConditions.mockReturnValue({ data: [], isLoading: false })
+    const { unmount } = render(<ParticipantHealthConditionsSection participantId="participant-1" />)
+    expect(screen.getByText('Not recorded: Health conditions').closest('details')).toBeNull()
+    expect(screen.queryByRole('heading', { name: /health conditions/i })).not.toBeInTheDocument()
+    unmount()
+    setUserRole('SupportWorker')
+    render(<ParticipantHealthConditionsSection participantId="participant-1" />)
+    expect(screen.getByText('Not recorded: Health conditions').closest('details')).toBeNull()
+  })
+
+  it('heads the table "Health conditions" once something is answered', () => {
+    threeAnswered()
+    render(<ParticipantHealthConditionsSection participantId="participant-1" />)
+    expect(screen.getByRole('heading', { name: 'Health conditions' })).toBeInTheDocument()
+  })
+
   it('offers no reveal button to a role that cannot edit', () => {
     setUserRole('SupportWorker')
     threeAnswered()

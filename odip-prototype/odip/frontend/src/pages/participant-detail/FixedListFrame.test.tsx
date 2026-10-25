@@ -20,12 +20,18 @@ describe('FixedListFrame — zero rows is the same as zero answered', () => {
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
 
-  it('gives an editor the fold, holding what the section renders for no rows and no count line', () => {
+  it('gives an editor the same plain line: with no rows there is nothing to add to, so no fold', () => {
     const { container } = frame([], true)
+    expect(screen.getByText('Not recorded: Daily living')).toBeInTheDocument()
+    expect(container.querySelector('details')).toBeNull()
+    expect(screen.queryByText('empty table')).not.toBeInTheDocument()
+  })
+
+  it('gives an editor the fold when rows exist but none are answered', () => {
+    const { container } = frame([{ id: 'a', done: false }, { id: 'b', done: false }], true)
     const fold = container.querySelector('details')!
     expect(fold).toHaveTextContent('Not recorded: Daily living')
-    expect(fold).toHaveTextContent('empty table')
-    expect(fold).not.toHaveTextContent(/of 0/)
+    expect(fold).toHaveTextContent('a')
   })
 
   it('still shows the answered rows, the count and the reveal button when some are answered', () => {

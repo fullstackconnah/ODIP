@@ -131,10 +131,6 @@ export default function ParticipantHealthConditionsSection({ participantId }: { 
 
   return (
     <div className="space-y-4">
-      <h3 className="font-semibold text-[var(--color-foreground)] flex items-center gap-2">
-        <HeartPulse className="w-4 h-4" /> Health Conditions
-      </h3>
-
       {phase === 'loading' ? (
         <PageState kind="loading" noun="health condition list" />
       ) : phase === 'error' ? (
@@ -150,7 +146,12 @@ export default function ParticipantHealthConditionsSection({ participantId }: { 
           rowSelector="tbody tr"
         >
           {(visible) => (
-            <DataTable data={visible} columns={columns} keyField="conditionType" emptyMessage="No health conditions recorded." compact />
+            <>
+              <h3 className="font-semibold text-[var(--color-foreground)] flex items-center gap-2">
+                <HeartPulse className="w-4 h-4" /> Health conditions
+              </h3>
+              <DataTable data={visible} columns={columns} keyField="conditionType" emptyMessage="No health conditions recorded." compact />
+            </>
           )}
         </FixedListFrame>
       )}

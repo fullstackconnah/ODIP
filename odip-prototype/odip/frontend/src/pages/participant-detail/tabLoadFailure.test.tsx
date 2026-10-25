@@ -41,8 +41,8 @@ const TABS: Tab[] = [
   // L5-04 left these nine on `{ data = [], isLoading }`: a failed or paused request read as an empty record.
   { name: 'Recent administrations', Component: MedicationsTab, path: '/participants/p1/administrations', noun: /administration list/i, none: /no administrations recorded in the last 14 days/i },
   { name: 'Risks', Component: RiskEntriesSection, path: '/participants/p1/risk-entries', noun: /risk list/i, none: /no risks recorded/i },
-  { name: 'Health conditions', Component: ParticipantHealthConditionsSection, path: '/participants/p1/health-conditions', noun: /health condition list/i, none: /no health conditions recorded/i },
-  { name: 'ADL assessments', Component: ParticipantAdlAssessmentsSection, path: '/participants/p1/adl-assessments', noun: /ADL assessment list/i, none: /no personal adls recorded/i },
+  { name: 'Health conditions', Component: ParticipantHealthConditionsSection, path: '/participants/p1/health-conditions', noun: /health condition list/i, none: /not recorded: health conditions/i },
+  { name: 'ADL assessments', Component: ParticipantAdlAssessmentsSection, path: '/participants/p1/adl-assessments', noun: /ADL assessment list/i, none: /not recorded: daily living/i },
   { name: 'Consents', Component: ParticipantConsentsSection, path: '/participants/p1/consents', noun: /consent list/i, none: /no consents recorded/i },
   { name: 'Rostering', Component: ({ participantId }) => <RosteringTab participantId={participantId!} />, path: '/participants/p1/rostering', noun: /rostering details/i, none: /no staff assigned/i },
   { name: 'Claims', Component: ({ participantId }) => <ClaimsTab participantId={participantId!} canWrite={false} />, path: '/participants/p1/claims', noun: /claim list/i, none: /no claims yet/i },
