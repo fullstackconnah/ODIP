@@ -27,7 +27,7 @@ public static class ParticipantIntakeCompletedAtBackfill
     /// <summary>Returns how many participant rows the backfill actually changed.</summary>
     public static async Task<int> RunAsync(OdipDbContext db, CancellationToken ct = default)
     {
-        var participants = await db.Participants.IgnoreQueryFilters().ToListAsync(ct);
+        var participants = await db.Participants.IgnoreQueryFilters([TenantFilter.Name]).ToListAsync(ct);
         var changed = 0;
 
         foreach (var p in participants)

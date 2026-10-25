@@ -599,10 +599,10 @@ public sealed class ServiceAgreementApprovalService
     private async Task<HashSet<Guid>> RecordedAgainstAsync(List<Guid> ids, CancellationToken ct)
     {
         if (ids.Count == 0) return new HashSet<Guid>();
-        var recorded = new HashSet<Guid>(await _db.ShiftNotes.IgnoreQueryFilters().Where(n => ids.Contains(n.ShiftId)).Select(n => n.ShiftId).ToListAsync(ct));
-        recorded.UnionWith(await _db.ShiftCompletions.IgnoreQueryFilters().Where(c => ids.Contains(c.ShiftId)).Select(c => c.ShiftId).ToListAsync(ct));
-        recorded.UnionWith(await _db.HandoverAcknowledgements.IgnoreQueryFilters().Where(a => ids.Contains(a.ShiftId)).Select(a => a.ShiftId).ToListAsync(ct));
-        recorded.UnionWith(await _db.ClaimLineItems.IgnoreQueryFilters().Where(l => l.ShiftId != null && ids.Contains(l.ShiftId.Value)).Select(l => l.ShiftId!.Value).ToListAsync(ct));
+        var recorded = new HashSet<Guid>(await _db.ShiftNotes.IgnoreQueryFilters([TenantFilter.Name]).Where(n => ids.Contains(n.ShiftId)).Select(n => n.ShiftId).ToListAsync(ct));
+        recorded.UnionWith(await _db.ShiftCompletions.IgnoreQueryFilters([TenantFilter.Name]).Where(c => ids.Contains(c.ShiftId)).Select(c => c.ShiftId).ToListAsync(ct));
+        recorded.UnionWith(await _db.HandoverAcknowledgements.IgnoreQueryFilters([TenantFilter.Name]).Where(a => ids.Contains(a.ShiftId)).Select(a => a.ShiftId).ToListAsync(ct));
+        recorded.UnionWith(await _db.ClaimLineItems.IgnoreQueryFilters([TenantFilter.Name]).Where(l => l.ShiftId != null && ids.Contains(l.ShiftId.Value)).Select(l => l.ShiftId!.Value).ToListAsync(ct));
         return recorded;
     }
 

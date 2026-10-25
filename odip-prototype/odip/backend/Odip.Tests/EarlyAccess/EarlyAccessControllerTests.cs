@@ -820,7 +820,7 @@ public class EarlyAccessControllerTests
 
         Assert.False(typeof(ITenantEntity).IsAssignableFrom(typeof(EarlyAccessRequest)));
         Assert.Null(entity.FindProperty("TenantId"));
-        Assert.Null(entity.GetQueryFilter());
+        Assert.Empty(entity.GetDeclaredQueryFilters());
     }
 
     [Theory]

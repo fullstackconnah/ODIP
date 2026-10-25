@@ -52,7 +52,7 @@ public class AdminUsersController : ControllerBase
         (page, pageSize) = PagingParams.Clamp(page, pageSize, maxPageSize: 100);
 
         var query = _db.Users
-            .IgnoreQueryFilters()
+            .IgnoreQueryFilters([TenantFilter.Name])
             .Include(u => u.Tenant)
             .AsQueryable();
 
@@ -118,7 +118,7 @@ public class AdminUsersController : ControllerBase
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var user = await _db.Users
-            .IgnoreQueryFilters()
+            .IgnoreQueryFilters([TenantFilter.Name])
             .Include(u => u.Tenant)
             .FirstOrDefaultAsync(u => u.Id == id, ct);
 
@@ -171,14 +171,14 @@ public class AdminUsersController : ControllerBase
 
         // Validate email uniqueness across all tenants
         var emailExists = await _db.Users
-            .IgnoreQueryFilters()
+            .IgnoreQueryFilters([TenantFilter.Name])
             .AnyAsync(u => u.Email.ToLower() == email, ct);
         if (emailExists)
             return Conflict(ApiResponse<object>.Fail("A user with this email already exists"));
 
         // Validate username uniqueness across all tenants
         var usernameExists = await _db.Users
-            .IgnoreQueryFilters()
+            .IgnoreQueryFilters([TenantFilter.Name])
             .AnyAsync(u => u.Username.ToLower() == dto.Username.ToLower(), ct);
         if (usernameExists)
             return Conflict(ApiResponse<object>.Fail("A user with this username already exists"));
@@ -291,7 +291,7 @@ public class AdminUsersController : ControllerBase
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateAdminUserDto dto, CancellationToken ct)
     {
         var user = await _db.Users
-            .IgnoreQueryFilters()
+            .IgnoreQueryFilters([TenantFilter.Name])
             .Include(u => u.Tenant)
             .FirstOrDefaultAsync(u => u.Id == id, ct);
 
@@ -307,14 +307,14 @@ public class AdminUsersController : ControllerBase
 
         // Validate email uniqueness (excluding current user)
         var emailExists = await _db.Users
-            .IgnoreQueryFilters()
+            .IgnoreQueryFilters([TenantFilter.Name])
             .AnyAsync(u => u.Email.ToLower() == email && u.Id != id, ct);
         if (emailExists)
             return Conflict(ApiResponse<object>.Fail("A user with this email already exists"));
 
         // Validate username uniqueness (excluding current user)
         var usernameExists = await _db.Users
-            .IgnoreQueryFilters()
+            .IgnoreQueryFilters([TenantFilter.Name])
             .AnyAsync(u => u.Username.ToLower() == dto.Username.ToLower() && u.Id != id, ct);
         if (usernameExists)
             return Conflict(ApiResponse<object>.Fail("A user with this username already exists"));
@@ -434,7 +434,7 @@ public class AdminUsersController : ControllerBase
     public async Task<IActionResult> EnsureSignInAccount(Guid id, CancellationToken ct)
     {
         var user = await _db.Users
-            .IgnoreQueryFilters()
+            .IgnoreQueryFilters([TenantFilter.Name])
             .FirstOrDefaultAsync(u => u.Id == id, ct);
 
         if (user is null)

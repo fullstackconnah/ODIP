@@ -28,7 +28,7 @@ public static class ImportUntouched
         await Add(db.ShiftPatterns.Where(s => list.Contains(s.ParticipantId)).Select(s => s.ParticipantId), "has recurring shift patterns");
         await Add(db.ParticipantNotes.Where(n => list.Contains(n.ParticipantId)).Select(n => n.ParticipantId), "has notes");
         // Incidents unfiltered: a row the previous image filed after a rollback has no TenantId yet, and still has to block undo. The ids are this organisation's already.
-        await Add(db.IncidentReports.IgnoreQueryFilters().Where(i => i.InvolvedParticipantId != null && list.Contains(i.InvolvedParticipantId.Value)).Select(i => i.InvolvedParticipantId!.Value), "is named in an incident");
+        await Add(db.IncidentReports.IgnoreQueryFilters([TenantFilter.Name]).Where(i => i.InvolvedParticipantId != null && list.Contains(i.InvolvedParticipantId.Value)).Select(i => i.InvolvedParticipantId!.Value), "is named in an incident");
         await Add(db.ParticipantBookings.Where(b => list.Contains(b.ParticipantId)).Select(b => b.ParticipantId), "has trip bookings");
         await Add(db.ParticipantMedications.Where(m => list.Contains(m.ParticipantId)).Select(m => m.ParticipantId), "has medications");
         await Add(db.ServiceAgreementDrafts.Where(a => list.Contains(a.ParticipantId)).Select(a => a.ParticipantId), "has a service agreement");
@@ -87,8 +87,8 @@ public static class ImportUntouched
         await Add(db.VehicleAssignments.Where(v => v.DriverUserId != null && list.Contains(v.DriverUserId.Value)).Select(v => v.DriverUserId!.Value), "drives on a trip");
         await Add(db.Participants.Where(p => p.PreferredUserId != null && list.Contains(p.PreferredUserId.Value)).Select(p => p.PreferredUserId!.Value), "is a participant's preferred staff member");
         // Incidents unfiltered, as for participants above.
-        await Add(db.IncidentReports.IgnoreQueryFilters().Where(i => list.Contains(i.ReportedByUserId)).Select(i => i.ReportedByUserId), "is named in an incident");
-        await Add(db.IncidentReports.IgnoreQueryFilters().Where(i => i.InvolvedUserId != null && list.Contains(i.InvolvedUserId.Value)).Select(i => i.InvolvedUserId!.Value), "is named in an incident");
+        await Add(db.IncidentReports.IgnoreQueryFilters([TenantFilter.Name]).Where(i => list.Contains(i.ReportedByUserId)).Select(i => i.ReportedByUserId), "is named in an incident");
+        await Add(db.IncidentReports.IgnoreQueryFilters([TenantFilter.Name]).Where(i => i.InvolvedUserId != null && list.Contains(i.InvolvedUserId.Value)).Select(i => i.InvolvedUserId!.Value), "is named in an incident");
         await Add(db.IncidentWitnesses.Where(w => w.WitnessUserId != null && list.Contains(w.WitnessUserId.Value)).Select(w => w.WitnessUserId!.Value), "is a witness to an incident");
         await Add(db.TripInstances.Where(t => t.LeadCoordinatorId != null && list.Contains(t.LeadCoordinatorId.Value)).Select(t => t.LeadCoordinatorId!.Value), "leads a trip");
         await Add(db.BookingTasks.Where(t => t.OwnerId != null && list.Contains(t.OwnerId.Value)).Select(t => t.OwnerId!.Value), "owns tasks");

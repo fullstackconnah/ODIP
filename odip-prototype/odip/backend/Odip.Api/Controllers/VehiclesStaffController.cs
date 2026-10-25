@@ -559,7 +559,7 @@ public class StaffController : ControllerBase
             if (otherOrganisationError != null) return BadRequest(ApiResponse<StaffDetailDto>.Fail(otherOrganisationError));
         }
 
-        var emailTaken = await _db.Users.IgnoreQueryFilters()
+        var emailTaken = await _db.Users.IgnoreQueryFilters([TenantFilter.Name])
             .AnyAsync(u => u.Id != id && u.Email.ToLower() == emailLower, ct);
         if (emailTaken) return Conflict(ApiResponse<StaffDetailDto>.Fail("A user with this email already exists."));
 

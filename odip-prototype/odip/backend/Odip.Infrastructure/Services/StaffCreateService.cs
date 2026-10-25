@@ -47,7 +47,7 @@ public sealed class StaffCreateService
         var otherOrganisationError = await OtherOrganisationAddressErrorAsync(caller, emailLower, tenantId, ct);
         if (otherOrganisationError != null) return new(null, otherOrganisationError);
 
-        var emailTaken = await _db.Users.IgnoreQueryFilters().AnyAsync(u => u.Email.ToLower() == emailLower, ct);
+        var emailTaken = await _db.Users.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(u => u.Email.ToLower() == emailLower, ct);
         if (emailTaken) return new(null, EmailTakenMessage, IsConflict: true);
 
         // Any address can sign in, so one at neither the tenant's own domain nor a common provider (a typo, another organisation's) is a live
@@ -57,7 +57,7 @@ public sealed class StaffCreateService
             return new(null, AddressConfirmation.Message(emailLower, tenantDomain), AddressConfirmation.Code);
 
         // Collision-safe username handling: reuses the migration's own algorithm (StaffUserUnificationMapping.ResolveUsername).
-        var existingUsernamesList = await _db.Users.IgnoreQueryFilters().Select(u => u.Username.ToLower()).ToListAsync(ct);
+        var existingUsernamesList = await _db.Users.IgnoreQueryFilters([TenantFilter.Name]).Select(u => u.Username.ToLower()).ToListAsync(ct);
         var username = StaffUserUnificationMapping.ResolveUsername(dto.FirstName, dto.LastName, existingUsernamesList.ToHashSet());
 
         var s = new User

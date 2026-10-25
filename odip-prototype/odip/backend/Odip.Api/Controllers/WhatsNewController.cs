@@ -42,7 +42,7 @@ public class WhatsNewController : ControllerBase
 
         // IgnoreQueryFilters: see the type doc. A user who no longer exists still reads the entries but has nothing unread.
         var callerId = ResolveCallerId();
-        var created = callerId is null ? null : await _db.Users.IgnoreQueryFilters().Where(u => u.Id == callerId)
+        var created = callerId is null ? null : await _db.Users.IgnoreQueryFilters([TenantFilter.Name]).Where(u => u.Id == callerId)
             .Select(u => (DateTime?)u.CreatedAt).FirstOrDefaultAsync(ct);
         if (created is null) return Ok(ApiResponse<WhatsNewFeedDto>.Ok(new WhatsNewFeedDto { Entries = entries }));
 
@@ -67,7 +67,7 @@ public class WhatsNewController : ControllerBase
     {
         var callerId = ResolveCallerId();
         if (callerId is null) return Unauthorized();
-        if (!await _db.Users.IgnoreQueryFilters().AnyAsync(u => u.Id == callerId, ct)) return Ok(ApiResponse<bool>.Ok(true));
+        if (!await _db.Users.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(u => u.Id == callerId, ct)) return Ok(ApiResponse<bool>.Ok(true));
 
         for (var attempt = 0; ; attempt++)
         {

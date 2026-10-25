@@ -130,7 +130,7 @@ public sealed class OnboardingImportService
         var tenantId = TenantId();
         var plans = ImportStaffRows.Build(table, mapping);
         var emails = plans.Where(p => p.DuplicateKey != null).Select(p => p.DuplicateKey!).Distinct().ToList();
-        var users = (await _db.Users.IgnoreQueryFilters()
+        var users = (await _db.Users.IgnoreQueryFilters([TenantFilter.Name])
                 .Where(u => emails.Contains(u.Email.ToLower()))
                 .Select(u => new { Email = u.Email.ToLower(), u.TenantId, u.FirstName, u.LastName })
                 .ToListAsync(ct))
