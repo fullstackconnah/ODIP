@@ -256,6 +256,7 @@ export default function ParticipantDetailPage() {
           <PageHeader
             variant="detail"
             title={p.fullName}
+            actionsBesideTitle
             subtitle={
               <PageHeaderMeta>
                 <StatusBadge status={p.isActive ? 'Active' : 'Inactive'} />
@@ -295,6 +296,13 @@ export default function ParticipantDetailPage() {
               </div>
             }
           >
+            {/* The download error and the caregiver-link panel sit here, full width, so the title row stays one line at 390 px. */}
+            {(downloadIntakeForm.isError || downloadParticipantProfile.isError || downloadClientOverview.isError) && (
+              <p role="alert" className="text-xs text-[var(--color-destructive)]">
+                Couldn't download the file. Try again, or contact support if this keeps happening.
+              </p>
+            )}
+            {caregiverLink.panel}
             <ParticipantSafetyFlags participant={p} />
           </PageHeader>
         </div>
@@ -445,8 +453,8 @@ type PdfDownload = {
 /**
  * The header's one menu, at every width (VISUAL-1 V2: seven header controls at 1440 became one menu and Edit). A secondary-look
  * trigger, so Edit stays the page's one filled primary. It holds the three PDF downloads, "Agreement draft" (same gate as before) and
- * the caregiver-link actions. Each download keeps its file name and pending state; their error lines collapse into one shared
- * `role="alert"` under the trigger, and the caregiver link's own panel (the issued URL, its error, the Revoke confirm) sits there too.
+ * the caregiver-link actions. Each download keeps its file name and pending state. Their shared `role="alert"` error line and the caregiver link's
+ * panel (the issued URL, its error, the Revoke confirm) render in the PageHeader children, outside the action cluster.
  */
 function DocumentsMenu({
   participantId, fullName, canOpenAgreementDraft, intake, profile, overview, caregiverLink,
@@ -466,7 +474,6 @@ function DocumentsMenu({
     { value: 'overview', label: 'Client Overview PDF', fileName: `${fullName} - Client Overview.pdf`, mutation: overview },
   ]
   const busy = downloads.some(d => d.mutation.isPending)
-  const failed = downloads.some(d => d.mutation.isError)
 
   const items: DropdownItem[] = [
     ...downloads.map(d => ({
@@ -490,22 +497,15 @@ function DocumentsMenu({
   }
 
   return (
-    <div className="flex flex-col items-start gap-1">
-      <Dropdown
-        variant="menu"
-        triggerVariant="secondary"
-        label={busy ? 'Preparing…' : 'Documents'}
-        icon={busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-        items={items}
-        onSelect={onSelect}
-      />
-      {failed && (
-        <p role="alert" className="text-xs text-[var(--color-destructive)]">
-          Couldn't download the file. Try again, or contact support if this keeps happening.
-        </p>
-      )}
-      {caregiverLink.panel}
-    </div>
+    <Dropdown
+      variant="menu"
+      triggerVariant="secondary"
+      iconOnlyBelowSm
+      label={busy ? 'Preparing…' : 'Documents'}
+      icon={busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+      items={items}
+      onSelect={onSelect}
+    />
   )
 }
 

@@ -682,6 +682,10 @@ describe('ParticipantDetailPage — cg04 Task 9 caregiver link control', () => {
     // Unmounting and re-rendering the page (simulating navigating away and back) must not
     // resurrect the URL — it lives only in this render's local state, never in the query cache
     // or anywhere else the UI could recover it from.
+    // T13: the panel renders once, outside the action cluster that holds the Documents menu.
+    expect(screen.getAllByTestId('caregiver-link-control')).toHaveLength(1)
+    expect(documentsTrigger().parentElement).not.toContainElement(control)
+
     first.unmount()
     setup()
     expect(screen.queryByText(`${window.location.origin}/caregiver/tok-123`)).not.toBeInTheDocument()
