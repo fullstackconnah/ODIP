@@ -94,7 +94,7 @@ public static class EarlyAccessRateLimiting
     private static bool IsEarlyAccessRequest(HttpContext context) =>
         context.GetEndpoint()?.Metadata.GetMetadata<EarlyAccessRateLimitAttribute>() is not null;
 
-    // Fixed windows, not sliding: in .NET 8 a rejected sliding-window lease carries no RetryAfter value, and the
+    // Fixed windows, not sliding: since .NET 6 a rejected sliding-window lease carries no RetryAfter value, and the
     // contract promises a Retry-After header. The cost is that a client can land 5 requests at the end of one window
     // and 5 more at the start of the next; for a flood guard on a low-traffic form that is acceptable.
     private static FixedWindowRateLimiterOptions Window(int permits, TimeSpan window) => new()

@@ -3,7 +3,7 @@
 ODIP is an NDIS trip and participant operations management platform. It covers participants,
 trips and itineraries, accommodation bookings, vehicle and staff scheduling, NDIS claims with
 the NDIA bulk payment file (BPR CSV), incident reporting, audit logging, and a support catalogue with pricing. The codebase is a fork-in-progress of an existing product
-called "TripCore", retargeted from net9.0 to net8.0. For the fuller vision and architecture
+called "TripCore", retargeted to net10.0. For the fuller vision and architecture
 picture, see `PROTOTYPE_NOTES.md` and the `Platform Plan/` directory.
 
 ## Operating Model — Orchestrator Only (MANDATORY)
@@ -206,8 +206,8 @@ npm run lint
   sets `VITE_API_BASE_URL` pointing at port 5000, but the backend actually listens on 5062 —
   copy it blindly and every API call fails.
 
-- The backend `Dockerfile` builds and runs on .NET 9.0 images even though every project targets
-  net10.0, and serves on container-internal port 5000 — don't "fix" local ports to match it.
+- The backend `Dockerfile` serves on container-internal port 5000 (every project targets net10.0)
+  — don't "fix" local ports to match it.
 
 - Outside Development, the API sets a strict CSP (`connect-src` allows only self plus the
   Firebase identity endpoints) — frontend calls to any new external API will be CSP-blocked in

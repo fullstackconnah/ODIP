@@ -92,7 +92,7 @@ public class DataExportController : ControllerBase
         // A stale or mistyped X-View-As-Tenant: never a complete-looking ZIP of empty files, nor an audit row for no organisation.
         if (name is null) return NotFound(ApiResponse<bool>.Fail("Organisation not found."));
         var today = await ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct);
-        // ZipArchive writes its headers synchronously on .NET 8, which Kestrel refuses unless the request allows it: this request only.
+        // ZipArchive writes its headers synchronously in .NET, which Kestrel refuses unless the request allows it: this request only.
         if (HttpContext.Features.Get<IHttpBodyControlFeature>() is { } body) body.AllowSynchronousIO = true;
         Response.ContentType = "application/zip";
         Response.Headers.ContentDisposition = $"attachment; filename=\"odip-export-{Slug(name)}-{today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}.zip\"";
