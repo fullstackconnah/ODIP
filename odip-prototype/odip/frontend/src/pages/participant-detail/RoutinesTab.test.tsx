@@ -481,3 +481,39 @@ describe('RoutinesTab', () => {
     })
   })
 })
+
+describe('RoutinesTab — long list (T10)', () => {
+  it('shows 5 of 23 active rows, then all 23 with focus on the 6th row', async () => {
+    const user = userEvent.setup()
+    mockUseParticipantRoutines.mockReturnValue({
+      data: Array.from({ length: 23 }, (_, i) => makeRoutine({ id: `q${i}`, title: `Routine ${i}` })),
+      isLoading: false,
+    })
+    const { container } = render(<RoutinesTab participantId="participant-1" />)
+    expect(container.querySelectorAll('[data-show-row]')).toHaveLength(5)
+    await user.click(screen.getByRole('button', { name: 'Show all 23' }))
+    const rows = container.querySelectorAll('[data-show-row]')
+    expect(rows).toHaveLength(23)
+    expect(rows[5]).toHaveFocus()
+  })
+})
+
+describe('RoutinesTab — long list counts rows per day group (T10)', () => {
+  it('counts a Mon/Wed/Fri routine as 3 rows and hides a day header with no visible row', async () => {
+    const user = userEvent.setup()
+    const mwf = ['Monday', 'Wednesday', 'Friday']
+    mockUseParticipantRoutines.mockReturnValue({
+      data: [
+        ...Array.from({ length: 2 }, (_, i) => makeRoutine({ id: `a${i}`, title: `Mwf ${i}`, days: mwf })),
+        makeRoutine({ id: 'sun', title: 'Sunday only', days: ['Sunday'] }),
+      ],
+      isLoading: false,
+    })
+    const { container } = render(<RoutinesTab participantId="participant-1" />)
+    expect(container.querySelectorAll('[data-show-row]')).toHaveLength(5)
+    expect(screen.queryByText('Sunday only')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Show all 7' }))
+    expect(container.querySelectorAll('[data-show-row]')).toHaveLength(7)
+    expect(screen.getByText('Sunday only')).toBeInTheDocument()
+  })
+})

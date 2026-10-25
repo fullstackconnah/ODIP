@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import { useShowAll } from '@/components/ShowAllButton'
 import { ListChecks, AlertTriangle, ChevronDown, Plus, Clock, CalendarDays } from 'lucide-react'
 import { useParticipantRoutines, useCreateRoutine, useUpdateRoutine, useDeleteRoutine } from '@/api/hooks'
 import { formatShiftTime, extractErrorMessage } from '@/lib/utils'
@@ -201,6 +202,11 @@ export default function RoutinesTab({ participantId }: { participantId: string |
   const activeRoutines = useMemo(() => routines.filter(r => r.isActive), [routines])
   const inactiveRoutines = useMemo(() => routines.filter(r => !r.isActive), [routines])
   const groups = useMemo(() => groupRoutines(activeRoutines), [activeRoutines])
+  // Counted per rendered row: a routine on Mon/Wed/Fri sits under three day groups and counts three times.
+  const rowCount = groups.reduce((n, g) => n + g.items.length, 0)
+  const activeRef = useRef<HTMLDivElement>(null)
+  const showAll = useShowAll(rowCount, activeRef, '[data-show-row]')
+  let budget = showAll.limit
 
   function openCreate() {
     setForm(EMPTY_FORM)
@@ -310,19 +316,30 @@ export default function RoutinesTab({ participantId }: { participantId: string |
           action={canWriteRoutines && participantId ? { label: 'New routine', onClick: openCreate } : undefined}
         />
       ) : (
-        <div className="space-y-5">
-          {groups.map(group => (
+        <div>
+        <div ref={activeRef} className="space-y-5">
+          {groups.map(group => {
+            const items = group.items.slice(0, Math.max(budget, 0))
+            budget -= items.length
+            // A day group renders only if one of its rows is visible.
+            if (items.length === 0) return null
+            return (
             <div key={group.label}>
               <h3 className="text-sm font-semibold text-[var(--color-muted-foreground)] mb-2">
                 {group.label}
               </h3>
               <div className="space-y-3">
-                {group.items.map(r => (
-                  <RoutineCard key={r.id} routine={r} canWrite={canWriteRoutines} canDelete={canDeleteRoutines} onEdit={() => openEdit(r)} onDelete={() => setDeletingRoutine(r)} />
+                {items.map(r => (
+                  <div key={r.id} tabIndex={-1} data-show-row className="rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]">
+                    <RoutineCard routine={r} canWrite={canWriteRoutines} canDelete={canDeleteRoutines} onEdit={() => openEdit(r)} onDelete={() => setDeletingRoutine(r)} />
+                  </div>
                 ))}
               </div>
             </div>
-          ))}
+            )
+          })}
+        </div>
+        {showAll.button}
         </div>
       )}
 
@@ -340,7 +357,7 @@ export default function RoutinesTab({ participantId }: { participantId: string |
             aria-expanded={showInactive}
           >
             <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showInactive ? 'rotate-180' : ''}`} />
-            Inactive routines ({inactiveRoutines.length})
+            Inactive ({inactiveRoutines.length})
           </button>
           {showInactive && (
             <div className="space-y-3 mt-3">

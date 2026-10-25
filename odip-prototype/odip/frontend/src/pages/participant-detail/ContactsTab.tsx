@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { useShowAll } from '@/components/ShowAllButton'
 import { Contact2, Plus } from 'lucide-react'
 import { useParticipantContactRoles, useDeleteContactRole } from '@/api/hooks'
 import { Modal } from '@/components/Modal'
@@ -53,6 +54,8 @@ export default function ContactsTab({ participantId }: { participantId: string |
   // A failed or paused request is not an empty list: "No contacts recorded" is only for one that succeeded and came back empty.
   const phase = queryPhase(rolesQuery)
   const deleteRole = useDeleteContactRole()
+  const tableRef = useRef<HTMLDivElement>(null)
+  const showAll = useShowAll(roles.length, tableRef, 'tbody tr')
 
   const [modalState, setModalState] = useState<{ mode: 'create' | 'edit'; role?: ParticipantContactRoleDto } | null>(null)
   const [deletingRole, setDeletingRole] = useState<ParticipantContactRoleDto | null>(null)
@@ -167,13 +170,17 @@ export default function ContactsTab({ participantId }: { participantId: string |
           description="Add next of kin, guardians, support coordinators, plan managers, and other key contacts for this participant."
         />
       ) : (
-        <DataTable
-          data={roles}
-          columns={columns}
-          keyField="id"
-          sortable
-          emptyMessage="No contacts recorded"
-        />
+        <div ref={tableRef}>
+          <DataTable
+            data={roles}
+            columns={columns}
+            keyField="id"
+            sortable
+            limit={showAll.limit}
+            emptyMessage="No contacts recorded"
+          />
+          {showAll.button}
+        </div>
       )}
 
       <Modal

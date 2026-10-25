@@ -126,7 +126,7 @@ describe('RiskEntriesSection', () => {
     expect(screen.getByText('Active risk')).toBeInTheDocument()
     expect(screen.queryByText('Retired risk')).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /inactive risks/i }))
+    await user.click(screen.getByRole('button', { name: 'Inactive (1)' }))
     expect(screen.getByText('Retired risk')).toBeInTheDocument()
   })
 
@@ -211,5 +211,21 @@ describe('RiskEntriesSection — Add risk weight', () => {
     const add = screen.getByRole('button', { name: /Add risk/ })
     expect(add).toHaveClass('bg-[var(--color-card)]', 'border')
     expect(add).not.toHaveClass('bg-[var(--color-primary)]')
+  })
+})
+
+describe('RiskEntriesSection — long list (T10)', () => {
+  it('shows 5 of 23 active rows, then all 23 with focus on the 6th row', async () => {
+    const user = userEvent.setup()
+    mockUseParticipantRiskEntries.mockReturnValue({
+      data: Array.from({ length: 23 }, (_, i) => makeEntry({ id: `r${i}` })),
+      isLoading: false,
+    })
+    const { container } = render(<RiskEntriesSection participantId="participant-1" />)
+    expect(container.querySelectorAll('[data-show-row]')).toHaveLength(5)
+    await user.click(screen.getByRole('button', { name: 'Show all 23' }))
+    const rows = container.querySelectorAll('[data-show-row]')
+    expect(rows).toHaveLength(23)
+    expect(rows[5]).toHaveFocus()
   })
 })

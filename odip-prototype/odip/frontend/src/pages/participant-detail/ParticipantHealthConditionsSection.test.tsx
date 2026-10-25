@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, within, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import ParticipantHealthConditionsSection from './ParticipantHealthConditionsSection'
 import { HEALTH_CONDITION_TYPES } from '@/api/types/enums'
@@ -92,7 +92,7 @@ describe('ParticipantHealthConditionsSection', () => {
     const asthmaRow = screen.getByText('Asthma').closest('tr')!
     expect(within(asthmaRow).getByText('No')).toBeInTheDocument()
 
-    expect(screen.getAllByText('Not recorded')).toHaveLength(8)
+    expect(screen.getByText('8 of 10 not recorded')).toBeInTheDocument()
   })
 
   it('hides the Edit action for a role without health-condition-write permission (e.g. SupportWorker)', () => {
@@ -184,19 +184,45 @@ describe('ParticipantHealthConditionsSection', () => {
 })
 
 // VISUAL-1 V2: ten "Not recorded" rows on a new participant fold into one line that opens to them.
-describe('ParticipantHealthConditionsSection — nothing recorded yet', () => {
-  it('folds the table into one closed "Not recorded" line, and shows it open once a row is answered', () => {
+describe('ParticipantHealthConditionsSection — fixed list (T9)', () => {
+  function threeAnswered() {
+    const data = unansweredConditions()
+    replaceCondition(data, { id: 'a', conditionType: data[0].conditionType, has: true })
+    replaceCondition(data, { id: 'b', conditionType: data[1].conditionType, has: false })
+    replaceCondition(data, { id: 'c', conditionType: data[2].conditionType, has: true })
+    mockUseParticipantHealthConditions.mockReturnValue({ data, isLoading: false })
+  }
+
+  it('counts a "No" as answered, shows 3 rows and the count line; the editor reveals the rest and focuses the 4th', async () => {
+    const user = userEvent.setup()
+    threeAnswered()
+    render(<ParticipantHealthConditionsSection participantId="participant-1" />)
+    expect(document.querySelectorAll('tbody tr')).toHaveLength(3)
+    expect(screen.getByText('7 of 10 not recorded')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Add a condition' }))
+    const rows = document.querySelectorAll('tbody tr')
+    expect(rows).toHaveLength(10)
+    await waitFor(() => expect(within(rows[3] as HTMLElement).getByRole('button', { name: 'Edit' })).toHaveFocus())
+  })
+
+  it('offers no reveal button to a role that cannot edit', () => {
+    setUserRole('SupportWorker')
+    threeAnswered()
+    render(<ParticipantHealthConditionsSection participantId="participant-1" />)
+    expect(screen.queryByRole('button', { name: 'Add a condition' })).not.toBeInTheDocument()
+  })
+
+  it('with nothing recorded: an editor gets a closed fold holding the rows, a viewer one plain line', () => {
     const { unmount } = render(<ParticipantHealthConditionsSection participantId="participant-1" />)
-    const fold = screen.getByText('Not recorded: 10 health conditions').closest('details')!
+    const fold = screen.getByText('Not recorded: Health conditions').closest('details')!
     expect(fold).not.toHaveAttribute('open')
     expect(fold).toContainElement(screen.getByText('Epilepsy'))
     unmount()
 
-    const data = unansweredConditions()
-    replaceCondition(data, { conditionType: 'Asthma', has: false })
-    mockUseParticipantHealthConditions.mockReturnValue({ data, isLoading: false })
+    setUserRole('SupportWorker')
     render(<ParticipantHealthConditionsSection participantId="participant-1" />)
-    expect(screen.queryByText(/^Not recorded:/)).not.toBeInTheDocument()
-    expect(screen.getByText('Epilepsy').closest('details')).toBeNull()
+    expect(screen.getByText('Not recorded: Health conditions').closest('details')).toBeNull()
+    expect(screen.queryByText('Epilepsy')).not.toBeInTheDocument()
   })
 })

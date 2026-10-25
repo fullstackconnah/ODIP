@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import { useShowAll } from '@/components/ShowAllButton'
 import { Link, useNavigate } from 'react-router-dom'
 import { ChevronDown, Plus, Info, Pill } from 'lucide-react'
 import { useParticipantMedications, useParticipantAdministrations } from '@/api/hooks'
@@ -103,6 +104,8 @@ export default function MedicationsTab({ participantId }: { participantId: strin
 
   const activeMeds = useMemo(() => medications.filter(m => m.status !== 'Ceased'), [medications])
   const inactiveMeds = useMemo(() => medications.filter(m => m.status === 'Ceased'), [medications])
+  const activeRef = useRef<HTMLDivElement>(null)
+  const showAll = useShowAll(activeMeds.length, activeRef, '[data-show-row]')
 
   const activePsychotropicCount = useMemo(
     () => medications.filter(m => m.status === 'Active' && m.isPsychotropic).length,
@@ -146,8 +149,11 @@ export default function MedicationsTab({ participantId }: { participantId: strin
           action={canManageMedications && participantId ? { label: 'Add medication', to: `/medications/new?participantId=${participantId}` } : undefined}
         />
       ) : (
-        <div className="grid sm:grid-cols-2 gap-3">
-          {activeMeds.map(m => <MedicationCard key={m.id} medication={m} canOpen={canManageMedications || isReadOnly} />)}
+        <div>
+          <div ref={activeRef} className="grid sm:grid-cols-2 gap-3">
+            {activeMeds.slice(0, showAll.limit).map(m => <div key={m.id} tabIndex={-1} data-show-row className="rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"><MedicationCard medication={m} canOpen={canManageMedications || isReadOnly} /></div>)}
+          </div>
+          {showAll.button}
         </div>
       )}
 
@@ -160,7 +166,7 @@ export default function MedicationsTab({ participantId }: { participantId: strin
             aria-expanded={showInactive}
           >
             <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showInactive ? 'rotate-180' : ''}`} />
-            Ceased medications ({inactiveMeds.length})
+            Ceased ({inactiveMeds.length})
           </button>
           {showInactive && (
             <div className="grid sm:grid-cols-2 gap-3 mt-3">

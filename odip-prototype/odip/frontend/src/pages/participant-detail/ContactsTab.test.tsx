@@ -202,3 +202,19 @@ describe('ContactsTab', () => {
     expect(mockDeleteMutateAsync).toHaveBeenCalledWith({ id: 'role-1', participantId: 'participant-1' })
   })
 })
+
+describe('ContactsTab — long list (T10)', () => {
+  it('shows 5 of 23 rows, then all 23 with focus on the 6th row', async () => {
+    const user = userEvent.setup()
+    mockUseParticipantContactRoles.mockReturnValue({
+      data: Array.from({ length: 23 }, (_, i) => makeRole({ id: `c${i}`, personFullName: `Person ${i}` })),
+      isLoading: false,
+    })
+    const { container } = render(<ContactsTab participantId="participant-1" />)
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(5)
+    await user.click(screen.getByRole('button', { name: 'Show all 23' }))
+    const rows = container.querySelectorAll('tbody tr')
+    expect(rows).toHaveLength(23)
+    expect(rows[5]).toHaveFocus()
+  })
+})

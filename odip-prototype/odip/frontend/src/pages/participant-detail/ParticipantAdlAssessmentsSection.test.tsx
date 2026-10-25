@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, within, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import ParticipantAdlAssessmentsSection from './ParticipantAdlAssessmentsSection'
 import { ADL_TYPES } from '@/api/types/enums'
@@ -91,7 +91,7 @@ describe('ParticipantAdlAssessmentsSection', () => {
     expect(within(communityRow).getByText(/assistance/i)).toBeInTheDocument()
     expect(within(communityRow).getByText('1:1 supervision')).toBeInTheDocument()
 
-    expect(screen.getAllByText('Not assessed')).toHaveLength(18)
+    expect(screen.getByText('18 of 20 not assessed')).toBeInTheDocument()
   })
 
   it('hides the Edit action for a role without ADL-assessment-write permission (e.g. SupportWorker)', () => {
@@ -166,12 +166,14 @@ describe('ParticipantAdlAssessmentsSection', () => {
   // at all once ANY row across the whole grid actually has a value, matching this page's
   // whole-card/column presence-or-relevance idiom rather than showing an all-"—" column for a
   // participant who was never in the CA stream.
-  it('shows the "How To Help Me" column, and only that column, once any row has howToHelpNotes', () => {
+  it('shows the "How To Help Me" column, and only that column, once any row has howToHelpNotes', async () => {
+    const user = userEvent.setup()
     const data = unassessedRows()
     replaceAssessment(data, { adlType: 'Dressing', level: 'Independent', howToHelpNotes: 'Lay out clothes in order.' })
     mockUseParticipantAdlAssessments.mockReturnValue({ data, isLoading: false })
 
     render(<ParticipantAdlAssessmentsSection participantId="participant-1" />)
+    await user.click(screen.getByRole('button', { name: 'Add an assessment' }))
 
     // The column is added to BOTH grouped tables (Personal + Community & Domestic) once ANY row
     // across the whole grid has howToHelpNotes — the presence check in the component isn't
@@ -193,13 +195,48 @@ describe('ParticipantAdlAssessmentsSection', () => {
   })
 })
 
-// VISUAL-1 V2: a table of "Not assessed" rows on a new participant folds into one line that opens to it.
-describe('ParticipantAdlAssessmentsSection — nothing assessed yet', () => {
-  it('folds each unassessed table into one closed line under its heading', () => {
+// T9: a fixed list shows what is answered, counts the rest, and lets an editor reveal them.
+describe('ParticipantAdlAssessmentsSection — fixed list (T9)', () => {
+  function threeAnswered() {
+    const data = unassessedRows()
+    for (const adlType of ADL_TYPES.slice(0, 3)) replaceAssessment(data, { id: 'adl-' + adlType, adlType, level: 'Independent' })
+    mockUseParticipantAdlAssessments.mockReturnValue({ data, isLoading: false })
+  }
+
+  it('shows 3 answered rows and the count line; the editor reveals the rest and focuses the 4th row', async () => {
+    const user = userEvent.setup()
+    threeAnswered()
     render(<ParticipantAdlAssessmentsSection participantId="participant-1" />)
-    for (const summary of [/^Not recorded: \d+ personal ADLs$/, /^Not recorded: \d+ community or domestic ADLs$/]) {
-      expect(screen.getByText(summary).closest('details')).not.toHaveAttribute('open')
-    }
-    expect(screen.getByText('Dressing').closest('details')).not.toBeNull()
+    expect(document.querySelectorAll('tbody tr')).toHaveLength(3)
+    expect(screen.getByText('17 of 20 not assessed')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Add an assessment' }))
+    const rows = document.querySelectorAll('tbody tr')
+    expect(rows).toHaveLength(20)
+    await waitFor(() => expect(within(rows[3] as HTMLElement).getByRole('button', { name: 'Edit' })).toHaveFocus())
+    await user.click(screen.getByRole('button', { name: 'Show answered only' }))
+    expect(document.querySelectorAll('tbody tr')).toHaveLength(3)
+  })
+
+  it('offers no reveal button to a role that cannot edit', () => {
+    setUserRole('SupportWorker')
+    threeAnswered()
+    render(<ParticipantAdlAssessmentsSection participantId="participant-1" />)
+    expect(screen.getByText('17 of 20 not assessed')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add an assessment' })).not.toBeInTheDocument()
+  })
+
+  it('with nothing assessed: an editor gets a closed fold holding the rows, a viewer one plain line', () => {
+    const { unmount } = render(<ParticipantAdlAssessmentsSection participantId="participant-1" />)
+    const fold = screen.getByText('Not recorded: Daily living').closest('details')!
+    expect(fold).not.toHaveAttribute('open')
+    expect(fold).toContainElement(screen.getByText('Dressing'))
+    expect(screen.getByText('20 of 20 not assessed')).toBeInTheDocument()
+    unmount()
+
+    setUserRole('SupportWorker')
+    render(<ParticipantAdlAssessmentsSection participantId="participant-1" />)
+    expect(screen.getByText('Not recorded: Daily living').closest('details')).toBeNull()
+    expect(screen.queryByText('Dressing')).not.toBeInTheDocument()
   })
 })

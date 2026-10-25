@@ -22,7 +22,11 @@ export function useShowAll(count: number, containerRef: RefObject<HTMLElement | 
     if (!focusRow.current) return
     focusRow.current = false
     // Collapsing needs no move: the clicked button keeps focus.
-    if (expanded) containerRef.current?.querySelectorAll<HTMLElement>(rowSelector)[COLLAPSED_ROWS]?.focus()
+    if (!expanded) return
+    const row = containerRef.current?.querySelectorAll<HTMLElement>(rowSelector)[COLLAPSED_ROWS]
+    if (!row) return
+    if (!row.hasAttribute('tabindex')) row.tabIndex = -1
+    row.focus()
   }, [expanded, containerRef, rowSelector])
 
   const toggle = () => {
