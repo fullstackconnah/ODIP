@@ -3,7 +3,7 @@ import { usePreviousAppPathTracker } from '@/hooks/useBackNavigation'
 import { useDialogBehavior } from '@/hooks/useDialogBehavior'
 import { useIsBelowLg } from '@/hooks/useIsBelowLg'
 import { LogOut, Menu, X, ChevronDown } from 'lucide-react'
-import { Suspense, useCallback, useId, useState, useRef, type RefObject } from 'react'
+import { Suspense, useId, useState, useRef } from 'react'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import TenantSwitcher from '@/components/layout/TenantSwitcher'
 import UserSwitcher from '@/components/layout/UserSwitcher'
@@ -61,8 +61,6 @@ type RailContext = {
   flyout: { id: string; trigger: HTMLElement } | null
   toggleFlyout: (id: string, trigger: HTMLElement) => void
   closeFlyout: (focusTrigger: boolean) => void
-  asideRef: RefObject<HTMLElement | null>
-  navRef: RefObject<HTMLElement | null>
 }
 
 /** A 40px square (44px under a coarse pointer) holding one 18px icon: every item of the icon rail. */
@@ -217,7 +215,7 @@ function RailGroup({ id, label, msIcon, noun, leaves, rail, pathname, counts, on
         <span className="sr-only">{label}</span>
       </button>
       {open && rail.flyout && (
-        <RailFlyout id={panelId} label={label} trigger={rail.flyout.trigger} asideRef={rail.asideRef} navRef={rail.navRef} onClose={rail.closeFlyout}>
+        <RailFlyout id={panelId} label={label} trigger={rail.flyout.trigger} onClose={rail.closeFlyout}>
           {leaves.map(leaf => (
             <SidebarLink
               key={leaf.to}
@@ -305,8 +303,6 @@ export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const drawerRef = useRef<HTMLElement>(null)
   const location = useLocation()
-  const asideRef = drawerRef
-  const navRef = useRef<HTMLElement>(null)
   const { prefs, setPref } = useUiPreferences()
   const permissions = usePermissions()
   // Only relevant to staff who can see the portal at all — fetching it unconditionally is fine
@@ -339,26 +335,18 @@ export default function AppLayout() {
   const [railLayoutSaved, setRailLayout] = useState(prefs.sidebarCollapsed)
   const railLayout = railLayoutSaved && !isBelowLg
   const settleTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
-  const railTip = useRailTooltip(asideRef)
+  const railTip = useRailTooltip()
   const [openFlyout, setOpenFlyout] = useState<{ id: string; trigger: HTMLElement } | null>(null)
-  const flyoutRef = useRef(openFlyout)
-  const closeFlyout = useCallback((focusTrigger: boolean) => {
-    const trigger = flyoutRef.current?.trigger
-    flyoutRef.current = null
+  const closeFlyout = (focusTrigger: boolean) => {
     setOpenFlyout(null)
-    if (focusTrigger) trigger?.focus()
-  }, [])
+    if (focusTrigger) openFlyout?.trigger.focus()
+  }
   const toggleFlyout = (id: string, trigger: HTMLElement) => {
     railTip.hide()
-    const next = flyoutRef.current?.id === id ? null : { id, trigger }
-    flyoutRef.current = next
-    setOpenFlyout(next)
+    setOpenFlyout(openFlyout?.id === id ? null : { id, trigger })
   }
   // A flyout left open when the window shrank below lg has no rail to hang from.
-  if (isBelowLg && openFlyout) {
-    flyoutRef.current = null
-    setOpenFlyout(null)
-  }
+  if (isBelowLg && openFlyout) setOpenFlyout(null)
   const toggleCollapsed = () => {
     const next = !prefs.sidebarCollapsed
     setPref('sidebarCollapsed', next)
@@ -370,7 +358,7 @@ export default function AppLayout() {
     else settleTimer.current = setTimeout(() => setRailLayout(true), 260)
   }
   const rail: RailContext | undefined = railLayout
-    ? { tip: railTip.bind, flyout: openFlyout, toggleFlyout, closeFlyout, asideRef, navRef }
+    ? { tip: railTip.bind, flyout: openFlyout, toggleFlyout, closeFlyout }
     : undefined
 
   // Which groups are open: what the user chose to keep open last time, plus the group that holds the current page.
@@ -384,7 +372,6 @@ export default function AppLayout() {
     setSeenPathname(location.pathname)
     setOpenGroups(withActiveGroups(readStoredOpenGroups(), location.pathname))
     setSidebarOpen(false)
-    flyoutRef.current = null
     setOpenFlyout(null)
     railTip.hide()
   }
@@ -471,7 +458,7 @@ export default function AppLayout() {
             `--tap-min` floor: 32px (28px for a group child) on a mouse as before, 44px under a coarse pointer, where
             this is the touch drawer (and the permanent sidebar of a touch tablet). The list scrolls inside the
             drawer when 44px items no longer fit its height. */}
-        <nav ref={navRef} aria-label="Main" className={`flex-1 space-y-0.5 overflow-y-auto pt-1 ${railLayout ? '[scrollbar-width:none]' : ''}`}>
+        <nav aria-label="Main" className={`flex-1 space-y-0.5 overflow-y-auto pt-1 ${railLayout ? '[scrollbar-width:none]' : ''}`}>
           {resolvedNav.map(entry =>
             entry.kind === 'group' && rail ? (
               <RailGroup

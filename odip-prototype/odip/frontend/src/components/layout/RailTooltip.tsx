@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FocusEvent, type PointerEvent, type RefObject } from 'react'
+import { useEffect, useState, type FocusEvent, type PointerEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { NavCountBadge } from '@/components/layout/NavCountBadge'
 
@@ -30,80 +30,100 @@ function focusVisible(el: HTMLElement): boolean {
 }
 
 /**
- * One tooltip for the whole rail, portaled to the body. A mouse waits 500ms on the first item and 0ms on the next while one shows
- * (or within 300ms of one hiding); a keyboard focus shows at once; touch never does. It stays while the pointer is on it
- * (WCAG 1.4.13), and Escape, scrolling, a resize or `hide()` remove it.
+ * The timers and the warm-up memory of the rail's one tooltip. A plain object rather than refs, so the handlers it hands out can be
+ * spread onto items while rendering. A mouse waits 500ms on the first item and 0ms on the next while one shows (or within 300ms of
+ * one hiding); a keyboard focus shows at once; touch never does.
  */
-export function useRailTooltip(asideRef: RefObject<HTMLElement | null>) {
-  const [tip, setTip] = useState<Tip | null>(null)
-  const showing = useRef(false)
-  const lastHidden = useRef(0)
-  const showTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
-  const hideTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+class RailTipController {
+  private showing = false
+  private lastHidden = 0
+  private showTimer: ReturnType<typeof setTimeout> | undefined
+  private hideTimer: ReturnType<typeof setTimeout> | undefined
 
-  const cancel = () => {
-    clearTimeout(showTimer.current)
-    clearTimeout(hideTimer.current)
+  private readonly setTip: (tip: Tip | null) => void
+
+  constructor(setTip: (tip: Tip | null) => void) {
+    this.setTip = setTip
   }
-  const hide = useCallback(() => {
-    clearTimeout(showTimer.current)
-    clearTimeout(hideTimer.current)
-    if (showing.current) lastHidden.current = Date.now()
-    showing.current = false
-    setTip(null)
-  }, [])
-  const hideSoon = () => {
-    clearTimeout(showTimer.current)
-    clearTimeout(hideTimer.current)
-    hideTimer.current = setTimeout(hide, HIDE_GRACE_MS)
+
+  hide = () => {
+    clearTimeout(this.showTimer)
+    clearTimeout(this.hideTimer)
+    if (this.showing) this.lastHidden = Date.now()
+    this.showing = false
+    this.setTip(null)
   }
-  const show = (el: HTMLElement, label: string, count: number) => {
+
+  /** Leaving an item or the tooltip: gone after a short grace, so the pointer can cross onto the tooltip (WCAG 1.4.13). */
+  hideSoon = () => {
+    clearTimeout(this.showTimer)
+    clearTimeout(this.hideTimer)
+    this.hideTimer = setTimeout(this.hide, HIDE_GRACE_MS)
+  }
+
+  keep = () => clearTimeout(this.hideTimer)
+
+  private cancel() {
+    clearTimeout(this.showTimer)
+    clearTimeout(this.hideTimer)
+  }
+
+  private show(el: HTMLElement, label: string, count: number) {
     const rect = el.getBoundingClientRect()
-    const left = (asideRef.current?.getBoundingClientRect().right ?? rect.right) + MARGIN
+    const left = (el.closest('aside')?.getBoundingClientRect().right ?? rect.right) + MARGIN
     const top = Math.min(Math.max(rect.top + rect.height / 2 - HEIGHT / 2, MARGIN), window.innerHeight - MARGIN - HEIGHT)
-    showing.current = true
-    setTip({ label, count, left, top })
+    this.showing = true
+    this.setTip({ label, count, left, top })
   }
+
+  bind = (label: string, count: number): RailTipProps => ({
+    onPointerEnter: e => {
+      if ((e.pointerType !== 'mouse' && e.pointerType !== 'pen') || !hoverCapable()) return
+      this.cancel()
+      const el = e.currentTarget
+      const warm = this.showing || Date.now() - this.lastHidden < WARM_MS
+      if (warm) this.show(el, label, count)
+      else this.showTimer = setTimeout(() => this.show(el, label, count), SHOW_DELAY_MS)
+    },
+    onPointerLeave: this.hideSoon,
+    onFocus: e => {
+      if (!focusVisible(e.currentTarget)) return
+      this.cancel()
+      this.show(e.currentTarget, label, count)
+    },
+    onBlur: this.hide,
+  })
+}
+
+/**
+ * One tooltip for the whole rail, portaled to the body, placed beside the rail's right edge and centred on the item. It stays while
+ * the pointer is on it, and Escape, scrolling, a resize or `hide()` remove it.
+ */
+export function useRailTooltip() {
+  const [tip, setTip] = useState<Tip | null>(null)
+  const [ctl] = useState(() => new RailTipController(setTip))
 
   useEffect(() => {
     if (!tip) return
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') hide()
+      if (e.key === 'Escape') ctl.hide()
     }
     document.addEventListener('keydown', onKeyDown)
-    window.addEventListener('resize', hide)
-    document.addEventListener('scroll', hide, true)
+    window.addEventListener('resize', ctl.hide)
+    document.addEventListener('scroll', ctl.hide, true)
     return () => {
       document.removeEventListener('keydown', onKeyDown)
-      window.removeEventListener('resize', hide)
-      document.removeEventListener('scroll', hide, true)
+      window.removeEventListener('resize', ctl.hide)
+      document.removeEventListener('scroll', ctl.hide, true)
     }
-  }, [tip, hide])
-
-  const bind = (label: string, count: number): RailTipProps => ({
-    onPointerEnter: e => {
-      if ((e.pointerType !== 'mouse' && e.pointerType !== 'pen') || !hoverCapable()) return
-      cancel()
-      const el = e.currentTarget
-      const warm = showing.current || Date.now() - lastHidden.current < WARM_MS
-      if (warm) show(el, label, count)
-      else showTimer.current = setTimeout(() => show(el, label, count), SHOW_DELAY_MS)
-    },
-    onPointerLeave: hideSoon,
-    onFocus: e => {
-      if (!focusVisible(e.currentTarget)) return
-      cancel()
-      show(e.currentTarget, label, count)
-    },
-    onBlur: hide,
-  })
+  }, [tip, ctl])
 
   const tooltip = tip && createPortal(
     <div
       data-testid="rail-tooltip"
       aria-hidden="true"
-      onPointerEnter={() => clearTimeout(hideTimer.current)}
-      onPointerLeave={hideSoon}
+      onPointerEnter={ctl.keep}
+      onPointerLeave={ctl.hideSoon}
       style={{ left: tip.left, top: tip.top }}
       className="rail-tooltip fixed z-[70] inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-[var(--radius-sm)] bg-[var(--color-foreground)] px-2.5 text-[13px] font-medium leading-none text-[var(--color-background)] shadow-[var(--shadow-float)]"
     >
@@ -113,5 +133,5 @@ export function useRailTooltip(asideRef: RefObject<HTMLElement | null>) {
     document.body,
   )
 
-  return { bind, hide, tooltip }
+  return { bind: ctl.bind, hide: ctl.hide, tooltip }
 }

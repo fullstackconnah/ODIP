@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, type KeyboardEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
 const MARGIN = 8
@@ -12,12 +12,10 @@ const MARGIN = 8
  * a scroll of the rail. `onClose(true)` also returns focus to the trigger. Tab off either end of the list closes it and carries on
  * from the trigger, because the portal sits at the end of the document and the natural order would skip the rest of the rail.
  */
-export function RailFlyout({ id, label, trigger, asideRef, navRef, onClose, children }: {
+export function RailFlyout({ id, label, trigger, onClose, children }: {
   id: string
   label: string
   trigger: HTMLElement
-  asideRef: RefObject<HTMLElement | null>
-  navRef: RefObject<HTMLElement | null>
   onClose: (focusTrigger: boolean) => void
   children: ReactNode
 }) {
@@ -28,10 +26,10 @@ export function RailFlyout({ id, label, trigger, asideRef, navRef, onClose, chil
     const panel = panelRef.current
     if (!panel) return
     const rect = trigger.getBoundingClientRect()
-    panel.style.left = `${(asideRef.current?.getBoundingClientRect().right ?? rect.right) + MARGIN}px`
+    panel.style.left = `${(trigger.closest('aside')?.getBoundingClientRect().right ?? rect.right) + MARGIN}px`
     panel.style.maxHeight = `${window.innerHeight - 2 * MARGIN}px`
     panel.style.top = `${Math.max(MARGIN, Math.min(rect.top - 6, window.innerHeight - MARGIN - panel.offsetHeight))}px`
-  }, [trigger, asideRef])
+  }, [trigger])
 
   useEffect(() => {
     panelRef.current?.querySelector<HTMLElement>('a')?.focus()
@@ -54,7 +52,7 @@ export function RailFlyout({ id, label, trigger, asideRef, navRef, onClose, chil
       if (!inside(e.target)) onClose(false)
     }
     const close = () => onClose(false)
-    const nav = navRef.current
+    const nav = trigger.closest('nav')
     document.addEventListener('keydown', onKeyDown)
     document.addEventListener('mousedown', onMouseDown)
     document.addEventListener('focusin', onFocusIn)
@@ -67,7 +65,7 @@ export function RailFlyout({ id, label, trigger, asideRef, navRef, onClose, chil
       window.removeEventListener('resize', close)
       nav?.removeEventListener('scroll', close)
     }
-  }, [trigger, navRef, onClose])
+  }, [trigger, onClose])
 
   const onPanelKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const links = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('a'))
@@ -78,7 +76,7 @@ export function RailFlyout({ id, label, trigger, asideRef, navRef, onClose, chil
         onClose(true)
       } else if (!e.shiftKey && at === links.length - 1) {
         e.preventDefault()
-        const controls = Array.from(asideRef.current?.querySelectorAll<HTMLElement>('a[href], button:not([disabled])') ?? [])
+        const controls = Array.from(trigger.closest('aside')?.querySelectorAll<HTMLElement>('a[href], button:not([disabled])') ?? [])
         onClose(false)
         controls[controls.indexOf(trigger) + 1]?.focus()
       }
