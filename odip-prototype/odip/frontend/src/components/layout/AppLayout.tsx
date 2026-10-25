@@ -454,11 +454,11 @@ export default function AppLayout() {
           {railLayout ? <BrandTile /> : <Wordmark size={21} />}
         </div>
 
-        {/* Nav. Every item (group toggles, top-level links, group children, and "Sign Out" below) carries a
+        {/* Nav. In the rail it bleeds to the aside edges (and pads back), so the nav's scroll clip does not cut a count badge or a focus ring. Every item (group toggles, top-level links, group children, and "Sign Out" below) carries a
             `--tap-min` floor: 32px (28px for a group child) on a mouse as before, 44px under a coarse pointer, where
             this is the touch drawer (and the permanent sidebar of a touch tablet). The list scrolls inside the
             drawer when 44px items no longer fit its height. */}
-        <nav aria-label="Main" className={`flex-1 space-y-0.5 overflow-y-auto pt-1 ${railLayout ? '[scrollbar-width:none]' : ''}`}>
+        <nav aria-label="Main" className={`flex-1 space-y-0.5 overflow-y-auto pt-1 ${railLayout ? '-mx-3 px-3 pointer-coarse:-mx-2.5 pointer-coarse:px-2.5 [scrollbar-width:none]' : ''}`}>
           {resolvedNav.map(entry =>
             entry.kind === 'group' && rail ? (
               <RailGroup
