@@ -76,7 +76,7 @@ public sealed class DemoParticipantFixtureSeeder
         async Task<List<T>> Fresh<T>(List<T> rows, Func<T, Guid> id, Func<T, Guid> owner) where T : class
         {
             var ids = rows.Select(id).ToList();
-            var existing = (await db.Set<T>().IgnoreQueryFilters().Where(e => ids.Contains(EF.Property<Guid>(e, "Id")))
+            var existing = (await db.Set<T>().IgnoreQueryFilters([TenantFilter.Name]).Where(e => ids.Contains(EF.Property<Guid>(e, "Id")))
                 .Select(e => new { Id = EF.Property<Guid>(e, "Id"), Tenant = EF.Property<Guid>(e, "TenantId") }).ToListAsync(ct)).ToDictionary(e => e.Id, e => e.Tenant);
             var foreign = existing.Where(e => e.Value != tenantId).Select(e => e.Key).ToList();
             if (foreign.Count > 0) rejected ??= $"{typeof(T).Name} id {foreign[0]} is owned by another tenant; a fixture never reassigns an owner.";

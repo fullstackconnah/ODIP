@@ -82,7 +82,7 @@ public static class DbSeeder
         var usersAdded = false;
         foreach (var user in seedUsers)
         {
-            var exists = await context.Users.IgnoreQueryFilters().AnyAsync(u => u.Id == user.Id, ct);
+            var exists = await context.Users.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(u => u.Id == user.Id, ct);
             if (!exists)
             {
                 context.Users.Add(user);
@@ -95,7 +95,7 @@ public static class DbSeeder
         // Ensure SuperAdmin user exists for Connah tenant
         var connahTenantId = new Guid("00000000-0000-0000-0000-000000000001");
         var superAdminExists = await context.Users
-            .IgnoreQueryFilters()
+            .IgnoreQueryFilters([TenantFilter.Name])
             .AnyAsync(u => u.Email == "info@connah.com.au" && u.TenantId == connahTenantId, ct);
         if (!superAdminExists)
         {
@@ -808,27 +808,27 @@ public static class DbSeeder
     /// old Staff-table check — like Staff before it, this fixed-id user is only ever created by
     /// this atomic batch (the other 9 users in the batch are guarded individually and may
     /// already exist from an earlier partial run).
-    /// Uses IgnoreQueryFilters() throughout so the tenant query filter can't cause a
+    /// Uses IgnoreQueryFilters([TenantFilter.Name]) throughout so the tenant query filter can't cause a
     /// false negative (mirrors the pattern already used elsewhere in this file).
     /// </summary>
     private static async Task<bool> HasExistingSeedDataAsync(OdipDbContext context, CancellationToken ct)
     {
-        return await context.Users.IgnoreQueryFilters().AnyAsync(u => u.Id == Guid.Parse("a2000000-0000-0000-0000-000000000001"), ct)
-            || await context.EventTemplates.IgnoreQueryFilters().AnyAsync(ct)
-            || await context.Participants.IgnoreQueryFilters().AnyAsync(ct)
-            || await context.Contacts.IgnoreQueryFilters().AnyAsync(ct)
-            || await context.AccommodationProperties.IgnoreQueryFilters().AnyAsync(ct)
-            || await context.Vehicles.IgnoreQueryFilters().AnyAsync(ct)
-            || await context.TripInstances.IgnoreQueryFilters().AnyAsync(ct)
-            || await context.ParticipantBookings.IgnoreQueryFilters().AnyAsync(ct)
-            || await context.AccommodationReservations.IgnoreQueryFilters().AnyAsync(ct)
-            || await context.VehicleAssignments.IgnoreQueryFilters().AnyAsync(ct)
-            || await context.StaffAssignments.IgnoreQueryFilters().AnyAsync(ct)
-            || await context.StaffAvailabilities.IgnoreQueryFilters().AnyAsync(ct)
-            || await context.Activities.IgnoreQueryFilters().AnyAsync(ct)
-            || await context.TripDays.IgnoreQueryFilters().AnyAsync(ct)
-            || await context.ScheduledActivities.IgnoreQueryFilters().AnyAsync(ct)
-            || await context.BookingTasks.IgnoreQueryFilters().AnyAsync(ct);
+        return await context.Users.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(u => u.Id == Guid.Parse("a2000000-0000-0000-0000-000000000001"), ct)
+            || await context.EventTemplates.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(ct)
+            || await context.Participants.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(ct)
+            || await context.Contacts.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(ct)
+            || await context.AccommodationProperties.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(ct)
+            || await context.Vehicles.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(ct)
+            || await context.TripInstances.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(ct)
+            || await context.ParticipantBookings.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(ct)
+            || await context.AccommodationReservations.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(ct)
+            || await context.VehicleAssignments.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(ct)
+            || await context.StaffAssignments.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(ct)
+            || await context.StaffAvailabilities.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(ct)
+            || await context.Activities.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(ct)
+            || await context.TripDays.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(ct)
+            || await context.ScheduledActivities.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(ct)
+            || await context.BookingTasks.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(ct);
     }
 
     /// <summary>
@@ -923,7 +923,7 @@ public static class DbSeeder
     /// </summary>
     public static async Task SeedMedicationsAsync(OdipDbContext context, CancellationToken ct = default)
     {
-        if (await context.ParticipantMedications.IgnoreQueryFilters().AnyAsync(ct))
+        if (await context.ParticipantMedications.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(ct))
             return;
 
         var demoTenant = await context.Tenants.FirstOrDefaultAsync(t => t.EmailDomain == "demo.odip.com.au", ct);
@@ -951,7 +951,7 @@ public static class DbSeeder
             sophieId, charlotteId, harrisonId,
             liamId, oliviaId, miaId, williamId, isabellaId, chloeId, graceId, zoeId, ryanId, natalieId,
         };
-        var existingParticipants = await context.Participants.IgnoreQueryFilters()
+        var existingParticipants = await context.Participants.IgnoreQueryFilters([TenantFilter.Name])
             .Where(p => targetIds.Contains(p.Id)).Select(p => p.Id).ToListAsync(ct);
         if (existingParticipants.Count == 0)
             return;
@@ -1648,7 +1648,7 @@ public static class DbSeeder
     /// </summary>
     public static async Task SeedParticipantNotesAsync(OdipDbContext context, CancellationToken ct = default)
     {
-        if (await context.ParticipantNotes.IgnoreQueryFilters().AnyAsync(ct))
+        if (await context.ParticipantNotes.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(ct))
             return;
 
         var demoTenant = await context.Tenants.FirstOrDefaultAsync(t => t.EmailDomain == "demo.odip.com.au", ct);
@@ -1668,7 +1668,7 @@ public static class DbSeeder
         var ryanId = Guid.Parse("d2000000-0000-0000-0000-000000000008");
 
         var targetIds = new[] { sophieId, charlotteId, harrisonId, liamId, oliviaId, jackId, williamId, graceId, ryanId };
-        var existingParticipants = await context.Participants.IgnoreQueryFilters()
+        var existingParticipants = await context.Participants.IgnoreQueryFilters([TenantFilter.Name])
             .Where(p => targetIds.Contains(p.Id)).Select(p => p.Id).ToListAsync(ct);
         if (existingParticipants.Count == 0)
             return;
@@ -1799,7 +1799,7 @@ public static class DbSeeder
     /// </summary>
     public static async Task SeedParticipantRoutinesAsync(OdipDbContext context, CancellationToken ct = default)
     {
-        if (await context.ParticipantRoutines.IgnoreQueryFilters().AnyAsync(ct))
+        if (await context.ParticipantRoutines.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(ct))
             return;
 
         var demoTenant = await context.Tenants.FirstOrDefaultAsync(t => t.EmailDomain == "demo.odip.com.au", ct);
@@ -1830,7 +1830,7 @@ public static class DbSeeder
             sophieId, charlotteId, harrisonId,
             liamId, oliviaId, jackId, williamId, graceId, natalieId, isabellaId, zoeId, ryanId,
         };
-        var existingParticipants = await context.Participants.IgnoreQueryFilters()
+        var existingParticipants = await context.Participants.IgnoreQueryFilters([TenantFilter.Name])
             .Where(p => targetIds.Contains(p.Id)).Select(p => p.Id).ToListAsync(ct);
         if (existingParticipants.Count == 0)
             return;
@@ -2022,7 +2022,7 @@ public static class DbSeeder
     /// </summary>
     public static async Task SeedRestrictivePracticesAsync(OdipDbContext context, CancellationToken ct = default)
     {
-        if (await context.RestrictivePractices.IgnoreQueryFilters().AnyAsync(ct))
+        if (await context.RestrictivePractices.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(ct))
             return;
 
         var demoTenant = await context.Tenants.FirstOrDefaultAsync(t => t.EmailDomain == "demo.odip.com.au", ct);
@@ -2045,7 +2045,7 @@ public static class DbSeeder
         var harrisonId = Guid.Parse("d2000000-0000-0000-0000-000000000006");
 
         var targetIds = new[] { sophieId, charlotteId, chloeId, ryanId, harrisonId };
-        var participants = await context.Participants.IgnoreQueryFilters()
+        var participants = await context.Participants.IgnoreQueryFilters([TenantFilter.Name])
             .Where(p => targetIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, ct);
         if (participants.Count == 0)
             return;
@@ -2078,7 +2078,7 @@ public static class DbSeeder
 
             // Only add the ChemicalRestraint link if the medication was actually seeded (guards
             // against SeedMedicationsAsync having been skipped for any reason).
-            if (await context.ParticipantMedications.IgnoreQueryFilters().AnyAsync(m => m.Id == risperidoneId, ct))
+            if (await context.ParticipantMedications.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(m => m.Id == risperidoneId, ct))
             {
                 practices.Add(new RestrictivePractice
                 {
@@ -2161,7 +2161,7 @@ public static class DbSeeder
     /// </summary>
     public static async Task SeedParticipantRiskEntriesAsync(OdipDbContext context, CancellationToken ct = default)
     {
-        if (await context.ParticipantRiskEntries.IgnoreQueryFilters().AnyAsync(ct))
+        if (await context.ParticipantRiskEntries.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(ct))
             return;
 
         var demoTenant = await context.Tenants.FirstOrDefaultAsync(t => t.EmailDomain == "demo.odip.com.au", ct);
@@ -2174,7 +2174,7 @@ public static class DbSeeder
         var harrisonId = Guid.Parse("d2000000-0000-0000-0000-000000000006");
 
         var targetIds = new[] { sophieId, charlotteId, harrisonId };
-        var existingParticipants = await context.Participants.IgnoreQueryFilters()
+        var existingParticipants = await context.Participants.IgnoreQueryFilters([TenantFilter.Name])
             .Where(p => targetIds.Contains(p.Id)).Select(p => p.Id).ToListAsync(ct);
         if (existingParticipants.Count == 0)
             return;
@@ -2247,7 +2247,7 @@ public static class DbSeeder
     /// </summary>
     public static async Task SeedParticipantConsentsAsync(OdipDbContext context, CancellationToken ct = default)
     {
-        if (await context.ParticipantConsents.IgnoreQueryFilters().AnyAsync(ct))
+        if (await context.ParticipantConsents.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(ct))
             return;
 
         var demoTenant = await context.Tenants.FirstOrDefaultAsync(t => t.EmailDomain == "demo.odip.com.au", ct);
@@ -2340,7 +2340,7 @@ public static class DbSeeder
         };
 
         var participantIds = plans.Select(p => p.ParticipantId).ToArray();
-        var participants = await context.Participants.IgnoreQueryFilters()
+        var participants = await context.Participants.IgnoreQueryFilters([TenantFilter.Name])
             .Where(p => participantIds.Contains(p.Id))
             .Select(p => new { p.Id, p.FirstName, p.LastName })
             .ToDictionaryAsync(p => p.Id, ct);
@@ -2396,7 +2396,7 @@ public static class DbSeeder
     /// </summary>
     public static async Task SeedParticipantHealthConditionsAsync(OdipDbContext context, CancellationToken ct = default)
     {
-        if (await context.ParticipantHealthConditions.IgnoreQueryFilters().AnyAsync(ct))
+        if (await context.ParticipantHealthConditions.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(ct))
             return;
 
         var demoTenant = await context.Tenants.FirstOrDefaultAsync(t => t.EmailDomain == "demo.odip.com.au", ct);
@@ -2466,7 +2466,7 @@ public static class DbSeeder
         };
 
         var participantIds = plans.Select(p => p.ParticipantId).ToArray();
-        var participantExists = await context.Participants.IgnoreQueryFilters()
+        var participantExists = await context.Participants.IgnoreQueryFilters([TenantFilter.Name])
             .Where(p => participantIds.Contains(p.Id)).Select(p => p.Id).ToListAsync(ct);
         if (participantExists.Count == 0)
             return;
@@ -2542,7 +2542,7 @@ public static class DbSeeder
             Guid.Parse("d2000000-0000-0000-0000-000000000010"), // Dylan — manual wheelchair, flat terrain only
         };
 
-        var participants = await context.Participants.IgnoreQueryFilters()
+        var participants = await context.Participants.IgnoreQueryFilters([TenantFilter.Name])
             .Where(p => targetIds.Contains(p.Id)).ToListAsync(ct);
         if (participants.Count == 0)
             return;
@@ -2691,7 +2691,7 @@ public static class DbSeeder
     /// </summary>
     public static async Task SeedParticipantAdlAssessmentsAsync(OdipDbContext context, CancellationToken ct = default)
     {
-        if (await context.ParticipantAdlAssessments.IgnoreQueryFilters().AnyAsync(ct))
+        if (await context.ParticipantAdlAssessments.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(ct))
             return;
 
         var demoTenant = await context.Tenants.FirstOrDefaultAsync(t => t.EmailDomain == "demo.odip.com.au", ct);
@@ -2806,7 +2806,7 @@ public static class DbSeeder
         };
 
         var participantIds = plans.Select(p => p.ParticipantId).ToArray();
-        var participantExists = await context.Participants.IgnoreQueryFilters()
+        var participantExists = await context.Participants.IgnoreQueryFilters([TenantFilter.Name])
             .Where(p => participantIds.Contains(p.Id)).Select(p => p.Id).ToListAsync(ct);
         if (participantExists.Count == 0)
             return;
@@ -2879,7 +2879,7 @@ public static class DbSeeder
             Guid.Parse("d2000000-0000-0000-0000-000000000009"), // Natalie
         };
 
-        var participants = await context.Participants.IgnoreQueryFilters()
+        var participants = await context.Participants.IgnoreQueryFilters([TenantFilter.Name])
             .Where(p => targetIds.Contains(p.Id)).ToListAsync(ct);
         if (participants.Count == 0)
             return;
@@ -3030,7 +3030,7 @@ public static class DbSeeder
     /// </summary>
     public static async Task SeedCommunityAccessDailyLivingAsync(OdipDbContext context, CancellationToken ct = default)
     {
-        if (await context.ParticipantChecklistItems.IgnoreQueryFilters().AnyAsync(ct))
+        if (await context.ParticipantChecklistItems.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(ct))
             return;
 
         var demoTenant = await context.Tenants.FirstOrDefaultAsync(t => t.EmailDomain == "demo.odip.com.au", ct);
@@ -3043,12 +3043,12 @@ public static class DbSeeder
         var oliviaId = Guid.Parse("d1000000-0000-0000-0000-000000000004");
         var targetIds = new[] { sophieId, charlotteId, oliviaId };
 
-        var participants = await context.Participants.IgnoreQueryFilters()
+        var participants = await context.Participants.IgnoreQueryFilters([TenantFilter.Name])
             .Where(p => targetIds.Contains(p.Id)).ToListAsync(ct);
         if (participants.Count == 0)
             return;
 
-        var adlRows = await context.ParticipantAdlAssessments.IgnoreQueryFilters()
+        var adlRows = await context.ParticipantAdlAssessments.IgnoreQueryFilters([TenantFilter.Name])
             .Where(a => targetIds.Contains(a.ParticipantId)).ToListAsync(ct);
 
         void SetAdlHowToHelp(Guid participantId, AdlType type, string howToHelp)
@@ -3196,7 +3196,7 @@ public static class DbSeeder
     /// </summary>
     public static async Task SeedShiftNotesAsync(OdipDbContext context, CancellationToken ct = default)
     {
-        if (await context.ShiftNotes.IgnoreQueryFilters().AnyAsync(ct))
+        if (await context.ShiftNotes.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(ct))
             return;
 
         var demoTenant = await context.Tenants.FirstOrDefaultAsync(t => t.EmailDomain == "demo.odip.com.au", ct);
@@ -3210,10 +3210,10 @@ public static class DbSeeder
         var emilyUserId = Guid.Parse("b2000000-0000-0000-0000-000000000002");
 
         var targetParticipantIds = new[] { sophieId, charlotteId };
-        var existingParticipants = await context.Participants.IgnoreQueryFilters()
+        var existingParticipants = await context.Participants.IgnoreQueryFilters([TenantFilter.Name])
             .Where(p => targetParticipantIds.Contains(p.Id)).Select(p => p.Id).ToListAsync(ct);
         var targetUserIds = new[] { jamesUserId, emilyUserId };
-        var existingUsers = await context.Users.IgnoreQueryFilters()
+        var existingUsers = await context.Users.IgnoreQueryFilters([TenantFilter.Name])
             .Where(u => targetUserIds.Contains(u.Id)).Select(u => u.Id).ToListAsync(ct);
         if (existingParticipants.Count == 0 || existingUsers.Count == 0)
             return;

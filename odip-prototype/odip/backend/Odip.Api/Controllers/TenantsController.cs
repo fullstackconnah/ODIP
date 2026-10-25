@@ -40,7 +40,7 @@ public class TenantsController : ControllerBase
             .OrderBy(t => t.Name)
             .Select(t => new TenantSummaryDto(
                 t.Id, t.Name, t.EmailDomain, t.IsActive, t.CreatedAt,
-                _db.Users.IgnoreQueryFilters().Count(u => u.TenantId == t.Id)))
+                _db.Users.IgnoreQueryFilters([TenantFilter.Name]).Count(u => u.TenantId == t.Id)))
             .ToListAsync();
         return Ok(ApiResponse<List<TenantSummaryDto>>.Ok(tenants));
     }
@@ -104,7 +104,7 @@ public class TenantsController : ControllerBase
             // The first user's address is stored and compared in one form (see EmailIdentity), and must be new in any case: the exchange
             // matches case-insensitively, so two rows differing only in case would be ambiguous.
             var candidateEmail = EmailIdentity.Normalise(candidate.Email);
-            if (await _db.Users.IgnoreQueryFilters().AnyAsync(u => u.Email.ToLower() == candidateEmail, ct))
+            if (await _db.Users.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(u => u.Email.ToLower() == candidateEmail, ct))
                 return Conflict("A user with this email already exists");
 
             // An address at neither the new tenant's own domain nor a common provider is a live login for whoever owns it: ask the admin to check
@@ -239,7 +239,7 @@ public class TenantsController : ControllerBase
             return NotFound();
 
         var users = await _db.Users
-            .IgnoreQueryFilters()
+            .IgnoreQueryFilters([TenantFilter.Name])
             .Where(u => u.TenantId == id)
             .OrderBy(u => u.FirstName).ThenBy(u => u.LastName)
             .Select(u => new TenantUserDto(u.Id, $"{u.FirstName} {u.LastName}".Trim(), u.Role.ToString(), u.IsActive))
@@ -256,7 +256,7 @@ public class TenantsController : ControllerBase
             return NotFound();
 
         var ps = await _db.ProviderSettings
-            .IgnoreQueryFilters()
+            .IgnoreQueryFilters([TenantFilter.Name])
             .FirstOrDefaultAsync(p => p.TenantId == id, ct);
 
         if (ps is null)

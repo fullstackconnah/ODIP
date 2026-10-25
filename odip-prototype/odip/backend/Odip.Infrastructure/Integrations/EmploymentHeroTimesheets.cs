@@ -77,7 +77,7 @@ public static class EmploymentHeroTimesheets
     /// <summary>The provider-local date the organisation connected on; shifts before it are never queued. Null when the organisation isn't connected.</summary>
     public static async Task<DateOnly?> CutoffAsync(OdipDbContext db, Guid tenantId, CancellationToken ct)
     {
-        var at = await db.EmploymentHeroConnections.IgnoreQueryFilters().Where(c => c.TenantId == tenantId).Select(c => (DateTime?)c.ConnectedAt).FirstOrDefaultAsync(ct);
+        var at = await db.EmploymentHeroConnections.IgnoreQueryFilters([TenantFilter.Name]).Where(c => c.TenantId == tenantId).Select(c => (DateTime?)c.ConnectedAt).FirstOrDefaultAsync(ct);
         if (at is null) return null;
         return ProviderLocalTime.TodayIn(ProviderLocalTime.AsUtc(at.Value), (await ProviderTimeZoneResolver.ResolveAsync(db, tenantId, ct)).Zone);
     }
@@ -94,7 +94,7 @@ public static class EmploymentHeroTimesheets
         if (approved.Count == 0 || await CutoffAsync(db, tenantId, ct) is not { } cutoff) return;
         var due = approved.Where(p => p.Shift.ServiceDate >= cutoff).Select(p => p.Completion.Id).ToList();
         if (due.Count == 0) return;
-        var have = await db.EmploymentHeroOutbox.IgnoreQueryFilters()
+        var have = await db.EmploymentHeroOutbox.IgnoreQueryFilters([TenantFilter.Name])
             .Where(r => r.TenantId == tenantId && r.Kind == EmploymentHeroOutboxKind.Timesheet && due.Contains(r.EntityId)).Select(r => r.EntityId).ToListAsync(ct);
         foreach (var id in due.Except(have)) db.EmploymentHeroOutbox.Add(NewRow(tenantId, id, now));
     }

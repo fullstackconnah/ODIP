@@ -129,7 +129,7 @@ public class ProviderSettingsController : ControllerBase
         if (startChanged)
         {
             var owner = _tenant?.TenantId ?? s.TenantId;
-            if (await _db.Invoices.IgnoreQueryFilters().AnyAsync(i => i.TenantId == owner && i.Kind == InvoiceKind.Invoice, ct))
+            if (await _db.Invoices.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(i => i.TenantId == owner && i.Kind == InvoiceKind.Invoice, ct))
                 return Conflict(ApiResponse<bool>.Fail("Invoice numbers have started, so the starting number can't change."));
         }
 

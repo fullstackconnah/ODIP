@@ -49,14 +49,14 @@ public class CaregiverController : ControllerBase
         var hash = CaregiverTokenService.Hash(token);
         var now = DateTime.UtcNow;
         var sub = await _db.CaregiverProfileSubmissions
-            .IgnoreQueryFilters()
+            .IgnoreQueryFilters([TenantFilter.Name])
             .FirstOrDefaultAsync(s => s.TokenHash == hash
                 && (s.Status == CaregiverSubmissionStatus.Draft || s.Status == CaregiverSubmissionStatus.Submitted)
                 && s.ExpiresAt > now, ct);
         if (sub == null) return null;
 
         var p = await _db.Participants
-            .IgnoreQueryFilters()
+            .IgnoreQueryFilters([TenantFilter.Name])
             .Include(x => x.PreferredUser)
             .Include(x => x.RestrictivePractices)
             .Include(x => x.Consents)
@@ -122,7 +122,7 @@ public class CaregiverController : ControllerBase
             // resolution keys off sub.TenantId directly (IgnoreQueryFilters — ambient
             // ICurrentTenant.TenantId is null here, which would otherwise filter out every
             // tenant-scoped row). Design spec §5.
-            var caregiverRecipients = await _db.Users.IgnoreQueryFilters()
+            var caregiverRecipients = await _db.Users.IgnoreQueryFilters([TenantFilter.Name])
                 .Where(u => u.TenantId == sub.TenantId && u.IsActive
                     && (u.Role == Odip.Domain.Enums.UserRole.Admin || u.Role == Odip.Domain.Enums.UserRole.Coordinator))
                 .ToListAsync(ct);

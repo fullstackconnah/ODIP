@@ -48,7 +48,7 @@ public static class DemoQueries
 
     /// <summary>"Insert-if-missing": which of these ids already exist (a primary-key probe, <c>"Id" = ANY(@ids)</c>).</summary>
     public static IQueryable<Guid> ExistingIds<T>(OdipDbContext db, Guid[] ids) where T : class =>
-        db.Set<T>().IgnoreQueryFilters().Where(e => ids.Contains(EF.Property<Guid>(e, "Id"))).Select(e => EF.Property<Guid>(e, "Id"));
+        db.Set<T>().IgnoreQueryFilters([TenantFilter.Name]).Where(e => ids.Contains(EF.Property<Guid>(e, "Id"))).Select(e => EF.Property<Guid>(e, "Id"));
 
     // ── staff, compatibility, contacts ───────────────────────────────────────
 
@@ -338,12 +338,12 @@ public static class DemoQueries
     /// <see cref="ExistingIds{T}"/>: the unique index sees every row whatever its tenant, so a row that would collide is "already there" wherever it is.
     /// </summary>
     public static IQueryable<AckKey> HandoverAcksOf(OdipDbContext db, List<Guid> sourceCompletionIds, List<Guid> userIds) =>
-        db.HandoverAcknowledgements.IgnoreQueryFilters().AsNoTracking().Where(a => sourceCompletionIds.Contains(a.SourceCompletionId) && userIds.Contains(a.UserId))
+        db.HandoverAcknowledgements.IgnoreQueryFilters([TenantFilter.Name]).AsNoTracking().Where(a => sourceCompletionIds.Contains(a.SourceCompletionId) && userIds.Contains(a.UserId))
             .Select(a => new AckKey(a.SourceCompletionId, a.UserId));
 
     /// <summary>Read only: the routine ticks already on these completions, whoever made them (<see cref="TickKey"/>), for the same reason, and filters ignored for the same one, as <see cref="HandoverAcksOf"/>.</summary>
     public static IQueryable<TickKey> RoutineTicksOf(OdipDbContext db, List<Guid> completionIds) =>
-        db.ShiftRoutineChecks.IgnoreQueryFilters().AsNoTracking().Where(t => completionIds.Contains(t.ShiftCompletionId))
+        db.ShiftRoutineChecks.IgnoreQueryFilters([TenantFilter.Name]).AsNoTracking().Where(t => completionIds.Contains(t.ShiftCompletionId))
             .Select(t => new TickKey(t.ShiftCompletionId, t.ParticipantRoutineId, t.ScheduledAt));
 
     public static IQueryable<ShiftNote> NotesOf(OdipDbContext db, List<Guid> shiftIds) =>

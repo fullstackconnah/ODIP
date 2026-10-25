@@ -11,7 +11,7 @@ namespace Odip.Infrastructure.Notifications;
 /// — same context, so "same SaveChanges" needs no explicit transaction plumbing. Beside each outbox row it adds the
 /// recipient's bell row (<see cref="Odip.Domain.Notifications.InAppNotification"/>), which shares the dedupe and the save.
 ///
-/// TenantId is resolved per-recipient (via <c>Users.IgnoreQueryFilters()</c>) rather than left
+/// TenantId is resolved per-recipient (via <c>Users.IgnoreQueryFilters([TenantFilter.Name])</c>) rather than left
 /// to <see cref="OdipDbContext.SaveChangesAsync"/>'s ambient auto-stamp: one v1 trigger
 /// (<c>CaregiverController.Submit</c>) raises with no authenticated principal at all — ambient
 /// <c>ICurrentTenant.TenantId</c> is null there, so the auto-stamp would silently leave
@@ -44,7 +44,7 @@ public sealed class NotificationRaiser : INotificationRaiser
             // The newest notice this person already has about this entity, inside the window. The same kind again is a double-click or a retry, and is dropped;
             // a different kind is news (a shift's worker put on, taken off and put back within five minutes must still end with "on").
             // IgnoreQueryFilters: this must see prior rows whatever the calling context's tenant (it may be null/anonymous, e.g. CaregiverController).
-            var newest = await _db.NotificationOutbox.IgnoreQueryFilters()
+            var newest = await _db.NotificationOutbox.IgnoreQueryFilters([TenantFilter.Name])
                 .Where(o => o.EntityId == entityId && o.RecipientUserId == recipientId && o.CreatedAt >= cutoff)
                 .OrderByDescending(o => o.CreatedAt)
                 .Select(o => (NotificationEventType?)o.EventType)
@@ -55,7 +55,7 @@ public sealed class NotificationRaiser : INotificationRaiser
             // user (null result) is distinguishable from a found user whose TenantId happens to
             // be Guid.Empty — the latter is a legitimate value in tenant-agnostic test fixtures
             // and must not be treated as "not found".
-            var recipientUser = await _db.Users.IgnoreQueryFilters()
+            var recipientUser = await _db.Users.IgnoreQueryFilters([TenantFilter.Name])
                 .Where(u => u.Id == recipientId)
                 .Select(u => new { u.TenantId })
                 .FirstOrDefaultAsync(ct);

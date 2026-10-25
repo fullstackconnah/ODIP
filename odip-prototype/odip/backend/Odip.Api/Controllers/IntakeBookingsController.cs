@@ -365,7 +365,7 @@ public class IntakeBookingsController : ControllerBase
         var participants = await _db.Participants.Where(p => participantIds.Contains(p.Id))
             .Select(p => new { p.Id, p.IsDraft, p.IntakeCompletedAt }).ToDictionaryAsync(p => p.Id, ct);
         var staffIds = rows.Select(r => r.IntakeStaffUserId!.Value).Distinct().ToList();
-        var names = await _db.Users.IgnoreQueryFilters().Where(u => staffIds.Contains(u.Id) && u.TenantId == tenantId)
+        var names = await _db.Users.IgnoreQueryFilters([TenantFilter.Name]).Where(u => staffIds.Contains(u.Id) && u.TenantId == tenantId)
             .ToDictionaryAsync(u => u.Id, u => (u.FirstName + " " + u.LastName).Trim(), ct);
 
         return Ok(ApiResponse<List<IntakeVisitDto>>.Ok(rows.Select(r =>
@@ -388,11 +388,11 @@ public class IntakeBookingsController : ControllerBase
     // Read by the ENQUIRY's organisation: a SuperAdmin viewing as a tenant has no query filter, and must never get another organisation's settings.
     private async Task<Provider> ProviderAsync(Guid tenantId, CancellationToken ct)
     {
-        var settings = await _db.ProviderSettings.IgnoreQueryFilters().Where(p => p.TenantId == tenantId)
+        var settings = await _db.ProviderSettings.IgnoreQueryFilters([TenantFilter.Name]).Where(p => p.TenantId == tenantId)
             .Select(p => new { p.State, p.OrganisationName, p.Address, p.ManagerName, p.ManagerPhone }).FirstOrDefaultAsync(ct);
         var name = !string.IsNullOrWhiteSpace(settings?.OrganisationName)
             ? settings.OrganisationName
-            : await _db.Tenants.IgnoreQueryFilters().Where(t => t.Id == tenantId).Select(t => t.Name).FirstOrDefaultAsync(ct) ?? string.Empty;
+            : await _db.Tenants.IgnoreQueryFilters([TenantFilter.Name]).Where(t => t.Id == tenantId).Select(t => t.Name).FirstOrDefaultAsync(ct) ?? string.Empty;
         return new Provider(ProviderTimeZoneResolver.FromState(settings?.State).Id, name, settings?.Address ?? string.Empty, settings?.ManagerName, settings?.ManagerPhone);
     }
 
@@ -400,12 +400,12 @@ public class IntakeBookingsController : ControllerBase
     private async Task<User?> CallerAsync(CancellationToken ct)
     {
         Guid? id = _tenant.ViewAsUserId ?? (Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var own) ? own : (Guid?)null);
-        return id is Guid userId ? await _db.Users.IgnoreQueryFilters().FirstOrDefaultAsync(u => u.Id == userId && u.TenantId == _tenant.TenantId, ct) : null; // view-as must name a user of this organisation
+        return id is Guid userId ? await _db.Users.IgnoreQueryFilters([TenantFilter.Name]).FirstOrDefaultAsync(u => u.Id == userId && u.TenantId == _tenant.TenantId, ct) : null; // view-as must name a user of this organisation
     }
 
     // Keyed on the enquiry's organisation, never the ambient filter (a SuperAdmin has none): another organisation's user is simply not found.
     private async Task<User?> StaffAsync(Guid? id, Guid tenantId, CancellationToken ct) =>
-        id is Guid staffId ? await _db.Users.IgnoreQueryFilters().FirstOrDefaultAsync(u => u.Id == staffId && u.TenantId == tenantId, ct) : null;
+        id is Guid staffId ? await _db.Users.IgnoreQueryFilters([TenantFilter.Name]).FirstOrDefaultAsync(u => u.Id == staffId && u.TenantId == tenantId, ct) : null;
 
     // Who an invite is from (lead decision S2). ORGANIZER and Reply-To stay the coordinator who booked, for every revision of the UID: calendar apps
     // treat a changed ORGANIZER as another event. A booker since deactivated stays ORGANIZER (the address only identifies the event, and the system
@@ -486,14 +486,14 @@ public class IntakeBookingsController : ControllerBase
         var (from, to) = (ProviderLocalTime.UtcToLocal(startUtc, zone), ProviderLocalTime.UtcToLocal(endUtc, zone));
         // A shift that ends the next day began the day before: one day back finds it.
         var (firstDay, lastDay) = (DateOnly.FromDateTime(from).AddDays(-1), DateOnly.FromDateTime(to));
-        var shifts = await _db.Shifts.IgnoreQueryFilters()
+        var shifts = await _db.Shifts.IgnoreQueryFilters([TenantFilter.Name])
             .Where(s => s.TenantId == inquiry.TenantId && s.UserId == staff.Id && s.Status != ShiftStatus.Cancelled && s.ServiceDate >= firstDay && s.ServiceDate <= lastDay)
             .ToListAsync(ct);
         var shift = shifts.Select(ProviderLocalTime.RosteredWindowLocal).Where(w => w.StartLocal < to && from < w.EndLocal).OrderBy(w => w.StartLocal).FirstOrDefault();
         if (shift != default) return $"{staff.FullName} is on a shift {IntakeWording.Span(shift.StartLocal, shift.EndLocal)} on {IntakeWording.ShortDay(shift.StartLocal)}.";
 
         // A visit is at most 8 hours long (Set's own limit), so one that overlaps began less than 8 hours before this one. The overlap is worked out here, not in SQL.
-        var visits = await _db.ParticipantInquiries.IgnoreQueryFilters()
+        var visits = await _db.ParticipantInquiries.IgnoreQueryFilters([TenantFilter.Name])
             .Where(x => x.TenantId == inquiry.TenantId && x.Id != inquiry.Id && x.IntakeStaffUserId == staff.Id && x.IntakeStartsAt > startUtc.AddMinutes(-480) && x.IntakeStartsAt < endUtc)
             .Select(x => new { x.IntakeStartsAt, x.IntakeDurationMinutes }).ToListAsync(ct);
         var visit = visits.Select(v => (Start: ProviderLocalTime.AsUtc(v.IntakeStartsAt!.Value), End: ProviderLocalTime.AsUtc(v.IntakeStartsAt!.Value).AddMinutes(v.IntakeDurationMinutes ?? DefaultDuration)))

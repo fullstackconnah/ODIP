@@ -33,13 +33,13 @@ public static class RestrictivePracticeBackfill
 
         foreach (var sp in legacyProfiles)
         {
-            var alreadyBackfilled = await db.RestrictivePractices.IgnoreQueryFilters().AnyAsync(
+            var alreadyBackfilled = await db.RestrictivePractices.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(
                 rp => rp.ParticipantId == sp.ParticipantId
                       && rp.Type == RestrictivePracticeType.Unclassified
                       && rp.Description == sp.RestrictivePracticeDetails, ct);
             if (alreadyBackfilled) continue;
 
-            var participant = await db.Participants.IgnoreQueryFilters()
+            var participant = await db.Participants.IgnoreQueryFilters([TenantFilter.Name])
                 .FirstOrDefaultAsync(p => p.Id == sp.ParticipantId, ct);
             if (participant == null) continue;
 
@@ -54,13 +54,13 @@ public static class RestrictivePracticeBackfill
             });
         }
 
-        var chemicalRestraintMeds = await db.ParticipantMedications.IgnoreQueryFilters()
+        var chemicalRestraintMeds = await db.ParticipantMedications.IgnoreQueryFilters([TenantFilter.Name])
             .Where(m => m.IsChemicalRestraint)
             .ToListAsync(ct);
 
         foreach (var m in chemicalRestraintMeds)
         {
-            var alreadyBackfilled = await db.RestrictivePractices.IgnoreQueryFilters().AnyAsync(
+            var alreadyBackfilled = await db.RestrictivePractices.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(
                 rp => rp.RelatedMedicationId == m.Id && rp.Type == RestrictivePracticeType.ChemicalRestraint, ct);
             if (alreadyBackfilled) continue;
 
