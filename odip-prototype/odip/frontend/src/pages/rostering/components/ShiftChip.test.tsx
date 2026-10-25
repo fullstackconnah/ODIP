@@ -1033,3 +1033,73 @@ describe('ShiftChip: the regular (2026-10-16)', () => {
     expect(within(flag).getByText('Regular away')).toHaveClass('hidden', '@[15rem]:inline')
   })
 })
+
+describe('ShiftChip Draft: tinted, worded, and publishable from its menu (card roster-draft-publish)', () => {
+  const draft = makeShift({ status: 'Draft', staffId: 'staff-1', staffName: 'Kim Lee' })
+  const chipIn = (shift: ShiftDto, state: Partial<DropState> = {}, extra: Partial<ShiftChipProps> = {}) => {
+    const publish = vi.fn()
+    renderChip(
+      <DropStateContext.Provider value={{ disabled: false, pending: null, publish, ...state }}>
+        <ShiftChip shift={shift} canWrite context="participant" onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} {...extra} />
+      </DropStateContext.Provider>,
+    )
+    return publish
+  }
+  const openMenu = (user: ReturnType<typeof userEvent.setup>) => user.click(screen.getByRole('button', { name: /^Actions for/ }))
+
+  it('a Draft chip is tinted warning and shows the word Draft; a Published one has neither', () => {
+    const { container, rerender } = renderChip(<ShiftChip shift={draft} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+    const tray = container.querySelector('[data-shift-chip]')!
+    expect(tray).toHaveClass('bg-[var(--color-warning-container)]')
+    expect(tray).not.toHaveClass('bg-surface-container-low')
+    expect(within(tray as HTMLElement).getByText('Draft')).toBeInTheDocument()
+    expect(getOpenButton(draft).getAttribute('aria-label')).toMatch(/Draft$/)
+    rerender(<MemoryRouter><ShiftChip shift={{ ...draft, status: 'Published' }} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} /></MemoryRouter>)
+    expect(tray).not.toHaveClass('bg-[var(--color-warning-container)]')
+    expect(within(tray as HTMLElement).queryByText('Draft')).not.toBeInTheDocument()
+  })
+
+  it('a Draft chip keeps its problem signals: the severity marker, and the dashed box of an open shift', () => {
+    const open = makeUnfilledShift({ status: 'Draft', findings: [makeFinding({ severity: 'Blocking' })] })
+    const { container } = renderChip(<ShiftChip shift={open} canWrite dashed onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+    expect(screen.getByRole('img', { name: /1 blocking issue/ })).toBeInTheDocument()
+    expect(container.querySelector('[data-shift-box]')).toHaveClass('border-dashed', 'bg-card')
+  })
+
+  it('the menu offers Publish on a Draft shift (after Edit), and not on a Published one', async () => {
+    const user = userEvent.setup()
+    chipIn(draft)
+    await openMenu(user)
+    expect(screen.getAllByRole('option').map(o => o.textContent)).toEqual(['Edit', 'Publish', 'Replace Kim…', 'Remove Kim', 'Delete'])
+    cleanup()
+    chipIn({ ...draft, status: 'Published' })
+    await openMenu(user)
+    expect(screen.queryByRole('option', { name: 'Publish' })).not.toBeInTheDocument()
+  })
+
+  it('no Publish where the page offers none (a reader, or outside the board)', async () => {
+    const user = userEvent.setup()
+    chipIn(draft, { publish: undefined })
+    await openMenu(user)
+    expect(screen.queryByRole('option', { name: 'Publish' })).not.toBeInTheDocument()
+  })
+
+  it('choosing Publish hands the shift to the page once', async () => {
+    const user = userEvent.setup()
+    const publish = chipIn(draft)
+    await openMenu(user)
+    await user.click(screen.getByRole('option', { name: 'Publish' }))
+    expect(publish).toHaveBeenCalledTimes(1)
+    expect(publish).toHaveBeenCalledWith(draft)
+  })
+
+  it('while its publish is out the item reads Publishing… and cannot be chosen', async () => {
+    const user = userEvent.setup()
+    const publish = chipIn(draft, { publishingIds: new Set([draft.id]) })
+    await openMenu(user)
+    const item = screen.getByRole('option', { name: 'Publishing…' })
+    expect(item).toHaveAttribute('aria-disabled', 'true')
+    await user.click(item)
+    expect(publish).not.toHaveBeenCalled()
+  })
+})

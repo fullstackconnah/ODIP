@@ -83,7 +83,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
   const onLeaveTitle = `${shift.staffName} has approved leave covering this shift — this slot needs a new assignee.`
 
   // Roster drag and drop: the grip lifts this shift's person; the chip is a drop target, locked ones included, so a drag over one can say why it is refused.
-  const { disabled: dragsOff, pending, pick, swap, pickingId } = useContext(DropStateContext)
+  const { disabled: dragsOff, pending, pick, swap, pickingId, publish, publishingIds } = useContext(DropStateContext)
   const locked = isLockedShift(shift)
   const canLift = draggable && canWrite && isFilled && !locked
   const carry: DragCarry = { staffId: shift.staffId ?? '', staffName: shift.staffName ?? '', fromShift: shift }
@@ -109,6 +109,10 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
   // The accessible name and the hover title end with the shift's state (the brief, section 8): Draft or Published, or why it is locked.
   const statusWords = locked ? lockTitle : shift.status
 
+  // Draft (card roster-draft-publish): the tray takes the warning tint and says the word where it fits, so an unpublished shift stands out. Only the tray tints: the box keeps the card fill, so a problem's dashed edge, its marker and the name read as on any chip.
+  const isDraft = shift.status === 'Draft'
+  const publishing = publishingIds?.has(shift.id) ?? false
+
   // Budget phase 3: a shift saved past its budget on purpose carries a marker, read from the codes the SERVER stored (never from the reason's words). It stands in for the generic override mark: one shield, not two.
   const budgetMarker = markerForAcknowledgedCodes(shift.acknowledgedFindingCodes)
   const budgetReviewWords = budgetMarker === 'emergency' ? (shift.budgetReview?.state === 'Reviewed' ? 'Reviewed' : 'Admin review pending') : null
@@ -133,6 +137,8 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
 
   const menuItems = [
     { value: 'edit', label: 'Edit' },
+    // Publish (card roster-draft-publish): a Draft shift, for the writers the menu is already for. It waits while its own write is out.
+    ...(isDraft && publish ? [{ value: 'publish', label: publishing ? 'Publishing…' : 'Publish', disabled: publishing }] : []),
     // The owner's words (the brief, section 5): Replace and Remove name the person, which keeps Remove apart from Delete and says who is meant in the Staff view.
     { value: 'assign', label: dashed || !shift.staffId ? 'Assign to…' : `Replace ${firstName(shift.staffName)}…`, disabled: canPick && dragsOff },
     // Swap (the lead's decision 1): an assigned, unlocked chip, wherever the page can open the swap picker. It waits while a write is out, as every drag and plus does.
@@ -145,6 +151,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
 
   function handleMenuSelect(value: string) {
     if (value === 'edit') onOpen(shift)
+    else if (value === 'publish') publish?.(shift)
     // An unfilled chip assigns through the picker, as its plus does: one way to assign on one chip (SHAPE departure 13). A filled chip's "Replace {first name}…" keeps the panel.
     else if (value === 'assign') { if (!canPick) onAssignTo(shift); else if (!dragsOff) pick?.(shift) }
     else if (value === 'swap') { if (!dragsOff) swap?.(shift) }
@@ -240,7 +247,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
       // The tray: the header row over the --control-h box row; a marked chip adds one row for its marker words.
       // Three columns, lead, name and menu. The open control and its box share the rows and columns (subgrid), so the grip, plus and menu still sit in the box's cells.
       // A 2px pad and a 2px row gap make 56px with a mouse and 68px under a coarse pointer; a marked chip grows only for its marker line.
-      className={`group @container relative grid grid-cols-[auto_minmax(0,1fr)_auto] ${markedChip ? 'grid-rows-[auto_var(--control-h)_auto]' : 'grid-rows-[auto_var(--control-h)]'} gap-y-0.5 rounded-sm border border-border bg-surface-container-low p-0.5 text-[13px] transition-opacity duration-150 ${
+      className={`group @container relative grid grid-cols-[auto_minmax(0,1fr)_auto] ${markedChip ? 'grid-rows-[auto_var(--control-h)_auto]' : 'grid-rows-[auto_var(--control-h)]'} gap-y-0.5 rounded-sm border border-border ${isDraft ? 'bg-[var(--color-warning-container)]' : 'bg-surface-container-low'} p-0.5 text-[13px] transition-opacity duration-150 ${
         isDragging || fading ? 'opacity-50' : ''
       } ${overKind === 'locked' ? 'cursor-not-allowed' : ''} ${hasFindings || budgetMarker ? 'my-2' : ''}`}
     >
@@ -328,6 +335,8 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
               that wraps, with a zero-width first item holding that line, so anything that does not fit wraps onto the hidden second line (ReadinessNote's technique). */}
           <span className="flex h-4 min-w-0 flex-1 flex-wrap items-center justify-end gap-y-4 overflow-hidden text-muted-foreground" title={source.title} data-shift-source={source.kind}>
             <span className="h-4 w-0" aria-hidden="true" />
+            {/* Draft leads the kind, so on a narrow chip the kind's word goes first, then its glyph, then this: the tint is the cue that is never dropped. */}
+            {isDraft && <span className="shrink-0 pr-1 font-semibold text-[var(--color-on-warning-container)]">Draft</span>}
             <SourceIcon className="h-3 w-3 shrink-0" aria-hidden="true" />
             <span className="shrink-0 pl-0.5">{source.word}</span>
           </span>

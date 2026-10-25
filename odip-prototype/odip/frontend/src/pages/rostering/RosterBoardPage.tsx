@@ -20,7 +20,7 @@ import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/lib/utils'
 import { apiErrorCode, apiErrorStatus } from '@/lib/shiftPackageErrors'
 import { plural } from '@/lib/format'
-import { useRosterBoard, useAssignShift, useMoveStaff, usePublishWeek, useStartWeek, useSetRegular, useDeleteShift, useParticipants, useStaff, getRosterFindings } from '@/api/hooks'
+import { useRosterBoard, useAssignShift, useMoveStaff, usePublishWeek, useStartWeek, useSetRegular, useUpdateShift, useDeleteShift, useParticipants, useStaff, getRosterFindings } from '@/api/hooks'
 import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
 import type { ShiftDto, RosterFindingDto, MoveStaffMode, StartWeekResultDto } from '@/api/types'
 import {
@@ -31,7 +31,7 @@ import { BOARD_REFRESHED, isBoardChanged } from './lib/boardChanged'
 import { weekStartOf, weekStartFromDateParam, shiftWeek, daysOfWeek, isUnfilledShift, formatWeekSpan, allBoardShifts } from './lib/roster'
 import { useBoardViewMode } from './lib/useBoardViewMode'
 import {
-  DropStateContext, ROSTER_SCREEN_READER_INSTRUCTIONS, assignedSentence, dropOutcome, movedSentence, publishWeekMessage, publishedSentence, replacePromptLines, rosterAnnouncements,
+  DropStateContext, ROSTER_SCREEN_READER_INSTRUCTIONS, assignedSentence, dropOutcome, movedSentence, publishWeekMessage, publishedShiftSentence, publishedSentence, replacePromptLines, rosterAnnouncements,
   rosterCollision, staffWeekHours, swappedSentence, keepInWindow, isLockedShift, leaveFromStaffRows, type DragCarry, type DropTarget, type PendingDrop, type PickRow,
 } from './lib/rosterDrag'
 import {
@@ -154,6 +154,7 @@ export default function RosterBoardPage() {
   const { data: participants = [] } = useParticipants(CAN_RECEIVE_SERVICES)
   const { data: staff = [], isLoading: staffLoading } = useStaff()
   const assignShift = useAssignShift()
+  const updateShift = useUpdateShift()
   const moveStaff = useMoveStaff()
   const belowMd = useIsBelowMd()
   const deleteShift = useDeleteShift()
@@ -390,6 +391,34 @@ export default function RosterBoardPage() {
   function performAssign(shift: ShiftDto, staffId: string | null) {
     return runRosterWrite((overrideReason, acknowledgedFindingCodes) =>
       assignShift.mutateAsync({ id: shift.id, data: { staffId, overrideReason, acknowledgedFindingCodes } }))
+  }
+
+  // Publish one shift from its chip menu: the slide-over's own request (PUT the shift as it is, status Published), so the same server rules answer. The ref guards a second press in the render before the state lands.
+  const publishesInFlight = useRef(new Set<string>())
+  const [publishingIds, setPublishingIds] = useState<ReadonlySet<string>>(new Set())
+  async function publishShift(shift: ShiftDto) {
+    if (publishesInFlight.current.has(shift.id)) return
+    publishesInFlight.current.add(shift.id)
+    setPublishingIds(new Set(publishesInFlight.current))
+    setAssignError(null)
+    try {
+      await updateShift.mutateAsync({
+        id: shift.id,
+        data: {
+          participantId: shift.participantId, staffId: shift.staffId ?? null, serviceDate: shift.serviceDate, startTime: shift.startTime.slice(0, 5), endTime: shift.endTime.slice(0, 5),
+          endsNextDay: shift.endsNextDay, ratio: shift.ratio, nightType: shift.nightType, status: 'Published', notes: shift.notes, overrideReason: shift.overrideReason,
+          acknowledgedFindingCodes: shift.acknowledgedFindingCodes ?? [],
+        },
+      })
+      setAnnouncement(publishedShiftSentence(shift))
+    } catch (err: unknown) {
+      // The shift stays a Draft. A refusal over findings is the panel's to answer (reasons, overrides), so it points there.
+      if (getRosterFindings(err)) setAssignError({ message: 'Open the shift to see what needs fixing, then publish it from there.', boardChanged: false })
+      else showWriteError(err, 'Something went wrong publishing this shift. Please try again.')
+    } finally {
+      publishesInFlight.current.delete(shift.id)
+      setPublishingIds(new Set(publishesInFlight.current))
+    }
   }
 
   /** A drop's write: the pending look on its shifts while it is out (every drag waits), and the sentence a screen reader hears once it lands, a retry included. */
@@ -757,7 +786,7 @@ export default function RosterBoardPage() {
         </div>
       ) : (
         // In every mode, not only while drag is on: the plus, and a pick's pending look, reach phones and the Staff view too (SHAPE departure 15). The DndContext stays drag-only.
-        <DropStateContext.Provider value={{ disabled: dragsOff, pending: dropPending, pick: canWrite ? togglePicker : undefined, swap: canWrite ? openSwap : undefined, pickingId: pickerShift?.id ?? swapShift?.id ?? null }}>
+        <DropStateContext.Provider value={{ disabled: dragsOff, pending: dropPending, pick: canWrite ? togglePicker : undefined, swap: canWrite ? openSwap : undefined, publish: canWrite ? publishShift : undefined, publishingIds, pickingId: pickerShift?.id ?? swapShift?.id ?? null }}>
           {dragOn ? (
             <DndContext
               sensors={sensors}

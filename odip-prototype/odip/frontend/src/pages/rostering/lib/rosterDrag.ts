@@ -32,7 +32,7 @@ export type PendingDrop = { targetId: string; sourceId?: string; staffName: stri
  * `pick` opens the staff picker for a Needs staff shift: the chip's plus, and its menu's "Assign to…" (spec 2026-10-15). `swap` opens the swap picker for an assigned shift: its menu's
  * "Swap with…" (the lead's decision 1, 2026-10-15). `pickingId` is the shift whose picker, either one, is open; the chip rings it.
  */
-export type DropState = { disabled: boolean; pending: PendingDrop | null; pick?: (shift: ShiftDto) => void; swap?: (shift: ShiftDto) => void; pickingId?: string | null }
+export type DropState = { disabled: boolean; pending: PendingDrop | null; pick?: (shift: ShiftDto) => void; swap?: (shift: ShiftDto) => void; pickingId?: string | null; /** The chip menu's Publish (a writer, one Draft shift) and the shifts whose publish is out. */ publish?: (shift: ShiftDto) => void; publishingIds?: ReadonlySet<string> }
 
 /** Shared by the page with the strip and every puck, so neither is threaded through the grid's rows. Outside a provider nothing is disabled or pending, and no chip has a plus. */
 export const DropStateContext = createContext<DropState>({ disabled: false, pending: null })
@@ -208,6 +208,11 @@ export function movedSentence(carry: DragCarry, to: ShiftDto): string {
 export function swappedSentence(carry: DragCarry, to: ShiftDto): string {
   const from = carry.fromShift
   return `Swapped: ${firstName(carry.staffName)} is on ${shiftSpeech(to)}${from ? ` and ${firstName(to.staffName)} on ${shiftSpeech(from)}` : ''}.`
+}
+
+/** "Published Mia Chen, Tuesday 9am to 3pm. Sam has been notified." (the last sentence only when someone is on the shift) */
+export function publishedShiftSentence(shift: ShiftDto): string {
+  return `Published ${shiftSpeech(shift)}.${shift.staffName ? ` ${firstName(shift.staffName)} has been notified.` : ''}`
 }
 
 /** "Published 14 shifts. 9 people notified." and, when a blocking problem kept some back (gap 2), how many stayed in draft. */
