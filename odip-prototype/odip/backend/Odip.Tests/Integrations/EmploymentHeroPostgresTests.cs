@@ -346,9 +346,9 @@ public class EmploymentHeroPostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal(1, eh.Requests.Count(r => r.Method == HttpMethod.Post && r.RequestUri!.AbsolutePath == EhLeaveFixture.Requests42));
     }
 
-    private static StubHttpHandler EhHolding(string fromDate, string toDate, string? notes) =>
+    private static StubHttpHandler EhHolding(string fromDate, string toDate, string? notes, string status = "Approved") =>
         EhLeaveFixture.Eh().OnAnyQuery("/api/v2/business/777/leaverequest", HttpStatusCode.OK,
-            new[] { new { id = 9001, employeeId = 42, leaveCategoryId = 5, fromDate, toDate, status = "Approved", notes } });
+            new[] { new { id = 9001, employeeId = 42, leaveCategoryId = 5, fromDate, toDate, status, notes } });
 
     [SkippableFact]
     public async Task A_pull_and_a_drain_on_one_EH_leave_keep_one_row_on_Postgres()
@@ -381,12 +381,12 @@ public class EmploymentHeroPostgresTests : IClassFixture<PostgresFixture>
         var leave = await SeedLeaveAsync(db1, tenantId);   // db1 still tracks it with no EH id
         await using var db2 = PostgresFixture.NewContext(_pg.ConnectionString!, ImportTestSupport.Tenant(tenantId));
         await db2.LeaveRequests.Where(l => l.Id == leave.Id).ExecuteUpdateAsync(s => s.SetProperty(l => l.ExternalLeaveId, "9001"));
-        var eh = EhHolding(leave.StartDate.ToString("yyyy-MM-dd") + "T00:00:00", leave.EndDate.ToString("yyyy-MM-dd") + "T00:00:00", EmploymentHeroLeave.Marker(leave.Id));
+        var eh = EhHolding(leave.StartDate.ToString("yyyy-MM-dd") + "T00:00:00", leave.EndDate.ToString("yyyy-MM-dd") + "T00:00:00", EmploymentHeroLeave.Marker(leave.Id), "Cancelled");
 
         await LeaveSync(eh).RunAsync(db1, tenantId, true, CancellationToken.None);
 
         var all = await db1.LeaveRequests.AsNoTracking().ToListAsync();
-        Assert.Equal(("9001", LeaveSource.Odip), (Assert.Single(all).ExternalLeaveId, all[0].Source));
+        Assert.Equal(("9001", LeaveSource.Odip, LeaveStatus.Cancelled), (Assert.Single(all).ExternalLeaveId, all[0].Source, all[0].Status));
     }
 
     [SkippableFact]
