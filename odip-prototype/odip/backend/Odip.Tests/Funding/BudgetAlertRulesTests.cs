@@ -356,4 +356,48 @@ public class BudgetAlertRulesTests
         }
         finally { System.Globalization.CultureInfo.CurrentCulture = previous; }
     }
+
+    // ── Pace ────────────────────────────────────────────────────────────────
+
+    private static readonly DateOnly PaceToday = new(2026, 11, 4);   // 34 days into the quarter's 92
+
+    private static ParticipantLedger LedgerOn(DateOnly today, FundingPlan plan, params LedgerItem[] items) =>
+        new(plan.ParticipantId, "Sophie Brown", today, "Australia/Sydney", 80, BudgetLedgerCalculator.Compute(plan, today, 80, items), items);
+
+    [Fact]
+    public void Pace_IsAWarning_ForAnOnTrackPool_WithNoMoneyInIt()
+    {
+        var alert = Assert.Single(AlertsOf(LedgerOn(PaceToday, CorePlan(), Cost(LedgerGroup.Claimed, 4000m))));
+
+        Assert.Equal("budget-pace", alert.Type);
+        Assert.Equal(AlertSeverity.Warning, alert.Severity);
+        Assert.Equal("Core is spending faster than its period allows: at this rate it runs out around 8 Dec 2026, before the period ends on 31 Dec 2026", alert.Message);
+        Assert.Equal("funding", alert.DeepLinkTab);
+        Assert.DoesNotContain("$", alert.Message);
+    }
+
+    [Fact]
+    public void Pace_IsSilentWhenTheCostIsNotFastEnough_OrBeforeAQuarterOfThePeriodHasGone()
+    {
+        Assert.Empty(AlertsOf(LedgerOn(PaceToday, CorePlan(), Cost(LedgerGroup.Claimed, 2000m))));
+        Assert.Empty(AlertsOf(LedgerOn(new DateOnly(2026, 10, 23), CorePlan(), Cost(LedgerGroup.Claimed, 4000m))));
+    }
+
+    [Fact]
+    public void AnApproachingPool_KeepsItsOwnAlert_AndGetsNoPaceAlert()
+    {
+        var alert = Assert.Single(AlertsOf(LedgerOn(PaceToday, CorePlan(), Cost(LedgerGroup.Claimed, 6560m))));
+
+        Assert.Equal("budget-approaching", alert.Type);
+    }
+
+    [Fact]
+    public void AnOverOrForecastOverPool_GetsItsOwnAlertOnly()
+    {
+        var over = Assert.Single(AlertsOf(LedgerOn(PaceToday, CorePlan(), Cost(LedgerGroup.Claimed, 8200m))));
+        var forecast = Assert.Single(AlertsOf(LedgerOn(PaceToday, CorePlan(), Cost(LedgerGroup.Claimed, 4000m), Cost(LedgerGroup.BookedAhead, 4500m, new DateOnly(2026, 11, 20)))));
+
+        Assert.Equal("budget-over", over.Type);
+        Assert.Equal("budget-forecast-over", forecast.Type);
+    }
 }

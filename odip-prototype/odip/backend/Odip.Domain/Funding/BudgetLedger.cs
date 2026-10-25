@@ -82,7 +82,13 @@ public sealed record PeriodLedger(
     public decimal Available => Limit + Carried;
     public decimal Used => Claimed + Pending;
     public decimal Forecast => Used + BookedAhead;
+
+    /// <summary>The pace warning for this period as of <paramref name="today"/> (see <see cref="BudgetLedgerCalculator.PaceOf"/>); a method, so the positional order above is untouched.</summary>
+    public PaceWarning? PaceAt(DateOnly today) => BudgetLedgerCalculator.PaceOf(Status, Period.PeriodStart, Period.PeriodEnd, today, Available, Used);
 }
+
+/// <summary>The date the money runs out at the pace so far, for a period on course to run out before it ends. Never stored and never a <see cref="BudgetStatus"/>: display paths read it, the roster gate does not.</summary>
+public sealed record PaceWarning(DateOnly RunsOutOn);
 
 /// <summary>
 /// The same sums over a whole pool: every period's limit, claimed, pending and booked ahead, against the sum of the limits. Nothing carries: it is movement inside the pool.
@@ -137,6 +143,27 @@ public static class BudgetLedgerCalculator
         if (forecast > available) return BudgetStatus.ForecastOver;
         if (available > 0 && used * 100m >= approachingPercent * available) return BudgetStatus.Approaching;
         return BudgetStatus.OnTrack;
+    }
+
+    /// <summary>The share of the period that must have passed before a pace warning shows: the owner's guard against thin data. A constant, not a setting.</summary>
+    public const int PaceMinimumElapsedPercent = 25;
+
+    /// <summary>
+    /// The pace warning: at the rate of spending so far (used over the days elapsed, today not counted) the money runs out before the period ends. Only for On track and Approaching (a worse or
+    /// different warning already applies), only inside the period, and only once <see cref="PaceMinimumElapsedPercent"/> of it has passed. Whole calendar days (DayNumber, never TimeSpan, so a
+    /// clock change cannot move a count) and exact decimals. A shortfall that only bites on the last day is no warning: the copy says "before the period ends".
+    /// </summary>
+    public static PaceWarning? PaceOf(BudgetStatus status, DateOnly periodStart, DateOnly periodEnd, DateOnly today, decimal available, decimal used)
+    {
+        if (status is not (BudgetStatus.OnTrack or BudgetStatus.Approaching)) return null;
+        if (today < periodStart || today > periodEnd) return null;
+        var periodDays = periodEnd.DayNumber - periodStart.DayNumber + 1;
+        var elapsed = today.DayNumber - periodStart.DayNumber;
+        if (elapsed * 100 < periodDays * PaceMinimumElapsedPercent) return null;
+        if (used <= 0m || available <= 0m) return null;
+        if (used * periodDays / elapsed <= available) return null;
+        var runsOutOn = periodStart.AddDays((int)decimal.Floor(available * elapsed / used));
+        return runsOutOn >= periodEnd ? null : new PaceWarning(runsOutOn);
     }
 
     /// <summary>The pool an item of this category and management type belongs to in the plan, or null when the plan records none.</summary>
