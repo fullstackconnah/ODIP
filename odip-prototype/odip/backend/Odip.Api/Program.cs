@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Odip.Api.Middleware;
 using Odip.Api.RateLimiting;
 using Odip.Api.Services;
 using Odip.Domain.Interfaces;
@@ -41,9 +42,11 @@ if (args.Contains("--seed-demo-participant-fixtures"))
 // referenced from Program.cs, so no audit rows were ever written.
 builder.Services.AddScoped<Odip.Infrastructure.Audit.AuditInterceptor>();
 
+builder.Services.AddRequestTiming();
 builder.Services.AddDbContext<OdipDbContext>((sp, options) =>
     options.UseNpgsql(connectionString)
-        .AddInterceptors(sp.GetRequiredService<Odip.Infrastructure.Audit.AuditInterceptor>()));
+        .AddInterceptors(sp.GetRequiredService<Odip.Infrastructure.Audit.AuditInterceptor>(),
+            sp.GetRequiredService<Odip.Api.Middleware.DbCommandCountInterceptor>()));
 
 // ── JWT Authentication ───────────────────────────────────────
 var jwtSecret = builder.Configuration["Jwt:Secret"];
@@ -602,6 +605,10 @@ app.Use(async (context, next) =>
     context.Response.Headers["Pragma"] = "no-cache";
     await next();
 });
+
+// Timing only observes: it sits outside exception handling, the rate limiter and auth so it logs the final status (429, 401, 403
+// included) without changing what any of them do. Implicit routing runs first, so the endpoint's route template is already known.
+app.UseMiddleware<Odip.Api.Middleware.RequestTimingMiddleware>();
 
 app.UseMiddleware<Odip.Api.Middleware.ExceptionHandlingMiddleware>();
 

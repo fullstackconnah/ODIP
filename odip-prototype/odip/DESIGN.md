@@ -377,7 +377,7 @@ display size is added. The title is still the page's single `<h1>`, from `PageHe
 
 ## Layout
 
-A fixed 232px desktop sidebar (from `lg`) plus a fluid content column under a 48px sticky header;
+A fixed desktop sidebar (from `lg`; 232px, or a 64px icon rail the user can switch to, remembered per device) plus a fluid content column under a 48px sticky header;
 below `lg` the sidebar becomes a slide-over menu and a bottom bar carries primary navigation. The main
 column has `--gutter` side padding (20px fine, 16px coarse), a 16px top pad, and `--section-gap`
 (16px fine, 20px coarse) between stacked blocks.
@@ -594,6 +594,7 @@ tone's ink, a 20px circle with a 14px icon), so a problem is louder than the wai
   sends them there) and sees only that, Trips (All Trips, Schedule), Participants (Participants, Medications), Tasks and Incidents.
   ReadOnly is not offered what its API refuses: the five Rostering pages, Budgets, Caregiver forms and Settings. A group left with one
   visible page is drawn as that page, and one with none is not drawn.
+- **Icon rail (from `lg`):** the button at the foot of the sidebar, under Sign out, collapses it to 64px and back (200ms `cubic-bezier(0.2,0,0,1)`, instant under reduced motion; saved as `sidebarCollapsed` with the other per-user display choices). The brand becomes the "b" tile; every item is a 40px square (44px on touch) holding its icon, with the count on the icon as on the bottom bar. A group opens a flyout of its pages beside the rail (a disclosure, one at a time, closed by Escape, a click outside or choosing a page); labels show as a tooltip after 500ms on a mouse, at once on keyboard focus, never on touch. The rail nav hides its scrollbar on purpose; it still scrolls by wheel, touch and keyboard. "Other workspaces" uses the `apps` icon. The toggle is named for what it does ("Collapse sidebar" / "Expand sidebar"), has no keyboard shortcut, and is absent below `lg`, where the drawer always keeps wide rows.
 - **Sidebar:** 232px, Sidebar Grey (`#f5f3ef`) surface, 12px padding, 48px brand block, and the nav
   straight under it: there is no call-to-action slot, and no create shortcut anywhere in the shell (a trip
   is created from the "New Trip" Button in the Trips page header). Items are 32px tall, `rounded-md` (not
