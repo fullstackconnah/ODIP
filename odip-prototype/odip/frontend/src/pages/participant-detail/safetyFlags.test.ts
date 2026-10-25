@@ -14,6 +14,16 @@ describe('safetyFlags', () => {
     expect(labels({ ...all, isAnaphylaxisRisk: false })).toEqual(['Allergies', 'Choking risk', 'Falls risk: High', 'Behaviour risk: Critical', 'Restrictive practices'])
   })
 
+  it('shows the allergen on the Anaphylaxis flag, since Allergies is hidden then', () => {
+    expect(safetyFlags(all)[0].detail).toBe('Peanuts')
+    expect(safetyFlags({ ...all, allergiesDetail: '  Peanuts ' })[0].detail).toBe('Peanuts')
+  })
+
+  it('falls back to a plain line on the Anaphylaxis flag when allergies are blank or "Nil"', () => {
+    expect(safetyFlags({ ...all, allergiesDetail: '' })[0].detail).toBe('Anaphylaxis risk recorded')
+    expect(safetyFlags({ ...all, allergiesDetail: 'Nil' })[0].detail).toBe('Anaphylaxis risk recorded')
+  })
+
   it('flags High as negative and Critical as danger, and never Low or Medium', () => {
     const tones = Object.fromEntries(safetyFlags(all).map(f => [f.key, f.tone]))
     expect(tones.falls).toBe('negative')

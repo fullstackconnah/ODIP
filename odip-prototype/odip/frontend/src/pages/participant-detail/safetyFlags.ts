@@ -21,7 +21,7 @@ type Source = Pick<ParticipantDetailDto, 'isAnaphylaxisRisk' | 'allergiesDetail'
 export function safetyFlags(p: Source): SafetyFlag[] {
   const flags: SafetyFlag[] = []
   if (p.isAnaphylaxisRisk === true) {
-    flags.push({ key: 'anaphylaxis', label: 'Anaphylaxis risk', tone: 'danger', tab: 'health', hash: 'medical', section: 'Medical', detail: 'Anaphylaxis risk recorded' })
+    flags.push({ key: 'anaphylaxis', label: 'Anaphylaxis risk', tone: 'danger', tab: 'health', hash: 'medical', section: 'Medical', detail: meansNothing(p.allergiesDetail) ? 'Anaphylaxis risk recorded' : p.allergiesDetail!.trim() })
   } else if (!meansNothing(p.allergiesDetail)) {
     flags.push({ key: 'allergies', label: 'Allergies', tone: 'warning', tab: 'health', hash: 'medical', section: 'Medical', detail: p.allergiesDetail!.trim() })
   }
