@@ -32,7 +32,7 @@ production keeps them off.
 
 ## Run locally on a machine without a container runtime
 
-You need .NET 8 SDK, Node 20+, and a PostgreSQL 16 server (a portable zip is enough). All paths below are from
+You need .NET 10 SDK, Node 20+, and a PostgreSQL 16 server (a portable zip is enough). All paths below are from
 `odip-prototype/odip`. Pick free ports first (netstat) - the examples use 55436 (PostgreSQL), 5000 (API), 8475 (web).
 
 1. PostgreSQL: `initdb -D <dir> -U postgres -A trust -E UTF8`, then

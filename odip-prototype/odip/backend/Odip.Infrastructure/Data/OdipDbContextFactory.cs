@@ -13,6 +13,9 @@ public class OdipDbContextFactory : IDesignTimeDbContextFactory<OdipDbContext>
 {
     public OdipDbContext CreateDbContext(string[] args)
     {
+        // Design-time model must match the runtime mapping (Program.cs); without it EF 10 tooling sees every DateTime as timestamptz.
+        AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+
         var optionsBuilder = new DbContextOptionsBuilder<OdipDbContext>();
 
         var connectionString =

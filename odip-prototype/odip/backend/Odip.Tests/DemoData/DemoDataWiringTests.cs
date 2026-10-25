@@ -80,6 +80,7 @@ public class DemoDataWiringTests
         var service = new DemoDataHostedService(factory, MaintainerFor(new DemoDataOptions()), new DemoDataOptions(), new CapturingLogger<DemoDataHostedService>());
 
         await service.StartAsync(CancellationToken.None);
+        if (service.ExecuteTask is { } executing) await executing;   // .NET 10 runs ExecuteAsync off the caller's thread
 
         Assert.True(service.ExecuteTask is null || service.ExecuteTask.IsCompletedSuccessfully);
         Assert.Equal(0, factory.Created);
@@ -115,6 +116,8 @@ public class DemoDataWiringTests
         var service = new DemoDataHostedService(new ThrowingScopeFactory(), MaintainerFor(options), options, log);
 
         await service.StartAsync(CancellationToken.None);
+        // .NET 10 runs ExecuteAsync off the caller's thread: wait for the startup line (and the warning beside it) before stopping.
+        Assert.True(SpinWait.SpinUntil(() => log.Entries.Count >= (options.Warning is null ? 1 : 2), TimeSpan.FromSeconds(10)));
         await service.StopAsync(CancellationToken.None);
         return log.Entries;
     }

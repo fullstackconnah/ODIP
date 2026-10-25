@@ -145,6 +145,7 @@ public class DemoRunbookTests
         var service = new DemoDataHostedService(Mock.Of<IServiceScopeFactory>(), maintainer, options, log);
 
         await service.StartAsync(CancellationToken.None);
+        Assert.True(SpinWait.SpinUntil(() => log.Entries.Count >= 2, TimeSpan.FromSeconds(10)));   // .NET 10 runs ExecuteAsync off the caller's thread
         await service.StopAsync(CancellationToken.None);
 
         var startup = Assert.Single(log.Entries, e => e.Level == LogLevel.Information).Message;

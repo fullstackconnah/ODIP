@@ -68,7 +68,7 @@ supporting tooling all live nested two levels down, inside `odip-prototype/odip/
 ├── _to_delete/                    # legacy docs staged for deletion — ignore
 ├── odip-prototype.zip             # duplicate of tree below — NEVER search/index it
 └── odip-prototype/odip/           # ACTUAL APPLICATION ROOT
-    ├── backend/                   # .NET 8: Odip.sln → Odip.{Api,Application,Domain,Infrastructure,Tests}
+    ├── backend/                   # .NET 10: Odip.sln → Odip.{Api,Application,Domain,Infrastructure,Tests}
     ├── frontend/                  # React 19 + TypeScript 5.9 + Vite 7 + Tailwind 4
     ├── mock-api/server.js         # Node mock API for offline frontend preview
     ├── local-test/                # fake Firebase SA + JWT minting; run-api.ps1 starts the API on :5100
@@ -81,7 +81,7 @@ not this directory — run `git` commands from there.
 
 ## Commands
 
-The backend is a standard .NET 8 solution; run these from `odip-prototype/odip/backend`:
+The backend is a standard .NET 10 solution; run these from `odip-prototype/odip/backend`:
 ```
 dotnet restore
 dotnet build
@@ -211,7 +211,7 @@ npm run lint
   copy it blindly and every API call fails.
 
 - The backend `Dockerfile` builds and runs on .NET 9.0 images even though every project targets
-  net8.0, and serves on container-internal port 5000 — don't "fix" local ports to match it.
+  net10.0, and serves on container-internal port 5000 — don't "fix" local ports to match it.
 
 - Outside Development, the API sets a strict CSP (`connect-src` allows only self plus the
   Firebase identity endpoints) — frontend calls to any new external API will be CSP-blocked in
