@@ -88,7 +88,7 @@ public sealed class ParticipantIntakeSnapshotService
         return snapshot;
     }
 
-    private static byte[] RenderPdf(string title, DateTime completedAt, int revision, string actor, string participantName, Guid participantId, string? hash, string json, string? note = null) =>
+    private static byte[] RenderPdf(string title, DateTime completedAt, int revision, string actor, string participantName, Guid participantId, string? hash, string? json, string? note = null) =>
         Document.Create(container => container.Page(page =>
         {
             page.Margin(36); page.Size(PageSizes.A4); page.DefaultTextStyle(x => x.FontSize(10));
@@ -102,19 +102,23 @@ public sealed class ParticipantIntakeSnapshotService
                 c.Item().Text($"Participant: {participantName} ({participantId})");
                 if (hash != null) c.Item().Text($"SHA-256: {hash}").FontSize(8);
                 c.Item().LineHorizontal(1);
-                c.Item().Text(json).FontSize(7);
+                if (json != null) c.Item().Text(json).FontSize(7);
             });
         })).GeneratePdf();
 
-    /// <summary>The snapshot JSON with every ID-number field masked; the stored row is never changed.</summary>
-    public static string MaskSnapshotJson(string json)
+    /// <summary>
+    /// The snapshot JSON with every ID-number field masked (keys match case-insensitively); the stored row is never changed.
+    /// Null when there is no `fields` object to mask: the caller must then print no JSON rather than the raw one.
+    /// </summary>
+    public static string? MaskSnapshotJson(string json)
     {
-        var root = JsonNode.Parse(json)!;
-        if (root["fields"] is JsonObject fields)
-            foreach (var name in ParticipantIdMask.PropertyNames)
-                if (fields[char.ToLowerInvariant(name[0]) + name[1..]] is JsonValue v && v.TryGetValue<string>(out var s))
-                    fields[char.ToLowerInvariant(name[0]) + name[1..]] = ParticipantIdMask.Mask(s);
-        return root.ToJsonString(new JsonSerializerOptions { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
+        var root = JsonNode.Parse(json) as JsonObject;
+        var fields = root?.FirstOrDefault(p => string.Equals(p.Key, "fields", StringComparison.OrdinalIgnoreCase)).Value as JsonObject;
+        if (fields == null) return null;
+        foreach (var key in fields.Select(p => p.Key).ToList())
+            if (ParticipantIdMask.PropertyNames.Contains(key, StringComparer.OrdinalIgnoreCase) && fields[key] is JsonValue v)
+                fields[key] = ParticipantIdMask.Mask(v.ToString());
+        return root!.ToJsonString(new JsonSerializerOptions { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
     }
 
     /// <summary>
@@ -122,7 +126,7 @@ public sealed class ParticipantIntakeSnapshotService
     /// hash of the full JSON could be brute-forced back to the number. The office keeps the stored PDF, hash included.
     /// </summary>
     public static byte[] RenderMaskedCopy(ParticipantIntakeSnapshot s, string participantName) =>
-        RenderPdf("Bunya Support intake completion copy", s.CompletedAtUtc, s.Revision, s.CompletedBy, participantName, s.ParticipantId,
+        RenderPdf("Bunya Support Intake Completion Copy", s.CompletedAtUtc, s.Revision, s.CompletedBy, participantName, s.ParticipantId,
             hash: null, MaskSnapshotJson(s.SnapshotJson), note: "ID numbers are hidden for your role. Stored evidence is untouched.");
 
     /// <summary>Creates and persists a completion snapshot for standalone callers.</summary>

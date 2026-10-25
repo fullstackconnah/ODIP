@@ -170,7 +170,7 @@ public class ParticipantIdMaskTests
         if (!masked) Assert.Contains("430000017", text);
         if (!masked && document == "profile") Assert.All(FullValues, v => Assert.Contains(v, text));
         if (masked) Assert.All(FullValues, v => Assert.DoesNotContain(v, text));
-        if (masked) Assert.Contains("7", text);
+        if (masked) Assert.Contains(Dots + "7", text);
     }
 
     [Theory]
@@ -217,7 +217,10 @@ public class ParticipantIdMaskTests
         Assert.Contains("BunyaSupportIntakeComple", stored); // the "ti" ligature extracts as NUL
 
         var result = await ControllerFor(db, role).DownloadIntakeSnapshotPdf(p.Id, snapshot.Revision, CancellationToken.None);
-        var bytes = Assert.IsType<FileContentResult>(result).FileContents;
+        var file = Assert.IsType<FileContentResult>(result);
+        var bytes = file.FileContents;
+        var stem = $"Intake-Completion-r{snapshot.Revision}-{snapshot.CompletedAtUtc:yyyyMMdd}";
+        Assert.Equal(masked ? stem + "-copy.pdf" : stem + ".pdf", file.FileDownloadName);
         if (!masked) { Assert.True(bytes.SequenceEqual(pdf)); }
         else
         {
@@ -225,8 +228,8 @@ public class ParticipantIdMaskTests
             Assert.DoesNotContain("430000017", text);
             Assert.DoesNotContain("SHA-256", text);
             Assert.DoesNotContain(probe, text);
-            Assert.Contains("BunyaSupportintakecomple", text);
-            Assert.Contains("copy", text);
+            Assert.Contains("BunyaSupportIntakeComple", text);
+            Assert.Contains("Copy", text);
             Assert.Contains("hiddenforyourrole", text);
         }
 
@@ -235,6 +238,35 @@ public class ParticipantIdMaskTests
         Assert.Equal(json, row.SnapshotJson);
         Assert.Equal(hash, row.ContentHash);
         Assert.True(row.PdfContent.SequenceEqual(pdf));
+    }
+
+    [Theory]
+    [InlineData("{\"fields\":{\"NdisNumber\":\"430000017\",\"MEDICARENUMBER\":\"2951123451\",\"taxiCardNumber\":\"TXI775534\"}}")]
+    [InlineData("{\"Fields\":{\"ndisNumber\":430000017}}")]
+    public void MaskSnapshotJson_MatchesFieldKeysCaseInsensitively(string json)
+    {
+        var masked = ParticipantIntakeSnapshotService.MaskSnapshotJson(json)!;
+        Assert.DoesNotContain("430000017", masked);
+        Assert.DoesNotContain("2951123451", masked);
+        Assert.DoesNotContain("TXI775534", masked);
+        Assert.Contains(Dots + "7", masked);
+    }
+
+    [Theory]
+    [InlineData("{\"ndisNumber\":\"430000017\"}")]
+    [InlineData("{\"fields\":\"430000017\"}")]
+    [InlineData("{\"fields\":[\"430000017\"]}")]
+    [InlineData("[\"430000017\"]")]
+    public async Task MaskedCopy_FieldsNotAnObject_PrintsNoJsonBlock(string json)
+    {
+        Assert.Null(ParticipantIntakeSnapshotService.MaskSnapshotJson(json));
+        using var db = CreateDb();
+        var p = Seed(db);
+        var snapshot = await new ParticipantIntakeSnapshotService(db).CaptureAsync(p, "tester", null, CancellationToken.None);
+        snapshot.SnapshotJson = json;
+        var text = PdfText(ParticipantIntakeSnapshotService.RenderMaskedCopy(snapshot, p.FullName));
+        Assert.DoesNotContain("430000017", text);
+        Assert.Contains("hiddenforyourrole", text);
     }
 
     [Fact]

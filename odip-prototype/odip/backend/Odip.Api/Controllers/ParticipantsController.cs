@@ -943,8 +943,9 @@ public class ParticipantsController : ControllerBase
         var snapshot = await _intakeSnapshots.FindAsync(id, revision, ct);
         if (snapshot == null) return NotFound(ApiResponse<bool>.Fail("Intake snapshot not found"));
         // The stored evidence PDF prints the full ID numbers and a hash over them, so masked roles get a re-rendered copy instead.
-        var bytes = ParticipantIdMask.AppliesTo(User) ? ParticipantIntakeSnapshotService.RenderMaskedCopy(snapshot, participant.FullName) : snapshot.PdfContent;
-        return File(bytes, "application/pdf", $"Intake-Completion-r{snapshot.Revision}-{snapshot.CompletedAtUtc:yyyyMMdd}.pdf");
+        var masked = ParticipantIdMask.AppliesTo(User);
+        var bytes = masked ? ParticipantIntakeSnapshotService.RenderMaskedCopy(snapshot, participant.FullName) : snapshot.PdfContent;
+        return File(bytes, "application/pdf", $"Intake-Completion-r{snapshot.Revision}-{snapshot.CompletedAtUtc:yyyyMMdd}{(masked ? "-copy" : "")}.pdf");
     }
 
     /// <summary>DOC-01: download the Participant Profile PDF for a participant.</summary>
