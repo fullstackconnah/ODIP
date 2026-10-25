@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { chipToneOf, claimBudgetLine, focusPeriodOf, money, poolSentence, quietEstimateLine, rowsByGroup, unpricedShiftSentence } from './budgetLedger'
+import { chipToneOf, claimBudgetLine, focusPeriodOf, money, poolSentence, quietEstimateLine, rowsByGroup, unpricedShiftSentence, paceSentence } from './budgetLedger'
 import { formatDayMonth } from './dateRange'
 import { ledgerPeriod, ledgerPool, ledgerRow } from '@/test/fixtures/ledger'
 
@@ -176,5 +176,11 @@ describe('the budget line of a claim', () => {
   it('says a part in no pool uses none of the budget, and a part outside the plan\'s dates likewise', () => {
     expect(claimBudgetLine({ placement: 'NotInAPool', poolName: 'Not in a recorded pool', thisClaim: 75 })).toEqual({ text: '$75 is not in a recorded pool, so it uses none of the budget.', over: false })
     expect(claimBudgetLine({ placement: 'OutsideThePlan', poolName: 'Outside the plan dates', thisClaim: 75.5 })).toEqual({ text: '$75.50 is outside the plan\'s dates, so it uses none of the budget.', over: false })
+  })
+})
+
+describe('the pace sentence', () => {
+  it('says when the money runs out at this rate, and when the period ends, in the same short dates as the pool sentence', () => {
+    expect(paceSentence('2026-12-08', '2026-12-31')).toBe('At this rate the budget runs out around 8 Dec, before the period ends on 31 Dec.')
   })
 })

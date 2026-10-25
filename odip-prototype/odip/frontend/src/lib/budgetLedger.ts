@@ -23,6 +23,11 @@ export function focusPeriodOf(pool: LedgerPool): LedgerPeriod | undefined {
   return pool.periods.find(period => period.isCurrent) ?? pool.periods[pool.periods.length - 1]
 }
 
+/** The pace warning in one sentence, for the Funding tab line and the Budgets list pill's title: dates only, no money. "At this rate", never "will": it is a projection from the spending so far. */
+export function paceSentence(runsOutOn: string, periodEnd: string): string {
+  return `At this rate the budget runs out around ${formatDayMonth(runsOutOn)}, before the period ends on ${formatDayMonth(periodEnd)}.`
+}
+
 /** The chip's tone for a status: on track is go, approaching and forecast over ask for attention (nothing is past the limit yet), over has gone past it. */
 export function chipToneOf(status: BudgetStatus): Extract<FactChipTone, 'success' | 'warning' | 'danger' | 'neutral'> {
   switch (status) {

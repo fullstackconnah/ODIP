@@ -105,6 +105,53 @@ describe('the glance strip and the sentence', () => {
   })
 })
 
+describe('the pace line', () => {
+  const sentence = 'At this rate the budget runs out around 8 Dec, before the period ends on 31 Dec.'
+  const paced = (status: 'OnTrack' | 'Approaching' = 'OnTrack') => [
+    ledgerPeriod({ id: 'past', position: 0, periodStart: '2026-07-01', periodEnd: '2026-09-30', isCurrent: false, status: 'OnTrack' }),
+    ledgerPeriod({ paceRunsOutOn: '2026-12-08', status }),
+  ]
+
+  it('sits under the pool sentence in the warning colour when the current period carries a run-out date', () => {
+    renderLedger(participantLedger({ pools: [ledgerPool({ periods: paced() })] }))
+
+    const line = screen.getByText(sentence)
+    expect(line.tagName).toBe('P')
+    expect(line.className).toContain('text-[var(--color-on-warning-container)]')
+    expect(line.previousElementSibling?.textContent).toMatch(/^Core: /)
+  })
+
+  it('is absent when the period carries none', () => {
+    renderLedger(participantLedger({ pools: [ledgerPool({ periods: paced().map(p => ({ ...p, paceRunsOutOn: undefined })) })] }))
+
+    expect(screen.queryByText(/At this rate/)).not.toBeInTheDocument()
+  })
+
+  it('is not shown for a period that is not the focus, even when the server sent one', async () => {
+    const periods = paced()
+    periods[0] = { ...periods[0], paceRunsOutOn: '2026-09-20' }
+    periods[1] = { ...periods[1], paceRunsOutOn: undefined }
+    renderLedger(participantLedger({ pools: [ledgerPool({ periods })] }))
+    await userEvent.setup({ advanceTimers: vi.advanceTimersByTime }).click(screen.getByRole('button', { name: /1 Jul – 30 Sep 2026/ }))
+
+    expect(screen.queryByText(/At this rate/)).not.toBeInTheDocument()
+  })
+
+  it('shows beside an Approaching chip, and the status words are unchanged', () => {
+    renderLedger(participantLedger({ pools: [ledgerPool({ periods: paced('Approaching') })] }))
+
+    expect(screen.getByText(sentence)).toBeInTheDocument()
+    expect(screen.getAllByText('Approaching').length).toBeGreaterThan(0)
+    expect(screen.queryByText(/Spending fast/)).not.toBeInTheDocument()
+  })
+
+  it('leaves On track as the word for a paced pool', () => {
+    renderLedger(participantLedger({ pools: [ledgerPool({ periods: paced() })] }))
+
+    expect(screen.getAllByText('On track').length).toBeGreaterThan(0)
+  })
+})
+
 describe('the period strip', () => {
   it('gives one cell per period, marking the current one, and shows limit, used and booked in each', () => {
     renderLedger(participantLedger())
