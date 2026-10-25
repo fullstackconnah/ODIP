@@ -265,7 +265,7 @@ export function SearchableSelect({
       role="listbox"
       id={listboxId}
       style={panelStyle}
-      className="bg-[var(--color-card)] rounded-[var(--radius-md)] shadow-[0_24px_40px_-12px_rgba(27,28,26,0.14)] py-1"
+      className="bg-[var(--color-popover)] rounded-[var(--radius-md)] shadow-[var(--shadow-float)] py-1"
     >
       {showLoadingRow ? (
         <p role="presentation" className="px-4 py-3 text-sm text-[var(--color-muted-foreground)] flex items-center gap-2">

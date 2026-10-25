@@ -14,7 +14,7 @@ describe('Button', () => {
     expect(btn).toBeInTheDocument()
     expect(btn).toHaveClass('bg-[var(--color-primary)]')
     // Primary button uses white text on the brand background — see Button.tsx.
-    expect(btn).toHaveClass('text-white')
+    expect(btn).toHaveClass('text-[var(--color-primary-foreground)]')
   })
 
   it('defaults the native type to "button" so it cannot submit a form by accident', () => {

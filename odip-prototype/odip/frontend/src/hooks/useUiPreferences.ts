@@ -1,4 +1,4 @@
-import { createContext, createElement, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { DEFAULT_UI_PREFERENCES, readUiPreferences, writeUiPreferences, type UiPreferences } from '@/lib/uiPreferences'
 
 /**
@@ -45,6 +45,13 @@ export function UiPreferencesProvider({ children }: { children: ReactNode }) {
       return next
     })
   }, [userId])
+
+  // public/theme.js painted the saved theme before React mounted; this keeps it in step with a change, and the cleanup
+  // hands the page back to System when the shell unmounts (sign-out reloads, so pre-paint then finds no user).
+  useEffect(() => {
+    window.odipTheme?.set(prefs.theme)
+    return () => window.odipTheme?.set('system')
+  }, [prefs.theme])
 
   const value = useMemo(() => ({ prefs, setPref }), [prefs, setPref])
 

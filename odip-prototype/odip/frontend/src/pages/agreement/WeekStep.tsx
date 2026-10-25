@@ -202,7 +202,7 @@ export function WeekStep({ shifts, onChange, selected, onSelect, state, zone, se
                         onClick={event => toggle(shift.id, event.shiftKey)}
                         onKeyDown={event => move(event, shift)}
                         className={`flex min-h-[var(--control-h)] flex-col justify-center rounded-[var(--radius-sm)] border px-3 py-1 text-left text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] ${
-                          on ? 'border-transparent bg-[var(--color-primary)] text-white' : 'border-[var(--color-border)] bg-[var(--color-card)] hover:bg-[var(--color-accent)]'}`}
+                          on ? 'border-transparent bg-[var(--color-primary)] text-[var(--color-primary-foreground)]' : 'border-[var(--color-border)] bg-[var(--color-card)] hover:bg-[var(--color-accent)]'}`}
                       >
                         {text}
                       </button>

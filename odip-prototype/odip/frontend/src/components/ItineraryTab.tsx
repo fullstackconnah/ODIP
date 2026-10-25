@@ -172,15 +172,15 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
             {itinerary.days.map((day: any) => (
               <div key={day.dayNumber} className="relative md:pl-16">
                 {/* Day number badge on timeline */}
-                <div className="hidden md:flex absolute left-0 top-5 w-12 h-12 rounded-full bg-[var(--color-on-accessible-container)] items-center justify-center text-white font-bold text-sm z-10 shadow-lg">
+                <div className="hidden md:flex absolute left-0 top-5 w-12 h-12 rounded-full bg-[var(--color-on-accessible-container)] items-center justify-center text-[var(--color-card)] font-bold text-sm z-10 shadow-lg">
                   {day.dayNumber}
                 </div>
 
-                <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] overflow-hidden shadow-[0_24px_32px_-12px_rgba(27,28,26,0.04)]">
+                <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] overflow-hidden shadow-[var(--shadow-hairline)]">
                   {/* Day header */}
                   <div className="bg-gradient-to-r from-[var(--color-primary)]/8 to-transparent px-5 py-4">
                     <div className="flex items-center gap-3">
-                      <span className="md:hidden w-8 h-8 rounded-full bg-[var(--color-on-accessible-container)] flex items-center justify-center text-white font-bold text-xs">{day.dayNumber}</span>
+                      <span className="md:hidden w-8 h-8 rounded-full bg-[var(--color-on-accessible-container)] flex items-center justify-center text-[var(--color-card)] font-bold text-xs">{day.dayNumber}</span>
                       <div>
                         <h4 className="font-bold text-[var(--color-foreground)]">{day.dayTitle || `Day ${day.dayNumber}`}</h4>
                         <p className="text-sm text-[var(--color-muted-foreground)]">{formatDayName(day.date)} · {formatDateAu(day.date)}</p>

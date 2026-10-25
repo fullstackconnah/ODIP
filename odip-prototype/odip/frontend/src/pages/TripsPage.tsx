@@ -366,7 +366,7 @@ export default function TripsPage() {
       ) : (
         <div className="grid gap-[var(--section-gap)] md:grid-cols-2 xl:grid-cols-3">
           {trips.map((t: TripListDto) => (
-            <div key={t.id} className="group rounded-[var(--radius-md)] bg-[var(--color-card)] p-[var(--card-pad)] transition-all hover:shadow-[0_24px_32px_-12px_rgba(27,28,26,0.08)]">
+            <div key={t.id} className="group rounded-[var(--radius-md)] bg-[var(--color-card)] p-[var(--card-pad)] transition-all hover:shadow-[var(--shadow-lift)]">
               {/* Title row */}
               <Link to={`/trips/${t.id}`} className="mb-3 block">
                 <h3 className="truncate font-semibold transition-colors group-hover:text-[var(--color-primary)]">{t.tripName}</h3>

@@ -1,15 +1,36 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Check } from 'lucide-react'
 import { CheckboxField } from '@/components/CheckboxField'
+import { ToggleGroup } from '@/components/ToggleGroup'
 import { useUiPreferences } from '@/hooks/useUiPreferences'
+import type { ThemePreference } from '@/lib/uiPreferences'
 import { TONE } from '@/lib/tone'
+
+const THEME_OPTIONS: { key: ThemePreference; label: string }[] = [
+  { key: 'light', label: 'Light' },
+  { key: 'dark', label: 'Dark' },
+  { key: 'system', label: 'System' },
+]
 
 /** My account › Appearance: kept the moment it changes, on this device only, so there is no Save; a line says it was kept. */
 export default function AppearanceSection() {
   const { prefs, setPref } = useUiPreferences()
   const [changed, setChanged] = useState(false)
+  const labelId = useId()
+  const hintId = useId()
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+    <div className="flex flex-col gap-[var(--field-gap-y)]">
+      <div>
+        <p id={labelId} className="text-sm text-[var(--color-foreground)] mb-1">Theme</p>
+        <ToggleGroup
+          options={THEME_OPTIONS}
+          value={prefs.theme}
+          onChange={key => { setPref('theme', key as ThemePreference); setChanged(true) }}
+          aria-labelledby={labelId}
+          ariaDescribedby={hintId}
+        />
+        <p id={hintId} className="text-xs text-[var(--color-muted-foreground)] mt-1">System follows your device&apos;s light or dark setting.</p>
+      </div>
       <CheckboxField
         label="Show lines between table columns"
         hint="Applies to every table in ODIP."

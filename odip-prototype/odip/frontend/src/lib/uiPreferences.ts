@@ -6,12 +6,23 @@
  * Stored as a JSON object (not a bare boolean) under `odip_ui_prefs:<userId>` so more
  * preferences can be added later without a storage-format migration.
  */
+export type ThemePreference = 'light' | 'dark' | 'system'
+
 export type UiPreferences = {
   tableVerticalDividers: boolean
+  theme: ThemePreference
+}
+
+// public/theme.js applies the theme before first paint and exposes set() for React; keep its validation in step with readUiPreferences.
+declare global {
+  interface Window {
+    odipTheme?: { set(pref: ThemePreference): void }
+  }
 }
 
 export const DEFAULT_UI_PREFERENCES: UiPreferences = {
   tableVerticalDividers: false,
+  theme: 'system',
 }
 
 function storageKey(userId: string): string {
@@ -46,7 +57,12 @@ export function readUiPreferences(userId: string | null): UiPreferences {
         ? candidate.tableVerticalDividers
         : DEFAULT_UI_PREFERENCES.tableVerticalDividers
 
-    return { tableVerticalDividers }
+    const theme =
+      candidate.theme === 'light' || candidate.theme === 'dark' || candidate.theme === 'system'
+        ? candidate.theme
+        : DEFAULT_UI_PREFERENCES.theme
+
+    return { tableVerticalDividers, theme }
   } catch {
     // localStorage itself threw (e.g. Safari private mode) — degrade to defaults.
     return { ...DEFAULT_UI_PREFERENCES }
