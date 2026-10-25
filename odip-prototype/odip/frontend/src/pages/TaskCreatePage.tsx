@@ -103,7 +103,7 @@ export default function TaskCreatePage() {
         status: existingTask.status ?? 'NotStarted',
         completedDate: existingTask.completedDate ?? '',
         notes: existingTask.notes ?? '',
-      })
+      }, { keepDirtyValues: true })
     }
   }, [existingTask, reset])
 
