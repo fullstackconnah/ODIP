@@ -110,9 +110,10 @@ test.describe('participant workflow navigation', () => {
     await expect(page).toHaveURL((url) => url.pathname === '/participants' && url.searchParams.get('tab') === 'onboarding');
   });
 
-  test('Edit from the Funding tab, then Cancel, returns to Funding', async ({ page }) => {
+  test('Edit from the Funding & claims tab, then Cancel, returns to Funding & claims', async ({ page }) => {
     await page.goto(`/participants/${active.id}?tab=funding`);
-    await page.getByRole('link', { name: 'Edit', exact: true }).first().click();
+    await page.getByRole('button', { name: 'More actions' }).click();
+    await page.getByRole('option', { name: 'Edit full profile (wizard)' }).click();
     await expect(page).toHaveURL(new RegExp(`/participants/${active.id}/profile$`));
     await page.getByRole('link', { name: 'Cancel' }).click();
     await expect(page).toHaveURL((url) => url.pathname === `/participants/${active.id}` && url.searchParams.get('tab') === 'funding');

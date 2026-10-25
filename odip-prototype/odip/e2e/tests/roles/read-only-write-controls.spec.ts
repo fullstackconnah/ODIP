@@ -59,9 +59,9 @@ test.describe('ReadOnly', () => {
     await expect(page.getByRole('button', { name: /^Assign / })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /^Unassign / })).toHaveCount(0);
 
-    await page.goto(`/participants/${participant.id}`);
+    await page.goto(`/participants/${participant.id}?tab=about`);
     await expect(page.getByRole('heading', { level: 1 })).toContainText(participant.token);
-    await expect(page.getByRole('link', { name: /^Edit$/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'More actions' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /^(Edit|Add)\b/ })).toHaveCount(0);
 
     // TRIPS-3: the Activities tab used to send POST .../schedule/generate for ReadOnly.
@@ -104,7 +104,8 @@ test.describe('Coordinator (control)', () => {
 
     await page.goto(`/participants/${participant.id}`);
     await expect(page.getByRole('heading', { level: 1 })).toContainText(participant.token);
-    await expect(page.getByRole('link', { name: /^Edit$/ })).toBeVisible();
+    await page.getByRole('button', { name: 'More actions' }).click();
+    await expect(page.getByRole('option', { name: 'Edit full profile (wizard)' })).toBeVisible();
 
     await page.goto(`/tasks/${taskId}/edit`);
     await expect(page.getByRole('heading', { name: 'Edit task' })).toBeVisible();
