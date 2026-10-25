@@ -48,7 +48,7 @@ public class DemoIdsTests
         var original = System.Globalization.CultureInfo.CurrentCulture;
         try
         {
-            // The deploy image's test run uses invariant globalization, where only the invariant culture exists: there the check runs
+            // In a run with invariant globalization (not part of CI) only the invariant culture exists: there the check runs
             // under the current culture, which is all that can differ.
             try { System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("ar-SA"); }
             catch (System.Globalization.CultureNotFoundException) { }
