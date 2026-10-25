@@ -128,11 +128,12 @@ npm run lint
   explicitly rejects the literal dev placeholder secret — so local setup needs a real secret
   value, not just any non-empty string.
 
-- Middleware runs in a fixed order in `Program.cs`: security headers →
+- Middleware runs in a fixed order in `Program.cs`: security headers → `RequestTimingMiddleware` (observes only; logs `Odip.RequestTiming`) →
   `ExceptionHandlingMiddleware` → rate limiter ("login"/"api" policies) → CORS → Auth →
   `ReadOnlyMiddleware` (403s writes for the "ReadOnly" role) → controllers. Because the order
   matters, inserting new middleware in the wrong slot can silently change what gets
-  rate-limited, authenticated, or blocked.
+  rate-limited, authenticated, or blocked. On live the timing log can be silenced without a deploy with env
+  `Logging__LogLevel__Odip.RequestTiming=Warning`; container logs rotate at 10 MB (`deploy/compose.yaml`).
 
 - Multi-tenancy is implemented through `ICurrentTenant`/`ITenantEntity`, with super-admin tenant
   switching handled via the `X-View-As-Tenant`/`X-View-As-User` request headers — tenant-scoped
