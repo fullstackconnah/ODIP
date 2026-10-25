@@ -22,9 +22,9 @@ function money(amount) {
 const MANAGEMENT = { SelfManaged: 'self managed', PlanManaged: 'plan managed', AgencyManaged: 'agency managed' }
 const SEVERITY = { Critical: 0, Warning: 1, Info: 2 }
 /** The Budgets list's order of risk: Over, then a pool the NDIA has refused a claim of for want of funds (its word is as Critical as Over), then Forecast over, Approaching and On track (BudgetListService.Rank). */
-const riskOf = (status, refusedByNdia) => (status === 'Over' ? 0 : refusedByNdia ? 1 : { ForecastOver: 2, Approaching: 3, OnTrack: 4 }[status] ?? 5)
+const riskOf = (status, refusedByNdia, paced) => (status === 'Over' ? 0 : refusedByNdia ? 1 : { ForecastOver: 2, Approaching: 3 }[status] ?? (status === 'OnTrack' ? (paced ? 4 : 5) : 6))
 /** What alerts of one severity are put in order by: the budget kinds come worse first (the NDIA's word, over, forecast over, approaching), every other kind by its name (ParticipantAlertsService.SortKey). */
-const sortKey = (type) => ({ 'budget-ndia-exhausted': 'budget-0', 'budget-over': 'budget-1', 'budget-forecast-over': 'budget-2', 'budget-approaching': 'budget-3' }[type] ?? type)
+const sortKey = (type) => ({ 'budget-ndia-exhausted': 'budget-0', 'budget-over': 'budget-1', 'budget-forecast-over': 'budget-2', 'budget-approaching': 'budget-3', 'budget-pace': 'budget-4' }[type] ?? type)
 
 /** What a pool is called in a sentence: the Core (flexible) pool under its default name is just "Core", and says how it is managed when a plan holds two of them. */
 function poolLabel(pool, pools) {
@@ -61,6 +61,7 @@ function budgetAlertsOf(ledger) {
     if (period.status === 'Over') alerts.push(alert('budget-over', 'Critical', withTheGap(`${label} is ${money(period.used - period.available)} over this period's ${money(period.available)} (to ${end})`, period)))
     else if (period.status === 'ForecastOver') alerts.push(alert('budget-forecast-over', 'Warning', withTheGap(`Booked shifts would take ${label} ${money(period.forecast - period.available)} over this period's ${money(period.available)} by ${end}`, period)))
     else if (period.status === 'Approaching') alerts.push(alert('budget-approaching', 'Warning', withTheGap(`${label} is at ${approachingAt(period.used, period.available, 0)}% of this period's ${money(period.available)} (to ${end})`, period)))
+    else if (period.paceRunsOutOn) alerts.push(alert('budget-pace', 'Warning', `${label} is spending faster than its period allows: at this rate it runs out around ${say(period.paceRunsOutOn)}, before the period ends on ${end}`))
     if (pool.ndiaRejection) alerts.push(alert('budget-ndia-exhausted', 'Critical', `NDIA rejected a claim for ${label} on ${say(pool.ndiaRejection.date)}: not enough funds${fundsScope(pool.ndiaRejection.code)} (${pool.ndiaRejection.code})`))
   }
   return alerts
@@ -95,11 +96,11 @@ function budgetList(people, ledgerOf, today, approachingPercent) {
       if (!period) return
       rows.push({
         participantId: person.id, participantName: nameOf(person), poolId: pool.id, poolName: poolLabel(pool, ledger.pools), kind: pool.kind, managementType: pool.managementType,
-        periodStart: period.periodStart, periodEnd: period.periodEnd, available: period.available, carried: period.carried, used: period.used, remaining: round2(period.available - period.used), bookedAhead: period.bookedAhead, forecast: period.forecast, status: period.status, unpricedShiftCount: period.unpricedShiftCount || 0, ndiaRejection: pool.ndiaRejection ? { date: pool.ndiaRejection.date, code: pool.ndiaRejection.code, claimId: pool.ndiaRejection.claimId, claimReference: pool.ndiaRejection.claimReference } : undefined, position,
+        periodStart: period.periodStart, periodEnd: period.periodEnd, available: period.available, carried: period.carried, used: period.used, remaining: round2(period.available - period.used), bookedAhead: period.bookedAhead, forecast: period.forecast, status: period.status, ...(period.paceRunsOutOn ? { paceRunsOutOn: period.paceRunsOutOn } : {}), unpricedShiftCount: period.unpricedShiftCount || 0, ndiaRejection: pool.ndiaRejection ? { date: pool.ndiaRejection.date, code: pool.ndiaRejection.code, claimId: pool.ndiaRejection.claimId, claimReference: pool.ndiaRejection.claimReference } : undefined, position,
       })
     })
   }
-  rows.sort((a, b) => riskOf(a.status, Boolean(a.ndiaRejection)) - riskOf(b.status, Boolean(b.ndiaRejection)) || a.participantName.localeCompare(b.participantName) || a.position - b.position)
+  rows.sort((a, b) => riskOf(a.status, Boolean(a.ndiaRejection), Boolean(a.paceRunsOutOn)) - riskOf(b.status, Boolean(b.ndiaRejection), Boolean(b.paceRunsOutOn)) || a.participantName.localeCompare(b.participantName) || a.position - b.position)
   noBudget.sort((a, b) => a.participantName.localeCompare(b.participantName))
   return { asOf: today, approachingPercent, rows: rows.map(({ position, ...row }) => row), noBudget }
 }
