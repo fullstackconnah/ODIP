@@ -25,7 +25,7 @@ namespace Odip.Tests.Postgres;
 /// A scratch PostgreSQL database for tests that EF InMemory cannot answer: the provider hides unique/partial indexes,
 /// real concurrency, ordering/null semantics and LINQ translation. Created from the server named by the
 /// <c>POSTGRES_CONNECTION_STRING</c> environment variable (the same one the PR workflow's Postgres service provides) and dropped
-/// afterwards. With the variable unset - a developer machine, or the Docker image build, which runs <c>dotnet test</c> with no
+/// afterwards. With the variable unset - a developer machine, or any run of <c>dotnet test</c> with no
 /// database - every test that uses it is SKIPPED, never failed.
 /// </summary>
 public sealed class PostgresFixture : IAsyncLifetime

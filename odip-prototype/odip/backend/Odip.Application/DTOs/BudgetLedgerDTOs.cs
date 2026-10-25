@@ -71,6 +71,8 @@ public record LedgerPeriodDto : LedgerFiguresDto
     public DateOnly PeriodEnd { get; init; }
     /// <summary>The period that holds the provider's today; at most one per pool, and none once the plan has ended.</summary>
     public bool IsCurrent { get; init; }
+    /// <summary>The date the money runs out at the pace so far, when that is before the period ends (see <c>BudgetLedgerCalculator.PaceOf</c>); only the current period can carry it. Not a status. Left out when null.</summary>
+    public DateOnly? PaceRunsOutOn { get; init; }
     /// <summary>How many shifts in this period were never completed or cancelled although their day has passed (they are counted as pending).</summary>
     public int PastUnresolvedCount { get; init; }
     /// <summary>

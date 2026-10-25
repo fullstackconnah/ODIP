@@ -32,9 +32,9 @@ public class BudgetListTests
         return new BudgetsController(tenant.Object, new BudgetListService(kit.Db, kit.Ledger, new NdiaRejectionReader(kit.Db, kit.Clock), kit.Clock));
     }
 
-    private static LedgerKit Arrange()
+    private static LedgerKit Arrange(DateTimeOffset? now = null)
     {
-        var kit = LedgerKit.Create();
+        var kit = LedgerKit.Create(now: now);
         kit.SeedProvider("NSW");
         kit.EnsureCommunityAccessCatalogue();
         return kit;
@@ -164,6 +164,28 @@ public class BudgetListTests
 
         Assert.Equal(new[] { BudgetStatus.Over, BudgetStatus.Over, BudgetStatus.ForecastOver, BudgetStatus.Approaching, BudgetStatus.OnTrack }, rows.Select(r => r.Status));
         Assert.Equal(new[] { "Olive Over", "Zed Over", "Ford Cast", "Appa Roach", "Alma Fine" }, rows.Select(r => r.ParticipantName));
+    }
+
+    [Fact]
+    public async Task APacedOnTrackPoolCarriesItsRunOutDate_RanksBetweenApproachingAndOnTrack_AndOtherRowsOmitIt()
+    {
+        using var kit = Arrange(new DateTimeOffset(2026, 11, 4, 3, 0, 0, TimeSpan.Zero));   // 34 of the quarter's 92 days in
+        var plain = kit.SeedParticipant(first: "Alma", last: "Fine");
+        var paced = kit.SeedParticipant(first: "Zed", last: "Pace");
+        var over = kit.SeedParticipant(first: "Olive", last: "Over");
+        var forecast = kit.SeedParticipant(first: "Ford", last: "Cast");
+        var approaching = kit.SeedParticipant(first: "Appa", last: "Roach");
+        foreach (var p in new[] { plain, paced, over, forecast, approaching }) OctoberPlan(kit, p, 1000m);
+        Claim(kit, plain, 100m);
+        Claim(kit, paced, 400m);          // 40% used: on track, but at this rate it runs out 85 days from 1 Oct
+        Claim(kit, over, 1100m);
+        Claim(kit, approaching, 850m);
+        kit.SeedShift(forecast, D(2026, 11, 5)); kit.SeedShift(forecast, D(2026, 11, 6)); kit.SeedShift(forecast, D(2026, 11, 7));
+
+        var rows = Body(await ListAsync(kit)).Rows;
+
+        Assert.Equal(new[] { "Olive Over", "Ford Cast", "Appa Roach", "Zed Pace", "Alma Fine" }, rows.Select(r => r.ParticipantName));
+        Assert.Equal(new DateOnly?[] { null, null, D(2026, 11, 10), D(2026, 12, 25), null }, rows.Select(r => r.PaceRunsOutOn));
     }
 
     [Fact]

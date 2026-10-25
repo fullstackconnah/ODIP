@@ -7,6 +7,7 @@ COPY Odip.Domain/Odip.Domain.csproj Odip.Domain/
 COPY Odip.Application/Odip.Application.csproj Odip.Application/
 COPY Odip.Infrastructure/Odip.Infrastructure.csproj Odip.Infrastructure/
 COPY Odip.Api/Odip.Api.csproj Odip.Api/
+# Odip.Tests is in the solution, so its csproj is needed for the restore. Tests run in CI (pr-validation.yml), not in the image.
 COPY Odip.Tests/Odip.Tests.csproj Odip.Tests/
 
 # Restore dependencies
@@ -14,11 +15,6 @@ RUN dotnet restore
 
 # Copy everything and build
 COPY . .
-
-# Test gate: a failing test fails the image build, which stops the deploy
-# before any container is replaced. Runs here rather than as a separate CI
-# step so it reuses the restore layer above instead of re-fetching packages.
-RUN dotnet test Odip.Tests/Odip.Tests.csproj -c Release --no-restore
 
 RUN dotnet publish Odip.Api/Odip.Api.csproj -c Release -o /app/publish
 
