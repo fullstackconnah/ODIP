@@ -53,18 +53,20 @@ export default function InvoicesPage() {
   const page = Math.max(1, Number(param('page')) || 1)
   const hasFilters = !!(search || kind || status || from || to || deletedOnly)
 
+  // The failure line belongs to the rows it was shown under, so any filter or page change drops it.
+  const [downloadError, setDownloadError] = useState<{ id: string; message: string } | null>(null)
   // Filters and page live in the URL (replace, defaults dropped), so Back from a claim lands on the same filtered page. Any filter change drops the page.
-  const setFilters = (patch: Record<string, string>) => setSearchParams(prev => {
+  const setFilters = (patch: Record<string, string>) => { setDownloadError(null); setSearchParams(prev => {
     const next = new URLSearchParams(prev)
     next.delete('page')
     for (const [key, value] of Object.entries(patch)) { if (value) next.set(key, value); else next.delete(key) }
     return next
-  }, { replace: true })
-  const setPage = (next: number) => setSearchParams(prev => {
+  }, { replace: true }) }
+  const setPage = (next: number) => { setDownloadError(null); setSearchParams(prev => {
     const copy = new URLSearchParams(prev)
     if (next > 1) copy.set('page', String(next)); else copy.delete('page')
     return copy
-  }, { replace: true })
+  }, { replace: true }) }
 
   const term = useDebouncedValue(search.trim(), 300)
   const queryParams: Record<string, string> = { page: String(page), pageSize: String(INVOICES_PAGE_SIZE) }
@@ -85,13 +87,13 @@ export default function InvoicesPage() {
 
   const searchBox = useRef<HTMLDivElement>(null)
   const clearFilters = () => {
+    setDownloadError(null)
     setSearchParams({}, { replace: true })
     searchBox.current?.querySelector('input')?.focus()
   }
 
   // One download at a time: while one runs the other numbers are aria-disabled, so a click is never silently ignored.
   const [downloading, setDownloading] = useState<string | null>(null)
-  const [downloadError, setDownloadError] = useState<{ id: string; message: string } | null>(null)
   const download = async (row: InvoiceRegisterRowDto) => {
     if (downloading) return
     const n = row.displayNumber

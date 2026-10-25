@@ -217,6 +217,24 @@ describe('InvoicesPage: the number downloads the PDF', () => {
     expect(screen.getAllByRole('status').some(el => el.textContent === "Couldn't download INV-0042. Try again.")).toBe(true)
   })
 
+  it.each([
+    ['a filter changes', async (user: ReturnType<typeof userEvent.setup>) => {
+      await user.click(screen.getByRole('button', { name: /issued$/i }))
+      await user.click(screen.getByRole('option', { name: 'Voided' }))
+    }],
+    ['the page changes', async (user: ReturnType<typeof userEvent.setup>) => { await user.click(screen.getByRole('button', { name: 'Next page' })) }],
+  ])('drops the failure line and its announcement when %s', async (_name, act) => {
+    const user = userEvent.setup()
+    mockUseInvoiceRegister.mockReturnValue(ready([row()], 130))
+    mockDownloadFile.mockRejectedValue(new Error("Couldn't download INV-0042. Try again."))
+    renderPage('/invoices?status=Issued')
+
+    await user.click(screen.getByRole('button', { name: 'Download INV-0042 PDF' }))
+    expect(await screen.findAllByText("Couldn't download INV-0042. Try again.")).toHaveLength(2)
+    await act(user)
+    expect(screen.queryAllByText("Couldn't download INV-0042. Try again.")).toHaveLength(0)
+  })
+
   it('refuses a second download while one runs, with aria-disabled rather than a silent no-op', async () => {
     const user = userEvent.setup()
     let release: () => void = () => {}
