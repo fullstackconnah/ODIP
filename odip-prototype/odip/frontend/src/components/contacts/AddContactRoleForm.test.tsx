@@ -167,7 +167,8 @@ describe('AddContactRoleForm', () => {
     const primary = screen.getByRole('checkbox', { name: 'Primary contact' })
     expect(primary).toBeChecked()
     expect(primary.closest('label')).toHaveClass('rounded-full')
-    expect(screen.getByText(/only one active primary per role type/i)).toBeInTheDocument()
+    expect(screen.getByText('Only one primary Next of Kin at a time')).toBeInTheDocument()
+    expect(primary).toHaveAccessibleDescription('Only one primary Next of Kin at a time')
 
     await user.click(primary)
     await user.click(screen.getByRole('button', { name: 'Save contact' }))

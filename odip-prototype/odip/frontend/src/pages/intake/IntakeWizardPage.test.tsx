@@ -319,6 +319,7 @@ describe('IntakeWizardPage', () => {
     const primary = screen.getByRole('checkbox', { name: 'Primary contact' })
     expect(primary).not.toBeChecked()
     expect(primary.closest('label')).toHaveClass('rounded-full')
+    expect(primary).toHaveAccessibleDescription('Only one primary Next of Kin at a time')
     await user.click(primary)
     expect(primary).toBeChecked()
   })
