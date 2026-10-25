@@ -28,6 +28,9 @@ public class ParticipantDocumentComposerTests
             // Support Needs & Mobility — mobilityAidWalker is Intake-only, mobilityNotes is Profile-only.
             MobilityAidWalker = true,
             MobilityNotes = "Uses a walking frame indoors",
+            // Captured at Intake since 2026-10-23, so the Intake Form must print them.
+            ReceptiveSkills = "Understands short sentences",
+            EquipmentRequirements = "Armrests",
             // Key Identifiers — Profile-only section, should never appear on the Intake Form.
             PensionCardNumber = "PEN-001",
             // Medical
@@ -103,6 +106,17 @@ public class ParticipantDocumentComposerTests
         Assert.Contains(model.Sections, s => s.Heading == "Support Needs & Mobility");
         // Key Identifiers is entirely Profile-tagged — must never appear on the Intake Form.
         Assert.DoesNotContain(model.Sections, s => s.Heading == "Key Identifiers");
+    }
+
+    [Fact]
+    public void ComposeIntakeForm_IncludesReceptiveSkillsAndEquipmentRequirements()
+    {
+        var participant = BuildParticipant();
+        var model = ParticipantDocumentComposer.ComposeIntakeForm(participant, BuildRiskEntries(participant.Id));
+        var fields = model.Sections.SelectMany(s => s.Fields).ToList();
+
+        Assert.Contains(fields, f => f.Label == "Receptive Skills" && f.Value == "Understands short sentences");
+        Assert.Contains(fields, f => f.Label == "Equipment Requirements" && f.Value == "Armrests");
     }
 
     [Fact]

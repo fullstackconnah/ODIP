@@ -117,7 +117,7 @@ public static class ParticipantFieldEntryMap
         E("requiresStandingMachine", ParticipantFieldEntryPhase.Intake),
         E("supportRatio", ParticipantFieldEntryPhase.Intake),
         E("mobilityNotes", ParticipantFieldEntryPhase.Profile),
-        E("equipmentRequirements", ParticipantFieldEntryPhase.Profile),
+        E("equipmentRequirements", ParticipantFieldEntryPhase.Intake),
         E("transportRequirements", ParticipantFieldEntryPhase.Profile),
         E("ambulantStatus", ParticipantFieldEntryPhase.Profile),
         E("fallsRiskRating", ParticipantFieldEntryPhase.Profile),
@@ -174,7 +174,7 @@ public static class ParticipantFieldEntryMap
         E("bspPlanProvided", ParticipantFieldEntryPhase.Profile),
         E("bocChartProvided", ParticipantFieldEntryPhase.Profile),
         E("expressiveSkills", ParticipantFieldEntryPhase.Intake),
-        E("receptiveSkills", ParticipantFieldEntryPhase.Profile),
+        E("receptiveSkills", ParticipantFieldEntryPhase.Intake),
         E("readingAbility", ParticipantFieldEntryPhase.Profile),
         E("communicationAids", ParticipantFieldEntryPhase.Profile),
 

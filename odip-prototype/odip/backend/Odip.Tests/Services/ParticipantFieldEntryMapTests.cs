@@ -38,12 +38,12 @@ public class ParticipantFieldEntryMapTests
     public void MatchesExpectedIntakeProfileSplit()
     {
         // 146 total fields as of this branch (PF-10.2 added communityAccessRiskItems +
-        // overallCommunityAccessRiskRating, both Profile): 61 Intake / 85 Profile — mirrors
+        // overallCommunityAccessRiskRating, both Profile): 63 Intake / 83 Profile (receptiveSkills and equipmentRequirements moved to Intake, meeting 2026-10-23) — mirrors
         // documentMapping.test.ts's equivalent frontend assertion. Expected to move if a future
         // branch adds/reallocates fields; exists to catch an accidental mass-reallocation.
         Assert.Equal(146, ParticipantFieldEntryMap.Entries.Count);
-        Assert.Equal(61, ParticipantFieldEntryMap.Entries.Count(e => e.Phase == ParticipantFieldEntryPhase.Intake));
-        Assert.Equal(85, ParticipantFieldEntryMap.Entries.Count(e => e.Phase == ParticipantFieldEntryPhase.Profile));
+        Assert.Equal(63, ParticipantFieldEntryMap.Entries.Count(e => e.Phase == ParticipantFieldEntryPhase.Intake));
+        Assert.Equal(83, ParticipantFieldEntryMap.Entries.Count(e => e.Phase == ParticipantFieldEntryPhase.Profile));
     }
 
     // SkippableFact, not Fact: the API image's Docker build context is backend/ only

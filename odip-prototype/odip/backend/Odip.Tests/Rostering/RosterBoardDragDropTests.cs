@@ -164,6 +164,49 @@ public class RosterBoardDragDropTests
         EndsNextDay = s.EndsNextDay, Ratio = s.Ratio, NightType = s.NightType, Status = status,
     };
 
+    // ── The chip's Publish names the worker the board showed (roster-draft-publish) ──
+
+    [Fact]
+    public async Task UpdateShift_WhenTheWorkerChangedSinceTheChipWasDrawn_Is409AndChangesNothing()
+    {
+        using var db = TestDb.Create();
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var jo = SeedStaff(db, "Jo", "Park");
+        var shift = SeedShift(db, SeedParticipant(db).Id, jo.Id, ShiftStatus.Draft);   // moved to Jo since the board showed Alex
+
+        var result = await Controller(db).UpdateShift(shift.Id, Put(shift, alex.Id, ShiftStatus.Published) with { ExpectedStaffId = alex.Id }, default);
+
+        Assert.Equal("SHIFT_BOARD_CHANGED", Assert.IsType<ApiResponse<ShiftDto>>(Assert.IsType<ConflictObjectResult>(result.Result).Value).Code);
+        var after = await Reload(db, shift.Id);
+        Assert.Equal(jo.Id, after.UserId);
+        Assert.Equal(ShiftStatus.Draft, after.Status);
+        Assert.Empty(await db.NotificationOutbox.ToListAsync());
+    }
+
+    [Theory]
+    [InlineData(false)]   // the request leaves the field out (the slide-over): not checked
+    [InlineData(true)]    // the request names the worker the shift has: saves
+    public async Task UpdateShift_WhenTheFieldIsOmittedOrMatches_Publishes(bool named)
+    {
+        using var db = TestDb.Create();
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var shift = SeedShift(db, SeedParticipant(db).Id, alex.Id, ShiftStatus.Draft);
+        var put = Put(shift, alex.Id, ShiftStatus.Published);
+
+        Body(await Controller(db).UpdateShift(shift.Id, named ? put with { ExpectedStaffId = alex.Id } : put, default));
+
+        Assert.Equal(ShiftStatus.Published, (await Reload(db, shift.Id)).Status);
+    }
+
+    [Fact]
+    public void UpdateShiftDto_TellsAnAbsentExpectedStaffIdFromANullOne()
+    {
+        var web = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+
+        Assert.False(JsonSerializer.Deserialize<UpdateShiftDto>("""{ "staffId": null }""", web)!.ExpectsStaff);
+        Assert.True(JsonSerializer.Deserialize<UpdateShiftDto>("""{ "staffId": null, "expectedStaffId": null }""", web)!.ExpectsStaff);
+    }
+
     // ── Notices only for Published shifts (decision 9) ──
 
     [Fact]

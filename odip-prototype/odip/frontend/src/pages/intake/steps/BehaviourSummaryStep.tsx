@@ -1,7 +1,7 @@
 /**
  * PF-10.3 — Intake wizard, "Behaviour Summary" step. Per PF-10.1's fission table, only
- * `behavioursOfConcernCurrent`/`behavioursOfConcernFiveYearHistory`/`expressiveSkills` are
- * `entryPhase: 'intake'` — the cognitive/receptive-skills/reading/communication-aids detail and
+ * `behavioursOfConcernCurrent`/`behavioursOfConcernFiveYearHistory`/`expressiveSkills`/`receptiveSkills` are
+ * `entryPhase: 'intake'` — the cognitive/reading/communication-aids detail and
  * the Community-Access-gated narrative fields are Profile-only (PF-10.4).
  */
 import type { Control, UseFormRegister } from 'react-hook-form'
@@ -22,6 +22,7 @@ export function BehaviourSummaryStep({ control, register }: {
       </Card>
 
       <Card title="Communication">
+        <TextAreaField label="Receptive Skills" id="receptiveSkills" {...register('receptiveSkills')} rows={2} placeholder="e.g. High, understands simple instructions..." />
         <TextAreaField label="Expressive Skills" id="expressiveSkills" {...register('expressiveSkills')} rows={2} placeholder="e.g. High, verbal..." />
       </Card>
     </div>

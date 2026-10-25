@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useId } from 'react'
 import type { CSSProperties, KeyboardEvent, ChangeEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Plus } from 'lucide-react'
 import { inputClass } from '@/components/FormField'
 import type { DropdownItem } from '@/components/Dropdown'
 
@@ -29,6 +29,8 @@ export type SearchableSelectProps = {
   emptyMessage?: string
   /** Message shown when a query is typed and nothing matches. Defaults to 'No results found'. */
   noMatchMessage?: string
+  /** Offered under the no-match message when a query is typed: calls `onSelect` with the typed text and closes. */
+  noMatchAction?: { label: string; onSelect: (query: string) => void }
   className?: string
 
   // Labelling — lets a wrapping component (e.g. FormField) associate an external <label>
@@ -68,6 +70,7 @@ export function SearchableSelect({
   openOnFocus = true,
   emptyMessage = 'No options available',
   noMatchMessage = 'No results found',
+  noMatchAction,
   className,
   id,
   'aria-labelledby': ariaLabelledBy,
@@ -100,6 +103,11 @@ export function SearchableSelect({
     .filter(i => i !== -1)
 
   const optionId = (idx: number) => `${listboxId}-opt-${idx}`
+
+  const showLoadingRow = loading && items.length === 0
+  const showEmptyRow = !showLoadingRow && filteredItems.length === 0
+  // With nothing to pick, the no-match action is the popup's only option (index 0), so the keys below can reach it.
+  const showAction = showEmptyRow && !!trimmedQuery && !!noMatchAction
 
   const updatePosition = useCallback(() => {
     if (!containerRef.current) return
@@ -156,6 +164,11 @@ export function SearchableSelect({
     onBlurRef.current?.()
   }
 
+  function selectAction() {
+    noMatchAction?.onSelect(trimmedQuery)
+    closePopup()
+  }
+
   function handleSelect(item: SearchableSelectItem) {
     if (item.disabled) return
     onChange(item.value)
@@ -206,6 +219,7 @@ export function SearchableSelect({
     }
     if (e.key === 'ArrowDown') {
       e.preventDefault()
+      if (showAction) { setActiveIndex(0); return }
       if (enabledIndices.length === 0) return
       const pos = enabledIndices.indexOf(activeIndex)
       const next = enabledIndices[(pos + 1) % enabledIndices.length]
@@ -214,6 +228,7 @@ export function SearchableSelect({
     }
     if (e.key === 'ArrowUp') {
       e.preventDefault()
+      if (showAction) { setActiveIndex(0); return }
       if (enabledIndices.length === 0) return
       const pos = enabledIndices.indexOf(activeIndex)
       const prev = pos === -1
@@ -224,25 +239,25 @@ export function SearchableSelect({
     }
     if (e.key === 'Home') {
       e.preventDefault()
-      if (enabledIndices.length > 0) setActiveIndex(enabledIndices[0])
+      if (showAction) setActiveIndex(0)
+      else if (enabledIndices.length > 0) setActiveIndex(enabledIndices[0])
       return
     }
     if (e.key === 'End') {
       e.preventDefault()
-      if (enabledIndices.length > 0) setActiveIndex(enabledIndices[enabledIndices.length - 1])
+      if (showAction) setActiveIndex(0)
+      else if (enabledIndices.length > 0) setActiveIndex(enabledIndices[enabledIndices.length - 1])
       return
     }
     if (e.key === 'Enter') {
       e.preventDefault()
+      if (showAction && activeIndex === 0) { selectAction(); return }
       const active = activeIndex >= 0 ? filteredItems[activeIndex] : undefined
       const target = active
         ?? (filteredItems.length === 1 && !filteredItems[0]?.disabled ? filteredItems[0] : undefined)
       if (target) handleSelect(target)
     }
   }
-
-  const showLoadingRow = loading && items.length === 0
-  const showEmptyRow = !showLoadingRow && filteredItems.length === 0
 
   const panel = open && createPortal(
     <div
@@ -258,9 +273,30 @@ export function SearchableSelect({
           Loading options…
         </p>
       ) : showEmptyRow ? (
-        <p role="presentation" className="px-4 py-3 text-sm text-[var(--color-muted-foreground)] opacity-70">
-          {trimmedQuery ? noMatchMessage : emptyMessage}
-        </p>
+        <div role="presentation">
+          <p role="presentation" className="px-4 py-3 text-sm text-[var(--color-muted-foreground)] opacity-70">
+            {trimmedQuery ? noMatchMessage : emptyMessage}
+          </p>
+          {showAction && noMatchAction && (
+            <div
+              role="option"
+              id={optionId(0)}
+              aria-selected={activeIndex === 0}
+              // Keeps focus in the input, like the options' mousedown guard below.
+              onMouseDown={e => e.preventDefault()}
+              onClick={selectAction}
+              onMouseEnter={() => setActiveIndex(0)}
+              className={`min-h-[var(--control-h)] flex items-center gap-1.5 px-3 py-1.5 text-sm text-left transition-colors cursor-pointer ${
+                activeIndex === 0
+                  ? 'bg-[var(--color-accent)] text-[var(--color-primary)]'
+                  : 'text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] hover:text-[var(--color-primary)]'
+              }`}
+            >
+              <Plus className="w-4 h-4 shrink-0" aria-hidden="true" />
+              {noMatchAction.label}
+            </div>
+          )}
+        </div>
       ) : (
         filteredItems.map((item, idx) => (
           <div

@@ -2237,6 +2237,30 @@ public class ParticipantsControllerTests
     }
 
     [Fact]
+    public async Task Create_LivingArrangementSharedHousehold_Succeeds_KeepsNotes_AndClearsOtherArrangementFields()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+
+        var dto = MinimalCreateDto() with
+        {
+            LivingArrangement = Domain.Enums.LivingArrangement.SharedHousehold,
+            LivingArrangementNotes = "Three other tenants.",
+            MainSupportPersonName = "Stray",
+            SilProviderName = "Stray SIL Provider",
+        };
+        var created = Assert.IsType<CreatedAtActionResult>((await controller.Create(dto, CancellationToken.None)).Result);
+
+        var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(created.Value);
+        var saved = await db.Participants.SingleAsync();
+        Assert.Equal(Domain.Enums.LivingArrangement.SharedHousehold, saved.LivingArrangement);
+        Assert.Equal("Three other tenants.", saved.LivingArrangementNotes);
+        Assert.Null(saved.MainSupportPersonName);
+        Assert.Null(saved.SilProviderName);
+        Assert.Equal(body.Data!.Id, saved.Id);
+    }
+
+    [Fact]
     public async Task Create_LivingArrangementFamily_ClearsIndependentAndSupportedAccommodationFields()
     {
         // Defence in depth (mirrors FundingOrganisation): a stray payload carrying fields for
