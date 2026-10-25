@@ -25,5 +25,6 @@ public static class ApiJsonOptions
         options.Converters.Add(new JsonStringEnumConverter());
         options.Converters.Add(new UtcInstantDateTimeConverter());
         options.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+        options.AllowDuplicateProperties = false; // a body with a repeated key is a 400, not "last one wins"
     }
 }
