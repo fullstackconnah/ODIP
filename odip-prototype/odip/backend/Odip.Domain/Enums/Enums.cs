@@ -53,7 +53,9 @@ public enum LivingArrangement
 {
     Family,
     Independent,
-    SupportedAccommodation
+    SupportedAccommodation,
+    /// <summary>Stored as an int: appended last so existing rows keep their value. Has no arrangement-specific fields, only the shared notes.</summary>
+    SharedHousehold
 }
 
 public enum SupportRatio

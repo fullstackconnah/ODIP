@@ -145,10 +145,10 @@ function StepHarness({ step, editable = false }: { step: StepName; editable?: bo
 describe('every Profile step: each direct child of a formGrid container carries an xl:col-span-* class', () => {
   const STEPS: { step: StepName; readOnlyFields: number }[] = [
     { step: 'keyIdentifiers', readOnlyFields: 16 },
-    { step: 'behaviourCognition', readOnlyFields: 4 },
+    { step: 'behaviourCognition', readOnlyFields: 5 },
     { step: 'culturalDepth', readOnlyFields: 9 },
     { step: 'medical', readOnlyFields: 1 }, // sits in a Card, not a formGrid
-    { step: 'mobility', readOnlyFields: 9 },
+    { step: 'mobility', readOnlyFields: 10 },
     { step: 'dailyLiving', readOnlyFields: 0 },
     { step: 'communityAccess', readOnlyFields: 0 },
   ]
@@ -241,6 +241,6 @@ describe('Caregiver wizard: no un-spanned child of a formGrid on any step', () =
       expect(unspannedChildren(container), `step ${i + 2}`).toEqual([])
     }
     // The four read-only-heavy steps really were rendered on the way (16 + 9 + 1 + 9 + 4 read-only fields), so this was not vacuous.
-    expect(seenReadOnly.reduce((a, b) => a + b, 0)).toBe(16 + 9 + 1 + 9 + 4)
+    expect(seenReadOnly.reduce((a, b) => a + b, 0)).toBe(16 + 9 + 1 + 10 + 5)
   })
 })

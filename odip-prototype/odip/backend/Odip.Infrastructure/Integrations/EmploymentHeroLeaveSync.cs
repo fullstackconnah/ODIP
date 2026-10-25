@@ -179,7 +179,9 @@ public sealed class EmploymentHeroLeaveSync
         var userByPayroll = linked.GroupBy(u => u.Payroll).ToDictionary(g => g.Key, g => g.First().Id);
         var payrollByUser = linked.GroupBy(u => u.Id).ToDictionary(g => g.Key, g => g.First().Payroll);
         var known = await db.LeaveRequests.Where(l => l.TenantId == tenantId && l.ExternalLeaveId != null && ids.Contains(l.ExternalLeaveId)).ToListAsync(ct);
-        var knownById = known.GroupBy(l => l.ExternalLeaveId!).ToDictionary(g => g.Key, g => g.First());
+        // A leave this context loaded earlier comes back as its stale tracked copy, with no EH id even though another run has linked it since.
+        foreach (var stale in known.Where(l => l.ExternalLeaveId is null)) await db.Entry(stale).ReloadAsync(ct);
+        var knownById = known.Where(l => l.ExternalLeaveId is not null).GroupBy(l => l.ExternalLeaveId!).ToDictionary(g => g.Key, g => g.First());
         var cancelPending = (await db.EmploymentHeroOutbox.AsNoTracking()
             .Where(r => r.TenantId == tenantId && r.Kind == EmploymentHeroOutboxKind.LeaveCancel && r.Status != EmploymentHeroOutboxStatus.Sent).Select(r => r.EntityId).ToListAsync(ct)).ToHashSet();
         var rows = (await db.EmploymentHeroOutbox.AsNoTracking().Where(r => r.TenantId == tenantId && r.Kind == EmploymentHeroOutboxKind.Leave).ToListAsync(ct))

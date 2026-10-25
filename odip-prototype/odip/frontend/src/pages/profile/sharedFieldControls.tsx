@@ -244,16 +244,18 @@ export function SupportNeedsFields({ control, register, errors }: { control: Ctl
       <CheckboxField label="Shower Chair" id="requiresShowerChair" {...register('requiresShowerChair')} className={span.short} />
       <CheckboxField label="Commode" id="requiresCommode" {...register('requiresCommode')} className={span.short} />
       <CheckboxField label="Standing Machine" id="requiresStandingMachine" {...register('requiresStandingMachine')} className={span.short} />
+      <TextAreaField label="Equipment notes" id="equipmentRequirements" {...register('equipmentRequirements')} rows={2} hint="For example, armrests or back support" className={span.long} />
     </>
   )
 }
 
-/** Behaviours-of-concern flags, expressive skills and behaviour risk summary — Intake's behaviour and risks steps. */
+/** Behaviours-of-concern flags, expressive/receptive skills and behaviour risk summary — Intake's behaviour and risks steps. */
 export function BehaviourSummaryFields({ control, register }: { control: Ctl; register: Reg }) {
   return (
     <>
       <div className={span.medium}><YesNoToggleField control={control} name="behavioursOfConcernCurrent" label="Behaviours of Concern (Current)" /></div>
       <div className={span.medium}><YesNoToggleField control={control} name="behavioursOfConcernFiveYearHistory" label="Behaviours of Concern (5-Year History)" /></div>
+      <TextAreaField label="Receptive Skills" id="receptiveSkills" {...register('receptiveSkills')} rows={2} placeholder="e.g. High, understands simple instructions..." className={span.long} />
       <TextAreaField label="Expressive Skills" id="expressiveSkills" {...register('expressiveSkills')} rows={2} placeholder="e.g. High, verbal..." className={span.long} />
       <TextAreaField label="Behaviour Risk Summary" id="behaviourRiskSummary" {...register('behaviourRiskSummary')} rows={3} placeholder="Behaviour risk notes..." className={span.long} />
     </>

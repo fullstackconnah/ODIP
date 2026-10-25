@@ -410,7 +410,7 @@ export const CONSENT_TYPES = ['PhotoVideo', 'Alcohol', 'OtcMedication', 'Emergen
 export type ConsentType = typeof CONSENT_TYPES[number]
 
 // ── Living Arrangement (LIVING-01) ───────────────────────────────────────
-export const LIVING_ARRANGEMENTS = ['Family', 'Independent', 'SupportedAccommodation'] as const
+export const LIVING_ARRANGEMENTS = ['Family', 'Independent', 'SupportedAccommodation', 'SharedHousehold'] as const
 export type LivingArrangement = typeof LIVING_ARRANGEMENTS[number]
 
 // ── AU State/Territory (INTAKE-06 address — fixed dropdown, not a backend enum: the

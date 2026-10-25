@@ -43,15 +43,23 @@ describe('DOCUMENT_MAPPING entryPhase allocation (PF-10.1)', () => {
     }
   })
 
+  it('receptiveSkills and equipmentRequirements are captured at Intake and print on both documents', () => {
+    for (const field of ['receptiveSkills', 'equipmentRequirements']) {
+      const entry = getFieldMapping(field)
+      expect(entry?.entryPhase).toBe('intake')
+      expect(entry?.sources).toEqual(['shared'])
+    }
+  })
+
   it('matches the field-count split measured against SPEC-05 PF-10.1/PF-10.2\'s allocation tables', () => {
     // 146 total fields as of this branch (PF-10.2 added communityAccessRiskItems +
-    // overallCommunityAccessRiskRating, both Profile): 61 Intake (39 of them sources: ['shared']) /
-    // 85 Profile. A future field addition is expected to move these counts — this test exists to
+    // overallCommunityAccessRiskRating, both Profile): 63 Intake (two moved from Profile 2026-10-23: receptiveSkills, equipmentRequirements; 41 of them sources: ['shared']; both print on the Intake Form and the Profile) /
+    // 83 Profile. A future field addition is expected to move these counts — this test exists to
     // make an accidental mass-reallocation (e.g. a bad refactor of the INTAKE_FIELDS set) fail
     // loudly, not to freeze the numbers forever.
     expect(DOCUMENT_MAPPING.length).toBe(146)
-    expect(fieldsForEntry('intake').length).toBe(61)
-    expect(fieldsForEntry('profile').length).toBe(85)
+    expect(fieldsForEntry('intake').length).toBe(63)
+    expect(fieldsForEntry('profile').length).toBe(83)
   })
 
   it('fieldsForDocument and fieldsForEntry remain independent queries (sources vs entryPhase)', () => {

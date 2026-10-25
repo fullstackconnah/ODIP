@@ -127,7 +127,7 @@ describe('IntakeWizardPage (wire) — resuming a draft', () => {
     expect(second.completionRequestId).toBe(first.completionRequestId)
   })
 
-  it('shows the server\'s own reason when Complete Intake is refused, and stays on the wizard', async () => {
+  it('shows the server\'s own reason when Complete intake is refused, and stays on the wizard', async () => {
     mockApiPutRaw.mockRejectedValue(apiError(400, 'Plan Manager contacts are only available for plan-managed participants.'))
     const user = userEvent.setup()
     renderWizard()
@@ -140,7 +140,7 @@ describe('IntakeWizardPage (wire) — resuming a draft', () => {
     expect(screen.queryByText(/failed to save this participant's intake details/i)).not.toBeInTheDocument()
   })
 
-  it('falls back to a plain message when Complete Intake fails with no server text', async () => {
+  it('falls back to a plain message when Complete intake fails with no server text', async () => {
     mockApiPutRaw.mockRejectedValue(new Error('Network Error'))
     const user = userEvent.setup()
     renderWizard()

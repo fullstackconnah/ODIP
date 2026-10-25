@@ -138,6 +138,23 @@ public class ParticipantIntakeControllerTests
         Assert.True(saved.IsDsoa);
     }
 
+    [Fact]
+    public async Task SaveIntake_WritesReceptiveSkillsAndEquipmentNotes_ItNowOwns()
+    {
+        var tenantId = Guid.NewGuid();
+        var (db, controller) = Create(tenantId);
+        using var _ = db;
+        var participant = DraftWithProfileData(tenantId);
+        db.Participants.Add(participant);
+        await db.SaveChangesAsync();
+
+        Ok(await controller.SaveIntake(participant.Id, WizardBody(", \"receptiveSkills\": \"High\", \"equipmentRequirements\": \"Armrests\""), CancellationToken.None));
+
+        var saved = await db.Participants.SingleAsync();
+        Assert.Equal("High", saved.ReceptiveSkills);
+        Assert.Equal("Armrests", saved.EquipmentRequirements);
+    }
+
     private static readonly string[] NeverWrittenByIntake = ["IsDraft", "IsActive", "IntakeCompletedAt"];
 
     /// <summary>A value that differs from <see cref="Baseline"/> for the same property, so a write shows up as a change.</summary>
