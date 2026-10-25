@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 # Copy solution and project files
@@ -23,11 +23,11 @@ RUN dotnet test Odip.Tests/Odip.Tests.csproj -c Release --no-restore
 RUN dotnet publish Odip.Api/Odip.Api.csproj -c Release -o /app/publish
 
 # Runtime image
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 COPY --from=build /app/publish .
 
-# curl for the Compose healthcheck against /api/health/ready — the aspnet:8.0 runtime
+# curl for the Compose healthcheck against /api/health/ready — the aspnet:10.0 runtime
 # image ships neither curl nor wget, so a healthcheck referencing either is permanently
 # unhealthy without this layer.
 RUN apt-get update \
