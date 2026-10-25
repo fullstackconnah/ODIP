@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import ContactsTab from './ContactsTab'
 import type { ParticipantContactRoleDto, PersonDto } from '@/api/types/contacts'
 import type { ParticipantDetailDto } from '@/api/types/participants'
@@ -216,5 +217,32 @@ describe('ContactsTab — long list (T10)', () => {
     const rows = container.querySelectorAll('tbody tr')
     expect(rows).toHaveLength(23)
     expect(rows[5]).toHaveFocus()
+  })
+})
+
+describe('ContactsTab — one-home copies (T11)', () => {
+  const renderRouted = () => render(<MemoryRouter><ContactsTab participantId="participant-1" /></MemoryRouter>)
+
+  it('shows Preferred staff with a link worded by the viewer gate on Identity', () => {
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ preferredStaffName: 'Alex Rivera' }) })
+    setUserRole('SupportWorker')
+    const { unmount } = renderRouted()
+    expect(screen.getByText(/Preferred staff: Alex Rivera/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'See Identity' })).toHaveAttribute('href', '/?tab=about#identity')
+    unmount()
+    setUserRole('Coordinator')
+    renderRouted()
+    expect(screen.getByRole('link', { name: 'Edit in Identity' })).toBeInTheDocument()
+  })
+
+  it('shows the Home and living hint only when a main support person or SIL provider is recorded', () => {
+    const { unmount } = renderRouted()
+    expect(screen.queryByText(/Recorded in Home and living/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Preferred staff/)).not.toBeInTheDocument()
+    unmount()
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ mainSupportPersonName: 'Jo Brown' }) })
+    renderRouted()
+    expect(screen.getByText(/Recorded in Home and living: Jo Brown. Add them as a contact to keep their details./)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Home and living/ })).toHaveAttribute('href', '/?tab=about#home-and-living')
   })
 })

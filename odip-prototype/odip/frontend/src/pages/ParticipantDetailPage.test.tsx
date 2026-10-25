@@ -1109,6 +1109,17 @@ describe('ParticipantDetailPage — the tab lives in the URL (useTabParam)', () 
     expect(page.url()).toBe('/participants/x-1?from=dash&tab=daily')
   })
 
+  // T11: the Support needs Restrictive practice row points at its one home, worded by the viewer's gate on the register.
+  it.each([['SupportWorker', 'See Restrictive practices'], ['Coordinator', 'Edit in Restrictive practices']])('%s sees "%s" on the Support needs row, and it opens Health', async (role, label) => {
+    const user = userEvent.setup()
+    setUserRole(role)
+    Element.prototype.scrollIntoView = vi.fn()
+    const page = renderWithUrl('/participants/x-1?tab=daily')
+    await user.click(screen.getByRole('link', { name: label }))
+    expect(page.url()).toBe('/participants/x-1?tab=health')
+    expect(screen.getByRole('tab', { name: /^Health/ })).toHaveAttribute('aria-selected', 'true')
+  })
+
   it('reads an unknown ?tab= as the default tab', () => {
     renderWithUrl('/participants/x-1?tab=bogus')
     expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')

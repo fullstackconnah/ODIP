@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { useShowAll } from '@/components/ShowAllButton'
 import { Contact2, Plus } from 'lucide-react'
-import { useParticipantContactRoles, useDeleteContactRole } from '@/api/hooks'
+import { useParticipant, useParticipantContactRoles, useDeleteContactRole } from '@/api/hooks'
 import { Modal } from '@/components/Modal'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { EmptyState } from '@/components/EmptyState'
@@ -18,6 +18,7 @@ import type { ParticipantContactRoleDto } from '@/api/types/contacts'
 import { extractErrorMessage } from '@/lib/utils'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
+import { SeeSectionLink } from './SeeSectionLink'
 
 // A row's actions repeat on every row, and one person can hold several roles, so their names carry both.
 const subject = (role: ParticipantContactRoleDto) => `${role.personFullName}, ${CONTACT_ROLE_TYPE_LABELS[role.roleType]}`
@@ -48,7 +49,9 @@ function roleSummaryLine(role: ParticipantContactRoleDto): string {
 }
 
 export default function ContactsTab({ participantId }: { participantId: string | undefined }) {
-  const { canWriteContacts: canWrite } = usePermissions()
+  const { canWriteContacts: canWrite, canWriteParticipantDetails } = usePermissions()
+  // Read-only copies of facts whose one home is About (plan section 9); the query is the page's own cache entry.
+  const participant = useParticipant(participantId).data
   const rolesQuery = useParticipantContactRoles(participantId)
   const roles = rolesQuery.data ?? []
   // A failed or paused request is not an empty list: "No contacts recorded" is only for one that succeeded and came back empty.
@@ -151,6 +154,19 @@ export default function ContactsTab({ participantId }: { participantId: string |
           </Button>
         )}
       </div>
+
+      {participant?.preferredStaffName && (
+        <p className="flex flex-wrap items-center gap-x-2 text-sm text-[var(--color-foreground)]">
+          Preferred staff: {participant.preferredStaffName}
+          <SeeSectionLink tab="about" hash="identity" section="Identity" canEdit={canWriteParticipantDetails} />
+        </p>
+      )}
+      {(participant?.mainSupportPersonName || participant?.silProviderName) && (
+        <p className="flex flex-wrap items-center gap-x-2 text-sm text-[var(--color-muted-foreground)]">
+          Recorded in Home and living: {[participant.mainSupportPersonName, participant.silProviderName].filter(Boolean).join(', ')}. Add them as a contact to keep their details.
+          <SeeSectionLink tab="about" hash="home-and-living" section="Home and living" canEdit={canWriteParticipantDetails} />
+        </p>
+      )}
 
       {listError && (
         <Callout tone="error"

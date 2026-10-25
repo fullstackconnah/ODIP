@@ -41,6 +41,7 @@ import {
 import { BehaviourSupportCard, TypicalDayCard, EarlierChecklistFold, answeredChecklist } from './participant-detail/ParticipantCommunityAccessSection'
 import { SupportProfileTopicCard, hasTopic, type SupportProfileState, type TopicField } from './participant-detail/SupportProfileTopicCard'
 import { SeeSectionLink } from './participant-detail/SeeSectionLink'
+import { managementLabel } from '@/lib/fundingPlan'
 import { ServicesCard } from './participant-detail/ServicesCard'
 import { JumpPanel } from './participant-detail/JumpTo'
 import { ParticipantSafetyFlags } from './participant-detail/ParticipantSafetyFlags'
@@ -403,7 +404,13 @@ export default function ParticipantDetailPage() {
       <TabPanel tab={tab} id="funding">
         <JumpPanel>
           <div className={CARD_GRID}>
-            {canManageFunding && <Section id="plan-budget" label="Plan budget" srHeading wide><FundingTab participantId={id!} planType={p.planType} /></Section>}
+            {canManageFunding && <Section id="plan-budget" label="Plan budget" srHeading wide>
+              <p className="mb-3 flex flex-wrap items-center gap-x-2 text-sm">
+                Plan type: {managementLabel(p.planType)}
+                <SeeSectionLink tab="about" hash="ndis-plan" section="NDIS plan" canEdit={canWriteParticipantDetails} />
+              </p>
+              <FundingTab participantId={id!} planType={p.planType} />
+            </Section>}
             {canAccessClaims && <Section id="claims" label="Claims" srHeading wide><ClaimsTab participantId={id!} canWrite={canWrite} /></Section>}
           </div>
         </JumpPanel>
