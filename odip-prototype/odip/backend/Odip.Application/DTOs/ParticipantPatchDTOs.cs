@@ -189,7 +189,7 @@ public record PatchLivingArrangementDto
 /// <summary>ndisPlan group — NDIS &amp; Funding (wizard step 1) / NDIS &amp; Funding (detail tab). See PatchParticipantDto's doc.</summary>
 public record PatchNdisPlanDto
 {
-    [StringLength(20)]
+    [NoMaskedId, StringLength(20)]
     public string? NdisNumber { get; init; }
     public DateOnly? PlanStartDate { get; init; }
     public DateOnly? PlanEndDate { get; init; }
@@ -216,20 +216,20 @@ public record PatchServiceProfileDto
 /// <summary>keyIdentifiers group — Key Identifiers (wizard step 2) / Key Identifiers (detail tab). See PatchParticipantDto's doc.</summary>
 public record PatchKeyIdentifiersDto
 {
-    [StringLength(50)]
+    [NoMaskedId, StringLength(50)]
     public string? PensionCardNumber { get; init; }
     public DateOnly? PensionCardExpiry { get; init; }
-    [StringLength(50)]
+    [NoMaskedId, StringLength(50)]
     public string? MedicareNumber { get; init; }
     public DateOnly? MedicareExpiry { get; init; }
-    [StringLength(50)]
+    [NoMaskedId, StringLength(50)]
     public string? CompanionCardNumber { get; init; }
     public DateOnly? CompanionCardExpiry { get; init; }
     [StringLength(100)]
     public string? PrivateHealthFund { get; init; }
-    [StringLength(50)]
+    [NoMaskedId, StringLength(50)]
     public string? PrivateHealthMembershipNumber { get; init; }
-    [StringLength(50)]
+    [NoMaskedId, StringLength(50)]
     public string? TaxiCardNumber { get; init; }
     [StringLength(50)]
     public string? HairColour { get; init; }

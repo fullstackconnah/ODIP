@@ -139,7 +139,8 @@ public class ParticipantsController : ControllerBase
                 Id = p.Id, FirstName = p.FirstName, LastName = p.LastName,
                 PreferredName = p.PreferredName,
                 FullName = string.IsNullOrEmpty(p.PreferredName) ? (p.FirstName + " " + p.LastName).Trim() : (p.PreferredName + " " + p.LastName).Trim(),
-                MaskedNdisNumber = p.NdisNumber != null ? p.NdisNumber.Length > 0 ? "••••••••" + p.NdisNumber.Substring(p.NdisNumber.Length - 1) : "•••" : null,
+                // same rule as ParticipantIdMask.Mask; kept inline so EF translates it
+                MaskedNdisNumber = string.IsNullOrWhiteSpace(p.NdisNumber) ? p.NdisNumber : p.NdisNumber.Trim().Length < 2 ? "••••••••" : "••••••••" + p.NdisNumber.Trim().Substring(p.NdisNumber.Trim().Length - 1),
                 PlanType = p.PlanType, Region = p.Region, IsRepeatClient = p.IsRepeatClient,
                 IsActive = p.IsActive, MobilityAidWheelchair = p.MobilityAidWheelchair, MobilityAidWalker = p.MobilityAidWalker,
                 IsHighSupport = p.IsHighSupport, IsIntensiveSupport = p.IsIntensiveSupport, SupportRatio = p.SupportRatio,
