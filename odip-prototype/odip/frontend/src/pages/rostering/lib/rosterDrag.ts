@@ -210,6 +210,9 @@ export function swappedSentence(carry: DragCarry, to: ShiftDto): string {
   return `Swapped: ${firstName(carry.staffName)} is on ${shiftSpeech(to)}${from ? ` and ${firstName(to.staffName)} on ${shiftSpeech(from)}` : ''}.`
 }
 
+/** "Couldn't publish Mia Chen, Tuesday 9am to 3pm." The start of every publish failure on the board, so the notice says what failed and on which shift. */
+export const publishFailedPrefix = (shift: ShiftDto) => `Couldn't publish ${shiftSpeech(shift)}.`
+
 /** "Published Mia Chen, Tuesday 9am to 3pm. Sam has been notified." (the last sentence only when someone is on the shift) */
 export function publishedShiftSentence(shift: ShiftDto): string {
   return `Published ${shiftSpeech(shift)}.${shift.staffName ? ` ${firstName(shift.staffName)} has been notified.` : ''}`

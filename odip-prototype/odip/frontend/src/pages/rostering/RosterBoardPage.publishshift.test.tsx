@@ -66,12 +66,13 @@ describe('Publish from the chip menu', () => {
     await openMenu(user, 'draft-1')
     await user.click(screen.getByRole('option', { name: 'Publish' }))
     await waitFor(() => expect(h.update).toHaveBeenCalledTimes(1))
+    // The full body, every field the server reads; expectedStaffId is the worker the chip showed, so a stale chip is refused rather than written back.
     expect(h.update).toHaveBeenCalledWith({
       id: 'draft-1',
-      data: {
+      data: expect.objectContaining({
         participantId: 'p-1', staffId: 'staff-2', serviceDate: '2026-08-18', startTime: '09:00', endTime: '15:00', endsNextDay: DRAFT.endsNextDay, ratio: DRAFT.ratio, nightType: DRAFT.nightType,
-        status: 'Published', notes: 'Bring the lift sling', overrideReason: 'Cover', acknowledgedFindingCodes: ['SOME_WARNING'],
-      },
+        status: 'Published', notes: 'Bring the lift sling', overrideReason: 'Cover', acknowledgedFindingCodes: ['SOME_WARNING'], expectedStaffId: 'staff-2',
+      }),
     })
     await waitFor(() => expect(screen.getByText(/Published Mia Chen, Tuesday 9am to 3pm\. Sam has been notified\./)).toBeInTheDocument())
   })
@@ -95,7 +96,7 @@ describe('Publish from the chip menu', () => {
     renderPage()
     await openMenu(user, 'draft-1')
     await user.click(screen.getByRole('option', { name: 'Publish' }))
-    expect(await screen.findByText(/This shift has already started./)).toBeInTheDocument()
+    expect(await screen.findByText("Couldn't publish Mia Chen, Tuesday 9am to 3pm. This shift has already started.")).toBeInTheDocument()
     expect(within(chipOf('draft-1')).getByText('Draft')).toBeInTheDocument()
     await openMenu(user, 'draft-1')
     expect(screen.getByRole('option', { name: 'Publish' })).not.toHaveAttribute('aria-disabled')
@@ -107,7 +108,26 @@ describe('Publish from the chip menu', () => {
     renderPage()
     await openMenu(user, 'draft-1')
     await user.click(screen.getByRole('option', { name: 'Publish' }))
-    expect(await screen.findByText(/Open the shift to see what needs fixing/)).toBeInTheDocument()
+    expect(await screen.findByText("Couldn't publish Mia Chen, Tuesday 9am to 3pm. Open the shift to see what needs fixing, then publish it from there.")).toBeInTheDocument()
+  })
+
+  it('with no server message it names the shift and says to try again', async () => {
+    const user = userEvent.setup()
+    h.update.mockRejectedValue(new Error('boom'))
+    renderPage()
+    await openMenu(user, 'draft-1')
+    await user.click(screen.getByRole('option', { name: 'Publish' }))
+    expect(await screen.findByText("Couldn't publish Mia Chen, Tuesday 9am to 3pm. Please try again.")).toBeInTheDocument()
+  })
+
+  it('a worker moved since the board loaded (409) shows the board-changed notice with Refresh the board', async () => {
+    const user = userEvent.setup()
+    h.update.mockRejectedValue({ isAxiosError: true, response: { status: 409, data: { message: 'This shift changed after the board was loaded. Refresh the board and try again.', code: 'SHIFT_BOARD_CHANGED' } } })
+    renderPage()
+    await openMenu(user, 'draft-1')
+    await user.click(screen.getByRole('option', { name: 'Publish' }))
+    expect(await screen.findByRole('button', { name: 'Refresh the board' })).toBeInTheDocument()
+    expect(screen.getByText(/Couldn't publish Mia Chen, Tuesday 9am to 3pm. This shift changed after the board was loaded/)).toBeInTheDocument()
   })
 
   it('a reader gets no actions menu, so no Publish', () => {

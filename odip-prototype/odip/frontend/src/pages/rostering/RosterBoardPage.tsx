@@ -31,7 +31,7 @@ import { BOARD_REFRESHED, isBoardChanged } from './lib/boardChanged'
 import { weekStartOf, weekStartFromDateParam, shiftWeek, daysOfWeek, isUnfilledShift, formatWeekSpan, allBoardShifts } from './lib/roster'
 import { useBoardViewMode } from './lib/useBoardViewMode'
 import {
-  DropStateContext, ROSTER_SCREEN_READER_INSTRUCTIONS, assignedSentence, dropOutcome, movedSentence, publishWeekMessage, publishedShiftSentence, publishedSentence, replacePromptLines, rosterAnnouncements,
+  DropStateContext, ROSTER_SCREEN_READER_INSTRUCTIONS, assignedSentence, dropOutcome, movedSentence, publishFailedPrefix, publishWeekMessage, publishedShiftSentence, publishedSentence, replacePromptLines, rosterAnnouncements,
   rosterCollision, staffWeekHours, swappedSentence, keepInWindow, isLockedShift, leaveFromStaffRows, type DragCarry, type DropTarget, type PendingDrop, type PickRow,
 } from './lib/rosterDrag'
 import {
@@ -408,13 +408,16 @@ export default function RosterBoardPage() {
           participantId: shift.participantId, staffId: shift.staffId ?? null, serviceDate: shift.serviceDate, startTime: shift.startTime.slice(0, 5), endTime: shift.endTime.slice(0, 5),
           endsNextDay: shift.endsNextDay, ratio: shift.ratio, nightType: shift.nightType, status: 'Published', notes: shift.notes, overrideReason: shift.overrideReason,
           acknowledgedFindingCodes: shift.acknowledgedFindingCodes ?? [],
+          // The worker the chip showed: if the shift has moved to someone else, the server answers 409 (board changed) instead of writing this stale worker back.
+          expectedStaffId: shift.staffId ?? null,
         },
       })
       setAnnouncement(publishedShiftSentence(shift))
     } catch (err: unknown) {
       // The shift stays a Draft. A refusal over findings is the panel's to answer (reasons, overrides), so it points there.
-      if (getRosterFindings(err)) setAssignError({ message: 'Open the shift to see what needs fixing, then publish it from there.', boardChanged: false })
-      else showWriteError(err, 'Something went wrong publishing this shift. Please try again.')
+      const failed = publishFailedPrefix(shift)
+      if (getRosterFindings(err)) setAssignError({ message: `${failed} Open the shift to see what needs fixing, then publish it from there.`, boardChanged: false })
+      else setAssignError({ message: `${failed} ${extractErrorMessage(err, 'Please try again.')}`, boardChanged: isBoardChanged(err) })
     } finally {
       publishesInFlight.current.delete(shift.id)
       setPublishingIds(new Set(publishesInFlight.current))

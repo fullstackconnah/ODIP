@@ -7,7 +7,7 @@ import { Dropdown } from '@/components/Dropdown'
 import { TAP_AREA } from '@/components/tapArea'
 import { formatShiftTimeRange, isUnfilledShift, RATIO_LABELS, shiftSource } from '../lib/roster'
 import { plural } from '@/lib/format'
-import { TONE } from '@/lib/tone'
+import { ON_TINT, TONE } from '@/lib/tone'
 import { OVER_BUDGET_MARKER, markerForAcknowledgedCodes } from './parallel-budget-override'
 import { DropStateContext, canDeleteShift, dropOutcome, firstName, isLockedShift, lockedWords, pickName, type DragCarry, type DropTarget } from '../lib/rosterDrag'
 
@@ -57,8 +57,10 @@ const LABEL_LINK =
 
 /**
  * The one chip type rendered in staff rows, participant rows and the Unfilled lane. Colour is
- * reserved for "something is wrong" — a healthy chip is a neutral surface; only the warning dot and
- * the dashed/unfilled variant carry meaning.
+ * reserved for "something needs attention" — a healthy chip is a neutral surface; only the finding marker,
+ * the dashed/unfilled variant and one exception carry meaning. The exception: a Draft shift on this board takes
+ * the warning tray plus the word "Draft", because it is waiting for the coordinator to publish it. Findings keep
+ * priority over that tint: on a Draft chip the marker sits in an ON_TINT pill (card fill, the tone's ink), not a bare stroke.
  *
  * A tray holding a slot (the chip brief, 2026-10-15). The tray is a header, when and what kind (the time, the label), over a bordered box, who: the plus when nobody,
  * the person when someone, a Lock when nothing can change. The tray is always solid, because the shift exists; the box is dashed where the shift has a hole. 56px tall with a
@@ -138,7 +140,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
   const menuItems = [
     { value: 'edit', label: 'Edit' },
     // Publish (card roster-draft-publish): a Draft shift, for the writers the menu is already for. It waits while its own write is out.
-    ...(isDraft && publish ? [{ value: 'publish', label: publishing ? 'Publishing…' : 'Publish', disabled: publishing }] : []),
+    ...(isDraft && publish ? [{ value: 'publish', label: publishing ? 'Publishing…' : 'Publish', disabled: publishing || dragsOff }] : []),
     // The owner's words (the brief, section 5): Replace and Remove name the person, which keeps Remove apart from Delete and says who is meant in the Staff view.
     { value: 'assign', label: dashed || !shift.staffId ? 'Assign to…' : `Replace ${firstName(shift.staffName)}…`, disabled: canPick && dragsOff },
     // Swap (the lead's decision 1): an assigned, unlocked chip, wherever the page can open the swap picker. It waits while a write is out, as every drag and plus does.
@@ -151,7 +153,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
 
   function handleMenuSelect(value: string) {
     if (value === 'edit') onOpen(shift)
-    else if (value === 'publish') publish?.(shift)
+    else if (value === 'publish') { if (!dragsOff) publish?.(shift) }
     // An unfilled chip assigns through the picker, as its plus does: one way to assign on one chip (SHAPE departure 13). A filled chip's "Replace {first name}…" keeps the panel.
     else if (value === 'assign') { if (!canPick) onAssignTo(shift); else if (!dragsOff) pick?.(shift) }
     else if (value === 'swap') { if (!dragsOff) swap?.(shift) }
@@ -247,7 +249,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
       // The tray: the header row over the --control-h box row; a marked chip adds one row for its marker words.
       // Three columns, lead, name and menu. The open control and its box share the rows and columns (subgrid), so the grip, plus and menu still sit in the box's cells.
       // A 2px pad and a 2px row gap make 56px with a mouse and 68px under a coarse pointer; a marked chip grows only for its marker line.
-      className={`group @container relative grid grid-cols-[auto_minmax(0,1fr)_auto] ${markedChip ? 'grid-rows-[auto_var(--control-h)_auto]' : 'grid-rows-[auto_var(--control-h)]'} gap-y-0.5 rounded-sm border border-border ${isDraft ? 'bg-[var(--color-warning-container)]' : 'bg-surface-container-low'} p-0.5 text-[13px] transition-opacity duration-150 ${
+      className={`group @container relative grid grid-cols-[auto_minmax(0,1fr)_auto] ${markedChip ? 'grid-rows-[auto_var(--control-h)_auto]' : 'grid-rows-[auto_var(--control-h)]'} gap-y-0.5 rounded-sm border border-border ${isDraft ? TONE.warning.soft : 'bg-surface-container-low'} p-0.5 text-[13px] transition-opacity duration-150 ${
         isDragging || fading ? 'opacity-50' : ''
       } ${overKind === 'locked' ? 'cursor-not-allowed' : ''} ${hasFindings || budgetMarker ? 'my-2' : ''}`}
     >
@@ -317,7 +319,8 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
         className={`col-span-full ${markedChip ? 'row-[1/span_3]' : 'row-[1/span_2]'} grid grid-cols-subgrid grid-rows-subgrid rounded-sm text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring`}
       >
         {/* The header: one 16px line of 12px text, 4px in from the tray's inner edge. The time has the chip's whole width and never gives way; the kind is right-aligned after it. */}
-        <span className="col-span-full flex h-4 min-w-0 items-center gap-0.5 px-0.5 text-xs">
+        {/* A Draft chip's marker is a 20px badge reaching 12px into the tray, so the header keeps clear of it. */}
+        <span className={`col-span-full flex h-4 min-w-0 items-center gap-0.5 ${isDraft && hasFindings ? 'pl-0.5 pr-3' : 'px-0.5'} text-xs`}>
           <span
             className={`shrink-0 font-medium tabular-nums ${shift.status === 'Cancelled' ? 'text-muted-foreground line-through' : 'text-foreground'}`}
             title={shift.endsNextDay ? `${timeRange} — ends the next day` : undefined}
@@ -336,7 +339,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
           <span className="flex h-4 min-w-0 flex-1 flex-wrap items-center justify-end gap-y-4 overflow-hidden text-muted-foreground" title={source.title} data-shift-source={source.kind}>
             <span className="h-4 w-0" aria-hidden="true" />
             {/* Draft leads the kind, so on a narrow chip the kind's word goes first, then its glyph, then this: the tint is the cue that is never dropped. */}
-            {isDraft && <span className="shrink-0 pr-1 font-semibold text-[var(--color-on-warning-container)]">Draft</span>}
+            {isDraft && <span className={`shrink-0 pr-1 font-semibold ${TONE.warning.ink}`}>Draft</span>}
             <SourceIcon className="h-3 w-3 shrink-0" aria-hidden="true" />
             <span className="shrink-0 pl-0.5">{source.word}</span>
           </span>
@@ -409,19 +412,20 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
       */}
       {hasFindings && (
         <span
-          className="pointer-events-none absolute -top-[10px] -right-1.5 z-10 flex h-3 w-3"
+          // A Draft chip's marker is a badge (card fill, the tone's ink, a ring) so it outranks the amber tray; 20px, hung 8px above the tray, inside the chip's my-2.
+          className={`pointer-events-none absolute z-10 flex ${isDraft ? `-top-[9px] -right-2 h-5 w-5 items-center justify-center rounded-full ring-1 ring-current ${hasBlocking ? ON_TINT.danger : ON_TINT.warning}` : '-top-[10px] -right-1.5 h-3 w-3'}`}
           role="img"
           aria-label={findingsSeverityLabel(shift.findings)}
           title={findingsSeverityLabel(shift.findings)}
         >
           {hasBlocking ? (
-            <AlertOctagon className="h-3 w-3 text-destructive" aria-hidden="true" />
+            <AlertOctagon className={isDraft ? 'h-3.5 w-3.5' : 'h-3 w-3 text-destructive'} aria-hidden="true" />
           ) : (
             // Amber-700, not the --color-warning token: the token (#f59e0b) measures 1.94:1
             // against this chip's surface-container-low background, failing WCAG 1.4.11's 3:1
             // minimum for a graphical object conveying meaning. --color-on-warning-container
             // (#92400e) clears it comfortably while still reading as amber.
-            <AlertTriangle className="h-3 w-3 text-[var(--color-on-warning-container)]" aria-hidden="true" />
+            <AlertTriangle className={isDraft ? 'h-3.5 w-3.5' : 'h-3 w-3 text-[var(--color-on-warning-container)]'} aria-hidden="true" />
           )}
         </span>
       )}
