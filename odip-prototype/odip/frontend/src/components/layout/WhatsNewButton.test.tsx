@@ -101,6 +101,7 @@ describe('WhatsNewButton: the panel (V-B3, V-B4)', () => {
     expect(document.body.contains(dialog)).toBe(true)
     expect(button().parentElement?.contains(dialog)).toBe(false)
     expect(button()).toHaveAttribute('aria-haspopup', 'dialog')
+    await waitFor(() => expect(dialog.contains(document.activeElement) && document.activeElement?.textContent === "What's new").toBe(true))
   })
 
   it('Escape, a click outside, focus moving on and a route change close it; Escape and an outside click return focus to the button', async () => {

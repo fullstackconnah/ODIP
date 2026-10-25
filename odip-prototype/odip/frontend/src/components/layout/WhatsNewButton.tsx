@@ -127,6 +127,7 @@ export default function WhatsNewButton() {
         <SlideOver
           open={open}
           onClose={() => setOpen(false)}
+          initialFocusRef={slideOverTitleRef}
           title={<span ref={slideOverTitleRef} tabIndex={-1} className="focus:outline-none">What's new</span>}
           bodyClassName="p-0"
         >
