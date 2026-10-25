@@ -34,6 +34,9 @@ public static class WhatsNewSeed
         new Item("2026-10-caregiver-accept-keeps-edits", "Accepting a caregiver's form keeps your team's newer edits",
             "Accepting a caregiver's form now applies only what the caregiver changed. Details your team edited after the caregiver opened the form are kept.\n\nIf your team and the caregiver changed the same detail, the caregiver's value is applied and the review screen flags that row.",
             Staff, false),
+        new Item("2026-10-caregiver-form-keeps-typing", "Caregiver forms keep what you type while saving",
+            "If a caregiver keeps typing while their form is saving, what they typed is now kept instead of being cleared when the save finishes.",
+            Staff, false),
     };
 
     /// <summary>Inserts the keys the table lacks, one save each, so a key another instance inserted first costs only that row.</summary>
