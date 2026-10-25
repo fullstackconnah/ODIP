@@ -40,7 +40,7 @@ public class TenantsController : ControllerBase
             .OrderBy(t => t.Name)
             .Select(t => new TenantSummaryDto(
                 t.Id, t.Name, t.EmailDomain, t.IsActive, t.CreatedAt,
-                _db.Users.IgnoreQueryFilters([TenantFilter.Name]).Count(u => u.TenantId == t.Id)))
+                _db.Users.IgnoreQueryFilters(new[] { TenantFilter.Name }).Count(u => u.TenantId == t.Id)))
             .ToListAsync();
         return Ok(ApiResponse<List<TenantSummaryDto>>.Ok(tenants));
     }
