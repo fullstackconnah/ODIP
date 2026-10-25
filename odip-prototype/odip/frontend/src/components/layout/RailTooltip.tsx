@@ -69,6 +69,8 @@ class RailTipController {
   }
 
   private show(el: HTMLElement, label: string, count: number) {
+    // The item can unmount while the 500ms timer is pending; a detached rect is all zeros and would strand the tip at the corner.
+    if (!el.isConnected) return
     const rect = el.getBoundingClientRect()
     const left = (el.closest('aside')?.getBoundingClientRect().right ?? rect.right) + MARGIN
     const top = Math.min(Math.max(rect.top + rect.height / 2 - HEIGHT / 2, MARGIN), window.innerHeight - MARGIN - HEIGHT)
@@ -102,6 +104,8 @@ class RailTipController {
 export function useRailTooltip() {
   const [tip, setTip] = useState<Tip | null>(null)
   const [ctl] = useState(() => new RailTipController(setTip))
+
+  useEffect(() => ctl.hide, [ctl])
 
   useEffect(() => {
     if (!tip) return

@@ -3,7 +3,7 @@ import { usePreviousAppPathTracker } from '@/hooks/useBackNavigation'
 import { useDialogBehavior } from '@/hooks/useDialogBehavior'
 import { useIsBelowLg } from '@/hooks/useIsBelowLg'
 import { LogOut, Menu, X, ChevronDown } from 'lucide-react'
-import { Suspense, useId, useState, useRef } from 'react'
+import { Suspense, useCallback, useId, useState, useRef } from 'react'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import TenantSwitcher from '@/components/layout/TenantSwitcher'
 import UserSwitcher from '@/components/layout/UserSwitcher'
@@ -337,14 +337,16 @@ export default function AppLayout() {
   const settleTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const railTip = useRailTooltip()
   const [openFlyout, setOpenFlyout] = useState<{ id: string; trigger: HTMLElement } | null>(null)
-  const closeFlyout = (focusTrigger: boolean) => {
+  // Stable between renders so RailFlyout's document listeners are not torn down and re-added on every parent render.
+  const closeFlyout = useCallback((focusTrigger: boolean) => {
     setOpenFlyout(null)
     if (focusTrigger) openFlyout?.trigger.focus()
-  }
-  const toggleFlyout = (id: string, trigger: HTMLElement) => {
-    railTip.hide()
+  }, [openFlyout])
+  const hideTip = railTip.hide
+  const toggleFlyout = useCallback((id: string, trigger: HTMLElement) => {
+    hideTip()
     setOpenFlyout(openFlyout?.id === id ? null : { id, trigger })
-  }
+  }, [hideTip, openFlyout])
   // A flyout left open when the window shrank below lg has no rail to hang from.
   if (isBelowLg && openFlyout) setOpenFlyout(null)
   const toggleCollapsed = () => {
@@ -514,7 +516,8 @@ export default function AppLayout() {
           <button onClick={endSession}
             className={`${rail ? RAIL_ITEM : WIDE_FOOT_ROW} text-[var(--color-secondary)] hover:bg-[var(--color-sidebar-accent)]`}
             {...(rail ? rail.tip('Sign out', 0) : {})}>
-            <LogOut className="w-4 h-4" />
+            {/* The wide icon sits in an 18px slot so Sign out's label starts at x=54 like the nav labels. */}
+            {rail ? <LogOut className="w-4 h-4" /> : <span className="inline-flex w-[18px] justify-center"><LogOut className="w-4 h-4" /></span>}
             {rail ? <span className="sr-only">Sign out</span> : 'Sign out'}
           </button>
           {/* Collapse / expand: one button in both states (it keeps its focus across the toggle), named for what it will do. */}

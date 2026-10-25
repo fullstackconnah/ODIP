@@ -1538,6 +1538,33 @@ describe('AppLayout — the sidebar collapses to an icon rail (from lg)', () => 
     expect(tooltip()).toBeNull()
   })
 
+  it('shows no tooltip when its item unmounts during the 500ms delay (it would strand at the corner)', () => {
+    renderRail('/', { sidebarCollapsed: true })
+    const item = dashboard()
+    fireEvent.pointerEnter(item, { pointerType: 'mouse' })
+    act(() => { vi.advanceTimersByTime(300) })
+    item.remove()
+    act(() => { vi.advanceTimersByTime(300) })
+    expect(tooltip()).toBeNull()
+  })
+
+  it('opens a flyout with its header level with the trigger icon (trigger top + 2px)', () => {
+    renderRail('/', { sidebarCollapsed: true })
+    const group = trigger(/Trips$/)
+    group.getBoundingClientRect = () => ({ top: 100, bottom: 140, left: 12, right: 52, width: 40, height: 40, x: 12, y: 100, toJSON: () => ({}) })
+    fireEvent.click(group)
+    expect(panel('Trips')!.style.top).toBe('102px')
+  })
+
+  it('the wide Sign out icon sits in an 18px slot so its label lines up with the nav labels; the rail one does not', () => {
+    const { unmount } = renderRail('/')
+    const icon = () => within(aside()).getByRole('button', { name: /Sign out$/ }).querySelector('svg')!
+    expect(icon().parentElement).toHaveClass('w-[18px]')
+    unmount()
+    renderRail('/', { sidebarCollapsed: true })
+    expect(icon().parentElement).not.toHaveClass('w-[18px]')
+  })
+
   it('the width and margin transitions are off under reduced motion', () => {
     renderRail('/')
     expect(aside().className).toContain('motion-reduce:lg:transition-none')

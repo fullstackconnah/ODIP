@@ -28,7 +28,7 @@ export function RailFlyout({ id, label, trigger, onClose, children }: {
     const rect = trigger.getBoundingClientRect()
     panel.style.left = `${(trigger.closest('aside')?.getBoundingClientRect().right ?? rect.right) + MARGIN}px`
     panel.style.maxHeight = `${window.innerHeight - 2 * MARGIN}px`
-    panel.style.top = `${Math.max(MARGIN, Math.min(rect.top - 6, window.innerHeight - MARGIN - panel.offsetHeight))}px`
+    panel.style.top = `${Math.max(MARGIN, Math.min(rect.top + 2, window.innerHeight - MARGIN - panel.offsetHeight))}px`
   }, [trigger])
 
   useEffect(() => {
