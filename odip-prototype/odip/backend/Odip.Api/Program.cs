@@ -558,6 +558,7 @@ for (var attempt = 1; attempt <= maxRetries; attempt++)
         await DbSeeder.SeedParticipantDailyLivingAsync(db);
         await DbSeeder.SeedCommunityAccessDailyLivingAsync(db);
         await DbSeeder.SeedShiftNotesAsync(db);
+        await WhatsNewSeed.SeedWhatsNewAsync(db, DateTime.UtcNow);
 
         break; // Success — exit retry loop
     }
