@@ -54,6 +54,8 @@ try {
       const tag = `${vp.name}-${scheme}`
       const context = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, hasTouch: !!vp.mobile, isMobile: !!vp.mobile, locale: 'en-AU', timezoneId: 'Australia/Sydney', colorScheme: scheme, reducedMotion: 'reduce' })
       const page = await context.newPage()
+      // The touch emulation alone left `pointer: coarse` false on the first page of a run; pin it so the 44px density tokens apply.
+      if (vp.mobile) await (await context.newCDPSession(page)).send('Emulation.setEmulatedMedia', { features: [{ name: 'pointer', value: 'coarse' }, { name: 'hover', value: 'none' }] })
       page.on('pageerror', (e) => check(`${tag} page error`, e.message, false))
       await page.route('**/api/v1/auth/dev-users', (r) => r.fulfill({ json: devUsers }))
       await page.route('**/api/v1/auth/dev-login', (r) => r.fulfill({ json: devLogin }))
@@ -142,7 +144,7 @@ try {
       const tl = await lines(page.getByText(/^Imported \d+ shifts?/).first()); check(`${tag} result title lines`, tl, !vp.mobile || tl === 1)
       const ol = await lines(open); check(`${tag} Open the first week lines`, ol, ol === 1)
       const ws = await open.evaluate((e) => getComputedStyle(e).whiteSpace); check(`${tag} Open the first week white-space`, ws, ws === 'nowrap')
-      if (vp.mobile) { const b = await box(open); check(`${tag} touch target Open the first week height>=44`, Math.round(b.height), b.height >= 43.5) }
+      if (vp.mobile) { const b = await box(open);  check(`${tag} touch target Open the first week height>=44`, Math.round(b.height), b.height >= 43.5) }
       await noScroll('result')
       const href = await open.getAttribute('href')
       if (scheme === 'light') await shot('result', main)
