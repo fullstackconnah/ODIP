@@ -27,6 +27,10 @@
   --color-border: #c3c9b5;
   --color-input: #e4e2de;
   --color-ring: #396200;
+  /* Microsoft's own button colours for Sign in with Microsoft (light and dark variants of its branding guidance). */
+  --ms-button-bg: #ffffff;
+  --ms-button-fg: #5e5e5e;
+  --ms-button-border: #8c8c8c;
   --color-sidebar: #f5f3ef;
   --color-sidebar-foreground: #1b1c1a;
   --color-sidebar-accent: rgba(255,255,255,0.4);
@@ -419,6 +423,9 @@
   --color-border: #434a3e;
   --color-input: #2b2f28;
   --color-ring: #a6d66b;
+  --ms-button-bg: #2f2f2f;
+  --ms-button-fg: #ffffff;
+  --ms-button-border: #8c8c8c;
   --color-sidebar: #171a15;
   --color-sidebar-foreground: #e4e5dd;
   --color-sidebar-accent: rgba(255,255,255,0.06);

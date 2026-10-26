@@ -179,7 +179,8 @@ describe('the Microsoft outcome words', () => {
   it('sets the tone per code and tells the person what to do next', () => {
     expect(describeMicrosoftOutcome('MicrosoftCancelled', 'signin').tone).toBe('warning')
     expect(describeMicrosoftOutcome('MicrosoftSessionEnded', 'signin')).toMatchObject({ tone: 'info', sentence: "You've been signed out." })
-    expect(describeMicrosoftOutcome('MicrosoftOrgAlreadyLinked', 'organisation')).toMatchObject({ tone: 'info', nextStep: undefined })
+    expect(describeMicrosoftOutcome('MicrosoftOrgAlreadyLinked', 'organisation').tone).toBe('info')
+    expect(describeMicrosoftOutcome('MicrosoftOrgAlreadyLinked', 'organisation').nextStep).toBeUndefined()
     expect(describeMicrosoftOutcome('MicrosoftOnlySignIn', 'account')).toMatchObject({
       tone: 'danger',
       sentence: "Microsoft is your only way to sign in, so you can't unlink it yet.",

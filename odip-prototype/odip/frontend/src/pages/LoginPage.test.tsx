@@ -27,8 +27,12 @@ vi.mock('@/lib/firebase', () => ({
     return firebase.devAuth
   },
 }))
+// The page also has its own polite region for Microsoft outcomes (first in main); these tests mean the one inside the card.
+const cardStatuses = () => within(screen.getByLabelText('Email').closest('form') as HTMLElement).getAllByRole('status')
 vi.mock('firebase/auth', () => ({ sendPasswordResetEmail }))
-vi.mock('@/api/hooks', () => ({
+vi.mock('@/api/hooks', async () => ({
+  // The real storeSession, so the tests still see what a sign-in keeps.
+  storeSession: (await vi.importActual<typeof import('@/api/hooks/auth')>('@/api/hooks/auth')).storeSession,
   useLogin: () => ({ mutateAsync: mockLogin, isPending: false }),
   useResendVerification: () => ({ mutateAsync: mockResend, isPending: false }),
   useDevLogin: () => ({ mutateAsync: mockDevLogin, isPending: false }),
@@ -139,7 +143,7 @@ describe('LoginPage: a sign-in the exchange refused', () => {
     await waitFor(() => expect(mockResend).toHaveBeenCalledTimes(1))
     expect(mockResend).toHaveBeenCalledWith({ email: EMAIL, password: 'a-password' })
     // The polite status is on the page before anything is said, so wait for what is said in it.
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(`We've sent it again to ${EMAIL}. It can take a few minutes, so check your spam folder.`))
+    await waitFor(() => expect(cardStatuses()[0]).toHaveTextContent(`We've sent it again to ${EMAIL}. It can take a few minutes, so check your spam folder.`))
     // Held again: another click does nothing until the wait is over.
     await u.click(screen.getByRole('button', { name: 'Send it again' }))
     expect(mockResend).toHaveBeenCalledTimes(1)
@@ -496,7 +500,7 @@ describe('LoginPage: sending the verification link again', () => {
   it('says that it is sending and then that it went, in a polite status that is on the page before either, and shows the sentence once', async () => {
     const resend = pendingResend()
     const u = await refusedUnverified()
-    const status = screen.getByRole('status')
+    const status = cardStatuses()[0]
     expect(status).toBeEmptyDOMElement()
 
     await u.click(sendAgain())
@@ -505,21 +509,21 @@ describe('LoginPage: sending the verification link again', () => {
 
     await waitFor(() => expect(status).toHaveTextContent(`We've sent it again to ${EMAIL}. It can take a few minutes, so check your spam folder.`))
     expect(status).not.toHaveTextContent('Sending')
-    expect(screen.getAllByRole('status')).toHaveLength(1)
-    expect(screen.getByRole('status')).toBe(status)
+    expect(cardStatuses()).toHaveLength(1)
+    expect(cardStatuses()[0]).toBe(status)
   })
 
   it('does not add a second alert when the resend fails: the failure is said in that polite status', async () => {
     const resend = pendingResend()
     const u = await refusedUnverified()
-    const status = screen.getByRole('status')
+    const status = cardStatuses()[0]
 
     await u.click(sendAgain())
     await resend.fail({ code: 'auth/too-many-requests' })
 
     await waitFor(() => expect(status).toHaveTextContent("We couldn't send it just now. Wait a few minutes, then try again."))
     expect(screen.getAllByRole('alert')).toHaveLength(1)
-    expect(screen.getAllByRole('status')).toHaveLength(1)
+    expect(cardStatuses()).toHaveLength(1)
   })
 
   it('disables Sign In while the link is being sent again, and enables it when that is over', async () => {

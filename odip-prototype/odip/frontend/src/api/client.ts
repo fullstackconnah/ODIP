@@ -20,12 +20,14 @@ let loggingOut = false
  * Ends the session everywhere and goes to /login. This browser is signed out first (the keys go, Firebase forgets the user), so a slow API cannot leave the app
  * usable behind a Sign out button that looks dead. Then the server is told to drop the 7-day cookie (it outlives the stored token, and the API accepts it when no
  * token is sent), with the token the keys held; that is best effort and gives up after 5 s. A step that fails does not stop the others.
+ *
+ * `reason` is a Microsoft outcome code (MicrosoftSessionEnded) the login page words for the person, so they know why they were signed out.
  */
-export async function endSession() {
+export async function endSession(reason?: string) {
   if (loggingOut) return
   loggingOut = true
   const token = localStorage.getItem('odip_token')
-  for (const key of ['odip_token', 'odip_user', 'odip_viewing_tenant', 'odip_viewing_user', 'odip_superadmin_user']) localStorage.removeItem(key)
+  for (const key of ['odip_token', 'odip_user', 'odip_viewing_tenant', 'odip_viewing_user', 'odip_superadmin_user', 'odip_sign_in_method']) localStorage.removeItem(key)
   try {
     const { auth } = await import('../lib/firebase')
     if (auth) await (await import('firebase/auth')).signOut(auth)
@@ -33,7 +35,7 @@ export async function endSession() {
   try {
     await apiClient.post('/auth/logout', undefined, { timeout: 5000, headers: token ? { Authorization: `Bearer ${token}` } : undefined })
   } catch { /* ignore */ }
-  window.location.href = '/login'
+  window.location.href = reason ? `/login?microsoft=${encodeURIComponent(reason)}` : '/login'
 }
 
 // JWT interceptor
@@ -64,17 +66,25 @@ apiClient.interceptors.response.use(
     // would ask the exchange again about the same account and get the same answer; and because the refresh itself calls the exchange, a refusal there waited
     // on its own refresh and never settled. A refused sign-in used to leave the page on "Signing in..." for good, and a refresh refused mid-session left the
     // request that triggered it hanging. Now it is passed on as it is (the login page reads the code), and a refused refresh signs the person out below.
-    if (error.response?.status === 401 && config?.url?.endsWith('/auth/exchange')) {
+    if (error.response?.status === 401 && (config?.url?.endsWith('/auth/exchange') || config?.url?.endsWith('/auth/microsoft/refresh'))) {
       return Promise.reject(error)
     }
     if (error.response?.status === 401 && !config._retried) {
       config._retried = true
+      // A Microsoft session has no Firebase user: it is renewed at the Microsoft refresh, which says whether Microsoft's session is still good.
+      const microsoft = localStorage.getItem('odip_sign_in_method') === 'microsoft'
       try {
         // Deduplicate concurrent refresh calls — reuse in-flight promise instead of
         // spawning a new /auth/exchange request for every simultaneous 401
         if (!refreshPromise) {
           refreshPromise = (async () => {
             try {
+              if (microsoft) {
+                const res = await apiClient.post<ApiResponse<{ token: string }>>('/auth/microsoft/refresh')
+                const token = res.data.data?.token ?? null
+                if (token) localStorage.setItem('odip_token', token)
+                return token
+              }
               const { auth } = await import('../lib/firebase')
               const currentUser = auth?.currentUser
               if (!currentUser) return null
@@ -99,7 +109,7 @@ apiClient.interceptors.response.use(
       } catch {
         // Firebase refresh failed — fall through to logout
       }
-      await endSession()
+      await endSession(microsoft ? 'MicrosoftSessionEnded' : undefined)
     }
     return Promise.reject(error)
   }

@@ -76,7 +76,7 @@ describe('LoginPage: Sign in with Microsoft', () => {
       await u.tab()
       order.push(document.activeElement?.getAttribute('aria-label') ?? document.activeElement?.textContent ?? '')
     }
-    expect(order.slice(order.indexOf('Sign in'))).toEqual(['Sign in', 'Sign in with Microsoft', 'Forgot password?'])
+    expect(order.slice(order.indexOf('Sign in')).slice(0, 3)).toEqual(['Sign in', 'Sign in with Microsoft', 'Forgot password?'])
   })
 
   it('?microsoft=MicrosoftLinkFromAccount shows its words, announces them after mount (region empty on first render), and strips the param', async () => {
@@ -92,7 +92,7 @@ describe('LoginPage: Sign in with Microsoft', () => {
     expect(region).toHaveTextContent(words)
     // On the first render, before any effect, the region is there and empty, so a screen reader sees a change when the words arrive.
     const first = renderToString(<MemoryRouter initialEntries={['/login?microsoft=MicrosoftLinkFromAccount']}><LoginPage /></MemoryRouter>)
-    expect(first).toMatch(/aria-live="polite"[^>]*></div>/)
+    expect(first).toMatch(/aria-live="polite"[^>]*><\/div>/)
     // The visible Callout does not announce a second time.
     const card = screen.getByLabelText('Email').closest('form') as HTMLElement
     expect(within(card).queryByRole('alert')).not.toBeInTheDocument()

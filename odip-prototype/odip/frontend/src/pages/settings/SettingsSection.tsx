@@ -83,7 +83,8 @@ export function SettingsGroup({ title, children }: { title: string; children: Re
  * the page does, breakpoint included, so a move to another section asks and a move within this one doesn't.
  */
 function SaveFoot({ title, dirty, pending, result, problems = 0, onSave }: SectionSave & { title: string }) {
-  const perms = usePermissions()
+  // The foot only needs which section a location names; Microsoft sign-in has no Save, so whether the server offers it can't change when a move is blocked.
+  const perms = { ...usePermissions(), microsoftSignIn: true }
   const belowMd = useIsBelowMd()
   const sections = visibleSections(perms)
   const at = (l: Location) => shownSection(new URLSearchParams(l.search), sections, belowMd)?.key ?? null
