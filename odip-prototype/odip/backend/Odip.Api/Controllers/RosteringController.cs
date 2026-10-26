@@ -47,6 +47,7 @@ public class RosteringController : ControllerBase
     private readonly StaffCompatibilityLinkService _compatLink;
     private readonly IStaffUnavailabilityQuery _unavailabilityQuery;
     private readonly RosterAvailability _availability;
+    private readonly RosterWeekStarter _weekStarter;
     private readonly IConfiguration? _config;
 
     private readonly Odip.Application.Interfaces.INotificationRaiser _notificationRaiser;
@@ -65,7 +66,7 @@ public class RosteringController : ControllerBase
         IConfiguration? config = null, Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null,
         Odip.Application.Interfaces.IObligationTaskService? obligationTasks = null,
         ShiftPackageService? package = null, TimeProvider? clock = null, RosterShiftGenerator? generator = null,
-        ICurrentTenant? tenant = null, ShiftBudgetCheck? budget = null, ShiftBudgetEffect? budgetEffect = null, ILogger<RosteringController>? logger = null)
+        ICurrentTenant? tenant = null, ShiftBudgetCheck? budget = null, ShiftBudgetEffect? budgetEffect = null, ILogger<RosteringController>? logger = null, RosterWeekStarter? weekStarter = null)
     {
         _logger = logger;
         _db = db;
@@ -77,6 +78,7 @@ public class RosteringController : ControllerBase
         _compatLink = compatLink;
         _unavailabilityQuery = unavailabilityQuery;
         _availability = new RosterAvailability(db, unavailabilityQuery);
+        _weekStarter = weekStarter ?? new RosterWeekStarter(_generator, _availability);
         _config = config;
         _notificationRaiser = notificationRaiser ?? new Odip.Infrastructure.Notifications.NotificationRaiser(db);
         _obligationTasks = obligationTasks ?? new Odip.Infrastructure.Tasks.ObligationTaskService(db);
@@ -550,7 +552,7 @@ public class RosteringController : ControllerBase
         }
         catch (RosterBusyException)
         {
-            return Conflict(ApiResponse<ShiftDto>.Fail(RosterBoardBusyMessage));
+            return Conflict(ApiResponse<ShiftDto>.Fail(RosterGenerationLock.RosterBoardBusyMessage));
         }
     }
 
@@ -617,7 +619,7 @@ public class RosteringController : ControllerBase
         }
         catch (RosterBusyException)
         {
-            return Conflict(ApiResponse<ShiftDto>.Fail(RosterBoardBusyMessage));
+            return Conflict(ApiResponse<ShiftDto>.Fail(RosterGenerationLock.RosterBoardBusyMessage));
         }
     }
 
@@ -745,7 +747,7 @@ public class RosteringController : ControllerBase
         }
         catch (RosterBusyException)
         {
-            return Conflict(ApiResponse<bool>.Fail(RosterBoardBusyMessage));
+            return Conflict(ApiResponse<bool>.Fail(RosterGenerationLock.RosterBoardBusyMessage));
         }
     }
 
@@ -793,7 +795,7 @@ public class RosteringController : ControllerBase
         }
         catch (RosterBusyException)
         {
-            return Conflict(ApiResponse<ShiftDto>.Fail(RosterBoardBusyMessage));
+            return Conflict(ApiResponse<ShiftDto>.Fail(RosterGenerationLock.RosterBoardBusyMessage));
         }
     }
 
@@ -895,7 +897,7 @@ public class RosteringController : ControllerBase
         }
         catch (RosterBusyException)
         {
-            return Conflict(ApiResponse<ShiftDto>.Fail(RosterBoardBusyMessage));
+            return Conflict(ApiResponse<ShiftDto>.Fail(RosterGenerationLock.RosterBoardBusyMessage));
         }
     }
 
@@ -973,7 +975,7 @@ public class RosteringController : ControllerBase
         }
         catch (RosterBusyException)
         {
-            return Conflict(ApiResponse<PublishWeekResultDto>.Fail(RosterBoardBusyMessage));
+            return Conflict(ApiResponse<PublishWeekResultDto>.Fail(RosterGenerationLock.RosterBoardBusyMessage));
         }
     }
 
@@ -988,34 +990,18 @@ public class RosteringController : ControllerBase
         // As Publish week: a SuperAdmin with no organisation chosen has no tenant filter.
         if (_tenant?.TenantId is not { } tenantId) return BadRequest(ApiResponse<StartWeekResultDto>.Fail("Choose an organisation to start its week."));
         var start = WeekStart(weekStart);
-        var end = start.AddDays(6);
         try
         {
             await using var held = await RosterBoardLockAsync(ct);
-            if (await WeekStartedAsync(tenantId, start, ct)) return WeekAlreadyStarted();
-
-            var participantIds = await AgreementPatternsLiveIn(tenantId, start, end).Select(p => p.ParticipantId).Distinct().OrderBy(id => id).ToListAsync(ct);
-            var made = new List<Shift>();
-            var skipped = new List<Guid>();
-            foreach (var participantId in participantIds)
-            {
-                if (!(await ParticipantReadiness.CheckAsync(_db, participantId, ct)).Allowed) { skipped.Add(participantId); continue; }
-                // shortcut: the board lock is held while each participant's lock is waited for in turn (up to LockWait each), so a slow generation makes drag and drop answer busy; take the participant locks without waiting if that bites.
-                await using var participantLock = await RosterGenerationLock.AcquireAsync(_db, participantId, ct, _generator.LockWait);
-                // Read again under the lock: an approval that ended or replaced a pattern a moment ago is seen.
-                var patterns = await AgreementPatternsLiveIn(tenantId, start, end).Where(p => p.ParticipantId == participantId).ToListAsync(ct);
-                made.AddRange((await _generator.AddAsync(_db, patterns, start, end, ct)).MadeShifts);
-            }
-
-            var away = await _availability.MarkRegularsAwayAsync(made, ct);
-            _db.RosterWeeks.Add(new RosterWeek { Id = Guid.NewGuid(), TenantId = tenantId, WeekStart = start, StartedAt = _clock.GetUtcNow().UtcDateTime, StartedByUserId = ResolveCurrentUserId() });
+            var started = await _weekStarter.StartAsync(_db, tenantId, start, ResolveCurrentUserId(), _clock.GetUtcNow().UtcDateTime, ct);
+            if (started is null) return WeekAlreadyStarted();
             await _db.SaveChangesAsync(ct);
             await held.CommitAsync(ct);
-            return Ok(ApiResponse<StartWeekResultDto>.Ok(await StartWeekResultAsync(start, made, skipped, away, ct)));
+            return Ok(ApiResponse<StartWeekResultDto>.Ok(await StartWeekResultAsync(start, started.Made, started.Skipped, started.Away, ct)));
         }
         catch (RosterBusyException)
         {
-            return Conflict(ApiResponse<StartWeekResultDto>.Fail(RosterBoardBusyMessage));
+            return Conflict(ApiResponse<StartWeekResultDto>.Fail(RosterGenerationLock.RosterBoardBusyMessage));
         }
         // A Generate (L10) or another Start marked the week started between the check and this save: the unique row decides, and nothing of this Start is kept.
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
@@ -2252,9 +2238,6 @@ public class RosteringController : ControllerBase
         }
     }
 
-    /// <summary>What a board write answers when the organisation's roster lock stayed held too long (RosterBusyException speaks of one participant's roster; this lock is the whole organisation's).</summary>
-    private const string RosterBoardBusyMessage = "Another change to the roster is still running. Wait a moment, then try again.";
-
     /// <summary>The code of Start's 409 for a week already started (L4): not "busy", so the board and the e2e helper can tell them apart.</summary>
     public const string RosterWeekStartedCode = "roster-week-started";
 
@@ -2265,10 +2248,6 @@ public class RosteringController : ControllerBase
 
     /// <summary>Whether the week from <paramref name="monday"/> is started, by the one rule (<see cref="StartedWeeks"/>).</summary>
     private async Task<bool> WeekStartedAsync(Guid? tenantId, DateOnly monday, CancellationToken ct) => (await StartedWeeks.MondaysAsync(_db, tenantId, monday, monday, ct)).Count > 0;
-
-    /// <summary>The organisation's agreement patterns (an approved revision made them) that are switched on and live on some day of [start, end]: what Start rostering generates (L4).</summary>
-    private IQueryable<ShiftPattern> AgreementPatternsLiveIn(Guid tenantId, DateOnly start, DateOnly end) =>
-        _db.ShiftPatterns.Where(p => p.TenantId == tenantId && p.SourceDraftId != null && p.IsActive && p.EffectiveFrom <= end && (p.EffectiveTo == null || p.EffectiveTo >= start));
 
     /// <summary>Start's answer, after its commit: the names of the participants it skipped, and the budget warnings of what it made (never a failure: BudgetWarningsAsync logs and drops one).</summary>
     private async Task<StartWeekResultDto> StartWeekResultAsync(DateOnly start, List<Shift> made, List<Guid> skipped, int away, CancellationToken ct)

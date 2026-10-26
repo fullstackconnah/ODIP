@@ -26,6 +26,9 @@ public sealed class RosterBusyException : InvalidOperationException
 /// </summary>
 public sealed class RosterGenerationLock : IAsyncDisposable
 {
+    /// <summary>What a board write answers when the organisation's roster lock stayed held too long (RosterBusyException speaks of one participant's roster; this lock is the whole organisation's).</summary>
+    public const string RosterBoardBusyMessage = "Another change to the roster is still running. Wait a moment, then try again.";
+
     /// <summary>How long a generation waits for another one of the same participant to finish: an approval or a top-up is a second or two of work.</summary>
     public static readonly TimeSpan DefaultWait = TimeSpan.FromSeconds(10);
 
