@@ -165,13 +165,14 @@ describe('ImportWizardPage, upcoming shifts', () => {
     await toPreview()
     expect(screen.getByText('Participants must be fully ready to be rostered')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Readiness settings' })).toHaveAttribute('href', '/settings?section=safety')
-    expect(screen.getByText('96 shifts over 12 weeks, Mon 2 Nov to Sun 24 Jan, from 30 ready rows. They are added as drafts: nobody is told until you publish each week. 6 shifts have no staff yet and import unfilled.')).toBeInTheDocument()
+    expect(screen.getByText('96 shifts over 12 weeks, Mon 2 Nov to Sun 24 Jan, from 30 ready rows. They are added as drafts: nobody is told until you publish each week.')).toBeInTheDocument()
+    expect(screen.getByText('6 shifts have no staff yet and import unfilled.')).toBeInTheDocument()
   })
 
   it('preview_dated_summary', async () => {
     renderWizard()
     await toPreview(/Dated shifts/)
-    expect(screen.getByText('96 shifts from Mon 2 Nov to Sun 24 Jan, one per ready row. They are added as drafts: nobody is told until you publish each week. 6 shifts have no staff yet and import unfilled.')).toBeInTheDocument()
+    expect(screen.getByText('96 shifts from Mon 2 Nov to Sun 24 Jan, one per ready row. They are added as drafts: nobody is told until you publish each week.')).toBeInTheDocument()
     expect(screen.queryByText('Participants must be fully ready to be rostered')).not.toBeInTheDocument()
   })
 

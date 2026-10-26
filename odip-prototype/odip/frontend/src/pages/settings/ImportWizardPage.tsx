@@ -102,9 +102,7 @@ function shiftsSummary(d: ImportPreviewDto, shape: ImportShiftShape | null) {
   const made = shape === 'pattern'
     ? `${plural(d.createCount, 'shift')} over ${plural(d.weekCount ?? 0, 'week')}, ${span}, from ${plural(d.readyCount, 'ready row')}.`
     : `${plural(d.createCount, 'shift')} from ${span}, one per ready row.`
-  const n = d.unfilledCount ?? 0
-  const unfilled = n > 0 ? ` ${plural(n, 'shift')} ${n === 1 ? 'has' : 'have'} no staff yet and ${n === 1 ? 'imports' : 'import'} unfilled.` : ''
-  return `${made} They are added as drafts: nobody is told until you publish each week.${unfilled}`
+  return `${made} They are added as drafts: nobody is told until you publish each week.`
 }
 
 /** The Import step's paragraphs for upcoming shifts. */
@@ -259,7 +257,7 @@ export default function ImportWizardPage() {
             actions={<div className="flex flex-col items-start gap-1">
               <div className="flex items-center gap-2">
                 {isShifts
-                  ? result.firstWeekStart && <Button to={`/rostering?date=${result.firstWeekStart}`} size="sm" className="whitespace-nowrap">Open the first week</Button>
+                  ? result.firstWeekStart && <Button to={`/rostering?date=${result.firstWeekStart}`} className="whitespace-nowrap">Open the first week</Button>
                   : <Button to={listTo(landing)} variant="secondary" size="sm">View {listNoun}</Button>}
                 <Button
                   variant="secondary"
@@ -409,6 +407,7 @@ export default function ImportWizardPage() {
                   </Callout>
                 )}
                 {isShifts && data.createCount > 0 && <p className="text-sm">{shiftsSummary(data, shape)}</p>}
+                {isShifts && (data.unfilledCount ?? 0) > 0 && <p className="text-sm">{`${plural(data.unfilledCount!, 'shift')} ${data.unfilledCount === 1 ? 'has' : 'have'} no staff yet and ${data.unfilledCount === 1 ? 'imports' : 'import'} unfilled.`}</p>}
                 {kind === 'participants' && (
                   <fieldset className="grid gap-2 md:grid-cols-2">
                     <legend className={`${labelClass} mb-1`}>Where do these participants go?</legend>

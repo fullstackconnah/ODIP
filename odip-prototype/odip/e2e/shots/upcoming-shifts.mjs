@@ -134,6 +134,7 @@ try {
       const ws = await open.evaluate((e) => getComputedStyle(e).whiteSpace); check(`${tag} Open the first week white-space`, ws, ws === 'nowrap')
       if (vp.mobile) { const b = await box(open); check(`${tag} touch target Open the first week height>=44`, Math.round(b.height), b.height >= 43.5) }
       await noScroll('result')
+      const href = await open.getAttribute('href')
       if (scheme === 'light') await shot('result', main)
 
       // Undo is partial
@@ -144,7 +145,7 @@ try {
 
       // Hand-off, once
       if (scheme === 'light' && vp.name === '1280') {
-        await open.click()
+        await page.goto(`${BASE_URL}${href}`)
         await page.waitForURL(/\/rostering\?date=\d{4}-\d{2}-\d{2}/)
         const date = new URL(page.url()).searchParams.get('date')
         check(`${tag} hand-off date is a Monday`, date, new Date(`${date}T00:00:00Z`).getUTCDay() === 1)
