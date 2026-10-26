@@ -106,6 +106,20 @@ describe('SearchableSelect — opening and filtering', () => {
     expect(screen.getByText('No options available')).toBeInTheDocument()
   })
 
+  it('keeps its no-results live region out of the page while the list is closed', () => {
+    const { container } = render(<SearchableSelect items={items} value="" onChange={vi.fn()} />)
+    expect(container.querySelector('[aria-live]')).toBeNull()
+  })
+
+  it('mounts an empty live region when the list is open with no query and no options', async () => {
+    const user = userEvent.setup()
+    const { container } = render(<SearchableSelect items={[]} value="" onChange={vi.fn()} />)
+    await user.click(screen.getByRole('combobox'))
+    const region = container.querySelector('[aria-live="polite"]')
+    expect(region).not.toBeNull()
+    expect(region).toBeEmptyDOMElement()
+  })
+
   it('supports custom empty/no-match messages', async () => {
     const user = userEvent.setup()
     render(
@@ -414,5 +428,19 @@ describe('SearchableSelect — noMatchAction', () => {
     expect(screen.getByText('No results found')).toBeInTheDocument()
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
     expect(screen.queryByRole('option')).not.toBeInTheDocument()
+  })
+})
+
+describe('SearchableSelect — no-results announcement', () => {
+  it('announces the no-results state in a polite live region, and stays empty while results exist', async () => {
+    const user = userEvent.setup()
+    const { container } = render(<SearchableSelect items={items} value="" onChange={vi.fn()} />)
+    const live = () => container.querySelector('[aria-live="polite"]')
+    await user.click(screen.getByRole('combobox'))
+    expect(live()).toBeEmptyDOMElement()
+    await user.type(screen.getByRole('combobox'), 'zzz')
+    expect(live()).toHaveTextContent('No results found for "zzz"')
+    await user.clear(screen.getByRole('combobox'))
+    expect(live()).toBeEmptyDOMElement()
   })
 })

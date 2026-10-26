@@ -366,6 +366,12 @@ export function SearchableSelect({
           <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
         )}
       </span>
+      {/* Mounted while the list is open (a live region must exist before its text changes) and absent otherwise, so a page with its own live region keeps it as the only one only while no list is open. Empty unless the query matches nothing; worded differently from the visible row so the two never double up. */}
+      {open && (
+        <span aria-live="polite" className="sr-only">
+          {showEmptyRow && trimmedQuery ? `${noMatchMessage} for "${trimmedQuery}"` : ''}
+        </span>
+      )}
       {panel}
     </div>
   )
