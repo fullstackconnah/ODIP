@@ -84,7 +84,7 @@ export function SettingsGroup({ title, children }: { title: string; children: Re
  */
 function SaveFoot({ title, dirty, pending, result, problems = 0, onSave }: SectionSave & { title: string }) {
   // The foot only needs which section a location names; Microsoft sign-in has no Save, so whether the server offers it can't change when a move is blocked.
-  const perms = { ...usePermissions(), microsoftSignIn: true }
+  const perms = { ...usePermissions(), microsoftSignIn: true, viewingAs: false }
   const belowMd = useIsBelowMd()
   const sections = visibleSections(perms)
   const at = (l: Location) => shownSection(new URLSearchParams(l.search), sections, belowMd)?.key ?? null

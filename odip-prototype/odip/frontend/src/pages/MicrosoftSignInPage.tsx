@@ -14,7 +14,7 @@ export default function MicrosoftSignInPage() {
   const started = useRef(false)
 
   useEffect(() => {
-    // The refresh cookie rotates on use, so a second post (StrictMode runs effects twice) would be refused.
+    // Post once; StrictMode runs effects twice.
     if (started.current) return
     started.current = true
     apiPostRaw<AuthResponseDto>('/auth/microsoft/refresh')

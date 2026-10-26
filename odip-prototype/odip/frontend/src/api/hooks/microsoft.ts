@@ -23,7 +23,8 @@ export function useTurnOffMicrosoft() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: () => apiDelete('/auth/microsoft/link'),
-    onSuccess: () => qc.invalidateQueries({ queryKey: LINK_KEY }),
+    // Profile offers Link or Unlink by whether the organisation is linked, so its cached answer goes stale too.
+    onSuccess: () => Promise.all([qc.invalidateQueries({ queryKey: LINK_KEY }), qc.invalidateQueries({ queryKey: ACCOUNT_KEY })]),
   })
 }
 

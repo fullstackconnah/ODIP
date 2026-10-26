@@ -12,7 +12,7 @@ type SettingsFixture = SettingsPerms & {
 
 const superAdmin: SettingsFixture = {
   role: 'SuperAdmin', isAdmin: false, isCoordinator: false, isSuperAdmin: true, hasOrganisation: true, canEditProviderSettings: true,
-  canImportData: true, canManageIntegrations: true, microsoftSignIn: false, showBankDetails: true, canManageNotifications: true, fullName: 'Sam Okafor', username: 'sam.okafor', tenantName: null,
+  canImportData: true, canManageIntegrations: true, microsoftSignIn: false, viewingAs: false, showBankDetails: true, canManageNotifications: true, fullName: 'Sam Okafor', username: 'sam.okafor', tenantName: null,
 }
 
 /**
@@ -22,11 +22,11 @@ const superAdmin: SettingsFixture = {
 export const SETTINGS_PERMS = {
   Admin: {
     role: 'Admin', isAdmin: true, isCoordinator: false, isSuperAdmin: false, hasOrganisation: true, canEditProviderSettings: true,
-    canImportData: true, canManageIntegrations: true, microsoftSignIn: false, showBankDetails: true, canManageNotifications: true, fullName: 'Dana Whitlock', username: 'dana.whitlock', tenantName: 'Sunrise Support',
+    canImportData: true, canManageIntegrations: true, microsoftSignIn: false, viewingAs: false, showBankDetails: true, canManageNotifications: true, fullName: 'Dana Whitlock', username: 'dana.whitlock', tenantName: 'Sunrise Support',
   },
   Coordinator: {
     role: 'Coordinator', isAdmin: false, isCoordinator: true, isSuperAdmin: false, hasOrganisation: true, canEditProviderSettings: false,
-    canImportData: false, canManageIntegrations: false, microsoftSignIn: false, showBankDetails: false, canManageNotifications: false, fullName: 'Priya Sharma', username: 'priya.sharma', tenantName: 'Sunrise Support',
+    canImportData: false, canManageIntegrations: false, microsoftSignIn: false, viewingAs: false, showBankDetails: false, canManageNotifications: false, fullName: 'Priya Sharma', username: 'priya.sharma', tenantName: 'Sunrise Support',
   },
   SuperAdmin: superAdmin,
   SuperAdminNoOrg: { ...superAdmin, hasOrganisation: false, canImportData: false, canManageIntegrations: false },

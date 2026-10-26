@@ -13,6 +13,7 @@ import { SelectField } from '@/components/SelectField'
 import { formatDateTimeAu } from '@/lib/format'
 import { describeMicrosoftOutcome } from '@/lib/signInRefusal'
 import { MicrosoftLinkAction } from './MicrosoftLinkAction'
+import { apiErrorStatus } from '@/lib/shiftPackageErrors'
 import { notSavedText } from './settingsSections'
 
 const ROLE_OPTIONS = [
@@ -20,7 +21,7 @@ const ROLE_OPTIONS = [
   { value: 'SupportWorker', label: 'Support Worker' },
   { value: 'Coordinator', label: 'Coordinator' },
 ]
-const ROLE_HINT = "The role someone gets the first time they sign in with Microsoft. You can change anyone's role later in Staff."
+const ROLE_HINT = "Someone who signs in with Microsoft for the first time gets a Bunya Support account with this role. You're emailed when that happens, and you can change their role in Staff."
 
 /** Settings > Microsoft sign-in (Admin): link the organisation's Microsoft directory, choose the role new people get, or turn it off. */
 export default function MicrosoftSignInSection() {
@@ -67,6 +68,7 @@ export default function MicrosoftSignInSection() {
       value={role}
       options={ROLE_OPTIONS}
       hint={ROLE_HINT}
+      className="w-full sm:w-64"
       onChange={e => { setRoleDraft(e.target.value as MicrosoftRole); setSaved(false) }}
     />
   )
@@ -76,6 +78,8 @@ export default function MicrosoftSignInSection() {
     setSaved(false)
     saveRole.mutate({ defaultRole: role, expectedUpdatedAt: linked.updatedAt }, {
       onSuccess: () => { setSaved(true); setAnnounced('Role saved.') },
+      // Someone else changed the link: read it again, so the next Save carries its updatedAt instead of the stale one.
+      onError: e => { if (apiErrorStatus(e) === 409) link.refetch() },
     })
   }
 
@@ -105,27 +109,27 @@ export default function MicrosoftSignInSection() {
           <FactList
             items={[
               { label: 'Microsoft directory ID', value: <span className="font-mono text-[13px] [overflow-wrap:anywhere]">{linked.microsoftTenantId}</span> },
-              { label: 'Linked', value: `${formatDateTimeAu(linked.linkedAt)} by ${linked.linkedByName}` },
+              { label: 'Linked', value: linked.linkedByName ? `${formatDateTimeAu(linked.linkedAt)} by ${linked.linkedByName}` : formatDateTimeAu(linked.linkedAt) },
             ]}
           />
-          <p className="text-sm text-[var(--color-fg-muted)]">Your team can sign in with their Microsoft work accounts. People still keep any password they have.</p>
+          <p className="max-w-prose text-sm text-[var(--color-muted-foreground)]">Only accounts from this directory can sign in with Microsoft. To use a different directory, turn this off and link again.</p>
           {roleField}
           {saveRole.isError && <Callout tone="danger">{notSavedText(saveRole.error)}</Callout>}
-          <div className="flex flex-wrap items-center gap-3">
-            <Button variant="primary" onClick={save} disabled={role === linked.defaultRole || saveRole.isPending}>Save role</Button>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+            <Button variant="secondary" className="w-full sm:w-auto" onClick={save} disabled={role === linked.defaultRole || saveRole.isPending}>Save role</Button>
             {saved && (
-              <span className="inline-flex items-center gap-1 text-sm text-[var(--color-fg-muted)]"><Check aria-hidden className="size-4" />Saved</span>
+              <span className="inline-flex items-center gap-1 text-sm text-[var(--color-muted-foreground)]"><Check aria-hidden className="size-4" />Saved</span>
             )}
-            <Button variant="secondary" className="sm:ml-auto" onClick={() => setConfirming(true)}>Turn off Microsoft sign-in</Button>
+            <Button variant="secondary" className="w-full sm:ml-auto sm:w-auto" onClick={() => setConfirming(true)}>Turn off Microsoft sign-in</Button>
           </div>
         </>
       ) : (
         <>
-          <p className="text-sm text-[var(--color-fg-muted)]">
-            Link your organisation's Microsoft directory so your team can sign in with their Microsoft work accounts. People who sign in for the first time join with the role you choose.
+          <p className="max-w-prose text-sm">
+            Link your organisation's Microsoft directory so your team can sign in with their Microsoft work accounts. Passwords keep working.
           </p>
           {roleField}
-          <p className="text-sm text-[var(--color-fg-muted)]">You need to be an administrator of your Microsoft directory to link it.</p>
+          <p className="max-w-prose text-[13px] text-[var(--color-muted-foreground)]">Microsoft will ask you to sign in as an administrator of your directory: a Global, Privileged Role, Application or Cloud Application Administrator.</p>
           {startUrl && (
             <MicrosoftLinkAction
               startUrl={startUrl}
@@ -150,6 +154,7 @@ export default function MicrosoftSignInSection() {
         onConfirm={confirmTurnOff}
         message={
           <div className="flex flex-col gap-2">
+            <p>No one can sign in with Microsoft until you link again. Everyone keeps their Bunya Support account and role, and passwords keep working.</p>
             <p>People who joined through Microsoft have no password, so they can't sign in until it's back on.</p>
             {microsoftSession && <p>You signed in with Microsoft, so you'll be signed out within 30 minutes.</p>}
             {turnOff.isError && <Callout tone="danger">Microsoft sign-in couldn't be turned off. Try again.</Callout>}

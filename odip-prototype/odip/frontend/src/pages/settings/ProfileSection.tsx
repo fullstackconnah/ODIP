@@ -94,13 +94,13 @@ function MicrosoftAccountGroup({ startUrl }: { startUrl: string }) {
           )}
           {account.data?.orgLinked &&
             (linked ? (
-              <div className="flex flex-wrap items-center gap-3">
-                <p className="text-sm text-[var(--color-fg-muted)]">Linked. You can use Sign in with Microsoft.</p>
-                <Button variant="secondary" className="sm:ml-auto" onClick={() => setConfirming(true)}>Unlink</Button>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                <p className="max-w-prose text-sm text-[var(--color-muted-foreground)]">Linked. You can use Sign in with Microsoft.</p>
+                <Button variant="secondary" className="w-full sm:ml-auto sm:w-auto" onClick={() => setConfirming(true)}>Unlink</Button>
               </div>
             ) : (
               <>
-                <p className="text-sm text-[var(--color-fg-muted)]">Link your Microsoft work account to sign in with Microsoft. Your password keeps working.</p>
+                <p className="max-w-prose text-sm text-[var(--color-muted-foreground)]">Link your Microsoft work account to sign in with Microsoft. Your password keeps working.</p>
                 <MicrosoftLinkAction
                   startUrl={startUrl}
                   intent="link-account"

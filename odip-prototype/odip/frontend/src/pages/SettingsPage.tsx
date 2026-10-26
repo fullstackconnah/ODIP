@@ -57,7 +57,7 @@ export default function SettingsPage() {
   const current: SectionDef | null = asked ?? (belowMd ? null : visible[0])
   const key = current?.key ?? null
   // A link to Microsoft sign-in (the return from Microsoft) can arrive before the server's config has: wait for it instead of tidying the section away.
-  const holdMicrosoft = config.isPending && params.get('section') === 'microsoft' && perms.isAdmin && perms.hasOrganisation
+  const holdMicrosoft = config.isPending && params.get('section') === 'microsoft' && perms.isAdmin && !perms.viewingAs && perms.hasOrganisation
 
   // Only cleanup rewrites the URL in place: a legacy ?tab= becomes ?section= (other params kept), and a key this person can't see is dropped.
   const tidy = new URLSearchParams(params)

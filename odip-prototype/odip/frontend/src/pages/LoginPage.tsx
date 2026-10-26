@@ -52,7 +52,8 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!microsoftCode) return
-    setAnnounced(describeMicrosoftOutcome(microsoftCode, 'signin').sentence)
+    const w = describeMicrosoftOutcome(microsoftCode, 'signin')
+    setAnnounced(w.nextStep ? `${w.sentence} ${w.nextStep}` : w.sentence)
     navigate({ search: '' }, { replace: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -319,12 +320,12 @@ export default function LoginPage() {
               <>
                 <div className="my-5 flex items-center gap-3">
                   <div className="h-px flex-1 bg-[var(--color-border)]" />
-                  <span className="text-xs text-[var(--color-muted-foreground)]">or</span>
+                  <span className="text-xs uppercase tracking-wide text-[var(--color-muted-foreground)]">or</span>
                   <div className="h-px flex-1 bg-[var(--color-border)]" />
                 </div>
                 <a
                   href={microsoftStartUrl}
-                  className="flex min-h-11 w-full items-center justify-center gap-3 rounded-[var(--radius-lg)] border border-[var(--ms-button-border)] bg-[var(--ms-button-bg)] px-3 text-[15px] font-semibold text-[var(--ms-button-fg)] transition-transform duration-100 hover:opacity-90 active:scale-[0.99] motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
+                  className="flex min-h-11 w-full items-center justify-center gap-3 rounded-[var(--radius-lg)] border border-[var(--ms-button-border)] bg-[var(--ms-button-bg)] px-3 text-[15px] font-semibold text-[var(--ms-button-fg)] transition-transform duration-100 hover:opacity-90 active:scale-[0.99] motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-card)]"
                 >
                   <svg aria-hidden="true" width="21" height="21" viewBox="0 0 21 21">
                     <rect width="10" height="10" fill="#F25022" />

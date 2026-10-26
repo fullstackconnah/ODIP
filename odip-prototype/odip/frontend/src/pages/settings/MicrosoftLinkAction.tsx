@@ -59,7 +59,7 @@ export function MicrosoftLinkAction({ startUrl, intent, defaultRole, label, vari
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2 sm:items-start">
       {failed && <Callout tone="danger">Couldn't reach Bunya Support. Check your connection and try again.</Callout>}
       <Button variant={variant} data-microsoft-link onClick={go} aria-busy={busy || undefined} className="w-full sm:w-auto">
         {busy ? 'Opening Microsoft…' : label}

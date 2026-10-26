@@ -186,3 +186,17 @@ describe('useResendVerification', () => {
     expect(signOut).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('storeSession', () => {
+  it('leaves no view-as state from an earlier SuperAdmin session behind', async () => {
+    const { storeSession } = await import('./auth')
+    localStorage.setItem('odip_viewing_user', '{"id":"u1"}')
+    localStorage.setItem('odip_superadmin_user', '{"id":"sa"}')
+
+    storeSession({ token: 'the-token', tenantId: 'tenant-1' } as never)
+
+    expect(localStorage.getItem('odip_token')).toBe('the-token')
+    expect(localStorage.getItem('odip_viewing_user')).toBeNull()
+    expect(localStorage.getItem('odip_superadmin_user')).toBeNull()
+  })
+})

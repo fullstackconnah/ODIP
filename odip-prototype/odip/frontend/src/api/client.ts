@@ -73,6 +73,7 @@ apiClient.interceptors.response.use(
       config._retried = true
       // A Microsoft session has no Firebase user: it is renewed at the Microsoft refresh, which says whether Microsoft's session is still good.
       const microsoft = localStorage.getItem('odip_sign_in_method') === 'microsoft'
+      let refreshRefused = false
       try {
         // Deduplicate concurrent refresh calls — reuse in-flight promise instead of
         // spawning a new /auth/exchange request for every simultaneous 401
@@ -106,10 +107,11 @@ apiClient.interceptors.response.use(
           config.headers.Authorization = `Bearer ${newToken}`
           return apiClient(config)
         }
-      } catch {
-        // Firebase refresh failed — fall through to logout
+      } catch (e) {
+        // Refresh failed — fall through to logout. Only a 401 from the Microsoft refresh means its session is over; a network error or 5xx isn't that.
+        refreshRefused = (e as { response?: { status?: number } })?.response?.status === 401
       }
-      await endSession(microsoft ? 'MicrosoftSessionEnded' : undefined)
+      await endSession(microsoft && refreshRefused ? 'MicrosoftSessionEnded' : undefined)
     }
     return Promise.reject(error)
   }

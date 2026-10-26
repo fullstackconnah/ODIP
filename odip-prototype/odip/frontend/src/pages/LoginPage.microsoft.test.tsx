@@ -90,6 +90,8 @@ describe('LoginPage: Sign in with Microsoft', () => {
     expect(screen.getByTestId('where').textContent).toBe('/login')
     const region = document.querySelector('[aria-live="polite"]') as HTMLElement
     expect(region).toHaveTextContent(words)
+    // A screen reader user also hears what to do next.
+    expect(region).toHaveTextContent('Sign in with your password, then link Microsoft in Settings, Profile.')
     // On the first render, before any effect, the region is there and empty, so a screen reader sees a change when the words arrive.
     const first = renderToString(<MemoryRouter initialEntries={['/login?microsoft=MicrosoftLinkFromAccount']}><LoginPage /></MemoryRouter>)
     expect(first).toMatch(/aria-live="polite"[^>]*><\/div>/)

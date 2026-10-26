@@ -9,6 +9,8 @@ export type SettingsPerms = Pick<
 > & {
   /** The server offers Microsoft sign-in (GET /auth/config). */
   microsoftSignIn: boolean
+  /** A SuperAdmin is viewing as someone: the browser carries that person's role, but the server still sees a SuperAdmin and refuses the Microsoft endpoints. */
+  viewingAs: boolean
 }
 
 export type SectionKey =
@@ -52,7 +54,7 @@ export const SECTIONS: SectionDef[] = [
   { key: 'setup', label: 'Organisation setup', group: 'Organisation', visible: managesOrganisation, description: "Review your organisation's existing settings. You can leave and return at any time." },
   { key: 'workspace-visibility', label: 'Workspace visibility', group: 'Organisation', visible: managesOrganisation, description: 'Choose which optional workspaces appear in the usual menu for your organisation.' },
   { key: 'organisation', label: 'Organisation profile', group: 'Organisation', visible: withOrganisation, readOnly: onlyAdminsChange, description: "Your organisation's legal details and address, as they appear on NDIS claims, bulk payment files and invoices." },
-  { key: 'microsoft', label: 'Microsoft sign-in', group: 'Organisation', visible: p => p.isAdmin && p.hasOrganisation && p.microsoftSignIn, description: 'Let your team sign in with their Microsoft work accounts, and choose the role new people get.' },
+  { key: 'microsoft', label: 'Microsoft sign-in', group: 'Organisation', visible: p => p.isAdmin && !p.viewingAs && p.hasOrganisation && p.microsoftSignIn, description: 'Let your team sign in with their Microsoft work accounts, and choose the role new people get.' },
   { key: 'billing', label: 'Billing details', group: 'Organisation', visible: withOrganisation, readOnly: onlyAdminsChange, description: "The bank account on your invoices, how they're numbered and when they're due, your GST status, and the note printed at the foot of every invoice." },
   { key: 'safety', label: 'Safety checks', group: 'Organisation', visible: withOrganisation, readOnly: onlyAdminsChange, description: "What ODIP stops, and what it only warns about, when something isn't in place. These apply to everyone in your organisation, and every change is recorded in the audit log." },
   { key: 'alerts', label: 'Alert windows', group: 'Organisation', visible: withOrganisation, readOnly: onlyAdminsChange, description: 'How early ODIP warns before something expires, and how many hours a week the roster allows before it warns. The warnings show on the dashboard, the roster and the pages that list them, for everyone in your organisation.' },

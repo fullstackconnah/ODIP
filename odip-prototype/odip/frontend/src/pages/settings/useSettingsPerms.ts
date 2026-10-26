@@ -6,5 +6,5 @@ import type { SettingsPerms } from './settingsSections'
 export function useSettingsPerms(): SettingsPerms {
   const perms = usePermissions()
   const config = useAuthConfig()
-  return { ...perms, microsoftSignIn: config.data?.microsoft === true }
+  return { ...perms, microsoftSignIn: config.data?.microsoft === true, viewingAs: localStorage.getItem('odip_viewing_user') !== null }
 }

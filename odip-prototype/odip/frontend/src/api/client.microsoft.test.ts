@@ -91,6 +91,17 @@ describe('a Microsoft session', () => {
     expect(localStorage.getItem('odip_token')).toBeNull()
   })
 
+  it('a refresh that failed for any reason but a 401 ends the session without the 12-hour words', async () => {
+    const client = await freshClient()
+    signInAsMicrosoft()
+    script(client, url => (url === '/auth/microsoft/refresh' ? { status: 503, data: {} } : { status: 401, data: {} }))
+
+    await outcome(client.apiGet('/participants'))
+
+    await vi.waitFor(() => expect(hrefs).toEqual(['/login']))
+    expect(localStorage.getItem('odip_token')).toBeNull()
+  })
+
   it('a 401 from /auth/microsoft/refresh itself is passed through, not retried', async () => {
     const client = await freshClient()
     localStorage.setItem('odip_token', 'a-landing-session')

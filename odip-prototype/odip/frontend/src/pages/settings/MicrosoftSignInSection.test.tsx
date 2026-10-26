@@ -76,6 +76,13 @@ describe('Microsoft sign-in: not linked', () => {
     expect(linkGets()).toBe(2)
   })
 
+  it('says what linking does, what the new person gets, and who can link', async () => {
+    renderSection()
+    expect(await screen.findByText("Link your organisation's Microsoft directory so your team can sign in with their Microsoft work accounts. Passwords keep working.")).toBeInTheDocument()
+    expect(screen.getByText("Someone who signs in with Microsoft for the first time gets a Bunya Support account with this role. You're emailed when that happens, and you can change their role in Staff.")).toBeInTheDocument()
+    expect(screen.getByText('Microsoft will ask you to sign in as an administrator of your directory: a Global, Privileged Role, Application or Cloud Application Administrator.')).toBeInTheDocument()
+  })
+
   it('a failed preflight shows the connection Callout and does not navigate', async () => {
     const u = renderSection()
     await screen.findByLabelText('New people join as')
@@ -116,6 +123,34 @@ describe('Microsoft sign-in: linked', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Role saved.')
   })
 
+  it('shows the date alone when the linker is unknown', async () => {
+    apiGet.mockResolvedValue({ ...LINK, linkedByName: null })
+    renderSection()
+    expect(await screen.findByText(LINK.microsoftTenantId)).toBeInTheDocument()
+    expect(screen.queryByText(/ by /)).not.toBeInTheDocument()
+    expect(screen.queryByText(/null/)).not.toBeInTheDocument()
+  })
+
+  it('says the linked directory is the only one, and what changing it takes', async () => {
+    renderSection()
+    expect(await screen.findByText('Only accounts from this directory can sign in with Microsoft. To use a different directory, turn this off and link again.')).toBeInTheDocument()
+  })
+
+  it('a 409 on save refetches the link, so the next Save carries the fresh updatedAt', async () => {
+    apiPut.mockRejectedValueOnce({ response: { status: 409, data: { errors: ['Someone else changed this. Reload and try again.'] } } })
+    const u = renderSection()
+    await u.selectOptions(await screen.findByLabelText('New people join as'), 'Coordinator')
+    const before = linkGets()
+    apiGet.mockResolvedValue({ ...LINK, updatedAt: '2026-10-22T03:00:00Z' })
+
+    await u.click(screen.getByRole('button', { name: 'Save role' }))
+
+    await waitFor(() => expect(linkGets()).toBeGreaterThan(before))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save role' })).toBeEnabled())
+    await u.click(screen.getByRole('button', { name: 'Save role' }))
+    await waitFor(() => expect(apiPut).toHaveBeenLastCalledWith('/auth/microsoft/link', { defaultRole: 'Coordinator', expectedUpdatedAt: '2026-10-22T03:00:00Z' }))
+  })
+
   it('a 409 on save shows the server sentence', async () => {
     apiPut.mockRejectedValue({ response: { status: 409, data: { errors: ['Someone else changed this. Reload and try again.'] } } })
     const u = renderSection()
@@ -130,6 +165,7 @@ describe('Microsoft sign-in: linked', () => {
     const u = renderSection()
     await u.click(await screen.findByRole('button', { name: 'Turn off Microsoft sign-in' }))
     let dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).getByText(/No one can sign in with Microsoft until you link again\. Everyone keeps their Bunya Support account and role, and passwords keep working\./)).toBeInTheDocument()
     expect(within(dialog).getByText(/People who joined through Microsoft have no password, so they can't sign in until it's back on\./)).toBeInTheDocument()
     expect(within(dialog).queryByText(/signed out within 30 minutes/)).not.toBeInTheDocument()
     await u.click(within(dialog).getByRole('button', { name: 'Cancel' }))
