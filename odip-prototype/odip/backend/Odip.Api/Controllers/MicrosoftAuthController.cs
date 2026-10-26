@@ -441,6 +441,93 @@ public class MicrosoftAuthController : ControllerBase
         }
     }
 
+    // ── Config and management (normal session, normal tenant filter) ─────
+
+    /// <summary>What the sign-in page needs to show the button: whether Microsoft sign-in is on, and where it starts.</summary>
+    [HttpGet("/api/v1/auth/config")]
+    [AllowAnonymous]
+    public IActionResult Config()
+    {
+        var cfg = MicrosoftSignInConfig.From(_config);
+        return Ok(ApiResponse<AuthConfigDto>.Ok(new AuthConfigDto(cfg is not null, cfg?.StartUrl(MicrosoftIntent.SignIn))));
+    }
+
+    [HttpGet("link")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetLink(CancellationToken ct)
+    {
+        var link = await _db.MicrosoftTenantLinks.FirstOrDefaultAsync(ct);
+        if (link is null) return Ok(ApiResponse<MicrosoftTenantLinkDto?>.Ok(null));
+        var by = await _db.Users.Where(u => u.Id == link.LinkedByUserId).Select(u => u.FirstName + " " + u.LastName).FirstOrDefaultAsync(ct);
+        return Ok(ApiResponse<MicrosoftTenantLinkDto?>.Ok(new MicrosoftTenantLinkDto(link.MicrosoftTenantId, link.DefaultRole.ToString(), by?.Trim(), link.LinkedAt, link.UpdatedAt)));
+    }
+
+    [HttpPut("link")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> PutLink([FromBody] UpdateMicrosoftLinkDto dto, CancellationToken ct)
+    {
+        if (!Enum.TryParse<UserRole>(dto.DefaultRole, true, out var role) || !Enum.IsDefined(role) || !GrantableRoles.Contains(role))
+            return BadRequest(ApiResponse<object>.Fail("Choose Coordinator, Support Worker or Read only."));
+        var link = await _db.MicrosoftTenantLinks.FirstOrDefaultAsync(ct);
+        if (link is null) return NotFound(ApiResponse<object>.Fail("Microsoft sign-in is not set up for this organisation."));
+        // shortcut: compares the whole-microsecond versions; a different client clock cannot matter because the value is the one a GET returned.
+        if (dto.ExpectedUpdatedAt.Ticks - dto.ExpectedUpdatedAt.Ticks % 10 != link.UpdatedAt.Ticks - link.UpdatedAt.Ticks % 10)
+            return Conflict(ApiResponse<object>.Fail("Someone else changed this. Reload and try again."));
+
+        if (link.DefaultRole != role)
+        {
+            _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(nameof(MicrosoftTenantLink), link.Id, "Default role", link.DefaultRole.ToString(), role.ToString(), User));
+            link.DefaultRole = role;
+            link.UpdatedAt = _clock.GetUtcNow().UtcDateTime;
+            await _db.SaveChangesAsync(ct);
+        }
+        var by = await _db.Users.Where(u => u.Id == link.LinkedByUserId).Select(u => u.FirstName + " " + u.LastName).FirstOrDefaultAsync(ct);
+        return Ok(ApiResponse<MicrosoftTenantLinkDto>.Ok(new MicrosoftTenantLinkDto(link.MicrosoftTenantId, link.DefaultRole.ToString(), by?.Trim(), link.LinkedAt, link.UpdatedAt)));
+    }
+
+    /// <summary>Removes only the link: people keep their Microsoft columns, so a relink to the same directory signs them straight back in.</summary>
+    [HttpDelete("link")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> DeleteLink(CancellationToken ct)
+    {
+        var link = await _db.MicrosoftTenantLinks.FirstOrDefaultAsync(ct);
+        if (link is null) return NotFound(ApiResponse<object>.Fail("Microsoft sign-in is not set up for this organisation."));
+        _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(nameof(MicrosoftTenantLink), link.Id, "Microsoft tenant", link.MicrosoftTenantId.ToString(), null, User));
+        _db.MicrosoftTenantLinks.Remove(link);
+        await _db.SaveChangesAsync(ct);
+        return Ok(ApiResponse<object>.Ok(null, "Microsoft sign-in turned off."));
+    }
+
+    [HttpGet("account")]
+    [Authorize]
+    public async Task<IActionResult> GetAccount(CancellationToken ct)
+    {
+        var me = await CurrentUserAsync(ct);
+        if (me is null) return Unauthorized(ApiResponse<object>.Fail("Sign in again."));
+        return Ok(ApiResponse<MicrosoftAccountDto>.Ok(new MicrosoftAccountDto(await _db.MicrosoftTenantLinks.AnyAsync(ct), me.MicrosoftObjectId is not null)));
+    }
+
+    /// <summary>Unlinks the caller's own Microsoft account, but only if they have another way in (a Firebase account), so nobody locks themselves out.</summary>
+    [HttpDelete("account")]
+    [Authorize]
+    public async Task<IActionResult> DeleteAccount(CancellationToken ct)
+    {
+        var me = await CurrentUserAsync(ct);
+        if (me is null) return Unauthorized(ApiResponse<object>.Fail("Sign in again."));
+        if (me.MicrosoftObjectId is null) return NotFound(ApiResponse<object>.Fail("No Microsoft account is linked."));
+        if (!await _firebase.ExistsAsync(me.Email, ct))
+            return Conflict(ApiResponse<object>.Fail("Microsoft is your only way to sign in. Ask an admin to set up a password first.", MicrosoftRefusal.MicrosoftOnlySignIn));
+
+        _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(nameof(Odip.Domain.Entities.User), me.Id, "Microsoft account", me.MicrosoftObjectId.ToString(), null, User));
+        me.MicrosoftTenantId = null;
+        me.MicrosoftObjectId = null;
+        await _db.SaveChangesAsync(ct);
+        return Ok(ApiResponse<object>.Ok(null, "Microsoft account unlinked."));
+    }
+
+    private Task<User?> CurrentUserAsync(CancellationToken ct) =>
+        Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? _db.Users.FirstOrDefaultAsync(u => u.Id == id, ct) : Task.FromResult<User?>(null);
+
     // ── Helpers ──────────────────────────────────────────────────────────
 
     private IQueryable<MicrosoftTenantLink> OrgLinks(Guid orgId) =>
@@ -497,3 +584,8 @@ public class MicrosoftAuthController : ControllerBase
         if (_attemptKey is not null) _lockedOut = _attempts.IsLockedOut(_attemptKey, out _);
     }
 }
+
+public sealed record AuthConfigDto(bool Microsoft, string? MicrosoftStartUrl);
+public sealed record MicrosoftTenantLinkDto(Guid MicrosoftTenantId, string DefaultRole, string? LinkedByName, DateTime LinkedAt, DateTime UpdatedAt);
+public sealed record UpdateMicrosoftLinkDto(string? DefaultRole, DateTime ExpectedUpdatedAt);
+public sealed record MicrosoftAccountDto(bool OrgLinked, bool AccountLinked);

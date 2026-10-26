@@ -86,20 +86,22 @@ public sealed class MicrosoftAuthRig
     public string Nonce { get; private set; } = "";
     public string RequestHost { get; set; } = new Uri(PublicBase).Host;
 
+    public Guid? AmbientTenant { get; set; }
+
     public MicrosoftAuthRig()
     {
         var tenant = new Mock<ICurrentTenant>();
-        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
+        tenant.Setup(t => t.TenantId).Returns(() => AmbientTenant);
         tenant.Setup(t => t.IsSuperAdmin).Returns(false);
         Db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, tenant.Object);
     }
 
-    public MicrosoftAuthController Controller(HttpContext http)
+    public MicrosoftAuthController Controller(HttpContext http, Odip.Api.Services.IFirebaseUserService? firebase = null)
     {
         var config = new ConfigurationBuilder().AddInMemoryCollection(Settings).Build();
         return new MicrosoftAuthController(
             Db, config, new Mock<ILogger<MicrosoftAuthController>>().Object, Tracker, Redeemer, MicrosoftTestTokens.Validator(), Dp, Cache, Clock,
-            new StaffCreateService(Db, config), new NotificationRaiser(Db))
+            new StaffCreateService(Db, config), new NotificationRaiser(Db), firebase)
         {
             ControllerContext = new ControllerContext { HttpContext = http },
         };
