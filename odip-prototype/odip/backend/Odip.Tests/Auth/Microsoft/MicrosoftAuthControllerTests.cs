@@ -139,6 +139,25 @@ public class MicrosoftAuthControllerTests
         Assert.Empty(rig.Tracker.Failures);
     }
 
+    [Fact]
+    public async Task S9_ReturnToIgnored_AtStartAndCallback()
+    {
+        var rig = new MicrosoftAuthRig();
+        var org = rig.Org();
+        rig.Link(org.Id);
+        var http = rig.Http();
+        http.Request.QueryString = new QueryString("?returnTo=https://evil.example");
+        var result = rig.Controller(http).Start("signin", null);
+        Assert.Equal("login.microsoftonline.com", new Uri(Assert.IsType<RedirectResult>(result).Url).Host);
+
+        var start = await rig.StartAsync();
+        rig.Redeemer.Result = () => Token()(rig.Nonce);
+        var cb = rig.Http(null, CookieHeader(start, MicrosoftAuthController.CorrelationCookie));
+        cb.Request.QueryString = new QueryString("?returnTo=https://evil.example");
+        var done = await rig.Controller(cb).Callback("code1", StateOf(start), null, CancellationToken.None);
+        Assert.Equal(MicrosoftSignInPaths.SignInSuccess, Assert.IsType<LocalRedirectResult>(done).Url);
+    }
+
     // ── C: callback, common ──────────────────────────────────────────────
 
     [Fact]
@@ -401,13 +420,14 @@ public class MicrosoftAuthControllerTests
     [Fact]
     public async Task I7_NewPerson_Created()
     {
-        var rig = new MicrosoftAuthRig();
+        var rig = new MicrosoftAuthRig(audit: true);
         var org = rig.Org();
         rig.Link(org.Id, role: UserRole.SupportWorker);
 
         var o = await rig.RunAsync(Token(email: "Pat@Contoso.example"));
 
         var row = await rig.Db.Users.IgnoreQueryFilters([TenantFilter.Name]).SingleAsync();
+        Assert.Equal(MicrosoftAuthController.AuditActor, Assert.Single(await rig.Db.AuditLogs.ToListAsync(), a => a.EntityType == "User" && a.EntityId == row.Id).ChangedByName);
         Assert.Equal(org.Id, row.TenantId);
         Assert.Equal(UserRole.SupportWorker, row.Role);
         Assert.True(row.IsActive);

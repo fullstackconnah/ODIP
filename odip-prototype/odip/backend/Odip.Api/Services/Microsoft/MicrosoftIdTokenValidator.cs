@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Protocols;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
@@ -6,9 +7,9 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace Odip.Api.Services.Microsoft;
 
-/// <summary>Who Microsoft says signed in. <see cref="EmailDomainVerified"/> is the xms_edov claim: only then may a row be created from <see cref="Email"/>.</summary>
+/// <summary>Who Microsoft says signed in. <see cref="EmailDomainVerified"/> is the xms_edov claim: only then may a row be created from <see cref="Email"/>. <see cref="DirectoryRoles"/> is the wids claim (role template ids); null or empty when the token has none.</summary>
 public sealed record MicrosoftIdentity(Guid TenantId, Guid ObjectId, string? Email, bool EmailDomainVerified,
-    string? GivenName = null, string? FamilyName = null, string? DisplayName = null);
+    string? GivenName = null, string? FamilyName = null, string? DisplayName = null, IReadOnlyCollection<Guid>? DirectoryRoles = null);
 
 /// <summary>Either an identity or a <see cref="MicrosoftRefusal"/> code.</summary>
 public sealed record MicrosoftIdTokenResult(MicrosoftIdentity? Identity, string? Refusal)
@@ -58,9 +59,12 @@ public sealed class MicrosoftIdTokenValidator : IMicrosoftIdTokenValidator
         var email = Claim("email");
         if (string.IsNullOrWhiteSpace(email) || !email.Contains('@')) email = Claim("preferred_username");
         if (email is not null && !email.Contains('@')) email = null;
+        // wids arrives as one claim per role or as a JSON array in one claim: pull every GUID out of either form.
+        var roles = jwt.Claims.Where(c => c.Type == "wids").SelectMany(c => Regex.Matches(c.Value, "[0-9a-fA-F-]{36}").Select(m => m.Value))
+            .Select(v => Guid.TryParse(v, out var g) ? g : (Guid?)null).OfType<Guid>().ToList();
         var edov = Claim("xms_edov");
         var verified = string.Equals(edov, "true", StringComparison.OrdinalIgnoreCase) || edov == "1";
-        return new MicrosoftIdTokenResult(new MicrosoftIdentity(tid, oid, email?.Trim(), verified, Claim("given_name"), Claim("family_name"), Claim("name")), null);
+        return new MicrosoftIdTokenResult(new MicrosoftIdentity(tid, oid, email?.Trim(), verified, Claim("given_name"), Claim("family_name"), Claim("name"), roles), null);
     }
 
     private async Task<TokenValidationResult> ValidateOnceAsync(string idToken, CancellationToken ct)

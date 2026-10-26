@@ -16,6 +16,7 @@ using Odip.Application.Interfaces;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
+using Odip.Infrastructure.Audit;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Notifications;
 using Odip.Infrastructure.Services;
@@ -91,18 +92,25 @@ public sealed class MicrosoftAuthRig
     /// <summary>Replaces the real raiser (a Postgres race test hooks the moment between staging and saving).</summary>
     public INotificationRaiser? Raiser { get; set; }
 
-    public MicrosoftAuthRig(Func<OdipDbContext>? dbFactory = null)
+    /// <summary>What the audit interceptor reads the request from; set to the current request each time a controller is built.</summary>
+    public HttpContextAccessor Accessor { get; } = new();
+
+    /// <param name="audit">Runs AuditInterceptor on the in-memory database, for a test that reads the audit rows back.</param>
+    public MicrosoftAuthRig(Func<OdipDbContext>? dbFactory = null, bool audit = false)
     {
         var tenant = new Mock<ICurrentTenant>();
         tenant.Setup(t => t.TenantId).Returns(() => AmbientTenant);
         tenant.Setup(t => t.IsSuperAdmin).Returns(false);
         if (dbFactory is not null) { Db = dbFactory(); return; }
-        Db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, tenant.Object);
+        var options = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString());
+        if (audit) options.AddInterceptors(new AuditInterceptor(Accessor));
+        Db = new OdipDbContext(options.Options, tenant.Object);
     }
 
     public MicrosoftAuthController Controller(HttpContext http, Odip.Api.Services.IFirebaseUserService? firebase = null)
     {
         var config = new ConfigurationBuilder().AddInMemoryCollection(Settings).Build();
+        Accessor.HttpContext = http;
         return new MicrosoftAuthController(
             Db, config, new Mock<ILogger<MicrosoftAuthController>>().Object, Tracker, Redeemer, MicrosoftTestTokens.Validator(), Dp, Cache, Clock,
             new StaffCreateService(Db, config), Raiser ?? new NotificationRaiser(Db), firebase)
@@ -199,15 +207,17 @@ public sealed class MicrosoftAuthRig
         return l;
     }
 
+    public const string GlobalAdmin = "62e90394-69f5-4237-9190-012177145e10";
     public static readonly Guid PersonOid = Guid.Parse("cccccccc-0000-0000-0000-000000000003");
 
     /// <summary>A verified-domain id token (xms_edov) for the standard tid, with the given overrides.</summary>
     public static Func<string, string?> Token(string? email = "pat@contoso.example", string? upn = null, Guid? tid = null, Guid? oid = null, bool verified = true,
-        IDictionary<string, object>? extra = null) => nonce =>
+        IDictionary<string, object>? extra = null, bool withWids = true) => nonce =>
     {
         var claims = new Dictionary<string, object>(extra ?? new Dictionary<string, object>());
         if (verified) claims["xms_edov"] = "1";
         claims.TryAdd("name", "Pat Contoso");
+        if (withWids) claims.TryAdd("wids", new[] { GlobalAdmin }); // so a link-tenant test passes the directory-admin check by default
         return MicrosoftTestTokens.Mint(tid, oid ?? PersonOid, nonce, email: email, upn: upn, extra: claims);
     };
 

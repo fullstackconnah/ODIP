@@ -312,6 +312,13 @@ public class MicrosoftAuthController : ControllerBase
         return LocalRedirect(MicrosoftSignInPaths.SignInSuccess);
     }
 
+    // Entra role template ids: Global Administrator, Privileged Role Administrator, Application Administrator, Cloud Application Administrator.
+    private static readonly HashSet<Guid> DirectoryAdminRoles = new()
+    {
+        Guid.Parse("62e90394-69f5-4237-9190-012177145e10"), Guid.Parse("e8611ab8-c189-46e8-94e1-60213ab1f814"),
+        Guid.Parse("9b895d92-2cd3-44c7-9d02-a6ac2d5ea5c3"), Guid.Parse("158c047a-c907-4556-b7ef-446551a6b5f7"),
+    };
+
     private async Task<IActionResult> LinkTenantAsync(Correlation corr, MicrosoftIdentity id, CancellationToken ct)
     {
         const string path = MicrosoftSignInPaths.LinkTenant;
@@ -323,6 +330,10 @@ public class MicrosoftAuthController : ControllerBase
         var links = _db.MicrosoftTenantLinks.IgnoreQueryFilters([TenantFilter.Name]);
         if (await links.AnyAsync(l => l.TenantId == admin.TenantId, ct)) return Refuse(MicrosoftRefusal.MicrosoftOrgAlreadyLinked, path, "Microsoft link-tenant - org {Org} is already linked", admin.TenantId);
         if (await links.AnyAsync(l => l.MicrosoftTenantId == id.TenantId, ct)) return Refuse(MicrosoftRefusal.MicrosoftTenantTaken, path, "Microsoft link-tenant - tid {Tid} belongs to another org", id.TenantId);
+
+        // Signing in to a directory is not administering it: without a directory-admin role the caller could claim someone else's tenant.
+        if (id.DirectoryRoles is not { } roles || !roles.Any(DirectoryAdminRoles.Contains))
+            return Refuse(MicrosoftRefusal.MicrosoftAdminOnly, path, "Microsoft link-tenant - the token carries no directory-admin role (wids)");
 
         var now = _clock.GetUtcNow().UtcDateTime;
         var link = new MicrosoftTenantLink
@@ -418,7 +429,7 @@ public class MicrosoftAuthController : ControllerBase
         OdipSession.SetCookie(Response, token);
         return Ok(ApiResponse<AuthResponseDto>.Ok(new AuthResponseDto
         {
-            Id = user.Id, Token = token, ExpiresAt = DateTime.UtcNow.AddMinutes(30), Username = user.Username, FullName = user.FullName,
+            Id = user.Id, Token = token, ExpiresAt = _clock.GetUtcNow().UtcDateTime.AddMinutes(30), Username = user.Username, FullName = user.FullName,
             Role = user.Role.ToString(), TenantName = org.Name, TenantId = org.Id,
         }));
     }

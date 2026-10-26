@@ -52,6 +52,7 @@ services:
       - INTEGRATIONS_MASTER_KEY=${INTEGRATIONS_MASTER_KEY:-}
       - EmploymentHero__Enabled=${EMPLOYMENT_HERO_ENABLED:-true}
       # Sign in with Microsoft. Empty ClientId/ClientSecret = the feature is off. PublicBaseUrl must be the https origin users reach ODIP on.
+      # The app registration must emit the wids claim (Token configuration -> groups claim -> Directory roles; UNVERIFIED whether Entra sends it by default, so check one real token at setup, beside xms_edov). Without it, linking a directory is refused.
       - Microsoft__ClientId=${MICROSOFT_CLIENT_ID:-}
       - Microsoft__ClientSecret=${MICROSOFT_CLIENT_SECRET:-}
       - Microsoft__PublicBaseUrl=${MICROSOFT_PUBLIC_BASE_URL:-}

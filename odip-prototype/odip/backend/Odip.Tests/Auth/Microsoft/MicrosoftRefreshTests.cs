@@ -112,11 +112,29 @@ public class MicrosoftRefreshTests
     }
 
     [Fact]
+    public async Task F2b_ExpiresAt_UsesInjectedClock()
+    {
+        var (rig, _, _, cookie) = await SignedInAsync();
+        rig.Clock.Offset = TimeSpan.FromHours(1);
+        var dto = Assert.IsType<ApiResponse<AuthResponseDto>>(((ObjectResult)(await RefreshAsync(rig, cookie)).Result).Value).Data!;
+        Assert.InRange(dto.ExpiresAt, DateTime.UtcNow.AddMinutes(85), DateTime.UtcNow.AddMinutes(95));
+    }
+
+    [Fact]
     public async Task F7_AccountUnlinked_401()
     {
         var (rig, _, person, cookie) = await SignedInAsync();
         person.MicrosoftTenantId = null;
         person.MicrosoftObjectId = null;
+        await rig.Db.SaveChangesAsync();
+        AssertEnded(await RefreshAsync(rig, cookie));
+    }
+
+    [Fact]
+    public async Task F7b_AccountRepointedInSameDirectory_401()
+    {
+        var (rig, _, person, cookie) = await SignedInAsync();
+        person.MicrosoftObjectId = Guid.NewGuid();
         await rig.Db.SaveChangesAsync();
         AssertEnded(await RefreshAsync(rig, cookie));
     }

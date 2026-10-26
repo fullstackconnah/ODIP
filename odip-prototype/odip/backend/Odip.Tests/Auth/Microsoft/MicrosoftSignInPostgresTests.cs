@@ -120,13 +120,13 @@ public class MicrosoftSignInPostgresCallbackTests : IClassFixture<PostgresFixtur
         return await db.Users.ToListAsync();
     }
 
-    private static async Task AddRivalAsync(string cs, Guid org, string email, Guid? tid, Guid? oid)
+    private static async Task AddRivalAsync(string cs, Guid org, string email, Guid? tid, Guid? oid, bool active = true)
     {
         await using var db = PostgresFixture.NewContext(cs);
         db.Users.Add(new User
         {
             Id = Guid.NewGuid(), TenantId = org, FirstName = "Rival", LastName = "Row", Username = Guid.NewGuid().ToString("N"), Email = email,
-            Role = UserRole.SupportWorker, IsActive = true, MicrosoftTenantId = tid, MicrosoftObjectId = oid,
+            Role = UserRole.SupportWorker, IsActive = active, MicrosoftTenantId = tid, MicrosoftObjectId = oid,
         });
         await db.SaveChangesAsync();
     }
@@ -157,6 +157,18 @@ public class MicrosoftSignInPostgresCallbackTests : IClassFixture<PostgresFixtur
         Assert.Equal(winner.Id.ToString(), MicrosoftAuthRig.Jwt(o).Claims.First(c => c.Type.EndsWith("nameidentifier")).Value);
         await using var db = PostgresFixture.NewContext(cs);
         Assert.DoesNotContain(await db.InAppNotifications.ToListAsync(), n => n.RecipientUserId == admin);
+    }
+
+    [SkippableFact]
+    public async Task P4b_Race_WinnerDeactivated_MicrosoftLinkFromAccount()
+    {
+        var (rig, org, _, cs) = await SetupAsync();
+        rig.Raiser = new RacingRaiser(new NotificationRaiser(rig.Db), () => AddRivalAsync(cs, org, "pat@contoso.example", Tid, MicrosoftAuthRig.PersonOid, active: false));
+
+        var o = await rig.RunAsync(MicrosoftAuthRig.Token());
+
+        Assert.Equal(MicrosoftRefusal.MicrosoftLinkFromAccount, o.Code);
+        Assert.Null(o.Cookie("odip_jwt"));
     }
 
     [SkippableFact]

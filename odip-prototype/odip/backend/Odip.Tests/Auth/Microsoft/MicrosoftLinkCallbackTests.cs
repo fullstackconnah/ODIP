@@ -42,6 +42,33 @@ public class MicrosoftLinkCallbackTests
         Assert.Empty(rig.Tracker.Successes);
     }
 
+    [Theory]
+    [InlineData(false, null)]
+    [InlineData(true, "11111111-0000-0000-0000-000000000001")] // some role, not a directory-admin one
+    public async Task L1f_LinkTenant_NoDirectoryAdminRole_MicrosoftAdminOnly_NoLink(bool hasWids, string? role)
+    {
+        var (rig, org, admin) = AdminRig();
+        var token = hasWids ? Token(extra: new Dictionary<string, object> { ["wids"] = new[] { role! } }) : Token(withWids: false);
+        var o = await rig.RunAsync(token, MicrosoftIntent.LinkTenant, null, Signed(admin.Id, org.Id, UserRole.Admin));
+
+        Assert.Equal(MicrosoftRefusal.MicrosoftAdminOnly, o.Code);
+        Assert.Empty(await Links(rig));
+        Assert.Null((await rig.Db.Users.FindAsync(admin.Id))!.MicrosoftObjectId);
+    }
+
+    [Theory]
+    [InlineData("62e90394-69f5-4237-9190-012177145e10")] // Global Administrator
+    [InlineData("e8611ab8-c189-46e8-94e1-60213ab1f814")] // Privileged Role Administrator
+    [InlineData("9b895d92-2cd3-44c7-9d02-a6ac2d5ea5c3")] // Application Administrator
+    [InlineData("158c047a-c907-4556-b7ef-446551a6b5f7")] // Cloud Application Administrator
+    public async Task L1g_LinkTenant_DirectoryAdminRole_Linked(string role)
+    {
+        var (rig, org, admin) = AdminRig();
+        var token = Token(extra: new Dictionary<string, object> { ["wids"] = new[] { "11111111-0000-0000-0000-000000000001", role } });
+        await rig.RunAsync(token, MicrosoftIntent.LinkTenant, null, Signed(admin.Id, org.Id, UserRole.Admin));
+        Assert.Single(await Links(rig));
+    }
+
     [Fact]
     public async Task L1b_LinkTenant_NoDefaultRole_ReadOnly()
     {

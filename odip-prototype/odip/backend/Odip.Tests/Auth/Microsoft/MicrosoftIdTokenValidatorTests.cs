@@ -116,4 +116,13 @@ public class MicrosoftIdTokenValidatorTests
     [InlineData(false, false)]
     public async Task V20_XmsEdov_SetsEmailDomainVerified(object edov, bool expected) =>
         Assert.Equal(expected, (await Run(T.Mint(extra: With("xms_edov", edov)))).Identity!.EmailDomainVerified);
+
+    [Fact]
+    public async Task V21_Wids_ReadFromArrayClaimAndFromJsonStringClaim()
+    {
+        var id = MicrosoftAuthRig.GlobalAdmin;
+        Assert.Equal(new[] { Guid.Parse(id) }, (await Run(T.Mint(extra: With("wids", new[] { id })))).Identity!.DirectoryRoles);
+        Assert.Equal(new[] { Guid.Parse(id) }, (await Run(T.Mint(extra: With("wids", $"[\"{id}\"]")))).Identity!.DirectoryRoles);
+        Assert.Empty((await Run(T.Mint())).Identity!.DirectoryRoles!);
+    }
 }
