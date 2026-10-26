@@ -345,12 +345,15 @@ describe('usePatchParticipant expectedRevisions', () => {
 
   it('H3 does not follow another person\'s save', async () => {
     const { result } = setup({ aboutMe: 3 })
-    mockApiPatchRaw.mockResolvedValue(ok({ aboutMe: 3 }))
+    // This tab took 1 -> 2; someone else then took 2 -> 3 (the cache holds 3).
+    mockApiPatchRaw.mockResolvedValue(ok({ aboutMe: 2 }))
     await result.current.mutateAsync({ id: 'p1', data: { aboutMe: { goals: 'a' }, expectedRevisions: { aboutMe: 1 } } })
     await result.current.mutateAsync({ id: 'p1', data: { aboutMe: { goals: 'b' }, expectedRevisions: { aboutMe: 1 } } })
     expect(body(1).expectedRevisions).toEqual({ aboutMe: 2 })
     await result.current.mutateAsync({ id: 'p1', data: { aboutMe: { goals: 'c' }, expectedRevisions: { aboutMe: 0 } } })
     expect(body(2).expectedRevisions).toEqual({ aboutMe: 0 })
+    await result.current.mutateAsync({ id: 'p1', data: { aboutMe: { goals: 'd' }, expectedRevisions: { aboutMe: 2 } } })
+    expect(body(3).expectedRevisions).toEqual({ aboutMe: 2 })
   })
 
   it('H4 a section-changed 409 refetches the participant', async () => {
@@ -359,6 +362,22 @@ describe('usePatchParticipant expectedRevisions', () => {
     mockApiPatchRaw.mockRejectedValue(conflict())
     await expect(result.current.mutateAsync({ id: 'p1', data: { aboutMe: { goals: 'a' }, expectedRevisions: { aboutMe: 1 } } })).rejects.toBeTruthy()
     expect(spy).toHaveBeenCalledWith({ queryKey: ['participant', 'p1'] })
+  })
+
+  it('H6 a save that changed only one group never advances another group in the ledger', async () => {
+    const { result } = setup({ aboutMe: 2, medical: 5 })
+    mockApiPatchRaw.mockResolvedValue(ok({ aboutMe: 2, medical: 5 }))
+    await result.current.mutateAsync({ id: 'p1', data: { aboutMe: { goals: 'a' }, expectedRevisions: { aboutMe: 1, medical: 4 } } })
+    await result.current.mutateAsync({ id: 'p1', data: { medical: { primaryDiagnosis: 'x', otherDiagnoses: [], hidpaSupportCategories: 'None' }, expectedRevisions: { medical: 4 } } })
+    expect(body(1).expectedRevisions).toEqual({ medical: 4 })
+  })
+
+  it('H7 a revision that jumped by more than one is not this tab\'s save', async () => {
+    const { result } = setup({ aboutMe: 3 })
+    mockApiPatchRaw.mockResolvedValue(ok({ aboutMe: 3 }))
+    await result.current.mutateAsync({ id: 'p1', data: { aboutMe: { goals: 'a' }, expectedRevisions: { aboutMe: 1 } } })
+    await result.current.mutateAsync({ id: 'p1', data: { aboutMe: { goals: 'b' }, expectedRevisions: { aboutMe: 1 } } })
+    expect(body(1).expectedRevisions).toEqual({ aboutMe: 1 })
   })
 
   it('H5 no expected: nothing sent, nothing recorded, no wait on the refetch', async () => {

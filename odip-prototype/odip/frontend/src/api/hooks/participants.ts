@@ -242,7 +242,8 @@ export function usePatchParticipant() {
       await qc.invalidateQueries({ queryKey: ['participant', id] })
       const cached = qc.getQueryData<ParticipantDetailDto>(['participant', id])?.groupRevisions
       for (const [k, n] of Object.entries(sent) as [ScalarGroupKey, number][]) {
-        if ((res.data?.groupRevisions?.[k] ?? 0) > n && (cached?.[k] ?? 0) >= n + 1) ledger.set(`${id}/${k}/${n}`, n + 1)
+        // Exactly n + 1 only: the server bumps a group just for a changed column, so a group this request carried unchanged, or a jump by more than one, is someone else's.
+        if (res.data?.groupRevisions?.[k] === n + 1 && (cached?.[k] ?? 0) >= n + 1) ledger.set(`${id}/${k}/${n}`, n + 1)
       }
       return res
     },
