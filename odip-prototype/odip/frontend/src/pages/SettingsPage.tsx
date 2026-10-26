@@ -8,7 +8,10 @@ import { NoticesRegion } from '@/components/NoticesRegion'
 import { PageHeader } from '@/components/PageHeader'
 import { useIsBelowMd } from '@/hooks/useIsBelowMd'
 import { useNotices, type Notice } from '@/hooks/useNotices'
-import { usePermissions } from '@/lib/permissions'
+import { useAuthConfig } from '@/api/hooks'
+import { useSettingsPerms } from '@/pages/settings/useSettingsPerms'
+import MicrosoftSignInSection from '@/pages/settings/MicrosoftSignInSection'
+import { PageState } from '@/components/PageState'
 import ActivityLibraryTab from '@/pages/settings/ActivityLibraryTab'
 import AdminNotificationsTab from '@/pages/settings/AdminNotificationsTab'
 import AlphaSignupsTab from '@/pages/settings/AlphaSignupsTab'
@@ -44,7 +47,8 @@ import UsersTab from '@/pages/settings/UsersTab'
  * One section is mounted at a time, keyed by its section, so switching always starts the next one fresh.
  */
 export default function SettingsPage() {
-  const perms = usePermissions()
+  const perms = useSettingsPerms()
+  const config = useAuthConfig()
   const belowMd = useIsBelowMd()
   const [params] = useSearchParams()
   const visible = visibleSections(perms)
@@ -52,12 +56,14 @@ export default function SettingsPage() {
   // Below md bare /settings is the list; from md it opens on Profile, which is first for everyone who can open Settings.
   const current: SectionDef | null = asked ?? (belowMd ? null : visible[0])
   const key = current?.key ?? null
+  // A link to Microsoft sign-in (the return from Microsoft) can arrive before the server's config has: wait for it instead of tidying the section away.
+  const holdMicrosoft = config.isPending && params.get('section') === 'microsoft' && perms.isAdmin && !perms.viewingAs && perms.hasOrganisation
 
   // Only cleanup rewrites the URL in place: a legacy ?tab= becomes ?section= (other params kept), and a key this person can't see is dropped.
   const tidy = new URLSearchParams(params)
   tidy.delete('tab')
   if (asked) tidy.set('section', asked.key)
-  else tidy.delete('section')
+  else if (!holdMicrosoft) tidy.delete('section')
   const tidySearch = tidy.toString()
 
   // The section shown before this one. A switch moves focus (to the new heading, or back to the list row just left); a first load doesn't.
@@ -121,6 +127,7 @@ export default function SettingsPage() {
       case 'workspace-visibility': return <WorkspaceVisibilitySection {...frame} />
       case 'setup': return framed(<OrganisationSetupSection />)
       case 'organisation': return <OrganisationProfileSection {...frame} />
+      case 'microsoft': return framed(<MicrosoftSignInSection />)
       case 'billing': return <BillingDetailsSection {...frame} />
       case 'safety': return <SafetyChecksSection {...frame} />
       case 'alerts': return <AlertWindowsSection {...frame} />
@@ -158,7 +165,7 @@ export default function SettingsPage() {
     }
   }
 
-  const sectionScreen = belowMd && current !== null
+  const sectionScreen = belowMd && (current !== null || holdMicrosoft)
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       {tidySearch !== params.toString() && <Navigate replace to={{ pathname: '/settings', search: tidySearch ? `?${tidySearch}` : '' }} />}
@@ -176,7 +183,7 @@ export default function SettingsPage() {
             returnFocusTo={key === null && switched ? shown.from : null}
           />
         )}
-        {current && <Fragment key={current.key}>{body(current)}</Fragment>}
+        {holdMicrosoft ? <PageState kind="loading" noun="Microsoft sign-in" /> : current && <Fragment key={current.key}>{body(current)}</Fragment>}
       </div>
 
       <TenantFormPanel

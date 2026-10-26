@@ -1,25 +1,30 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { sendPasswordResetEmail } from 'firebase/auth'
 import { auth, devAuthEnabled } from '@/lib/firebase'
-import { useLogin, useResendVerification, useDevLogin, useDevUsers } from '@/api/hooks'
+import { useLogin, useResendVerification, useDevLogin, useDevUsers, useAuthConfig, storeSession } from '@/api/hooks'
 import type { AuthResponseDto, ApiResponse } from '@/api/types'
-import { Callout } from '@/components/Callout'
+import { AnnouncementRegion } from '@/components/AnnouncementRegion'
+import { Callout, type CalloutTone } from '@/components/Callout'
 import { Button } from '@/components/Button'
 import PlatformFooter from '@/components/layout/PlatformFooter'
-import { SignInRefused, describeSignInRefusal, type RefusalWords } from '@/lib/signInRefusal'
+import { SignInRefused, describeMicrosoftOutcome, describeSignInRefusal, type RefusalWords } from '@/lib/signInRefusal'
 import { VERIFICATION_HOLD_MS, holdLeftMs, readVerificationSend, writeVerificationSend, type VerificationSendRecord } from '@/lib/verificationSend'
 import { Eye, EyeOff } from 'lucide-react'
 import { Wordmark } from '@/components/Wordmark'
 
 /** What the person is told: one plain sentence, and what to do next when the sentence does not already say. */
-type Problem = RefusalWords
+type Problem = RefusalWords & { tone?: CalloutTone }
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [problem, setProblem] = useState<Problem | null>(null)
+  const [params] = useSearchParams()
+  // A refused or ended Microsoft sign-in returns here as ?microsoft=<code>. Read once, shown as the card's problem, and dropped from the address.
+  const [microsoftCode] = useState(() => params.get('microsoft'))
+  const [problem, setProblem] = useState<Problem | null>(() => (microsoftCode ? describeMicrosoftOutcome(microsoftCode, 'signin') : null))
+  const [announced, setAnnounced] = useState('')
   const [resetSent, setResetSent] = useState(false)
   // Set when the exchange refused an unverified email: what was typed (so "Send it again" uses it), and how the resend is going. The refused sign-in ended
   // its Firebase session, so sending again signs in once more with these.
@@ -36,12 +41,24 @@ export default function LoginPage() {
   const resendVerification = useResendVerification()
   const devLogin = useDevLogin()
   const devUsers = useDevUsers()
+  const config = useAuthConfig()
+  const microsoftStartUrl = config.data?.microsoft ? config.data.microsoftStartUrl : null
 
   const devUserOptions = devUsers.data ?? []
   const defaultDevUsername = devUserOptions.some(u => u.username === 'admin')
     ? 'admin'
     : (devUserOptions[0]?.username ?? 'admin')
   const devUsername = devUsernameOverride ?? defaultDevUsername
+
+  useEffect(() => {
+    if (!microsoftCode) return
+    const w = describeMicrosoftOutcome(microsoftCode, 'signin')
+    // Written a tick after mount: AnnouncementRegion must already be on the page for a screen reader to announce its text.
+    const tick = setTimeout(() => setAnnounced(w.nextStep ? `${w.sentence} ${w.nextStep}` : w.sentence), 0)
+    navigate({ search: '' }, { replace: true })
+    return () => clearTimeout(tick)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => () => {
     if (holdTimer.current) clearTimeout(holdTimer.current)
@@ -71,11 +88,7 @@ export default function LoginPage() {
 
   const applyLoginSuccess = (res: ApiResponse<AuthResponseDto>) => {
     if (res.success && res.data) {
-      localStorage.setItem('odip_token', res.data.token)
-      localStorage.setItem('odip_user', JSON.stringify(res.data))
-      if (res.data.tenantId) {
-        localStorage.setItem('odip_viewing_tenant', res.data.tenantId)
-      }
+      storeSession(res.data)
       navigate('/')
       return true
     }
@@ -195,17 +208,20 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex flex-col bg-[var(--color-background)]">
       <main className="flex-1 flex items-center justify-center p-4">
+        <AnnouncementRegion message={announced} />
         <div className="w-full max-w-md animate-fade-in">
           <div className="text-center mb-8">
             <h1><Wordmark size={32} /></h1>
           </div>
 
+          {!config.isPending && (
           <form onSubmit={handleSubmit} className="bg-[var(--color-card)] rounded-[var(--radius-lg)] p-8 shadow-[var(--shadow-lift)]">
             <h2 className="text-xl font-semibold mb-6 text-[var(--color-foreground)]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Sign in to your account</h2>
 
             {problem && (
               <Callout
-                tone="error"
+                tone={problem.tone ?? 'error'}
+                announce={problem.tone ? false : undefined}
                 className="mb-4"
                 actions={
                   unverified ? (
@@ -302,6 +318,28 @@ export default function LoginPage() {
               </button>
             </div>
 
+            {microsoftStartUrl && (
+              <>
+                <div className="my-5 flex items-center gap-3">
+                  <div className="h-px flex-1 bg-[var(--color-border)]" />
+                  <span className="text-xs uppercase tracking-wide text-[var(--color-muted-foreground)]">or</span>
+                  <div className="h-px flex-1 bg-[var(--color-border)]" />
+                </div>
+                <a
+                  href={microsoftStartUrl}
+                  className="flex min-h-11 w-full items-center justify-center gap-3 rounded-[var(--radius-lg)] border border-[var(--ms-button-border)] bg-[var(--ms-button-bg)] px-3 text-[15px] font-semibold text-[var(--ms-button-fg)] transition-transform duration-100 hover:opacity-90 active:scale-[0.99] motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-card)]"
+                >
+                  <svg aria-hidden="true" width="21" height="21" viewBox="0 0 21 21">
+                    <rect width="10" height="10" fill="var(--ms-logo-red)" />
+                    <rect x="11" width="10" height="10" fill="var(--ms-logo-green)" />
+                    <rect y="11" width="10" height="10" fill="var(--ms-logo-blue)" />
+                    <rect x="11" y="11" width="10" height="10" fill="var(--ms-logo-yellow)" />
+                  </svg>
+                  Sign in with Microsoft
+                </a>
+              </>
+            )}
+
             <div className="flex justify-between items-center mt-6">
               <button
                 type="button"
@@ -315,6 +353,7 @@ export default function LoginPage() {
               </p>
             </div>
           </form>
+          )}
 
           {devAuthEnabled && (
             <div className="mt-6 bg-[var(--color-card)] rounded-[var(--radius-lg)] p-8 shadow-[var(--shadow-lift)]">

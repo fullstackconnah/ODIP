@@ -7,9 +7,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { SETTINGS_PERMS } from '@/test/fixtures/settingsPermissions'
 import SettingsPage from './SettingsPage'
 
-const { mockUsePermissions, mockWorkspaceRead, mockUseEventTemplates, settingsData, mockSyncMutate, holidayRows, screenSize } = vi.hoisted(() => ({
+const { mockUseAuthConfig, mockUsePermissions, mockWorkspaceRead, mockUseEventTemplates, settingsData, mockSyncMutate, holidayRows, screenSize } = vi.hoisted(() => ({
   mockWorkspaceRead: vi.fn().mockReturnValue({ data: { hiddenAccommodation: false, hiddenVehicles: false }, isError: false, isFetching: false }),
   mockUsePermissions: vi.fn(),
+  // GET /auth/config: Microsoft sign-in is off unless a test says otherwise.
+  mockUseAuthConfig: vi.fn(() => ({ data: { microsoft: false, microsoftStartUrl: null } as { microsoft: boolean; microsoftStartUrl: string | null } | undefined, isPending: false })),
   screenSize: { belowMd: false },
   // The Public Holidays tab: the rows usePublicHolidays returns (a stable reference, like a cached query).
   holidayRows: { current: [] as unknown[] },
@@ -51,6 +53,8 @@ function renderSettingsPageWithQueryClient(url = '/settings') {
 }
 
 vi.mock('@/api/hooks', () => ({
+  useAuthConfig: mockUseAuthConfig,
+  useMicrosoftAccount: () => ({ data: undefined, isError: false }),
   useEventTemplates: mockUseEventTemplates,
   useActivities: () => ({ data: [] }),
   useModuleVisibility: mockWorkspaceRead,
@@ -111,6 +115,7 @@ vi.mock('@/api/client', async () => {
 beforeEach(() => {
   mockImportPost.mockReset()
   mockUsePermissions.mockReturnValue(SETTINGS_PERMS.Admin)
+  mockUseAuthConfig.mockReturnValue({ data: { microsoft: false, microsoftStartUrl: null }, isPending: false })
   screenSize.belowMd = false
   mockUseEventTemplates.mockReturnValue({ data: [] })
   holidayRows.current = []
@@ -172,6 +177,17 @@ describe('SettingsPage — Event Templates tab', () => {
 // The public holiday table is global: every tenant's quotes and claims read the same rows, and a row decides whether a day is priced at the public
 // holiday rate (+122% on a weekday). Only a SuperAdmin may add, delete or sync rows (the API refuses everyone else, review M6 of plan builder
 // phase B), so everyone else gets the calendar to read and no control that would only fail.
+describe('SettingsPage — Microsoft sign-in section', () => {
+  it('section=microsoft while config loads shows the loading state, not Profile', () => {
+    mockUseAuthConfig.mockReturnValue({ data: undefined, isPending: true })
+    const { router } = renderSettingsPage('/settings?section=microsoft')
+
+    expect(screen.getByText(/Loading Microsoft sign-in/i)).toBeInTheDocument()
+    expect(screen.queryByText('Signed in as')).not.toBeInTheDocument()
+    expect(router.state.location.search).toBe('?section=microsoft')
+  })
+})
+
 describe('SettingsPage — Public Holidays tab: who may change the calendar', () => {
   const labourDay = { id: 'h1', date: '2026-10-05', name: 'Labour Day', state: 'NSW' }
 

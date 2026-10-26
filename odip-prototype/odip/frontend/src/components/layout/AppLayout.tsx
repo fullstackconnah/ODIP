@@ -514,7 +514,7 @@ export default function AppLayout() {
 
         {/* Bottom */}
         <div className={`pt-2 shrink-0 ${rail ? 'space-y-0.5' : ''}`}>
-          <button onClick={endSession}
+          <button onClick={() => endSession()}
             className={`${rail ? RAIL_ITEM : WIDE_FOOT_ROW} text-[var(--color-secondary)] hover:bg-[var(--color-sidebar-accent)]`}
             {...(rail ? rail.tip('Sign out', 0) : {})}>
             {/* The wide icon sits in an 18px slot so Sign out's label starts at x=54 like the nav labels. */}

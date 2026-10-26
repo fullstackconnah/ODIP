@@ -21,7 +21,9 @@ vi.mock('firebase/auth', () => ({ signInWithEmailAndPassword, sendEmailVerificat
 vi.mock('@/lib/firebase', () => ({ auth: { name: 'the-auth' }, devAuthEnabled: false }))
 vi.mock('@/api/client', async () => {
   const actual = await vi.importActual<typeof import('@/api/client')>('@/api/client')
-  return { ...actual, apiPostRaw: mockApiPostRaw, apiGet: vi.fn() }
+  // GET /auth/config (the card waits for it): Microsoft sign-in is off.
+  const apiClient = Object.assign(Object.create(actual.apiClient), { get: vi.fn().mockResolvedValue({ data: { data: { microsoft: false, microsoftStartUrl: null } } }) })
+  return { ...actual, apiClient, apiPostRaw: mockApiPostRaw, apiGet: vi.fn() }
 })
 
 const EMAIL = 'jane.smith@acme.example.com'
@@ -63,7 +65,7 @@ const pressSignIn = (u: User) => u.click(screen.getByRole('button', { name: 'Sig
 const wait = (ms: number) => act(async () => { vi.advanceTimersByTime(ms) })
 
 async function signIn(u: User) {
-  await u.type(screen.getByLabelText('Email'), EMAIL)
+  await u.type(await screen.findByLabelText('Email'), EMAIL)
   await u.type(screen.getByLabelText('Password'), 'a-password')
   await pressSignIn(u)
 }
