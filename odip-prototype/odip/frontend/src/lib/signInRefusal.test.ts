@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SIGN_IN_REFUSAL_CODES, SignInRefused, describeSignInRefusal, describeWait, signInRefusalOf, type SignInRefusal } from './signInRefusal'
+import { MICROSOFT_REFUSAL_CODES, SIGN_IN_REFUSAL_CODES, SignInRefused, describeMicrosoftOutcome, describeSignInRefusal, describeWait, signInRefusalOf, type SignInRefusal } from './signInRefusal'
 
 const refused = (code: SignInRefusal['code'], retryAfterSeconds: number | null = null): SignInRefusal => ({ code, retryAfterSeconds })
 
@@ -139,5 +139,52 @@ describe('SignInRefused', () => {
     expect(failure.refusal).toEqual(refused('EmailNotVerified'))
     expect(failure.verification).toBe('sent')
     expect(failure.message).toBe('Sign-in refused: EmailNotVerified')
+  })
+})
+
+// The Microsoft callbacks refuse with 21 codes (Odip.Api/Services/MicrosoftRefusal.cs), pinned here in file order. They arrive in the URL (?microsoft=<code>), so an
+// unknown one must still read sensibly.
+describe('the Microsoft outcome words', () => {
+  const PLACES = ['signin', 'organisation', 'account'] as const
+
+  it('pins the Microsoft refusal codes', () => {
+    expect([...MICROSOFT_REFUSAL_CODES]).toEqual([
+      'InvalidToken', 'NoOdipAccount', 'TenantInactive', 'LockedOut', 'MicrosoftNotLinked', 'MicrosoftPersonalAccount', 'MicrosoftGuest', 'MicrosoftLinkFromAccount',
+      'MicrosoftNoEmail', 'MicrosoftCannotCreate', 'MicrosoftCancelled', 'SignInRequired', 'MicrosoftAdminOnly', 'MicrosoftOrgAlreadyLinked', 'MicrosoftTenantTaken',
+      'MicrosoftSessionChanged', 'MicrosoftWrongTenant', 'MicrosoftAccountTaken', 'MicrosoftAccountAlreadyLinked', 'MicrosoftOnlySignIn', 'MicrosoftSessionEnded',
+    ])
+  })
+
+  it('every Microsoft code has words in every place', () => {
+    for (const code of MICROSOFT_REFUSAL_CODES) {
+      for (const place of PLACES) {
+        const words = describeMicrosoftOutcome(code, place)
+        expect(words.sentence, `${code} ${place}`).not.toBe('')
+        expect(words.tone, `${code} ${place}`).toMatch(/^(danger|warning|info)$/)
+        expect(`${words.sentence} ${words.nextStep ?? ''}`, `${code} ${place}`).not.toMatch(/odip/i)
+      }
+    }
+  })
+
+  it('an unknown Microsoft code gets the InvalidToken words', () => {
+    expect(describeMicrosoftOutcome('SomethingNew', 'signin')).toEqual(describeMicrosoftOutcome('InvalidToken', 'signin'))
+    expect(describeMicrosoftOutcome(null, 'account')).toEqual(describeMicrosoftOutcome('InvalidToken', 'account'))
+  })
+
+  it('MicrosoftNotLinked words differ for signin and account', () => {
+    expect(describeMicrosoftOutcome('MicrosoftNotLinked', 'signin').sentence).toBe("Your organisation hasn't turned on Microsoft sign-in.")
+    expect(describeMicrosoftOutcome('MicrosoftNotLinked', 'account').sentence).toBe('Microsoft sign-in has been turned off for your organisation.')
+  })
+
+  it('sets the tone per code and tells the person what to do next', () => {
+    expect(describeMicrosoftOutcome('MicrosoftCancelled', 'signin').tone).toBe('warning')
+    expect(describeMicrosoftOutcome('MicrosoftSessionEnded', 'signin')).toMatchObject({ tone: 'info', sentence: "You've been signed out." })
+    expect(describeMicrosoftOutcome('MicrosoftOrgAlreadyLinked', 'organisation').tone).toBe('info')
+    expect(describeMicrosoftOutcome('MicrosoftOrgAlreadyLinked', 'organisation').nextStep).toBeUndefined()
+    expect(describeMicrosoftOutcome('MicrosoftOnlySignIn', 'account')).toMatchObject({
+      tone: 'danger',
+      sentence: "Microsoft is your only way to sign in, so you can't unlink it yet.",
+      nextStep: 'Ask an admin to send you a set-password email from your page in Staff, set a password, then unlink.',
+    })
   })
 })
