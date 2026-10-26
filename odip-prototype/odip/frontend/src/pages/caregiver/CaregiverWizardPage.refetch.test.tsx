@@ -290,11 +290,28 @@ describe('CaregiverWizardPage - one save per click', () => {
 
     expect(mockPut).toHaveBeenCalledTimes(1)
     const saving = await screen.findByRole('button', { name: 'Saving your progress…' })
-    expect(saving).toBeDisabled()
+    expect(saving).toHaveAttribute('aria-disabled', 'true')
 
     release()
     await screen.findByText(/Progress saved/)
-    expect(saveLater()).toBeEnabled()
+    expect(saveLater()).not.toHaveAttribute('aria-disabled')
+    expect(mockPut).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps focus on Save and continue later while saving, and Enter or Space on it saves nothing more', async () => {
+    const { user } = await open()
+    await user.type(nameField(), 'Jane Doe')
+    const release = holdNextPut()
+    saveLater().focus()
+    await user.keyboard('{Enter}')
+    const saving = await screen.findByRole('button', { name: 'Saving your progress…' })
+    expect(document.activeElement).toBe(saving)
+    await user.keyboard('{Enter}')
+    await user.keyboard(' ')
+    expect(mockPut).toHaveBeenCalledTimes(1)
+    expect(document.activeElement).toBe(saving)
+    release()
+    await screen.findByText(/Progress saved/)
     expect(mockPut).toHaveBeenCalledTimes(1)
   })
 
@@ -308,10 +325,10 @@ describe('CaregiverWizardPage - one save per click', () => {
     const submitButton = await screen.findByRole('button', { name: 'Submit for review' })
     const release = holdNextPut()
     await user.click(saveLater())
-    expect(submitButton).toBeDisabled()
+    expect(submitButton).toHaveAttribute('aria-disabled', 'true')
     release()
     await screen.findByText(/Progress saved/)
-    expect(submitButton).toBeEnabled()
+    expect(submitButton).not.toHaveAttribute('aria-disabled')
   })
 
   it('after a failed save: enabled again, failure copy shown, text typed in flight kept', async () => {
@@ -323,7 +340,7 @@ describe('CaregiverWizardPage - one save per click', () => {
     fail()
 
     await screen.findByText(/couldn't save your progress/i)
-    expect(saveLater()).toBeEnabled()
+    expect(saveLater()).not.toHaveAttribute('aria-disabled')
     expect(relationshipField()).toHaveValue('Mother')
     expect(nameField()).toHaveValue('Jane Doe')
   })
@@ -337,7 +354,7 @@ describe('CaregiverWizardPage - one save per click', () => {
     }
     mockPost.mockImplementationOnce(() => new Promise(() => {}))
     await user.click(await screen.findByRole('button', { name: 'Submit for review' }))
-    expect(await screen.findByRole('button', { name: 'Submitting…' })).toBeDisabled()
-    expect(saveLater()).toBeDisabled()
+    expect(await screen.findByRole('button', { name: 'Submitting…' })).toHaveAttribute('aria-disabled', 'true')
+    expect(saveLater()).toHaveAttribute('aria-disabled', 'true')
   })
 })

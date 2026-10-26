@@ -569,6 +569,7 @@ export default function IntakeWizardPage() {
           reviewActionsRight
           secondaryActions={secondaryActions}
           cancelTo={isEditMode ? `/participants/${id}` : '/participants'}
+          submitReserve="Complete intake"
           submitLabel={saveMutation.isPending ? (isEditMode ? 'Saving...' : 'Creating...') : 'Complete intake'}
           isSubmitting={saveMutation.isPending || wizard.isAdvancing}
         />

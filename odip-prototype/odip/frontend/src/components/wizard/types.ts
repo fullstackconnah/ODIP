@@ -32,6 +32,7 @@ export type WizardSecondaryAction = {
   key: string
   label: string
   onClick: () => void | Promise<void>
+  /** Busy: the button stays focusable (aria-disabled) but ignores activation, so a save in flight keeps the user's place. */
   disabled?: boolean
 }
 

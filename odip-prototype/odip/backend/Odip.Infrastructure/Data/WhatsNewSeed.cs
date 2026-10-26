@@ -46,6 +46,9 @@ public static class WhatsNewSeed
         new Item("2026-10-caregiver-review-readable", "Caregiver form reviews are easier to read",
             "When you review a caregiver's form, each section now has the same name the caregiver saw, and the Field, Current and Caregiver's value columns line up from one section to the next.",
             Staff, false),
+        new Item("2026-10-wizard-footer-focus", "Save and Submit keep your place while they work",
+            "When you use Save and continue later, Save as draft or Submit, the keyboard focus now stays on that button while it saves, so you do not lose your place.\n\nOn small phones the buttons also fit: Back and Next stay together, and the save button sits on its own line below.",
+            Staff, false),
     };
 
     /// <summary>Inserts the keys the table lacks, one save each, so a key another instance inserted first costs only that row.</summary>
