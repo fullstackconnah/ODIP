@@ -14,7 +14,7 @@ public partial class EmploymentHeroClient
 {
     // A payslip is a page or two. The read stops past the base64 size of this, so nothing bigger is ever buffered.
     private const int MaxPayslipBytes = 10 * 1024 * 1024;
-    private const string NotAPayslipMessage = "Employment Hero sent a payslip Bunya Support couldn't open.";
+    private const string NotAPayslipMessage = "Employment Hero sent a payslip we couldn't open.";
 
     public Task<List<EhPayslip>> ListPayslipsAsync(string apiKey, string employeeId, CancellationToken ct) =>
         GetAsync<List<EhPayslip>>(apiKey, $"api/v2/ess/{Uri.EscapeDataString(employeeId)}/document/payslip", ct);
@@ -52,7 +52,7 @@ public partial class EmploymentHeroClient
             case HttpStatusCode.NotFound:
                 throw new EmploymentHeroException(EmploymentHeroFailure.BusinessNotFound, "Employment Hero couldn't find that business or employee for this API key.");
             case HttpStatusCode.TooManyRequests:
-                throw new EmploymentHeroException(EmploymentHeroFailure.RateLimited, "Employment Hero is busy. Bunya Support tries again at the next sync.");
+                throw new EmploymentHeroException(EmploymentHeroFailure.RateLimited, "Employment Hero is busy. We'll try again at the next sync.");
         }
         if (!response.IsSuccessStatusCode)
             throw new EmploymentHeroException(EmploymentHeroFailure.Unavailable, $"Employment Hero answered with an error ({(int)response.StatusCode}). Try again in a few minutes.");

@@ -40,7 +40,7 @@ public class ImportTemplateTests
         using var workbook = new XLWorkbook(new MemoryStream(ImportTemplate.Build(ImportKind.Participants)));
         var notes = workbook.Worksheet("Notes");
         Assert.Equal(("First name", "Yes", "Required."), (notes.Cell(2, 1).GetString(), notes.Cell(2, 2).GetString(), notes.Cell(2, 3).GetString()));
-        Assert.Equal("odip-participants-template.xlsx", ImportTemplate.FileName(ImportKind.Participants));
+        Assert.Equal("bunya-support-participants-template.xlsx", ImportTemplate.FileName(ImportKind.Participants));
     }
 
     [Fact]
@@ -48,7 +48,7 @@ public class ImportTemplateTests
     {
         var table = ImportFileReader.Read(ImportTemplate.Build(ImportKind.Staff), ImportTemplate.FileName(ImportKind.Staff));
         Assert.Equal(ImportFields.For(ImportKind.Staff).Select(f => f.Key), ImportFields.AutoMatch(ImportKind.Staff, table.Headers));
-        Assert.Equal("odip-staff-template.xlsx", ImportTemplate.FileName(ImportKind.Staff));
+        Assert.Equal("bunya-support-staff-template.xlsx", ImportTemplate.FileName(ImportKind.Staff));
     }
     [Fact]
     public void The_funding_template_round_trips_its_example_row_is_skipped_and_its_name_is_the_url_word()
@@ -58,7 +58,7 @@ public class ImportTemplateTests
 
         Assert.Equal(ImportFields.For(ImportKind.FundingPlans).Select(f => f.Key), mapping);
         Assert.Equal(ImportRowStatus.Skipped, ImportFundingRows.Build(table, mapping).Single().Status);
-        Assert.Equal("odip-funding-plans-template.xlsx", ImportTemplate.FileName(ImportKind.FundingPlans));
+        Assert.Equal("bunya-support-funding-plans-template.xlsx", ImportTemplate.FileName(ImportKind.FundingPlans));
     }
 
     [Fact]

@@ -92,7 +92,7 @@ public class ImportsControllerTests
         var (controller, db) = Controller();
         using var _ = db;
         var file = Assert.IsType<FileContentResult>(controller.Template("participants", null));
-        Assert.Equal(("odip-participants-template.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"), (file.FileDownloadName, file.ContentType));
+        Assert.Equal(("bunya-support-participants-template.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"), (file.FileDownloadName, file.ContentType));
     }
 
     [Fact]
@@ -101,7 +101,7 @@ public class ImportsControllerTests
         var (controller, db) = Controller();
         using var _ = db;
         var file = Assert.IsType<FileContentResult>(controller.Template("funding-plans", null));
-        Assert.Equal("odip-funding-plans-template.xlsx", file.FileDownloadName);
+        Assert.Equal("bunya-support-funding-plans-template.xlsx", file.FileDownloadName);
 
         const string csv = "NDIS number,Plan start,Plan end,Support category,Managed by,Amount\n430000001,01/07/2026,30/06/2027,Core,Self managed,100\n";
         var preview = Assert.IsType<OkObjectResult>((await controller.Preview("funding-plans", Upload("budgets.csv", csv), null, null, null, null, CancellationToken.None)).Result);

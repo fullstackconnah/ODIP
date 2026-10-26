@@ -95,7 +95,7 @@ public class DataExportController : ControllerBase
         // ZipArchive writes its headers synchronously in .NET, which Kestrel refuses unless the request allows it: this request only.
         if (HttpContext.Features.Get<IHttpBodyControlFeature>() is { } body) body.AllowSynchronousIO = true;
         Response.ContentType = "application/zip";
-        Response.Headers.ContentDisposition = $"attachment; filename=\"odip-export-{Slug(name)}-{today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}.zip\"";
+        Response.Headers.ContentDisposition = $"attachment; filename=\"bunya-support-export-{Slug(name)}-{today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}.zip\"";
         Response.Headers.CacheControl = "no-store";
 
         var zipComplete = false;

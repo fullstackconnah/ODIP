@@ -442,7 +442,7 @@ public sealed class EmploymentHeroLeaveSync
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                Fail(row, "Bunya Support couldn't send this leave.");
+                Fail(row, "We couldn't send this leave.");
                 _logger.LogWarning("Leave row failed ({Error})", ex.GetType().Name);
             }
             try
@@ -561,7 +561,7 @@ public sealed class EmploymentHeroLeaveSync
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                fail(row, "Bunya Support couldn't take this leave back.");
+                fail(row, "We couldn't take this leave back.");
                 _logger.LogWarning("Leave cancel row failed ({Error})", ex.GetType().Name);
             }
             await EmploymentHeroTimesheetSender.SaveOrSkipAsync(db, row, now, ct);

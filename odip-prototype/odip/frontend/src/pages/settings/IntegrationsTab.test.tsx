@@ -112,12 +112,12 @@ describe('IntegrationsTab — connecting', () => {
 describe('IntegrationsTab — connected', () => {
   it('shows the business, the last sync and the counts, syncs now, and disconnects only after a confirm', async () => {
     const user = userEvent.setup()
-    state.status = connected({ lastSyncError: "Employment Hero is busy. Bunya Support tries again at the next sync." })
+    state.status = connected({ lastSyncError: "Employment Hero is busy. We'll try again at the next sync." })
     renderTab()
 
     expect(screen.getByText('Acme Care')).toBeInTheDocument()
     expect(screen.getByText('12 staff members linked, 1 not linked')).toBeInTheDocument()
-    expect(screen.getByText('Employment Hero is busy. Bunya Support tries again at the next sync.')).toBeInTheDocument()
+    expect(screen.getByText("Employment Hero is busy. We'll try again at the next sync.")).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Sync now' }))
     expect(calls.sync).toHaveBeenCalledTimes(1)
 

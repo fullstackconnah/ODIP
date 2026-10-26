@@ -9,7 +9,7 @@ namespace Odip.Tests.Common;
 
 /// <summary>
 /// The product is "Bunya Support"; "ODIP" is only the internal code name. No string literal a person can read
-/// (API refusals, emails, export README, PDF text) may say ODIP. Each kept case below is stored, compared or
+/// (API refusals, emails, export README, PDF text) may say ODIP, and no download file name may start with odip-. Each kept case below is stored, compared or
 /// machine-read, so changing it would break existing data or a parser.
 /// </summary>
 public class BrandNameInStringsTests
@@ -24,10 +24,12 @@ public class BrandNameInStringsTests
         ("IntakeIcs.cs", "-//ODIP//Intake visit//EN", "calendar PRODID, machine-read"),
         ("EmploymentHeroLeave.cs", "Sent from ODIP", "marker already written into Employment Hero notes and matched on read"),
         ("EmploymentHeroLeave.cs", "ODIP can't read this worker's Employment Hero id", "old LastError text still stored on outbox rows; IsWaiting matches it"),
+        ("DemoIds.cs", "odip-demo/v1", "namespace the stable demo ids are hashed from; changing it re-keys every demo row"),
+        ("DemoTickLock.cs", "odip-demo-data-tick", "advisory-lock key hashed from this text; every running instance must agree on it"),
     ];
 
     private static readonly Regex Literal = new(@"""(?:[^""\\]|\\.)*""", RegexOptions.Compiled);
-    private static readonly Regex Brand = new(@"\bODIP\b", RegexOptions.Compiled);
+    private static readonly Regex Brand = new(@"\bODIP\b|\bodip-", RegexOptions.Compiled);
 
     [Fact]
     public void NoReadableStringSaysOdip()

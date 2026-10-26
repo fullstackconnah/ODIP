@@ -15,10 +15,10 @@ public static class EmploymentHeroLeave
     public const string FromEhMessage = "This leave was entered in Employment Hero. Change or cancel it there.";
     public const string CancelFinalisedMessage = "Cancelled in Bunya Support after the pay run was finalised: fix it in Employment Hero";
     public const string WeekendMessage = "This leave falls only on a weekend, so Bunya Support has no standard hours to send. Enter it in Employment Hero if it is paid.";
-    public const string GaveUpMessage = "Bunya Support stopped trying after six tries.";
+    public const string GaveUpMessage = "We stopped trying after six tries.";
     public const string CreateFinalisedMessage = "Sent after the pay run was finalised: enter it in Employment Hero";
-    public const string LinkClashMessage = "Bunya Support could not link this leave to Employment Hero's copy.";
-    private const string UnreadableIdReason = "Bunya Support can't read this worker's Employment Hero id. Link them again in Settings → Integrations.";
+    public const string LinkClashMessage = "We couldn't link this leave to Employment Hero's copy.";
+    private const string UnreadableIdReason = "We can't read this worker's Employment Hero id. Link them again in Settings → Integrations.";
     // Rows queued before the rename still hold this text in LastError; IsWaiting must keep matching them.
     private const string LegacyUnreadableIdReason = "ODIP can't read this worker's Employment Hero id. Link them again in Settings → Integrations.";
     private const string CategoryReasonStart = "Choose the Employment Hero leave category for ";

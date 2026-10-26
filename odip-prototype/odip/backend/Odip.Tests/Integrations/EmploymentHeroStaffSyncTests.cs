@@ -94,7 +94,7 @@ public class EmploymentHeroStaffSyncTests
         var items = await db.EmploymentHeroAttentions.ToDictionaryAsync(a => a.ExternalEmployeeId!, a => (a.Kind, a.Reason));
         Assert.Equal(4, items.Count);
         Assert.All(items.Values, i => Assert.Equal(EmploymentHeroAttentionKind.FixInEmploymentHero, i.Kind));
-        Assert.Equal("They have no email in Employment Hero, and Bunya Support needs one to add them.", items["201"].Reason);
+        Assert.Equal("They have no email in Employment Hero, and we need one to add them.", items["201"].Reason);
         Assert.Equal("Their email in Employment Hero belongs to another organisation on Bunya Support.", items["202"].Reason);
         Assert.Equal("Their mobile in Employment Hero is longer than 20 characters.", items["203"].Reason);
         Assert.Equal("Their first name or surname is missing in Employment Hero.", items["204"].Reason);
@@ -266,7 +266,7 @@ public class EmploymentHeroStaffSyncTests
         var items = await db.EmploymentHeroAttentions.ToListAsync();
         Assert.Equal(4, items.Count);
         Assert.All(items, i => Assert.Equal(EmploymentHeroAttentionKind.FixInOdip, i.Kind));
-        Assert.All(items, i => Assert.StartsWith("Employment Hero has ended the employment of 4 staff in one sync, so Bunya Support archived nobody", i.Reason));
+        Assert.All(items, i => Assert.StartsWith("Employment Hero has ended the employment of 4 staff in one sync, so we archived nobody", i.Reason));
     }
 
     [Fact]

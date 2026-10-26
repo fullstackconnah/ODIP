@@ -50,7 +50,7 @@ public class EmploymentHeroLeaveRulesTests
 
         Assert.Equal("Choose the Employment Hero leave category for sick leave in Settings → Integrations.", EmploymentHeroLeave.Build(ALeave(LeaveType.Sick), "42", unmapped).WaitReason);
         Assert.Equal(EmploymentHeroTimesheets.NotLinkedReason, EmploymentHeroLeave.Build(ALeave(), null, Mapped).WaitReason);
-        Assert.Equal("Bunya Support can't read this worker's Employment Hero id. Link them again in Settings → Integrations.", EmploymentHeroLeave.Build(ALeave(), "abc", Mapped).WaitReason);
+        Assert.Equal("We can't read this worker's Employment Hero id. Link them again in Settings → Integrations.", EmploymentHeroLeave.Build(ALeave(), "abc", Mapped).WaitReason);
         Assert.Null(EmploymentHeroLeave.Build(ALeave(), "abc", Mapped).Line);
     }
 

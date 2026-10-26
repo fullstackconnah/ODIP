@@ -580,7 +580,7 @@ public class EmploymentHeroController : ControllerBase
             {
                 var reason = r.LastError ?? "";
                 if (r.Status == EmploymentHeroOutboxStatus.Failed)
-                    reason += $" Bunya Support tries again at {TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(r.NextAttemptAt, DateTimeKind.Utc), zone).ToString("h:mm tt", CultureInfo.InvariantCulture).ToLowerInvariant()}.";
+                    reason += $" We'll try again at {TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(r.NextAttemptAt, DateTimeKind.Utc), zone).ToString("h:mm tt", CultureInfo.InvariantCulture).ToLowerInvariant()}.";
                 problems.Add((leave.StartDate, new EmploymentHeroLeaveProblemDto(r.Id, leave.Id, leave.Name.Trim(), leave.LeaveType, leave.StartDate, leave.EndDate, cancelling, heldForCategory, reason)));
             }
         }

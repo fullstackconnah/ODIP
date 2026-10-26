@@ -111,7 +111,7 @@ public class EmploymentHeroLeaveCardTests
         Assert.Equal("Ben Turner", waiting.Name);
         Assert.Single(status.LeaveProblems, p => p.Cancelling);
         var failure = Assert.Single(status.LeaveProblems, p => p.Id == failed.Id);
-        Assert.StartsWith("Employment Hero refused it. Bunya Support tries again at ", failure.Reason);
+        Assert.StartsWith("Employment Hero refused it. We'll try again at ", failure.Reason);
         Assert.DoesNotContain(status.LeaveProblems, p => p.Reason == "Old failure.");
     }
 

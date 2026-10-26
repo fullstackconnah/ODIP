@@ -259,7 +259,7 @@ public sealed class EmploymentHeroTimesheetSender
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                Fail(row, "Bunya Support couldn't send this shift's hours.");
+                Fail(row, "We couldn't send this shift's hours.");
                 _logger.LogWarning("Timesheet row failed ({Error})", ex.GetType().Name);
             }
             await SaveOrSkipAsync(db, row, now, ct);
