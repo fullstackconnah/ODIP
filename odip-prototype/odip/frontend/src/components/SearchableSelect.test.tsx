@@ -418,14 +418,15 @@ describe('SearchableSelect — noMatchAction', () => {
 })
 
 describe('SearchableSelect — no-results announcement', () => {
-  it('announces the no-results state in a polite status region, and stays empty while results exist', async () => {
+  it('announces the no-results state in a polite live region, and stays empty while results exist', async () => {
     const user = userEvent.setup()
-    render(<SearchableSelect items={items} value="" onChange={vi.fn()} />)
+    const { container } = render(<SearchableSelect items={items} value="" onChange={vi.fn()} />)
+    const live = () => container.querySelector('[aria-live="polite"]')
     await user.click(screen.getByRole('combobox'))
-    expect(screen.getByRole('status')).toBeEmptyDOMElement()
+    expect(live()).toBeEmptyDOMElement()
     await user.type(screen.getByRole('combobox'), 'zzz')
-    expect(screen.getByRole('status')).toHaveTextContent('No results found for "zzz"')
+    expect(live()).toHaveTextContent('No results found for "zzz"')
     await user.clear(screen.getByRole('combobox'))
-    expect(screen.getByRole('status')).toBeEmptyDOMElement()
+    expect(live()).toBeEmptyDOMElement()
   })
 })
