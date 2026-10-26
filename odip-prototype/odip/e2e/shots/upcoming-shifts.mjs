@@ -48,14 +48,17 @@ try {
   await warm.goto(`${BASE_URL}/settings/import/upcoming-shifts`, { waitUntil: 'networkidle', timeout: 120_000 })
   await warm.waitForTimeout(3000)
   await warm.context().close()
-  for (const scheme of ['light', 'dark']) {
+  for (const scheme of ['dark', 'light']) {
     for (const vp of VIEWPORTS) {
       if (scheme === 'dark' && vp.name === '768') continue
       const tag = `${vp.name}-${scheme}`
-      const context = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, hasTouch: !!vp.mobile, isMobile: !!vp.mobile, locale: 'en-AU', timezoneId: 'Australia/Sydney', colorScheme: scheme, reducedMotion: 'reduce' })
+      const context = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, hasTouch: !!vp.mobile, isMobile: !!vp.mobile, locale: 'en-AU', timezoneId: 'Australia/Sydney', colorScheme: scheme === 'dark' ? 'dark' : undefined, reducedMotion: 'reduce' })
       const page = await context.newPage()
       // The touch emulation alone left `pointer: coarse` false on the first page of a run; pin it so the 44px density tokens apply.
-      if (vp.mobile) await (await context.newCDPSession(page)).send('Emulation.setEmulatedMedia', { features: [{ name: 'pointer', value: 'coarse' }, { name: 'hover', value: 'none' }] })
+      const cdp = vp.mobile ? await context.newCDPSession(page) : null
+      // A full-page screenshot resets the touch emulation, so the phone checks pin it again just before measuring.
+      const pinCoarse = async () => { await cdp?.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 }); await cdp?.send('Emulation.setEmulatedMedia', { features: [{ name: 'pointer', value: 'coarse' }, { name: 'hover', value: 'none' }] }) }
+      await pinCoarse()
       page.on('pageerror', (e) => check(`${tag} page error`, e.message, false))
       await page.route('**/api/v1/auth/dev-users', (r) => r.fulfill({ json: devUsers }))
       await page.route('**/api/v1/auth/dev-login', (r) => r.fulfill({ json: devLogin }))
@@ -90,6 +93,7 @@ try {
       check(`${tag} card label lines`, labelLines, labelLines === 1)
       check(`${tag} card hint lines (<=3 at 390)`, hintLines, hintLines <= 3)
       check(`${tag} span line lines`, spanLines, vp.mobile ? spanLines <= 2 : spanLines === 1)
+      await pinCoarse(); await page.waitForTimeout(200)
       if (vp.mobile) {
         for (const [what, loc] of [['pattern radio card', page.locator('label:has(input[value="pattern"])')], ['dated radio card', page.locator('label:has(input[value="dated"])')], ['Starts from', page.getByLabel('Starts from')], ['Download the template', page.getByRole('button', { name: 'Download the template' })], ['Next', page.getByRole('button', { name: 'Next' })]]) {
           const b = await box(loc); check(`${tag} touch target ${what} height>=44`, Math.round(b.height), b.height >= 43.5)
@@ -144,6 +148,7 @@ try {
       const tl = await lines(page.getByText(/^Imported \d+ shifts?/).first()); check(`${tag} result title lines`, tl, !vp.mobile || tl === 1)
       const ol = await lines(open); check(`${tag} Open the first week lines`, ol, ol === 1)
       const ws = await open.evaluate((e) => getComputedStyle(e).whiteSpace); check(`${tag} Open the first week white-space`, ws, ws === 'nowrap')
+      await pinCoarse(); await page.waitForTimeout(200)
       if (vp.mobile) { const b = await box(open);  check(`${tag} touch target Open the first week height>=44`, Math.round(b.height), b.height >= 43.5) }
       await noScroll('result')
       const href = await open.getAttribute('href')
