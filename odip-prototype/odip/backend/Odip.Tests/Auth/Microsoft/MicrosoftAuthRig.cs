@@ -88,11 +88,15 @@ public sealed class MicrosoftAuthRig
 
     public Guid? AmbientTenant { get; set; }
 
-    public MicrosoftAuthRig()
+    /// <summary>Replaces the real raiser (a Postgres race test hooks the moment between staging and saving).</summary>
+    public INotificationRaiser? Raiser { get; set; }
+
+    public MicrosoftAuthRig(Func<OdipDbContext>? dbFactory = null)
     {
         var tenant = new Mock<ICurrentTenant>();
         tenant.Setup(t => t.TenantId).Returns(() => AmbientTenant);
         tenant.Setup(t => t.IsSuperAdmin).Returns(false);
+        if (dbFactory is not null) { Db = dbFactory(); return; }
         Db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, tenant.Object);
     }
 
@@ -101,7 +105,7 @@ public sealed class MicrosoftAuthRig
         var config = new ConfigurationBuilder().AddInMemoryCollection(Settings).Build();
         return new MicrosoftAuthController(
             Db, config, new Mock<ILogger<MicrosoftAuthController>>().Object, Tracker, Redeemer, MicrosoftTestTokens.Validator(), Dp, Cache, Clock,
-            new StaffCreateService(Db, config), new NotificationRaiser(Db), firebase)
+            new StaffCreateService(Db, config), Raiser ?? new NotificationRaiser(Db), firebase)
         {
             ControllerContext = new ControllerContext { HttpContext = http },
         };

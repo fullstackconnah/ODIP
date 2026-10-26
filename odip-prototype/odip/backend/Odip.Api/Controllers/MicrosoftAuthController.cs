@@ -273,12 +273,14 @@ public class MicrosoftAuthController : ControllerBase
         {
             // Drops the staged user, outbox and bell rows: the request that lost the race raises nothing.
             _db.ChangeTracker.Clear();
-            if (pg.ConstraintName == Odip.Domain.Entities.User.MicrosoftIdentityIndexName)
+            // The same person signing in twice at once trips the email index or the identity index, whichever Postgres checks first: either way the winner holds this (tid, oid).
+            if (pg.ConstraintName is Odip.Domain.Entities.User.MicrosoftIdentityIndexName or EmailIndexName)
             {
                 var winner = await FindByIdentityAsync(id.TenantId, id.ObjectId, ct);
                 if (winner is { IsActive: true } && winner.Role != UserRole.SuperAdmin && winner.TenantId == link.TenantId)
                     return StartSession(winner);
-                return Refuse(MicrosoftRefusal.MicrosoftLinkFromAccount, path, "Microsoft sign-in - lost the first-sign-in race for {Email}", email);
+                if (pg.ConstraintName == Odip.Domain.Entities.User.MicrosoftIdentityIndexName)
+                    return Refuse(MicrosoftRefusal.MicrosoftLinkFromAccount, path, "Microsoft sign-in - lost the first-sign-in race for {Email}", email);
             }
             // The address was taken meanwhile; any other constraint (the username) is a fault to look at.
             _logger.LogWarning("Microsoft sign-in - unique violation {Constraint} creating {Email}", pg.ConstraintName, email);
