@@ -308,6 +308,14 @@ describe('CaregiverSubmissionReviewPage — section headings and columns', () =>
     }
   })
 
+  it('top-aligns every cell in a body row, so a tall value does not push the label down', () => {
+    multiGroup()
+    const { container } = renderPage()
+    const rows = container.querySelectorAll('tbody tr')
+    expect(rows).toHaveLength(3)
+    for (const r of rows) expect(r).toHaveClass('align-top')
+  })
+
   it('still flags a staff edit under Current', () => {
     multiGroup()
     mockUseCaregiverSubmission.mockReturnValue({

@@ -125,7 +125,7 @@ export default function CaregiverSubmissionReviewPage() {
                 </thead>
                 <tbody className="divide-y divide-[var(--color-border)]">
                   {groupRows.map((r) => (
-                    <tr key={r.field}>
+                    <tr key={r.field} className="align-top">
                       <td className="px-[var(--cell-px)] py-[7px] break-words font-medium">{r.label}</td>
                       <td className="px-[var(--cell-px)] py-[7px] break-words">
                         {r.current}
