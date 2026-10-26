@@ -8,7 +8,8 @@ import { AU_STATES, LIVING_ARRANGEMENTS } from '@/api/types/enums'
 import { LIVING_ARRANGEMENT_LABELS } from '@/api/types/participants'
 import type { LivingArrangement } from '@/api/types/enums'
 import type { ParticipantDetailDto } from '@/api/types/participants'
-import { extractErrorMessage } from '@/lib/utils'
+import { rethrowSectionError } from '@/lib/sectionConflict'
+import type { PatchParticipantDto } from '@/api/types/participant-patch'
 
 /**
  * PD-7: Address & Living Arrangements card — covers TWO CORE-02 groups in one section, saved
@@ -48,7 +49,7 @@ export function ParticipantAddressLivingSection({ p, participantId, canEdit }: {
   const [draft, setDraft] = useState<AddressLivingDraft>(saved)
   const isDirty = (Object.keys(saved) as (keyof AddressLivingDraft)[]).some((k) => draft[k] !== saved[k])
 
-  async function handleSave() {
+  async function handleSave(expected: PatchParticipantDto['expectedRevisions']) {
     const type = draft.livingArrangement
     try {
       await patchParticipant.mutateAsync({
@@ -74,15 +75,16 @@ export function ParticipantAddressLivingSection({ p, participantId, canEdit }: {
             onSiteSupportHours: type === 'SupportedAccommodation' ? (draft.onSiteSupportHours.trim() || null) : null,
             livingArrangementNotes: draft.livingArrangementNotes.trim() || null,
           },
+          expectedRevisions: expected,
         },
       })
     } catch (err) {
-      throw new Error(extractErrorMessage(err, 'Failed to save Address & Living Arrangements.'))
+      rethrowSectionError(err, 'Failed to save Address & Living Arrangements.')
     }
   }
 
   return (
-    <SectionEditPanel title="Address & Living Arrangements" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
+    <SectionEditPanel title="Address & Living Arrangements" groups={['address', 'livingArrangement']} revisions={p.groupRevisions} canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
       {(editing, startEdit) => editing ? (
         <div className="space-y-4">
           <div className={formGrid}>

@@ -7,7 +7,8 @@ import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
 import { hasCulturalBackground } from './recorded'
 import type { ParticipantDetailDto } from '@/api/types/participants'
-import { extractErrorMessage } from '@/lib/utils'
+import { rethrowSectionError } from '@/lib/sectionConflict'
+import type { PatchParticipantDto } from '@/api/types/participant-patch'
 
 /** INTAKE sub-wave B tri-state idiom, duplicated locally per this codebase's per-file-helper convention (see SupportProfileTab.tsx). */
 const YES_NO_UNANSWERED_OPTIONS = [
@@ -56,7 +57,7 @@ export function ParticipantCulturalBackgroundSection({ p, participantId, canEdit
 
   if (!canEdit && !hasAnyData) return null
 
-  async function handleSave() {
+  async function handleSave(expected: PatchParticipantDto['expectedRevisions']) {
     try {
       await patchParticipant.mutateAsync({
         id: participantId,
@@ -70,15 +71,16 @@ export function ParticipantCulturalBackgroundSection({ p, participantId, canEdit
             receivedAdvocacyInfo: keyToTri(draft.receivedAdvocacyInfo),
             personalInterests: draft.personalInterests.trim() || null, choiceControlNotes: draft.choiceControlNotes.trim() || null,
           },
+          expectedRevisions: expected,
         },
       })
     } catch (err) {
-      throw new Error(extractErrorMessage(err, 'Failed to save Cultural Background.'))
+      rethrowSectionError(err, 'Failed to save Cultural Background.')
     }
   }
 
   return (
-    <SectionEditPanel title="Cultural Background" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
+    <SectionEditPanel title="Cultural Background" groups={['culturalBackground']} revisions={p.groupRevisions} canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
       {(editing, startEdit) => editing ? (
         <div className="space-y-4">
           <div className={formGrid}>

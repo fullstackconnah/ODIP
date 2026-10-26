@@ -40,6 +40,8 @@ public static class InAppNotificationText
                 ($"{Who(p.ReportedByName)} reported an incident: {Words(p.IncidentType)}, {Words(p.Severity)} severity.", $"/incidents/{entityId}"),
             // The entity id is a fresh one per revision, so this links to My shifts, where the visit and Start intake are; same words as the email's subject.
             (NotificationEventType.IntakeBooked, IntakeVisitStaffPayload p) => (IntakeVisit(p), "/portal"),
+            (NotificationEventType.StaffJoinedViaMicrosoft, StaffJoinedViaMicrosoftPayload p) =>
+                ($"{Who(p.FullName)} joined with Microsoft sign-in as {Words(p.Role)}.", $"/staff/{entityId}"),
             _ => (GenericTitle, null),
         };
 

@@ -42,6 +42,9 @@ public interface IFirebaseUserService
     /// sign-up for an address they do not own. Throws on any other failure, as <see cref="CreateUserAsync"/> does.
     /// </summary>
     Task<SignInAccountResult> EnsureSignInAccountAsync(string email, string displayName, CancellationToken ct);
+
+    /// <summary>Whether a Firebase sign-in account exists for this address (a person who can use Forgot password). Throws on any failure other than not-found.</summary>
+    Task<bool> ExistsAsync(string email, CancellationToken ct);
 }
 
 /// <summary>What <see cref="IFirebaseUserService.EnsureSignInAccountAsync"/> found or did.</summary>
@@ -90,6 +93,19 @@ public class FirebaseUserService : IFirebaseUserService
         {
             // Someone created it between the lookup and the create. Still not ours to change.
             return SignInAccountResult.Existing;
+        }
+    }
+
+    public async Task<bool> ExistsAsync(string email, CancellationToken ct)
+    {
+        try
+        {
+            await _gateway.GetUidByEmailAsync(email, ct);
+            return true;
+        }
+        catch (FirebaseAuthException ex) when (ex.AuthErrorCode == AuthErrorCode.UserNotFound)
+        {
+            return false;
         }
     }
 

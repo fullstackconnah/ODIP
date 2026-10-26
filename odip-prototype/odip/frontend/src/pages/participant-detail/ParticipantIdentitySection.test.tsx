@@ -80,6 +80,7 @@ describe('ParticipantIdentitySection — edit/save cycle', () => {
           country: 'Australia', phone: '0400 000 000',
         }),
         preferredStaff: { preferredStaffId: null },
+        expectedRevisions: {},
       },
     })
   })

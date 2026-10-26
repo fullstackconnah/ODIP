@@ -34,6 +34,8 @@ public class ReadOnlyMiddleware
     }
 
     private static readonly string[] InboxPrefix = { "api", "v1", "notifications", "inbox" };
+    private static readonly string[] AuthPrefix = { "api", "v1", "auth" };
+    private static readonly string[] MicrosoftAuthPrefix = { "api", "v1", "auth", "microsoft" };
     private static readonly string[] WhatsNewPrefix = { "api", "v1", "whats-new" };
 
     /// <summary>
@@ -46,6 +48,9 @@ public class ReadOnlyMiddleware
     {
         if (!HttpMethods.IsPost(request.Method)) return false;
         var segments = (request.Path.Value ?? string.Empty).Trim('/').Split('/');
+        // Signing out and renewing a Microsoft session change no data, and a ReadOnly user must be able to do both.
+        if (segments.Length == 4 && segments.Take(3).SequenceEqual(AuthPrefix, StringComparer.OrdinalIgnoreCase) && string.Equals(segments[3], "logout", StringComparison.OrdinalIgnoreCase)) return true;
+        if (segments.Length == 5 && segments.Take(4).SequenceEqual(MicrosoftAuthPrefix, StringComparer.OrdinalIgnoreCase) && string.Equals(segments[4], "refresh", StringComparison.OrdinalIgnoreCase)) return true;
         if (segments.Length == 4 && segments.Take(3).SequenceEqual(WhatsNewPrefix, StringComparer.OrdinalIgnoreCase))
             return string.Equals(segments[3], "seen", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(segments[3], "popup-seen", StringComparison.OrdinalIgnoreCase);

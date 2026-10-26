@@ -13,8 +13,8 @@ using Odip.Infrastructure.Data;
 namespace Odip.Infrastructure.Migrations
 {
     [DbContext(typeof(OdipDbContext))]
-    [Migration("20261026100000_AddImportBatchKeptCount")]
-    partial class AddImportBatchKeptCount
+    [Migration("20261026100000_AddParticipantGroupRevisions")]
+    partial class AddParticipantGroupRevisions
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -1009,9 +1009,6 @@ namespace Odip.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
-
-                    b.Property<int?>("KeptCount")
-                        .HasColumnType("integer");
 
                     b.Property<int>("Kind")
                         .HasColumnType("integer");
@@ -2660,6 +2657,27 @@ namespace Odip.Infrastructure.Migrations
                     b.HasIndex("TenantId");
 
                     b.ToTable("ParticipantContactRoles");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.ParticipantGroupRevision", b =>
+                {
+                    b.Property<Guid>("ParticipantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("GroupKey")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<int>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("ParticipantId", "GroupKey");
+
+                    b.ToTable("ParticipantGroupRevisions");
                 });
 
             modelBuilder.Entity("Odip.Domain.Entities.ParticipantHealthCondition", b =>
@@ -6984,6 +7002,15 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("Person");
 
                     b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.ParticipantGroupRevision", b =>
+                {
+                    b.HasOne("Odip.Domain.Entities.Participant", null)
+                        .WithMany()
+                        .HasForeignKey("ParticipantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Odip.Domain.Entities.ParticipantHealthCondition", b =>

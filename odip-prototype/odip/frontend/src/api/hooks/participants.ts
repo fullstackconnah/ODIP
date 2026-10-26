@@ -1,7 +1,9 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { apiGet, apiPostRaw, apiPutRaw, apiPatchRaw, apiDeleteRaw, apiClient } from '../client'
 import { toTruncatableList } from './pagedList'
 import { isNotFoundError } from '@/lib/httpStatus'
+import { isSectionChanged } from '@/lib/sectionConflict'
+import { SCALAR_GROUP_KEYS, type ScalarGroupKey } from '../types/participant-patch'
 import type {
   ParticipantListDto,
   ParticipantDetailDto,
@@ -208,6 +210,13 @@ export function useDownloadParticipantIntakeSnapshotPdf() {
 }
 
 /**
+ * This tab's own section saves, `${id}/${group}/${from}` -> from + 1: a card opened before another card's save landed
+ * still saves on top of it. Another person's move never lands here, so it is still refused. Per QueryClient so tests stay apart.
+ */
+const ledgers = new WeakMap<QueryClient, Map<string, number>>()
+const ledgerOf = (qc: QueryClient) => ledgers.get(qc) ?? ledgers.set(qc, new Map()).get(qc)!
+
+/**
  * CORE-02: partial save — patches only the semantic field groups present in `data` (see
  * PatchParticipantDto's doc), leaving every absent group untouched server-side. One generic hook
  * for every group combination a caller needs (a wizard step's 1-4 groups, or a detail-tab
@@ -218,11 +227,36 @@ export function useDownloadParticipantIntakeSnapshotPdf() {
 export function usePatchParticipant() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: PatchParticipantDto }) =>
-      apiPatchRaw<ParticipantDetailDto>(`/participants/${id}`, data),
+    mutationFn: async ({ id, data }: { id: string; data: PatchParticipantDto }) => {
+      if (!data.expectedRevisions) return apiPatchRaw<ParticipantDetailDto>(`/participants/${id}`, data)
+      const ledger = ledgerOf(qc)
+      const sent: Partial<Record<ScalarGroupKey, number>> = {}
+      for (const k of SCALAR_GROUP_KEYS) {
+        let n = data.expectedRevisions[k]
+        if (data[k] === undefined || n === undefined) continue
+        while (ledger.has(`${id}/${k}/${n}`)) n = ledger.get(`${id}/${k}/${n}`)!
+        sent[k] = n
+      }
+      const before = qc.getQueryData<ParticipantDetailDto>(['participant', id]) as Record<string, unknown> | undefined
+      const res = await apiPatchRaw<ParticipantDetailDto>(`/participants/${id}`, { ...data, expectedRevisions: sent })
+      // The save is only done once the cache holds it: the next card rebuilds its group from the cache.
+      await qc.invalidateQueries({ queryKey: ['participant', id] })
+      const cached = qc.getQueryData<ParticipantDetailDto>(['participant', id])?.groupRevisions
+      for (const [k, n] of Object.entries(sent) as [ScalarGroupKey, number][]) {
+        // shortcut: client-side compare; server-normalised values (flag order, fundingOrganisation) can over-report a change, compare normalised values if this race matters.
+        // Exactly n + 1 AND a field of this group changed: the server bumps a group just for a changed column, so a group this request carried unchanged (its n + 1 is someone else's save landing mid-request), or a jump by more than one, is not ours.
+        const changed = !before || Object.entries(data[k]!).some(([f, v]) => JSON.stringify(v ?? null) !== JSON.stringify(before[f] ?? null))
+        if (changed && res.data?.groupRevisions?.[k] === n + 1 && (cached?.[k] ?? 0) >= n + 1) ledger.set(`${id}/${k}/${n}`, n + 1)
+      }
+      return res
+    },
+    onError: (err, vars) => {
+      if (isSectionChanged(err)) qc.invalidateQueries({ queryKey: ['participant', vars.id] })
+    },
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['participants'] })
-      qc.invalidateQueries({ queryKey: ['participant', vars.id] })
+      // A save with expected revisions already awaited this refetch.
+      if (!vars.data.expectedRevisions) qc.invalidateQueries({ queryKey: ['participant', vars.id] })
       // The checklist's "Profile details" item and the worklist are derived from these fields.
       qc.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
       qc.invalidateQueries({ queryKey: ['onboarding', vars.id] })

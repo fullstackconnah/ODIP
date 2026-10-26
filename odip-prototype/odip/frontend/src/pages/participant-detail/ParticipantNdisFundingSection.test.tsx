@@ -60,7 +60,7 @@ describe('ParticipantNdisFundingSection — the planType data-loss guard (THE TR
 
     expect(mockPatchMutateAsync).toHaveBeenCalledWith({
       id: 'participant-1',
-      data: { ndisPlan: expect.objectContaining({ planType: 'PlanManaged', fundingSource: 'Ndis', isDsoa: true }) },
+      data: { ndisPlan: expect.objectContaining({ planType: 'PlanManaged', fundingSource: 'Ndis', isDsoa: true }), expectedRevisions: {} },
     })
   })
 
@@ -84,6 +84,7 @@ describe('ParticipantNdisFundingSection — the planType data-loss guard (THE TR
           // planType still carried through untouched even while switching funding source.
           planType: 'SelfManaged',
         }),
+        expectedRevisions: {},
       },
     })
   })

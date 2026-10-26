@@ -62,7 +62,7 @@ describe('ParticipantRisksHazardsSummarySection — edit/save cycle', () => {
 
     expect(mockPatchMutateAsync).toHaveBeenCalledWith({
       id: 'participant-1',
-      data: { risksHazardsSummary: { behaviourRiskSummary: 'Escalates when routine changes.', notes: null } },
+      data: { risksHazardsSummary: { behaviourRiskSummary: 'Escalates when routine changes.', notes: null }, expectedRevisions: {} },
     })
   })
 

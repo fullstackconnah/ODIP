@@ -131,5 +131,7 @@ public class StaffCompatibilityLinkService
             participant.PreferredUserId = null;
             participant.UpdatedAt = DateTime.UtcNow;
         }
+        // Once, after both branches; the caller's SaveChanges is SaveBumpingAsync.
+        await ParticipantGroupRevisions.BumpChangedAsync(_db, participant, null, ct);
     }
 }

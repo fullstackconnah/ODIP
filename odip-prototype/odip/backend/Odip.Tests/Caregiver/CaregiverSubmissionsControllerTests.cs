@@ -448,4 +448,26 @@ public class CaregiverSubmissionsControllerTests
             .Cast<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>().Single();
         Assert.Equal("Admin,Coordinator,SuperAdmin", attr.Roles);
     }
+
+    [Fact]
+    public async Task Accept_bumps_the_changed_groups()
+    {
+        var (db, tenantId) = CreateTenantDb();
+        var p = SeedParticipant(db, tenantId);
+        await AcceptAsync(db, tenantId, p, new PatchParticipantDto { AboutMe = new PatchAboutMeDto { Goals = "A goal" } }, basePayload: null);
+        Assert.Equal(1, await db.ParticipantGroupRevisions.Where(r => r.ParticipantId == p.Id && r.GroupKey == "aboutMe").Select(r => r.Revision).SingleAsync());
+    }
+
+    [Fact]
+    public async Task Accept_with_stale_expected_in_payload_is_never_refused()
+    {
+        var (db, tenantId) = CreateTenantDb();
+        var p = SeedParticipant(db, tenantId);
+        db.ParticipantGroupRevisions.Add(new ParticipantGroupRevision { ParticipantId = p.Id, GroupKey = "aboutMe", Revision = 3, UpdatedAt = DateTime.UtcNow });
+        await db.SaveChangesAsync();
+        var reloaded = await AcceptAsync(db, tenantId, p,
+            new PatchParticipantDto { AboutMe = new PatchAboutMeDto { Goals = "A goal" }, ExpectedRevisions = new() { ["aboutMe"] = 0 } }, basePayload: null);
+        Assert.Equal("A goal", reloaded.Goals);
+        Assert.Equal(4, await db.ParticipantGroupRevisions.Where(r => r.ParticipantId == p.Id && r.GroupKey == "aboutMe").Select(r => r.Revision).SingleAsync());
+    }
 }

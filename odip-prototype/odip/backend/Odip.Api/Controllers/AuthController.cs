@@ -291,10 +291,11 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("logout")]
-    [Authorize]
+    [AllowAnonymous]
     public IActionResult Logout()
     {
         Response.Cookies.Delete("odip_jwt", new CookieOptions { Path = "/api" });
+        Response.Cookies.Delete("odip_ms_refresh", new CookieOptions { Path = "/api/v1/auth/microsoft" });
         return Ok(ApiResponse<object>.Ok(null, "Logged out."));
     }
 
@@ -478,42 +479,9 @@ public class AuthController : ControllerBase
         };
     }
 
-    private void SetJwtCookie(string token)
-    {
-        Response.Cookies.Append("odip_jwt", token, new CookieOptions
-        {
-            HttpOnly = true,
-            Secure = true,
-            SameSite = SameSiteMode.Strict,
-            Expires = DateTimeOffset.UtcNow.AddDays(7),
-            Path = "/api"
-        });
-    }
+    private void SetJwtCookie(string token) => OdipSession.SetCookie(Response, token);
 
-    private string GenerateJwtToken(Domain.Entities.User user, Guid tenantId)
-    {
-        var key = GetSigningKey();
-        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-
-        var claims = new[]
-        {
-            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-            new Claim(ClaimTypes.Name, user.Username),
-            new Claim(ClaimTypes.Email, user.Email),
-            new Claim(ClaimTypes.Role, user.Role.ToString()),
-            new Claim("fullName", user.FullName),
-            new Claim("tenant_id", tenantId.ToString())
-        };
-
-        var token = new JwtSecurityToken(
-            issuer: "Odip",
-            audience: "Odip",
-            claims: claims,
-            expires: DateTime.UtcNow.AddMinutes(30),
-            signingCredentials: creds);
-
-        return new JwtSecurityTokenHandler().WriteToken(token);
-    }
+    private string GenerateJwtToken(Domain.Entities.User user, Guid tenantId) => OdipSession.Token(user, tenantId, _config);
 
     private string GenerateSuperAdminJwtToken(Domain.Entities.User user)
     {
@@ -539,13 +507,5 @@ public class AuthController : ControllerBase
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
-    private SymmetricSecurityKey GetSigningKey()
-    {
-        var secret = _config["Jwt:Secret"];
-        if (string.IsNullOrEmpty(secret))
-            secret = Environment.GetEnvironmentVariable("JWT_SECRET");
-        if (string.IsNullOrEmpty(secret))
-            throw new InvalidOperationException("JWT_SECRET must be configured.");
-        return new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
-    }
+    private SymmetricSecurityKey GetSigningKey() => OdipSession.SigningKey(_config);
 }

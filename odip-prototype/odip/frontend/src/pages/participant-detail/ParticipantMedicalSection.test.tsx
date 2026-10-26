@@ -62,7 +62,7 @@ describe('ParticipantMedicalSection — edit/save cycle', () => {
 
     expect(mockPatchMutateAsync).toHaveBeenCalledWith({
       id: 'participant-1',
-      data: { medical: expect.objectContaining({ medicalSummary: 'Stable, reviewed quarterly.', hidpaSupportCategories: 'None' }) },
+      data: { medical: expect.objectContaining({ medicalSummary: 'Stable, reviewed quarterly.', hidpaSupportCategories: 'None' }), expectedRevisions: {} },
     })
   })
 
@@ -80,7 +80,7 @@ describe('ParticipantMedicalSection — edit/save cycle', () => {
 
     expect(mockPatchMutateAsync).toHaveBeenCalledWith({
       id: 'participant-1',
-      data: { medical: expect.objectContaining({ otherDiagnoses: expect.arrayContaining(['Epilepsy', 'Rett Syndrome']) }) },
+      data: { medical: expect.objectContaining({ otherDiagnoses: expect.arrayContaining(['Epilepsy', 'Rett Syndrome']) }), expectedRevisions: {} },
     })
   })
 

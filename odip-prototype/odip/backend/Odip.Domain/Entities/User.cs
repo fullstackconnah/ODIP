@@ -60,6 +60,10 @@ public class User : ITenantEntity
     /// </summary>
     public string? ExternalPayrollId { get; set; }
     public const string ExternalPayrollIdIndexName = "IX_Users_TenantId_ExternalPayrollId";
+    /// <summary>The person's Microsoft Entra identity (tid and oid), set when they sign in with Microsoft or an Admin links their own account. Both null when not linked. Unique over non-null values (<see cref="MicrosoftIdentityIndexName"/>).</summary>
+    public Guid? MicrosoftTenantId { get; set; }
+    public Guid? MicrosoftObjectId { get; set; }
+    public const string MicrosoftIdentityIndexName = "IX_Users_MicrosoftTenantId_MicrosoftObjectId";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? LastLoginAt { get; set; }

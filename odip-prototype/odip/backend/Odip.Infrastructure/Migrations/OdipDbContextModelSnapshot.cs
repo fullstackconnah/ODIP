@@ -2659,6 +2659,27 @@ namespace Odip.Infrastructure.Migrations
                     b.ToTable("ParticipantContactRoles");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Entities.ParticipantGroupRevision", b =>
+                {
+                    b.Property<Guid>("ParticipantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("GroupKey")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<int>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("ParticipantId", "GroupKey");
+
+                    b.ToTable("ParticipantGroupRevisions");
+                });
+
             modelBuilder.Entity("Odip.Domain.Entities.ParticipantHealthCondition", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3461,6 +3482,43 @@ namespace Odip.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("PlanPricingSettings");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.MicrosoftTenantLink", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("DefaultRole")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("LinkedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid>("LinkedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("MicrosoftTenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MicrosoftTenantId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_MicrosoftTenantLinks_MicrosoftTenantId");
+
+                    b.HasIndex("TenantId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_MicrosoftTenantLinks_TenantId");
+
+                    b.ToTable("MicrosoftTenantLinks");
                 });
 
             modelBuilder.Entity("Odip.Domain.Entities.ProviderSettings", b =>
@@ -4839,6 +4897,12 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateOnly?>("MedicationCompetencyExpiryDate")
                         .HasColumnType("date");
 
+                    b.Property<Guid?>("MicrosoftObjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("MicrosoftTenantId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Mobile")
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
@@ -4890,6 +4954,11 @@ namespace Odip.Infrastructure.Migrations
                         .IsUnique()
                         .HasDatabaseName("IX_Users_TenantId_ExternalPayrollId")
                         .HasFilter("\"ExternalPayrollId\" IS NOT NULL");
+
+                    b.HasIndex("MicrosoftTenantId", "MicrosoftObjectId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Users_MicrosoftTenantId_MicrosoftObjectId")
+                        .HasFilter("\"MicrosoftObjectId\" IS NOT NULL");
 
                     b.ToTable("Users");
                 });
@@ -6983,6 +7052,15 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("Tenant");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Entities.ParticipantGroupRevision", b =>
+                {
+                    b.HasOne("Odip.Domain.Entities.Participant", null)
+                        .WithMany()
+                        .HasForeignKey("ParticipantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Odip.Domain.Entities.ParticipantHealthCondition", b =>
                 {
                     b.HasOne("Odip.Domain.Entities.Participant", "Participant")
@@ -7149,6 +7227,17 @@ namespace Odip.Infrastructure.Migrations
                 });
 
             modelBuilder.Entity("Odip.Domain.Entities.PlanPricingSettings", b =>
+                {
+                    b.HasOne("Odip.Domain.Entities.Tenant", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.MicrosoftTenantLink", b =>
                 {
                     b.HasOne("Odip.Domain.Entities.Tenant", "Tenant")
                         .WithMany()
