@@ -523,7 +523,7 @@ public class DashboardController : ControllerBase
             ParticipantCount: await _db.Participants.CountAsync(p => p.IsActive, ct),
             ParticipantsWithPlanCount: await _db.Participants.CountAsync(p => p.IsActive && _db.FundingPlans.Any(f => f.ParticipantId == p.Id), ct),
             FirstPublishedWeekStart: firstPublished is { } d ? RosterWeek.MondayOf(d) : null,
-            HasInvoice: await _db.Invoices.AnyAsync(ct),
+            HasInvoice: await _db.Invoices.AnyAsync(i => i.Status != InvoiceStatus.Voided, ct),
             EmploymentHeroAvailable: keys.IsConfigured)));
     }
 

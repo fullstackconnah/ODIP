@@ -49,9 +49,9 @@ public class SetupStatusTests
         db.SaveChanges();
     }
 
-    private static void AddInvoice(OdipDbContext db, Guid tenant)
+    private static void AddInvoice(OdipDbContext db, Guid tenant, InvoiceStatus status = InvoiceStatus.Issued)
     {
-        db.Invoices.Add(new Invoice { Id = Guid.NewGuid(), TenantId = tenant, Number = 1, DisplayNumber = "INV-0001", Status = InvoiceStatus.Issued, IssueDate = new DateOnly(2026, 10, 20) });
+        db.Invoices.Add(new Invoice { Id = Guid.NewGuid(), TenantId = tenant, Number = 1, DisplayNumber = "INV-0001", Status = status, IssueDate = new DateOnly(2026, 10, 20) });
         db.SaveChanges();
     }
 
@@ -175,6 +175,26 @@ public class SetupStatusTests
         var result = await new DashboardController(Db(A)).GetSetup(Caller(null, isSuperAdmin: true), keys, Ct);
         var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
         Assert.Contains(DashboardController.ChooseOrganisation, Assert.IsType<ApiResponse<SetupStatusDto>>(bad.Value).Errors!);
+    }
+
+    // The token's own tenant_id with no view-as header: CurrentTenant keeps IsSuperAdmin = true, so every query filter is bypassed. The tenant half of the guard is not enough.
+    [Fact]
+    public async Task Setup_SuperAdminWithTheirOwnTenantAndNoViewAsIsRefused()
+    {
+        var keys = IntegrationKeyProtectorTests.Protector(null);
+        var result = await new DashboardController(Db(A)).GetSetup(Caller(A, isSuperAdmin: true), keys, Ct);
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Contains(DashboardController.ChooseOrganisation, Assert.IsType<ApiResponse<SetupStatusDto>>(bad.Value).Errors!);
+    }
+
+    [Fact]
+    public async Task Setup_VoidedInvoiceDoesNotCountAsFirstInvoice()
+    {
+        var db = Db(A);
+        AddInvoice(db, A, InvoiceStatus.Voided);
+        Assert.False((await Get(db)).HasInvoice);
+        AddInvoice(db, A, InvoiceStatus.Credited);
+        Assert.True((await Get(db)).HasInvoice);
     }
 
     [Fact]

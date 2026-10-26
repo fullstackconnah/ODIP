@@ -71,7 +71,7 @@ public class ImportStaffPostgresTests : IClassFixture<PostgresFixture>
 
         var refusal = await Assert.ThrowsAsync<ImportException>(() => service.UndoAsync(result.BatchId, Admin(), CancellationToken.None));
 
-        Assert.Equal((409, "Nothing was undone: one of its records is used elsewhere in ODIP."), (refusal.StatusCode, refusal.Message));
+        Assert.Equal((409, "Nothing was undone: one of its records is used elsewhere in Bunya Support."), (refusal.StatusCode, refusal.Message));
         db.ChangeTracker.Clear();
         Assert.Equal(2, await db.Users.CountAsync(u => u.Email.EndsWith($".{token}@gmail.com")));
         Assert.Null((await db.ImportBatches.SingleAsync(b => b.Id == result.BatchId)).UndoneAt);

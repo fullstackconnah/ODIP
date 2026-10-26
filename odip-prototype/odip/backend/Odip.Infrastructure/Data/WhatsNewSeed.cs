@@ -53,7 +53,7 @@ public static class WhatsNewSeed
             "On the last step of an intake, the review now shows funding source, plan type, service streams, support ratio and overnight support in plain words instead of internal names.",
             Staff, false),
         new Item("2026-10-get-set-up", "Get set up from the dashboard",
-            "A new organisation now sees Get set up at the top of the dashboard: six steps from your organisation details to your first published week, each with its status and one way in.\n\nStaff imports now email each new staff member a sign-in invite straight after the import. Keep the tab open until the invites finish.\n\nHide the steps on a device, and show them again from Settings, Organisation setup.",
+            "A new organisation now sees Get set up at the top of the dashboard: six steps, from your organisation details to your first invoice, each with its status and what to do next.\n\nStaff imports now email each new staff member a sign-in invite straight after the import. Keep the tab open until the invites finish.\n\nHide the steps on a device, and show them again from Settings, Organisation setup.",
             WhatsNewAudience.Admin, false),
     };
 
