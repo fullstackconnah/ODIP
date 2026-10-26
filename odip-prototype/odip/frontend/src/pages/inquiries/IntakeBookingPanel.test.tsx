@@ -110,7 +110,7 @@ describe('IntakeBookingPanel: a new booking', () => {
 
     await user.click(screen.getByRole('button', { name: 'Send invite' }))
 
-    expect(await screen.findByText("Couldn't reach ODIP. Check your connection and try again. Your entries are kept.")).toBeInTheDocument()
+    expect(await screen.findByText("Couldn't reach Bunya Support. Check your connection and try again. Your entries are kept.")).toBeInTheDocument()
     expect(screen.getByLabelText(/^Where/)).toHaveValue('Library')
   })
 

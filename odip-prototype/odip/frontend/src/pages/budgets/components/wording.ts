@@ -28,13 +28,13 @@ export const NO_BUDGET_REASON = 'No budget recorded'
  * The line inside the opened list of participants with no budget recorded. Every plan has a limit; ODIP just does not hold it, so it cannot warn about it. (It used to say the participant is "never
  * warned about: there is no limit to be near", which is the opposite of the truth and read as reassurance.)
  */
-export const noBudgetNote = 'ODIP cannot warn about a budget it does not hold. Record the plan to start tracking.'
+export const noBudgetNote = "We can't warn about a budget we don't hold. Record the plan to start tracking."
 
 /**
  * The same note when the tail holds a participant whose plan is recorded for later ("Plan starts 1 Nov 2026"): "Record the plan to start tracking" would sit above a row whose plan is already
  * recorded, so it says that nothing can be warned of until a plan is running, and that the one that starts later can be opened.
  */
-export const noBudgetNoteUpcoming = 'Until a plan is running, ODIP cannot warn about its budget. Record the plan, or open one that starts later.'
+export const noBudgetNoteUpcoming = "Until a plan is running, we can't warn about its budget. Record the plan, or open one that starts later."
 
 /** What the Budgets page says when no budget is being tracked for anybody, and what to do about it. */
 export const NOTHING_TRACKED = 'No budgets are being tracked yet. Record a participant’s plan to start.'

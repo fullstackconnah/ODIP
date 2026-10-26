@@ -319,7 +319,7 @@ describe('InvoicesSection', () => {
     serve('get /claims/claim-1/invoices/b-plan', async config => pdf(config))
     renderSection()
 
-    expect(await screen.findByText('Submitted before ODIP numbered its invoices. These keep their old reference and are drawn from the claim each time.')).toBeInTheDocument()
+    expect(await screen.findByText('Submitted before we numbered invoices. These keep their old reference and are drawn from the claim each time.')).toBeInTheDocument()
     const r = rowOf('Pat Morgan — Harbour Plan Co')
     expect(within(r).getByText(formatInstantDateAu(claim.submittedDate))).toBeInTheDocument()
     expect(within(r).queryByText('Issued')).not.toBeInTheDocument()

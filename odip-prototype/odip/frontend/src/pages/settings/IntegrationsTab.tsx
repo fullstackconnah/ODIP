@@ -49,11 +49,11 @@ export default function IntegrationsTab() {
           <h3 id="eh-heading" className="text-sm font-semibold">Employment Hero</h3>
           <StatusBadge tone={badge.tone} label={badge.label} />
         </div>
-        <p className={MUTED}>Staff come from Employment Hero Payroll, the master list. ODIP checks it for changes every 30 minutes.</p>
+        <p className={MUTED}>Staff come from Employment Hero Payroll, the master list. We check it for changes every 30 minutes.</p>
       </div>
       {!eh.configured && (
         <Callout tone="info" title="Integrations aren't set up on this server yet.">
-          Contact ODIP support.
+          Contact Bunya Support.
         </Callout>
       )}
       {eh.connected ? <Connected eh={eh} /> : eh.configured && <ConnectForm />}
@@ -99,7 +99,7 @@ function ConnectForm() {
             {/* new-password: a password manager must not offer to save the EH key as a sign-in. */}
             <input type="password" autoComplete="new-password" value={apiKey} onChange={e => { setApiKey(e.target.value); setFound(null) }} />
           </FormField>
-          <p id={hintId} className="basis-full text-xs text-[var(--color-muted-foreground)] sm:order-last">From Employment Hero Payroll. ODIP stores it encrypted and never shows it again.</p>
+          <p id={hintId} className="basis-full text-xs text-[var(--color-muted-foreground)] sm:order-last">From Employment Hero Payroll. We store it encrypted and never show it again.</p>
           {found === null && (
             <Button variant="secondary" className="order-last mt-1 sm:order-none sm:mt-0" onClick={findBusinesses} disabled={!apiKey.trim() || businesses.isPending}>
               {businesses.isPending ? 'Finding…' : 'Find businesses'}
@@ -114,7 +114,7 @@ function ConnectForm() {
           <SelectField label="Business" className={FIELD_WIDTH} value={businessId} onChange={e => setBusinessId(e.target.value)} placeholder="Choose the business"
             options={found.map(b => ({ value: b.id, label: b.name }))} />
           <p className={MUTED}>
-            When you connect, ODIP links your staff to Employment Hero by email and adds anyone missing as a support worker (no invite is sent).
+            When you connect, we link your staff to Employment Hero by email and add anyone missing as a support worker (no invite is sent).
             From then on staff come from Employment Hero: New staff member and the staff import are turned off.
           </p>
           <div><Button onClick={save} disabled={!businessId || connect.isPending}>{connect.isPending ? 'Connecting…' : 'Connect'}</Button></div>
@@ -161,7 +161,7 @@ function Connected({ eh }: { eh: EmploymentHeroStatusDto }) {
       {eh.lastSyncError && (
         <Callout tone="danger" title="The last sync didn't work.">
           <p>{eh.lastSyncError}</p>
-          <p>Nobody's details changed. ODIP tries again every 30 minutes.</p>
+          <p>Nobody's details changed. We try again every 30 minutes.</p>
         </Callout>
       )}
       {sync.error != null && <Callout tone="danger">{extractErrorMessage(sync.error, "The sync couldn't start. Try again.")}</Callout>}
@@ -283,7 +283,7 @@ function LeaveCategories({ saved }: { saved: EmploymentHeroLeaveCategoriesDto })
   return (
     <section aria-labelledby="eh-leave-categories" className="flex flex-col gap-3 border-t border-[var(--color-border)] pt-[var(--section-gap)]">
       <h4 id="eh-leave-categories" tabIndex={-1} className="text-sm font-semibold outline-none">Leave categories</h4>
-      <p className={MUTED}>Which Employment Hero leave category each kind of ODIP leave is recorded as. Approved leave of a kind with no category waits until one is chosen. A change applies to leave not yet sent.</p>
+      <p className={MUTED}>Which Employment Hero leave category each kind of leave is recorded as. Approved leave of a kind with no category waits until one is chosen. A change applies to leave not yet sent.</p>
       {categories.isLoading && !retryingAfterError(categories) ? (
         <p className={MUTED} role="status">Reading Employment Hero's leave categories…</p>
       ) : categories.isError || !categories.data ? (
@@ -369,10 +369,10 @@ function LeaveNotSent({ items }: { items: EmploymentHeroLeaveProblemDto[] }) {
 
 /** The groups, in the server's order: what the Admin does about each kind. */
 const GROUPS: { kind: EmploymentHeroAttentionKind; title: string; intro: string }[] = [
-  { kind: 'NotLinked', title: 'Not linked', intro: 'In ODIP but not matched to anyone in Employment Hero. Link them, or leave them unlinked.' },
-  { kind: 'FixInEmploymentHero', title: 'Fix in Employment Hero', intro: "ODIP can't take these people as they are. Fix them in Employment Hero; each clears at the next sync." },
-  { kind: 'FixInOdip', title: 'Fix in ODIP', intro: "Only an Admin can make these changes, on the person's staff page." },
-  { kind: 'MissingFromEmploymentHero', title: 'No longer in Employment Hero', intro: "Linked, but missing from Employment Hero's employee list. ODIP never archives anyone for this; dismiss once you've checked." },
+  { kind: 'NotLinked', title: 'Not linked', intro: 'In Bunya Support but not matched to anyone in Employment Hero. Link them, or leave them unlinked.' },
+  { kind: 'FixInEmploymentHero', title: 'Fix in Employment Hero', intro: "We can't take these people as they are. Fix them in Employment Hero; each clears at the next sync." },
+  { kind: 'FixInOdip', title: 'Fix in Bunya Support', intro: "Only an Admin can make these changes, on the person's staff page." },
+  { kind: 'MissingFromEmploymentHero', title: 'No longer in Employment Hero', intro: "Linked, but missing from Employment Hero's employee list. We never archive anyone for this; dismiss once you've checked." },
 ]
 
 function Attention({ items }: { items: EmploymentHeroAttentionDto[] }) {
@@ -473,7 +473,7 @@ function LinkPicker({ item, onClose }: { item: EmploymentHeroAttentionDto; onClo
         <p className={MUTED}>{`Choose ${item.name}'s record in Employment Hero. From the next sync, Employment Hero keeps their details up to date.`}</p>
         {employees.isLoading ? <p role="status" className={MUTED}>Reading Employment Hero's employees…</p>
           : employees.isError ? <Callout tone="danger">{extractErrorMessage(employees.error, "Employment Hero's employees couldn't be read. Try again.")}</Callout>
-          : list.length === 0 ? <p className={MUTED}>Everyone in Employment Hero is already linked to someone in ODIP.</p>
+          : list.length === 0 ? <p className={MUTED}>Everyone in Employment Hero is already linked to someone in Bunya Support.</p>
           : (
             // A native select on purpose: a phone opens its own picker, and a desktop type-ahead searches 200 names.
             <SelectField label="Employment Hero employee" value={employeeId} onChange={e => setEmployeeId(e.target.value)} placeholder="Choose an employee"

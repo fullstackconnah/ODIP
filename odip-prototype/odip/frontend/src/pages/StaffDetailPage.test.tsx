@@ -531,7 +531,7 @@ describe('StaffDetailPage — leave balances', () => {
     mockVisibility.mockReturnValue({ data: { employmentHeroConnected: true } })
     mockBalances.mockReturnValue({ data: { status: 'NotLinked', balances: [] }, isLoading: false, isError: false, refetch: vi.fn() })
     renderAt('staff-1')
-    expect(screen.getByText("Not linked to Employment Hero, so ODIP can't show balances.")).toBeInTheDocument()
+    expect(screen.getByText("Not linked to Employment Hero, so we can't show balances.")).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Link in Settings \u2192 Integrations' })).toHaveAttribute('href', '/settings?section=integrations')
   })
 

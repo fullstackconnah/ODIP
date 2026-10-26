@@ -71,7 +71,7 @@ describe('IntegrationsTab — connecting', () => {
     renderTab()
     expect(screen.getByText("Integrations aren't set up on this server yet.")).toBeInTheDocument()
     // Plain words for an Admin; the server variable to set is named only in the server's log.
-    expect(screen.getByText('Contact ODIP support.')).toBeInTheDocument()
+    expect(screen.getByText('Contact Bunya Support.')).toBeInTheDocument()
     expect(screen.queryByText(/INTEGRATIONS_MASTER_KEY/)).toBeNull()
     expect(screen.queryByLabelText('API key')).toBeNull()
   })
@@ -173,7 +173,7 @@ describe('IntegrationsTab — the approved brief', () => {
     renderTab()
     await user.type(screen.getByLabelText('API key'), 'key-1')
     await user.click(screen.getByRole('button', { name: 'Find businesses' }))
-    expect(await screen.findByText(/adds anyone missing as a support worker \(no invite is sent\)/)).toBeInTheDocument()
+    expect(await screen.findByText(/add anyone missing as a support worker \(no invite is sent\)/)).toBeInTheDocument()
     expect(screen.getByLabelText('Business')).toHaveValue('777')   // the only business is preselected
   })
 
@@ -197,7 +197,7 @@ describe('IntegrationsTab — the approved brief', () => {
     expect(screen.getByRole('heading', { name: 'Needs attention (3)' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Not linked (2)' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'No longer in Employment Hero (1)' })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: /Fix in ODIP/ })).toBeNull()
+    expect(screen.queryByRole('heading', { name: /Fix in Bunya Support/ })).toBeNull()
     expect(screen.queryByRole('textbox', { name: 'Find a person' })).toBeNull()   // 10 or fewer: no filter
   })
 
@@ -235,7 +235,7 @@ describe('IntegrationsTab — the approved brief', () => {
     state.status = connected({ lastSyncError: "Employment Hero didn't accept the API key. Check it in Employment Hero and connect again." })
     renderTab()
     expect(screen.getByText('Last sync failed')).toBeInTheDocument()
-    expect(screen.getByText("Nobody's details changed. ODIP tries again every 30 minutes.")).toBeInTheDocument()
+    expect(screen.getByText("Nobody's details changed. We try again every 30 minutes.")).toBeInTheDocument()
   })
 })
 

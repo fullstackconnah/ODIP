@@ -61,6 +61,9 @@ public static class WhatsNewSeed
         new Item("2026-10-upcoming-shifts-import", "Import your upcoming shifts",
             "Go to Settings, then Import data, to bring in your next weeks of shifts: an export from your old platform, or a weekly pattern repeated for up to 12 weeks. Every shift is checked against the roster rules and added as a draft, and each week is ready to publish. Nobody is told until you publish.",
             WhatsNewAudience.Admin, false),
+        new Item("2026-10-bunya-support-screens", "Bunya Support on every screen",
+            "Settings, budgets and imports now say Bunya Support too.",
+            WhatsNewAudience.Admin, false),
     };
 
     /// <summary>Inserts the keys the table lacks, one save each, so a key another instance inserted first costs only that row.</summary>

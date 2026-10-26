@@ -527,7 +527,7 @@ describe('BudgetRiskTable: the no-budget tail', () => {
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
     const list = document.getElementById(toggle.getAttribute('aria-controls')!)!
     expect(list).not.toBeVisible()
-    expect(within(list).getByText('ODIP cannot warn about a budget it does not hold. Record the plan to start tracking.')).toBeInTheDocument()
+    expect(within(list).getByText("We can't warn about a budget we don't hold. Record the plan to start tracking.")).toBeInTheDocument()
     expect(screen.queryByText(/never warned about|no limit to be near/)).not.toBeInTheDocument()
   })
 
@@ -537,8 +537,8 @@ describe('BudgetRiskTable: the no-budget tail', () => {
     renderTable(readyTable([riskRow()], { noBudget: [...entries(), upcoming] }))
 
     const list = document.getElementById(screen.getByRole('button', { name: noBudgetHiddenLabel(3) }).getAttribute('aria-controls')!)!
-    expect(within(list).getByText('Until a plan is running, ODIP cannot warn about its budget. Record the plan, or open one that starts later.')).toBeInTheDocument()
-    expect(within(list).queryByText('ODIP cannot warn about a budget it does not hold. Record the plan to start tracking.')).not.toBeInTheDocument()
+    expect(within(list).getByText("Until a plan is running, we can't warn about its budget. Record the plan, or open one that starts later.")).toBeInTheDocument()
+    expect(within(list).queryByText("We can't warn about a budget we don't hold. Record the plan to start tracking.")).not.toBeInTheDocument()
   })
 
   it('is open from the start when it is told to be, as it is on a page where nobody has a budget yet', () => {

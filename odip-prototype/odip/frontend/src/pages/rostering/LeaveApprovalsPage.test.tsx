@@ -796,7 +796,7 @@ describe('LeaveApprovalsPage — Employment Hero leave', () => {
   it('says how many hours EH has for an ODIP row, and when they were the default', () => {
     mockUseLeaveRequests.mockReturnValue({ data: rows().slice(1), isLoading: false, isError: false, refetch: vi.fn() })
     renderPage()
-    expect(screen.getByText("In Employment Hero \u00b7 22.8 h (7.6 h a day: ODIP's default)")).toBeInTheDocument()
+    expect(screen.getByText("In Employment Hero \u00b7 22.8 h (7.6 h a day: our default)")).toBeInTheDocument()
     expect(screen.getByText('In Employment Hero \u00b7 36 h')).toBeInTheDocument()
   })
 

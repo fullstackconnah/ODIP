@@ -107,13 +107,13 @@ export default function PortalPayslipsPage() {
   } else if (data.status === 'NotLinked') {
     body = (
       <Callout tone="info" title="Your account isn't linked to Employment Hero yet">
-        ODIP can't find your payslips until an Admin links you. Ask your manager or an Admin; they appear here once you're linked.
+        We can't find your payslips until an Admin links you. Ask your manager or an Admin; they appear here once you're linked.
       </Callout>
     )
   } else if (data.status === 'NotConnected') {
     body = (
-      <Callout tone="info" title="Payslips aren't available in ODIP">
-        Your organisation doesn't connect its payroll to ODIP. Ask your manager where to find your payslips.
+      <Callout tone="info" title="Payslips aren't available in Bunya Support">
+        Your organisation doesn't connect its payroll to Bunya Support. Ask your manager where to find your payslips.
       </Callout>
     )
   } else if (slips.length === 0) {
@@ -126,7 +126,7 @@ export default function PortalPayslipsPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <PageHeader title="My payslips" subtitle="From Employment Hero, newest first. ODIP doesn't keep a copy." />
+      <PageHeader title="My payslips" subtitle="From Employment Hero, newest first. We don't keep a copy." />
       {failure && (
         <div ref={failureRef} className="max-xl:scroll-mt-16">
           <Callout
