@@ -58,6 +58,9 @@ public static class WhatsNewSeed
         new Item("2026-10-get-set-up", "Get set up from the dashboard",
             "A new organisation now sees Get set up at the top of the dashboard: six steps, from your organisation details to your first invoice, each with its status and what to do next.\n\nStaff imports now email each new staff member a sign-in invite straight after the import. Keep the tab open until the invites finish.\n\nHide the steps on a device, and show them again from Settings, Organisation setup.",
             WhatsNewAudience.Admin, false),
+        new Item("2026-10-bunya-support-name", "Bunya Support, everywhere",
+            "Messages from the app and its downloads now use the Bunya Support name. Data exports are called bunya-support-export, and the import templates are called bunya-support-…-template.",
+            WhatsNewAudience.Admin, false),
     };
 
     /// <summary>Inserts the keys the table lacks, one save each, so a key another instance inserted first costs only that row.</summary>
