@@ -39,6 +39,7 @@ public static class ParticipantGroupRevisions
     public static readonly string[] Keys = Groups.Select(g => g.Key).ToArray();
 
     // Participant columns in no scalar group (ids, tenant, lifecycle, timestamps). The completeness test pins it.
+    // FundingSource is in a group but ParticipantFundingSourceBackfill writes it with no bump: startup-only, it re-derives the same value.
     internal static readonly string[] NotGroupColumns =
         ["Id", "TenantId", "IsActive", "HasRestrictivePracticeFlag", "PlanManagerContactId", "IsDraft", "IntakeCompletedAt", "ServicesStartedAt", "CreatedAt", "UpdatedAt"];
 
