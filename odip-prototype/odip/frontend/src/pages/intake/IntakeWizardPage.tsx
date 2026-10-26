@@ -200,9 +200,10 @@ export default function IntakeWizardPage() {
       receptiveSkills: participant.receptiveSkills ?? '',
       equipmentRequirements: participant.equipmentRequirements ?? '',
       behaviourRiskSummary: participant.behaviourRiskSummary ?? '', notes: participant.notes ?? '',
-      riskEntries: [], contactRoles: [],
-    } as unknown as Parameters<typeof reset>[0])
-  }, [isEditMode, participant, reset])
+      // Field-array rows live only in the form (never in `participant`): keep what is there, not a refetch wipe.
+      riskEntries: getValues('riskEntries') ?? [], contactRoles: getValues('contactRoles') ?? [],
+    } as unknown as Parameters<typeof reset>[0], { keepDirtyValues: true })
+  }, [isEditMode, participant, reset, getValues])
 
   const WIZARD_STEPS: WizardStepDef<ParticipantFormData>[] = useMemo(() => [
     { key: 'participantDetails', label: 'Participant Details', fields: STEP_PARTICIPANT_DETAILS_FIELDS },

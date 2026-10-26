@@ -43,8 +43,9 @@ export function useUpdateTask() {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: UpdateTaskDto }) =>
       apiPutRaw<TaskDto>(`/tasks/${id}`, data),
-    onSuccess: () => {
+    onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['tasks'] })
+      qc.invalidateQueries({ queryKey: ['task', vars.id] })
       qc.invalidateQueries({ queryKey: ['trip-tasks'] })
       qc.invalidateQueries({ queryKey: ['dashboard'] })
     },

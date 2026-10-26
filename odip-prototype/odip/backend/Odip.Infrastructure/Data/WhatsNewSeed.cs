@@ -40,6 +40,9 @@ public static class WhatsNewSeed
         new Item("2026-10-caregiver-form-keeps-typing", "Caregiver forms keep what you type while saving",
             "If a caregiver keeps typing while their form is saving, what they typed is now kept instead of being cleared when the save finishes.",
             Staff, false),
+        new Item("2026-10-forms-keep-typing", "Intake and task forms keep what you type",
+            "If the participant or task you are editing refreshes in the background, for example when you come back to the browser tab, what you have typed now stays.\n\nWhen you open a task again after saving it, it shows its latest details.",
+            Staff, false),
     };
 
     /// <summary>Inserts the keys the table lacks, one save each, so a key another instance inserted first costs only that row.</summary>
