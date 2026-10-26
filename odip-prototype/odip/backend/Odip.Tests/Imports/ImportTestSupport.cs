@@ -3,6 +3,7 @@ using System.Text;
 using Moq;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
 
 namespace Odip.Tests.Imports;
@@ -27,7 +28,8 @@ internal static class ImportTestSupport
             new ParticipantCreateService(db, new StaffCompatibilityLinkService(db), new SafetyNoteSyncService(db), new ParticipantIntakeSnapshotService(db), TimeProvider.System),
             new StaffCreateService(db, null),
             new FundingPlanService(db, TimeProvider.System),
-            TimeProvider.System);
+            TimeProvider.System, null, new RosterWeekStarter(new RosterShiftGenerator(), new RosterAvailability(db, new StaffUnavailabilityQuery(db))),
+            new RosterAvailability(db, new StaffUnavailabilityQuery(db)));
 
     public static byte[] Csv(params string[] lines) => Encoding.UTF8.GetBytes(string.Join("\r\n", lines) + "\r\n");
 

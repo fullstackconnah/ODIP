@@ -7,7 +7,9 @@ using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Funding;
+using Odip.Domain.Rostering;
 using Odip.Domain.Interfaces;
+using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Integrations;
 
@@ -22,7 +24,7 @@ public sealed record ImportUndoOutcome(bool NotFound, List<ImportUndoBlockerDto>
 /// manual-entry services, one organisation at a time, in one transaction. Undo takes a whole batch back while nothing has been added to its
 /// records. The file is never stored, and nothing here logs a value from it.
 /// </summary>
-public sealed class OnboardingImportService
+public sealed partial class OnboardingImportService
 {
     public const string ChooseOrganisation = "Choose an organisation to view as before importing: an import belongs to one organisation.";
     public const string LockBusy = "Another import is running for this organisation; try again when it finishes.";
@@ -40,9 +42,14 @@ public sealed class OnboardingImportService
     private readonly FundingPlanService _funding;
     private readonly TimeProvider _clock;
     private readonly ILogger<OnboardingImportService>? _logger;
+    private readonly RosterWeekStarter? _weekStarter;
+    private readonly RosterAvailability? _availability;
+    private readonly ShiftBudgetCheck? _budget;
+    private readonly BudgetLedgerService? _ledgers;
 
     public OnboardingImportService(OdipDbContext db, ICurrentTenant tenant, ParticipantCreateService participants, StaffCreateService staff, FundingPlanService funding, TimeProvider clock,
-        ILogger<OnboardingImportService>? logger = null)
+        ILogger<OnboardingImportService>? logger = null, RosterWeekStarter? weekStarter = null, RosterAvailability? availability = null,
+        ShiftBudgetCheck? budget = null, BudgetLedgerService? ledgers = null)
     {
         _db = db;
         _tenant = tenant;
@@ -51,6 +58,10 @@ public sealed class OnboardingImportService
         _funding = funding;
         _clock = clock;
         _logger = logger;
+        _weekStarter = weekStarter;
+        _availability = availability;
+        _ledgers = ledgers ?? new BudgetLedgerService(db, clock);
+        _budget = budget ?? new ShiftBudgetCheck(db, _ledgers);
     }
 
     /// <summary>
@@ -67,14 +78,15 @@ public sealed class OnboardingImportService
     }
 
     public async Task<ImportPreviewDto> PreviewAsync(ImportKind kind, byte[] content, string fileName, IReadOnlyList<string?>? mapping, CancellationToken ct,
-        ClaimsPrincipal? caller = null)
+        ClaimsPrincipal? caller = null, ImportShiftOptions? shifts = null)
     {
         await RefuseStaffFromPayrollAsync(kind, TenantId(), ct);
+        var shape = RequireShape(kind, shifts)?.Shape;
         var table = ImportFileReader.Read(content, fileName);
-        var columns = mapping ?? ImportFields.AutoMatch(kind, table.Headers);
-        if (ImportFields.MappingError(kind, columns, table.Headers.Count, requireAll: false) is { } mappingError) throw new ImportException(mappingError);
+        var columns = mapping ?? ImportFields.AutoMatch(kind, table.Headers, shape);
+        if (ImportFields.MappingError(kind, columns, table.Headers.Count, requireAll: false, shape) is { } mappingError) throw new ImportException(mappingError);
 
-        var plans = await PlanAsync(kind, table, columns, caller, ct);
+        var plans = await PlanAsync(kind, table, columns, caller, shifts, fileName, ct);
         var hash = Sha256(content);
         var previouslyImportedAt = await _db.ImportBatches
             .Where(b => b.FileSha256 == hash && b.UndoneAt == null)
@@ -83,19 +95,25 @@ public sealed class OnboardingImportService
             .FirstOrDefaultAsync(ct);
 
         return new ImportPreviewDto(
-            ImportFields.For(kind).Select(f => new ImportFieldDto(f.Key, f.Label, f.Required)).ToList(),
+            ImportFields.For(kind, shape).Select(f => new ImportFieldDto(f.Key, f.Label, f.Required)).ToList(),
             table.Headers.Select((header, i) => new ImportColumnDto(i, header, columns[i], ImportFields.NotImportedNote(kind, header))).ToList(),
             plans.Select(p => p.ToDto()).ToList(),
             plans.Count(p => p.Status == ImportRowStatus.Ready),
             plans.Count(p => p.Status == ImportRowStatus.Skipped),
             plans.Count(p => p.Status == ImportRowStatus.Invalid),
             previouslyImportedAt,
-            kind == ImportKind.FundingPlans ? ImportFundingRows.Plans(plans).Count : plans.Count(p => p.Status == ImportRowStatus.Ready));
+            kind == ImportKind.FundingPlans ? ImportFundingRows.Plans(plans).Count : kind == ImportKind.UpcomingShifts ? Summarise(plans).Count : plans.Count(p => p.Status == ImportRowStatus.Ready),
+            UnfilledCount: kind == ImportKind.UpcomingShifts ? Summarise(plans).Unfilled : null,
+            FirstDate: kind == ImportKind.UpcomingShifts ? Summarise(plans).First : null,
+            LastDate: kind == ImportKind.UpcomingShifts ? Summarise(plans).Last : null,
+            WeekCount: kind == ImportKind.UpcomingShifts ? Summarise(plans).Weeks : null,
+            ReadinessEnforced: kind == ImportKind.UpcomingShifts && await ReadinessEnforcedAsync(ct));
     }
 
     /// <summary>Every row's status: the file's own rules, then people already in this organisation, then repeats within the file.</summary>
-    private async Task<List<ImportRowPlan>> PlanAsync(ImportKind kind, ImportTable table, IReadOnlyList<string?> mapping, ClaimsPrincipal? caller, CancellationToken ct)
+    private async Task<List<ImportRowPlan>> PlanAsync(ImportKind kind, ImportTable table, IReadOnlyList<string?> mapping, ClaimsPrincipal? caller, ImportShiftOptions? shifts, string fileName, CancellationToken ct)
     {
+        if (kind == ImportKind.UpcomingShifts) return await PlanShiftsAsync(table, mapping, shifts!, fileName, ct);
         if (kind == ImportKind.Staff) return await PlanStaffAsync(table, mapping, caller, ct);
         if (kind == ImportKind.FundingPlans) return await PlanFundingAsync(table, mapping, ct);
         var asOf = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
@@ -209,16 +227,17 @@ public sealed class OnboardingImportService
     public static long LockKey(Guid tenantId) => BitConverter.ToInt64(tenantId.ToByteArray(), 0);
 
     public async Task<ImportResultDto> CommitAsync(ImportKind kind, byte[] content, string fileName, IReadOnlyList<string?>? mapping,
-        ImportLanding? landing, string idempotencyKey, ClaimsPrincipal? caller, CancellationToken ct)
+        ImportLanding? landing, string idempotencyKey, ClaimsPrincipal? caller, CancellationToken ct, ImportShiftOptions? shifts = null)
     {
         var tenantId = TenantId();
         await RefuseStaffFromPayrollAsync(kind, tenantId, ct);
         if (string.IsNullOrWhiteSpace(idempotencyKey) || idempotencyKey.Length > 100)
             throw new ImportException("The import request has no key. Reload the page and try again.");
         if (kind == ImportKind.Participants && landing is null) throw new ImportException(ChooseLanding);
+        var shape = RequireShape(kind, shifts)?.Shape;
         var table = ImportFileReader.Read(content, fileName);
-        var columns = mapping ?? ImportFields.AutoMatch(kind, table.Headers);
-        if (ImportFields.MappingError(kind, columns, table.Headers.Count, requireAll: true) is { } mappingError) throw new ImportException(mappingError);
+        var columns = mapping ?? ImportFields.AutoMatch(kind, table.Headers, shape);
+        if (ImportFields.MappingError(kind, columns, table.Headers.Count, requireAll: true, shape) is { } mappingError) throw new ImportException(mappingError);
         if (await ReplayAsync(idempotencyKey, ct) is { } earlier) return earlier;
 
         await using var importLock = await AcquireLockAsync(tenantId, CommitLockBusy, ct);
@@ -228,7 +247,9 @@ public sealed class OnboardingImportService
         // A request that waited behind its own twin finds the batch the twin made.
         if (await ReplayAsync(idempotencyKey, ct) is { } twin) return twin;
 
-        var plans = await PlanAsync(kind, table, columns, caller, ct);
+        // The board lock comes after the import lock and is held to the end, so no roster change lands between the checks and the inserts.
+        await using var board = kind == ImportKind.UpcomingShifts ? await AcquireBoardLockAsync(tenantId, ct) : null;
+        var plans = await PlanAsync(kind, table, columns, caller, shifts, fileName, ct);
         // The column holds 260 characters; a longer name would fail the final save after every row was written. The cut never splits an emoji.
         var name = Path.GetFileName(fileName);
         var batch = new ImportBatch
@@ -240,7 +261,9 @@ public sealed class OnboardingImportService
         var rowNumber = 0;
         try
         {
-            if (kind == ImportKind.FundingPlans)
+            if (kind == ImportKind.UpcomingShifts)
+                items.AddRange(await AddShiftsAsync(plans, batch, caller, ct));
+            else if (kind == ImportKind.FundingPlans)
             {
                 var note = $"Imported from {batch.FileName} on {Say(await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct))}.";
                 foreach (var group in ImportFundingRows.Plans(plans))
@@ -272,6 +295,10 @@ public sealed class OnboardingImportService
             await _db.SaveChangesAsync(ct);
             await importLock.CommitAsync(ct);
         }
+        catch (RosterBusyException)
+        {
+            throw new ImportException(RosterGenerationLock.RosterBoardBusyMessage, 409);
+        }
         catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: "23505" or "40P01" })
         {
             // Usernames and emails are unique across ODIP, so another organisation (which this lock does not hold back) can take one between
@@ -286,7 +313,10 @@ public sealed class OnboardingImportService
             _logger?.LogError("Import {BatchId} failed at row {RowNumber}: {ExceptionType}", batch.Id, rowNumber, ex.GetType().Name);
             throw new ImportException(CommitFailed, 500);
         }
-        return new ImportResultDto(batch.Id, batch.CreatedCount, batch.SkippedCount, batch.FailedCount, plans.Select(p => p.ToDto()).ToList(), Replayed: false);
+        var made = kind == ImportKind.UpcomingShifts ? Summarise(plans) : default;
+        return new ImportResultDto(batch.Id, batch.CreatedCount, batch.SkippedCount, batch.FailedCount, plans.Select(p => p.ToDto()).ToList(), Replayed: false,
+            FirstWeekStart: made.First is { } firstDay ? MondayOf(firstDay) : null, WeekCount: kind == ImportKind.UpcomingShifts ? made.Weeks : null,
+            UnfilledCount: kind == ImportKind.UpcomingShifts ? made.Unfilled : null);
     }
 
     private async Task<CatalogueImportLock> AcquireLockAsync(Guid tenantId, string busy, CancellationToken ct)
@@ -298,9 +328,15 @@ public sealed class OnboardingImportService
     private async Task<ImportResultDto?> ReplayAsync(string idempotencyKey, CancellationToken ct)
     {
         var earlier = await _db.ImportBatches.Where(b => b.IdempotencyKey == idempotencyKey)
-            .Select(b => new { b.Id, b.CreatedCount, b.SkippedCount, b.FailedCount })
+            .Select(b => new { b.Id, b.Kind, b.CreatedCount, b.SkippedCount, b.FailedCount })
             .FirstOrDefaultAsync(ct);
-        return earlier is null ? null : new ImportResultDto(earlier.Id, earlier.CreatedCount, earlier.SkippedCount, earlier.FailedCount, [], Replayed: true);
+        if (earlier is null) return null;
+        if (earlier.Kind != ImportKind.UpcomingShifts) return new ImportResultDto(earlier.Id, earlier.CreatedCount, earlier.SkippedCount, earlier.FailedCount, [], Replayed: true);
+        // The shifts still on the roster say which weeks the batch started.
+        var batchShifts = _db.ImportBatchItems.Where(i => i.BatchId == earlier.Id).Select(i => i.EntityId);
+        var firstShift = await _db.Shifts.Where(s => batchShifts.Contains(s.Id)).OrderBy(s => s.ServiceDate).Select(s => (DateOnly?)s.ServiceDate).FirstOrDefaultAsync(ct);
+        return new ImportResultDto(earlier.Id, earlier.CreatedCount, earlier.SkippedCount, earlier.FailedCount, [], Replayed: true,
+            FirstWeekStart: firstShift is { } d ? MondayOf(d) : null);
     }
 
     /// <summary>
@@ -360,6 +396,12 @@ public sealed class OnboardingImportService
         if (batch.UndoneAt != null) throw new ImportException("This import was already undone.");
 
         var ids = await _db.ImportBatchItems.Where(i => i.BatchId == batch.Id).Select(i => i.EntityId).ToListAsync(ct);
+        if (batch.Kind == ImportKind.UpcomingShifts)
+        {
+            var undone = await UndoShiftsAsync(batch, tenantId, ids, caller, ct);
+            await importLock.CommitAsync(ct);
+            return new ImportUndoOutcome(false, [], undone);
+        }
         // The import lock does not stop a coordinator adding a shift or a note meanwhile. Locking the participant rows narrows that: a child row's
         // foreign key takes FOR KEY SHARE on its participant, which conflicts with this FOR UPDATE. So a write committed or in flight before the lock
         // is seen by the checks below (an in-flight one is waited for). A write that starts after the lock waits for the undo to commit and then
@@ -477,7 +519,7 @@ public sealed class OnboardingImportService
     }
 
     private static ImportBatchDto ToDto(ImportBatch b) =>
-        new(b.Id, b.Kind, b.FileName, b.CreatedByName, b.CreatedAt, b.RowCount, b.CreatedCount, b.SkippedCount, b.FailedCount, b.UndoneAt, b.UndoneByName);
+        new(b.Id, b.Kind, b.FileName, b.CreatedByName, b.CreatedAt, b.RowCount, b.CreatedCount, b.SkippedCount, b.FailedCount, b.UndoneAt, b.UndoneByName, b.KeptCount);
 
     private static string Say(DateOnly day) => day.ToString("d MMM yyyy", CultureInfo.InvariantCulture);
 

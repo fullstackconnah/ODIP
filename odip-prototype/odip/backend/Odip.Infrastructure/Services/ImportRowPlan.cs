@@ -25,6 +25,8 @@ public sealed class ImportRowPlan
     public ImportFundingLine? Funding { get; set; }
     /// <summary>An upcoming-shifts row as read, with the dates it makes shifts on (ImportShiftRows).</summary>
     public ImportShiftLine? Shift { get; set; }
+    /// <summary>The Draft shifts an upcoming-shifts row will make, checked and ready to save.</summary>
+    public List<Odip.Domain.Rostering.Shift> Shifts { get; } = new();
 
     /// <summary>The row can't be imported for this reason. A skipped row stays skipped: it would not be imported anyway.</summary>
     public void Refuse(string reason)
