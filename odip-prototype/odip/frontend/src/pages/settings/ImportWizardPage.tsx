@@ -1,4 +1,5 @@
 import { useRef, useState, type FormEvent } from 'react'
+import { format } from 'date-fns'
 import { Navigate, useParams } from 'react-router-dom'
 import { BackButton } from '@/components/BackButton'
 import { Button } from '@/components/Button'
@@ -13,11 +14,13 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { WizardNavFooter, WizardShell, WizardStepHeading, WizardStepRail, type WizardStepDef } from '@/components/wizard'
 import { useCommitImport, useDownloadImportTemplate, usePreviewImport, useProviderSettings, useUndoImport } from '@/api/hooks'
-import type { ImportKind, ImportLanding, ImportPreviewDto, ImportResultDto, ImportRowDto, ImportRowStatus, ImportUndoBlockerDto } from '@/api/types'
+import type { ImportKind, ImportLanding, ImportShiftShape, ImportPreviewDto, ImportResultDto, ImportRowDto, ImportRowStatus, ImportUndoBlockerDto } from '@/api/types'
 import { newCompletionRequestId } from '@/lib/completionRequestId'
 import { formatDateTimeAu, plural } from '@/lib/format'
 import { extractErrorMessage } from '@/lib/utils'
 import ImportInvites from './ImportInvites'
+import ShiftsUploadFields from './ShiftsUploadFields'
+import { maxFrom, nextMonday, sayDay } from './upcomingShifts'
 import { undoBlockers, undoFirst } from './importUndoBlockers'
 
 const MAX_BYTES = 5 * 1024 * 1024
@@ -48,6 +51,10 @@ const KIND: Record<ImportKind, { noun: string; title: string; listNoun: string; 
     // The participants list shows no plans; Budgets lists every participant's plan in force.
     noun: 'funding plan', title: 'Import funding plans', listNoun: 'budgets', listTo: () => '/budgets',
     undone: 'deleted', undoRule: 'none of its plans has been changed, or used by a shift or a service agreement, since the import', undoNote: '',
+  },
+  'upcoming-shifts': {
+    noun: 'shift', title: 'Import upcoming shifts', listNoun: 'roster', listTo: () => '/rostering',
+    undone: 'removed', undoRule: 'they are still drafts nobody has changed', undoNote: ' Shifts already published or changed stay on the roster.',
   },
 }
 
@@ -89,10 +96,37 @@ function RowsTable({ rows }: { rows: ImportRowDto[] }) {
   return <DataTable data={rows} columns={columns} keyField="rowNumber" emptyMessage="No rows with this status." />
 }
 
+/** The Preview sentence for upcoming shifts: what will be made, over which dates, and how many are unfilled. */
+function shiftsSummary(d: ImportPreviewDto, shape: ImportShiftShape | null) {
+  const span = d.firstDate && d.lastDate ? `${sayDay(d.firstDate)} to ${sayDay(d.lastDate)}` : ''
+  const made = shape === 'pattern'
+    ? `${plural(d.createCount, 'shift')} over ${plural(d.weekCount ?? 0, 'week')}, ${span}, from ${plural(d.readyCount, 'ready row')}.`
+    : `${plural(d.createCount, 'shift')} from ${span}, one per ready row.`
+  const n = d.unfilledCount ?? 0
+  const unfilled = n > 0 ? ` ${plural(n, 'shift')} ${n === 1 ? 'has' : 'have'} no staff yet and ${n === 1 ? 'imports' : 'import'} unfilled.` : ''
+  return `${made} They are added as drafts: nobody is told until you publish each week.${unfilled}`
+}
+
+/** The Import step's paragraphs for upcoming shifts. */
+function ShiftsReview({ data, checkCount }: { data: ImportPreviewDto; checkCount: number }) {
+  const n = data.unfilledCount ?? 0
+  return (
+    <>
+      <p>{`${plural(data.createCount, 'shift')} will be added as drafts${data.firstDate && data.lastDate ? `, ${sayDay(data.firstDate)} to ${sayDay(data.lastDate)}` : ''}.`}</p>
+      <p>Their weeks are started on the roster, so each is ready to check and publish. Staff see nothing until you publish.</p>
+      {n > 0 && <p>{`${n} ${n === 1 ? 'has' : 'have'} no staff yet: fill ${n === 1 ? 'it' : 'them'} on the roster before or after publishing.`}</p>}
+      {data.skippedCount > 0 && <p>{`Skipped, already on the roster or repeated in the file: ${data.skippedCount}.`}</p>}
+      {data.invalidCount > 0 && <p>{`Can't be imported: ${data.invalidCount}. Fix ${data.invalidCount === 1 ? 'it' : 'them'} in the file and import it again: shifts already on the roster are skipped, never added twice.`}</p>}
+      {checkCount > 0 && <p>{`Rows to check first: ${checkCount}. Each one says why in the preview.`}</p>}
+      <p>Every shift is checked again as it is imported. You can undo the import later: it removes the shifts that are still drafts nobody has changed.</p>
+    </>
+  )
+}
+
 export default function ImportWizardPage() {
   const staffFromPayroll = useProviderSettings().data?.employmentHeroConnected === true
   const { kind: param } = useParams()
-  const kind: ImportKind | null = param === 'participants' || param === 'staff' || param === 'funding-plans' ? param : null
+  const kind = param && Object.hasOwn(KIND, param) ? (param as ImportKind) : null
   const preview = usePreviewImport()
   const commit = useCommitImport()
   const undo = useUndoImport()
@@ -109,6 +143,12 @@ export default function ImportWizardPage() {
   const [result, setResult] = useState<ImportResultDto | null>(null)
   const [confirmUndo, setConfirmUndo] = useState(false)
   const [undone, setUndone] = useState(false)
+  // Upcoming shifts only: what the file holds, and for a pattern where it starts and how many weeks it runs. `kept` is what an undo left on the roster.
+  const [today] = useState(() => format(new Date(), 'yyyy-MM-dd'))
+  const [shape, setShape] = useState<ImportShiftShape | null>(null)
+  const [from, setFrom] = useState(() => nextMonday(format(new Date(), 'yyyy-MM-dd')))
+  const [weeks, setWeeks] = useState(12)
+  const [kept, setKept] = useState(0)
   const [inviteOnImport, setInviteOnImport] = useState(true)
   const [inviting, setInviting] = useState(false)
   const [blockers, setBlockers] = useState<ImportUndoBlockerDto[]>([])
@@ -117,6 +157,11 @@ export default function ImportWizardPage() {
 
   if (!kind || (kind === 'staff' && staffFromPayroll)) return <Navigate to={BACK_TO} replace />
   const { noun, title, listNoun, listTo, undone: undoneWord, undoRule, undoNote } = KIND[kind]
+
+  const isShifts = kind === 'upcoming-shifts'
+  const extra = isShifts && shape ? { shape, ...(shape === 'pattern' ? { from, weeks: String(weeks) } : {}) } : undefined
+  // A changed file or setting makes the later steps stale, and a retry must never replay a batch made with the old ones.
+  const resetUpload = () => { setData(null); idempotencyKey.current = newCompletionRequestId(); setVisited(new Set(['upload'])); setFilter('all') }
 
   const go = (next: StepKey) => {
     setProblem(null)
@@ -127,7 +172,7 @@ export default function ImportWizardPage() {
   async function runPreview(next: StepKey, withMapping?: (string | null)[]) {
     if (!file || !kind) return
     try {
-      const answer = await preview.mutateAsync({ kind, file, mapping: withMapping })
+      const answer = await preview.mutateAsync({ kind, file, mapping: withMapping, extra })
       setData(answer)
       if (!withMapping) setMapping(answer.columns.map(c => c.field))
       go(next)
@@ -137,8 +182,16 @@ export default function ImportWizardPage() {
   }
 
   function handleNext() {
+    if (preview.isPending) return
     setProblem(null)
     if (step === 'upload') {
+      if (isShifts) {
+        if (!shape) return setProblem("Choose what's in your file first.")
+        if (shape === 'pattern') {
+          if (!from) return setProblem('Choose the date the pattern starts from.')
+          if (from < today || from > maxFrom(today)) return setProblem(`The pattern can start from today up to ${sayDay(maxFrom(today))}.`)
+        }
+      }
       if (!file) return setProblem('Choose a .csv or .xlsx file first.')
       if (file.size > MAX_BYTES) return setProblem('The file is over 5 MB. Split it into smaller files and import each one.')
       void runPreview('match')
@@ -163,7 +216,7 @@ export default function ImportWizardPage() {
     setConfirming(false)
     if (!file || !kind) return
     try {
-      setResult(await commit.mutateAsync({ kind, file, mapping, landing: landing ?? undefined, idempotencyKey: idempotencyKey.current }))
+      setResult(await commit.mutateAsync({ kind, file, mapping, landing: landing ?? undefined, idempotencyKey: idempotencyKey.current, extra }))
     } catch (err) {
       setProblem(extractErrorMessage(err, 'The import failed, so nothing was imported.'))
     }
@@ -174,7 +227,8 @@ export default function ImportWizardPage() {
     setProblem(null)
     setBlockers([])
     try {
-      await undo.mutateAsync(result!.batchId)
+      const batch = await undo.mutateAsync(result!.batchId)
+      setKept(batch?.keptCount ?? 0)
       setUndone(true)
     } catch (err) {
       setProblem(extractErrorMessage(err, 'The import could not be undone.'))
@@ -195,14 +249,18 @@ export default function ImportWizardPage() {
       <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
         {header}
         {undone ? (
-          <Callout tone="info" title="Import undone">{`The ${plural(result.createdCount, noun)} it created ${result.createdCount === 1 ? 'is' : 'are'} ${undoneWord}.`}</Callout>
+          <Callout tone="info" title={kept > 0 ? 'Import partly undone' : 'Import undone'}>{kept > 0
+            ? `${plural(result.createdCount - kept, noun)} ${result.createdCount - kept === 1 ? 'is' : 'are'} ${undoneWord}. ${kept} ${kept === 1 ? 'stays' : 'stay'} on the roster because ${kept === 1 ? 'it was' : 'they were'} published or changed since the import.`
+            : `The ${plural(result.createdCount, noun)} it ${isShifts ? 'added' : 'created'} ${result.createdCount === 1 ? 'is' : 'are'} ${undoneWord}.`}</Callout>
         ) : (
           <Callout
             tone="success"
             title={`Imported ${plural(result.createdCount, noun)}`}
             actions={<div className="flex flex-col items-start gap-1">
               <div className="flex items-center gap-2">
-                <Button to={listTo(landing)} variant="secondary" size="sm">View {listNoun}</Button>
+                {isShifts
+                  ? result.firstWeekStart && <Button to={`/rostering?date=${result.firstWeekStart}`} size="sm" className="whitespace-nowrap">Open the first week</Button>
+                  : <Button to={listTo(landing)} variant="secondary" size="sm">View {listNoun}</Button>}
                 <Button
                   variant="secondary"
                   size="sm"
@@ -215,7 +273,9 @@ export default function ImportWizardPage() {
               {kind === 'staff' && inviting && <p id="undo-wait" className="max-w-[18rem] text-[13px] text-[var(--color-muted-foreground)]">Wait for the invites to finish, then undo.</p>}
             </div>}
           >
-            {kind === 'funding-plans'
+            {isShifts
+              ? `${result.weekCount != null && result.firstWeekStart ? `${plural(result.weekCount, 'week')} ${result.weekCount === 1 ? 'is' : 'are'} on the roster as drafts, from ${sayDay(result.firstWeekStart)}. Check the first week, then Publish week. ` : ''}${plural(result.skippedCount, 'row')} skipped, ${plural(result.failedCount, 'row')} couldn't be imported.`
+              : kind === 'funding-plans'
               ? `${plural(result.skippedCount, 'row')} skipped, ${plural(result.failedCount, 'row')} couldn't be imported.`
               : `${result.skippedCount} skipped (already in Bunya Support), ${result.failedCount} couldn't be imported.`}
           </Callout>
@@ -241,7 +301,9 @@ export default function ImportWizardPage() {
         <ConfirmDialog
           open={confirmUndo}
           title="Undo this import?"
-          message={`The ${plural(result.createdCount, noun)} it created ${result.createdCount === 1 ? 'is' : 'are'} ${undoneWord}. This only works while ${undoRule}.${undoNote}`}
+          message={isShifts
+            ? `The ${plural(result.createdCount, noun)} it added ${result.createdCount === 1 ? 'is' : 'are'} ${undoneWord} if ${undoRule}.${undoNote}`
+            : `The ${plural(result.createdCount, noun)} it created ${result.createdCount === 1 ? 'is' : 'are'} ${undoneWord}. This only works while ${undoRule}.${undoNote}`}
           confirmLabel="Undo import"
           variant="danger"
           loading={undo.isPending}
@@ -274,29 +336,41 @@ export default function ImportWizardPage() {
                 {kind === 'funding-plans' && (
                   <p className="text-sm">Import participants first. Each row is one support category of one participant's plan, and finds its participant by NDIS number, or by name and date of birth when it has none.</p>
                 )}
+                {isShifts && (
+                  <ShiftsUploadFields
+                    shape={shape} onShape={v => { setShape(v); resetUpload() }}
+                    from={from} onFrom={v => { setFrom(v); resetUpload() }}
+                    weeks={weeks} onWeeks={v => { setWeeks(v); resetUpload() }}
+                    today={today}
+                  />
+                )}
                 <div>
                   <label className={labelClass} htmlFor="import-file">File (.csv or .xlsx)</label>
                   <input
                     id="import-file" type="file" accept=".csv,.xlsx"
                     className="mt-1 block w-full rounded-[var(--radius-sm)] text-sm text-[var(--color-muted-foreground)] file:mr-3 file:h-[var(--control-h)] file:cursor-pointer file:rounded-[var(--radius-sm)] file:border file:border-solid file:border-[var(--color-border)] file:bg-[var(--color-card)] file:px-4 file:text-sm file:font-medium file:text-[var(--color-foreground)] hover:file:bg-[var(--color-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
                     onChange={e => {
-                      setFile(e.target.files?.[0] ?? null); setData(null); idempotencyKey.current = newCompletionRequestId()
+                      setFile(e.target.files?.[0] ?? null)
                       // A new file makes the later steps stale: they open again as Next reaches them.
-                      setVisited(new Set(['upload'])); setFilter('all')
+                      resetUpload()
                     }}
                   />
                 </div>
                 <p className="text-sm text-[var(--color-muted-foreground)]">Up to 2,000 rows and 5 MB. The file is read to check it and is never stored.</p>
-                <div className="flex flex-wrap items-center gap-2 text-sm">
-                  <span className="text-[var(--color-muted-foreground)]">Not sure how to lay it out?</span>
-                  <Button type="button" variant="secondary" onClick={() => template.mutate(kind)}>Download the Bunya Support template</Button>
-                </div>
+                {(!isShifts || shape) && (
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <span className="text-[var(--color-muted-foreground)]">Not sure how to lay it out?</span>
+                    {isShifts
+                      ? <Button type="button" variant="secondary" onClick={() => template.mutate({ kind, shape: shape! })}>Download the template</Button>
+                      : <Button type="button" variant="secondary" onClick={() => template.mutate(kind)}>Download the Bunya Support template</Button>}
+                  </div>
+                )}
               </div>
             )}
 
             {step === 'match' && data && (
               <div className="flex flex-col gap-3">
-                <p className="text-sm">Each column in your file is matched to a Bunya Support field. Change any match, or choose Don't import. Fields marked * are required.</p>
+                <p className="text-sm">Each column in your file is matched to a Bunya Support field. Change any match, or choose Don't import. Fields marked * are required.{isShifts && ' A participant is found by NDIS number, or by name and date of birth.'}</p>
                 <DataTable
                   data={data.columns}
                   keyField="index"
@@ -327,8 +401,14 @@ export default function ImportWizardPage() {
             {step === 'preview' && data && (
               <div className="flex flex-col gap-4">
                 {data.previouslyImportedAt && (
-                  <Callout tone="warning">{`This exact file was imported on ${formatDateTimeAu(data.previouslyImportedAt)}. ${kind === 'funding-plans' ? "Plans already in Bunya Support can't be imported again" : 'Rows already in Bunya Support are skipped'}, but check before importing it again.`}</Callout>
+                  <Callout tone="warning">{`This exact file was imported on ${formatDateTimeAu(data.previouslyImportedAt)}. ${kind === 'funding-plans' ? "Plans already in Bunya Support can't be imported again" : isShifts ? 'Shifts already on the roster are skipped' : 'Rows already in Bunya Support are skipped'}, but check before importing it again.`}</Callout>
                 )}
+                {isShifts && data.readinessEnforced && (
+                  <Callout tone="info" title="Participants must be fully ready to be rostered" actions={<Button to="/settings?section=safety" variant="secondary" size="sm">Readiness settings</Button>}>
+                    Your organisation's participant readiness check is set to Enforce, so rows for participants who aren't fully ready, including a signed service agreement, can't be imported.
+                  </Callout>
+                )}
+                {isShifts && data.createCount > 0 && <p className="text-sm">{shiftsSummary(data, shape)}</p>}
                 {kind === 'participants' && (
                   <fieldset className="grid gap-2 md:grid-cols-2">
                     <legend className={`${labelClass} mb-1`}>Where do these participants go?</legend>
@@ -365,12 +445,14 @@ export default function ImportWizardPage() {
 
             {step === 'review' && data && (
               <div className="flex max-w-xl flex-col gap-2 text-sm">
+                {isShifts ? <ShiftsReview data={data} checkCount={checkCount} /> : <>
                 <p>{`${plural(data.createCount, noun)} will be created${landing ? `, ${LANDINGS.find(l => l.value === landing)!.label.toLowerCase()}` : ''}.`}</p>
                 {data.skippedCount > 0 && <p>{kind === 'funding-plans' ? `Rows skipped: ${data.skippedCount}.` : `Skipped, already in Bunya Support: ${data.skippedCount}.`}</p>}
                 {data.invalidCount > 0 && <p>{kind === 'funding-plans'
                   ? `Rows that can't be imported: ${data.invalidCount}. Their plans are left out whole. Fix ${data.invalidCount === 1 ? 'that row' : 'those rows'} in the file and import it again: plans already in Bunya Support are refused, never added twice.`
                   : `Can't be imported: ${data.invalidCount}. Fix ${data.invalidCount === 1 ? 'it' : 'them'} in the file and import it again afterwards.`}</p>}
                 {checkCount > 0 && <p>{`Rows to check first: ${checkCount}. Each one says why in the preview.`}</p>}
+                </>}
                 {kind === 'staff' && <CheckboxField label="Email each new staff member a sign-in invite" checked={inviteOnImport} onChange={e => setInviteOnImport(e.target.checked)}
                   hint={inviteOnImport ? 'Invites are sent from this browser straight after the import. Keep this tab open until they finish.' : 'Nobody is emailed. You can send invites later from Import history.'} />}
                 <p>{`Every row is checked again as it is imported. You can undo the whole import while ${kind === 'participants' ? 'nothing has been added to its records' : KIND[kind].undoRule}.`}</p>
@@ -387,7 +469,8 @@ export default function ImportWizardPage() {
               history={false}
               submitLabel={`Import ${plural(data?.createCount ?? 0, noun)}`}
               isSubmitting={commit.isPending}
-              summary={commit.isPending ? <p className="text-sm text-[var(--color-muted-foreground)]">Large files can take up to a minute.</p> : undefined}
+              summary={commit.isPending ? <p className="text-sm text-[var(--color-muted-foreground)]">Large files can take up to a minute.</p>
+                : isShifts && preview.isPending ? <p className="text-sm text-[var(--color-muted-foreground)]">Checking every shift against the roster rules. Large files can take up to a minute.</p> : undefined}
             />
           </div>
         </WizardShell>
@@ -395,7 +478,9 @@ export default function ImportWizardPage() {
       <ConfirmDialog
         open={confirming}
         title={`Import ${plural(data?.createCount ?? 0, noun)}?`}
-        message={`${plural(data?.createCount ?? 0, noun)} will be created${kind === 'staff' && inviteOnImport ? ' and each emailed a sign-in invite' : ''}. Rows skipped or that can't be imported are left out.`}
+        message={isShifts
+          ? `${plural(data?.createCount ?? 0, noun)} ${data?.createCount === 1 ? 'is' : 'are'} added as drafts. Rows skipped or that can't be imported are left out. Nobody is notified.`
+          : `${plural(data?.createCount ?? 0, noun)} will be created${kind === 'staff' && inviteOnImport ? ' and each emailed a sign-in invite' : ''}. Rows skipped or that can't be imported are left out.`}
         confirmLabel="Import"
         loading={commit.isPending}
         onCancel={() => setConfirming(false)}
