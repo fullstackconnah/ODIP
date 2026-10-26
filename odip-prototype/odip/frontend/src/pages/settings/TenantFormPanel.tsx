@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
+import { CheckboxField } from '@/components/CheckboxField'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Dropdown } from '@/components/Dropdown'
 import { ToggleGroup } from '@/components/ToggleGroup'
@@ -526,17 +527,14 @@ export default function TenantFormPanel({
                 />
               </div>
 
-              <label className="flex w-fit items-center gap-2 text-sm text-[var(--color-foreground)] cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={gstRegistered}
-                  onChange={e => setGstRegistered(e.target.checked)}
-                  className="w-4 h-4 rounded border-[var(--color-border)] accent-[var(--color-primary)]"
-                />
-                GST Registered
-              </label>
+              <CheckboxField
+                label="GST Registered"
+                className="w-fit"
+                checked={gstRegistered}
+                onChange={e => setGstRegistered(e.target.checked)}
+              />
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div>
                   <label htmlFor="tf-bank-account-name" className={labelClass}>Bank Account Name</label>
                   <input
