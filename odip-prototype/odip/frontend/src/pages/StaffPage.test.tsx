@@ -456,3 +456,42 @@ describe('StaffPage — import', () => {
     expect(screen.queryByRole('link', { name: 'Import' })).toBeNull()
   })
 })
+
+describe('StaffPage — the empty state points at Import', () => {
+  const empty = () => mockUseStaff.mockReturnValue({ data: [], isLoading: false })
+  const links = () => screen.queryAllByRole('link').map((a) => [a.textContent, a.getAttribute('href')])
+
+  it('Admin: Import staff, then Add a staff member', () => {
+    empty()
+    renderPage()
+    expect(screen.getByText(/Import your staff list from a spreadsheet, or add people one at a time/)).toBeInTheDocument()
+    expect(links()).toEqual(expect.arrayContaining([['Import staff', '/settings/import/staff'], ['Add a staff member', '/staff/new']]))
+  })
+
+  it('Employment Hero connected: its own description and Open integrations only', () => {
+    empty()
+    providerSettings.current = { employmentHeroConnected: true }
+    renderPage()
+    expect(screen.getByText(/Your staff come from Employment Hero/)).toBeInTheDocument()
+    expect(links()).toEqual(expect.arrayContaining([['Open integrations', '/settings?section=integrations']]))
+    expect(screen.queryByRole('link', { name: 'Import staff' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Add a staff member' })).toBeNull()
+  })
+
+  it('ReadOnly: the description and no actions', () => {
+    empty()
+    setUserRole('ReadOnly')
+    renderPage()
+    expect(screen.getByText('No staff members yet')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Import staff' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Add a staff member' })).toBeNull()
+  })
+
+  it('Archived tab, Admin: no Import staff link and the plain description', async () => {
+    empty()
+    renderPage()
+    await userEvent.setup().click(screen.getByRole('radio', { name: 'Archived' }))
+    expect(screen.queryByRole('link', { name: 'Import staff' })).toBeNull()
+    expect(screen.queryByText(/Import your staff list/)).toBeNull()
+  })
+})

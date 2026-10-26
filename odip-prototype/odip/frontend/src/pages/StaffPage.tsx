@@ -2,7 +2,7 @@ import { useStaff, useDeleteStaff, useUpdateStaff, useProviderSettings } from '@
 import { DataTable, RowActions, type Column } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { Dropdown } from '@/components/Dropdown'
-import { EmptyState } from '@/components/EmptyState'
+import { EmptyState, type EmptyStateAction } from '@/components/EmptyState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { SearchInput } from '@/components/SearchInput'
 import { CHIP_CLASS } from '@/components/ServiceStreamBadges'
@@ -61,7 +61,7 @@ function Qualifications({ staff }: { staff: StaffListDto }) {
 }
 
 export default function StaffPage() {
-  const { canWrite, canAccessPage, canImportData } = usePermissions()
+  const { canWrite, canAccessPage, canImportData, canManageIntegrations } = usePermissions()
   // Staff come from Employment Hero for a connected organisation: ODIP's own create and import are hidden, and the server refuses them.
   const staffFromPayroll = useProviderSettings(canWrite).data?.employmentHeroConnected === true
   const canAccessLeaveApprovals = canAccessPage('leave-approvals')
@@ -175,6 +175,13 @@ export default function StaffPage() {
     },
   ]
 
+  // The header buttons' gates, so the empty state never offers what the header would not. Archived has nothing to import into.
+  const emptyStaffActions: EmptyStateAction[] = showArchived ? [] : staffFromPayroll
+    ? canManageIntegrations ? [{ label: 'Open integrations', to: '/settings?section=integrations' }] : []
+    : [
+        ...(canImportData ? [{ label: 'Import staff', to: '/settings/import/staff' }] : []),
+        ...(canWrite ? [{ label: 'Add a staff member', to: '/staff/new' }] : []),
+      ]
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       {/* Plain wrapper keeps PageHeader's title and filter rows in block flow (32 + 8 + 32 = 72px)
@@ -215,7 +222,12 @@ export default function StaffPage() {
           <EmptyState
             icon={UserCog}
             title="No staff members yet"
-            description="Staff are the support workers and coordinators you assign to trips, tasks, and incidents. Add one to start rostering them."
+            description={!showArchived ? (staffFromPayroll
+              ? 'Your staff come from Employment Hero. Bunya Support checks for them every 30 minutes, so they appear here soon after you connect.'
+              : 'Staff are the support workers and coordinators you roster. Import your staff list from a spreadsheet, or add people one at a time.')
+              : 'Staff are the support workers and coordinators you assign to trips, tasks, and incidents. Add one to start rostering them.'}
+            action={emptyStaffActions[0]}
+            secondaryAction={emptyStaffActions[1]}
           />
         )
       ) : (
