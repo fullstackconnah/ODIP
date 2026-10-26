@@ -257,6 +257,8 @@ public static class ExportTables
         Via("import-batch-items.csv", "The records each import created.",
             (db, t) => { var batches = db.ImportBatches.Where(b => b.TenantId == t); return db.ImportBatchItems.Where(i => batches.Any(b => b.Id == i.BatchId)); }),
 
+        Own<MicrosoftTenantLink>("microsoft-link.csv", "The Microsoft directory your organisation sign-in is linked to, and the role new people get."),
+
         // Employment Hero (the connection itself, with its encrypted key, is in LeftOut)
         Own<EmploymentHeroAttention>("employment-hero-attention.csv", "Staff the Employment Hero sync needs an Admin to look at, and why.") with
         {

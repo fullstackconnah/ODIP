@@ -291,6 +291,8 @@ public class NotificationDispatchBackgroundService : BackgroundService
                 IntegrationDegradedTemplate.Render(Deserialize<IntegrationDegradedPayload>(payloadJson), baseUrl),
             NotificationEventType.IntakeBooked =>
                 IntakeVisitStaffTemplate.Render(Deserialize<IntakeVisitStaffPayload>(payloadJson), baseUrl),
+            NotificationEventType.StaffJoinedViaMicrosoft =>
+                StaffJoinedViaMicrosoftTemplate.Render(Deserialize<StaffJoinedViaMicrosoftPayload>(payloadJson), baseUrl),
             _ => throw new NotSupportedException($"No template registered for event type {type}"),
         };
 

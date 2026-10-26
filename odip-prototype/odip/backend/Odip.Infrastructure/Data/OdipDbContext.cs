@@ -89,6 +89,7 @@ public class OdipDbContext : DbContext
     public DbSet<SupportActivityGroup> SupportActivityGroups => Set<SupportActivityGroup>();
     public DbSet<SupportCatalogueItem> SupportCatalogueItems => Set<SupportCatalogueItem>();
     public DbSet<ProviderSettings> ProviderSettings => Set<ProviderSettings>();
+    public DbSet<MicrosoftTenantLink> MicrosoftTenantLinks => Set<MicrosoftTenantLink>();
     public DbSet<Invoice> Invoices => Set<Invoice>();
     public DbSet<InvoiceLine> InvoiceLines => Set<InvoiceLine>();
     public DbSet<InvoiceNumberCounter> InvoiceNumberCounters => Set<InvoiceNumberCounter>();
@@ -804,6 +805,19 @@ public class OdipDbContext : DbContext
                 .IsUnique()
                 .HasDatabaseName(User.ExternalPayrollIdIndexName)
                 .HasFilter("\"ExternalPayrollId\" IS NOT NULL");
+            // One ODIP user per Microsoft identity, across organisations. Filtered so every unlinked row is outside it.
+            entity.HasIndex(e => new { e.MicrosoftTenantId, e.MicrosoftObjectId })
+                .IsUnique()
+                .HasDatabaseName(User.MicrosoftIdentityIndexName)
+                .HasFilter("\"MicrosoftObjectId\" IS NOT NULL");
+        });
+
+        modelBuilder.Entity<MicrosoftTenantLink>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.TenantId).IsUnique().HasDatabaseName(MicrosoftTenantLink.OrganisationIndexName);
+            entity.HasIndex(e => e.MicrosoftTenantId).IsUnique().HasDatabaseName(MicrosoftTenantLink.MicrosoftTenantIdIndexName);
+            entity.HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         });
 
         // ── TripClaim ─────────────────────────────────────────────
