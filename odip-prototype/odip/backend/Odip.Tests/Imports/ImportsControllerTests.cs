@@ -57,10 +57,10 @@ public class ImportsControllerTests
     {
         var (controller, db) = Controller();
         using var _ = db;
-        var refused = Assert.IsType<ObjectResult>((await controller.Preview("participants", Upload("people.xls", "a,b\n1,2\n"), null, CancellationToken.None)).Result);
+        var refused = Assert.IsType<ObjectResult>((await controller.Preview("participants", Upload("people.xls", "a,b\n1,2\n"), null, null, null, null, CancellationToken.None)).Result);
         Assert.Equal(400, refused.StatusCode);
         Assert.Equal("Upload a .csv or .xlsx file. An older .xls workbook can be saved as .xlsx from Excel.", Assert.IsType<ApiResponse<ImportPreviewDto>>(refused.Value).Errors.Single());
-        Assert.IsType<NotFoundObjectResult>((await controller.Preview("vehicles", Upload("people.csv", "a\n1\n"), null, CancellationToken.None)).Result);
+        Assert.IsType<NotFoundObjectResult>((await controller.Preview("vehicles", Upload("people.csv", "a\n1\n"), null, null, null, null, CancellationToken.None)).Result);
     }
 
     [Fact]
@@ -69,7 +69,7 @@ public class ImportsControllerTests
         var (controller, db) = Controller();
         using var _ = db;
         const string csv = "First name,Last name\nAva,Stone\nBen,Lee\n";
-        var committed = Assert.IsType<OkObjectResult>((await controller.Commit("participants", Upload("people.csv", csv), null, "Active", "key-1", CancellationToken.None)).Result);
+        var committed = Assert.IsType<OkObjectResult>((await controller.Commit("participants", Upload("people.csv", csv), null, "Active", "key-1", null, null, null, CancellationToken.None)).Result);
         var result = Assert.IsType<ApiResponse<ImportResultDto>>(committed.Value).Data!;
         Assert.Equal(2, result.CreatedCount);
 
@@ -91,7 +91,7 @@ public class ImportsControllerTests
     {
         var (controller, db) = Controller();
         using var _ = db;
-        var file = Assert.IsType<FileContentResult>(controller.Template("participants"));
+        var file = Assert.IsType<FileContentResult>(controller.Template("participants", null));
         Assert.Equal(("odip-participants-template.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"), (file.FileDownloadName, file.ContentType));
     }
 
@@ -100,11 +100,11 @@ public class ImportsControllerTests
     {
         var (controller, db) = Controller();
         using var _ = db;
-        var file = Assert.IsType<FileContentResult>(controller.Template("funding-plans"));
+        var file = Assert.IsType<FileContentResult>(controller.Template("funding-plans", null));
         Assert.Equal("odip-funding-plans-template.xlsx", file.FileDownloadName);
 
         const string csv = "NDIS number,Plan start,Plan end,Support category,Managed by,Amount\n430000001,01/07/2026,30/06/2027,Core,Self managed,100\n";
-        var preview = Assert.IsType<OkObjectResult>((await controller.Preview("funding-plans", Upload("budgets.csv", csv), null, CancellationToken.None)).Result);
+        var preview = Assert.IsType<OkObjectResult>((await controller.Preview("funding-plans", Upload("budgets.csv", csv), null, null, null, null, CancellationToken.None)).Result);
         var row = Assert.IsType<ApiResponse<ImportPreviewDto>>(preview.Value).Data!.Rows.Single();
         Assert.Equal("No participant in ODIP has this NDIS number. Import or add them first.", row.Reasons.Single());
     }

@@ -39,11 +39,18 @@ public class ImportsController : ControllerBase
         _logger = logger;
     }
 
+    private static ImportShiftShape? ParseShape(string? shape) =>
+        Enum.TryParse<ImportShiftShape>(shape, ignoreCase: true, out var parsed) && Enum.IsDefined(parsed) ? parsed : null;
+
+    private static ImportShiftOptions? ShiftOptions(string? shape, string? from, int? weeks) =>
+        ParseShape(shape) is { } s ? new ImportShiftOptions(s, DateOnly.TryParseExact(from, "yyyy-MM-dd", out var day) ? day : null, weeks) : null;
+
     private static ImportKind? Kind(string kind) => kind switch
     {
         "participants" => ImportKind.Participants,
         "staff" => ImportKind.Staff,
         "funding-plans" => ImportKind.FundingPlans,
+        "upcoming-shifts" => ImportKind.UpcomingShifts,
         _ => null,
     };
 
@@ -51,29 +58,29 @@ public class ImportsController : ControllerBase
     public Task<ActionResult<ApiResponse<List<ImportBatchDto>>>> History(CancellationToken ct) => Run(() => _imports.HistoryAsync(ct));
 
     [HttpGet("{kind}/template")]
-    public IActionResult Template(string kind) =>
+    public IActionResult Template(string kind, [FromQuery] string? shape) =>
         Kind(kind) is { } k
-            ? File(ImportTemplate.Build(k), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ImportTemplate.FileName(k))
+            ? File(ImportTemplate.Build(k, ParseShape(shape) ?? ImportShiftShape.Pattern), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ImportTemplate.FileName(k, ParseShape(shape) ?? ImportShiftShape.Pattern))
             : NotFound(ApiResponse<bool>.Fail("Unknown import type."));
 
     [HttpPost("{kind}/preview")]
     [RequestSizeLimit(MaxRequestBytes)]
     [RequestFormLimits(MultipartBodyLengthLimit = MaxRequestBytes, MemoryBufferThreshold = MaxRequestBytes)]
-    public async Task<ActionResult<ApiResponse<ImportPreviewDto>>> Preview(string kind, IFormFile? file, [FromForm] string? mapping, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<ImportPreviewDto>>> Preview(string kind, IFormFile? file, [FromForm] string? mapping, [FromForm] string? shape, [FromForm] string? from, [FromForm] int? weeks, CancellationToken ct)
     {
         if (Kind(kind) is not { } k) return NotFound(ApiResponse<ImportPreviewDto>.Fail("Unknown import type."));
-        return await Run(async () => await _imports.PreviewAsync(k, await ReadAsync(file, ct), file!.FileName, ParseMapping(mapping), ct, User));
+        return await Run(async () => await _imports.PreviewAsync(k, await ReadAsync(file, ct), file!.FileName, ParseMapping(mapping), ct, User, ShiftOptions(shape, from, weeks)));
     }
 
     [HttpPost("{kind}/commit")]
     [RequestSizeLimit(MaxRequestBytes)]
     [RequestFormLimits(MultipartBodyLengthLimit = MaxRequestBytes, MemoryBufferThreshold = MaxRequestBytes)]
     public async Task<ActionResult<ApiResponse<ImportResultDto>>> Commit(string kind, IFormFile? file, [FromForm] string? mapping,
-        [FromForm] string? landing, [FromForm] string? idempotencyKey, CancellationToken ct)
+        [FromForm] string? landing, [FromForm] string? idempotencyKey, [FromForm] string? shape, [FromForm] string? from, [FromForm] int? weeks, CancellationToken ct)
     {
         if (Kind(kind) is not { } k) return NotFound(ApiResponse<ImportResultDto>.Fail("Unknown import type."));
         ImportLanding? where = Enum.TryParse<ImportLanding>(landing, ignoreCase: true, out var parsed) && Enum.IsDefined(parsed) ? parsed : null;
-        return await Run(async () => await _imports.CommitAsync(k, await ReadAsync(file, ct), file!.FileName, ParseMapping(mapping), where, idempotencyKey ?? "", User, ct));
+        return await Run(async () => await _imports.CommitAsync(k, await ReadAsync(file, ct), file!.FileName, ParseMapping(mapping), where, idempotencyKey ?? "", User, ct, ShiftOptions(shape, from, weeks)));
     }
 
     [HttpPost("{batchId:guid}/undo")]

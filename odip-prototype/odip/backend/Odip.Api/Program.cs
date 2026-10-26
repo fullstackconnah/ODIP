@@ -206,6 +206,9 @@ builder.Services.AddScoped<Odip.Infrastructure.Services.ElectronicSigningEvidenc
 // roster writes use (the API owns it, so the infrastructure services reach it through this seam); the top-up job itself is registered below with the other hosted services.
 builder.Services.AddSingleton<Odip.Infrastructure.Rostering.IRosterPlacementGate, Odip.Api.Services.RosterPlacementGate>();
 builder.Services.AddSingleton<Odip.Infrastructure.Rostering.RosterShiftGenerator>();
+// Scoped: RosterAvailability holds the request's db. Start rostering's one body, shared by the Start endpoint and the Upcoming shifts import.
+builder.Services.AddScoped<Odip.Infrastructure.Rostering.RosterAvailability>();
+builder.Services.AddScoped<Odip.Infrastructure.Rostering.RosterWeekStarter>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.ServiceAgreementApprovalService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.DemoJourneySimulationService>();
 // DOC-01 — Intake Form / Participant Profile PDF exports.

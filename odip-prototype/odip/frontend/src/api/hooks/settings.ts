@@ -36,10 +36,16 @@ export function useAdminTenantUsers(tenantId: string | null) {
 
 const VISIBLE_WORKSPACES = { hiddenAccommodation: false, hiddenVehicles: false }
 
+/** The organisation the session is working in: the one a SuperAdmin is viewing, else the signed-in user's own. */
+export function currentTenantId(): string | null {
+  try {
+    const user = JSON.parse(localStorage.getItem('odip_user') || '{}')
+    return localStorage.getItem('odip_viewing_tenant') ?? user.tenantId ?? null
+  } catch { return null }
+}
+
 function moduleVisibilityKey() {
-  const user = JSON.parse(localStorage.getItem('odip_user') || '{}')
-  const tenant = localStorage.getItem('odip_viewing_tenant') ?? user.tenantId ?? null
-  return ['module-visibility', tenant] as const
+  return ['module-visibility', currentTenantId()] as const
 }
 
 export function useModuleVisibility() {

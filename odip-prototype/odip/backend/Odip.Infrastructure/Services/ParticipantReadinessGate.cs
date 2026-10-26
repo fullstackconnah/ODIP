@@ -4,7 +4,7 @@ using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Infrastructure.Data;
 
-namespace Odip.Api.Services;
+namespace Odip.Infrastructure.Services;
 
 /// <summary>
 /// The single fail-closed eligibility rule for participant activation and operational placement.

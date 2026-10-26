@@ -2,7 +2,7 @@ using Odip.Domain.Funding;
 using Odip.Domain.Rostering;
 using Odip.Domain.Rostering.Services;
 
-namespace Odip.Api.Rostering;
+namespace Odip.Infrastructure.Rostering;
 
 /// <summary>
 /// What the roster gate does with the budget findings of a shift (budget phase 3), on top of <see cref="RosterGate"/>, which it leaves as it is.

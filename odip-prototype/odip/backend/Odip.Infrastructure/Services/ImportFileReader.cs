@@ -108,6 +108,8 @@ public static class ImportFileReader
     private static string CellText(IXLCell cell)
     {
         if (cell.HasFormula) cell.Value = cell.CachedValue;
+        // A time-only cell is a day fraction on Excel's zero date: keep the time, not the date.
+        if (cell.DataType == XLDataType.DateTime && cell.GetDateTime() is { Year: <= 1900 } clock) return clock.ToString("HH:mm", CultureInfo.InvariantCulture);
         return cell.DataType == XLDataType.DateTime
             ? cell.GetDateTime().ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
             : cell.GetFormattedString();

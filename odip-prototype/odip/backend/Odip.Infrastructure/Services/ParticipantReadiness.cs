@@ -4,7 +4,7 @@ using Odip.Domain.Enums;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
 
-namespace Odip.Api.Services;
+namespace Odip.Infrastructure.Services;
 
 /// <summary>Why an activation is refused in Enforce mode (None when it is not).</summary>
 public enum ActivationBlock { None, EvidenceRequired, FundingNotRecorded }

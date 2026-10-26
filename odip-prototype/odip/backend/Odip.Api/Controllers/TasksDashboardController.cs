@@ -7,9 +7,11 @@ using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Incidents;
+using Odip.Domain.Rostering;
 using Odip.Domain.Interfaces;
 using Odip.Domain.Tasks;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Integrations;
 using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
@@ -500,6 +502,29 @@ public class DashboardController : ControllerBase
     {
         _db = db;
         _clock = clock ?? TimeProvider.System;
+    }
+
+    public const string ChooseOrganisation = "Choose an organisation to view as first: setup steps belong to one organisation.";
+
+    [HttpGet("setup")]
+    [Authorize(Roles = "Admin,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<SetupStatusDto>>> GetSetup(
+        [FromServices] ICurrentTenant tenant, [FromServices] IntegrationKeyProtector keys, CancellationToken ct)
+    {
+        // An unscoped SuperAdmin bypasses every tenant filter: the counts would span all organisations.
+        if (tenant.IsSuperAdmin || tenant.TenantId is null)
+            return BadRequest(ApiResponse<SetupStatusDto>.Fail(ChooseOrganisation));
+
+        // A week was published once any shift is past Draft: Published, InProgress, PendingReview and Completed all count.
+        var firstPublished = await _db.Shifts.Where(s => s.Status != ShiftStatus.Draft && s.Status != ShiftStatus.Cancelled)
+            .OrderBy(s => s.ServiceDate).Select(s => (DateOnly?)s.ServiceDate).FirstOrDefaultAsync(ct);
+        return Ok(ApiResponse<SetupStatusDto>.Ok(new SetupStatusDto(
+            StaffCount: await _db.Users.CountAsync(u => u.IsActive && u.Role != UserRole.Admin && u.Role != UserRole.SuperAdmin, ct),
+            ParticipantCount: await _db.Participants.CountAsync(p => p.IsActive, ct),
+            ParticipantsWithPlanCount: await _db.Participants.CountAsync(p => p.IsActive && _db.FundingPlans.Any(f => f.ParticipantId == p.Id), ct),
+            FirstPublishedWeekStart: firstPublished is { } d ? RosterWeek.MondayOf(d) : null,
+            HasInvoice: await _db.Invoices.AnyAsync(i => i.Status != InvoiceStatus.Voided, ct),
+            EmploymentHeroAvailable: keys.IsConfigured)));
     }
 
     [HttpGet("summary")]

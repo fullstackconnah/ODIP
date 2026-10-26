@@ -29,7 +29,7 @@ export function usePreviewImport() {
 
 /** The lists an import or an undo changes. A funding plans import also changes each participant's Funding tab, the onboarding "Funding recorded" gate and the Budgets list. */
 function refreshAfterImport(qc: ReturnType<typeof useQueryClient>) {
-  for (const key of ['imports', 'participants', 'staff', 'participant-funding', 'onboarding', 'participant-onboarding-worklist']) qc.invalidateQueries({ queryKey: [key] })
+  for (const key of ['imports', 'participants', 'staff', 'participant-funding', 'onboarding', 'participant-onboarding-worklist', 'dashboard']) qc.invalidateQueries({ queryKey: [key] })
   refreshBudgetWarnings(qc)
 }
 

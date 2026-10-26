@@ -1738,6 +1738,12 @@ const publicHolidays = [
   { id: 'ph-0005', date: '2026-05-04', name: 'Labour Day', state: 'QLD' },
 ]
 
+// Get set up card (SetupStatusDto): a FINISHED organisation, so no card shows by default; a capture overrides it per state with page.route.
+const dashboardSetup = {
+  staffCount: 20, participantCount: 40, participantsWithPlanCount: 40,
+  firstPublishedWeekStart: addDaysIso(new Date().toISOString().slice(0, 10), -60), hasInvoice: true, employmentHeroAvailable: true,
+}
+
 // Dashboard summary (DashboardSummaryDto)
 const dashboardSummary = {
   upcomingTripCount: 3,
@@ -2532,6 +2538,7 @@ const routes = [
   ...invoiceMock.get,
   ['provider-settings', () => invoiceMock.settingsDto(providerSettingsRow)],
   ['dashboard/summary', () => dashboardSummary],
+  ['dashboard/setup', () => dashboardSetup],
   ['plan-pricing/settings', () => planPricingSettings],
   ['service-agreements/ending', () => agreementsEnding()],
   // The newest revision in full, the older ones as summaries; one revision in full by id.

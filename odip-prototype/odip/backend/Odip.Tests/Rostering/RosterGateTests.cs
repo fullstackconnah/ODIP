@@ -2,6 +2,7 @@ using Odip.Api.Rostering;
 using Odip.Domain.Rostering;
 using Odip.Domain.Rostering.Services;
 using Xunit;
+using Odip.Infrastructure.Rostering;
 
 namespace Odip.Tests.Rostering;
 
