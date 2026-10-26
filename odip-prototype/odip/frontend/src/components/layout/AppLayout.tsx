@@ -544,10 +544,10 @@ export default function AppLayout() {
       <div className={`flex-1 min-w-0 ${collapsed ? 'lg:ml-16' : 'lg:ml-[232px]'} lg:transition-[margin-left] lg:duration-200 lg:ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:lg:transition-none flex flex-col min-h-screen`}>
         {/* Top bar — fixed 48px */}
         <header className="sticky top-0 z-30 h-12 bg-[var(--color-background)]/80 backdrop-blur-xl shadow-[var(--shadow-hairline)]">
-          <div className="flex items-center justify-between h-full px-[var(--gutter,20px)]">
-            <div className="flex min-w-0 items-center gap-4">
+          <div className="flex items-center justify-between gap-2 h-full px-[var(--gutter,20px)]">
+            <div className={`flex min-w-0 items-center gap-4 ${isSuperAdmin ? 'max-sm:gap-2' : ''}`}>
               <button
-                className="flex items-center justify-center lg:hidden min-[390px]:shrink-0 p-2 pointer-coarse:size-[var(--tap-min)] pointer-coarse:p-0 rounded-md hover:bg-[var(--color-accent)] transition-colors"
+                className="flex items-center justify-center lg:hidden shrink-0 p-2 pointer-coarse:size-[var(--tap-min)] pointer-coarse:p-0 rounded-md hover:bg-[var(--color-accent)] transition-colors"
                 onClick={() => setSidebarOpen(!sidebarOpen)}
                 title={sidebarOpen ? 'Close menu' : 'Open menu'}
                 aria-label={sidebarOpen ? 'Close menu' : 'Open menu'}
@@ -557,16 +557,16 @@ export default function AppLayout() {
                 {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </button>
               {user.tenantName && (
-                <span title={user.tenantName} className={`${isSuperAdmin ? 'hidden sm:inline-block' : 'inline-block'} max-w-[7.5rem] truncate sm:max-w-none text-xs bg-[var(--color-primary)]/10 text-[var(--color-primary)] px-2.5 py-0.5 rounded-full border border-[var(--color-primary)]/20 font-medium`}>
+                <span title={user.tenantName} className={`${isSuperAdmin ? 'hidden md:inline-block' : 'inline-block'} max-w-[7.5rem] truncate sm:max-w-none text-xs bg-[var(--color-primary)]/10 text-[var(--color-primary)] px-2.5 py-0.5 rounded-full border border-[var(--color-primary)]/20 font-medium`}>
                   {user.tenantName}
                 </span>
               )}
               {/* Page navigation only: the old entity-search field had no query or results behaviour. */}
-              <div className="min-[390px]:shrink-0">
-                <PlatformDirectoryTrigger compact entries={platformNavigation(permissions, savedVisibility)} />
+              <div className="shrink-0">
+                <PlatformDirectoryTrigger compact tight={isSuperAdmin && !!viewingTenantId} entries={platformNavigation(permissions, savedVisibility)} />
               </div>
             </div>
-            <div className="flex items-center gap-3 max-lg:gap-2">
+            <div className="flex shrink-0 items-center gap-3 max-lg:gap-2">
               {isSuperAdmin && <TenantSwitcher />}
               {isSuperAdmin && viewingTenantId && <UserSwitcher />}
               <WhatsNewButton />

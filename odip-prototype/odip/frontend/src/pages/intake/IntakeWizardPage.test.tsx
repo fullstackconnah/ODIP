@@ -10,14 +10,14 @@ import {
   STEP_CULTURAL_FIELDS, STEP_SUPPORT_FIELDS, STEP_MEDICAL_FIELDS, STEP_BEHAVIOUR_FIELDS, STEP_RISKS_FIELDS,
 } from '@/lib/participantSchema'
 
-const { mockCreate, mockUpdate, mockSave, mockParticipant } = vi.hoisted(() => ({
-  mockCreate: vi.fn(), mockUpdate: vi.fn(), mockSave: vi.fn(), mockParticipant: vi.fn(),
+const { mockCreate, mockUpdate, mockSave, mockParticipant, savePending } = vi.hoisted(() => ({
+  mockCreate: vi.fn(), mockUpdate: vi.fn(), mockSave: vi.fn(), mockParticipant: vi.fn(), savePending: { value: false },
 }))
 
 vi.mock('@/api/hooks', () => ({
   useCreateParticipant: () => ({ mutateAsync: mockCreate, isPending: false, isError: false }),
   useUpdateParticipant: () => ({ mutateAsync: mockUpdate, isPending: false, isError: false }),
-  useSaveParticipantIntake: () => ({ mutateAsync: mockSave, isPending: false, isError: false }),
+  useSaveParticipantIntake: () => ({ mutateAsync: mockSave, isPending: savePending.value, isError: false }),
   useParticipantIntakeSnapshots: () => ({ data: [], refetch: vi.fn() }),
   useDownloadParticipantIntakeSnapshotPdf: () => ({ mutate: vi.fn(), isPending: false }),
   useParticipant: mockParticipant,
@@ -113,7 +113,7 @@ async function walkToReview(user: ReturnType<typeof userEvent.setup>) {
 beforeEach(() => {
   mockCreate.mockReset(); mockCreate.mockResolvedValue({ success: true, data: { id: 'new-participant-1' } })
   mockUpdate.mockReset(); mockUpdate.mockResolvedValue({ success: true })
-  mockSave.mockReset(); mockSave.mockResolvedValue({ success: true })
+  mockSave.mockReset(); mockSave.mockResolvedValue({ success: true }); savePending.value = false
   mockParticipant.mockReset(); mockParticipant.mockReturnValue({ data: undefined, isLoading: false })
 })
 
@@ -629,5 +629,42 @@ describe('IntakeWizardPage — meeting quick wins', () => {
     const complete = screen.getByRole('button', { name: /complete intake/i })
     expect(Array.from(cancel.parentElement!.children)).toEqual([draftBtn, cancel, complete])
     expect(back.parentElement).not.toBe(cancel.parentElement)
+  })
+})
+
+describe('IntakeWizardPage — finish follow-ups', () => {
+  // Edit mode: the stored draft carries Ndis / SelfManaged / SharedSupport / None, the raw names Review used to print.
+  async function walkDraftToReview(user: ReturnType<typeof userEvent.setup>, overrides: Record<string, unknown> = {}) {
+    mockParticipant.mockReturnValue({ data: draft({ serviceStreams: 'InHomeSupport', overnightSupport: 'ActiveNight', ...overrides }), isLoading: false })
+    renderPage('/participants/draft-1/intake')
+    for (let i = 0; i < 8; i++) await user.click(screen.getByRole('button', { name: /^next$/i }))
+    await expectStep(/review/i)
+  }
+
+  it('Review shows plan details in words, never the enum names', async () => {
+    const user = userEvent.setup()
+    await walkDraftToReview(user)
+    for (const raw of ['Ndis', 'SelfManaged', 'SharedSupport', 'ActiveNight', 'InHomeSupport']) expect(screen.queryByText(raw)).not.toBeInTheDocument()
+    for (const words of ['NDIS', 'Self Managed', 'Shared Support', 'Active Night', 'In-Home Support']) expect(screen.getByText(words)).toBeInTheDocument()
+  })
+
+  it('Review splits an unknown enum value into words rather than printing it raw', async () => {
+    const user = userEvent.setup()
+    await walkDraftToReview(user, { overnightSupport: 'NightOwlSupport' })
+    expect(screen.getByText('Night Owl Support')).toBeInTheDocument()
+    expect(screen.queryByText('NightOwlSupport')).not.toBeInTheDocument()
+  })
+
+  it('Review joins several service streams as words, comma separated', async () => {
+    const user = userEvent.setup()
+    await walkDraftToReview(user, { serviceStreams: 'InHomeSupport, CommunityNursing' })
+    expect(screen.getByText('In-Home Support, Community Nursing')).toBeInTheDocument()
+  })
+
+  it('the busy label uses a single ellipsis character', async () => {
+    const user = userEvent.setup()
+    savePending.value = true // the mutation is mid-flight
+    await walkDraftToReview(user)
+    expect(screen.getByRole('button', { name: 'Saving…' })).toBeInTheDocument()
   })
 })

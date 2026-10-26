@@ -57,10 +57,11 @@ import {
   STEP_PARTICIPANT_DETAILS_FIELDS, STEP_NDIS_FUNDING_FIELDS, STEP_CONTACTS_FIELDS,
   STEP_CULTURAL_FIELDS, STEP_SUPPORT_FIELDS, STEP_MEDICAL_FIELDS, STEP_BEHAVIOUR_FIELDS, STEP_RISKS_FIELDS,
 } from '@/lib/participantSchema'
-import { LIVING_ARRANGEMENT_LABELS, formatServiceStreams, parseServiceStreams } from '@/api/types/participants'
+import { LIVING_ARRANGEMENT_LABELS, OVERNIGHT_SUPPORT_LABELS, SERVICE_STREAM_LABELS, FUNDING_SOURCE_LABELS, formatServiceStreams, parseServiceStreams } from '@/api/types/participants'
 import { newCompletionRequestId } from '@/lib/completionRequestId'
 import { ONBOARDING_TABLE_PATH, ENQUIRIES_TABLE_PATH, intakeCompleteState } from './intakeComplete'
 import { planTypeComplianceWarning } from '@/api/types/contacts'
+import { PLAN_TYPE_LABELS, SUPPORT_RATIO_LABELS } from '@/api/types/enums'
 import type { PlanType, ServiceStream } from '@/api/types/enums'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { focusField, triStateToBool, boolToTriState, extractErrorMessage } from './intakeFormat'
@@ -84,6 +85,12 @@ const CULTURAL_TRI_STATE_FIELDS = [
 /** Review-step display helper for a tri-state ('true' | 'false' | '' | undefined) field. */
 function yesNoUnknown(value: string | undefined): string {
   return value === 'true' ? 'Yes' : value === 'false' ? 'No' : 'Not recorded'
+}
+
+/** Review-step display helper for an enum value: its label, else the name split into words, else a dash. */
+function enumWords(labels: Record<string, string>, value: string | null | undefined): string {
+  if (!value) return '—'
+  return labels[value] ?? value.replace(/([a-z])([A-Z])/g, '$1 $2')
 }
 
 export default function IntakeWizardPage() {
@@ -350,7 +357,7 @@ export default function IntakeWizardPage() {
   const secondaryActions: WizardSecondaryAction[] = [
     {
       key: 'save-draft',
-      label: savingDraft ? 'Saving draft...' : 'Save as draft',
+      label: savingDraft ? 'Saving draft…' : 'Save as draft',
       onClick: handleSaveDraft,
       disabled: savingDraft || saveMutation.isPending,
     },
@@ -371,11 +378,11 @@ export default function IntakeWizardPage() {
         )
       } else if (step.key === 'ndisFunding') {
         rows.push(
-          { label: 'Funding Source', value: values.fundingSource || '—' },
+          { label: 'Funding Source', value: enumWords(FUNDING_SOURCE_LABELS, values.fundingSource) },
           { label: 'NDIS Number', value: values.ndisNumber || '—' },
-          { label: 'Plan Type', value: values.planType || '—' },
+          { label: 'Plan Type', value: enumWords(PLAN_TYPE_LABELS, values.planType) },
           { label: 'Region', value: values.region || '—' },
-          { label: 'Service Streams', value: (values.serviceStreams ?? []).join(', ') || '—' },
+          { label: 'Service Streams', value: (values.serviceStreams ?? []).map((stream) => enumWords(SERVICE_STREAM_LABELS, stream)).join(', ') || '—' },
           { label: 'Plan-type compliance', value: planTypeComplianceWarningValue ?? '' },
         )
       } else if (step.key === 'contacts') {
@@ -392,8 +399,8 @@ export default function IntakeWizardPage() {
       } else if (step.key === 'support') {
         rows.push(
           { label: 'High Support', value: values.isHighSupport ? 'Yes' : 'No' },
-          { label: 'Support Ratio', value: values.supportRatio || '—' },
-          { label: 'Overnight Support', value: values.overnightSupport || '—' },
+          { label: 'Support Ratio', value: enumWords(SUPPORT_RATIO_LABELS, values.supportRatio) },
+          { label: 'Overnight Support', value: enumWords(OVERNIGHT_SUPPORT_LABELS, values.overnightSupport) },
           { label: 'Equipment notes', value: values.equipmentRequirements || '—' },
         )
       } else if (step.key === 'medical') {
@@ -569,7 +576,8 @@ export default function IntakeWizardPage() {
           reviewActionsRight
           secondaryActions={secondaryActions}
           cancelTo={isEditMode ? `/participants/${id}` : '/participants'}
-          submitLabel={saveMutation.isPending ? (isEditMode ? 'Saving...' : 'Creating...') : 'Complete intake'}
+          submitReserve="Complete intake"
+          submitLabel={saveMutation.isPending ? (isEditMode ? 'Saving…' : 'Creating…') : 'Complete intake'}
           isSubmitting={saveMutation.isPending || wizard.isAdvancing}
         />
         </form>
