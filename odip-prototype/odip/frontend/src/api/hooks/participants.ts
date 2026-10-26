@@ -243,6 +243,7 @@ export function usePatchParticipant() {
       await qc.invalidateQueries({ queryKey: ['participant', id] })
       const cached = qc.getQueryData<ParticipantDetailDto>(['participant', id])?.groupRevisions
       for (const [k, n] of Object.entries(sent) as [ScalarGroupKey, number][]) {
+        // shortcut: client-side compare; server-normalised values (flag order, fundingOrganisation) can over-report a change, compare normalised values if this race matters.
         // Exactly n + 1 AND a field of this group changed: the server bumps a group just for a changed column, so a group this request carried unchanged (its n + 1 is someone else's save landing mid-request), or a jump by more than one, is not ours.
         const changed = !before || Object.entries(data[k]!).some(([f, v]) => JSON.stringify(v ?? null) !== JSON.stringify(before[f] ?? null))
         if (changed && res.data?.groupRevisions?.[k] === n + 1 && (cached?.[k] ?? 0) >= n + 1) ledger.set(`${id}/${k}/${n}`, n + 1)

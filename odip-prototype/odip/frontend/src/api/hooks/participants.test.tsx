@@ -382,10 +382,10 @@ describe('usePatchParticipant expectedRevisions', () => {
 
   it('H8 a group carried with no changed field is not this tab\'s save, even when the response shows n + 1', async () => {
     const { qc, result } = setup()
-    // Someone else's save of aboutMe landed (1 -> 2); this request only re-sent the values the cache already held.
-    qc.setQueryData(['participant', 'p1'], { id: 'p1', groupRevisions: { aboutMe: 2 }, goals: 'same', likesDislikes: null })
+    // Someone else's save of aboutMe landed (1 -> 2); this request only re-sent the values the cache already held. The server omits null members, so the cache has no likesDislikes key while the card sends null.
+    qc.setQueryData(['participant', 'p1'], { id: 'p1', groupRevisions: { aboutMe: 2 }, goals: 'same' })
     mockApiPatchRaw.mockResolvedValue(ok({ aboutMe: 2 }))
-    await result.current.mutateAsync({ id: 'p1', data: { aboutMe: { goals: 'same' }, expectedRevisions: { aboutMe: 1 } } })
+    await result.current.mutateAsync({ id: 'p1', data: { aboutMe: { goals: 'same', likesDislikes: null }, expectedRevisions: { aboutMe: 1 } } })
     await result.current.mutateAsync({ id: 'p1', data: { aboutMe: { goals: 'b' }, expectedRevisions: { aboutMe: 1 } } })
     expect(body(1).expectedRevisions).toEqual({ aboutMe: 1 })
   })
