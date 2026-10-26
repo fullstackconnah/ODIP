@@ -38,6 +38,11 @@ const colours = (loc, prop) => loc.evaluate((el, prop) => {
 
 const browser = await chromium.launch({ headless: true })
 try {
+  // Warm-up: the dev server builds its CSS and pre-bundles dependencies on the first visit, so the measured passes start from a settled page.
+  const warm = await (await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })).newPage()
+  await warm.goto(`${BASE_URL}/login`, { waitUntil: 'networkidle', timeout: 120_000 })
+  await warm.waitForTimeout(3000)
+  await warm.context().close()
   for (const scheme of ['light', 'dark']) {
     for (const vp of VIEWPORTS) {
       if (scheme === 'dark' && vp.name === '768') continue
