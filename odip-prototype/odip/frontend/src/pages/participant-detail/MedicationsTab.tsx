@@ -125,7 +125,7 @@ export default function MedicationsTab({ participantId }: { participantId: strin
         <h2 className="font-semibold text-[var(--color-foreground)]">Medications</h2>
         {canManageMedications && participantId && (
           <Button to={`/medications/new?participantId=${participantId}`}>
-            <Plus className="w-4 h-4" /> New medication
+            <Plus className="w-4 h-4" /> Add medication
           </Button>
         )}
       </div>
