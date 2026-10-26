@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { ShieldAlert } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { usePatchParticipant } from '@/api/hooks'
-import { extractErrorMessage } from '@/lib/utils'
+import { rethrowSectionError } from '@/lib/sectionConflict'
 import { FormField, labelClass } from '@/components/FormField'
 import { Dropdown } from '@/components/Dropdown'
 import { FactList } from '@/components/FactList'
@@ -15,6 +15,7 @@ import {
 import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS, AMBULANT_STATUSES, PERSONAL_CARE_LEVELS, RISK_RATING_LEVELS } from '@/api/types/enums'
 import type { AmbulantStatus, PersonalCareLevel, RiskRatingLevel, OvernightSupportType, SupportRatio } from '@/api/types/enums'
 import type { ParticipantDetailDto } from '@/api/types/participants'
+import type { PatchParticipantDto } from '@/api/types/participant-patch'
 import type { PatchSupportNeedsMobilityDto } from '@/api/types/participant-patch'
 
 function Tag({ label }: { label: string }) {
@@ -91,17 +92,17 @@ function snmSnapshot(p: ParticipantDetailDto): PatchSupportNeedsMobilityDto {
 
 /**
  * Saves one card's slice of the shared supportNeedsMobility group. The group is rebuilt from the LATEST cached participant when the
- * save runs (not from the props the card rendered with), and the save stays pending until the refetch lands: usePatchParticipant only
- * invalidates, so a second card saved straight after the first would otherwise put the first card's old value back.
+ * save runs (not from the props the card rendered with), and the save stays pending until the refetch lands (usePatchParticipant awaits it when expectedRevisions is
+ * sent), so a second card saved straight after the first would otherwise put the first card's old value back.
  * shortcut: two cards saved within one refetch of each other can still race; upgrade to a page-level save queue if users hit it.
  */
 function useSaveSnm(participantId: string, p: ParticipantDetailDto) {
   const qc = useQueryClient()
   const patch = usePatchParticipant()
-  return async (draft: Partial<PatchSupportNeedsMobilityDto>) => {
+  return async (draft: Partial<PatchSupportNeedsMobilityDto>, expected: PatchParticipantDto['expectedRevisions']) => {
     const latest = qc.getQueryData<ParticipantDetailDto>(['participant', participantId]) ?? p
-    await patch.mutateAsync({ id: participantId, data: { supportNeedsMobility: { ...snmSnapshot(latest), ...draft } } })
-    await qc.invalidateQueries({ queryKey: ['participant', participantId] })
+    // With expectedRevisions the hook itself waits for the refetch, so the next card saved straight after reads the fresh cache.
+    await patch.mutateAsync({ id: participantId, data: { supportNeedsMobility: { ...snmSnapshot(latest), ...draft }, expectedRevisions: expected } })
   }
 }
 
@@ -125,16 +126,16 @@ export function SupportNeedsSection({ p, participantId, canEdit, restrictiveLink
   const [draft, setDraft] = useState<SupportNeedsDraft>(saved)
   const isDirty = draft.isHighSupport !== saved.isHighSupport || draft.isIntensiveSupport !== saved.isIntensiveSupport || draft.supportRatio !== saved.supportRatio
 
-  async function handleSave() {
+  async function handleSave(expected: PatchParticipantDto['expectedRevisions']) {
     try {
-      await saveSnm(draft)
+      await saveSnm(draft, expected)
     } catch (err) {
-      throw new Error(extractErrorMessage(err, 'Failed to save Support Needs.'))
+      rethrowSectionError(err, 'Failed to save Support Needs.')
     }
   }
 
   return (
-    <SectionEditPanel title="Support Needs" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
+    <SectionEditPanel title="Support Needs" groups={['supportNeedsMobility']} revisions={p.groupRevisions} canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
       {(editing, startEdit) => editing ? (
         <div className="space-y-4">
           <FormField label="High Support" layout="checkbox">
@@ -195,11 +196,11 @@ export function MobilityAidsSection({ p, participantId, canEdit }: CommonSection
     || draft.mobilitySupportOptions.length !== saved.mobilitySupportOptions.length
     || draft.mobilitySupportOptions.some((v) => !saved.mobilitySupportOptions.includes(v))
 
-  async function handleSave() {
+  async function handleSave(expected: PatchParticipantDto['expectedRevisions']) {
     try {
-      await saveSnm(draft)
+      await saveSnm(draft, expected)
     } catch (err) {
-      throw new Error(extractErrorMessage(err, 'Failed to save Mobility Aids & Support.'))
+      rethrowSectionError(err, 'Failed to save Mobility Aids & Support.')
     }
   }
 
@@ -207,7 +208,7 @@ export function MobilityAidsSection({ p, participantId, canEdit }: CommonSection
   const readMobilityAidBadges = [p.mobilityAidWheelchair && 'Wheelchair', p.mobilityAidWalker && 'Walker'].filter((v): v is string => !!v)
 
   return (
-    <SectionEditPanel title="Mobility Aids & Support" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
+    <SectionEditPanel title="Mobility Aids & Support" groups={['supportNeedsMobility']} revisions={p.groupRevisions} canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
       {(editing, startEdit) => editing ? (
         <div className="space-y-4">
           <fieldset className="m-0 p-0 border-0">
@@ -287,16 +288,16 @@ export function OvernightSupportSection({ p, participantId, canEdit }: CommonSec
   const [draft, setDraft] = useState<OvernightDraft>(saved)
   const isDirty = draft.overnightSupport !== saved.overnightSupport || draft.overnightRatio !== saved.overnightRatio
 
-  async function handleSave() {
+  async function handleSave(expected: PatchParticipantDto['expectedRevisions']) {
     try {
-      await saveSnm(draft)
+      await saveSnm(draft, expected)
     } catch (err) {
-      throw new Error(extractErrorMessage(err, 'Failed to save Overnight Support.'))
+      rethrowSectionError(err, 'Failed to save Overnight Support.')
     }
   }
 
   return (
-    <SectionEditPanel title="Overnight Support" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
+    <SectionEditPanel title="Overnight Support" groups={['supportNeedsMobility']} revisions={p.groupRevisions} canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
       {(editing, startEdit) => editing ? (
         <div className="space-y-4">
           <FormField label="Overnight Support">
@@ -353,18 +354,18 @@ export function EquipmentSection({ p, participantId, canEdit }: CommonSectionPro
   const [draft, setDraft] = useState<EquipmentDraft>(saved)
   const isDirty = EQUIPMENT_FIELDS.some((f) => draft[f.key] !== saved[f.key])
 
-  async function handleSave() {
+  async function handleSave(expected: PatchParticipantDto['expectedRevisions']) {
     try {
-      await saveSnm(draft)
+      await saveSnm(draft, expected)
     } catch (err) {
-      throw new Error(extractErrorMessage(err, 'Failed to save Equipment.'))
+      rethrowSectionError(err, 'Failed to save Equipment.')
     }
   }
 
   const equipmentBadges = EQUIPMENT_FIELDS.filter((f) => p[f.key]).map((f) => f.label)
 
   return (
-    <SectionEditPanel title="Equipment" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
+    <SectionEditPanel title="Equipment" groups={['supportNeedsMobility']} revisions={p.groupRevisions} canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
       {(editing, startEdit) => editing ? (
         <fieldset className="m-0 p-0 border-0 space-y-2">
           <legend className="sr-only">Equipment</legend>
@@ -398,16 +399,16 @@ export function SupportNotesSection({ p, participantId, canEdit, field }: Common
   const saved = p[field] ?? ''
   const [draft, setDraft] = useState(saved)
 
-  async function handleSave() {
+  async function handleSave(expected: PatchParticipantDto['expectedRevisions']) {
     try {
-      await saveSnm({ [field]: draft.trim() || null })
+      await saveSnm({ [field]: draft.trim() || null }, expected)
     } catch (err) {
-      throw new Error(extractErrorMessage(err, `Failed to save ${title.toLowerCase()}.`))
+      rethrowSectionError(err, `Failed to save ${title.toLowerCase()}.`)
     }
   }
 
   return (
-    <SectionEditPanel title={title} canEdit={canEdit} isDirty={draft !== saved} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
+    <SectionEditPanel title={title} groups={['supportNeedsMobility']} revisions={p.groupRevisions} canEdit={canEdit} isDirty={draft !== saved} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
       {(editing, startEdit) => editing ? (
         <FormField label={title}>
           <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={2} placeholder={placeholder} />
@@ -455,7 +456,7 @@ export function MobilityFunctionalSection({ p, participantId, canEdit }: CommonS
   const [draft, setDraft] = useState<MobilityFunctionalDraft>(saved)
   const isDirty = (Object.keys(saved) as (keyof MobilityFunctionalDraft)[]).some((k) => draft[k] !== saved[k])
 
-  async function handleSave() {
+  async function handleSave(expected: PatchParticipantDto['expectedRevisions']) {
     try {
       await saveSnm({
         ambulantStatus: (draft.ambulantStatus || null) as AmbulantStatus | null,
@@ -467,9 +468,9 @@ export function MobilityFunctionalSection({ p, participantId, canEdit }: CommonS
         bowelCareDetail: draft.bowelCareDetail.trim() || null,
         menstruationSupport: draft.menstruationSupport.trim() || null,
         skinIntegrity: draft.skinIntegrity.trim() || null,
-      })
+      }, expected)
     } catch (err) {
-      throw new Error(extractErrorMessage(err, 'Failed to save Mobility & Functional.'))
+      rethrowSectionError(err, 'Failed to save Mobility & Functional.')
     }
   }
 
@@ -484,7 +485,7 @@ export function MobilityFunctionalSection({ p, participantId, canEdit }: CommonS
     .map((d) => ({ label: d.label, value: d.text ? <span className="whitespace-pre-line">{d.text}</span> : undefined }))
 
   return (
-    <SectionEditPanel title="Mobility & Functional" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
+    <SectionEditPanel title="Mobility & Functional" groups={['supportNeedsMobility']} revisions={p.groupRevisions} canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
       {(editing, startEdit) => editing ? (
         <div className="space-y-4">
           <div className="grid md:grid-cols-2 gap-4">

@@ -63,7 +63,7 @@ describe('ParticipantCulturalBackgroundSection — edit/save cycle', () => {
 
     expect(mockPatchMutateAsync).toHaveBeenCalledWith({
       id: 'participant-1',
-      data: { culturalBackground: expect.objectContaining({ isCald: true }) },
+      data: { culturalBackground: expect.objectContaining({ isCald: true }), expectedRevisions: {} },
     })
   })
 

@@ -27,6 +27,11 @@ function bodyOf<T = unknown>(error: unknown): ApiErrorBody<T> | undefined {
   return response?.data
 }
 
+/** The `data` payload of a failed call's envelope (e.g. the section-changed 409's current revisions), or undefined. */
+export function apiErrorData<T = unknown>(error: unknown): T | undefined {
+  return bodyOf<T>(error)?.data ?? undefined
+}
+
 /** HTTP status of a failed call, or undefined for a network failure (no response). */
 export function apiErrorStatus(error: unknown): number | undefined {
   return (error as { response?: { status?: number } } | null | undefined)?.response?.status

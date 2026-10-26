@@ -9,7 +9,9 @@ import { GENDERS } from '@/api/types/enums'
 import { GENDER_LABELS } from '@/api/types/participants'
 import type { Gender } from '@/api/types/enums'
 import type { ParticipantDetailDto } from '@/api/types/participants'
-import { extractErrorMessage, formatDateAu } from '@/lib/utils'
+import { formatDateAu } from '@/lib/utils'
+import { rethrowSectionError } from '@/lib/sectionConflict'
+import type { PatchParticipantDto } from '@/api/types/participant-patch'
 
 /**
  * PD-7: Identity card — CORE-02's `personalDetails` group (firstName, lastName, preferredName,
@@ -51,7 +53,7 @@ export function ParticipantIdentitySection({ p, participantId, canEdit }: { p: P
   const [draft, setDraft] = useState<IdentityDraft>(saved)
   const isDirty = (Object.keys(saved) as (keyof IdentityDraft)[]).some((k) => draft[k] !== saved[k])
 
-  async function handleSave() {
+  async function handleSave(expected: PatchParticipantDto['expectedRevisions']) {
     try {
       await patchParticipant.mutateAsync({
         id: participantId,
@@ -70,15 +72,16 @@ export function ParticipantIdentitySection({ p, participantId, canEdit }: { p: P
             email: draft.email.trim() || null,
           },
           preferredStaff: { preferredStaffId: draft.preferredStaffId || null },
+          expectedRevisions: expected,
         },
       })
     } catch (err) {
-      throw new Error(extractErrorMessage(err, 'Failed to save Identity.'))
+      rethrowSectionError(err, 'Failed to save Identity.')
     }
   }
 
   return (
-    <SectionEditPanel title="Identity" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
+    <SectionEditPanel title="Identity" groups={['personalDetails', 'preferredStaff']} revisions={p.groupRevisions} canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
       {(editing, startEdit) => editing ? (
         <div className="space-y-4">
           <div className={formGrid}>

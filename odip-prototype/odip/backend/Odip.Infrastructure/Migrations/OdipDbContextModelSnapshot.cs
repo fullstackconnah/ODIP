@@ -2656,6 +2656,27 @@ namespace Odip.Infrastructure.Migrations
                     b.ToTable("ParticipantContactRoles");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Entities.ParticipantGroupRevision", b =>
+                {
+                    b.Property<Guid>("ParticipantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("GroupKey")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<int>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("ParticipantId", "GroupKey");
+
+                    b.ToTable("ParticipantGroupRevisions");
+                });
+
             modelBuilder.Entity("Odip.Domain.Entities.ParticipantHealthCondition", b =>
                 {
                     b.Property<Guid>("Id")
@@ -7026,6 +7047,15 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("Person");
 
                     b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.ParticipantGroupRevision", b =>
+                {
+                    b.HasOne("Odip.Domain.Entities.Participant", null)
+                        .WithMany()
+                        .HasForeignKey("ParticipantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Odip.Domain.Entities.ParticipantHealthCondition", b =>

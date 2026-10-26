@@ -44,6 +44,7 @@ public class OdipDbContext : DbContext
     public DbSet<Person> People => Set<Person>();
     public DbSet<ParticipantContactRole> ParticipantContactRoles => Set<ParticipantContactRole>();
     public DbSet<SupportProfile> SupportProfiles => Set<SupportProfile>();
+    public DbSet<ParticipantGroupRevision> ParticipantGroupRevisions => Set<ParticipantGroupRevision>();
     public DbSet<ParticipantMedication> ParticipantMedications => Set<ParticipantMedication>();
     public DbSet<MedicationAdministration> MedicationAdministrations => Set<MedicationAdministration>();
     public DbSet<ParticipantNote> ParticipantNotes => Set<ParticipantNote>();
@@ -333,6 +334,15 @@ public class OdipDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(e => e.ParticipantId).IsUnique();
+        });
+
+        // ── ParticipantGroupRevision (one row per participant section) ──
+        modelBuilder.Entity<ParticipantGroupRevision>(e =>
+        {
+            e.HasKey(x => new { x.ParticipantId, x.GroupKey });
+            e.Property(x => x.GroupKey).HasMaxLength(40);
+            e.Property(x => x.Revision).IsConcurrencyToken();
+            e.HasOne<Participant>().WithMany().HasForeignKey(x => x.ParticipantId).OnDelete(DeleteBehavior.Cascade);
         });
 
         // ── EventTemplate ────────────────────────────────────────

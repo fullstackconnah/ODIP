@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { usePatchParticipant } from '@/api/hooks'
-import { formatDateAu, extractErrorMessage } from '@/lib/utils'
+import { formatDateAu } from '@/lib/utils'
+import { rethrowSectionError } from '@/lib/sectionConflict'
+import type { PatchParticipantDto } from '@/api/types/participant-patch'
 import { FormField } from '@/components/FormField'
 import { FactList } from '@/components/FactList'
 import { MaskedValue } from '@/components/MaskedValue'
@@ -39,7 +41,7 @@ export function ParticipantKeyIdentifiersSection({ p, participantId, canEdit }: 
 
   if (!canEdit && !hasAnyData) return null
 
-  async function handleSave() {
+  async function handleSave(expected: PatchParticipantDto['expectedRevisions']) {
     try {
       await patchParticipant.mutateAsync({
         id: participantId,
@@ -59,15 +61,16 @@ export function ParticipantKeyIdentifiersSection({ p, participantId, canEdit }: 
             weightKg: draft.weightKg.trim() ? Number(draft.weightKg) : null,
             heightCm: draft.heightCm.trim() ? Number(draft.heightCm) : null,
           },
+          expectedRevisions: expected,
         },
       })
     } catch (err) {
-      throw new Error(extractErrorMessage(err, 'Failed to save Key Identifiers.'))
+      rethrowSectionError(err, 'Failed to save Key Identifiers.')
     }
   }
 
   return (
-    <SectionEditPanel title="Key Identifiers" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
+    <SectionEditPanel title="Key Identifiers" groups={['keyIdentifiers']} revisions={p.groupRevisions} canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
       {(editing, startEdit) => editing ? (
         <div className={formGrid}>
           <FormField label="Pension Card Number" className={span.medium}>

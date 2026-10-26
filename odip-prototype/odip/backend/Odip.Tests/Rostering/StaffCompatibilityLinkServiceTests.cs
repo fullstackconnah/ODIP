@@ -378,4 +378,27 @@ public class StaffCompatibilityLinkServiceTests
         Assert.Equal(2, allRows.Count);
         Assert.Contains(allRows, r => r.TenantId == tenantB);
     }
+
+    [Fact]
+    public async Task Compat_upsert_to_preferred_bumps_preferredStaff()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db, preferredUserId: null);
+        var service = new StaffCompatibilityLinkService(db);
+        var row = new StaffParticipantCompatibility
+        {
+            Id = Guid.NewGuid(), UserId = staff.Id, ParticipantId = participant.Id,
+            Level = CompatibilityLevel.Preferred, AutoLinked = false, UpdatedAt = DateTime.UtcNow,
+        };
+        db.StaffParticipantCompatibilities.Add(row);
+        await service.SyncFromCompatibilityUpsertAsync(row, CompatibilityLevel.Allowed, CancellationToken.None);
+        await Odip.Infrastructure.Services.ParticipantGroupRevisions.SaveBumpingAsync(db, CancellationToken.None);
+        Assert.Equal(1, (await Odip.Infrastructure.Services.ParticipantGroupRevisions.ReadAsync(db, participant.Id, CancellationToken.None))["preferredStaff"]);
+
+        row.Level = CompatibilityLevel.Excluded;
+        await service.SyncFromCompatibilityUpsertAsync(row, CompatibilityLevel.Preferred, CancellationToken.None);
+        await Odip.Infrastructure.Services.ParticipantGroupRevisions.SaveBumpingAsync(db, CancellationToken.None);
+        Assert.Equal(2, (await Odip.Infrastructure.Services.ParticipantGroupRevisions.ReadAsync(db, participant.Id, CancellationToken.None))["preferredStaff"]);
+    }
 }

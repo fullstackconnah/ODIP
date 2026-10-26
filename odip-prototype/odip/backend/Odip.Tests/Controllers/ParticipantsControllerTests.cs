@@ -3375,4 +3375,44 @@ public class ParticipantsControllerTests
         }
         Assert.Equal(Domain.Enums.RiskRatingLevel.High, body.Data.OverallCommunityAccessRiskRating);
     }
+
+    private static async Task<Dictionary<string, int>> RevisionsAsync(OdipDbContext db, Guid id) =>
+        await ParticipantGroupRevisions.ReadAsync(db, id, CancellationToken.None);
+
+    [Fact]
+    public async Task Update_bumps_only_changed_groups()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true, IsDraft = true };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+        var dto = new UpdateParticipantDto
+        {
+            FirstName = "Sophia", LastName = "Brown", PlanType = Domain.Enums.PlanType.SelfManaged,
+            OvernightSupport = Domain.Enums.OvernightSupportType.None, OvernightRatio = Domain.Enums.SupportRatio.OneToOne,
+            SupportRatio = Domain.Enums.SupportRatio.OneToOne, IsActive = true, IsDraft = true,
+        };
+        Assert.IsType<OkObjectResult>((await controller.Update(participant.Id, dto, CancellationToken.None)).Result);
+        var revisions = await RevisionsAsync(db, participant.Id);
+        Assert.Equal(1, revisions["personalDetails"]);
+        Assert.Equal(15, revisions.Values.Count(v => v == 0));
+    }
+
+    [Fact]
+    public async Task SaveIntake_bumps_exactly_the_changed_groups()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = new Participant { Id = Guid.NewGuid(), FirstName = "Sophie", LastName = "Brown", IsActive = true, IsDraft = true };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+        var controller = new ParticipantsController(db, new StaffCompatibilityLinkService(db), new ParticipantDocumentService(db), new SafetyNoteSyncService(db));
+        var dto = MinimalCreateDto() with { FirstName = "Sophia", NdisNumber = "NDIS999", MobilityAidWheelchair = true, MedicalSummary = "Intake note.", IsDraft = true };
+        Assert.IsType<OkObjectResult>((await controller.SaveIntake(participant.Id, dto, CancellationToken.None)).Result);
+        var revisions = await RevisionsAsync(db, participant.Id);
+        foreach (var moved in new[] { "personalDetails", "ndisPlan", "supportNeedsMobility", "medical" })
+            Assert.Equal(1, revisions[moved]);
+        foreach (var never in new[] { "preferredStaff", "keyIdentifiers", "communityAccessBehaviour", "mealsAndDiet", "aboutMe", "supportsLookLike" })
+            Assert.Equal(0, revisions[never]);
+    }
 }

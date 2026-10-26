@@ -452,4 +452,74 @@ public class FundingPostgresTests : IClassFixture<PostgresFixture>
         Assert.True(deleted);
         Assert.Equal(1, await CountAsync(connectionString, "SELECT COUNT(*) FROM \"FundingPlans\" WHERE \"ParticipantId\" = @id", ("id", participantId)));
     }
+
+    private static async Task<int> NdisPlanRevisionAsync(string connectionString, Guid tenantId, Guid participantId)
+    {
+        await using var db = Open(connectionString, tenantId);
+        return await db.ParticipantGroupRevisions.Where(r => r.ParticipantId == participantId && r.GroupKey == "ndisPlan").Select(r => r.Revision).SingleOrDefaultAsync();
+    }
+
+    [SkippableFact]
+    public async Task Apply_dates_bumps_ndisPlan_only_when_the_dates_change()
+    {
+        RequirePostgres();
+        var (connectionString, tenantId, participants) = await SetUpAsync();
+        var participantId = participants[0];
+        Guid planId;
+        await using (var setup = Open(connectionString, tenantId))
+            planId = (await new FundingPlanService(setup, TimeProvider.System).CreateAsync(tenantId, participantId, WholePlan(D(2026, 7, 1), D(2027, 6, 30)), "setup", default)).Plan!.Id;
+
+        await using (var first = Open(connectionString, tenantId))
+            Assert.True((await new FundingPlanService(first, TimeProvider.System).ApplyDatesToProfileAsync(tenantId, participantId, planId, default))!.Changed);
+        Assert.Equal(1, await NdisPlanRevisionAsync(connectionString, tenantId, participantId));
+        await using (var again = Open(connectionString, tenantId))
+            Assert.False((await new FundingPlanService(again, TimeProvider.System).ApplyDatesToProfileAsync(tenantId, participantId, planId, default))!.Changed);
+        Assert.Equal(1, await NdisPlanRevisionAsync(connectionString, tenantId, participantId));
+    }
+
+    [SkippableFact]
+    public async Task Apply_dates_losing_the_revision_race_retries_once_inside_the_lock()
+    {
+        RequirePostgres();
+        var (connectionString, tenantId, participants) = await SetUpAsync();
+        var participantId = participants[0];
+        Guid planId;
+        await using (var setup = Open(connectionString, tenantId))
+        {
+            planId = (await new FundingPlanService(setup, TimeProvider.System).CreateAsync(tenantId, participantId, WholePlan(D(2026, 7, 1), D(2027, 6, 30)), "setup", default)).Plan!.Id;
+            setup.ParticipantGroupRevisions.Add(new ParticipantGroupRevision { ParticipantId = participantId, GroupKey = "ndisPlan", Revision = 1, UpdatedAt = DateTime.UtcNow });
+            await setup.SaveChangesAsync();
+        }
+
+        // Another writer bumps ndisPlan between this save's revision read and its UPDATE; the savepoint rolls this one back and the retry saves again.
+        var raced = false;
+        var race = new RaceOnFirstSave(async () =>
+        {
+            if (raced) return;
+            raced = true;
+            await using var other = Open(connectionString, tenantId);
+            var row = await other.ParticipantGroupRevisions.SingleAsync(r => r.ParticipantId == participantId && r.GroupKey == "ndisPlan");
+            row.Revision = 2;
+            await other.SaveChangesAsync();
+        });
+        await using (var apply = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseNpgsql(connectionString).AddInterceptors(race).Options, TenantOf(tenantId)))
+            Assert.True((await new FundingPlanService(apply, TimeProvider.System).ApplyDatesToProfileAsync(tenantId, participantId, planId, default))!.Changed);
+
+        Assert.True(raced);
+        Assert.Equal(3, await NdisPlanRevisionAsync(connectionString, tenantId, participantId));
+        await using var check = Open(connectionString, tenantId);
+        var participant = await check.Participants.SingleAsync(p => p.Id == participantId);
+        Assert.Equal(D(2026, 7, 1), participant.PlanStartDate);
+        Assert.Equal(D(2027, 6, 30), participant.PlanEndDate);
+    }
+
+    private sealed class RaceOnFirstSave(Func<Task> action) : Microsoft.EntityFrameworkCore.Diagnostics.SaveChangesInterceptor
+    {
+        public override async ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int>> SavingChangesAsync(
+            Microsoft.EntityFrameworkCore.Diagnostics.DbContextEventData eventData, Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int> result, CancellationToken ct = default)
+        {
+            await action();
+            return result;
+        }
+    }
 }

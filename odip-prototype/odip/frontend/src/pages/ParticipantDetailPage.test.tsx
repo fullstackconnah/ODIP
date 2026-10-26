@@ -1890,3 +1890,68 @@ describe('ParticipantDetailPage — masked IDs for screen readers', () => {
     expect(spoken).toBe('Hidden, ends in 7')
   })
 })
+
+// A card that is being edited keeps its place when a refetch flips `has`: the card would otherwise move to the other parent and remount, losing the draft.
+describe('ParticipantDetailPage — an open short card keeps its place', () => {
+  const conflict = Object.assign(new Error('409'), {
+    response: { status: 409, data: { success: false, code: 'participant-section-changed', errors: ['x'], data: { groupRevisions: { aboutMe: 1, risksHazardsSummary: 1 } } } },
+  })
+  const tree = () => (
+    <MemoryRouter initialEntries={['/participants/participant-1?tab=about']}>
+      <Routes><Route path="/participants/:id" element={<PageWithClient />} /></Routes>
+    </MemoryRouter>
+  )
+
+  async function openAboutMeAndType() {
+    setUserRole('Coordinator')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ groupRevisions: { aboutMe: 0 } as ParticipantDetailDto['groupRevisions'] }), isLoading: false })
+    const view = render(tree())
+    const fold = [...document.querySelectorAll('details')].find(d => d.textContent?.includes('About Me')) as HTMLDetailsElement
+    await userEvent.click(fold.querySelector('summary')!)
+    await userEvent.click(within(fold).getAllByRole('button', { name: /Edit/ }).at(-1)!)
+    await userEvent.type(screen.getByLabelText('Goals'), 'mine')
+    return view
+  }
+
+  it('PIN1 an open short card survives a has flip', async () => {
+    const view = await openAboutMeAndType()
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ goals: 'Theirs', groupRevisions: { aboutMe: 1 } as ParticipantDetailDto['groupRevisions'] }), isLoading: false })
+    view.rerender(tree())
+    expect(screen.getByLabelText('Goals')).toHaveValue('mine')
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument()
+  })
+
+  it('PIN2 a refused short card survives the refetch that lands', async () => {
+    mockPatchMutateAsync.mockRejectedValue(conflict)
+    const view = await openAboutMeAndType()
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(document.querySelector('[data-save-refused-callout]')).not.toBeNull()
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ goals: 'Theirs', groupRevisions: { aboutMe: 1 } as ParticipantDetailDto['groupRevisions'] }), isLoading: false })
+    view.rerender(tree())
+    expect(screen.getByLabelText('Goals')).toHaveValue('mine')
+    expect(document.querySelector('[data-save-refused-callout]')).not.toBeNull()
+    expect(document.querySelector('[data-latest-saved]')).toHaveTextContent('Theirs')
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Discard' }))
+    // Editing is over, so the card settles into the grid with the other recorded cards.
+    expect(screen.getByRole('heading', { name: 'About Me' }).closest('details')).toBeNull()
+  })
+
+  it('PIN3 the Risks & Hazards Summary panel keeps its place too', async () => {
+    setUserRole('Coordinator')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ groupRevisions: { risksHazardsSummary: 0 } as ParticipantDetailDto['groupRevisions'] }), isLoading: false })
+    const tree3 = () => (
+      <MemoryRouter initialEntries={['/participants/participant-1?tab=health']}>
+        <Routes><Route path="/participants/:id" element={<PageWithClient />} /></Routes>
+      </MemoryRouter>
+    )
+    const view = render(tree3())
+    const fold = [...document.querySelectorAll('details')].find(d => d.querySelector('summary')?.textContent?.includes('Risks & Hazards Summary')) as HTMLDetailsElement
+    await userEvent.click(fold.querySelector('summary')!)
+    await userEvent.click(within(fold).getAllByRole('button', { name: /Edit/ }).at(-1)!)
+    await userEvent.type(screen.getByLabelText('Behaviour Risk Summary'), 'mine')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant({ behaviourRiskSummary: 'Theirs', groupRevisions: { risksHazardsSummary: 1 } as ParticipantDetailDto['groupRevisions'] }), isLoading: false })
+    view.rerender(tree3())
+    expect(screen.getByLabelText('Behaviour Risk Summary')).toHaveValue('mine')
+  })
+})
