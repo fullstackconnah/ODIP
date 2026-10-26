@@ -164,10 +164,7 @@ public sealed class OnboardingImportService
     private async Task<List<ImportRowPlan>> PlanFundingAsync(ImportTable table, IReadOnlyList<string?> mapping, CancellationToken ct)
     {
         var plans = ImportFundingRows.Build(table, mapping);
-        var undone = _db.ImportBatchItems.Where(i => i.Batch!.UndoneAt != null).Select(i => i.EntityId);
-        var participants = await _db.Participants.Where(p => !undone.Contains(p.Id))
-            .Select(p => new ImportParticipantMatch(p.Id, p.NdisNumber, p.FirstName, p.LastName, p.DateOfBirth))
-            .ToListAsync(ct);
+        var participants = await LoadParticipantMatchesAsync(ct);
         ImportFundingRows.Match(plans, participants);
 
         var ids = plans.Where(p => p.Status == ImportRowStatus.Ready).Select(p => p.Funding!.ParticipantId).Distinct().ToList();
@@ -178,6 +175,16 @@ public sealed class OnboardingImportService
             .ToList();
         ImportFundingRows.Check(plans, existing);
         return plans;
+    }
+
+    /// <summary>The organisation's participants an import row can be matched to. The tenant is named, not left to the query filter, because this feeds writes; one an undone import archived does not count.</summary>
+    private async Task<List<ImportParticipantMatch>> LoadParticipantMatchesAsync(CancellationToken ct)
+    {
+        var tenantId = TenantId();
+        var undone = _db.ImportBatchItems.Where(i => i.Batch!.UndoneAt != null).Select(i => i.EntityId);
+        return await _db.Participants.Where(p => p.TenantId == tenantId && !undone.Contains(p.Id))
+            .Select(p => new ImportParticipantMatch(p.Id, p.NdisNumber, p.FirstName, p.LastName, p.DateOfBirth))
+            .ToListAsync(ct);
     }
 
     /// <summary>
