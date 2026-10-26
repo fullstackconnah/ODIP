@@ -61,8 +61,8 @@ public static class WhatsNewSeed
         new Item("2026-10-upcoming-shifts-import", "Import your upcoming shifts",
             "Go to Settings, then Import data, to bring in your next weeks of shifts: an export from your old platform, or a weekly pattern repeated for up to 12 weeks. Every shift is checked against the roster rules and added as a draft, and each week is ready to publish. Nobody is told until you publish.",
             WhatsNewAudience.Admin, false),
-        new Item("2026-10-bunya-support-screens", "Bunya Support on every screen",
-            "Settings, budgets and imports now say Bunya Support too.",
+        new Item("2026-10-bunya-support-screens", "Screens now say Bunya Support",
+            "Settings, payslips and other screens now use the Bunya Support name too.",
             WhatsNewAudience.Admin, false),
     };
 

@@ -236,7 +236,7 @@ describe('BudgetRiskTable: a real row', () => {
   })
 
   // ODIP's arithmetic can say On track while the NDIA has just refused a claim for want of funds, and the list is where the dashboard sends people: the row says the NDIA's word in a pill of its own.
-  it('says the NDIA word in a danger pill beside the status, even when ODIP own status is On track', () => {
+  it('says the NDIA word in a danger pill beside the status, even when our own status is On track', () => {
     renderTable(readyTable([
       riskRow({ id: 'a', participantLabel: 'Refused Person', status: 'OnTrack', ndiaWord: { date: '2026-10-08', code: 'V27' } }),
       riskRow({ id: 'b', participantLabel: 'Quiet Person', status: 'OnTrack' }),
@@ -520,7 +520,7 @@ describe('BudgetRiskTable: the no-budget tail', () => {
 
   // The old line beside the toggle ("... is never warned about: there is no limit to be near") said the opposite of the truth: every plan has a limit, ODIP just does not hold it, and it read as
   // reassurance. It now sits inside the opened list, where the people it is about are, and says what ODIP cannot do.
-  it('keeps them behind a count that says what it is, closed, and says inside the list that ODIP cannot warn about a budget it does not hold', () => {
+  it('keeps them behind a count that says what it is, closed, and says inside the list that nothing can be warned about without a budget on record', () => {
     renderTable(readyTable([riskRow()], { noBudget: entries() }))
 
     const toggle = screen.getByRole('button', { name: noBudgetHiddenLabel(2) })

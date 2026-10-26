@@ -467,7 +467,7 @@ describe('the NDIA rejecting a claim for want of funds', () => {
     expect(within(row).getByText('Forecast over')).toBeInTheDocument()   // ODIP's own word stays (the fixture's pool is forecast to go over): it is ODIP's arithmetic, and the NDIA's is beside it
   })
 
-  it('says whose figures they are when the NDIA has spoken: ODIP\'s own', () => {
+  it('says whose figures they are when the NDIA has spoken: ours', () => {
     renderLedger(participantLedger({ pools: [ledgerPool({ ndiaRejection: rejection })] }))
 
     expect(screen.getByText(/^Core, by our figures: /)).toBeInTheDocument()
