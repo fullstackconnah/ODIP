@@ -68,7 +68,7 @@ export function SectionEditPanel({ title, className, canEdit, isDirty, onEditSta
   const [confirmDiscard, setConfirmDiscard] = useState(false)
   const bodyRef = useRef<HTMLDivElement>(null)
   const [focusEmpty, setFocusEmpty] = useState(false)
-  const snapshotRef = useRef<Revisions>({})
+  const [snapshot, setSnapshot] = useState<Revisions>({})
   const [refused, setRefused] = useState<Revisions | null>(null)
   const [refusals, setRefusals] = useState(0)
   const calloutRef = useRef<HTMLDivElement>(null)
@@ -102,7 +102,7 @@ export function SectionEditPanel({ title, className, canEdit, isDirty, onEditSta
   function handleEdit(focus?: 'first-empty') {
     setError(null)
     setSaved(false)
-    snapshotRef.current = pick(revisions, groups)
+    setSnapshot(pick(revisions, groups))
     onEditStart()
     setEditing(true)
     setFocusEmpty(focus === 'first-empty')
@@ -128,9 +128,10 @@ export function SectionEditPanel({ title, className, canEdit, isDirty, onEditSta
     setError(null)
     setIsSaving(true)
     // After the refetch the person has seen the latest saved version, so Save now replaces it knowingly.
-    if (refused && landed) snapshotRef.current = pick(revisions, groups)
+    const expected = refused && landed ? pick(revisions, groups) : snapshot
+    setSnapshot(expected)
     try {
-      await onSave(snapshotRef.current)
+      await onSave(expected)
       setEditing(false)
       setSaved(true)
       setRefused(null)

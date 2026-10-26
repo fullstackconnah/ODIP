@@ -92,6 +92,7 @@ public static class CaregiverFieldPolicy
     {
         var node = JsonSerializer.SerializeToNode(detail, Web) as JsonObject ?? new JsonObject();
         foreach (var key in InternalFields) node.Remove(key);
+        node.Remove("groupRevisions"); // staff-only concurrency tokens, never part of the caregiver projection
         return node;
     }
 

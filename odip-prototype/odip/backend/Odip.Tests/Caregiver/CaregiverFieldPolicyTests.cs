@@ -31,6 +31,14 @@ public class CaregiverFieldPolicyTests
             Assert.False(projection.ContainsKey(f), $"projection leaked internal field '{f}'");
     }
 
+    // groupRevisions are staff-only concurrency tokens: the caregiver page never sees them.
+    [Fact]
+    public void ProjectionOmitsGroupRevisions()
+    {
+        var detail = new ParticipantDetailDto { Id = Guid.NewGuid(), FirstName = "S", LastName = "B", GroupRevisions = new() { ["aboutMe"] = 3 } };
+        Assert.False(CaregiverFieldPolicy.BuildProjection(detail).ContainsKey("groupRevisions"));
+    }
+
     [Fact]
     public void ProjectionContainsAtLeastTheIdentityFields()
     {
