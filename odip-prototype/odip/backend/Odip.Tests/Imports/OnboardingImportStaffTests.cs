@@ -52,7 +52,7 @@ public class OnboardingImportStaffTests
         var rows = (await Preview(db, tenantId, Csv(Header,
             "Kim,Tan,KIM@own.example.com", "Sam,Lee,sam.lee@gmail.com", "Pat,Ng,pat@other.example.org", "Jo,Ng,jo@own.example.com", "Lee,Ho,lee@unusual.example.net"))).Rows;
 
-        Assert.Equal((ImportRowStatus.Skipped, "Already in ODIP as Kim Tan."), (rows[0].Status, rows[0].SkipReason));
+        Assert.Equal((ImportRowStatus.Skipped, "Already in Bunya Support as Kim Tan."), (rows[0].Status, rows[0].SkipReason));
         // Said without naming the organisation or the person there.
         Assert.Equal("This email belongs to another organisation.", rows[1].Reasons.Single());
         Assert.Equal(StaffCreateService.OtherOrganisationMessage, rows[2].Reasons.Single());

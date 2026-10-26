@@ -15,7 +15,7 @@ namespace Odip.Infrastructure.Integrations;
 public sealed class IntegrationKeyProtector
 {
     // What an Admin is told; the variable to set is named only in the server's log (below).
-    public const string NotConfiguredMessage = "Integrations aren't set up on this server yet. Contact ODIP support.";
+    public const string NotConfiguredMessage = "Integrations aren't set up on this server yet. Contact Bunya Support.";
     private const int TagBytes = 16;
     private readonly byte[]? _key;
 

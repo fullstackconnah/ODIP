@@ -228,8 +228,8 @@ describe('ImportWizardPage', () => {
   })
 
   it('sets the rows to check apart from notes, filters them, and counts them before the import', async () => {
-    const check = 'The file names Ben Lee for this NDIS number, which is Ava Stone in ODIP. Check the number.'
-    const note = "Categories 01 to 04 are one Core (flexible) pool in ODIP: this plan's plan-managed Core comes to $1,250.50."
+    const check = 'The file names Ben Lee for this NDIS number, which is Ava Stone in Bunya Support. Check the number.'
+    const note = "Categories 01 to 04 are one Core (flexible) pool in Bunya Support: this plan's plan-managed Core comes to $1,250.50."
     preview.mockResolvedValue({
       ...previewOf(['firstName', 'lastName']), readyCount: 2, invalidCount: 0, createCount: 2,
       rows: [

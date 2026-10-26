@@ -53,7 +53,7 @@ export default function IntegrationsTab() {
       </div>
       {!eh.configured && (
         <Callout tone="info" title="Integrations aren't set up on this server yet.">
-          Contact ODIP support.
+          Contact Bunya Support.
         </Callout>
       )}
       {eh.connected ? <Connected eh={eh} /> : eh.configured && <ConnectForm />}

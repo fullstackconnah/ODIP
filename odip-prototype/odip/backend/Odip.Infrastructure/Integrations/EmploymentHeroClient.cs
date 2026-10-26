@@ -34,7 +34,7 @@ public partial class EmploymentHeroClient
     private const int PageSize = 100;
     // 20,000 employees: past this the list is not ending, and a run must not page forever.
     private const int MaxPages = 200;
-    private const string NotEndingMessage = "Employment Hero kept sending the same employees, so ODIP stopped reading the list. Try again in a few minutes.";
+    private const string NotEndingMessage = "Employment Hero kept sending the same employees, so Bunya Support stopped reading the list. Try again in a few minutes.";
     // EH allows 5 requests a second per key and IP (Usage.html): a short pause between pages keeps a large list under it.
     private static readonly TimeSpan PagePause = TimeSpan.FromMilliseconds(250);
     private readonly HttpClient _http;
@@ -104,7 +104,7 @@ public partial class EmploymentHeroClient
             if (response.StatusCode == HttpStatusCode.TooManyRequests)
             {
                 var after = response.Headers.RetryAfter;
-                throw new EmploymentHeroException(EmploymentHeroFailure.RateLimited, "Employment Hero is busy. ODIP tries again at the next sync.")
+                throw new EmploymentHeroException(EmploymentHeroFailure.RateLimited, "Employment Hero is busy. Bunya Support tries again at the next sync.")
                 {
                     RetryAfter = after?.Delta ?? (after?.Date is { } at ? at - DateTimeOffset.UtcNow : null),
                 };
@@ -119,7 +119,7 @@ public partial class EmploymentHeroClient
             }
             catch (JsonException)
             {
-                throw new EmploymentHeroException(EmploymentHeroFailure.Unavailable, "Employment Hero sent an answer ODIP couldn't read.");
+                throw new EmploymentHeroException(EmploymentHeroFailure.Unavailable, "Employment Hero sent an answer Bunya Support couldn't read.");
             }
         }
     }

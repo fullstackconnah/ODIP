@@ -58,7 +58,7 @@ export default function DataExportTab() {
       <section aria-labelledby="data-export-heading" className="flex max-w-2xl flex-col gap-4">
         <div className="flex flex-col gap-1">
           <h3 id="data-export-heading" className="text-base font-semibold">Export all your data</h3>
-          <p className={`text-sm ${muted}`}>Download everything your organisation holds in ODIP as one ZIP file, at any time.</p>
+          <p className={`text-sm ${muted}`}>Download everything your organisation holds in Bunya Support as one ZIP file, at any time.</p>
         </div>
         <div className="flex flex-col gap-2">
           <h4 className="text-sm font-semibold">What's in the ZIP</h4>
@@ -75,7 +75,7 @@ export default function DataExportTab() {
             <li>Times that record when something happened are in UTC and end in Z. Times typed in as a local time, such as a dose slot, are your local time.</li>
             <li>It holds participants' health information and staff details such as worker screening and licence numbers. Store it securely and share it only with people who need it.</li>
             <li>Not included: the change history (audit log), queued notification messages and sign-in accounts.</li>
-            <li>Agreements, invoices and other PDFs that ODIP creates when you open them aren't files in the ZIP. Their details are in the CSV files.</li>
+            <li>Agreements, invoices and other PDFs that Bunya Support creates when you open them aren't files in the ZIP. Their details are in the CSV files.</li>
           </ul>
         </div>
         <div className="flex flex-col gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-[var(--card-pad)]">

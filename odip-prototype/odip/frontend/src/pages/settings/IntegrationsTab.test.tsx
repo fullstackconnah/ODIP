@@ -71,7 +71,7 @@ describe('IntegrationsTab — connecting', () => {
     renderTab()
     expect(screen.getByText("Integrations aren't set up on this server yet.")).toBeInTheDocument()
     // Plain words for an Admin; the server variable to set is named only in the server's log.
-    expect(screen.getByText('Contact ODIP support.')).toBeInTheDocument()
+    expect(screen.getByText('Contact Bunya Support.')).toBeInTheDocument()
     expect(screen.queryByText(/INTEGRATIONS_MASTER_KEY/)).toBeNull()
     expect(screen.queryByLabelText('API key')).toBeNull()
   })
@@ -112,12 +112,12 @@ describe('IntegrationsTab — connecting', () => {
 describe('IntegrationsTab — connected', () => {
   it('shows the business, the last sync and the counts, syncs now, and disconnects only after a confirm', async () => {
     const user = userEvent.setup()
-    state.status = connected({ lastSyncError: "Employment Hero is busy. ODIP tries again at the next sync." })
+    state.status = connected({ lastSyncError: "Employment Hero is busy. Bunya Support tries again at the next sync." })
     renderTab()
 
     expect(screen.getByText('Acme Care')).toBeInTheDocument()
     expect(screen.getByText('12 staff members linked, 1 not linked')).toBeInTheDocument()
-    expect(screen.getByText('Employment Hero is busy. ODIP tries again at the next sync.')).toBeInTheDocument()
+    expect(screen.getByText('Employment Hero is busy. Bunya Support tries again at the next sync.')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Sync now' }))
     expect(calls.sync).toHaveBeenCalledTimes(1)
 

@@ -103,7 +103,7 @@ public class EmploymentHeroTimesheetPayloadTests
         Assert.Null(unlinked.Line);
         Assert.Equal(EmploymentHeroTimesheets.NotLinkedReason, unlinked.WaitReason);
         Assert.Null(unreadable.Line);
-        Assert.Equal("ODIP can't read this worker's Employment Hero id. Link them again in Settings → Integrations.", unreadable.WaitReason);
+        Assert.Equal("Bunya Support can't read this worker's Employment Hero id. Link them again in Settings → Integrations.", unreadable.WaitReason);
     }
 
     [Fact]
@@ -150,12 +150,12 @@ public class EmploymentHeroTimesheetPayloadTests
         { null, false, null, PayrollShiftStatus.NotLinked, EmploymentHeroTimesheets.NotLinkedReason, false },
         { Row(EmploymentHeroOutboxStatus.Pending), false, null, PayrollShiftStatus.NotLinked, EmploymentHeroTimesheets.NotLinkedReason, false },
         { null, true, null, PayrollShiftStatus.Waiting, "Not queued yet. Send missing queues it.", true },
-        { Row(EmploymentHeroOutboxStatus.Pending, EmploymentHeroTimesheets.BusyMessage), true, null, PayrollShiftStatus.Waiting, "Employment Hero is busy. ODIP tries again at 12:01 pm.", false },
-        { Row(EmploymentHeroOutboxStatus.Pending, EmploymentHeroTimesheets.KeyRefusedReason), true, null, PayrollShiftStatus.Waiting, "Employment Hero didn't accept the API key. ODIP tries again at 12:01 pm.", false },
+        { Row(EmploymentHeroOutboxStatus.Pending, EmploymentHeroTimesheets.BusyMessage), true, null, PayrollShiftStatus.Waiting, "Employment Hero is busy. Bunya Support tries again at 12:01 pm.", false },
+        { Row(EmploymentHeroOutboxStatus.Pending, EmploymentHeroTimesheets.KeyRefusedReason), true, null, PayrollShiftStatus.Waiting, "Employment Hero didn't accept the API key. Bunya Support tries again at 12:01 pm.", false },
         { Row(EmploymentHeroOutboxStatus.Pending), true, "Choose the work type.", PayrollShiftStatus.Waiting, "Choose the work type.", false },
-        { Row(EmploymentHeroOutboxStatus.Pending), true, null, PayrollShiftStatus.Waiting, "Queued. ODIP sends about 25 shifts a minute.", false },
-        { Row(EmploymentHeroOutboxStatus.Pending, sentAt: Retry), true, null, PayrollShiftStatus.Waiting, "Changed in ODIP; the update is queued.", false },
-        { Row(EmploymentHeroOutboxStatus.Failed, "Employment Hero couldn't be reached."), true, null, PayrollShiftStatus.Failed, "Employment Hero couldn't be reached. ODIP tries again at 12:01 pm.", true },
+        { Row(EmploymentHeroOutboxStatus.Pending), true, null, PayrollShiftStatus.Waiting, "Queued. Bunya Support sends about 25 shifts a minute.", false },
+        { Row(EmploymentHeroOutboxStatus.Pending, sentAt: Retry), true, null, PayrollShiftStatus.Waiting, "Changed in Bunya Support; the update is queued.", false },
+        { Row(EmploymentHeroOutboxStatus.Failed, "Employment Hero couldn't be reached."), true, null, PayrollShiftStatus.Failed, "Employment Hero couldn't be reached. Bunya Support tries again at 12:01 pm.", true },
         { Row(EmploymentHeroOutboxStatus.NeedsAttention, EmploymentHeroTimesheets.FinalisedMessage), true, null, PayrollShiftStatus.Changed, EmploymentHeroTimesheets.FinalisedMessage, false },
         { Row(EmploymentHeroOutboxStatus.NeedsAttention, "Employment Hero refused it: no."), true, null, PayrollShiftStatus.Failed, "Employment Hero refused it: no.", true },
         { Row(EmploymentHeroOutboxStatus.Sent, sentAt: Retry), true, null, PayrollShiftStatus.Sent, null, false },

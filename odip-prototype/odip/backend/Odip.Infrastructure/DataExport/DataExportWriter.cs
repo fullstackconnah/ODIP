@@ -97,12 +97,12 @@ public static class DataExportWriter
     private static string Readme(OdipDbContext db, IReadOnlyList<ExportTable> tables, DateTime generatedAtUtc, string build)
     {
         var text = new StringBuilder();
-        text.Append("ODIP data export\r\n");
+        text.Append("Bunya Support data export\r\n");
         // First, because the ZIP travels without the Settings tab's warning.
         text.Append("This export holds personal and health information about participants and staff, for example in participants.csv, medications.csv, ");
         text.Append("participant-health-conditions.csv, restrictive-practices.csv, incidents.csv and staff.csv. ");
         text.Append("Store it securely and share it only with people who need it.\r\n");
-        text.Append("Made ").Append(ExportValue.Cell(generatedAtUtc, wallClock: false)).Append(" by ODIP build ").Append(build).Append(".\r\n\r\n");
+        text.Append("Made ").Append(ExportValue.Cell(generatedAtUtc, wallClock: false)).Append(" by Bunya Support build ").Append(build).Append(".\r\n\r\n");
 
         text.Append("FILES\r\n");
         foreach (var table in tables) text.Append(table.FileName).Append(": ").Append(table.Description).Append("\r\n");
@@ -125,8 +125,8 @@ public static class DataExportWriter
         foreach (var table in tables)
             foreach (var (column, why) in table.Omit)
                 text.Append("- ").Append(table.FileName).Append(" leaves out ").Append(column).Append(": ").Append(why).Append(".\r\n");
-        text.Append("- Sign-in accounts. They are held by the sign-in service, not in ODIP's database.\r\n");
-        text.Append("- Agreements, invoices and other PDFs that ODIP creates when you open them. Their details are in the CSV files.\r\n");
+        text.Append("- Sign-in accounts. They are held by the sign-in service, not in Bunya Support's database.\r\n");
+        text.Append("- Agreements, invoices and other PDFs that Bunya Support creates when you open them. Their details are in the CSV files.\r\n");
         return text.ToString();
     }
 }

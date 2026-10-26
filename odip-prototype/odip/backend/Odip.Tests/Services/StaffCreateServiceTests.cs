@@ -59,7 +59,7 @@ public class StaffCreateServiceTests
         var (db, tenantId) = TwoOrganisations();
         using var _ = db;
         var result = await new StaffCreateService(db, null).StageAsync(Staff("jo@other.example.org"), As("Admin"), tenantId, CancellationToken.None);
-        Assert.Equal("That address belongs to another organisation on ODIP.", result.Error);
+        Assert.Equal("That address belongs to another organisation on Bunya Support.", result.Error);
     }
 
     [Fact]

@@ -765,7 +765,7 @@ public class AuthControllerExchangeTests
 
         var result = await Exchange(CreateController(db, "jane.smith@gmail.com", logger: logger.Object, signInProvider: provider));
 
-        AssertRefusal(result, "ProviderNotAllowed", "This sign-in method is not enabled for ODIP.");
+        AssertRefusal(result, "ProviderNotAllowed", "This sign-in method is not enabled for Bunya Support.");
         Assert.Null(StoredLastLoginAt(db, user.Id));
         // The answer says the method is not enabled; the log says which one it was.
         VerifyWarningMentioning(logger, provider);
@@ -880,7 +880,7 @@ public class AuthControllerExchangeTests
 
         var result = await Exchange(CreateController(db, "jane.smith@gmail.com"));
 
-        AssertRefusal(result, "NoOdipAccount", "No active ODIP account uses this email address.");
+        AssertRefusal(result, "NoOdipAccount", "No active Bunya Support account uses this email address.");
     }
 
     [Fact]
@@ -891,7 +891,7 @@ public class AuthControllerExchangeTests
 
         var result = await Exchange(CreateController(db, "platform.admin@platform.example.com"));
 
-        AssertRefusal(result, "NoOdipAccount", "No active ODIP account uses this email address.");
+        AssertRefusal(result, "NoOdipAccount", "No active Bunya Support account uses this email address.");
     }
 
     [Fact]
@@ -914,7 +914,7 @@ public class AuthControllerExchangeTests
 
         var result = await Exchange(CreateController(db, "jane.smith@gmail.com", signInProvider: "google.com"));
 
-        AssertRefusal(result, "ProviderNotAllowed", "This sign-in method is not enabled for ODIP.");
+        AssertRefusal(result, "ProviderNotAllowed", "This sign-in method is not enabled for Bunya Support.");
     }
 
     [Fact]
@@ -977,8 +977,8 @@ public class AuthControllerExchangeTests
         using var db = CreateDb();
         SeedUser(db, SeedTenant(db).Id, "has.account@gmail.com");
 
-        AssertRefusal(await Exchange(CreateController(db, "has.account@gmail.com", signInProvider: "google.com")), "ProviderNotAllowed", "This sign-in method is not enabled for ODIP.");
-        AssertRefusal(await Exchange(CreateController(db, "no.account@gmail.com", signInProvider: "google.com")), "ProviderNotAllowed", "This sign-in method is not enabled for ODIP.");
+        AssertRefusal(await Exchange(CreateController(db, "has.account@gmail.com", signInProvider: "google.com")), "ProviderNotAllowed", "This sign-in method is not enabled for Bunya Support.");
+        AssertRefusal(await Exchange(CreateController(db, "no.account@gmail.com", signInProvider: "google.com")), "ProviderNotAllowed", "This sign-in method is not enabled for Bunya Support.");
     }
 
     [Fact]
