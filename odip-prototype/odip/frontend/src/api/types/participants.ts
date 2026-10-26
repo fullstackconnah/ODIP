@@ -1,5 +1,6 @@
 import type { PlanType, SupportRatio, OvernightSupportType, ServiceStream, Gender, FundingSource, LivingArrangement, HidpaSupportCategory, AmbulantStatus, PersonalCareLevel, RiskRatingLevel, MemoryLevel, ShiftStatus, CompatibilityLevel } from './enums'
 import { SERVICE_STREAMS, HIDPA_SUPPORT_CATEGORIES } from './enums'
+import type { ScalarGroupKey } from './participant-patch'
 import type { CreateParticipantRiskEntryDto } from './risk-entries'
 import type { ParticipantConsentDto, CreateParticipantConsentDto } from './consents'
 import type { ParticipantHealthConditionDto, CreateParticipantHealthConditionDto } from './health-conditions'
@@ -280,6 +281,8 @@ export interface ParticipantListDto {
 }
 
 export interface ParticipantDetailDto extends ParticipantListDto {
+  /** Save revision of each field group (0 = never saved). Optional: the caregiver forms share this type and never get it. */
+  groupRevisions?: Record<ScalarGroupKey, number>
   inquiryId?: string | null
   inquirySource?: string | null
   inquiryProvenance?: string | null

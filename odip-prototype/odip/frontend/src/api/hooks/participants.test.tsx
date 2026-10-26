@@ -312,3 +312,60 @@ describe('useUpdateSupportProfile', () => {
     expect(mockApiPutRaw.mock.calls[0][1]).toMatchObject({ emergencyConsiderations: 'X', communicationNotes: 'Uses Auslan' })
   })
 })
+
+// Section save conflicts: expectedRevisions travel only for groups in the body, follow this tab's own saves, and a refusal refetches.
+describe('usePatchParticipant expectedRevisions', () => {
+  const ok = (groupRevisions: Record<string, number>) => ({ success: true, data: { id: 'p1', groupRevisions }, message: null, errors: null })
+  const conflict = () => Object.assign(new Error('409'), {
+    response: { status: 409, data: { success: false, code: 'participant-section-changed', errors: ['x'], data: { groupRevisions: { aboutMe: 3 } } } },
+  })
+  const setup = (cacheRevisions?: Record<string, number>) => {
+    mockApiPatchRaw.mockReset()
+    const qc = new QueryClient()
+    if (cacheRevisions) qc.setQueryData(['participant', 'p1'], { id: 'p1', groupRevisions: cacheRevisions })
+    const { result } = renderHook(() => usePatchParticipant(), { wrapper: createWrapper(qc) })
+    return { qc, result }
+  }
+  const body = (call: number) => mockApiPatchRaw.mock.calls[call][1] as PatchParticipantDto
+
+  it('H1 sends expected only for groups in the body', async () => {
+    const { result } = setup()
+    mockApiPatchRaw.mockResolvedValue(ok({ aboutMe: 2 }))
+    await result.current.mutateAsync({ id: 'p1', data: { aboutMe: { goals: 'g' }, expectedRevisions: { aboutMe: 1, medical: 2 } } })
+    expect(body(0).expectedRevisions).toEqual({ aboutMe: 1 })
+  })
+
+  it('H2 follows this tab\'s own saves', async () => {
+    const { result } = setup({ aboutMe: 2 })
+    mockApiPatchRaw.mockResolvedValue(ok({ aboutMe: 2 }))
+    await result.current.mutateAsync({ id: 'p1', data: { aboutMe: { goals: 'a' }, expectedRevisions: { aboutMe: 1 } } })
+    await result.current.mutateAsync({ id: 'p1', data: { aboutMe: { goals: 'b' }, expectedRevisions: { aboutMe: 1 } } })
+    expect(body(1).expectedRevisions).toEqual({ aboutMe: 2 })
+  })
+
+  it('H3 does not follow another person\'s save', async () => {
+    const { result } = setup({ aboutMe: 3 })
+    mockApiPatchRaw.mockResolvedValue(ok({ aboutMe: 3 }))
+    await result.current.mutateAsync({ id: 'p1', data: { aboutMe: { goals: 'a' }, expectedRevisions: { aboutMe: 1 } } })
+    await result.current.mutateAsync({ id: 'p1', data: { aboutMe: { goals: 'b' }, expectedRevisions: { aboutMe: 1 } } })
+    expect(body(1).expectedRevisions).toEqual({ aboutMe: 2 })
+    await result.current.mutateAsync({ id: 'p1', data: { aboutMe: { goals: 'c' }, expectedRevisions: { aboutMe: 0 } } })
+    expect(body(2).expectedRevisions).toEqual({ aboutMe: 0 })
+  })
+
+  it('H4 a section-changed 409 refetches the participant', async () => {
+    const { qc, result } = setup()
+    const spy = vi.spyOn(qc, 'invalidateQueries')
+    mockApiPatchRaw.mockRejectedValue(conflict())
+    await expect(result.current.mutateAsync({ id: 'p1', data: { aboutMe: { goals: 'a' }, expectedRevisions: { aboutMe: 1 } } })).rejects.toBeTruthy()
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['participant', 'p1'] })
+  })
+
+  it('H5 no expected: nothing sent, nothing recorded, no wait on the refetch', async () => {
+    const { qc, result } = setup()
+    vi.spyOn(qc, 'invalidateQueries').mockReturnValue(new Promise(() => {}))
+    mockApiPatchRaw.mockResolvedValue(ok({ aboutMe: 1 }))
+    await result.current.mutateAsync({ id: 'p1', data: { aboutMe: { goals: 'a' } } })
+    expect('expectedRevisions' in body(0)).toBe(false)
+  })
+})
