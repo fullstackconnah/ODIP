@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import CaregiverSubmissionReviewPage from './CaregiverSubmissionReviewPage'
 import type { CaregiverSubmissionDetailDto } from '@/api/types/caregiver'
+import type { PatchParticipantDto } from '@/api/types/participant-patch'
 import { __testHooks } from '@/hooks/useBackNavigation'
 
 const {
@@ -266,5 +267,66 @@ describe('CaregiverSubmissionReviewPage — links', () => {
     renderPage()
     expect(screen.getByRole('link', { name: /^Back to / })).toHaveAttribute('href', '/participants/p1')
     __testHooks.reset()
+  })
+})
+
+// Staff read the same section names the caregiver saw, and the three columns line up from one section to the next.
+describe('CaregiverSubmissionReviewPage — section headings and columns', () => {
+  const multiGroup = () => mockUseCaregiverSubmission.mockReturnValue({
+    data: makeSubmission({
+      current: { firstName: 'Sophie', likesDislikes: 'Reading', allergiesDetail: 'None' },
+      payload: {
+        personalDetails: { firstName: 'Sofia' },
+        medical: { allergiesDetail: 'x'.repeat(200) },
+        aboutMe: { likesDislikes: 'Gardening' },
+      } as unknown as PatchParticipantDto,
+      base: {
+        personalDetails: { firstName: 'Sophie' }, medical: { allergiesDetail: 'None' }, aboutMe: { likesDislikes: 'Reading' },
+      } as unknown as PatchParticipantDto,
+    }),
+    isLoading: false,
+  })
+
+  it('names each section as the caregiver form does, never by its payload key', () => {
+    multiGroup()
+    renderPage()
+    const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)
+    expect(headings).toEqual(['Key Identifiers', 'Medical', 'Daily Living'])
+  })
+
+  it('gives every section table the same column widths', () => {
+    multiGroup()
+    const { container } = renderPage()
+    const tables = container.querySelectorAll('table')
+    expect(tables).toHaveLength(3)
+    const widths = (t: Element) => Array.from(t.querySelectorAll('col')).map((c) => c.className)
+    expect(widths(tables[0])).toHaveLength(3)
+    for (const t of tables) {
+      expect(t).toHaveClass('table-fixed')
+      expect(widths(t)).toEqual(widths(tables[0]))
+      expect(Array.from(t.querySelectorAll('th')).every((th) => th.getAttribute('scope') === 'col')).toBe(true)
+    }
+  })
+
+  it('top-aligns every cell in a body row, so a tall value does not push the label down', () => {
+    multiGroup()
+    const { container } = renderPage()
+    const rows = container.querySelectorAll('tbody tr')
+    expect(rows).toHaveLength(3)
+    for (const r of rows) expect(r).toHaveClass('align-top')
+  })
+
+  it('still flags a staff edit under Current', () => {
+    multiGroup()
+    mockUseCaregiverSubmission.mockReturnValue({
+      data: makeSubmission({
+        current: { firstName: 'Sofie' },
+        payload: { personalDetails: { firstName: 'Sofia' } } as unknown as PatchParticipantDto,
+        base: { personalDetails: { firstName: 'Sophie' } } as unknown as PatchParticipantDto,
+      }),
+      isLoading: false,
+    })
+    renderPage()
+    expect(screen.getByText(/Staff edited this since the caregiver started/)).toBeInTheDocument()
   })
 })
