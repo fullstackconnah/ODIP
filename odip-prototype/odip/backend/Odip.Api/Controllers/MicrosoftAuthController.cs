@@ -310,11 +310,85 @@ public class MicrosoftAuthController : ControllerBase
         return LocalRedirect(MicrosoftSignInPaths.SignInSuccess);
     }
 
-    private Task<IActionResult> LinkTenantAsync(Correlation corr, MicrosoftIdentity id, CancellationToken ct) =>
-        Task.FromResult(Refuse(MicrosoftRefusal.InvalidToken, MicrosoftSignInPaths.LinkTenant, "not yet"));
+    private async Task<IActionResult> LinkTenantAsync(Correlation corr, MicrosoftIdentity id, CancellationToken ct)
+    {
+        const string path = MicrosoftSignInPaths.LinkTenant;
+        var admin = await ReStartedUserAsync(corr, ct);
+        if (admin is null || admin.Role != UserRole.Admin) return Refuse(MicrosoftRefusal.MicrosoftSessionChanged, path, "Microsoft link-tenant - the starting admin is gone, inactive, moved or no longer Admin");
+        var org = await _db.Tenants.FirstOrDefaultAsync(t => t.Id == admin.TenantId, ct);
+        if (org is null || !org.IsActive) return Refuse(MicrosoftRefusal.TenantInactive, path, "Microsoft link-tenant - org {Org} is inactive", admin.TenantId);
 
-    private Task<IActionResult> LinkAccountAsync(Correlation corr, MicrosoftIdentity id, CancellationToken ct) =>
-        Task.FromResult(Refuse(MicrosoftRefusal.InvalidToken, MicrosoftSignInPaths.LinkAccount, "not yet"));
+        var links = _db.MicrosoftTenantLinks.IgnoreQueryFilters([TenantFilter.Name]);
+        if (await links.AnyAsync(l => l.TenantId == admin.TenantId, ct)) return Refuse(MicrosoftRefusal.MicrosoftOrgAlreadyLinked, path, "Microsoft link-tenant - org {Org} is already linked", admin.TenantId);
+        if (await links.AnyAsync(l => l.MicrosoftTenantId == id.TenantId, ct)) return Refuse(MicrosoftRefusal.MicrosoftTenantTaken, path, "Microsoft link-tenant - tid {Tid} belongs to another org", id.TenantId);
+
+        var now = _clock.GetUtcNow().UtcDateTime;
+        var link = new MicrosoftTenantLink
+        {
+            Id = Guid.NewGuid(), TenantId = admin.TenantId, MicrosoftTenantId = id.TenantId, DefaultRole = corr.DefaultRole ?? UserRole.ReadOnly,
+            LinkedByUserId = admin.Id, LinkedAt = now, UpdatedAt = now,
+        };
+        _db.MicrosoftTenantLinks.Add(link);
+        var actor = ActorFor(admin);
+        _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(nameof(MicrosoftTenantLink), link.Id, "Microsoft tenant", null, id.TenantId.ToString(), actor));
+
+        // The admin who links the directory is the obvious first person in it: link their own row too, when this account is free.
+        if (admin.MicrosoftObjectId is null
+            && !await _db.Users.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(u => u.MicrosoftTenantId == id.TenantId && u.MicrosoftObjectId == id.ObjectId, ct))
+        {
+            admin.MicrosoftTenantId = id.TenantId;
+            admin.MicrosoftObjectId = id.ObjectId;
+            _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(nameof(Odip.Domain.Entities.User), admin.Id, "Microsoft account", null, id.ObjectId.ToString(), actor));
+        }
+
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } pg)
+        {
+            _db.ChangeTracker.Clear();
+            return Refuse(pg.ConstraintName == MicrosoftTenantLink.OrganisationIndexName ? MicrosoftRefusal.MicrosoftOrgAlreadyLinked : MicrosoftRefusal.MicrosoftTenantTaken,
+                path, "Microsoft link-tenant - unique violation {Constraint}", pg.ConstraintName);
+        }
+        return LocalRedirect(MicrosoftSignInPaths.WithOutcome(path, "linked"));
+    }
+
+    private async Task<IActionResult> LinkAccountAsync(Correlation corr, MicrosoftIdentity id, CancellationToken ct)
+    {
+        const string path = MicrosoftSignInPaths.LinkAccount;
+        var user = await ReStartedUserAsync(corr, ct);
+        if (user is null || user.Role == UserRole.SuperAdmin) return Refuse(MicrosoftRefusal.MicrosoftSessionChanged, path, "Microsoft link-account - the starting user is gone, inactive or moved");
+        var link = await OrgLinks(user.TenantId).FirstOrDefaultAsync(ct);
+        if (link is null) return Refuse(MicrosoftRefusal.MicrosoftNotLinked, path, "Microsoft link-account - org {Org} is not linked", user.TenantId);
+        if (link.MicrosoftTenantId != id.TenantId) return Refuse(MicrosoftRefusal.MicrosoftWrongTenant, path, "Microsoft link-account - tid {Tid} is not the org's directory", id.TenantId);
+        if (user.MicrosoftObjectId is not null) return Refuse(MicrosoftRefusal.MicrosoftAccountAlreadyLinked, path, "Microsoft link-account - user {User} already has an identity", user.Id);
+        if (await FindByIdentityAsync(id.TenantId, id.ObjectId, ct) is not null) return Refuse(MicrosoftRefusal.MicrosoftAccountTaken, path, "Microsoft link-account - the account is on another user");
+
+        user.MicrosoftTenantId = id.TenantId;
+        user.MicrosoftObjectId = id.ObjectId;
+        _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(nameof(Odip.Domain.Entities.User), user.Id, "Microsoft account", null, id.ObjectId.ToString(), ActorFor(user)));
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } pg)
+        {
+            _db.ChangeTracker.Clear();
+            return Refuse(MicrosoftRefusal.MicrosoftAccountTaken, path, "Microsoft link-account - unique violation {Constraint}", pg.ConstraintName);
+        }
+        return LocalRedirect(MicrosoftSignInPaths.WithOutcome(path, "linked"));
+    }
+
+    /// <summary>The person who started a link, re-read now (the callback has no session): still active, still in the org they started in.</summary>
+    private Task<User?> ReStartedUserAsync(Correlation corr, CancellationToken ct) =>
+        _db.Users.IgnoreQueryFilters([TenantFilter.Name]).FirstOrDefaultAsync(u => u.Id == corr.UserId && u.TenantId == corr.OrgId && u.IsActive, ct);
+
+    /// <summary>The audit row's actor, built the way <see cref="OdipSession.Token"/> builds the claims the audit reads.</summary>
+    private static ClaimsPrincipal ActorFor(User u) => new(new ClaimsIdentity(new[]
+    {
+        new Claim(ClaimTypes.NameIdentifier, u.Id.ToString()), new Claim(ClaimTypes.Name, u.Username), new Claim("fullName", u.FullName),
+    }, "microsoft-link"));
 
     // ── Helpers ──────────────────────────────────────────────────────────
 
