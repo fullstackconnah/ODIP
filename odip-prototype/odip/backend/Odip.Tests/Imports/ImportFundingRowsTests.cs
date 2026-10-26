@@ -94,7 +94,7 @@ public class ImportFundingRowsTests
             Line("430000000", "Core", "Plan managed", "45000.00", first: ImportParticipantRows.ExampleFirstName, last: ImportParticipantRows.ExampleLastName, dob: "03/04/1990"));
 
         Assert.Equal(new[] { ImportRowStatus.Skipped, ImportRowStatus.Skipped }, plans.Select(p => p.Status));
-        Assert.Equal("Recurring Transport (18) is paid to the participant and never claimed by providers, so ODIP doesn't record it.", plans[0].SkipReason);
+        Assert.Equal("Recurring Transport (18) is paid to the participant and never claimed by providers, so Bunya Support doesn't record it.", plans[0].SkipReason);
         Assert.Equal("This is the template's example row.", plans[1].SkipReason);
     }
 
@@ -146,7 +146,7 @@ public class ImportFundingRowsTests
             ava.Pools!.Select(p => (p.Kind!.Value, p.PaceCategory, p.ManagementType!.Value, p.Periods!.Single().PlanAmount!.Value)));
         Assert.All(ava.Pools!, p => Assert.Equal((new DateOnly(2026, 7, 1), new DateOnly(2027, 6, 30)), (p.Periods![0].PeriodStart!.Value, p.Periods[0].PeriodEnd!.Value)));
         // A note, not a warning: nothing on these rows needs checking.
-        Assert.Equal("Categories 01 to 04 are one Core (flexible) pool in ODIP: this plan's plan-managed Core comes to $1,250.50.", plans[0].Notes.Single());
+        Assert.Equal("Categories 01 to 04 are one Core (flexible) pool in Bunya Support: this plan's plan-managed Core comes to $1,250.50.", plans[0].Notes.Single());
         Assert.Equal(plans[0].Notes, plans[1].Notes);
         Assert.Empty(plans[2].Notes);
         Assert.All(plans, p => Assert.Empty(p.Warnings));
@@ -160,8 +160,8 @@ public class ImportFundingRowsTests
             Line("430000001", "15", "Self managed", "100", first: "ava", last: "STONE", dob: "01/01/1980"));
 
         Assert.All(plans, p => Assert.Equal(ImportRowStatus.Ready, p.Status));
-        Assert.Equal("The file names Ben Lee for this NDIS number, which is Ava Stone in ODIP. Check the number.", plans[0].Warnings.Single());
-        Assert.Equal("The file's date of birth for this NDIS number isn't Ava Stone's in ODIP. Check the number.", plans[1].Warnings.Single());
+        Assert.Equal("The file names Ben Lee for this NDIS number, which is Ava Stone in Bunya Support. Check the number.", plans[0].Warnings.Single());
+        Assert.Equal("The file's date of birth for this NDIS number isn't Ava Stone's in Bunya Support. Check the number.", plans[1].Warnings.Single());
     }
 
     [Fact]
@@ -171,8 +171,8 @@ public class ImportFundingRowsTests
             Line("430000009", "Core", "Self managed", "100", first: "Ava", last: "Stone", dob: "03/04/1990"),
             Line("", "Core", "Self managed", "100", first: "Cal", last: "Wu", dob: "01/01/1980"));
 
-        Assert.Equal("No participant in ODIP has this NDIS number. Import or add them first.", plans[0].Reasons.Single());
-        Assert.Equal("No participant in ODIP has this name and date of birth. Import or add them first.", plans[1].Reasons.Single());
+        Assert.Equal("No participant in Bunya Support has this NDIS number. Import or add them first.", plans[0].Reasons.Single());
+        Assert.Equal("No participant in Bunya Support has this name and date of birth. Import or add them first.", plans[1].Reasons.Single());
     }
 
     [Fact]
@@ -180,7 +180,7 @@ public class ImportFundingRowsTests
     {
         var plans = Read(Line("", "Core", "Self managed", "100", first: "Jo", last: "Ng", dob: "01/01/2000"));
         ImportFundingRows.Match(plans, [new(Guid.NewGuid(), null, "Jo", "Ng", new DateOnly(2000, 1, 1)), new(Guid.NewGuid(), null, "JO", "NG", new DateOnly(2000, 1, 1))]);
-        Assert.Equal("2 participants in ODIP have this name and date of birth. Add their NDIS number to the row.", plans.Single().Reasons.Single());
+        Assert.Equal("2 participants in Bunya Support have this name and date of birth. Add their NDIS number to the row.", plans.Single().Reasons.Single());
     }
 
     [Fact]
@@ -237,7 +237,7 @@ public class ImportFundingRowsTests
     public void A_plan_that_overlaps_one_already_in_ODIP_is_refused_not_replaced()
     {
         var plans = Checked([(Ava, new DateOnly(2026, 1, 1), new DateOnly(2026, 7, 1))], Line("430000001", "Core", "Plan managed", "1000"));
-        Assert.Equal("This participant already has a plan in ODIP from 1 Jan 2026 to 1 Jul 2026, which overlaps these dates. Change that plan on their Funding tab, or leave these rows out.",
+        Assert.Equal("This participant already has a plan in Bunya Support from 1 Jan 2026 to 1 Jul 2026, which overlaps these dates. Change that plan on their Funding tab, or leave these rows out.",
             plans.Single().Reasons.Single());
     }
 

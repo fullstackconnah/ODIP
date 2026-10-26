@@ -9,9 +9,9 @@ const blobOf = (body: unknown) => new Blob([JSON.stringify(body)], { type: 'appl
 
 describe('exportFileName', () => {
   it("uses the server's name, quoted or not, and otherwise one with today's date", () => {
-    expect(exportFileName('attachment; filename="odip-export-sunrise-care-2026-10-14.zip"')).toBe('odip-export-sunrise-care-2026-10-14.zip')
-    expect(exportFileName('attachment; filename=odip-export-sunrise-care-2026-10-14.zip')).toBe('odip-export-sunrise-care-2026-10-14.zip')
-    expect(exportFileName(undefined)).toBe(`odip-export-${localIsoDate()}.zip`)
+    expect(exportFileName('attachment; filename="bunya-support-export-sunrise-care-2026-10-14.zip"')).toBe('bunya-support-export-sunrise-care-2026-10-14.zip')
+    expect(exportFileName('attachment; filename=bunya-support-export-sunrise-care-2026-10-14.zip')).toBe('bunya-support-export-sunrise-care-2026-10-14.zip')
+    expect(exportFileName(undefined)).toBe(`bunya-support-export-${localIsoDate()}.zip`)
   })
 })
 

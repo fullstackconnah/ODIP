@@ -22,7 +22,7 @@ function deferred<T>() {
 }
 // 2 KB ending in the end-of-central-directory record (PK 05 06 and 18 bytes), as a ZIP the server finished does.
 const wholeZip = () => { const bytes = new Uint8Array(2048); bytes.set([0x50, 0x4b, 0x05, 0x06], 2048 - 22); return bytes }
-const zipResponse = { data: new Blob([wholeZip()]), headers: { 'content-disposition': 'attachment; filename="odip-export-sunrise-care-2026-10-14.zip"' } }
+const zipResponse = { data: new Blob([wholeZip()]), headers: { 'content-disposition': 'attachment; filename="bunya-support-export-sunrise-care-2026-10-14.zip"' } }
 const jordan = { exportedAt: '2026-10-14T05:04:00Z', exportedByName: 'Jordan Lee' }
 let saved: string[] = []
 
@@ -105,8 +105,8 @@ describe('DataExportTab', () => {
     getWithDefault.mockResolvedValue(jordan)
     await userEvent.click(downloadButton())
     expect(await screen.findByText('Export saved')).toBeInTheDocument()
-    expect(screen.getByText('Saved as odip-export-sunrise-care-2026-10-14.zip (2 KB). Your browser lists it in its downloads.')).toBeInTheDocument()
-    expect(saved).toEqual(['odip-export-sunrise-care-2026-10-14.zip'])
+    expect(screen.getByText('Saved as bunya-support-export-sunrise-care-2026-10-14.zip (2 KB). Your browser lists it in its downloads.')).toBeInTheDocument()
+    expect(saved).toEqual(['bunya-support-export-sunrise-care-2026-10-14.zip'])
     expect(screen.getByRole('status')).toHaveTextContent('Export saved.')
     expect(await screen.findByText(/^Last exported by Jordan Lee on$/)).toBeInTheDocument()
     expect(getWithDefault).toHaveBeenCalledTimes(2)
@@ -176,6 +176,6 @@ describe('DataExportTab', () => {
     expect(screen.getByText("Still downloading. Keep this page open until it's saved.")).toBeInTheDocument()
     await act(async () => response.resolve(zipResponse))
     expect(await screen.findByText('Export saved')).toBeInTheDocument()
-    expect(saved).toEqual(['odip-export-sunrise-care-2026-10-14.zip'])
+    expect(saved).toEqual(['bunya-support-export-sunrise-care-2026-10-14.zip'])
   })
 })

@@ -136,7 +136,7 @@ describe('PayrollPage', () => {
   })
 
   it('keeps each time with its am or pm', () => {
-    setup(check({ approved: 1, sent: 0, waiting: 1, sendable: 1, workers: [worker({ shifts: [shift({ status: 'Waiting', reason: 'Queued. ODIP tries again at 9:15 am.' })] })] }))
+    setup(check({ approved: 1, sent: 0, waiting: 1, sendable: 1, workers: [worker({ shifts: [shift({ status: 'Waiting', reason: "Queued. We'll try again at 9:15 am." })] })] }))
     expect(document.body.textContent).toMatch(/Rostered 9:00\u00A0am/)
     expect(document.body.textContent).toMatch(/at 9:15\u00A0am/)
     expect(document.body.textContent).not.toMatch(/\d:\d\d[ \u202F][ap]m/)

@@ -51,9 +51,9 @@ public static class ExportTables
         [typeof(PublicHolidayOverride)] = "Changes to the public holiday calendar, which apply to every organisation.",
         [typeof(WhatsNewEntry)] = "Release notes from Bunya Support, which are the same for every organisation.",
         [typeof(WhatsNewUserState)] = "When each person last opened What's new, which is screen state, not your organisation's records.",
-        [typeof(EarlyAccessRequest)] = "Early access requests from the ODIP website, which aren't your organisation's records.",
-        [typeof(InvoiceNumberCounter)] = "ODIP's next-number counter; the numbers themselves are in invoices.csv.",
-        [typeof(EarlyAccessLaterSubmission)] = "Repeat early access requests from the ODIP website, which aren't your organisation's records.",
+        [typeof(EarlyAccessRequest)] = "Early access requests from the Bunya Support website, which aren't your organisation's records.",
+        [typeof(InvoiceNumberCounter)] = "Bunya Support's next-number counter; the numbers themselves are in invoices.csv.",
+        [typeof(EarlyAccessLaterSubmission)] = "Repeat early access requests from the Bunya Support website, which aren't your organisation's records.",
     };
 
     /// <summary>
@@ -231,10 +231,10 @@ public static class ExportTables
             (db, t) => { var trips = Trips(db, t); return db.VehicleAssignments.Where(v => trips.Any(x => x.Id == v.TripInstanceId)); }),
         Via("staff-assignments.csv", "Staff assigned to trips.",
             (db, t) => { var trips = Trips(db, t); return db.StaffAssignments.Where(s => trips.Any(x => x.Id == s.TripInstanceId)); }),
-        Via("trip-documents.csv", "Documents recorded against trips: their details only, as ODIP stores no files for them.",
+        Via("trip-documents.csv", "Documents recorded against trips: their details only, as Bunya Support stores no files for them.",
             (db, t) => { var trips = Trips(db, t); return db.TripDocuments.Where(d => trips.Any(x => x.Id == d.TripInstanceId)); }) with
         {
-            Omit = new Dictionary<string, string> { [nameof(TripDocument.FilePath)] = "a location on ODIP's own server, which means nothing outside ODIP" },
+            Omit = new Dictionary<string, string> { [nameof(TripDocument.FilePath)] = "a location on Bunya Support's own server, which means nothing outside Bunya Support" },
         },
 
         // Incidents
@@ -262,7 +262,7 @@ public static class ExportTables
         // Employment Hero (the connection itself, with its encrypted key, is in LeftOut)
         Own<EmploymentHeroAttention>("employment-hero-attention.csv", "Staff the Employment Hero sync needs an Admin to look at, and why.") with
         {
-            Omit = new Dictionary<string, string> { [nameof(EmploymentHeroAttention.Key)] = "ODIP's own label for the item (its kind and the person's id, both already in the file)" },
+            Omit = new Dictionary<string, string> { [nameof(EmploymentHeroAttention.Key)] = "Bunya Support's own label for the item (its kind and the person's id, both already in the file)" },
         },
         Own<EmploymentHeroSyncLog>("employment-hero-sync-log.csv", "Each Employment Hero staff sync and timesheet send of the last 90 days: when, which business, what changed, and any error."),
         Own<EmploymentHeroOutbox>("employment-hero-timesheets.csv", "Hours sent to or waiting for Employment Hero Payroll: one row per approved shift, with what happened.") with

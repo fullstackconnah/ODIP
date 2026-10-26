@@ -21,7 +21,7 @@ public static class ImportFields
     private static readonly IReadOnlyList<ImportField> DatedShifts = BuildShifts(ImportShiftShape.Dated);
 
     private const string Payroll = "Won't be imported: your payroll system keeps employment details.";
-    private const string NoField = "Won't be imported: ODIP has no field for this yet.";
+    private const string NoField = "Won't be imported: Bunya Support has no field for this yet.";
     // Staff columns other platforms export that ODIP does not hold: shown as "won't be imported" so the Admin knows they were seen.
     private static readonly Dictionary<string, string> StaffNotImported = new()
     {
@@ -107,7 +107,7 @@ public static class ImportFields
             new("preferredName", "Preferred name", false, ["known as", "nickname"], "What they like to be called."),
             new("dateOfBirth", "Date of birth", false, ["dob", "birth date", "birthdate"], "dd/mm/yyyy or yyyy-mm-dd."),
             new("gender", "Gender", false, ["sex"], "Male, Female, Non-binary or Prefer not to say."),
-            new("ndisNumber", "NDIS number", false, ["ndis no", "ndis", "ndis id", "ndis participant number"], "Finds people already in ODIP, who are skipped."),
+            new("ndisNumber", "NDIS number", false, ["ndis no", "ndis", "ndis id", "ndis participant number"], "Finds people already in Bunya Support, who are skipped."),
             new("planType", "Plan type", false, ["plan management", "plan management type", "management type", "managed by"], "Self managed, Plan managed or NDIA managed. Plan managed lets a contact be the plan manager."),
             new("planStartDate", "Plan start", false, ["plan start date", "ndis plan start", "plan from"], "dd/mm/yyyy or yyyy-mm-dd."),
             new("planEndDate", "Plan end", false, ["plan end date", "ndis plan end", "plan to"], "dd/mm/yyyy or yyyy-mm-dd. On or after Plan start."),
@@ -161,7 +161,7 @@ public static class ImportFields
         const string byName = "With the other name and date of birth, finds the participant when the row has no NDIS number.";
         return
         [
-            new("ndisNumber", "NDIS number", false, ["ndis no", "ndis", "ndis id", "ndis participant number"], "Finds the participant in ODIP. Leave it blank to find them by name and date of birth instead."),
+            new("ndisNumber", "NDIS number", false, ["ndis no", "ndis", "ndis id", "ndis participant number"], "Finds the participant in Bunya Support. Leave it blank to find them by name and date of birth instead."),
             new("firstName", "First name", false, ["given name", "forename", "first"], byName),
             new("lastName", "Last name", false, ["surname", "family name", "last"], byName),
             new("dateOfBirth", "Date of birth", false, ["dob", "birth date", "birthdate"], date),

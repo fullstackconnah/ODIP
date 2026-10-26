@@ -19,7 +19,7 @@ public sealed record StaffCreateResult(User? User, string? Error, string? ErrorC
 /// </summary>
 public sealed class StaffCreateService
 {
-    public const string OtherOrganisationMessage = "That address belongs to another organisation on ODIP.";
+    public const string OtherOrganisationMessage = "That address belongs to another organisation on Bunya Support.";
     public const string EmailTakenMessage = "A user with this email already exists.";
 
     private readonly OdipDbContext _db;

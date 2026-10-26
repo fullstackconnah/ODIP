@@ -118,7 +118,7 @@ public class ImportFundingPostgresTests : IClassFixture<PostgresFixture>
         var preview = await service.PreviewAsync(ImportKind.FundingPlans, file, "budgets.csv", null, CancellationToken.None, Admin());
         var result = await service.CommitAsync(ImportKind.FundingPlans, file, "budgets.csv", null, null, $"k-{Guid.NewGuid():N}", Admin(), CancellationToken.None);
 
-        Assert.Equal("No participant in ODIP has this NDIS number. Import or add them first.", preview.Rows.Single().Reasons.Single());
+        Assert.Equal("No participant in Bunya Support has this NDIS number. Import or add them first.", preview.Rows.Single().Reasons.Single());
         Assert.Equal((0, 1), (result.CreatedCount, result.FailedCount));
         await using var unfiltered = PostgresFixture.NewContext(_pg.ConnectionString);
         Assert.False(await unfiltered.FundingPlans.IgnoreQueryFilters().AnyAsync(f => f.ParticipantId == avaOfB));

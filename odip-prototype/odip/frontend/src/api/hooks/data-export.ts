@@ -59,10 +59,10 @@ export function useDataExport() {
   })
 }
 
-/** The server's name for the file (odip-export-<organisation>-<date>.zip), or one with today's date when the header can't be read. */
+/** The server's name for the file (bunya-support-export-<organisation>-<date>.zip), or one with today's date when the header can't be read. */
 export function exportFileName(contentDisposition: unknown): string {
   const match = typeof contentDisposition === 'string' ? /filename="?([^";]+)"?/i.exec(contentDisposition) : null
-  return match?.[1] ?? `odip-export-${localIsoDate()}.zip`
+  return match?.[1] ?? `bunya-support-export-${localIsoDate()}.zip`
 }
 
 /** The tab's words for a failed download (SHAPE section 3). */

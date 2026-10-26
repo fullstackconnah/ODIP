@@ -41,16 +41,16 @@ public sealed class EmploymentHeroStaffSync
 {
     public const string ActorName = "Employment Hero sync";
     public const string StaffFromEmploymentHeroMessage = "Staff come from Employment Hero for this organisation. Add them there; they appear here within 30 minutes.";
-    public const string KeyUnreadableMessage = "ODIP can't read the saved API key (this server's integrations key changed or is missing). Connect again with the API key.";
-    public const string UnexpectedMessage = "ODIP couldn't apply Employment Hero's list this time. The next sync tries again.";
+    public const string KeyUnreadableMessage = "We can't read the saved API key (this server's integrations key changed or is missing). Connect again with the API key.";
+    public const string UnexpectedMessage = "We couldn't apply Employment Hero's list this time. The next sync tries again.";
     public const string BusyMessage = "A sync for this organisation is already running. Try again in a minute.";
-    private const string OtherOrganisationEmail = "Their email in Employment Hero belongs to another organisation on ODIP.";
-    private const string CouldNotSave = "ODIP couldn't save their details this time; the next sync tries again.";
-    private const string ArchivedButCurrent = "Employment Hero has them as current, but their ODIP account is archived. Restore them on their staff page.";
+    private const string OtherOrganisationEmail = "Their email in Employment Hero belongs to another organisation on Bunya Support.";
+    private const string CouldNotSave = "We couldn't save their details this time; the next sync tries again.";
+    private const string ArchivedButCurrent = "Employment Hero has them as current, but their Bunya Support account is archived. Restore them on their staff page.";
     private const string LastAdminLeaving = "Employment Hero has ended their employment; they are the only Admin. Add another Admin first, then archive them.";
     // The sync re-pointed a never-signed-in person's sign-in address: any invite they were sent went to the old one.
     private const string EmailChangedStart = "Employment Hero changed their email to ";
-    private const string MassLeaving = "Employment Hero has ended the employment of {0} staff in one sync, so ODIP archived nobody in case its data is wrong. Check their end dates in Employment Hero; if they really have left, archive them on their staff page.";
+    private const string MassLeaving = "Employment Hero has ended the employment of {0} staff in one sync, so we archived nobody in case its data is wrong. Check their end dates in Employment Hero; if they really have left, archive them on their staff page.";
     private const int NameMax = 100, MobileMax = 20, EmailMax = 200;
 
     private readonly EmploymentHeroClient _client;
@@ -298,7 +298,7 @@ public sealed class EmploymentHeroStaffSync
             var namesake = unlinked.FirstOrDefault(u => !held.ContainsKey(u.Id) && NameKey(u.FirstName, u.LastName) == NameKey(e.FirstName, e.Surname));
             if (namesake is not null) { held[namesake.Id] = e; continue; }
             var email = EmailOf(e);
-            if (email is null) { problems.Add(FixInEh(e, "They have no email in Employment Hero, and ODIP needs one to add them.")); continue; }
+            if (email is null) { problems.Add(FixInEh(e, "They have no email in Employment Hero, and we need one to add them.")); continue; }
             if (ValueProblem(e, email) is { } problem) { problems.Add(FixInEh(e, problem)); continue; }
             var staged = await creator.StageAsync(new CreateStaffDto
             {
@@ -351,8 +351,8 @@ public sealed class EmploymentHeroStaffSync
                 // lets only an Admin change a working one, and a pending Admin's or Coordinator's invite must not go to an address EH holds.
                 if (u.LastLoginAt is not null || u.Role != UserRole.SupportWorker)
                     problems.Add(new(EmploymentHeroAttentionKind.FixInOdip, u.Id, Id(e), u.FullName, u.LastLoginAt is not null
-                        ? $"Employment Hero has a new email for them ({email}). They have signed in to ODIP before, so an Admin changes their sign-in address on their staff page, then sends a sign-in invite."
-                        : $"Employment Hero has a new email for them ({email}). They have the {u.Role} role in ODIP, so an Admin changes their sign-in address on their staff page."));
+                        ? $"Employment Hero has a new email for them ({email}). They have signed in to Bunya Support before, so an Admin changes their sign-in address on their staff page, then sends a sign-in invite."
+                        : $"Employment Hero has a new email for them ({email}). They have the {u.Role} role in Bunya Support, so an Admin changes their sign-in address on their staff page."));
                 else if (await EmailProblemAsync(db, creator, email, u.Id, u.TenantId, ct) is { } emailProblem) problems.Add(FixInEh(e, emailProblem));
                 else
                 {
@@ -416,14 +416,14 @@ public sealed class EmploymentHeroStaffSync
         var holder = await db.Users.IgnoreQueryFilters([TenantFilter.Name]).Where(u => u.Id != userId && u.Email.ToLower() == email)
             .Select(u => new { u.TenantId, u.FirstName, u.LastName }).FirstOrDefaultAsync(ct);
         if (holder is not null)
-            return holder.TenantId == tenantId ? $"Their email in Employment Hero is already used by {(holder.FirstName + " " + holder.LastName).Trim()} in ODIP." : OtherOrganisationEmail;
+            return holder.TenantId == tenantId ? $"Their email in Employment Hero is already used by {(holder.FirstName + " " + holder.LastName).Trim()} in Bunya Support." : OtherOrganisationEmail;
         if (creator.ReservedDomainError(null, email) is { } reserved) return reserved;
         return await creator.OtherOrganisationAddressErrorAsync(null, email, tenantId, ct) is null ? null : OtherOrganisationEmail;
     }
 
     /// <summary>A refusal from StaffCreateService, as the item says it. Same-organisation addresses were matched in step 1, so "taken" means another organisation.</summary>
     private static string CreateRefusal(StaffCreateResult staged) =>
-        staged.IsConflict || staged.Error == StaffCreateService.OtherOrganisationMessage ? OtherOrganisationEmail : $"ODIP couldn't add them: {staged.Error}";
+        staged.IsConflict || staged.Error == StaffCreateService.OtherOrganisationMessage ? OtherOrganisationEmail : $"We couldn't add them: {staged.Error}";
 
     /// <summary>Why ODIP can't take EH's name, email or mobile as they are (the column limits and the staff form's rules), or null.</summary>
     private static string? ValueProblem(EhEmployee e, string? email)

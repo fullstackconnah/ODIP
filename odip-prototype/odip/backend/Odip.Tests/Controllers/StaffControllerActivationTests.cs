@@ -104,7 +104,7 @@ public class StaffControllerActivationTests
         var result = await host.Controller.Create(StaffAt($"new.hire@{OtherDomain}"), CancellationToken.None);
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
-        Assert.Equal("That address belongs to another organisation on ODIP.", Assert.Single(Assert.IsType<ApiResponse<StaffDetailDto>>(badRequest.Value).Errors!));
+        Assert.Equal("That address belongs to another organisation on Bunya Support.", Assert.Single(Assert.IsType<ApiResponse<StaffDetailDto>>(badRequest.Value).Errors!));
         Assert.Empty(await host.Db.Users.ToListAsync());
     }
 }

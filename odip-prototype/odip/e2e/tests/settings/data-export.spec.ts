@@ -35,7 +35,7 @@ test('a full export downloads as a ZIP whose manifest counts every file, and the
   const downloading = page.waitForEvent('download', { timeout: 30_000 }); // fires only once the whole export is in, past the 10 s action timeout
   await page.getByRole('button', { name: 'Download all data' }).click();
   const download = await downloading;
-  expect(download.suggestedFilename()).toMatch(/^odip-export-[a-z0-9-]+-\d{4}-\d{2}-\d{2}\.zip$/);
+  expect(download.suggestedFilename()).toMatch(/^bunya-support-export-[a-z0-9-]+-\d{4}-\d{2}-\d{2}\.zip$/);
 
   const zip = readFileSync((await download.path())!);
   const names = zipEntryNames(zip);

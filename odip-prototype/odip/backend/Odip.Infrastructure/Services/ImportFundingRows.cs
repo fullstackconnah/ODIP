@@ -75,13 +75,13 @@ public static class ImportFundingRows
             }
             if (found.Count == 0)
             {
-                plan.Refuse($"No participant in ODIP has {(line.NdisKey is null ? "this name and date of birth" : "this NDIS number")}. Import or add them first.");
+                plan.Refuse($"No participant in Bunya Support has {(line.NdisKey is null ? "this name and date of birth" : "this NDIS number")}. Import or add them first.");
                 if (Likely(line, participants) is { } owner) plan.Funding = line with { ParticipantId = owner.Id };
             }
             else if (found.Count > 1)
                 plan.Refuse(line.NdisKey is null
-                    ? $"{found.Count} participants in ODIP have this name and date of birth. Add their NDIS number to the row."
-                    : $"{found.Count} participants in ODIP have this NDIS number. Correct it on their profiles first.");
+                    ? $"{found.Count} participants in Bunya Support have this name and date of birth. Add their NDIS number to the row."
+                    : $"{found.Count} participants in Bunya Support have this NDIS number. Correct it on their profiles first.");
             else
             {
                 var match = found[0];
@@ -91,9 +91,9 @@ public static class ImportFundingRows
                 // ODIP name: say so (a warning, since the number is the stronger key).
                 if (line.NdisKey is null) continue;
                 if (line.FullName.Contains(' ') && NameKey(line.FullName) != NameKey(plan.Name))
-                    plan.Warnings.Add($"The file names {line.FullName} for this NDIS number, which is {plan.Name} in ODIP. Check the number.");
+                    plan.Warnings.Add($"The file names {line.FullName} for this NDIS number, which is {plan.Name} in Bunya Support. Check the number.");
                 else if (line.DateOfBirth is { } dob && match.DateOfBirth is { } recorded && dob != recorded)
-                    plan.Warnings.Add($"The file's date of birth for this NDIS number isn't {plan.Name}'s in ODIP. Check the number.");
+                    plan.Warnings.Add($"The file's date of birth for this NDIS number isn't {plan.Name}'s in Bunya Support. Check the number.");
             }
         }
     }
@@ -147,7 +147,7 @@ public static class ImportFundingRows
             var inFile = groups.Where(g => g != rows && g[0].Funding!.ParticipantId == participantId && g[0].Funding!.PlanStart <= end && start <= g[0].Funding!.PlanEnd)
                 .Select(g => (int?)g[0].RowNumber).FirstOrDefault();
             if (inOdip != null)
-                Refuse(rows, $"This participant already has a plan in ODIP from {inOdip}, which overlaps these dates. Change that plan on their Funding tab, or leave these rows out.");
+                Refuse(rows, $"This participant already has a plan in Bunya Support from {inOdip}, which overlaps these dates. Change that plan on their Funding tab, or leave these rows out.");
             else if (inFile != null)
                 Refuse(rows, $"This plan overlaps the plan on row {inFile} for the same participant, so both are left out. Check the plan dates on those rows.");
             else
@@ -196,7 +196,7 @@ public static class ImportFundingRows
     {
         foreach (var pool in rows.Where(r => r.Funding!.Category is >= 1 and <= 4).GroupBy(r => r.Funding!.Management!.Value))
         {
-            var note = $"Categories 01 to 04 are one Core (flexible) pool in ODIP: this plan's {Words(pool.Key)} Core comes to ${Money(pool.Sum(r => r.Funding!.Amount!.Value))}.";
+            var note = $"Categories 01 to 04 are one Core (flexible) pool in Bunya Support: this plan's {Words(pool.Key)} Core comes to ${Money(pool.Sum(r => r.Funding!.Amount!.Value))}.";
             foreach (var row in pool) row.Notes.Add(note);
         }
     }
@@ -285,7 +285,7 @@ public static class ImportFundingRows
             plan.Detail = $"{(c == Core ? "Core" : $"{c:00} {PaceCategories.NameOf(c)}")}, {Words(m)}, ${Money(a)}, {Say(from)} to {Say(to)}";
         if (ndis.Length > 0 && ndisKey is null && known) plan.Warnings.Add("The NDIS number isn't 9 digits, so this row finds its participant by name and date of birth.");
         if (first == ImportParticipantRows.ExampleFirstName && last == ImportParticipantRows.ExampleLastName) plan.Skip("This is the template's example row.");
-        else if (category == RecurringTransport) plan.Skip("Recurring Transport (18) is paid to the participant and never claimed by providers, so ODIP doesn't record it.");
+        else if (category == RecurringTransport) plan.Skip("Recurring Transport (18) is paid to the participant and never claimed by providers, so Bunya Support doesn't record it.");
         else reasons.ForEach(plan.Refuse);
         return plan;
     }

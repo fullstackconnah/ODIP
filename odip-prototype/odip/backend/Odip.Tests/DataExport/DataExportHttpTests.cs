@@ -49,7 +49,7 @@ public class DataExportHttpTests
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("application/zip", response.Content.Headers.ContentType!.MediaType);
-        Assert.Matches("^odip-export-sunrise-care-[0-9]{4}-[0-9]{2}-[0-9]{2}[.]zip$", response.Content.Headers.ContentDisposition!.FileName!.Trim('"'));
+        Assert.Matches("^bunya-support-export-sunrise-care-[0-9]{4}-[0-9]{2}-[0-9]{2}[.]zip$", response.Content.Headers.ContentDisposition!.FileName!.Trim('"'));
         using var zip = new ZipArchive(new MemoryStream(await response.Content.ReadAsByteArrayAsync()), ZipArchiveMode.Read);
         Assert.Equal(DataExportWriter.ManifestName, zip.Entries[^1].FullName);
         Assert.Equal(2, DataExportTestKit.Csv(zip, "vehicles.csv").Count);

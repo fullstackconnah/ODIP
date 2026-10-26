@@ -16,7 +16,7 @@ public static class EmploymentHeroTimesheets
 {
     public const string NotLinkedReason = "Staff not linked to Employment Hero";
     public const string FinalisedMessage = "Changed after the pay run was finalised: fix it in Employment Hero";
-    public const string GaveUpMessage = "ODIP stopped trying after six tries. Send missing tries again.";
+    public const string GaveUpMessage = "We stopped trying after six tries. Send missing tries again.";
     public const string BusyMessage = "Employment Hero is busy.";
     public const string KeyRefusedReason = "Employment Hero didn't accept the API key.";
 
@@ -30,7 +30,7 @@ public static class EmploymentHeroTimesheets
     {
         if (payrollId is null) return new(null, NotLinkedReason);
         if (!int.TryParse(payrollId, NumberStyles.None, CultureInfo.InvariantCulture, out var employeeId))
-            return new(null, "ODIP can't read this worker's Employment Hero id. Link them again in Settings → Integrations.");
+            return new(null, "We can't read this worker's Employment Hero id. Link them again in Settings → Integrations.");
         var (workType, kind) = s.NightType switch
         {
             SleepoverType.ActiveNight => (map.ActiveNight, "active nights"),
@@ -108,10 +108,10 @@ public static class EmploymentHeroTimesheets
         if (row is null) return (PayrollShiftStatus.Waiting, "Not queued yet. Send missing queues it.", true);
         return row.Status switch
         {
-            EmploymentHeroOutboxStatus.Pending when row.LastError is BusyMessage or KeyRefusedReason => (PayrollShiftStatus.Waiting, $"{row.LastError} ODIP tries again at {Retry()}.", false),
+            EmploymentHeroOutboxStatus.Pending when row.LastError is BusyMessage or KeyRefusedReason => (PayrollShiftStatus.Waiting, $"{row.LastError} We'll try again at {Retry()}.", false),
             EmploymentHeroOutboxStatus.Pending => (PayrollShiftStatus.Waiting,
-                waitReason ?? (row.SentAt is null ? "Queued. ODIP sends about 25 shifts a minute." : "Changed in ODIP; the update is queued."), false),
-            EmploymentHeroOutboxStatus.Failed => (PayrollShiftStatus.Failed, $"{row.LastError} ODIP tries again at {Retry()}.", true),
+                waitReason ?? (row.SentAt is null ? "Queued. We send about 25 shifts a minute." : "Changed in Bunya Support; the update is queued."), false),
+            EmploymentHeroOutboxStatus.Failed => (PayrollShiftStatus.Failed, $"{row.LastError} We'll try again at {Retry()}.", true),
             EmploymentHeroOutboxStatus.NeedsAttention when row.LastError == FinalisedMessage => (PayrollShiftStatus.Changed, FinalisedMessage, false),
             EmploymentHeroOutboxStatus.NeedsAttention => (PayrollShiftStatus.Failed, row.LastError, true),
             _ => (PayrollShiftStatus.Sent, null, false),
