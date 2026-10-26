@@ -168,7 +168,7 @@ public class CaregiverSubmissionsController : ControllerBase
         }
         payload = CaregiverFieldPolicy.Sanitise(payload, s.Participant);
 
-        var error = await ParticipantPatchApplier.ApplyAsync(_db, _safetyNoteSync, _compatLink, s.Participant, payload, ct);
+        var error = await ParticipantPatchApplier.ApplyAsync(_db, _safetyNoteSync, _compatLink, s.Participant, payload, null, ct);
         if (error != null) return BadRequest(ApiResponse<object>.Fail(error));
 
         s.Status = CaregiverSubmissionStatus.Accepted;

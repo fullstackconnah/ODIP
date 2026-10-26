@@ -33,6 +33,7 @@ public static class ParticipantPatchApplier
         StaffCompatibilityLinkService compatLink,
         Participant p,
         PatchParticipantDto dto,
+        IReadOnlyDictionary<string, int>? expectedRevisions,
         CancellationToken ct)
     {
         // ── Validate — only for present groups, each checked purely from its own incoming values

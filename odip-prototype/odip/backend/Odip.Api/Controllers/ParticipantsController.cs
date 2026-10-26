@@ -840,7 +840,7 @@ public class ParticipantsController : ControllerBase
         // Extracted, behaviour-preserving, into ParticipantPatchApplier.ApplyAsync so the
         // caregiver accept flow (CaregiverSubmissionsController) can apply a sanitised
         // PatchParticipantDto in-process without going through HTTP. See that class's doc.
-        var error = await ParticipantPatchApplier.ApplyAsync(_db, _safetyNoteSync, _compatLink, p, dto, ct);
+        var error = await ParticipantPatchApplier.ApplyAsync(_db, _safetyNoteSync, _compatLink, p, dto, null, ct);
         if (error != null) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(error));
 
         // PF-2: Patch's DTO never carries contactRoles either — computed from live ContactRoles,
