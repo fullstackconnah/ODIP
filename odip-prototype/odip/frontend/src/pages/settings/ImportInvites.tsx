@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { useImportInvites } from '@/api/hooks'
+import type { ImportInviteDto } from '@/api/types'
 import { describeEmailOutcome, sendSetPasswordEmailFor, type EmailOutcome } from '@/lib/signInEmail'
 import { extractErrorMessage } from '@/lib/utils'
 
@@ -27,12 +28,144 @@ export function InviteResults({ result, fileName }: { result: InviteResult; file
   )
 }
 
+// Auto mode runs once per import: the flag outlives a remount (the page re-rendering, the tab navigating back), so a second automatic run never starts.
+const sentKey = (batchId: string) => `bunya-invites-sent:${batchId}`
+const autoAlreadyRan = (batchId: string) => { try { return sessionStorage.getItem(sentKey(batchId)) !== null } catch { return true } }
+const markAutoRan = (batchId: string) => { try { sessionStorage.setItem(sentKey(batchId), '1') } catch { /* the read side treats a blocked store as already run */ } }
+
+type Resume = { queue: ImportInviteDto[]; cursor: { after: string; left: number } | null; first: boolean }
+
+/** The staff import's own invites: sends every page without a press, pausing (not failing) when the email service asks us to slow down. */
+function AutoInvites({ batchId, count, onSendingChange }: { batchId: string; count: number; onSendingChange?: (sending: boolean) => void }) {
+  const invites = useImportInvites()
+  const [phase, setPhase] = useState<'sending' | 'paused' | 'finished' | 'problem'>('sending')
+  const [outcomes, setOutcomes] = useState<EmailOutcome[]>([])
+  const [failedPeople, setFailedPeople] = useState<ImportInviteDto[]>([])
+  const [problem, setProblem] = useState('')
+  const [left, setLeft] = useState(0)
+  const resume = useRef<Resume>({ queue: [], cursor: null, first: true })
+  const running = useRef(false)
+
+  const emailFor = (person: ImportInviteDto): Promise<EmailOutcome> | EmailOutcome => person.firebaseAccount
+    ? sendSetPasswordEmailFor(person.email, person.firebaseAccount)
+    : { ok: false, email: person.email, reason: 'account', detail: person.error ?? undefined }
+
+  async function run(from: Resume) {
+    if (running.current) return
+    running.current = true
+    onSendingChange?.(true)
+    setPhase('sending')
+    let { queue, cursor, first } = from
+    try {
+      for (;;) {
+        if (queue.length === 0) {
+          if (!first && !cursor) break
+          const page = await invites.mutateAsync(cursor ? { batchId, after: cursor.after } : { batchId })
+          first = false
+          queue = page.invites
+          cursor = page.left > 0 && page.next ? { after: page.next, left: page.left } : null
+          if (queue.length === 0) break
+        }
+        const person = queue[0]
+        const outcome = await emailFor(person)
+        if (!outcome.ok && outcome.reason === 'too-many-requests') {
+          // The person stays at the head of what is held, so Send the rest tries them first.
+          resume.current = { queue, cursor, first }
+          setLeft(queue.length + (cursor?.left ?? 0))
+          setPhase('paused')
+          return
+        }
+        setOutcomes(o => [...o, outcome])
+        if (!outcome.ok) setFailedPeople(f => [...f, person])
+        queue = queue.slice(1)
+      }
+      resume.current = { queue: [], cursor: null, first: false }
+      setPhase('finished')
+    } catch (err) {
+      resume.current = { queue, cursor, first }
+      setProblem(extractErrorMessage(err, 'The invites could not be sent.'))
+      setPhase('problem')
+    } finally {
+      running.current = false
+      onSendingChange?.(false)
+    }
+  }
+
+  const started = useRef(false)
+  useEffect(() => {
+    if (started.current) return
+    started.current = true
+    markAutoRan(batchId)
+    void run({ queue: [], cursor: null, first: true })
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on mount
+  }, [])
+
+  // Only the failures that have an account can be sent again; the rest need their email fixed first.
+  const retryable = failedPeople.filter(p => p.firebaseAccount)
+  const needFix = failedPeople.length > retryable.length
+  async function retryFailed() {
+    if (running.current) return
+    running.current = true
+    onSendingChange?.(true)
+    setPhase('sending')
+    const next: EmailOutcome[] = []
+    for (const person of retryable) next.push(await sendSetPasswordEmailFor(person.email, person.firebaseAccount!))
+    const again = new Set(retryable.map(p => p.email))
+    setOutcomes(o => [...o.filter(x => !again.has(x.email)), ...next])
+    setFailedPeople(f => f.filter(p => !p.firebaseAccount || next.some(n => !n.ok && n.email === p.email)))
+    running.current = false
+    onSendingChange?.(false)
+    setPhase('finished')
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {phase === 'sending' && (
+        <div role="status" aria-live="polite" className="flex flex-col gap-1 text-sm">
+          <p className="tabular-nums">{`Sending sign-in invites: ${outcomes.length} of ${count}`}</p>
+          <p className="text-[13px] text-[var(--color-muted-foreground)]">Keep this tab open until the invites finish.</p>
+        </div>
+      )}
+      {phase === 'paused' && (
+        <>
+          <Callout tone="warning">{`Sending paused: the email service asked us to slow down. ${left} still to invite.`}</Callout>
+          <div><Button variant="secondary" size="sm" onClick={() => void run(resume.current)}>{`Send the rest (${left})`}</Button></div>
+        </>
+      )}
+      {phase === 'problem' && (
+        <>
+          <InviteResults result={{ problem }} />
+          <div><Button variant="secondary" size="sm" onClick={() => void run(resume.current)}>Try again</Button></div>
+        </>
+      )}
+      {phase === 'finished' && <InviteResults result={{ outcomes, left: 0 }} />}
+      {phase === 'finished' && retryable.length > 0 && (
+        <div><Button variant="secondary" size="sm" onClick={() => void retryFailed()}>{`Try the ${retryable.length} again`}</Button></div>
+      )}
+      {phase === 'finished' && needFix && <p className="text-[13px]">Fix their email on the Staff page, then send from Import history.</p>}
+    </div>
+  )
+}
+
+/**
+ * The import's invites. With `auto` (the staff import) every page is sent on arrival, once per import; otherwise it is the Send sign-in invites button.
+ */
+export default function ImportInvites({ batchId, count, onResult, auto, onSendingChange }: {
+  batchId: string; count: number; onResult?: (result: InviteResult) => void
+  auto?: boolean; onSendingChange?: (sending: boolean) => void
+}) {
+  const [runsAuto] = useState(() => !!auto && !autoAlreadyRan(batchId))
+  return runsAuto
+    ? <AutoInvites batchId={batchId} count={count} onSendingChange={onSendingChange} />
+    : <ManualInvites batchId={batchId} count={count} onResult={onResult} />
+}
+
 /**
  * "Send sign-in invites (N)" for an imported staff batch: the server makes sure each account exists (the Staff page's own step), then this
  * browser asks Firebase for each set-password email in turn. The results show under the button, or wherever `onResult` puts them (the Import
  * history shows them above its table, never inside a row).
  */
-export default function ImportInvites({ batchId, count, onResult }: { batchId: string; count: number; onResult?: (result: InviteResult) => void }) {
+function ManualInvites({ batchId, count, onResult }: { batchId: string; count: number; onResult?: (result: InviteResult) => void }) {
   const invites = useImportInvites()
   const [sending, setSending] = useState(false)
   const [result, setResult] = useState<InviteResult | null>(null)

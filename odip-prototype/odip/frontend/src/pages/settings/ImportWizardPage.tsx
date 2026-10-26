@@ -3,6 +3,7 @@ import { Navigate, useParams } from 'react-router-dom'
 import { BackButton } from '@/components/BackButton'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
+import { CheckboxField } from '@/components/CheckboxField'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { DataTable, type Column } from '@/components/DataTable'
 import { Dropdown } from '@/components/Dropdown'
@@ -108,6 +109,8 @@ export default function ImportWizardPage() {
   const [result, setResult] = useState<ImportResultDto | null>(null)
   const [confirmUndo, setConfirmUndo] = useState(false)
   const [undone, setUndone] = useState(false)
+  const [inviteOnImport, setInviteOnImport] = useState(true)
+  const [inviting, setInviting] = useState(false)
   const [blockers, setBlockers] = useState<ImportUndoBlockerDto[]>([])
   // One key per file: a retry after a lost response sends the same key and gets the same batch back, never a second import.
   const idempotencyKey = useRef(newCompletionRequestId())
@@ -199,15 +202,16 @@ export default function ImportWizardPage() {
             title={`Imported ${plural(result.createdCount, noun)}`}
             actions={<>
               <Button to={listTo(landing)} variant="secondary" size="sm">View {listNoun}</Button>
-              <Button variant="secondary" size="sm" onClick={() => setConfirmUndo(true)}>Undo import</Button>
+              <Button variant="secondary" size="sm" aria-disabled={inviting || undefined} aria-describedby={inviting ? 'undo-wait' : undefined} onClick={() => { if (!inviting) setConfirmUndo(true) }}>Undo import</Button>
             </>}
           >
             {kind === 'funding-plans'
               ? `${plural(result.skippedCount, 'row')} skipped, ${plural(result.failedCount, 'row')} couldn't be imported.`
-              : `${result.skippedCount} skipped (already in ODIP), ${result.failedCount} couldn't be imported.`}
+              : `${result.skippedCount} skipped (already in Bunya Support), ${result.failedCount} couldn't be imported.`}
           </Callout>
         )}
-        {kind === 'staff' && !undone && <ImportInvites batchId={result.batchId} count={result.createdCount} />}
+        {kind === 'staff' && !undone && inviting && <p id="undo-wait" className="text-[13px] text-[var(--color-muted-foreground)]">Wait for the invites to finish, then undo.</p>}
+        {kind === 'staff' && !undone && <ImportInvites batchId={result.batchId} count={result.createdCount} auto={inviteOnImport} onSendingChange={setInviting} />}
         {problem && (
           <Callout tone="error" title={problem}>
             {blockers.length > 0 && (
@@ -314,7 +318,7 @@ export default function ImportWizardPage() {
             {step === 'preview' && data && (
               <div className="flex flex-col gap-4">
                 {data.previouslyImportedAt && (
-                  <Callout tone="warning">{`This exact file was imported on ${formatDateTimeAu(data.previouslyImportedAt)}. ${kind === 'funding-plans' ? "Plans already in ODIP can't be imported again" : 'Rows already in ODIP are skipped'}, but check before importing it again.`}</Callout>
+                  <Callout tone="warning">{`This exact file was imported on ${formatDateTimeAu(data.previouslyImportedAt)}. ${kind === 'funding-plans' ? "Plans already in Bunya Support can't be imported again" : 'Rows already in Bunya Support are skipped'}, but check before importing it again.`}</Callout>
                 )}
                 {kind === 'participants' && (
                   <fieldset className="grid gap-2 md:grid-cols-2">
@@ -353,12 +357,13 @@ export default function ImportWizardPage() {
             {step === 'review' && data && (
               <div className="flex max-w-xl flex-col gap-2 text-sm">
                 <p>{`${plural(data.createCount, noun)} will be created${landing ? `, ${LANDINGS.find(l => l.value === landing)!.label.toLowerCase()}` : ''}.`}</p>
-                {data.skippedCount > 0 && <p>{kind === 'funding-plans' ? `Rows skipped: ${data.skippedCount}.` : `Skipped, already in ODIP: ${data.skippedCount}.`}</p>}
+                {data.skippedCount > 0 && <p>{kind === 'funding-plans' ? `Rows skipped: ${data.skippedCount}.` : `Skipped, already in Bunya Support: ${data.skippedCount}.`}</p>}
                 {data.invalidCount > 0 && <p>{kind === 'funding-plans'
-                  ? `Rows that can't be imported: ${data.invalidCount}. Their plans are left out whole. Fix ${data.invalidCount === 1 ? 'that row' : 'those rows'} in the file and import it again: plans already in ODIP are refused, never added twice.`
+                  ? `Rows that can't be imported: ${data.invalidCount}. Their plans are left out whole. Fix ${data.invalidCount === 1 ? 'that row' : 'those rows'} in the file and import it again: plans already in Bunya Support are refused, never added twice.`
                   : `Can't be imported: ${data.invalidCount}. Fix ${data.invalidCount === 1 ? 'it' : 'them'} in the file and import it again afterwards.`}</p>}
                 {checkCount > 0 && <p>{`Rows to check first: ${checkCount}. Each one says why in the preview.`}</p>}
-                {kind === 'staff' && <p>Nobody is emailed yet: send sign-in invites after the import, now or later from Import history.</p>}
+                {kind === 'staff' && <CheckboxField label="Email each new staff member a sign-in invite" checked={inviteOnImport} onChange={e => setInviteOnImport(e.target.checked)}
+                  hint={inviteOnImport ? 'Invites are sent from this browser straight after the import. Keep this tab open until they finish.' : 'Nobody is emailed. You can send invites later from Import history.'} />}
                 <p>{`Every row is checked again as it is imported. You can undo the whole import while ${kind === 'participants' ? 'nothing has been added to its records' : KIND[kind].undoRule}.`}</p>
               </div>
             )}
@@ -381,7 +386,7 @@ export default function ImportWizardPage() {
       <ConfirmDialog
         open={confirming}
         title={`Import ${plural(data?.createCount ?? 0, noun)}?`}
-        message={`${plural(data?.createCount ?? 0, noun)} will be created. Rows skipped or that can't be imported are left out.`}
+        message={`${plural(data?.createCount ?? 0, noun)} will be created${kind === 'staff' && inviteOnImport ? ' and each emailed a sign-in invite' : ''}. Rows skipped or that can't be imported are left out.`}
         confirmLabel="Import"
         loading={commit.isPending}
         onCancel={() => setConfirming(false)}

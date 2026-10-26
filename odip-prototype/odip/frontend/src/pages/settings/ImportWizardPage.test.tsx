@@ -19,6 +19,12 @@ vi.mock('@/api/hooks', () => ({
   useProviderSettings: () => ({ data: providerSettings.current }),
 }))
 
+const { sendEmail } = vi.hoisted(() => ({ sendEmail: vi.fn() }))
+vi.mock('@/lib/signInEmail', async () => ({
+  ...(await vi.importActual<typeof import('@/lib/signInEmail')>('@/lib/signInEmail')),
+  sendSetPasswordEmailFor: sendEmail,
+}))
+
 const FIELDS = [
   { key: 'firstName', label: 'First name', required: true },
   { key: 'lastName', label: 'Last name', required: true },
@@ -174,7 +180,8 @@ describe('ImportWizardPage', () => {
     await screen.findByRole('heading', { name: 'Preview' })
     expect(screen.queryByLabelText(/Already receiving services/)).toBeNull()
     await userEvent.click(screen.getByRole('button', { name: 'Next' }))
-    expect(screen.getByText(/Nobody is emailed yet/)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Email each new staff member a sign-in invite' }))
+    expect(screen.getByText('Nobody is emailed. You can send invites later from Import history.')).toBeInTheDocument()
     expect(screen.getByText('Every row is checked again as it is imported. You can undo the whole import while none of them has signed in or been rostered.')).toBeInTheDocument()
     await userEvent.click(await screen.findByRole('button', { name: 'Import 1 staff member' }))
     await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Import' }))
@@ -205,7 +212,7 @@ describe('ImportWizardPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Next' }))
     expect(screen.getByText('1 funding plan will be created.')).toBeInTheDocument()
     expect(screen.getByText('Rows skipped: 1.')).toBeInTheDocument()
-    expect(screen.getByText("Rows that can't be imported: 2. Their plans are left out whole. Fix those rows in the file and import it again: plans already in ODIP are refused, never added twice.")).toBeInTheDocument()
+    expect(screen.getByText("Rows that can't be imported: 2. Their plans are left out whole. Fix those rows in the file and import it again: plans already in Bunya Support are refused, never added twice.")).toBeInTheDocument()
     expect(screen.getByText('Every row is checked again as it is imported. You can undo the whole import while none of its plans has been changed, or used by a shift or a service agreement, since the import.')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Import 1 funding plan' }))
     await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Import' }))
@@ -269,5 +276,61 @@ describe('ImportWizardPage: where an unknown kind goes', () => {
     )
     render(<RouterProvider router={router} />)
     await waitFor(() => expect(router.state.location.search).toBe('?section=import'))
+  })
+
+  async function importStaff() {
+    commit.mockResolvedValue({ batchId: 'bx', createdCount: 1, skippedCount: 1, failedCount: 0, rows: previewOf(['firstName', 'lastName']).rows, replayed: false })
+    const router = createMemoryRouter([{ path: '/settings/import/:kind', element: <ImportWizardPage /> }], { initialEntries: ['/settings/import/staff'] })
+    render(<RouterProvider router={router} />)
+    await upload()
+    await screen.findByRole('heading', { name: 'Match columns' })
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }))
+    await screen.findByRole('heading', { name: 'Preview' })
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }))
+  }
+  const doImport = async () => {
+    await userEvent.click(await screen.findByRole('button', { name: 'Import 1 staff member' }))
+    await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Import' }))
+  }
+
+  it('staff review: the invite checkbox is on by default with its helper, and the confirm says invites go out', async () => {
+    await importStaff()
+    expect(screen.getByRole('checkbox', { name: 'Email each new staff member a sign-in invite' })).toBeChecked()
+    expect(screen.getByText('Invites are sent from this browser straight after the import. Keep this tab open until they finish.')).toBeInTheDocument()
+    await userEvent.click(await screen.findByRole('button', { name: 'Import 1 staff member' }))
+    expect(within(screen.getByRole('alertdialog')).getByText("1 staff member will be created and each emailed a sign-in invite. Rows skipped or that can't be imported are left out.")).toBeInTheDocument()
+  })
+
+  it('unticked: the manual Send button shows and nothing is sent', async () => {
+    invites.mockClear()
+    await importStaff()
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Email each new staff member a sign-in invite' }))
+    await doImport()
+    expect(await screen.findByRole('button', { name: 'Send sign-in invites (1)' })).toBeInTheDocument()
+    expect(invites).not.toHaveBeenCalled()
+  })
+
+  it('ticked: invites are fetched once with no click, and Undo waits until they finish', async () => {
+    invites.mockClear(); sendEmail.mockReset()
+    let release!: (v: unknown) => void
+    sendEmail.mockReturnValue(new Promise(r => { release = r }))
+    invites.mockResolvedValue({ left: 0, invites: [{ staffId: 's1', name: 'Ava Stone', email: 'ava@example.com', firebaseAccount: 'created', error: null }] })
+    await importStaff()
+    await doImport()
+    const undoBtn = await screen.findByRole('button', { name: 'Undo import' })
+    await waitFor(() => expect(undoBtn).toHaveAttribute('aria-disabled', 'true'))
+    expect(invites).toHaveBeenCalledTimes(1)
+    expect(invites).toHaveBeenCalledWith({ batchId: 'bx' })
+    expect(screen.getByText('Wait for the invites to finish, then undo.')).toBeInTheDocument()
+    await userEvent.click(undoBtn)
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    release({ ok: true, email: 'ava@example.com', account: 'created' })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Undo import' })).not.toHaveAttribute('aria-disabled'))
+    expect(screen.queryByText('Wait for the invites to finish, then undo.')).toBeNull()
+  })
+
+  it('staff copy never says ODIP', async () => {
+    await importStaff()
+    expect(document.body.textContent).not.toMatch(/ODIP/)
   })
 })
