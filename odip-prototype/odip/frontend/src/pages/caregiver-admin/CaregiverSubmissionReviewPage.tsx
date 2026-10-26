@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AlertCircle } from 'lucide-react'
 import { useCaregiverSubmission, useAcceptCaregiverSubmission, useRejectCaregiverSubmission } from '@/api/hooks/caregiver'
-import { computeCaregiverDiff, type DiffRow } from '@/lib/caregiverDiff'
+import { computeCaregiverDiff, groupHeading, type DiffRow } from '@/lib/caregiverDiff'
 import { usePermissions } from '@/lib/permissions'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Modal } from '@/components/Modal'
@@ -41,7 +41,7 @@ export default function CaregiverSubmissionReviewPage() {
 
   const rows = useMemo(() => (s ? computeCaregiverDiff(s.current, s.payload, s.base) : []), [s])
   const byGroup = useMemo(
-    () => rows.reduce<Record<string, DiffRow[]>>((acc, r) => { (acc[r.group] ??= []).push(r); return acc }, {}),
+    () => rows.reduce<Record<string, DiffRow[]>>((acc, r) => { (acc[groupHeading(r.group)] ??= []).push(r); return acc }, {}),
     [rows],
   )
 
@@ -114,19 +114,20 @@ export default function CaregiverSubmissionReviewPage() {
           <section key={group} className="rounded-[var(--radius-md)] border border-[var(--color-border)] overflow-hidden">
             <h2 className="px-[var(--cell-px)] py-[6px] bg-[var(--color-accent)] text-sm font-medium">{group}</h2>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full table-fixed text-sm">
+                <colgroup><col className="w-[30%]" /><col className="w-[35%]" /><col className="w-[35%]" /></colgroup>
                 <thead>
                   <tr className="text-left text-[var(--color-muted-foreground)] text-xs">
-                    <th className="px-[var(--cell-px)] py-[6px] font-medium">Field</th>
-                    <th className="px-[var(--cell-px)] py-[6px] font-medium">Current</th>
-                    <th className="px-[var(--cell-px)] py-[6px] font-medium">Caregiver's value</th>
+                    <th scope="col" className="px-[var(--cell-px)] py-[6px] font-medium">Field</th>
+                    <th scope="col" className="px-[var(--cell-px)] py-[6px] font-medium">Current</th>
+                    <th scope="col" className="px-[var(--cell-px)] py-[6px] font-medium">Caregiver's value</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--color-border)]">
                   {groupRows.map((r) => (
                     <tr key={r.field}>
-                      <td className="px-[var(--cell-px)] py-[7px] font-medium">{r.label}</td>
-                      <td className="px-[var(--cell-px)] py-[7px]">
+                      <td className="px-[var(--cell-px)] py-[7px] break-words font-medium">{r.label}</td>
+                      <td className="px-[var(--cell-px)] py-[7px] break-words">
                         {r.current}
                         {flagStaffChanges && r.staffChanged && (
                           <p className="mt-1 flex items-start gap-1 text-xs font-medium text-[var(--color-on-warning-container)]">
@@ -135,7 +136,7 @@ export default function CaregiverSubmissionReviewPage() {
                           </p>
                         )}
                       </td>
-                      <td className="px-[var(--cell-px)] py-[7px]">{r.proposed}</td>
+                      <td className="px-[var(--cell-px)] py-[7px] break-words">{r.proposed}</td>
                     </tr>
                   ))}
                 </tbody>

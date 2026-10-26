@@ -40,6 +40,9 @@ public static class WhatsNewSeed
         new Item("2026-10-caregiver-form-keeps-typing", "Caregiver forms keep what you type while saving",
             "If a caregiver keeps typing while their form is saving, what they typed is now kept instead of being cleared when the save finishes.",
             Staff, false),
+        new Item("2026-10-caregiver-review-readable", "Caregiver form reviews are easier to read",
+            "When you review a caregiver's form, each section now has the same name the caregiver saw, and the Field, Current and Caregiver's value columns line up from one section to the next.",
+            Staff, false),
     };
 
     /// <summary>Inserts the keys the table lacks, one save each, so a key another instance inserted first costs only that row.</summary>

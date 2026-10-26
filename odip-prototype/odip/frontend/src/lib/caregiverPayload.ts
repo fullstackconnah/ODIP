@@ -5,6 +5,16 @@ import type { PatchParticipantDto } from '@/api/types/participant-patch'
 /** The wizard steps whose groups the caregiver form sends. One list for the draft body, the base and the review diff. */
 export const PROFILE_STEP_GROUP_KEYS = ['keyIdentifiers', 'culturalDepth', 'medical', 'mobility', 'behaviourCognition', 'dailyLiving'] as const
 
+/** The caregiver wizard's step names. The wizard titles its steps with these and the staff review page titles its sections with them, so both sides use the same words. */
+export const CAREGIVER_STEP_LABELS: Record<(typeof PROFILE_STEP_GROUP_KEYS)[number], string> = {
+  keyIdentifiers: 'Key Identifiers',
+  culturalDepth: 'Cultural & Consents',
+  medical: 'Medical',
+  mobility: 'Mobility & Functional',
+  behaviourCognition: 'Behaviour & Communication',
+  dailyLiving: 'Daily Living',
+}
+
 /** The four collection groups and the column that identifies a row in each. */
 export const COLLECTION_KEYS: Record<string, string> = {
   consents: 'consentType',

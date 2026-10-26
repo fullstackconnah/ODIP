@@ -35,7 +35,7 @@ import {
   PROFILE_STEP_MOBILITY_FIELDS, PROFILE_STEP_BEHAVIOUR_FIELDS, PROFILE_STEP_DAILY_LIVING_FIELDS,
   type ParticipantFormData,
 } from '@/lib/participantSchema'
-import { buildCaregiverWire } from '@/lib/caregiverPayload'
+import { buildCaregiverWire, CAREGIVER_STEP_LABELS } from '@/lib/caregiverPayload'
 import { CAREGIVER_INTERNAL_FIELDS } from '@/lib/caregiverFields'
 import { label as fieldLabel, norm as normValue } from '@/lib/caregiverDiff'
 import type { PatchParticipantDto } from '@/api/types/participant-patch'
@@ -108,12 +108,12 @@ export default function CaregiverWizardPage() {
 
   const steps: WizardStepDef<CaregiverFormData>[] = useMemo(() => [
     { key: 'aboutYou', label: 'About you', fields: ABOUT_YOU_FIELDS },
-    { key: 'keyIdentifiers', label: 'Key Identifiers', fields: PROFILE_STEP_KEY_IDENTIFIERS_FIELDS },
-    { key: 'culturalDepth', label: 'Cultural & Consents', fields: PROFILE_STEP_CULTURAL_DEPTH_FIELDS },
-    { key: 'medical', label: 'Medical', fields: PROFILE_STEP_MEDICAL_FIELDS },
-    { key: 'mobility', label: 'Mobility & Functional', fields: PROFILE_STEP_MOBILITY_FIELDS },
-    { key: 'behaviourCognition', label: 'Behaviour & Communication', fields: PROFILE_STEP_BEHAVIOUR_FIELDS },
-    { key: 'dailyLiving', label: 'Daily Living', fields: PROFILE_STEP_DAILY_LIVING_FIELDS },
+    { key: 'keyIdentifiers', label: CAREGIVER_STEP_LABELS.keyIdentifiers, fields: PROFILE_STEP_KEY_IDENTIFIERS_FIELDS },
+    { key: 'culturalDepth', label: CAREGIVER_STEP_LABELS.culturalDepth, fields: PROFILE_STEP_CULTURAL_DEPTH_FIELDS },
+    { key: 'medical', label: CAREGIVER_STEP_LABELS.medical, fields: PROFILE_STEP_MEDICAL_FIELDS },
+    { key: 'mobility', label: CAREGIVER_STEP_LABELS.mobility, fields: PROFILE_STEP_MOBILITY_FIELDS },
+    { key: 'behaviourCognition', label: CAREGIVER_STEP_LABELS.behaviourCognition, fields: PROFILE_STEP_BEHAVIOUR_FIELDS },
+    { key: 'dailyLiving', label: CAREGIVER_STEP_LABELS.dailyLiving, fields: PROFILE_STEP_DAILY_LIVING_FIELDS },
   ], [])
   const stepsForRail = useMemo(() => [...steps, { key: REVIEW_STEP_KEY, label: 'Review', fields: [] }], [steps])
 

@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import CaregiverSubmissionReviewPage from './CaregiverSubmissionReviewPage'
 import type { CaregiverSubmissionDetailDto } from '@/api/types/caregiver'
+import type { PatchParticipantDto } from '@/api/types/participant-patch'
 import { __testHooks } from '@/hooks/useBackNavigation'
 
 const {
@@ -278,10 +279,10 @@ describe('CaregiverSubmissionReviewPage — section headings and columns', () =>
         personalDetails: { firstName: 'Sofia' },
         medical: { allergiesDetail: 'x'.repeat(200) },
         aboutMe: { likesDislikes: 'Gardening' },
-      },
+      } as unknown as PatchParticipantDto,
       base: {
         personalDetails: { firstName: 'Sophie' }, medical: { allergiesDetail: 'None' }, aboutMe: { likesDislikes: 'Reading' },
-      },
+      } as unknown as PatchParticipantDto,
     }),
     isLoading: false,
   })
@@ -312,8 +313,8 @@ describe('CaregiverSubmissionReviewPage — section headings and columns', () =>
     mockUseCaregiverSubmission.mockReturnValue({
       data: makeSubmission({
         current: { firstName: 'Sofie' },
-        payload: { personalDetails: { firstName: 'Sofia' } },
-        base: { personalDetails: { firstName: 'Sophie' } },
+        payload: { personalDetails: { firstName: 'Sofia' } } as unknown as PatchParticipantDto,
+        base: { personalDetails: { firstName: 'Sophie' } } as unknown as PatchParticipantDto,
       }),
       isLoading: false,
     })
