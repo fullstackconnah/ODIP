@@ -557,7 +557,7 @@ export default function AppLayout() {
                 {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </button>
               {user.tenantName && (
-                <span title={user.tenantName} className={`${isSuperAdmin ? 'hidden sm:inline-block' : 'inline-block'} max-w-[7.5rem] truncate sm:max-w-none text-xs bg-[var(--color-primary)]/10 text-[var(--color-primary)] px-2.5 py-0.5 rounded-full border border-[var(--color-primary)]/20 font-medium`}>
+                <span title={user.tenantName} className={`${isSuperAdmin ? 'hidden md:inline-block' : 'inline-block'} max-w-[7.5rem] truncate sm:max-w-none text-xs bg-[var(--color-primary)]/10 text-[var(--color-primary)] px-2.5 py-0.5 rounded-full border border-[var(--color-primary)]/20 font-medium`}>
                   {user.tenantName}
                 </span>
               )}

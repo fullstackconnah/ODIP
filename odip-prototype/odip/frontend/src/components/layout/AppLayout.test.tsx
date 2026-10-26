@@ -153,7 +153,15 @@ describe('AppLayout — the organisation name in the header', () => {
   it('is hidden on a phone for a SuperAdmin, whose tenant switcher already names the organisation and needs the room', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'SuperAdmin', tenantName: 'Jo Care Support Services' }))
     renderAt('/trips')
-    expect(screen.getByText('Jo Care Support Services')).toHaveClass('hidden', 'sm:inline-block')
+    expect(screen.getByText('Jo Care Support Services')).toHaveClass('hidden', 'md:inline-block')
+    expect(screen.getByText('Jo Care Support Services')).not.toHaveClass('sm:inline-block')
+  })
+
+  it('keeps showing a staff member\'s organisation at every width', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin', tenantName: 'Jo Care Support Services' }))
+    renderAt('/trips')
+    expect(screen.getByText('Jo Care Support Services')).toHaveClass('inline-block')
+    expect(screen.getByText('Jo Care Support Services')).not.toHaveClass('hidden')
   })
 })
 
@@ -430,6 +438,7 @@ describe('AppLayout — 44px coarse-pointer hit areas', () => {
     localStorage.setItem('odip_viewing_tenant', 'tenant-0001')
     renderAt('/trips')
     expect(screen.getByRole('button', { name: 'Find a page' })).toHaveClass('xl:w-72', 'max-xl:px-2')
+    expect(screen.getByRole('button', { name: 'Find a page' })).toHaveAttribute('title', 'Find a page')
     expect(screen.getByRole('button', { name: 'Find a page' })).not.toHaveClass('md:w-72')
   })
 

@@ -27,7 +27,7 @@ export function PlatformDirectoryTrigger({ entries, compact = false, tight = fal
   return (
     <>
       <Button variant="secondary" className={`pointer-coarse:min-h-11 pointer-coarse:min-w-11 ${compact ? (tight ? 'max-xl:px-2 xl:w-72 xl:justify-start' : 'max-md:px-2 md:w-72 md:justify-start') : 'w-full justify-between'}`}
-        aria-label={compact ? 'Find a page' : 'Explore the platform'} aria-haspopup="dialog" aria-expanded={open}
+        aria-label={compact ? 'Find a page' : 'Explore the platform'} title={compact ? 'Find a page' : undefined} aria-haspopup="dialog" aria-expanded={open}
         onClick={() => { setQuery(''); setOpen(true) }}>
         {compact ? <Search aria-hidden="true" className="h-4 w-4 shrink-0" /> : null}
         <span className={compact ? (tight ? 'max-xl:sr-only' : 'max-md:sr-only') : undefined}>{compact ? 'Find a page…' : 'Explore the platform'}</span>
