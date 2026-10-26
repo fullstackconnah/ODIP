@@ -1,6 +1,7 @@
 import type { PatchParticipantDto } from '@/api/types/participant-patch'
 import { getFieldMapping } from './documentMapping'
-import { COLLECTION_KEYS, norm } from './caregiverPayload'
+import { CAREGIVER_STEP_LABELS, COLLECTION_KEYS, PROFILE_STEP_GROUP_KEYS, norm } from './caregiverPayload'
+import { PROFILE_STEP_TO_PATCH_GROUPS } from './participantPatchGroups'
 import { liveWire } from '@/pages/caregiver/hydrate'
 
 export { norm }
@@ -21,6 +22,12 @@ export type DiffRow = { field: string; label: string; group: string; current: st
 
 export function label(field: string): string {
   return getFieldMapping(field)?.label ?? field
+}
+
+/** The section name for a payload group: the caregiver wizard step that owns it, so staff and caregiver read the same words. */
+export function groupHeading(group: string): string {
+  const step = PROFILE_STEP_GROUP_KEYS.find((s) => (PROFILE_STEP_TO_PATCH_GROUPS[s] as string[] | undefined)?.includes(group))
+  return step ? CAREGIVER_STEP_LABELS[step] : label(group)
 }
 
 type Row = Record<string, unknown>
