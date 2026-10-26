@@ -61,14 +61,11 @@ public static class ImportFundingRows
     /// </summary>
     public static void Match(List<ImportRowPlan> plans, IReadOnlyList<ImportParticipantMatch> participants)
     {
-        // Only real numbers: a participant saved with "-" or "TBC" is never found by it.
-        var byNdis = participants.Where(p => p.NdisNumber != null && ImportParticipantRows.IsNdisNumber(ImportParticipantRows.NdisKey(p.NdisNumber))).ToLookup(p => ImportParticipantRows.NdisKey(p.NdisNumber!));
-        var byName = participants.Where(p => p.DateOfBirth is not null).ToLookup(p => (NameKey($"{p.FirstName} {p.LastName}".Trim()), p.DateOfBirth!.Value));
+        var lookup = new ImportParticipantLookup(participants);
         foreach (var plan in plans.Where(p => p.Funding != null && p.Status != ImportRowStatus.Skipped))
         {
             var line = plan.Funding!;
-            var found = line.NdisKey is { } key ? byNdis[key].ToList()
-                : line.DateOfBirth is { } born && line.FullName.Length > 0 ? byName[(NameKey(line.FullName), born)].ToList() : [];
+            var found = lookup.Find(line.NdisKey, line.FullName, line.DateOfBirth);
             if (plan.Status != ImportRowStatus.Ready)
             {
                 // A row that can't be imported still says whose plan it belongs to, so Check can keep the rest of that plan out.
@@ -293,7 +290,7 @@ public static class ImportFundingRows
         return plan;
     }
 
-    private static string NameKey(string name) => string.Join(' ', name.Split(' ', StringSplitOptions.RemoveEmptyEntries)).ToLowerInvariant();
+    private static string NameKey(string name) => ImportParticipantLookup.NameKey(name);
 
     private static (DateOnly? Value, string? Error) RequiredDate(string text, string label, bool columnIsMonthFirst) =>
         text.Length == 0 ? (null, $"{label} is required.") : ImportValues.Date(text, label, columnIsMonthFirst);

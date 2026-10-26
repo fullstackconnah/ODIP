@@ -1007,6 +1007,9 @@ namespace Odip.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<int?>("KeptCount")
+                        .HasColumnType("integer");
+
                     b.Property<int>("Kind")
                         .HasColumnType("integer");
 

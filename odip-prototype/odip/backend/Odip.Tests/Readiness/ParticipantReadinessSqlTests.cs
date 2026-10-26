@@ -4,6 +4,7 @@ using Odip.Api.Services;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Xunit;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Tests.Readiness;
 

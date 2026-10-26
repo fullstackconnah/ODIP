@@ -1,5 +1,6 @@
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Rostering;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Services;
 

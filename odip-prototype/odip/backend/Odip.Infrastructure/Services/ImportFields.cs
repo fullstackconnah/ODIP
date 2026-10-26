@@ -1,3 +1,4 @@
+using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 
 namespace Odip.Infrastructure.Services;
@@ -16,6 +17,8 @@ public static class ImportFields
     private static readonly IReadOnlyList<ImportField> Participants = BuildParticipants();
     private static readonly IReadOnlyList<ImportField> Staff = BuildStaff();
     private static readonly IReadOnlyList<ImportField> FundingPlans = BuildFundingPlans();
+    private static readonly IReadOnlyList<ImportField> PatternShifts = BuildShifts(ImportShiftShape.Pattern);
+    private static readonly IReadOnlyList<ImportField> DatedShifts = BuildShifts(ImportShiftShape.Dated);
 
     private const string Payroll = "Won't be imported: your payroll system keeps employment details.";
     private const string NoField = "Won't be imported: ODIP has no field for this yet.";
@@ -27,11 +30,12 @@ public static class ImportFields
         ["policecheck"] = NoField, ["nationalpolicecheck"] = NoField, ["cpr"] = NoField, ["cprexpiry"] = NoField,
     };
 
-    public static IReadOnlyList<ImportField> For(ImportKind kind) => kind switch
+    public static IReadOnlyList<ImportField> For(ImportKind kind, ImportShiftShape? shape = null) => kind switch
     {
         ImportKind.Participants => Participants,
         ImportKind.Staff => Staff,
         ImportKind.FundingPlans => FundingPlans,
+        ImportKind.UpcomingShifts => shape == ImportShiftShape.Dated ? DatedShifts : PatternShifts,
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 
@@ -41,14 +45,14 @@ public static class ImportFields
     public static string? NotImportedNote(ImportKind kind, string header) =>
         kind == ImportKind.Staff && StaffNotImported.TryGetValue(Normalise(header), out var note) ? note : null;
 
-    public static List<string?> AutoMatch(ImportKind kind, IReadOnlyList<string> headers)
+    public static List<string?> AutoMatch(ImportKind kind, IReadOnlyList<string> headers, ImportShiftShape? shape = null)
     {
         var taken = new HashSet<string>();
         var mapping = new List<string?>(headers.Count);
         foreach (var header in headers)
         {
             var h = Normalise(header);
-            var field = For(kind).FirstOrDefault(f => !taken.Contains(f.Key) && (Normalise(f.Label) == h || f.Synonyms.Any(s => Normalise(s) == h)));
+            var field = For(kind, shape).FirstOrDefault(f => !taken.Contains(f.Key) && (Normalise(f.Label) == h || f.Synonyms.Any(s => Normalise(s) == h)));
             if (field != null) taken.Add(field.Key);
             mapping.Add(field?.Key);
         }
@@ -59,15 +63,39 @@ public static class ImportFields
     /// Why a column mapping cannot be used, or null. <paramref name="requireAll"/> also asks for every required field: the import needs them,
     /// while a preview shows the columns so the Admin can match them.
     /// </summary>
-    public static string? MappingError(ImportKind kind, IReadOnlyList<string?> mapping, int columnCount, bool requireAll)
+    public static string? MappingError(ImportKind kind, IReadOnlyList<string?> mapping, int columnCount, bool requireAll, ImportShiftShape? shape = null)
     {
-        var fields = For(kind);
+        var fields = For(kind, shape);
         if (mapping.Count != columnCount || mapping.Any(key => key != null && fields.All(f => f.Key != key))) return Mismatch;
         var twice = mapping.OfType<string>().GroupBy(key => key).FirstOrDefault(g => g.Count() > 1);
         if (twice != null) return $"Two columns are matched to {fields.First(f => f.Key == twice.Key).Label}. Choose one.";
         if (!requireAll) return null;
         var missing = fields.Where(f => f.Required && !mapping.Contains(f.Key)).Select(f => f.Label).ToList();
-        return missing.Count == 0 ? null : $"Match a column to {string.Join(", ", missing)}.";
+        if (missing.Count > 0) return $"Match a column to {string.Join(", ", missing)}.";
+        if (kind == ImportKind.UpcomingShifts && !mapping.Contains("ndis") && !(mapping.Contains("participantName") && mapping.Contains("dateOfBirth")))
+            return "Match a column to NDIS number, or to Participant name and Date of birth.";
+        return null;
+    }
+
+    private static List<ImportField> BuildShifts(ImportShiftShape shape)
+    {
+        const string who = "Finds the participant: the NDIS number, or the name with the date of birth.";
+        const string time = "A time like 9:00 am or 21:00.";
+        var when = shape == ImportShiftShape.Dated
+            ? new ImportField("date", "Date", true, ["shift date"], "dd/mm/yyyy or yyyy-mm-dd, from today up to 12 weeks ahead.")
+            : new ImportField("weekday", "Weekday", true, ["day", "day of week"], "Mon to Sun or Monday to Sunday.");
+        return
+        [
+            new("ndis", "NDIS number", false, ["ndis no", "ndis #", "ndis", "ndis id"], who),
+            new("participantName", "Participant name", false, ["client", "client name", "participant", "customer"], who),
+            new("dateOfBirth", "Date of birth", false, ["dob", "birth date", "birthdate"], "dd/mm/yyyy or yyyy-mm-dd."),
+            when,
+            new("start", "Start time", true, ["from", "start"], time),
+            new("end", "End time", true, ["to", "finish", "end"], time + " An end before the start ends the next day."),
+            new("staffEmail", "Staff email", false, ["worker email"], "Finds the staff member. Blank or not found: the shift has nobody on it."),
+            new("staffName", "Staff name", false, ["worker", "support worker", "staff", "carer"], "Used when there is no email and the name is unique."),
+            new("notes", "Notes", false, ["comments", "shift notes"], "Shown on the shift."),
+        ];
     }
 
     private static List<ImportField> BuildParticipants()

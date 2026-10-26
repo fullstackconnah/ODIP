@@ -8,6 +8,7 @@ public enum ImportKind
     Participants = 0,
     Staff = 1,
     FundingPlans = 2,
+    UpcomingShifts = 3,
 }
 
 /// <summary>
@@ -28,6 +29,8 @@ public class ImportBatch : ITenantEntity
     public int CreatedCount { get; set; }
     public int SkippedCount { get; set; }
     public int FailedCount { get; set; }
+    /// <summary>Shifts a partial undo left on the roster (published, changed or in use); null until an upcoming-shifts import is undone.</summary>
+    public int? KeptCount { get; set; }
     public Guid? CreatedById { get; set; }
     public string CreatedByName { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

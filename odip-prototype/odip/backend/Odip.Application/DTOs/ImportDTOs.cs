@@ -5,6 +5,9 @@ namespace Odip.Application.DTOs;
 /// <summary>Where imported participants land: "Already receiving services" (Active) or "New onboarding" (the Onboarding checklist).</summary>
 public enum ImportLanding { Active, Onboarding }
 
+/// <summary>What an upcoming-shifts file holds: one dated row per shift, or a weekly pattern repeated over a span.</summary>
+public enum ImportShiftShape { Dated, Pattern }
+
 /// <summary>Ready to import; Skipped (already in ODIP, or the template's example row); Invalid ("Can't import", with reasons).</summary>
 public enum ImportRowStatus { Ready, Skipped, Invalid }
 
@@ -18,13 +21,15 @@ public record ImportRowDto(int RowNumber, string Name, ImportRowStatus Status, L
 
 /// <summary>What a preview found. <see cref="CreateCount"/> is what Import would create: the ready rows or, for funding plans, the plans they make.</summary>
 public record ImportPreviewDto(List<ImportFieldDto> Fields, List<ImportColumnDto> Columns, List<ImportRowDto> Rows,
-    int ReadyCount, int SkippedCount, int InvalidCount, DateTime? PreviouslyImportedAt, int CreateCount);
+    int ReadyCount, int SkippedCount, int InvalidCount, DateTime? PreviouslyImportedAt, int CreateCount,
+    int? UnfilledCount = null, DateOnly? FirstDate = null, DateOnly? LastDate = null, int? WeekCount = null, bool ReadinessEnforced = false);
 
 /// <summary>What a commit did. <see cref="Replayed"/>: the idempotency key matched an earlier batch, which is answered instead (with no rows).</summary>
-public record ImportResultDto(Guid BatchId, int CreatedCount, int SkippedCount, int FailedCount, List<ImportRowDto> Rows, bool Replayed);
+public record ImportResultDto(Guid BatchId, int CreatedCount, int SkippedCount, int FailedCount, List<ImportRowDto> Rows, bool Replayed,
+    DateOnly? FirstWeekStart = null, int? WeekCount = null, int? UnfilledCount = null);
 
 public record ImportBatchDto(Guid Id, ImportKind Kind, string FileName, string CreatedByName, DateTime CreatedAt,
-    int RowCount, int CreatedCount, int SkippedCount, int FailedCount, DateTime? UndoneAt, string? UndoneByName);
+    int RowCount, int CreatedCount, int SkippedCount, int FailedCount, DateTime? UndoneAt, string? UndoneByName, int? KeptCount = null);
 
 /// <summary>A record that has changed since its import, so the batch cannot be undone.</summary>
 public record ImportUndoBlockerDto(Guid EntityId, string Name, string Reason);

@@ -85,6 +85,9 @@ public sealed record ShiftBudgetRequest(
     Guid TenantId, Guid ParticipantId, Guid? ExistingShiftId, DateOnly ServiceDate, TimeOnly StartTime, TimeOnly EndTime, bool EndsNextDay, SupportRatio Ratio, SleepoverType NightType,
     ShiftStatus? TargetStatus, bool CallerIsAdmin);
 
+/// <summary>A shift of an import batch whose budget period is over once the whole batch is counted: the pool, how far over the period would be, whether it was over before the batch, and what the batch adds to it.</summary>
+public sealed record BudgetOver(string PoolName, decimal OverBy, bool AlreadyOver, decimal Added);
+
 /// <summary>What the check found: the findings (none when the participant has no plan, the pool cannot be mapped, or the shift cannot be priced) and, when it could not price, why.</summary>
 public sealed record ShiftBudgetOutcome(IReadOnlyList<RosterFinding> Findings, string? NotCheckedReason = null)
 {
@@ -176,6 +179,40 @@ public sealed class ShiftBudgetCheck
         var oneOff = !await IsRoutineAsync(request, saved?.ShiftPatternId, ct);
         var findings = ShiftBudgetAssessor.Assess(figures, new ShiftBudgetContext(mode, participantLedger.ApproachingPercent, oneOff, raises, request.CallerIsAdmin));
         return new ShiftBudgetOutcome(findings);
+    }
+
+    /// <summary>
+    /// The budget side of an import, in one pass: every shift is priced in one estimator call and appended to the participant's ledger as a booked-ahead item, the ledger is computed once, and each shift whose period
+    /// then forecasts over what is available gets that period's <see cref="BudgetOver"/> (null otherwise: no plan, no pool, outside the plan's dates, or the estimator cannot price it). The caller computes the ledgers
+    /// once for all its participants. Same figures as <see cref="CheckAsync"/>, whose forecast it agrees with for a single shift.
+    /// </summary>
+    public async Task<IReadOnlyList<BudgetOver?>> ForecastOverAsync(Guid tenantId, Guid participantId, IReadOnlyList<ShiftSpec> shifts, ParticipantLedger? ledger, CancellationToken ct)
+    {
+        var result = new BudgetOver?[shifts.Count];
+        if (shifts.Count == 0 || ledger?.Ledger is null) return result;
+        var plan = ledger.Ledger.Plan;
+        var estimates = await _costs.EstimateAsync(tenantId, participantId, shifts, ct);
+        var planType = await _db.Participants.AsNoTracking().Where(p => p.TenantId == tenantId && p.Id == participantId).Select(p => p.PlanType).FirstAsync(ct);
+
+        var placed = new List<(int Index, LedgerItem Item, LedgerPlace Place)>();
+        for (var i = 0; i < shifts.Count; i++)
+        {
+            if (estimates[i] is not ShiftCostEstimate.Priced priced) continue;
+            var item = ItemFor(shifts[i].ServiceDate, priced, planType, null, ShiftStatus.Draft, ledger.Today);
+            var place = BudgetLedgerCalculator.Place(plan, item);
+            if (place.Placement == LedgerPlacement.InPeriod) placed.Add((i, item, place));
+        }
+        if (placed.Count == 0) return result;
+
+        var after = BudgetLedgerCalculator.Compute(plan, ledger.Today, ledger.ApproachingPercent, ledger.Items.Concat(placed.Select(p => p.Item)));
+        foreach (var (index, _, place) in placed)
+        {
+            var period = after.Pools.First(p => p.Pool.Id == place.Pool!.Id).Periods.First(p => p.Period.Id == place.Period!.Id);
+            if (period.Forecast <= period.Available) continue;
+            var added = placed.Where(p => p.Place.Period!.Id == place.Period!.Id).Sum(p => p.Item.Amount);
+            result[index] = new BudgetOver(place.Pool!.Name, period.Forecast - period.Available, period.Forecast - added > period.Available, added);
+        }
+        return result;
     }
 
     /// <summary>

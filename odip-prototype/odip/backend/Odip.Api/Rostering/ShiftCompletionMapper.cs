@@ -4,6 +4,7 @@ using Odip.Domain.Entities;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
+using Odip.Infrastructure.Rostering;
 
 namespace Odip.Api.Rostering;
 
