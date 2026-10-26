@@ -127,6 +127,25 @@ describe('ImportDataTab', () => {
     expect(screen.getByText('The 3 funding plans that budgets.csv created are deleted. This only works while none of them has been changed, or used by a shift or a service agreement, since the import.')).toBeInTheDocument()
   })
 
+  it('offers an upcoming shifts import with the weekly pattern template', async () => {
+    renderTab()
+    const card = screen.getByRole('region', { name: 'Upcoming shifts' })
+    expect(within(card).getByRole('link', { name: 'Import upcoming shifts' })).toHaveAttribute('href', '/settings/import/upcoming-shifts')
+    await userEvent.click(within(card).getByRole('button', { name: 'Download template' }))
+    expect(templateMutate).toHaveBeenCalledWith({ kind: 'upcoming-shifts', shape: 'pattern' })
+  })
+
+  it('counts an upcoming shifts batch in shifts and rows, and says when an undo left some', () => {
+    history.current = [
+      batch({ id: 'b4', kind: 'UpcomingShifts', fileName: 'roster.xlsx', createdCount: 96, skippedCount: 1, failedCount: 3 }),
+      batch({ id: 'b5', kind: 'UpcomingShifts', fileName: 'old.xlsx', createdCount: 96, undoneAt: '2026-10-14T01:00:00Z', undoneByName: 'Ada Admin', keptCount: 6 }),
+    ]
+    renderTab()
+    const row = screen.getByRole('row', { name: /roster\.xlsx/ })
+    expect([within(row).getByText('96 shifts'), within(row).getByText('1 row'), within(row).getByText('3 rows')]).toHaveLength(3)
+    expect(within(screen.getByRole('row', { name: /old\.xlsx/ })).getByText('Partly undone')).toBeInTheDocument()
+  })
+
   it('tells the Admin to undo a funding plans import before the participants it used', async () => {
     renderTab()
     await userEvent.click(within(screen.getByRole('row', { name: /people\.csv/ })).getByRole('button', { name: 'Undo' }))

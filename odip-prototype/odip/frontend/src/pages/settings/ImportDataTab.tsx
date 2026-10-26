@@ -26,6 +26,10 @@ const KINDS: { kind: ImportKind; title: string; text: string; noun: string }[] =
     kind: 'funding-plans', title: 'Funding plans', noun: 'funding plan',
     text: "Each participant's plan dates and budget, one row per support category. Import participants first: each row finds its participant by NDIS number, or by name and date of birth.",
   },
+  {
+    kind: 'upcoming-shifts', title: 'Upcoming shifts', noun: 'shift',
+    text: 'Your next weeks of shifts, added as drafts: dated shifts from your old platform, or a weekly pattern repeated for up to 12 weeks. Import participants and staff first. Nobody is told until you publish.',
+  },
 ]
 
 /** The history's words for each kind. */
@@ -52,13 +56,13 @@ export default function ImportDataTab() {
     { key: 'kind', header: 'Type', mobile: 'meta', render: b => KIND_LABEL[b.kind] },
     { key: 'createdByName', header: 'Run by', mobile: 'meta' },
     { key: 'createdAt', header: 'When', mobile: 'meta', render: b => formatDateTimeAu(b.createdAt) },
-    // A funding plans batch creates plans from several rows each, so its counts name their unit.
-    { key: 'createdCount', header: 'Created', align: 'right', render: b => b.kind === 'FundingPlans' ? plural(b.createdCount, 'plan') : b.createdCount },
-    { key: 'skippedCount', header: 'Skipped', align: 'right', render: b => b.kind === 'FundingPlans' ? plural(b.skippedCount, 'row') : b.skippedCount },
-    { key: 'failedCount', header: "Couldn't import", align: 'right', render: b => b.kind === 'FundingPlans' ? plural(b.failedCount, 'row') : b.failedCount },
+    // A funding plans batch creates plans from several rows each, and a shifts batch shifts, so their counts name their unit.
+    { key: 'createdCount', header: 'Created', align: 'right', render: b => b.kind === 'FundingPlans' ? plural(b.createdCount, 'plan') : b.kind === 'UpcomingShifts' ? plural(b.createdCount, 'shift') : b.createdCount },
+    { key: 'skippedCount', header: 'Skipped', align: 'right', render: b => b.kind === 'FundingPlans' || b.kind === 'UpcomingShifts' ? plural(b.skippedCount, 'row') : b.skippedCount },
+    { key: 'failedCount', header: "Couldn't import", align: 'right', render: b => b.kind === 'FundingPlans' || b.kind === 'UpcomingShifts' ? plural(b.failedCount, 'row') : b.failedCount },
     {
       key: 'status', header: 'Status', mobile: 'status',
-      render: b => b.undoneAt ? <StatusBadge tone="neutral" label="Undone" /> : <StatusBadge tone="success" label="Imported" />,
+      render: b => b.undoneAt ? <StatusBadge tone="neutral" label={b.keptCount ? 'Partly undone' : 'Undone'} /> : <StatusBadge tone="success" label="Imported" />,
     },
     {
       key: 'actions', header: '', align: 'right', pin: 'end',
@@ -95,7 +99,7 @@ export default function ImportDataTab() {
               <div className="flex flex-wrap gap-2">
                 {fromPayroll ? <Button variant="secondary" to="/settings?section=integrations">Open integrations</Button> : (
                   <>
-                    <Button variant="secondary" onClick={() => template.mutate(k.kind)}>Download template</Button>
+                    <Button variant="secondary" onClick={() => template.mutate(k.kind === 'upcoming-shifts' ? { kind: k.kind, shape: 'pattern' } : k.kind)}>Download template</Button>
                     <Button to={`/settings/import/${k.kind}`}>Import {k.title.toLowerCase()}</Button>
                   </>
                 )}
