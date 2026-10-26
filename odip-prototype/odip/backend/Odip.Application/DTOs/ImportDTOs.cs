@@ -5,6 +5,9 @@ namespace Odip.Application.DTOs;
 /// <summary>Where imported participants land: "Already receiving services" (Active) or "New onboarding" (the Onboarding checklist).</summary>
 public enum ImportLanding { Active, Onboarding }
 
+/// <summary>What an upcoming-shifts file holds: one dated row per shift, or a weekly pattern repeated over a span.</summary>
+public enum ImportShiftShape { Dated, Pattern }
+
 /// <summary>Ready to import; Skipped (already in ODIP, or the template's example row); Invalid ("Can't import", with reasons).</summary>
 public enum ImportRowStatus { Ready, Skipped, Invalid }
 
