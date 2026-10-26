@@ -50,6 +50,7 @@ vi.mock('@/api/client', async (importOriginal) => ({ ...(await importOriginal<ty
 // A SuperAdmin's header also renders the tenant switcher, whose own TanStack Query hook needs a QueryClientProvider this
 // suite does not set up. It is header chrome, not navigation, so stub it: the role-by-role nav tests below cover SuperAdmin.
 vi.mock('@/components/layout/TenantSwitcher', () => ({ default: () => null }))
+vi.mock('@/components/layout/UserSwitcher', () => ({ default: () => null }))
 
 function renderAt(path: string) {
   return render(
@@ -418,6 +419,18 @@ describe('AppLayout — 44px coarse-pointer hit areas', () => {
     renderAt('/trips')
     expect(screen.getByRole('button', { name: 'Open menu' })).toHaveClass('shrink-0')
     expect(screen.getByRole('button', { name: /Find a page/ }).parentElement).toHaveClass('shrink-0')
+  })
+
+  it('collapses the page finder to its icon below xl only while a SuperAdmin views a tenant, where two switchers need the room', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin', firstName: 'Sam' }))
+    const { unmount } = renderAt('/trips')
+    expect(screen.getByRole('button', { name: 'Find a page' })).toHaveClass('md:w-72')
+    unmount()
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'SuperAdmin', firstName: 'Sam' }))
+    localStorage.setItem('odip_viewing_tenant', 'tenant-0001')
+    renderAt('/trips')
+    expect(screen.getByRole('button', { name: 'Find a page' })).toHaveClass('xl:w-72', 'max-xl:px-2')
+    expect(screen.getByRole('button', { name: 'Find a page' })).not.toHaveClass('md:w-72')
   })
 
   it('gives every mobile bottom-nav cell, "More" included, a --tap-min floor each way, its content centred, so the 42px cells are 44px', () => {

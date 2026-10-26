@@ -563,7 +563,7 @@ export default function AppLayout() {
               )}
               {/* Page navigation only: the old entity-search field had no query or results behaviour. */}
               <div className="shrink-0">
-                <PlatformDirectoryTrigger compact entries={platformNavigation(permissions, savedVisibility)} />
+                <PlatformDirectoryTrigger compact tight={isSuperAdmin && !!viewingTenantId} entries={platformNavigation(permissions, savedVisibility)} />
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-3 max-lg:gap-2">

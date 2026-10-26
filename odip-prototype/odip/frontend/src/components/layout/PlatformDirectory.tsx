@@ -12,7 +12,7 @@ import type { usePermissions } from '@/lib/permissions'
 import { pageDescription, platformLeaves } from './platformDirectoryModel'
 import type { ResolvedEntry } from './navConfig'
 
-export function PlatformDirectoryTrigger({ entries, compact = false }: { entries: ResolvedEntry[]; compact?: boolean }) {
+export function PlatformDirectoryTrigger({ entries, compact = false, tight = false }: { entries: ResolvedEntry[]; compact?: boolean; tight?: boolean }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const close = () => setOpen(false)
@@ -26,11 +26,11 @@ export function PlatformDirectoryTrigger({ entries, compact = false }: { entries
 
   return (
     <>
-      <Button variant="secondary" className={`pointer-coarse:min-h-11 pointer-coarse:min-w-11 ${compact ? 'max-md:px-2 md:w-72 md:justify-start' : 'w-full justify-between'}`}
+      <Button variant="secondary" className={`pointer-coarse:min-h-11 pointer-coarse:min-w-11 ${compact ? (tight ? 'max-xl:px-2 xl:w-72 xl:justify-start' : 'max-md:px-2 md:w-72 md:justify-start') : 'w-full justify-between'}`}
         aria-label={compact ? 'Find a page' : 'Explore the platform'} aria-haspopup="dialog" aria-expanded={open}
         onClick={() => { setQuery(''); setOpen(true) }}>
         {compact ? <Search aria-hidden="true" className="h-4 w-4 shrink-0" /> : null}
-        <span className={compact ? 'max-md:sr-only' : undefined}>{compact ? 'Find a page…' : 'Explore the platform'}</span>
+        <span className={compact ? (tight ? 'max-xl:sr-only' : 'max-md:sr-only') : undefined}>{compact ? 'Find a page…' : 'Explore the platform'}</span>
         {!compact && <Grid2X2 aria-hidden="true" className="h-4 w-4" />}
       </Button>
       {createPortal(<Modal open={open} onClose={close} title="Explore the platform" size="lg"
