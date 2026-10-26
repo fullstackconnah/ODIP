@@ -231,6 +231,14 @@ builder.Services.AddScoped<Odip.Infrastructure.Rostering.IStaffAvailabilityItems
 builder.Services.AddSingleton(TimeProvider.System);
 Odip.Api.Services.DataProtectionSetup.Add(builder.Services, builder.Configuration);
 builder.Services.AddMemoryCache();
+// Sign in with Microsoft (ms-sso spec 2026-10-26). The metadata manager caches Entra's signing keys; the controller answers 404 until the three Microsoft__ settings are set.
+builder.Services.AddSingleton<Microsoft.IdentityModel.Protocols.IConfigurationManager<Microsoft.IdentityModel.Protocols.OpenIdConnect.OpenIdConnectConfiguration>>(
+    _ => new Microsoft.IdentityModel.Protocols.ConfigurationManager<Microsoft.IdentityModel.Protocols.OpenIdConnect.OpenIdConnectConfiguration>(
+        "https://login.microsoftonline.com/organizations/v2.0/.well-known/openid-configuration",
+        new Microsoft.IdentityModel.Protocols.OpenIdConnect.OpenIdConnectConfigurationRetriever(),
+        new Microsoft.IdentityModel.Protocols.HttpDocumentRetriever { RequireHttps = true }));
+builder.Services.AddScoped<Odip.Api.Services.Microsoft.IMicrosoftIdTokenValidator, Odip.Api.Services.Microsoft.MicrosoftIdTokenValidator>();
+builder.Services.AddHttpClient<Odip.Api.Services.Microsoft.IMicrosoftCodeRedeemer, Odip.Api.Services.Microsoft.MicrosoftCodeRedeemer>(c => c.Timeout = TimeSpan.FromSeconds(15));
 builder.Services.AddScoped<Odip.Infrastructure.Services.MedicationSlotService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.MedicationAdministrationRecorder>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.ShiftBreakService>();
