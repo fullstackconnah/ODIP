@@ -63,7 +63,7 @@ describe('ParticipantKeyIdentifiersSection — edit/save cycle', () => {
 
     expect(mockPatchMutateAsync).toHaveBeenCalledWith({
       id: 'participant-1',
-      data: { keyIdentifiers: expect.objectContaining({ medicareNumber: '2951 12345 1' }) },
+      data: { keyIdentifiers: expect.objectContaining({ medicareNumber: '2951 12345 1' }), expectedRevisions: {} },
     })
   })
 
