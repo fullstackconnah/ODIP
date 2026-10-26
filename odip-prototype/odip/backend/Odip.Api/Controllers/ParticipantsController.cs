@@ -418,7 +418,8 @@ public class ParticipantsController : ControllerBase
         // PD-5: syncs the safety-critical auto-notes in the same SaveChangesAsync as this update.
         await _safetyNoteSync.SyncFromParticipantAsync(p, ct);
         if (p.SupportRatio != previousSupportRatio) await TripStaffing.RecalculateForParticipantAsync(_db, p.Id, ct);
-        await _db.SaveChangesAsync(ct);
+        await ParticipantGroupRevisions.BumpChangedAsync(_db, p, null, ct);
+        await ParticipantGroupRevisions.SaveBumpingAsync(_db, ct);
         // PF-2: Update's payload carries no contactRoles (unchanged, per Design's note) — the
         // warning is computed from the participant's live ContactRoles exactly as GetById does.
         var updatePlanTypeComplianceWarning = await ComputePlanTypeComplianceWarningAsync(p.Id, p.PlanType, ct);
@@ -534,9 +535,10 @@ public class ParticipantsController : ControllerBase
             await EnsureOnboardingAsync(p, ct);
         }
 
+        await ParticipantGroupRevisions.BumpChangedAsync(_db, p, null, ct);
         try
         {
-            await _db.SaveChangesAsync(ct);
+            await ParticipantGroupRevisions.SaveBumpingAsync(_db, ct);
         }
         catch (DbUpdateConcurrencyException ex) when (ex.Entries.All(e => e.Entity is ParticipantInquiry))
         {
@@ -554,9 +556,12 @@ public class ParticipantsController : ControllerBase
                     property.IsModified = mine;
                 }
             }
+            // The failed save rolled the revision rows back on PostgreSQL (EF InMemory keeps what it wrote), so read them afresh and bump once more.
+            foreach (var row in _db.ChangeTracker.Entries<ParticipantGroupRevision>().ToList()) row.State = EntityState.Detached;
+            await ParticipantGroupRevisions.BumpChangedAsync(_db, p, null, ct);
             try
             {
-                await _db.SaveChangesAsync(ct);
+                await ParticipantGroupRevisions.SaveBumpingAsync(_db, ct);
             }
             catch (DbUpdateConcurrencyException again) when (again.Entries.All(e => e.Entity is ParticipantInquiry))
             {

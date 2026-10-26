@@ -1751,7 +1751,7 @@ public class RosteringController : ControllerBase
         // PreferredUserId, in the same transaction as this compatibility write.
         await _compatLink.SyncFromCompatibilityUpsertAsync(row, previousLevel, ct);
 
-        await _db.SaveChangesAsync(ct);
+        await ParticipantGroupRevisions.SaveBumpingAsync(_db, ct);
 
         var loaded = await _db.StaffParticipantCompatibilities
             .Include(c => c.User).Include(c => c.Participant)

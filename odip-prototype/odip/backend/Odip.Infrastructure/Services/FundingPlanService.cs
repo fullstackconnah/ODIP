@@ -216,7 +216,9 @@ public sealed class FundingPlanService
             participant.PlanStartDate = plan.PlanStart;
             participant.PlanEndDate = plan.PlanEnd;
             participant.UpdatedAt = _clock.GetUtcNow().UtcDateTime;
-            await _db.SaveChangesAsync(ct);
+            await ParticipantGroupRevisions.BumpChangedAsync(_db, participant, null, ct);
+            // Inside the lock's transaction: a lost revision race rolls back to EF's savepoint and the retry saves again (P6).
+            await ParticipantGroupRevisions.SaveBumpingAsync(_db, ct);
         }
 
         await gate.CommitAsync(ct);
