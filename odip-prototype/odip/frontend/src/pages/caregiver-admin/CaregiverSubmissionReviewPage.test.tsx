@@ -268,3 +268,56 @@ describe('CaregiverSubmissionReviewPage — links', () => {
     __testHooks.reset()
   })
 })
+
+// Staff read the same section names the caregiver saw, and the three columns line up from one section to the next.
+describe('CaregiverSubmissionReviewPage — section headings and columns', () => {
+  const multiGroup = () => mockUseCaregiverSubmission.mockReturnValue({
+    data: makeSubmission({
+      current: { firstName: 'Sophie', likesDislikes: 'Reading', allergiesDetail: 'None' },
+      payload: {
+        personalDetails: { firstName: 'Sofia' },
+        medical: { allergiesDetail: 'x'.repeat(200) },
+        aboutMe: { likesDislikes: 'Gardening' },
+      },
+      base: {
+        personalDetails: { firstName: 'Sophie' }, medical: { allergiesDetail: 'None' }, aboutMe: { likesDislikes: 'Reading' },
+      },
+    }),
+    isLoading: false,
+  })
+
+  it('names each section as the caregiver form does, never by its payload key', () => {
+    multiGroup()
+    renderPage()
+    const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)
+    expect(headings).toEqual(['Key Identifiers', 'Medical', 'Daily Living'])
+  })
+
+  it('gives every section table the same column widths', () => {
+    multiGroup()
+    const { container } = renderPage()
+    const tables = container.querySelectorAll('table')
+    expect(tables).toHaveLength(3)
+    const widths = (t: Element) => Array.from(t.querySelectorAll('col')).map((c) => c.className)
+    expect(widths(tables[0])).toHaveLength(3)
+    for (const t of tables) {
+      expect(t).toHaveClass('table-fixed')
+      expect(widths(t)).toEqual(widths(tables[0]))
+      expect(Array.from(t.querySelectorAll('th')).every((th) => th.getAttribute('scope') === 'col')).toBe(true)
+    }
+  })
+
+  it('still flags a staff edit under Current', () => {
+    multiGroup()
+    mockUseCaregiverSubmission.mockReturnValue({
+      data: makeSubmission({
+        current: { firstName: 'Sofie' },
+        payload: { personalDetails: { firstName: 'Sofia' } },
+        base: { personalDetails: { firstName: 'Sophie' } },
+      }),
+      isLoading: false,
+    })
+    renderPage()
+    expect(screen.getByText(/Staff edited this since the caregiver started/)).toBeInTheDocument()
+  })
+})

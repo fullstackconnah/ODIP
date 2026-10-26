@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { computeCaregiverDiff } from './caregiverDiff'
+import { computeCaregiverDiff, groupHeading } from './caregiverDiff'
+import { COLLECTION_KEYS, PROFILE_STEP_GROUP_KEYS } from './caregiverPayload'
+import { PROFILE_STEP_TO_PATCH_GROUPS } from './participantPatchGroups'
 
 describe('computeCaregiverDiff', () => {
   it('returns only changed scalar fields, with labels', () => {
@@ -88,5 +90,22 @@ describe('computeCaregiverDiff against the base the caregiver loaded', () => {
       { consents: [{ consentType: 'PhotoVideo', granted: null }] },
     )
     expect(rows).toEqual([expect.objectContaining({ field: 'consents.PhotoVideo', staffChanged: true })])
+  })
+})
+
+describe('groupHeading', () => {
+  it('names every group a caregiver submission can carry in plain English', () => {
+    const keys = [...new Set([...PROFILE_STEP_GROUP_KEYS.flatMap((s) => PROFILE_STEP_TO_PATCH_GROUPS[s] ?? []), ...Object.keys(COLLECTION_KEYS)])]
+    expect(keys.length).toBeGreaterThan(8)
+    for (const k of keys) {
+      const h = groupHeading(k)
+      expect(h, k).not.toBe(k)
+      expect(h, k).not.toMatch(/\.|^[a-z]+[A-Z]/)
+    }
+  })
+
+  it('uses the caregiver wizard step name for a group', () => {
+    expect(groupHeading('aboutMe')).toBe('Daily Living')
+    expect(groupHeading('consents')).toBe('Cultural & Consents')
   })
 })
