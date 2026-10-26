@@ -275,6 +275,7 @@ export default function DashboardPage() {
   const groupsClear = !hasRecovery && groups.every((group) => !isPresent(group, decision.gone, decision.notices.filter((n) => n.subject === group.key).length, decision.running.has(group.key)))
   // Setup card (onboarding phase 1): the people who can import are the people who set the organisation up. A hidden card does not query.
   const [setupHidden, setSetupHiddenState] = useState(isSetupHidden)
+  const [hideNote, setHideNote] = useState('')
   const wantSetup = canImportData && !setupHidden
   // Hide unmounts the card, and the Alerts heading may be swapped for the All clear field in the same render: focus the id once that has committed.
   const justHid = useRef(false)
@@ -310,12 +311,12 @@ export default function DashboardPage() {
       />
       {/* Mounted before any group can speak, outside the sections, so it survives the page turning all clear (SHAPE §10). sr-only, so it takes no gap. */}
       {groups.length > 0 && <AnnouncementRegion message={decision.announcement} />}
-      {canImportData && <AnnouncementRegion message={setupHidden ? SETUP_HIDDEN_MESSAGE : ''} />}
+      {canImportData && <AnnouncementRegion message={hideNote} />}
 
       <div className={`grid gap-[var(--section-gap)] ${platform.length > 0 ? 'xl:grid-cols-[minmax(0,1fr)_18rem]' : ''}`}>
       <div className="flex min-w-0 flex-col gap-[var(--section-gap)]">
       {(card === 'steps' || card === 'done') && setup.data && (
-        <SetupSteps status={setup.data} provider={provider.data ?? null} card={card} onHide={() => { justHid.current = true; setSetupHiddenState(true) }} />
+        <SetupSteps status={setup.data} provider={provider.data ?? null} card={card} onHide={() => { justHid.current = true; setHideNote(SETUP_HIDDEN_MESSAGE); setSetupHiddenState(true) }} />
       )}
       {pageClear ? (
         // Same id as the Alerts heading, which it replaces: where focus lands when the last decision turns the page clear (QuickGroup's finish).

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import ImportInvites from './ImportInvites'
 
@@ -84,6 +84,8 @@ describe('ImportInvites: auto (invites as part of the staff import)', () => {
   const page = (from: number, n: number, left = 0, next: string | null = null) => ({ invites: Array.from({ length: n }, (_, k) => person(from + k)), left, next })
   const sentTo = () => sendEmail.mock.calls.map(c => c[0])
   const ok = async (email: string) => ({ ok: true, email, account: 'created' })
+  // The run's one live region carries the line; the visible Callout does not announce itself as well.
+  const announced = (text: string | RegExp) => waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(text))
   afterEach(() => sessionStorage.clear())
 
   it('loops past 100 with no press', async () => {
@@ -91,7 +93,7 @@ describe('ImportInvites: auto (invites as part of the staff import)', () => {
     invites.mockResolvedValueOnce(page(0, 100, 20, 'id100')).mockResolvedValueOnce(page(100, 20))
     render(<ImportInvites batchId="b1" count={120} auto />)
 
-    expect(await screen.findByText('Sign-in invites: all 120 sent')).toBeInTheDocument()
+    await announced('Sign-in invites: all 120 sent')
     expect(invites.mock.calls.map(c => c[0])).toEqual([{ batchId: 'b1' }, { batchId: 'b1', after: 'id100' }])
     expect(sendEmail).toHaveBeenCalledTimes(120)
   })
@@ -100,7 +102,7 @@ describe('ImportInvites: auto (invites as part of the staff import)', () => {
     sendEmail.mockImplementation(ok)
     invites.mockResolvedValue(page(0, 1))
     const first = render(<ImportInvites batchId="b2" count={1} auto />)
-    await screen.findByText('Sign-in invites: all 1 sent')
+    await announced('Sign-in invites: all 1 sent')
     first.unmount()
     render(<ImportInvites batchId="b2" count={1} auto />)
 
@@ -117,12 +119,13 @@ describe('ImportInvites: auto (invites as part of the staff import)', () => {
     invites.mockResolvedValueOnce(page(0, 100, 5, 'id100')).mockResolvedValueOnce(page(100, 5))
     render(<ImportInvites batchId="b3" count={105} auto />)
 
-    expect(await screen.findByText(/Sending paused: the email service asked us to slow down\. 46 still to invite\./)).toBeInTheDocument()
+    await announced(/Sending paused: the email service asked us to slow down. 46 still to invite./)
+    expect(screen.queryByRole('alert')).toBeNull()
     expect(invites).toHaveBeenCalledTimes(1)
     sendEmail.mockClear()
     await userEvent.click(screen.getByRole('button', { name: 'Send the rest (46)' }))
 
-    await screen.findByText('Sign-in invites: all 105 sent')
+    await announced('Sign-in invites: all 105 sent')
     expect(sentTo()[0]).toBe('p59@example.com')
     expect(sentTo().slice(0, 41)).toEqual(Array.from({ length: 41 }, (_, k) => `p${59 + k}@example.com`))
     expect(invites.mock.calls[1][0]).toEqual({ batchId: 'b3', after: 'id100' })
@@ -132,14 +135,14 @@ describe('ImportInvites: auto (invites as part of the staff import)', () => {
     invites.mockResolvedValue({ left: 0, next: null, invites: [person(1), person(2, { firebaseAccount: null, error: 'No account.' }), person(3)] })
     sendEmail.mockImplementation(async (email: string) => (email === 'p1@example.com' ? { ok: false, email, reason: 'other' } : ok(email)))
     render(<ImportInvites batchId="b4" count={3} auto />)
-    await screen.findByText('Sign-in invites: 1 sent, 2 not sent')
+    await announced('Sign-in invites: 1 sent, 2 not sent')
     sendEmail.mockReset(); sendEmail.mockImplementation(ok)
 
     await userEvent.click(screen.getByRole('button', { name: 'Try the 1 again' }))
 
     expect(sentTo()).toEqual(['p1@example.com'])
     expect(invites).toHaveBeenCalledTimes(1)
-    expect(await screen.findByText('Sign-in invites: 2 sent, 1 not sent')).toBeInTheDocument()
+    await announced('Sign-in invites: 2 sent, 1 not sent')
     expect(screen.getByText(/Fix their email on the Staff page, then send from Import history\./)).toBeInTheDocument()
   })
 
@@ -157,8 +160,36 @@ describe('ImportInvites: auto (invites as part of the staff import)', () => {
     sendEmail.mockImplementation(ok)
     const seen = vi.fn()
     render(<ImportInvites batchId="b6" count={1} auto onSendingChange={seen} />)
-    await screen.findByText('Sign-in invites: all 1 sent')
+    await announced('Sign-in invites: all 1 sent')
     expect(seen.mock.calls.map(c => c[0])).toEqual([true, false])
+  })
+
+  it('keeps one live region for the whole run: its text goes from sending to the finished title, and the Callouts do not announce again', async () => {
+    invites.mockResolvedValue({ left: 0, next: null, invites: [person(1), person(2)] })
+    sendEmail.mockImplementation(async (email: string) => (email === 'p1@example.com' ? { ok: false, email, reason: 'other' } : ok(email)))
+    render(<ImportInvites batchId="b8" count={2} auto />)
+    const region = screen.getByRole('status')
+    expect(region).toHaveTextContent(/^Sending sign-in invites: [0-9] of 2$/)
+    await announced('Sign-in invites: 1 sent, 1 not sent')
+    expect(screen.getByRole('status')).toBe(region)
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('finished: failures are listed, Try again sits under them, the sent lines are behind a closed disclosure', async () => {
+    invites.mockResolvedValue({ left: 0, next: null, invites: [person(1), person(2), person(3)] })
+    sendEmail.mockImplementation(async (email: string) => (email === 'p1@example.com' ? { ok: false, email, reason: 'other' } : ok(email)))
+    render(<ImportInvites batchId="b9" count={3} auto />)
+    await announced('Sign-in invites: 2 sent, 1 not sent')
+
+    const summary = screen.getByText('Show the 2 sent')
+    const details = summary.closest('details')!
+    expect(details).not.toHaveAttribute('open')
+    expect(within(details).getAllByRole('listitem')).toHaveLength(2)
+    const failedLine = screen.getAllByRole('listitem').find(li => /p1@example.com/.test(li.textContent ?? ''))!
+    expect(details.contains(failedLine)).toBe(false)
+    const retry = screen.getByRole('button', { name: 'Try the 1 again' })
+    expect(retry.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(failedLine.compareDocumentPosition(retry) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('a failed page request shows the problem and reports not sending', async () => {

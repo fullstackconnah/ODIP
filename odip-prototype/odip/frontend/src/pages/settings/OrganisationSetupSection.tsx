@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useProviderSettings } from '@/api/hooks/catalogue'
 import { usePlanPricingSettings } from '@/api/hooks/plan-pricing'
+import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { Button } from '@/components/Button'
 import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -15,6 +16,7 @@ export default function OrganisationSetupSection() {
   // The app caches fresh settings for 30 seconds; a return to this guide still reads current facts.
   useEffect(() => { void refreshPricing() }, [refreshPricing])
   const [hidden, setHidden] = useState(isSetupHidden)
+  const [shownNote, setShownNote] = useState('')
   const providerPhase = queryPhase(provider)
   const pricingPhase = queryPhase(pricing)
   const detailsRecorded = organisationDetailsRecorded(provider.data)
@@ -63,9 +65,15 @@ export default function OrganisationSetupSection() {
       {hidden && (
         <div className="flex flex-wrap items-center gap-3 border-t border-[var(--color-border)] pt-[var(--card-pad)]">
           <p className="text-[13px] text-[var(--color-muted-foreground)]">Setup steps are hidden on this device.</p>
-          <Button variant="secondary" onClick={() => { setSetupHidden(false); setHidden(false) }}>Show setup steps on the dashboard</Button>
+          <Button variant="secondary" onClick={e => {
+            // The button unmounts: say what happened and hand focus to the section's heading (the frame's h2, which takes focus).
+            const section = e.currentTarget.closest('section')
+            setSetupHidden(false); setHidden(false); setShownNote('Setup steps will show on the dashboard.')
+            document.getElementById(section?.getAttribute('aria-labelledby') ?? '')?.focus()
+          }}>Show setup steps on the dashboard</Button>
         </div>
       )}
+      <AnnouncementRegion message={shownNote} />
     </>
   )
 }

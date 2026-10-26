@@ -322,6 +322,10 @@ describe('ImportWizardPage: where an unknown kind goes', () => {
     expect(invites).toHaveBeenCalledTimes(1)
     expect(invites).toHaveBeenCalledWith({ batchId: 'bx' })
     expect(screen.getByText('Wait for the invites to finish, then undo.')).toBeInTheDocument()
+    // The reason sits inside the banner the held button is in, and the button looks held.
+    expect(undoBtn.closest('[role=status]')).toContainElement(screen.getByText('Wait for the invites to finish, then undo.'))
+    expect(undoBtn).toHaveAttribute('aria-describedby', 'undo-wait')
+    expect(undoBtn.className).toMatch(/aria-disabled:opacity-60/)
     await userEvent.click(undoBtn)
     expect(screen.queryByRole('alertdialog')).toBeNull()
     release({ ok: true, email: 'ava@example.com', account: 'created' })

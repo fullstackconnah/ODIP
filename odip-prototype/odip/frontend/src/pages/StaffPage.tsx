@@ -175,13 +175,10 @@ export default function StaffPage() {
     },
   ]
 
-  // The header buttons' gates, so the empty state never offers what the header would not. Archived has nothing to import into.
+  // The header buttons' gates, so the empty state never offers what the header would not (and never repeats "New staff member", which the header owns). Archived has nothing to import into.
   const emptyStaffActions: EmptyStateAction[] = showArchived ? [] : staffFromPayroll
     ? canManageIntegrations ? [{ label: 'Open integrations', to: '/settings?section=integrations' }] : []
-    : [
-        ...(canImportData ? [{ label: 'Import staff', to: '/settings/import/staff' }] : []),
-        ...(canWrite ? [{ label: 'Add a staff member', to: '/staff/new' }] : []),
-      ]
+    : canImportData ? [{ label: 'Import staff', to: '/settings/import/staff' }] : []
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       {/* Plain wrapper keeps PageHeader's title and filter rows in block flow (32 + 8 + 32 = 72px)

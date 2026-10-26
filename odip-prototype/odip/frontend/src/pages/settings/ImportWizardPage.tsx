@@ -200,17 +200,26 @@ export default function ImportWizardPage() {
           <Callout
             tone="success"
             title={`Imported ${plural(result.createdCount, noun)}`}
-            actions={<>
-              <Button to={listTo(landing)} variant="secondary" size="sm">View {listNoun}</Button>
-              <Button variant="secondary" size="sm" aria-disabled={inviting || undefined} aria-describedby={inviting ? 'undo-wait' : undefined} onClick={() => { if (!inviting) setConfirmUndo(true) }}>Undo import</Button>
-            </>}
+            actions={<div className="flex flex-col items-start gap-1">
+              <div className="flex items-center gap-2">
+                <Button to={listTo(landing)} variant="secondary" size="sm">View {listNoun}</Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  aria-disabled={inviting || undefined}
+                  aria-describedby={inviting ? 'undo-wait' : undefined}
+                  className="aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
+                  onClick={() => { if (!inviting) setConfirmUndo(true) }}
+                >Undo import</Button>
+              </div>
+              {kind === 'staff' && inviting && <p id="undo-wait" className="max-w-[18rem] text-[13px] text-[var(--color-muted-foreground)]">Wait for the invites to finish, then undo.</p>}
+            </div>}
           >
             {kind === 'funding-plans'
               ? `${plural(result.skippedCount, 'row')} skipped, ${plural(result.failedCount, 'row')} couldn't be imported.`
               : `${result.skippedCount} skipped (already in Bunya Support), ${result.failedCount} couldn't be imported.`}
           </Callout>
         )}
-        {kind === 'staff' && !undone && inviting && <p id="undo-wait" className="text-[13px] text-[var(--color-muted-foreground)]">Wait for the invites to finish, then undo.</p>}
         {kind === 'staff' && !undone && <ImportInvites batchId={result.batchId} count={result.createdCount} auto={inviteOnImport} onSendingChange={setInviting} />}
         {problem && (
           <Callout tone="error" title={problem}>
@@ -280,21 +289,21 @@ export default function ImportWizardPage() {
                 <p className="text-sm text-[var(--color-muted-foreground)]">Up to 2,000 rows and 5 MB. The file is read to check it and is never stored.</p>
                 <div className="flex flex-wrap items-center gap-2 text-sm">
                   <span className="text-[var(--color-muted-foreground)]">Not sure how to lay it out?</span>
-                  <Button type="button" variant="secondary" onClick={() => template.mutate(kind)}>Download the ODIP template</Button>
+                  <Button type="button" variant="secondary" onClick={() => template.mutate(kind)}>Download the Bunya Support template</Button>
                 </div>
               </div>
             )}
 
             {step === 'match' && data && (
               <div className="flex flex-col gap-3">
-                <p className="text-sm">Each column in your file is matched to an ODIP field. Change any match, or choose Don't import. Fields marked * are required.</p>
+                <p className="text-sm">Each column in your file is matched to a Bunya Support field. Change any match, or choose Don't import. Fields marked * are required.</p>
                 <DataTable
                   data={data.columns}
                   keyField="index"
                   columns={[
                     { key: 'header', header: 'Column in your file', mobile: 'primary', render: c => <span id={`import-col-${c.index}`}>{c.header}</span> },
                     {
-                      key: 'field', header: 'ODIP field',
+                      key: 'field', header: 'Bunya Support field',
                       render: c => (
                         <Dropdown
                           variant="form"

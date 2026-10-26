@@ -461,11 +461,13 @@ describe('StaffPage — the empty state points at Import', () => {
   const empty = () => mockUseStaff.mockReturnValue({ data: [], isLoading: false })
   const links = () => screen.queryAllByRole('link').map((a) => [a.textContent, a.getAttribute('href')])
 
-  it('Admin: Import staff, then Add a staff member', () => {
+  it('Admin: Import staff, and no second create link next to the header New staff member', () => {
     empty()
     renderPage()
     expect(screen.getByText(/Import your staff list from a spreadsheet, or add people one at a time/)).toBeInTheDocument()
-    expect(links()).toEqual(expect.arrayContaining([['Import staff', '/settings/import/staff'], ['Add a staff member', '/staff/new']]))
+    expect(links()).toEqual(expect.arrayContaining([['Import staff', '/settings/import/staff']]))
+    expect(screen.queryByRole('link', { name: 'Add a staff member' })).toBeNull()
+    expect(screen.getAllByRole('link', { name: /New staff member/ })).toHaveLength(1)
   })
 
   it('Employment Hero connected: its own description and Open integrations only', () => {

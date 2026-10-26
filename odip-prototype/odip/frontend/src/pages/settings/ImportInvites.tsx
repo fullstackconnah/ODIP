@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Button } from '@/components/Button'
+import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { Callout } from '@/components/Callout'
 import { useImportInvites } from '@/api/hooks'
 import type { ImportInviteDto } from '@/api/types'
@@ -9,20 +10,44 @@ import { extractErrorMessage } from '@/lib/utils'
 /** What a press of "Send sign-in invites" came to: one outcome per person, or the request's own refusal. */
 export type InviteResult = { outcomes: EmailOutcome[]; left: number } | { problem: string }
 
-/** The invites' results as one Callout: failures first, each line naming the address (lib/signInEmail words it). */
-export function InviteResults({ result, fileName }: { result: InviteResult; fileName?: string }) {
+const NO_INVITES = 'Everyone in this import has signed in already, so no invites were sent.'
+
+/** The one-line result of a finished run ("Sign-in invites: all 3 sent"), also what the auto run's live region announces. */
+function inviteTitle(outcomes: EmailOutcome[], lead = 'Sign-in invites') {
+  const failed = outcomes.filter(o => !o.ok).length
+  return failed > 0 ? `${lead}: ${outcomes.length - failed} sent, ${failed} not sent` : `${lead}: all ${outcomes.length} sent`
+}
+
+/**
+ * The invites' results as one Callout: failures first, each line naming the address (lib/signInEmail words it).
+ * The staff import's own run (`auto`) keeps the sent lines behind "Show the {n} sent" so a long batch's failures are not lost in the list, puts
+ * `afterFailures` (Try again) right under them, and leaves the announcing to its own live region.
+ */
+export function InviteResults({ result, fileName, auto, afterFailures }: { result: InviteResult; fileName?: string; auto?: boolean; afterFailures?: ReactNode }) {
   const lead = fileName ? `Sign-in invites for ${fileName}` : 'Sign-in invites'
   if ('problem' in result) return <Callout tone="error" title={`${lead}: not sent`}>{result.problem}</Callout>
   const { outcomes, left } = result
   const more = left > 0 && <p>{`${left} more still to invite: press Send sign-in invites again.`}</p>
-  if (outcomes.length === 0) return <Callout tone="info">Everyone in this import has signed in already, so no invites were sent.</Callout>
+  if (outcomes.length === 0) return <Callout tone="info" announce={!auto}>{NO_INVITES}</Callout>
   const failed = outcomes.filter(o => !o.ok)
   const sent = outcomes.filter(o => o.ok)
+  const line = (o: EmailOutcome) => <li key={o.email} className="break-words">{describeEmailOutcome(o, 'use Send sign-in invites again').message}</li>
   return (
-    <Callout tone={failed.length > 0 ? 'warning' : 'success'} title={failed.length > 0 ? `${lead}: ${sent.length} sent, ${failed.length} not sent` : `${lead}: all ${sent.length} sent`}>
-      <ul className="list-disc pl-5">
-        {[...failed, ...sent].map(o => <li key={o.email} className="break-words">{describeEmailOutcome(o, 'use Send sign-in invites again').message}</li>)}
-      </ul>
+    <Callout tone={failed.length > 0 ? 'warning' : 'success'} title={inviteTitle(outcomes, lead)} announce={!auto}>
+      {auto ? (
+        <>
+          {failed.length > 0 && <ul className="list-disc pl-5">{failed.map(line)}</ul>}
+          {afterFailures}
+          {sent.length > 0 && (
+            <details className="mt-1">
+              <summary className="cursor-pointer min-h-[var(--control-h)] flex items-center">{`Show the ${sent.length} sent`}</summary>
+              <ul className="list-disc pl-5">{sent.map(line)}</ul>
+            </details>
+          )}
+        </>
+      ) : (
+        <ul className="list-disc pl-5">{[...failed, ...sent].map(line)}</ul>
+      )}
       {more}
     </Callout>
   )
@@ -118,17 +143,24 @@ function AutoInvites({ batchId, count, onSendingChange }: { batchId: string; cou
     setPhase('finished')
   }
 
+  // One live region for the whole run, mounted before the first line is written: the sending lines and the end are announced from here.
+  const announcement = phase === 'sending' ? `Sending sign-in invites: ${outcomes.length} of ${count}`
+    : phase === 'paused' ? `Sending paused: the email service asked us to slow down. ${left} still to invite.`
+    : phase === 'finished' ? (outcomes.length === 0 ? NO_INVITES : inviteTitle(outcomes))
+    : '' // a refused request is the error Callout's own alert
+
   return (
     <div className="flex flex-col gap-3">
+      <AnnouncementRegion message={announcement} />
       {phase === 'sending' && (
-        <div role="status" aria-live="polite" className="flex flex-col gap-1 text-sm">
+        <div className="flex flex-col gap-1 text-sm">
           <p className="tabular-nums">{`Sending sign-in invites: ${outcomes.length} of ${count}`}</p>
           <p className="text-[13px] text-[var(--color-muted-foreground)]">Keep this tab open until the invites finish.</p>
         </div>
       )}
       {phase === 'paused' && (
         <>
-          <Callout tone="warning">{`Sending paused: the email service asked us to slow down. ${left} still to invite.`}</Callout>
+          <Callout tone="warning" announce={false}>{`Sending paused: the email service asked us to slow down. ${left} still to invite.`}</Callout>
           <div><Button variant="secondary" size="sm" onClick={() => void run(resume.current)}>{`Send the rest (${left})`}</Button></div>
         </>
       )}
@@ -138,9 +170,14 @@ function AutoInvites({ batchId, count, onSendingChange }: { batchId: string; cou
           <div><Button variant="secondary" size="sm" onClick={() => void run(resume.current)}>Try again</Button></div>
         </>
       )}
-      {phase === 'finished' && <InviteResults result={{ outcomes, left: 0 }} />}
-      {phase === 'finished' && retryable.length > 0 && (
-        <div><Button variant="secondary" size="sm" onClick={() => void retryFailed()}>{`Try the ${retryable.length} again`}</Button></div>
+      {phase === 'finished' && (
+        <InviteResults
+          result={{ outcomes, left: 0 }}
+          auto
+          afterFailures={retryable.length > 0 && (
+            <div className="mt-2"><Button variant="secondary" size="sm" onClick={() => void retryFailed()}>{`Try the ${retryable.length} again`}</Button></div>
+          )}
+        />
       )}
       {phase === 'finished' && needFix && <p className="text-[13px]">Fix their email on the Staff page, then send from Import history.</p>}
     </div>

@@ -158,4 +158,20 @@ describe('Show setup steps on the dashboard', () => {
     expect(screen.queryByText('Setup steps are hidden on this device.')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Show setup steps on the dashboard' })).not.toBeInTheDocument()
   })
+
+  it('confirms in a polite region and moves focus to the section heading when the button goes', async () => {
+    localStorage.setItem('odip_user', JSON.stringify({ tenantId: 'org-1' }))
+    localStorage.setItem('bunya-setup-hidden:org-1', '1')
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <section aria-labelledby="sec-h"><h2 id="sec-h" tabIndex={-1}>Setup</h2><OrganisationSetupSection /></section>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    await userEvent.click(await screen.findByRole('button', { name: 'Show setup steps on the dashboard' }))
+    expect(screen.getByText('Setup steps will show on the dashboard.')).toHaveAttribute('role', 'status')
+    expect(screen.getByRole('heading', { name: 'Setup' })).toHaveFocus()
+  })
 })

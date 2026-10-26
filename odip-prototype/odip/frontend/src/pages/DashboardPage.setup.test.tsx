@@ -88,6 +88,15 @@ describe('DashboardPage: setup card', () => {
     expect(container.querySelector('#dashboard-alerts')).toHaveFocus()
   })
 
+  it('hidden flag set on mount: no hide sentence is left in the page for a later visit', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
+    localStorage.setItem('bunya-setup-hidden:none', '1')
+    emptyOrg()
+    renderPage()
+
+    expect(screen.queryByText('Setup steps hidden. Show them again from Settings, Organisation setup.')).toBeNull()
+  })
+
   it('hidden flag set: the setup query is asked not to run', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
     localStorage.setItem('bunya-setup-hidden:none', '1')
