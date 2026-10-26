@@ -128,7 +128,7 @@ try {
       await importBtn.click()
       await page.getByRole('alertdialog').getByRole('button', { name: 'Import' }).click()
       const open = page.getByRole('link', { name: 'Open the first week' })
-      await open.waitFor()
+      await open.waitFor(); await page.waitForTimeout(500)
       const tl = await lines(page.getByText(/^Imported \d+ shifts?/).first()); check(`${tag} result title lines`, tl, !vp.mobile || tl === 1)
       const ol = await lines(open); check(`${tag} Open the first week lines`, ol, ol === 1)
       const ws = await open.evaluate((e) => getComputedStyle(e).whiteSpace); check(`${tag} Open the first week white-space`, ws, ws === 'nowrap')
