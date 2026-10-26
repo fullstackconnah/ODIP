@@ -291,10 +291,11 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("logout")]
-    [Authorize]
+    [AllowAnonymous]
     public IActionResult Logout()
     {
         Response.Cookies.Delete("odip_jwt", new CookieOptions { Path = "/api" });
+        Response.Cookies.Delete("odip_ms_refresh", new CookieOptions { Path = "/api/v1/auth/microsoft" });
         return Ok(ApiResponse<object>.Ok(null, "Logged out."));
     }
 
