@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import userEvent from "@testing-library/user-event"
 import { MemoryRouter } from 'react-router-dom'
 import TenantDetailView from './TenantDetailView'
 import type { ProviderSettingsDto, TenantSummaryDto } from '@/api/types'
@@ -33,5 +34,15 @@ describe('Tenant detail: provider settings', () => {
     settings.current = undefined
     show()
     expect(screen.getByRole('button', { name: /Provider Settings/ })).not.toHaveTextContent('Incomplete')
+  })
+})
+
+describe("Tenant detail: no PACE badge", () => {
+  it.each([true, false])("shows GST but nothing about PACE when the stored flag is %s", async isPaceProvider => {
+    settings.current = { ...complete, gstRegistered: true, isPaceProvider }
+    show()
+    await userEvent.click(screen.getByRole("button", { name: /Provider Settings/ }))
+    expect(screen.getByText("GST Registered")).toBeInTheDocument()
+    expect(screen.queryByText(/PACE/i)).not.toBeInTheDocument()
   })
 })

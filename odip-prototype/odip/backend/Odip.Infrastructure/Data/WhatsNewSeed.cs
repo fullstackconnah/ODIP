@@ -64,6 +64,9 @@ public static class WhatsNewSeed
         new Item("2026-10-bunya-support-name", "Bunya Support, everywhere",
             "Messages from the app and its downloads now use the Bunya Support name. Data exports are called bunya-support-export, and the import templates are called bunya-support-…-template.",
             WhatsNewAudience.Admin, false),
+        new Item("2026-10-tenant-pace-removed", "Tenant screens no longer show PACE",
+            "The PACE Provider tick box and badge are gone from the tenant screens. Nothing used them.",
+            WhatsNewAudience.Admin, false),
     };
 
     /// <summary>Inserts the keys the table lacks, one save each, so a key another instance inserted first costs only that row.</summary>

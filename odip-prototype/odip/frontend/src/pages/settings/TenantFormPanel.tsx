@@ -102,7 +102,6 @@ export default function TenantFormPanel({
   const [address, setAddress] = useState('')
   const [state, setState] = useState('')
   const [gstRegistered, setGstRegistered] = useState(false)
-  const [isPaceProvider, setIsPaceProvider] = useState(false)
   const [bankAccountName, setBankAccountName] = useState('')
   const [bsb, setBsb] = useState('')
   const [accountNumber, setAccountNumber] = useState('')
@@ -159,7 +158,6 @@ export default function TenantFormPanel({
       setAddress('')
       setState('')
       setGstRegistered(false)
-      setIsPaceProvider(false)
       setBankAccountName('')
       setBsb('')
       setAccountNumber('')
@@ -199,7 +197,6 @@ export default function TenantFormPanel({
           address,
           state,
           gstRegistered,
-          isPaceProvider,
           bankAccountName: bankAccountName || undefined,
           bsb: bsb || undefined,
           accountNumber: accountNumber || undefined,
@@ -316,11 +313,11 @@ export default function TenantFormPanel({
   // "Tenant updated" notice, up to the auto-close) there is nothing left to lose. A create never gets here: it ends in the done
   // view above, which passes dirty={false} itself.
   const current = JSON.stringify([
-    name, emailDomain, isActive, registrationNumber, abn, orgName ?? '', address, state, gstRegistered, isPaceProvider,
+    name, emailDomain, isActive, registrationNumber, abn, orgName ?? '', address, state, gstRegistered,
     bankAccountName, bsb, accountNumber, invoiceFooterNotes, firstName, lastName, email, username, role, userPassword,
   ])
   const initial = JSON.stringify([
-    tenant?.name ?? '', tenant?.emailDomain ?? '', tenant?.isActive ?? true, '', '', '', '', '', false, false,
+    tenant?.name ?? '', tenant?.emailDomain ?? '', tenant?.isActive ?? true, '', '', '', '', '', false,
     '', '', '', '', '', '', '', '', '', '',
   ])
   const dirty = current !== initial && !successMessage
@@ -529,26 +526,15 @@ export default function TenantFormPanel({
                 />
               </div>
 
-              <div className="flex items-center gap-[var(--section-gap)]">
-                <label className="flex items-center gap-2 text-sm text-[var(--color-foreground)] cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={gstRegistered}
-                    onChange={e => setGstRegistered(e.target.checked)}
-                    className="w-4 h-4 rounded border-[var(--color-border)] accent-[var(--color-primary)]"
-                  />
-                  GST Registered
-                </label>
-                <label className="flex items-center gap-2 text-sm text-[var(--color-foreground)] cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={isPaceProvider}
-                    onChange={e => setIsPaceProvider(e.target.checked)}
-                    className="w-4 h-4 rounded border-[var(--color-border)] accent-[var(--color-primary)]"
-                  />
-                  PACE Provider
-                </label>
-              </div>
+              <label className="flex w-fit items-center gap-2 text-sm text-[var(--color-foreground)] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={gstRegistered}
+                  onChange={e => setGstRegistered(e.target.checked)}
+                  className="w-4 h-4 rounded border-[var(--color-border)] accent-[var(--color-primary)]"
+                />
+                GST Registered
+              </label>
 
               <div className="grid grid-cols-3 gap-3">
                 <div>
