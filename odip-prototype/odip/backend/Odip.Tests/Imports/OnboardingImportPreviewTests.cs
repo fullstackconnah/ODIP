@@ -36,7 +36,7 @@ public class OnboardingImportPreviewTests
         var preview = await Preview(db, tenantId, Csv(Header, "Ava,Stone,03/04/1990,430000001", "Ben,,1990-01-01,", "Old,Hand,,430000009"));
 
         Assert.Equal((1, 1, 1), (preview.ReadyCount, preview.InvalidCount, preview.SkippedCount));
-        Assert.Equal("Already in ODIP as Old Hand.", preview.Rows.Single(r => r.Status == ImportRowStatus.Skipped).SkipReason);
+        Assert.Equal("Already in Bunya Support as Old Hand.", preview.Rows.Single(r => r.Status == ImportRowStatus.Skipped).SkipReason);
         Assert.Equal(new string?[] { "firstName", "lastName", "dateOfBirth", "ndisNumber" }, preview.Columns.Select(c => c.Field));
         Assert.False(db.ChangeTracker.HasChanges());
         Assert.Equal(1, await db.Participants.CountAsync());

@@ -298,7 +298,7 @@ public class EmploymentHeroTimesheetSenderTests
 
         var status = EmploymentHeroTimesheets.StatusOf(await RowAsync(db), true, null, EhTimesheetFixture.Sydney);
 
-        Assert.Equal((PayrollShiftStatus.Failed, "Employment Hero couldn't be reached. ODIP tries again at 12:01 pm."), (status.Status, status.Reason));
+        Assert.Equal((PayrollShiftStatus.Failed, "Employment Hero couldn't be reached. We'll try again at 12:01 pm."), (status.Status, status.Reason));
     }
 
     [Fact]

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { SectionEditPanel } from './SectionEditPanel'
 
@@ -92,7 +92,7 @@ describe('SectionEditPanel refused save', () => {
     expect(screen.getByLabelText('goals')).toHaveValue('mine')
     expect(callout()).toHaveTextContent(TITLE)
     expect(callout()).toHaveTextContent(BODY)
-    expect(callout()).toHaveFocus()
+    await waitFor(() => expect(callout()).toHaveFocus())
     expect(screen.queryByText('Failed to save changes.')).toBeNull()
     expect(latest()).toHaveTextContent(LOADING)
     expect(latest()).not.toHaveTextContent('read view')
@@ -154,7 +154,7 @@ describe('SectionEditPanel refused save', () => {
     screen.getByLabelText('goals').focus()
     await userEvent.click(saveBtn())
     expect(callout()).not.toBe(first)
-    expect(callout()).toHaveFocus()
+    await waitFor(() => expect(callout()).toHaveFocus())
   })
 
   it('F7 other errors use the error callout and keep Latest saved', async () => {

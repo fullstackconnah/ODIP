@@ -26,7 +26,7 @@ public class OtherTenantAddressTests
 {
     private const string OwnDomain = "acme.example.com";
     private const string OtherDomain = "tenantb.example.org";
-    private const string Refusal = "That address belongs to another organisation on ODIP.";
+    private const string Refusal = "That address belongs to another organisation on Bunya Support.";
 
     private sealed class Setup : IDisposable
     {

@@ -94,8 +94,8 @@ public class EmploymentHeroStaffSyncTests
         var items = await db.EmploymentHeroAttentions.ToDictionaryAsync(a => a.ExternalEmployeeId!, a => (a.Kind, a.Reason));
         Assert.Equal(4, items.Count);
         Assert.All(items.Values, i => Assert.Equal(EmploymentHeroAttentionKind.FixInEmploymentHero, i.Kind));
-        Assert.Equal("They have no email in Employment Hero, and ODIP needs one to add them.", items["201"].Reason);
-        Assert.Equal("Their email in Employment Hero belongs to another organisation on ODIP.", items["202"].Reason);
+        Assert.Equal("They have no email in Employment Hero, and we need one to add them.", items["201"].Reason);
+        Assert.Equal("Their email in Employment Hero belongs to another organisation on Bunya Support.", items["202"].Reason);
         Assert.Equal("Their mobile in Employment Hero is longer than 20 characters.", items["203"].Reason);
         Assert.Equal("Their first name or surname is missing in Employment Hero.", items["204"].Reason);
     }
@@ -164,7 +164,7 @@ public class EmploymentHeroStaffSyncTests
         var items = await db.EmploymentHeroAttentions.ToListAsync();
         Assert.Equal(2, items.Count);
         Assert.All(items, i => Assert.Equal(
-            (EmploymentHeroAttentionKind.FixInOdip, "Employment Hero has them as current, but their ODIP account is archived. Restore them on their staff page."), (i.Kind, i.Reason)));
+            (EmploymentHeroAttentionKind.FixInOdip, "Employment Hero has them as current, but their Bunya Support account is archived. Restore them on their staff page."), (i.Kind, i.Reason)));
         var people = await db.Users.Where(u => u.FirstName == "Ed" || u.FirstName == "Fay").OrderBy(u => u.FirstName).ToListAsync();
         Assert.Equal(new[] { ("406", false), ("501", false) }, people.Select(u => (u.ExternalPayrollId!, u.IsActive)));   // linked, never restored by the sync
     }
@@ -266,7 +266,7 @@ public class EmploymentHeroStaffSyncTests
         var items = await db.EmploymentHeroAttentions.ToListAsync();
         Assert.Equal(4, items.Count);
         Assert.All(items, i => Assert.Equal(EmploymentHeroAttentionKind.FixInOdip, i.Kind));
-        Assert.All(items, i => Assert.StartsWith("Employment Hero has ended the employment of 4 staff in one sync, so ODIP archived nobody", i.Reason));
+        Assert.All(items, i => Assert.StartsWith("Employment Hero has ended the employment of 4 staff in one sync, so we archived nobody", i.Reason));
     }
 
     [Fact]

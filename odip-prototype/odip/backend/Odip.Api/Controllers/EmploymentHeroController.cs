@@ -413,7 +413,7 @@ public class EmploymentHeroController : ControllerBase
         var holder = await _db.Users.FirstOrDefaultAsync(u => u.TenantId == tenantId && u.ExternalPayrollId == employeeId, ct);
         // The first sync may have added this person a second time (another name or email). While that duplicate has never signed in, Link takes the id from it.
         if (holder is not null && (holder.LastLoginAt is not null || (await AddedBySyncAsync([holder.Id], ct)).Count == 0))
-            return Conflict(ApiResponse<EmploymentHeroStatusDto>.Fail("That Employment Hero employee is already linked to someone in ODIP."));
+            return Conflict(ApiResponse<EmploymentHeroStatusDto>.Fail("That Employment Hero employee is already linked to someone in Bunya Support."));
         if (await SavedKeyAsync(tenantId, ct) is not { } saved) return Conflict(ApiResponse<EmploymentHeroStatusDto>.Fail(EmploymentHeroStaffSync.KeyUnreadableMessage));
         EhEmployee employee;
         try
@@ -450,7 +450,7 @@ public class EmploymentHeroController : ControllerBase
         catch (DbUpdateException)
         {
             // The sync linked this EH employee between the check above and this save, and the payroll-id index refused the second link.
-            return Conflict(ApiResponse<EmploymentHeroStatusDto>.Fail("That Employment Hero employee is already linked to someone in ODIP."));
+            return Conflict(ApiResponse<EmploymentHeroStatusDto>.Fail("That Employment Hero employee is already linked to someone in Bunya Support."));
         }
         if (!linkedNow) return Conflict(ApiResponse<EmploymentHeroStatusDto>.Fail(EmploymentHeroStaffSync.BusyMessage));
         return Ok(ApiResponse<EmploymentHeroStatusDto>.Ok(await StatusAsync(tenantId, ct)));
@@ -580,7 +580,7 @@ public class EmploymentHeroController : ControllerBase
             {
                 var reason = r.LastError ?? "";
                 if (r.Status == EmploymentHeroOutboxStatus.Failed)
-                    reason += $" ODIP tries again at {TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(r.NextAttemptAt, DateTimeKind.Utc), zone).ToString("h:mm tt", CultureInfo.InvariantCulture).ToLowerInvariant()}.";
+                    reason += $" We'll try again at {TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(r.NextAttemptAt, DateTimeKind.Utc), zone).ToString("h:mm tt", CultureInfo.InvariantCulture).ToLowerInvariant()}.";
                 problems.Add((leave.StartDate, new EmploymentHeroLeaveProblemDto(r.Id, leave.Id, leave.Name.Trim(), leave.LeaveType, leave.StartDate, leave.EndDate, cancelling, heldForCategory, reason)));
             }
         }

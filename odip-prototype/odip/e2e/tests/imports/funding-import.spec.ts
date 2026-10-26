@@ -45,7 +45,7 @@ test('an Admin imports funding plans for imported participants, finds the plan o
   await page.goto('/settings?tab=import');
   const card = page.getByRole('region', { name: 'Funding plans' });
   const [download] = await Promise.all([page.waitForEvent('download'), card.getByRole('button', { name: 'Download template' }).click()]);
-  expect(download.suggestedFilename()).toBe('odip-funding-plans-template.xlsx');
+  expect(download.suggestedFilename()).toBe('bunya-support-funding-plans-template.xlsx');
   await card.getByRole('link', { name: 'Import funding plans' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Import funding plans' })).toBeVisible();
   await runImport(page, budgets, [

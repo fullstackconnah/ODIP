@@ -44,7 +44,7 @@ public class ImportFieldsTests
         Assert.Equal(new string?[] { "firstName", "lastName", "email", "mobile", "position", "driversLicence", "firstAidExpiry", "workerScreeningNumber", null, null },
             ImportFields.AutoMatch(ImportKind.Staff, headers));
         Assert.Equal("Won't be imported: your payroll system keeps employment details.", ImportFields.NotImportedNote(ImportKind.Staff, "Employment type"));
-        Assert.Equal("Won't be imported: ODIP has no field for this yet.", ImportFields.NotImportedNote(ImportKind.Staff, "Police check"));
+        Assert.Equal("Won't be imported: Bunya Support has no field for this yet.", ImportFields.NotImportedNote(ImportKind.Staff, "Police check"));
         Assert.Null(ImportFields.NotImportedNote(ImportKind.Participants, "Employment type"));
         foreach (var field in ImportFields.For(ImportKind.Staff))
             Assert.Equal(new string?[] { field.Key }, ImportFields.AutoMatch(ImportKind.Staff, [field.Label]));

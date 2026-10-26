@@ -72,7 +72,7 @@ export function useDownloadImportTemplate() {
       const url = window.URL.createObjectURL(response.data)
       const link = document.createElement('a')
       link.href = url
-      link.download = shape ? `bunya-support-${kind}-${shape === 'pattern' ? 'weekly-pattern' : 'dated'}-template.xlsx` : `odip-${kind}-template.xlsx`
+      link.download = shape ? `bunya-support-${kind}-${shape === 'pattern' ? 'weekly-pattern' : 'dated'}-template.xlsx` : `bunya-support-${kind}-template.xlsx`
       document.body.appendChild(link)
       link.click()
       link.remove()

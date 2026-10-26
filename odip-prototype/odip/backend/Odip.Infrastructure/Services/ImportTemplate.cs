@@ -13,7 +13,7 @@ public static class ImportTemplate
     // The URL's word for the kind, so this name and the browser's download name agree.
     public static string FileName(ImportKind kind, ImportShiftShape? shape = null) => kind == ImportKind.UpcomingShifts
         ? $"bunya-support-upcoming-shifts-{(shape == ImportShiftShape.Dated ? "dated" : "weekly-pattern")}-template.xlsx"
-        : $"odip-{(kind == ImportKind.FundingPlans ? "funding-plans" : kind.ToString().ToLowerInvariant())}-template.xlsx";
+        : $"bunya-support-{(kind == ImportKind.FundingPlans ? "funding-plans" : kind.ToString().ToLowerInvariant())}-template.xlsx";
 
     public static byte[] Build(ImportKind kind, ImportShiftShape? shape = null)
     {

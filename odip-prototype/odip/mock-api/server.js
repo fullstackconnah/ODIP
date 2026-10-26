@@ -3196,8 +3196,8 @@ function matchRoute(pattern, segments) {
 const EXCHANGE_REFUSALS = {
   InvalidToken: 'Invalid or expired token',
   EmailNotVerified: 'The email address on this sign-in has not been verified.',
-  ProviderNotAllowed: 'This sign-in method is not enabled for ODIP.',
-  NoOdipAccount: 'No active ODIP account uses this email address.',
+  ProviderNotAllowed: 'This sign-in method is not enabled for Bunya Support.',
+  NoOdipAccount: 'No active Bunya Support account uses this email address.',
   Ambiguous: "We can't sign you in with this email address yet. Ask your administrator to check your account.",
   TenantInactive: 'The organisation this account belongs to is inactive.',
   LockedOut: 'Too many failed sign-in attempts. Try again shortly.',

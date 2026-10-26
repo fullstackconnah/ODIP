@@ -42,8 +42,8 @@ public class OnboardingImportFundingTests
 
         Assert.Equal((3, 0, 1, 1), (preview.ReadyCount, preview.SkippedCount, preview.InvalidCount, preview.CreateCount));
         Assert.Equal(new[] { "Ava Stone", "Ava Stone", "Ava Stone", "NDIS 430000009" }, preview.Rows.Select(r => r.Name));
-        Assert.Equal("No participant in ODIP has this NDIS number. Import or add them first.", preview.Rows[3].Reasons.Single());
-        Assert.Equal(("Categories 01 to 04 are one Core (flexible) pool in ODIP: this plan's plan-managed Core comes to $1,250.50.", 0), (preview.Rows[0].Notes.Single(), preview.Rows[0].Warnings.Count));
+        Assert.Equal("No participant in Bunya Support has this NDIS number. Import or add them first.", preview.Rows[3].Reasons.Single());
+        Assert.Equal(("Categories 01 to 04 are one Core (flexible) pool in Bunya Support: this plan's plan-managed Core comes to $1,250.50.", 0), (preview.Rows[0].Notes.Single(), preview.Rows[0].Warnings.Count));
         Assert.Empty(await db.FundingPlans.ToListAsync());
         Assert.Empty(await db.ImportBatches.ToListAsync());
     }
@@ -78,7 +78,7 @@ public class OnboardingImportFundingTests
         var again = await service.CommitAsync(ImportKind.FundingPlans, File, "budgets.csv", null, null, "key-2", Admin(), CancellationToken.None);
 
         Assert.Equal((0, 4), (again.CreatedCount, again.FailedCount));
-        Assert.StartsWith("This participant already has a plan in ODIP from 1 Jul 2026 to 30 Jun 2027", again.Rows[0].Reasons.Single());
+        Assert.StartsWith("This participant already has a plan in Bunya Support from 1 Jul 2026 to 30 Jun 2027", again.Rows[0].Reasons.Single());
         Assert.Equal(1250.50m, await db.FundingPeriods.Where(p => p.FundingPool!.PaceCategory == 0).Select(p => p.PlanAmount).SingleAsync());
         Assert.Single(await db.FundingPlans.ToListAsync());
     }

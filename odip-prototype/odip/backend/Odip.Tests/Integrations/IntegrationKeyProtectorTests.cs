@@ -68,7 +68,7 @@ public class IntegrationKeyProtectorTests
         Assert.Equal(IntegrationKeyProtector.NotConfiguredMessage, refusal.Message);
         Assert.Null(keys.Unprotect(new byte[40], new byte[12], TenantA));
         // Follow-ups: an Admin is told to contact support; the variable to set is named only in the server's log.
-        Assert.Equal("Integrations aren't set up on this server yet. Contact ODIP support.", IntegrationKeyProtector.NotConfiguredMessage);
+        Assert.Equal("Integrations aren't set up on this server yet. Contact Bunya Support.", IntegrationKeyProtector.NotConfiguredMessage);
         var warning = Assert.Single(logger.Entries);
         Assert.Equal(LogLevel.Warning, warning.Level);
         Assert.Contains("INTEGRATIONS_MASTER_KEY", warning.Message);

@@ -271,7 +271,7 @@ public class EmploymentHeroControllerTests
         var taken = await Controller(db, tenant, eh).Link(item.Id, new EmploymentHeroLinkDto("1"), CancellationToken.None);   // Ada's
         var unknown = await Controller(db, tenant, eh).Link(item.Id, new EmploymentHeroLinkDto("999"), CancellationToken.None);
 
-        Assert.Equal((409, "That Employment Hero employee is already linked to someone in ODIP."), Refusal(taken));
+        Assert.Equal((409, "That Employment Hero employee is already linked to someone in Bunya Support."), Refusal(taken));
         Assert.Equal((400, "Employment Hero couldn't find that business or employee for this API key."), Refusal(unknown));
         Assert.Null(jane.ExternalPayrollId);
         Assert.Single(db.EmploymentHeroAttentions);
@@ -341,7 +341,7 @@ public class EmploymentHeroControllerTests
 
         var result = await Controller(racing, tenant, eh).Link(itemId, new EmploymentHeroLinkDto("301"), CancellationToken.None);
 
-        Assert.Equal((409, "That Employment Hero employee is already linked to someone in ODIP."), Refusal(result));
+        Assert.Equal((409, "That Employment Hero employee is already linked to someone in Bunya Support."), Refusal(result));
     }
 
     [Fact]
@@ -442,7 +442,7 @@ public class EmploymentHeroControllerTests
 
         var result = await Controller(db, tenant, eh).Link(item.Id, new EmploymentHeroLinkDto("302"), CancellationToken.None);
 
-        Assert.Equal((409, "That Employment Hero employee is already linked to someone in ODIP."), Refusal(result));
+        Assert.Equal((409, "That Employment Hero employee is already linked to someone in Bunya Support."), Refusal(result));
         Assert.Equal(("302", true), (robert.ExternalPayrollId, robert.IsActive));
         Assert.Null(jane.ExternalPayrollId);
     }

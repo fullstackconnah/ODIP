@@ -132,7 +132,7 @@ public sealed partial class OnboardingImportService
             .ToDictionary(g => g.Key, g => g.First());
         foreach (var plan in plans)
             if (plan.DuplicateKey is { } key && existing.TryGetValue(key, out var match))
-                plan.Skip($"Already in ODIP as {(match.FirstName + " " + match.LastName).Trim()}.");
+                plan.Skip($"Already in Bunya Support as {(match.FirstName + " " + match.LastName).Trim()}.");
 
         ImportRowPlan.MarkFileDuplicates(plans, "NDIS number");
         return plans;
@@ -161,7 +161,7 @@ public sealed partial class OnboardingImportService
             if (plan.DuplicateKey is not { } email || plan.Status == ImportRowStatus.Skipped) continue;
             if (users.TryGetValue(email, out var user))
             {
-                if (user.TenantId == tenantId) plan.Skip($"Already in ODIP as {(user.FirstName + " " + user.LastName).Trim()}.");
+                if (user.TenantId == tenantId) plan.Skip($"Already in Bunya Support as {(user.FirstName + " " + user.LastName).Trim()}.");
                 else plan.Refuse("This email belongs to another organisation.");
                 continue;
             }

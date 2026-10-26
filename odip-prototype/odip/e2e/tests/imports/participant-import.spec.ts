@@ -50,7 +50,7 @@ test('an Admin imports participants from a file, finds them listed, then undoes 
   // Import history is GET /api/v1/imports with no trailing slash: nginx proxies it straight through, no 301 round trip first.
   expect((await page.request.get('/api/v1/imports', { maxRedirects: 0 })).status()).not.toBe(301);
   const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download template' }).first().click()]);
-  expect(download.suggestedFilename()).toBe('odip-participants-template.xlsx');
+  expect(download.suggestedFilename()).toBe('bunya-support-participants-template.xlsx');
 
   await page.getByRole('link', { name: 'Import participants' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Import participants' })).toBeVisible();
