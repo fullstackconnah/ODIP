@@ -3,7 +3,7 @@ using Odip.Application.DTOs;
 using Odip.Domain.Rostering;
 using Odip.Domain.Rostering.Services;
 
-namespace Odip.Api.Rostering;
+namespace Odip.Infrastructure.Rostering;
 
 /// <summary>
 /// The Blocking/RequiresReason/override gate every roster-checked write runs through, shared by

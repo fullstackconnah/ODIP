@@ -9,6 +9,7 @@ using Odip.Domain.Rostering.Services;
 using Odip.Infrastructure.Data;
 using Xunit;
 using Odip.Tests.Support;
+using Odip.Infrastructure.Rostering;
 
 namespace Odip.Tests.Rostering;
 
