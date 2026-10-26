@@ -390,6 +390,57 @@ public class MicrosoftAuthController : ControllerBase
         new Claim(ClaimTypes.NameIdentifier, u.Id.ToString()), new Claim(ClaimTypes.Name, u.Username), new Claim("fullName", u.FullName),
     }, "microsoft-link"));
 
+    // ── Refresh ──────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Mints a fresh 30-minute session while the 12-hour absolute refresh cookie holds. It never re-issues that cookie, so sign-in stays bounded to 12 hours.
+    /// Everything the cookie vouched for is re-checked now, so removing the link, deactivating the person or unlinking their account ends it within one cycle.
+    /// Failures are not counted: the cookie is sealed by Data Protection, so there is nothing to guess.
+    /// </summary>
+    [HttpPost("refresh")]
+    [AllowAnonymous]
+    public async Task<IActionResult> Refresh(CancellationToken ct)
+    {
+        if (MicrosoftSignInConfig.From(_config) is null) return NotFound();
+
+        var ticket = ReadRefresh(Request.Cookies[RefreshCookie]);
+        var user = ticket is null ? null : await _db.Users.IgnoreQueryFilters([TenantFilter.Name]).FirstOrDefaultAsync(u => u.Id == ticket.UserId, ct);
+        if (ticket is null || user is not { IsActive: true } || user.Role == UserRole.SuperAdmin
+            || user.MicrosoftTenantId != ticket.MicrosoftTenantId || user.MicrosoftObjectId != ticket.MicrosoftObjectId
+            || !await OrgLinks(user.TenantId).AnyAsync(l => l.MicrosoftTenantId == ticket.MicrosoftTenantId, ct))
+            return EndRefresh();
+        var org = await _db.Tenants.FirstOrDefaultAsync(t => t.Id == user.TenantId && t.IsActive, ct);
+        if (org is null) return EndRefresh();
+
+        var token = OdipSession.Token(user, org.Id, _config);
+        OdipSession.SetCookie(Response, token);
+        return Ok(ApiResponse<AuthResponseDto>.Ok(new AuthResponseDto
+        {
+            Id = user.Id, Token = token, ExpiresAt = DateTime.UtcNow.AddMinutes(30), Username = user.Username, FullName = user.FullName,
+            Role = user.Role.ToString(), TenantName = org.Name, TenantId = org.Id,
+        }));
+    }
+
+    private IActionResult EndRefresh()
+    {
+        Response.Cookies.Delete(RefreshCookie, new CookieOptions { Path = CookiePath });
+        return Unauthorized(ApiResponse<object>.Fail("Sign in again.", MicrosoftRefusal.MicrosoftSessionEnded));
+    }
+
+    private RefreshTicket? ReadRefresh(string? cookie)
+    {
+        if (string.IsNullOrEmpty(cookie)) return null;
+        try
+        {
+            var ticket = JsonSerializer.Deserialize<RefreshTicket>(_refresh.Unprotect(cookie));
+            return ticket is not null && _clock.GetUtcNow() - ticket.IssuedAt < RefreshLife ? ticket : null;
+        }
+        catch (Exception ex) when (ex is CryptographicException or JsonException)
+        {
+            return null;
+        }
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────
 
     private IQueryable<MicrosoftTenantLink> OrgLinks(Guid orgId) =>

@@ -363,6 +363,18 @@ public class MicrosoftAuthControllerTests
     }
 
     [Fact]
+    public async Task I4b_SuperAdminRowWithIdentity_NoOdipAccount()
+    {
+        var rig = new MicrosoftAuthRig();
+        var org = rig.Org();
+        rig.Link(org.Id);
+        rig.Person(org.Id, "boss@acme.test", UserRole.SuperAdmin, tid: Tid, oid: PersonOid);
+        var o = await rig.RunAsync(Token());
+        Assert.Equal(MicrosoftRefusal.NoOdipAccount, o.Code);
+        Assert.Null(o.Cookie("odip_jwt"));
+    }
+
+    [Fact]
     public async Task I5_LinkedRowInOtherOrg_MicrosoftNotLinked()
     {
         var rig = new MicrosoftAuthRig();
