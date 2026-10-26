@@ -1,7 +1,9 @@
 // Settings → Import data (ImportsController). Shapes follow Odip.Application/DTOs/ImportDTOs.cs.
 import type { FirebaseAccountState } from './users'
 
-export type ImportKind = 'participants' | 'staff' | 'funding-plans'
+export type ImportKind = 'participants' | 'staff' | 'funding-plans' | 'upcoming-shifts'
+/** What an upcoming-shifts file holds: one dated row per shift, or a weekly pattern repeated over a span. */
+export type ImportShiftShape = 'dated' | 'pattern'
 export type ImportLanding = 'Active' | 'Onboarding'
 export type ImportRowStatus = 'Ready' | 'Skipped' | 'Invalid'
 
@@ -20,13 +22,22 @@ export interface ImportPreviewDto {
   previouslyImportedAt: string | null
   /** What Import would create: the ready rows or, for funding plans, the plans they make (a plan is several rows). */
   createCount: number
+  /** Upcoming shifts only (null for the other kinds): shifts with nobody on them, the span of the shifts made (yyyy-MM-dd, null when none), the weeks they touch, and whether the organisation enforces participant readiness. */
+  unfilledCount?: number | null
+  firstDate?: string | null
+  lastDate?: string | null
+  weekCount?: number | null
+  readinessEnforced?: boolean
 }
 
-export interface ImportResultDto { batchId: string; createdCount: number; skippedCount: number; failedCount: number; rows: ImportRowDto[]; replayed: boolean }
+export interface ImportResultDto { batchId: string; createdCount: number; skippedCount: number; failedCount: number; rows: ImportRowDto[]; replayed: boolean
+  /** Upcoming shifts: the Monday of the first week made (null when none). A replayed commit answers firstWeekStart only. */
+  firstWeekStart?: string | null; weekCount?: number | null; unfilledCount?: number | null
+}
 
 export interface ImportBatchDto {
   id: string
-  kind: 'Participants' | 'Staff' | 'FundingPlans'
+  kind: 'Participants' | 'Staff' | 'FundingPlans' | 'UpcomingShifts'
   fileName: string
   createdByName: string
   createdAt: string
@@ -36,6 +47,8 @@ export interface ImportBatchDto {
   failedCount: number
   undoneAt: string | null
   undoneByName: string | null
+  /** Upcoming shifts: how many shifts an undo left because they were published or changed (0 after a full undo, null before any undo). */
+  keptCount?: number | null
 }
 
 export interface ImportUndoBlockerDto { entityId: string; name: string; reason: string }

@@ -14,7 +14,7 @@ vi.mock('../client', () => ({
   apiPost: async (url: string, body: unknown, config: unknown) => (await mockPost(url, body, config)).data.data,
 }))
 
-import { useCommitImport, useImportHistory, usePreviewImport } from './imports'
+import { useCommitImport, useDownloadImportTemplate, useImportHistory, usePreviewImport } from './imports'
 
 const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={new QueryClient()}>{children}</QueryClientProvider>
 
@@ -44,6 +44,29 @@ describe('import hooks', () => {
     const [url, form] = mockPost.mock.calls[0] as unknown as [string, FormData]
     expect(url).toBe('/imports/participants/commit')
     expect([form.get('landing'), form.get('idempotencyKey')]).toEqual(['Onboarding', 'k-1'])
+  })
+
+  it('sends the shape, start and weeks of an upcoming-shifts file with preview and commit', async () => {
+    const file = new File(['x'], 'roster.csv')
+    const extra = { shape: 'pattern', from: '2026-11-02', weeks: '12' }
+    const preview = renderHook(() => usePreviewImport(), { wrapper })
+    await preview.result.current.mutateAsync({ kind: 'upcoming-shifts', file, extra })
+    const [previewUrl, previewForm] = mockPost.mock.calls[0] as unknown as [string, FormData]
+    expect(previewUrl).toBe('/imports/upcoming-shifts/preview')
+    expect([previewForm.get('shape'), previewForm.get('from'), previewForm.get('weeks')]).toEqual(['pattern', '2026-11-02', '12'])
+
+    const commit = renderHook(() => useCommitImport(), { wrapper })
+    await commit.result.current.mutateAsync({ kind: 'upcoming-shifts', file, mapping: ['weekday'], idempotencyKey: 'k-3', extra })
+    const [, commitForm] = mockPost.mock.calls[1] as unknown as [string, FormData]
+    expect([commitForm.get('shape'), commitForm.get('from'), commitForm.get('weeks'), commitForm.get('idempotencyKey')]).toEqual(['pattern', '2026-11-02', '12', 'k-3'])
+  })
+
+  it('asks for the template of the chosen shape', async () => {
+    mockGet.mockResolvedValueOnce({ data: new Blob(['x']) } as never)
+    Object.assign(window.URL, { createObjectURL: vi.fn(() => 'blob:x'), revokeObjectURL: vi.fn() })
+    const { result } = renderHook(() => useDownloadImportTemplate(), { wrapper })
+    await result.current.mutateAsync({ kind: 'upcoming-shifts', shape: 'dated' })
+    expect(mockGet).toHaveBeenCalledWith('/imports/upcoming-shifts/template?shape=dated', { responseType: 'blob' })
   })
 
   it('refreshes the Funding tab and the onboarding checklist after a commit', async () => {
