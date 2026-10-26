@@ -40,7 +40,12 @@ const browser = await chromium.launch({ headless: true })
 try {
   // Warm-up: the dev server builds its CSS and pre-bundles dependencies on the first visit, so the measured passes start from a settled page.
   const warm = await (await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })).newPage()
-  await warm.goto(`${BASE_URL}/login`, { waitUntil: 'networkidle', timeout: 120_000 })
+  await warm.route('**/api/v1/auth/dev-users', (r) => r.fulfill({ json: devUsers }))
+  await warm.route('**/api/v1/auth/dev-login', (r) => r.fulfill({ json: devLogin }))
+  await warm.goto(`${BASE_URL}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
+  await warm.getByRole('button', { name: 'Sign in as selected user' }).click()
+  await warm.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 })
+  await warm.goto(`${BASE_URL}/settings/import/upcoming-shifts`, { waitUntil: 'networkidle', timeout: 120_000 })
   await warm.waitForTimeout(3000)
   await warm.context().close()
   for (const scheme of ['light', 'dark']) {
