@@ -30,13 +30,17 @@ async function importStaff(page: Page, token: string, shot: (name: string) => Pr
   await expect(page.getByText('Where do these participants go?')).toHaveCount(0);
   await shot('staff-preview');
   await page.getByRole('button', { name: 'Next' }).click();
-  await expect(page.getByText(/Nobody is emailed yet/)).toBeVisible();
+  // Default path (plan D13): the invite checkbox is ticked, so the invites go out on their own after the import.
+  await expect(page.getByRole('checkbox', { name: 'Email each new staff member a sign-in invite' })).toBeChecked();
+  await expect(page.getByText(/Invites are sent from this browser straight after the import./)).toBeVisible();
   await shot('staff-review');
   await page.getByRole('button', { name: 'Import 1 staff member' }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'Import' }).click();
   await expect(page.getByText('Imported 1 staff member')).toBeVisible();
-  // The e2e stack has no real Firebase: the invites are covered by ImportInvitesTests and ImportInvites.test.tsx. Here only the offer is checked.
-  await expect(page.getByRole('button', { name: 'Send sign-in invites (1)' })).toBeVisible();
+  // The e2e stack has no real Firebase, so the person comes back 'not sent'; the loop itself is covered by ImportInvitesTests and ImportInvites.test.tsx.
+  // Here only that the run starts by itself and ends is checked: the run's live region carries the finished line, and no press was needed.
+  await expect(page.getByRole('status').filter({ hasText: /Sign-in invites: (all \d+ sent|\d+ sent, \d+ not sent)/ })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Send sign-in invites (1)' })).toHaveCount(0);
   await shot('staff-result');
 }
 

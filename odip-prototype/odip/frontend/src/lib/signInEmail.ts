@@ -60,9 +60,9 @@ export function sendSetPasswordEmailFor(email: string, account: AccountState): P
  * The sentence for an outcome, and whether it is good news. It always names the address, never claims delivery for a failure, and gives
  * advice that fits the failure: only a rate limit or a dropped connection is worth trying again soon, and an invalid address needs fixing
  * first. `retry` is what the person does to try again, as an imperative that follows "then" and "To try again,": the control THIS screen
- * offers ("use Send set-password email on their row", "use Send again").
+ * offers ("use Send set-password email on their row", "use Send again"). Null when the screen shows its own Try again button right under the line: the clause is dropped.
  */
-export function describeEmailOutcome(outcome: EmailOutcome, retry: string): { tone: 'success' | 'danger'; message: string } {
+export function describeEmailOutcome(outcome: EmailOutcome, retry: string | null): { tone: 'success' | 'danger'; message: string } {
   const { email } = outcome
   if (outcome.ok) {
     const verb = outcome.account === 'created' ? 'set' : 'reset'
@@ -74,13 +74,13 @@ export function describeEmailOutcome(outcome: EmailOutcome, retry: string): { to
     case 'account':
       return { tone: 'danger', message: `${noLink} ${outcome.detail ?? "We couldn't set up a sign-in account for them."}` }
     case 'too-many-requests':
-      return { tone: 'danger', message: `${noLink} Firebase is limiting emails for now. Wait a few minutes, then ${retry}.` }
+      return { tone: 'danger', message: `${noLink} Firebase is limiting emails for now. Wait a few minutes${retry ? `, then ${retry}` : ''}.` }
     case 'invalid-email':
-      return { tone: 'danger', message: `${noLink} That doesn't look like a valid email address. Correct it, then ${retry}.` }
+      return { tone: 'danger', message: `${noLink} That doesn't look like a valid email address. Correct it${retry ? `, then ${retry}` : ''}.` }
     case 'network':
-      return { tone: 'danger', message: `${noLink} We couldn't reach Firebase. Check your connection, then ${retry}.` }
+      return { tone: 'danger', message: `${noLink} We couldn't reach Firebase. Check your connection${retry ? `, then ${retry}` : ''}.` }
     case 'other':
-      return { tone: 'danger', message: `${noLink} To try again, ${retry}.` }
+      return { tone: 'danger', message: retry ? `${noLink} To try again, ${retry}.` : noLink }
   }
 }
 

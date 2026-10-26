@@ -138,3 +138,40 @@ describe('Organisation setup read-only facts', () => {
     expect(screen.queryByText('Registration groups confirmed')).not.toBeInTheDocument()
   })
 })
+
+describe('Show setup steps on the dashboard', () => {
+  afterEach(() => localStorage.clear())
+
+  it('offers no way back while the card is showing', async () => {
+    show()
+    await screen.findByText('Details recorded')
+    expect(screen.queryByRole('button', { name: 'Show setup steps on the dashboard' })).not.toBeInTheDocument()
+  })
+
+  it('shows the line and button while hidden; pressing clears the flag and removes both', async () => {
+    localStorage.setItem('odip_user', JSON.stringify({ tenantId: 'org-1' }))
+    localStorage.setItem('bunya-setup-hidden:org-1', '1')
+    show()
+    expect(await screen.findByText('Setup steps are hidden on this device.')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Show setup steps on the dashboard' }))
+    expect(localStorage.getItem('bunya-setup-hidden:org-1')).toBeNull()
+    expect(screen.queryByText('Setup steps are hidden on this device.')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Show setup steps on the dashboard' })).not.toBeInTheDocument()
+  })
+
+  it('confirms in a polite region and moves focus to the section heading when the button goes', async () => {
+    localStorage.setItem('odip_user', JSON.stringify({ tenantId: 'org-1' }))
+    localStorage.setItem('bunya-setup-hidden:org-1', '1')
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <section aria-labelledby="sec-h"><h2 id="sec-h" tabIndex={-1}>Setup</h2><OrganisationSetupSection /></section>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    await userEvent.click(await screen.findByRole('button', { name: 'Show setup steps on the dashboard' }))
+    expect(screen.getByText('Setup steps will show on the dashboard.')).toHaveAttribute('role', 'status')
+    expect(screen.getByRole('heading', { name: 'Setup' })).toHaveFocus()
+  })
+})

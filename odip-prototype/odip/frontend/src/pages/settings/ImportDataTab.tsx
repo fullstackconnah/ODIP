@@ -16,11 +16,11 @@ import { retryingAfterError } from '@/lib/queryPhase'
 const KINDS: { kind: ImportKind; title: string; text: string; noun: string }[] = [
   {
     kind: 'participants', title: 'Participants', noun: 'participant',
-    text: 'Core profile, plan type and dates, contacts and caregivers. Budgets come in with Funding plans; medications and goals are added in ODIP afterwards.',
+    text: 'Core profile, plan type and dates, contacts and caregivers. Budgets come in with Funding plans; medications and goals are added in Bunya Support afterwards.',
   },
   {
     kind: 'staff', title: 'Staff', noun: 'staff member',
-    text: 'Core profile and the checks ODIP tracks. Pay and employment details stay in your payroll system. Sign-in invites are sent afterwards, when you choose.',
+    text: 'Core profile and the checks Bunya Support tracks. Pay and employment details stay in your payroll system. You can send sign-in invites straight after the import.',
   },
   {
     kind: 'funding-plans', title: 'Funding plans', noun: 'funding plan',
@@ -75,9 +75,9 @@ export default function ImportDataTab() {
   return (
     <div className="flex flex-col gap-[var(--section-gap)]">
       <section className="flex flex-col gap-3" aria-labelledby="import-kinds">
-        <h3 id="import-kinds" className="text-base font-semibold">Bring your records into ODIP</h3>
+        <h3 id="import-kinds" className="text-base font-semibold">Bring your records into Bunya Support</h3>
         <p className="text-sm text-[var(--color-muted-foreground)]">
-          Upload a .csv or .xlsx export from your old platform, up to 2,000 rows and 5 MB. Records already in ODIP are skipped and never changed.
+          Upload a .csv or .xlsx export from your old platform, up to 2,000 rows and 5 MB. Records already in Bunya Support are skipped and never changed.
         </p>
         {KINDS.map(k => {
           // A connected organisation's staff come from Employment Hero: the staff card stays in its slot and says where they come from instead.
