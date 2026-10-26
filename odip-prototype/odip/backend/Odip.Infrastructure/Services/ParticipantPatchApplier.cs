@@ -33,6 +33,7 @@ public static class ParticipantPatchApplier
         StaffCompatibilityLinkService compatLink,
         Participant p,
         PatchParticipantDto dto,
+        IReadOnlyDictionary<string, int>? expectedRevisions,
         CancellationToken ct)
     {
         // ── Validate — only for present groups, each checked purely from its own incoming values
@@ -290,7 +291,10 @@ public static class ParticipantPatchApplier
             await safetyNoteSync.SyncFromParticipantAsync(p, ct);
         if (ratioChanged) await TripStaffing.RecalculateForParticipantAsync(db, p.Id, ct);
 
-        await db.SaveChangesAsync(ct);
+        await ParticipantGroupRevisions.BumpChangedAsync(db, p, expectedRevisions, ct);
+        // With expected revisions a lost race must surface as a 409 (the caller maps it); without, retry once.
+        if (expectedRevisions is null) await ParticipantGroupRevisions.SaveBumpingAsync(db, ct);
+        else await db.SaveChangesAsync(ct);
         return null;
     }
 

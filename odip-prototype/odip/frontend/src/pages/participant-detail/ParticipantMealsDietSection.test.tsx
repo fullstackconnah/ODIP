@@ -62,7 +62,7 @@ describe('ParticipantMealsDietSection — edit/save cycle', () => {
 
     expect(mockPatchMutateAsync).toHaveBeenCalledWith({
       id: 'participant-1',
-      data: { mealsAndDiet: expect.objectContaining({ favouriteBreakfast: 'Toast' }) },
+      data: { mealsAndDiet: expect.objectContaining({ favouriteBreakfast: 'Toast' }), expectedRevisions: {} },
     })
   })
 

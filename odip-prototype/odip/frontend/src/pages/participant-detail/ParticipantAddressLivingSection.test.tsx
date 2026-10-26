@@ -60,6 +60,7 @@ describe('ParticipantAddressLivingSection — edit/save cycle', () => {
       data: {
         address: expect.objectContaining({ addressStreet: '12 Example St' }),
         livingArrangement: expect.objectContaining({ livingArrangement: 'Family', mainSupportPersonName: 'Jane Citizen' }),
+        expectedRevisions: {},
       },
     })
   })

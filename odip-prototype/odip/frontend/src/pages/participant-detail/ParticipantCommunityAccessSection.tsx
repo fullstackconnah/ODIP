@@ -9,7 +9,8 @@ import { answeredChecklist } from './recorded'
 import { CHECKLIST_ITEM_TYPE_LABELS, CHECKLIST_ITEM_VALUE_LABELS } from '@/api/types/enums'
 import type { ChecklistItemType } from '@/api/types/enums'
 import type { ParticipantDetailDto } from '@/api/types/participants'
-import { extractErrorMessage } from '@/lib/utils'
+import { rethrowSectionError } from '@/lib/sectionConflict'
+import type { PatchParticipantDto } from '@/api/types/participant-patch'
 
 const pl = (v?: string | null) => (v ? <span className="whitespace-pre-line">{v}</span> : undefined)
 
@@ -61,7 +62,7 @@ export function BehaviourSupportCard({ p, participantId, canEdit }: { p: Partici
   const [draft, setDraft] = useState<BehaviourDraft>(saved)
   const isDirty = BEHAVIOUR_FIELDS.some(({ key }) => draft[key] !== saved[key])
 
-  async function handleSave() {
+  async function handleSave(expected: PatchParticipantDto['expectedRevisions']) {
     try {
       const latest = qc.getQueryData<ParticipantDetailDto>(['participant', participantId]) ?? p
       await patchParticipant.mutateAsync({
@@ -77,16 +78,17 @@ export function BehaviourSupportCard({ p, participantId, canEdit }: { p: Partici
             // Not edited here (wizard-owned), but a present group clears omitted members: echo the latest value.
             overallCommunityAccessRiskRating: latest.overallCommunityAccessRiskRating ?? null,
           },
+          expectedRevisions: expected,
         },
       })
       await qc.invalidateQueries({ queryKey: ['participant', participantId] })
     } catch (err) {
-      throw new Error(extractErrorMessage(err, 'Failed to save Behaviour support.'))
+      rethrowSectionError(err, 'Failed to save Behaviour support.')
     }
   }
 
   return (
-    <SectionEditPanel title="Behaviour support" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
+    <SectionEditPanel title="Behaviour support" groups={['communityAccessBehaviour']} revisions={p.groupRevisions} canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
       {(editing, startEdit) => editing ? (
         <div className={formGrid}>
           {BEHAVIOUR_FIELDS.map(({ key, label }) => (
@@ -129,7 +131,7 @@ export function TypicalDayCard({ p, participantId, canEdit }: { p: ParticipantDe
   const [draft, setDraft] = useState<TypicalDayDraft>(saved)
   const isDirty = TYPICAL_DAY_FIELDS.some(({ key }) => draft[key] !== saved[key])
 
-  async function handleSave() {
+  async function handleSave(expected: PatchParticipantDto['expectedRevisions']) {
     try {
       await patchParticipant.mutateAsync({
         id: participantId,
@@ -140,16 +142,17 @@ export function TypicalDayCard({ p, participantId, canEdit }: { p: ParticipantDe
             supportsLookLikeAfternoonEvening: draft.supportsLookLikeAfternoonEvening.trim() || null,
             supportsLookLikeOvernight: draft.supportsLookLikeOvernight.trim() || null,
           },
+          expectedRevisions: expected,
         },
       })
       await qc.invalidateQueries({ queryKey: ['participant', participantId] })
     } catch (err) {
-      throw new Error(extractErrorMessage(err, 'Failed to save Typical day.'))
+      rethrowSectionError(err, 'Failed to save Typical day.')
     }
   }
 
   return (
-    <SectionEditPanel title="What my supports look like" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
+    <SectionEditPanel title="What my supports look like" groups={['supportsLookLike']} revisions={p.groupRevisions} canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
       {(editing, startEdit) => editing ? (
         <div className={formGrid}>
           {TYPICAL_DAY_FIELDS.map(({ key, label }) => (

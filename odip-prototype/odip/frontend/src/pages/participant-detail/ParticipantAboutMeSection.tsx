@@ -6,7 +6,8 @@ import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
 import { hasAboutMe } from './recorded'
 import type { ParticipantDetailDto } from '@/api/types/participants'
-import { extractErrorMessage } from '@/lib/utils'
+import { rethrowSectionError } from '@/lib/sectionConflict'
+import type { PatchParticipantDto } from '@/api/types/participant-patch'
 
 const pl = (v?: string | null) => (v ? <span className="whitespace-pre-line">{v}</span> : undefined)
 
@@ -32,7 +33,7 @@ export function ParticipantAboutMeSection({ p, participantId, canEdit }: { p: Pa
 
   if (!canEdit && !hasAnyData) return null
 
-  async function handleSave() {
+  async function handleSave(expected: PatchParticipantDto['expectedRevisions']) {
     try {
       await patchParticipant.mutateAsync({
         id: participantId,
@@ -45,15 +46,16 @@ export function ParticipantAboutMeSection({ p, participantId, canEdit }: { p: Pa
             whoIsImportant: draft.whoIsImportant.trim() || null,
             likesDislikes: draft.likesDislikes.trim() || null,
           },
+          expectedRevisions: expected,
         },
       })
     } catch (err) {
-      throw new Error(extractErrorMessage(err, 'Failed to save About Me.'))
+      rethrowSectionError(err, 'Failed to save About Me.')
     }
   }
 
   return (
-    <SectionEditPanel title="About Me" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
+    <SectionEditPanel title="About Me" canEdit={canEdit} groups={['aboutMe']} revisions={p.groupRevisions} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
       {(editing, startEdit) => editing ? (
         <div className={formGrid}>
           <FormField label="Goals" className={span.medium}>

@@ -10,7 +10,8 @@ import { MEMORY_LEVELS, RISK_RATING_LEVELS } from '@/api/types/enums'
 import { MEMORY_LEVEL_LABELS, RISK_RATING_LEVEL_LABELS } from '@/api/types/participants'
 import type { MemoryLevel, RiskRatingLevel } from '@/api/types/enums'
 import type { ParticipantDetailDto } from '@/api/types/participants'
-import { extractErrorMessage } from '@/lib/utils'
+import { rethrowSectionError } from '@/lib/sectionConflict'
+import type { PatchParticipantDto } from '@/api/types/participant-patch'
 
 const YES_NO_UNANSWERED_OPTIONS = [
   { key: 'true', label: 'Yes' },
@@ -60,7 +61,7 @@ export function ParticipantBehaviourCommunicationSection({ p, participantId, can
 
   if (!canEdit && !hasAnyData) return null
 
-  async function handleSave() {
+  async function handleSave(expected: PatchParticipantDto['expectedRevisions']) {
     try {
       await patchParticipant.mutateAsync({
         id: participantId,
@@ -77,15 +78,16 @@ export function ParticipantBehaviourCommunicationSection({ p, participantId, can
             expressiveSkills: draft.expressiveSkills.trim() || null, receptiveSkills: draft.receptiveSkills.trim() || null,
             readingAbility: draft.readingAbility.trim() || null, communicationAids: draft.communicationAids.trim() || null,
           },
+          expectedRevisions: expected,
         },
       })
     } catch (err) {
-      throw new Error(extractErrorMessage(err, 'Failed to save Behaviour & Communication.'))
+      rethrowSectionError(err, 'Failed to save Behaviour & Communication.')
     }
   }
 
   return (
-    <SectionEditPanel title="Behaviour & Communication" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
+    <SectionEditPanel title="Behaviour & Communication" groups={['behaviourCommunication']} revisions={p.groupRevisions} canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
       {(editing, startEdit) => editing ? (
         <div className="space-y-4">
           <div className={formGrid}>

@@ -19,9 +19,10 @@ import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { PageState } from '@/components/PageState'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { FileEdit, Pencil, Download, Loader2, Link2, Link2Off, FileText, ClipboardCheck } from 'lucide-react'
-import { useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import AuditHistoryTab from '@/components/AuditHistoryTab'
 import { usePermissions } from '@/lib/permissions'
+import { CardPinContext } from './participant-detail/cardPin'
 import { formatDateAu, extractErrorMessage } from '@/lib/utils'
 import { copyText } from '@/lib/clipboard'
 import {
@@ -79,7 +80,7 @@ const CARD_GRID = 'grid grid-cols-[repeat(auto-fill,minmax(min(26rem,100%),1fr))
  */
 function Section({ id, label, srHeading, wide, children }: { id: string; label: string; srHeading?: boolean; wide?: boolean; children: ReactNode }) {
   return (
-    <section id={id} aria-label={label} data-jump className={`scroll-mt-12 ${wide ? 'col-span-full' : ''}`}>
+    <section id={id} aria-label={label} data-jump className={`scroll-mt-12 has-[[data-save-refused]]:col-span-full ${wide ? 'col-span-full' : ''}`}>
       {srHeading && <h3 className="sr-only">{label}</h3>}
       {children}
     </section>
@@ -92,11 +93,24 @@ type ShortCard = { id: string; title: string; has: boolean; node: ReactNode }
  * The sections with something recorded, in order, then the empty ones folded into one line for every role (D2): an editor opens the fold to
  * reach each card's Add, a viewer reads the line. A section that is still loading counts as recorded, so nothing folds before its data is in.
  */
-function ShortCards({ cards, canEdit }: { cards: ShortCard[]; canEdit: boolean }) {
-  const empty = cards.filter(c => !c.has)
+function ShortCards({ cards, canEdit, also }: { cards: ShortCard[]; canEdit: boolean; also?: Record<string, boolean> }) {
+  // While a panel in this tab edits, every card keeps the placement it had: a refetch that flips `has` would move the card to the other
+  // parent (top level or the fold), remount it and lose the draft. `also` is the placement of a card rendered inside another card.
+  const [frozen, setFrozen] = useState<Record<string, boolean> | null>(null)
+  const current = useRef<Record<string, boolean>>({})
+  useEffect(() => { current.current = { ...also, ...Object.fromEntries(cards.map(c => [c.id, c.has])) } })
+  const open = useRef(0)
+  const pin = useCallback(() => {
+    if (open.current++ === 0) setFrozen(current.current)
+    return () => { if (--open.current === 0) setFrozen(null) }
+  }, [])
+  const held = useCallback((id: string, has: boolean) => frozen?.[id] ?? has, [frozen])
+  const value = useMemo(() => ({ pin, held }), [pin, held])
+  const placed = cards.map(c => ({ ...c, has: held(c.id, c.has) }))
+  const empty = placed.filter(c => !c.has)
   return (
-    <>
-      {cards.filter(c => c.has).map(c => c.node)}
+    <CardPinContext.Provider value={value}>
+      {placed.filter(c => c.has).map(c => c.node)}
       {empty.length > 0 && (canEdit ? (
         <NotRecordedFold className="col-span-full" summary={joinList(empty.map(c => c.title))}>
           <div className={CARD_GRID}>{empty.map(c => c.node)}</div>
@@ -104,8 +118,19 @@ function ShortCards({ cards, canEdit }: { cards: ShortCard[]; canEdit: boolean }
       ) : (
         <p className="col-span-full text-[13px] text-[var(--color-muted-foreground)]">Not recorded: {joinList(empty.map(c => c.title))}</p>
       ))}
-    </>
+    </CardPinContext.Provider>
   )
+}
+
+/** The Risks & Hazards Summary sits inside the Risks card, so it is placed through the same pin as the ShortCards around it. */
+function RisksSummaryCards({ summary, canEdit, slot }: { summary: ShortCard; canEdit: boolean; slot: 'top' | 'fold' }) {
+  const has = useContext(CardPinContext).held(summary.id, summary.has)
+  if (slot === 'top') return has ? <>{summary.node}</> : null
+  return canEdit && !has ? (
+    <NotRecordedFold className="col-span-full" summary={summary.title}>
+      <div className={CARD_GRID}>{summary.node}</div>
+    </NotRecordedFold>
+  ) : null
 }
 
 export default function ParticipantDetailPage() {
@@ -208,13 +233,9 @@ export default function ParticipantDetailPage() {
     // INTAKE-09 — the risk entries are a compact section rather than their own tab; the summary card shares the section's inner grid.
     card('risks', 'Risks and hazards', true, (
       <div className={CARD_GRID}>
-        {risksSummary.has && risksSummary.node}
+        <RisksSummaryCards summary={risksSummary} canEdit={canWriteParticipantDetails} slot="top" />
         <Card className="col-span-full"><RiskEntriesSection participantId={id} /></Card>
-        {canWriteParticipantDetails && !risksSummary.has && (
-          <NotRecordedFold className="col-span-full" summary={risksSummary.title}>
-            <div className={CARD_GRID}>{risksSummary.node}</div>
-          </NotRecordedFold>
-        )}
+        <RisksSummaryCards summary={risksSummary} canEdit={canWriteParticipantDetails} slot="fold" />
       </div>
     ), { wide: true }),
     card('restrictive-practices', 'Restrictive practices', true, stack(
@@ -378,7 +399,7 @@ export default function ParticipantDetailPage() {
       <TabPanel tab={tab} id="health">
         <JumpPanel>
           <div className={CARD_GRID}>
-            <ShortCards cards={healthCards} canEdit={canWriteParticipantDetails} />
+            <ShortCards cards={healthCards} canEdit={canWriteParticipantDetails} also={{ [risksSummary.id]: risksSummary.has }} />
           </div>
         </JumpPanel>
       </TabPanel>

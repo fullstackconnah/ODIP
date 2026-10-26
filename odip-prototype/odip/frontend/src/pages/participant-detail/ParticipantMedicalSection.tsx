@@ -14,7 +14,8 @@ import {
 } from '@/api/types/participants'
 import type { HidpaSupportCategory } from '@/api/types/enums'
 import type { ParticipantDetailDto } from '@/api/types/participants'
-import { extractErrorMessage } from '@/lib/utils'
+import { rethrowSectionError } from '@/lib/sectionConflict'
+import type { PatchParticipantDto } from '@/api/types/participant-patch'
 
 const YES_NO_UNANSWERED_OPTIONS = [
   { key: 'true', label: 'Yes' },
@@ -76,7 +77,7 @@ export function ParticipantMedicalSection({ p, participantId, canEdit }: { p: Pa
 
   if (!canEdit && !hasAnyData) return null
 
-  async function handleSave() {
+  async function handleSave(expected: PatchParticipantDto['expectedRevisions']) {
     const resolvedPrimary = draft.primaryDiagnosis === DIAGNOSIS_OTHER_SENTINEL ? draft.primaryDiagnosisOther.trim() : draft.primaryDiagnosis
     try {
       await patchParticipant.mutateAsync({
@@ -92,17 +93,18 @@ export function ParticipantMedicalSection({ p, participantId, canEdit }: { p: Pa
             isAnaphylaxisRisk: keyToTri(draft.isAnaphylaxisRisk),
             allergyManagementNotes: draft.allergyManagementNotes.trim() || null,
           },
+          expectedRevisions: expected,
         },
       })
     } catch (err) {
-      throw new Error(extractErrorMessage(err, 'Failed to save Medical.'))
+      rethrowSectionError(err, 'Failed to save Medical.')
     }
   }
 
   const customEntries = draft.otherDiagnoses.filter((d) => !(DIAGNOSIS_OPTIONS as readonly string[]).includes(d))
 
   return (
-    <SectionEditPanel title="Medical" canEdit={canEdit} isDirty={isDirty} onEditStart={() => { setDraft(saved); setCustomDiagnosisInput('') }} onCancel={() => { setDraft(saved); setCustomDiagnosisInput('') }} onSave={handleSave}>
+    <SectionEditPanel title="Medical" groups={['medical']} revisions={p.groupRevisions} canEdit={canEdit} isDirty={isDirty} onEditStart={() => { setDraft(saved); setCustomDiagnosisInput('') }} onCancel={() => { setDraft(saved); setCustomDiagnosisInput('') }} onSave={handleSave}>
       {(editing, startEdit) => editing ? (
         <div className={formGrid}>
           <FormField label="Primary Diagnosis" className={span.medium}>

@@ -52,6 +52,9 @@ public static class WhatsNewSeed
         new Item("2026-10-intake-review-labels", "Intake review shows plan details in words",
             "On the last step of an intake, the review now shows funding source, plan type, service streams, support ratio and overnight support in plain words instead of internal names.",
             Staff, false),
+        new Item("2026-10-section-save-conflict", "A section save now tells you when someone else saved it first",
+            "If someone else saves the same section of a participant's profile while you are editing it, your save is stopped instead of quietly replacing theirs. What you typed stays in the form, and their version is shown beside it as Latest saved. Compare the two, then save again to replace their version, or cancel to keep it.",
+            Staff, false),
     };
 
     /// <summary>Inserts the keys the table lacks, one save each, so a key another instance inserted first costs only that row.</summary>

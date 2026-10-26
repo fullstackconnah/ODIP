@@ -28,6 +28,7 @@ public class TenantFilterCoverageTests
         ["TripDocument"] = "through its trip",
         ["StaffAvailability"] = "through its user",
         ["SupportProfile"] = "through its participant",
+        ["ParticipantGroupRevision"] = "through its participant",
         ["IncidentInjury"] = "through its incident",
         ["IncidentWitness"] = "through its incident, and own-row for the witness",
         ["TripClaim"] = "through its trip (Trip claims) or participant (Shift claims): ClaimsController.TenantClaims",
