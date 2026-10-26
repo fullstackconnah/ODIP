@@ -25,6 +25,9 @@ let failed = false
 const check = (name, value, ok) => { if (!ok) failed = true; console.log(`CHECK ${ok ? 'ok' : 'FAIL'} ${name} = ${JSON.stringify(value)}`) }
 const csv = { name: 'roster.csv', mimeType: 'text/csv', buffer: Buffer.from('Client Name,NDIS #,Day,From,To,Worker Email,Internal ref\r\nLiam Okafor,430123456,Monday,09:00,15:00,jack@example.com,x\r\n') }
 
+/** Waits (at most 5 s) until no animation or transition is running, so a capture is not taken mid-fade. */
+const settled = (p) => p.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'), null, { timeout: 5000 }).catch(() => {})
+
 const lines = (loc) => loc.evaluate((el) => { const r = document.createRange(); r.selectNodeContents(el); return new Set([...r.getClientRects()].map((c) => Math.round(c.top))).size })
 const box = (loc) => loc.boundingBox()
 const lum = ([r, g, b]) => { const f = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4 }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b) }
@@ -74,9 +77,36 @@ try {
       const main = page.locator('main')
       const shot = async (name, loc) => {
         const file = path.join(OUT_DIR, `${name}-${tag}.png`)
-        if (!loc) return page.screenshot({ path: file, fullPage: true })
-        const b = await loc.boundingBox(); if (!b) return
-        await page.screenshot({ path: file, fullPage: true, clip: { x: Math.max(0, b.x - 24), y: Math.max(0, b.y - 24), width: Math.min(vp.width, b.width + 48), height: b.height + 48 } })
+        const clipOf = async () => { const bb = await loc.boundingBox(); return bb && { x: Math.max(0, bb.x - 24), y: Math.max(0, bb.y - 24), width: Math.min(vp.width, bb.width + 48), height: bb.height + 48 } }
+        if (!vp.mobile) {
+          if (!loc) return page.screenshot({ path: file, fullPage: true })
+          const clip = await clipOf(); return clip && page.screenshot({ path: file, fullPage: true, clip })
+        }
+        // A full-page screenshot drops the touch emulation, so the phone grows the viewport to the page, pins pointer: coarse again, proves it, then shoots without fullPage.
+        await page.evaluate(() => window.scrollTo(0, 0))
+        await page.setViewportSize({ width: vp.width, height: Math.max(vp.height, await page.evaluate(() => document.documentElement.scrollHeight)) })
+        await pinCoarse(); await settled(page); await page.waitForTimeout(200)
+        const coarse = await page.evaluate(() => matchMedia('(pointer: coarse)').matches)
+        check(`${tag} pointer coarse while shooting ${name}`, coarse, coarse)
+        const clip = loc ? await clipOf() : undefined
+        if (!loc || clip) await page.screenshot({ path: file, ...(clip ? { clip } : {}) })
+        await page.setViewportSize({ width: vp.width, height: vp.height }); await pinCoarse()
+      }
+      // The Upload panel scrolled to its end, so the limits line and Download the template show above the fixed footer.
+      const shotEnd = async (name) => {
+        if (!vp.mobile) return
+        await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+        await pinCoarse(); await settled(page); await page.waitForTimeout(200)
+        await page.screenshot({ path: path.join(OUT_DIR, `${name}-${tag}.png`) })
+        await page.evaluate(() => window.scrollTo(0, 0))
+      }
+      // Every match must be at least 44 px tall at a coarse pointer (phones only); `optional` allows none to be on the page.
+      const touch = async (what, loc, optional = false) => {
+        if (!vp.mobile) return
+        await pinCoarse()
+        const n = await loc.count()
+        check(`${tag} touch targets found ${what}`, n, optional || n > 0)
+        for (let i = 0; i < n; i++) { const bb = await loc.nth(i).boundingBox(); check(`${tag} touch target ${what}${n > 1 ? ` #${i + 1}` : ''} height>=44`, Math.round(bb.height), bb.height >= 43.5) }
       }
       const noScroll = async (what) => { const w = await page.evaluate(() => document.documentElement.scrollWidth); check(`${tag} no horizontal scroll (${what}) scrollWidth<=${vp.width}`, w, w <= vp.width) }
 
@@ -94,12 +124,16 @@ try {
       check(`${tag} card hint lines (<=3 at 390)`, hintLines, hintLines <= 3)
       check(`${tag} span line lines`, spanLines, vp.mobile ? spanLines <= 2 : spanLines === 1)
       await pinCoarse(); await page.waitForTimeout(200)
+      await touch('For', page.getByLabel('For', { exact: true }).last())
+      await touch('file input (Choose file button)', page.getByLabel('File (.csv or .xlsx)'))
+      await touch('Cancel (upload)', page.getByRole('link', { name: 'Cancel' }), true)
       if (vp.mobile) {
         for (const [what, loc] of [['pattern radio card', page.locator('label:has(input[value="pattern"])')], ['dated radio card', page.locator('label:has(input[value="dated"])')], ['Starts from', page.getByLabel('Starts from')], ['Download the template', page.getByRole('button', { name: 'Download the template' })], ['Next', page.getByRole('button', { name: 'Next' })]]) {
           const b = await box(loc); check(`${tag} touch target ${what} height>=44`, Math.round(b.height), b.height >= 43.5)
         }
       }
-      if (scheme === 'light') await shot('upload-pattern', main)
+      await shot('upload-pattern', main)
+      await shotEnd('upload-pattern-end')
       if (scheme === 'dark') {
         const c = await colours(hint, 'color'); check(`${tag} hint contrast>=4.5`, +contrast(c.fg, c.bg).toFixed(2), contrast(c.fg, c.bg) >= 4.5)
         const cb = await colours(page.locator('label:has(input[value="pattern"])'), 'borderTopColor')
@@ -109,12 +143,14 @@ try {
       // Upload error: Next without a file
       await page.getByRole('button', { name: 'Next' }).click()
       await page.getByRole('alert').first().waitFor()
-      if (scheme === 'light') await shot('upload-error', main)
+      await shot('upload-error', main)
+      await shotEnd('upload-error-end')
 
       // Preview, slowed so the pending line can be measured
       await page.getByLabel('File (.csv or .xlsx)').setInputFiles(csv)
       await page.getByRole('button', { name: 'Next' }).click()
       await page.getByRole('heading', { name: 'Match columns' }).waitFor()
+      await touch('Back (match)', page.getByRole('button', { name: 'Back' }))
       delayPreview = 1200
       const nextBtn = page.getByRole('button', { name: 'Next' })
       const before = await box(nextBtn)
@@ -127,21 +163,28 @@ try {
       check(`${tag} Enforce callout in the DOM on first Preview paint`, enforce, enforce === 1)
       const sl = await lines(page.getByText(/They are added as drafts: nobody is told/)); check(`${tag} Preview summary lines`, sl, vp.mobile ? sl <= 3 : sl <= 2)
       await noScroll('preview')
+      await touch('filter chip', page.getByRole('radiogroup', { name: 'Show rows' }).getByRole('radio'))
+      await touch('Back (preview)', page.getByRole('button', { name: 'Back' }))
+      await touch('Readiness settings', page.getByRole('link', { name: 'Readiness settings' }))
       if (scheme === 'dark') {
         const c = await colours(page.getByText(/worker screening expired/).first(), 'color')
         check(`${tag} Check text contrast>=4.5`, +contrast(c.fg, c.bg).toFixed(2), contrast(c.fg, c.bg) >= 4.5)
       }
-      if (scheme === 'light') await shot('preview-mixed-enforce', main)
+      await shot('preview-mixed-enforce', main)
 
       // Review
       await nextBtn.click()
       const importBtn = page.getByRole('button', { name: /^Import \d+ shifts?/ })
       await importBtn.waitFor()
       await noScroll('review')
-      if (scheme === 'light') await shot('review', main)
+      await touch('Back (review)', page.getByRole('button', { name: 'Back' }))
+      await touch('Cancel (review)', page.getByRole('link', { name: 'Cancel' }))
+      await shot('review', main)
 
       // Result
       await importBtn.click()
+      await page.getByRole('alertdialog').waitFor()
+      await touch('import dialog buttons', page.getByRole('alertdialog').getByRole('button', { name: /^(Cancel|Import|Undo import)$/ }))
       await page.getByRole('alertdialog').getByRole('button', { name: 'Import' }).click()
       const open = page.getByRole('link', { name: 'Open the first week' })
       await open.waitFor(); await page.waitForTimeout(500)
@@ -151,14 +194,17 @@ try {
       await pinCoarse(); await page.waitForTimeout(200)
       if (vp.mobile) { const b = await box(open);  check(`${tag} touch target Open the first week height>=44`, Math.round(b.height), b.height >= 43.5) }
       await noScroll('result')
+      await touch('Undo import', page.getByRole('button', { name: 'Undo import' }))
       const href = await open.getAttribute('href')
-      if (scheme === 'light') await shot('result', main)
+      await shot('result', main)
 
       // Undo is partial
       await page.getByRole('button', { name: 'Undo import' }).click()
+      await page.getByRole('alertdialog').waitFor()
+      await touch('undo dialog buttons', page.getByRole('alertdialog').getByRole('button', { name: /^(Cancel|Import|Undo import)$/ }))
       await page.getByRole('alertdialog').getByRole('button', { name: 'Undo import' }).click()
       await page.getByText('Import partly undone').waitFor()
-      if (scheme === 'light') { await shot('result-partly-undone', main); await shot('full', null) }
+      { await shot('result-partly-undone', main); await shot('full', null) }
 
       // Hand-off, once
       if (scheme === 'light' && vp.name === '1280') {

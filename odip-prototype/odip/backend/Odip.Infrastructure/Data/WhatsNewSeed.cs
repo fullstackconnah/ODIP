@@ -59,7 +59,7 @@ public static class WhatsNewSeed
             "A new organisation now sees Get set up at the top of the dashboard: six steps, from your organisation details to your first invoice, each with its status and what to do next.\n\nStaff imports now email each new staff member a sign-in invite straight after the import. Keep the tab open until the invites finish.\n\nHide the steps on a device, and show them again from Settings, Organisation setup.",
             WhatsNewAudience.Admin, false),
         new Item("2026-10-upcoming-shifts-import", "Import your upcoming shifts",
-            "Settings, Import data now takes your next weeks of shifts: an export from your old platform, or a weekly pattern repeated for up to 12 weeks. Every shift is checked against the roster rules and added as a draft, and its week is ready to publish. Nobody is told until you publish.",
+            "Go to Settings, then Import data, to bring in your next weeks of shifts: an export from your old platform, or a weekly pattern repeated for up to 12 weeks. Every shift is checked against the roster rules and added as a draft, and each week is ready to publish. Nobody is told until you publish.",
             WhatsNewAudience.Admin, false),
     };
 

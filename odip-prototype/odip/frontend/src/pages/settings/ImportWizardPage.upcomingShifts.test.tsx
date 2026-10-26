@@ -6,13 +6,13 @@ import ImportWizardPage from './ImportWizardPage'
 import type { ImportPreviewDto, ImportResultDto } from '@/api/types'
 
 const { preview, commit, undo, template, flags } = vi.hoisted(() => ({
-  preview: vi.fn(), commit: vi.fn(), undo: vi.fn(), template: vi.fn(), flags: { previewPending: false },
+  preview: vi.fn(), commit: vi.fn(), undo: vi.fn(), template: vi.fn(), flags: { previewPending: false, commitPending: false, undoPending: false },
 }))
 
 vi.mock('@/api/hooks', () => ({
   usePreviewImport: () => ({ mutateAsync: preview, isPending: flags.previewPending }),
-  useCommitImport: () => ({ mutateAsync: commit, isPending: false }),
-  useUndoImport: () => ({ mutateAsync: undo, isPending: false }),
+  useCommitImport: () => ({ mutateAsync: commit, isPending: flags.commitPending }),
+  useUndoImport: () => ({ mutateAsync: undo, isPending: flags.undoPending }),
   useDownloadImportTemplate: () => ({ mutate: template, isPending: false }),
   useImportInvites: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useProviderSettings: () => ({ data: undefined }),
@@ -72,7 +72,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'], now: new Date(2026, 9, 26, 12) })
   preview.mockResolvedValue(shiftsPreview())
 })
-afterEach(() => { cleanup(); vi.clearAllMocks(); vi.useRealTimers(); flags.previewPending = false })
+afterEach(() => { cleanup(); vi.clearAllMocks(); vi.useRealTimers(); flags.previewPending = false; flags.commitPending = false; flags.undoPending = false })
 
 describe('ImportWizardPage, upcoming shifts', () => {
   it('upload_noShape_blocks_with_choose_first', async () => {
@@ -192,6 +192,8 @@ describe('ImportWizardPage, upcoming shifts', () => {
     expect(screen.getByText('Skipped, already on the roster or repeated in the file: 1.')).toBeInTheDocument()
     expect(screen.getByText("Can't be imported: 2. Fix them in the file and import it again: shifts already on the roster are skipped, never added twice.")).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Import 96 shifts' })).toBeInTheDocument()
+    expect(screen.queryByText(/Every row is checked again/)).not.toBeInTheDocument()
+    expect(screen.getAllByText(/Every shift is checked again/)).toHaveLength(1)
   })
 
   it('result_open_first_week_navigates_to_rostering_date', async () => {
@@ -241,5 +243,47 @@ describe('ImportWizardPage, upcoming shifts', () => {
     renderWizard()
     await toPreview()
     expect(screen.getByText(/Shifts already on the roster are skipped, but check before importing it again\./)).toBeInTheDocument()
+  })
+
+  it.each([
+    ['busy 409', 409, 'Another change to the roster is still running. Try again in a moment.'],
+    ['RecordRace 409', 409, 'Someone changed the roster while this import ran, so nothing was imported. Try again.'],
+    ['over cap 400', 400, 'This import has more than 5,000 shifts. Split the file, then import each part.'],
+  ])('commit_%s_shows_server_sentence_then_retry_clears_it', async (_name, status, sentence) => {
+    commit.mockRejectedValueOnce({ response: { status, data: { success: false, errors: [sentence] } } }).mockResolvedValue(resultOf())
+    renderWizard()
+    await toReview()
+    await userEvent.click(screen.getByRole('button', { name: 'Import 96 shifts' }))
+    await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Import' }))
+    expect(await screen.findByText(sentence)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Import 96 shifts' }))
+    await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Import' }))
+    expect(await screen.findByText('Imported 96 shifts')).toBeInTheDocument()
+    expect(screen.queryByText(sentence)).not.toBeInTheDocument()
+    expect(commit.mock.calls[0][0].idempotencyKey).toBe(commit.mock.calls[1][0].idempotencyKey)
+  })
+
+  it('import_double_press_sends_once', async () => {
+    commit.mockImplementation(() => { flags.commitPending = true; return new Promise(() => {}) })
+    renderWizard()
+    await toReview()
+    await userEvent.click(screen.getByRole('button', { name: 'Import 96 shifts' }))
+    await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Import' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Import 96 shifts' }))
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(commit).toHaveBeenCalledTimes(1)
+  })
+
+  it('undo_double_press_sends_once', async () => {
+    undo.mockImplementation(() => { flags.undoPending = true; return new Promise(() => {}) })
+    renderWizard()
+    await toResult()
+    await userEvent.click(screen.getByRole('button', { name: 'Undo import' }))
+    await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Undo import' }))
+    const again = screen.getByRole('button', { name: 'Undo import' })
+    expect(again).toHaveAttribute('aria-disabled', 'true')
+    await userEvent.click(again)
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(undo).toHaveBeenCalledTimes(1)
   })
 })

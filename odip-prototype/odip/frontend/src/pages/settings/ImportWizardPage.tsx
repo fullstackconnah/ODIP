@@ -17,7 +17,7 @@ import { useCommitImport, useDownloadImportTemplate, usePreviewImport, useProvid
 import type { ImportKind, ImportLanding, ImportShiftShape, ImportPreviewDto, ImportResultDto, ImportRowDto, ImportRowStatus, ImportUndoBlockerDto } from '@/api/types'
 import { newCompletionRequestId } from '@/lib/completionRequestId'
 import { formatDateTimeAu, plural } from '@/lib/format'
-import { extractErrorMessage } from '@/lib/utils'
+import { cn, extractErrorMessage } from '@/lib/utils'
 import ImportInvites from './ImportInvites'
 import ShiftsUploadFields from './ShiftsUploadFields'
 import { maxFrom, nextMonday, sayDay } from './upcomingShifts'
@@ -212,6 +212,7 @@ export default function ImportWizardPage() {
 
   async function runImport() {
     setConfirming(false)
+    setProblem(null)
     if (!file || !kind) return
     try {
       setResult(await commit.mutateAsync({ kind, file, mapping, landing: landing ?? undefined, idempotencyKey: idempotencyKey.current, extra }))
@@ -261,11 +262,11 @@ export default function ImportWizardPage() {
                   : <Button to={listTo(landing)} variant="secondary" size="sm">View {listNoun}</Button>}
                 <Button
                   variant="secondary"
-                  size="sm"
-                  aria-disabled={inviting || undefined}
+                  size={isShifts ? 'md' : 'sm'}
+                  aria-disabled={inviting || undo.isPending || undefined}
                   aria-describedby={inviting ? 'undo-wait' : undefined}
-                  className="aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
-                  onClick={() => { if (!inviting) setConfirmUndo(true) }}
+                  className={cn('aria-disabled:cursor-not-allowed aria-disabled:opacity-60', isShifts && 'pointer-coarse:min-h-11')}
+                  onClick={() => { if (!inviting && !undo.isPending) setConfirmUndo(true) }}
                 >Undo import</Button>
               </div>
               {kind === 'staff' && inviting && <p id="undo-wait" className="max-w-[18rem] text-[13px] text-[var(--color-muted-foreground)]">Wait for the invites to finish, then undo.</p>}
@@ -402,7 +403,7 @@ export default function ImportWizardPage() {
                   <Callout tone="warning">{`This exact file was imported on ${formatDateTimeAu(data.previouslyImportedAt)}. ${kind === 'funding-plans' ? "Plans already in Bunya Support can't be imported again" : isShifts ? 'Shifts already on the roster are skipped' : 'Rows already in Bunya Support are skipped'}, but check before importing it again.`}</Callout>
                 )}
                 {isShifts && data.readinessEnforced && (
-                  <Callout tone="info" title="Participants must be fully ready to be rostered" actions={<Button to="/settings?section=safety" variant="secondary" size="sm">Readiness settings</Button>}>
+                  <Callout tone="info" title="Participants must be fully ready to be rostered" actions={<Button to="/settings?section=safety" variant="secondary" size="sm" className="pointer-coarse:min-h-11">Readiness settings</Button>}>
                     Your organisation's participant readiness check is set to Enforce, so rows for participants who aren't fully ready, including a signed service agreement, can't be imported.
                   </Callout>
                 )}
@@ -454,7 +455,7 @@ export default function ImportWizardPage() {
                 </>}
                 {kind === 'staff' && <CheckboxField label="Email each new staff member a sign-in invite" checked={inviteOnImport} onChange={e => setInviteOnImport(e.target.checked)}
                   hint={inviteOnImport ? 'Invites are sent from this browser straight after the import. Keep this tab open until they finish.' : 'Nobody is emailed. You can send invites later from Import history.'} />}
-                <p>{`Every row is checked again as it is imported. You can undo the whole import while ${kind === 'participants' ? 'nothing has been added to its records' : KIND[kind].undoRule}.`}</p>
+                {!isShifts && <p>{`Every row is checked again as it is imported. You can undo the whole import while ${kind === 'participants' ? 'nothing has been added to its records' : KIND[kind].undoRule}.`}</p>}
               </div>
             )}
 
