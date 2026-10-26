@@ -224,7 +224,6 @@ export default function StaffPage() {
               : 'Staff are the support workers and coordinators you roster. Import your staff list from a spreadsheet, or add people one at a time.')
               : 'Staff are the support workers and coordinators you assign to trips, tasks, and incidents. Add one to start rostering them.'}
             action={emptyStaffActions[0]}
-            secondaryAction={emptyStaffActions[1]}
           />
         )
       ) : (

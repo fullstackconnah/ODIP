@@ -3,6 +3,7 @@ import { Button } from '@/components/Button'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { Callout } from '@/components/Callout'
 import { useImportInvites } from '@/api/hooks'
+import { ChevronDown } from 'lucide-react'
 import type { ImportInviteDto } from '@/api/types'
 import { describeEmailOutcome, sendSetPasswordEmailFor, type EmailOutcome } from '@/lib/signInEmail'
 import { extractErrorMessage } from '@/lib/utils'
@@ -31,7 +32,7 @@ export function InviteResults({ result, fileName, auto, afterFailures }: { resul
   if (outcomes.length === 0) return <Callout tone="info" announce={!auto}>{NO_INVITES}</Callout>
   const failed = outcomes.filter(o => !o.ok)
   const sent = outcomes.filter(o => o.ok)
-  const line = (o: EmailOutcome) => <li key={o.email} className="break-words">{describeEmailOutcome(o, 'use Send sign-in invites again').message}</li>
+  const line = (o: EmailOutcome) => <li key={o.email} className="break-words">{describeEmailOutcome(o, auto ? null : 'use Send sign-in invites again').message}</li>
   return (
     <Callout tone={failed.length > 0 ? 'warning' : 'success'} title={inviteTitle(outcomes, lead)} announce={!auto}>
       {auto ? (
@@ -39,8 +40,8 @@ export function InviteResults({ result, fileName, auto, afterFailures }: { resul
           {failed.length > 0 && <ul className="list-disc pl-5">{failed.map(line)}</ul>}
           {afterFailures}
           {sent.length > 0 && (
-            <details className="mt-1">
-              <summary className="cursor-pointer min-h-[var(--control-h)] flex items-center">{`Show the ${sent.length} sent`}</summary>
+            <details className="group mt-1">
+              <summary className="flex min-h-[var(--control-h)] cursor-pointer select-none items-center gap-1 font-medium">{`Show the ${sent.length} sent`}<ChevronDown className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" aria-hidden="true" /></summary>
               <ul className="list-disc pl-5">{sent.map(line)}</ul>
             </details>
           )}
@@ -66,6 +67,8 @@ function AutoInvites({ batchId, count, onSendingChange }: { batchId: string; cou
   const [phase, setPhase] = useState<'sending' | 'paused' | 'finished' | 'problem'>('sending')
   const [outcomes, setOutcomes] = useState<EmailOutcome[]>([])
   const [failedPeople, setFailedPeople] = useState<ImportInviteDto[]>([])
+  // While "Try the n again" runs, the progress counts that batch (1 of 2), not the whole import.
+  const [retrying, setRetrying] = useState<{ done: number; total: number } | null>(null)
   const [problem, setProblem] = useState('')
   const [left, setLeft] = useState(0)
   const resume = useRef<Resume>({ queue: [], cursor: null, first: true })
@@ -134,17 +137,23 @@ function AutoInvites({ batchId, count, onSendingChange }: { batchId: string; cou
     onSendingChange?.(true)
     setPhase('sending')
     const next: EmailOutcome[] = []
-    for (const person of retryable) next.push(await sendSetPasswordEmailFor(person.email, person.firebaseAccount!))
+    setRetrying({ done: 0, total: retryable.length })
+    for (const person of retryable) {
+      next.push(await sendSetPasswordEmailFor(person.email, person.firebaseAccount!))
+      setRetrying({ done: next.length, total: retryable.length })
+    }
     const again = new Set(retryable.map(p => p.email))
     setOutcomes(o => [...o.filter(x => !again.has(x.email)), ...next])
     setFailedPeople(f => f.filter(p => !p.firebaseAccount || next.some(n => !n.ok && n.email === p.email)))
     running.current = false
     onSendingChange?.(false)
+    setRetrying(null)
     setPhase('finished')
   }
 
   // One live region for the whole run, mounted before the first line is written: the sending lines and the end are announced from here.
-  const announcement = phase === 'sending' ? `Sending sign-in invites: ${outcomes.length} of ${count}`
+  const progress = `Sending sign-in invites: ${retrying?.done ?? outcomes.length} of ${retrying?.total ?? count}`
+  const announcement = phase === 'sending' ? progress
     : phase === 'paused' ? `Sending paused: the email service asked us to slow down. ${left} still to invite.`
     : phase === 'finished' ? (outcomes.length === 0 ? NO_INVITES : inviteTitle(outcomes))
     : '' // a refused request is the error Callout's own alert
@@ -154,7 +163,7 @@ function AutoInvites({ batchId, count, onSendingChange }: { batchId: string; cou
       <AnnouncementRegion message={announcement} />
       {phase === 'sending' && (
         <div className="flex flex-col gap-1 text-sm">
-          <p className="tabular-nums">{`Sending sign-in invites: ${outcomes.length} of ${count}`}</p>
+          <p className="tabular-nums">{progress}</p>
           <p className="text-[13px] text-[var(--color-muted-foreground)]">Keep this tab open until the invites finish.</p>
         </div>
       )}

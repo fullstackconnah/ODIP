@@ -192,6 +192,41 @@ describe('ImportInvites: auto (invites as part of the staff import)', () => {
     expect(failedLine.compareDocumentPosition(retry) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
+  it('auto-run failure lines do not point at a Send button that is not there; manual ones still do', async () => {
+    invites.mockResolvedValue({ left: 0, next: null, invites: [person(1), person(2)] })
+    sendEmail.mockImplementation(async (email: string) => (email === 'p1@example.com' ? { ok: false, email, reason: 'network' } : { ok: false, email, reason: 'other' }))
+    const auto = render(<ImportInvites batchId="b10" count={2} auto />)
+    await announced('Sign-in invites: 0 sent, 2 not sent')
+    const lines = screen.getAllByRole('listitem').map(li => li.textContent ?? '')
+    expect(lines).toHaveLength(2)
+    for (const line of lines) expect(line).not.toContain('Send sign-in invites')
+    expect(lines.join(' ')).toContain('No link was sent to p2@example.com.')
+    auto.unmount()
+
+    render(<ImportInvites batchId="b11" count={2} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Send sign-in invites (2)' }))
+    expect((await screen.findAllByText(/Send sign-in invites again/)).length).toBe(2)
+  })
+
+  it('Try the failures again counts its own batch, and the list still merges the earlier sent ones', async () => {
+    invites.mockResolvedValue({ left: 0, next: null, invites: [person(1), person(2), person(3)] })
+    sendEmail.mockImplementation(async (email: string) => (email === 'p2@example.com' ? ok(email) : { ok: false, email, reason: 'other' }))
+    render(<ImportInvites batchId="b12" count={3} auto />)
+    await announced('Sign-in invites: 1 sent, 2 not sent')
+    let releaseSecond!: () => void
+    sendEmail.mockReset()
+    sendEmail.mockImplementation((email: string) => (email === 'p3@example.com'
+      ? new Promise(resolve => { releaseSecond = () => resolve({ ok: true, email, account: 'created' }) })
+      : ok(email)))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Try the 2 again' }))
+
+    await announced('Sending sign-in invites: 1 of 2')
+    expect(screen.getByText('Sending sign-in invites: 1 of 2', { selector: 'p' })).toBeInTheDocument()
+    releaseSecond()
+    await announced('Sign-in invites: all 3 sent')
+  })
+
   it('a failed page request shows the problem and reports not sending', async () => {
     invites.mockRejectedValue({ response: { status: 500, data: { success: false, errors: ['Down.'] } } })
     const seen = vi.fn()
