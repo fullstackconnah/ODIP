@@ -34,7 +34,7 @@ public static class ParticipantFundingSourceBackfill
                 ? ParticipantFundingSource.Ndis
                 : ParticipantFundingSource.Other;
             if (p.FundingSource == expected) continue;
-            p.FundingSource = expected;
+            p.FundingSource = expected; // No group revision bump: startup-only backfill re-derives the same value.
             changed++;
         }
 

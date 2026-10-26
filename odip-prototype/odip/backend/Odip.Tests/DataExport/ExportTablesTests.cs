@@ -58,7 +58,7 @@ public class ExportTablesTests
         Assert.Empty(exported.Intersect(leftOut));
         Assert.Empty(exported.Concat(leftOut).Except(model));
         Assert.Equal(exported.Count, exported.Distinct().Count());
-        Assert.Equal((76, 13), (exported.Count, leftOut.Count));
+        Assert.Equal((78, 13), (exported.Count, leftOut.Count));
     }
 
     [Fact]
@@ -138,6 +138,7 @@ public class ExportTablesTests
         ["ElectronicSigningEvidence.PreviousEvidenceHash"] = "the signing evidence chain: integrity evidence",
         ["ElectronicSigningEvidence.IdempotencyKey"] = "the signing page's retry key, part of the evidence it hashes; it grants nothing",
         ["ParticipantIntakeSnapshot.ContentHash"] = "the hash of a completed intake: integrity evidence",
+        ["ParticipantGroupRevision.GroupKey"] = "the name of a profile section such as medical; it grants nothing",
         ["ImportBatch.IdempotencyKey"] = "a browser's retry key for one Import click; it grants nothing",
         ["MedicationAdministration.IdempotencyKey"] = "a browser's retry key for one dose record; it grants nothing",
         ["BookingTask.SourceKey"] = "names the rule that made the task, such as leave-coverage:<shift>:<leave>",

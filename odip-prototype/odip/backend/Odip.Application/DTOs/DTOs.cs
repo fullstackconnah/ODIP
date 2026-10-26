@@ -48,6 +48,8 @@ public record ParticipantListDto
 
 public record ParticipantDetailDto : ParticipantListDto
 {
+    /// <summary>Revision of each scalar PATCH group (see ParticipantGroupRevisions). Set on the staff detail GET only.</summary>
+    public Dictionary<string, int>? GroupRevisions { get; init; }
     /// <summary>The tenant-owned inquiry selected for converted-intake continuity, if any.</summary>
     public Guid? InquiryId { get; init; }
     public string? InquirySource { get; init; }

@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { usePatchParticipant } from '@/api/hooks'
-import { formatDateAu, maskNdisNumber, extractErrorMessage } from '@/lib/utils'
+import { formatDateAu, maskNdisNumber } from '@/lib/utils'
+import { rethrowSectionError } from '@/lib/sectionConflict'
+import type { PatchParticipantDto } from '@/api/types/participant-patch'
 import { MaskedValue } from '@/components/MaskedValue'
 import { FormField } from '@/components/FormField'
 import { FactList } from '@/components/FactList'
@@ -38,7 +40,7 @@ export function ParticipantNdisFundingSection({ p, participantId, canEdit }: { p
   const [draft, setDraft] = useState<NdisFundingDraft>(saved)
   const isDirty = (Object.keys(saved) as (keyof NdisFundingDraft)[]).some((k) => draft[k] !== saved[k])
 
-  async function handleSave() {
+  async function handleSave(expected: PatchParticipantDto['expectedRevisions']) {
     const isNdis = draft.fundingSource !== 'Other'
     try {
       await patchParticipant.mutateAsync({
@@ -55,15 +57,16 @@ export function ParticipantNdisFundingSection({ p, participantId, canEdit }: { p
             isDsoa: draft.isDsoa,
             isRepeatClient: draft.isRepeatClient,
           },
+          expectedRevisions: expected,
         },
       })
     } catch (err) {
-      throw new Error(extractErrorMessage(err, 'Failed to save NDIS & Funding.'))
+      rethrowSectionError(err, 'Failed to save NDIS & Funding.')
     }
   }
 
   return (
-    <SectionEditPanel title="NDIS & Funding" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
+    <SectionEditPanel title="NDIS & Funding" groups={['ndisPlan']} revisions={p.groupRevisions} canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
       {(editing, startEdit) => editing ? (
         <div className="space-y-4">
           <div className={formGrid}>

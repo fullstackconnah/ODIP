@@ -70,7 +70,7 @@ describe('Support needs card (supportNeedsMobility group)', () => {
 
     expect(mockPatchMutateAsync).toHaveBeenCalledWith({
       id: 'participant-1',
-      data: { supportNeedsMobility: expect.objectContaining({ isHighSupport: true, mobilityNotes: 'Prefers left-side approach.', overnightSupport: 'ActiveNight' }) },
+      data: { supportNeedsMobility: expect.objectContaining({ isHighSupport: true, mobilityNotes: 'Prefers left-side approach.', overnightSupport: 'ActiveNight' }), expectedRevisions: {} },
     })
   })
 
@@ -121,6 +121,8 @@ describe('Notes cards (T16: supportNeedsMobility cards back to back)', () => {
     // The server applies the PATCH and the refetch lands: model it as the cache taking the sent group.
     mockPatchMutateAsync.mockImplementation(async ({ data }) => {
       qc.setQueryData(['participant', 'participant-1'], { ...(qc.getQueryData(['participant', 'participant-1']) as object), ...data.supportNeedsMobility })
+      // The real hook awaits the refetch itself when expectedRevisions is sent; the mock models that.
+      await qc.invalidateQueries({ queryKey: ['participant', 'participant-1'] })
     })
     let release: () => void = () => {}
     const gate = new Promise<void>(r => { release = r })
@@ -176,7 +178,43 @@ describe('Equipment card', () => {
     await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(mockPatchMutateAsync).toHaveBeenCalledWith({
       id: 'participant-1',
-      data: { supportNeedsMobility: expect.objectContaining({ requiresHoist: true, mobilityNotes: 'Keep' }) },
+      data: { supportNeedsMobility: expect.objectContaining({ requiresHoist: true, mobilityNotes: 'Keep' }), expectedRevisions: {} },
     })
+  })
+})
+
+describe('Support cards refuse a stale save (S1-S3)', () => {
+  const conflict = Object.assign(new Error('409'), {
+    response: { status: 409, data: { success: false, code: 'participant-section-changed', errors: ['x'], data: { groupRevisions: { supportNeedsMobility: 5 } } } },
+  })
+  const revs = { supportNeedsMobility: 4 } as ParticipantDetailDto['groupRevisions']
+
+  async function editNotes(user: ReturnType<typeof userEvent.setup>, p: ParticipantDetailDto) {
+    render(wrap(<SupportNotesSection {...common(p)} field="mobilityNotes" />))
+    const card = screen.getByRole('heading', { name: 'Mobility notes' }).closest('.rounded-md') as HTMLElement
+    await user.click(within(card).getByRole('button', { name: /^(Edit|Add)/ }))
+    await user.type(within(card).getByRole('textbox'), 'Left side')
+    await user.click(within(card).getByRole('button', { name: 'Save' }))
+    return card
+  }
+
+  it('S1 sends the supportNeedsMobility revision the card was opened on', async () => {
+    mockPatchMutateAsync.mockResolvedValue({ success: true })
+    await editNotes(userEvent.setup(), makeParticipant({ groupRevisions: revs }))
+    expect(mockPatchMutateAsync.mock.calls[0][0].data.expectedRevisions).toEqual({ supportNeedsMobility: 4 })
+  })
+
+  it('S2 a section-changed 409 keeps the draft and shows the refused state', async () => {
+    mockPatchMutateAsync.mockRejectedValue(conflict)
+    const card = await editNotes(userEvent.setup(), makeParticipant({ groupRevisions: revs }))
+    expect(screen.getByText('Someone else saved this section since you opened it.')).toBeInTheDocument()
+    expect(within(card).getByRole('textbox')).toHaveValue('Left side')
+  })
+
+  it('S3 the card leaves the refetch to the hook', async () => {
+    mockPatchMutateAsync.mockResolvedValue({ success: true })
+    const invalidate = vi.spyOn(qc, 'invalidateQueries')
+    await editNotes(userEvent.setup(), makeParticipant({ groupRevisions: revs }))
+    expect(invalidate).not.toHaveBeenCalled()
   })
 })

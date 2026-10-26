@@ -22,13 +22,20 @@ namespace Odip.Application.DTOs;
 // file: a present group with one of its own members set to null CLEARS that field, exactly as a
 // full Create/Update submission would.
 //
-// CONCURRENCY: last-write-wins per group, no RowVersion/ETag — see SPEC-00's CORE-02 section for
-// why (there is zero optimistic-concurrency precedent anywhere in this codebase, and a per-group
-// PATCH is already a strict reduction in collision blast radius versus today's whole-payload PUT).
+// CONCURRENCY: each scalar group has a revision (ParticipantGroupRevisions). A PATCH that sends
+// ExpectedRevisions is refused whole (409 participant-section-changed) when any sent group has
+// moved since the editor opened it; without ExpectedRevisions nothing is checked. The four
+// collection groups stay last-write-wins.
 //
 // RiskEntries/ContactRoles are excluded entirely (they stay on their existing nested-CRUD
 // endpoints); IsDraft/IsActive are lifecycle flags, never part of any group — this DTO has no
 // IsDraft member at all, so a partial save can neither finalise nor un-finalise a draft.
+/// <summary>The data of the 409 a stale section save gets: the current revision of every group.</summary>
+public record ParticipantSectionChangedDto
+{
+    public Dictionary<string, int> GroupRevisions { get; init; } = new();
+}
+
 public record PatchParticipantDto
 {
     public PatchPersonalDetailsDto? PersonalDetails { get; init; }
@@ -47,6 +54,9 @@ public record PatchParticipantDto
     public PatchAboutMeDto? AboutMe { get; init; }
     public PatchSupportsLookLikeDto? SupportsLookLike { get; init; }
     public PatchRisksHazardsSummaryDto? RisksHazardsSummary { get; init; }
+
+    /// <summary>The revision of each sent group as the editor opened it. Absent means no check; keys for groups not sent are ignored.</summary>
+    public Dictionary<string, int>? ExpectedRevisions { get; init; }
 
     // ── Collections — reuse the existing item DTOs directly (same shapes CreateParticipantDto's
     // matching collections already use). Upserted via the existing UpsertXAsync helper, UNCHANGED

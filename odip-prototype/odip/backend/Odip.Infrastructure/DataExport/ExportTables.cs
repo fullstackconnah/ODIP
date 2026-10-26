@@ -167,6 +167,8 @@ public static class ExportTables
             (db, t) => { var people = Participants(db, t); return db.ParticipantContacts.Where(pc => people.Any(p => p.Id == pc.ParticipantId)); }),
         Via("support-profiles.csv", "Support profiles: behaviour, communication and personal care notes.",
             (db, t) => { var people = Participants(db, t); return db.SupportProfiles.Where(s => people.Any(p => p.Id == s.ParticipantId)); }),
+        Via("participant-section-revisions.csv", "How many times each section of a participant's profile has been saved.",
+            (db, t) => { var people = Participants(db, t); return db.ParticipantGroupRevisions.Where(r => people.Any(p => p.Id == r.ParticipantId)); }),
         Own<ParticipantNote>("participant-notes.csv", "Notes on participants, archived ones included."),
         Own<ParticipantRoutine>("participant-routines.csv", "Participants' daily routines."),
         Own<ParticipantRiskEntry>("participant-risks.csv", "Participants' risk register entries."),
@@ -254,6 +256,8 @@ public static class ExportTables
         Own<ImportBatch>("import-batches.csv", "Imports of participants and staff, and their undos."),
         Via("import-batch-items.csv", "The records each import created.",
             (db, t) => { var batches = db.ImportBatches.Where(b => b.TenantId == t); return db.ImportBatchItems.Where(i => batches.Any(b => b.Id == i.BatchId)); }),
+
+        Own<MicrosoftTenantLink>("microsoft-link.csv", "The Microsoft directory your organisation sign-in is linked to, and the role new people get."),
 
         // Employment Hero (the connection itself, with its encrypted key, is in LeftOut)
         Own<EmploymentHeroAttention>("employment-hero-attention.csv", "Staff the Employment Hero sync needs an Admin to look at, and why.") with

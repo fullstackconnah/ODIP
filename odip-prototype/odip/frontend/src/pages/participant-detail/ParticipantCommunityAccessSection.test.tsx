@@ -58,7 +58,7 @@ describe('BehaviourSupportCard (T17: community access split)', () => {
 
     await waitFor(() => expect(mockPatchMutateAsync).toHaveBeenCalledTimes(1))
     const { data } = mockPatchMutateAsync.mock.calls[0][0]
-    expect(Object.keys(data)).toEqual(['communityAccessBehaviour'])
+    expect(Object.keys(data)).toEqual(['communityAccessBehaviour', 'expectedRevisions'])
     expect(data.communityAccessBehaviour).toEqual(expect.objectContaining({
       signsHappyAndSettled: 'Humming', bocTriggers: 'Loud noise', overallCommunityAccessRiskRating: 'Medium',
     }))
@@ -92,7 +92,7 @@ describe('TypicalDayCard', () => {
     await user.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(mockPatchMutateAsync).toHaveBeenCalledTimes(1))
     const { data } = mockPatchMutateAsync.mock.calls[0][0]
-    expect(Object.keys(data)).toEqual(['supportsLookLike'])
+    expect(Object.keys(data)).toEqual(['supportsLookLike', 'expectedRevisions'])
     expect(data.supportsLookLike).toEqual({
       supportsLookLikeMorning: 'Breakfast', supportsLookLikeDay: 'Walk', supportsLookLikeAfternoonEvening: null, supportsLookLikeOvernight: null,
     })

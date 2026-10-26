@@ -22,7 +22,7 @@
  * have their own trap, called out per-group below and in ProfileWizardPage.tsx's save handler.
  */
 import type { ParticipantFormData } from './participantSchema'
-import type { PatchParticipantDto } from '@/api/types/participant-patch'
+import type { PatchParticipantDto, ScalarGroupKey } from '@/api/types/participant-patch'
 import type { HidpaSupportCategory, ConsentType, ServiceStream } from '@/api/types/enums'
 import { formatHidpaCategories, formatServiceStreams } from '@/api/types/participants'
 import { triStateToBool } from '@/pages/intake/intakeFormat'
@@ -31,7 +31,7 @@ const DIAGNOSIS_OTHER_SENTINEL = 'Other — specify'
 
 /** Every scalar (non-collection) group's member fields, keyed by PatchParticipantDto's own group
  * names — copied verbatim from the retired single-step wizard's PATCH_GROUP_FIELDS. */
-type ScalarPatchGroup = Exclude<keyof PatchParticipantDto, 'consents' | 'healthConditions' | 'adlAssessments' | 'checklistItems'>
+type ScalarPatchGroup = ScalarGroupKey
 export const PATCH_GROUP_FIELDS: Record<ScalarPatchGroup, readonly (keyof ParticipantFormData)[]> = {
   personalDetails: ['firstName', 'lastName', 'preferredName', 'middleName', 'dateOfBirth', 'gender', 'genderSelfDescription', 'placeOfBirth', 'country', 'phone', 'email'],
   preferredStaff: ['preferredStaffId'],

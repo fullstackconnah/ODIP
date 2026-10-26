@@ -62,7 +62,7 @@ describe('ParticipantBehaviourCommunicationSection — edit/save cycle', () => {
 
     expect(mockPatchMutateAsync).toHaveBeenCalledWith({
       id: 'participant-1',
-      data: { behaviourCommunication: expect.objectContaining({ expressiveSkills: 'High, verbal' }) },
+      data: { behaviourCommunication: expect.objectContaining({ expressiveSkills: 'High, verbal' }), expectedRevisions: {} },
     })
   })
 

@@ -146,6 +146,14 @@ describe('ProfileWizardPage (wire) — Save profile saves only the steps that ch
     expect(mockApiPatchRaw).not.toHaveBeenCalled()
   })
 
+  it('X2 never sends expectedRevisions: the wizard keeps its old save-over behaviour', async () => {
+    const user = userEvent.setup()
+    renderWizard()
+    await walkToReview(user)
+    expect(mockApiPatchRaw).toHaveBeenCalled()
+    for (const call of mockApiPatchRaw.mock.calls) expect(JSON.stringify(call[1])).not.toContain('expectedRevisions')
+  })
+
   it('saves only the step that was edited after its save, then leaves the wizard', async () => {
     const user = userEvent.setup()
     renderWizard()

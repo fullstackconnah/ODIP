@@ -27,7 +27,34 @@ import type { CreateParticipantChecklistItemDto } from './checklist-items'
  * leaves every one of its fields completely untouched. There is no IsDraft/IsActive here at
  * all — those stay the dedicated status, restore, begin-services and make-active endpoints' job.
  */
+/** The 16 scalar field groups of {@link PatchParticipantDto}; each has its own save revision. */
+export const SCALAR_GROUP_KEYS = [
+  'personalDetails',
+  'preferredStaff',
+  'address',
+  'livingArrangement',
+  'ndisPlan',
+  'serviceProfile',
+  'keyIdentifiers',
+  'culturalBackground',
+  'supportNeedsMobility',
+  'medical',
+  'behaviourCommunication',
+  'communityAccessBehaviour',
+  'mealsAndDiet',
+  'aboutMe',
+  'supportsLookLike',
+  'risksHazardsSummary',
+] as const
+export type ScalarGroupKey = (typeof SCALAR_GROUP_KEYS)[number]
+
 export interface PatchParticipantDto {
+  /**
+   * The revision of each group the editor opened. Only keys for groups in this body count. The server refuses the whole save
+   * (409 participant-section-changed) when any of them moved. Omit it (the wizard) for last-write-wins.
+   */
+  expectedRevisions?: Partial<Record<ScalarGroupKey, number>>
+
   personalDetails?: PatchPersonalDetailsDto
   preferredStaff?: PatchPreferredStaffDto
   address?: PatchAddressDto

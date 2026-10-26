@@ -82,7 +82,7 @@ internal static class DataExportTestKit
     public static readonly string[] PlantedFiles =
     [
         "organisation.csv", "staff.csv", "staff-availability.csv", "participants.csv", "participant-intake-snapshots.csv", "contacts.csv",
-        "participant-contacts.csv", "support-profiles.csv", "participant-notes.csv", "service-agreements.csv", "service-agreement-lines.csv",
+        "participant-contacts.csv", "support-profiles.csv", "participant-section-revisions.csv", "participant-notes.csv", "service-agreements.csv", "service-agreement-lines.csv",
         "service-agreement-blocks.csv", "shifts.csv", "shift-notes.csv", "trips.csv", "trip-days.csv", "scheduled-activities.csv", "bookings.csv",
         "accommodation-properties.csv", "accommodation-reservations.csv", "vehicles.csv", "vehicle-assignments.csv", "staff-assignments.csv",
         "trip-documents.csv", "incidents.csv", "incident-injuries.csv", "incident-witnesses.csv", "claims.csv", "claim-lines.csv",
@@ -129,6 +129,7 @@ internal static class DataExportTestKit
         var injury = new IncidentInjury { Id = Guid.NewGuid(), IncidentReportId = incident.Id, Description = "Graze" };
         var witness = new IncidentWitness { Id = Guid.NewGuid(), IncidentReportId = incident.Id, WitnessName = "Alex" };
         var profile = new SupportProfile { Id = Guid.NewGuid(), ParticipantId = participant.Id, BehaviourSupportNotes = "private" };
+        var revision = new ParticipantGroupRevision { ParticipantId = participant.Id, GroupKey = "medical", Revision = 1, UpdatedAt = DateTime.UtcNow };
         var reservation = new AccommodationReservation { Id = Guid.NewGuid(), TripInstanceId = trip.Id, AccommodationPropertyId = property.Id, CheckInDate = new DateOnly(2026, 2, 1), CheckOutDate = new DateOnly(2026, 2, 3) };
         var document = new TripDocument { Id = Guid.NewGuid(), TripInstanceId = trip.Id, FileName = "itinerary.pdf" };
         var link = new ParticipantContact { ParticipantId = participant.Id, ContactId = linked.Id };
@@ -149,7 +150,7 @@ internal static class DataExportTestKit
             RequestId = Guid.NewGuid().ToString(), SnapshotJson = "{}", ContentHash = "hash", PdfContent = Encoding.ASCII.GetBytes("%PDF-1.4 " + tenantId),
         };
         admin.AddRange(booking, tripClaim, shiftClaim, line, vehicleAssignment, staffAssignment, availability, day, activity, incident, injury, witness,
-            profile, reservation, document, link, draft, draftLine, draftBlock, batchItem, shift, shiftNote, note, intake);
+            profile, revision, reservation, document, link, draft, draftLine, draftBlock, batchItem, shift, shiftNote, note, intake);
         admin.SaveChanges();
 
         return new Planted(tenantId, ndis,

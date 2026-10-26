@@ -6,7 +6,8 @@ import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
 import { hasRisksHazardsSummary } from './recorded'
 import type { ParticipantDetailDto } from '@/api/types/participants'
-import { extractErrorMessage } from '@/lib/utils'
+import { rethrowSectionError } from '@/lib/sectionConflict'
+import type { PatchParticipantDto } from '@/api/types/participant-patch'
 
 /**
  * PD-7: Risks & Hazards Summary card — CORE-02's `risksHazardsSummary` group, fully rendered
@@ -28,7 +29,7 @@ export function ParticipantRisksHazardsSummarySection({ p, participantId, canEdi
   const hasAnyData = hasRisksHazardsSummary(p)
   if (!canEdit && !hasAnyData) return null
 
-  async function handleSave() {
+  async function handleSave(expected: PatchParticipantDto['expectedRevisions']) {
     try {
       await patchParticipant.mutateAsync({
         id: participantId,
@@ -37,15 +38,16 @@ export function ParticipantRisksHazardsSummarySection({ p, participantId, canEdi
             behaviourRiskSummary: draft.behaviourRiskSummary.trim() || null,
             notes: draft.notes.trim() || null,
           },
+          expectedRevisions: expected,
         },
       })
     } catch (err) {
-      throw new Error(extractErrorMessage(err, 'Failed to save Risks & Hazards Summary.'))
+      rethrowSectionError(err, 'Failed to save Risks & Hazards Summary.')
     }
   }
 
   return (
-    <SectionEditPanel title="Risks & Hazards Summary" canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
+    <SectionEditPanel title="Risks & Hazards Summary" groups={['risksHazardsSummary']} revisions={p.groupRevisions} canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
       {(editing, startEdit) => editing ? (
         <div className={formGrid}>
           <FormField label="Behaviour Risk Summary" className={span.long}>
