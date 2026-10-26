@@ -229,6 +229,8 @@ builder.Services.AddScoped<Odip.Infrastructure.Rostering.IStaffAvailabilityItems
 
 // ── Shift package: MAR slot computation with a window form (shared by the MAR and the portal) ──
 builder.Services.AddSingleton(TimeProvider.System);
+Odip.Api.Services.DataProtectionSetup.Add(builder.Services, builder.Configuration);
+builder.Services.AddMemoryCache();
 builder.Services.AddScoped<Odip.Infrastructure.Services.MedicationSlotService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.MedicationAdministrationRecorder>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.ShiftBreakService>();

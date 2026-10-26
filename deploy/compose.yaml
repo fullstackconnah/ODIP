@@ -51,11 +51,17 @@ services:
       # every organisation's EH API key, and losing it means each Admin pastes their key again. Empty = integrations off, the rest of ODIP runs.
       - INTEGRATIONS_MASTER_KEY=${INTEGRATIONS_MASTER_KEY:-}
       - EmploymentHero__Enabled=${EMPLOYMENT_HERO_ENABLED:-true}
+      # Sign in with Microsoft. Empty ClientId/ClientSecret = the feature is off. PublicBaseUrl must be the https origin users reach ODIP on.
+      - Microsoft__ClientId=${MICROSOFT_CLIENT_ID:-}
+      - Microsoft__ClientSecret=${MICROSOFT_CLIENT_SECRET:-}
+      - Microsoft__PublicBaseUrl=${MICROSOFT_PUBLIC_BASE_URL:-}
+      - DataProtection__KeysPath=/keys
     depends_on:
       db:
         condition: service_healthy
     volumes:
       - documents:/data/documents
+      - odip-dp-keys:/keys
       - /home/connah/secrets/odip/firebase-credentials.json:/credentials/firebase.json:ro
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:5000/api/health/ready"]
@@ -107,3 +113,4 @@ services:
 volumes:
   pgdata:
   documents:
+  odip-dp-keys:
