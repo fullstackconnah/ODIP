@@ -2,8 +2,20 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { sendEmailVerification, signInWithEmailAndPassword, signOut, type User } from 'firebase/auth'
 import { auth, devAuthEnabled } from '@/lib/firebase'
 import { SignInRefused, signInRefusalOf, type VerificationSend } from '@/lib/signInRefusal'
-import { apiPostRaw, apiGet } from '../client'
-import type { AuthResponseDto, DevUserDto } from '../types'
+import { apiClient, apiPostRaw, apiGet } from '../client'
+import type { ApiResponse, AuthConfigDto, AuthResponseDto, DevUserDto } from '../types'
+
+/** Keeps a sign-in response as the session: the token, the user, and the organisation the person views. Both the password and the Microsoft sign-in end here. */
+export function storeSession(session: AuthResponseDto) {
+  localStorage.setItem('odip_token', session.token)
+  localStorage.setItem('odip_user', JSON.stringify(session))
+  if (session.tenantId) localStorage.setItem('odip_viewing_tenant', session.tenantId)
+  // A password sign-in must not inherit a Microsoft refresh route from an earlier session; the Microsoft landing sets this again after.
+  localStorage.removeItem('odip_sign_in_method')
+  // Nor may it inherit a SuperAdmin's view-as state from a browser that was never logged out.
+  localStorage.removeItem('odip_viewing_user')
+  localStorage.removeItem('odip_superadmin_user')
+}
 
 /**
  * Sends the verification link and says whether it went. It never throws: Firebase rate-limits these, and a failed send must not hide the refusal that matters.
@@ -82,6 +94,19 @@ export function useDevUsers() {
     queryKey: ['dev-users'],
     queryFn: () => apiGet<DevUserDto[]>('/auth/dev-users'),
     enabled: devAuthEnabled,
+    retry: false,
+  })
+}
+
+/**
+ * GET /auth/config: is Sign in with Microsoft on, and where does it start. Asked once per page load. The login page waits for it, so it gives up after 3 s and
+ * a failure reads as off: the page is then just the password sign-in.
+ */
+export function useAuthConfig() {
+  return useQuery({
+    queryKey: ['auth-config'],
+    queryFn: async () => (await apiClient.get<ApiResponse<AuthConfigDto>>('/auth/config', { timeout: 3000 })).data.data as AuthConfigDto,
+    staleTime: Infinity,
     retry: false,
   })
 }

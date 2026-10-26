@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiClient, apiGet, apiPost } from '../client'
 import { refreshBudgetWarnings } from './funding-ledger'
-import type { ImportBatchDto, ImportInvitesDto, ImportKind, ImportLanding, ImportPreviewDto, ImportResultDto } from '../types'
+import type { ImportBatchDto, ImportInvitesDto, ImportKind, ImportLanding, ImportPreviewDto, ImportResultDto, ImportShiftShape } from '../types'
 
 const MULTIPART = { headers: { 'Content-Type': 'multipart/form-data' } }
 
@@ -22,14 +22,14 @@ export function useImportHistory(enabled = true) {
 /** POST /imports/{kind}/preview: what each row of the file would do. Writes nothing. */
 export function usePreviewImport() {
   return useMutation({
-    mutationFn: ({ kind, file, mapping }: { kind: ImportKind; file: File; mapping?: (string | null)[] }) =>
-      apiPost<ImportPreviewDto>(`/imports/${kind}/preview`, importForm(file, mapping), MULTIPART),
+    mutationFn: ({ kind, file, mapping, extra }: { kind: ImportKind; file: File; mapping?: (string | null)[]; extra?: Record<string, string> }) =>
+      apiPost<ImportPreviewDto>(`/imports/${kind}/preview`, importForm(file, mapping, extra), MULTIPART),
   })
 }
 
 /** The lists an import or an undo changes. A funding plans import also changes each participant's Funding tab, the onboarding "Funding recorded" gate and the Budgets list. */
 function refreshAfterImport(qc: ReturnType<typeof useQueryClient>) {
-  for (const key of ['imports', 'participants', 'staff', 'participant-funding', 'onboarding', 'participant-onboarding-worklist', 'dashboard']) qc.invalidateQueries({ queryKey: [key] })
+  for (const key of ['imports', 'participants', 'staff', 'roster-board', 'participant-funding', 'onboarding', 'participant-onboarding-worklist', 'dashboard']) qc.invalidateQueries({ queryKey: [key] })
   refreshBudgetWarnings(qc)
 }
 
@@ -37,8 +37,8 @@ function refreshAfterImport(qc: ReturnType<typeof useQueryClient>) {
 export function useCommitImport() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ kind, file, mapping, landing, idempotencyKey }: { kind: ImportKind; file: File; mapping: (string | null)[]; landing?: ImportLanding; idempotencyKey: string }) =>
-      apiPost<ImportResultDto>(`/imports/${kind}/commit`, importForm(file, mapping, { idempotencyKey, ...(landing ? { landing } : {}) }), MULTIPART),
+    mutationFn: ({ kind, file, mapping, landing, idempotencyKey, extra }: { kind: ImportKind; file: File; mapping: (string | null)[]; landing?: ImportLanding; idempotencyKey: string; extra?: Record<string, string> }) =>
+      apiPost<ImportResultDto>(`/imports/${kind}/commit`, importForm(file, mapping, { ...extra, idempotencyKey, ...(landing ? { landing } : {}) }), MULTIPART),
     onSuccess: () => refreshAfterImport(qc),
   })
 }
@@ -63,15 +63,16 @@ export function useImportInvites() {
   })
 }
 
-/** GET /imports/{kind}/template, saved under the name the server gives it. */
+/** GET /imports/{kind}/template (upcoming shifts: of the chosen shape), saved under a name that says what it is. */
 export function useDownloadImportTemplate() {
   return useMutation({
-    mutationFn: async (kind: ImportKind) => {
-      const response = await apiClient.get<Blob>(`/imports/${kind}/template`, { responseType: 'blob' })
+    mutationFn: async (arg: ImportKind | { kind: ImportKind; shape: ImportShiftShape }) => {
+      const { kind, shape } = typeof arg === 'string' ? { kind: arg, shape: undefined } : arg
+      const response = await apiClient.get<Blob>(`/imports/${kind}/template${shape ? `?shape=${shape}` : ''}`, { responseType: 'blob' })
       const url = window.URL.createObjectURL(response.data)
       const link = document.createElement('a')
       link.href = url
-      link.download = `bunya-support-${kind}-template.xlsx`
+      link.download = shape ? `bunya-support-${kind}-${shape === 'pattern' ? 'weekly-pattern' : 'dated'}-template.xlsx` : `bunya-support-${kind}-template.xlsx`
       document.body.appendChild(link)
       link.click()
       link.remove()

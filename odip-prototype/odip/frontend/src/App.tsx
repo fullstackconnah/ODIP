@@ -8,6 +8,8 @@ import AppLayout from './components/layout/AppLayout'
 import './index.css'
 
 const LoginPage = React.lazy(() => import('./pages/LoginPage'))
+const MicrosoftSignInPage = React.lazy(() => import('./pages/MicrosoftSignInPage'))
+const AccountRedirect = React.lazy(() => import('./pages/AccountRedirect'))
 const DashboardPage = React.lazy(() => import('./pages/DashboardPage'))
 const TripsPage = React.lazy(() => import('./pages/TripsPage'))
 const TripDetailPage = React.lazy(() => import('./pages/TripDetailPage'))
@@ -120,6 +122,9 @@ const router = createBrowserRouter(
   createRoutesFromElements(
     <Route element={<Suspense fallback={<div className="flex items-center justify-center h-screen text-[var(--color-muted-foreground)]">Loading...</div>}><Outlet /></Suspense>}>
       <Route path="/login" element={<LoginPage />} />
+      {/* Where the server's Microsoft callback lands, with the session cookies set: public, outside the shell, like /login. */}
+      <Route path="/signin/microsoft" element={<MicrosoftSignInPage />} />
+      <Route path="/account" element={<AccountRedirect />} />
       {/* Caregiver profile form — public, token-authenticated, deliberately OUTSIDE the
           authenticated shell: no PrivateRoute, no AppLayout, no UiPreferencesProvider. */}
       <Route path="/caregiver/:token" element={<CaregiverWizardPage />} />

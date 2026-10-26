@@ -14,6 +14,7 @@ const fundingModule = require('./funding')
 const intakeBookingModule = require('./intakeBooking')
 const rosterBudgetModule = require('./rosterBudget')
 const invoicesModule = require('./invoices')
+const importsModule = require('./imports')
 
 const PORT = Number(process.env.MOCK_PORT) || 5062
 const BASE = '/api/v1'
@@ -2532,7 +2533,11 @@ planPricing.withdraw('04_105_0136_6_1', planApproval.addDays(planApproval.provid
 // Budget phase 3: the roster's budget check, the shifts that carry the over-budget markers and the Admin's review task. See rosterBudget.js for the switches.
 const rosterBudget = rosterBudgetModule.create({ funding, respond, failEnvelope, rosterShifts, tasks, participants, today: () => new Date().toISOString().slice(0, 10) })
 
+// Onboarding phase 3: the upcoming-shifts import (preview, commit with a started week of drafts, partial undo). See imports.js.
+const importMock = importsModule.create({ respond, failEnvelope, rosterShifts, startedWeeks, today: planApproval.providerToday, addDays: planApproval.addDays, weekday: planApproval.weekday })
+
 const routes = [
+  ...importMock.get,
   ...funding.get,
   ...intake.get,
   ...invoiceMock.get,
@@ -2817,6 +2822,7 @@ const routes = [
 // with its new status/decision fields, plus the one pure-preview endpoint (staff-assignments/check)
 // that must return an array of findings, not an echoed object.
 const postRoutes = [
+  ...importMock.post,
   ...earlyAccessFollowedUp,
   ...funding.post,
   ...intake.post,
@@ -3390,7 +3396,7 @@ const server = http.createServer((req, res) => {
   req.on('end', () => {
     let body = {}
     if (raw) {
-      try { body = JSON.parse(raw) } catch { body = {} }
+      try { body = JSON.parse(raw) } catch { body = raw.includes('Content-Disposition: form-data') ? { _form: raw } : {} }
     }
 
     // Status-transition + pure-preview POST routes that need a specific response shape (see

@@ -24,6 +24,7 @@ export const NOTIFICATION_EVENT_TYPES = [
   'IntegrationDegraded',
   'ShiftUnassigned',
   'IntakeBooked',
+  'StaffJoinedViaMicrosoft',
 ] as const
 export type NotificationEventType = typeof NOTIFICATION_EVENT_TYPES[number]
 
@@ -42,6 +43,7 @@ export const NOTIFICATION_EVENT_TYPE_LABELS: Record<NotificationEventType, strin
   IntegrationDegraded: 'Integration degraded',
   ShiftUnassigned: 'Taken off a shift',
   IntakeBooked: 'Intake visits',
+  StaffJoinedViaMicrosoft: 'Someone joined through Microsoft',
 }
 
 /**
@@ -63,6 +65,7 @@ export const NOTIFICATION_EVENT_TYPE_GROUPS: { label: string; eventTypes: Notifi
   { label: 'Intake', eventTypes: ['IntakeBooked'] },
   { label: 'Agreements', eventTypes: ['ServiceAgreementSent', 'ServiceAgreementSigned'] },
   { label: 'Integrations', eventTypes: ['IntegrationDegraded'] },
+  { label: 'Sign-in', eventTypes: ['StaffJoinedViaMicrosoft'] },
 ]
 
 /** SMS renders disabled with "Not available yet" everywhere in the UI — ruling 1: no SMS
