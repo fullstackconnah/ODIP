@@ -163,4 +163,96 @@ public class UpcomingShiftsImportTests
         Assert.NotNull(replay.FirstWeekStart);
         Assert.Equal(1, await w.Db.Shifts.CountAsync());
     }
+
+    private static void AddStaff(World w, string email, string first, string last) =>
+        w.Db.Users.Add(new User
+        {
+            Id = Guid.NewGuid(), TenantId = w.TenantId, FirstName = first, LastName = last, Username = Guid.NewGuid().ToString(), Email = email, Role = UserRole.SupportWorker,
+            Position = Position.SupportWorker, IsActive = true, WorkerScreeningNumber = "WSC-1", WorkerScreeningExpiryDate = new DateOnly(2035, 1, 1),
+        });
+
+    private static void AddParticipant(World w, string ndis, string first, string last, DateOnly? dob = null) =>
+        w.Db.Participants.Add(new Participant { Id = Guid.NewGuid(), TenantId = w.TenantId, FirstName = first, LastName = last, NdisNumber = ndis, DateOfBirth = dob, IsActive = true });
+
+    [Fact]
+    public async Task Preview_StaffByEmail_ByUniqueName_AmbiguousName_Blank()
+    {
+        var w = await Seed();
+        using var _ = w.Db;
+        AddStaff(w, "pat1@example.com", "Pat", "Lee");
+        AddStaff(w, "pat2@example.com", "Pat", "Lee");
+        await w.Db.SaveChangesAsync();
+        var day = TodayName(w);
+
+        var preview = await Service(w.Db, w.TenantId).PreviewAsync(ImportKind.UpcomingShifts, Csv("NDIS number,Weekday,Start time,End time,Staff email,Staff name",
+            $"{Ndis},{day},9:00 am,10:00 am,{w.StaffEmail},", $"{Ndis},{day},11:00 am,12:00 pm,nobody@example.com,", $"{Ndis},{day},1:00 pm,2:00 pm,,sam ng",
+            $"{Ndis},{day},3:00 pm,4:00 pm,,Pat Lee", $"{Ndis},{day},5:00 pm,6:00 pm,,"), "shifts.csv", null, CancellationToken.None, Admin(), Pattern(w, 1));
+
+        Assert.All(preview.Rows, r => Assert.Equal(ImportRowStatus.Ready, r.Status));
+        Assert.Contains("with Sam Ng", preview.Rows[0].Detail);
+        Assert.Contains("No staff member with the email nobody@example.com, so the shift imports unfilled.", preview.Rows[1].Warnings);
+        Assert.Contains("with nobody yet", preview.Rows[1].Detail);
+        Assert.Contains("with Sam Ng", preview.Rows[2].Detail);
+        Assert.Contains("More than one staff member is named Pat Lee, so the shift imports unfilled: add their email.", preview.Rows[3].Warnings);
+        Assert.Contains("No staff given: imports unfilled.", preview.Rows[4].Notes);
+        Assert.Equal(3, preview.UnfilledCount);
+    }
+
+    [Fact]
+    public async Task Preview_ParticipantByNdis_ByNameDob_Ambiguous_NotFound()
+    {
+        var w = await Seed();
+        using var _ = w.Db;
+        AddParticipant(w, "430000002", "Dup", "One");
+        AddParticipant(w, "430000002", "Dup", "Two");
+        AddParticipant(w, "430000003", "Ann", "Bee", new DateOnly(1990, 5, 1));
+        AddParticipant(w, "430000004", "Jo", "Dup", new DateOnly(1985, 2, 2));
+        AddParticipant(w, "430000005", "Jo", "Dup", new DateOnly(1985, 2, 2));
+        await w.Db.SaveChangesAsync();
+        var day = TodayName(w);
+
+        var preview = await Service(w.Db, w.TenantId).PreviewAsync(ImportKind.UpcomingShifts, Csv("NDIS number,Participant name,Date of birth,Weekday,Start time,End time",
+            $"{Ndis},,,{day},9:00 am,3:00 pm", $",Ann Bee,1990-05-01,{day},9:00 am,3:00 pm", $"430000009,,,{day},9:00 am,3:00 pm",
+            $"430000002,,,{day},9:00 am,3:00 pm", $",Jo Dup,1985-02-02,{day},9:00 am,3:00 pm", $",Zed Nobody,1980-03-03,{day},9:00 am,3:00 pm"), "shifts.csv", null,
+            CancellationToken.None, Admin(), Pattern(w, 1));
+
+        Assert.Equal([ImportRowStatus.Ready, ImportRowStatus.Ready, ImportRowStatus.Invalid, ImportRowStatus.Invalid, ImportRowStatus.Invalid, ImportRowStatus.Invalid], preview.Rows.Select(r => r.Status));
+        Assert.Equal("Ann Bee", preview.Rows[1].Name);
+        Assert.Contains("No participant with NDIS number 430 000 009. Import participants first, or check the number.", preview.Rows[2].Reasons);
+        Assert.Contains("More than one participant has NDIS number 430 000 002. Correct it on their profiles first.", preview.Rows[3].Reasons);
+        Assert.Contains("More than one participant is named Jo Dup born 2 Feb 1985: add their NDIS number.", preview.Rows[4].Reasons);
+        Assert.Contains("No participant named Zed Nobody born 3 Mar 1980.", preview.Rows[5].Reasons);
+    }
+
+    [Fact]
+    public async Task Preview_Exactly5000Shifts_IsAllowed_And5001IsRefused()
+    {
+        var w = await Seed();
+        using var _ = w.Db;
+        string[] Rows(int count) => Enumerable.Repeat($"{Ndis},{TodayName(w)},9:00 am,3:00 pm,", count).ToArray();
+
+        // The rows repeat one slot, so only the first makes shifts: the check is on the expanded total, and costs one pass.
+        var allowed = await Preview(w, Pattern(w, 4), Rows(1250));   // 1,250 rows x 4 weeks = 5,000
+        Assert.Equal(4, allowed.CreateCount);
+
+        var ex = await Assert.ThrowsAsync<ImportException>(() => Preview(w, Pattern(w, 3), Rows(1667)));   // 5,001
+        Assert.Equal("This makes 5,001 shifts, more than 5,000 at once. Import fewer weeks, or split the file.", ex.Message);
+    }
+
+    [Fact]
+    public async Task Commit_RechecksRows()
+    {
+        var w = await Seed();
+        using var _ = w.Db;
+        var line = $"{Ndis},{TodayName(w)},9:00 am,3:00 pm,{w.StaffEmail}";
+        Assert.Equal(3, (await Preview(w, Pattern(w, 3), line)).CreateCount);
+
+        // The worker's screening runs out a week in, between the preview and the import: the third shift is refused at commit.
+        (await w.Db.Users.SingleAsync(u => u.Id == w.StaffId)).WorkerScreeningExpiryDate = w.Today.AddDays(7);
+        await w.Db.SaveChangesAsync();
+        var result = await Commit(w, Pattern(w, 3), "recheck", line);
+
+        Assert.Equal(2, result.CreatedCount);
+        Assert.Equal([w.Today, w.Today.AddDays(7)], await w.Db.Shifts.OrderBy(s => s.ServiceDate).Select(s => s.ServiceDate).ToListAsync());
+    }
 }

@@ -77,4 +77,32 @@ public class UpcomingShiftsUndoTests
         Assert.Equal(0, outcome.Batch!.KeptCount);
         Assert.Equal(0, await db.Shifts.CountAsync());
     }
+
+    [Fact]
+    public async Task Undo_keeps_a_published_shift_whose_UpdatedAt_was_never_bumped()
+    {
+        var (db, tenantId, batchId, _, shifts) = await ImportFour();
+        using var _ = db;
+        // A publish path that forgot to bump UpdatedAt: only the Draft check stands between this shift and the delete.
+        shifts[0].Status = ShiftStatus.Published;
+        shifts[0].UpdatedAt = shifts[0].CreatedAt;
+        await db.SaveChangesAsync();
+
+        var outcome = await Undo(db, tenantId, batchId);
+
+        Assert.Equal(1, outcome.Batch!.KeptCount);
+        Assert.Equal([shifts[0].Id], await db.Shifts.Select(s => s.Id).ToListAsync());
+    }
+
+    [Fact]
+    public async Task Undo_Twice_SaysAlreadyUndone()
+    {
+        var (db, tenantId, batchId, _, _) = await ImportFour();
+        using var _ = db;
+        await Undo(db, tenantId, batchId);
+
+        var ex = await Assert.ThrowsAsync<ImportException>(() => Undo(db, tenantId, batchId));
+
+        Assert.Equal("This import was already undone.", ex.Message);
+    }
 }

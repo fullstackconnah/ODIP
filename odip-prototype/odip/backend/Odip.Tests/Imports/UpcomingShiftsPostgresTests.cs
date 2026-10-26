@@ -1,8 +1,10 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using Moq;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Rostering;
@@ -181,5 +183,93 @@ public class UpcomingShiftsPostgresTests : IClassFixture<PostgresFixture>
         // Week 2's early Monday clashes with week 1's Sunday night, which is only seen because week 1 was saved before week 2 was started.
         var early = Assert.Single(agreement, s => s.StartTime == new TimeOnly(5, 0) && s.ServiceDate == imported[1].ServiceDate);
         Assert.Equal((null, o.StaffId, "booked on another shift"), (early.UserId, early.RegularUserId, early.RegularAwayReason));
+    }
+
+    [SkippableFact]
+    public async Task Commit_StartedWeekAlready_IsNoOp_Postgres()
+    {
+        RequirePostgres();
+        var o = await SeedOrg();
+        await using var _ = o.Db;
+        var day = o.Today.DayOfWeek.ToString();
+        await CommitAsync(o, day, 1, "first");
+        Assert.Equal(1, await o.Db.RosterWeeks.CountAsync());
+
+        // Later in the same day, over two weeks: this week is already started, so only next week gets a row.
+        await Service(o.Db, o.TenantId).CommitAsync(ImportKind.UpcomingShifts, Csv(Header, $"{o.Ndis},{day},4:00 pm,6:00 pm,"), "shifts.csv", null, null, "second", Caller(o),
+            CancellationToken.None, new ImportShiftOptions(ImportShiftShape.Pattern, o.Today, 2));
+
+        Assert.Equal((2, 3), (await o.Db.RosterWeeks.CountAsync(), await o.Db.Shifts.CountAsync()));
+    }
+
+    [SkippableFact]
+    public async Task Undo_LeavesAgreementShiftsFromStart()
+    {
+        RequirePostgres();
+        var o = await SeedOrg();
+        await using var _ = o.Db;
+        var bo = o.Db.Participants.Add(new Participant { Id = Guid.NewGuid(), TenantId = o.TenantId, FirstName = "Bo", LastName = "Test", IsActive = true }).Entity;
+        var revision = o.Db.ServiceAgreementDrafts.Add(ApprovalTestSupport.BuildRevision(o.TenantId, bo.Id, 1, [ApprovalTestSupport.WeekdayBlock()])).Entity;
+        o.Db.ShiftPatterns.Add(new ShiftPattern
+        {
+            Id = Guid.NewGuid(), TenantId = o.TenantId, ParticipantId = bo.Id, DayOfWeek = DayOfWeek.Wednesday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(13, 0),
+            Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, EffectiveFrom = new DateOnly(2026, 10, 1), IsActive = true, DefaultUserId = o.StaffId,
+            SourceDraftId = revision.Id, SourceBlockKey = "b1", WorkerSlot = 1,
+        });
+        await o.Db.SaveChangesAsync();
+        var result = await CommitAsync(o, o.Today.DayOfWeek.ToString(), 3, "agreement-undo");
+        var agreement = await o.Db.Shifts.Where(s => s.ParticipantId == bo.Id).Select(s => s.Id).ToListAsync();
+        Assert.NotEmpty(agreement);
+        var weeks = await o.Db.RosterWeeks.CountAsync();
+
+        var outcome = await Service(o.Db, o.TenantId).UndoAsync(result.BatchId, Caller(o), CancellationToken.None);
+
+        Assert.Equal(0, outcome.Batch!.KeptCount);
+        Assert.Equal(0, await o.Db.Shifts.CountAsync(s => s.ParticipantId == o.ParticipantId));
+        Assert.Equal(agreement.Order(), (await o.Db.Shifts.Where(s => s.ParticipantId == bo.Id).Select(s => s.Id).ToListAsync()).Order());
+        Assert.Equal(weeks, await o.Db.RosterWeeks.CountAsync());
+    }
+
+    [SkippableFact]
+    public async Task CrossTenant_SameEmailAndNameInOtherOrg_NotMatched_Postgres()
+    {
+        RequirePostgres();
+        var a = await SeedOrg();
+        var b = await SeedOrg();
+        await using var _a = a.Db;
+        await using var _b = b.Db;
+        var zedEmail = $"zed.{Guid.NewGuid():N}@example.com";
+        b.Db.Users.Add(new User
+        {
+            Id = Guid.NewGuid(), TenantId = b.TenantId, FirstName = "Zed", LastName = "Quill", Username = Guid.NewGuid().ToString(), Email = zedEmail, Role = UserRole.SupportWorker,
+            Position = Position.SupportWorker, IsActive = true, WorkerScreeningNumber = "WSC-2", WorkerScreeningExpiryDate = new DateOnly(2035, 1, 1),
+        });
+        b.Db.Participants.Add(new Participant { Id = Guid.NewGuid(), TenantId = b.TenantId, FirstName = "Zoe", LastName = "Vance", DateOfBirth = new DateOnly(1991, 1, 1), IsActive = true });
+        await b.Db.SaveChangesAsync();
+
+        // Org A's import over a context with no tenant filter at all, so only the service's own tenant predicates keep org B's people out.
+        var everything = new Mock<ICurrentTenant>();
+        everything.Setup(t => t.IsSuperAdmin).Returns(true);
+        await using var wide = PostgresFixture.NewContext(_pg.ConnectionString, everything.Object);
+        var service = Service(wide, a.TenantId);
+        var day = a.Today.DayOfWeek;
+        var file = Csv("NDIS number,Participant name,Date of birth,Weekday,Start time,End time,Staff email,Staff name",
+            $"{a.Ndis},,,{day},9:00 am,10:00 am,{zedEmail},", $"{a.Ndis},,,{day},11:00 am,12:00 pm,,Zed Quill", $"{b.Ndis},,,{day},1:00 pm,2:00 pm,,", $",Zoe Vance,1991-01-01,{day},3:00 pm,4:00 pm,,");
+        var options = new ImportShiftOptions(ImportShiftShape.Pattern, a.Today, 1);
+
+        var preview = await service.PreviewAsync(ImportKind.UpcomingShifts, file, "shifts.csv", null, CancellationToken.None, Caller(a), options);
+
+        Assert.Equal([ImportRowStatus.Ready, ImportRowStatus.Ready, ImportRowStatus.Invalid, ImportRowStatus.Invalid], preview.Rows.Select(r => r.Status));
+        Assert.All(preview.Rows.Take(2), r => Assert.Contains(r.Warnings, w => w.StartsWith("No staff member") && w.EndsWith("so the shift imports unfilled.")));
+        Assert.StartsWith("No participant with NDIS number", preview.Rows[2].Reasons.Single());
+        Assert.StartsWith("No participant named Zoe Vance", preview.Rows[3].Reasons.Single());
+
+        await service.CommitAsync(ImportKind.UpcomingShifts, file, "shifts.csv", null, null, "cross-tenant", Caller(a), CancellationToken.None, options);
+
+        var made = await wide.Shifts.Where(s => s.TenantId == a.TenantId).ToListAsync();
+        Assert.Equal(2, made.Count);
+        Assert.All(made, s => Assert.Equal((a.ParticipantId, (Guid?)null), (s.ParticipantId, s.UserId)));
+        await using var check = PostgresFixture.NewContext(_pg.ConnectionString, Tenant(b.TenantId));
+        Assert.Equal((0, 0), (await check.Shifts.CountAsync(), await check.RosterWeeks.CountAsync()));
     }
 }

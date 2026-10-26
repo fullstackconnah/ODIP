@@ -162,7 +162,6 @@ public sealed partial class OnboardingImportService
             {
                 var key = (participantId, date, line.Start, line.End);
                 if (seen.TryGetValue(key, out var earlier)) { skipped++; repeatOf = earlier; continue; }
-                seen[key] = plan.RowNumber;
                 if (onRoster.Contains(key)) { skipped++; continue; }
                 // The id is final before Check and Add: the rules skip a shift by id, so a shared empty id would hide every overlap inside the file.
                 var shift = new Shift
@@ -175,6 +174,7 @@ public sealed partial class OnboardingImportService
                 if (findings.FirstOrDefault(f => f.Severity == RosterFindingSeverity.Blocking) is { } blocking) { refused.Add((date, blocking.Message)); continue; }
                 snapshot.Add(shift);
                 made.Add((shift, findings));
+                seen[key] = plan.RowNumber;   // after the refusal check: a refused row leaves the slot open for a later row
                 if (!perParticipant.TryGetValue(participantId, out var list)) perParticipant[participantId] = list = [];
                 list.Add((plan, shift, findings));
             }
@@ -282,7 +282,7 @@ public sealed partial class OnboardingImportService
         var removable = untouched.Where(id => !used.Contains(id)).ToList();
         if (removable.Count == 0) throw new ImportException(NothingToUndo, 409);
 
-        // The rows are locked above, so the read cannot be stale; the guard is repeated in the delete query anyway.
+        // The rows are locked above, so the read cannot be stale; the guard is repeated in this load query anyway (the DELETE EF emits is by Id).
         _db.Shifts.RemoveRange(await _db.Shifts.Where(s => removable.Contains(s.Id) && s.Status == ShiftStatus.Draft && s.UpdatedAt == s.CreatedAt).ToListAsync(ct));
         batch.KeptCount = rows.Count - removable.Count;
         batch.UndoneAt = DateTime.UtcNow;
