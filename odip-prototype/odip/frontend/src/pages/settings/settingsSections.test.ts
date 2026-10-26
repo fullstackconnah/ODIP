@@ -9,7 +9,7 @@ function permsOf(role: UserRole, viewingTenant?: string) {
   localStorage.clear()
   localStorage.setItem('odip_user', JSON.stringify({ role }))
   if (viewingTenant) localStorage.setItem('odip_viewing_tenant', viewingTenant)
-  return renderHook(() => usePermissions()).result.current
+  return { ...renderHook(() => usePermissions()).result.current, microsoftSignIn: false }
 }
 
 afterEach(() => localStorage.clear())
@@ -103,6 +103,17 @@ describe('every legacy ?tab= key, for every role that opens Settings (the plan b
     expect(requestedSection(new URLSearchParams('section=budgets&tab=pricing'), admin)?.key).toBe('budgets')
     expect(requestedSection(new URLSearchParams('section=provider'), admin)).toBeNull()
     expect(requestedSection(new URLSearchParams('section=nonsense'), admin)).toBeNull()
+  })
+})
+
+describe('Microsoft sign-in section', () => {
+  const keys = (role: RoleCase, microsoftSignIn: boolean) => visibleSections({ ...ROLES[role](), microsoftSignIn }).map(s => s.key)
+
+  it('is visible to an Admin with an organisation when the flag is on, and to no SuperAdmin, Coordinator or flag-off Admin', () => {
+    expect(keys('Admin', true)).toContain('microsoft')
+    expect(keys('Admin', true).indexOf('microsoft')).toBe(keys('Admin', true).indexOf('organisation') + 1)
+    expect(keys('Admin', false)).not.toContain('microsoft')
+    for (const role of ['Coordinator', 'SuperAdmin', 'SuperAdminNoOrg'] as const) expect(keys(role, true), role).not.toContain('microsoft')
   })
 })
 

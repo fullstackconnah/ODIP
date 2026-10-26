@@ -33,6 +33,8 @@ vi.mock('@/api/hooks', () => ({
   useResendVerification: () => ({ mutateAsync: mockResend, isPending: false }),
   useDevLogin: () => ({ mutateAsync: mockDevLogin, isPending: false }),
   useDevUsers: () => ({ data: [], isError: false, error: null }),
+  // GET /auth/config: Microsoft sign-in is off here (LoginPage.microsoft.test.tsx covers it on).
+  useAuthConfig: () => ({ data: { microsoft: false, microsoftStartUrl: null }, isPending: false, isError: false }),
 }))
 
 const EMAIL = 'jane.smith@acme.example.com'
