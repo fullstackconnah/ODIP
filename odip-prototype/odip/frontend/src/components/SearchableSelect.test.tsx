@@ -106,6 +106,20 @@ describe('SearchableSelect — opening and filtering', () => {
     expect(screen.getByText('No options available')).toBeInTheDocument()
   })
 
+  it('keeps its no-results live region out of the page while the list is closed', () => {
+    const { container } = render(<SearchableSelect items={items} value="" onChange={vi.fn()} />)
+    expect(container.querySelector('[aria-live]')).toBeNull()
+  })
+
+  it('mounts an empty live region when the list is open with no query and no options', async () => {
+    const user = userEvent.setup()
+    const { container } = render(<SearchableSelect items={[]} value="" onChange={vi.fn()} />)
+    await user.click(screen.getByRole('combobox'))
+    const region = container.querySelector('[aria-live="polite"]')
+    expect(region).not.toBeNull()
+    expect(region).toBeEmptyDOMElement()
+  })
+
   it('supports custom empty/no-match messages', async () => {
     const user = userEvent.setup()
     render(

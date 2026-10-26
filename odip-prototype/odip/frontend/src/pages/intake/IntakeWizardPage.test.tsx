@@ -634,8 +634,8 @@ describe('IntakeWizardPage — meeting quick wins', () => {
 
 describe('IntakeWizardPage — finish follow-ups', () => {
   // Edit mode: the stored draft carries Ndis / SelfManaged / SharedSupport / None, the raw names Review used to print.
-  async function walkDraftToReview(user: ReturnType<typeof userEvent.setup>) {
-    mockParticipant.mockReturnValue({ data: draft({ serviceStreams: 'InHomeSupport', overnightSupport: 'ActiveNight' }), isLoading: false })
+  async function walkDraftToReview(user: ReturnType<typeof userEvent.setup>, overrides: Record<string, unknown> = {}) {
+    mockParticipant.mockReturnValue({ data: draft({ serviceStreams: 'InHomeSupport', overnightSupport: 'ActiveNight', ...overrides }), isLoading: false })
     renderPage('/participants/draft-1/intake')
     for (let i = 0; i < 8; i++) await user.click(screen.getByRole('button', { name: /^next$/i }))
     await expectStep(/review/i)
@@ -646,6 +646,19 @@ describe('IntakeWizardPage — finish follow-ups', () => {
     await walkDraftToReview(user)
     for (const raw of ['Ndis', 'SelfManaged', 'SharedSupport', 'ActiveNight', 'InHomeSupport']) expect(screen.queryByText(raw)).not.toBeInTheDocument()
     for (const words of ['NDIS', 'Self Managed', 'Shared Support', 'Active Night', 'In-Home Support']) expect(screen.getByText(words)).toBeInTheDocument()
+  })
+
+  it('Review splits an unknown enum value into words rather than printing it raw', async () => {
+    const user = userEvent.setup()
+    await walkDraftToReview(user, { overnightSupport: 'NightOwlSupport' })
+    expect(screen.getByText('Night Owl Support')).toBeInTheDocument()
+    expect(screen.queryByText('NightOwlSupport')).not.toBeInTheDocument()
+  })
+
+  it('Review joins several service streams as words, comma separated', async () => {
+    const user = userEvent.setup()
+    await walkDraftToReview(user, { serviceStreams: 'InHomeSupport, CommunityNursing' })
+    expect(screen.getByText('In-Home Support, Community Nursing')).toBeInTheDocument()
   })
 
   it('the busy label uses a single ellipsis character', async () => {
