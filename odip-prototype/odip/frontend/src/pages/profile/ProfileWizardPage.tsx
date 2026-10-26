@@ -538,6 +538,7 @@ export default function ProfileWizardPage() {
           isReviewStep={isReviewStep}
           secondaryActions={[]}
           cancelTo={returnTo}
+          submitReserve="Save profile"
           submitLabel={completing ? 'Saving...' : 'Save profile'}
           isSubmitting={completing || wizard.isAdvancing}
         />

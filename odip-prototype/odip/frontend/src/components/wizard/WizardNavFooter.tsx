@@ -23,6 +23,8 @@ export type WizardNavFooterProps = {
    */
   history?: boolean
   submitLabel: string
+  /** The longest of the submit button's labels, for a caller whose label changes while submitting: the button holds that width, so Cancel does not slide under a second click. */
+  submitReserve?: string
   isSubmitting: boolean
   /** Shown between the actions (above them on a phone): the agreement wizard's running total. */
   summary?: ReactNode
@@ -49,6 +51,7 @@ export function WizardNavFooter({
   cancelTo,
   history = true,
   submitLabel,
+  submitReserve,
   isSubmitting,
   summary,
   reviewActionsRight = false,
@@ -93,7 +96,15 @@ export function WizardNavFooter({
           <>
             {groupRight && secondary}
             <Button variant="secondary" to={cancelHref}>Cancel</Button>
-            <Button type="submit" aria-disabled={isSubmitting || undefined} onClick={(e) => { if (isSubmitting) e.preventDefault() }} className={`${BUSY_LOOK}${groupRight ? " max-sm:ml-auto" : ""}`}>{submitLabel}</Button>
+            <Button type="submit" aria-disabled={isSubmitting || undefined} onClick={(e) => { if (isSubmitting) e.preventDefault() }} className={`${BUSY_LOOK}${groupRight ? " max-sm:ml-auto" : ""}`}>
+              {submitReserve ? (
+                // The longest label sits invisible in the same grid cell as the live one (drawn from an attribute, so it is not in the name or findable by text).
+                <span className="grid">
+                  <span aria-hidden="true" data-reserve={submitReserve} className="invisible col-start-1 row-start-1 before:content-[attr(data-reserve)]" />
+                  <span className="col-start-1 row-start-1">{submitLabel}</span>
+                </span>
+              ) : submitLabel}
+            </Button>
           </>
         )}
       </div>

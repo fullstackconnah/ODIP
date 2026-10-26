@@ -289,3 +289,21 @@ describe('WizardNavFooter — narrow layout with a secondary action', () => {
     expect(screen.getByRole('button', { name: 'Back' }).parentElement).not.toHaveClass('max-sm:contents')
   })
 })
+
+describe('WizardNavFooter — submit holds its width while submitting', () => {
+  it('reserves the longest label invisibly: the name is the live label only, and the reserve is aria-hidden and not findable by text', () => {
+    renderFooter({ isReviewStep: true, submitLabel: 'Submitting…', submitReserve: 'Submit for review', isSubmitting: true })
+    const submit = screen.getByRole('button', { name: 'Submitting…' })
+    expect(submit).toHaveAttribute('aria-disabled', 'true')
+    const reserve = submit.querySelector('[data-reserve]')
+    expect(reserve).toHaveAttribute('aria-hidden', 'true')
+    expect(reserve).toHaveAttribute('data-reserve', 'Submit for review')
+    expect(screen.queryByText('Submit for review')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Submit for review' })).not.toBeInTheDocument()
+  })
+
+  it('renders the plain label when no reserve is given', () => {
+    renderFooter({ isReviewStep: true, submitLabel: 'Create Participant' })
+    expect(screen.getByRole('button', { name: 'Create Participant' }).querySelector('[data-reserve]')).toBeNull()
+  })
+})
