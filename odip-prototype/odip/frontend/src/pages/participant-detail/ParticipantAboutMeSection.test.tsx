@@ -62,8 +62,29 @@ describe('ParticipantAboutMeSection — edit/save cycle', () => {
 
     expect(mockPatchMutateAsync).toHaveBeenCalledWith({
       id: 'participant-1',
-      data: { aboutMe: expect.objectContaining({ goals: 'Learn to cook independently.' }) },
+      data: { aboutMe: expect.objectContaining({ goals: 'Learn to cook independently.' }), expectedRevisions: {} },
     })
+  })
+
+  it('X1 sends the opened aboutMe revision, and a section-changed 409 shows the refused state, not the generic error', async () => {
+    const user = userEvent.setup()
+    const p = makeParticipant({ groupRevisions: { aboutMe: 7 } as ParticipantDetailDto['groupRevisions'] })
+    mockPatchMutateAsync.mockRejectedValue(Object.assign(new Error('409'), {
+      response: { status: 409, data: { success: false, code: 'participant-section-changed', errors: ['x'], data: { groupRevisions: { aboutMe: 8 } } } },
+    }))
+    render(<ParticipantAboutMeSection p={p} participantId="participant-1" canEdit />)
+
+    await user.click(screen.getByRole('button', { name: /edit/i }))
+    await user.type(screen.getByLabelText('Goals'), 'Mine')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(mockPatchMutateAsync).toHaveBeenCalledWith({
+      id: 'participant-1',
+      data: { aboutMe: expect.objectContaining({ goals: 'Mine' }), expectedRevisions: { aboutMe: 7 } },
+    })
+    expect(screen.getByText('Someone else saved this section since you opened it.')).toBeInTheDocument()
+    expect(screen.queryByText('Failed to save About Me.')).toBeNull()
+    expect(screen.getByLabelText('Goals')).toHaveValue('Mine')
   })
 
   it('cancel restores the previous values with no network call', async () => {
