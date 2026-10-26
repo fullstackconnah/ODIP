@@ -7,7 +7,8 @@ using Microsoft.IdentityModel.Tokens;
 namespace Odip.Api.Services.Microsoft;
 
 /// <summary>Who Microsoft says signed in. <see cref="EmailDomainVerified"/> is the xms_edov claim: only then may a row be created from <see cref="Email"/>.</summary>
-public sealed record MicrosoftIdentity(Guid TenantId, Guid ObjectId, string? Email, bool EmailDomainVerified);
+public sealed record MicrosoftIdentity(Guid TenantId, Guid ObjectId, string? Email, bool EmailDomainVerified,
+    string? GivenName = null, string? FamilyName = null, string? DisplayName = null);
 
 /// <summary>Either an identity or a <see cref="MicrosoftRefusal"/> code.</summary>
 public sealed record MicrosoftIdTokenResult(MicrosoftIdentity? Identity, string? Refusal)
@@ -59,7 +60,7 @@ public sealed class MicrosoftIdTokenValidator : IMicrosoftIdTokenValidator
         if (email is not null && !email.Contains('@')) email = null;
         var edov = Claim("xms_edov");
         var verified = string.Equals(edov, "true", StringComparison.OrdinalIgnoreCase) || edov == "1";
-        return new MicrosoftIdTokenResult(new MicrosoftIdentity(tid, oid, email?.Trim(), verified), null);
+        return new MicrosoftIdTokenResult(new MicrosoftIdentity(tid, oid, email?.Trim(), verified, Claim("given_name"), Claim("family_name"), Claim("name")), null);
     }
 
     private async Task<TokenValidationResult> ValidateOnceAsync(string idToken, CancellationToken ct)
