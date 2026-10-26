@@ -92,9 +92,9 @@ export default function TenantSwitcher() {
         aria-expanded={open}
         aria-label={`SA ${current?.name ?? 'Loading…'}`}
         title={current?.name}
-        className={`flex min-h-[var(--tap-min)] items-center gap-1.5 ${TONE.info.solid} border border-[var(--color-border)] rounded-lg px-2.5 py-1.5 cursor-pointer hover:brightness-95 transition-[filter]`}
+        className={`flex min-h-[var(--tap-min)] items-center gap-1.5 max-sm:gap-1 ${TONE.info.solid} border border-[var(--color-border)] rounded-lg px-2.5 max-sm:px-1.5 py-1.5 cursor-pointer hover:brightness-95 transition-[filter]`}
       >
-        <span className="text-xs bg-[var(--color-info)] text-[var(--color-secondary-foreground)] px-1.5 py-0.5 rounded font-bold tracking-wide">SA</span>
+        <span className="text-xs bg-[var(--color-info)] text-[var(--color-secondary-foreground)] px-1.5 max-sm:px-1 py-0.5 rounded font-bold tracking-wide">SA</span>
         <span className="hidden min-w-0 max-w-[12rem] min-[1400px]:max-w-[20rem] truncate whitespace-nowrap text-sm font-semibold sm:block">{current?.name ?? 'Loading…'}</span>
         <span className="text-xs">▾</span>
       </button>

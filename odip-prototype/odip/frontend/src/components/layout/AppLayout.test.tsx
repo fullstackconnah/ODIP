@@ -414,10 +414,10 @@ describe('AppLayout — 44px coarse-pointer hit areas', () => {
     expect(bell.parentElement?.parentElement).toHaveClass('gap-3', 'max-lg:gap-2')
   })
 
-  it('keeps the menu toggle and the page finder at full size from 390px so the tenant chip, not they, gives way', () => {
+  it('keeps the menu toggle and the page finder at full size at every width so the tenant chip, not they, gives way', () => {
     renderAt('/trips')
-    expect(screen.getByRole('button', { name: 'Open menu' })).toHaveClass('min-[390px]:shrink-0')
-    expect(screen.getByRole('button', { name: /Find a page/ }).parentElement).toHaveClass('min-[390px]:shrink-0')
+    expect(screen.getByRole('button', { name: 'Open menu' })).toHaveClass('shrink-0')
+    expect(screen.getByRole('button', { name: /Find a page/ }).parentElement).toHaveClass('shrink-0')
   })
 
   it('gives every mobile bottom-nav cell, "More" included, a --tap-min floor each way, its content centred, so the 42px cells are 44px', () => {
