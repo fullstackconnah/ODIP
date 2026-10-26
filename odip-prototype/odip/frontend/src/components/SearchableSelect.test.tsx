@@ -416,3 +416,16 @@ describe('SearchableSelect — noMatchAction', () => {
     expect(screen.queryByRole('option')).not.toBeInTheDocument()
   })
 })
+
+describe('SearchableSelect — no-results announcement', () => {
+  it('announces the no-results state in a polite status region, and stays empty while results exist', async () => {
+    const user = userEvent.setup()
+    render(<SearchableSelect items={items} value="" onChange={vi.fn()} />)
+    await user.click(screen.getByRole('combobox'))
+    expect(screen.getByRole('status')).toBeEmptyDOMElement()
+    await user.type(screen.getByRole('combobox'), 'zzz')
+    expect(screen.getByRole('status')).toHaveTextContent('No results found for "zzz"')
+    await user.clear(screen.getByRole('combobox'))
+    expect(screen.getByRole('status')).toBeEmptyDOMElement()
+  })
+})

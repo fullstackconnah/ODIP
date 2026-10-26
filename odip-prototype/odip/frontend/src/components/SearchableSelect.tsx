@@ -366,6 +366,10 @@ export function SearchableSelect({
           <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
         )}
       </span>
+      {/* Always mounted, so a text change is announced. Empty unless the query matches nothing; worded differently from the visible row so the two never double up. */}
+      <span role="status" aria-live="polite" className="sr-only">
+        {open && showEmptyRow && trimmedQuery ? `${noMatchMessage} for "${trimmedQuery}"` : ''}
+      </span>
       {panel}
     </div>
   )

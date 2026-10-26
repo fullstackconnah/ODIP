@@ -49,6 +49,9 @@ public static class WhatsNewSeed
         new Item("2026-10-wizard-footer-focus", "Save and Submit keep your place while they work",
             "When you use Save and continue later, Save as draft or Submit, the keyboard focus now stays on that button while it saves, so you do not lose your place.\n\nOn small phones the buttons also fit: Back and Next stay together, and the save button sits on its own line below.",
             Staff, false),
+        new Item("2026-10-intake-review-labels", "Intake review shows plan details in words",
+            "On the last step of an intake, the review now shows funding source, plan type, service streams, support ratio and overnight support in plain words instead of internal names.",
+            Staff, false),
     };
 
     /// <summary>Inserts the keys the table lacks, one save each, so a key another instance inserted first costs only that row.</summary>
