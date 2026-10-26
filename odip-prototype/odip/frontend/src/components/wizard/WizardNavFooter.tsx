@@ -3,6 +3,9 @@ import { Button } from '@/components/Button'
 import { useBackTarget } from '@/hooks/useBackNavigation'
 import type { WizardSecondaryAction } from './types'
 
+// A busy button stays natively enabled so a keyboard or screen-reader user keeps focus; aria-disabled plus the click guards below make it inert.
+const BUSY_LOOK = 'aria-disabled:opacity-50 aria-disabled:cursor-not-allowed'
+
 export type WizardNavFooterProps = {
   showBack: boolean
   onBack: () => void
@@ -54,13 +57,16 @@ export function WizardNavFooter({
   // A router link either way, so the unsaved-changes blocker still asks before leaving.
   const cancelHref = history ? back.to : cancelTo
   const groupRight = isReviewStep && reviewActionsRight
+  // Below sm, on a non-review step, the secondary drops to its own full-width row so Back and Next stay together on row 1.
+  const stackSecondary = !isReviewStep && secondaryActions.length > 0
   const secondary = secondaryActions.map((action) => (
     <Button
       key={action.key}
       type="button"
       variant="secondary"
-      onClick={action.onClick}
-      disabled={action.disabled}
+      onClick={() => { if (!action.disabled) void action.onClick() }}
+      aria-disabled={action.disabled || undefined}
+      className={`${BUSY_LOOK}${stackSecondary ? " max-sm:order-3 max-sm:basis-full" : ""}`}
     >
       {action.label}
     </Button>
@@ -68,7 +74,7 @@ export function WizardNavFooter({
   // z-[4]: above a DataTable's pinned columns (z-[2], z-[3]) scrolling under it, below every menu and dialog (z-50 and up).
   return (
     <div className={`sticky bottom-[var(--mobile-nav-h)] lg:bottom-0 z-[4] md:col-span-2 mt-[var(--section-gap)] flex w-full min-w-0 flex-row flex-wrap items-center ${groupRight ? 'justify-end' : 'justify-between'} gap-3 border-t border-[var(--color-border)] bg-[var(--color-background)] py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]`}>
-      <div className={`flex min-w-0 flex-wrap items-center gap-3${groupRight ? ' mr-auto' : ''}`}>
+      <div className={`flex min-w-0 flex-wrap items-center gap-3${groupRight ? ' mr-auto' : ''}${stackSecondary ? ' max-sm:contents' : ''}`}>
         {/* The first step has no Back, so the way out takes its place (the review step has its own Cancel). */}
         {showBack ? (
           <Button type="button" variant="secondary" onClick={onBack}>Back</Button>
@@ -87,7 +93,7 @@ export function WizardNavFooter({
           <>
             {groupRight && secondary}
             <Button variant="secondary" to={cancelHref}>Cancel</Button>
-            <Button type="submit" disabled={isSubmitting} className={groupRight ? 'max-sm:ml-auto' : undefined}>{submitLabel}</Button>
+            <Button type="submit" aria-disabled={isSubmitting || undefined} onClick={(e) => { if (isSubmitting) e.preventDefault() }} className={`${BUSY_LOOK}${groupRight ? " max-sm:ml-auto" : ""}`}>{submitLabel}</Button>
           </>
         )}
       </div>

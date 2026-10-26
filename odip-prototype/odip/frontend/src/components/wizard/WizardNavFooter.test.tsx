@@ -190,3 +190,102 @@ describe('WizardNavFooter — reviewActionsRight', () => {
     expect(screen.getByRole('button', { name: 'Save as draft' }).parentElement).toBe(screen.getByRole('button', { name: 'Back' }).parentElement)
   })
 })
+
+describe('WizardNavFooter — busy buttons keep focus', () => {
+  const footer = (props: Partial<ComponentProps<typeof WizardNavFooter>>) => (
+    <MemoryRouter>
+      <WizardNavFooter
+        showBack
+        onBack={vi.fn()}
+        onNext={vi.fn()}
+        isReviewStep={false}
+        secondaryActions={[]}
+        cancelTo="/participants"
+        submitLabel="Create Participant"
+        isSubmitting={false}
+        {...props}
+      />
+    </MemoryRouter>
+  )
+
+  it('a focused secondary action that becomes busy keeps focus, is aria-disabled (not disabled) and ignores activation', async () => {
+    const user = userEvent.setup()
+    const onClick = vi.fn()
+    const action = (disabled: boolean) => [{ key: 'save-later', label: disabled ? 'Saving…' : 'Save later', onClick, disabled }]
+    const { rerender } = render(footer({ secondaryActions: action(false) }))
+    const btn = screen.getByRole('button', { name: 'Save later' })
+    btn.focus()
+    rerender(footer({ secondaryActions: action(true) }))
+
+    const busy = screen.getByRole('button', { name: 'Saving…' })
+    expect(busy).toBe(btn)
+    expect(document.activeElement).toBe(busy)
+    expect(busy).toHaveAttribute('aria-disabled', 'true')
+    expect(busy).not.toHaveAttribute('disabled')
+    await user.click(busy)
+    await user.keyboard('{Enter}')
+    await user.keyboard(' ')
+    expect(onClick).not.toHaveBeenCalled()
+    expect(document.activeElement).toBe(busy)
+  })
+
+  it('an idle secondary action is not aria-disabled and still fires', async () => {
+    const onClick = vi.fn()
+    render(footer({ secondaryActions: [{ key: 'k', label: 'Save later', onClick, disabled: false }] }))
+    const btn = screen.getByRole('button', { name: 'Save later' })
+    expect(btn).not.toHaveAttribute('aria-disabled')
+    await userEvent.setup().click(btn)
+    expect(onClick).toHaveBeenCalledTimes(1)
+  })
+
+  it('Submit while isSubmitting keeps focus, is aria-disabled (not disabled) and no click or Enter reaches the form', async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault())
+    const ui = (isSubmitting: boolean) => (
+      <form onSubmit={onSubmit}>
+        <input aria-label="Name" />
+        {footer({ isReviewStep: true, isSubmitting })}
+      </form>
+    )
+    const { rerender } = render(ui(false))
+    const submit = screen.getByRole('button', { name: 'Create Participant' })
+    submit.focus()
+    rerender(ui(true))
+
+    expect(document.activeElement).toBe(submit)
+    expect(submit).toHaveAttribute('aria-disabled', 'true')
+    expect(submit).not.toHaveAttribute('disabled')
+    await user.click(submit)
+    await user.keyboard(' ')
+    await user.click(screen.getByLabelText('Name'))
+    await user.keyboard('{Enter}')
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(document.activeElement).not.toBe(document.body)
+  })
+
+  it('Submit submits when idle', async () => {
+    const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault())
+    render(<form onSubmit={onSubmit}>{footer({ isReviewStep: true })}</form>)
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Create Participant' }))
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('WizardNavFooter — narrow layout with a secondary action', () => {
+  const secondaryActions = [{ key: 'save-later', label: 'Save later', onClick: vi.fn(), disabled: false }]
+
+  it('below sm Back and Next share row 1 and the secondary sits full width on its own row', () => {
+    renderFooter({ showBack: true, secondaryActions })
+    const back = screen.getByRole('button', { name: 'Back' })
+    const next = screen.getByRole('button', { name: 'Next' })
+    const later = screen.getByRole('button', { name: 'Save later' })
+    expect(back.parentElement).toHaveClass('max-sm:contents')
+    expect(later).toHaveClass('max-sm:order-3', 'max-sm:basis-full')
+    expect(next.parentElement).not.toHaveClass('max-sm:order-3')
+  })
+
+  it('leaves the single-row footer alone when there is no secondary action', () => {
+    renderFooter({ showBack: true })
+    expect(screen.getByRole('button', { name: 'Back' }).parentElement).not.toHaveClass('max-sm:contents')
+  })
+})
