@@ -190,7 +190,7 @@ public class ParticipantsController : ControllerBase
         // ready. The mapper is shared with the caregiver forms, which must not show it, so it is
         // set here and nowhere else.
         var readinessIssues = await ParticipantReadiness.IssuesAsync(_db, new[] { p.Id }, ct);
-        dto = dto with { ReadinessIssues = ParticipantReadiness.IssuesOrNull(readinessIssues, p.Id) };
+        dto = dto with { ReadinessIssues = ParticipantReadiness.IssuesOrNull(readinessIssues, p.Id), GroupRevisions = await ParticipantGroupRevisions.ReadAsync(_db, id, ct) };
         // Masked here and not in the mapper, which the caregiver forms share. Only the office roles see full ID numbers.
         if (ParticipantIdMask.AppliesTo(User)) dto = ParticipantIdMask.Apply(dto);
         return Ok(ApiResponse<ParticipantDetailDto>.Ok(dto));
@@ -822,9 +822,9 @@ public class ParticipantsController : ControllerBase
     /// every absent group's columns are left completely untouched. Presence is all-or-nothing at
     /// the GROUP level, not the field level: a present group's own null member DOES clear that
     /// field (mirrors a mini full-submit for just that group), matching every existing
-    /// validator/assignment's self-contained-within-one-group behaviour. Concurrency is
-    /// last-write-wins per group — no RowVersion/ETag, same policy as today's whole-payload PUT,
-    /// just scoped to a smaller blast radius. This DTO structurally cannot express IsDraft or
+    /// validator/assignment's self-contained-within-one-group behaviour. A sent group whose
+    /// revision moved since the editor opened it (<c>expectedRevisions</c>) refuses the whole PATCH
+    /// with 409 participant-section-changed; no <c>expectedRevisions</c> means no check. This DTO structurally cannot express IsDraft or
     /// IsActive — those stay PUT's job exclusively; a partial save can neither finalise nor
     /// un-finalise a draft.
     /// </summary>
@@ -837,17 +837,40 @@ public class ParticipantsController : ControllerBase
         var p = await _db.Participants.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
 
+        var expected = dto.ExpectedRevisions is { Count: > 0 } ? dto.ExpectedRevisions : null;
+        var unknown = expected?.Keys.FirstOrDefault(k => !ParticipantGroupRevisions.Keys.Contains(k));
+        if (unknown != null) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail($"Unknown section key: {unknown}."));
+        // Refused before anything is assigned: InMemory has no transaction to roll a later refusal back.
+        if (expected != null && await ParticipantGroupRevisions.StaleAsync(_db, p.Id, expected, ParticipantGroupRevisions.SentGroups(dto), ct) is { } stale)
+            return SectionChanged(stale);
+
         // Extracted, behaviour-preserving, into ParticipantPatchApplier.ApplyAsync so the
         // caregiver accept flow (CaregiverSubmissionsController) can apply a sanitised
         // PatchParticipantDto in-process without going through HTTP. See that class's doc.
-        var error = await ParticipantPatchApplier.ApplyAsync(_db, _safetyNoteSync, _compatLink, p, dto, null, ct);
+        string? error;
+        try
+        {
+            error = await ParticipantPatchApplier.ApplyAsync(_db, _safetyNoteSync, _compatLink, p, dto, expected, ct);
+        }
+        catch (DbUpdateException ex) when (ParticipantGroupRevisions.IsLostRace(ex))
+        {
+            // Interleaved: both passed the check above and this one lost the UPDATE (or the first-row INSERT); the save rolled back whole.
+            _db.ChangeTracker.Clear();
+            return SectionChanged(await ParticipantGroupRevisions.ReadAsync(_db, id, ct));
+        }
         if (error != null) return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(error));
 
         // PF-2: Patch's DTO never carries contactRoles either — computed from live ContactRoles,
         // using p.PlanType as it stands after any ndisPlan group patch applied above.
         var patchPlanTypeComplianceWarning = await ComputePlanTypeComplianceWarningAsync(p.Id, p.PlanType, ct);
-        return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, FullName = p.FullName, IsActive = p.IsActive, IsDraft = p.IsDraft, UpdatedAt = p.UpdatedAt, PlanTypeComplianceWarning = patchPlanTypeComplianceWarning }));
+        return Ok(ApiResponse<ParticipantDetailDto>.Ok(new ParticipantDetailDto { Id = p.Id, FirstName = p.FirstName, LastName = p.LastName, FullName = p.FullName, IsActive = p.IsActive, IsDraft = p.IsDraft, UpdatedAt = p.UpdatedAt, PlanTypeComplianceWarning = patchPlanTypeComplianceWarning, GroupRevisions = await ParticipantGroupRevisions.ReadAsync(_db, p.Id, ct) }));
     }
+
+    private ConflictObjectResult SectionChanged(Dictionary<string, int> current) => Conflict(new ApiResponse<ParticipantSectionChangedDto>
+    {
+        Success = false, Data = new ParticipantSectionChangedDto { GroupRevisions = current },
+        Errors = [ParticipantGroupRevisions.ChangedMessage], Code = ParticipantGroupRevisions.ChangedCode,
+    });
 
     /// <summary>Get bookings for a participant.</summary>
     [HttpGet("{id:guid}/bookings")]
