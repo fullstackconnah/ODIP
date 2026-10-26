@@ -51,13 +51,13 @@ describe('the sentence of a pool', () => {
   })
 
   // When the NDIA has refused a claim of the pool for want of funds, the sentence says whose figures these are: ODIP's own arithmetic, which can say fine beside the NDIA's word. The words sit with the
-  // pool's name ("Core, by ODIP's figures: $3,120 left ..."), so there is one colon and no comma beside it.
-  it("names the pool \"Core, by ODIP's figures:\" when the NDIA has refused a claim of the pool, and not otherwise", () => {
+  // pool's name ("Core, by our figures: $3,120 left ..."), so there is one colon and no comma beside it.
+  it("names the pool \"Core, by our figures:\" when the NDIA has refused a claim of the pool, and not otherwise", () => {
     const refused = { date: '2026-10-08', code: 'V27', claimId: 'claim-9', claimReference: 'CLM-0009' }
 
-    expect(poolSentence(core({ ndiaRejection: refused }), q2())).toBe("Core, by ODIP's figures: $3,120 left of the $8,000 set aside this period (to 31 Dec). Booked shifts would finish $640 over.")
-    expect(poolSentence(core(), q2())).not.toContain('By ODIP')
-    expect(poolSentence(core(), q2())).not.toContain("ODIP's figures")
+    expect(poolSentence(core({ ndiaRejection: refused }), q2())).toBe("Core, by our figures: $3,120 left of the $8,000 set aside this period (to 31 Dec). Booked shifts would finish $640 over.")
+    expect(poolSentence(core(), q2())).not.toContain('By our')
+    expect(poolSentence(core(), q2())).not.toContain("our figures")
   })
 
   it('says over, not a negative left, once what is used is past what is available, and still says where the booked shifts take it', () => {
@@ -135,7 +135,7 @@ describe('the rows in their three groups', () => {
 describe('the quiet estimate line', () => {
   it('says what the estimates use, that shift claims price community access only, and which shifts are therefore not counted', () => {
     expect(quietEstimateLine).toBe(
-      'Estimates use the rates ODIP will claim with; shift claims price community access only for now, so sleepover, passive-night and group shifts are not counted yet.',
+      "Estimates use the rates we'll claim with; shift claims price community access only for now, so sleepover, passive-night and group shifts are not counted yet.",
     )
   })
 })

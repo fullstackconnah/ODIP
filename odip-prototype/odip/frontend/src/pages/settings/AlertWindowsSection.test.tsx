@@ -11,7 +11,7 @@ vi.mock('@/api/hooks', () => ({
 }))
 
 function renderSection(readOnly = false) {
-  const element = <AlertWindowsSection title="Alert windows" description="How early ODIP warns." readOnly={readOnly} focusOnMount={false} />
+  const element = <AlertWindowsSection title="Alert windows" description="How early we warn." readOnly={readOnly} focusOnMount={false} />
   render(<RouterProvider router={createMemoryRouter([{ path: '/settings', element }], { initialEntries: ['/settings?section=alerts'] })} />)
 }
 

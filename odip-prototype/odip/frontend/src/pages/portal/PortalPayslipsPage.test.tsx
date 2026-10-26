@@ -69,8 +69,8 @@ describe('PortalPayslipsPage', () => {
   it('says plainly when the organisation is not connected', () => {
     mockUseMyPayslips.mockReturnValue(ready([], 'NotConnected'))
     renderPage()
-    expect(screen.getByText("Payslips aren't available in ODIP")).toBeInTheDocument()
-    expect(screen.getByText("Your organisation doesn't connect its payroll to ODIP. Ask your manager where to find your payslips.")).toBeInTheDocument()
+    expect(screen.getByText("Payslips aren't available in Bunya Support")).toBeInTheDocument()
+    expect(screen.getByText("Your organisation doesn't connect its payroll to Bunya Support. Ask your manager where to find your payslips.")).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /try again/i })).not.toBeInTheDocument()
   })
 
@@ -78,7 +78,7 @@ describe('PortalPayslipsPage', () => {
     mockUseMyPayslips.mockReturnValue(ready([], 'NotLinked'))
     renderPage()
     expect(screen.getByText("Your account isn't linked to Employment Hero yet")).toBeInTheDocument()
-    expect(screen.getByText("ODIP can't find your payslips until an Admin links you. Ask your manager or an Admin; they appear here once you're linked.")).toBeInTheDocument()
+    expect(screen.getByText("We can't find your payslips until an Admin links you. Ask your manager or an Admin; they appear here once you're linked.")).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /try again/i })).not.toBeInTheDocument()
   })
 

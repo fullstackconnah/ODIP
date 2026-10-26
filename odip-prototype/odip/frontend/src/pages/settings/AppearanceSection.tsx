@@ -33,7 +33,7 @@ export default function AppearanceSection() {
       </div>
       <CheckboxField
         label="Show lines between table columns"
-        hint="Applies to every table in ODIP."
+        hint="Applies to every table in Bunya Support."
         checked={prefs.tableVerticalDividers}
         onChange={e => { setPref('tableVerticalDividers', e.target.checked); setChanged(true) }}
       />

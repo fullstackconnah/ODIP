@@ -188,7 +188,7 @@ describe('BudgetsPage: the participants with no budget in force', () => {
     expect(within(list).getByText('Plan ended 30 Jun 2026')).toBeVisible()
     expect(within(list).getByRole('link', { name: 'Record budget for Noor Hassan' })).toHaveAttribute('href', '/participants/p-0005?tab=funding')
     expect(within(list).getByRole('link', { name: 'Record a new plan for Edna Ended' })).toHaveAttribute('href', '/participants/p-0006?tab=funding')   // the Funding tab's own button for a plan that ended
-    expect(within(list).getByText('ODIP cannot warn about a budget it does not hold. Record the plan to start tracking.')).toBeVisible()
+    expect(within(list).getByText("We can't warn about a budget we don't hold. Record the plan to start tracking.")).toBeVisible()
   })
 
   // A plan recorded for later is not "no budget recorded": the entry says when it starts, and the Funding tab (where the plan is) is the link.
@@ -201,7 +201,7 @@ describe('BudgetsPage: the participants with no budget in force', () => {
     const list = document.getElementById(screen.getByRole('button', { name: /no budget recorded/ }).getAttribute('aria-controls')!)!
     expect(within(list).getByText('Una Upcoming')).toBeVisible()
     expect(within(list).getByText('Plan starts 1 Nov 2026')).toBeVisible()
-    expect(within(list).getByText('Until a plan is running, ODIP cannot warn about its budget. Record the plan, or open one that starts later.')).toBeVisible()
+    expect(within(list).getByText("Until a plan is running, we can't warn about its budget. Record the plan, or open one that starts later.")).toBeVisible()
     expect(within(list).getByRole('link', { name: 'Open funding for Una Upcoming' })).toHaveAttribute('href', '/participants/p-0007?tab=funding')
   })
 

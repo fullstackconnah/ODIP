@@ -236,7 +236,7 @@ describe('BudgetRiskTable: a real row', () => {
   })
 
   // ODIP's arithmetic can say On track while the NDIA has just refused a claim for want of funds, and the list is where the dashboard sends people: the row says the NDIA's word in a pill of its own.
-  it('says the NDIA word in a danger pill beside the status, even when ODIP own status is On track', () => {
+  it('says the NDIA word in a danger pill beside the status, even when our own status is On track', () => {
     renderTable(readyTable([
       riskRow({ id: 'a', participantLabel: 'Refused Person', status: 'OnTrack', ndiaWord: { date: '2026-10-08', code: 'V27' } }),
       riskRow({ id: 'b', participantLabel: 'Quiet Person', status: 'OnTrack' }),
@@ -520,14 +520,14 @@ describe('BudgetRiskTable: the no-budget tail', () => {
 
   // The old line beside the toggle ("... is never warned about: there is no limit to be near") said the opposite of the truth: every plan has a limit, ODIP just does not hold it, and it read as
   // reassurance. It now sits inside the opened list, where the people it is about are, and says what ODIP cannot do.
-  it('keeps them behind a count that says what it is, closed, and says inside the list that ODIP cannot warn about a budget it does not hold', () => {
+  it('keeps them behind a count that says what it is, closed, and says inside the list that nothing can be warned about without a budget on record', () => {
     renderTable(readyTable([riskRow()], { noBudget: entries() }))
 
     const toggle = screen.getByRole('button', { name: noBudgetHiddenLabel(2) })
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
     const list = document.getElementById(toggle.getAttribute('aria-controls')!)!
     expect(list).not.toBeVisible()
-    expect(within(list).getByText('ODIP cannot warn about a budget it does not hold. Record the plan to start tracking.')).toBeInTheDocument()
+    expect(within(list).getByText("We can't warn about a budget we don't hold. Record the plan to start tracking.")).toBeInTheDocument()
     expect(screen.queryByText(/never warned about|no limit to be near/)).not.toBeInTheDocument()
   })
 
@@ -537,8 +537,8 @@ describe('BudgetRiskTable: the no-budget tail', () => {
     renderTable(readyTable([riskRow()], { noBudget: [...entries(), upcoming] }))
 
     const list = document.getElementById(screen.getByRole('button', { name: noBudgetHiddenLabel(3) }).getAttribute('aria-controls')!)!
-    expect(within(list).getByText('Until a plan is running, ODIP cannot warn about its budget. Record the plan, or open one that starts later.')).toBeInTheDocument()
-    expect(within(list).queryByText('ODIP cannot warn about a budget it does not hold. Record the plan to start tracking.')).not.toBeInTheDocument()
+    expect(within(list).getByText("Until a plan is running, we can't warn about its budget. Record the plan, or open one that starts later.")).toBeInTheDocument()
+    expect(within(list).queryByText("We can't warn about a budget we don't hold. Record the plan to start tracking.")).not.toBeInTheDocument()
   })
 
   it('is open from the start when it is told to be, as it is on a page where nobody has a budget yet', () => {

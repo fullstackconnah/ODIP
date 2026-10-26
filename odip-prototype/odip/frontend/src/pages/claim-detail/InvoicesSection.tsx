@@ -130,7 +130,7 @@ export function InvoicesSection({ claim, onAnnounce, headingRef }: InvoicesSecti
       ) : (
         <>
           {state === 'preview' && <p className={`px-[var(--card-pad)] pt-2 ${MUTED_LINE}`}>Issued when the claim is marked as submitted. Until then, each one is a preview.</p>}
-          {state === 'legacy' && <p className={`px-[var(--card-pad)] pt-2 ${MUTED_LINE}`}>Submitted before ODIP numbered its invoices. These keep their old reference and are drawn from the claim each time.</p>}
+          {state === 'legacy' && <p className={`px-[var(--card-pad)] pt-2 ${MUTED_LINE}`}>Submitted before we numbered invoices. These keep their old reference and are drawn from the claim each time.</p>}
           <DataTable
             data={rows}
             keyField="id"

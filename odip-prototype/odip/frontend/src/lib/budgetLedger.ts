@@ -56,7 +56,7 @@ export function poolSentence(pool: LedgerPool, period: LedgerPeriod): string {
   const stand = period.remaining >= 0 ? `${money(period.remaining)} left of ${of}` : `${money(-period.remaining)} over ${of}`
   // When the NDIA has refused a claim of this pool for want of funds, ODIP's arithmetic may still say fine: say whose figures these are, beside the NDIA's word, with the pool's name ("Core, by ODIP's
   // figures: ...") so the sentence has one colon.
-  const label = pool.ndiaRejection ? `${name}, by ODIP's figures:` : `${name}:`
+  const label = pool.ndiaRejection ? `${name}, by our figures:` : `${name}:`
   const first = `${label} ${stand} ${when} (to ${formatDayMonth(period.periodEnd)})${rolled}.`
   const forecast = period.bookedAhead <= 0
     ? ''
@@ -88,7 +88,7 @@ export function rowsByGroup(rows: readonly LedgerRow[]): { group: LedgerGroup; r
  * group shift has no price yet and is counted as $0: the line says so, and the Funding tab counts the shifts it leaves out (see `unpricedShiftSentence`).
  */
 export const quietEstimateLine =
-  'Estimates use the rates ODIP will claim with; shift claims price community access only for now, so sleepover, passive-night and group shifts are not counted yet.'
+  "Estimates use the rates we'll claim with; shift claims price community access only for now, so sleepover, passive-night and group shifts are not counted yet."
 
 /**
  * The warning beside a pool's figures when shifts have no price: they are $0 in every figure, so Used, the forecast and the status leave them out, and the screen says how many and why
