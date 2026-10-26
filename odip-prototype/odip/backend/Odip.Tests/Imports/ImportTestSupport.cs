@@ -21,15 +21,15 @@ internal static class ImportTestSupport
         return tenant.Object;
     }
 
-    public static OnboardingImportService Service(OdipDbContext db, Guid tenantId) => Service(db, Tenant(tenantId));
+    public static OnboardingImportService Service(OdipDbContext db, Guid tenantId, TimeProvider? clock = null, BudgetLedgerService? ledger = null) => Service(db, Tenant(tenantId), clock, ledger);
 
-    public static OnboardingImportService Service(OdipDbContext db, ICurrentTenant tenant) =>
+    public static OnboardingImportService Service(OdipDbContext db, ICurrentTenant tenant, TimeProvider? clock = null, BudgetLedgerService? ledger = null) =>
         new(db, tenant,
             new ParticipantCreateService(db, new StaffCompatibilityLinkService(db), new SafetyNoteSyncService(db), new ParticipantIntakeSnapshotService(db), TimeProvider.System),
             new StaffCreateService(db, null),
-            new FundingPlanService(db, TimeProvider.System),
-            TimeProvider.System, null, new RosterWeekStarter(new RosterShiftGenerator(), new RosterAvailability(db, new StaffUnavailabilityQuery(db))),
-            new RosterAvailability(db, new StaffUnavailabilityQuery(db)));
+            new FundingPlanService(db, clock ?? TimeProvider.System),
+            clock ?? TimeProvider.System, null, new RosterWeekStarter(new RosterShiftGenerator(), new RosterAvailability(db, new StaffUnavailabilityQuery(db))),
+            new RosterAvailability(db, new StaffUnavailabilityQuery(db)), ledger is null ? null : new ShiftBudgetCheck(db, ledger), ledger);
 
     public static byte[] Csv(params string[] lines) => Encoding.UTF8.GetBytes(string.Join("\r\n", lines) + "\r\n");
 
