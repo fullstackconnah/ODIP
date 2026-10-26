@@ -257,7 +257,7 @@ export default function ImportWizardPage() {
             actions={<div className="flex flex-col items-start gap-1">
               <div className="flex items-center gap-2">
                 {isShifts
-                  ? result.firstWeekStart && <Button to={`/rostering?date=${result.firstWeekStart}`} className="whitespace-nowrap">Open the first week</Button>
+                  ? result.firstWeekStart && <Button to={`/rostering?date=${result.firstWeekStart}`} className="min-h-[var(--control-h)] whitespace-nowrap">Open the first week</Button>
                   : <Button to={listTo(landing)} variant="secondary" size="sm">View {listNoun}</Button>}
                 <Button
                   variant="secondary"
