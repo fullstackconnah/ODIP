@@ -5,4 +5,5 @@ import { configure } from '@testing-library/react'
 configure({ asyncUtilTimeout: 3000 })
 
 // jsdom has no scrollIntoView; code that scrolls a refused section into view needs a no-op.
-Element.prototype.scrollIntoView ??= () => {}
+// Node-environment test files have no Element at all.
+if (typeof Element !== 'undefined') Element.prototype.scrollIntoView ??= () => {}
