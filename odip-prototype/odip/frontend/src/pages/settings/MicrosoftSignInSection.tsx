@@ -44,8 +44,10 @@ export default function MicrosoftSignInSection() {
   useEffect(() => {
     if (outcome === null || !ready) return
     heading()?.focus()
-    setAnnounced(outcome === 'linked' ? 'Microsoft sign-in is on.' : describeMicrosoftOutcome(outcome, 'organisation').sentence)
+    // Written a tick after mount: AnnouncementRegion must already be on the page for a screen reader to announce its text.
+    const tick = setTimeout(() => setAnnounced(outcome === 'linked' ? 'Microsoft sign-in is on.' : describeMicrosoftOutcome(outcome, 'organisation').sentence), 0)
     setParams(p => { p.delete('microsoft'); return p }, { replace: true })
+    return () => clearTimeout(tick)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready])
 
@@ -68,7 +70,7 @@ export default function MicrosoftSignInSection() {
       value={role}
       options={ROLE_OPTIONS}
       hint={ROLE_HINT}
-      className="w-full sm:w-64"
+      className="w-full max-w-prose sm:[&_select]:w-64"
       onChange={e => { setRoleDraft(e.target.value as MicrosoftRole); setSaved(false) }}
     />
   )

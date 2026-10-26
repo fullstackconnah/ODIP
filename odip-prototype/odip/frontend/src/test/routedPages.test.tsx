@@ -121,6 +121,8 @@ const ALLOWED: Record<string, string> = {
   '/inquiries': 'redirect to /participants?tab=enquiries',
   '/onboarding': 'redirect to /participants?tab=onboarding',
   '/participants/:id/edit': 'redirect to the profile wizard',
+  '/account': 'redirect to /settings/profile',
+  '/signin/microsoft': 'pre-auth Microsoft landing: a status line that posts once then navigates; outside the app layout',
 }
 
 // These titles were renamed (or their nav label was) so the two match; this keeps them there.

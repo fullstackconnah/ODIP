@@ -53,8 +53,10 @@ export default function LoginPage() {
   useEffect(() => {
     if (!microsoftCode) return
     const w = describeMicrosoftOutcome(microsoftCode, 'signin')
-    setAnnounced(w.nextStep ? `${w.sentence} ${w.nextStep}` : w.sentence)
+    // Written a tick after mount: AnnouncementRegion must already be on the page for a screen reader to announce its text.
+    const tick = setTimeout(() => setAnnounced(w.nextStep ? `${w.sentence} ${w.nextStep}` : w.sentence), 0)
     navigate({ search: '' }, { replace: true })
+    return () => clearTimeout(tick)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -328,10 +330,10 @@ export default function LoginPage() {
                   className="flex min-h-11 w-full items-center justify-center gap-3 rounded-[var(--radius-lg)] border border-[var(--ms-button-border)] bg-[var(--ms-button-bg)] px-3 text-[15px] font-semibold text-[var(--ms-button-fg)] transition-transform duration-100 hover:opacity-90 active:scale-[0.99] motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-card)]"
                 >
                   <svg aria-hidden="true" width="21" height="21" viewBox="0 0 21 21">
-                    <rect width="10" height="10" fill="#F25022" />
-                    <rect x="11" width="10" height="10" fill="#7FBA00" />
-                    <rect y="11" width="10" height="10" fill="#00A4EF" />
-                    <rect x="11" y="11" width="10" height="10" fill="#FFB900" />
+                    <rect width="10" height="10" fill="var(--ms-logo-red)" />
+                    <rect x="11" width="10" height="10" fill="var(--ms-logo-green)" />
+                    <rect y="11" width="10" height="10" fill="var(--ms-logo-blue)" />
+                    <rect x="11" y="11" width="10" height="10" fill="var(--ms-logo-yellow)" />
                   </svg>
                   Sign in with Microsoft
                 </a>

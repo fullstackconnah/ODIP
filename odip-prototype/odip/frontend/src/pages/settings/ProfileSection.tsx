@@ -54,8 +54,10 @@ function MicrosoftAccountGroup({ startUrl }: { startUrl: string }) {
   useEffect(() => {
     if (outcome === null) return
     root.current?.closest('section')?.querySelector('h2')?.focus()
-    setAnnounced(outcome === 'linked' ? 'Your Microsoft account is linked.' : describeMicrosoftOutcome(outcome, 'account').sentence)
+    // Written a tick after mount: AnnouncementRegion must already be on the page for a screen reader to announce its text.
+    const tick = setTimeout(() => setAnnounced(outcome === 'linked' ? 'Your Microsoft account is linked.' : describeMicrosoftOutcome(outcome, 'account').sentence), 0)
     setParams(p => { p.delete('microsoft'); return p }, { replace: true })
+    return () => clearTimeout(tick)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
