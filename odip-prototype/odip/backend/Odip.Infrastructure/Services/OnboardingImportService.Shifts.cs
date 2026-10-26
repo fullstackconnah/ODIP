@@ -63,7 +63,7 @@ public sealed partial class OnboardingImportService
     {
         var tenantId = TenantId();
         var availability = _availability ?? throw new InvalidOperationException("The upcoming-shifts import needs the roster services.");
-        var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
+        var today = await ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct);
         var (from, weeks) = ValidateShiftOptions(options, today);
         var plans = ImportShiftRows.Build(table, mapping, options.Shape, today, from, weeks);
 

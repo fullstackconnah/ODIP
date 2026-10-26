@@ -245,6 +245,7 @@ public class UpcomingShiftsPostgresTests : IClassFixture<PostgresFixture>
             Position = Position.SupportWorker, IsActive = true, WorkerScreeningNumber = "WSC-2", WorkerScreeningExpiryDate = new DateOnly(2035, 1, 1),
         });
         b.Db.Participants.Add(new Participant { Id = Guid.NewGuid(), TenantId = b.TenantId, FirstName = "Zoe", LastName = "Vance", DateOfBirth = new DateOnly(1991, 1, 1), IsActive = true });
+        var bShift = b.Db.Shifts.Add(new Shift { Id = Guid.NewGuid(), TenantId = b.TenantId, ParticipantId = b.ParticipantId, ServiceDate = b.Today, StartTime = new TimeOnly(8, 0), EndTime = new TimeOnly(9, 0), Status = ShiftStatus.Draft }).Entity;
         await b.Db.SaveChangesAsync();
 
         // Org A's import over a context with no tenant filter at all, so only the service's own tenant predicates keep org B's people out.
@@ -270,6 +271,10 @@ public class UpcomingShiftsPostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal(2, made.Count);
         Assert.All(made, s => Assert.Equal((a.ParticipantId, (Guid?)null), (s.ParticipantId, s.UserId)));
         await using var check = PostgresFixture.NewContext(_pg.ConnectionString, Tenant(b.TenantId));
-        Assert.Equal((0, 0), (await check.Shifts.CountAsync(), await check.RosterWeeks.CountAsync()));
+        // Org B keeps exactly the one shift it had, untouched, and no roster week appears.
+        var bShifts = await check.Shifts.ToListAsync();
+        var kept = Assert.Single(bShifts);
+        Assert.Equal((bShift.Id, bShift.StartTime, bShift.EndTime, bShift.Status), (kept.Id, kept.StartTime, kept.EndTime, kept.Status));
+        Assert.Equal(0, await check.RosterWeeks.CountAsync());
     }
 }
