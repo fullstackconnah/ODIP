@@ -138,3 +138,24 @@ describe('Organisation setup read-only facts', () => {
     expect(screen.queryByText('Registration groups confirmed')).not.toBeInTheDocument()
   })
 })
+
+describe('Show setup steps on the dashboard', () => {
+  afterEach(() => localStorage.clear())
+
+  it('offers no way back while the card is showing', async () => {
+    show()
+    await screen.findByText('Details recorded')
+    expect(screen.queryByRole('button', { name: 'Show setup steps on the dashboard' })).not.toBeInTheDocument()
+  })
+
+  it('shows the line and button while hidden; pressing clears the flag and removes both', async () => {
+    localStorage.setItem('odip_user', JSON.stringify({ tenantId: 'org-1' }))
+    localStorage.setItem('bunya-setup-hidden:org-1', '1')
+    show()
+    expect(await screen.findByText('Setup steps are hidden on this device.')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Show setup steps on the dashboard' }))
+    expect(localStorage.getItem('bunya-setup-hidden:org-1')).toBeNull()
+    expect(screen.queryByText('Setup steps are hidden on this device.')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Show setup steps on the dashboard' })).not.toBeInTheDocument()
+  })
+})

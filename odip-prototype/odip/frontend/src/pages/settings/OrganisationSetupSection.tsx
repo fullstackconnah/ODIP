@@ -1,9 +1,10 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useProviderSettings } from '@/api/hooks/catalogue'
 import { usePlanPricingSettings } from '@/api/hooks/plan-pricing'
 import { Button } from '@/components/Button'
 import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
+import { isSetupHidden, organisationDetailsRecorded, setSetupHidden } from '@/lib/organisationSetup'
 import { queryPhase } from '@/lib/queryPhase'
 
 /** Optional guidance only: recorded facts never stand in for an administrator's review. Mounted by the gated Settings section. */
@@ -13,10 +14,10 @@ export default function OrganisationSetupSection() {
   const { refetch: refreshPricing } = pricing
   // The app caches fresh settings for 30 seconds; a return to this guide still reads current facts.
   useEffect(() => { void refreshPricing() }, [refreshPricing])
+  const [hidden, setHidden] = useState(isSetupHidden)
   const providerPhase = queryPhase(provider)
   const pricingPhase = queryPhase(pricing)
-  const detailsRecorded = !!provider.data?.organisationName?.trim() && !!provider.data?.address?.trim()
-    && ['ACT', 'NSW', 'NT', 'QLD', 'SA', 'TAS', 'VIC', 'WA'].includes(provider.data?.state ?? '')
+  const detailsRecorded = organisationDetailsRecorded(provider.data)
   const rows = [
     {
       title: 'Organisation details', purpose: 'Review the legal name and address used on your documents.',
@@ -59,6 +60,12 @@ export default function OrganisationSetupSection() {
           </li>
         ))}
       </ul>
+      {hidden && (
+        <div className="flex flex-wrap items-center gap-3 border-t border-[var(--color-border)] pt-[var(--card-pad)]">
+          <p className="text-[13px] text-[var(--color-muted-foreground)]">Setup steps are hidden on this device.</p>
+          <Button variant="secondary" onClick={() => { setSetupHidden(false); setHidden(false) }}>Show setup steps on the dashboard</Button>
+        </div>
+      )}
     </>
   )
 }
