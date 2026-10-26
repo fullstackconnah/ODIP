@@ -22,6 +22,11 @@ vi.mock('@/api/hooks', () => ({
   useSettings: mockUseSettings,
   useUpdateStaff: () => ({ mutate: mockMutate, isPending: mockPending.current }),
   useProviderSettings: () => ({ data: providerSettings.current }),
+  // A finished organisation long ago: the Dashboard shows no setup card, whatever the role.
+  useSetupStatus: () => ({
+    data: { staffCount: 20, participantCount: 40, participantsWithPlanCount: 40, firstPublishedWeekStart: '2020-01-06', hasInvoice: true, employmentHeroAvailable: false },
+    isPending: false, isError: false, isFetching: false, fetchStatus: 'idle', errorUpdateCount: 0,
+  }),
   // The dashboard's own request, answered with a real summary of zeros (the page no longer makes one up).
   useDashboard: () => ({
     data: {

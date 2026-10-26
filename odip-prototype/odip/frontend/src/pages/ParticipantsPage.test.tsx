@@ -875,3 +875,21 @@ describe('ParticipantsPage — search debounce', () => {
     expect(new Set(searched())).toEqual(new Set(['sop']))
   })
 })
+
+describe('ParticipantsTable: the empty state points at Import', () => {
+  it('Admin: Import participants, then Add participant, with the new description', () => {
+    renderPage()
+    expect(screen.getByText(/Import your participant list from a spreadsheet, or add them one at a time/)).toBeInTheDocument()
+    expect(screen.queryByText(/plan trips/)).toBeNull()
+    expect(screen.getAllByRole('link').map((a) => [a.textContent, a.getAttribute('href')])).toEqual(
+      expect.arrayContaining([['Import participants', '/settings/import/participants'], ['Add participant', '/participants/new']]))
+  })
+
+  it('ReadOnly: no actions', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'ReadOnly' }))
+    renderPage()
+    expect(screen.getByText('No participants yet')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Import participants' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Add participant' })).toBeNull()
+  })
+})

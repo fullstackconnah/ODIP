@@ -80,7 +80,7 @@ export function ParticipantsTable() {
 }
 
 function useParticipantsScreen() {
-  const { canWrite, canViewAlerts, canManageParticipantLifecycle } = usePermissions()
+  const { canWrite, canViewAlerts, canManageParticipantLifecycle, canImportData } = usePermissions()
   const viewOptions = canManageParticipantLifecycle ? [...VIEW_OPTIONS, ENDING_OPTION] : VIEW_OPTIONS
   const navigate = useNavigate()
   const location = useLocation()
@@ -380,8 +380,9 @@ function useParticipantsScreen() {
     <EmptyState
       icon={Users}
       title="No participants yet"
-      description="Participants are the NDIS clients you plan trips and supports for. Add one to start booking them onto trips."
-      action={canWrite ? { label: 'Add participant', to: '/participants/new' } : undefined}
+      description="Participants are the NDIS clients you support. Import your participant list from a spreadsheet, or add them one at a time."
+      action={canImportData ? { label: 'Import participants', to: '/settings/import/participants' } : canWrite ? { label: 'Add participant', to: '/participants/new' } : undefined}
+      secondaryAction={canImportData && canWrite ? { label: 'Add participant', to: '/participants/new' } : undefined}
     />
   )
 

@@ -1805,6 +1805,9 @@ public record UpdateEventTemplateDto : CreateEventTemplateDto { }
 // DASHBOARD DTOs
 // ══════════════════════════════════════════════════════════════
 
+/// <summary>What the dashboard's Get set up card reads: counts and facts for one organisation. FirstPublishedWeekStart is the Monday of the earliest non-Draft, non-Cancelled shift (a week was published, even if its shifts have since moved on).</summary>
+public record SetupStatusDto(int StaffCount, int ParticipantCount, int ParticipantsWithPlanCount, DateOnly? FirstPublishedWeekStart, bool HasInvoice, bool EmploymentHeroAvailable);
+
 public record DashboardSummaryDto
 {
     public int UpcomingTripCount { get; init; }

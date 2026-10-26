@@ -7,7 +7,7 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import DashboardPage from '../DashboardPage'
 import {
-  mockUseDashboard, mockUseSettings, mockUseStaff, mockUseParticipantAlertsAggregate, mockUsePendingLeaveQueue, mockUsePendingCompletionQueue, mockUseDecisionGroups, mockUseModuleVisibility,
+  mockUseDashboard, mockUseSettings, mockUseStaff, mockUseParticipantAlertsAggregate, mockUsePendingLeaveQueue, mockUsePendingCompletionQueue, mockUseDecisionGroups, mockUseModuleVisibility, mockUseSetupStatus, mockUseProviderSettings,
 } from './dashboardHookMocks'
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -22,6 +22,10 @@ export function renderPage() {
 }
 
 /** The defaults every dashboard page test starts from (moved verbatim from DashboardPage.test.tsx). Call it once at the top of a test file. */
+export const FINISHED_ORG = { staffCount: 20, participantCount: 40, participantsWithPlanCount: 40, firstPublishedWeekStart: '2020-01-06', hasInvoice: true, employmentHeroAvailable: false }
+// A settled query as the page reads it.
+export const settled = (data: unknown) => ({ data, isPending: false, isError: false, isFetching: false, fetchStatus: 'idle', errorUpdateCount: 0 })
+
 export function installDashboardDefaults() {
   afterEach(() => {
     localStorage.clear()
@@ -35,6 +39,9 @@ export function installDashboardDefaults() {
     mockUsePendingCompletionQueue.mockReturnValue(pendingCompletions(0))
     mockUseStaff.mockReturnValue({ data: [] })
     mockUseModuleVisibility.mockReturnValue({ data: { hiddenAccommodation: false, hiddenVehicles: false }, isError: false })
+    // A finished organisation: its first week was published long ago, so the setup card is not drawn and no existing assertion moves.
+    mockUseSetupStatus.mockReturnValue(settled({ ...FINISHED_ORG }))
+    mockUseProviderSettings.mockReturnValue(settled({ organisationName: 'Sunrise Care', address: '1 Main St', state: 'NSW' }))
     // No decision groups: a test sees the band exactly as its viewer's role draws it.
     mockUseDecisionGroups.mockReturnValue([])
   })

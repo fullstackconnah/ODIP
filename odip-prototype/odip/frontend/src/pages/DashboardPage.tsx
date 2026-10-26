@@ -1,5 +1,5 @@
-import { useId, useMemo, useState, type ReactNode } from 'react'
-import { useDashboard, useSettings, useStaff, useParticipantAlertsAggregate, usePendingLeaveQueue, usePendingCompletionQueue, useModuleVisibility } from '@/api/hooks'
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useDashboard, useSettings, useStaff, useParticipantAlertsAggregate, usePendingLeaveQueue, usePendingCompletionQueue, useModuleVisibility, useSetupStatus, useProviderSettings } from '@/api/hooks'
 import { formatDateAu } from '@/lib/utils'
 import { TRIP_STATUS_LABELS } from '@/lib/tone'
 import type { TripStatus } from '@/api/types'
@@ -9,6 +9,7 @@ import { awaitsData, retryingAfterError } from '@/lib/queryPhase'
 import { localIsoDate } from '@/lib/dateOnly'
 import { formatToday, greetingFor } from '@/lib/greeting'
 import { usePermissions } from '@/lib/permissions'
+import { isSetupHidden, setupCard } from '@/lib/organisationSetup'
 import { useNow } from '@/hooks/useNow'
 import { ALERT_SEVERITY_STYLES, ALERT_TYPE_LABELS } from '@/components/alertSeverityStyles'
 import { PageHeader, PageHeaderMeta } from '@/components/PageHeader'
@@ -17,6 +18,7 @@ import { PageState } from '@/components/PageState'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { StatusBadge } from '@/components/StatusBadge'
 import { TAP_FLOOR } from '@/components/tapArea'
+import { SetupSteps } from './dashboard/SetupSteps'
 import { AllClearField, AttentionBand, type BandItem } from './dashboard/AttentionBand'
 import { decisionGates } from './dashboard/decisionGates'
 import { useDecisionGroups } from './dashboard/useDecisionGroups'
@@ -69,11 +71,13 @@ function DashboardHeader({ now, fullName, counts, action }: {
   )
 }
 
+const SETUP_HIDDEN_MESSAGE = 'Setup steps hidden. Show them again from Settings, Organisation setup.'
+
 export default function DashboardPage() {
   const permissions = usePermissions()
   const visibility = useModuleVisibility()
   const platform = platformNavigation(permissions, visibility.isError ? undefined : visibility.data)
-  const { canViewAlerts, canApproveLeave, canReviewCompletions, canAccessPage, isReadOnly, fullName, id, isAdmin, isSuperAdmin } = permissions
+  const { canViewAlerts, canApproveLeave, canReviewCompletions, canAccessPage, isReadOnly, fullName, id, isAdmin, isSuperAdmin, canImportData } = permissions
   // The viewer's clock, ticking every minute. The title reads it, and so does the one figure that depends on the day (the qualification count below), so the page never
   // advertises a new date beside a count that still belongs to yesterday.
   const now = useNow()
@@ -269,7 +273,30 @@ export default function DashboardPage() {
   const bandClear = !!d && !criticalListed && attentionItems.every((item) => !item.loading && !item.error && item.count === 0)
   // "Nothing needs you" only when it is true: every group and every alert has data and is at zero, and no consequence notice is waiting (SHAPE §6).
   const groupsClear = !hasRecovery && groups.every((group) => !isPresent(group, decision.gone, decision.notices.filter((n) => n.subject === group.key).length, decision.running.has(group.key)))
-  const pageClear = bandClear && groupsClear
+  // Setup card (onboarding phase 1): the people who can import are the people who set the organisation up. A hidden card does not query.
+  const [setupHidden, setSetupHiddenState] = useState(isSetupHidden)
+  const [hideNote, setHideNote] = useState('')
+  const wantSetup = canImportData && !setupHidden
+  // Hide unmounts the card, and the Alerts heading may be swapped for the All clear field in the same render: focus the id once that has committed.
+  const justHid = useRef(false)
+  useEffect(() => {
+    if (setupHidden && justHid.current) { justHid.current = false; document.getElementById('dashboard-alerts')?.focus() }
+  }, [setupHidden])
+  const setup = useSetupStatus(wantSetup)
+  const provider = useProviderSettings(wantSetup, 'always')
+  // A failed query with no data goes back to pending/fetching on every retry: that is a failure, not a wait (lib/queryPhase.ts).
+  const waits = (q: Parameters<typeof awaitsData>[0] & Parameters<typeof retryingAfterError>[0]) => awaitsData(q) && !retryingAfterError(q)
+  const setupFailed = setup.isError || retryingAfterError(setup) || provider.isError || retryingAfterError(provider)
+  const card = wantSetup ? setupCard(setup.data, { waiting: waits(setup) || waits(provider), failed: setupFailed }, today) : 'none'
+  // The empty org's own card says what to do, so the page is not also "All clear"; a failed setup query is not known to be clear either.
+  const pageClear = bandClear && groupsClear && card !== 'waiting' && card !== 'steps' && !(wantSetup && setupFailed)
+  // Only the Alerts block waits for the card, so the decision groups below are not held back.
+  const holdMain = card === 'waiting'
+  const spinner = (
+    <div className="flex h-32 items-center justify-center">
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--color-primary)] border-t-transparent" />
+    </div>
+  )
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)]">
@@ -284,9 +311,13 @@ export default function DashboardPage() {
       />
       {/* Mounted before any group can speak, outside the sections, so it survives the page turning all clear (SHAPE §10). sr-only, so it takes no gap. */}
       {groups.length > 0 && <AnnouncementRegion message={decision.announcement} />}
+      {canImportData && <AnnouncementRegion message={hideNote} />}
 
       <div className={`grid gap-[var(--section-gap)] ${platform.length > 0 ? 'xl:grid-cols-[minmax(0,1fr)_18rem]' : ''}`}>
       <div className="flex min-w-0 flex-col gap-[var(--section-gap)]">
+      {(card === 'steps' || card === 'done') && setup.data && (
+        <SetupSteps status={setup.data} provider={provider.data ?? null} card={card} onHide={() => { justHid.current = true; setHideNote(SETUP_HIDDEN_MESSAGE); setSetupHiddenState(true) }} />
+      )}
       {pageClear ? (
         // Same id as the Alerts heading, which it replaces: where focus lands when the last decision turns the page clear (QuickGroup's finish).
         <div id="dashboard-alerts" tabIndex={-1} className="focus:outline-none">
@@ -295,14 +326,12 @@ export default function DashboardPage() {
       ) : (
         <>
           <div className="flex flex-col gap-2">
-            <h2 id="dashboard-alerts" tabIndex={-1} className="text-sm font-semibold focus:outline-none">Alerts</h2>
-            {summary.isError || retryingAfterError(summary) ? (
+            {!holdMain && <h2 id="dashboard-alerts" tabIndex={-1} className="text-sm font-semibold focus:outline-none">Alerts</h2>}
+            {holdMain ? spinner : summary.isError || retryingAfterError(summary) ? (
               <PageState kind="error" noun="dashboard summary" onRetry={() => summary.refetch()} />
             ) : !d ? (
               // No summary yet (in flight, or paused offline) is a spinner, never a band of zeros.
-              <div className="flex h-32 items-center justify-center">
-                <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--color-primary)] border-t-transparent" />
-              </div>
+              spinner
             ) : (
               <>
                 <AttentionBand items={attentionItems} />

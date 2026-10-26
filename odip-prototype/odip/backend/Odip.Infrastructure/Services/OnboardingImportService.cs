@@ -443,7 +443,7 @@ public sealed class OnboardingImportService
             // A reference StaffBlockersAsync does not know about: nothing is deleted (disposing the lock rolls its transaction back), and only
             // the type is logged.
             _logger?.LogError("Undo of import {BatchId} failed: {ExceptionType}", batch.Id, ex.GetType().Name);
-            throw new ImportException("Nothing was undone: one of its records is used elsewhere in ODIP.", 409);
+            throw new ImportException("Nothing was undone: one of its records is used elsewhere in Bunya Support.", 409);
         }
         await importLock.CommitAsync(ct);
         return new ImportUndoOutcome(false, [], ToDto(batch));

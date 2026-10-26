@@ -14,9 +14,22 @@ export type EmptyStateProps = {
   /** 'inline' trims vertical padding to py-6 for use inside a table body / dense panel;
    * defaults to 'default' (py-10) for a full page-level empty state. */
   size?: 'default' | 'inline'
+  /** A second action beside the first (Import, then Add one). */
+  secondaryAction?: EmptyStateAction
 }
 
-export function EmptyState({ icon: Icon, title, description, action, className, size = 'default' }: EmptyStateProps) {
+// inline-flex + min-h-[44px] gives the link/button a WCAG 2.5.5-sized tap target without growing the text visually: the extra height is invisible padding, not a bigger glyph.
+const ACTION_CLASS = 'inline-flex min-h-[44px] items-center justify-center px-2 text-sm font-bold text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded-lg'
+
+function ActionLink({ action }: { action: EmptyStateAction }) {
+  return action.to ? (
+    <Link to={action.to} className={ACTION_CLASS}>{action.label}</Link>
+  ) : (
+    <button type="button" onClick={action.onClick} className={ACTION_CLASS}>{action.label}</button>
+  )
+}
+
+export function EmptyState({ icon: Icon, title, description, action, secondaryAction, className, size = 'default' }: EmptyStateProps) {
   const paddingClass = size === 'inline' ? 'py-6' : 'py-10'
   return (
     <div className={`flex flex-col items-center justify-center text-center ${paddingClass} gap-3 ${className ?? ''}`}>
@@ -25,25 +38,11 @@ export function EmptyState({ icon: Icon, title, description, action, className, 
       {description && (
         <p className="max-w-sm text-sm text-[var(--color-muted-foreground)] opacity-80">{description}</p>
       )}
-      {action && (
-        // inline-flex + min-h-[44px] gives the link/button a WCAG 2.5.5-sized tap target without
-        // growing the text visually — the extra height is invisible padding, not a bigger glyph.
-        action.to ? (
-          <Link
-            to={action.to}
-            className="mt-2 inline-flex min-h-[44px] items-center justify-center px-2 text-sm font-bold text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded-lg"
-          >
-            {action.label}
-          </Link>
-        ) : (
-          <button
-            type="button"
-            onClick={action.onClick}
-            className="mt-2 inline-flex min-h-[44px] items-center justify-center px-2 text-sm font-bold text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded-lg"
-          >
-            {action.label}
-          </button>
-        )
+      {(action || secondaryAction) && (
+        <div className="mt-2 flex flex-wrap justify-center gap-x-4">
+          {action && <ActionLink action={action} />}
+          {secondaryAction && <ActionLink action={secondaryAction} />}
+        </div>
       )}
     </div>
   )

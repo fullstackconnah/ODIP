@@ -121,7 +121,10 @@ export function usePublishWeek() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (weekStart: string) => apiPost<PublishWeekResultDto>(`/rostering/weeks/${weekStart}/publish`),
-    onSettled: () => qc.invalidateQueries({ queryKey: ['roster-board'] }),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ['roster-board'] })
+      qc.invalidateQueries({ queryKey: ['dashboard', 'setup'] })   // the first published week finishes the setup card
+    },
   })
 }
 
