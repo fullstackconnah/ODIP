@@ -87,7 +87,7 @@ public sealed class ShiftBreakService
         // The shift row lock serialises same-id starts on PostgreSQL, so the second one finds the first here.
         if (breakId is { } id)
         {
-            var existing = await _db.ShiftBreaks.IgnoreQueryFilters().FirstOrDefaultAsync(b => b.Id == id, ct);
+            var existing = await _db.ShiftBreaks.IgnoreQueryFilters([TenantFilter.Name]).FirstOrDefaultAsync(b => b.Id == id, ct);
             if (existing is not null)
                 return existing.ShiftCompletionId == completion.Id
                     ? new ShiftBreakResult(ShiftBreakOutcome.Ok, existing)

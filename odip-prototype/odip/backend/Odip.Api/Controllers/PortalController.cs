@@ -1105,7 +1105,7 @@ public class PortalController : ControllerBase
     /// <summary>The 200 (same shift, same author) or 409 (any other row) for a note id that already exists; null when the id is free.</summary>
     private async Task<ActionResult<ApiResponse<ShiftNoteDto>>?> FindNoteForReplayAsync(Guid noteId, Guid shiftId, Guid staffId, CancellationToken ct)
     {
-        var existing = await _db.ShiftNotes.IgnoreQueryFilters().FirstOrDefaultAsync(n => n.Id == noteId, ct);
+        var existing = await _db.ShiftNotes.IgnoreQueryFilters([TenantFilter.Name]).FirstOrDefaultAsync(n => n.Id == noteId, ct);
         if (existing is null) return null;
         if (existing.ShiftId != shiftId || existing.AuthorUserId != staffId)
             return Conflict(ApiResponse<ShiftNoteDto>.Fail("This note can't be saved.", ShiftErrorCodes.ShiftNoteIdConflict));
