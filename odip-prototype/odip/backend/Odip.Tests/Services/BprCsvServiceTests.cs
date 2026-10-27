@@ -143,7 +143,7 @@ public class BprCsvServiceTests
     }
 
     [Fact]
-    public async Task GenerateBprCsvAsync_AnOtherFundedParticipantsLine_IsNotExported()
+    public async Task GenerateBprCsvAsync_AParticipantSwitchedToOtherAfterTheService_StillExportsTheirLine()
     {
         using var db = CreateDb();
         var participant = new Participant
@@ -173,7 +173,7 @@ public class BprCsvServiceTests
         var (bytes, _) = await new BprCsvService(db).GenerateBprCsvAsync(claim.Id, CancellationToken.None);
 
         var lines = Encoding.UTF8.GetString(bytes).Split((char)10, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        Assert.Single(lines); // the header only
+        Assert.Equal(2, lines.Length); // the header and the line: a BPR mirrors its claim
     }
 
     // RFC 4180 split: commas inside quotes stay, doubled quotes unescape.

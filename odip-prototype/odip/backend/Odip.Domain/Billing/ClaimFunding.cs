@@ -3,7 +3,7 @@ using Odip.Domain.Enums;
 
 namespace Odip.Domain.Billing;
 
-/// <summary>The one rule for who is claimed to the NDIS: funded through the NDIS and holding an NDIS number. Every claim engine and the BPR export use it.</summary>
+/// <summary>The one rule for who is claimed to the NDIS: funded through the NDIS and holding an NDIS number. Every claim engine and the submit guard use it; a BPR export mirrors its claim and does not use it.</summary>
 public static class ClaimFunding
 {
     public const string OtherFundedNotClaimed = "Funded another way, so not claimed to the NDIS. Invoice them directly.";

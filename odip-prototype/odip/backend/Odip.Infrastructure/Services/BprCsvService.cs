@@ -30,7 +30,6 @@ public class BprCsvService(OdipDbContext db)
         // (see the design spec's Open questions).
         var items = claim.LineItems
             .Where(l => l.ParticipantBooking != null
-                && l.ParticipantBooking.Participant?.FundingSource == ParticipantFundingSource.Ndis
                 && (l.ParticipantBooking.PlanTypeOverride ?? l.ParticipantBooking.Participant?.PlanType) == PlanType.AgencyManaged)
             .ToList();
 
