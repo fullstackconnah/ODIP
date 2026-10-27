@@ -1078,3 +1078,34 @@ describe('DataTable — limit', () => {
     for (let i = 0; i < 8; i++) expect(screen.getAllByText(`Name${i}`).length).toBeGreaterThan(0)
   })
 })
+
+describe('DataTable — width', () => {
+  type Item = { id: string; name: string; status: string }
+  const items: Item[] = [{ id: '1', name: 'Bianca', status: 'Draft' }]
+  const columns: Column<Item>[] = [
+    { key: 'name', header: 'Name' },
+    { key: 'status', header: 'Status', width: '22%' },
+  ]
+
+  it('sets the width from md up on the header and every cell, through a custom property', () => {
+    render(<DataTable data={items} columns={columns} keyField="id" />)
+
+    const th = screen.getByRole('columnheader', { name: 'Status' })
+    const td = screen.getByText('Draft').closest('td') as HTMLElement
+    for (const el of [th, td]) {
+      expect(el).toHaveClass('md:w-[var(--col-w)]')
+      expect(el.getAttribute('style')).toContain('--col-w: 22%')
+    }
+    const name = screen.getByRole('columnheader', { name: 'Name' })
+    expect(name.className).not.toMatch(/md:w-/)
+    expect(name.getAttribute('style')).toBeNull()
+  })
+
+  it('keeps the width on the header when there are no rows', () => {
+    render(<DataTable data={[]} columns={columns} keyField="id" />)
+
+    const th = screen.getByRole('columnheader', { name: 'Status' })
+    expect(th).toHaveClass('md:w-[var(--col-w)]')
+    expect(th.getAttribute('style')).toContain('--col-w: 22%')
+  })
+})

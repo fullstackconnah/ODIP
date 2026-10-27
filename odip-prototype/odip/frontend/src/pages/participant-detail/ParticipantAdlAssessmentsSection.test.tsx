@@ -248,6 +248,41 @@ describe('ParticipantAdlAssessmentsSection — shared column layout', () => {
     const [personal, community] = Array.from(document.querySelectorAll('table'))
     const widths = (table: Element) => Array.from(table.querySelector('tbody tr')!.children).map((td) => td.className)
     expect(widths(personal)).toEqual(widths(community))
-    expect(widths(personal).some((c) => c.includes('md:w-['))).toBe(true)
+    const colWidths = Array.from(personal.querySelector('tbody tr')!.children).map((td) => td.getAttribute('style')?.match(/--col-w: ([^;]+)/)?.[1])
+    expect(colWidths).toEqual(['22%', '14%', undefined, '72px'])
+  })
+})
+
+describe('ParticipantAdlAssessmentsSection — long notes and header widths', () => {
+  it('shows a 400-character note in full, not cut off', () => {
+    const note = 'x'.repeat(400)
+    const data = unassessedRows()
+    replaceAssessment(data, { adlType: 'Dressing', level: 'Assistance', notes: note })
+    mockUseParticipantAdlAssessments.mockReturnValue({ data, isLoading: false })
+    render(<ParticipantAdlAssessmentsSection participantId="participant-1" />)
+
+    const cell = screen.getByText(note)
+    expect(cell.className).not.toMatch(/truncate/)
+    expect(cell).not.toHaveAttribute('title')
+  })
+
+  it('lets an unbroken note (a pasted URL) wrap inside its column instead of widening the table', () => {
+    const note = 'https://example.com/' + 'a'.repeat(300)
+    const data = unassessedRows()
+    replaceAssessment(data, { adlType: 'Dressing', level: 'Assistance', notes: note, howToHelpNotes: note })
+    mockUseParticipantAdlAssessments.mockReturnValue({ data, isLoading: false })
+    render(<ParticipantAdlAssessmentsSection participantId="participant-1" />)
+
+    const cells = screen.getAllByText(note)
+    expect(cells).toHaveLength(2)
+    for (const cell of cells) expect(cell.className).toContain('[overflow-wrap:anywhere]')
+  })
+
+  it('puts the Level width on the header, so a table with no rows keeps its columns', () => {
+    render(<ParticipantAdlAssessmentsSection participantId="participant-1" />)
+
+    for (const th of screen.getAllByRole('columnheader', { name: 'Level' })) {
+      expect(th.getAttribute('style')).toContain('--col-w: 14%')
+    }
   })
 })
