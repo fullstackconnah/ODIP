@@ -434,7 +434,7 @@ sideways inside its own box (the page never does). Two columns stay put while it
 labelled column (the one that says who the row is; an unlabelled tick or avatar column and the select-all checkbox column scroll away) pins to the start edge, and
 the column keyed `actions` pins to the end edge (`pin: 'start' | 'end' | false` picks or opts out). A pinned cell is filled opaque, with a hairline, only while
 content is scrolled under it, so a tinted row keeps its tint at rest, and the fill follows the row's hover tint. `priority` is retired and ignored;
-`src/test/dataTableColumnRule.test.ts` stops a page asking for it. Derivable secondary text inside a cell (a trip's "(4d)") may still give way by breakpoint; a column may not. Between md and xl two columns may merge into one stacked cell (a muted second line) when every value stays on screen; that is not removing a column (LeaveApprovalsPage: Staff · Type, Dates · Requested).
+`src/test/dataTableColumnRule.test.ts` stops a page asking for it. Derivable secondary text inside a cell (a trip's "(4d)") may still give way by breakpoint; a column may not. Between md and xl two columns may merge into one stacked cell (a muted second line) when every value stays on screen; that is not removing a column (LeaveApprovalsPage: Staff · Type, Dates · Requested). The one named exception: the Enquiries Open list wraps its Actions cluster below 1440 rather than scrolling inside its box, so its rows can reach about 118 px at 1280.
 
 **The Density Rule.** Row height comes from `--row-h`, never from added padding. If a table is too tall,
 the answer is a tighter cell (a cap, an ellipsis), not more air, and never a deleted column.

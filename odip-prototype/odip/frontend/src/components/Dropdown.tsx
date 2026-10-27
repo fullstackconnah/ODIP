@@ -119,7 +119,8 @@ export function Dropdown({
     style.maxHeight = max
     style.overflowY = 'auto'
     if (resolvedAlign === 'left') {
-      style.left = rect.left
+      // A fixed-width panel (menu, icon) opened near the right edge of a phone card would run off screen: keep it within 8px of the viewport.
+      style.left = variant === 'form' ? rect.left : Math.max(8, Math.min(rect.left, window.innerWidth - (panelRef.current?.offsetWidth ?? 0) - 8))
       if (variant === 'form') style.width = rect.width
     } else {
       style.right = window.innerWidth - rect.right
