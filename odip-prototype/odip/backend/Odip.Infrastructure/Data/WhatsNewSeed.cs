@@ -100,9 +100,9 @@ public static class WhatsNewSeed
         new Item("2026-10-participant-subtabs", "Each section has its own tab",
             "On a participant's page, the sections of a tab are now listed as small tabs under the main ones. Choose one to see just that section. Risks, routines, contacts and notes show how many there are.\n\nLinks, flags and alerts still open the right section.",
             WhatsNewAudience.All, false),
-        new Item("2026-10-27-other-funded-not-claimed", "Participants funded another way are left out of claims",
+        new Item("2026-10-other-funded-claims", "Participants funded another way are left out of claims",
             "A participant who is funded another way is no longer included in NDIS claims, even if an old NDIS number is still on their profile. The claim lists them as left out and says to invoice them directly.",
-            WhatsNewAudience.Admin | WhatsNewAudience.Coordinator, false),
+            Staff, false),
     };
 
     /// <summary>Inserts the keys the table lacks, one save each, so a key another instance inserted first costs only that row.</summary>
