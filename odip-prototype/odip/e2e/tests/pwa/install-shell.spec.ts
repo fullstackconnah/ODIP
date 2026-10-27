@@ -53,8 +53,8 @@ test.describe('install shell @pwa', () => {
     await expect(nav).toBeVisible()
     // An offline switch that never reached the worker could not fail this: the API must be unreachable from the page.
     expect(await page.evaluate(() => fetch('/api/v1/portal/my-shifts').then(() => 'reached', () => 'rejected'))).toBe('rejected')
-    // The app has no icon font (lucide SVGs), so the offline font proof is the body face: loaded from the worker's cache, not just declared.
-    expect(await page.evaluate(async () => { await document.fonts.ready; return [...document.fonts].some(f => f.family.includes('Plus Jakarta Sans') && f.status === 'loaded') })).toBe(true)
+    // Icons are a ligature font (Material Symbols): loaded from the worker's cache, not just declared, or every icon reads as its name.
+    expect(await page.evaluate(async () => { await document.fonts.ready; return [...document.fonts].some(f => f.family.includes('Material Symbols Outlined') && f.status === 'loaded') })).toBe(true)
     await context.setOffline(false)
     expect([...hosts]).toEqual(['127.0.0.1'])
   })
