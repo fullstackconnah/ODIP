@@ -195,7 +195,7 @@ describe('Callout primitive', () => {
   })
 
   it('fades in when it mounts (reduced motion is handled by the global rule)', () => {
-    render(<Callout tone=info>Heads up.</Callout>)
+    render(<Callout tone="info">Heads up.</Callout>)
     expect(screen.getByRole('status')).toHaveClass('animate-fade-in')
   })
 })
