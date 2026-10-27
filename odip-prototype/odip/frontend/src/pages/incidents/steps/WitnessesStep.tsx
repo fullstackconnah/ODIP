@@ -104,7 +104,7 @@ export function WitnessesStep({ control, errors, reportedByStaffId, staff, exist
       header: '',
       align: 'right',
       render: (_row, rowIndex) => (
-        <Button variant="ghost" iconOnly onClick={() => remove(rowIndex)} aria-label="Remove witness">
+        <Button variant="ghost-danger" iconOnly onClick={() => remove(rowIndex)} aria-label="Remove witness">
           <X className="w-4 h-4" aria-hidden />
         </Button>
       ),

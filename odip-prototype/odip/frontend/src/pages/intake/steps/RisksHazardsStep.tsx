@@ -57,7 +57,7 @@ export function RisksHazardsStep({ control, register, errors, riskEntryFieldArra
                       )}
                     />
                   </FormField>
-                  <Button variant="ghost" iconOnly className="mt-6" onClick={() => removeRiskEntry(index)} aria-label={`Remove risk entry ${index + 1}`} title="Remove risk entry">
+                  <Button variant="ghost-danger" iconOnly className="mt-7" onClick={() => removeRiskEntry(index)} aria-label={`Remove risk entry ${index + 1}`} title="Remove risk entry">
                     <Trash2 className="w-4 h-4" aria-hidden />
                   </Button>
                 </div>

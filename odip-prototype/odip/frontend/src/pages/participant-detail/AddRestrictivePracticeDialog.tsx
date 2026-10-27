@@ -248,7 +248,7 @@ function AddRestrictivePracticeDialogBody({ participantId, onClose, onSaved, def
     render: row => {
       const rowNumber = bulkRows.findIndex(r => r.id === row.id) + 1
       return (
-        <Button variant="ghost" iconOnly onClick={() => removeBulkRow(row.id)} disabled={bulkRows.length <= 1} aria-label={`Remove row ${rowNumber}`}>
+        <Button variant="ghost-danger" iconOnly onClick={() => removeBulkRow(row.id)} disabled={bulkRows.length <= 1} aria-label={`Remove row ${rowNumber}`}>
           <Trash2 className="w-4 h-4" aria-hidden />
         </Button>
       )

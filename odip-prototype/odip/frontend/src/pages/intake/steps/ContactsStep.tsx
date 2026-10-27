@@ -122,7 +122,7 @@ export function ContactsStep({
                         </div>
                       )}
                     </div>
-                    <Button variant="ghost" iconOnly className="mt-6" onClick={() => removeContactRole(index)} aria-label={`Remove contact ${index + 1}`} title="Remove contact">
+                    <Button variant="ghost-danger" iconOnly className="mt-7" onClick={() => removeContactRole(index)} aria-label={`Remove contact ${index + 1}`} title="Remove contact">
                       <Trash2 className="w-4 h-4" aria-hidden />
                     </Button>
                   </div>
