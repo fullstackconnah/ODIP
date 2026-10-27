@@ -73,17 +73,28 @@ public sealed class AgreementRenewalService
             return new RenewalOutcome(null, new[] { string.Create(CultureInfo.InvariantCulture, $"Record the new plan first: no plan of the participant's covers {start:yyyy-MM-dd}, the day the renewal starts.") }, PlanNeeded: true);
         var end = new[] { SameLengthEnd(termStart, termEnd, start), plan.PlanEnd, start.AddDays(PlanPricingEngine.MaxPeriodDays - 1) }.Min();
 
-        var blocks = source.Blocks.OrderBy(b => b.Position).Select(DraftJson.ToDto).ToList();
-        if (blocks.Count == 0 || blocks.Any(b => b.Unreadable))
-            return RenewalOutcome.Refused("This agreement's supports cannot be read here. Open the agreement and save it again.");
+        var blocks = ReadBlocks(source);
+        if (blocks is null) return RenewalOutcome.Refused(UnreadableBlocksWords);
 
-        var saved = await _drafts.SaveAsync(tenantId, participantId, new CreateServiceAgreementDraftDto
-        {
-            PlanStartDate = plan.PlanStart, PlanEndDate = plan.PlanEnd, AgreementStartDate = start, AgreementEndDate = end, State = source.State,
-            Representative = source.Representative, Blocks = blocks, BaseVersion = source.Version,
-        }, actor, ct);
+        var saved = await _drafts.SaveAsync(tenantId, participantId, CopyOf(source, blocks, start, end, plan.PlanStart, plan.PlanEnd), actor, ct);
         return new RenewalOutcome(saved.Draft, saved.Errors, saved.NotFound, saved.ConflictVersion);
     }
+
+    public const string UnreadableBlocksWords = "This agreement's supports cannot be read here. Open the agreement and save it again.";
+
+    /// <summary>The source's blocks in order, or null when it has none or one cannot be read (the callers refuse with <see cref="UnreadableBlocksWords"/>).</summary>
+    internal static List<DraftBlockDto>? ReadBlocks(ServiceAgreementDraft source)
+    {
+        var blocks = source.Blocks.OrderBy(b => b.Position).Select(DraftJson.ToDto).ToList();
+        return blocks.Count == 0 || blocks.Any(b => b.Unreadable) ? null : blocks;
+    }
+
+    /// <summary>The source's supports as the next revision over a new term: its state and representative, based on the source's version so a newer edit is caught by the save.</summary>
+    internal static CreateServiceAgreementDraftDto CopyOf(ServiceAgreementDraft source, List<DraftBlockDto> blocks, DateOnly start, DateOnly end, DateOnly planStart, DateOnly planEnd) => new()
+    {
+        PlanStartDate = planStart, PlanEndDate = planEnd, AgreementStartDate = start, AgreementEndDate = end, State = source.State,
+        Representative = source.Representative, Blocks = blocks, BaseVersion = source.Version,
+    };
 
     /// <summary>
     /// The last day of a term as long as termStart to termEnd, starting on <paramref name="start"/>. A term of whole calendar months (a year, say) runs for the same months, so a year stays a year

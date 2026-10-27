@@ -201,6 +201,7 @@ builder.Services.AddScoped<Odip.Infrastructure.Services.ServiceAgreementDraftSer
 builder.Services.AddScoped<Odip.Infrastructure.Services.AgreementPatternChangeService>();
 // Agreement PR 2: Renew agreement saves the newest approved revision's blocks as the next revision, from the day after it ends (through ServiceAgreementDraftService.SaveAsync).
 builder.Services.AddScoped<Odip.Infrastructure.Services.AgreementRenewalService>();
+builder.Services.AddScoped<Odip.Infrastructure.Services.AgreementBulkService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.ElectronicSigningEvidenceService>();
 // Plan builder phase D: "Mark approved" makes roster patterns and open shifts. The one generator is shared with the Generate button and the daily top-up; the gate is the readiness check the
 // roster writes use (the API owns it, so the infrastructure services reach it through this seam); the top-up job itself is registered below with the other hosted services.

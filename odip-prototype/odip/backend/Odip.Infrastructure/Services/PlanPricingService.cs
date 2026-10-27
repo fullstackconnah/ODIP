@@ -21,7 +21,8 @@ public sealed class PlanPricingService
     public Task<PlanPricingSettings?> FindSettingsAsync(Guid tenantId, CancellationToken ct = default) =>
         _db.PlanPricingSettings.AsNoTracking().FirstOrDefaultAsync(s => s.TenantId == tenantId, ct);
 
-    public async Task<PlanQuote> QuoteAsync(Guid tenantId, IReadOnlyList<PlanBlock> blocks, DateOnly from, DateOnly to, CancellationToken ct = default)
+    /// <param name="pinnedVersion">Prices every day on this catalogue version alone, as if it were still in force (the old side of a reprice); null prices from the catalogue as it is.</param>
+    public async Task<PlanQuote> QuoteAsync(Guid tenantId, IReadOnlyList<PlanBlock> blocks, DateOnly from, DateOnly to, CancellationToken ct = default, string? pinnedVersion = null)
     {
         ArgumentNullException.ThrowIfNull(blocks);
 
@@ -29,7 +30,7 @@ public sealed class PlanPricingService
 
         // A period the engine will refuse loads nothing: it answers with the reason.
         var priceable = to >= from && to.DayNumber - from.DayNumber + 1 <= PlanPricingEngine.MaxPeriodDays;
-        var catalogue = priceable ? await LoadCatalogueAsync(from, to, ct) : new List<SupportCatalogueItem>();
+        var catalogue = priceable ? await LoadCatalogueAsync(from, to, pinnedVersion, ct) : new List<SupportCatalogueItem>();
         var holidays = priceable ? await LoadHolidaysAsync(from, to, ct) : new List<HolidayEntry>();
         List<HolidayCoverage>? coverage = priceable ? await LoadCoverageAsync(from, to, ct) : null;
         DateOnly? overridesThrough = priceable ? await LoadOverridesThroughAsync(ct) : null;
@@ -46,10 +47,18 @@ public sealed class PlanPricingService
     /// dates inside it. The day after is loaded because an occurrence that starts on the last day can run into it (a Monday 22:00 to Tuesday 02:00 support has a
     /// part on the Tuesday), and a price change that starts that day must be there to price it. The holidays are loaded to the same day.
     /// </summary>
-    private Task<List<SupportCatalogueItem>> LoadCatalogueAsync(DateOnly from, DateOnly to, CancellationToken ct)
+    private async Task<List<SupportCatalogueItem>> LoadCatalogueAsync(DateOnly from, DateOnly to, string? pinnedVersion, CancellationToken ct)
     {
+        if (pinnedVersion is not null)
+        {
+            var pinned = await _db.SupportCatalogueItems.AsNoTracking().Where(i => i.CatalogueVersion == pinnedVersion).ToListAsync(ct);
+            // price every day on the old list, even after a newer import end-dated it: the engine counts a row valid only if IsActive or EffectiveTo is set. The copy is never attached or saved.
+            foreach (var i in pinned) { i.EffectiveTo = null; i.IsActive = true; }
+            return pinned;
+        }
+
         var last = to.AddDays(1);
-        return _db.SupportCatalogueItems.AsNoTracking()
+        return await _db.SupportCatalogueItems.AsNoTracking()
             .Where(item => item.EffectiveFrom <= last && (item.EffectiveTo == null || item.EffectiveTo >= from))
             .ToListAsync(ct);
     }

@@ -66,14 +66,14 @@ public sealed class AgreementPatternChangeService
         var (changed, error) = AgreementBlockChange.Apply(blocks, pattern, request);
         if (changed is null) return PatternChangeOutcome.Refused(error!);
 
-        var oldTotal = PricedTotal(await _pricing.QuoteAsync(tenantId, blocks.Select(b => b.Block).ToList(), from, end, ct));
+        var oldTotal = AgreementPriceLists.PricedTotal(await _pricing.QuoteAsync(tenantId, blocks.Select(b => b.Block).ToList(), from, end, ct));
         if (request.Preview)
         {
             // The blocks, dates and engine a save prices with, and the same refusals: what Create revision would save, with nothing written.
             var quote = await _pricing.QuoteAsync(tenantId, changed.Select(b => b.Block).ToList(), from, end, ct);
             var refusals = quote.Issues.Where(i => ServiceAgreementDraftService.SaveRefusals.Contains(i.Reason)).Select(i => i.Message).Distinct().ToArray();
             if (refusals.Length > 0) return PatternChangeOutcome.Refused(refusals);
-            return Answer(null, source.Version + 1, from, end, oldTotal, PricedTotal(quote), quote.NeedsReview);
+            return Answer(null, source.Version + 1, from, end, oldTotal, AgreementPriceLists.PricedTotal(quote), quote.NeedsReview);
         }
 
         var saved = await _drafts.SaveAsync(tenantId, participantId, new CreateServiceAgreementDraftDto
@@ -84,9 +84,6 @@ public sealed class AgreementPatternChangeService
         if (saved.Draft is not { } draft) return new PatternChangeOutcome(null, saved.Errors, saved.NotFound, saved.ConflictVersion);
         return Answer(draft.Id, draft.Version, from, end, oldTotal, draft.Lines.Sum(l => l.Total ?? 0m), DraftJson.ReadQuote(draft.PricingJson)?.NeedsReview ?? false);
     }
-
-    /// <summary>What a quote's priced lines add up to: each line's own total, already floored to the cent. A line that could not be priced is not money the agreement claims.</summary>
-    private static decimal PricedTotal(PlanQuote quote) => quote.Lines.Where(l => l.IsPriced).Sum(l => l.Total);
 
     private static PatternChangeOutcome Answer(Guid? draftId, int version, DateOnly from, DateOnly to, decimal oldTotal, decimal newTotal, bool needsReview) => new(new PatternChangeResultDto
     {
