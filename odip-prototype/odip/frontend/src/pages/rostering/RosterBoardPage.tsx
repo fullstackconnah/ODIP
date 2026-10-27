@@ -903,7 +903,7 @@ export default function RosterBoardPage() {
         message={pendingBlocked && (
           <>
             <p>{blockedOnlyByDoubleBooking(pendingBlocked.findings)
-              ? "This worker is already booked at that time. Only an admin can override this, so ask an admin to make the assignment."
+              ? "This worker is already booked at that time, so ask an admin to make the assignment."
               : "This assignment was blocked by a rostering rule that can't be overridden."}</p>
             <FindingsList findings={pendingBlocked.findings} className="mt-3" />
           </>

@@ -109,7 +109,7 @@ describe('ShiftSlideOver override gate', () => {
       />,
     )
 
-    expect(screen.getByRole('alert')).toHaveTextContent("This worker is already booked at that time, so the shift can't be saved as it is. Change the time or the worker, or ask an admin to override.")
+    expect(screen.getByRole('alert')).toHaveTextContent("This worker is already booked at that time, so the shift can't be saved as it is. Change the time or the worker, or ask an admin to save it.")
     expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
   })
 
@@ -1022,6 +1022,18 @@ describe('ShiftSlideOver — the server\'s refusal reaches the user', () => {
     expect(await screen.findByText('Pending leave overlaps this window.')).toBeInTheDocument()
     expect(screen.queryByText('Roster findings need review.')).not.toBeInTheDocument()
     expect(screen.queryByText(GENERIC_SHIFT_ERROR)).not.toBeInTheDocument()
+  })
+
+  it('says the double-booking sentence when the server refuses an edit with a Blocking DOUBLE_BOOKED_SHIFT (another coordinator booked the worker meanwhile)', async () => {
+    const user = userEvent.setup()
+    const finding = makeFinding({ code: 'DOUBLE_BOOKED_SHIFT', severity: 'Blocking', message: 'Sam Wilson already has a shift on 24 Aug 2026, 16:00-20:00, that overlaps this one. An admin can override this.' })
+    mockGetRosterFindings.mockReturnValueOnce([finding] as never)
+    mockUpdateMutateAsync.mockRejectedValueOnce({ response: { status: 422, data: { success: false, data: [finding] } } })
+    render(<ShiftSlideOver target={{ mode: 'edit', shift: makeShift({ findings: [] }) }} onClose={noop} canWrite participantOptions={participantOptions} staffOptions={staffOptions} />)
+
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("This worker is already booked at that time, so the shift can't be saved as it is. Change the time or the worker, or ask an admin to save it.")
   })
 })
 

@@ -106,8 +106,8 @@ public static class WhatsNewSeed
         new Item("2026-10-logo-mark", "A new Bunya Support logo",
             "The small logo in the side menu is now the \"b\" from the Bunya Support name. When you fold the side menu away, the name folds into it.",
             WhatsNewAudience.All, false),
-        new Item("2026-10-double-booking-block", "A worker can't be booked on two shifts at once",
-            "When a worker already has a shift at that time, coordinators can no longer add or move them onto another one. An admin still can, after giving a reason. Shifts that already overlap can still be edited or cancelled.",
+        new Item("2026-10-double-booking-block", "Coordinators can't double-book a worker",
+            "When a worker already has a shift at that time, a coordinator can no longer put them on another shift from the roster board or the shift panel. An admin still can, after giving a reason. Shifts that already overlap can still be edited or cancelled.",
             Staff, false),
     };
 

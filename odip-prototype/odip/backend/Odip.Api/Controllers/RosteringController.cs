@@ -2293,12 +2293,12 @@ public class RosteringController : ControllerBase
     }
 
     /// <summary>
-    /// True when an edit cannot have made its shift clash with the worker's other shifts: it cancels the shift, or sets the same worker, date and times the saved row already has. Rows saved before the
+    /// True when an edit cannot have made its shift clash with the worker's other shifts: it cancels the shift, or edits a live shift keeping the same worker, date and times it already has (reopening a cancelled one makes it live, so it is checked). Rows saved before the
     /// double-booking block may clash, and cancelling or annotating one must still work (2026-10-27).
     /// </summary>
     private static bool ClashIsInherited(Shift? saved, ShiftStatus? status, Guid? staffId, DateOnly date, TimeOnly start, TimeOnly end, bool endsNextDay) =>
         status == ShiftStatus.Cancelled
-        || (saved is not null && saved.UserId == staffId && saved.ServiceDate == date && saved.StartTime == start && saved.EndTime == end && saved.EndsNextDay == endsNextDay);
+        || (saved is not null && saved.Status != ShiftStatus.Cancelled && saved.UserId == staffId && saved.ServiceDate == date && saved.StartTime == start && saved.EndTime == end && saved.EndsNextDay == endsNextDay);
 
     private bool CallerIsAdmin => User?.IsInRole("Admin") == true || User?.IsInRole("SuperAdmin") == true;
 

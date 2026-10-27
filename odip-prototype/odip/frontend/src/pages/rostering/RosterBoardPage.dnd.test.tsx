@@ -204,7 +204,7 @@ describe('RosterBoardPage drag and drop: when the server says no', () => {
     await drop(sam, onShift(OPEN))
 
     const dialog = await screen.findByRole('alertdialog', { name: "Can't assign this shift" })
-    expect(within(dialog).getByText("This worker is already booked at that time. Only an admin can override this, so ask an admin to make the assignment.")).toBeInTheDocument()
+    expect(within(dialog).getByText("This worker is already booked at that time, so ask an admin to make the assignment.")).toBeInTheDocument()
     expect(within(dialog).queryByText(/can't be overridden/)).not.toBeInTheDocument()
   })
 

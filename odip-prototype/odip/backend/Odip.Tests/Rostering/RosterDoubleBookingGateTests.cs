@@ -236,4 +236,73 @@ public class RosterDoubleBookingGateTests
 
         AssertSaved(await Controller(db, "Coordinator").MoveStaff(new MoveStaffDto { FromShiftId = from.Id, ToShiftId = to.Id, Mode = MoveStaffMode.Move, StaffId = sam.Id }, default));
     }
+
+    [Fact]
+    public async Task Update_ReopeningACancelledShiftOnTopOfANewerBooking_BlocksACoordinator_AndNeedsAnAdminsReason()
+    {
+        using var db = TestDb.Create();
+        var sam = SeedStaff(db); var mia = SeedParticipant(db);
+        var cancelled = SeedShift(db, mia.Id, sam.Id, status: ShiftStatus.Cancelled);
+        SeedShift(db, mia.Id, sam.Id);
+
+        AssertBlocked(await Controller(db, "Coordinator").UpdateShift(cancelled.Id, Update(cancelled, status: ShiftStatus.Draft), default));
+        db.ChangeTracker.Clear();
+        Assert.Equal(ShiftStatus.Cancelled, (await db.Shifts.AsNoTracking().SingleAsync(s => s.Id == cancelled.Id)).Status);
+
+        AssertSaved(await Controller(db, "Admin").UpdateShift(cancelled.Id, Update(cancelled, status: ShiftStatus.Draft, reason: Reason), default));
+        await AssertReasonStored(db, cancelled.Id);
+    }
+
+    // ── Dry run ──
+
+    private static CheckShiftDto Check(Shift shift, Guid? id = null, Guid? staffId = null, int startHour = 10, int endHour = 12) => new()
+    {
+        Id = id, ParticipantId = shift.ParticipantId, StaffId = staffId, ServiceDate = shift.ServiceDate, StartTime = new TimeOnly(startHour, 0), EndTime = new TimeOnly(endHour, 0),
+        Ratio = shift.Ratio, NightType = shift.NightType,
+    };
+
+    private static List<RosterFindingDto> Findings(ActionResult<ApiResponse<List<RosterFindingDto>>> result) =>
+        Assert.IsType<ApiResponse<List<RosterFindingDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
+
+    [Fact]
+    public async Task Check_ACoordinatorSeesTheClashAsBlocking_ButAnInheritedClashIsNotShown()
+    {
+        using var db = TestDb.Create();
+        var sam = SeedStaff(db); var mia = SeedParticipant(db);
+        var other = SeedShift(db, mia.Id, sam.Id);
+        var clashing = SeedShift(db, mia.Id, sam.Id, 10, 12);
+        var coordinator = Controller(db, "Coordinator");
+
+        var candidate = Findings(await coordinator.CheckShift(Check(other, staffId: sam.Id), default)).Where(f => f.Code == RosterConflictService.DoubleBookedShift).ToList();
+        Assert.NotEmpty(candidate);
+        Assert.All(candidate, f => Assert.Equal(RosterFindingSeverity.Blocking, f.Severity));
+
+        var inherited = Findings(await coordinator.CheckShift(Check(clashing, clashing.Id, sam.Id), default));
+        Assert.DoesNotContain(inherited, f => f.Code == RosterConflictService.DoubleBookedShift);
+    }
+
+    // ── Move staff, Swap ──
+
+    [Fact]
+    public async Task MoveStaff_Swap_ACoordinatorIsRefusedWhenTheOtherWorkerLandsOnAClash_AnAdminNeedsAReason()
+    {
+        using var db = TestDb.Create();
+        var sam = SeedStaff(db); var joe = SeedStaff(db); var mia = SeedParticipant(db);
+        var from = SeedShift(db, mia.Id, sam.Id);
+        SeedShift(db, mia.Id, joe.Id, 10, 12);
+        var to = SeedShift(db, mia.Id, joe.Id, 9, 15, Monday.AddDays(1));
+        MoveStaffDto Swap(string? reason = null) => new()
+        {
+            FromShiftId = from.Id, ToShiftId = to.Id, Mode = MoveStaffMode.Swap, StaffId = sam.Id, ExpectedToStaffId = joe.Id, OverrideReason = reason,
+            AcknowledgedFindingCodes = reason is null ? null : [RosterConflictService.DoubleBookedShift],
+        };
+
+        AssertBlocked(await Controller(db, "Coordinator").MoveStaff(Swap(Reason), default));
+        AssertNeedsReason(await Controller(db, "Admin").MoveStaff(Swap(), default));
+        db.ChangeTracker.Clear();
+        Assert.Equal(sam.Id, (await db.Shifts.AsNoTracking().SingleAsync(s => s.Id == from.Id)).UserId);
+
+        AssertSaved(await Controller(db, "Admin").MoveStaff(Swap(Reason), default));
+        await AssertReasonStored(db, from.Id);
+    }
 }

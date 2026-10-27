@@ -73,8 +73,10 @@ function toTimeInputValue(time: string | undefined): string {
 }
 
 /** What the panel says when the budget refuses the shift (the hard limit, for a Coordinator): one line, in the budget's words and not the roster conflict gate's. */
-const DOUBLE_BOOKED_REFUSAL_SENTENCE = "This worker is already booked at that time, so the shift can't be saved as it is. Change the time or the worker, or ask an admin to override."
 const BUDGET_REFUSAL_SENTENCE = "The hard limit is on, so this shift can't be saved as it is."
+
+/** What the panel says when only a double-booking blocks (a Coordinator): who can unblock it, and the next step. */
+const DOUBLE_BOOKED_REFUSAL_SENTENCE = "This worker is already booked at that time, so the shift can't be saved as it is. Change the time or the worker, or ask an admin to save it."
 
 /** No findings, one stable array (a new `[]` each render would look like a change). */
 const NO_FINDINGS: RosterFindingDto[] = []
@@ -292,7 +294,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   const emergencyReady = emergencyActive && canSubmit(budgetChoice, emergencyDescription)
   const stillBlocking = emergencyActive ? blockingFindings.filter(f => f.code !== BUDGET_FINDING_CODES.forecastOver) : blockingFindings
   const saveWithheld = stillBlocking.length > 0 || (refusedOnBudget && !emergencyReady)
-  // The standing sentence under a Blocking finding is said in the budget's own words when the budget is the ONLY thing blocking; any other blocking finding keeps the roster's generic sentence.
+  // The standing sentence under a Blocking finding is in the budget's words when only the budget blocks, in the double-booking's words when only a double-booking blocks; any other mix keeps the roster's generic sentence.
   const blockingAnswered = emergencyActive && stillBlocking.length === 0
   const blockingSentence = blockingFindings.length > 0 && blockingFindings.every(f => f.code === BUDGET_FINDING_CODES.forecastOver) ? BUDGET_REFUSAL_SENTENCE
     : blockedOnlyByDoubleBooking(blockingFindings) ? DOUBLE_BOOKED_REFUSAL_SENTENCE : undefined
