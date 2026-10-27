@@ -25,9 +25,21 @@ beforeEach(() => {
 afterEach(() => { offlineQueue.wipeAll(); vi.restoreAllMocks() })
 
 describe('SyncRow', () => {
-  it('renders nothing when nothing is unsent', () => {
+  it('idle: only an empty, visually hidden status stays mounted', () => {
     const { container } = view()
-    expect(container).toBeEmptyDOMElement()
+    expect(screen.getByRole('status')).toBeEmptyDOMElement()
+    expect(container.querySelector('[data-sync-row]')).toHaveClass('sr-only')
+  })
+
+  it('discarding the last Not sent item with nothing waiting keeps the list open: "Nothing left here." and focus on Close', () => {
+    seed(record('r1', 'notSent'))
+    view()
+    fireEvent.click(screen.getByRole('button', { name: 'Review' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
+    fireEvent.click(within(screen.getByRole('alertdialog', { name: 'Discard this note?' })).getByRole('button', { name: 'Discard' }))
+    const dialog = screen.getByRole('dialog', { name: 'Not sent' })
+    expect(within(dialog).getByText('Nothing left here.')).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'Close' })).toHaveFocus()
   })
 
   it('waiting: counts the changes and Send now replays the queue', () => {
@@ -72,8 +84,8 @@ describe('SyncRow', () => {
   })
 
   it('a SyncBar is a labelled region only while there is something to say', () => {
-    const { container, unmount } = view(<SyncBar />)
-    expect(container).toBeEmptyDOMElement()
+    const { unmount } = view(<SyncBar />)
+    expect(screen.queryByRole('region', { name: 'Sending' })).toBeNull()
     unmount()
     seed(record('r1'))
     view(<SyncBar />)

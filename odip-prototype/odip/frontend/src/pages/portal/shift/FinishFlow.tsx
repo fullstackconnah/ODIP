@@ -35,8 +35,8 @@ function openDraft(shift: PortalShiftDetailDto): { draft: EndDraft; breaksChange
 
 function blockedDoseMessage(doses: ReturnType<typeof offlineDueDoses>): string {
   const name = (d: (typeof doses)[number]) => `${d.medicationName}${d.strength ? ` ${d.strength}` : ''}`
-  if (doses.length === 1) return `${name(doses[0])} was due at ${clockLabel(doses[0].scheduledAt)} with no outcome recorded, and recording a dose needs a connection. When you're back online, record it, then finish.`
-  return `${doses.length} doses are due with no outcome recorded: ${joinList(doses.map(d => `${name(d)} (${clockLabel(d.scheduledAt)})`))}. Recording a dose needs a connection. When you're back online, record them, then finish.`
+  if (doses.length === 1) return `${name(doses[0])} was due at ${clockLabel(doses[0].scheduledAt)} with no outcome recorded, and recording a dose needs a connection. When you're back online, record it, then finish. What you've entered is kept.`
+  return `${doses.length} doses are due with no outcome recorded: ${joinList(doses.map(d => `${name(d)} (${clockLabel(d.scheduledAt)})`))}. Recording a dose needs a connection. When you're back online, record them, then finish. What you've entered is kept.`
 }
 
 /**

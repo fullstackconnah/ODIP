@@ -171,8 +171,8 @@ describe('CompletionReviewPage', () => {
     mockUseCompletion.mockReturnValue({ data: makeCompletionDetail({ sentFromOffline: true, submittedAt: '2026-09-08T04:41:00Z' }) })
     const { unmount } = renderPage()
     await user.click(screen.getByRole('button', { name: /^approve jack o'sullivan with liam okafor on /i }))
-    const marker = screen.getByText('Sent from offline')
-    expect(marker).toHaveAttribute('title', "Recorded on the worker's phone without a connection and sent at 2:41 pm")
+    expect(screen.getByText('Sent from offline')).toBeInTheDocument()
+    expect(screen.getByText('Reached Bunya Support 2:41 pm')).toBeInTheDocument()
     unmount()
 
     mockUseCompletion.mockReturnValue({ data: makeCompletionDetail({ sentFromOffline: false }) })

@@ -104,10 +104,10 @@ public static class WhatsNewSeed
             "On your phone, you can add Bunya Support to your home screen and open it like an app. After you sign in, look for the card above the menu bar.",
             WhatsNewAudience.All, false),
         new Item("2026-10-offline-shifts", "Your shifts work without signal",
-            "If you lose signal, you can still start your shift, write notes, take breaks, tick routines and finish. Bunya Support saves them on your phone and sends them when you're back online. Medication still needs a connection.",
+            "Today's shifts in My shifts keep working if you lose signal: you can start the shift, write notes, take breaks, tick routines and finish. Bunya Support saves them on your phone and sends them when you're back online. Recording a dose still needs a connection.",
             WhatsNewAudience.SupportWorker, false),
         new Item("2026-10-offline-review-marker", "See which shifts were sent from offline",
-            "When a support worker finished a shift without signal, the review shows \"Sent from offline\" and when it reached Bunya Support. Times are the ones the worker recorded on their phone.",
+            "On Completions, a shift a support worker finished without signal shows \"Sent from offline\" and when it reached Bunya Support. Its times are the ones the worker recorded on their phone.",
             Staff, false),
     };
 

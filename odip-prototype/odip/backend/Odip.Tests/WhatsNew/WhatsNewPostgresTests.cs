@@ -162,7 +162,7 @@ public class WhatsNewPostgresTests : IClassFixture<PostgresFixture>
 
         await using var read = PostgresFixture.NewContext(cs);
         var feed = Feed(await WithCaller(new WhatsNewController(read), userId, "Admin").GetFeed(CancellationToken.None));
-        Assert.Equal(WhatsNewSeed.All.Select(i => i.Title).Reverse(), feed.Entries.Select(e => e.Title));
+        Assert.Equal(WhatsNewSeed.All.Where(i => (i.Roles & WhatsNewAudience.Admin) != 0).Select(i => i.Title).Reverse(), feed.Entries.Select(e => e.Title)); // the Admin sees every entry whose audience includes Admin; a SupportWorker-only entry is not theirs
 
         // A role none of the Admin/Coordinator-only entries targets still gets the entries for everyone, via a bitwise filter; derived from the seed so new All entries do not break it.
         var audience = WhatsNewAudience.SupportWorker;

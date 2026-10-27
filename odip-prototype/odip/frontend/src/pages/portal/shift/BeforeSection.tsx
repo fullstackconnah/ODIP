@@ -59,7 +59,7 @@ function Handover({ shift, canAct }: { shift: PortalShiftDetailDto; canAct: bool
       {handover.requiresAcknowledgement && (handover.isRead ? (
         <p className="text-sm font-medium">
           Read{handover.readAt ? ` ${formatWithTimeZone(handover.readAt, shift.timeZoneId, { dateStyle: 'medium', timeStyle: 'short' })}` : ''}
-          {ackWaiting && <> &middot; <WaitingToSend /></>}
+          {ackWaiting && <span className="whitespace-nowrap">&nbsp;&middot;&nbsp;<WaitingToSend /></span>}
         </p>
       ) : canAct && (
         <Button variant="secondary" size="lg" onClick={markRead} disabled={ack.isPending}>

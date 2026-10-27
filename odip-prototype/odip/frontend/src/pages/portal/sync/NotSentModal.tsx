@@ -5,13 +5,13 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Modal } from '@/components/Modal'
 import { useQueueRecords } from '@/api/hooks/portal'
 import { offlineQueue, type QueueRecord } from '@/lib/offline/queue'
-import { clockTime, reasonFor } from '@/lib/offline/reasons'
+import { clockTime, reasonFor, recordedLine } from '@/lib/offline/reasons'
 
 const KIND: Record<QueueRecord['kind'], string> = { start: 'Start', note: 'Note', breakStart: 'Break', breakEnd: 'Break', tick: 'Check', untick: 'Check', ack: 'Handover read', finish: 'Finish' }
 const NOUN: Record<QueueRecord['kind'], string> = { start: 'start', note: 'note', breakStart: 'break', breakEnd: 'break', tick: 'check', untick: 'check', ack: 'handover read', finish: 'Finish' }
 
 const dayLabel = (serviceDate: string) =>
-  new Intl.DateTimeFormat('en-AU', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${serviceDate.slice(0, 10)}T00:00:00Z`))
+  new Intl.DateTimeFormat('en-AU', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${serviceDate.slice(0, 10)}T00:00:00Z`)).replace(',', '')
 
 const kindLine = (r: QueueRecord) => (r.kind === 'tick' || r.kind === 'untick' ? `Check: ${r.label.routine ?? 'routine'}` : KIND[r.kind])
 
@@ -82,7 +82,7 @@ export function NotSentModal({ open, onClose }: { open: boolean; onClose: () => 
                       <li key={r.id} className="rounded-[var(--radius-sm)] border border-[var(--color-border)] p-3 space-y-1">
                         <p className="text-sm font-medium">{kindLine(r)}</p>
                         <Content r={r} />
-                        <p className="text-xs text-[var(--color-muted-foreground)]">Recorded on this phone at {clockTime(r.clientTime)}</p>
+                        <p className="text-xs text-[var(--color-muted-foreground)]">{recordedLine(r.clientTime)}</p>
                         <p className="text-sm">{reasonFor(r)}</p>
                         <div className="flex flex-wrap gap-2 pt-1">
                           <Button variant="ghost-danger" size="sm" data-discard-id={r.id} onClick={() => setDiscarding(r)}>Discard</Button>

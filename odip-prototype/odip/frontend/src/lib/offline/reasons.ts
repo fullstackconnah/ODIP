@@ -11,7 +11,7 @@ export function reasonFor(rec: QueueRecord, ctx: { returnCount?: number } = {}):
   const { httpStatus: status, code } = rec
   const at = clockTime(rec.clientTime)
   if (code && CLIENT_TIME_CODES.includes(code)) return `The time on this phone (${at}) is outside what Bunya Support accepts, for example if the phone's clock was wrong. Tell your coordinator the real time.`
-  if (code === 'SHIFT_CLIENT_TIME_TOO_OLD') return `This was recorded more than 48 hours ago (${at}), which is too old for Bunya Support to accept. Tell your coordinator the real time.`
+  if (code === 'SHIFT_CLIENT_TIME_TOO_OLD') return 'This was recorded more than 48 hours before this phone could send it, which is too old for Bunya Support to accept. Tell your coordinator what happened and when.'
   if (code === 'SHIFT_FINISH_BLOCKED') {
     return rec.blockers?.includes('BREAK_RUNNING')
       ? "Finish wasn't sent: a break is still running. End it on the shift, then try again."
@@ -41,4 +41,15 @@ export function savedLine(savedAt: number, now = Date.now()): string {
   if (day(savedAt) === day(now - 86_400_000)) return `Shift details saved yesterday at ${time}.`
   const when = new Date(savedAt).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })
   return `Shift details saved ${when} at ${time}.`
+}
+
+/** "Recorded on this phone at 1:00 pm" / "…yesterday at…" / "…on Tue 20 Oct at…" (Not sent list); the day logic of savedLine. */
+export function recordedLine(iso: string, now = Date.now()): string {
+  const day = (t: number) => new Date(t).toDateString()
+  const at = new Date(iso).getTime()
+  const time = clockTime(iso)
+  if (day(at) === day(now)) return `Recorded on this phone at ${time}`
+  if (day(at) === day(now - 86_400_000)) return `Recorded on this phone yesterday at ${time}`
+  const when = new Date(at).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' }).replace(',', '')
+  return `Recorded on this phone on ${when} at ${time}`
 }

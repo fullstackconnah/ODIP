@@ -104,12 +104,10 @@ function WorkerAnswers({ c }: { c: ShiftCompletionDto }) {
   return (
     <div className="space-y-1">
       {c.sentFromOffline && (
-        <span
-          className={`inline-block text-xs px-2 py-0.5 rounded-full ${TONE.neutral.solid}`}
-          title={`Recorded on the worker's phone without a connection${c.submittedAt ? ` and sent at ${t(c.submittedAt)}` : ''}`}
-        >
-          Sent from offline
-        </span>
+        <div>
+          <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${TONE.neutral.solid}`}>Sent from offline</span>
+          {c.submittedAt && <span className="ml-2 text-xs text-[var(--color-muted-foreground)]">Reached Bunya Support {t(c.submittedAt)}</span>}
+        </div>
       )}
       {lines.length > 0 && <ul className="space-y-0.5 text-xs">{lines.map(line => <li key={line}>{line}</li>)}</ul>}
     </div>

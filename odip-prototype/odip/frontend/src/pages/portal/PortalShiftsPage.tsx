@@ -94,7 +94,7 @@ function ShiftLink({ shift }: { shift: PortalShiftSummaryDto }) {
           )}
         </div>
       </div>
-      {!openable && <p className="mt-2 text-sm text-[var(--color-muted-foreground)]">Needs a connection to open</p>}
+      {!openable && <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">Needs a connection to open</p>}
     </>
   )
   return openable
@@ -199,7 +199,7 @@ export default function PortalShiftsPage() {
       {current && <CurrentShiftCard shift={current} />}
 
       {!online && weekSavedAt !== null && (
-        <Callout tone="info" icon={WifiOff} polite>
+        <Callout tone="info" icon={WifiOff} polite title="You're offline">
           These are your shifts as saved at {clockTime(new Date(weekSavedAt).toISOString())}. Only today&rsquo;s shifts can be opened until you&rsquo;re back online.
         </Callout>
       )}

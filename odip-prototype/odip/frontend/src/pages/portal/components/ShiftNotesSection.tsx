@@ -231,8 +231,9 @@ export function ShiftNotesSection({
                 <>
                   <div className="flex items-start justify-between gap-2">
                     <p className="text-xs text-[var(--color-muted-foreground)]">
-                      <span className="font-medium text-[var(--color-foreground)]">{(note as QueuedNote).waiting ? 'You' : note.authorName}</span> · {formatNoteTimestamp(note.createdAt)}{(note as QueuedNote).waiting && <> · <WaitingToSend /></>}
+                      <span className="font-medium text-[var(--color-foreground)]">{(note as QueuedNote).waiting ? 'You' : note.authorName}</span> · {formatNoteTimestamp(note.createdAt)}
                       {note.updatedAt > note.createdAt && ` · edited ${formatNoteTimestamp(note.updatedAt)}`}
+                      {(note as QueuedNote).waiting && <span className="block mt-0.5"><WaitingToSend /></span>}
                     </p>
                     {note.authorUserId === currentUserId && !online && !(note as QueuedNote).waiting && (
                       <span className="shrink-0 text-xs text-[var(--color-muted-foreground)]">Editing a sent note needs a connection.</span>

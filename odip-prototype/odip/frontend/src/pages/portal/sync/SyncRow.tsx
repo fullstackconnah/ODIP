@@ -10,11 +10,12 @@ import { useSyncSummary } from './syncState'
 /**
  * The first row of the sticky action bar (SHAPE 4a/4b): how many changes are waiting on this phone, with Send now, or the ones Bunya Support did not accept, with Review.
  * Neutral tone throughout; the count is in a status region so a change is announced politely.
+ * Always mounted: the status span must exist before its text arrives to be announced, and the Not sent list (a child) must not unmount when the
+ * last item is discarded. Idle, only the empty status span is left, visually hidden.
  */
 export function SyncRow() {
   const s = useSyncSummary()
   const [reviewing, setReviewing] = useState(false)
-  if (s.state === 'idle') return null
   const send = () => { void offlineQueue.replay() }
   let icon = <CloudUpload className="size-4 shrink-0" aria-hidden="true" />
   let text = ''
@@ -27,19 +28,23 @@ export function SyncRow() {
     text = `Sending ${plural(s.waiting, 'change')}…`
     action = <Button variant="secondary" size="md" className="shrink-0 whitespace-nowrap" disabled>Send now</Button>
   } else if (s.state === 'allSent') {
-    icon = <CheckCircle2 className="size-4 shrink-0" aria-hidden="true" />
+    icon = <CheckCircle2 className="size-4 shrink-0 text-[var(--color-primary)]" aria-hidden="true" />
     text = `All sent at ${clockTime(new Date(s.at).toISOString())}`
-  } else {
+  } else if (s.state === 'notSent') {
     icon = <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
     text = `${s.notSent} not sent${s.waiting > 0 ? ` · ${s.waiting} waiting` : ''}`
     action = <Button variant="secondary" size="md" className="shrink-0 whitespace-nowrap" onClick={() => setReviewing(true)}>Review</Button>
   }
+  const idle = s.state === 'idle'
   return (
-    <div data-sync-row className="flex items-center gap-3 basis-full min-h-[var(--control-h)] text-[var(--color-foreground)]">
-      {icon}
-      <span role="status" className="flex-1 text-sm line-clamp-2">{text}</span>
-      {action}
+    <>
+      <div data-sync-row className={idle ? 'sr-only' : 'flex items-center gap-3 basis-full min-h-[var(--control-h)] text-[var(--color-foreground)]'}>
+        {!idle && icon}
+        <span role="status" className="flex-1 text-sm line-clamp-2">{text}</span>
+        {action}
+      </div>
+      {/* Outside the row: its sr-only clip would otherwise clip the fixed modal. */}
       {reviewing && <NotSentModal open onClose={() => setReviewing(false)} />}
-    </div>
+    </>
   )
 }

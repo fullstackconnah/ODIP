@@ -67,7 +67,7 @@ describe('PortalShiftsPage', () => {
     mockUseMyShifts.mockReturnValue({ data: undefined, isLoading: true, isError: false })
     renderPage()
 
-    expect(screen.getByRole('status')).toHaveTextContent(/loading your shifts/i)
+    expect(screen.getByText(/loading your shifts/i).closest('[role="status"]')).not.toBeNull()
     expect(screen.queryByText(/nothing rostered this week/i)).not.toBeInTheDocument()
   })
 

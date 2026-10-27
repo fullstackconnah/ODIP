@@ -6,7 +6,7 @@ import { usePortalShiftDetail, useShiftNotes, useStartShift, useStartBreak, useE
 import { useQueueRecords, savedAtFor } from '@/api/hooks/portal'
 import { waitingBreak, waitingKind } from '@/lib/offline/overlay'
 import { offlineQueue } from '@/lib/offline/queue'
-import { clockTime, savedLine } from '@/lib/offline/reasons'
+import { savedLine } from '@/lib/offline/reasons'
 import { usePermissions } from '@/lib/permissions'
 import { StatusBadge } from '@/components/StatusBadge'
 import { BackButton } from '@/components/BackButton'
@@ -403,7 +403,7 @@ export default function PortalShiftDetailPage() {
             {`${formatShiftTimeRange(shift.startTime, shift.endTime)}${shift.endsNextDay ? ' (+1 day)' : ''}`}
             {shift.ratio !== 'OneToOne' && (RATIO_LABELS[shift.ratio] ?? shift.ratio)}
             {shift.nightType !== 'None' && `Overnight: ${shift.nightType}`}
-            {startedWaiting && <>Started {clockTime(startedWaiting.clientTime)}&nbsp;<WaitingToSend /></>}
+            {startedWaiting && <>Started {clock(startedWaiting.clientTime, tz)}&nbsp;<WaitingToSend /></>}
             {running && <>{`On a break since ${clock(running.startedAt, tz)}`}{waitingBreak(queued, shift.id, running.id) && <>&nbsp;<WaitingToSend /></>}</>}
           </PageHeaderMeta>
         }
