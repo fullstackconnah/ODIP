@@ -292,9 +292,6 @@ public class ServiceAgreementDraftsController : ControllerBase
         HorizonEnd = approval.HorizonEnd, FirstShiftDate = approval.FirstShiftDate,
     };
 
-    /// <summary>What a line adds up to: the engine's total for a line it generated, hours times unit price floored to the cent for one typed by hand.</summary>
-    private static decimal LineTotal(ServiceAgreementDraftLine x) => x.Total ?? Math.Floor(x.Hours * x.UnitPrice * 100m) / 100m;
-
     /// <summary>The revision without its blocks, lines and answer: who, when, which template, and what it came to.</summary>
     private static ServiceAgreementDraftDto Header(ServiceAgreementDraft draft, int blockCount) => new()
     {
@@ -303,7 +300,7 @@ public class ServiceAgreementDraftsController : ControllerBase
         TemplateDocxSha256 = ProvisionalAgreementTemplate.DocxSha256, TemplatePdfSha256 = ProvisionalAgreementTemplate.PdfSha256,
         PlanStartDate = draft.PlanStartDate, PlanEndDate = draft.PlanEndDate, Representative = draft.Representative,
         AgreementStartDate = draft.AgreementStartDate, AgreementEndDate = draft.AgreementEndDate,
-        BlockCount = blockCount, LineCount = draft.Lines.Count, Total = draft.Lines.Sum(LineTotal), Caveats = DraftPricingCaveats.For(draft).ToList(),
+        BlockCount = blockCount, LineCount = draft.Lines.Count, Total = draft.Lines.Sum(l => AgreementPriceLists.LineTotal(l)), PriceList = AgreementPriceLists.VersionOf(draft.Lines.Select(l => (l.CatalogueVersion, l.CatalogueEffectiveFrom))), Caveats = DraftPricingCaveats.For(draft).ToList(),
     };
 
     private static ServiceAgreementDraftDto ToSummary(ServiceAgreementDraft draft, int blockCount) => Header(draft, blockCount) with { IsSummary = true };
@@ -317,7 +314,7 @@ public class ServiceAgreementDraftsController : ControllerBase
             ServiceType = x.ServiceType, Hours = x.Hours, ItemCode = x.ItemCode, UnitPrice = x.UnitPrice, CatalogueVersion = x.CatalogueVersion,
             CatalogueEffectiveFrom = x.CatalogueEffectiveFrom, CatalogueEffectiveTo = x.CatalogueEffectiveTo,
             BlockId = x.BlockKey, Band = x.Band, Unit = x.Unit, Occurrences = x.Occurrences, Flags = (PlannedLineFlags)x.Flags,
-            Total = LineTotal(x),
+            Total = AgreementPriceLists.LineTotal(x),
         }).ToList(),
     };
 }

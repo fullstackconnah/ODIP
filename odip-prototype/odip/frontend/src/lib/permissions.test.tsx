@@ -327,7 +327,7 @@ describe('usePermissions.canAccessPage — ReadOnly', () => {
   })
 
   // Each of these sits behind a controller that admits only SuperAdmin, Admin and Coordinator, reads included: see READ_ONLY_REFUSED_PAGES.
-  const REFUSED: PageKey[] = ['rostering', 'leave-approvals', 'claims', 'settings', 'caregiver-submissions', 'agreement-drafts', 'budgets']
+  const REFUSED: PageKey[] = ['rostering', 'leave-approvals', 'claims', 'settings', 'caregiver-submissions', 'agreement-drafts', 'budgets', 'agreements']
   const ALLOWED: PageKey[] = [
     'dashboard', 'portal', 'portal-leave', 'trips', 'schedule', 'participants', 'accommodation', 'vehicles', 'staff', 'tasks', 'incidents', 'bookings',
     'qualifications', 'medications',
@@ -447,6 +447,7 @@ describe('PrivateRoute — pages ReadOnly is refused', () => {
     ['/caregiver-submissions', 'caregiver-submissions', true],
     ['/participants/p-1/agreement-draft', 'agreement-drafts', false],
     ['/budgets', 'budgets', false],
+    ['/agreements', 'agreements', false],
   ])('sends ReadOnly away from %s, and still admits a Coordinator', (path, page, requiresWrite) => {
     const { unmount } = renderGuarded('ReadOnly', path, { page, requiresWrite })
     expect(screen.getByText('Redirected')).toBeInTheDocument()

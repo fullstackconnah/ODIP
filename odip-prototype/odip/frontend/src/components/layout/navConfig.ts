@@ -114,6 +114,8 @@ export const navItems: NavEntry[] = [
     bar: { order: 4 },
     children: [
       { to: '/participants', label: 'Participants', msIcon: 'group', page: 'participants', matchActive: participantsHubActive },
+      // Every service agreement across participants, with bulk approve: it changes the roster, so it needs the same role as the register's lifecycle actions. Same page key rule: ReadOnly and SupportWorker are refused.
+      { to: '/agreements', label: 'Agreements', msIcon: 'verified', page: 'agreements', requiresParticipantLifecycleMutation: true },
       { to: '/medications', label: 'Medications', msIcon: 'pill', page: 'medications' },
       // cg04: the review pages are behind `requiresWrite` in App.tsx (so a SupportWorker would be bounced), and the API behind them admits
       // only the three management roles (so ReadOnly would get a 403): its own page key keeps both out of the menu and the route.

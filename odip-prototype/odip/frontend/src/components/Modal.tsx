@@ -22,6 +22,8 @@ export type ModalProps = {
   role?: 'dialog' | 'alertdialog'
   /** The control that takes focus on open, in place of the first focusable one. A prompt with a safe answer ("Keep editing") points it there. */
   initialFocusRef?: RefObject<HTMLElement | null>
+  /** No close button: for a dialog that cannot be dismissed while a write is in flight (the caller also makes `onClose` do nothing). */
+  hideClose?: boolean
 }
 
 const SIZE_MAP = {
@@ -31,7 +33,7 @@ const SIZE_MAP = {
   xl: 'max-w-4xl',
 }
 
-export function Modal({ open, onClose, title, size = 'md', footer, children, className, closeOnBackdrop = true, stickyFooter = false, role = 'dialog', initialFocusRef }: ModalProps) {
+export function Modal({ open, onClose, title, size = 'md', footer, children, className, closeOnBackdrop = true, stickyFooter = false, role = 'dialog', initialFocusRef, hideClose = false }: ModalProps) {
   const titleId = useId()
   const descriptionId = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
@@ -61,9 +63,9 @@ export function Modal({ open, onClose, title, size = 'md', footer, children, cla
           {/* type="button": the dialog renders inline, so when it is opened from inside a <form> (the Profile
               wizard's embedded Contacts editor) an untyped close button would SUBMIT that form. TAP_AREA: the 28px
               button keeps its look and gets a 44px hit area on touch (R1-07). */}
-          <button type="button" onClick={onClose} aria-label="Close dialog" className={`${TAP_AREA} p-1 hover:bg-[var(--color-accent)] rounded-lg`}>
+          {!hideClose && <button type="button" onClick={onClose} aria-label="Close dialog" className={`${TAP_AREA} p-1 hover:bg-[var(--color-accent)] rounded-lg`}>
             <X className="w-5 h-5" />
-          </button>
+          </button>}
         </div>
         <div id={descriptionId}>{children}</div>
         {footer && (
