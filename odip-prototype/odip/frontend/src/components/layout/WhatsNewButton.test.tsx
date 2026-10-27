@@ -218,3 +218,10 @@ describe('WhatsNewButton: the states (V-B7)', () => {
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
   })
 })
+
+describe('WhatsNewButton: focus ring', () => {
+  it('carries the house keyboard focus ring', async () => {
+    renderButton()
+    expect(button()).toHaveClass('focus-visible:ring-2', 'focus-visible:ring-[var(--color-ring)]')
+  })
+})
