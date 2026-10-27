@@ -78,6 +78,7 @@ public static class WhatsNewSeed
             Staff, false),
         new Item("2026-10-unsaved-prompt-clear-of-nav", "Unsaved changes prompt fits phones",
             "On a phone, the \"unsaved changes\" prompt no longer sits under the bottom menu.",
+            WhatsNewAudience.All, false),
         new Item("2026-10-notices-one-look", "Warnings look the same everywhere",
             "Warning and error notices on participant pages, intake, the caregiver form and the roster panels now share one look, with an icon.",
             WhatsNewAudience.All, false),
