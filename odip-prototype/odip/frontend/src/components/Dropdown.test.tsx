@@ -58,7 +58,9 @@ describe('Dropdown — 44px coarse-pointer hit area on the compact triggers', ()
 
   // The panel scrolls past 320px, so a keyboard open on a far-down chosen row, and each arrow press, must bring the active row into view.
   it('scrolls the keyboard-active row into view on open and on ArrowDown', async () => {
-    const scrollIntoView = vi.fn()
+    // Record the panel's position at call time: scrolling while it is still static at the end of body scrolls the WINDOW.
+    const positions: string[] = []
+    const scrollIntoView = vi.fn(() => { positions.push(screen.getByRole('listbox').style.position) })
     const original = Element.prototype.scrollIntoView
     Element.prototype.scrollIntoView = scrollIntoView
     try {
@@ -69,8 +71,18 @@ describe('Dropdown — 44px coarse-pointer hit area on the compact triggers', ()
       await user.keyboard('{Enter}')
       expect(scrollIntoView.mock.contexts.at(-1)).toBe(document.getElementById('dd-opt-v30'))
       expect(scrollIntoView).toHaveBeenLastCalledWith({ block: 'nearest' })
+      expect(positions).toEqual(['fixed'])
       await user.keyboard('{ArrowDown}')
       expect(scrollIntoView.mock.contexts.at(-1)).toBe(document.getElementById('dd-opt-v31'))
+      expect(positions).toEqual(['fixed', 'fixed'])
+      // Close and reopen: the panel is positioned afresh and the scroll still waits for it.
+      await user.keyboard('{Escape}')
+      scrollIntoView.mockClear()
+      positions.length = 0
+      await user.keyboard('{Enter}')
+      expect(scrollIntoView).toHaveBeenCalledTimes(1)
+      expect(scrollIntoView.mock.contexts.at(-1)).toBe(document.getElementById('dd-opt-v30'))
+      expect(positions.every(p => p === 'fixed')).toBe(true)
     } finally {
       Element.prototype.scrollIntoView = original
     }

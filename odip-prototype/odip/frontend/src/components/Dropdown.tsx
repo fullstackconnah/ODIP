@@ -167,16 +167,20 @@ export function Dropdown({
     }
   }, [open, searchable])
 
-  // Reset search query when panel closes
+  // Reset search query and position when panel closes (the panel unmounts, so no exit transition to flash): the next open positions first, then scrolls.
   useEffect(() => {
-    if (!open) setSearchQuery('')
+    if (!open) {
+      setSearchQuery('')
+      setPanelStyle({})
+    }
   }, [open])
 
   // The panel scrolls past maxPanelHeight: keep the active row in view (a no-op when it already is, so hover is harmless). jsdom lacks scrollIntoView.
   useEffect(() => {
-    if (!open || focusedIndex < 0) return
+    // Wait for the position: scrolling while the panel is still static at the end of body scrolls the window.
+    if (!open || focusedIndex < 0 || panelStyle.position !== 'fixed') return
     panelRef.current?.querySelectorAll('[role="option"]')[focusedIndex]?.scrollIntoView?.({ block: 'nearest' })
-  }, [open, focusedIndex])
+  }, [open, focusedIndex, panelStyle.position])
 
   // Reset focusedIndex when query changes
   useEffect(() => {
