@@ -253,7 +253,7 @@ function useInquiriesScreen() {
   const columns: Column<ParticipantInquiryDto>[] = [
     // wrap: a long name (W) takes two lines rather than widening the table past its box at 1440.
     { key: 'firstName', header: 'Participant', sortable: true, wrap: true, render: row => nameOf(row) },
-    { key: 'phone', header: 'Contact', render: row => <ContactCell row={row} className="md:max-[1439px]:max-w-36" /> },
+    { key: 'phone', header: 'Contact', render: row => <ContactCell row={row} className="md:max-[1440px]:max-w-36" /> },
     { key: 'source', header: 'Source', sortable: true, render: sourceLabel },
     {
       key: 'provenance',
@@ -263,7 +263,7 @@ function useInquiriesScreen() {
         if (!row.provenance) return <span>{text}</span>
         return (
           <span
-            className="block max-w-[8rem] md:max-[1439px]:max-w-20 truncate text-sm text-[var(--color-muted-foreground)]"
+            className="block max-w-[8rem] md:max-[1440px]:max-w-20 truncate text-sm text-[var(--color-muted-foreground)]"
             title={row.provenance}
           >
             {text}
@@ -286,7 +286,7 @@ function useInquiriesScreen() {
       key: 'id', header: 'Actions', type: 'custom', pin: 'end', wrap: true,
       render: row => canManageParticipantLifecycle ? (
         <div className="flex flex-col gap-1">
-          <div className={`flex flex-wrap whitespace-nowrap md:max-[1439px]:w-40 min-[1440px]:flex-nowrap items-center gap-2 ${ROW_ACTIONS_CARD}`}>
+          <div className={`flex flex-wrap whitespace-nowrap md:max-[1440px]:w-40 min-[1440px]:flex-nowrap items-center gap-2 ${ROW_ACTIONS_CARD}`}>
             {primaryAction(row)}
             {/* A direct intake has no enquiry record, so there is nothing to edit as one. On a booked row's phone card, Edit enquiry moves into More. */}
             {!row.isDirectIntake && (

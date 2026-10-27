@@ -24,3 +24,8 @@ Touch targets kept at 44 px on phone (not shrunk); spatial consistency (menu ope
 
 ## Addendum after the first measurement (before the second UI edit)
 The cherry-picked fix left the table 1100 px wide in a 1006 px box. Added: below 1440 Contact (12.5rem to 9rem) and Provenance (8rem to 5rem) truncate harder (full text stays in `title`); the one-row Actions threshold moves 1400 to 1440 because the table needs about 1166 px at 1440. The icon Dropdown panel is clamped 8 px inside the viewport when left-aligned (phone card menu ran off the right edge: right edge 454 of 390).
+
+## Addendum, fix round 2 (before the edit)
+Finish review found a dead band: in Tailwind v4 `max-[1439px]` is width < 1439 and `min-[1440px]` is width >= 1440, so at exactly 1439 (and fractional widths from 1439 to 1440 under zoom) neither rule applied and Contact, Provenance and Actions fell back to the wide composition by luck. Change the three `md:max-[1439px]` classes to `md:max-[1440px]` so the pair is complementary (< 1440 and >= 1440), same idiom as `max-md:` beside `md:`. States unchanged: 1440+ one-row Actions and no tighter caps; 1280, 1366 and 1400; the Closed table; the 390 phone menu. No new copy, colour, motion or component.
+DESIGN.md gets one sentence in the Column Rule: the Enquiries Open list wraps its Actions below 1440 instead of scrolling in its box, so rows reach about 118 px at 1280 (the one named exception to the Density Rule).
+apple-design rules applied: simplicity and consistency (one complementary breakpoint, no band where the layout is accidental); craft (every width resolves to a designed rule).

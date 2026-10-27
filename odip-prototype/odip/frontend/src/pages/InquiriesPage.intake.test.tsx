@@ -60,7 +60,7 @@ describe('the Intake column', () => {
     page()
 
     const cluster = screen.getByRole('button', { name: 'Start intake for Noah Fitzgerald' }).parentElement!
-    expect(cluster).toHaveClass('flex-wrap', 'whitespace-nowrap', 'md:max-[1439px]:w-40', 'min-[1440px]:flex-nowrap')
+    expect(cluster).toHaveClass('flex-wrap', 'whitespace-nowrap', 'md:max-[1440px]:w-40', 'min-[1440px]:flex-nowrap')
     expect(cluster.closest('td')).not.toHaveClass('md:whitespace-nowrap')
   })
 
