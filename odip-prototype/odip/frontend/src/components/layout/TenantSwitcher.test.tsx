@@ -167,3 +167,10 @@ describe('TenantSwitcher — label stays on one line in the header bar', () => {
     expect(label.className).toContain('min-[1400px]:max-w-[20rem]')
   })
 })
+
+describe('TenantSwitcher: focus ring', () => {
+  it('carries the house keyboard focus ring', () => {
+    render(<TenantSwitcher />)
+    expect(screen.getByRole('button', { name: /demo/i })).toHaveClass('focus-visible:ring-2', 'focus-visible:ring-[var(--color-ring)]')
+  })
+})

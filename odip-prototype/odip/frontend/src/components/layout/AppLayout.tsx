@@ -3,12 +3,13 @@ import { usePreviousAppPathTracker } from '@/hooks/useBackNavigation'
 import { useDialogBehavior } from '@/hooks/useDialogBehavior'
 import { useIsBelowLg } from '@/hooks/useIsBelowLg'
 import { LogOut, Menu, X, ChevronDown } from 'lucide-react'
-import { Suspense, useCallback, useId, useState, useRef } from 'react'
+import { Suspense, useCallback, useEffect, useId, useLayoutEffect, useState, useRef, type RefObject } from 'react'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import TenantSwitcher from '@/components/layout/TenantSwitcher'
 import UserSwitcher from '@/components/layout/UserSwitcher'
 import NotificationBell from '@/components/layout/NotificationBell'
 import WhatsNewButton from '@/components/layout/WhatsNewButton'
+import ThemeMenu from '@/components/layout/ThemeMenu'
 import { NavCountBadge } from '@/components/layout/NavCountBadge'
 import { navBadgeLabel } from '@/components/layout/navBadgeLabel'
 import PlatformFooter from '@/components/layout/PlatformFooter'
@@ -101,6 +102,7 @@ function SidebarLink({ leaf, nested = false, tabbable = true, rail, pathname, co
         aria-current={active ? 'page' : undefined}
         aria-label={leafBadgeLabel(leaf, counts)}
         onClick={onNavigate}
+        data-glide={leaf.to}
         className={`${RAIL_ITEM} ${active ? NAV_ACTIVE : NAV_IDLE}`}
         {...rail.tip(leaf.label, count)}
       >
@@ -116,11 +118,12 @@ function SidebarLink({ leaf, nested = false, tabbable = true, rail, pathname, co
       aria-current={active ? 'page' : undefined}
       aria-label={leafBadgeLabel(leaf, counts)}
       onClick={onNavigate}
+      data-glide={nested ? undefined : leaf.to}
       className={`flex items-center gap-3 ${nested ? 'pl-7 pr-3 h-7' : 'px-3 py-1.5'} min-h-[var(--tap-min)] rounded-md text-sm transition-colors duration-150 ${active ? NAV_ACTIVE : NAV_IDLE}`}
     >
       <span className="material-symbols-outlined shrink-0" aria-hidden="true" style={{ fontSize: '18px' }}>{leaf.msIcon}</span>
-      <span className="flex-1 truncate">{leaf.label}</span>
-      <NavCountBadge count={leafCount(leaf, counts)} />
+      <span data-fold="label" className="flex-1 truncate">{leaf.label}</span>
+      <NavCountBadge count={leafCount(leaf, counts)} fold />
     </Link>
   )
 }
@@ -150,16 +153,20 @@ function SidebarGroup({ group, leaves, open, onToggle, pathname, counts, onNavig
         aria-current={filled ? 'true' : undefined}
         aria-label={open ? undefined : navBadgeLabel(count, group.badgeNoun ?? 'item', group.label)}
         onClick={() => onToggle(group.id)}
+        data-glide={group.id}
         // One active signal: the open group's lit child. The header is lit only when closed over the current page (U3).
         className={`flex items-center w-full gap-3 px-3 py-1.5 min-h-[var(--tap-min)] rounded-md text-sm transition-colors duration-150 ${filled ? NAV_ACTIVE : NAV_IDLE}`}
       >
         <span className="material-symbols-outlined shrink-0" aria-hidden="true" style={{ fontSize: '18px' }}>{group.msIcon}</span>
-        <span className="flex-1 text-left truncate">{group.label}</span>
-        {!open && <NavCountBadge count={count} />}
-        <ChevronDown
-          aria-hidden="true"
-          className={`w-4 h-4 shrink-0 transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
-        />
+        <span data-fold="label" className="flex-1 text-left truncate">{group.label}</span>
+        {!open && <NavCountBadge count={count} fold />}
+        {/* The fold wrapper carries data-fold: its unlayered opacity transition would override the chevron's own transform transition. */}
+        <span data-fold="trail" className="inline-flex shrink-0">
+          <ChevronDown
+            aria-hidden="true"
+            className={`w-4 h-4 transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
+          />
+        </span>
       </button>
       <div
         id={panelId}
@@ -168,7 +175,7 @@ function SidebarGroup({ group, leaves, open, onToggle, pathname, counts, onNavig
           open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
         }`}
       >
-        <div className="min-h-0 space-y-0.5">
+        <div data-fold="label" className="min-h-0 space-y-0.5">
           {leaves.map(leaf => (
             <SidebarLink key={leaf.to} leaf={leaf} nested tabbable={open} pathname={pathname} counts={counts} onNavigate={onNavigate} />
           ))}
@@ -204,6 +211,7 @@ function RailGroup({ id, label, msIcon, noun, leaves, rail, pathname, counts, on
         aria-current={active ? 'true' : undefined}
         aria-label={navBadgeLabel(count, noun, label)}
         onClick={e => rail.toggleFlyout(id, e.currentTarget)}
+        data-glide={id}
         onKeyDown={e => {
           if (e.key !== 'ArrowDown') return
           e.preventDefault()
@@ -238,7 +246,7 @@ function RailGroup({ id, label, msIcon, noun, leaves, rail, pathname, counts, on
 /** The brand in the rail: the favicon's "b" on a primary tile. Not a link, like the wordmark; assistive tech still reads the name. */
 function BrandTile() {
   return (
-    <span className="inline-flex">
+    <span data-brand className="inline-flex origin-left">
       <span className="sr-only">Bunya Support</span>
       <svg aria-hidden="true" viewBox="0 0 32 32" className="size-8">
         <rect width="32" height="32" rx="8" style={{ fill: 'var(--color-primary)' }} />
@@ -300,6 +308,87 @@ function BottomBar({ items, moreActive, menuOpen, onOpenMenu }: {
   )
 }
 
+const GLIDE_EASE = 'cubic-bezier(0.2,0,0,1)'
+const FADE_EASE = 'cubic-bezier(0.16,1,0.3,1)'
+
+/**
+ * The sidebar's collapse motion ("the rail gathers"; DESIGN.md). Each lagged half of the layout (nav and brand, or the foot rows) flips
+ * through `flip`, which measures every `[data-glide]` first and, once React has committed the new shape, glides each one from where it
+ * was (FLIP, WAAPI transform). Expanding also fades the words and badges in behind the opening edge. The width and the content margin are
+ * CSS transitions and are never cancelled here, so a click mid-motion reverses from where things are. Without WAAPI (jsdom) nothing animates.
+ */
+function useSidebarGlide(
+  asideRef: RefObject<HTMLElement | null>,
+  navSaved: boolean,
+  footSaved: boolean,
+  setNav: (v: boolean) => void,
+  setFoot: (v: boolean) => void,
+  saved: boolean,
+) {
+  const current = useRef({ nav: saved, foot: saved })
+  const pending = useRef<{ rects: Map<string, DOMRect>; which: 'nav' | 'foot'; to: boolean } | null>(null)
+
+  /** Flip `which` half to `to` if it is not there already; `click` also cancels the fades a click interrupts. */
+  const flip = (which: 'nav' | 'foot', to: boolean, click: boolean) => {
+    const aside = asideRef.current
+    if (current.current[which] === to) return
+    current.current[which] = to
+    if (aside && typeof aside.getAnimations === 'function') {
+      const rects = new Map<string, DOMRect>()
+      aside.querySelectorAll<HTMLElement>('[data-glide]').forEach(el => rects.set(el.dataset.glide!, el.getBoundingClientRect()))
+      pending.current = { rects, which, to }
+      // Never cancel CSS transitions: that would snap the width and the margin.
+      for (const a of aside.getAnimations({ subtree: true })) if (a.id === 'sb-glide' || (click && a.id === 'sb-fade')) a.cancel()
+    }
+    if (which === 'nav') setNav(to)
+    else setFoot(to)
+  }
+  /** Reduced motion: both halves at once, nothing measured or animated. */
+  const instant = (to: boolean) => {
+    current.current = { nav: to, foot: to }
+    pending.current = null
+    setNav(to)
+    setFoot(to)
+  }
+
+  useLayoutEffect(() => {
+    const aside = asideRef.current
+    const p = pending.current
+    pending.current = null
+    if (!aside || !p || typeof aside.animate !== 'function') return
+    const ms = p.which === 'foot' && !p.to ? 60 : 100
+    aside.querySelectorAll<HTMLElement>('[data-glide]').forEach(el => {
+      const old = p.rects.get(el.dataset.glide!)
+      if (!old) return
+      const now = el.getBoundingClientRect()
+      const dx = old.left - now.left
+      const dy = old.top - now.top
+      if (dx || dy) el.animate([{ transform: `translate(${dx}px,${dy}px)` }, { transform: 'none' }], { id: 'sb-glide', duration: ms, easing: GLIDE_EASE })
+    })
+    const inZone = (el: Element) => (el.closest('[data-foot]') ? 'foot' : 'nav') === p.which
+    if (p.which === 'nav' && p.to) {
+      aside.querySelector<HTMLElement>('[data-brand]')?.animate(
+        [{ opacity: 0, transform: 'scale(0.8)' }, { opacity: 1, transform: 'none' }],
+        { id: 'sb-glide', duration: 100, easing: GLIDE_EASE, fill: 'backwards' },
+      )
+    }
+    if (!p.to) {
+      aside.querySelectorAll<HTMLElement>('[data-fold]').forEach(el => {
+        if (!inZone(el)) return
+        const label = el.dataset.fold === 'label'
+        const foot = p.which === 'foot'
+        el.animate([{ opacity: 0 }, { opacity: 1 }], {
+          id: 'sb-fade', easing: FADE_EASE, fill: 'backwards',
+          duration: label ? (foot ? 60 : 100) : 60,
+          delay: label ? (foot ? 0 : 20) : 90,
+        })
+      })
+    }
+  }, [navSaved, footSaved, asideRef])
+
+  return { flip, instant }
+}
+
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const drawerRef = useRef<HTMLElement>(null)
@@ -329,13 +418,18 @@ export default function AppLayout() {
   // Closed below lg the drawer is off screen: `inert` takes its links out of the Tab order and the accessibility tree.
   const drawerInert = isBelowLg && !drawerOpen
 
-  // The icon rail (from lg up only; the drawer always has wide rows). `collapsed` is the saved choice and drives the width at once;
-  // `railLayout` drives the item layout. It lags on the way in, so the labels are clipped by the shrinking edge rather than re-flowed
-  // into squares mid-slide, and switches on the aside's transitionend (or a timeout, since reduced motion and jsdom never fire it).
+  // The icon rail (from lg up only; the drawer always has wide rows). `collapsed` is the saved choice and drives the width at once.
+  // The item layout follows in two lagged halves, each by a timer (never transitionend, so reduced motion and jsdom need no path):
+  // `railLayout` (nav and brand) lags 80ms on the way in, so the words fade before the labels are re-laid-out as squares; `footRail`
+  // (Sign out, the toggle) lags 110ms on the way out, so the toggle stays a square until the edge has passed its wide focus ring.
+  // Every flip FLIPs the icons: measured before, glided from their old place after (see `useSidebarGlide`).
   const collapsed = prefs.sidebarCollapsed && !isBelowLg
   const [railLayoutSaved, setRailLayout] = useState(prefs.sidebarCollapsed)
+  const [footRailSaved, setFootRail] = useState(prefs.sidebarCollapsed)
   const railLayout = railLayoutSaved && !isBelowLg
+  const footRail = footRailSaved && !isBelowLg
   const settleTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const { flip, instant } = useSidebarGlide(drawerRef, railLayoutSaved, footRailSaved, setRailLayout, setFootRail, prefs.sidebarCollapsed)
   const railTip = useRailTooltip()
   const [openFlyout, setOpenFlyout] = useState<{ id: string; trigger: HTMLElement } | null>(null)
   // Stable between renders so RailFlyout's document listeners are not torn down and re-added on every parent render.
@@ -343,6 +437,7 @@ export default function AppLayout() {
     setOpenFlyout(null)
     if (focusTrigger) openFlyout?.trigger.focus()
   }, [openFlyout])
+  useEffect(() => () => clearTimeout(settleTimer.current), [])
   const hideTip = railTip.hide
   const toggleFlyout = useCallback((id: string, trigger: HTMLElement) => {
     hideTip()
@@ -356,9 +451,14 @@ export default function AppLayout() {
     closeFlyout(false)
     railTip.hide()
     clearTimeout(settleTimer.current)
-    const reduce = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    if (!next || reduce) setRailLayout(next)
-    else settleTimer.current = setTimeout(() => setRailLayout(true), 260)
+    if (typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) instant(next)
+    else if (next) {
+      flip('foot', true, true)
+      settleTimer.current = setTimeout(() => flip('nav', true, false), 80)
+    } else {
+      flip('nav', false, true)
+      settleTimer.current = setTimeout(() => flip('foot', false, false), 110)
+    }
   }
   const rail: RailContext | undefined = railLayout
     ? { tip: railTip.bind, flyout: openFlyout, toggleFlyout, closeFlyout }
@@ -440,13 +540,8 @@ export default function AppLayout() {
         aria-label={drawerOpen ? 'Main menu' : undefined}
         tabIndex={drawerOpen ? -1 : undefined}
         inert={drawerInert}
-        onTransitionEnd={e => {
-          if (e.target === e.currentTarget && e.propertyName === 'width') {
-            clearTimeout(settleTimer.current)
-            setRailLayout(prefs.sidebarCollapsed)
-          }
-        }}
-        className={`fixed inset-y-0 left-0 z-[60] lg:z-50 w-[232px] ${collapsed ? 'lg:w-16' : ''} overflow-hidden bg-[var(--color-sidebar)] transition-transform duration-200 lg:translate-x-0 lg:transition-[width] lg:ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:lg:transition-none ${
+        data-folding={collapsed && !railLayout ? '' : undefined}
+        className={`fixed inset-y-0 left-0 z-[60] lg:z-50 w-[232px] ${collapsed ? 'lg:w-16 lg:duration-[140ms]' : 'lg:duration-[160ms]'} overflow-hidden bg-[var(--color-sidebar)] transition-transform duration-200 lg:translate-x-0 lg:transition-[width] lg:ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:lg:transition-none ${
           drawerOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
       >
@@ -454,7 +549,7 @@ export default function AppLayout() {
         <div className={`flex h-full flex-col pt-3 pb-3 ${railLayout ? 'w-16 px-3 pointer-coarse:px-2.5' : 'w-[232px] px-3'}`}>
         {/* Brand — ~48px tall total */}
         <div className={`flex items-center h-12 shrink-0 ${railLayout ? 'justify-center' : 'px-2.5'}`}>
-          {railLayout ? <BrandTile /> : <Wordmark size={21} />}
+          {railLayout ? <BrandTile /> : <span data-fold="label" className="inline-flex"><Wordmark size={21} /></span>}
         </div>
 
         {/* Nav. In the rail it bleeds to the aside edges (and pads back), so the nav's scroll clip does not cut a count badge or a focus ring. Every item (group toggles, top-level links, group children, and "Sign Out" below) carries a
@@ -506,20 +601,21 @@ export default function AppLayout() {
           )}
           {otherWorkspaces.length > 0 && !rail && (
             <details open={otherWorkspaces.some(leaf => isLeafActive(leaf, location.pathname)) || undefined} className="mt-2">
-              <summary className={`cursor-pointer rounded-md px-3 py-1.5 min-h-[var(--tap-min)] text-sm ${NAV_IDLE}`}>Other workspaces</summary>
+              <summary data-glide="other" className={`cursor-pointer rounded-md px-3 py-1.5 min-h-[var(--tap-min)] text-sm ${NAV_IDLE}`}><span data-fold="label">Other workspaces</span></summary>
               {otherWorkspaces.map(leaf => <SidebarLink key={leaf.to} leaf={leaf} pathname={location.pathname} counts={counts} onNavigate={closeDrawer} />)}
             </details>
           )}
         </nav>
 
         {/* Bottom */}
-        <div className={`pt-2 shrink-0 ${rail ? 'space-y-0.5' : ''}`}>
+        <div data-foot className={`pt-2 shrink-0 ${footRail ? 'space-y-0.5' : ''}`}>
           <button onClick={() => endSession()}
-            className={`${rail ? RAIL_ITEM : WIDE_FOOT_ROW} text-[var(--color-secondary)] hover:bg-[var(--color-sidebar-accent)]`}
+            data-glide="signout"
+            className={`${footRail ? RAIL_ITEM : WIDE_FOOT_ROW} text-[var(--color-secondary)] hover:bg-[var(--color-sidebar-accent)]`}
             {...(rail ? rail.tip('Sign out', 0) : {})}>
             {/* The wide icon sits in an 18px slot so Sign out's label starts at x=54 like the nav labels. */}
-            {rail ? <LogOut className="w-4 h-4" /> : <span className="inline-flex w-[18px] justify-center"><LogOut className="w-4 h-4" /></span>}
-            {rail ? <span className="sr-only">Sign out</span> : 'Sign out'}
+            {footRail ? <LogOut className="w-4 h-4" /> : <span className="inline-flex w-[18px] justify-center"><LogOut className="w-4 h-4" /></span>}
+            {footRail ? <span className="sr-only">Sign out</span> : <span data-fold="label">Sign out</span>}
           </button>
           {/* Collapse / expand: one button in both states (it keeps its focus across the toggle), named for what it will do. */}
           {!isBelowLg && (
@@ -527,13 +623,14 @@ export default function AppLayout() {
               type="button"
               aria-controls="app-menu"
               onClick={toggleCollapsed}
-              className={`${rail ? RAIL_ITEM : WIDE_FOOT_ROW} text-[var(--color-secondary)] hover:bg-[var(--color-sidebar-accent)]`}
+              data-glide="toggle"
+              className={`${footRail ? RAIL_ITEM : WIDE_FOOT_ROW} text-[var(--color-secondary)] hover:bg-[var(--color-sidebar-accent)]`}
               {...(rail ? rail.tip('Expand sidebar', 0) : {})}
             >
               <span className="material-symbols-outlined shrink-0" aria-hidden="true" style={{ fontSize: '18px' }}>
                 {collapsed ? 'left_panel_open' : 'left_panel_close'}
               </span>
-              <span className={rail ? 'sr-only' : undefined}>{collapsed ? 'Expand sidebar' : 'Collapse sidebar'}</span>
+              <span className={footRail ? 'sr-only' : undefined} data-fold={footRail ? undefined : 'label'}>{collapsed ? 'Expand sidebar' : 'Collapse sidebar'}</span>
             </button>
           )}
         </div>
@@ -541,13 +638,13 @@ export default function AppLayout() {
       </aside>
 
       {/* Main area */}
-      <div className={`flex-1 min-w-0 ${collapsed ? 'lg:ml-16' : 'lg:ml-[232px]'} lg:transition-[margin-left] lg:duration-200 lg:ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:lg:transition-none flex flex-col min-h-screen`}>
+      <div className={`flex-1 min-w-0 ${collapsed ? 'lg:ml-16 lg:duration-[140ms]' : 'lg:ml-[232px] lg:duration-[160ms]'} lg:transition-[margin-left] lg:ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:lg:transition-none flex flex-col min-h-screen`}>
         {/* Top bar — fixed 48px */}
         <header className="sticky top-0 z-30 h-12 bg-[var(--color-background)]/80 backdrop-blur-xl shadow-[var(--shadow-hairline)]">
           <div className="flex items-center justify-between gap-2 h-full px-[var(--gutter,20px)]">
             <div className={`flex min-w-0 items-center gap-4 ${isSuperAdmin ? 'max-sm:gap-2' : ''}`}>
               <button
-                className="flex items-center justify-center lg:hidden shrink-0 p-2 pointer-coarse:size-[var(--tap-min)] pointer-coarse:p-0 rounded-md hover:bg-[var(--color-accent)] transition-colors"
+                className="flex items-center justify-center lg:hidden shrink-0 p-2 pointer-coarse:size-[var(--tap-min)] pointer-coarse:p-0 rounded-md hover:bg-[var(--color-accent)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
                 onClick={() => setSidebarOpen(!sidebarOpen)}
                 title={sidebarOpen ? 'Close menu' : 'Open menu'}
                 aria-label={sidebarOpen ? 'Close menu' : 'Open menu'}
@@ -569,6 +666,7 @@ export default function AppLayout() {
             <div className="flex shrink-0 items-center gap-3 max-lg:gap-2">
               {isSuperAdmin && <TenantSwitcher />}
               {isSuperAdmin && viewingTenantId && <UserSwitcher />}
+              <ThemeMenu />
               <WhatsNewButton />
               <NotificationBell />
               <div className="max-lg:hidden w-8 h-8 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] flex items-center justify-center text-[var(--color-primary-foreground)] font-bold text-sm shadow-md">

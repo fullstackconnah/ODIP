@@ -9,6 +9,7 @@ import { Plus, Trash2 } from 'lucide-react'
 import { FormField } from '@/components/FormField'
 import { TextAreaField } from '@/components/TextAreaField'
 import { Card } from '@/components/Card'
+import { Button } from '@/components/Button'
 import { Dropdown } from '@/components/Dropdown'
 import { Controller } from 'react-hook-form'
 import { AT_RISK_PARTIES } from '@/api/types/enums'
@@ -56,15 +57,9 @@ export function RisksHazardsStep({ control, register, errors, riskEntryFieldArra
                       )}
                     />
                   </FormField>
-                  <button
-                    type="button"
-                    onClick={() => removeRiskEntry(index)}
-                    aria-label={`Remove risk entry ${index + 1}`}
-                    title="Remove risk entry"
-                    className="mt-6 p-1.5 min-w-[var(--control-h)] min-h-[var(--control-h)] rounded-[var(--radius-sm)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-destructive)]/10 hover:text-[var(--color-destructive)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <Button variant="ghost-danger" iconOnly className="mt-7" onClick={() => removeRiskEntry(index)} aria-label={`Remove risk entry ${index + 1}`} title="Remove risk entry">
+                    <Trash2 className="w-4 h-4" aria-hidden />
+                  </Button>
                 </div>
                 <TextAreaField label="Description" required error={errors.riskEntries?.[index]?.description?.message} className="mb-0" id={`riskEntries.${index}.description`} {...register(`riskEntries.${index}.description`)} rows={2} placeholder="Describe the risk..." />
                 <TextAreaField label="Mitigation Notes" className="mb-0" id={`riskEntries.${index}.mitigationNotes`} {...register(`riskEntries.${index}.mitigationNotes`)} rows={2} placeholder="How this risk is mitigated (optional)..." />
@@ -72,13 +67,9 @@ export function RisksHazardsStep({ control, register, errors, riskEntryFieldArra
             ))}
           </div>
         )}
-        <button
-          type="button"
-          onClick={() => appendRiskEntry({ atRiskParty: 'Participant', description: '', mitigationNotes: '' })}
-          className="inline-flex items-center gap-1.5 h-[var(--control-h)] px-3 text-sm font-medium text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded-[var(--radius-sm)]"
-        >
-          <Plus className="w-4 h-4" /> Add risk entry
-        </button>
+        <Button variant="secondary" onClick={() => appendRiskEntry({ atRiskParty: 'Participant', description: '', mitigationNotes: '' })}>
+          <Plus className="w-4 h-4" aria-hidden /> Add risk entry
+        </Button>
       </Card>
     </div>
   )

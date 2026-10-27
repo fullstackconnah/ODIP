@@ -183,6 +183,16 @@ describe('PortalShiftsPage: the current shift leads (SHAPE §2)', () => {
   })
 
 
+  it('says "1 dose overdue" for a single overdue dose', () => {
+    const now = row({ id: 'shift-2', serviceDate: today, status: 'InProgress' })
+    answer([now], [now])
+    mockUsePortalShiftDetail.mockReturnValue({
+      data: { timeZoneId: 'Australia/Brisbane', breaks: [], completion: { actualStart: '2026-08-18T23:02:00Z' }, medicationsDue: [{ state: 'Overdue', outcome: null }, { state: 'Due', outcome: null }], handover: { requiresAcknowledgement: false, isRead: true } } as never,
+    })
+    renderPage()
+    expect(screen.getByText('1 dose overdue')).toBeInTheDocument()
+  })
+
   it("shows today's Rostered shift as Today with Open shift, and Continue finishing once a finish is under way", () => {
     const later = row({ id: 'shift-3', serviceDate: today, startTime: '15:00:00', endTime: '20:00:00' })
     answer([later], [later])

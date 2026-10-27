@@ -372,3 +372,23 @@ describe('BookingsTab — support ratio override labels', () => {
     expect(screen.queryByRole('option', { name: 'Shared' })).not.toBeInTheDocument()
   })
 })
+
+describe('BookingsTab — Add Booking field labels', () => {
+  it('names the booking fields so each label finds its control', async () => {
+    const user = userEvent.setup()
+    renderTab([], [])
+    await user.click(screen.getByRole('button', { name: /add participant/i }))
+    expect(screen.getByLabelText('Booking Notes')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Booking Status' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Support Ratio Override' })).toBeInTheDocument()
+  })
+
+  it('labels the Participant picker with the shared form label and marks it required', async () => {
+    const user = userEvent.setup()
+    renderTab([], [])
+    await user.click(screen.getByRole('button', { name: /add participant/i }))
+    const picker = screen.getByRole('combobox', { name: 'Participant *' })
+    expect(screen.getByText('Participant *')).toHaveAttribute('for', picker.id)
+    expect(picker).toHaveAttribute('aria-required', 'true')
+  })
+})

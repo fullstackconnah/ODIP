@@ -172,3 +172,31 @@ describe('AccommodationTab — dialogs', () => {
     expect(control).toHaveFocus()
   })
 })
+
+describe('AccommodationTab — form labels and cost', () => {
+  const trip = { startDate: '2026-10-10T00:00:00', endDate: '2026-10-14T00:00:00' } as TripDetailDto
+  const renderTab = (accommodation: ReservationDto[]) => render(
+    <MemoryRouter>
+      <AccommodationTab tripId="t1" trip={trip} accommodation={accommodation} canWrite />
+    </MemoryRouter>,
+  )
+
+  it('names the add-reservation fields, and marks the new property name required', async () => {
+    const user = userEvent.setup()
+    properties.length = 0
+    renderTab([])
+    await user.click(screen.getByRole('button', { name: 'Add Accommodation' }))
+    for (const label of ['Check-in', 'Check-out', 'Bedrooms', 'Beds', 'Cost', 'Comments']) {
+      expect(screen.getByLabelText(label)).toBeInTheDocument()
+    }
+    await user.click(screen.getByRole('button', { name: '+ Create new' }))
+    expect(screen.getByLabelText(/^Property Name/)).toBeRequired()
+  })
+
+  it('prints the cost and the cost per night as AUD currency', () => {
+    properties.length = 0
+    properties.push(property())
+    renderTab([reservation({ cost: 1250 })])
+    expect(screen.getAllByText('$1,250.00 ($312.50/night)').length).toBeGreaterThan(0)
+  })
+})

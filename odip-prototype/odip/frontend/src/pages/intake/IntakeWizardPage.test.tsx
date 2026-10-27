@@ -324,6 +324,22 @@ describe('IntakeWizardPage', () => {
     expect(primary).toBeChecked()
   })
 
+  it('names each Remove button by its row, and Remove drops that row (contacts and risk entries)', async () => {
+    const user = userEvent.setup()
+    renderPage('/participants/new')
+    await fillNameAndAdvance(user)
+    await user.click(screen.getByRole('button', { name: /^next$/i }))
+    await expectStep(/contacts/i)
+    await user.click(screen.getByRole('button', { name: /add contact/i }))
+    await user.click(screen.getByRole('button', { name: 'Remove contact 1' }))
+    expect(screen.queryByRole('button', { name: 'Remove contact 1' })).not.toBeInTheDocument()
+    for (let i = 0; i < 5; i++) await user.click(screen.getByRole('button', { name: /^next$/i }))
+    await expectStep(/risks & hazards/i)
+    await user.click(screen.getByRole('button', { name: /add risk entry/i }))
+    await user.click(screen.getByRole('button', { name: 'Remove risk entry 1' }))
+    expect(screen.queryByRole('button', { name: 'Remove risk entry 1' })).not.toBeInTheDocument()
+  })
+
   it('saves a resumed draft (edit mode) and lands on the Enquiries tab too', async () => {
     const user = userEvent.setup()
     mockParticipant.mockReturnValue({ data: draft(), isLoading: false })

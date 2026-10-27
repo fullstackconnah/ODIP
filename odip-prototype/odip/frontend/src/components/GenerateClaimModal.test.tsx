@@ -77,3 +77,12 @@ describe('GenerateClaimModal — who the claim leaves out', () => {
     expect(screen.queryByText(/left out of this claim/)).not.toBeInTheDocument()
   })
 })
+
+describe('GenerateClaimModal — field labels', () => {
+  it('names the three time fields so each label finds its control', () => {
+    render(<GenerateClaimModal tripId="t1" trip={trip} onClose={() => {}} onSuccess={() => {}} />)
+    for (const label of ['Departure Time', 'Return Time', 'Active Hours/Day']) {
+      expect(screen.getByLabelText(label)).toBeInTheDocument()
+    }
+  })
+})
