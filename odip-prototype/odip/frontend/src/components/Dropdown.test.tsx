@@ -223,16 +223,17 @@ describe('Dropdown — which way the panel opens', () => {
 
 // Agreements FIX3 (M8): a disabled menu item with a reason dims only its label, so the reason stays readable (4.5:1).
 describe('Dropdown — disabled item with a description', () => {
-  const open = (items: { value: string; label: string; description?: string; disabled?: boolean }[], onSelect = () => {}) => {
+  const open = (items: { value: string; label: string; description?: string; disabled?: boolean; icon?: JSX.Element }[], onSelect = () => {}) => {
     render(<Dropdown variant="menu" label="Actions" items={items} onSelect={onSelect} />)
     fireEvent.click(screen.getByRole('button', { name: 'Actions' }))
   }
 
-  it('dims the label but not the reason', async () => {
-    open([{ value: 'a', label: 'Approve', description: 'No draft waiting.', disabled: true }])
+  it('dims the label and icon but not the reason', async () => {
+    open([{ value: 'a', label: 'Approve', description: 'No draft waiting.', disabled: true, icon: <svg data-testid="ic" /> }])
     const option = await screen.findByRole('option')
     expect(option).not.toHaveClass('opacity-40')
     expect(screen.getByText('Approve')).toHaveClass('opacity-40')
+    expect(screen.getByTestId('ic').parentElement).toHaveClass('opacity-40')
     expect(screen.getByText('No draft waiting.')).not.toHaveClass('opacity-40')
   })
 

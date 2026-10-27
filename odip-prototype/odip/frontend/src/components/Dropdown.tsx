@@ -371,9 +371,9 @@ export function Dropdown({
                   : 'hover:bg-[var(--color-surface-container-low)]'
               }`}
             >
-              {item.icon && <span className="shrink-0">{item.icon}</span>}
+              {item.icon && <span className={`shrink-0 ${item.disabled && item.description ? 'opacity-40' : ''}`}>{item.icon}</span>}
               <div className="min-w-0">
-                {/* A disabled item with a reason dims only the label: the reason is the one place that says why, so it keeps its contrast. */}
+                {/* A disabled item with a reason dims the label and icon: the reason is the one place that says why, so it keeps its contrast. */}
                 <p className={item.description ? `font-semibold ${item.disabled ? 'opacity-40' : ''}` : ''}>{item.label}</p>
                 {item.description && (
                   <p className="text-[13px] text-[var(--color-muted-foreground)]">{item.description}</p>
