@@ -81,7 +81,7 @@ export default function ClaimsTab({ participantId, canWrite, otherFunded = false
           title={otherFunded ? 'Not claimed to the NDIS' : 'No claims yet'}
           description={otherFunded
             ? `This participant is funded another way, so Bunya Support leaves them out of NDIS claims. Invoice ${funder?.trim() || 'their funder'} directly.`
-            : "Generate a claim once this participant has completed, unclaimed shifts — or from a trip's own Claims tab."
+            : "Generate a claim once this participant has completed, unclaimed shifts — or from a trip's own Claims tab."}
         />
       ) : (
         <div ref={tableRef}>

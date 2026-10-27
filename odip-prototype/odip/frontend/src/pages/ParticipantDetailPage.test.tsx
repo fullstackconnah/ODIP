@@ -317,11 +317,12 @@ describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
   })
 
   it('passes the funding source and funder to the Claims tab', () => {
+    setUserRole('Coordinator')
     mockUseParticipant.mockReturnValue({
       data: makeParticipant({ fundingSource: 'Other', fundingOrganisation: 'Local Council' }),
       isLoading: false,
     })
-    renderAtTab('participant-1', 'claims')
+    renderAtTab('participant-1', 'funding', 'claims')
 
     expect(screen.getByTestId('claims-tab')).toHaveAttribute('data-other-funded', 'true')
     expect(screen.getByTestId('claims-tab')).toHaveAttribute('data-funder', 'Local Council')
