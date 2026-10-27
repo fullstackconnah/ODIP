@@ -31,11 +31,6 @@ type AssessmentFormState = {
   notes: string
 }
 
-// Both tables take these widths, so Level starts at the same x in each. Notes takes the rest.
-const COLUMN_WIDTH: Record<string, string> = {
-  adlType: 'md:w-[22%]', level: 'md:w-[14%]', howToHelpNotes: 'md:w-[22%]', edit: 'md:w-[72px]',
-}
-
 const EMPTY_FORM: AssessmentFormState = { level: '', notes: '' }
 
 /** Same status/colour lookup StatusBadge already ships — see ParticipantHealthConditionsSection's identical helper. */
@@ -112,26 +107,28 @@ export default function ParticipantAdlAssessmentsSection({ participantId }: { pa
     }
   }
 
+  // Both tables take these widths, so Level starts at the same x in each. Notes takes the rest.
+  // The two prose columns break unspaced text (a pasted URL) and pad a little, so long notes clear the row lines.
   function columns(): Column<ParticipantAdlAssessmentDto>[] {
     return [
-      { key: 'adlType', header: 'Activity', className: COLUMN_WIDTH.adlType, render: (row) => ADL_TYPE_LABELS[row.adlType] },
+      { key: 'adlType', header: 'Activity', width: '22%', render: (row) => ADL_TYPE_LABELS[row.adlType] },
       {
-        key: 'level', header: 'Level', className: COLUMN_WIDTH.level,
+        key: 'level', header: 'Level', width: '14%',
         render: (row) => {
           const { status, label } = levelStatus(row.level)
           return <StatusBadge status={status} label={label} />
         },
       },
-      { key: 'notes', header: 'Notes', render: (row) => row.notes || '—' },
+      { key: 'notes', header: 'Notes', wrap: true, className: 'md:py-1 [overflow-wrap:anywhere]', render: (row) => row.notes || '—' },
       // INTAKE-03, CommunityAccessDailyLiving stream-specific — shown as its own column whenever
       // ANY row across the grid has a value, matching this page's whole-card presence-or-relevance
       // idiom (see ParticipantDetailPage.tsx's Community Access card): a participant who no longer
       // has the CA stream but still has saved howToHelpNotes data still gets to see it here.
       ...(assessments.some((a) => a.howToHelpNotes)
-        ? [{ key: 'howToHelpNotes', header: 'How To Help Me', className: COLUMN_WIDTH.howToHelpNotes, render: (row: ParticipantAdlAssessmentDto) => row.howToHelpNotes || '—' }]
+        ? [{ key: 'howToHelpNotes', header: 'How To Help Me', width: '28%', wrap: true, className: 'md:py-1 [overflow-wrap:anywhere]', render: (row: ParticipantAdlAssessmentDto) => row.howToHelpNotes || '—' }]
         : []),
       {
-        key: 'edit', header: '', align: 'right', className: COLUMN_WIDTH.edit,
+        key: 'edit', header: '', align: 'right', width: 72,
         render: (row) => canWriteAdlAssessments && (
           <button
             type="button"
