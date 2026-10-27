@@ -31,6 +31,11 @@ type AssessmentFormState = {
   notes: string
 }
 
+// Both tables take these widths, so Level starts at the same x in each. Notes takes the rest.
+const COLUMN_WIDTH: Record<string, string> = {
+  adlType: 'md:w-[22%]', level: 'md:w-[14%]', howToHelpNotes: 'md:w-[22%]', edit: 'md:w-[72px]',
+}
+
 const EMPTY_FORM: AssessmentFormState = { level: '', notes: '' }
 
 /** Same status/colour lookup StatusBadge already ships — see ParticipantHealthConditionsSection's identical helper. */
@@ -109,9 +114,9 @@ export default function ParticipantAdlAssessmentsSection({ participantId }: { pa
 
   function columns(): Column<ParticipantAdlAssessmentDto>[] {
     return [
-      { key: 'adlType', header: 'Activity', render: (row) => ADL_TYPE_LABELS[row.adlType] },
+      { key: 'adlType', header: 'Activity', className: COLUMN_WIDTH.adlType, render: (row) => ADL_TYPE_LABELS[row.adlType] },
       {
-        key: 'level', header: 'Level',
+        key: 'level', header: 'Level', className: COLUMN_WIDTH.level,
         render: (row) => {
           const { status, label } = levelStatus(row.level)
           return <StatusBadge status={status} label={label} />
@@ -123,10 +128,10 @@ export default function ParticipantAdlAssessmentsSection({ participantId }: { pa
       // idiom (see ParticipantDetailPage.tsx's Community Access card): a participant who no longer
       // has the CA stream but still has saved howToHelpNotes data still gets to see it here.
       ...(assessments.some((a) => a.howToHelpNotes)
-        ? [{ key: 'howToHelpNotes', header: 'How To Help Me', render: (row: ParticipantAdlAssessmentDto) => row.howToHelpNotes || '—' }]
+        ? [{ key: 'howToHelpNotes', header: 'How To Help Me', className: COLUMN_WIDTH.howToHelpNotes, render: (row: ParticipantAdlAssessmentDto) => row.howToHelpNotes || '—' }]
         : []),
       {
-        key: 'edit', header: '', align: 'right',
+        key: 'edit', header: '', align: 'right', className: COLUMN_WIDTH.edit,
         render: (row) => canWriteAdlAssessments && (
           <button
             type="button"
