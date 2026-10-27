@@ -11,8 +11,8 @@ type Variant = 'shell' | 'public'
  * the last thing in AppLayout's column, carries its clearance (main used to). public: one centred column, like the pages it closes.
  */
 const FRAME: Record<Variant, string> = {
-  shell: 'px-[var(--gutter,20px)] pb-[calc(var(--mobile-nav-h)+env(safe-area-inset-bottom)+0.75rem)] lg:pb-3',
-  public: 'mx-auto w-full max-w-3xl px-[var(--gutter,20px)] pb-[calc(env(safe-area-inset-bottom)+0.75rem)]',
+  shell: 'px-[var(--gutter,20px)] pb-[calc(var(--mobile-nav-h)+0.75rem)] lg:pb-3',
+  public: 'mx-auto w-full max-w-3xl px-[var(--gutter,20px)] pb-[calc(var(--safe-bottom)+0.75rem)]',
 }
 
 /** Facts first, links after: one row in the shell from md (facts at the start, links at the end), otherwise stacked and centred. */

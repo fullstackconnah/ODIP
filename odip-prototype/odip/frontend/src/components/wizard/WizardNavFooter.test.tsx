@@ -58,7 +58,7 @@ describe('WizardNavFooter', () => {
 
     expect(footer).toHaveClass('w-full', 'min-w-0', 'flex-row', 'flex-wrap', 'justify-between')
     expect(footer).not.toHaveClass('flex-col')
-    expect(footer).toHaveClass('pb-[max(0.75rem,env(safe-area-inset-bottom))]')
+    expect(footer).toHaveClass('py-3', 'lg:pb-[max(0.75rem,var(--safe-bottom))]')
   })
 
   it('sticks above the fixed mobile bottom nav below lg and to the viewport edge from lg', () => {
