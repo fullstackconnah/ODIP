@@ -24,6 +24,7 @@ export default function InstallPrompt() {
   const { deferred, installed: installedEvent } = useSyncExternalStore(subscribeInstall, getInstallSnapshot)
   const userId = currentUserId()
   const [record, setRecord] = useState(() => (userId ? readInstallRecord(userId) : { dismissedUntil: 0, installed: false }))
+  const [now] = useState(() => Date.now()) // read once, not during render; a 30-day snooze needs no fresher clock
   const [leaving, setLeaving] = useState(false)
   const [cardH, setCardH] = useState(0)
   const cardRef = useRef<HTMLElement>(null)
@@ -35,7 +36,7 @@ export default function InstallPrompt() {
     standalone: matches('(display-mode: standalone)') || (navigator as Navigator & { standalone?: boolean }).standalone === true,
     installed: installedEvent || record.installed,
     dismissedUntil: record.dismissedUntil,
-    now: Date.now(),
+    now,
     hasDeferred: deferred !== null,
     iosSafari: isIosSafari(navigator.userAgent, navigator.maxTouchPoints),
     path: pathname,
