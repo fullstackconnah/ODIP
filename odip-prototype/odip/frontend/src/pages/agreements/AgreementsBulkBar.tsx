@@ -26,21 +26,26 @@ export function AgreementsBulkBar({ selected, approvable, canApprove, shown, all
   const label = approvable > 0 ? `Approve ${approvable}` : 'Approve'
   const disabled = tooMany || approvable === 0
   return (
-    <div className="mb-3 flex min-h-11 flex-wrap items-center gap-x-4 gap-y-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-1.5" role="region" aria-label="Selection">
+    <div className="mb-3 flex min-h-11 flex-wrap items-center gap-x-4 gap-y-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-1.5 max-md:flex-nowrap max-md:gap-x-3" role="region" aria-label="Selection">
       {narrow && (
-        <label className="flex min-h-11 items-center gap-2 text-sm">
-          <input type="checkbox" className="h-5 w-5" checked={allShownSelected} onChange={onToggleShown} disabled={shown === 0} />
-          Select shown
+        // The same box as the table's row boxes (DataTable), so it wears the house accent and a 44 px target.
+        <label className="inline-flex min-h-[var(--tap-min)] min-w-[var(--tap-min)] shrink-0 items-center justify-center">
+          <input type="checkbox" className="rounded border-[var(--color-border)] accent-[var(--color-primary)] cursor-pointer" checked={allShownSelected} onChange={onToggleShown} disabled={shown === 0} />
+          <span className="sr-only">Select shown</span>
         </label>
       )}
       <span className="text-sm tabular-nums" aria-live="polite">{selected === 0 ? 'None selected' : `${selected} selected`}</span>
-      <Button variant="ghost" size="sm" onClick={onClear} className={selected > 0 ? "" : "invisible"}>Clear</Button>
-      {/* Always present on a phone so the bar never grows when a reason appears; empty it takes no room from md up. */}
-      <span className={`text-sm max-md:basis-full max-md:min-h-5 empty:md:hidden ${tooMany ? 'text-[var(--color-destructive)]' : 'text-[var(--color-muted-foreground)]'}`}>{reason}</span>
+      {/* A phone has no room for Clear or a reason line: the box clears, and the reason is the Actions item's own. */}
+      {!narrow && (
+        <>
+          <Button variant="ghost" size="sm" onClick={onClear} className={selected > 0 ? "" : "invisible"}>Clear</Button>
+          <span className={`text-sm empty:hidden ${tooMany ? 'text-[var(--color-destructive)]' : 'text-[var(--color-muted-foreground)]'}`}>{reason}</span>
+        </>
+      )}
       {canApprove && (
         <div className="ml-auto">
           {narrow ? (
-            <Dropdown variant="menu" label="Actions" align="right" disabled={disabled} items={[{ value: 'approve', label }]} onSelect={onApprove} />
+            <Dropdown variant="menu" label="Actions" align="right" disabled={selected === 0} items={[{ value: 'approve', label, description: reason ?? undefined, disabled }]} onSelect={onApprove} />
           ) : (
             <Button size="sm" onClick={onApprove} disabled={disabled}><ShieldCheck className="h-4 w-4" aria-hidden="true" />{label}</Button>
           )}

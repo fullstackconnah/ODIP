@@ -19,7 +19,7 @@ import { formatCurrency } from '@/lib/utils'
 import { AgreementsBulkBar } from './agreements/AgreementsBulkBar'
 import { ApproveAgreementsDialog, type ApprovePhase, type ApproveStopped } from './agreements/ApproveAgreementsDialog'
 import { MAX_SELECTED, approveTargets, filterRows, listOptions, parseShow, statusBadge, termView, type Show } from './agreements/agreementRows'
-import { TOO_MANY_WORDS, summarise } from './agreements/outcomeWords'
+import { NOT_AN_APPROVER_WORDS, NO_REPLY_WORDS, TOO_MANY_WORDS, summarise } from './agreements/outcomeWords'
 
 const SHOW_OPTIONS: { key: Show; label: string }[] = [
   { key: 'all', label: 'All' },
@@ -77,8 +77,13 @@ const columns: Column<AgreementRow>[] = [
   },
 ]
 
-const failureWords = (error: unknown) =>
-  (error as { response?: { status?: number } })?.response?.status === 429 ? TOO_MANY_WORDS : 'Could not approve these. Try again.'
+/** No HTTP answer at all (timeout, network): the server may have gone on and approved some. */
+const hasNoReply = (error: unknown) => !(error as { response?: unknown })?.response
+
+const failureWords = (error: unknown) => {
+  const status = (error as { response?: { status?: number } })?.response?.status
+  return status === 429 ? TOO_MANY_WORDS : status === 403 ? NOT_AN_APPROVER_WORDS : hasNoReply(error) ? NO_REPLY_WORDS : 'Could not approve these. Try again.'
+}
 
 /**
  * Every participant's service agreement in one list (Agreements page, PR A): filter by what needs doing, tick the ones with a draft waiting and approve them together. The filters live in the
@@ -133,11 +138,12 @@ export default function AgreementsPage() {
     }
     const done = new Set(run.results.filter(r => r.outcome === 'Approved').map(r => r.participantId))
     setSelected(new Set([...selected].filter(id => !done.has(id))))
-    const s = summarise(run.results, run.stopped?.notSent ?? 0)
+    const noReply = !!run.stopped && hasNoReply(run.stopped.error)
+    const s = summarise(run.results, run.stopped?.notSent ?? 0, noReply)
     notify(s.tone, s.title, s.message)
     setDialog(d => ({
       ...d, phase: 'result', results: run.results,
-      stopped: run.stopped ? { done: run.results.length, total: sent.length, notSent: run.stopped.notSent } : null,
+      stopped: run.stopped ? { done: run.results.length, total: sent.length, notSent: run.stopped.notSent, noReply } : null,
     }))
   }
   const closeDialog = () => {
@@ -160,12 +166,15 @@ export default function AgreementsPage() {
       {phase !== 'ready' || rows.length > 0 ? (
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-end gap-3">
-            <ToggleGroup ariaLabel="Show" options={SHOW_OPTIONS} value={show} onChange={key => setParam('show', key)} className="flex-wrap [&>button]:min-w-[var(--tap-min)] [&>button]:whitespace-nowrap" />
+            {/* One row that scrolls sideways inside its own box; the padding keeps the focus rings from being clipped. */}
+            <div className="-mx-1 -my-1 min-w-0 overflow-x-auto px-1 py-1 max-sm:w-full">
+              <ToggleGroup ariaLabel="Show" options={SHOW_OPTIONS} value={show} onChange={key => setParam('show', key)} className="w-max [&>button]:min-w-[var(--tap-min)] [&>button]:whitespace-nowrap" />
+            </div>
             <SelectField
-              label="Price list" value={list} onChange={e => setParam('list', e.target.value)} className="w-48"
+              label="Price list" value={list} onChange={e => setParam('list', e.target.value)} className="w-48 max-sm:w-full"
               options={[{ value: '', label: 'Any price list' }, ...lists.map(l => ({ value: l.version, label: l.version }))]}
             />
-            <SearchInput value={q} onChange={value => setParam('q', value)} placeholder="Search participants..." label="Search participants" />
+            <SearchInput value={q} onChange={value => setParam('q', value)} placeholder="Search participants..." label="Search participants" className="max-w-md flex-1 max-sm:max-w-none max-sm:basis-full" />
           </div>
           {phase === 'ready' && (
             <p className="text-sm text-[var(--color-muted-foreground)] tabular-nums">

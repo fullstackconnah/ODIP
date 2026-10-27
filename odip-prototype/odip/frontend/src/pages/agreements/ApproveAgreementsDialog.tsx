@@ -6,11 +6,12 @@ import { Callout } from '@/components/Callout'
 import { Modal } from '@/components/Modal'
 import { StatusBadge } from '@/components/StatusBadge'
 import { plural } from '@/lib/format'
-import { OUTCOME_BADGE } from './outcomeWords'
+import { NO_REPLY_LAST, OUTCOME_BADGE, groupResults, resultHeading } from './outcomeWords'
 
 export type ApprovePhase = 'confirm' | 'running' | 'result'
 
-export interface ApproveStopped { done: number; total: number; notSent: number }
+/** `noReply`: the failed request got no answer at all, so some of its items may have been approved. */
+export interface ApproveStopped { done: number; total: number; notSent: number; noReply: boolean }
 
 interface Props {
   open: boolean
@@ -31,8 +32,9 @@ interface Props {
 /** Confirm, run and report for the bulk Approve. While requests are in flight nothing closes it (no X, Escape and the backdrop do nothing) so the person cannot lose the answers. */
 export function ApproveAgreementsDialog({ open, phase, count, skipped, progress, error, results, stopped, onConfirm, onClose }: Props) {
   const running = phase === 'running'
-  const listed = results.filter(r => r.outcome !== 'Approved')
-  const title = phase === 'result' ? `${plural(results.filter(r => r.outcome === 'Approved').length, 'agreement')} approved` : `Approve ${plural(count, 'agreement')}?`
+  const listed = groupResults(results)
+  const heading = resultHeading(results, stopped?.total ?? results.length)
+  const title = phase === 'result' ? heading.title : `Approve ${plural(count, 'agreement')}?`
   return (
     <Modal
       open={open}
@@ -73,9 +75,12 @@ export function ApproveAgreementsDialog({ open, phase, count, skipped, progress,
         <div className="space-y-3 text-sm">
           {stopped && (
             <Callout tone="warning">
-              {`Stopped after ${stopped.done} of ${stopped.total}. The first ${stopped.done} are listed below. The other ${stopped.notSent} weren't started, so select them and try again.`}
+              {stopped.noReply
+                ? `Stopped after ${stopped.done} of ${stopped.total}. ${NO_REPLY_LAST(stopped.notSent)} Refresh to check before trying again.`
+                : `Stopped after ${stopped.done} of ${stopped.total}. The first ${stopped.done} are listed below. The other ${stopped.notSent} weren't started, so select them and try again.`}
             </Callout>
           )}
+          {heading.line && <p className={heading.danger ? 'text-[var(--color-destructive)]' : 'text-[var(--color-muted-foreground)]'}>{heading.line}</p>}
           {listed.length > 0 ? (
             <ul className="divide-y divide-[var(--color-border)] rounded-[var(--radius-md)] border border-[var(--color-border)]">
               {listed.map(r => {
