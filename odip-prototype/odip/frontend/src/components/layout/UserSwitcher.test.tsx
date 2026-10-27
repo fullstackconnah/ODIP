@@ -317,3 +317,16 @@ describe('UserSwitcher: focus ring', () => {
     }
   })
 })
+
+// The trigger sits too far left on a 360px phone for a right-aligned w-64 popover; it narrows below sm (shots measure the rect).
+describe('UserSwitcher: popover stays on screen on a phone', () => {
+  it('narrows to w-56 below sm and keeps w-64 from sm up', async () => {
+    setSuperAdminSignedIn()
+    const user = userEvent.setup()
+    render(<UserSwitcher />)
+
+    await user.click(screen.getByRole('button', { name: /^usr/i }))
+    const popover = screen.getByText('View as user', { exact: true }).closest('div.absolute')
+    expect(popover).toHaveClass('right-0', 'w-64', 'max-sm:w-56')
+  })
+})

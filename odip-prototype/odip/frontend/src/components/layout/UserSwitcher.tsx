@@ -86,7 +86,7 @@ export default function UserSwitcher() {
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-1 w-64 bg-[var(--color-popover)] border border-[var(--color-border)] rounded-xl shadow-2xl overflow-hidden z-50">
+        <div className="absolute right-0 mt-1 w-64 max-sm:w-56 bg-[var(--color-popover)] border border-[var(--color-border)] rounded-xl shadow-2xl overflow-hidden z-50">
           <div className="px-3 py-2 border-b border-[var(--color-border)] text-xs text-[var(--color-muted-foreground)] uppercase tracking-wider">
             View as user
           </div>
