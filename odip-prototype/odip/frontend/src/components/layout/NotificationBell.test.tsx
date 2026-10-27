@@ -363,3 +363,10 @@ describe('NotificationBell: more unread than the panel holds', () => {
     expect(within(screen.getByRole('dialog')).queryByRole('button', { name: 'Mark all as read' })).toBeNull()
   })
 })
+
+describe('NotificationBell: focus ring', () => {
+  it('carries the house keyboard focus ring', () => {
+    renderBell()
+    expect(bell()).toHaveClass('focus-visible:ring-2', 'focus-visible:ring-[var(--color-ring)]')
+  })
+})
