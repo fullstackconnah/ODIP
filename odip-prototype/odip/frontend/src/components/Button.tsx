@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import type { ButtonHTMLAttributes, ReactNode, Ref } from 'react'
 import { Link } from 'react-router-dom'
 import { buttonClasses, type ButtonVariant, type ButtonSize } from './buttonClasses'
 
@@ -19,6 +19,8 @@ export type ButtonProps = {
   iconOnly?: boolean
   className?: string
   children?: ReactNode
+  /** Reaches the <button> (React 19 passes `ref` as a prop); a link-style Button ignores it. */
+  ref?: Ref<HTMLButtonElement>
 } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'className' | 'children'>
 
 export function Button({

@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, Link, RouterProvider } from 'react-router-dom'
@@ -162,5 +164,67 @@ describe('useUnsavedChangesWarning with leaveCopy', () => {
 
     await user.click(screen.getByRole('link', { name: 'Organisation profile' }))
     expect(screen.getByRole('alertdialog', { name: 'Leave without publishing?' })).toBeInTheDocument()
+  })
+})
+
+describe('useUnsavedChangesWarning prompt on Modal', () => {
+  type Leave = { title: string; message: string; confirmLabel: string; stayLabel: string }
+
+  function Opener({ leaveCopy }: { leaveCopy?: Leave }) {
+    const { dialog } = useUnsavedChangesWarning(true, { leaveCopy })
+    return (
+      <>
+        {dialog}
+        <Link to="/elsewhere">Elsewhere</Link>
+      </>
+    )
+  }
+
+  function renderOpener(leaveCopy?: Leave) {
+    const router = createMemoryRouter(
+      [{ path: '/form', element: <Opener leaveCopy={leaveCopy} /> }, { path: '/elsewhere', element: <p>Elsewhere page</p> }],
+      { initialEntries: ['/form'] },
+    )
+    return { router, ...render(<RouterProvider router={router} />) }
+  }
+
+  it('focuses "Keep editing", and a custom stayLabel', async () => {
+    const user = userEvent.setup()
+    const first = renderOpener()
+    await user.click(screen.getByRole('link', { name: 'Elsewhere' }))
+    expect(screen.getByRole('button', { name: 'Keep editing' })).toHaveFocus()
+    first.unmount()
+
+    renderOpener({ title: 'T', message: 'M', confirmLabel: 'Go', stayLabel: 'Stay here' })
+    await user.click(screen.getByRole('link', { name: 'Elsewhere' }))
+    expect(screen.getByRole('button', { name: 'Stay here' })).toHaveFocus()
+  })
+
+  it('Escape keeps editing, Tab stays inside, focus returns to the opener, and the dialog is named and described', async () => {
+    const user = userEvent.setup()
+    const { router } = renderOpener()
+    const opener = screen.getByRole('link', { name: 'Elsewhere' })
+    opener.focus()
+    await user.click(opener)
+
+    const dialog = screen.getByRole('alertdialog', { name: 'Leave without saving?' })
+    expect(dialog).toHaveAccessibleDescription(/unsaved changes/)
+    for (let i = 0; i < 5; i++) {
+      await user.tab()
+      expect(dialog).toContainElement(document.activeElement as HTMLElement)
+    }
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/form')
+    expect(opener).toHaveFocus()
+  })
+
+  it('sits inside Modal: its backdrop clears the phone bottom nav, and the hook builds no overlay of its own', async () => {
+    const user = userEvent.setup()
+    renderOpener()
+    await user.click(screen.getByRole('link', { name: 'Elsewhere' }))
+    expect(screen.getByRole('alertdialog').parentElement).toHaveClass('pb-[calc(var(--mobile-nav-h)+env(safe-area-inset-bottom))]', 'lg:pb-0')
+    const source = readFileSync(join(__dirname, 'useUnsavedChangesWarning.tsx'), 'utf8')
+    expect(source).not.toContain('fixed inset-0')
   })
 })
