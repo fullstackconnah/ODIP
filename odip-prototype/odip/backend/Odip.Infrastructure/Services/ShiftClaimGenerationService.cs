@@ -3,6 +3,7 @@ using Odip.Application.DTOs;
 using Odip.Domain.Billing.Catalogue;
 using Odip.Domain.Billing.Services;
 using Odip.Domain.Entities;
+using Odip.Domain.Billing;
 using Odip.Domain.Enums;
 using Odip.Domain.Funding;
 using Odip.Domain.Interfaces;
@@ -199,10 +200,12 @@ public class ShiftClaimGenerationService
         var lineItems = new List<ShiftLineCalc>();
         var leftOut = new List<ShiftClaimLeftOutDto>();
         // No line for an NDIS-funded participant without an NDIS number: services can begin before the profile is complete, so this is reachable. The
-        // shifts are left out with the reason, never dropped silently. A participant funded another way has no NDIS number by design and is claimed as before.
-        var noNdisNumber = participant.FundingSource == ParticipantFundingSource.Ndis && string.IsNullOrWhiteSpace(participant.NdisNumber)
-            ? $"{participant.FullName}: NDIS number missing. Add it to the participant's profile, then generate the claim again."
-            : null;
+        // shifts are left out with the reason, never dropped silently. A participant funded another way is never claimed, even with an NDIS number still on file.
+        var noNdisNumber = ClaimFunding.IsOtherFunded(participant)
+            ? $"{participant.FullName}: {ClaimFunding.OtherFundedNotClaimed}"
+            : string.IsNullOrWhiteSpace(participant.NdisNumber)
+                ? $"{participant.FullName}: NDIS number missing. Add it to the participant's profile, then generate the claim again."
+                : null;
         foreach (var shift in shifts)
         {
             if (noNdisNumber is not null)

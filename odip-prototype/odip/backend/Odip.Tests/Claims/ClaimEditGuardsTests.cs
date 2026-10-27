@@ -54,6 +54,85 @@ public class ClaimEditGuardsTests
 
     private static string RefusalOf(ActionResult<ApiResponse<bool>> result) => Assert.Single(Assert.IsType<ApiResponse<bool>>(Assert.IsAssignableFrom<ObjectResult>(result.Result).Value).Errors!);
 
+    // ── A claim with a participant funded another way is not submitted to the NDIS ────────────────
+
+    /// <summary>A trip-kind Draft of organisation A with one line per participant (each on their own booking).</summary>
+    private static TripClaim SeedTripDraft(OdipDbContext db, params Participant[] participants)
+    {
+        var trip = new TripInstance { Id = Guid.NewGuid(), TenantId = TenantA };
+        var claim = new TripClaim { Id = Guid.NewGuid(), TripInstanceId = trip.Id, Status = TripClaimStatus.Draft, ClaimReference = $"TC-{Guid.NewGuid():N}"[..20], TotalAmount = 100m * participants.Length };
+        db.AddRange(trip, claim, new ProviderSettings { Id = Guid.NewGuid(), TenantId = TenantA, RegistrationNumber = "PR001", ABN = "12345678901", OrganisationName = "Test Provider", Address = "1 Test St", State = "NSW" });
+        foreach (var p in participants)
+        {
+            var booking = new ParticipantBooking { Id = Guid.NewGuid(), TripInstanceId = trip.Id, ParticipantId = p.Id, BookingStatus = BookingStatus.Confirmed };
+            db.AddRange(p, booking, new ClaimLineItem
+            {
+                Id = Guid.NewGuid(), TripClaimId = claim.Id, ParticipantBookingId = booking.Id, SupportItemCode = "04_104_0125_6_1", DayType = ClaimDayType.Weekday,
+                SupportsDeliveredFrom = new DateOnly(2026, 10, 1), SupportsDeliveredTo = new DateOnly(2026, 10, 1), Hours = 2m, UnitPrice = 50m, TotalAmount = 100m,
+            });
+        }
+        db.SaveChanges();
+        return claim;
+    }
+
+    private static Participant Person(string first, string last, ParticipantFundingSource funding, PlanType plan = PlanType.SelfManaged) =>
+        new() { Id = Guid.NewGuid(), TenantId = TenantA, FirstName = first, LastName = last, NdisNumber = "430000007", FundingSource = funding, PlanType = plan };
+
+    [Fact]
+    public async Task ADraftTripClaimWithAnOtherFundedParticipant_CannotBeSubmitted_AndNothingIsChanged()
+    {
+        var (db, controller) = Create();
+        var claim = SeedTripDraft(db, Person("Ada", "Ng", ParticipantFundingSource.Ndis), Person("Lee", "Left", ParticipantFundingSource.Other));
+
+        var result = await controller.UpdateClaim(claim.Id, new UpdateClaimDto { Status = TripClaimStatus.Submitted }, Ct);
+
+        Assert.Equal(409, StatusOf(result));
+        Assert.Equal("Lee Left is funded another way, so this claim can't be submitted to the NDIS. Remove their lines or reject the claim.", RefusalOf(result));
+        db.ChangeTracker.Clear();
+        Assert.Equal(TripClaimStatus.Draft, (await db.TripClaims.AsNoTracking().SingleAsync(c => c.Id == claim.Id)).Status);
+        Assert.Empty(db.Invoices);
+    }
+
+    [Fact]
+    public async Task TheRefusalNamesEveryOtherFundedParticipantOnce()
+    {
+        var (db, controller) = Create();
+        var claim = SeedTripDraft(db, Person("Lee", "Left", ParticipantFundingSource.Other), Person("Sam", "Side", ParticipantFundingSource.Other, PlanType.AgencyManaged));
+
+        var result = await controller.UpdateClaim(claim.Id, new UpdateClaimDto { Status = TripClaimStatus.Submitted }, Ct);
+
+        Assert.Equal(409, StatusOf(result));
+        Assert.Equal("Lee Left, Sam Side are funded another way, so this claim can't be submitted to the NDIS. Remove their lines or reject the claim.", RefusalOf(result));
+    }
+
+    [Fact]
+    public async Task ADraftShiftClaimForAnOtherFundedParticipant_CannotBeSubmitted_AndNothingIsChanged()
+    {
+        var (db, controller) = Create();
+        var (claim, _, _) = Seed(db, TripClaimStatus.Draft);
+        (await db.Participants.SingleAsync(p => p.Id == claim.ParticipantId)).FundingSource = ParticipantFundingSource.Other;
+        await db.SaveChangesAsync();
+
+        var result = await controller.UpdateClaim(claim.Id, new UpdateClaimDto { Status = TripClaimStatus.Submitted }, Ct);
+
+        Assert.Equal(409, StatusOf(result));
+        Assert.Contains("Ada Claim is funded another way", RefusalOf(result));
+        db.ChangeTracker.Clear();
+        Assert.Equal(TripClaimStatus.Draft, (await db.TripClaims.AsNoTracking().SingleAsync(c => c.Id == claim.Id)).Status);
+        Assert.Empty(db.Invoices);
+    }
+
+    [Fact]
+    public async Task ADraftTripClaimOfNdisFundedParticipants_StillSubmits()
+    {
+        var (db, controller) = Create();
+        var claim = SeedTripDraft(db, Person("Ada", "Ng", ParticipantFundingSource.Ndis), Person("Sam", "Side", ParticipantFundingSource.Ndis));
+
+        Assert.Equal(200, StatusOf(await controller.UpdateClaim(claim.Id, new UpdateClaimDto { Status = TripClaimStatus.Submitted }, Ct)));
+        db.ChangeTracker.Clear();
+        Assert.Equal(TripClaimStatus.Submitted, (await db.TripClaims.AsNoTracking().SingleAsync(c => c.Id == claim.Id)).Status);
+    }
+
     // ── A claim that has gone to the NDIA keeps its figures ────────────────
 
     public static TheoryData<TripClaimStatus, string> LockedEdits()

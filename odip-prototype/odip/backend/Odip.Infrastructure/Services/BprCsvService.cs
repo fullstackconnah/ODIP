@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.EntityFrameworkCore;
+using Odip.Domain.Billing;
 using Odip.Domain.Enums;
 using Odip.Infrastructure.Data;
 
