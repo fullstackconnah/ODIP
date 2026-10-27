@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { useRef, useState } from 'react'
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
@@ -230,5 +232,23 @@ describe('Modal initialFocusRef', () => {
 
     render(<Modal open onClose={() => {}} title="Example" footer={<button>Safe answer</button>}><input aria-label="Name" /></Modal>)
     expect(screen.getByRole('button', { name: 'Close dialog' })).toHaveFocus()
+  })
+})
+
+describe('Modal enter motion', () => {
+  const css = readFileSync(join(__dirname, '..', 'index.css'), 'utf-8')
+
+  it('the scrim and the panel carry the classes index.css animates', () => {
+    render(<Modal open onClose={() => {}} title="Example"><p>Body</p></Modal>)
+    const panel = screen.getByRole('dialog')
+    expect(panel).toHaveClass('modal-panel')
+    expect(panel.parentElement).toHaveClass('modal-scrim')
+  })
+
+  it('is declared only for users who have NOT asked for reduced motion', () => {
+    const withoutNoPreference = css.replace(/@media \(prefers-reduced-motion: no-preference\)\s*\{(?:[^{}]|\{[^{}]*\})*\}/g, '')
+    expect(css).toMatch(/@media \(prefers-reduced-motion: no-preference\)\s*\{[^@]*\.modal-panel\s*\{\s*animation:\s*modalIn/)
+    expect(withoutNoPreference).not.toMatch(/\.modal-panel\s*\{/)
+    expect(withoutNoPreference).not.toMatch(/\.modal-scrim\s*\{/)
   })
 })

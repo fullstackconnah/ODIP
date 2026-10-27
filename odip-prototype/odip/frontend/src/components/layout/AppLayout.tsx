@@ -518,8 +518,13 @@ export default function AppLayout() {
         "Sign out" (which could not be tapped) and stayed live above the scrim. From lg up the sidebar is permanent,
         there is no bottom nav, and it keeps z-50 (`lg:z-50`) so a Modal (z-50, later in the DOM) still covers it.
       */}
-      {drawerOpen && (
-        <div aria-hidden="true" className="fixed inset-0 bg-black/40 z-[55] lg:hidden" onClick={closeDrawer} />
+      {/* Mounted below lg even when closed, so it fades on the drawer's 200ms clock both ways; closed it is transparent and takes no taps. */}
+      {isBelowLg && (
+        <div
+          aria-hidden="true"
+          className={`fixed inset-0 bg-black/40 z-[55] lg:hidden transition-opacity duration-200 ${drawerOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+          onClick={closeDrawer}
+        />
       )}
 
       {/*
