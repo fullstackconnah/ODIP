@@ -241,7 +241,9 @@ export function Dropdown({
       if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault()
         setOpen(true)
-        const first = visibleItems.findIndex(i => !i.disabled)
+        // Open on the chosen row so Enter, Enter keeps the current choice; no choice, the first enabled row.
+        const chosen = visibleItems.findIndex(i => !i.disabled && i.value === value)
+        const first = chosen >= 0 ? chosen : visibleItems.findIndex(i => !i.disabled)
         setFocusedIndex(first >= 0 ? first : 0)
       }
       return
@@ -452,10 +454,10 @@ export function Dropdown({
           disabled={disabled || loading}
           onClick={() => setOpen(v => !v)}
           onKeyDown={handleKeyDown}
-          // No TAP_AREA on the icon trigger, on purpose. Its one consumer (a roster ShiftChip's "Actions" kebab)
+          // No TAP_AREA on the icon trigger, on purpose. The default look (a roster ShiftChip's "Actions" kebab)
           // sits flush against the chip body and the drag handle, so a 44px pad would take the chip's own right
-          // edge under coarse — a pad must never overlap a neighbouring control. Pad it together with a gap
-          // when a consumer with room for one appears.
+          // edge under coarse — a pad must never overlap a neighbouring control. A header icon with room for
+          // one passes triggerClassName.
           className={triggerClassName ?? 'p-1.5 rounded-lg hover:bg-[var(--color-accent)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] disabled:opacity-40 disabled:pointer-events-none transition-colors'}
         >
           {icon}

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { Dropdown } from './Dropdown'
 import { Button } from './Button'
 import { TAP_AREA } from './tapArea'
@@ -34,6 +35,25 @@ describe('Dropdown — 44px coarse-pointer hit area on the compact triggers', ()
     expect(trigger).toHaveClass('p-1.5')
     expect(trigger.className).not.toContain('before:')
     expect(trigger).not.toHaveClass('relative')
+  })
+
+  it('lets the caller replace the icon trigger look with triggerClassName', () => {
+    render(<Dropdown variant="icon" label="Theme" icon={<span>i</span>} items={ITEMS} onSelect={() => {}} triggerClassName="w-8 h-8 rounded-full" />)
+    const trigger = screen.getByRole('button', { name: 'Theme' })
+    expect(trigger).toHaveClass('w-8', 'h-8', 'rounded-full')
+    expect(trigger).not.toHaveClass('p-1.5')
+  })
+
+  it('opens on the chosen row from the keyboard, and on the first row when nothing is chosen', async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(<Dropdown variant="icon" label="Pick" icon={<span>i</span>} items={ITEMS} value="b" onSelect={() => {}} />)
+    await user.tab()
+    await user.keyboard('{Enter}')
+    expect(screen.getByRole('button', { name: 'Pick' })).toHaveAttribute('aria-activedescendant', 'dd-opt-b')
+    await user.keyboard('{Escape}')
+    rerender(<Dropdown variant="icon" label="Pick" icon={<span>i</span>} items={ITEMS} onSelect={() => {}} />)
+    await user.keyboard('{Enter}')
+    expect(screen.getByRole('button', { name: 'Pick' })).toHaveAttribute('aria-activedescendant', 'dd-opt-a')
   })
 
   // A header action is one primary md Button (UI survey s.1), menu or not: no gradient pill. md is --control-h, 44px on a touch screen,
