@@ -125,15 +125,21 @@ public class ServiceAgreementsController : ControllerBase
         var today = await ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct);
 
         var results = new List<AgreementApproveResultDto>();
+        var deadline = _clock.GetUtcNow() + BatchBudget;
         foreach (var item in items)
         {
             string outcome; List<string> reasons = [];
             try
             {
-                var found = await _db.ServiceAgreementDrafts.AsNoTracking().Where(d => d.TenantId == tenantId && d.Id == item.DraftId && d.ParticipantId == item.ParticipantId)
-                    .Select(d => new { d.AgreementEndDate, Approved = _db.ServiceAgreementDraftApprovals.Any(a => a.DraftId == d.Id) }).FirstOrDefaultAsync(ct);
-                if (found is { Approved: false } && found.AgreementEndDate < today) outcome = "Ended";
-                else (outcome, reasons) = MapOutcome(await _approval.ApproveAsync(tenantId, item.ParticipantId, item.DraftId, acknowledgeOverlaps: false, caller, ct));
+                // Past the budget the rest are answered Busy untouched, so the request ends inside the proxies' minute and every item still gets an answer.
+                if (_clock.GetUtcNow() >= deadline) (outcome, reasons) = ("Busy", [RosterBusyException.Words]);
+                else
+                {
+                    var found = await _db.ServiceAgreementDrafts.AsNoTracking().Where(d => d.TenantId == tenantId && d.Id == item.DraftId && d.ParticipantId == item.ParticipantId)
+                        .Select(d => new { d.AgreementEndDate, Approved = _db.ServiceAgreementDraftApprovals.Any(a => a.DraftId == d.Id) }).FirstOrDefaultAsync(ct);
+                    if (found is { Approved: false } && found.AgreementEndDate < today) outcome = "Ended";
+                    else (outcome, reasons) = MapOutcome(await _approval.ApproveAsync(tenantId, item.ParticipantId, item.DraftId, acknowledgeOverlaps: false, caller, ct));
+                }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -149,6 +155,9 @@ public class ServiceAgreementsController : ControllerBase
         }
         return Ok(ApiResponse<List<AgreementApproveResultDto>>.Ok(results));
     }
+
+    /// <summary>Wall time the items of one batch may use before the rest are answered Busy.</summary>
+    internal static readonly TimeSpan BatchBudget = TimeSpan.FromSeconds(40);
 
     private const string NotAnApproverWords = "Your role cannot approve agreements in your organisation. An Admin can change who may in Settings, Plan pricing.";
 

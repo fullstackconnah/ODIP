@@ -2913,8 +2913,9 @@ const postRoutes = [
     const outcomes = ['Approved', 'AlreadyApproved', 'NeedsReview', 'Superseded', 'Ended', 'Busy', 'NotFound', 'Failed']
     const items = (body && body.items) || []
     if (items.length < 1 || items.length > 25) return respond(400, failEnvelope(null, ['Select between 1 and 25 agreements.']))
+    const names = new Map(agreementsList().rows.map((r) => [r.participantId, r.participantName]))
     return items.map((item, i) => ({
-      participantId: item.participantId, draftId: item.draftId, participantName: 'Demo Ng', outcome: i < 3 ? 'Approved' : outcomes[i % outcomes.length],
+      participantId: item.participantId, draftId: item.draftId, participantName: names.get(item.participantId) || 'Demo Ng', outcome: i < 3 ? 'Approved' : outcomes[i % outcomes.length],
       reasons: outcomes[i % outcomes.length] === 'NeedsReview' ? ['Block weekdays: no item fits.'] : [],
     }))
   }],
