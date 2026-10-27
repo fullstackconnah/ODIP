@@ -73,7 +73,7 @@ describe('usePatchParticipant', () => {
 
 // Funding source Other drops a participant out of the NDIS ledger (and back), so any save that can change it must refresh the ledger and the figures built on it.
 describe('a participant save refreshes the budget figures', () => {
-  const expectFiguresRefreshed = (spy: ReturnType<typeof vi.spyOn>, id: string) => {
+  const expectFiguresRefreshed = (spy: unknown, id: string) => {
     expect(spy).toHaveBeenCalledWith({ queryKey: ['participant-funding', id, 'ledger'] })
     expect(spy).toHaveBeenCalledWith({ queryKey: ['participant-alerts-aggregate'] })
   }
