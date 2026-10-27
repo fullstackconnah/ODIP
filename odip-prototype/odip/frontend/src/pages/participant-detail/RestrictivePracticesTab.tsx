@@ -8,6 +8,7 @@ import {
 import { Modal } from '@/components/Modal'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { FormField } from '@/components/FormField'
+import { CheckboxField } from '@/components/CheckboxField'
 import { EmptyState } from '@/components/EmptyState'
 import { Dropdown } from '@/components/Dropdown'
 import { usePermissions } from '@/lib/permissions'
@@ -45,11 +46,13 @@ type PracticeFormState = {
   reviewDate: string
   relatedMedicationId: string
   isActive: boolean
+  /** Ticked: who authorised it and when are shown and required. Unticked: both are saved as null. */
+  authorised: boolean
 }
 
 const EMPTY_FORM: PracticeFormState = {
   type: 'Unclassified', description: '', authorisedBy: '', authorisationDate: '', reviewDate: '',
-  relatedMedicationId: '', isActive: true,
+  relatedMedicationId: '', isActive: true, authorised: false,
 }
 
 function PracticeCard({ practice, canWrite, onEdit, onDelete }: {
@@ -147,7 +150,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
   // edit-only — `null` means closed, otherwise the entry currently being edited.
   const [editingPractice, setEditingPractice] = useState<RestrictivePracticeDto | null>(null)
   const [form, setForm] = useState<PracticeFormState>(EMPTY_FORM)
-  const [errors, setErrors] = useState<{ description?: string }>({})
+  const [errors, setErrors] = useState<{ description?: string; authorisedBy?: string; authorisationDate?: string }>({})
   const [modalError, setModalError] = useState<string | null>(null)
   const [deletingPractice, setDeletingPractice] = useState<RestrictivePracticeDto | null>(null)
   const [listError, setListError] = useState<string | null>(null)
@@ -169,6 +172,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
       reviewDate: practice.reviewDate ? practice.reviewDate.split('T')[0] : '',
       relatedMedicationId: practice.relatedMedicationId ?? '',
       isActive: practice.isActive,
+      authorised: isRpAuthorised(practice),
     })
     setErrors({})
     setModalError(null)
@@ -181,8 +185,10 @@ export default function RestrictivePracticesTab({ participantId }: { participant
   }
 
   function validate(): boolean {
-    const next: { description?: string } = {}
+    const next: { description?: string; authorisedBy?: string; authorisationDate?: string } = {}
     if (!form.description.trim()) next.description = 'Description is required'
+    if (form.authorised && !form.authorisedBy.trim()) next.authorisedBy = 'Add who authorised it'
+    if (form.authorised && !form.authorisationDate) next.authorisationDate = 'Add the date it was authorised'
     setErrors(next)
     return Object.keys(next).length === 0
   }
@@ -194,8 +200,8 @@ export default function RestrictivePracticesTab({ participantId }: { participant
     const payload = {
       type: form.type,
       description: form.description.trim(),
-      authorisedBy: form.authorisedBy.trim() || null,
-      authorisationDate: form.authorisationDate || null,
+      authorisedBy: form.authorised ? form.authorisedBy.trim() : null,
+      authorisationDate: form.authorised ? form.authorisationDate : null,
       reviewDate: form.reviewDate || null,
       relatedMedicationId: form.type === 'ChemicalRestraint' ? (form.relatedMedicationId || null) : null,
       isActive: form.isActive,
@@ -344,21 +350,29 @@ export default function RestrictivePracticesTab({ participantId }: { participant
               />
             </FormField>
           )}
-          <FormField label="Authorised by">
-            <input
-              value={form.authorisedBy}
-              onChange={e => setForm(f => ({ ...f, authorisedBy: e.target.value }))}
-              placeholder="e.g. Dr. Chen / NDIS Commission"
-            />
+          <CheckboxField
+            label="This restrictive practice is authorised"
+            hint="Authorised practices need who authorised it and the date."
+            checked={form.authorised}
+            onChange={e => setForm(f => ({ ...f, authorised: e.target.checked }))}
+          />
+          {form.authorised && (
+            <>
+              <FormField label="Authorised by" required error={errors.authorisedBy}>
+                <input
+                  value={form.authorisedBy}
+                  onChange={e => setForm(f => ({ ...f, authorisedBy: e.target.value }))}
+                  placeholder="e.g. Dr. Chen / NDIS Commission"
+                />
+              </FormField>
+              <FormField label="Authorisation date" required error={errors.authorisationDate}>
+                <input type="date" value={form.authorisationDate} onChange={e => setForm(f => ({ ...f, authorisationDate: e.target.value }))} />
+              </FormField>
+            </>
+          )}
+          <FormField label="Review date">
+            <input type="date" value={form.reviewDate} onChange={e => setForm(f => ({ ...f, reviewDate: e.target.value }))} />
           </FormField>
-          <div className="grid grid-cols-2 gap-3">
-            <FormField label="Authorisation date">
-              <input type="date" value={form.authorisationDate} onChange={e => setForm(f => ({ ...f, authorisationDate: e.target.value }))} />
-            </FormField>
-            <FormField label="Review date">
-              <input type="date" value={form.reviewDate} onChange={e => setForm(f => ({ ...f, reviewDate: e.target.value }))} />
-            </FormField>
-          </div>
           <FormField label="Active" layout="checkbox" hint="Inactive entries are hidden from the default list but not deleted">
             <input
               type="checkbox"

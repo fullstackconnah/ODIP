@@ -5,6 +5,7 @@ import { useBulkCreateRestrictivePractices, useParticipantMedications } from '@/
 import { Modal } from '@/components/Modal'
 import { FormField } from '@/components/FormField'
 import { Dropdown } from '@/components/Dropdown'
+import { CheckboxField } from '@/components/CheckboxField'
 import { DataTable, type Column } from '@/components/DataTable'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
@@ -95,6 +96,8 @@ function AddRestrictivePracticeDialogBody({ participantId, onClose, onSaved, def
   // clicks as the old single-entry form did.
   const [bulkStep, setBulkStep] = useState<'setup' | 'rows'>(single ? 'rows' : 'setup')
   const [bulkType, setBulkType] = useState<RestrictivePracticeType>(defaultType ?? RESTRICTIVE_PRACTICE_TYPES[0])
+  // One answer for the whole batch. Unticked, the authorisation columns are hidden and rows are saved with no authoriser or date (Not authorised).
+  const [authorised, setAuthorised] = useState(false)
   const [bulkCountInput, setBulkCountInput] = useState('1')
   const [bulkCountError, setBulkCountError] = useState<string | null>(null)
   const [bulkRows, setBulkRows] = useState<BulkRowState[]>(() => (single ? [makeBulkRow(defaultDescription ?? '')] : []))
@@ -135,7 +138,11 @@ function AddRestrictivePracticeDialogBody({ participantId, onClose, onSaved, def
   async function saveBulk() {
     const nextErrors = new Map<string, string>()
     for (const row of bulkRows) {
-      if (!row.description.trim()) nextErrors.set(row.id, 'Description is required')
+      const problems: string[] = []
+      if (!row.description.trim()) problems.push('Description is required')
+      if (authorised && !row.authorisedBy.trim()) problems.push('Add who authorised it')
+      if (authorised && !row.authorisationDate) problems.push('Add the date it was authorised')
+      if (problems.length > 0) nextErrors.set(row.id, problems.join('. '))
     }
     if (nextErrors.size > 0) {
       setBulkRowErrors(nextErrors)
@@ -150,8 +157,8 @@ function AddRestrictivePracticeDialogBody({ participantId, onClose, onSaved, def
       items: bulkRows.map(row => ({
         type: bulkType,
         description: row.description.trim(),
-        authorisedBy: row.authorisedBy.trim() || null,
-        authorisationDate: row.authorisationDate || null,
+        authorisedBy: authorised ? row.authorisedBy.trim() : null,
+        authorisationDate: authorised ? row.authorisationDate : null,
         reviewDate: row.reviewDate || null,
         relatedMedicationId: bulkType === 'ChemicalRestraint' ? (row.relatedMedicationId || null) : null,
         isActive: true,
@@ -260,7 +267,7 @@ function AddRestrictivePracticeDialogBody({ participantId, onClose, onSaved, def
   const bulkColumns: Column<BulkRowState>[] = [
     // The full row on a phone card: otherwise the cell shrinks to the input and a prefilled description can't be read.
     textColumn('description', 'Description', 'What the restrictive practice involves...', 'max-md:basis-full'),
-    ...(single ? [] : [textColumn('authorisedBy', 'Authorised by', 'e.g. Dr. Chen'), dateColumn('authorisationDate', 'Authorisation date')]),
+    ...(single || !authorised ? [] : [textColumn('authorisedBy', 'Authorised by', 'e.g. Dr. Chen'), dateColumn('authorisationDate', 'Authorisation date')]),
     dateColumn('reviewDate', 'Review date'),
     ...(bulkType === 'ChemicalRestraint' ? [medicationColumn] : []),
     ...(single ? [] : [removeColumn]),
@@ -296,6 +303,12 @@ function AddRestrictivePracticeDialogBody({ participantId, onClose, onSaved, def
               items={RESTRICTIVE_PRACTICE_TYPES.map(t => ({ value: t, label: RESTRICTIVE_PRACTICE_TYPE_LABELS[t], description: RESTRICTIVE_PRACTICE_TYPE_DESCRIPTIONS[t] }))}
             />
           </FormField>
+          <CheckboxField
+            label="This restrictive practice is authorised"
+            hint="Authorised practices need who authorised it and the date."
+            checked={authorised}
+            onChange={e => setAuthorised(e.target.checked)}
+          />
           <FormField label="Number of entries" error={bulkCountError ?? undefined}>
             <input
               type="number"
