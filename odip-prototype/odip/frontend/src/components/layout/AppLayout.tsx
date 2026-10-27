@@ -9,6 +9,7 @@ import TenantSwitcher from '@/components/layout/TenantSwitcher'
 import UserSwitcher from '@/components/layout/UserSwitcher'
 import NotificationBell from '@/components/layout/NotificationBell'
 import WhatsNewButton from '@/components/layout/WhatsNewButton'
+import ThemeMenu from '@/components/layout/ThemeMenu'
 import { NavCountBadge } from '@/components/layout/NavCountBadge'
 import { navBadgeLabel } from '@/components/layout/navBadgeLabel'
 import PlatformFooter from '@/components/layout/PlatformFooter'
@@ -569,6 +570,7 @@ export default function AppLayout() {
             <div className="flex shrink-0 items-center gap-3 max-lg:gap-2">
               {isSuperAdmin && <TenantSwitcher />}
               {isSuperAdmin && viewingTenantId && <UserSwitcher />}
+              <ThemeMenu />
               <WhatsNewButton />
               <NotificationBell />
               <div className="max-lg:hidden w-8 h-8 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] flex items-center justify-center text-[var(--color-primary-foreground)] font-bold text-sm shadow-md">

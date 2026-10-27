@@ -79,6 +79,9 @@ public static class WhatsNewSeed
         new Item("2026-10-unsaved-prompt-clear-of-nav", "Unsaved changes prompt fits phones",
             "On a phone, the \"unsaved changes\" prompt no longer sits under the bottom menu.",
             WhatsNewAudience.All, false),
+        new Item("2026-10-theme-in-top-bar", "Change the theme from the top bar",
+            "Use the sun, moon or screen icon at the top of any page to switch between Light, Dark and System. Settings, Appearance still works too, and your choice is saved on this device.",
+            WhatsNewAudience.All, false),
     };
 
     /// <summary>Inserts the keys the table lacks, one save each, so a key another instance inserted first costs only that row.</summary>

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useId } from 'react'
 import type { CSSProperties, KeyboardEvent, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown } from 'lucide-react'
+import { Check, ChevronDown } from 'lucide-react'
 import { TAP_AREA } from './tapArea'
 import { buttonClasses, type ButtonVariant } from './buttonClasses'
 
@@ -34,6 +34,8 @@ type DropdownProps = {
   /** Menu variant: the Button look of the trigger. Primary for a header action; secondary for an in-page menu, so a page keeps one filled primary. */
   triggerVariant?: Extract<ButtonVariant, 'primary' | 'secondary'>
   colorClass?: string       // Tailwind color classes for pill trigger background
+  /** Icon variant: replaces the small icon-button look, so a header icon can match its neighbours' size. */
+  triggerClassName?: string
   disabled?: boolean        // caller controls — not auto-applied on empty items
   loading?: boolean
   /** Panel height cap in px (default 320). A tall list passes a larger cap; the room on screen then limits it, and an overflowing list is trimmed to end on half a row so the cut says it scrolls. */
@@ -65,6 +67,7 @@ export function Dropdown({
   iconOnlyBelowSm,
   triggerVariant = 'primary',
   colorClass = '',
+  triggerClassName,
   disabled = false,
   loading = false,
   maxPanelHeight,
@@ -362,6 +365,8 @@ export function Dropdown({
                   <p className="text-[13px] text-[var(--color-muted-foreground)]">{item.description}</p>
                 )}
               </div>
+              {/* Icon variant with a value: the chosen row wears a check (aria-selected already announces it). */}
+              {variant === 'icon' && item.value === value && <Check className="ml-auto w-4 h-4 shrink-0" aria-hidden="true" />}
             </div>
           </div>
         ))
@@ -451,7 +456,7 @@ export function Dropdown({
           // sits flush against the chip body and the drag handle, so a 44px pad would take the chip's own right
           // edge under coarse — a pad must never overlap a neighbouring control. Pad it together with a gap
           // when a consumer with room for one appears.
-          className="p-1.5 rounded-lg hover:bg-[var(--color-accent)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] disabled:opacity-40 disabled:pointer-events-none transition-colors"
+          className={triggerClassName ?? 'p-1.5 rounded-lg hover:bg-[var(--color-accent)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] disabled:opacity-40 disabled:pointer-events-none transition-colors'}
         >
           {icon}
         </button>
