@@ -82,6 +82,9 @@ public static class WhatsNewSeed
         new Item("2026-10-notices-one-look", "Warnings look the same everywhere",
             "Warning and error notices on participant pages, intake, the caregiver form and the roster panels now share one look, with an icon.",
             WhatsNewAudience.All, false),
+        new Item("2026-10-trip-form-labels", "Trip forms read better with screen readers",
+            "The accommodation, bookings, staff, activity, vehicle and claim forms now name every field and match the other forms.",
+            Staff, false),
     };
 
     /// <summary>Inserts the keys the table lacks, one save each, so a key another instance inserted first costs only that row.</summary>
