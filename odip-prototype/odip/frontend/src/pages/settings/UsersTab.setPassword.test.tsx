@@ -212,7 +212,7 @@ describe('UsersTab: Send set-password email', () => {
 
     for (const button of [send, edit]) {
       // Button, iconOnly: the --control-h-sm square with its 44px tap area, and the shared focus ring.
-      expect(button).toHaveClass('w-[var(--control-h-sm)]', 'h-[var(--control-h-sm)]', 'before:min-h-[var(--tap-min)]', 'focus:ring-[var(--color-ring)]')
+      expect(button).toHaveClass('w-[var(--control-h-sm)]', 'h-[var(--control-h-sm)]', 'before:min-h-[var(--tap-min)]', 'focus-visible:ring-[var(--color-ring)]')
       // Button, ghost: muted at rest, accent wash on hover.
       expect(button).toHaveClass('hover:bg-[var(--color-accent)]')
       // RowActions: opacity-only reveal keyed to the row, with the touch gap.

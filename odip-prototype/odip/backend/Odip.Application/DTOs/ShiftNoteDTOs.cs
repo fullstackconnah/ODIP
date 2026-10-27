@@ -30,6 +30,12 @@ public record ShiftNoteDto(
 
 public record CreateShiftNoteDto
 {
+    /// <summary>The client's id for the note, so a re-sent request is a no-op.</summary>
+    public Guid? Id { get; init; }
+
+    /// <summary>When the phone saved the note, if it was sent late (UTC). Null: now.</summary>
+    public DateTime? CreatedAt { get; init; }
+
     [Required, StringLength(1000, MinimumLength = 1)]
     public string Body { get; init; } = string.Empty;
 }

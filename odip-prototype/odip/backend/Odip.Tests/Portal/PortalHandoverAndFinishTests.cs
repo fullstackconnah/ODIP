@@ -674,7 +674,7 @@ public class PortalFinishValidationTests
         var f = Create(workerCompetent: false, competencyMode: MedicationCompetencyMode.Enforce);
         AddNote(f);
         AddMed(f, "Levetiracetam", "09:00");
-        Detail(await f.Controller.StartBreak(f.Shift.Id, default));
+        Detail(await f.Controller.StartBreak(f.Shift.Id, null, default));
 
         var body = await FinishBlocked(f);
 
@@ -771,13 +771,13 @@ public class PortalFinishValidationTests
     {
         var f = Create();
         AddNote(f);
-        var started = Detail(await f.Controller.StartBreak(f.Shift.Id, default)).Breaks.Single();
+        var started = Detail(await f.Controller.StartBreak(f.Shift.Id, null, default)).Breaks.Single();
 
         var body = await FinishBlocked(f);
         Assert.Equal(ShiftFinishBlockerCodes.BreakRunning, Assert.Single(body.Data!.FinishBlockers).Code);
 
         f.Advance(TimeSpan.FromMinutes(20));
-        Detail(await f.Controller.EndBreak(f.Shift.Id, started.Id, default));
+        Detail(await f.Controller.EndBreak(f.Shift.Id, started.Id, null, default));
         var finished = Detail(await f.Controller.FinishShift(f.Shift.Id, new FinishShiftDto(), default));
         Assert.Equal(ShiftStatus.PendingReview, finished.Status);
         Assert.Equal(20, finished.Completion!.BreakMinutes);
@@ -791,7 +791,7 @@ public class PortalFinishValidationTests
         AddNote(f);
         AddMed(f, "Zeta", "12:30");
         AddMed(f, "Alpha", "09:00");
-        Detail(await f.Controller.StartBreak(f.Shift.Id, default));
+        Detail(await f.Controller.StartBreak(f.Shift.Id, null, default));
 
         var body = await FinishBlocked(f);
 

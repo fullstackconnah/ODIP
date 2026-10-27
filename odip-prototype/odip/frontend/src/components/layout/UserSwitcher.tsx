@@ -86,7 +86,7 @@ export default function UserSwitcher() {
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-1 w-64 bg-[var(--color-popover)] border border-[var(--color-border)] rounded-xl shadow-2xl overflow-hidden z-50">
+        <div className="absolute right-0 mt-1 w-64 max-sm:w-56 bg-[var(--color-popover)] border border-[var(--color-border)] rounded-xl shadow-2xl overflow-hidden z-50">
           <div className="px-3 py-2 border-b border-[var(--color-border)] text-xs text-[var(--color-muted-foreground)] uppercase tracking-wider">
             View as user
           </div>
@@ -98,7 +98,7 @@ export default function UserSwitcher() {
   setOpen(false);
   setConfirmingExit(true);
 }}
-                className="w-full flex min-h-[var(--tap-min)] items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors hover:bg-[var(--color-accent)] mb-1 border-b border-[var(--color-border)] pb-2"
+                className="w-full flex min-h-[var(--tap-min)] items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:relative hover:bg-[var(--color-accent)] mb-1 border-b border-[var(--color-border)] pb-2"
               >
                 <span className="text-sm text-[var(--color-muted-foreground)]">↩ Exit view</span>
               </button>
@@ -118,7 +118,7 @@ export default function UserSwitcher() {
   setPendingUser(user);
 }}
                 disabled={!user.isActive}
-                className={`w-full flex min-h-[var(--tap-min)] items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors ${
+                className={`w-full flex min-h-[var(--tap-min)] items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:relative ${
                   user.id === viewingUserId
                     ? TONE.warning.soft
                     : user.isActive ? 'hover:bg-[var(--color-accent)]' : ''

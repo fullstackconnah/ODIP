@@ -44,7 +44,7 @@ export function Modal({ open, onClose, title, size = 'md', footer, children, cla
 
   return (
     // Below lg the fixed bottom nav (AppLayout, z-50, later in the DOM) covers the screen foot: the bottom padding centres the dialog in what is left.
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 pb-[calc(var(--mobile-nav-h)+env(safe-area-inset-bottom))] lg:pb-0" onClick={closeOnBackdrop ? onClose : undefined}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 pb-[var(--mobile-nav-h)] lg:pb-0" onClick={closeOnBackdrop ? onClose : undefined}>
       <div
         ref={dialogRef}
         role={role}

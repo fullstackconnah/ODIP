@@ -302,4 +302,31 @@ describe('UserSwitcher: focus ring', () => {
     render(<UserSwitcher />)
     expect(screen.getByRole('button', { name: /view as user/i })).toHaveClass('focus-visible:ring-2', 'focus-visible:ring-[var(--color-ring)]')
   })
+
+  it('gives the exit-view row and every user row the keyboard focus ring', async () => {
+    setSuperAdminSignedIn()
+    localStorage.setItem('odip_viewing_user', 'user-support-1')
+    const user = userEvent.setup()
+    render(<UserSwitcher />)
+
+    await user.click(screen.getByRole('button', { name: /^usr/i }))
+    const rows = [screen.getByRole('button', { name: /exit view/i }), screen.getByRole('button', { name: /^casey coordinator/i })]
+    for (const row of rows) {
+      expect(row).toHaveClass('focus-visible:ring-2', 'focus-visible:ring-[var(--color-ring)]', 'focus-visible:relative')
+      expect(row).not.toHaveClass('focus:ring-2')
+    }
+  })
+})
+
+// The trigger sits too far left on a 360px phone for a right-aligned w-64 popover; it narrows below sm (shots measure the rect).
+describe('UserSwitcher: popover stays on screen on a phone', () => {
+  it('narrows to w-56 below sm and keeps w-64 from sm up', async () => {
+    setSuperAdminSignedIn()
+    const user = userEvent.setup()
+    render(<UserSwitcher />)
+
+    await user.click(screen.getByRole('button', { name: /^usr/i }))
+    const popover = screen.getByText('View as user', { exact: true }).closest('div.absolute')
+    expect(popover).toHaveClass('right-0', 'w-64', 'max-sm:w-56')
+  })
 })

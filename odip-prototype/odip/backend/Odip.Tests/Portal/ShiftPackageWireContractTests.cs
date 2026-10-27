@@ -81,7 +81,7 @@ public class ShiftPackageWireContractTests
             IsCritical = true, IsActive = true,
         });
         f.Db.SaveChanges();
-        await f.Controller.StartBreak(f.Shift.Id, default);   // a running break: endedAt / editedAt null, and a BREAK_RUNNING blocker
+        await f.Controller.StartBreak(f.Shift.Id, null, default);   // a running break: endedAt / editedAt null, and a BREAK_RUNNING blocker
         return f;
     }
 

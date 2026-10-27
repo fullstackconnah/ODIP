@@ -79,7 +79,7 @@ public class PortalWritesTenantTests
     {
         var f = await Unscoped(ShiftStatus.InProgress);
 
-        Detail(await f.Controller.StartBreak(f.Shift.Id, default));
+        Detail(await f.Controller.StartBreak(f.Shift.Id, null, default));
 
         Assert.Equal(WaOrg, (await f.Db.ShiftBreaks.IgnoreQueryFilters().SingleAsync()).TenantId);
     }
