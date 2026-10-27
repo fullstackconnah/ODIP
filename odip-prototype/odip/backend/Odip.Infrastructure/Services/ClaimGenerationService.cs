@@ -314,6 +314,8 @@ public class ClaimGenerationService
             return "This trip has no days recorded, so there is nothing to claim. Check the trip's dates, then generate the claim again.";
         if (context.ConfirmedWithNdisNumberCount == 0 && context.ConfirmedOtherFundedCount > 0 && context.ConfirmedOtherFundedCount == context.ConfirmedParticipantCount)
             return "None of the trip's confirmed participants is claimed to the NDIS (funded another way). Invoice them directly.";
+        if (context.ConfirmedWithNdisNumberCount == 0 && context.ConfirmedOtherFundedCount > 0)
+            return "None of the trip's NDIS-funded participants has an NDIS number, so no claim lines could be built. Add it to their profiles, then generate the claim again. Participants funded another way are not claimed to the NDIS.";
         if (context.ConfirmedWithNdisNumberCount == 0)
             return "None of the trip's confirmed participants has an NDIS number, so no claim lines could be built. Add the NDIS number to each participant, then generate the claim again.";
         if (context.UnpricedDayTypes.Count > 0)

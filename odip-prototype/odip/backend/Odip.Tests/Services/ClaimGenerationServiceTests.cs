@@ -258,6 +258,30 @@ public class ClaimGenerationServiceTests
     }
 
     [Fact]
+    public async Task GenerateDraftClaimAsync_AnOtherFundedParticipantAndAnNdisOneWithoutANumber_AsksForTheNumberOfTheNdisOneOnly()
+    {
+        using var db = CreateDb();
+        var group = SeedActivityGroup(db);
+        SeedProviderSettings(db);
+        SeedCatalogueItem(db, group.Id, ClaimDayType.Weekday, false, vicPrice: 50m);
+        var other = CreateParticipant();
+        other.FundingSource = ParticipantFundingSource.Other;
+        var noNumber = CreateParticipant();
+        noNumber.NdisNumber = null;
+        db.Participants.AddRange(other, noNumber);
+        var trip = SeedCompletedTrip(db, new DateOnly(2026, 1, 5), 1, other, activityGroupId: group.Id);
+        db.ParticipantBookings.Add(new ParticipantBooking
+        {
+            Id = Guid.NewGuid(), TripInstanceId = trip.Id, ParticipantId = noNumber.Id, Participant = noNumber,
+            BookingStatus = BookingStatus.Confirmed, BookingDate = DateOnly.FromDateTime(DateTime.UtcNow)
+        });
+        await db.SaveChangesAsync();
+
+        await AssertGenerateRefusesAndSavesNothingAsync(db, trip,
+            "None of the trip's NDIS-funded participants has an NDIS number, so no claim lines could be built. Add it to their profiles, then generate the claim again. Participants funded another way are not claimed to the NDIS.");
+    }
+
+    [Fact]
     public async Task PreviewClaimAsync_EveryoneHasAnNdisNumber_LeavesNobodyOut()
     {
         using var db = CreateDb();
