@@ -345,7 +345,7 @@ describe('AppLayout — participant lifecycle navigation', () => {
       // The New inquiry button now lives inside the Participants hub PageHeader, not the
       // sidebar — Draft intake is gone from the nav. Lifecycle roles still see the hub
       // entry, Medications and Caregiver forms.
-      'groupParticipants', 'pillMedications', 'checklist_rtlCaregiver forms',
+      'groupParticipants', 'verifiedAgreements', 'pillMedications', 'checklist_rtlCaregiver forms',
     ])
     // Draft intake must NOT be present anywhere in the nav (sidebar or mobile drawer).
     expect(screen.queryByRole('link', { name: /Draft intake$/ })).not.toBeInTheDocument()
@@ -721,7 +721,7 @@ describe('AppLayout — no New Trip shortcut in the sidebar, the drawer or the b
     expect(hrefs(mainNav())).toEqual([
       '/', '/portal',
       '/trips', '/schedule', '/bookings', '/accommodation', '/vehicles',
-      '/participants', '/medications', '/caregiver-submissions',
+      '/participants', '/agreements', '/medications', '/caregiver-submissions',
       '/rostering', '/rostering/patterns', '/rostering/compatibility', '/rostering/leave', '/rostering/completions', '/staff', '/qualifications',
       '/tasks', '/budgets', '/invoices',
       '/incidents', '/settings',
@@ -779,7 +779,7 @@ describe('AppLayout — the menu each role sees is generated from navConfig', ()
     'Dashboard',
     'My shifts',
     'Trips: Trips | Schedule | Bookings | Accommodation | Vehicles',
-    'Participants: Participants | Medications | Caregiver forms',
+    'Participants: Participants | Agreements | Medications | Caregiver forms',
     'Staff & roster: Roster board | Shift patterns | Compatibility | Leave | Completions | Staff | Qualifications',
     'Tasks',
     'Budgets',
@@ -1543,6 +1543,43 @@ describe('AppLayout — the sidebar collapses to an icon rail (from lg)', () => 
     expect(folds.filter(el => (el.getAttribute('class') ?? '').includes('transition-'))).toEqual([])
   })
 
+  describe('the brand: the wordmark folds into its "b"', () => {
+    const tile = () => aside().querySelectorAll('[data-brand-tile]')
+    const marks = () => aside().querySelectorAll('[data-glide="brand-mark"]')
+
+    it('A1 expanded: one hidden tile (off), one glide mark inside the wordmark, the name once', () => {
+      renderRail('/', { sidebarCollapsed: false })
+      expect(tile()).toHaveLength(1)
+      expect(tile()[0]).toHaveAttribute('aria-hidden', 'true')
+      expect(tile()[0]).not.toHaveAttribute('data-on')
+      expect(marks()).toHaveLength(1)
+      expect(marks()[0].closest('[aria-hidden="true"]')!.textContent).toBe('bunyasupport')
+      expect(within(aside()).getAllByText('Bunya Support')).toHaveLength(1)
+    })
+
+    it('A2 collapsed: the tile is on, the rail "b" is 26px live text, no word, the name once', () => {
+      renderRail('/', { sidebarCollapsed: true })
+      expect(tile()[0]).toHaveAttribute('data-on')
+      expect(marks()).toHaveLength(1)
+      expect(marks()[0].textContent).toBe('b')
+      expect((marks()[0] as HTMLElement).style.fontSize).toBe('26px')
+      expect(marks()[0]).toHaveAttribute('aria-hidden', 'true')
+      expect(within(aside()).queryByText(/support/)).toBeNull()
+      expect(within(aside()).getAllByText('Bunya Support')).toHaveLength(1)
+    })
+
+    it('A3 reduced motion: the tile and the "b" switch at once, both ways', () => {
+      stubMedia({ reduce: true })
+      renderRail('/', { sidebarCollapsed: false })
+      fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }))
+      expect(tile()[0]).toHaveAttribute('data-on')
+      expect((marks()[0] as HTMLElement).style.fontSize).toBe('26px')
+      fireEvent.click(screen.getByRole('button', { name: 'Expand sidebar' }))
+      expect(tile()[0]).not.toHaveAttribute('data-on')
+      expect(aside().querySelector('[data-fold="word"]')).not.toBeNull()
+    })
+  })
+
   describe('with WAAPI', () => {
     const animate = vi.fn(() => ({ cancel() {}, finished: Promise.resolve() }))
     beforeEach(() => {
@@ -1562,6 +1599,48 @@ describe('AppLayout — the sidebar collapses to an icon rail (from lg)', () => 
       renderRail('/', { sidebarCollapsed: false })
       collapseAndSettle()
       expect(animate).toHaveBeenCalled()
+    })
+
+    it('A4 the "b" glides and grows between the wordmark and the rail; the tail and the tile do not use WAAPI keyframes of their own', () => {
+      const calls: { el: HTMLElement; keyframes: Keyframe[]; options: KeyframeAnimationOptions }[] = []
+      Object.assign(Element.prototype, {
+        animate(this: HTMLElement, keyframes: Keyframe[], options: KeyframeAnimationOptions) {
+          calls.push({ el: this, keyframes, options })
+          return { cancel() {}, finished: Promise.resolve() }
+        },
+      })
+      const rect = (left: number, top: number, height: number) => ({ left, top, height, width: 0, right: left, bottom: top + height, x: left, y: top, toJSON() {} })
+      const spy = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+        const el = this as HTMLElement
+        if (el.dataset.glide !== 'brand-mark') return rect(0, 0, 40) as DOMRect
+        return (el.style.fontSize === '26px' ? rect(23.3, 22, 26) : rect(22, 25.5, 21)) as DOMRect
+      })
+      const nums = (t: string) => (t.match(/-?\d+(\.\d+)?/g) ?? []).map(Number)
+      try {
+        renderRail('/', { sidebarCollapsed: false })
+        fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }))
+        act(() => { vi.advanceTimersByTime(80) })
+        const glide = calls.filter(c => c.el.dataset.glide === 'brand-mark')
+        expect(glide).toHaveLength(1)
+        const [dx, dy, s] = nums(String(glide[0].keyframes[0].transform))
+        expect(dx).toBeCloseTo(-1.3, 1)
+        expect(dy).toBeCloseTo(3.5, 1)
+        expect(s).toBeCloseTo(0.808, 2)
+        expect(glide[0].options).toMatchObject({ id: 'sb-glide', duration: 100 })
+        expect(calls.filter(c => JSON.stringify(c.keyframes).includes('scale(')).every(c => c.el.dataset.glide === 'brand-mark')).toBe(true)
+        expect(calls.filter(c => c.el.hasAttribute('data-brand-tile'))).toHaveLength(0)
+
+        calls.length = 0
+        fireEvent.click(screen.getByRole('button', { name: 'Expand sidebar' }))
+        const back = calls.filter(c => c.el.dataset.glide === 'brand-mark')
+        expect(nums(String(back[0].keyframes[0].transform))[2]).toBeCloseTo(1.238, 2)
+        const tail = calls.filter(c => c.el.dataset.fold === 'word')
+        expect(tail).toHaveLength(1)
+        expect(tail[0].keyframes).toEqual([{ opacity: 0, transform: 'translateX(-12px)' }, { opacity: 1, transform: 'none' }])
+        expect(tail[0].options).toMatchObject({ duration: 100, delay: 20 })
+      } finally {
+        spy.mockRestore()
+      }
     })
 
     it('T2f reduced motion animates nothing', () => {

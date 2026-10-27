@@ -107,6 +107,8 @@ public class RestrictivePracticesController : ControllerBase
             {
                 errors.Add($"{label}: Authorised by must be 200 characters or fewer");
             }
+            var pairError = AuthorisationPairError(row.AuthorisedBy, row.AuthorisationDate);
+            if (pairError != null) errors.Add($"{label}: {pairError}");
             if (row.RelatedMedicationId.HasValue)
             {
                 var medicationError = await ValidateRelatedMedicationAsync(row.Type, row.RelatedMedicationId.Value, participantId, ct);
@@ -148,6 +150,14 @@ public class RestrictivePracticesController : ControllerBase
         return Ok(ApiResponse<List<RestrictivePracticeDto>>.Ok(practices.Select(ToDto).ToList()));
     }
 
+    /// <summary>The authoriser and the authorisation date are given together, or not at all (same wording as the client).</summary>
+    private static string? AuthorisationPairError(string? authorisedBy, DateOnly? authorisationDate)
+    {
+        var hasWho = !string.IsNullOrWhiteSpace(authorisedBy);
+        if (hasWho == authorisationDate.HasValue) return null;
+        return hasWho ? "Add the date it was authorised." : "Add who authorised it.";
+    }
+
     [HttpPut("participants/restrictive-practices/{id:guid}")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<RestrictivePracticeDto>>> Update(
@@ -160,6 +170,13 @@ public class RestrictivePracticesController : ControllerBase
         {
             var medicationError = await ValidateRelatedMedicationAsync(dto.Type, dto.RelatedMedicationId.Value, practice.ParticipantId, ct);
             if (medicationError != null) return BadRequest(ApiResponse<RestrictivePracticeDto>.Fail(medicationError));
+        }
+
+        // Legacy half-filled rows stay editable: only check when an authorisation field changes.
+        if (dto.AuthorisedBy != practice.AuthorisedBy || dto.AuthorisationDate != practice.AuthorisationDate)
+        {
+            var pairError = AuthorisationPairError(dto.AuthorisedBy, dto.AuthorisationDate);
+            if (pairError != null) return BadRequest(ApiResponse<RestrictivePracticeDto>.Fail(pairError));
         }
 
         practice.Type = dto.Type;

@@ -336,7 +336,11 @@ describe('RestrictivePracticesTab — Add entries (bulk add, PD-2)', () => {
     const user = userEvent.setup()
     render(<RestrictivePracticesTab participantId="participant-1" />)
 
-    await openBulkRows(user, '2')
+    await user.click(screen.getAllByRole('button', { name: /add entries/i })[0])
+    await user.click(screen.getByRole('checkbox', { name: /this restrictive practice is authorised/i }))
+    await user.clear(screen.getByLabelText(/number of entries/i))
+    await user.type(screen.getByLabelText(/number of entries/i), '2')
+    await user.click(screen.getByRole('button', { name: /continue/i }))
 
     expect(screen.getByLabelText('Description, row 1')).toBeInTheDocument()
     expect(screen.getByLabelText('Authorised by, row 1')).toBeInTheDocument()
@@ -376,7 +380,7 @@ describe('RestrictivePracticesTab — Add entries (bulk add, PD-2)', () => {
     await user.click(screen.getByRole('button', { name: /save 1 entry/i }))
 
     expect(mockBulkCreateMutateAsync).not.toHaveBeenCalled()
-    expect(screen.getByRole('alert')).toHaveTextContent('Description is required')
+    expect(screen.getByRole('alert')).toHaveTextContent('Add a description.')
   })
 
   it('creates a single entry end to end through Add entries (the only create path)', async () => {
@@ -561,5 +565,133 @@ describe('RestrictivePracticesTab — long list (T10)', () => {
     const rows = container.querySelectorAll('[data-show-row]')
     expect(rows).toHaveLength(23)
     expect(rows[5]).toHaveFocus()
+  })
+})
+
+describe('RestrictivePracticesTab — edit form authorised checkbox', () => {
+  const box = () => screen.getByRole('checkbox', { name: /this restrictive practice is authorised/i })
+
+  it('opens ticked, with who and when, for an authorised record', async () => {
+    const user = userEvent.setup()
+    mockUseRestrictivePractices.mockReturnValue({ data: [makePractice({ authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01' })], isLoading: false })
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    expect(box()).toBeChecked()
+    expect(screen.getByLabelText(/^authorised by/i)).toHaveValue('Dr Lee')
+    expect(screen.getByLabelText(/^authorisation date/i)).toHaveValue('2026-03-01')
+  })
+
+  it('opens unticked, with no authorisation fields, for an unauthorised record', async () => {
+    const user = userEvent.setup()
+    mockUseRestrictivePractices.mockReturnValue({ data: [makePractice()], isLoading: false })
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    expect(box()).not.toBeChecked()
+    expect(screen.queryByLabelText(/^authorised by/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/^authorisation date/i)).not.toBeInTheDocument()
+  })
+
+  it('unticking and saving sends null for both', async () => {
+    const user = userEvent.setup()
+    mockUseRestrictivePractices.mockReturnValue({ data: [makePractice({ authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01' })], isLoading: false })
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.click(box())
+    await user.click(screen.getByRole('button', { name: /save entry/i }))
+
+    const [call] = mockUpdateMutateAsync.mock.calls[0]
+    expect(call).toEqual({ id: 'rp-1', data: { type: 'Unclassified', description: 'Locked doors overnight for safety.', reviewDate: null, relatedMedicationId: null, authorisedBy: null, authorisationDate: null, isActive: true } })
+  })
+
+  it('ticked with a field emptied shows the field error and does not save', async () => {
+    const user = userEvent.setup()
+    mockUseRestrictivePractices.mockReturnValue({ data: [makePractice({ authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01' })], isLoading: false })
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.clear(screen.getByLabelText(/^authorised by/i))
+    await user.click(screen.getByRole('button', { name: /save entry/i }))
+
+    expect(screen.getByText('Add who authorised it')).toBeInTheDocument()
+    expect(mockUpdateMutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('ticking an unauthorised record then filling both saves them', async () => {
+    const user = userEvent.setup()
+    mockUseRestrictivePractices.mockReturnValue({ data: [makePractice()], isLoading: false })
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.click(box())
+    await user.type(screen.getByLabelText(/^authorised by/i), 'Dr Lee')
+    await user.type(screen.getByLabelText(/^authorisation date/i), '2026-03-01')
+    await user.click(screen.getByRole('button', { name: /save entry/i }))
+
+    const [call] = mockUpdateMutateAsync.mock.calls[0]
+    expect(call).toEqual({ id: 'rp-1', data: { type: 'Unclassified', description: 'Locked doors overnight for safety.', reviewDate: null, relatedMedicationId: null, authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01', isActive: true } })
+  })
+
+  it('opens ticked for an inactive record and a description-only edit posts both values unchanged', async () => {
+    const user = userEvent.setup()
+    mockUseRestrictivePractices.mockReturnValue({ data: [makePractice({ isActive: false, authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01' })], isLoading: false })
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    await user.click(screen.getByText('Inactive (1)'))
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    expect(box()).toBeChecked()
+    await user.type(screen.getByLabelText(/description/i), ' Reviewed.')
+    await user.click(screen.getByRole('button', { name: /save entry/i }))
+
+    const [call] = mockUpdateMutateAsync.mock.calls[0]
+    expect(call).toEqual({ id: 'rp-1', data: { type: 'Unclassified', description: 'Locked doors overnight for safety. Reviewed.', reviewDate: null, relatedMedicationId: null, authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01', isActive: false } })
+  })
+
+  it('opens ticked for a date-only record, shows the date, and blocks the save asking who', async () => {
+    const user = userEvent.setup()
+    mockUseRestrictivePractices.mockReturnValue({ data: [makePractice({ authorisationDate: '2026-03-01' })], isLoading: false })
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    expect(box()).toBeChecked()
+    expect(screen.getByLabelText(/^authorisation date/i)).toHaveValue('2026-03-01')
+    await user.click(screen.getByRole('button', { name: /save entry/i }))
+
+    expect(screen.getByText('Add who authorised it')).toBeInTheDocument()
+    expect(mockUpdateMutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('opens ticked for a name-only record, shows the name, and blocks the save asking for the date', async () => {
+    const user = userEvent.setup()
+    mockUseRestrictivePractices.mockReturnValue({ data: [makePractice({ authorisedBy: 'Dr Lee' })], isLoading: false })
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    expect(box()).toBeChecked()
+    expect(screen.getByLabelText(/^authorised by/i)).toHaveValue('Dr Lee')
+    await user.click(screen.getByRole('button', { name: /save entry/i }))
+
+    expect(screen.getByText('Add the date it was authorised')).toBeInTheDocument()
+    expect(mockUpdateMutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('keeps the form as typed, ticked, when the server rejects the save', async () => {
+    const user = userEvent.setup()
+    mockUseRestrictivePractices.mockReturnValue({ data: [makePractice()], isLoading: false })
+    mockUpdateMutateAsync.mockRejectedValueOnce({ response: { data: { errors: ['Authorised by is too long'] } } })
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.click(box())
+    await user.type(screen.getByLabelText(/^authorised by/i), 'Dr Lee')
+    await user.type(screen.getByLabelText(/^authorisation date/i), '2026-03-01')
+    await user.click(screen.getByRole('button', { name: /save entry/i }))
+
+    expect(await screen.findByText('Authorised by is too long')).toBeInTheDocument()
+    expect(box()).toBeChecked()
+    expect(screen.getByLabelText(/^authorised by/i)).toHaveValue('Dr Lee')
+    expect(screen.getByLabelText(/^authorisation date/i)).toHaveValue('2026-03-01')
   })
 })

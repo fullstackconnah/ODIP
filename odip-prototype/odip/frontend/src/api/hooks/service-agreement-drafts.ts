@@ -31,6 +31,7 @@ export function useCreateServiceAgreementDraft() {
       apiPost<ServiceAgreementDraftDto>(path(participantId), data),
     onSuccess: (_, { participantId }) => {
       queryClient.invalidateQueries({ queryKey: ['service-agreement-drafts', participantId] })
+      queryClient.invalidateQueries({ queryKey: AGREEMENTS_KEY })
       // The onboarding checklist's "Service needs" item and the worklist read the newest draft.
       queryClient.invalidateQueries({ queryKey: ['onboarding', participantId] })
       queryClient.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
@@ -50,6 +51,7 @@ export function usePatternChange() {
     onSuccess: (result, { participantId }) => {
       if (!result.draftId) return
       queryClient.invalidateQueries({ queryKey: ['service-agreement-drafts', participantId] })
+      queryClient.invalidateQueries({ queryKey: AGREEMENTS_KEY })
       // The onboarding checklist's "Service needs" item and the worklist read the newest draft.
       queryClient.invalidateQueries({ queryKey: ['onboarding', participantId] })
       queryClient.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
@@ -57,6 +59,8 @@ export function usePatternChange() {
   })
 }
 
+/** The Agreements page's list: any change to an agreement revision makes it stale. */
+export const AGREEMENTS_KEY = ['service-agreements'] as const
 export const AGREEMENTS_ENDING_KEY = ['agreements-ending'] as const
 
 /** The organisation's agreements ending within 60 days or ended (agreement PR 2): the Participants register's Agreements ending view. */
@@ -82,6 +86,7 @@ export function useRenewAgreement() {
       queryClient.invalidateQueries({ queryKey: ['onboarding', participantId] }),
       queryClient.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] }),
       queryClient.invalidateQueries({ queryKey: AGREEMENTS_ENDING_KEY }),
+      queryClient.invalidateQueries({ queryKey: AGREEMENTS_KEY }),
       queryClient.invalidateQueries({ queryKey: ['participant-alerts', participantId] }),
       queryClient.invalidateQueries({ queryKey: ['participant-alerts-aggregate'] }),
     ]),
@@ -129,6 +134,7 @@ export function useApproveServiceAgreementDraft() {
       queryClient.invalidateQueries({ queryKey: ['participant-rostering', participantId] }),
       // An approved renewal ends the "ending" flag; the alerts are refreshed with the budget figures below.
       queryClient.invalidateQueries({ queryKey: AGREEMENTS_ENDING_KEY }),
+      queryClient.invalidateQueries({ queryKey: AGREEMENTS_KEY }),
       // The unfilled shifts it makes are booked ahead in this participant's budget.
       refreshBudgetFigures(queryClient, [participantId]),
     ]),

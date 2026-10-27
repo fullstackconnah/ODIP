@@ -303,6 +303,12 @@ public class ClaimsController : ControllerBase
         // this moment, and a refusal (no settings) writes nothing, the numbers it took rolling back with the transaction.
         if (dto.Status == TripClaimStatus.Submitted && c.Status != TripClaimStatus.Submitted)
         {
+            // A draft made before the engines left out other-funded participants can still hold their lines: they are not claimed to the NDIS, so the move is refused before anything is issued.
+            var lineParticipantIds = _db.ClaimLineItems.Where(l => l.TripClaimId == c.Id && l.ParticipantBooking != null).Select(l => l.ParticipantBooking!.ParticipantId);
+            var participants = await _db.Participants.Where(p => p.Id == c.ParticipantId || lineParticipantIds.Contains(p.Id)).ToListAsync(ct);
+            var otherFunded = participants.Where(Odip.Domain.Billing.ClaimFunding.IsOtherFunded).Select(p => p.FullName).Distinct().ToList();
+            if (otherFunded.Count > 0)
+                return Conflict(ApiResponse<bool>.Fail($"{string.Join(", ", otherFunded)} {(otherFunded.Count == 1 ? "is" : "are")} funded another way, so this claim can't be submitted to the NDIS. Remove their lines or reject the claim."));
             try { await _invoiceService.IssueForSubmitAsync(c.Id, now, User, ct); }
             catch (InvoiceRefusedException ex) { return Conflict(ApiResponse<bool>.Fail(ex.Message)); }
         }

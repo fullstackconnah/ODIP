@@ -22,7 +22,8 @@ export type PageKey =
   | 'medications'
   | 'caregiver-submissions'
   | 'agreement-drafts'
-  | 'budgets';
+  | 'budgets'
+  | 'agreements';
 
 const SUPPORT_WORKER_PAGES: PageKey[] = [
   'dashboard',
@@ -55,6 +56,7 @@ const READ_ONLY_REFUSED_PAGES: PageKey[] = [
   'caregiver-submissions',
   'agreement-drafts',
   'budgets',
+  'agreements',
 ];
 
 function getCurrentUser(): Record<string, unknown> {

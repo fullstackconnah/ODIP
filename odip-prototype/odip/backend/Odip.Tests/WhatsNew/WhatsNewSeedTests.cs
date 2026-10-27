@@ -33,6 +33,13 @@ public class WhatsNewSeedTests
     }
 
     [Fact]
+    public void TheOtherFundedClaimsItem_FollowsTheKeyPattern_ForStaff()
+    {
+        var item = WhatsNewSeed.All.Single(i => i.Key == "2026-10-other-funded-claims");
+        Assert.Equal(WhatsNewAudience.Admin | WhatsNewAudience.Coordinator, item.Roles);
+    }
+
+    [Fact]
     public void Copy_NeverSaysOdip()
     {
         foreach (var i in WhatsNewSeed.All)

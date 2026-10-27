@@ -119,7 +119,8 @@ export function Dropdown({
     style.maxHeight = max
     style.overflowY = 'auto'
     if (resolvedAlign === 'left') {
-      style.left = rect.left
+      // A fixed-width panel (menu, icon) opened near the right edge of a phone card would run off screen: keep it within 8px of the viewport.
+      style.left = variant === 'form' ? rect.left : Math.max(8, Math.min(rect.left, window.innerWidth - (panelRef.current?.offsetWidth ?? 0) - 8))
       if (variant === 'form') style.width = rect.width
     } else {
       style.right = window.innerWidth - rect.right
@@ -365,15 +366,16 @@ export function Dropdown({
               // min-h --tap-min: 44px rows under a coarse pointer (a phone's row actions live here), 0px and so unchanged on a mouse.
               className={`w-full min-h-[var(--tap-min)] flex items-center gap-3 px-3 py-1.5 text-sm text-[var(--color-foreground)] text-left transition-colors ${
                 item.disabled
-                  ? 'opacity-40 cursor-not-allowed'
+                  ? `cursor-not-allowed ${item.description ? '' : 'opacity-40'}`
                   : focusedIndex === idx
                   ? 'bg-[var(--color-surface-container-low)]'
                   : 'hover:bg-[var(--color-surface-container-low)]'
               }`}
             >
-              {item.icon && <span className="shrink-0">{item.icon}</span>}
+              {item.icon && <span className={`shrink-0 ${item.disabled && item.description ? 'opacity-40' : ''}`}>{item.icon}</span>}
               <div className="min-w-0">
-                <p className={item.description ? 'font-semibold' : ''}>{item.label}</p>
+                {/* A disabled item with a reason dims the label and icon: the reason is the one place that says why, so it keeps its contrast. */}
+                <p className={item.description ? `font-semibold ${item.disabled ? 'opacity-40' : ''}` : ''}>{item.label}</p>
                 {item.description && (
                   <p className="text-[13px] text-[var(--color-muted-foreground)]">{item.description}</p>
                 )}

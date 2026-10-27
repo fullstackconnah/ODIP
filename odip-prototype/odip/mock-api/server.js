@@ -2477,6 +2477,31 @@ function agreementsEnding() {
   return rows.sort((a, b) => a.agreementEndDate.localeCompare(b.agreementEndDate))
 }
 
+
+// Agreements page (PR A): 34 synthetic rows, one per status, with an ended row holding a waiting draft and a newer price list. The ids are not the participants' above.
+const agreementPriceLists = [{ version: '2026-27', start: '2026-07-01' }, { version: '2025-26', start: '2025-07-01' }]
+function agreementsList() {
+  const today = planApproval.providerToday()
+  const first = ['Amy', 'Ben', 'Cal', 'Dee', 'Eve', 'Fay', 'Gus', 'Hal', 'Ivy', 'Jon', 'Kai', 'Lea', 'Max', 'Nell', 'Ola', 'Pat', 'Quin', 'Rae', 'Sam', 'Tia', 'Uma', 'Vic', 'Wes', 'Xia', 'Yan', 'Zoe', 'Abe', 'Bea', 'Cy', 'Dot', 'Eli', 'Flo', 'Gil', 'Hana']
+  const rev = (id, version, start, end, total, approved) => ({ draftId: id, version, agreementStartDate: start, agreementEndDate: end, total })
+  const rows = first.map((name, i) => {
+    const kind = i % 6 // 0 Active, 1 Ending, 2 Ended + waiting draft, 3 DraftWaiting, 4 NotApproved, 5 Active on the old list
+    const id = 'ag-' + String(i).padStart(4, '0')
+    const end = kind === 1 ? addDaysIso(today, 12 + i) : kind === 2 ? addDaysIso(today, -4) : addDaysIso(today, 200 + i)
+    const start = addDaysIso(end, -364)
+    const current = kind === 4 ? null : rev('cur-' + id, 1, start, end, 12480 + i * 37.5)
+    const waiting = kind === 2 || kind === 3 || kind === 4 ? rev('wait-' + id, kind === 4 ? 1 : 2, kind === 2 ? addDaysIso(end, 1) : start, addDaysIso(end, 365), 12999.5 + i) : null
+    const status = kind === 4 ? 'NotApproved' : waiting ? 'DraftWaiting' : kind === 1 ? 'Ending' : 'Active'
+    const daysLeft = kind === 1 || kind === 2 ? daysBetween(today, end) : null
+    return {
+      participantId: 'ag-p-' + id, participantName: name + ' Ng', status, endingState: kind === 1 ? 'Ending' : kind === 2 ? 'Ended' : 'None', hasWaitingDraft: waiting !== null,
+      current, waiting, daysLeft, termStart: current ? start : null,
+      priceList: agreementPriceLists[kind === 5 ? 1 : 0], newerPriceList: kind === 5 && current ? agreementPriceLists[0] : null,
+    }
+  })
+  return { canApprove: true, rows }
+}
+
 ;(function seedDrafts() {
   serviceAgreementDrafts['p-0002'] = [{
     id: 'draft-p-0002-v1', participantId: 'p-0002', version: 1, status: 'UnapprovedDraft', templateVersion: 'ODIP-Service-Agreement-Blank-DRAFT-2026-09-27', templateDocxSha256: '9f2c1d0e', templatePdfSha256: '41ab77c3',
@@ -2546,6 +2571,8 @@ const routes = [
   ['dashboard/setup', () => dashboardSetup],
   ['plan-pricing/settings', () => planPricingSettings],
   ['service-agreements/ending', () => agreementsEnding()],
+  ['service-agreements/price-lists', () => agreementPriceLists],
+  ['service-agreements', () => agreementsList()],
   // The newest revision in full, the older ones as summaries; one revision in full by id.
   ['participants/:id/service-agreement-drafts/:id', (participantId, draftId) => {
     const found = (serviceAgreementDrafts[participantId] || []).find((draft) => draft.id === draftId)
@@ -2880,6 +2907,17 @@ const postRoutes = [
       state: source.state, planStartDate: plan.planStart, planEndDate: plan.planEnd, agreementStartDate: start, agreementEndDate: end, representative: source.representative,
       blocks: source.blocks, baseVersion: revisions.length,
     })
+  }],
+  // One answer per item, in order; the first of each kind the page words (stateless like the rest: nothing is approved).
+  ['service-agreements/approve-batch', (body) => {
+    const outcomes = ['Approved', 'AlreadyApproved', 'NeedsReview', 'Superseded', 'Ended', 'Busy', 'NotFound', 'Failed']
+    const items = (body && body.items) || []
+    if (items.length < 1 || items.length > 25) return respond(400, failEnvelope(null, ['Select between 1 and 25 agreements.']))
+    const names = new Map(agreementsList().rows.map((r) => [r.participantId, r.participantName]))
+    return items.map((item, i) => ({
+      participantId: item.participantId, draftId: item.draftId, participantName: names.get(item.participantId) || 'Demo Ng', outcome: i < 3 ? 'Approved' : outcomes[i % outcomes.length],
+      reasons: outcomes[i % outcomes.length] === 'NeedsReview' ? ['Block weekdays: no item fits.'] : [],
+    }))
   }],
   ['participants/:id/service-agreement-drafts/:id/approve', (participantId, draftId, body) => {
     const result = planApproval.approve(approvalStore, participantId, draftId, body, { name: 'Demo Coordinator' })

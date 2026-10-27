@@ -11,3 +11,8 @@ export function endingWords(daysLeft: number, end: string, renewalVersion?: numb
     : `Agreement ends in ${daysLeft} days`
   return renewalVersion ? `${words}. Renewal v${renewalVersion} is waiting for approval` : words
 }
+
+/** The Agreements page's status badge for an ending agreement: short, since the table has the dates. */
+export function endingBadgeWords(daysLeft: number): string {
+  return daysLeft < 0 ? 'Ended' : daysLeft === 0 ? 'Ends today' : daysLeft === 1 ? 'Ends in 1 day' : `Ends in ${daysLeft} days`
+}

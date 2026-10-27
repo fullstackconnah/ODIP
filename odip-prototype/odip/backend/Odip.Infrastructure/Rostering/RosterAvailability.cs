@@ -112,14 +112,14 @@ public sealed class RosterAvailability(OdipDbContext db, IStaffUnavailabilityQue
         private readonly RosterConflictService _rules = new();
 
         /// <summary>Every finding for the candidate. Nothing when it has no worker, or its worker or participant is not in the snapshot (the board passes active staff only).</summary>
-        public List<RosterFinding> Check(Shift candidate, Guid? excludeShiftId = null, Guid? leavingShiftId = null) => CheckCore(candidate, excludeShiftId, leavingShiftId, liveOnly: false);
+        public List<RosterFinding> Check(Shift candidate, Guid? excludeShiftId = null, Guid? leavingShiftId = null, bool? callerIsAdmin = null) => CheckCore(candidate, excludeShiftId, leavingShiftId, liveOnly: false, callerIsAdmin);
 
         /// <summary>Why the candidate's worker cannot take it (L5), as a short reason (L-b), the first in the engine's order; null when they can.</summary>
         public string? AwayReason(Shift candidate)
         {
             if (candidate.UserId is not { } userId) return null;
             if (!_staff.TryGetValue(userId, out var worker) || !worker.IsActive) return "inactive";
-            return CheckCore(candidate, null, null, liveOnly: true).Select(ReasonOf).FirstOrDefault(reason => reason is not null);
+            return CheckCore(candidate, null, null, liveOnly: true, callerIsAdmin: null).Select(ReasonOf).FirstOrDefault(reason => reason is not null);
         }
 
         /// <summary>The short reason a finding makes its worker away (L-b), null when it does not: the mapped codes, and any other Blocking finding (B-S1) with a generic one.</summary>
@@ -129,7 +129,7 @@ public sealed class RosterAvailability(OdipDbContext db, IStaffUnavailabilityQue
         /// <summary>A shift placed in this batch: later checks see the worker as booked.</summary>
         public void Add(Shift shift) => _shifts.Add(shift);
 
-        private List<RosterFinding> CheckCore(Shift candidate, Guid? excludeShiftId, Guid? leavingShiftId, bool liveOnly)
+        private List<RosterFinding> CheckCore(Shift candidate, Guid? excludeShiftId, Guid? leavingShiftId, bool liveOnly, bool? callerIsAdmin)
         {
             if (candidate.UserId is not { } userId || !_staff.TryGetValue(userId, out var worker) || !_participants.TryGetValue(candidate.ParticipantId, out var participant))
                 return new List<RosterFinding>();
@@ -142,7 +142,7 @@ public sealed class RosterAvailability(OdipDbContext db, IStaffUnavailabilityQue
                 trips.Where(a => a.UserId == userId).ToList(),
                 windows.Where(w => w.UserId == userId).ToList(),
                 compatibility.TryGetValue((userId, candidate.ParticipantId), out var level) ? level : CompatibilityLevel.Allowed,
-                WeeklyHoursFor(weeklyHours, worker.TenantId), holidays);
+                WeeklyHoursFor(weeklyHours, worker.TenantId), holidays, callerIsAdmin);
             return _rules.Check(candidate, ctx).ToList();
         }
     }

@@ -56,7 +56,7 @@ describe('AddRestrictivePracticeDialog with a default type (from an incident)', 
 
     await user.click(screen.getByRole('button', { name: 'Save 1 entry' }))
 
-    expect(screen.getByText('Description is required')).toBeInTheDocument()
+    expect(screen.getByText('Add a description.')).toBeInTheDocument()
     expect(mockBulkCreateMutateAsync).not.toHaveBeenCalled()
   })
 
@@ -71,5 +71,108 @@ describe('AddRestrictivePracticeDialog on a phone', () => {
   it('gives the description cell the full row below md', () => {
     render(<AddRestrictivePracticeDialog open participantId="participant-1" defaultType="PhysicalRestraint" defaultDescription="Held both arms at the kerb." onClose={vi.fn()} onSaved={vi.fn()} />)
     expect(screen.getByLabelText('Description, row 1').closest('td')).toHaveClass('max-md:basis-full')
+  })
+})
+
+// The register tab's "Add entries" flow: one checkbox on the setup step says whether the batch is authorised. Only then do the authorisation
+// columns appear and get required; unticked rows are posted with no authoriser and no date (they read Not authorised).
+describe('AddRestrictivePracticeDialog authorised checkbox (register tab)', () => {
+  const authorisedBox = () => screen.getByRole('checkbox', { name: /this restrictive practice is authorised/i })
+
+  async function toRows(user: ReturnType<typeof userEvent.setup>, tick: boolean, count = 1) {
+    render(<AddRestrictivePracticeDialog open participantId="participant-1" onClose={vi.fn()} onSaved={vi.fn()} />)
+    if (tick) await user.click(authorisedBox())
+    if (count !== 1) {
+      await user.clear(screen.getByLabelText(/number of entries/i))
+      await user.type(screen.getByLabelText(/number of entries/i), String(count))
+    }
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+  }
+
+  it('starts unticked and shows no authorisation columns, posting nulls for both', async () => {
+    const user = userEvent.setup()
+    mockBulkCreateMutateAsync.mockResolvedValue({ success: true, data: [] })
+    render(<AddRestrictivePracticeDialog open participantId="participant-1" onClose={vi.fn()} onSaved={vi.fn()} />)
+    expect(authorisedBox()).not.toBeChecked()
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+
+    expect(screen.queryByLabelText('Authorised by, row 1')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Authorisation date, row 1')).not.toBeInTheDocument()
+    await user.type(screen.getByLabelText('Description, row 1'), 'Locked door overnight')
+    await user.click(screen.getByRole('button', { name: 'Save 1 entry' }))
+
+    expect(mockBulkCreateMutateAsync).toHaveBeenCalledWith({
+      participantId: 'participant-1',
+      data: { items: [{ type: 'Seclusion', description: 'Locked door overnight', authorisedBy: null, authorisationDate: null, reviewDate: null, relatedMedicationId: null, isActive: true }] },
+    })
+    expect(mockBulkCreateMutateAsync.mock.calls[0][0].data.items).toHaveLength(1)
+  })
+
+  it('ticked: shows the columns and refuses to save while any row is missing who or when, naming that row, with no POST', async () => {
+    const user = userEvent.setup()
+    await toRows(user, true, 2)
+    expect(screen.getByLabelText('Authorised by, row 2')).toBeInTheDocument()
+    expect(screen.getByLabelText('Authorisation date, row 2')).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('Description, row 1'), 'Locked door overnight')
+    await user.type(screen.getByLabelText('Authorised by, row 1'), 'Dr Lee')
+    await user.type(screen.getByLabelText('Authorisation date, row 1'), '2026-03-01')
+    await user.type(screen.getByLabelText('Description, row 2'), 'Bedroom door alarm')
+    await user.click(screen.getByRole('button', { name: 'Save 2 entries' }))
+
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent(/^Add who authorised it\. Add the date it was authorised\.$/)
+    expect(screen.getByLabelText('Authorised by, row 2')).toHaveAccessibleDescription(alert.textContent!)
+    expect(screen.getByLabelText('Authorised by, row 1')).not.toHaveAttribute('aria-describedby')
+    expect(mockBulkCreateMutateAsync).not.toHaveBeenCalled()
+
+    await user.type(screen.getByLabelText('Authorised by, row 2'), 'Dr Lee')
+    await user.click(screen.getByRole('button', { name: 'Save 2 entries' }))
+    expect(screen.getByRole('alert')).toHaveTextContent(/^Add the date it was authorised\.$/)
+    expect(screen.getByLabelText('Authorisation date, row 2')).toHaveAccessibleDescription('Add the date it was authorised.')
+    expect(screen.getByLabelText('Authorisation date, row 1')).not.toHaveAttribute('aria-describedby')
+    expect(mockBulkCreateMutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('ticked and filled: posts who and when', async () => {
+    const user = userEvent.setup()
+    mockBulkCreateMutateAsync.mockResolvedValue({ success: true, data: [] })
+    await toRows(user, true)
+    await user.type(screen.getByLabelText('Description, row 1'), 'Locked door overnight')
+    await user.type(screen.getByLabelText('Authorised by, row 1'), ' Dr Lee ')
+    await user.type(screen.getByLabelText('Authorisation date, row 1'), '2026-03-01')
+    await user.click(screen.getByRole('button', { name: 'Save 1 entry' }))
+
+    expect(mockBulkCreateMutateAsync).toHaveBeenCalledWith({
+      participantId: 'participant-1',
+      data: { items: [{ type: 'Seclusion', description: 'Locked door overnight', authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01', reviewDate: null, relatedMedicationId: null, isActive: true }] },
+    })
+    expect(mockBulkCreateMutateAsync.mock.calls[0][0].data.items).toHaveLength(1)
+  })
+
+  it('going Back to untick starts fresh rows and posts nulls', async () => {
+    const user = userEvent.setup()
+    mockBulkCreateMutateAsync.mockResolvedValue({ success: true, data: [] })
+    await toRows(user, true)
+    await user.type(screen.getByLabelText('Description, row 1'), 'Locked door overnight')
+    await user.type(screen.getByLabelText('Authorised by, row 1'), 'Dr Lee')
+    await user.type(screen.getByLabelText('Authorisation date, row 1'), '2026-03-01')
+
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    await user.click(authorisedBox())
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await user.type(screen.getByLabelText('Description, row 1'), 'Locked door overnight')
+    await user.click(screen.getByRole('button', { name: 'Save 1 entry' }))
+
+    expect(mockBulkCreateMutateAsync).toHaveBeenCalledWith({
+      participantId: 'participant-1',
+      data: { items: [{ type: 'Seclusion', description: 'Locked door overnight', authorisedBy: null, authorisationDate: null, reviewDate: null, relatedMedicationId: null, isActive: true }] },
+    })
+    expect(mockBulkCreateMutateAsync.mock.calls[0][0].data.items).toHaveLength(1)
+  })
+
+  it('single (incident) mode has no checkbox', () => {
+    render(<AddRestrictivePracticeDialog open participantId="participant-1" defaultType="PhysicalRestraint" onClose={vi.fn()} onSaved={vi.fn()} />)
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
   })
 })

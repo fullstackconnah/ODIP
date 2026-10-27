@@ -166,6 +166,8 @@ public record ServiceAgreementDraftDto
     public int LineCount { get; init; }
     /// <summary>What the revision's lines add up to over the agreement (a hand-typed line is hours times unit price, floored to the cent).</summary>
     public decimal Total { get; init; }
+    /// <summary>The catalogue version the revision was priced from (the version of its latest-dated line), derived; null for a hand-typed draft.</summary>
+    public string? PriceList { get; init; }
     /// <summary>What a reader must not miss, a sentence each, counted in shifts: shifts with a part not priced, public holiday shifts to decide, and provisional rates. Empty for a revision priced in full or typed by hand.</summary>
     public List<string> Caveats { get; init; } = [];
     /// <summary>
@@ -320,3 +322,34 @@ public record ServiceAgreementDraftLineDto
 /// booking, a billable event, or a claim.
 /// </summary>
 public record DemoJourneySimulationDto(string Banner, string Signing, string Activation, string Booking, string RateLabel);
+
+public record PriceListDto { public string Version { get; init; } = ""; public DateOnly Start { get; init; } }
+public record AgreementRevisionRefDto { public Guid DraftId { get; init; } public int Version { get; init; } public DateOnly AgreementStartDate { get; init; } public DateOnly AgreementEndDate { get; init; } public decimal Total { get; init; } }
+public record AgreementRowDto
+{
+    public Guid ParticipantId { get; init; }
+    public string ParticipantName { get; init; } = "";
+    /// <summary>The shown badge: NotApproved, DraftWaiting, Ended, Ending or Active.</summary>
+    public string Status { get; init; } = "";
+    /// <summary>The ending row whatever Status says: None, Ending or Ended.</summary>
+    public string EndingState { get; init; } = "None";
+    public bool HasWaitingDraft { get; init; }
+    public AgreementRevisionRefDto? Current { get; init; }
+    public AgreementRevisionRefDto? Waiting { get; init; }
+    public int? DaysLeft { get; init; }
+    public DateOnly? TermStart { get; init; }
+    public PriceListDto? PriceList { get; init; }
+    public PriceListDto? NewerPriceList { get; init; }
+}
+public record AgreementListDto { public bool CanApprove { get; init; } public List<AgreementRowDto> Rows { get; init; } = []; }
+public record AgreementDraftRefDto { public Guid ParticipantId { get; init; } public Guid DraftId { get; init; } }
+public record AgreementApproveBatchDto { public List<AgreementDraftRefDto> Items { get; init; } = []; }
+public record AgreementApproveResultDto
+{
+    public Guid ParticipantId { get; init; }
+    public Guid DraftId { get; init; }
+    public string ParticipantName { get; init; } = "";
+    /// <summary>Approved, AlreadyApproved, NeedsReview, Superseded, Ended, Busy, NotFound, NotAnApprover or Failed.</summary>
+    public string Outcome { get; init; } = "";
+    public List<string> Reasons { get; init; } = [];
+}

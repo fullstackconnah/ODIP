@@ -248,18 +248,15 @@ function RailGroup({ id, label, msIcon, noun, leaves, rail, pathname, counts, on
   )
 }
 
-/** The brand in the rail: the favicon's "b" on a primary tile. Not a link, like the wordmark; assistive tech still reads the name. */
-function BrandTile() {
+/** The brand in the rail: the wordmark's own "b" (live text, so it is the glyph the word folds into) over the brand tile. Not a link; assistive tech reads the name. */
+function BrandMark() {
   return (
-    <span data-brand className="inline-flex origin-left">
+    <span className="flex size-8 items-center justify-center">
       <span className="sr-only">Bunya Support</span>
-      <svg aria-hidden="true" viewBox="0 0 32 32" className="size-8">
-        <rect width="32" height="32" rx="8" style={{ fill: 'var(--color-primary)' }} />
-        <g style={{ fill: 'var(--color-primary-foreground)' }}>
-          <rect x="8.4" y="5.5" width="4.2" height="20.8" rx="0.6" />
-          <path fillRule="evenodd" d="M16.9 12.7a6.8 6.8 0 1 1 0 13.6a6.8 6.8 0 1 1 0-13.6zm0 3.6a3.2 3.2 0 1 0 0 6.4a3.2 3.2 0 1 0 0-6.4z" />
-        </g>
-      </svg>
+      <span
+        aria-hidden="true" data-glide="brand-mark" className="relative -top-px font-medium leading-none"
+        style={{ fontFamily: 'var(--font-display)', fontSize: 26, letterSpacing: 0, color: 'var(--color-foreground)', transformOrigin: '0 0' }}
+      >b</span>
     </span>
   )
 }
@@ -319,7 +316,8 @@ const FADE_EASE = 'cubic-bezier(0.16,1,0.3,1)'
 /**
  * The sidebar's collapse motion ("the rail gathers"; DESIGN.md). Each lagged half of the layout (nav and brand, or the foot rows) flips
  * through `flip`, which measures every `[data-glide]` first and, once React has committed the new shape, glides each one from where it
- * was (FLIP, WAAPI transform). Expanding also fades the words and badges in behind the opening edge. The width and the content margin are
+ * was (FLIP, WAAPI transform). The brand's "b" also scales (21px in the wordmark, 26px in the rail) while the tail of the word fades and
+ * slides into it and the tile grows in behind. Expanding also fades the words and badges in behind the opening edge. The width and the content margin are
  * CSS transitions and are never cancelled here, so a click mid-motion reverses from where things are. Without WAAPI (jsdom) nothing animates.
  */
 function useSidebarGlide(
@@ -368,21 +366,19 @@ function useSidebarGlide(
       const now = el.getBoundingClientRect()
       const dx = old.left - now.left
       const dy = old.top - now.top
-      if (dx || dy) el.animate([{ transform: `translate(${dx}px,${dy}px)` }, { transform: 'none' }], { id: 'sb-glide', duration: ms, easing: GLIDE_EASE })
+      // The brand's "b" changes size between the wordmark and the rail (height = font-size), so it scales about its top-left; nav items stay translate-only.
+      const s = el.dataset.glide === 'brand-mark' ? old.height / now.height : 1
+      if (dx || dy || s !== 1) el.animate([{ transform: `translate(${dx}px,${dy}px)${s !== 1 ? ` scale(${s})` : ''}` }, { transform: 'none' }],{ id: 'sb-glide', duration: ms, easing: GLIDE_EASE })
     })
     const inZone = (el: Element) => (el.closest('[data-foot]') ? 'foot' : 'nav') === p.which
-    if (p.which === 'nav' && p.to) {
-      aside.querySelector<HTMLElement>('[data-brand]')?.animate(
-        [{ opacity: 0, transform: 'scale(0.8)' }, { opacity: 1, transform: 'none' }],
-        { id: 'sb-glide', duration: 100, easing: GLIDE_EASE, fill: 'backwards' },
-      )
-    }
     if (!p.to) {
       aside.querySelectorAll<HTMLElement>('[data-fold]').forEach(el => {
         if (!inZone(el)) return
-        const label = el.dataset.fold === 'label'
+        const label = el.dataset.fold === 'label' || el.dataset.fold === 'word'
         const foot = p.which === 'foot'
-        el.animate([{ opacity: 0 }, { opacity: 1 }], {
+        // The tail of the wordmark also slides out from the "b" it folded into.
+        const word = el.dataset.fold === 'word'
+        el.animate(word ? [{ opacity: 0, transform: 'translateX(-12px)' }, { opacity: 1, transform: 'none' }] : [{ opacity: 0 }, { opacity: 1 }], {
           id: 'sb-fade', easing: FADE_EASE, fill: 'backwards',
           duration: label ? (foot ? 60 : 100) : 60,
           delay: label ? (foot ? 0 : 20) : 90,
@@ -567,7 +563,9 @@ export default function AppLayout() {
         <div className={`flex h-full flex-col pt-3 pb-3 ${railLayout ? 'w-16 px-3 pointer-coarse:px-2.5' : 'w-[232px] px-3'}`}>
         {/* Brand — ~48px tall total */}
         <div className={`flex items-center h-12 shrink-0 ${railLayout ? 'justify-center' : 'px-2.5'}`}>
-          {railLayout ? <BrandTile /> : <span data-fold="label" className="inline-flex"><Wordmark size={21} /></span>}
+          {/* The tile is the row's first child in both layouts, so it persists and its CSS transition runs; it sits behind the "b" (index.css, data-brand-tile). */}
+          <span aria-hidden="true" data-brand-tile data-on={railLayout ? '' : undefined} className="pointer-events-none absolute left-4 top-5 size-8 rounded-[8px] bg-[var(--color-primary-fixed)]" />
+          {railLayout ? <BrandMark /> : <Wordmark size={21} fold />}
         </div>
 
         {/* Nav. In the rail it bleeds to the aside edges (and pads back), so the nav's scroll clip does not cut a count badge or a focus ring. Every item (group toggles, top-level links, group children, and "Sign Out" below) carries a
