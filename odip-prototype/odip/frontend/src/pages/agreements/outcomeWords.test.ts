@@ -33,6 +33,13 @@ describe('resultHeading', () => {
   it('says a partial is partial, and why to look at the rows', () => {
     expect(resultHeading([...many(5, 'Approved'), ...many(12, 'NeedsReview')], 17)).toEqual({ title: '5 of 17 approved', line: "12 weren't approved. Each row says why.", danger: false })
   })
+  it('names every part that is left, so the counts add up', () => {
+    const mixed = [...many(5, 'Approved'), ...many(11, 'NeedsReview'), ...many(1, 'AlreadyApproved')]
+    expect(resultHeading(mixed, 17)).toEqual({ title: '5 of 17 approved', line: "11 weren't approved, and 1 was already approved. Each row says why.", danger: false })
+    expect(resultHeading([...many(5, 'Approved'), ...many(11, 'NeedsReview')], 16).line).toBe("11 weren't approved. Each row says why.")
+    expect(resultHeading([...many(5, 'Approved'), ...many(1, 'AlreadyApproved')], 7).line).toBe('1 was already approved. Each row says why.')
+    expect(resultHeading([...many(5, 'Approved'), ...many(1, 'Busy'), ...many(2, 'AlreadyApproved')], 8).line).toBe("1 wasn't approved, and 2 were already approved. Each row says why.")
+  })
   it('is neutral when everything was approved already', () => {
     expect(resultHeading(many(3, 'AlreadyApproved'), 3)).toEqual({ title: 'These were already approved.', line: null, danger: false })
   })

@@ -18,7 +18,7 @@ export const OUTCOME_BADGE: Record<AgreementApproveOutcome, { tone: Tone; label:
 export const ALREADY_APPROVED = 'These were already approved.'
 export const NO_REPLY_LAST = (n: number) => `No answer came back for the last ${n}: some may have been approved.`
 export const NO_REPLY_WORDS = "We didn't hear back, so some of these may have been approved. Refresh to check before trying again."
-export const NOT_AN_APPROVER_WORDS = "Your role cannot approve agreements in your organisation. An Admin can change who may in Settings, Plan pricing."
+export const NOT_AN_APPROVER_WORDS = "Your role can't approve agreements in your organisation. An Admin can change who may approve, in Settings, Plan pricing."
 export const TOO_MANY_WORDS = 'Too many requests just now. Wait a minute, then try again.'
 
 const names = (list: AgreementApproveResult[]) => {
@@ -52,14 +52,16 @@ export function summarise(results: readonly AgreementApproveResult[], notSent = 
 /** The dialog's heading after a run, and the line under it. `total` is how many were sent, so the ones never sent count as not approved. */
 export function resultHeading(results: readonly AgreementApproveResult[], total: number): { title: string; line: string | null; danger: boolean } {
   const approved = results.filter(r => r.outcome === 'Approved').length
+  const already = results.filter(r => r.outcome === 'AlreadyApproved').length
   const failed = results.filter(r => r.outcome !== 'Approved' && r.outcome !== 'AlreadyApproved').length
   if (failed === 0 && results.length === total) {
     return approved === 0 ? { title: ALREADY_APPROVED, line: null, danger: false } : { title: `${plural(approved, 'agreement')} approved`, line: null, danger: false }
   }
   if (approved === 0) return { title: 'Nothing was approved.', line: failed ? 'Each row says why.' : null, danger: true }
+  const parts = [failed && `${failed} ${failed === 1 ? "wasn't" : "weren't"} approved`, already && `${already} ${already === 1 ? 'was' : 'were'} already approved`].filter(Boolean)
   return {
     title: `${approved} of ${total} approved`,
-    line: failed ? `${failed} ${failed === 1 ? "wasn't" : "weren't"} approved. ${failed === 1 ? 'The row says' : 'Each row says'} why.` : null,
+    line: failed || already ? `${parts.join(', and ')}. ${failed === 1 && !already ? 'The row says' : 'Each row says'} why.` : null,
     danger: false,
   }
 }

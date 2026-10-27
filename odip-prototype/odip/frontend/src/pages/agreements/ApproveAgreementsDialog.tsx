@@ -23,6 +23,8 @@ interface Props {
   progress: number
   /** Confirm: a refused request (429, 403...) in words; the dialog stays open. */
   error: string | null
+  /** Confirm: the error was a 403, so a retry can only be refused again and Approve is off (Cancel stays). */
+  refused?: boolean
   results: AgreementApproveResult[]
   stopped: ApproveStopped | null
   onConfirm: () => void
@@ -30,7 +32,7 @@ interface Props {
 }
 
 /** Confirm, run and report for the bulk Approve. While requests are in flight nothing closes it (no X, Escape and the backdrop do nothing) so the person cannot lose the answers. */
-export function ApproveAgreementsDialog({ open, phase, count, skipped, progress, error, results, stopped, onConfirm, onClose }: Props) {
+export function ApproveAgreementsDialog({ open, phase, count, skipped, progress, error, refused, results, stopped, onConfirm, onClose }: Props) {
   const running = phase === 'running'
   const listed = groupResults(results)
   const heading = resultHeading(results, stopped?.total ?? results.length)
@@ -46,7 +48,7 @@ export function ApproveAgreementsDialog({ open, phase, count, skipped, progress,
       footer={phase === 'confirm' ? (
         <>
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button onClick={onConfirm}>{`Approve ${count}`}</Button>
+          <Button onClick={onConfirm} disabled={refused}>{`Approve ${count}`}</Button>
         </>
       ) : (
         <Button onClick={onClose} disabled={running} aria-disabled={running}>{running ? 'Approving...' : 'Done'}</Button>

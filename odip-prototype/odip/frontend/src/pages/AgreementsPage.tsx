@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { CalendarClock, FileText } from 'lucide-react'
 import { useAgreements, useApproveAgreements } from '@/api/hooks'
@@ -77,8 +77,11 @@ const columns: Column<AgreementRow>[] = [
   },
 ]
 
-/** No HTTP answer at all (timeout, network): the server may have gone on and approved some. */
-const hasNoReply = (error: unknown) => !(error as { response?: unknown })?.response
+/** No HTTP answer at all (timeout, network), or only the proxy's (502, 503, 504): the server may have gone on and approved some. */
+const hasNoReply = (error: unknown) => {
+  const response = (error as { response?: { status?: number } })?.response
+  return !response || [502, 503, 504].includes(response.status ?? 0)
+}
 
 const failureWords = (error: unknown) => {
   const status = (error as { response?: { status?: number } })?.response?.status
@@ -146,6 +149,19 @@ export default function AgreementsPage() {
       stopped: run.stopped ? { done: run.results.length, total: sent.length, notSent: run.stopped.notSent, noReply } : null,
     }))
   }
+  const stripRef = useRef<HTMLDivElement>(null)
+  // Keep the chosen Show option in view inside the strip (a ?show= link, a tap near the edge), as Tabs does; only the strip scrolls, never the page.
+  useEffect(() => {
+    const strip = stripRef.current
+    const chip = strip?.querySelector<HTMLElement>('[aria-checked="true"]')
+    if (!strip || !chip || strip.scrollWidth <= strip.clientWidth) return
+    const box = strip.getBoundingClientRect()
+    const at = chip.getBoundingClientRect()
+    if (at.left >= box.left && at.right <= box.right) return
+    const left = Math.max(0, Math.min(strip.scrollLeft + (at.left - box.left) - (box.width - at.width) / 2, strip.scrollWidth - strip.clientWidth))
+    if (typeof strip.scrollTo === 'function') strip.scrollTo({ left })
+    else strip.scrollLeft = left
+  }, [show])
   const closeDialog = () => {
     setDialog(d => ({ ...d, open: false }))
     window.setTimeout(() => noticesRef.current?.focus(), 0)
@@ -153,7 +169,9 @@ export default function AgreementsPage() {
 
   const allShownSelected = shown.length > 0 && shown.every(r => selected.has(r.participantId))
   const filtered = show !== 'all' || !!list || !!q.trim()
-  const emptyWords = show !== 'all' && !list && !q.trim() ? EMPTY_WORDS[show] : 'No agreements match. Clear the search or choose Any price list.'
+  // Only the filters that are set: a person is never told to pick what is already picked.
+  const advice = [q.trim() && 'clear the search', show !== 'all' && 'choose All under Show', list && 'choose Any price list'].filter(Boolean)
+  const emptyWords = show !== 'all' && !list && !q.trim() ? EMPTY_WORDS[show] : `No agreements match. ${advice.join(', ').replace(/, ([^,]*)$/, ' or $1').replace(/^./, c => c.toUpperCase())}.`
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
@@ -167,7 +185,7 @@ export default function AgreementsPage() {
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-end gap-3">
             {/* One row that scrolls sideways inside its own box; the padding keeps the focus rings from being clipped. */}
-            <div className="-mx-1 -my-1 min-w-0 overflow-x-auto px-1 py-1 max-sm:w-full">
+            <div ref={stripRef} className="-mx-1 -my-1 min-w-0 scroll-smooth overflow-x-auto px-1 py-1 max-sm:w-full max-md:[scrollbar-width:none] max-md:[&::-webkit-scrollbar]:hidden">
               <ToggleGroup ariaLabel="Show" options={SHOW_OPTIONS} value={show} onChange={key => setParam('show', key)} className="w-max [&>button]:min-w-[var(--tap-min)] [&>button]:whitespace-nowrap" />
             </div>
             <SelectField
@@ -211,7 +229,7 @@ export default function AgreementsPage() {
 
       <ApproveAgreementsDialog
         open={dialog.open} phase={dialog.phase} count={dialog.phase === 'confirm' ? targets.length : count} skipped={skipped} progress={dialog.progress}
-        error={dialog.error} results={dialog.results} stopped={dialog.stopped} onConfirm={confirm} onClose={closeDialog}
+        error={dialog.error} refused={dialog.error === NOT_AN_APPROVER_WORDS} results={dialog.results} stopped={dialog.stopped} onConfirm={confirm} onClose={closeDialog}
       />
     </div>
   )

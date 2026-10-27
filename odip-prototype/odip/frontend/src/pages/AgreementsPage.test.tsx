@@ -71,6 +71,34 @@ describe('AgreementsPage', () => {
     expect(screen.queryByText('Ana Lee')).not.toBeInTheDocument()
   })
 
+  it('names only the filters that are set when nothing matches', async () => {
+    const user = userEvent.setup()
+    renderPage('/agreements?show=ended&q=zzzz')
+    expect(screen.getByText('No agreements match. Clear the search or choose All under Show.')).toBeInTheDocument()
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Price list' }), '2025-26')
+    expect(screen.getByText('No agreements match. Clear the search, choose All under Show or choose Any price list.')).toBeInTheDocument()
+    cleanup()
+    renderPage('/agreements?q=zzzz')
+    expect(screen.getByText('No agreements match. Clear the search.')).toBeInTheDocument()
+  })
+
+  it('scrolls the chosen Show option into view inside its strip, and never the page', () => {
+    const scrollTo = vi.fn()
+    Object.defineProperty(Element.prototype, 'scrollTo', { configurable: true, value: scrollTo })
+    const width = vi.spyOn(Element.prototype, 'scrollWidth', 'get').mockReturnValue(500)
+    const client = vi.spyOn(Element.prototype, 'clientWidth', 'get').mockReturnValue(200)
+    const box = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      return (this.getAttribute('aria-checked') === 'true' ? { left: 400, right: 480, width: 80 } : { left: 0, right: 200, width: 200 }) as DOMRect
+    })
+    try {
+      renderPage('/agreements?show=new-price-list')
+      expect(scrollTo).toHaveBeenCalledWith({ left: 300 })
+    } finally {
+      width.mockRestore(); client.mockRestore(); box.mockRestore()
+      delete (Element.prototype as { scrollTo?: unknown }).scrollTo
+    }
+  })
+
   it('gives a role that cannot approve no checkboxes and no Approve', () => {
     mockUseAgreements.mockReturnValue(ready(rows, false))
     renderPage()
@@ -131,9 +159,32 @@ describe('AgreementsPage', () => {
     renderPage()
     await approveDee(userEvent.setup())
 
-    const words = await screen.findByText(/Your role cannot approve agreements/)
-    expect(words).toHaveTextContent('An Admin can change who may in Settings, Plan pricing.')
+    const words = await screen.findByText(/Your role can't approve agreements/)
+    expect(words).toHaveTextContent('An Admin can change who may approve, in Settings, Plan pricing.')
     expect(screen.queryByText(/Try again/)).not.toBeInTheDocument()
+    // A retry can only be refused again: Approve is off, Cancel still closes.
+    const dialog = within(screen.getByRole('dialog'))
+    expect(dialog.getByRole('button', { name: 'Approve 1' })).toBeDisabled()
+    expect(dialog.getByRole('button', { name: 'Cancel' })).toBeEnabled()
+  })
+
+  it('leaves Approve on for a retry after any other error', async () => {
+    mockApprove.mockResolvedValue({ results: [], stopped: { error: { response: { status: 500 } }, notSent: 1 } })
+    renderPage()
+    await approveDee(userEvent.setup())
+
+    const dialog = within(screen.getByRole('dialog'))
+    expect(await dialog.findByText('Could not approve these. Try again.')).toBeInTheDocument()
+    expect(dialog.getByRole('button', { name: 'Approve 1' })).toBeEnabled()
+  })
+
+  it.each([502, 503, 504])('reads a proxy %i as no reply, since the server may have gone on', async status => {
+    mockApprove.mockResolvedValue({ results: [], stopped: { error: { response: { status } }, notSent: 1 } })
+    renderPage()
+    await approveDee(userEvent.setup())
+
+    expect(await screen.findByText("We didn't hear back, so some of these may have been approved. Refresh to check before trying again.")).toBeInTheDocument()
+    expect(screen.queryByText(/Could not approve these/)).not.toBeInTheDocument()
   })
 
   it('says some may have been approved when the request got no answer at all', async () => {
