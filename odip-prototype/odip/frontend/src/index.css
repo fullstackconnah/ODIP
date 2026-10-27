@@ -285,13 +285,13 @@
 }
 
 /* Material Symbols support */
-/* Self-hosted, FILL axis only: the app sets FILL 0/1 and wght 400, GRAD 0, opsz 24 and nothing else. `block` so a ligature name never flashes as text. */
+/* Self-hosted subset (scripts/subset-icons.mjs): only the icons in src/icons/materialSymbols.ts, FILL 0..1 at wght 400, GRAD 0, opsz 24. `block` so a ligature name never flashes as text. */
 @font-face {
   font-family: 'Material Symbols Outlined';
   font-style: normal;
   font-weight: 100 700;
   font-display: block;
-  src: url(../node_modules/@fontsource-variable/material-symbols-outlined/files/material-symbols-outlined-latin-fill-normal.woff2) format('woff2-variations');
+  src: url(./assets/fonts/material-symbols-outlined-subset.woff2) format('woff2');
 }
 
 .material-symbols-outlined {
