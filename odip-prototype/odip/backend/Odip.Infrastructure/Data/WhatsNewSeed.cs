@@ -103,6 +103,9 @@ public static class WhatsNewSeed
         new Item("2026-10-install-app", "Add Bunya Support to your phone",
             "On your phone, you can add Bunya Support to your home screen and open it like an app. After you sign in, look for the card above the menu bar.",
             WhatsNewAudience.All, false),
+        new Item("2026-10-rp-authorised-checkbox", "Mark a restrictive practice as authorised",
+            "When you add or edit a restrictive practice, tick \"This restrictive practice is authorised\" to fill in who authorised it and when. Leave it unticked if it isn't authorised.",
+            Staff, false),
     };
 
     /// <summary>Inserts the keys the table lacks, one save each, so a key another instance inserted first costs only that row.</summary>
