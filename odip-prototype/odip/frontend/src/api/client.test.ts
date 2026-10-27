@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AxiosError, type InternalAxiosRequestConfig } from 'axios'
+import { AxiosError, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios'
 
 // The shared client turns a 401 into "the session expired": it asks Firebase for a fresh ID token, exchanges it at /auth/exchange and retries the request once,
 // and when that fails it clears the session and sends the person to /login. That is wrong for the exchange ITSELF. A 401 from it is its answer (a refusal and
@@ -118,7 +118,7 @@ describe('a 401 on any other request', () => {
         { status: 200, data: { success: true, data: [] } },
       ])
 
-      const answer = client.apiClient.defaults.adapter as (c: InternalAxiosRequestConfig) => Promise<unknown>
+      const answer = client.apiClient.defaults.adapter as (c: InternalAxiosRequestConfig) => Promise<AxiosResponse>
       const timeouts: Array<number | undefined> = []
       client.apiClient.defaults.adapter = (c: InternalAxiosRequestConfig) => { timeouts.push(c.timeout); return answer(c) }
 
