@@ -4,6 +4,7 @@ export const MATERIAL_SYMBOLS: readonly string[] = [
   'accessible',
   'account_balance_wallet',
   'airport_shuttle',
+  'apps',
   'bed',
   'calendar_month',
   'calendar_today',

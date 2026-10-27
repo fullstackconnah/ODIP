@@ -13,16 +13,17 @@ function sources(dir: string): string[] {
   })
 }
 
-// Names the app can render: span text inside a material-symbols-outlined element (literal, or the
-// quoted arms of an expression), `msIcon:` config values and `factIcon('...')` arguments.
+// Names the app can render: span text inside an element whose className (either quote style, or a
+// template literal) holds material-symbols-outlined anywhere (literal, or the quoted arms of an
+// expression), `msIcon: 'x'` / `msIcon="x"` / `msIcon={'x'}` values and `factIcon('x')` arguments.
 function usedNames(code: string): string[] {
   const names: string[] = []
-  for (const m of code.matchAll(/className="material-symbols-outlined[^"]*"[^>]*>([^<]*)</g)) {
-    const body = m[1].trim()
-    if (body.startsWith('{')) for (const q of body.matchAll(/'([a-z0-9_]+)'/g)) names.push(q[1])
+  for (const m of code.matchAll(/className=\{?\s*(["'`])(?:(?!\1)[^])*material-symbols-outlined(?:(?!\1)[^])*\1\s*\}?[^>]*>([^<]*)</g)) {
+    const body = m[2].trim()
+    if (body.startsWith('{')) for (const q of body.matchAll(/["']([a-z0-9_]+)["']/g)) names.push(q[1])
     else if (body) names.push(body)
   }
-  for (const m of code.matchAll(/(?:msIcon:\s*|factIcon\()'([a-z0-9_]+)'/g)) names.push(m[1])
+  for (const m of code.matchAll(/(?:msIcon(?::\s*|=\{?\s*)|factIcon\(\s*)(["'])([a-z0-9_]+)\1/g)) names.push(m[2])
   return names
 }
 
