@@ -154,7 +154,7 @@ public class PortalBreaksTests
     {
         var f = Create();
 
-        var detail = Detail(await f.Controller.StartBreak(f.Shift.Id, default));
+        var detail = Detail(await f.Controller.StartBreak(f.Shift.Id, null, default));
 
         var b = Assert.Single(detail.Breaks);
         Assert.True(b.IsRunning);
@@ -168,10 +168,10 @@ public class PortalBreaksTests
     public async Task Start_WhileABreakIsAlreadyRunning_Is409_AndNothingIsAdded()
     {
         var f = Create();
-        Detail(await f.Controller.StartBreak(f.Shift.Id, default));
+        Detail(await f.Controller.StartBreak(f.Shift.Id, null, default));
         f.Advance(TimeSpan.FromMinutes(5));
 
-        var body = Failure(await f.Controller.StartBreak(f.Shift.Id, default), 409);
+        var body = Failure(await f.Controller.StartBreak(f.Shift.Id, null, default), 409);
 
         Assert.Equal(ShiftErrorCodes.ShiftBreakAlreadyRunning, body.Code);
         Assert.Single(await f.Db.ShiftBreaks.ToListAsync());
@@ -181,12 +181,12 @@ public class PortalBreaksTests
     public async Task Start_ThenAnotherAfterTheFirstEnds_IsAllowed()
     {
         var f = Create();
-        var first = Detail(await f.Controller.StartBreak(f.Shift.Id, default)).Breaks.Single();
+        var first = Detail(await f.Controller.StartBreak(f.Shift.Id, null, default)).Breaks.Single();
         f.Advance(TimeSpan.FromMinutes(10));
-        Detail(await f.Controller.EndBreak(f.Shift.Id, first.Id, default));
+        Detail(await f.Controller.EndBreak(f.Shift.Id, first.Id, null, default));
         f.Advance(TimeSpan.FromMinutes(20));
 
-        var detail = Detail(await f.Controller.StartBreak(f.Shift.Id, default));
+        var detail = Detail(await f.Controller.StartBreak(f.Shift.Id, null, default));
 
         Assert.Equal(2, detail.Breaks.Count);
         Assert.Single(detail.Breaks, b => b.IsRunning);
@@ -198,10 +198,10 @@ public class PortalBreaksTests
     public async Task End_StampsTheEnd_AndNetWorkedMinutesFollow()
     {
         var f = Create();
-        var started = Detail(await f.Controller.StartBreak(f.Shift.Id, default)).Breaks.Single();
+        var started = Detail(await f.Controller.StartBreak(f.Shift.Id, null, default)).Breaks.Single();
         f.Advance(TimeSpan.FromMinutes(30));
 
-        var detail = Detail(await f.Controller.EndBreak(f.Shift.Id, started.Id, default));
+        var detail = Detail(await f.Controller.EndBreak(f.Shift.Id, started.Id, null, default));
 
         var b = Assert.Single(detail.Breaks);
         Assert.False(b.IsRunning);
@@ -216,12 +216,12 @@ public class PortalBreaksTests
     public async Task End_IsIdempotent_ADoubleTapIsASuccess_AndDoesNotMoveTheEnd()
     {
         var f = Create();
-        var started = Detail(await f.Controller.StartBreak(f.Shift.Id, default)).Breaks.Single();
+        var started = Detail(await f.Controller.StartBreak(f.Shift.Id, null, default)).Breaks.Single();
         f.Advance(TimeSpan.FromMinutes(30));
-        var first = Detail(await f.Controller.EndBreak(f.Shift.Id, started.Id, default));
+        var first = Detail(await f.Controller.EndBreak(f.Shift.Id, started.Id, null, default));
         f.Advance(TimeSpan.FromMinutes(5));
 
-        var second = Detail(await f.Controller.EndBreak(f.Shift.Id, started.Id, default));
+        var second = Detail(await f.Controller.EndBreak(f.Shift.Id, started.Id, null, default));
 
         Assert.Equal(first.Breaks.Single().EndedAt, second.Breaks.Single().EndedAt);
     }
@@ -230,7 +230,7 @@ public class PortalBreaksTests
     public async Task ARunningBreak_CountsTowardsBreakMinutes_UpToNow()
     {
         var f = Create();
-        Detail(await f.Controller.StartBreak(f.Shift.Id, default));
+        Detail(await f.Controller.StartBreak(f.Shift.Id, null, default));
         f.Advance(TimeSpan.FromMinutes(12));
 
         var detail = Detail(await f.Controller.GetShiftDetail(f.Shift.Id, default));
@@ -261,7 +261,7 @@ public class PortalBreaksTests
     public async Task Edit_ARunningBreakWithNoEnd_StaysRunning()
     {
         var f = Create();
-        var started = Detail(await f.Controller.StartBreak(f.Shift.Id, default)).Breaks.Single();
+        var started = Detail(await f.Controller.StartBreak(f.Shift.Id, null, default)).Breaks.Single();
 
         var detail = Detail(await f.Controller.EditBreak(f.Shift.Id, started.Id,
             new EditShiftBreakDto { StartedAt = NowUtc.AddMinutes(-15), EndedAt = null }, default));
@@ -346,8 +346,8 @@ public class PortalBreaksTests
 
         foreach (var result in new[]
                  {
-                     await f.Controller.StartBreak(f.Shift.Id, default),
-                     await f.Controller.EndBreak(f.Shift.Id, anyId, default),
+                     await f.Controller.StartBreak(f.Shift.Id, null, default),
+                     await f.Controller.EndBreak(f.Shift.Id, anyId, null, default),
                      await f.Controller.EditBreak(f.Shift.Id, anyId, new EditShiftBreakDto { StartedAt = NowUtc, EndedAt = NowUtc.AddMinutes(5) }, default),
                      await f.Controller.DeleteBreak(f.Shift.Id, anyId, default),
                  })
@@ -365,8 +365,8 @@ public class PortalBreaksTests
 
         foreach (var result in new[]
                  {
-                     await f.Controller.StartBreak(f.Shift.Id, default),
-                     await f.Controller.EndBreak(f.Shift.Id, anyId, default),
+                     await f.Controller.StartBreak(f.Shift.Id, null, default),
+                     await f.Controller.EndBreak(f.Shift.Id, anyId, null, default),
                      await f.Controller.EditBreak(f.Shift.Id, anyId, new EditShiftBreakDto { StartedAt = NowUtc, EndedAt = NowUtc.AddMinutes(5) }, default),
                      await f.Controller.DeleteBreak(f.Shift.Id, anyId, default),
                  })
@@ -457,8 +457,8 @@ public class PortalBreaksTests
         var (f, id) = await WithEndedBreakAsync();
         var stranger = f.ControllerFor(f.AddWorker().Id);
 
-        Assert.IsType<NotFoundObjectResult>((await stranger.StartBreak(f.Shift.Id, default)).Result);
-        Assert.IsType<NotFoundObjectResult>((await stranger.EndBreak(f.Shift.Id, id, default)).Result);
+        Assert.IsType<NotFoundObjectResult>((await stranger.StartBreak(f.Shift.Id, null, default)).Result);
+        Assert.IsType<NotFoundObjectResult>((await stranger.EndBreak(f.Shift.Id, id, null, default)).Result);
         Assert.IsType<NotFoundObjectResult>((await stranger.EditBreak(f.Shift.Id, id, new EditShiftBreakDto(), default)).Result);
         Assert.IsType<NotFoundObjectResult>((await stranger.DeleteBreak(f.Shift.Id, id, default)).Result);
         Assert.Single(await f.Db.ShiftBreaks.ToListAsync());
@@ -497,9 +497,9 @@ public class PortalBreaksTests
     public async Task BreakCreatesEditsAndDeletes_AreAudited()
     {
         var f = Create(withAuditing: true);
-        var started = Detail(await f.Controller.StartBreak(f.Shift.Id, default)).Breaks.Single();
+        var started = Detail(await f.Controller.StartBreak(f.Shift.Id, null, default)).Breaks.Single();
         f.Advance(TimeSpan.FromMinutes(10));
-        Detail(await f.Controller.EndBreak(f.Shift.Id, started.Id, default));
+        Detail(await f.Controller.EndBreak(f.Shift.Id, started.Id, null, default));
         Detail(await f.Controller.EditBreak(f.Shift.Id, started.Id,
             new EditShiftBreakDto { StartedAt = NowUtc.AddMinutes(1), EndedAt = NowUtc.AddMinutes(9) }, default));
         Detail(await f.Controller.DeleteBreak(f.Shift.Id, started.Id, default));

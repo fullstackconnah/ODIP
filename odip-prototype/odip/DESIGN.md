@@ -231,8 +231,8 @@ may read as a warning unless it genuinely is one.
 ### Brand
 
 The user-facing name is **Bunya Support** (owner, 2026-10-16); ODIP stays the name of the code and this system.
-- **Wordmark:** `components/Wordmark.tsx` (`size`, `tone`), the only way to set the name as a mark: "bunya" 500 in ink, "support" 800 in `--color-primary` (lime on dark), then a `--color-primary-fixed` dot. Lowercase, Plus Jakarta Sans, -0.04em. It sits in the sidebar's 48px brand row and the public pages' bar (21px), and above sign-in (32px).
-- **Icon:** a lime (`--color-primary-fixed`) mark on a `--color-primary` tile. At 16 and 32px it is "b" alone (`public/favicon.svg`); the "b" is drawn larger than the board's (about 65% of the tile height against 50%) on purpose, so it stays legible at 16px. At 48px and up it is "bs" with a white dot (`public/apple-touch-icon.png`, 180px, full-bleed because iOS rounds it itself).
+- **Wordmark:** `components/Wordmark.tsx` (`size`, `tone`, `fold`), the only way to set the name as a mark: "bunya" 500 in ink, "support" 800 in `--color-primary` (lime on dark), then a `--color-primary-fixed` dot. Lowercase, Plus Jakarta Sans, -0.04em. `fold` is for the sidebar only: it marks the "b" as the part that glides into the rail tile and the rest as the part that folds into it. It sits in the sidebar's 48px brand row and the public pages' bar (21px), and above sign-in (32px).
+- **Icon (one mark everywhere):** an ink (`--color-foreground`) "b" in the wordmark's own face (Plus Jakarta Sans 500) on a `--color-primary-fixed` tile, 32 units with an 8-unit radius (25%); the b's ink is 62.5% of the tile (20 of 32 units). In the app rail it is live text, so it is the glyph the word folds into (32px tile, 26px type). The browser tab, home screen and installed app use the same outline, drawn once in `public/favicon.svg`, `public/icons/icon-maskable.svg` and `public/icons/icon-touch.svg` and rendered to the PNGs (`public/apple-touch-icon.png`, 180px full-bleed because iOS rounds it itself, and `public/icons/icon-192.png`, `icon-512.png` and `icon-maskable-512.png`). The maskable icon is full-bleed lime with the b scaled to 0.64, so the ink stays inside the safe zone (largest ink radius 125.5 of the 204.8 limit at 512px). The SVGs carry no `prefers-color-scheme`: the mark is the same in light and dark.
 - **Email:** the wordmark as a PNG on a #0f2000 header band (`Notifications/Templates/email-wordmark.png`, sent inline by Content-ID from `EmailLayout.cs`; mail clients load no web fonts and invert text in dark mode, but not images), alt "Bunya Support"; sender name "Bunya Support".
 - **Tab title:** `Bunya Support · <page>` (`hooks/useDocumentTitle.ts`).
 
@@ -406,6 +406,13 @@ used through the `text-display` utility. It is not a density token: it does not 
 `lg` buttons are `--control-h` + 4px (36px / 48px). Mobile bottom-nav links, Tabs, sidebar and drawer items and
 standalone action links carry a `--tap-min` floor.
 
+**Safe-area tokens.** `--safe-top`, `--safe-bottom`, `--safe-left` and `--safe-right` are the device insets (`env(safe-area-inset-*, 0px)`):
+0 in a browser tab, real once the app is installed (the viewport meta carries `viewport-fit=cover`). Components read these vars and never
+`env()`. The inset is counted once: `--mobile-nav-h` is `calc(66px + var(--safe-bottom))` (68px under a coarse pointer), the bottom nav
+pads `--safe-bottom` inside that height, and anything that sits above or clears the nav (the wizard footer, `ActionBar`, `Modal`, the
+`PlatformFooter` shell) uses `--mobile-nav-h` alone. The sticky header is `3rem + --safe-top` tall and pads the top inset; header and nav
+pad their sides with `max(<usual>, var(--safe-left|right))` for landscape notches.
+
 ### Form grid: width by content
 `lib/formGrid.ts` supplies a 12-column grid. One column below 768px; two columns from `md`; twelve from
 `xl` (1280px). Each field declares a span by the size of its content: `short` (codes, numbers, dates,
@@ -494,7 +501,7 @@ panel covers it.
 
 | z | Layer |
 |---|---|
-| 40 | `SlideOver` scrim (`bg-black/40`) |
+| 40 | `SlideOver` scrim (`bg-black/40`); the install card (fixed above the bottom nav, below `lg`) |
 | 50 | `Modal` and its backdrop (`bg-black/50`), the `SlideOver` panel, the desktop sidebar, the mobile bottom nav |
 | 55 / 60 | The mobile nav drawer's scrim / the drawer, below `lg` only: above the bottom nav it overlays |
 
@@ -594,7 +601,7 @@ tone's ink, a 20px circle with a 14px icon), so a problem is louder than the wai
   sends them there) and sees only that, Trips (All Trips, Schedule), Participants (Participants, Medications), Tasks and Incidents.
   ReadOnly is not offered what its API refuses: the five Rostering pages, Budgets, Caregiver forms and Settings. A group left with one
   visible page is drawn as that page, and one with none is not drawn.
-- **Icon rail (from `lg`):** the button at the foot of the sidebar, under Sign out, collapses it to 64px and back (collapses in 140ms and expands in 160ms on `cubic-bezier(0.2,0,0,1)`, the content edge moving with it; labels fade before the edge and the icons glide into or out of the rail (100ms); instant under reduced motion; saved as `sidebarCollapsed` with the other per-user display choices). The brand becomes the "b" tile; every item is a 40px square (44px on touch) holding its icon, with the count on the icon as on the bottom bar. A group opens a flyout of its pages beside the rail (a disclosure, one at a time, closed by Escape, a click outside or choosing a page); labels show as a tooltip after 500ms on a mouse, at once on keyboard focus, never on touch. The rail nav hides its scrollbar on purpose; it still scrolls by wheel, touch and keyboard. "Other workspaces" uses the `apps` icon. The toggle is named for what it does ("Collapse sidebar" / "Expand sidebar"), has no keyboard shortcut, and is absent below `lg`, where the drawer always keeps wide rows.
+- **Icon rail (from `lg`):** the button at the foot of the sidebar, under Sign out, collapses it to 64px and back (collapses in 140ms and expands in 160ms on `cubic-bezier(0.2,0,0,1)`, the content edge moving with it; labels fade before the edge and the icons glide into or out of the rail (100ms); instant under reduced motion; saved as `sidebarCollapsed` with the other per-user display choices). The brand becomes the "b" tile: the wordmark's own "b" grows from 21px to 26px in place (transform only, 100ms) while the rest of the word slides 12px toward it and fades, and the tile grows in behind it; every item is a 40px square (44px on touch) holding its icon, with the count on the icon as on the bottom bar. A group opens a flyout of its pages beside the rail (a disclosure, one at a time, closed by Escape, a click outside or choosing a page); labels show as a tooltip after 500ms on a mouse, at once on keyboard focus, never on touch. The rail nav hides its scrollbar on purpose; it still scrolls by wheel, touch and keyboard. "Other workspaces" uses the `apps` icon. The toggle is named for what it does ("Collapse sidebar" / "Expand sidebar"), has no keyboard shortcut, and is absent below `lg`, where the drawer always keeps wide rows.
 - **Sidebar:** 232px, Sidebar Grey (`#f5f3ef`) surface, 12px padding, 48px brand block, and the nav
   straight under it: there is no call-to-action slot, and no create shortcut anywhere in the shell (a trip
   is created from the "New Trip" Button in the Trips page header). Items are 32px tall, `rounded-md` (not
@@ -627,6 +634,14 @@ tone's ink, a 20px circle with a 14px icon), so a problem is louder than the wai
   into view inside the strip when it changes; from `md` the strip wraps as it always did, except a strip asked to stay one row (`overflow="scroll"`, Settings) which fades out over its last 2rem (a CSS mask) and pads its end by the same, so a cut tab reads as "more this way". Keyboard
   (arrows, Home, End, roving tabindex) and ARIA are the same at every width.
 - Icons are Material Symbols Outlined, always preceding the label (16-20px in chrome).
+- **Install card** (`InstallPrompt`, mounted in `AppLayout` after the platform footer). A house `Callout` (`tone="info"`, no live-region
+  announce) with `--shadow-float`, fixed at `bottom-[calc(var(--mobile-nav-h)+0.5rem)]`, z-40, `lg:hidden`, so it floats over the end of
+  the page; an aria-hidden spacer of the card's measured height + 8px at the end of the column lets the last content scroll clear of it,
+  and nothing above moves when it appears or leaves. Shown only on `/` and `/portal`, below `md`, on a coarse pointer in a secure context,
+  in a browser tab (not standalone), until installed or dismissed. Android/Chromium: Install (the native dialog) and Not now. iOS Safari:
+  a two-step list with the Share glyph and Not now only. Not now or a declined dialog snoozes it 30 days, per user
+  (`odip_install_prompt:<userId>`) and moves focus to `#main`. Enter 200ms (fade + 8px rise), exit 150ms along the same path; reduced
+  motion fades only. The copy never promises offline use.
 
 ### Page header
 

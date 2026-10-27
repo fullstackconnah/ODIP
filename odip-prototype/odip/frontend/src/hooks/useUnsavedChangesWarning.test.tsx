@@ -235,7 +235,7 @@ describe('useUnsavedChangesWarning prompt on Modal', () => {
     const user = userEvent.setup()
     renderOpener()
     await user.click(screen.getByRole('link', { name: 'Elsewhere' }))
-    expect(screen.getByRole('alertdialog').parentElement).toHaveClass('pb-[calc(var(--mobile-nav-h)+env(safe-area-inset-bottom))]', 'lg:pb-0')
+    expect(screen.getByRole('alertdialog').parentElement).toHaveClass('pb-[var(--mobile-nav-h)]', 'lg:pb-0')
     const source = readFileSync(join(__dirname, 'useUnsavedChangesWarning.tsx'), 'utf8')
     expect(source).not.toContain('fixed inset-0')
   })

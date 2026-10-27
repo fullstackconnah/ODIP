@@ -53,7 +53,7 @@ public sealed class ShiftPackageService
     /// they could never clear it. Empty means Finish may proceed.
     /// </summary>
     public async Task<List<PortalFinishBlockerDto>> GetFinishBlockersAsync(
-        Shift shift, ShiftCompletion? completion, bool canRecordDoses, CancellationToken ct)
+        Shift shift, ShiftCompletion? completion, bool canRecordDoses, CancellationToken ct, DateTime? asOfUtc = null)
     {
         var breakRunning = completion is not null
             && await _db.ShiftBreaks.AnyAsync(b => b.ShiftCompletionId == completion.Id && b.EndedAt == null, ct);
@@ -62,7 +62,7 @@ public sealed class ShiftPackageService
         var doses = canRecordDoses
             ? await GetDosesAsync(shift, provider, includePrn: false, ct)
             : new ShiftDoses(Array.Empty<PortalDoseSlotDto>(), Array.Empty<PortalPrnDto>());
-        return BuildFinishBlockers(doses.Slots, breakRunning, canRecordDoses, _slots.UtcNow, provider.Zone);
+        return BuildFinishBlockers(doses.Slots, breakRunning, canRecordDoses, asOfUtc ?? _slots.UtcNow, provider.Zone);
     }
 
     /// <summary>
