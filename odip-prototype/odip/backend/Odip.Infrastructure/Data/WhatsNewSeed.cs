@@ -94,6 +94,9 @@ public static class WhatsNewSeed
         new Item("2026-10-trip-form-labels", "Trip forms read better with screen readers",
             "On a trip, the Edit trip, accommodation, bookings, staff, activity, vehicle and claim forms now label every field the same way as the rest of Bunya Support, and accommodation costs show dollars and cents.",
             Staff, false),
+        new Item("2026-10-theme-in-top-bar", "Change the theme from the top bar",
+            "Use the sun, moon or screen icon at the top of any page to switch between Light, Dark and System. Settings, Appearance still works too, and your choice is saved on this device.",
+            WhatsNewAudience.All, false),
     };
 
     /// <summary>Inserts the keys the table lacks, one save each, so a key another instance inserted first costs only that row.</summary>
