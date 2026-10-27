@@ -9,7 +9,6 @@ using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
-using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
@@ -22,6 +21,7 @@ public class ServiceAgreementsController : ControllerBase
 {
     // keep equal to CHUNK in the page's runInChunks.ts
     public const int MaxItems = 25;
+    private const string BudgetSkippedWords = "We ran out of time before reaching this one. Try it again.";
     public const string FailedWords = "This one could not be approved. Try again.";
 
     private readonly OdipDbContext _db;
@@ -133,7 +133,7 @@ public class ServiceAgreementsController : ControllerBase
             try
             {
                 // Past the budget the rest are answered Busy untouched, so the request ends inside the proxies' minute and every item still gets an answer.
-                if (_clock.GetUtcNow() >= deadline) (outcome, reasons) = ("Busy", [RosterBusyException.Words]);
+                if (_clock.GetUtcNow() >= deadline) (outcome, reasons) = ("Busy", [BudgetSkippedWords]);
                 else
                 {
                     var found = await _db.ServiceAgreementDrafts.AsNoTracking().Where(d => d.TenantId == tenantId && d.Id == item.DraftId && d.ParticipantId == item.ParticipantId)

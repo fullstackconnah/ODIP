@@ -229,6 +229,8 @@ public class AgreementApproveBatchTests
         Assert.Equal(200, status);
         Assert.Equal(new[] { "Approved", "Busy", "Busy" }, data!.Select(r => r.Outcome));
         Assert.Equal(new[] { d1.Id, d2.Id, d3.Id }, data!.Select(r => r.DraftId));
+        Assert.All(data!.Skip(1), r => Assert.Equal(new[] { "We ran out of time before reaching this one. Try it again." }, r.Reasons));
+        Assert.DoesNotContain(data!, r => r.Reasons.Any(w => w.Contains("Another change")));
         Assert.Equal(new[] { d1.Id }, await f.Db.ServiceAgreementDraftApprovals.Select(a => a.DraftId).ToArrayAsync());
     }
 }
