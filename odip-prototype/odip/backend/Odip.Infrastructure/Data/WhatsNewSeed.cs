@@ -85,6 +85,9 @@ public static class WhatsNewSeed
         new Item("2026-10-portal-call-buttons", "Call buttons and shift notices look the same as the rest of the app",
             "In the support worker portal, the call buttons on a shift and the notices about flagged notes and shift problems now use the same style as the rest of Bunya Support.",
             WhatsNewAudience.All, false),
+        new Item("2026-10-agreements-page", "Agreements page",
+            "A new Agreements page in the menu lists every participant's service agreement with its dates, total and price list. Tick the ones with a draft waiting and approve them together. The Agreements ending view from Participants now lives here too.",
+            Staff, false),
     };
 
     /// <summary>Inserts the keys the table lacks, one save each, so a key another instance inserted first costs only that row.</summary>
