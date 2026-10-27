@@ -108,12 +108,12 @@ describe('PlatformFooter', () => {
   })
 
   it('shell: carries the bottom-nav clearance below lg, now that main no longer does', () => {
-    expect(renderFooter('shell', NONE)).toHaveClass('pb-[calc(var(--mobile-nav-h)+env(safe-area-inset-bottom)+0.75rem)]', 'lg:pb-3')
+    expect(renderFooter('shell', NONE)).toHaveClass('pb-[calc(var(--mobile-nav-h)+0.75rem)]', 'lg:pb-3')
   })
 
   it('public: one centred column, padded for the safe area only', () => {
     const footer = renderFooter('public', NONE)
-    expect(footer).toHaveClass('pb-[calc(env(safe-area-inset-bottom)+0.75rem)]', 'max-w-3xl', 'mx-auto')
+    expect(footer).toHaveClass('pb-[calc(var(--safe-bottom)+0.75rem)]', 'max-w-3xl', 'mx-auto')
     expect(footer.className).not.toContain('mobile-nav-h')
   })
 

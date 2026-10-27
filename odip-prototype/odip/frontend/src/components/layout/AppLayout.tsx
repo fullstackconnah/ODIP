@@ -13,6 +13,7 @@ import ThemeMenu from '@/components/layout/ThemeMenu'
 import { NavCountBadge } from '@/components/layout/NavCountBadge'
 import { navBadgeLabel } from '@/components/layout/navBadgeLabel'
 import PlatformFooter from '@/components/layout/PlatformFooter'
+import InstallPrompt from '@/components/layout/InstallPrompt'
 import { PlatformDirectoryTrigger } from '@/components/layout/PlatformDirectory'
 import { platformNavigation } from '@/components/layout/platformDirectoryModel'
 import {
@@ -269,7 +270,7 @@ function BottomBar({ items, moreActive, menuOpen, onOpenMenu }: {
 }) {
   const colour = (active: boolean) => (active ? 'text-[var(--color-primary)]' : 'text-[var(--color-secondary)]')
   return (
-    <nav aria-label="Mobile" className="lg:hidden fixed bottom-0 left-0 right-0 h-[var(--mobile-nav-h)] bg-[var(--color-background)]/90 backdrop-blur-xl shadow-[var(--shadow-hairline-up)] px-2 flex items-center z-50">
+    <nav aria-label="Mobile" className="lg:hidden fixed bottom-0 left-0 right-0 h-[var(--mobile-nav-h)] bg-[var(--color-background)]/90 backdrop-blur-xl shadow-[var(--shadow-hairline-up)] pl-[max(0.5rem,var(--safe-left))] pr-[max(0.5rem,var(--safe-right))] pb-[var(--safe-bottom)] flex items-center z-50">
       {items.map(item => (
         <Link
           key={item.key}
@@ -638,8 +639,8 @@ export default function AppLayout() {
       {/* Main area */}
       <div className={`flex-1 min-w-0 ${collapsed ? 'lg:ml-16 lg:duration-[140ms]' : 'lg:ml-[232px] lg:duration-[160ms]'} lg:transition-[margin-left] lg:ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:lg:transition-none flex flex-col min-h-screen`}>
         {/* Top bar — fixed 48px */}
-        <header className="sticky top-0 z-30 h-12 bg-[var(--color-background)]/80 backdrop-blur-xl shadow-[var(--shadow-hairline)]">
-          <div className="flex items-center justify-between gap-2 h-full px-[var(--gutter,20px)]">
+        <header className="sticky top-0 z-30 h-[calc(3rem+var(--safe-top))] pt-[var(--safe-top)] bg-[var(--color-background)]/80 backdrop-blur-xl shadow-[var(--shadow-hairline)]">
+          <div className="flex items-center justify-between gap-2 h-full pl-[max(var(--gutter,20px),var(--safe-left))] pr-[max(var(--gutter,20px),var(--safe-right))]">
             <div className={`flex min-w-0 items-center gap-4 ${isSuperAdmin ? 'max-sm:gap-2' : ''}`}>
               <button
                 className="flex items-center justify-center lg:hidden shrink-0 p-2 pointer-coarse:size-[var(--tap-min)] pointer-coarse:p-0 rounded-md hover:bg-[var(--color-accent)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
@@ -706,7 +707,7 @@ export default function AppLayout() {
           PlatformFooter (variant="shell"), the last thing in this column, carries it below lg (--mobile-nav-h, the safe area and
           0.75rem). The footer always renders, because its Accessibility link is unconditional, so nothing can end up behind the nav.
         */}
-        <main id="main" className="flex-1 px-[var(--gutter,20px)] pt-4 pb-6">
+        <main id="main" tabIndex={-1} className="flex-1 px-[var(--gutter,20px)] pt-4 pb-6 focus:outline-none">
           {/* Track the previous in-app pathname once at the authenticated shell so any
               page-header back control (e.g. the intake/profile wizards) can navigate to
               where the user actually came from instead of a hardcoded fallback. */}
@@ -722,6 +723,7 @@ export default function AppLayout() {
           </ErrorBoundary>
         </main>
         <PlatformFooter variant="shell" />
+        <InstallPrompt />
       </div>
 
       {/* Mobile bottom nav. Generated from the same config as the sidebar (see BottomBar), so it can never offer a link the role

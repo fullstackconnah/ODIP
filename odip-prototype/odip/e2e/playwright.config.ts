@@ -21,6 +21,8 @@ export default defineConfig({
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'off',
+    // A worker would cache one spec's pages for the next; the two @pwa specs opt in with test.use({ serviceWorkers: 'allow' }).
+    serviceWorkers: 'block',
     actionTimeout: 10_000,
     navigationTimeout: 20_000,
   },
