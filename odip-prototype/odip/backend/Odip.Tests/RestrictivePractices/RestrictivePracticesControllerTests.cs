@@ -1072,4 +1072,76 @@ public class RestrictivePracticesControllerTests
         Assert.IsType<BadRequestObjectResult>(result.Result);
         Assert.Equal("Dr. Chen", (await db.RestrictivePractices.SingleAsync()).AuthorisedBy);
     }
+
+    [Fact]
+    public async Task Update_StaleExpectedUpdatedAt_ReturnsConflictAndChangesNothing()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var practice = SeedPractice(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
+
+        var result = await controller.Update(practice.Id,
+            new UpdateRestrictivePracticeDto { Description = "Stale edit", IsActive = true, ExpectedUpdatedAt = practice.UpdatedAt.AddMinutes(-1) },
+            CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<RestrictivePracticeDto>>(Assert.IsType<ConflictObjectResult>(result.Result).Value);
+        Assert.Contains("Someone else just changed this entry", body.Errors![0]);
+        Assert.Equal("Original", (await db.RestrictivePractices.AsNoTracking().SingleAsync()).Description);
+    }
+
+    [Fact]
+    public async Task Update_MatchingExpectedUpdatedAt_SavesAndMovesTheVersion()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var practice = SeedPractice(db);
+        practice.UpdatedAt = DateTime.UtcNow.AddHours(-1);
+        db.SaveChanges();
+        var loaded = practice.UpdatedAt;
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
+
+        var result = await controller.Update(practice.Id,
+            new UpdateRestrictivePracticeDto { Description = "Fresh edit", IsActive = true, ExpectedUpdatedAt = loaded }, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<RestrictivePracticeDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.True(body.Data!.UpdatedAt > loaded);
+        Assert.Equal("Fresh edit", (await db.RestrictivePractices.AsNoTracking().SingleAsync()).Description);
+    }
+
+    [Fact]
+    public async Task Update_NoExpectedUpdatedAt_StillSaves()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var practice = SeedPractice(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
+
+        var result = await controller.Update(practice.Id,
+            new UpdateRestrictivePracticeDto { Description = "Older tab", IsActive = true }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public void UpdatedAt_IsTheRestrictivePracticeConcurrencyToken()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        Assert.True(db.Model.FindEntityType(typeof(Domain.Entities.RestrictivePractice))!
+            .FindProperty(nameof(Domain.Entities.RestrictivePractice.UpdatedAt))!.IsConcurrencyToken);
+    }
+
+    [Fact]
+    public async Task Update_AuthorisedByOver200Characters_ReturnsBadRequest()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var practice = SeedPractice(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
+
+        var result = await controller.Update(practice.Id,
+            new UpdateRestrictivePracticeDto
+            {
+                Description = "Original", AuthorisedBy = new string('x', 201), AuthorisationDate = new DateOnly(2026, 2, 1), IsActive = true,
+            }, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<RestrictivePracticeDto>>(Assert.IsType<BadRequestObjectResult>(result.Result).Value);
+        Assert.Equal("Authorised by must be 200 characters or fewer", body.Errors![0]);
+    }
 }
