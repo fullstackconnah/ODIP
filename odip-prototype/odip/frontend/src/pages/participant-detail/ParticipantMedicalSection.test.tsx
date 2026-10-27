@@ -38,10 +38,12 @@ afterEach(() => {
 })
 
 describe('ParticipantMedicalSection — permission gate', () => {
-  it('hides the whole card for a role without canWriteParticipantDetails when there is no data', () => {
+  it('shows a read-only "Not recorded" card, with no Edit or Add, for a role without canWriteParticipantDetails when there is no data', () => {
     setUserRole('SupportWorker')
     render(<ParticipantMedicalSection p={makeParticipant()} participantId="participant-1" canEdit={false} />)
-    expect(screen.queryByRole('heading', { name: 'Medical' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Medical' })).toBeInTheDocument()
+    expect(screen.getByText('Not recorded')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /edit|add/i })).not.toBeInTheDocument()
   })
 
   it('renders the card for a privileged role even with no existing data', () => {

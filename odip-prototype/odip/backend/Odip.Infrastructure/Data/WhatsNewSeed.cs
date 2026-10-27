@@ -97,6 +97,9 @@ public static class WhatsNewSeed
         new Item("2026-10-theme-in-top-bar", "Change the theme from the top bar",
             "Use the sun, moon or screen icon at the top of any page to switch between Light, Dark and System. Settings, Appearance still works too, and your choice is saved on this device.",
             WhatsNewAudience.All, false),
+        new Item("2026-10-participant-subtabs", "Each section has its own tab",
+            "On a participant's page, the sections of a tab are now listed as small tabs under the main ones. Choose one to see just that section. Risks, routines, contacts and notes show how many there are.\n\nLinks, flags and alerts still open the right section.",
+            WhatsNewAudience.All, false),
     };
 
     /// <summary>Inserts the keys the table lacks, one save each, so a key another instance inserted first costs only that row.</summary>

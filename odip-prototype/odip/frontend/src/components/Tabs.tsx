@@ -32,6 +32,8 @@ export type TabItem = {
    * — the primitive always points at its own inline panel in that case.
    */
   panelId?: string
+  /** `variant="sub"` only: an empty section's tab. Dashed outline and a softer label while it is not the active one. */
+  quiet?: boolean
 }
 
 export type TabsProps = {
@@ -53,6 +55,12 @@ export type TabsProps = {
    * between tabs, in both modes.
    */
   overflow?: 'wrap' | 'scroll'
+  /**
+   * `underline` (the default) is a page's first level. `sub` is the second level inside a tab that groups sections: Pale Sprout chips in the sidebar's
+   * active-item shape, no baseline, one row that scrolls below md and wraps from md. `overflow` is ignored for it, `badge` is a plain numeral, and the
+   * keyboard, roving tabindex and panel wiring are the same.
+   */
+  variant?: 'underline' | 'sub'
 }
 
 // The one-row strip fades out over its last 2rem, so a tab cut by the edge reads as "more this way" (V2-F: Settings at 1440 ended in "Notificatior" with no
@@ -86,7 +94,16 @@ const SCROLL_FADE = '[mask-image:linear-gradient(to_right,black_calc(100%_-_2rem
  *   (`md:flex-wrap`) instead: billing-style 3-tab pages stay on one line and longer strips roll
  *   over onto a second row, exactly as before.
  */
-export function Tabs({ tabs, active, onChange, ariaLabel = 'Tabs', idPrefix, className, overflow = 'wrap' }: TabsProps) {
+// The sub variant: the list, and the chip (the 32px pill inside the 44px-floor button) in each state. Every chip has a transparent border so a quiet
+// (dashed) one never changes a width. Quiet colours are muted-foreground mixed down, because --color-border is under 2:1 and fails WCAG 1.4.11.
+const SUB_LIST = '-m-1 p-1 flex flex-nowrap gap-x-2 gap-y-2 overflow-x-auto scroll-smooth max-md:[scrollbar-width:none] max-md:[&::-webkit-scrollbar]:hidden md:flex-wrap max-md:[mask-image:linear-gradient(to_right,black_calc(100%_-_2rem),transparent)] max-md:pr-9'
+const SUB_CHIP = 'inline-flex h-8 items-center rounded-md border px-3 text-[13px] font-medium whitespace-nowrap transition-colors group-focus-visible:ring-2 group-focus-visible:ring-[var(--color-ring)] group-focus-visible:ring-offset-2'
+const SUB_ACTIVE = 'border-transparent bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]'
+const SUB_IDLE = 'border-transparent text-[var(--color-muted-foreground)] group-hover:bg-[var(--color-accent)] group-hover:text-[var(--color-foreground)] group-active:bg-[var(--color-surface-container-high)]'
+const SUB_QUIET = 'border-dashed border-[color-mix(in_srgb,var(--color-muted-foreground)_60%,transparent)] text-[color-mix(in_srgb,var(--color-muted-foreground)_80%,transparent)] group-hover:bg-[var(--color-accent)] group-hover:text-[var(--color-foreground)] group-active:bg-[var(--color-surface-container-high)]'
+
+export function Tabs({ tabs, active, onChange, ariaLabel = 'Tabs', idPrefix, className, overflow = 'wrap', variant = 'underline' }: TabsProps) {
+  const sub = variant === 'sub'
   const generatedId = useId()
   const baseId = idPrefix ?? generatedId
   const listRef = useRef<HTMLDivElement | null>(null)
@@ -207,7 +224,7 @@ export function Tabs({ tabs, active, onChange, ariaLabel = 'Tabs', idPrefix, cla
         // stays as the safety net there too. The scrollbar is hidden only below md, where the strip is
         // the scrolling surface (Tailwind has no scrollbar-width utility, hence the arbitrary property
         // and the WebKit pseudo).
-        className={`flex flex-nowrap gap-x-4 gap-y-1 border-b border-[var(--color-border)] overflow-x-auto scroll-smooth max-md:[scrollbar-width:none] max-md:[&::-webkit-scrollbar]:hidden ${overflow === 'scroll' ? `md:[scrollbar-width:thin] ${SCROLL_FADE}` : 'md:flex-wrap'}`}
+        className={sub ? SUB_LIST : `flex flex-nowrap gap-x-4 gap-y-1 border-b border-[var(--color-border)] overflow-x-auto scroll-smooth max-md:[scrollbar-width:none] max-md:[&::-webkit-scrollbar]:hidden ${overflow === 'scroll' ? `md:[scrollbar-width:thin] ${SCROLL_FADE}` : 'md:flex-wrap'}`}
       >
         {tabs.map(tab => {
           const isActive = tab.id === active
@@ -236,12 +253,18 @@ export function Tabs({ tabs, active, onChange, ariaLabel = 'Tabs', idPrefix, cla
                 onChange(tab.id)
               }}
               onKeyDown={e => onKeyDown(e, tab.id)}
-              className={`flex shrink-0 min-h-[var(--tap-min)] items-center gap-2 px-3 py-2 text-sm font-medium border-b-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-1 whitespace-nowrap ${
+              className={sub ? `group flex shrink-0 min-h-[var(--tap-min)] min-w-[var(--tap-min)] items-center focus-visible:outline-none ${tab.disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}` : `flex shrink-0 min-h-[var(--tap-min)] items-center gap-2 px-3 py-2 text-sm font-medium border-b-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-1 whitespace-nowrap ${
                 isActive
                   ? 'border-[var(--color-primary)] text-[var(--color-primary)]'
                   : 'border-transparent text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]'
               } ${tab.disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
             >
+              {sub ? (
+                <span className={`${SUB_CHIP} ${isActive ? SUB_ACTIVE : tab.quiet ? SUB_QUIET : SUB_IDLE}`}>
+                  {tab.label}
+                  {tab.badge !== undefined && tab.badge > 0 && <span aria-hidden="true" className="ml-1.5 tabular-nums opacity-80">{tab.badge}</span>}
+                </span>
+              ) : (<>
               {Icon && <Icon className="w-4 h-4" />}
               <span>{tab.label}</span>
               {tab.badge !== undefined && tab.badge > 0 && (
@@ -256,6 +279,7 @@ export function Tabs({ tabs, active, onChange, ariaLabel = 'Tabs', idPrefix, cla
                   {tab.badge}
                 </span>
               )}
+              </>)}
             </button>
           )
         })}

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useRef, type ReactNode } from 'react'
 import { Modal } from './Modal'
 import { Button } from '@/components/Button'
 
@@ -24,14 +24,18 @@ export type ConfirmDialogProps = {
    * call their own mutations and close the dialog.
    */
   footer?: ReactNode
+  /** Focus the default cancel button on open, so Enter and Space choose the safe answer (unsaved-changes prompts). Ignored with a custom `footer`. */
+  focusCancel?: boolean
 }
 
 export function ConfirmDialog({
   open, onConfirm, onCancel, title, message,
-  confirmLabel = 'Confirm', cancelLabel = 'Cancel', variant = 'default', loading, confirmDisabled, footer, confirmAriaLabel,
+  confirmLabel = 'Confirm', cancelLabel = 'Cancel', variant = 'default', loading, confirmDisabled, footer, confirmAriaLabel, focusCancel,
 }: ConfirmDialogProps) {
+  const cancelRef = useRef<HTMLButtonElement>(null)
   return (
     <Modal
+      initialFocusRef={focusCancel ? cancelRef : undefined}
       open={open}
       onClose={onCancel}
       title={title}
@@ -40,7 +44,7 @@ export function ConfirmDialog({
       footer={
         footer ?? (
           <>
-            <Button variant="secondary" onClick={onCancel}>
+            <Button ref={cancelRef} variant="secondary" onClick={onCancel}>
               {cancelLabel}
             </Button>
             <Button
