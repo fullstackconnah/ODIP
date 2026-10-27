@@ -16,7 +16,7 @@ vi.mock('@/api/hooks', () => ({
   useUpdateNotificationPreferences: mockUseUpdateNotificationPreferences,
 }))
 
-const FRAME = { title: 'Notifications', description: 'Which events ODIP emails you about.', readOnly: false, focusOnMount: false }
+const FRAME = { title: 'Notifications', description: 'Which events we email you about.', readOnly: false, focusOnMount: false }
 
 function renderTab() {
   const router = createMemoryRouter(

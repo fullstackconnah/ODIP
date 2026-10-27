@@ -186,7 +186,7 @@ export default function StaffDetailPage() {
             headingLevel={3}
             notLinked={
               <>
-                <span>Not linked to Employment Hero, so ODIP can't show balances.</span>
+                <span>Not linked to Employment Hero, so we can't show balances.</span>
                 <Link className="flex w-fit items-center text-[13px] underline pointer-coarse:min-h-[var(--tap-min)]" to="/settings?section=integrations">Link in Settings → Integrations</Link>
               </>
             }

@@ -133,7 +133,7 @@ export function LedgerBody({ data, nextPlanStart }: { data: ParticipantLedgerDto
       {data.pools.map(pool => <PoolLedger key={pool.id} pool={pool} />)}
       {buckets}
       <p className="text-[13px] text-[var(--color-muted-foreground)]">
-        {quietEstimateLine} Figures are as of {formatDayMonth(data.asOf)} ({data.timeBasis}). These are ODIP's own figures against the recorded plan, not an NDIA balance.
+        {quietEstimateLine} Figures are as of {formatDayMonth(data.asOf)} ({data.timeBasis}). These are our own figures against the recorded plan, not an NDIA balance.
       </p>
     </>
   )

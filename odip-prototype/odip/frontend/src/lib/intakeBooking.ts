@@ -177,7 +177,7 @@ export const changedByOther = (error: unknown, mapped: BookingErrors = {}) => (e
 
 /** The booking fields in screen order: where focus goes for the first refused one. */
 export const FIELD_ORDER: BookingField[] = ['email', 'date', 'time', 'duration', 'location', 'staffUserId', 'notes']
-export const NO_CONNECTION = "Couldn't reach ODIP. Check your connection and try again. Your entries are kept."
+export const NO_CONNECTION = "Couldn't reach Bunya Support. Check your connection and try again. Your entries are kept."
 
 /** The server's sentence for a refusal: the first field message of a ValidationProblemDetails, else its message, else the fallback. */
 export function refusalOf(error: unknown, fallback: string): string {

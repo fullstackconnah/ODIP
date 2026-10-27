@@ -345,7 +345,7 @@ export default function StaffCreatePage() {
                       : 'Used to sign in to the app.')
                   : undefined
               } className={span.medium}>
-              <input type="email" {...register('email')} placeholder="e.g. sarah@odip.com.au" />
+              <input type="email" {...register('email')} placeholder="e.g. sarah@example.com.au" />
             </FormField>
 
             <FormField

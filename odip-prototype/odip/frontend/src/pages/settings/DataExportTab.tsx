@@ -75,7 +75,7 @@ export default function DataExportTab() {
             <li>Times that record when something happened are in UTC and end in Z. Times typed in as a local time, such as a dose slot, are your local time.</li>
             <li>It holds participants' health information and staff details such as worker screening and licence numbers. Store it securely and share it only with people who need it.</li>
             <li>Not included: the change history (audit log), queued notification messages and sign-in accounts.</li>
-            <li>Agreements, invoices and other PDFs that Bunya Support creates when you open them aren't files in the ZIP. Their details are in the CSV files.</li>
+            <li>Agreements, invoices and other PDFs that we create when you open them aren't files in the ZIP. Their details are in the CSV files.</li>
           </ul>
         </div>
         <div className="flex flex-col gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-[var(--card-pad)]">

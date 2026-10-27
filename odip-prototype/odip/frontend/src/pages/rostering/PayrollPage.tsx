@@ -236,7 +236,7 @@ export default function PayrollPage() {
                 aria-describedby={data && sendable === 0 ? 'send-missing-none' : undefined}
                 onClick={() => current && send.mutate(
                   { from: current.from, to: current.to },
-                  { onSuccess: r => setQueued({ key: periodKey(current), text: `Queued ${plural(r.queued, 'shift')}. ODIP sends about 25 a minute.` }) },
+                  { onSuccess: r => setQueued({ key: periodKey(current), text: `Queued ${plural(r.queued, 'shift')}. We send about 25 a minute.` }) },
                 )}
               >
                 {send.isPending ? 'Sending…' : data ? `Send missing (${sendable})` : 'Send missing'}
