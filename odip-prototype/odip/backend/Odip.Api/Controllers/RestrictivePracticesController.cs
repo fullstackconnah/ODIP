@@ -158,6 +158,8 @@ public class RestrictivePracticesController : ControllerBase
         return hasWho ? "Add the date it was authorised." : "Add who authorised it.";
     }
 
+    private const string ChangedByOther = "Someone else just changed this entry. Close it and open it again to see their changes.";
+
     [HttpPut("participants/restrictive-practices/{id:guid}")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<RestrictivePracticeDto>>> Update(
@@ -165,6 +167,12 @@ public class RestrictivePracticesController : ControllerBase
     {
         var practice = await _db.RestrictivePractices.FirstOrDefaultAsync(rp => rp.Id == id, ct);
         if (practice == null) return NotFound(ApiResponse<RestrictivePracticeDto>.Fail("Restrictive practice entry not found"));
+
+        // The UPDATE's WHERE carries the version the form loaded; a form from an older tab sends none and saves as before.
+        if (dto.ExpectedUpdatedAt is DateTime expected) _db.Entry(practice).Property(rp => rp.UpdatedAt).OriginalValue = expected;
+
+        if (dto.AuthorisedBy is { Length: > 200 })
+            return BadRequest(ApiResponse<RestrictivePracticeDto>.Fail("Authorised by must be 200 characters or fewer"));
 
         if (dto.RelatedMedicationId.HasValue)
         {
@@ -203,7 +211,14 @@ public class RestrictivePracticesController : ControllerBase
             await _safetyNoteSync.SyncRestrictivePracticeNoteAsync(participant, ct);
         }
 
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Conflict(ApiResponse<RestrictivePracticeDto>.Fail(ChangedByOther));
+        }
 
         return Ok(ApiResponse<RestrictivePracticeDto>.Ok(await ToDtoWithMedicationNameAsync(practice, ct)));
     }

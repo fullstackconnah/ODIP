@@ -1855,6 +1855,8 @@ public class OdipDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Description).HasMaxLength(2000).IsRequired();
             entity.Property(e => e.AuthorisedBy).HasMaxLength(200);
+            // The version a save must still match: the PUT answers 409 if the entry changed since the form loaded it.
+            entity.Property(e => e.UpdatedAt).IsConcurrencyToken();
 
             // Restrict: same idiom as ParticipantNote/ParticipantRoutine/ParticipantMedication →
             // Participant — a participant with register history must not be silently
