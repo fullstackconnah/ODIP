@@ -67,6 +67,9 @@ public static class WhatsNewSeed
         new Item("2026-10-bunya-support-screens", "Screens now say Bunya Support",
             "Settings, payslips and other screens now use the Bunya Support name too.",
             WhatsNewAudience.Admin, false),
+        new Item("2026-10-participant-adl-columns", "Tidier ADL tables",
+            "The personal and community ADL tables on a participant's page now line up, and Medications says Add medication everywhere.",
+            WhatsNewAudience.All, false),
     };
 
     /// <summary>Inserts the keys the table lacks, one save each, so a key another instance inserted first costs only that row.</summary>

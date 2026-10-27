@@ -217,3 +217,13 @@ describe('participant-detail/MedicationsTab — long list (T10)', () => {
     expect(rows[5]).toHaveFocus()
   })
 })
+
+describe('participant-detail/MedicationsTab — one call to action', () => {
+  it('names the heading button "Add medication", and renders no "New medication" button', () => {
+    mockUseParticipantMedications.mockReturnValue({ data: [], isLoading: false })
+    renderTab()
+
+    expect(screen.getAllByRole('link', { name: 'Add medication' }).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('link', { name: /new medication/i })).not.toBeInTheDocument()
+  })
+})

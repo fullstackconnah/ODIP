@@ -164,12 +164,15 @@ public class WhatsNewPostgresTests : IClassFixture<PostgresFixture>
         var feed = Feed(await WithCaller(new WhatsNewController(read), userId, "Admin").GetFeed(CancellationToken.None));
         Assert.Equal(WhatsNewSeed.All.Select(i => i.Title).Reverse(), feed.Entries.Select(e => e.Title));
 
-        // A role none of the seeded Admin/Coordinator entries targets still gets the entries for everyone (dark mode, participant tabs), via a bitwise filter.
+        // A role none of the Admin/Coordinator-only entries targets still gets the entries for everyone, via a bitwise filter; derived from the seed so new All entries do not break it.
         var audience = WhatsNewAudience.SupportWorker;
         var sql = read.WhatsNewEntries.Where(e => (e.Roles & audience) != 0).ToQueryString();
         Assert.Contains("&", sql);
         var support = Feed(await WithCaller(new WhatsNewController(read), userId, "SupportWorker").GetFeed(CancellationToken.None));
-        Assert.Equal(new[] { "Participant pages are easier to scan", "Participant pages are now split into tabs", "Dark mode is here" }, support.Entries.Select(e => e.Title));
+        var expected = WhatsNewSeed.All.Where(i => (i.Roles & audience) != 0).Select(i => i.Title).Reverse().ToList();
+        Assert.NotEmpty(expected);
+        Assert.True(expected.Count < WhatsNewSeed.All.Count, "the role filter must exclude the Admin-only entries");
+        Assert.Equal(expected, support.Entries.Select(e => e.Title));
     }
 
     [SkippableFact]

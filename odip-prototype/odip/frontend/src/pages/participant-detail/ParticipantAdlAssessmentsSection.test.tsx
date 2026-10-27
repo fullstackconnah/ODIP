@@ -240,3 +240,14 @@ describe('ParticipantAdlAssessmentsSection — fixed list (T9)', () => {
     expect(screen.queryByText('Dressing')).not.toBeInTheDocument()
   })
 })
+
+describe('ParticipantAdlAssessmentsSection — shared column layout', () => {
+  it('gives the personal and community/domestic tables the same column widths, so Level starts at the same x', () => {
+    render(<ParticipantAdlAssessmentsSection participantId="participant-1" />)
+
+    const [personal, community] = Array.from(document.querySelectorAll('table'))
+    const widths = (table: Element) => Array.from(table.querySelector('tbody tr')!.children).map((td) => td.className)
+    expect(widths(personal)).toEqual(widths(community))
+    expect(widths(personal).some((c) => c.includes('md:w-['))).toBe(true)
+  })
+})
