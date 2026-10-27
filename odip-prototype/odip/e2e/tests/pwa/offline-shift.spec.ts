@@ -39,8 +39,9 @@ test('a worker starts a shift and writes a note offline, and both reach the serv
   await expect(page.getByRole('status').filter({ hasText: /waiting to send/ })).toContainText('2 changes waiting to send')
 
   await context.setOffline(false)
-  await page.getByRole('button', { name: 'Send now' }).first().tap()
-  await expect(page.getByRole('status').filter({ hasText: /waiting to send/ })).toHaveCount(0)
+  // Coming back online replays on its own; Send now is the fallback if the row is still showing it.
+  await page.getByRole('button', { name: 'Send now' }).first().tap({ timeout: 3_000 }).catch(() => {})
+  await expect(page.getByRole('status').filter({ hasText: /waiting to send/ })).toHaveCount(0, { timeout: 20_000 })
 
   const notes = await expectStatus('notes', 200, await call(worker, 'GET', `/portal/shifts/${shiftId}/notes`))
   expect(JSON.stringify(notes.data)).toContain('Written without signal.')

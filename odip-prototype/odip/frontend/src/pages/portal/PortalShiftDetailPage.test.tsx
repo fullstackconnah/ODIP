@@ -1171,7 +1171,6 @@ describe('PortalShiftDetailPage: offline (SHAPE 3, 5)', () => {
   const inProgress = (over: Partial<PortalShiftDetailDto> = {}) => makeDetail({ status: 'InProgress', completion: makeCompletion(), ...over })
   const missing = (name: string, id: string, at: string) => ({ code: 'DOSE_OUTCOME_MISSING', message: 'x', medicationId: id, medicationName: name, scheduledAt: at })
   const bar = () => within(screen.getByRole('toolbar', { name: 'Shift actions' }))
-  const forward = (name: string | RegExp) => fireEvent.click(bar().getByRole('button', { name }))
   const goOffline = () => Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false })
   afterEach(() => {
     Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true })
