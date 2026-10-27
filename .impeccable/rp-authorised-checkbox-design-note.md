@@ -11,7 +11,7 @@ What and where
 States (dialog)
 - Unticked: rows table has Description, Review date, (Linked medication). No authorisation columns. POST sends authorisedBy/authorisationDate null.
 - Ticked: Authorised by + Authorisation date columns appear and are required per row. Errors use the existing row-error style: "Row N: add who authorised it" / "Row N: add the date it was authorised" (both shown, joined, when both are missing).
-- Untick then re-tick: values kept in row state; never sent while unticked.
+- Untick then re-tick: Back + Continue rebuilds the rows, so nothing typed survives; authorisation values are never sent while unticked.
 - Phone 390: checkbox row is full width, label wraps, hit target >= 44px (CheckboxField). Table collapses to cards as today.
 - Hint line (one, optional): "Authorised practices need who authorised it and the date." shown via CheckboxField hint.
 
