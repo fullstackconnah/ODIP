@@ -383,6 +383,12 @@ describe('PortalShiftDetailPage: Before', () => {
 describe('PortalShiftDetailPage: During', () => {
   const inProgress = (over: Partial<PortalShiftDetailDto> = {}) => makeDetail({ status: 'InProgress', completion: makeCompletion(), ...over })
 
+  it('counts two as-needed medicines in the plural', () => {
+    const prn = (id: string) => ({ medicationId: id, medicationName: 'Ibuprofen', strength: null, doseDescription: '1 tablet', form: 'Tablet', route: 'Oral', directions: null, supportLevel: 'Administer', isHighRisk: false, indication: 'Pain', maxDosesPer24h: 3, minIntervalMinutes: 240, dosesInLast24h: 0, lastDoseAt: null, maxDosesReached: false, nextAvailableAt: null, outcomePendingAdministrationId: null })
+    show(inProgress({ prn: [prn('p1'), prn('p2')] as never }))
+    expect(within(screen.getByRole('region', { name: 'During the shift' })).getByText('As needed · 2 medicines')).toBeInTheDocument()
+  })
+
   it('puts overdue doses at the top in the warning group, with a PRN group', () => {
     show(inProgress({
       medicationsDue: [dose({ medicationId: 'a', medicationName: 'Evening Med', scheduledAt: '2026-08-17T20:00:00' }), dose({ medicationId: 'b', medicationName: 'Morning Med', scheduledAt: '2026-08-17T08:00:00', state: 'Overdue', isOverdue: true })] as never,
@@ -572,6 +578,17 @@ describe('PortalShiftDetailPage: the five-step finish (SHAPE §4)', () => {
     expect(screen.getByLabelText('Reason')).toBeInTheDocument()
   })
 
+  it('step 2 counts two missing outcomes in the plural', () => {
+    show(inProgress({
+      medicationsDue: [dose({ medicationId: 'm1', state: 'Overdue', isOverdue: true }), dose({ medicationId: 'm2', state: 'Overdue', isOverdue: true })] as never,
+      finishBlockers: [blocker('Paracetamol at 12:00 needs an outcome.'), blocker('Ibuprofen at 12:00 needs an outcome.')] as never,
+    }))
+    endShift()
+    forward('Confirm times')
+    forward('Next')
+    expect(screen.getByRole('alert')).toHaveTextContent('Record an outcome for 2 doses before you go on.')
+  })
+
   it("step 2 shows unticked routines without blocking (owner decision 7), ticks them in place, and folds the as-needed medicines", async () => {
     const routine = (id: string, title: string, isCritical: boolean) => ({ id, title, description: '', category: 'PersonalCare', isCritical, startTime: null, endTime: null, occursAt: null, afterMidnight: false, isChecked: false, checkedAt: null, checkedByName: null, fromTickSnapshot: false })
     const prn = { medicationId: 'p', medicationName: 'Ibuprofen', strength: null, doseDescription: '1 tablet', form: 'Tablet', route: 'Oral', directions: null, supportLevel: 'Administer', isHighRisk: false, indication: 'Pain', maxDosesPer24h: 3, minIntervalMinutes: 240, dosesInLast24h: 0, lastDoseAt: null, maxDosesReached: false, nextAvailableAt: null, outcomePendingAdministrationId: null }
@@ -718,6 +735,16 @@ describe('PortalShiftDetailPage: the five-step finish (SHAPE §4)', () => {
     expect(pills.map(p => p.hasAttribute('disabled'))).toEqual([false, false, false, true, true])
     fireEvent.click(pills[0])
     expect(heading('Your times')).toBeInTheDocument()
+  })
+
+  it('step 4 counts two notes in the plural', () => {
+    mockUseShiftNotes.mockReturnValue({ data: [noteWith({ id: 'n1' }), noteWith({ id: 'n2' })] })
+    show(inProgress())
+    endShift()
+    forward('Confirm times')
+    forward('Next')
+    forward('Skip')
+    expect(screen.getByText('2 notes on this shift.')).toBeInTheDocument()
   })
 
   it('step 4 counts the notes, and Add or edit notes opens the Notes tab, keeping every entry (plan check S1)', async () => {

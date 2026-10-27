@@ -4,6 +4,7 @@ import { formatWithTimeZone, parseApiDate } from '@/lib/utils'
 import { formatDayAccessibleName, formatElapsedSince, formatMinutesSpan, formatShiftTimeRange } from '@/pages/rostering/lib/roster'
 import { loadEndDraft } from '../shift/endDraft'
 import { providerLocalToUtcInstant } from '../shift/shiftTime'
+import { plural } from '@/lib/format'
 import { Chip } from '../shift/ui'
 import { useNow } from '../shift/useNow'
 import type { PortalShiftSummaryDto } from '@/api/types'
@@ -48,7 +49,7 @@ export function CurrentShiftCard({ shift }: { shift: PortalShiftSummaryDto }) {
       <p className="text-sm">{state ? `${when} · ${state}` : when}</p>
       {(overdue > 0 || handoverToRead) && (
         <div className="flex flex-wrap gap-2">
-          {overdue > 0 && <Chip tone="warning">{overdue} dose{overdue === 1 ? '' : 's'} overdue</Chip>}
+          {overdue > 0 && <Chip tone="warning">{plural(overdue, 'dose')} overdue</Chip>}
           {handoverToRead && <Chip>Handover to read</Chip>}
         </div>
       )}
