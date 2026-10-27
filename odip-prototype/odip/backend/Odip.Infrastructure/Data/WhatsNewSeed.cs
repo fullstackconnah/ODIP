@@ -82,6 +82,9 @@ public static class WhatsNewSeed
         new Item("2026-10-notices-one-look", "Warnings look the same everywhere",
             "Warning and error notices on participant pages, intake, the caregiver form and the roster panels now share one look, with an icon.",
             WhatsNewAudience.All, false),
+        new Item("2026-10-participant-subtabs", "Each section has its own tab",
+            "On a participant's page, the sections of a tab are now listed as small tabs under the main ones. Choose one to see just that section. Risks, routines, contacts and notes show how many there are.\n\nLinks, flags and alerts still open the right section.",
+            WhatsNewAudience.All, false),
     };
 
     /// <summary>Inserts the keys the table lacks, one save each, so a key another instance inserted first costs only that row.</summary>
