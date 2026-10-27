@@ -6,7 +6,6 @@ import { FactList } from '@/components/FactList'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
-import { hasMedical } from './recorded'
 import { HIDPA_SUPPORT_CATEGORIES } from '@/api/types/enums'
 import {
   DIAGNOSIS_OPTIONS, DIAGNOSIS_OTHER_SENTINEL, HIDPA_CATEGORY_LABELS, HIDPA_CATEGORY_TITLES,
@@ -73,9 +72,6 @@ export function ParticipantMedicalSection({ p, participantId, canEdit }: { p: Pa
     || draft.hidpaNotes !== saved.hidpaNotes || draft.medicalSummary !== saved.medicalSummary
     || draft.allergiesDetail !== saved.allergiesDetail || draft.isAnaphylaxisRisk !== saved.isAnaphylaxisRisk || draft.allergyManagementNotes !== saved.allergyManagementNotes
 
-  const hasAnyData = hasMedical(p)
-
-  if (!canEdit && !hasAnyData) return null
 
   async function handleSave(expected: PatchParticipantDto['expectedRevisions']) {
     const resolvedPrimary = draft.primaryDiagnosis === DIAGNOSIS_OTHER_SENTINEL ? draft.primaryDiagnosisOther.trim() : draft.primaryDiagnosis
