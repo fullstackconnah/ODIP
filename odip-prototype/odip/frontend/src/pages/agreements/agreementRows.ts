@@ -1,7 +1,8 @@
-import type { AgreementDraftRef, AgreementRow, PriceList } from '@/api/types'
+import type { AgreementBulkAction, AgreementDraftRef, AgreementRow, PriceList } from '@/api/types'
 import { endingBadgeWords } from '@/lib/agreementEnding'
 import { formatDateRange } from '@/lib/dateRange'
 import type { Tone } from '@/lib/tone'
+import { formatCurrency } from '@/lib/utils'
 
 export const SHOW_VALUES = ['all', 'ending', 'ended', 'draft', 'new-price-list'] as const
 export type Show = (typeof SHOW_VALUES)[number]
@@ -61,4 +62,31 @@ export function termView(r: AgreementRow): TermView {
     from: r.current && r.termStart && r.current.agreementStartDate > r.termStart ? r.current.agreementStartDate : null,
     draftLine: !r.current ? `Draft v${shown.version}, never approved` : r.waiting ? `Draft v${r.waiting.version}: ${formatDateRange(r.waiting.agreementStartDate, r.waiting.agreementEndDate)}` : null,
   }
+}
+
+/** What the server will leave alone in a bulk run, one line per reason, each row counted once (waiting draft, then ended, then already on the list). The server still decides per agreement. */
+export function bulkSkipNotes(selected: readonly AgreementRow[], action: AgreementBulkAction, list?: PriceList | null): string[] {
+  let waiting = 0, ended = 0, already = 0
+  for (const r of selected) {
+    if (r.hasWaitingDraft) waiting++
+    else if (action === 'reprice' && r.endingState === 'Ended') ended++
+    else if (action === 'reprice' && list && r.priceList && r.priceList.start >= list.start) already++
+  }
+  const has = (n: number) => (n === 1 ? 'has' : 'have')
+  return [
+    waiting && `${waiting} ${has(waiting)} a draft waiting and will be skipped.`,
+    ended && `${ended} ${has(ended)} ended and will be skipped.`,
+    already && `${already} ${already === 1 ? 'is' : 'are'} already on ${list!.version} or a newer price list and will be skipped.`,
+  ].filter(Boolean) as string[]
+}
+
+/** The latest end among the ticked agreements that are approved: an extension must run past it. */
+export function latestEnd(selected: readonly AgreementRow[]): string | null {
+  return selected.reduce<string | null>((latest, r) => (r.current && (!latest || r.current.agreementEndDate > latest) ? r.current.agreementEndDate : latest), null)
+}
+
+/** After minus before, signed: a rise is not good or bad, so it is plain ink, with a true minus sign. */
+export function changeWords(before: number, after: number): string {
+  const delta = Math.round((after - before) * 100) / 100
+  return delta === 0 ? formatCurrency(0) : `${delta > 0 ? '+' : '−'}${formatCurrency(Math.abs(delta))}`
 }

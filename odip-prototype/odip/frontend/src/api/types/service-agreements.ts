@@ -39,3 +39,32 @@ export interface AgreementApproveResult {
   outcome: AgreementApproveOutcome
   reasons: string[]
 }
+
+export type AgreementBulkAction = 'renew' | 'extend' | 'reprice'
+
+export interface AgreementBulkRequest {
+  action: AgreementBulkAction
+  participantIds: string[]
+  /** Extend: the new end date. */
+  endDate?: string
+  /** Reprice: the catalogue version to price from. */
+  priceList?: string
+}
+
+/** One agreement's term and what it adds up to. */
+export interface AgreementTerm { start: string; end: string; total: number }
+
+export type AgreementBulkOutcome = 'Created' | 'Skipped' | 'Failed' | 'Busy'
+
+export interface AgreementBulkResult {
+  participantId: string
+  name: string
+  outcome: AgreementBulkOutcome
+  reason: string | null
+  sourceDraftId: string | null
+  newDraftId: string | null
+  before: AgreementTerm | null
+  after: AgreementTerm | null
+  /** A draft was made but has findings to look at before it can be approved. */
+  hasIssues: boolean
+}

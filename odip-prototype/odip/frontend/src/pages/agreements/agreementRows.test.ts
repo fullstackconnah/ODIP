@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AgreementRevisionRef, AgreementRow } from '@/api/types'
-import { approveTargets, filterRows, listOptions, parseShow, statusBadge, termView } from './agreementRows'
+import { approveTargets, bulkSkipNotes, filterRows, latestEnd, listOptions, parseShow, statusBadge, termView } from './agreementRows'
 
 const rev = (n: number, start: string, end: string, total = 1000): AgreementRevisionRef => ({ draftId: `d${n}`, version: n, agreementStartDate: start, agreementEndDate: end, total })
 const row = (over: Partial<AgreementRow> & { participantName: string }): AgreementRow => ({
@@ -62,5 +62,27 @@ describe('termView', () => {
   it('names the waiting draft, and a never-approved one', () => {
     expect(termView(rows[3]).draftLine).toBe('Draft v2: 1 Jan – 31 Dec 2027')
     expect(termView(rows[4])).toMatchObject({ draftLine: 'Draft v1, never approved', from: null })
+  })
+})
+
+describe('bulkSkipNotes', () => {
+  const list = { version: '2026-27', start: '2026-07-01' }
+  it('counts each row once, by the first reason that skips it', () => {
+    expect(bulkSkipNotes(rows, 'renew')).toEqual(['2 have a draft waiting and will be skipped.'])
+    expect(bulkSkipNotes([rows[3]], 'extend')).toEqual(['1 has a draft waiting and will be skipped.'])
+    expect(bulkSkipNotes(rows, 'reprice', list)).toEqual([
+      '2 have a draft waiting and will be skipped.', '1 has ended and will be skipped.', '1 is already on 2026-27 or a newer price list and will be skipped.',
+    ])
+  })
+  it('says nothing when nothing is skipped, and ended rows are renewed', () => {
+    expect(bulkSkipNotes([rows[0], rows[2]], 'renew')).toEqual([])
+    expect(bulkSkipNotes([rows[0]], 'reprice', list)).toEqual([])
+  })
+})
+
+describe('latestEnd', () => {
+  it('is the latest end among the approved agreements, or null', () => {
+    expect(latestEnd([rows[0], rows[1]])).toBe('2026-12-31')
+    expect(latestEnd([rows[4]])).toBeNull()
   })
 })

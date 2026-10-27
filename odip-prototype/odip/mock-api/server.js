@@ -2919,6 +2919,27 @@ const postRoutes = [
       reasons: outcomes[i % outcomes.length] === 'NeedsReview' ? ['Block weekdays: no item fits.'] : [],
     }))
   }],
+  // Bulk renew, reprice or extend: a mix of Created (one with findings), Skipped and Failed, in order; "busy" in the ids is the 429 of a save running elsewhere.
+  ['service-agreements/bulk', (body) => {
+    const ids = (body && body.participantIds) || []
+    if (ids.length < 1 || ids.length > 25) return respond(400, failEnvelope(null, ['Select between 1 and 25 agreements.']))
+    if (ids.includes('busy')) return respond(429, failEnvelope(null, ['Another save is running for your organisation.']))
+    const rows = new Map(agreementsList().rows.map((r) => [r.participantId, r]))
+    const action = body.action
+    return ids.map((id, i) => {
+      const row = rows.get(id)
+      const name = row ? row.participantName : 'Demo Ng'
+      const base = { participantId: id, name, sourceDraftId: null, newDraftId: null, before: null, after: null, hasIssues: false, reason: null }
+      if (i % 11 === 9) return { ...base, outcome: 'Skipped', reason: 'Has a draft waiting' }
+      if (i % 11 === 10) return { ...base, outcome: 'Failed', reason: 'The plan ends before the new term' }
+      const start = (row && row.current && row.current.agreementStartDate) || '2026-01-01'
+      const end = (row && row.current && row.current.agreementEndDate) || '2026-12-31'
+      const total = (row && row.current && row.current.total) || 12000
+      const before = { start, end, total }
+      const next = action === 'extend' ? { start, end: body.endDate, total: 1500 } : action === 'reprice' ? { start, end, total: total + 240 } : { start: planApproval.addDays(end, 1), end: planApproval.addDays(end, 365), total: total + 600 }
+      return { ...base, outcome: 'Created', sourceDraftId: 'src-' + id, newDraftId: 'new-' + id, before, after: next, hasIssues: i % 11 === 3 }
+    })
+  }],
   ['participants/:id/service-agreement-drafts/:id/approve', (participantId, draftId, body) => {
     const result = planApproval.approve(approvalStore, participantId, draftId, body, { name: 'Demo Coordinator' })
     if (result.status === 409) return respond(409, failEnvelope({ currentVersion: result.currentVersion }, result.errors, 'draft-superseded'))

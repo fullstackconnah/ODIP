@@ -99,10 +99,10 @@ describe('AgreementsPage', () => {
     }
   })
 
-  it('gives a role that cannot approve no checkboxes and no Approve', () => {
+  it('gives a role that cannot approve the draft actions but no Approve', () => {
     mockUseAgreements.mockReturnValue(ready(rows, false))
     renderPage()
-    expect(screen.queryAllByRole('checkbox')).toHaveLength(0)
+    expect(screen.queryAllByRole('checkbox').length).toBeGreaterThan(0) // Renew, Reprice and Extend need no approver
     expect(screen.queryByRole('button', { name: /^Approve/ })).not.toBeInTheDocument()
   })
 
