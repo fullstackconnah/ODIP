@@ -219,4 +219,22 @@ describe('Dropdown — which way the panel opens', () => {
       Object.defineProperty(window, 'innerHeight', { configurable: true, value: restore.h })
     }
   })
+
+  it('keeps a left-aligned panel inside the viewport when its trigger sits near the right edge of a phone card', async () => {
+    const restore = { w: window.innerWidth }
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 })
+    const width = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth')
+    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, get() { return this.getAttribute('role') === 'listbox' ? 224 : 0 } })
+    try {
+      render(<Dropdown variant="icon" align="left" value="" onChange={() => {}} label="More actions" items={ITEMS} />)
+      const trigger = screen.getByRole('button', { name: 'More actions' })
+      trigger.getBoundingClientRect = () => ({ top: 400, bottom: 444, height: 44, left: 230, right: 274, width: 44, x: 230, y: 400, toJSON: () => ({}) })
+      fireEvent.click(trigger)
+      const panel = await screen.findByRole('listbox')
+      expect(panel.style.left).toBe('158px') // 390 - 224 - 8, not the trigger's 230
+    } finally {
+      if (width) Object.defineProperty(HTMLElement.prototype, 'offsetWidth', width)
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: restore.w })
+    }
+  })
 })
