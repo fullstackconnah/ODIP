@@ -172,8 +172,7 @@ public class BprCsvServiceTests
 
         var (bytes, _) = await new BprCsvService(db).GenerateBprCsvAsync(claim.Id, CancellationToken.None);
 
-        var lines = Encoding.UTF8.GetString(bytes).Split('
-', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var lines = Encoding.UTF8.GetString(bytes).Split((char)10, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         Assert.Single(lines); // the header only
     }
 
