@@ -12,6 +12,7 @@ import WhatsNewButton from '@/components/layout/WhatsNewButton'
 import { NavCountBadge } from '@/components/layout/NavCountBadge'
 import { navBadgeLabel } from '@/components/layout/navBadgeLabel'
 import PlatformFooter from '@/components/layout/PlatformFooter'
+import InstallPrompt from '@/components/layout/InstallPrompt'
 import { PlatformDirectoryTrigger } from '@/components/layout/PlatformDirectory'
 import { platformNavigation } from '@/components/layout/platformDirectoryModel'
 import {
@@ -706,7 +707,7 @@ export default function AppLayout() {
           PlatformFooter (variant="shell"), the last thing in this column, carries it below lg (--mobile-nav-h, the safe area and
           0.75rem). The footer always renders, because its Accessibility link is unconditional, so nothing can end up behind the nav.
         */}
-        <main id="main" className="flex-1 px-[var(--gutter,20px)] pt-4 pb-6">
+        <main id="main" tabIndex={-1} className="flex-1 px-[var(--gutter,20px)] pt-4 pb-6 focus:outline-none">
           {/* Track the previous in-app pathname once at the authenticated shell so any
               page-header back control (e.g. the intake/profile wizards) can navigate to
               where the user actually came from instead of a hardcoded fallback. */}
@@ -722,6 +723,7 @@ export default function AppLayout() {
           </ErrorBoundary>
         </main>
         <PlatformFooter variant="shell" />
+        <InstallPrompt />
       </div>
 
       {/* Mobile bottom nav. Generated from the same config as the sidebar (see BottomBar), so it can never offer a link the role

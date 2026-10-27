@@ -407,6 +407,21 @@ aside[data-folding] [data-fold="trail"] { transition-duration: 0s; }
   }
 }
 
+/*
+ * Install card (InstallPrompt): in 200ms from 8px below on the house curve, out along the same path in 150ms. Reduced motion keeps
+ * the 150ms but fades only (this block follows the product-wide rule above, so its !important wins on order).
+ */
+@keyframes installIn { from { opacity: 0; transform: translateY(8px); } }
+@keyframes installOut { to { opacity: 0; transform: translateY(8px); } }
+@keyframes installFadeIn { from { opacity: 0; } }
+@keyframes installFadeOut { to { opacity: 0; } }
+.install-card { animation: installIn 200ms cubic-bezier(0.2, 0, 0, 1); }
+.install-card[data-leaving] { animation: installOut 150ms cubic-bezier(0.2, 0, 0, 1) forwards; }
+@media (prefers-reduced-motion: reduce) {
+  .install-card { animation: installFadeIn 150ms linear !important; }
+  .install-card[data-leaving] { animation: installFadeOut 150ms linear forwards !important; }
+}
+
 :root { --wordmark-dot: var(--color-primary-fixed); }
 
 /* Dark theme (dark-mode-2026-10): the same tokens re-pointed; set by public/theme.js. Values: DESIGN.md "Dark theme". */
