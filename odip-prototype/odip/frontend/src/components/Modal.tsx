@@ -1,4 +1,4 @@
-import { useRef, useId, type ReactNode } from 'react'
+import { useRef, useId, type ReactNode, type RefObject } from 'react'
 import { X } from 'lucide-react'
 import { useDialogBehavior } from '@/hooks/useDialogBehavior'
 import { TAP_AREA } from './tapArea'
@@ -20,6 +20,8 @@ export type ModalProps = {
    * decision (e.g. a confirm prompt) — it gets the same labelledby/describedby wiring as the
    * default `'dialog'` role. Defaults to `'dialog'`. */
   role?: 'dialog' | 'alertdialog'
+  /** The control that takes focus on open, in place of the first focusable one. A prompt with a safe answer ("Keep editing") points it there. */
+  initialFocusRef?: RefObject<HTMLElement | null>
 }
 
 const SIZE_MAP = {
@@ -29,14 +31,14 @@ const SIZE_MAP = {
   xl: 'max-w-4xl',
 }
 
-export function Modal({ open, onClose, title, size = 'md', footer, children, className, closeOnBackdrop = true, stickyFooter = false, role = 'dialog' }: ModalProps) {
+export function Modal({ open, onClose, title, size = 'md', footer, children, className, closeOnBackdrop = true, stickyFooter = false, role = 'dialog', initialFocusRef }: ModalProps) {
   const titleId = useId()
   const descriptionId = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
 
   // Escape, the Tab trap, scroll lock and focus in / back. Shared with SlideOver; a ConfirmDialog opened over a panel is
   // the topmost layer, so it alone answers Escape.
-  useDialogBehavior({ open, onClose, containerRef: dialogRef })
+  useDialogBehavior({ open, onClose, containerRef: dialogRef, initialFocusRef })
 
   if (!open) return null
 

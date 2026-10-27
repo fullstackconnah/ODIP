@@ -101,7 +101,6 @@ export function AvailabilityRecordFormModal({ open, onClose, onSubmit, submittin
 
   return (
     <>
-      {unsavedChangesDialog}
       <Modal
         open={open}
         onClose={onClose}
@@ -159,6 +158,7 @@ export function AvailabilityRecordFormModal({ open, onClose, onSubmit, submittin
           )}
         </form>
       </Modal>
+      {unsavedChangesDialog}
     </>
   )
 }

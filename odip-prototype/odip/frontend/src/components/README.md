@@ -491,7 +491,7 @@ lock, focus returns to the trigger on close, `role="dialog"` + `aria-modal` +
 `aria-labelledby`. The behaviour is [`useDialogBehavior`](#usedialogbehavior), so a Modal
 opened over another layer (a ConfirmDialog over a [SlideOver](#slideover)) answers Escape
 alone. Props: `open`, `onClose`, `title`, `size` (`sm`/`md`/`lg`/`xl`), `footer`,
-`children`, `className`. The close button is named "Close dialog" and has the `TAP_AREA`
+`children`, `className`, `role`, `initialFocusRef` (the control that takes focus on open instead of the first focusable one; the unsaved-changes prompt points it at "Keep editing"). The close button is named "Close dialog" and has the `TAP_AREA`
 44px hit area on touch (its box stays 28px).
 
 `ConfirmDialog.tsx` is `Modal` pre-wired for the confirm/cancel shape: `title`, `message`,

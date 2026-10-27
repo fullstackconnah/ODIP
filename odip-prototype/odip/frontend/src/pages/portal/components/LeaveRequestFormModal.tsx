@@ -95,7 +95,6 @@ export function LeaveRequestFormModal({ open, onClose, onSubmit, submitting, err
 
   return (
     <>
-      {unsavedChangesDialog}
       <Modal
         open={open}
         onClose={onClose}
@@ -153,6 +152,7 @@ export function LeaveRequestFormModal({ open, onClose, onSubmit, submitting, err
           )}
         </form>
       </Modal>
+      {unsavedChangesDialog}
     </>
   )
 }

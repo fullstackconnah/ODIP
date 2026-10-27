@@ -76,6 +76,8 @@ public static class WhatsNewSeed
         new Item("2026-10-leave-approvals-1024", "Leave fits smaller screens",
             "On a laptop-sized screen the leave table now shows each person with their leave type, and the dates with who asked, so nothing scrolls sideways.",
             Staff, false),
+        new Item("2026-10-unsaved-prompt-clear-of-nav", "Unsaved changes prompt fits phones",
+            "On a phone, the \"unsaved changes\" prompt no longer sits under the bottom menu.",
         new Item("2026-10-notices-one-look", "Warnings look the same everywhere",
             "Warning and error notices on participant pages, intake, the caregiver form and the roster panels now share one look, with an icon.",
             WhatsNewAudience.All, false),

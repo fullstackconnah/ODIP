@@ -133,7 +133,7 @@ describe('SettingsSection: switching section with unsaved changes', () => {
     renderFrame({ save: save({ dirty: true }) })
     await user.click(screen.getByRole('link', { name: 'Organisation profile' }))
 
-    const scrim = screen.getByRole('alertdialog').closest('[role="presentation"]')
+    const scrim = screen.getByRole('alertdialog').parentElement
     expect(scrim?.parentElement).toBe(document.body)
   })
 

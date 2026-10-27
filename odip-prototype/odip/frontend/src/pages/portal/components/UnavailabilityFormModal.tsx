@@ -103,7 +103,6 @@ export function UnavailabilityFormModal({ open, onClose, onSubmit, submitting, e
 
   return (
     <>
-      {unsavedChangesDialog}
       <Modal
         open={open}
         onClose={onClose}
@@ -170,6 +169,7 @@ export function UnavailabilityFormModal({ open, onClose, onSubmit, submitting, e
           )}
         </form>
       </Modal>
+      {unsavedChangesDialog}
     </>
   )
 }

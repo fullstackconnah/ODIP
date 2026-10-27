@@ -361,7 +361,6 @@ function DraftPage() {
   const total = <RunningTotal status={pricing.status} answer={pricing.answer} refreshing={pricing.refreshing} error={pricing.error} onRetry={pricing.retry} budgetView={pricing.budgetView} leftOut={pricing.leftOut} />
 
   return <div className="flex max-w-6xl flex-col gap-[var(--section-gap)] animate-fade-in">
-    {unsavedChangesDialog}
     <ConfirmDialog
       open={confirmingLoad}
       onCancel={() => setConfirmingLoad(false)}
@@ -381,6 +380,7 @@ function DraftPage() {
         onSuperseded={superseded}
       />
     )}
+    {unsavedChangesDialog}
     <div className="flex items-start gap-4">
       <BackButton to={backHref} label={fromOnboarding ? 'onboarding' : 'participant'} variant="icon" history={false} className="mt-1" />
       <div className="flex-1"><PageHeader title="Service agreement" subtitle={participant.data.fullName} /></div>

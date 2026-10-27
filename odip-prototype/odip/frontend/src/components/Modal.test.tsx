@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -211,5 +211,24 @@ describe('Modal close button (R1-07)', () => {
     expect(close).toHaveClass(...TAP_AREA.split(' '))
     expect(close).toHaveClass('p-1', 'rounded-lg')
     expect(close.querySelector('svg')).toHaveClass('w-5', 'h-5')
+  })
+})
+
+describe('Modal initialFocusRef', () => {
+  it('focuses initialFocusRef on open; without it the first focusable', () => {
+    function WithRef() {
+      const ref = useRef<HTMLButtonElement>(null)
+      return (
+        <Modal open onClose={() => {}} title="Example" initialFocusRef={ref} footer={<button ref={ref}>Safe answer</button>}>
+          <input aria-label="Name" />
+        </Modal>
+      )
+    }
+    const { unmount } = render(<WithRef />)
+    expect(screen.getByRole('button', { name: 'Safe answer' })).toHaveFocus()
+    unmount()
+
+    render(<Modal open onClose={() => {}} title="Example" footer={<button>Safe answer</button>}><input aria-label="Name" /></Modal>)
+    expect(screen.getByRole('button', { name: 'Close dialog' })).toHaveFocus()
   })
 })
