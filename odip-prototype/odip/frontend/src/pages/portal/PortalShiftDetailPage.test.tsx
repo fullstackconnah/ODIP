@@ -826,6 +826,7 @@ describe('PortalShiftDetailPage: other states', () => {
     try {
       show(makeDetail({ status: 'InProgress', completion: makeCompletion() }))
       expect(screen.getByRole('alert')).toHaveTextContent(/you're offline/i)
+      expect(screen.getByRole('alert')).toHaveAttribute('aria-live', 'assertive')
       expect(screen.getByRole('button', { name: 'Start break' })).toBeDisabled()
     } finally {
       Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true })

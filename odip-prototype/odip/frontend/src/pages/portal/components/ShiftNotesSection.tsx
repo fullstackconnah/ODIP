@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { MessageSquare, AlertCircle, AlertTriangle, FileCheck } from 'lucide-react'
+import { MessageSquare, AlertCircle, FileCheck } from 'lucide-react'
 import { useShiftNotes, useCreateShiftNote, useUpdateShiftNote, useAcknowledgeShiftNoteFlags } from '@/api/hooks'
 import { usePermissions } from '@/lib/permissions'
 import { formatNoteTimestamp, formatRatio } from '@/lib/format'
@@ -8,6 +8,7 @@ import type { ShiftNoteDto } from '@/api/types'
 import { formatFlaggedCategoryList, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 import type { ShiftNoteIncidentPrefillState } from '@/lib/incidentPrefill'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 
 const BODY_MAX_LENGTH = 1000
 
@@ -49,23 +50,23 @@ function FlagBanner({
 }) {
   const categories = note.flaggedCategories as ShiftNoteFlagCategory[]
   return (
-    <div
-      role="status"
-      className="mt-2 flex flex-col gap-2 rounded-lg border border-[var(--color-warning-container)] bg-[var(--color-warning-container)]/60 p-3 text-sm text-[var(--color-on-warning-container)] sm:flex-row sm:items-start sm:justify-between"
+    <Callout
+      tone="warning"
+      polite
+      className="mt-2"
+      actions={(
+        <>
+          <Button variant="ghost" onClick={onDismiss} disabled={dismissing}>
+            {dismissing ? 'Dismissing…' : 'Dismiss'}
+          </Button>
+          <Button variant="secondary" onClick={onFileIncident}>
+            File incident report
+          </Button>
+        </>
+      )}
     >
-      <p className="flex items-start gap-1.5">
-        <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
-        <span>This note mentions {formatFlaggedCategoryList(categories)}. Consider filing an incident report.</span>
-      </p>
-      <div className="flex shrink-0 items-center gap-2 self-end sm:self-start">
-        <Button variant="ghost" onClick={onDismiss} disabled={dismissing}>
-          {dismissing ? 'Dismissing…' : 'Dismiss'}
-        </Button>
-        <Button variant="secondary" onClick={onFileIncident}>
-          File incident report
-        </Button>
-      </div>
-    </div>
+      This note mentions {formatFlaggedCategoryList(categories)}. Consider filing an incident report.
+    </Callout>
   )
 }
 
