@@ -91,17 +91,6 @@ export default function InstallPrompt() {
           icon={null}
           announce={false}
           className="shadow-[var(--shadow-float)]"
-          actions={
-            <>
-              {mode === 'android' && (
-                <Button variant="primary" size="md" onClick={() => void install()}>
-                  <Download className="size-4" aria-hidden="true" />
-                  Install
-                </Button>
-              )}
-              <Button variant="ghost" size="md" onClick={notNow}>Not now</Button>
-            </>
-          }
         >
           <div className="flex gap-3">
             <img src="/favicon.svg" alt="" width={40} height={40} className="size-10 shrink-0 rounded-[10px]" />
@@ -123,6 +112,15 @@ export default function InstallPrompt() {
                   </li>
                 </ol>
               )}
+              <div className="flex gap-2 pt-1">
+                {mode === 'android' && (
+                  <Button variant="primary" size="md" onClick={() => void install()}>
+                    <Download className="size-4" aria-hidden="true" />
+                    Install
+                  </Button>
+                )}
+                <Button variant="ghost" size="md" onClick={notNow}>Not now</Button>
+              </div>
             </div>
           </div>
         </Callout>

@@ -26,7 +26,7 @@ test.describe('install shell @pwa', () => {
     const text = await (await request.get('/sw.js')).text()
     const precache = JSON.parse(/const PRECACHE = (\[.*\])/.exec(text)![1]) as string[]
     expect(precache).toContain(entry)
-    expect(precache.filter(u => u.includes('welcome/'))).toEqual([])
+    expect(precache.filter(u => u.includes('welcome'))).toEqual([])
     let bytes = 0
     for (const url of precache) {
       const res = await request.get(url)

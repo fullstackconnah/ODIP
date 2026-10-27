@@ -2,7 +2,7 @@ const VERSION = __SW_VERSION__
 const PRECACHE = __SW_PRECACHE__
 const CACHE = `bunya-shell-${VERSION}`
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(PRECACHE.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()))
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(PRECACHE.map((u) => new Request(u, { cache: u.startsWith('/assets/') ? 'default' : 'reload' })))).then(() => self.skipWaiting()))
 })
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys()
@@ -16,9 +16,9 @@ self.addEventListener('fetch', (e) => {
   // Data stays in app code (tenant, view-as, token): never the API, the landing page or other origins.
   if (url.origin !== self.location.origin || url.pathname.startsWith('/api/') || url.pathname.startsWith('/welcome')) return
   if (req.mode === 'navigate') {
-    const shell = () => caches.match('/index.html', { cacheName: CACHE }).then((r) => r ?? Response.error())
-    // The tunnel up with the origin down answers 502-504: that is offline too, so fall back to the cached shell.
-    e.respondWith(fetch(req).then((r) => (r.status >= 502 && r.status <= 504 ? shell() : r), shell))
+    const shell = (error) => caches.match('/index.html', { cacheName: CACHE }).then((s) => s ?? error ?? Response.error())
+    // Origin or tunnel down (nginx 502-504, Cloudflare 521-524 and 530) is offline too: serve the cached shell, or the server's own error page if none is cached yet.
+    e.respondWith(fetch(req).then((r) => (r.status >= 502 ? shell(r) : r), () => shell()))
     return
   }
   if (url.pathname.startsWith('/assets/') || PRECACHE.includes(url.pathname)) {
