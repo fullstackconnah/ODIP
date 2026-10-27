@@ -490,7 +490,7 @@ describe('AppLayout — 44px coarse-pointer hit areas', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
     const { container } = renderAt('/trips')
     const nav = screen.getByRole('navigation', { name: 'Mobile' })
-    expect(nav).toHaveClass('h-[var(--mobile-nav-h)]', 'fixed', 'bottom-0', 'lg:hidden')
+    expect(nav).toHaveClass('h-[var(--mobile-nav-h)]', 'fixed', 'bottom-0', 'lg:hidden', 'pb-[var(--safe-bottom)]', 'pl-[max(0.5rem,var(--safe-left))]', 'pr-[max(0.5rem,var(--safe-right))]')
     // The clearance moved from main to the platform footer, the last thing in the content column.
     const main = container.querySelector('main')!
     expect(main).toHaveClass('pb-6')
@@ -498,7 +498,7 @@ describe('AppLayout — 44px coarse-pointer hit areas', () => {
     const footer = screen.getByRole('contentinfo')
     expect(main.nextElementSibling).toBe(footer)
     expect(footer.parentElement!.lastElementChild).toBe(footer)
-    expect(footer).toHaveClass('pb-[calc(var(--mobile-nav-h)+env(safe-area-inset-bottom)+0.75rem)]', 'lg:pb-3')
+    expect(footer).toHaveClass('pb-[calc(var(--mobile-nav-h)+0.75rem)]', 'lg:pb-3')
     // md:p-6 once overrode the clearance between 768 and 1024px; no breakpoint below lg may set padding-bottom on either element.
     expect(footer.className).not.toMatch(/(^|\s)(sm|md):pb-/)
     expect(main.className).not.toMatch(/(^|\s)(sm|md|lg):pb-/)
@@ -518,12 +518,21 @@ describe('AppLayout — 44px coarse-pointer hit areas', () => {
     }
   })
 
+  it('pads the sticky header below the notch and away from landscape side insets (safe-area tokens, 48px of content)', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
+    renderAt('/trips')
+    const header = document.querySelector('header')!
+    expect(header).toHaveClass('h-[calc(3rem+var(--safe-top))]', 'pt-[var(--safe-top)]')
+    expect(header.firstElementChild).toHaveClass('pl-[max(var(--gutter,20px),var(--safe-left))]', 'pr-[max(var(--gutter,20px),var(--safe-right))]')
+  })
+
   it('defines --mobile-nav-h for both pointer types as exactly what the nav content needs: 12px + the taller of the 42px link and --tap-min + 12px', () => {
     // jsdom does no layout, so read the source of truth: index.css. The bottom nav's links are 42px of icon + label and take a
     // --tap-min floor (0px on a mouse, 44px under `pointer: coarse`); the nav pads 12px above and below them. If the var and
     // the content drift apart the sticky wizard footer either floats above a gap or slides under the nav (the bug this pins).
     const css = readFileSync(resolve(__dirname, '../../index.css'), 'utf8')
-    const navH = [...css.matchAll(/--mobile-nav-h:\s*(\d+)px/g)].map(m => Number(m[1]))
+    const navH = [...css.matchAll(/--mobile-nav-h:\s*calc\((\d+)px \+ var\(--safe-bottom\)\)/g)].map(m => Number(m[1]))
+    expect(css).toMatch(/--safe-bottom:\s*env\(safe-area-inset-bottom,\s*0px\)/) // the inset is counted once, inside the nav height
     const tapMin = [...css.matchAll(/--tap-min:\s*(\d+)px/g)].map(m => Number(m[1]))
     expect(tapMin).toEqual([0, 44]) // fine pointer, then the coarse block
     expect(navH).toHaveLength(2)
@@ -1473,20 +1482,174 @@ describe('AppLayout — the sidebar collapses to an icon rail (from lg)', () => 
     expect(same).toBe(toggle)
     expect(document.activeElement).toBe(toggle)
     expect(aside()).toHaveClass('lg:w-16')
-    // The item layout follows once the width has settled (jsdom never fires transitionend: the 260ms fallback does).
+    // The foot rows go square at once; the nav follows at 80ms (jsdom never fires transitionend, and there is no handler for it).
+    expect(toggle).toHaveClass('size-10')
+    expect(aside()).toHaveAttribute('data-folding')
     expect(dashboard()).not.toHaveClass('size-10')
-    act(() => { vi.advanceTimersByTime(300) })
+    act(() => { vi.advanceTimersByTime(79) })
+    expect(dashboard()).not.toHaveClass('size-10')
+    expect(aside()).toHaveAttribute('data-folding')
+    act(() => { vi.advanceTimersByTime(1) })
     expect(dashboard()).toHaveClass('size-10')
+    expect(aside()).not.toHaveAttribute('data-folding')
     fireEvent.click(same)
     expect(stored().sidebarCollapsed).toBe(false)
     expect(dashboard()).not.toHaveClass('size-10')
+    // The foot rows stay square until the edge has passed the wide toggle's ring (110ms).
+    expect(toggle).toHaveClass('size-10')
+    act(() => { vi.advanceTimersByTime(109) })
+    expect(toggle).toHaveClass('size-10')
+    act(() => { vi.advanceTimersByTime(1) })
+    expect(toggle).not.toHaveClass('size-10')
+    expect(toggle).toHaveClass('h-8')
+    expect(document.activeElement).toBe(toggle)
   })
 
-  it('T2b reduced motion switches the item layout at once', () => {
+  it('T2b reduced motion switches the nav and the foot rows at once, both ways, with no folding', () => {
     stubMedia({ reduce: true })
     renderRail('/')
-    fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }))
+    const toggle = screen.getByRole('button', { name: 'Collapse sidebar' })
+    fireEvent.click(toggle)
     expect(dashboard()).toHaveClass('size-10')
+    expect(toggle).toHaveClass('size-10')
+    expect(aside()).not.toHaveAttribute('data-folding')
+    fireEvent.click(toggle)
+    expect(dashboard()).not.toHaveClass('size-10')
+    expect(toggle).not.toHaveClass('size-10')
+    expect(aside()).not.toHaveAttribute('data-folding')
+  })
+
+  it('T2c a click works without WAAPI, and a second click mid-fold reverses it for good', () => {
+    expect(Element.prototype.animate).toBeUndefined()
+    renderRail('/', { sidebarCollapsed: false })
+    const toggle = screen.getByRole('button', { name: 'Collapse sidebar' })
+    fireEvent.click(toggle)
+    expect(aside()).toHaveClass('lg:w-16')
+    act(() => { vi.advanceTimersByTime(40) })
+    fireEvent.click(screen.getByRole('button', { name: 'Expand sidebar' }))
+    expect(aside()).not.toHaveClass('lg:w-16')
+    expect(aside()).not.toHaveAttribute('data-folding')
+    act(() => { vi.advanceTimersByTime(200) })
+    expect(dashboard()).not.toHaveClass('size-10')
+    expect(toggle).not.toHaveClass('size-10')
+  })
+
+  it('T2d no folding element carries its own transition (the unlayered fold rule would override it and snap the group)', () => {
+    renderRail('/', { sidebarCollapsed: false })
+    fireEvent.click(trigger(/Trips$/))
+    expect(trigger(/Trips$/)).toHaveAttribute('aria-expanded', 'true')
+    const folds = Array.from(aside().querySelectorAll('[data-fold]'))
+    expect(folds.length).toBeGreaterThan(0)
+    expect(folds.filter(el => (el.getAttribute('class') ?? '').includes('transition-'))).toEqual([])
+  })
+
+  describe('the brand: the wordmark folds into its "b"', () => {
+    const tile = () => aside().querySelectorAll('[data-brand-tile]')
+    const marks = () => aside().querySelectorAll('[data-glide="brand-mark"]')
+
+    it('A1 expanded: one hidden tile (off), one glide mark inside the wordmark, the name once', () => {
+      renderRail('/', { sidebarCollapsed: false })
+      expect(tile()).toHaveLength(1)
+      expect(tile()[0]).toHaveAttribute('aria-hidden', 'true')
+      expect(tile()[0]).not.toHaveAttribute('data-on')
+      expect(marks()).toHaveLength(1)
+      expect(marks()[0].closest('[aria-hidden="true"]')!.textContent).toBe('bunyasupport')
+      expect(within(aside()).getAllByText('Bunya Support')).toHaveLength(1)
+    })
+
+    it('A2 collapsed: the tile is on, the rail "b" is 26px live text, no word, the name once', () => {
+      renderRail('/', { sidebarCollapsed: true })
+      expect(tile()[0]).toHaveAttribute('data-on')
+      expect(marks()).toHaveLength(1)
+      expect(marks()[0].textContent).toBe('b')
+      expect((marks()[0] as HTMLElement).style.fontSize).toBe('26px')
+      expect(marks()[0]).toHaveAttribute('aria-hidden', 'true')
+      expect(within(aside()).queryByText(/support/)).toBeNull()
+      expect(within(aside()).getAllByText('Bunya Support')).toHaveLength(1)
+    })
+
+    it('A3 reduced motion: the tile and the "b" switch at once, both ways', () => {
+      stubMedia({ reduce: true })
+      renderRail('/', { sidebarCollapsed: false })
+      fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }))
+      expect(tile()[0]).toHaveAttribute('data-on')
+      expect((marks()[0] as HTMLElement).style.fontSize).toBe('26px')
+      fireEvent.click(screen.getByRole('button', { name: 'Expand sidebar' }))
+      expect(tile()[0]).not.toHaveAttribute('data-on')
+      expect(aside().querySelector('[data-fold="word"]')).not.toBeNull()
+    })
+  })
+
+  describe('with WAAPI', () => {
+    const animate = vi.fn(() => ({ cancel() {}, finished: Promise.resolve() }))
+    beforeEach(() => {
+      animate.mockClear()
+      Object.assign(Element.prototype, { animate, getAnimations: () => [] })
+    })
+    afterEach(() => {
+      Reflect.deleteProperty(Element.prototype, 'animate')
+      Reflect.deleteProperty(Element.prototype, 'getAnimations')
+    })
+    const collapseAndSettle = () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }))
+      act(() => { vi.advanceTimersByTime(200) })
+    }
+
+    it('T2e collapsing animates', () => {
+      renderRail('/', { sidebarCollapsed: false })
+      collapseAndSettle()
+      expect(animate).toHaveBeenCalled()
+    })
+
+    it('A4 the "b" glides and grows between the wordmark and the rail; the tail and the tile do not use WAAPI keyframes of their own', () => {
+      const calls: { el: HTMLElement; keyframes: Keyframe[]; options: KeyframeAnimationOptions }[] = []
+      Object.assign(Element.prototype, {
+        animate(this: HTMLElement, keyframes: Keyframe[], options: KeyframeAnimationOptions) {
+          calls.push({ el: this, keyframes, options })
+          return { cancel() {}, finished: Promise.resolve() }
+        },
+      })
+      const rect = (left: number, top: number, height: number) => ({ left, top, height, width: 0, right: left, bottom: top + height, x: left, y: top, toJSON() {} })
+      const spy = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+        const el = this as HTMLElement
+        if (el.dataset.glide !== 'brand-mark') return rect(0, 0, 40) as DOMRect
+        return (el.style.fontSize === '26px' ? rect(23.3, 22, 26) : rect(22, 25.5, 21)) as DOMRect
+      })
+      const nums = (t: string) => (t.match(/-?\d+(\.\d+)?/g) ?? []).map(Number)
+      try {
+        renderRail('/', { sidebarCollapsed: false })
+        fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }))
+        act(() => { vi.advanceTimersByTime(80) })
+        const glide = calls.filter(c => c.el.dataset.glide === 'brand-mark')
+        expect(glide).toHaveLength(1)
+        const [dx, dy, s] = nums(String(glide[0].keyframes[0].transform))
+        expect(dx).toBeCloseTo(-1.3, 1)
+        expect(dy).toBeCloseTo(3.5, 1)
+        expect(s).toBeCloseTo(0.808, 2)
+        expect(glide[0].options).toMatchObject({ id: 'sb-glide', duration: 100 })
+        expect(calls.filter(c => JSON.stringify(c.keyframes).includes('scale(')).every(c => c.el.dataset.glide === 'brand-mark')).toBe(true)
+        expect(calls.filter(c => c.el.hasAttribute('data-brand-tile'))).toHaveLength(0)
+
+        calls.length = 0
+        fireEvent.click(screen.getByRole('button', { name: 'Expand sidebar' }))
+        const back = calls.filter(c => c.el.dataset.glide === 'brand-mark')
+        expect(nums(String(back[0].keyframes[0].transform))[2]).toBeCloseTo(1.238, 2)
+        const tail = calls.filter(c => c.el.dataset.fold === 'word')
+        expect(tail).toHaveLength(1)
+        expect(tail[0].keyframes).toEqual([{ opacity: 0, transform: 'translateX(-12px)' }, { opacity: 1, transform: 'none' }])
+        expect(tail[0].options).toMatchObject({ duration: 100, delay: 20 })
+      } finally {
+        spy.mockRestore()
+      }
+    })
+
+    it('T2f reduced motion animates nothing', () => {
+      stubMedia({ reduce: true })
+      renderRail('/', { sidebarCollapsed: false })
+      collapseAndSettle()
+      fireEvent.click(screen.getByRole('button', { name: 'Expand sidebar' }))
+      expect(animate).not.toHaveBeenCalled()
+    })
   })
 
   it('T3 every rail link keeps its accessible name, and a group keeps its count in the name', () => {

@@ -56,4 +56,11 @@ public static class ShiftErrorCodes
     public const string ShiftStartNotBeforeEnd = "SHIFT_START_NOT_BEFORE_END";
     public const string ShiftBreakOutsideTimes = "SHIFT_BREAK_OUTSIDE_TIMES";
     public const string ShiftKilometresOutOfRange = "SHIFT_KILOMETRES_OUT_OF_RANGE";
+
+    // Late (offline-queued) writes: a client-recorded time outside the bounds, or an idempotency id that belongs to someone else's row.
+    public const string ShiftClientTimeInFuture = "SHIFT_CLIENT_TIME_IN_FUTURE";
+    public const string ShiftClientTimeTooOld = "SHIFT_CLIENT_TIME_TOO_OLD";
+    public const string ShiftClientTimeBeforeStart = "SHIFT_CLIENT_TIME_BEFORE_START";
+    public const string ShiftBreakIdConflict = "SHIFT_BREAK_ID_CONFLICT";
+    public const string ShiftNoteIdConflict = "SHIFT_NOTE_ID_CONFLICT";
 }

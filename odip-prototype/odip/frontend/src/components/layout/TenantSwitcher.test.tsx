@@ -173,4 +173,26 @@ describe('TenantSwitcher: focus ring', () => {
     render(<TenantSwitcher />)
     expect(screen.getByRole('button', { name: /demo/i })).toHaveClass('focus-visible:ring-2', 'focus-visible:ring-[var(--color-ring)]')
   })
+
+  it('gives every menu row the keyboard focus ring', async () => {
+    const user = userEvent.setup()
+    render(<TenantSwitcher />)
+
+    await user.click(screen.getByRole('button', { name: 'SA Demo' }))
+    const row = screen.getByRole('button', { name: /^Acme/ })
+    expect(row).toHaveClass('focus-visible:outline-none', 'focus-visible:ring-2', 'focus-visible:ring-[var(--color-ring)]', 'focus-visible:relative')
+    expect(row).not.toHaveClass('focus:ring-2')
+  })
+})
+
+// jsdom cannot lay out, so the class contract is pinned; the shots check measures the real rect.
+describe('TenantSwitcher: popover stays on screen on a phone', () => {
+  it('hangs from the trigger left edge below sm, and stays right-aligned from sm up', async () => {
+    const user = userEvent.setup()
+    render(<TenantSwitcher />)
+
+    await user.click(screen.getByRole('button', { name: 'SA Demo' }))
+    const popover = screen.getByText(/viewing as tenant/i).closest('div.absolute')
+    expect(popover).toHaveClass('right-0', 'max-sm:right-auto', 'max-sm:left-0', 'w-56')
+  })
 })

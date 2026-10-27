@@ -61,3 +61,15 @@ describe('ConfirmDialog confirmDisabled', () => {
     expect(onConfirm).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('ConfirmDialog focusCancel', () => {
+  it('puts initial focus on the cancel button when asked, so the safe answer is the default', () => {
+    render(<ConfirmDialog open focusCancel onCancel={() => {}} onConfirm={() => {}} title="Discard?" message="Sure?" cancelLabel="Keep editing" confirmLabel="Discard" />)
+    expect(screen.getByRole('button', { name: 'Keep editing' })).toHaveFocus()
+  })
+
+  it('leaves initial focus alone when not asked', () => {
+    render(<ConfirmDialog open onCancel={() => {}} onConfirm={() => {}} title="Discard?" message="Sure?" cancelLabel="Keep editing" confirmLabel="Discard" />)
+    expect(screen.getByRole('button', { name: 'Keep editing' })).not.toHaveFocus()
+  })
+})

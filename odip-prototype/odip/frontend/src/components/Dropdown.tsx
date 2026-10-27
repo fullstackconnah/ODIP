@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useId } from 'react'
 import type { CSSProperties, KeyboardEvent, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown } from 'lucide-react'
+import { Check, ChevronDown } from 'lucide-react'
 import { TAP_AREA } from './tapArea'
 import { buttonClasses, type ButtonVariant } from './buttonClasses'
 
@@ -34,6 +34,8 @@ type DropdownProps = {
   /** Menu variant: the Button look of the trigger. Primary for a header action; secondary for an in-page menu, so a page keeps one filled primary. */
   triggerVariant?: Extract<ButtonVariant, 'primary' | 'secondary'>
   colorClass?: string       // Tailwind color classes for pill trigger background
+  /** Icon variant: replaces the small icon-button look, so a header icon can match its neighbours' size. */
+  triggerClassName?: string
   disabled?: boolean        // caller controls — not auto-applied on empty items
   loading?: boolean
   /** Panel height cap in px (default 320). A tall list passes a larger cap; the room on screen then limits it, and an overflowing list is trimmed to end on half a row so the cut says it scrolls. */
@@ -65,6 +67,7 @@ export function Dropdown({
   iconOnlyBelowSm,
   triggerVariant = 'primary',
   colorClass = '',
+  triggerClassName,
   disabled = false,
   loading = false,
   maxPanelHeight,
@@ -160,14 +163,25 @@ export function Dropdown({
   // Auto-focus search input when panel opens in searchable mode
   useEffect(() => {
     if (open && searchable && searchRef.current) {
-      searchRef.current.focus()
+      // preventScroll: the panel is still unstyled at the end of body here, and focusing it would scroll the window.
+      searchRef.current.focus({ preventScroll: true })
     }
   }, [open, searchable])
 
-  // Reset search query when panel closes
+  // Reset search query and position when panel closes (the panel unmounts, so no exit transition to flash): the next open positions first, then scrolls.
   useEffect(() => {
-    if (!open) setSearchQuery('')
+    if (!open) {
+      setSearchQuery('')
+      setPanelStyle({})
+    }
   }, [open])
+
+  // The panel scrolls past maxPanelHeight: keep the active row in view (a no-op when it already is, so hover is harmless). jsdom lacks scrollIntoView.
+  useEffect(() => {
+    // Wait for the position: scrolling while the panel is still static at the end of body scrolls the window.
+    if (!open || focusedIndex < 0 || panelStyle.position !== 'fixed') return
+    panelRef.current?.querySelectorAll('[role="option"]')[focusedIndex]?.scrollIntoView?.({ block: 'nearest' })
+  }, [open, focusedIndex, panelStyle.position])
 
   // Reset focusedIndex when query changes
   useEffect(() => {
@@ -238,7 +252,9 @@ export function Dropdown({
       if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault()
         setOpen(true)
-        const first = visibleItems.findIndex(i => !i.disabled)
+        // Open on the chosen row so Enter, Enter keeps the current choice; no choice, the first enabled row.
+        const chosen = visibleItems.findIndex(i => !i.disabled && i.value === value)
+        const first = chosen >= 0 ? chosen : visibleItems.findIndex(i => !i.disabled)
         setFocusedIndex(first >= 0 ? first : 0)
       }
       return
@@ -363,6 +379,8 @@ export function Dropdown({
                   <p className="text-[13px] text-[var(--color-muted-foreground)]">{item.description}</p>
                 )}
               </div>
+              {/* Icon variant with a value: the chosen row wears a check (aria-selected already announces it). */}
+              {variant === 'icon' && item.value === value && <Check className="ml-auto w-4 h-4 shrink-0" aria-hidden="true" />}
             </div>
           </div>
         ))
@@ -448,11 +466,11 @@ export function Dropdown({
           disabled={disabled || loading}
           onClick={() => setOpen(v => !v)}
           onKeyDown={handleKeyDown}
-          // No TAP_AREA on the icon trigger, on purpose. Its one consumer (a roster ShiftChip's "Actions" kebab)
+          // No TAP_AREA on the icon trigger, on purpose. The default look (a roster ShiftChip's "Actions" kebab)
           // sits flush against the chip body and the drag handle, so a 44px pad would take the chip's own right
-          // edge under coarse — a pad must never overlap a neighbouring control. Pad it together with a gap
-          // when a consumer with room for one appears.
-          className="p-1.5 rounded-lg hover:bg-[var(--color-accent)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] disabled:opacity-40 disabled:pointer-events-none transition-colors"
+          // edge under coarse — a pad must never overlap a neighbouring control. A header icon with room for
+          // one passes triggerClassName.
+          className={triggerClassName ?? 'p-1.5 rounded-lg hover:bg-[var(--color-accent)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] disabled:opacity-40 disabled:pointer-events-none transition-colors'}
         >
           {icon}
         </button>

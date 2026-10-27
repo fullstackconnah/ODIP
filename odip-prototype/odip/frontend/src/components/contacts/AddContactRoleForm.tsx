@@ -580,13 +580,9 @@ export default function AddContactRoleForm({ participantId, mode, role, onSaved,
               <p className="text-sm text-[var(--color-muted-foreground)]">No matching people found.</p>
             )
           )}
-          <button
-            type="button"
-            onClick={switchToNewPerson}
-            className="inline-flex items-center gap-1.5 min-h-[36px] px-2 text-sm font-medium text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded-lg"
-          >
-            <Plus className="w-3.5 h-3.5" /> None of these — create new
-          </button>
+          <Button variant="ghost" size="sm" onClick={switchToNewPerson}>
+            <Plus className="w-3.5 h-3.5" aria-hidden /> None of these — create new
+          </Button>
         </div>
       )}
 
@@ -627,13 +623,9 @@ export default function AddContactRoleForm({ participantId, mode, role, onSaved,
               <input type="date" value={form.newDateOfBirth} onChange={e => setForm(f => ({ ...f, newDateOfBirth: e.target.value }))} />
             </FormField>
           </div>
-          <button
-            type="button"
-            onClick={() => setForm(f => ({ ...f, personMode: 'search' }))}
-            className="text-xs font-medium text-[var(--color-primary)] hover:underline"
-          >
+          <Button variant="ghost" size="sm" onClick={() => setForm(f => ({ ...f, personMode: 'search' }))}>
             Back to search
-          </button>
+          </Button>
         </div>
       )}
 

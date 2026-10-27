@@ -893,7 +893,7 @@ public class ShiftPackagePostgresTests : IClassFixture<PostgresFixture>
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) } },
         };
 
-        var startBreak = portal.StartBreak(shiftId, default);   // sees InProgress, then waits for the row Finish is updating
+        var startBreak = portal.StartBreak(shiftId, null, default);   // sees InProgress, then waits for the row Finish is updating
         await Task.Delay(700);
         Assert.False(startBreak.IsCompleted, "Start Break must wait for the Finish that is already flipping the shift");
         await flip.CommitAsync();
