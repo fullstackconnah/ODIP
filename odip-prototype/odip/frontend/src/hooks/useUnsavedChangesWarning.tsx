@@ -123,7 +123,7 @@ export function useUnsavedChangesWarning(when: boolean, options: UnsavedChangesO
         </>
       }
     >
-      <p className="text-sm text-[var(--color-foreground)] opacity-70">{copy.message}</p>
+      <p className="text-sm text-[var(--color-muted-foreground)]">{copy.message}</p>
     </Modal>
   )
 

@@ -283,7 +283,6 @@ export default function StaffCreatePage() {
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       <AnnouncementRegion message={announcement} />
-      {unsavedChangesDialog}
       <div className="flex items-start gap-2">
         <BackButton to="/staff" label="staff" variant="icon" history={false} />
         <div className="flex-1 min-w-0"><PageHeader title={isEdit ? 'Edit staff member' : 'New staff member'} /></div>
@@ -477,6 +476,7 @@ export default function StaffCreatePage() {
           void submitWith(true)()
         }}
       />
+      {unsavedChangesDialog}
     </div>
   )
 }

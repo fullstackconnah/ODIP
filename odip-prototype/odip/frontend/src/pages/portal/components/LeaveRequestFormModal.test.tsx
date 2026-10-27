@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
 import { LeaveRequestFormModal, type LeaveRequestFormModalProps } from './LeaveRequestFormModal'
@@ -12,10 +12,10 @@ function noop() {}
 // that uses this hook.
 function renderModal(props: LeaveRequestFormModalProps) {
   const router = createMemoryRouter(
-    [{ path: '/', element: <LeaveRequestFormModal {...props} /> }],
+    [{ path: '/', element: <LeaveRequestFormModal {...props} /> }, { path: '/elsewhere', element: <p>Elsewhere</p> }],
     { initialEntries: ['/'] },
   )
-  return render(<RouterProvider router={router} />)
+  return { router, ...render(<RouterProvider router={router} />) }
 }
 
 describe('LeaveRequestFormModal', () => {
@@ -75,6 +75,18 @@ describe('LeaveRequestFormModal', () => {
   it('surfaces an errorMessage prop', () => {
     renderModal({ open: true, onClose: noop, onSubmit: vi.fn(), submitting: false, errorMessage: 'An identical request already exists.' })
     expect(screen.getByRole('alert')).toHaveTextContent('An identical request already exists.')
+  })
+
+  it('opens the unsaved-changes prompt after the form dialog, so it paints on top of it', async () => {
+    const user = userEvent.setup()
+    const { router } = renderModal({ open: true, onClose: noop, onSubmit: vi.fn(), submitting: false })
+    await user.type(screen.getByLabelText(/start date/i), '2026-09-14')
+    await act(async () => { await router.navigate('/elsewhere') })
+
+    const form = screen.getByRole('dialog', { name: 'Request leave' })
+    const prompt = screen.getByRole('alertdialog')
+    // Both layers are `fixed z-50`, so the later one in document order is the one on top.
+    expect(form.compareDocumentPosition(prompt) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   describe('edit mode', () => {

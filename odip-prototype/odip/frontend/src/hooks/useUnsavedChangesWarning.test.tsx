@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { act, render, screen } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, Link, RouterProvider } from 'react-router-dom'
 import { useUnsavedChangesWarning } from './useUnsavedChangesWarning'
@@ -217,6 +217,18 @@ describe('useUnsavedChangesWarning prompt on Modal', () => {
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/form')
     expect(opener).toHaveFocus()
+  })
+
+  it.each([
+    ['the close button', () => within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Close dialog' })],
+    ['the backdrop', () => screen.getByRole('alertdialog').parentElement as HTMLElement],
+  ])('clicking %s keeps editing: the prompt closes and the route stays put', async (_name, target) => {
+    const user = userEvent.setup()
+    const { router } = renderOpener()
+    await user.click(screen.getByRole('link', { name: 'Elsewhere' }))
+    await user.click(target())
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/form')
   })
 
   it('sits inside Modal: its backdrop clears the phone bottom nav, and the hook builds no overlay of its own', async () => {
