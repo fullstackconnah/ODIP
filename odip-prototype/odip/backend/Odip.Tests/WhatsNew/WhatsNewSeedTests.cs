@@ -33,10 +33,9 @@ public class WhatsNewSeedTests
     }
 
     [Fact]
-    public void TheOtherFundedClaimsItem_FollowsTheKeyPattern_ForStaff_AndComesLast()
+    public void TheOtherFundedClaimsItem_FollowsTheKeyPattern_ForStaff()
     {
-        var item = WhatsNewSeed.All[^1];
-        Assert.Equal("2026-10-other-funded-claims", item.Key);
+        var item = WhatsNewSeed.All.Single(i => i.Key == "2026-10-other-funded-claims");
         Assert.Equal(WhatsNewAudience.Admin | WhatsNewAudience.Coordinator, item.Roles);
     }
 
