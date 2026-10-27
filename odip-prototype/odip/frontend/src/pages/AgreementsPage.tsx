@@ -48,8 +48,8 @@ const columns: Column<AgreementRow>[] = [
       const t = termView(row)
       return (
         <span className="block">
-          <span className="block">{t.range}</span>
-          {t.draftLine && <span className="block text-xs text-[var(--color-muted-foreground)]">{t.draftLine}</span>}
+          <span className="block leading-4">{t.range}</span>
+          {t.draftLine && <span className="block text-xs leading-[14px] text-[var(--color-muted-foreground)]">{t.draftLine}</span>}
         </span>
       )
     },
@@ -60,8 +60,8 @@ const columns: Column<AgreementRow>[] = [
       const t = termView(row)
       return (
         <span className="block text-right tabular-nums">
-          <span className="block">{formatCurrency(t.total)}</span>
-          {t.from && <span className="block text-xs text-[var(--color-muted-foreground)]">{`from ${formatServiceDate(t.from)}`}</span>}
+          <span className="block leading-4">{formatCurrency(t.total)}</span>
+          {t.from && <span className="block text-xs leading-[14px] text-[var(--color-muted-foreground)]">{`from ${formatServiceDate(t.from)}`}</span>}
         </span>
       )
     },
@@ -70,8 +70,8 @@ const columns: Column<AgreementRow>[] = [
     key: 'priceList', header: 'Price list', mobile: 'meta', wrap: true,
     render: row => (
       <span className="block">
-        <span className="block">{row.priceList?.version ?? ''}</span>
-        {row.newerPriceList && <span className="block text-xs text-[var(--color-info)]">{`${row.newerPriceList.version} available`}</span>}
+        <span className="block leading-4">{row.priceList?.version ?? ''}</span>
+        {row.newerPriceList && <span className="block text-xs leading-[14px] text-[var(--color-info)]">{`${row.newerPriceList.version} available`}</span>}
       </span>
     ),
   },
@@ -160,7 +160,7 @@ export default function AgreementsPage() {
       {phase !== 'ready' || rows.length > 0 ? (
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-end gap-3">
-            <ToggleGroup ariaLabel="Show" options={SHOW_OPTIONS} value={show} onChange={key => setParam('show', key)} className="flex-wrap [&>button]:whitespace-nowrap" />
+            <ToggleGroup ariaLabel="Show" options={SHOW_OPTIONS} value={show} onChange={key => setParam('show', key)} className="flex-wrap [&>button]:min-w-[var(--tap-min)] [&>button]:whitespace-nowrap" />
             <SelectField
               label="Price list" value={list} onChange={e => setParam('list', e.target.value)} className="w-48"
               options={[{ value: '', label: 'Any price list' }, ...lists.map(l => ({ value: l.version, label: l.version }))]}

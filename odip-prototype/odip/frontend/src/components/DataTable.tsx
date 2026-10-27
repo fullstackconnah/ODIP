@@ -464,7 +464,7 @@ export function DataTable<T>({
           <tr className={`${dividerClass} ${headerRowHeight}`}>
             {selectable && (
               <th className={`${cellClass} w-10`}>
-                <input
+                <label className="inline-flex min-h-[var(--tap-min)] min-w-[var(--tap-min)] items-center justify-center"><input
                   ref={selectAllRef}
                   type="checkbox"
                   checked={
@@ -484,7 +484,7 @@ export function DataTable<T>({
                   }}
                   className="rounded border-[var(--color-border)] accent-[var(--color-primary)] cursor-pointer"
                   aria-label="Select all rows"
-                />
+                /></label>
               </th>
             )}
             {visibleColumns.map((col, colIndex) => {
@@ -581,7 +581,7 @@ export function DataTable<T>({
                       className={`${cellClass} w-10`}
                       onClick={e => e.stopPropagation()}
                     >
-                      <input
+                      <label className="inline-flex min-h-[var(--tap-min)] min-w-[var(--tap-min)] items-center justify-center"><input
                         type="checkbox"
                         checked={selectedRows?.has(rowKey) ?? false}
                         onChange={e => {
@@ -595,7 +595,7 @@ export function DataTable<T>({
                         }}
                         className="rounded border-[var(--color-border)] accent-[var(--color-primary)] cursor-pointer"
                         aria-label={`Select row ${rowKey}`}
-                      />
+                      /></label>
                     </td>
                   )}
                   {visibleColumns.map((col, colIndex) => {

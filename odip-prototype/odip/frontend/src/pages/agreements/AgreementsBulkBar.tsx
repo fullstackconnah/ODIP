@@ -34,8 +34,9 @@ export function AgreementsBulkBar({ selected, approvable, canApprove, shown, all
         </label>
       )}
       <span className="text-sm tabular-nums" aria-live="polite">{selected === 0 ? 'None selected' : `${selected} selected`}</span>
-      {selected > 0 && <Button variant="ghost" size="sm" onClick={onClear}>Clear</Button>}
-      {reason && <span className={`text-sm ${tooMany ? 'text-[var(--color-destructive)]' : 'text-[var(--color-muted-foreground)]'}`}>{reason}</span>}
+      <Button variant="ghost" size="sm" onClick={onClear} className={selected > 0 ? "" : "invisible"}>Clear</Button>
+      {/* Always present on a phone so the bar never grows when a reason appears; empty it takes no room from md up. */}
+      <span className={`text-sm max-md:basis-full max-md:min-h-5 empty:md:hidden ${tooMany ? 'text-[var(--color-destructive)]' : 'text-[var(--color-muted-foreground)]'}`}>{reason}</span>
       {canApprove && (
         <div className="ml-auto">
           {narrow ? (
