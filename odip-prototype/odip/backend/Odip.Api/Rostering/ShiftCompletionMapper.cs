@@ -226,7 +226,8 @@ public static class ShiftCompletionMapper
             breaks.Select(b => ToBreakDto(b, now, c.ActualEnd)).ToList(), breakMinutes, netMinutes,
             c.HandoverText, c.NothingToHandOver, c.NothingToNoteConfirmed,
             c.OriginalActualStart is not null || c.OriginalActualEnd is not null,
-            c.OriginalActualStart, c.OriginalActualEnd, c.TimeAdjustmentReason, c.Kilometres, c.AnythingToReport);
+            c.OriginalActualStart, c.OriginalActualEnd, c.TimeAdjustmentReason, c.Kilometres, c.AnythingToReport,
+            c.SentFromOffline, c.SubmittedAt);
     }
 
     /// <summary>

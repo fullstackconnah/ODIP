@@ -6186,6 +6186,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<Guid?>("ReviewedByUserId")
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("SentFromOffline")
+                        .HasColumnType("boolean");
+
                     b.Property<Guid>("ShiftId")
                         .HasColumnType("uuid");
 

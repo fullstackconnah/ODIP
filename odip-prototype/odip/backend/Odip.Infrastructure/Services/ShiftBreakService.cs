@@ -24,6 +24,9 @@ public enum ShiftBreakOutcome
     /// got there between the caller resolving the shift and the break being written. Nothing was written.
     /// </summary>
     ShiftNotInProgress,
+
+    /// <summary>The client's break id already belongs to a break of another completion (or tenant).</summary>
+    IdConflict,
 }
 
 public sealed record ShiftBreakResult(
@@ -33,8 +36,8 @@ public sealed record ShiftBreakResult(
 /// Break start / end / edit / delete against a shift's ACTIVE <see cref="ShiftCompletion"/>. The caller (the portal
 /// controller) has already established that the shift is the worker's own and InProgress; this owns the break
 /// rules: at most one running, inside the actual-start-to-now window, no overlaps
-/// (<see cref="ShiftBreakRules"/>). Start and End stamp the server clock - the client never supplies those instants;
-/// corrections go through <see cref="EditAsync"/>.
+/// (<see cref="ShiftBreakRules"/>). Start and End stamp the server clock unless a phone sends the time it recorded offline
+/// (<see cref="ClientTimeRules"/> bounds it); corrections go through <see cref="EditAsync"/>.
 /// </summary>
 public sealed class ShiftBreakService
 {
@@ -61,10 +64,11 @@ public sealed class ShiftBreakService
     /// With the in-memory test provider only the re-check remains. If the context is already inside a transaction the lock joins it and the owner
     /// commits. Returns <see cref="ShiftBreakOutcome.ShiftNotInProgress"/>, having written nothing, when the shift or its completion is no longer open.
     /// </summary>
-    public async Task<ShiftBreakResult> StartAsync(ShiftCompletion completion, Guid userId, CancellationToken ct)
+    public async Task<ShiftBreakResult> StartAsync(
+        ShiftCompletion completion, Guid userId, CancellationToken ct, Guid? breakId = null, DateTime? startedAtUtc = null)
     {
         await using var rowLock = await ShiftRowLock.AcquireAsync(_db, completion.ShiftId, ct);
-        var result = await StartCoreAsync(completion, userId, ct);
+        var result = await StartCoreAsync(completion, userId, breakId, startedAtUtc, ct);
         if (result.Outcome == ShiftBreakOutcome.Ok) await rowLock.CommitAsync(ct);
         return result;   // disposing the lock rolls back anything not committed
     }
@@ -74,20 +78,36 @@ public sealed class ShiftBreakService
         await _db.Shifts.AsNoTracking().AnyAsync(s => s.Id == completion.ShiftId && s.Status == ShiftStatus.InProgress, ct)
         && await _db.ShiftCompletions.AsNoTracking().AnyAsync(c => c.Id == completion.Id && c.IsActive && c.SubmittedAt == null, ct);
 
-    private async Task<ShiftBreakResult> StartCoreAsync(ShiftCompletion completion, Guid userId, CancellationToken ct)
+    private async Task<ShiftBreakResult> StartCoreAsync(
+        ShiftCompletion completion, Guid userId, Guid? breakId, DateTime? startedAtUtc, CancellationToken ct)
     {
         if (!await IsStillOpenAsync(completion, ct)) return new ShiftBreakResult(ShiftBreakOutcome.ShiftNotInProgress);
+
+        // A re-sent queued Start: the same id on this completion is already done; on any other row it is not ours to say anything about.
+        // The shift row lock serialises same-id starts on PostgreSQL, so the second one finds the first here.
+        if (breakId is { } id)
+        {
+            var existing = await _db.ShiftBreaks.IgnoreQueryFilters().FirstOrDefaultAsync(b => b.Id == id, ct);
+            if (existing is not null)
+                return existing.ShiftCompletionId == completion.Id
+                    ? new ShiftBreakResult(ShiftBreakOutcome.Ok, existing)
+                    : new ShiftBreakResult(ShiftBreakOutcome.IdConflict);
+        }
 
         var breaks = await LoadAsync(completion.Id, ct);
         if (breaks.Any(b => b.IsRunning)) return new ShiftBreakResult(ShiftBreakOutcome.AlreadyRunning);
 
         var now = Now;
-        var violation = ShiftBreakRules.Validate(now, null, completion.ActualStart, now, breaks);
+        var start = startedAtUtc is { } s ? ShiftBreakRules.ToUtc(s) : now;
+        if (startedAtUtc is not null && ClientTimeRules.Check(start, now, null) == ClientTimeViolation.TooOld)
+            return new ShiftBreakResult(ShiftBreakOutcome.Invalid, null, ShiftBreakViolation.ClientTimeTooOld);
+        var violation = ShiftBreakRules.Validate(start, null, completion.ActualStart, now, breaks);
         if (violation != ShiftBreakViolation.None) return new ShiftBreakResult(ShiftBreakOutcome.Invalid, null, violation);
 
+        if (startedAtUtc is not null) completion.SentFromOffline = true;
         var created = new ShiftBreak
         {
-            Id = Guid.NewGuid(), TenantId = completion.TenantId, ShiftCompletionId = completion.Id, StartedAt = now, CreatedByUserId = userId,
+            Id = breakId ?? Guid.NewGuid(), TenantId = completion.TenantId, ShiftCompletionId = completion.Id, StartedAt = start, CreatedByUserId = userId,
             CreatedAt = now, UpdatedAt = now,
         };
         _db.ShiftBreaks.Add(created);
@@ -104,7 +124,7 @@ public sealed class ShiftBreakService
         return new ShiftBreakResult(ShiftBreakOutcome.Ok, created);
     }
 
-    public async Task<ShiftBreakResult> EndAsync(ShiftCompletion completion, Guid breakId, CancellationToken ct)
+    public async Task<ShiftBreakResult> EndAsync(ShiftCompletion completion, Guid breakId, CancellationToken ct, DateTime? endedAtUtc = null)
     {
         var breaks = await LoadAsync(completion.Id, ct);
         var target = breaks.FirstOrDefault(b => b.Id == breakId);
@@ -114,10 +134,14 @@ public sealed class ShiftBreakService
         if (!target.IsRunning) return new ShiftBreakResult(ShiftBreakOutcome.Ok, target);
 
         var now = Now;
-        var violation = ShiftBreakRules.Validate(target.StartedAt, now, completion.ActualStart, now, breaks.Where(b => b.Id != breakId));
+        var end = endedAtUtc is { } e ? ShiftBreakRules.ToUtc(e) : now;
+        if (endedAtUtc is not null && ClientTimeRules.Check(end, now, null) == ClientTimeViolation.TooOld)
+            return new ShiftBreakResult(ShiftBreakOutcome.Invalid, target, ShiftBreakViolation.ClientTimeTooOld);
+        var violation = ShiftBreakRules.Validate(target.StartedAt, end, completion.ActualStart, now, breaks.Where(b => b.Id != breakId));
         if (violation != ShiftBreakViolation.None) return new ShiftBreakResult(ShiftBreakOutcome.Invalid, target, violation);
 
-        target.EndedAt = now;
+        if (endedAtUtc is not null) completion.SentFromOffline = true;
+        target.EndedAt = end;
         target.UpdatedAt = now;
         await _db.SaveChangesAsync(ct);
         return new ShiftBreakResult(ShiftBreakOutcome.Ok, target);

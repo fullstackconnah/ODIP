@@ -345,6 +345,9 @@ public class PortalController : ControllerBase
 
         var providerSettings = await _db.ProviderSettings.Where(p => p.TenantId == shift.TenantId).FirstOrDefaultAsync(ct); // the shift's own organisation: the zone is saved on the completion, so an unscoped SuperAdmin must not pick another
         var now = NowUtc;
+        var startStamp = dto.StartedAt is { } startedIn ? ShiftBreakRules.ToUtc(startedIn) : now;   // a queued tap: the phone's time, inside ClientTimeRules' bounds
+        if (dto.StartedAt is not null && ClientTimeError(ClientTimeRules.Check(startStamp, now, null)) is { } lateStart)
+            return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(lateStart.Message, lateStart.Code));
         var timeZoneId = StateTimeZoneMap.Resolve(providerSettings?.State);
 
         // F7: variance-at-start, computed once here so the coordinator queue can show it before
@@ -355,7 +358,7 @@ public class PortalController : ControllerBase
         // Early-start guard (PR1 review 4 N1): the manual-start path (Finish with an ActualStart) and
         // late starts are unaffected; only a tap on Start well before the rostered start is refused.
         var earliestStartUtc = rosteredStartUtc.AddMinutes(-EarliestStartLeadMinutes);
-        if (now < earliestStartUtc)
+        if (startStamp < earliestStartUtc)
         {
             var openLocal = TimeZoneInfo.ConvertTimeFromUtc(
                 DateTime.SpecifyKind(earliestStartUtc, DateTimeKind.Utc), ProviderLocalTime.ResolveZone(timeZoneId));
@@ -370,7 +373,7 @@ public class PortalController : ControllerBase
             Id = Guid.NewGuid(),
             TenantId = shift.TenantId,
             ShiftId = shift.Id,
-            ActualStart = now,
+            ActualStart = startStamp,
             TimeZoneId = timeZoneId,
             StartLatitude = dto.Latitude,
             StartLongitude = dto.Longitude,
@@ -378,7 +381,8 @@ public class PortalController : ControllerBase
             StartWasManual = false,
             SubmittedByUserId = shift.UserId!.Value,
             StartedAt = now,
-            VarianceMinutesStart = ShiftVarianceCalculator.VarianceMinutes(now, rosteredStartUtc),
+            VarianceMinutesStart = ShiftVarianceCalculator.VarianceMinutes(startStamp, rosteredStartUtc),
+            SentFromOffline = dto.StartedAt is not null,
             IsActive = true,
         };
         _db.ShiftCompletions.Add(completion);
@@ -440,6 +444,12 @@ public class PortalController : ControllerBase
             return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
                 "This shift has been cancelled.", ShiftErrorCodes.ShiftCancelled));
 
+        // A queued Finish carries the phone's time. Its future/age bounds run before the blockers, so an over-age time is a 400, not a 422.
+        var now = NowUtc;
+        var endStamp = dto.FinishedAt is { } finishedIn ? ShiftBreakRules.ToUtc(finishedIn) : now;
+        if (dto.FinishedAt is not null && ClientTimeError(ClientTimeRules.Check(endStamp, now, null)) is { } lateEnd)
+            return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(lateEnd.Message, lateEnd.Code));
+
         // A shift note is required - or, since the shift package, an explicit "nothing to note" confirmation.
         var hasNote = await _db.ShiftNotes.AnyAsync(n => n.ShiftId == id, ct);
         if (!hasNote && !dto.NothingToNote)
@@ -475,7 +485,7 @@ public class PortalController : ControllerBase
         {
             var checkedCompletion = await _db.ShiftCompletions.FirstOrDefaultAsync(c => c.ShiftId == shift.Id && c.IsActive, ct);
             var access = await _recorder.CheckRecordingAccessAsync(shift.UserId, shift.TenantId, ct);
-            var blockers = await _package.GetFinishBlockersAsync(shift, checkedCompletion, access.CanRecord, ct);
+            var blockers = await _package.GetFinishBlockersAsync(shift, checkedCompletion, access.CanRecord, ct, asOfUtc: endStamp);
             if (blockers.Count > 0)
             {
                 var detail = (await BuildShiftDetailDtoAsync(shift, ct)) with { FinishBlockers = blockers };
@@ -485,7 +495,6 @@ public class PortalController : ControllerBase
             }
         }
 
-        var now = NowUtc;
         ShiftCompletion completion;
 
         if (shift.Status == ShiftStatus.Published)
@@ -548,11 +557,15 @@ public class PortalController : ControllerBase
                 "This shift hasn't been started.", ShiftErrorCodes.ShiftNotInProgress));
         }
 
+        // Only now is there an actual start to judge the phone's finish time against.
+        if (dto.FinishedAt is not null && ClientTimeError(ClientTimeRules.Check(endStamp, now, completion.ActualStart)) is { } beforeStart)
+            return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(beforeStart.Message, beforeStart.Code));
+
         // Owner decision 3: either actual time may move up to MaxTimeAdjustmentMinutes from the server's stamp, with a reason. The worker picks
         // whole minutes, so both stamps are compared truncated to the minute, and picking the stamp's own minute is no change. The manual-start
         // path has no start stamp (its ActualStart keeps the F3 bounds above), so only the end rule applies to it.
         var limit = TimeSpan.FromMinutes(MaxTimeAdjustmentMinutes);
-        var nowMinute = TruncateToMinute(now);
+        var nowMinute = TruncateToMinute(endStamp);
         var stampMinute = TruncateToMinute(completion.ActualStart);
         DateTime? askedStart = shift.Status == ShiftStatus.InProgress && dto.ActualStart is { } startIn ? TruncateToMinute(ShiftBreakRules.ToUtc(startIn)) : null;
         DateTime? askedEnd = dto.ActualEnd is { } endIn ? TruncateToMinute(ShiftBreakRules.ToUtc(endIn)) : null;   // whole minutes, as the worker picks them
@@ -566,7 +579,7 @@ public class PortalController : ControllerBase
                 $"You can change your times by up to {MaxTimeAdjustmentMinutes} minutes.", ShiftErrorCodes.ShiftTimeAdjustmentTooLarge));
 
         var actualStart = startMoved ? askedStart!.Value : completion.ActualStart;
-        var actualEnd = endMoved ? askedEnd!.Value : now;
+        var actualEnd = endMoved ? askedEnd!.Value : endStamp;
         var reason = string.IsNullOrWhiteSpace(dto.TimeAdjustmentReason) ? null : dto.TimeAdjustmentReason.Trim();
         if (startMoved || endMoved)
         {
@@ -582,7 +595,7 @@ public class PortalController : ControllerBase
                 return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(
                     "Your times must include your breaks. Change the break first, or your times.", ShiftErrorCodes.ShiftBreakOutsideTimes));
             completion.OriginalActualStart = startMoved ? completion.ActualStart : null;
-            completion.OriginalActualEnd = endMoved ? now : null;
+            completion.OriginalActualEnd = endMoved ? endStamp : null;
         }
 
         completion.ActualStart = actualStart;
@@ -591,6 +604,7 @@ public class PortalController : ControllerBase
         completion.Kilometres = dto.Kilometres is { } kmIn ? Math.Round((decimal)kmIn, 1, MidpointRounding.AwayFromZero) : null;
         completion.AnythingToReport = dto.AnythingToReport;
         completion.SubmittedAt = now;
+        completion.SentFromOffline |= dto.FinishedAt is not null;
         completion.HandoverText = handoverText;
         completion.NothingToHandOver = dto.NothingToHandOver;
         completion.NothingToNoteConfirmed = dto.NothingToNote && !hasNote;
@@ -811,23 +825,25 @@ public class PortalController : ControllerBase
 
     /// <summary>Starts a break now. 409 SHIFT_BREAK_ALREADY_RUNNING if one is already running.</summary>
     [HttpPost("shifts/{id:guid}/breaks/start")]
-    public async Task<ActionResult<ApiResponse<PortalShiftDetailDto>>> StartBreak(Guid id, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<PortalShiftDetailDto>>> StartBreak(
+        Guid id, [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] StartBreakDto? dto, CancellationToken ct)
     {
         var (shift, completion, error) = await ResolveInProgressShiftAsync(id, ct);
         if (error is not null) return error;
 
-        var result = await _breaks.StartAsync(completion!, shift!.UserId!.Value, ct);
+        var result = await _breaks.StartAsync(completion!, shift!.UserId!.Value, ct, dto?.BreakId, dto?.StartedAt);
         return await ToBreakResponseAsync(shift, result, ct);
     }
 
     /// <summary>Ends the running break now. Idempotent: ending an already-ended break is a no-op success.</summary>
     [HttpPost("shifts/{id:guid}/breaks/{breakId:guid}/end")]
-    public async Task<ActionResult<ApiResponse<PortalShiftDetailDto>>> EndBreak(Guid id, Guid breakId, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<PortalShiftDetailDto>>> EndBreak(
+        Guid id, Guid breakId, [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] EndBreakDto? dto, CancellationToken ct)
     {
         var (shift, completion, error) = await ResolveInProgressShiftAsync(id, ct);
         if (error is not null) return error;
 
-        return await ToBreakResponseAsync(shift!, await _breaks.EndAsync(completion!, breakId, ct), ct);
+        return await ToBreakResponseAsync(shift!, await _breaks.EndAsync(completion!, breakId, ct, dto?.EndedAt), ct);
     }
 
     /// <summary>Corrects a break's times (UTC) before Finish. `endedAt` null keeps a running break running.</summary>
@@ -940,6 +956,18 @@ public class PortalController : ControllerBase
             "This shift hasn't been published yet.", ShiftErrorCodes.ShiftNotPublished)),
     };
 
+    private static readonly (string Message, string Code) TooOld =
+        ("That time is more than 48 hours ago, so it can't be sent.", ShiftErrorCodes.ShiftClientTimeTooOld);
+
+    /// <summary>The 400 for a client-recorded time outside <see cref="ClientTimeRules"/>' bounds, or null when it is inside them.</summary>
+    private static (string Message, string Code)? ClientTimeError(ClientTimeViolation v) => v switch
+    {
+        ClientTimeViolation.InFuture => ("That time is in the future.", ShiftErrorCodes.ShiftClientTimeInFuture),
+        ClientTimeViolation.TooOld => TooOld,
+        ClientTimeViolation.BeforeStart => ("That time is before the shift started.", ShiftErrorCodes.ShiftClientTimeBeforeStart),
+        _ => null,
+    };
+
     private async Task<ActionResult<ApiResponse<PortalShiftDetailDto>>> ToBreakResponseAsync(
         Shift shift, ShiftBreakResult result, CancellationToken ct)
     {
@@ -960,6 +988,9 @@ public class PortalController : ControllerBase
             case ShiftBreakOutcome.NotFound:
                 return NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Break not found.", ShiftErrorCodes.ShiftBreakNotFound));
 
+            case ShiftBreakOutcome.IdConflict:
+                return Conflict(ApiResponse<PortalShiftDetailDto>.Fail("This break can't be saved.", ShiftErrorCodes.ShiftBreakIdConflict));
+
             case ShiftBreakOutcome.AlreadyRunning:
                 return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
                     "A break is already running. End it before starting another.", ShiftErrorCodes.ShiftBreakAlreadyRunning));
@@ -971,6 +1002,7 @@ public class PortalController : ControllerBase
                     ShiftBreakViolation.InFuture => ("A break can't be in the future.", ShiftErrorCodes.ShiftBreakInFuture),
                     ShiftBreakViolation.EndNotAfterStart => ("A break must end after it starts.", ShiftErrorCodes.ShiftBreakEndNotAfterStart),
                     ShiftBreakViolation.EndRequired => ("A finished break needs an end time.", ShiftErrorCodes.ShiftBreakEndRequired),
+                    ShiftBreakViolation.ClientTimeTooOld => TooOld,
                     _ => ("This break overlaps another break.", ShiftErrorCodes.ShiftBreakOverlap),
                 };
                 return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(message, code));
@@ -1027,15 +1059,26 @@ public class PortalController : ControllerBase
         if (shiftTenantId is null)
             return NotFound(ApiResponse<ShiftNoteDto>.Fail("Shift not found."));
 
+        // A re-sent queued note: the same id from the same author on this shift is already saved (no rescan, no second task). Any other row
+        // with that id is not ours to describe.
+        if (dto.Id is { } noteId && await FindNoteForReplayAsync(noteId, id, staffId.Value, ct) is { } replay)
+            return replay;
+
+        var now = NowUtc;
+        if (dto.CreatedAt is { } createdIn && ClientTimeError(ClientTimeRules.Check(ShiftBreakRules.ToUtc(createdIn), now, null)) is { } lateNote)
+            return BadRequest(ApiResponse<ShiftNoteDto>.Fail(lateNote.Message, lateNote.Code));
+
         var note = new ShiftNote
         {
-            Id = Guid.NewGuid(),
+            Id = dto.Id ?? Guid.NewGuid(),
             TenantId = shiftTenantId.Value,   // the shift's organisation: an unscoped SuperAdmin has no current tenant to stamp it from
             ShiftId = id,
             AuthorUserId = staffId.Value,
             AuthorName = GetCallerName(),
             Body = dto.Body.Trim(),
         };
+        // Both stamps are the phone's time, else UpdatedAt would default to now and the note would read "edited".
+        if (dto.CreatedAt is { } at) note.CreatedAt = note.UpdatedAt = ShiftBreakRules.ToUtc(at);
         // NOTES-02: scan at save time — client-advisory + server-recorded, never blocking.
         note.FlaggedCategories = ShiftNoteKeywordScanner.Scan(note.Body);
         _db.ShiftNotes.Add(note);
@@ -1044,10 +1087,29 @@ public class PortalController : ControllerBase
         // task — "decide whether an incident is needed".
         await RaiseOrCompleteFlaggedNoteTaskAsync(note, ct);
 
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (dto.Id is { } racedId && ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            // A concurrent send of the same queued note won the insert: answer as the replay it is.
+            _db.ChangeTracker.Clear();
+            return await FindNoteForReplayAsync(racedId, id, staffId.Value, ct) ?? throw ex;
+        }
 
         // A brand-new note can't already be referenced by an incident.
         return Ok(ApiResponse<ShiftNoteDto>.Ok(ToShiftNoteDto(note, incidentId: null)));
+    }
+
+    /// <summary>The 200 (same shift, same author) or 409 (any other row) for a note id that already exists; null when the id is free.</summary>
+    private async Task<ActionResult<ApiResponse<ShiftNoteDto>>?> FindNoteForReplayAsync(Guid noteId, Guid shiftId, Guid staffId, CancellationToken ct)
+    {
+        var existing = await _db.ShiftNotes.IgnoreQueryFilters().FirstOrDefaultAsync(n => n.Id == noteId, ct);
+        if (existing is null) return null;
+        if (existing.ShiftId != shiftId || existing.AuthorUserId != staffId)
+            return Conflict(ApiResponse<ShiftNoteDto>.Fail("This note can't be saved.", ShiftErrorCodes.ShiftNoteIdConflict));
+        return Ok(ApiResponse<ShiftNoteDto>.Ok(ToShiftNoteDto(existing, incidentId: null)));
     }
 
     /// <summary>
