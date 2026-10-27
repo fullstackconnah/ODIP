@@ -186,7 +186,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
 
   function validate(): boolean {
     const next: { description?: string; authorisedBy?: string; authorisationDate?: string } = {}
-    if (!form.description.trim()) next.description = 'Description is required'
+    if (!form.description.trim()) next.description = 'Add a description'
     if (form.authorised && !form.authorisedBy.trim()) next.authorisedBy = 'Add who authorised it'
     if (form.authorised && !form.authorisationDate) next.authorisationDate = 'Add the date it was authorised'
     setErrors(next)
