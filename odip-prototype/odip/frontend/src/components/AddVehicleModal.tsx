@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Search } from 'lucide-react'
+import { SearchInput } from '@/components/SearchInput'
 import {
   useVehicles, useCreateVehicleAssignment, useCreateVehicle,
   useCheckVehicleAssignment, getRosterFindings,
@@ -12,6 +12,7 @@ import type { VehicleType, RosterFindingDto } from '@/api/types'
 import { Dropdown } from './Dropdown'
 import { plural } from '@/lib/format'
 import { Button } from '@/components/Button'
+import { FormField } from '@/components/FormField'
 
 interface AddVehicleModalProps {
   tripInstanceId: string
@@ -207,16 +208,7 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
         {/* Tab 1 — Select Existing */}
         {activeTab === 'existing' && (
           <div className="space-y-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-muted-foreground)]" />
-              <input
-                type="text"
-                placeholder="Search by name or rego..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm bg-[var(--color-background)] border border-[var(--color-border)] rounded-[var(--radius-md)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
-              />
-            </div>
+            <SearchInput value={search} onChange={setSearch} placeholder="Search by name or rego..." className="w-full" />
 
             <p className="text-xs text-[var(--color-muted-foreground)]">
               {plural(filteredVehicles.length, 'vehicle')} available
@@ -261,69 +253,44 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
         {/* Tab 2 — Add New Vehicle */}
         {activeTab === 'new' && (
           <div className={modalGrid}>
-            <div className={modalSpan.full}>
-              <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">
-                Vehicle name <span className="text-[var(--color-destructive)]">*</span>
-              </label>
-              <input
+            <FormField label="Vehicle name" required className={modalSpan.full}><input
                 type="text"
                 value={vehicleName}
                 onChange={e => setVehicleName(e.target.value)}
                 disabled={!!newVehicleId}
                 placeholder="e.g. Toyota HiAce"
-                className="w-full px-3 h-[var(--control-h)] text-sm bg-[var(--color-background)] border border-[var(--color-border)] rounded-[var(--radius-md)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
-              />
-            </div>
+              /></FormField>
 
             <div className="contents">
-              <div className={modalSpan.half}>
-                <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Registration</label>
-                <input
+              <FormField label="Registration" className={modalSpan.half}><input
                   type="text"
                   value={registration}
                   onChange={e => setRegistration(e.target.value)}
                   disabled={!!newVehicleId}
                   placeholder="ABC-123"
-                  className="w-full px-3 h-[var(--control-h)] text-sm bg-[var(--color-background)] border border-[var(--color-border)] rounded-[var(--radius-md)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
-                />
-              </div>
-              <div className={modalSpan.half}>
-                <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">
-                  Type <span className="text-[var(--color-destructive)]">*</span>
-                </label>
-                <Dropdown
+                /></FormField>
+              <FormField label="Type" required className={modalSpan.half}><Dropdown
                   variant="form"
                   items={['Car', 'Van', 'Bus', 'MiniBus', 'AccessibleVan', 'Other'].map(t => ({ value: t, label: t }))}
                   value={vehicleType}
                   onChange={setVehicleType}
                   disabled={!!newVehicleId}
                   label="Select type"
-                />
-              </div>
-              <div className={modalSpan.half}>
-                <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">
-                  Total seats <span className="text-[var(--color-destructive)]">*</span>
-                </label>
-                <input
+                /></FormField>
+              <FormField label="Total seats" required className={modalSpan.half}><input
                   type="number"
                   min={0}
                   value={totalSeats}
                   onChange={e => setTotalSeats(e.target.value)}
                   disabled={!!newVehicleId}
-                  className="w-full px-3 h-[var(--control-h)] text-sm bg-[var(--color-background)] border border-[var(--color-border)] rounded-[var(--radius-md)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
-                />
-              </div>
-              <div className={modalSpan.half}>
-                <label className="block text-xs font-medium text-[var(--color-muted-foreground)] mb-1">Wheelchair positions</label>
-                <input
+                /></FormField>
+              <FormField label="Wheelchair positions" className={modalSpan.half}><input
                   type="number"
                   min={0}
                   value={wheelchairPositions}
                   onChange={e => setWheelchairPositions(e.target.value)}
                   disabled={!!newVehicleId}
-                  className="w-full px-3 h-[var(--control-h)] text-sm bg-[var(--color-background)] border border-[var(--color-border)] rounded-[var(--radius-md)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
-                />
-              </div>
+                /></FormField>
             </div>
 
             <div className={`flex gap-5 ${modalSpan.full}`}>

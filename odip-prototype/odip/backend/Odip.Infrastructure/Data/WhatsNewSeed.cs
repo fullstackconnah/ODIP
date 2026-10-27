@@ -91,6 +91,9 @@ public static class WhatsNewSeed
         new Item("2026-10-sidebar-motion", "The side menu folds away more smoothly",
             "When you collapse or expand the side menu, the labels fade and the icons glide into place instead of jumping.",
             WhatsNewAudience.All, false),
+        new Item("2026-10-trip-form-labels", "Trip forms read better with screen readers",
+            "On a trip, the Edit trip, accommodation, bookings, staff, activity, vehicle and claim forms now label every field the same way as the rest of Bunya Support, and accommodation costs show dollars and cents.",
+            Staff, false),
     };
 
     /// <summary>Inserts the keys the table lacks, one save each, so a key another instance inserted first costs only that row.</summary>

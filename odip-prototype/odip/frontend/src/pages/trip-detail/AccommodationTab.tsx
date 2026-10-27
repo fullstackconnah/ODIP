@@ -24,6 +24,9 @@ import { RESERVATION_STATUSES } from '@/api/types/enums'
 import type { TripDetailDto } from '@/api/types/trips'
 import { toUpdateReservationDto, type ReservationDto } from '@/api/types/reservations'
 import type { AccommodationListDto } from '@/api/types/accommodation'
+import { formatCurrency } from '@/lib/utils'
+import { FormField, labelClass } from '@/components/FormField'
+import { modalGrid } from '@/lib/formGrid'
 
 /** "Sat, 3 Oct": the weekday and date of a calendar day ("2026-10-03"), the same in every viewer zone (it is never a local midnight). */
 const dayLabel = (isoDate: string) =>
@@ -259,8 +262,8 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
       header: 'Cost',
       render: (r) => {
         const nights = nightsOf(r)
-        const costPerNight = nights && r.cost ? (r.cost / nights).toFixed(2) : null
-        return <>{r.cost ? `$${r.cost}` : '—'}{costPerNight ? ` ($${costPerNight}/night)` : ''}</>
+        const costPerNight = nights && r.cost ? r.cost / nights : null
+        return <>{r.cost ? formatCurrency(r.cost) : '—'}{costPerNight ? ` (${formatCurrency(costPerNight)}/night)` : ''}</>
       },
     },
     {
@@ -414,8 +417,8 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
           <div className="space-y-4">
             {/* Property Select or Create */}
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label id="addAccommPropertyLabel" className="block text-sm font-medium">Property</label>
+              <div className="flex items-baseline justify-between">
+                <label id="addAccommPropertyLabel" className={labelClass}>Property</label>
                 <button type="button" onClick={() => { setCreatingNewProperty(!creatingNewProperty); setAccommForm({ ...accommForm, accommodationPropertyId: '' }) }}
                   className="text-xs text-[var(--color-primary)] hover:underline">
                   {creatingNewProperty ? 'Select existing' : '+ Create new'}
@@ -423,42 +426,18 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
               </div>
               {creatingNewProperty ? (
                 <div className="space-y-3 p-3 rounded-[var(--radius-md)] bg-[var(--color-surface-container)]/30">
-                  <div>
-                    <label className="block text-xs font-medium mb-1">Property Name *</label>
-                    <input type="text" value={newPropertyForm.propertyName} onChange={e => setNewPropertyForm({ ...newPropertyForm, propertyName: e.target.value })}
-                      className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
-                      placeholder="e.g. Beach House Resort" />
+                  <FormField label="Property Name" required><input type="text" value={newPropertyForm.propertyName} onChange={e => setNewPropertyForm({ ...newPropertyForm, propertyName: e.target.value })}
+                      placeholder="e.g. Beach House Resort" /></FormField>
+                  <div className={modalGrid}>
+                    <FormField label="Location"><input type="text" value={newPropertyForm.location} onChange={e => setNewPropertyForm({ ...newPropertyForm, location: e.target.value })}
+                        placeholder="e.g. Gold Coast, QLD" /></FormField>
+                    <FormField label="Region"><input type="text" value={newPropertyForm.region} onChange={e => setNewPropertyForm({ ...newPropertyForm, region: e.target.value })}
+                        placeholder="e.g. South East QLD" /></FormField>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium mb-1">Location</label>
-                      <input type="text" value={newPropertyForm.location} onChange={e => setNewPropertyForm({ ...newPropertyForm, location: e.target.value })}
-                        className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
-                        placeholder="e.g. Gold Coast, QLD" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium mb-1">Region</label>
-                      <input type="text" value={newPropertyForm.region} onChange={e => setNewPropertyForm({ ...newPropertyForm, region: e.target.value })}
-                        className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
-                        placeholder="e.g. South East QLD" />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium mb-1">Bedrooms</label>
-                      <input type="number" min="0" value={newPropertyForm.bedroomCount} onChange={e => setNewPropertyForm({ ...newPropertyForm, bedroomCount: e.target.value })}
-                        className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium mb-1">Beds</label>
-                      <input type="number" min="0" value={newPropertyForm.bedCount} onChange={e => setNewPropertyForm({ ...newPropertyForm, bedCount: e.target.value })}
-                        className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium mb-1">Max Capacity</label>
-                      <input type="number" min="0" value={newPropertyForm.maxCapacity} onChange={e => setNewPropertyForm({ ...newPropertyForm, maxCapacity: e.target.value })}
-                        className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                    </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-[var(--field-gap-x)] gap-y-[var(--field-gap-y)]">
+                    <FormField label="Bedrooms"><input type="number" min="0" value={newPropertyForm.bedroomCount} onChange={e => setNewPropertyForm({ ...newPropertyForm, bedroomCount: e.target.value })} /></FormField>
+                    <FormField label="Beds"><input type="number" min="0" value={newPropertyForm.bedCount} onChange={e => setNewPropertyForm({ ...newPropertyForm, bedCount: e.target.value })} /></FormField>
+                    <FormField label="Max Capacity"><input type="number" min="0" value={newPropertyForm.maxCapacity} onChange={e => setNewPropertyForm({ ...newPropertyForm, maxCapacity: e.target.value })} /></FormField>
                   </div>
                 </div>
               ) : (
@@ -473,59 +452,31 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
             </div>
 
             {/* Dates */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium mb-1">Check-in</label>
-                <input type="date" value={accommForm.checkInDate} onChange={e => setAccommForm({ ...accommForm, checkInDate: e.target.value })}
-                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Check-out</label>
-                <input type="date" value={accommForm.checkOutDate} onChange={e => setAccommForm({ ...accommForm, checkOutDate: e.target.value })}
-                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-              </div>
+            <div className={modalGrid}>
+              <FormField label="Check-in"><input type="date" value={accommForm.checkInDate} onChange={e => setAccommForm({ ...accommForm, checkInDate: e.target.value })} /></FormField>
+              <FormField label="Check-out"><input type="date" value={accommForm.checkOutDate} onChange={e => setAccommForm({ ...accommForm, checkOutDate: e.target.value })} /></FormField>
             </div>
 
             {/* Bedrooms / Beds */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium mb-1">Bedrooms</label>
-                <input type="number" min="0" value={accommForm.bedroomsReserved} onChange={e => setAccommForm({ ...accommForm, bedroomsReserved: e.target.value })}
-                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm" placeholder="Optional" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Beds</label>
-                <input type="number" min="0" value={accommForm.bedsReserved} onChange={e => setAccommForm({ ...accommForm, bedsReserved: e.target.value })}
-                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm" placeholder="Optional" />
-              </div>
+            <div className={modalGrid}>
+              <FormField label="Bedrooms"><input type="number" min="0" value={accommForm.bedroomsReserved} onChange={e => setAccommForm({ ...accommForm, bedroomsReserved: e.target.value })} placeholder="Optional" /></FormField>
+              <FormField label="Beds"><input type="number" min="0" value={accommForm.bedsReserved} onChange={e => setAccommForm({ ...accommForm, bedsReserved: e.target.value })} placeholder="Optional" /></FormField>
             </div>
 
             {/* Cost */}
-            <div>
-              <label className="block text-sm font-medium mb-1">Cost</label>
-              <input type="number" min="0" step="0.01" value={accommForm.cost} onChange={e => setAccommForm({ ...accommForm, cost: e.target.value })}
-                className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm" placeholder="Optional" />
-            </div>
+            <FormField label="Cost"><input type="number" min="0" step="0.01" value={accommForm.cost} onChange={e => setAccommForm({ ...accommForm, cost: e.target.value })} placeholder="Optional" /></FormField>
 
             {/* Status */}
-            <div>
-              <label id="addAccommStatusLabel" className="block text-sm font-medium mb-1">Status</label>
-              <Dropdown
+            <FormField label="Status"><Dropdown
                 variant="form"
-                aria-labelledby="addAccommStatusLabel"
                 value={accommForm.reservationStatus}
                 onChange={val => setAccommForm({ ...accommForm, reservationStatus: val })}
                 items={RESERVATION_STATUS_ITEMS}
-              />
-            </div>
+              /></FormField>
 
             {/* Comments */}
-            <div>
-              <label className="block text-sm font-medium mb-1">Comments</label>
-              <textarea value={accommForm.comments} onChange={e => setAccommForm({ ...accommForm, comments: e.target.value })} rows={3}
-                className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm resize-none focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
-                placeholder="Optional notes..." />
-            </div>
+            <FormField label="Comments"><textarea value={accommForm.comments} onChange={e => setAccommForm({ ...accommForm, comments: e.target.value })} rows={3} className="resize-none"
+                placeholder="Optional notes..." /></FormField>
 
             {/* Error */}
             {(createReservation.isError || createAccommodation.isError) && (
@@ -555,99 +506,51 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
         >
           <div className="space-y-4">
             {/* Property */}
-            <div>
-              <label id="editReservationPropertyLabel" className="block text-sm font-medium mb-1">Property</label>
-              <SearchableSelect
-                aria-labelledby="editReservationPropertyLabel"
+            <FormField label="Property"><SearchableSelect
                 value={editReservationForm.accommodationPropertyId}
                 onChange={val => setEditReservationForm({ ...editReservationForm, accommodationPropertyId: val })}
                 items={allAccommodation.map((a: AccommodationListDto) => ({ value: a.id, label: `${a.propertyName} — ${a.location || 'No location'}` }))}
-              />
-            </div>
+              /></FormField>
 
             {/* Dates */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium mb-1">Check-in</label>
-                <input type="date" value={editReservationForm.checkInDate} onChange={e => setEditReservationForm({ ...editReservationForm, checkInDate: e.target.value })}
-                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Check-out</label>
-                <input type="date" value={editReservationForm.checkOutDate} onChange={e => setEditReservationForm({ ...editReservationForm, checkOutDate: e.target.value })}
-                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-              </div>
+            <div className={modalGrid}>
+              <FormField label="Check-in"><input type="date" value={editReservationForm.checkInDate} onChange={e => setEditReservationForm({ ...editReservationForm, checkInDate: e.target.value })} /></FormField>
+              <FormField label="Check-out"><input type="date" value={editReservationForm.checkOutDate} onChange={e => setEditReservationForm({ ...editReservationForm, checkOutDate: e.target.value })} /></FormField>
             </div>
 
             {/* Bedrooms / Beds / Cost */}
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label className="block text-sm font-medium mb-1">Bedrooms</label>
-                <input type="number" min="0" value={editReservationForm.bedroomsReserved} onChange={e => setEditReservationForm({ ...editReservationForm, bedroomsReserved: e.target.value })}
-                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Beds</label>
-                <input type="number" min="0" value={editReservationForm.bedsReserved} onChange={e => setEditReservationForm({ ...editReservationForm, bedsReserved: e.target.value })}
-                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Cost</label>
-                <input type="number" min="0" step="0.01" value={editReservationForm.cost} onChange={e => setEditReservationForm({ ...editReservationForm, cost: e.target.value })}
-                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-[var(--field-gap-x)] gap-y-[var(--field-gap-y)]">
+              <FormField label="Bedrooms"><input type="number" min="0" value={editReservationForm.bedroomsReserved} onChange={e => setEditReservationForm({ ...editReservationForm, bedroomsReserved: e.target.value })} /></FormField>
+              <FormField label="Beds"><input type="number" min="0" value={editReservationForm.bedsReserved} onChange={e => setEditReservationForm({ ...editReservationForm, bedsReserved: e.target.value })} /></FormField>
+              <FormField label="Cost"><input type="number" min="0" step="0.01" value={editReservationForm.cost} onChange={e => setEditReservationForm({ ...editReservationForm, cost: e.target.value })} /></FormField>
             </div>
 
             {/* Status */}
-            <div>
-              <label id="editReservationStatusLabel" className="block text-sm font-medium mb-1">Status</label>
-              <Dropdown
+            <FormField label="Status"><Dropdown
                 variant="form"
-                aria-labelledby="editReservationStatusLabel"
                 value={editReservationForm.reservationStatus}
                 onChange={val => setEditReservationForm({ ...editReservationForm, reservationStatus: val })}
                 items={RESERVATION_STATUS_ITEMS}
-              />
-            </div>
+              /></FormField>
 
             {/* Confirmation Reference */}
-            <div>
-              <label className="block text-sm font-medium mb-1">Confirmation Reference</label>
-              <input type="text" value={editReservationForm.confirmationReference} onChange={e => setEditReservationForm({ ...editReservationForm, confirmationReference: e.target.value })}
-                className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
-                placeholder="e.g. booking ref number" />
-            </div>
+            <FormField label="Confirmation Reference"><input type="text" value={editReservationForm.confirmationReference} onChange={e => setEditReservationForm({ ...editReservationForm, confirmationReference: e.target.value })}
+                placeholder="e.g. booking ref number" /></FormField>
 
             {/* Date Booked / Date Confirmed */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium mb-1">Date Booked</label>
-                <input type="date" value={editReservationForm.dateBooked} onChange={e => setEditReservationForm({ ...editReservationForm, dateBooked: e.target.value })}
-                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Date Confirmed</label>
-                <input type="date" value={editReservationForm.dateConfirmed} onChange={e => setEditReservationForm({ ...editReservationForm, dateConfirmed: e.target.value })}
-                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-              </div>
+            <div className={modalGrid}>
+              <FormField label="Date Booked"><input type="date" value={editReservationForm.dateBooked} onChange={e => setEditReservationForm({ ...editReservationForm, dateBooked: e.target.value })} /></FormField>
+              <FormField label="Date Confirmed"><input type="date" value={editReservationForm.dateConfirmed} onChange={e => setEditReservationForm({ ...editReservationForm, dateConfirmed: e.target.value })} /></FormField>
             </div>
 
             {/* Comments */}
-            <div>
-              <label className="block text-sm font-medium mb-1">Comments</label>
-              <textarea value={editReservationForm.comments} onChange={e => setEditReservationForm({ ...editReservationForm, comments: e.target.value })} rows={3}
-                className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm resize-none focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
-                placeholder="Optional notes..." />
-            </div>
+            <FormField label="Comments"><textarea value={editReservationForm.comments} onChange={e => setEditReservationForm({ ...editReservationForm, comments: e.target.value })} rows={3} className="resize-none"
+                placeholder="Optional notes..." /></FormField>
 
             {/* Cancellation Reason (only show if cancelled) */}
             {editReservationForm.reservationStatus === 'Cancelled' && (
-              <div>
-                <label className="block text-sm font-medium mb-1">Cancellation Reason</label>
-                <input type="text" value={editReservationForm.cancellationReason} onChange={e => setEditReservationForm({ ...editReservationForm, cancellationReason: e.target.value })}
-                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
-                  placeholder="Reason for cancellation..." />
-              </div>
+              <FormField label="Cancellation Reason"><input type="text" value={editReservationForm.cancellationReason} onChange={e => setEditReservationForm({ ...editReservationForm, cancellationReason: e.target.value })}
+                  placeholder="Reason for cancellation..." /></FormField>
             )}
 
             {/* Error */}
