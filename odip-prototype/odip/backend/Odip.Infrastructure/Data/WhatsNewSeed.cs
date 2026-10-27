@@ -121,6 +121,9 @@ public static class WhatsNewSeed
         new Item("2026-10-agreements-page", "Agreements page",
             "A new Agreements page in the menu lists every participant's service agreement with its dates, total and price list. Where your organisation lets your role approve agreements, you can tick the ones with a draft waiting and approve them together. The Agreements ending view from Participants now lives here too.",
             Staff, false),
+        new Item("2026-10-other-funded-budgets", "Other-funded participants leave the NDIS budget",
+            "A participant who is funded another way no longer counts against an NDIS budget. Their shifts stop showing as pending NDIS money on the Budgets page and on their Funding tab, and their Claims tab now says to invoice their funder directly.",
+            Staff, false),
     };
 
     /// <summary>Inserts the keys the table lacks, one save each, so a key another instance inserted first costs only that row.</summary>
