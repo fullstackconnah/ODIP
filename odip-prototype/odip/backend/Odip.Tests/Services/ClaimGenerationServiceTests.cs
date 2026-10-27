@@ -209,6 +209,79 @@ public class ClaimGenerationServiceTests
     }
 
     [Fact]
+    public async Task PreviewClaimAsync_AnOtherFundedBookingWithAStaleNdisNumber_IsLeftOutAndNotPriced()
+    {
+        using var db = CreateDb();
+        var group = SeedActivityGroup(db);
+        SeedProviderSettings(db);
+        SeedCatalogueItem(db, group.Id, ClaimDayType.Weekday, false, vicPrice: 60m);
+        var claimed = CreateParticipant();
+        var other = CreateParticipant();
+        other.FirstName = "Lee"; other.LastName = "Left"; other.NdisNumber = "430000007"; other.FundingSource = ParticipantFundingSource.Other;
+        db.Participants.AddRange(claimed, other);
+        var trip = SeedCompletedTrip(db, new DateOnly(2026, 1, 5), 3, claimed, activityGroupId: group.Id, activeHoursPerDay: 8m);
+        db.ParticipantBookings.Add(new ParticipantBooking
+        {
+            Id = Guid.NewGuid(), TripInstanceId = trip.Id, ParticipantId = other.Id, Participant = other,
+            BookingStatus = BookingStatus.Confirmed, BookingDate = DateOnly.FromDateTime(DateTime.UtcNow)
+        });
+        await db.SaveChangesAsync();
+
+        var result = await new ClaimGenerationService(db).PreviewClaimAsync(trip.Id, null);
+
+        // The mixed trip: only the NDIS-funded participant is priced, however many NDIS numbers are on file.
+        var left = Assert.Single(result.LeftOut);
+        Assert.Equal((other.Id, "Lee Left"), (left.ParticipantId, left.Description));
+        Assert.Equal("Funded another way, so not claimed to the NDIS. Invoice them directly.", left.Reason);
+        Assert.Equal(1440m, result.TotalAmount);
+        Assert.Equal("Jane Doe", Assert.Single(result.LineItems).ParticipantName);
+    }
+
+    [Fact]
+    public async Task GenerateDraftClaimAsync_EveryConfirmedBookingOtherFunded_SaysFundedAnotherWay()
+    {
+        using var db = CreateDb();
+        var group = SeedActivityGroup(db);
+        SeedProviderSettings(db);
+        SeedCatalogueItem(db, group.Id, ClaimDayType.Weekday, false, vicPrice: 50m);
+        var participant = CreateParticipant();
+        participant.FundingSource = ParticipantFundingSource.Other; // keeps the NDIS number CreateParticipant gave it
+        db.Participants.Add(participant);
+        var trip = SeedCompletedTrip(db, new DateOnly(2026, 1, 5), 1, participant, activityGroupId: group.Id);
+        await db.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => new ClaimGenerationService(db).GenerateDraftClaimAsync(trip.Id));
+
+        Assert.Contains("funded another way", ex.Message);
+        Assert.DoesNotContain("Add the NDIS number", ex.Message);
+        Assert.Empty(db.TripClaims);
+    }
+
+    [Fact]
+    public async Task GenerateDraftClaimAsync_AnOtherFundedParticipantAndAnNdisOneWithoutANumber_AsksForTheNumberOfTheNdisOneOnly()
+    {
+        using var db = CreateDb();
+        var group = SeedActivityGroup(db);
+        SeedProviderSettings(db);
+        SeedCatalogueItem(db, group.Id, ClaimDayType.Weekday, false, vicPrice: 50m);
+        var other = CreateParticipant();
+        other.FundingSource = ParticipantFundingSource.Other;
+        var noNumber = CreateParticipant();
+        noNumber.NdisNumber = null;
+        db.Participants.AddRange(other, noNumber);
+        var trip = SeedCompletedTrip(db, new DateOnly(2026, 1, 5), 1, other, activityGroupId: group.Id);
+        db.ParticipantBookings.Add(new ParticipantBooking
+        {
+            Id = Guid.NewGuid(), TripInstanceId = trip.Id, ParticipantId = noNumber.Id, Participant = noNumber,
+            BookingStatus = BookingStatus.Confirmed, BookingDate = DateOnly.FromDateTime(DateTime.UtcNow)
+        });
+        await db.SaveChangesAsync();
+
+        await AssertGenerateRefusesAndSavesNothingAsync(db, trip,
+            "None of the trip's NDIS-funded participants has an NDIS number, so no claim lines could be built. Add it to their profiles, then generate the claim again. Participants funded another way are not claimed to the NDIS.");
+    }
+
+    [Fact]
     public async Task PreviewClaimAsync_EveryoneHasAnNdisNumber_LeavesNobodyOut()
     {
         using var db = CreateDb();

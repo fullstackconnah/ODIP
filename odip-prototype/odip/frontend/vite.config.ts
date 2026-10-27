@@ -37,7 +37,7 @@ function routeGate(): Plugin {
 // Emits /sw.js with the precache list and a build version. Precaches everything reachable from the app's index.html
 // (entry, injected route-gate, CSS, fonts, every lazy route chunk); files only /welcome/ uses are left out.
 function serviceWorker(): Plugin {
-  const publicFiles = ['/theme.js', '/favicon.svg', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/icon-maskable-512.png']
+  const publicFiles = ['/theme.js', '/favicon.svg', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/icon-maskable-512.png', '/apple-touch-icon.png']
   return {
     name: 'odip-service-worker',
     apply: 'build',

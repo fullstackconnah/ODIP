@@ -142,6 +142,40 @@ public class BprCsvServiceTests
         Assert.Equal("", cancRow[15]);
     }
 
+    [Fact]
+    public async Task GenerateBprCsvAsync_AParticipantSwitchedToOtherAfterTheService_StillExportsTheirLine()
+    {
+        using var db = CreateDb();
+        var participant = new Participant
+        {
+            Id = Guid.NewGuid(), TenantId = TenantId, FirstName = "Amy", LastName = "Ng",
+            NdisNumber = "431000123", PlanType = PlanType.AgencyManaged, FundingSource = ParticipantFundingSource.Other,
+        };
+        var booking = new ParticipantBooking { Id = Guid.NewGuid(), TripInstanceId = Guid.NewGuid(), ParticipantId = participant.Id, BookingStatus = BookingStatus.Confirmed };
+        var claim = new TripClaim { Id = Guid.NewGuid(), ParticipantId = participant.Id, ClaimReference = "TC-1", PeriodFrom = new DateOnly(2026, 9, 7), PeriodTo = new DateOnly(2026, 9, 7) };
+        db.Participants.Add(participant);
+        db.ParticipantBookings.Add(booking);
+        db.TripClaims.Add(claim);
+        db.ClaimLineItems.Add(new ClaimLineItem
+        {
+            Id = Guid.NewGuid(), TripClaimId = claim.Id, ParticipantBookingId = booking.Id,
+            SupportItemCode = "04_104_0125_6_1", DayType = ClaimDayType.Weekday,
+            SupportsDeliveredFrom = new DateOnly(2026, 9, 7), SupportsDeliveredTo = new DateOnly(2026, 9, 7),
+            Hours = 8m, UnitPrice = 40m, TotalAmount = 320m, ClaimType = ClaimType.Standard,
+        });
+        db.ProviderSettings.Add(new ProviderSettings
+        {
+            Id = Guid.NewGuid(), TenantId = TenantId, RegistrationNumber = "PR1", ABN = "1",
+            OrganisationName = "Org", Address = "1 St", State = "VIC",
+        });
+        await db.SaveChangesAsync();
+
+        var (bytes, _) = await new BprCsvService(db).GenerateBprCsvAsync(claim.Id, CancellationToken.None);
+
+        var lines = Encoding.UTF8.GetString(bytes).Split((char)10, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        Assert.Equal(2, lines.Length); // the header and the line: a BPR mirrors its claim
+    }
+
     // RFC 4180 split: commas inside quotes stay, doubled quotes unescape.
     private static List<string> Split(string line)
     {
