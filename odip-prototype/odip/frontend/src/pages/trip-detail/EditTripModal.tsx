@@ -11,7 +11,7 @@ import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { extractErrorMessage } from '@/lib/utils'
 import { FormField, textareaClass } from '@/components/FormField'
-import { modalGrid } from '@/lib/formGrid'
+import { modalGrid, modalSpan } from '@/lib/formGrid'
 
 interface TripEditFormState {
   tripName: string
@@ -129,7 +129,7 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
           <div className="space-y-3">
             <p className="text-xs font-bold text-[var(--color-primary)] uppercase tracking-wider">Basic Info</p>
             <div className={modalGrid}>
-              <FormField label="Trip Name" required className="sm:col-span-2"><input value={tripEditForm.tripName} onChange={e => setTripEditForm({ ...tripEditForm, tripName: e.target.value })} placeholder="e.g. Beach Getaway 2026" /></FormField>
+              <FormField label="Trip Name" required className={modalSpan.full}><input value={tripEditForm.tripName} onChange={e => setTripEditForm({ ...tripEditForm, tripName: e.target.value })} placeholder="e.g. Beach Getaway 2026" /></FormField>
               <FormField label="Trip Code"><input value={tripEditForm.tripCode} onChange={e => setTripEditForm({ ...tripEditForm, tripCode: e.target.value })} placeholder="e.g. BG-2026-01" /></FormField>
               <FormField label="Event Template"><Dropdown
                   variant="form"
@@ -159,7 +159,7 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
                   onChange={val => setTripEditForm({ ...tripEditForm, status: val as TripStatus })}
                   items={statusItems(TRIP_STATUSES.filter(s => s !== 'WaitlistOnly'), TRIP_STATUS_LABELS)}
                 /></FormField>
-              <FormField label="Lead Coordinator" className="sm:col-span-2"><Dropdown
+              <FormField label="Lead Coordinator" className={modalSpan.full}><Dropdown
                   variant="form"
                   value={tripEditForm.leadCoordinatorId}
                   onChange={val => setTripEditForm({ ...tripEditForm, leadCoordinatorId: val })}
@@ -175,7 +175,7 @@ export default function EditTripModal({ trip, onClose }: EditTripModalProps) {
           {/* Capacity */}
           <div className="space-y-3">
             <p className="text-xs font-bold text-[var(--color-primary)] uppercase tracking-wider">Capacity & Requirements</p>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-[var(--field-gap-x)] gap-y-[var(--field-gap-y)]">
               <FormField label="Min Participants"><input type="number" min={0} value={tripEditForm.minParticipants} onChange={e => setTripEditForm({ ...tripEditForm, minParticipants: e.target.value })} /></FormField>
               <FormField label="Max Participants"><input type="number" min={0} value={tripEditForm.maxParticipants} onChange={e => setTripEditForm({ ...tripEditForm, maxParticipants: e.target.value })} /></FormField>
               <FormField label="Wheelchair Capacity"><input type="number" min={0} value={tripEditForm.requiredWheelchairCapacity} onChange={e => setTripEditForm({ ...tripEditForm, requiredWheelchairCapacity: e.target.value })} /></FormField>

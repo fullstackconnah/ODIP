@@ -58,6 +58,14 @@ describe('StaffTab — UX-01 Add Staff picker (SearchableSelect)', () => {
     expect(screen.getByRole('combobox', { name: 'Staff Member' })).toBeInTheDocument()
   })
 
+  it('labels the Staff Member picker with the shared form label', async () => {
+    const user = openAddStaffModal()
+    await user.click(screen.getByRole('button', { name: /add staff/i }))
+
+    // FormField's label points at the control with htmlFor; the old hand-written label only used aria-labelledby.
+    expect(screen.getByText('Staff Member')).toHaveAttribute('for', screen.getByRole('combobox', { name: 'Staff Member' }).id)
+  })
+
   it('adds the selected staff member on submit', async () => {
     const user = openAddStaffModal()
     await user.click(screen.getByRole('button', { name: /add staff/i }))

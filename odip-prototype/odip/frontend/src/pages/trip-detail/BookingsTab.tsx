@@ -213,14 +213,12 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
           <div className="space-y-4">
             {/* Participant Select */}
             <div>
-              <label id="addBookingParticipantLabel" className="block text-sm font-medium mb-1">Participant *</label>
-              <SearchableSelect
-                aria-labelledby="addBookingParticipantLabel"
+              <FormField label="Participant" required><SearchableSelect
                 value={selectedParticipantId}
                 onChange={setSelectedParticipantId}
                 placeholder="Select a participant..."
                 items={availableParticipants.map((p: ParticipantListDto) => ({ value: p.id, label: p.fullName }))}
-              />
+              /></FormField>
               {availableParticipants.length === 0 && (
                 <p className="text-xs text-[var(--color-muted-foreground)] mt-1">All active participants are already booked on this trip.</p>
               )}

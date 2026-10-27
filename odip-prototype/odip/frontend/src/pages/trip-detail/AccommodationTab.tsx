@@ -25,7 +25,7 @@ import type { TripDetailDto } from '@/api/types/trips'
 import { toUpdateReservationDto, type ReservationDto } from '@/api/types/reservations'
 import type { AccommodationListDto } from '@/api/types/accommodation'
 import { formatCurrency } from '@/lib/utils'
-import { FormField } from '@/components/FormField'
+import { FormField, labelClass } from '@/components/FormField'
 import { modalGrid } from '@/lib/formGrid'
 
 /** "Sat, 3 Oct": the weekday and date of a calendar day ("2026-10-03"), the same in every viewer zone (it is never a local midnight). */
@@ -417,8 +417,8 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
           <div className="space-y-4">
             {/* Property Select or Create */}
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label id="addAccommPropertyLabel" className="block text-sm font-medium">Property</label>
+              <div className="flex items-baseline justify-between">
+                <label id="addAccommPropertyLabel" className={labelClass}>Property</label>
                 <button type="button" onClick={() => { setCreatingNewProperty(!creatingNewProperty); setAccommForm({ ...accommForm, accommodationPropertyId: '' }) }}
                   className="text-xs text-[var(--color-primary)] hover:underline">
                   {creatingNewProperty ? 'Select existing' : '+ Create new'}
@@ -434,7 +434,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
                     <FormField label="Region"><input type="text" value={newPropertyForm.region} onChange={e => setNewPropertyForm({ ...newPropertyForm, region: e.target.value })}
                         placeholder="e.g. South East QLD" /></FormField>
                   </div>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-[var(--field-gap-x)] gap-y-[var(--field-gap-y)]">
                     <FormField label="Bedrooms"><input type="number" min="0" value={newPropertyForm.bedroomCount} onChange={e => setNewPropertyForm({ ...newPropertyForm, bedroomCount: e.target.value })} /></FormField>
                     <FormField label="Beds"><input type="number" min="0" value={newPropertyForm.bedCount} onChange={e => setNewPropertyForm({ ...newPropertyForm, bedCount: e.target.value })} /></FormField>
                     <FormField label="Max Capacity"><input type="number" min="0" value={newPropertyForm.maxCapacity} onChange={e => setNewPropertyForm({ ...newPropertyForm, maxCapacity: e.target.value })} /></FormField>
@@ -519,7 +519,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
             </div>
 
             {/* Bedrooms / Beds / Cost */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-[var(--field-gap-x)] gap-y-[var(--field-gap-y)]">
               <FormField label="Bedrooms"><input type="number" min="0" value={editReservationForm.bedroomsReserved} onChange={e => setEditReservationForm({ ...editReservationForm, bedroomsReserved: e.target.value })} /></FormField>
               <FormField label="Beds"><input type="number" min="0" value={editReservationForm.bedsReserved} onChange={e => setEditReservationForm({ ...editReservationForm, bedsReserved: e.target.value })} /></FormField>
               <FormField label="Cost"><input type="number" min="0" step="0.01" value={editReservationForm.cost} onChange={e => setEditReservationForm({ ...editReservationForm, cost: e.target.value })} /></FormField>

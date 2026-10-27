@@ -436,14 +436,9 @@ export default function StaffTab({ tripId, trip, staff, canWrite }: StaffTabProp
           }
         >
           <div className="space-y-4">
-            {/* Staff Select — UX-01: staff-scale list, SearchableSelect not a bounded native
-                select. This file doesn't wrap fields in FormField, so the label/control
-                association is wired by hand (id + aria-labelledby) the same way FormField does
-                it for a custom component child. */}
+            {/* Staff Select — UX-01: staff-scale list, SearchableSelect not a bounded native select. */}
             <div>
-              <label id="addStaffMemberLabel" className="block text-sm font-medium mb-1">Staff Member</label>
-              <SearchableSelect
-                aria-labelledby="addStaffMemberLabel"
+              <FormField label="Staff Member"><SearchableSelect
                 value={selectedStaffId}
                 onChange={setSelectedStaffId}
                 placeholder="Select staff..."
@@ -453,7 +448,7 @@ export default function StaffTab({ tripId, trip, staff, canWrite }: StaffTabProp
                     const isAvailable = availableStaffIds.has(s.id)
                     return { value: s.id, label: `${s.fullName}${!isAvailable ? ' (Unavailable)' : ''}` }
                   })}
-              />
+              /></FormField>
               {selectedStaffId && !availableStaffIds.has(selectedStaffId) && (
                 <p className="text-xs text-[var(--color-warning)] mt-1 flex items-center gap-1">
                   <AlertTriangle className="w-3 h-3" /> This staff member has a scheduling conflict for the trip dates

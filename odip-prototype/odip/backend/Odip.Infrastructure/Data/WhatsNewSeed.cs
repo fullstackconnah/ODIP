@@ -83,7 +83,7 @@ public static class WhatsNewSeed
             "Warning and error notices on participant pages, intake, the caregiver form and the roster panels now share one look, with an icon.",
             WhatsNewAudience.All, false),
         new Item("2026-10-trip-form-labels", "Trip forms read better with screen readers",
-            "The accommodation, bookings, staff, activity, vehicle and claim forms now name every field and match the other forms.",
+            "On a trip, the Edit trip, accommodation, bookings, staff, activity, vehicle and claim forms now label every field the same way as the rest of Bunya Support, and accommodation costs show dollars and cents.",
             Staff, false),
     };
 
