@@ -389,10 +389,9 @@ export default function PortalShiftDetailPage() {
       />
       {!(belowLg && inFlow) && <GlanceStrip shift={shift} />}
       {!online && (
-        <div role="alert" className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-muted)] p-3 text-sm">
-          <WifiOff className="w-4 h-4 shrink-0" aria-hidden="true" />
+        <Callout tone="warning" icon={WifiOff}>
           You're offline. Recording, breaks and Finish need a connection, so they're switched off until it's back.
-        </div>
+        </Callout>
       )}
       {tabbed && (
         <Tabs

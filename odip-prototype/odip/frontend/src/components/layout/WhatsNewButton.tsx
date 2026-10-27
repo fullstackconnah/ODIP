@@ -98,7 +98,7 @@ export default function WhatsNewButton() {
         aria-expanded={open}
         aria-controls={!isBelowLg && open ? panelId : undefined}
         aria-haspopup={isBelowLg ? 'dialog' : undefined}
-        className="w-8 h-8 pointer-coarse:size-[var(--tap-min)] flex items-center justify-center rounded-full hover:bg-[var(--color-accent)] transition-colors"
+        className="w-8 h-8 pointer-coarse:size-[var(--tap-min)] flex items-center justify-center rounded-full hover:bg-[var(--color-accent)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
       >
         <span className="relative inline-flex">
           <span className="material-symbols-outlined text-[var(--color-primary)]" aria-hidden="true" style={{ fontSize: '20px' }}>campaign</span>

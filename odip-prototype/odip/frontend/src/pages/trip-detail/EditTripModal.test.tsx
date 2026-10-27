@@ -47,7 +47,7 @@ describe('EditTripModal — what Save refuses', () => {
     await user.click(screen.getByRole('button', { name: 'Save' }))
     fireEvent.change(screen.getByLabelText(/Start Date/), { target: { value: '2026-12-01' } })
     expect(screen.queryByText('Start date is required.')).toBeNull()
-    expect(screen.getByLabelText(/Start Date/)).toHaveAttribute('aria-invalid', 'false')
+    expect(screen.getByLabelText(/Start Date/)).not.toHaveAttribute('aria-invalid')
   })
 
   it('saves a start date and a duration of one or more days', async () => {
@@ -103,5 +103,15 @@ describe('EditTripModal — the dialog', () => {
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(opener).toHaveFocus()
+  })
+})
+
+describe('EditTripModal — field labels', () => {
+  it('names the fields so each label finds its control, and marks Trip Name required', async () => {
+    await setup()
+    expect(screen.getByLabelText(/Trip Name/)).toBeRequired()
+    for (const label of ['Trip Code', 'Destination', 'Region', 'Booking Cutoff', 'Min Participants', 'Notes']) {
+      expect(screen.getByLabelText(label)).toBeInTheDocument()
+    }
   })
 })

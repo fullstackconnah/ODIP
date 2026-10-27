@@ -17,6 +17,7 @@ import { DosesStep, HandoverStep, ReportStep, SubmitStep, TimesStep, type Refusa
 import { requestGeolocation } from './geolocation'
 import { utcInstantToProviderLocal } from './shiftTime'
 import { ActionBar } from './ui'
+import { plural } from '@/lib/format'
 import { useNow } from './useNow'
 import type { DoseTarget } from './DoseSheet'
 import type { PortalShiftDetailDto, ShiftNoteDto } from '@/api/types'
@@ -133,7 +134,7 @@ export function FinishFlow({ shift, online, canAct, onRecord, onClose, onEditNot
     }
     if (step === 'doses') {
       const missing = shift.finishBlockers.filter(b => b.code === 'DOSE_OUTCOME_MISSING').length
-      if (missing) return setError({ message: `Record an outcome for ${missing} dose${missing === 1 ? '' : 's'} before you go on.`, focus: 'dose-blocker-0' })
+      if (missing) return setError({ message: `Record an outcome for ${plural(missing, 'dose')} before you go on.`, focus: 'dose-blocker-0' })
       return go('report')
     }
     if (step === 'report') return go('handover')   // unanswered is fine: the question is optional, and null is sent

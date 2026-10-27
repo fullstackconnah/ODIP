@@ -321,7 +321,9 @@ describe('Profile wizard: the Intake validation applies to the corrected values'
 
     await user.click(document.getElementById('planType') as HTMLElement)
     await user.click(screen.getByRole('option', { name: 'Plan Managed' }))
-    expect(await screen.findByText(/no active plan manager contact/i)).toBeInTheDocument()
+    const banner = (await screen.findByText(/no active plan manager contact/i)).closest('[role]')
+    expect(banner).toHaveAttribute('role', 'status')
+    expect(banner).toHaveAttribute('aria-live', 'polite')
     await next(user, 1) // advisory only: it never blocks the save
   })
 })

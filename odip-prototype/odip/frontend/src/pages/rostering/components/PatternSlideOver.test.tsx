@@ -260,6 +260,7 @@ describe('PatternSlideOver — the server\'s refusal reaches the user', () => {
     })
     const message = await screen.findByText(NOT_READY_MESSAGE)
     expect(message.closest('[role="alert"]')).not.toBeNull()
+    expect(message.closest('[role="alert"]')).toHaveClass('scroll-mb-[var(--card-pad)]')
     expect(screen.queryByText(GENERIC_PATTERN_ERROR)).not.toBeInTheDocument()
     // The panel stays open and the form is as the user left it.
     expect(onClose).not.toHaveBeenCalled()

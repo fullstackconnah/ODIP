@@ -7,6 +7,7 @@ import { TONE } from '@/lib/tone'
 import { formatWithTimeZone, extractErrorMessage } from '@/lib/utils'
 import { apiErrorMessages } from '@/lib/shiftPackageErrors'
 import { buildChecklist, clockLabel, dueDoseKeys, foldDueList, type ChecklistGroup, type ChecklistItem } from './checklist'
+import { plural } from '@/lib/format'
 import { Chip, Fold, Section } from './ui'
 import type { DoseTarget } from './DoseSheet'
 import type { PortalDoseSlotDto, PortalPrnDto, PortalShiftDetailDto, PortalShiftRoutineDto } from '@/api/types'
@@ -192,7 +193,7 @@ export function DuringSection({ shift, canAct, online, onRecord }: {
             </Fold>
           )}
           {shift.prn.length > 0 && (
-            <Fold summary={`As needed · ${shift.prn.length} medicine${shift.prn.length === 1 ? '' : 's'}`}>
+            <Fold summary={`As needed · ${plural(shift.prn.length, 'medicine')}`}>
               <ul className="divide-y divide-[var(--color-border)]">
                 {shift.prn.map(prn => <PrnRow key={prn.medicationId} prn={prn} tz={tz} canAct={canRecord} onRecord={onRecord} />)}
               </ul>

@@ -25,8 +25,7 @@ import { retryingAfterError } from '@/lib/queryPhase'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { downloadFile } from '@/lib/downloadFile'
 import { InvoicesSection } from './claim-detail/InvoicesSection'
-
-const inputClass = 'w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
+import { FormField } from '@/components/FormField'
 
 
 /** The API sends the enum name ('AgencyManaged'); this page once mapped a spelling it never sends ('NdiaManaged') and printed the raw name. */
@@ -262,16 +261,14 @@ export default function ClaimDetailPage() {
 
       {/* Empty notes stay available without taking attention from the claim's line items. */}
       {(notes || notesExpanded || notesEditorShown) ? <div className="bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)] space-y-2">
-        <label className="block text-xs font-medium text-[var(--color-muted-foreground)]" htmlFor="claim-notes">Notes</label>
-        <textarea
+        <FormField label="Notes"><textarea
           id="claim-notes"
           ref={notesRef}
           value={notes}
           onChange={e => setNotes(e.target.value)}
           rows={3}
           placeholder="Add claim notes..."
-          className={inputClass + ' resize-none'}
-        />
+          className="resize-none" /></FormField>
         <div className="flex justify-end">
           <Button variant="primary" size="md" onClick={handleSaveNotes} disabled={updateClaim.isPending}>
             {saved ? 'Saved!' : 'Save Notes'}

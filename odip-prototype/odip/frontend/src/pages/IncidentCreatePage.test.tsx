@@ -1175,6 +1175,21 @@ describe('IncidentCreatePage — IN-7 Witnesses step', () => {
     expect(screen.queryByText(/will be asked to approve/i)).not.toBeInTheDocument()
   })
 
+  it('moves the witness choice with the arrow keys, as a radiogroup', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await reachWitnessesStep(user)
+
+    const group = screen.getByRole('radiogroup', { name: 'Witness type' })
+    expect(within(group).getAllByRole('radio')).toHaveLength(2)
+    screen.getByRole('radio', { name: 'Staff member' }).focus()
+    await user.keyboard('{ArrowRight}')
+    expect(screen.getByRole('radio', { name: 'Someone else' })).toBeChecked()
+    expect(screen.getByLabelText('Name')).toBeInTheDocument()
+    await user.keyboard('{ArrowLeft}')
+    expect(screen.getByRole('radio', { name: 'Staff member' })).toBeChecked()
+  })
+
   it('removes a witness row', async () => {
     const user = userEvent.setup()
     renderCreatePage()

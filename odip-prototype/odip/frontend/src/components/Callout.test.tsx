@@ -1,3 +1,4 @@
+import { createRef } from 'react'
 import { describe, it, expect, afterEach } from 'vitest'
 import { render, cleanup, screen } from '@testing-library/react'
 import { AlertTriangle, AlertCircle, Info, CheckCircle2 } from 'lucide-react'
@@ -168,5 +169,28 @@ describe('Callout primitive', () => {
     render(<Callout tone="warning">Default.</Callout>)
 
     expect(screen.getByRole('alert')).toHaveAttribute('aria-live', 'assertive')
+  })
+
+  it.each(['warning', 'danger'] as const)('polite makes a %s tone announce as role=status, aria-live=polite', (tone) => {
+    render(<Callout tone={tone} polite>Note.</Callout>)
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite')
+  })
+
+  it('polite keeps the tone look; announce={false} still wins over it', () => {
+    render(<Callout tone="warning" polite announce={false}>Quiet.</Callout>)
+
+    const el = screen.getByText('Quiet.').closest('div[class*="rounded-lg"]')!
+    expect(el).not.toHaveAttribute('role')
+    expect(el).not.toHaveAttribute('aria-live')
+    expect(el.className).toMatch(/bg-\[var\(--color-warning-container\)\]/)
+  })
+
+  it('forwards a ref to the root element', () => {
+    const ref = createRef<HTMLDivElement>()
+    render(<Callout tone="error" ref={ref}>Oops.</Callout>)
+
+    expect(ref.current).toBe(screen.getByRole('alert'))
   })
 })
