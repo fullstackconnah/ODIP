@@ -83,8 +83,10 @@ const hasNoReply = (error: unknown) => {
   return !response || [502, 503, 504].includes(response.status ?? 0)
 }
 
+const statusOf = (error: unknown) => (error as { response?: { status?: number } })?.response?.status
+
 const failureWords = (error: unknown) => {
-  const status = (error as { response?: { status?: number } })?.response?.status
+  const status = statusOf(error)
   return status === 429 ? TOO_MANY_WORDS : status === 403 ? NOT_AN_APPROVER_WORDS : hasNoReply(error) ? NO_REPLY_WORDS : 'Could not approve these. Try again.'
 }
 
@@ -121,8 +123,8 @@ export default function AgreementsPage() {
 
   const { notices, notify, dismiss } = useNotices()
   const noticesRef = useRef<HTMLDivElement>(null)
-  const [dialog, setDialog] = useState<{ open: boolean; phase: ApprovePhase; progress: number; error: string | null; results: AgreementApproveResult[]; stopped: ApproveStopped | null }>(
-    { open: false, phase: 'confirm', progress: 0, error: null, results: [], stopped: null })
+  const [dialog, setDialog] = useState<{ open: boolean; phase: ApprovePhase; progress: number; error: string | null; refused: boolean; results: AgreementApproveResult[]; stopped: ApproveStopped | null }>(
+    { open: false, phase: 'confirm', progress: 0, error: null, refused: false, results: [], stopped: null })
   const [count, setCount] = useState(0)
   const onProgress = useCallback((done: number) => setDialog(d => ({ ...d, progress: done })), [])
   const approve = useApproveAgreements(onProgress)
@@ -133,10 +135,10 @@ export default function AgreementsPage() {
   const confirm = async () => {
     const sent = targets
     setCount(sent.length)
-    setDialog(d => ({ ...d, phase: 'running', progress: 0, error: null }))
+    setDialog(d => ({ ...d, phase: 'running', progress: 0, error: null, refused: false }))
     const run = await approve.mutateAsync(sent)
     if (run.stopped && run.results.length === 0) {
-      setDialog(d => ({ ...d, phase: 'confirm', error: failureWords(run.stopped!.error) }))
+      setDialog(d => ({ ...d, phase: 'confirm', error: failureWords(run.stopped!.error), refused: statusOf(run.stopped!.error) === 403 }))
       return
     }
     const done = new Set(run.results.filter(r => r.outcome === 'Approved').map(r => r.participantId))
@@ -204,7 +206,7 @@ export default function AgreementsPage() {
               selected={selected.size} approvable={targets.length} canApprove={canApprove} shown={shown.length} allShownSelected={allShownSelected}
               onToggleShown={() => setSelected(allShownSelected ? new Set() : new Set(shown.slice(0, MAX_SELECTED + 1).map(r => r.participantId)))}
               onClear={() => setSelected(new Set())}
-              onApprove={() => setDialog({ open: true, phase: 'confirm', progress: 0, error: null, results: [], stopped: null })}
+              onApprove={() => setDialog({ open: true, phase: 'confirm', progress: 0, error: null, refused: false, results: [], stopped: null })}
             />
           )}
         </div>
@@ -229,7 +231,7 @@ export default function AgreementsPage() {
 
       <ApproveAgreementsDialog
         open={dialog.open} phase={dialog.phase} count={dialog.phase === 'confirm' ? targets.length : count} skipped={skipped} progress={dialog.progress}
-        error={dialog.error} refused={dialog.error === NOT_AN_APPROVER_WORDS} results={dialog.results} stopped={dialog.stopped} onConfirm={confirm} onClose={closeDialog}
+        error={dialog.error} refused={dialog.refused} results={dialog.results} stopped={dialog.stopped} onConfirm={confirm} onClose={closeDialog}
       />
     </div>
   )
