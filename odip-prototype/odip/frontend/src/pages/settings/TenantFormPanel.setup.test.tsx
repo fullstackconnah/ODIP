@@ -3,10 +3,10 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import TenantFormPanel from './TenantFormPanel'
 
-const { mockCreate } = vi.hoisted(() => ({ mockCreate: vi.fn() }))
+const { mockCreate, mockUpdate } = vi.hoisted(() => ({ mockCreate: vi.fn(), mockUpdate: vi.fn() }))
 vi.mock('@/api/hooks/admin', () => ({
   useCreateTenantWithSetup: () => ({ mutateAsync: mockCreate, isPending: false }),
-  useUpdateTenant: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useUpdateTenant: () => ({ mutateAsync: mockUpdate, isPending: false }),
   useEnsureUserSignInAccount: () => ({ mutateAsync: vi.fn() }),
 }))
 
@@ -17,6 +17,7 @@ const stateRadio = (name: string) => screen.getByRole('radio', { name })
 const create = () => screen.getByRole('button', { name: 'Create tenant' })
 
 beforeEach(() => {
+  mockUpdate.mockReset().mockResolvedValue({})
   mockCreate.mockReset().mockResolvedValue({ id: 't1', name: 'Jo Care', emailDomain: null, isActive: true, createdAt: '2026-01-01T00:00:00Z', userCount: 0 })
 })
 
@@ -50,8 +51,17 @@ describe('TenantFormPanel create: optional domain, required state', () => {
 
     expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({
       name: 'Jo Care', emailDomain: '', initialUser: null,
-      providerSettings: expect.objectContaining({ state: 'WA', organisationName: 'Jo Care', registrationNumber: '', abn: '', address: '', gstRegistered: false, isPaceProvider: false }),
+      providerSettings: expect.objectContaining({ state: 'WA', organisationName: 'Jo Care', registrationNumber: '', abn: '', address: '', gstRegistered: false }),
     }))
+    expect(mockCreate.mock.calls[0][0].providerSettings).not.toHaveProperty("isPaceProvider")
+  })
+
+  it("does not ask whether the tenant is a PACE provider", async () => {
+    const u = userEvent.setup()
+    render(<TenantFormPanel isOpen onClose={vi.fn()} />)
+    await u.click(screen.getByRole("button", { name: /provider settings/i }))
+    expect(screen.getByRole("checkbox", { name: "GST Registered" })).toBeInTheDocument()
+    expect(screen.queryByRole("checkbox", { name: /PACE/i })).not.toBeInTheDocument()
   })
 
   it('prefills the provider section\'s organisation name from the name above, until it is edited', async () => {
@@ -81,5 +91,27 @@ describe('TenantFormPanel create: optional domain, required state', () => {
     expect(screen.getByPlaceholderText('e.g. Acme Travel Co')).toHaveValue('Jo Care')
     expect(screen.getByPlaceholderText('e.g. acme.com.au')).toHaveValue('jo.example.com')
     expect(stateRadio('SA')).toBeChecked()
+  })
+})
+
+// Edit sends only these three fields, so a tenant whose stored PACE flag is on keeps it, and opening then closing is not a change.
+describe("TenantFormPanel edit: the stored PACE flag is left alone", () => {
+  const tenant = { id: "t1", name: "Jo Care", emailDomain: "jo.com.au", isActive: true, createdAt: "2026-01-01T00:00:00Z", userCount: 0 }
+
+  it("sends exactly name, emailDomain and isActive", async () => {
+    const u = userEvent.setup()
+    render(<TenantFormPanel isOpen onClose={vi.fn()} tenant={tenant} />)
+    await u.type(screen.getByPlaceholderText("e.g. Acme Travel Co"), " Services")
+    await u.click(screen.getByRole("button", { name: "Save" }))
+    expect(mockUpdate).toHaveBeenCalledWith({ id: "t1", data: { name: "Jo Care Services", emailDomain: "jo.com.au", isActive: true } })
+  })
+
+  it("closes without asking when nothing was changed", async () => {
+    const u = userEvent.setup()
+    const onClose = vi.fn()
+    render(<TenantFormPanel isOpen onClose={onClose} tenant={tenant} />)
+    await u.keyboard("{Escape}")
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument()
   })
 })
