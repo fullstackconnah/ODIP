@@ -55,12 +55,13 @@ beforeEach(() => {
 })
 
 describe('the Intake column', () => {
-  // Fix round 1 (SHAPE section 6): from md up the pinned Actions cluster stays on one row; only the phone card may wrap it.
-  it('keeps the desktop actions on one row', () => {
+  // Constrained desktop rows may wrap their actions; wide rows keep the single-line cluster.
+  it('lets constrained desktop actions wrap while wide rows keep one line', () => {
     page()
 
     const cluster = screen.getByRole('button', { name: 'Start intake for Noah Fitzgerald' }).parentElement!
-    expect(cluster).toHaveClass('flex-wrap', 'md:flex-nowrap')
+    expect(cluster).toHaveClass('flex-wrap', 'whitespace-nowrap', 'md:max-[1440px]:w-40', 'min-[1440px]:flex-nowrap')
+    expect(cluster.closest('td')).not.toHaveClass('md:whitespace-nowrap')
   })
 
   // Fix round 2 (FINISH review 2): two lines in every row. Line 1 is the visit alone; the reply badge leads line 2, beside what the invite did, so a
