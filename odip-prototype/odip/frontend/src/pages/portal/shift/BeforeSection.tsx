@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { BookOpen, HeartPulse, Phone } from 'lucide-react'
 import { useAcknowledgeHandover } from '@/api/hooks'
+import { useQueueRecords } from '@/api/hooks/portal'
+import { waitingKind } from '@/lib/offline/overlay'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { buttonClasses } from '@/components/buttonClasses'
@@ -9,14 +11,15 @@ import { TAP_AREA } from '@/components/tapArea'
 import { formatWithTimeZone, formatDateAu } from '@/lib/utils'
 import { SHIFT_PACKAGE_ERROR_CODES } from '@/api/types'
 import { apiErrorMessages, hasApiErrorCode, shiftDetailFromError } from '@/lib/shiftPackageErrors'
-import { Chip, Fact, Section } from './ui'
+import { Chip, Fact, Section, WaitingToSend } from './ui'
 import type { PortalAtAGlanceDto, PortalEmergencyContactDto, PortalShiftDetailDto } from '@/api/types'
 
 /** The HIDPA flags that are set, in their fixed order. */
 const hidpaFlags = (g: PortalAtAGlanceDto) => [g.hidpa.epilepsy && 'Epilepsy', g.hidpa.enteralFeeding && 'Enteral feeding', g.hidpa.dysphagia && 'Dysphagia'].filter(Boolean) as string[]
 
-function Handover({ shift, canAct, online }: { shift: PortalShiftDetailDto; canAct: boolean; online: boolean }) {
+function Handover({ shift, canAct }: { shift: PortalShiftDetailDto; canAct: boolean }) {
   const ack = useAcknowledgeHandover()
+  const ackWaiting = !!waitingKind(useQueueRecords(), shift.id, 'ack')
   const qc = useQueryClient()
   const [error, setError] = useState<string | null>(null)
   const { handover, handoverTrail } = shift
@@ -56,9 +59,10 @@ function Handover({ shift, canAct, online }: { shift: PortalShiftDetailDto; canA
       {handover.requiresAcknowledgement && (handover.isRead ? (
         <p className="text-sm font-medium">
           Read{handover.readAt ? ` ${formatWithTimeZone(handover.readAt, shift.timeZoneId, { dateStyle: 'medium', timeStyle: 'short' })}` : ''}
+          {ackWaiting && <> &middot; <WaitingToSend /></>}
         </p>
       ) : canAct && (
-        <Button variant="secondary" size="lg" onClick={markRead} disabled={ack.isPending || !online}>
+        <Button variant="secondary" size="lg" onClick={markRead} disabled={ack.isPending}>
           {ack.isPending ? 'Saving…' : 'Mark as read'}
         </Button>
       ))}
@@ -176,13 +180,13 @@ function Contacts({ contacts }: { contacts: PortalEmergencyContactDto[] }) {
 }
 
 /** The incoming handover. It moves between Now and Notes ("From the last shift") instead of folding (SHAPE §3). */
-export function HandoverSection({ shift, canAct, online, title = 'Handover' }: { shift: PortalShiftDetailDto; canAct: boolean; online: boolean; title?: string }) {
+export function HandoverSection({ shift, canAct, title = 'Handover' }: { shift: PortalShiftDetailDto; canAct: boolean; title?: string }) {
   const withheld = shift.sensitiveInfoWithheldReason
   return (
     <Section id="before-handover" title={title} icon={<BookOpen className="w-4 h-4" aria-hidden="true" />}>
       {withheld
         ? <Callout tone="info">{withheld}</Callout>
-        : <Handover shift={shift} canAct={canAct} online={online} />}
+        : <Handover shift={shift} canAct={canAct} />}
     </Section>
   )
 }

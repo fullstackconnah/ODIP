@@ -8,6 +8,9 @@ import type { ShiftNoteDto } from '@/api/types'
 import { formatFlaggedCategoryList, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 import type { ShiftNoteIncidentPrefillState } from '@/lib/incidentPrefill'
 import { Button } from '@/components/Button'
+import { useOnline } from '../shift/useOnline'
+import { WaitingToSend } from '../shift/ui'
+import type { QueuedNote } from '@/lib/offline/overlay'
 import { Callout } from '@/components/Callout'
 
 const BODY_MAX_LENGTH = 1000
@@ -114,6 +117,7 @@ export function ShiftNotesSection({
   const acknowledgeFlags = useAcknowledgeShiftNoteFlags(shiftId)
   const { id: currentUserId } = usePermissions()
   const navigate = useNavigate()
+  const online = useOnline()
 
   const [body, setBody] = useState('')
   const [createError, setCreateError] = useState<string | null>(null)
@@ -227,10 +231,13 @@ export function ShiftNotesSection({
                 <>
                   <div className="flex items-start justify-between gap-2">
                     <p className="text-xs text-[var(--color-muted-foreground)]">
-                      <span className="font-medium text-[var(--color-foreground)]">{note.authorName}</span> · {formatNoteTimestamp(note.createdAt)}
+                      <span className="font-medium text-[var(--color-foreground)]">{(note as QueuedNote).waiting ? 'You' : note.authorName}</span> · {formatNoteTimestamp(note.createdAt)}{(note as QueuedNote).waiting && <> · <WaitingToSend /></>}
                       {note.updatedAt > note.createdAt && ` · edited ${formatNoteTimestamp(note.updatedAt)}`}
                     </p>
-                    {note.authorUserId === currentUserId && (
+                    {note.authorUserId === currentUserId && !online && !(note as QueuedNote).waiting && (
+                      <span className="shrink-0 text-xs text-[var(--color-muted-foreground)]">Editing a sent note needs a connection.</span>
+                    )}
+                    {note.authorUserId === currentUserId && (online || (note as QueuedNote).waiting) && (
                       <button
                         type="button"
                         onClick={() => startEdit(note)}

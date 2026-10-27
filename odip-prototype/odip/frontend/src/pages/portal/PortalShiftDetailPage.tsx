@@ -3,6 +3,10 @@ import { useParams } from 'react-router-dom'
 import { format, parseISO } from 'date-fns'
 import { AlertTriangle, Armchair, Clock, ScrollText, WifiOff } from 'lucide-react'
 import { usePortalShiftDetail, useShiftNotes, useStartShift, useStartBreak, useEndBreak } from '@/api/hooks'
+import { useQueueRecords, savedAtFor } from '@/api/hooks/portal'
+import { waitingBreak, waitingKind } from '@/lib/offline/overlay'
+import { offlineQueue } from '@/lib/offline/queue'
+import { clockTime, savedLine } from '@/lib/offline/reasons'
 import { usePermissions } from '@/lib/permissions'
 import { StatusBadge } from '@/components/StatusBadge'
 import { BackButton } from '@/components/BackButton'
@@ -32,7 +36,8 @@ import { dueDoseKeys } from './shift/checklist'
 import { loadEndDraft } from './shift/endDraft'
 import { requestGeolocation } from './shift/geolocation'
 import { useOnline } from './shift/useOnline'
-import { ActionBar, Chip, Section } from './shift/ui'
+import { ActionBar, Chip, Section, WaitingToSend } from './shift/ui'
+import { SyncBar } from './sync/SyncBar'
 import { useNow } from './shift/useNow'
 import type { PortalShiftDetailDto, StartShiftDto } from '@/api/types'
 import { retryingAfterError } from '@/lib/queryPhase'
@@ -131,6 +136,7 @@ export default function PortalShiftDetailPage() {
   useDocumentTitle(shift ? shift.participant.fullName : 'Shift')   // also covers the loading and error states, which have no PageHeader
   const { canCompleteOwnShifts } = usePermissions()
   const online = useOnline()
+  const queued = useQueueRecords()
   const belowLg = useIsBelowLg()
   const [now] = useNow(30_000)
   const [tab, setTab] = useTabParam(TAB_KEYS, 'now')
@@ -176,7 +182,8 @@ export default function PortalShiftDetailPage() {
   function closeFinish(done: boolean) {
     setFinishing(false)
     if (done) {
-      setSubmitted(true)
+      // A queued Finish leaves the shift InProgress on the server; the page reads it from the queue, so it is not "submitted" yet.
+      if (!waitingKind(offlineQueue.getSnapshot(), id ?? '', 'finish')) setSubmitted(true)
       setTab('now')
     } else {
       // Back to shift returns focus to the control that opened the flow (SHAPE §6).
@@ -221,6 +228,11 @@ export default function PortalShiftDetailPage() {
   const inProgress = shift.status === 'InProgress'
   const showBefore = shift.status === 'Published' || inProgress
   const running = shift.breaks.find(b => b.isRunning)
+  const startedWaiting = waitingKind(queued, shift.id, 'start')
+  // A Finish saved on this phone: the shift reads as finished, and the bar steps aside until it is sent (SHAPE 3d).
+  const finishWaiting = !!waitingKind(queued, shift.id, 'finish')
+  const alreadySubmitted = offlineQueue.wasAlreadySubmitted(shift.id)
+  const savedAt = online ? null : savedAtFor(`detail:${shift.id}`)
   const h = shift.handover
   // Before the start the handover is read on Now. Mid-shift it stays there only while it waits to be acknowledged; else it lives in Notes.
   const handoverOnNow = shift.status === 'Published' || (inProgress && !!h?.requiresAcknowledgement && !h.isRead)
@@ -238,6 +250,14 @@ export default function PortalShiftDetailPage() {
 
   const nowContent = (
     <>
+      {finishWaiting && (
+        <Callout tone="info" polite title="Shift finished on this phone" actions={<Button to="/portal" variant="secondary" size="lg">Back to my shifts</Button>}>
+          It&rsquo;s sent to your coordinator when you&rsquo;re back online.&nbsp;<WaitingToSend />
+        </Callout>
+      )}
+      {alreadySubmitted && (
+        <Callout tone="info" polite>This shift was already submitted before this phone sent its Finish, so the details entered here (times, kilometres, handover) weren&rsquo;t added. Tell your coordinator if they differ.</Callout>
+      )}
       {submitted && (
         <Callout
           tone="success"
@@ -254,7 +274,7 @@ export default function PortalShiftDetailPage() {
       {shift.status === 'Published' && canAct && !canStartNow && (
         <p className="text-sm">You can start from {clock(new Date(opensAt).toISOString(), tz)}.</p>
       )}
-      {handoverOnNow && <HandoverSection shift={shift} canAct={canAct} online={online} />}
+      {handoverOnNow && <HandoverSection shift={shift} canAct={canAct} />}
       {showBefore && <MustKnowLine shift={shift} onAbout={showAbout} />}
       {shift.notes && (
         <Section id="roster-notes" title="From the roster" icon={<ScrollText className="w-4 h-4" aria-hidden="true" />}>
@@ -270,7 +290,7 @@ export default function PortalShiftDetailPage() {
 
   const notesContent = (
     <>
-      {showBefore && !handoverOnNow && <HandoverSection shift={shift} canAct={canAct} online={online} title="From the last shift" />}
+      {showBefore && !handoverOnNow && <HandoverSection shift={shift} canAct={canAct} title="From the last shift" />}
       {shift.status === 'Published'
         ? <p className="text-sm text-[var(--color-muted-foreground)]">You can add notes once your shift starts.</p>
         : <ShiftNotesSection shiftId={shift.id} participantId={participant.id} participantName={participant.fullName}
@@ -351,16 +371,16 @@ export default function PortalShiftDetailPage() {
   if (canAct && shift.status === 'Published' && canStartNow) {
     bar = (
       <ActionBar className={MAIN_COLUMN_BAR}>
-        <Button size="lg" className="flex-1 lg:flex-none" onClick={handleStart} disabled={startShift.isPending || !online}>
+        <Button size="lg" className="flex-1 lg:flex-none" onClick={handleStart} disabled={startShift.isPending}>
           {startShift.isPending ? 'Starting…' : 'Start shift'}
         </Button>
       </ActionBar>
     )
-  } else if (canAct && inProgress && !inFlow && !submitted) {
+  } else if (canAct && inProgress && !inFlow && !submitted && !finishWaiting) {
     bar = (
       <ActionBar className={MAIN_COLUMN_BAR}>
         <Button size="lg" variant={running ? 'primary' : 'secondary'} className="flex-1 lg:flex-none" onClick={() => handleBreak(running?.id)}
-          disabled={!online || startBreak.isPending || endBreak.isPending}>
+          disabled={startBreak.isPending || endBreak.isPending}>
           {running ? 'End break' : 'Start break'}
         </Button>
         <Button id="end-shift" size="lg" variant={running ? 'secondary' : 'primary'} className="flex-1 lg:flex-none" onClick={openFinish}>End shift</Button>
@@ -371,7 +391,7 @@ export default function PortalShiftDetailPage() {
   // No bottom padding on a phone: the sticky bar, then the bottom nav's own padding, end the page.
   return (
     <div className="space-y-3 lg:space-y-4 animate-fade-in lg:pb-4">
-      <AnnouncementRegion message={submitted ? 'Shift submitted. A coordinator will review it.' : ''} />
+      <AnnouncementRegion message={finishWaiting ? "Shift finished on this phone. It's sent to your coordinator when you're back online." : submitted ? 'Shift submitted. A coordinator will review it.' : ''} />
       <BackButton to="/portal" label="my shifts" variant="link" history={false} className="py-3" />
       <PageHeader
         variant="detail"
@@ -383,14 +403,16 @@ export default function PortalShiftDetailPage() {
             {`${formatShiftTimeRange(shift.startTime, shift.endTime)}${shift.endsNextDay ? ' (+1 day)' : ''}`}
             {shift.ratio !== 'OneToOne' && (RATIO_LABELS[shift.ratio] ?? shift.ratio)}
             {shift.nightType !== 'None' && `Overnight: ${shift.nightType}`}
-            {running && `On a break since ${clock(running.startedAt, tz)}`}
+            {startedWaiting && <>Started {clockTime(startedWaiting.clientTime)}&nbsp;<WaitingToSend /></>}
+            {running && <>{`On a break since ${clock(running.startedAt, tz)}`}{waitingBreak(queued, shift.id, running.id) && <>&nbsp;<WaitingToSend /></>}</>}
           </PageHeaderMeta>
         }
       />
       {!(belowLg && inFlow) && <GlanceStrip shift={shift} />}
       {!online && (
-        <Callout tone="warning" icon={WifiOff}>
-          You're offline. Recording, breaks and Finish need a connection, so they're switched off until it's back.
+        <Callout tone="info" icon={WifiOff} polite title="You're offline">
+          What you record is saved on this phone and sent when you're back online. Doses need a connection, so recording a dose is off until then.
+          {savedAt !== null && <span className="mt-1 block text-[13px] text-[var(--color-muted-foreground)]">{savedLine(savedAt)}</span>}
         </Callout>
       )}
       {tabbed && (
@@ -419,7 +441,7 @@ export default function PortalShiftDetailPage() {
         <div {...panel('about')} className="space-y-4">{aboutContent}</div>
       </div>
       {actionError && <p role="alert" className="text-sm text-[var(--color-destructive)]">{actionError}</p>}
-      {bar}
+      {bar ?? (!inFlow ? <SyncBar className={MAIN_COLUMN_BAR} /> : null)}
       <DoseSheet
         open={sheet !== null}
         onClose={() => setSheet(null)}

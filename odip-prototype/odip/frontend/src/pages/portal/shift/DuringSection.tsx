@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Check, Pill, ListChecks } from 'lucide-react'
 import { useCheckRoutine, useUncheckRoutine } from '@/api/hooks'
+import { useQueueRecords } from '@/api/hooks/portal'
+import { waitingTick } from '@/lib/offline/overlay'
 import { Button } from '@/components/Button'
 import { TAP_AREA } from '@/components/tapArea'
 import { TONE } from '@/lib/tone'
@@ -8,7 +10,7 @@ import { formatWithTimeZone, extractErrorMessage } from '@/lib/utils'
 import { apiErrorMessages } from '@/lib/shiftPackageErrors'
 import { buildChecklist, clockLabel, dueDoseKeys, foldDueList, type ChecklistGroup, type ChecklistItem } from './checklist'
 import { plural } from '@/lib/format'
-import { Chip, Fold, Section } from './ui'
+import { Chip, Fold, Section, WaitingToSend } from './ui'
 import type { DoseTarget } from './DoseSheet'
 import type { PortalDoseSlotDto, PortalPrnDto, PortalShiftDetailDto, PortalShiftRoutineDto } from '@/api/types'
 
@@ -65,7 +67,9 @@ function DoseRow({ slot, tz, canAct, onRecord }: { slot: PortalDoseSlotDto; tz: 
   )
 }
 
-export function RoutineRow({ routine, shiftId, canAct, online }: { routine: PortalShiftRoutineDto; shiftId: string; canAct: boolean; online: boolean }) {
+export function RoutineRow({ routine, shiftId, canAct }: { routine: PortalShiftRoutineDto; shiftId: string; canAct: boolean }) {
+  const waiting = waitingTick(useQueueRecords(), shiftId, routine.id)
+  const subId = `rt-sub-${routine.id}`
   const check = useCheckRoutine()
   const uncheck = useUncheckRoutine()
   const [error, setError] = useState<string | null>(null)
@@ -88,7 +92,8 @@ export function RoutineRow({ routine, shiftId, canAct, online }: { routine: Port
         role="checkbox"
         aria-checked={routine.isChecked}
         onClick={toggle}
-        disabled={!canAct || !online || busy}
+        disabled={!canAct || busy}
+        aria-describedby={waiting ? subId : undefined}
         className={`${TAP_AREA} w-full flex items-start gap-3 text-left min-h-[44px] disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded-sm`}
       >
         <span className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded border ${routine.isChecked ? 'bg-[var(--color-primary)] border-[var(--color-primary)] text-[var(--color-primary-foreground)]' : 'border-[var(--color-border)]'}`}>
@@ -98,7 +103,11 @@ export function RoutineRow({ routine, shiftId, canAct, online }: { routine: Port
           <span className="font-medium">{routine.title}</span>
           {routine.isCritical && <span className="ml-2 text-xs font-medium text-[var(--color-muted-foreground)]">Critical</span>}
           {routine.description && <span className="block text-[var(--color-muted-foreground)] whitespace-pre-wrap">{routine.description}</span>}
-          {routine.isChecked && (
+          {waiting ? (
+            <span id={subId} className="flex flex-wrap items-center gap-x-1 text-xs text-[var(--color-muted-foreground)]">
+              {routine.isChecked ? 'Done' : 'Not done'} &middot; <WaitingToSend />
+            </span>
+          ) : routine.isChecked && (
             <span className="block text-xs text-[var(--color-muted-foreground)]">
               Done{routine.checkedByName ? ` by ${routine.checkedByName}` : ''}
             </span>
@@ -162,7 +171,7 @@ export function DuringSection({ shift, canAct, online, onRecord }: {
   const rowsOf = (group: ChecklistGroup) => <ul className="divide-y divide-[var(--color-border)]">{group.items.map(renderItem)}</ul>
   const renderItem = (item: ChecklistItem) => item.kind === 'dose'
     ? <DoseRow key={item.key} slot={item.slot} tz={tz} canAct={canRecord} onRecord={onRecord} />
-    : <RoutineRow key={item.key} routine={item.routine} shiftId={shift.id} canAct={canAct} online={online} />
+    : <RoutineRow key={item.key} routine={item.routine} shiftId={shift.id} canAct={canAct} />
 
   return (
     <Section id="during" title="During the shift" icon={<ListChecks className="w-4 h-4" aria-hidden="true" />}>

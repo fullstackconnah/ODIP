@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, CalendarCheck2, Car, Moon, ShieldCheck, CalendarOff } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CalendarCheck2, Car, Moon, ShieldCheck, CalendarOff, WifiOff } from 'lucide-react'
 import { useIntakeVisits, useMyShifts, usePendingWitnessRequests } from '@/api/hooks'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
@@ -11,6 +11,10 @@ import { weekStartOf, shiftWeek, daysOfWeek, formatWeekRange, formatDayAccessibl
 import { addDays, format, subDays } from 'date-fns'
 import { RATIO_LABELS, hasEnded, pickCurrentShift, portalStatusLabel } from './lib/portal'
 import { useNow } from './shift/useNow'
+import { useOnline } from './shift/useOnline'
+import { SyncBar } from './sync/SyncBar'
+import { savedAtFor } from '@/api/hooks/portal'
+import { clockTime } from '@/lib/offline/reasons'
 import { CurrentShiftCard } from './components/CurrentShiftCard'
 import type { IntakeVisitDto, PortalShiftSummaryDto } from '@/api/types'
 import { usePermissions } from '@/lib/permissions'
@@ -63,12 +67,14 @@ function ShiftsSkeleton({ withCurrent }: { withCurrent: boolean }) {
   )
 }
 
+const CARD = 'block bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-4'
+
 function ShiftLink({ shift }: { shift: PortalShiftSummaryDto }) {
-  return (
-    <Link
-      to={`/portal/shifts/${shift.id}`}
-      className="block bg-[var(--color-card)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-4 hover:border-[var(--color-primary)]/40 transition-colors"
-    >
+  const online = useOnline()
+  // With no signal only a shift whose detail is saved on this phone can open; the rest say why (SHAPE 3b).
+  const openable = online || savedAtFor(`detail:${shift.id}`) !== null
+  const inner = (
+    <>
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="font-medium text-[var(--color-foreground)] truncate">{shift.participantName}</p>
@@ -88,8 +94,12 @@ function ShiftLink({ shift }: { shift: PortalShiftSummaryDto }) {
           )}
         </div>
       </div>
-    </Link>
+      {!openable && <p className="mt-2 text-sm text-[var(--color-muted-foreground)]">Needs a connection to open</p>}
+    </>
   )
+  return openable
+    ? <Link to={`/portal/shifts/${shift.id}`} className={`${CARD} hover:border-[var(--color-primary)]/40 transition-colors`}>{inner}</Link>
+    : <div className={CARD}>{inner}</div>
 }
 
 /** A titled run of day groups (Coming up, Earlier) holding shifts and intake visits; not drawn when empty. The day headings sit under it as h3. */
@@ -133,6 +143,8 @@ export default function PortalShiftsPage() {
   const { data: witnessRequests } = usePendingWitnessRequests()
   const pendingWitnessCount = witnessRequests?.length ?? 0
   const [now] = useNow(60_000)
+  const online = useOnline()
+  const weekSavedAt = online ? null : savedAtFor(`shifts:${weekStart}:${weekEnd}`)
   const isThisWeek = weekStart === weekStartOf(now)
   // The card's own query, independent of the browsed week: it catches a Sunday overnight still running on Monday morning (SHAPE §2),
   // and runs to tomorrow so a browser clock a day behind the provider's still finds a shift in progress (plan check S2).
@@ -186,8 +198,15 @@ export default function PortalShiftsPage() {
 
       {current && <CurrentShiftCard shift={current} />}
 
+      {!online && weekSavedAt !== null && (
+        <Callout tone="info" icon={WifiOff} polite>
+          These are your shifts as saved at {clockTime(new Date(weekSavedAt).toISOString())}. Only today&rsquo;s shifts can be opened until you&rsquo;re back online.
+        </Callout>
+      )}
       {isLoading || visitsQuery.isLoading ? (
         <ShiftsSkeleton withCurrent={isThisWeek && !current} />
+      ) : isError && !online && !data ? (
+        <EmptyState icon={WifiOff} title="This week isn't saved on this phone." action={{ label: 'Back to this week', onClick: () => setWeekStart(weekStartOf(new Date())) }} />
       ) : isError ? (
         <Callout tone="danger" actions={<Button variant="secondary" size="sm" onClick={() => refetch()}>Try again</Button>}>
           Couldn't load your shifts. Check your connection and try again.
@@ -231,6 +250,7 @@ export default function PortalShiftsPage() {
           )}
         </div>
       )}
+      <SyncBar />
     </div>
   )
 }

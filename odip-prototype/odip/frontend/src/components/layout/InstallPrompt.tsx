@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom'
 import { Download, Share } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
+import { useSyncBarVisible } from '@/pages/portal/sync/SyncBar'
 import { useIsBelowMd } from '@/hooks/useIsBelowMd'
 import {
   consumeDeferred, currentUserId, getInstallSnapshot, installPromptMode, isIosSafari, markInstalled, readInstallRecord,
@@ -29,6 +30,7 @@ export default function InstallPrompt() {
   const [cardH, setCardH] = useState(0)
   const cardRef = useRef<HTMLElement>(null)
 
+  const syncBarVisible = useSyncBarVisible()
   const mode = installPromptMode({
     belowMd,
     coarse: matches('(pointer: coarse)'),
@@ -40,6 +42,7 @@ export default function InstallPrompt() {
     hasDeferred: deferred !== null,
     iosSafari: isIosSafari(navigator.userAgent, navigator.maxTouchPoints),
     path: pathname,
+    syncBarVisible,
   })
 
   useEffect(() => {
