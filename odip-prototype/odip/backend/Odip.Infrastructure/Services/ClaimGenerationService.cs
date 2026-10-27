@@ -3,6 +3,7 @@ using Odip.Application.DTOs;
 using Odip.Domain.Interfaces;
 using Odip.Domain.Billing.Services;
 using Odip.Domain.Entities;
+using Odip.Domain.Billing;
 using Odip.Domain.Enums;
 using Odip.Domain.Funding;
 using Odip.Infrastructure.Data;
@@ -252,7 +253,8 @@ public class ClaimGenerationService
             StaffCount = confirmedStaffCount,
             State = state,
             ConfirmedParticipantCount = confirmedBookings.Count,
-            ConfirmedWithNdisNumberCount = confirmedBookings.Count(b => b.Participant != null && !string.IsNullOrWhiteSpace(b.Participant.NdisNumber)),
+            ConfirmedWithNdisNumberCount = confirmedBookings.Count(b => b.Participant != null && !ClaimFunding.IsOtherFunded(b.Participant) && !string.IsNullOrWhiteSpace(b.Participant.NdisNumber)),
+            ConfirmedOtherFundedCount = confirmedBookings.Count(b => b.Participant != null && ClaimFunding.IsOtherFunded(b.Participant)),
             TripDayCount = trip.TripDays.Count
         };
 
@@ -267,15 +269,15 @@ public class ClaimGenerationService
         {
             if (booking.Participant == null)
                 continue;
-            if (string.IsNullOrWhiteSpace(booking.Participant.NdisNumber))
+            if (ClaimFunding.IsOtherFunded(booking.Participant) || string.IsNullOrWhiteSpace(booking.Participant.NdisNumber))
             {
                 // Message only: the booking is skipped as before; the claim says who it left out and why.
                 context.LeftOut.Add(new TripClaimLeftOutDto
                 {
                     ParticipantId = booking.Participant.Id,
                     Description = booking.Participant.FullName,
-                    Reason = booking.Participant.FundingSource == ParticipantFundingSource.Other
-                        ? "Funded another way, so not claimed to the NDIS. Invoice them directly."
+                    Reason = ClaimFunding.IsOtherFunded(booking.Participant)
+                        ? ClaimFunding.OtherFundedNotClaimed
                         : "NDIS number missing. Add it to their profile, then preview the claim again to include them."
                 });
                 continue;
@@ -310,6 +312,8 @@ public class ClaimGenerationService
     {
         if (context.TripDayCount == 0)
             return "This trip has no days recorded, so there is nothing to claim. Check the trip's dates, then generate the claim again.";
+        if (context.ConfirmedWithNdisNumberCount == 0 && context.ConfirmedOtherFundedCount > 0 && context.ConfirmedOtherFundedCount == context.ConfirmedParticipantCount)
+            return "None of the trip's confirmed participants is claimed to the NDIS (funded another way). Invoice them directly.";
         if (context.ConfirmedWithNdisNumberCount == 0)
             return "None of the trip's confirmed participants has an NDIS number, so no claim lines could be built. Add the NDIS number to each participant, then generate the claim again.";
         if (context.UnpricedDayTypes.Count > 0)
@@ -334,6 +338,7 @@ public class ClaimGenerationService
         public int ConfirmedParticipantCount { get; set; }
         /// <summary>How many of the confirmed participants have an NDIS number: only they get lines.</summary>
         public int ConfirmedWithNdisNumberCount { get; set; }
+        public int ConfirmedOtherFundedCount { get; set; }
         /// <summary>How many days the trip has (rows in TripDays): none means nothing can be priced.</summary>
         public int TripDayCount { get; set; }
         /// <summary>Confirmed participants skipped for want of an NDIS number, with the reason shown to the person generating the claim.</summary>
