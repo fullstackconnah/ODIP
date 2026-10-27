@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiClient } from '@/api/client'
-import { apiSend, apiShiftStatus, createQueue, FINISH_TIMEOUT_MS, LEASE_MS, replayBody, type NewRecord, type QueueRecord, type SendResult } from './queue'
+import { apiSend, apiShiftStatus, createQueue, FINISH_TIMEOUT_MS, LEASE_MS, RETRY_AFTER_MS, replayBody, type NewRecord, type QueueRecord, type SendResult } from './queue'
 
 const label = { participant: 'Jordan Smith', serviceDate: '2026-10-28', rostered: '9:00 am - 1:00 pm' }
 const ok: SendResult = { kind: 'ok', data: {} }
@@ -392,7 +392,7 @@ describe('offline queue: replay under load', () => {
     expect(localStorage.getItem(LOCK)).toBeNull()
   })
 
-  it('Should 3: a replay the lease refuses is retried once the lease has lapsed, with one timer however often it is refused', async () => {
+  it('Should 3: a replay the lease refuses is looked at again after RETRY_AFTER_MS, with one timer however often it is refused', async () => {
     vi.useFakeTimers()
     const q = make()
     online = true
@@ -403,7 +403,9 @@ describe('offline queue: replay under load', () => {
     expect(await q.replay()).toMatchObject({ sent: 0 })
     expect(vi.getTimerCount() - before).toBe(1)
     clock += LEASE_MS
-    await vi.advanceTimersByTimeAsync(LEASE_MS)
+    await vi.advanceTimersByTimeAsync(RETRY_AFTER_MS - 1)
+    expect(sent).toHaveLength(0)
+    await vi.advanceTimersByTimeAsync(1)
     expect(sent).toHaveLength(1)
     expect(q.pendingCount()).toBe(0)
   })

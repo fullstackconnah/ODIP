@@ -108,6 +108,27 @@ describe('a 401 on any other request', () => {
     expect(localStorage.getItem('odip_token')).toBe('the-new-token')
   })
 
+  it('gives both refresh posts a 15 s limit, so a refresh that never answers cannot hold every waiting request', async () => {
+    for (const method of ['firebase', 'microsoft']) {
+      const client = await freshClient()
+      localStorage.setItem('odip_sign_in_method', method)
+      const requests = script(client, [
+        { status: 401, data: {} },
+        { status: 200, data: { success: true, data: { token: 'the-new-token' } } },
+        { status: 200, data: { success: true, data: [] } },
+      ])
+
+      const answer = client.apiClient.defaults.adapter as (c: InternalAxiosRequestConfig) => Promise<unknown>
+      const timeouts: Array<number | undefined> = []
+      client.apiClient.defaults.adapter = (c: InternalAxiosRequestConfig) => { timeouts.push(c.timeout); return answer(c) }
+
+      await client.apiGet('/participants')
+
+      expect(requests.map(r => r.url)[1]).toBe(method === 'microsoft' ? '/auth/microsoft/refresh' : '/auth/exchange')
+      expect(timeouts[1]).toBe(15_000)
+    }
+  })
+
   it('fails and clears the session when the refresh is refused (a tenant switched off mid-session), instead of waiting on itself', async () => {
     const client = await freshClient()
     // Signing out sets location.href, which jsdom reports as "not implemented: navigation"; that is the redirect to /login, so keep it out of the output.

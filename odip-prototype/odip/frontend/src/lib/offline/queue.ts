@@ -61,7 +61,7 @@ export const FINISH_TIMEOUT_MS = 45_000
 /** A second tab's replay is ignored while this lease is younger than this: one record's status lookup (15 s) plus its Finish (45 s), with margin. */
 export const LEASE_MS = 75_000
 /** After a live send fails with a server blip, one more try this long after. */
-const RETRY_AFTER_MS = 30_000
+export const RETRY_AFTER_MS = 30_000
 
 /** No response, a server blip, throttling, or a 401 that survived the refresh: the record stays Waiting. */
 const isTransient = (status: number | undefined) => status === undefined || status >= 500 || status === 408 || status === 429 || status === 401
@@ -251,7 +251,7 @@ export function createQueue(overrides: Partial<QueueDeps> = {}) {
     if (!s.userId) return result
     if (!takeLease(s.userId)) {
       // Whoever holds the lease cannot see what was queued after it started, so look again once the lease has lapsed.
-      leaseRetry ??= setTimeout(() => { leaseRetry = undefined; void replay() }, LEASE_MS)
+      leaseRetry ??= setTimeout(() => { leaseRetry = undefined; void replay() }, RETRY_AFTER_MS)
       return result
     }
     running = true

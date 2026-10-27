@@ -59,6 +59,9 @@ apiClient.interceptors.request.use((config) => {
   return config
 })
 
+// A refresh that never answers would hold every request waiting on it (the queue has its own 15 s per send); a timed-out one takes the failed-refresh path below.
+const REFRESH_TIMEOUT_MS = 15_000
+
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -85,7 +88,7 @@ apiClient.interceptors.response.use(
           refreshPromise = (async () => {
             try {
               if (microsoft) {
-                const res = await apiClient.post<ApiResponse<{ token: string }>>('/auth/microsoft/refresh')
+                const res = await apiClient.post<ApiResponse<{ token: string }>>('/auth/microsoft/refresh', undefined, { timeout: REFRESH_TIMEOUT_MS })
                 const token = res.data.data?.token ?? null
                 if (token) localStorage.setItem('odip_token', token)
                 return token
@@ -96,7 +99,8 @@ apiClient.interceptors.response.use(
               const idToken = await currentUser.getIdToken(true)
               const exchangeRes = await apiClient.post<ApiResponse<{ token: string }>>(
                 '/auth/exchange',
-                { idToken }
+                { idToken },
+                { timeout: REFRESH_TIMEOUT_MS }
               )
               const newToken = exchangeRes.data.data?.token ?? null
               if (newToken) localStorage.setItem('odip_token', newToken)
