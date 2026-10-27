@@ -649,7 +649,7 @@ public class RestrictivePracticesControllerTests
         {
             Items = new()
             {
-                BulkRow(description: "Row one description.", type: RestrictivePracticeType.Seclusion, authorisedBy: "Dr. Chen"),
+                BulkRow(description: "Row one description.", type: RestrictivePracticeType.Seclusion, authorisedBy: "Dr. Chen", authorisationDate: new DateOnly(2026, 1, 15)),
                 BulkRow(description: "Row two description.", type: RestrictivePracticeType.Seclusion, reviewDate: new DateOnly(2026, 12, 1)),
                 BulkRow(description: "Row three description.", type: RestrictivePracticeType.Seclusion),
             },
@@ -976,5 +976,100 @@ public class RestrictivePracticesControllerTests
 
         var note = await db.ParticipantNotes.SingleAsync(n => n.ParticipantId == participant.Id && n.SourceKey == "safety:restrictivePractices");
         Assert.True(note.IsArchived);
+    }
+
+    // ── Authorisation pair: authoriser and date together, or neither ────────────────────
+
+    private static readonly DateOnly AuthDate = new(2026, 1, 15);
+
+    [Theory]
+    [InlineData("Dr. Chen", null, "Add the date it was authorised.")]
+    [InlineData(null, "2026-01-15", "Add who authorised it.")]
+    [InlineData("   ", "2026-01-15", "Add who authorised it.")]
+    public async Task CreateBulk_AuthorisationHalfFilled_ReturnsRowErrorAndSavesNothing(string? by, string? date, string message)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
+        var dto = new BulkCreateRestrictivePracticeDto
+        {
+            Items = new() { BulkRow(), BulkRow(authorisedBy: by, authorisationDate: date == null ? null : DateOnly.Parse(date)) },
+        };
+
+        var result = await controller.CreateBulk(participant.Id, dto, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<List<RestrictivePracticeDto>>>(Assert.IsType<BadRequestObjectResult>(result.Result).Value);
+        Assert.Contains(body.Errors!, e => e == $"Row 2: {message}");
+        Assert.Empty(await db.RestrictivePractices.ToListAsync());
+    }
+
+    [Theory]
+    [InlineData("Dr. Chen", true)]
+    [InlineData(null, false)]
+    public async Task CreateBulk_AuthorisationBothOrNeither_Saves(string? by, bool withDate)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
+
+        var result = await CreateOne(controller, participant.Id, BulkRow(authorisedBy: by, authorisationDate: withDate ? AuthDate : null));
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Single(await db.RestrictivePractices.ToListAsync());
+    }
+
+    private static Domain.Entities.RestrictivePractice SeedPractice(OdipDbContext db, string? by = null, DateOnly? date = null)
+    {
+        var practice = new Domain.Entities.RestrictivePractice
+        {
+            Id = Guid.NewGuid(), ParticipantId = SeedParticipant(db).Id, Type = RestrictivePracticeType.Unclassified,
+            Description = "Original", AuthorisedBy = by, AuthorisationDate = date, IsActive = true,
+        };
+        db.RestrictivePractices.Add(practice);
+        db.SaveChanges();
+        return practice;
+    }
+
+    [Fact]
+    public async Task Update_AuthoriserWithoutDate_ReturnsBadRequestAndChangesNothing()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var practice = SeedPractice(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
+
+        var result = await controller.Update(practice.Id,
+            new UpdateRestrictivePracticeDto { Description = "Original", AuthorisedBy = "Dr. Chen", IsActive = true }, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<RestrictivePracticeDto>>(Assert.IsType<BadRequestObjectResult>(result.Result).Value);
+        Assert.Contains("Add the date it was authorised.", body.Errors!);
+        Assert.Null((await db.RestrictivePractices.SingleAsync()).AuthorisedBy);
+    }
+
+    [Fact]
+    public async Task Update_LegacyHalfFilledRow_UnrelatedEditStillSaves()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var practice = SeedPractice(db, by: "Dr. Chen");
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
+
+        var result = await controller.Update(practice.Id,
+            new UpdateRestrictivePracticeDto { Description = "Fixed typo", AuthorisedBy = "Dr. Chen", IsActive = true }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal("Fixed typo", (await db.RestrictivePractices.SingleAsync()).Description);
+    }
+
+    [Fact]
+    public async Task Update_LegacyHalfFilledRow_ChangingAuthoriserWithoutDate_ReturnsBadRequest()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var practice = SeedPractice(db, by: "Dr. Chen");
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
+
+        var result = await controller.Update(practice.Id,
+            new UpdateRestrictivePracticeDto { Description = "Original", AuthorisedBy = "Dr. Nguyen", IsActive = true }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Equal("Dr. Chen", (await db.RestrictivePractices.SingleAsync()).AuthorisedBy);
     }
 }
