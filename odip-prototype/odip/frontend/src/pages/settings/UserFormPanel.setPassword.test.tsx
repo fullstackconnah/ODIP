@@ -312,13 +312,13 @@ describe('UserFormPanel create: a temporary password instead', () => {
     const { u } = renderCreate()
 
     // Ghost, small: a quiet control that opens the section. (It used to be a bare text link with no focus ring.)
-    expect(disclosure()).toHaveClass('focus:ring-[var(--color-ring)]', 'h-[var(--control-h-sm)]', 'hover:bg-[var(--color-accent)]')
+    expect(disclosure()).toHaveClass('focus-visible:ring-[var(--color-ring)]', 'h-[var(--control-h-sm)]', 'hover:bg-[var(--color-accent)]')
 
     await u.click(disclosure())
 
     // Secondary, regular size: the height of the field it sits beside.
     expect(screen.getByRole('button', { name: 'Generate' })).toHaveClass(
-      'focus:ring-[var(--color-ring)]', 'h-[var(--control-h)]', 'border', 'bg-[var(--color-card)]',
+      'focus-visible:ring-[var(--color-ring)]', 'h-[var(--control-h)]', 'border', 'bg-[var(--color-card)]',
     )
   })
 

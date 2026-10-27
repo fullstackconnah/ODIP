@@ -100,7 +100,7 @@ export default function TenantSwitcher() {
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-1 w-56 bg-[var(--color-popover)] border border-[var(--color-border)] rounded-xl shadow-2xl overflow-hidden z-50">
+        <div className="absolute right-0 max-sm:right-auto max-sm:left-0 mt-1 w-56 bg-[var(--color-popover)] border border-[var(--color-border)] rounded-xl shadow-2xl overflow-hidden z-50">
           <div className="px-3 py-2 border-b border-[var(--color-border)] text-xs text-[var(--color-muted-foreground)] uppercase tracking-wider">
             Viewing as tenant
           </div>
@@ -113,7 +113,7 @@ export default function TenantSwitcher() {
   setOpen(false);
   setPendingTenant({ id: tenant.id, name: tenant.name });
 }}
-                className={`w-full flex min-h-[var(--tap-min)] items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors ${
+                className={`w-full flex min-h-[var(--tap-min)] items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:relative ${
                   tenant.id === viewingId
                     ? TONE.info.soft
                     : 'hover:bg-[var(--color-accent)]'

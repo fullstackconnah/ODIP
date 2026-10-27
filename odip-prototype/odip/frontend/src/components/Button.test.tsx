@@ -306,3 +306,12 @@ describe('Button — no destructive colour overrides on a ghost button', () => {
     // ParticipantDetailPage's Revoke is no longer a Button: it is an item of the header's Documents menu (VISUAL-1 V2).
   })
 })
+
+describe('Button — keyboard-only focus ring', () => {
+  it('rings on keyboard focus (focus-visible) and not on every focus, so a mouse press shows no ring', () => {
+    render(<Button>Save</Button>)
+    const btn = screen.getByRole('button', { name: 'Save' })
+    expect(btn).toHaveClass('focus-visible:ring-2', 'focus-visible:ring-[var(--color-ring)]')
+    expect(btn).not.toHaveClass('focus:ring-2')
+  })
+})
