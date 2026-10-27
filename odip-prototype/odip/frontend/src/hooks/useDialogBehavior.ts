@@ -128,7 +128,7 @@ export type DialogBehaviorOptions = {
 
 /**
  * The behaviour every modal layer owes its user, in one place: Escape to close, a Tab trap, focus moved in on open and back
- * on close, and page scroll locked while open. It is what Modal, SlideOver and the unsaved-changes dialog run on.
+ * on close, and page scroll locked while open. It is what Modal and SlideOver run on; the unsaved-changes prompt gets it through Modal.
  *
  * It does NOT render anything or set `role` / `aria-modal`: the caller marks up the dialog. Call it with `open` true for as
  * long as the layer is on screen.
