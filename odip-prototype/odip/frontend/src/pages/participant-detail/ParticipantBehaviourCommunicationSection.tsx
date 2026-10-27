@@ -5,7 +5,6 @@ import { FactList } from '@/components/FactList'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
-import { hasBehaviourCommunication } from './recorded'
 import { MEMORY_LEVELS, RISK_RATING_LEVELS } from '@/api/types/enums'
 import { MEMORY_LEVEL_LABELS, RISK_RATING_LEVEL_LABELS } from '@/api/types/participants'
 import type { MemoryLevel, RiskRatingLevel } from '@/api/types/enums'
@@ -57,9 +56,6 @@ export function ParticipantBehaviourCommunicationSection({ p, participantId, can
   const [draft, setDraft] = useState<BehaviourCommunicationDraft>(saved)
   const isDirty = (Object.keys(saved) as (keyof BehaviourCommunicationDraft)[]).some((k) => draft[k] !== saved[k])
 
-  const hasAnyData = hasBehaviourCommunication(p)
-
-  if (!canEdit && !hasAnyData) return null
 
   async function handleSave(expected: PatchParticipantDto['expectedRevisions']) {
     try {

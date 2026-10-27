@@ -991,6 +991,8 @@ the strip whenever `active` changes; from `md` up it wraps onto extra rows as be
 native hidden one below it), instead of wrapping from md up. Use it for a strip too long to fit one row at the widest layout, where wrapping leaves the last tab alone on a second row:
 Settings, with its ten tabs. The active tab (including one named by `?tab=`) is scrolled into view either way, arrow-key navigation is unchanged, and `'wrap'` renders exactly what it did before. The one-row strip fades out over its last 2rem and pads its end by the same, so a tab cut by the edge reads as "more this way" and the last tab is clear of the fade at the end.
 
+`variant="sub"` (optional, `'underline'` by default) is the second level inside a tab that groups sections: Pale Sprout chips, 32 px inside a 44 px hit area, one scrolling row below md. An item may set `quiet` (a dashed chip for an empty section, announced by the caller as "not recorded") and `panelId` (set it on the active item only). Use it only inside a tab; the participant page is the one user.
+
 > When a test previously did `getByRole('button', { name: <tab> })`, it is now
 > `getByRole('tab', { name: <tab> })` — the role change is the accessibility fix, not a
 > cosmetic one.
