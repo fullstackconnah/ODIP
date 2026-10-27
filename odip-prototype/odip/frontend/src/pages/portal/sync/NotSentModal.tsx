@@ -31,27 +31,28 @@ export function NotSentModal({ open, onClose }: { open: boolean; onClose: () => 
   const records = useQueueRecords()
   const current = useParams().id
   const [discarding, setDiscarding] = useState<QueueRecord | null>(null)
-  const [focusId, setFocusId] = useState<string | null>(null)
+  // Where focus goes once the discarded row has left the list; read by the effect below, which the list change re-runs.
+  const focusId = useRef<string | null>(null)
   const closeRef = useRef<HTMLButtonElement>(null)
   const items = records.filter((r) => r.status === 'notSent')
   const waiting = records.length - items.length
   const shifts = [...new Set(items.map((r) => r.shiftId))].sort((a, b) => Number(b === current) - Number(a === current))
 
   useEffect(() => {
-    if (focusId === null) return
-    const el = document.querySelector<HTMLElement>(`[data-discard-id="${focusId}"]`) ?? closeRef.current
+    if (focusId.current === null) return
+    const el = document.querySelector<HTMLElement>(`[data-discard-id="${focusId.current}"]`) ?? closeRef.current
     el?.focus()
-    setFocusId(null)
-  }, [focusId, records])
+    focusId.current = null
+  }, [records])
 
   const discard = () => {
     if (!discarding) return
     const order = items.map((r) => r.id)
     const at = order.indexOf(discarding.id)
     const next = order[at + 1] ?? order[at - 1] ?? 'close'
+    focusId.current = next
     offlineQueue.discard(discarding.id)
     setDiscarding(null)
-    setFocusId(next)
   }
 
   return (

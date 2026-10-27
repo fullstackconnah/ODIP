@@ -1,4 +1,5 @@
-import { SyncRow, syncRowVisible, useSyncSummary } from './SyncRow'
+import { SyncRow } from './SyncRow'
+import { syncRowVisible, useSyncSummary } from './syncState'
 
 /**
  * My shifts has no action bar, so unsent changes get their own: the same sticky bar as ActionBar (SHAPE 4a), a labelled region, last on the page.
@@ -12,9 +13,4 @@ export function SyncBar({ className = '' }: { className?: string }) {
       <SyncRow />
     </div>
   )
-}
-
-/** Whether a SyncBar would show right now: the install prompt steps aside for it. */
-export function useSyncBarVisible(): boolean {
-  return syncRowVisible(useSyncSummary())
 }
