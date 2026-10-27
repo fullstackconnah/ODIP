@@ -133,7 +133,7 @@ describe('navConfig — who sees what', () => {
       'Dashboard',
       'My shifts',
       'Trips: Trips | Schedule | Bookings | Accommodation | Vehicles',
-      'Participants: Participants | Medications | Caregiver forms',
+      'Participants: Participants | Agreements | Medications | Caregiver forms',
       'Staff & roster: Roster board | Shift patterns | Compatibility | Leave | Completions | Staff | Qualifications',
       'Tasks',
       'Budgets',
