@@ -149,7 +149,7 @@ public class RosterAvailabilityTests
         var candidate = ShiftOf(s.Mia.Id, s.Kim.Id, Tuesday, 9, 13);
 
         Assert.Null(snapshot.AwayReason(candidate));
-        Assert.Contains(snapshot.Check(candidate), f => f.Code == RosterConflictService.DoubleBookedShift);   // the board's own warning on it is unchanged
+        Assert.DoesNotContain(snapshot.Check(candidate), f => f.Code == RosterConflictService.DoubleBookedShift);   // the board no longer warns about a cancelled shift either (2026-10-27)
     }
 
     [Fact]

@@ -28,6 +28,7 @@ import {
   type ShiftSlideOverTarget,
 } from './components'
 import { BOARD_REFRESHED, isBoardChanged } from './lib/boardChanged'
+import { blockedOnlyByDoubleBooking } from './lib/rosterGate'
 import { weekStartOf, weekStartFromDateParam, shiftWeek, daysOfWeek, isUnfilledShift, formatWeekSpan, allBoardShifts } from './lib/roster'
 import { useBoardViewMode } from './lib/useBoardViewMode'
 import {
@@ -901,7 +902,9 @@ export default function RosterBoardPage() {
         title="Can't assign this shift"
         message={pendingBlocked && (
           <>
-            <p>This assignment was blocked by a rostering rule that can't be overridden.</p>
+            <p>{blockedOnlyByDoubleBooking(pendingBlocked.findings)
+              ? "This worker is already booked at that time, so ask an admin to make the assignment."
+              : "This assignment was blocked by a rostering rule that can't be overridden."}</p>
             <FindingsList findings={pendingBlocked.findings} className="mt-3" />
           </>
         )}

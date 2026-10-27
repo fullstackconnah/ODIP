@@ -41,6 +41,7 @@ public sealed record PublicHolidayRef(DateOnly Date, string Name);
 /// <see cref="RosterConflictService.Check"/> to fire <see cref="RosterConflictService.PublicHoliday"/>.
 /// Last positional parameter so existing callers keep compiling; null and an empty list are both
 /// treated as "no holidays" — see <see cref="RosterConflictService.Check"/>.</param>
+/// <param name="CallerIsAdmin">Who is making the write, for the rules that only an admin may override (DOUBLE_BOOKED_SHIFT, 2026-10-27). Null (the board display, the generator, Publish week, the import, trips) keeps a plain Warning; false makes it Blocking; true makes it a Warning that needs a reason. Last positional parameter so existing callers keep compiling.</param>
 public sealed record RosterCheckContext(
     User Staff,
     Participant? Participant,
@@ -50,7 +51,8 @@ public sealed record RosterCheckContext(
     IReadOnlyList<UnavailabilityWindow> Availability,
     CompatibilityLevel Compatibility,
     decimal WeeklyHoursThreshold,
-    IReadOnlyList<PublicHolidayRef>? PublicHolidays = null);
+    IReadOnlyList<PublicHolidayRef>? PublicHolidays = null,
+    bool? CallerIsAdmin = null);
 
 /// <summary>One other (non-cancelled) trip window this vehicle already covers, used by
 /// <see cref="RosterConflictService.CheckVehicleAssignment"/> to detect an overlap. AssignmentId
@@ -247,14 +249,17 @@ public sealed class RosterConflictService
     {
         foreach (var other in ctx.StaffShiftsInWeek)
         {
-            if (other.Id == excludeShiftId)
+            if (other.Id == excludeShiftId || other.Status == ShiftStatus.Cancelled)
                 continue;
 
             var otherWindow = ToWindow(other.ServiceDate, other.StartTime, other.EndTime, other.EndsNextDay);
             if (Overlaps(candidateWindow, otherWindow))
             {
-                findings.Add(new RosterFinding(DoubleBookedShift, RosterFindingSeverity.Warning,
-                    $"{ctx.Staff.FullName} already has a shift on {Fmt(other.ServiceDate)} that overlaps this one."));
+                // Same shape as the budget hard limit (ShiftBudgetAssessor): a coordinator is refused, an admin overrides with a reason, and null (the board display, the generator, Publish week, the import, trips) stays a warning.
+                var blocked = ctx.CallerIsAdmin == false;
+                findings.Add(new RosterFinding(DoubleBookedShift, blocked ? RosterFindingSeverity.Blocking : RosterFindingSeverity.Warning,
+                    $"{ctx.Staff.FullName} already has a shift on {Fmt(other.ServiceDate)}, {other.StartTime.ToString("HH:mm", CultureInfo.InvariantCulture)}-{other.EndTime.ToString("HH:mm", CultureInfo.InvariantCulture)}, that overlaps this one.{(blocked ? " An admin can override this." : string.Empty)}",
+                    RequiresReason: ctx.CallerIsAdmin == true));
             }
         }
     }

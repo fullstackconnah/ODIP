@@ -271,6 +271,54 @@ public class RosterConflictServiceTests
         Assert.True(HasCode(findings, RosterConflictService.DoubleBookedShift));
     }
 
+    [Theory]
+    [InlineData(null, RosterFindingSeverity.Warning, false)]
+    [InlineData(false, RosterFindingSeverity.Blocking, false)]
+    [InlineData(true, RosterFindingSeverity.Warning, true)]
+    public void Double_booked_shift_severity_follows_the_caller(bool? callerIsAdmin, RosterFindingSeverity severity, bool requiresReason)
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, start: new TimeOnly(9, 0), end: new TimeOnly(17, 0));
+        var other = CandidateShift(staff, participant, serviceDate: ServiceDate, start: new TimeOnly(16, 0), end: new TimeOnly(20, 0));
+        var ctx = CompliantContext(staff, participant, staffShiftsInWeek: new[] { other }) with { CallerIsAdmin = callerIsAdmin };
+
+        var finding = Assert.Single(new RosterConflictService().Check(candidate, ctx), f => f.Code == RosterConflictService.DoubleBookedShift);
+
+        Assert.Equal(severity, finding.Severity);
+        Assert.Equal(requiresReason, finding.RequiresReason);
+        Assert.Contains("24 Aug 2026", finding.Message);
+        Assert.Contains("16:00-20:00", finding.Message);
+        Assert.Equal(callerIsAdmin == false, finding.Message.Contains("An admin can override", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_cancelled_other_shift_does_not_fire_double_booked_shift()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, start: new TimeOnly(9, 0), end: new TimeOnly(17, 0));
+        var other = CandidateShift(staff, participant, start: new TimeOnly(16, 0), end: new TimeOnly(20, 0));
+        other.Status = ShiftStatus.Cancelled;
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant, staffShiftsInWeek: new[] { other }) with { CallerIsAdmin = false });
+
+        Assert.False(HasCode(findings, RosterConflictService.DoubleBookedShift));
+    }
+
+    [Fact]
+    public void Back_to_back_shifts_are_not_a_double_booking_even_for_a_coordinator()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, start: new TimeOnly(9, 0), end: new TimeOnly(14, 0));
+        var other = CandidateShift(staff, participant, start: new TimeOnly(14, 0), end: new TimeOnly(18, 0));
+
+        var findings = new RosterConflictService().Check(candidate, CompliantContext(staff, participant, staffShiftsInWeek: new[] { other }) with { CallerIsAdmin = false });
+
+        Assert.False(HasCode(findings, RosterConflictService.DoubleBookedShift));
+    }
+
     // ── DOUBLE_BOOKED_TRIP ───────────────────────────────────
 
     [Fact]

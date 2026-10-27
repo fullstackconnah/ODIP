@@ -112,6 +112,9 @@ public static class WhatsNewSeed
         new Item("2026-10-other-funded-claims", "Participants funded another way are left out of claims",
             "A participant who is funded another way is no longer included in NDIS claims, even if an old NDIS number is still on their profile. The claim lists them as left out and says to invoice them directly.",
             Staff, false),
+        new Item("2026-10-double-booking-block", "Coordinators can't double-book a worker",
+            "When a worker already has a shift at that time, a coordinator can no longer put them on another shift from the roster board or the shift panel. An admin still can, after giving a reason. Shifts that already overlap can still be edited or cancelled.",
+            Staff, false),
     };
 
     /// <summary>Inserts the keys the table lacks, one save each, so a key another instance inserted first costs only that row.</summary>
