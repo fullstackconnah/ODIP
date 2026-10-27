@@ -547,7 +547,7 @@ export default function AppLayout() {
           <div className="flex items-center justify-between gap-2 h-full px-[var(--gutter,20px)]">
             <div className={`flex min-w-0 items-center gap-4 ${isSuperAdmin ? 'max-sm:gap-2' : ''}`}>
               <button
-                className="flex items-center justify-center lg:hidden shrink-0 p-2 pointer-coarse:size-[var(--tap-min)] pointer-coarse:p-0 rounded-md hover:bg-[var(--color-accent)] transition-colors"
+                className="flex items-center justify-center lg:hidden shrink-0 p-2 pointer-coarse:size-[var(--tap-min)] pointer-coarse:p-0 rounded-md hover:bg-[var(--color-accent)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
                 onClick={() => setSidebarOpen(!sidebarOpen)}
                 title={sidebarOpen ? 'Close menu' : 'Open menu'}
                 aria-label={sidebarOpen ? 'Close menu' : 'Open menu'}

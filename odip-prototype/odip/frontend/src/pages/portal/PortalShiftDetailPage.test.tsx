@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import PortalShiftDetailPage from './PortalShiftDetailPage'
+import { buttonClasses } from '@/components/buttonClasses'
 import type { PortalShiftDetailDto } from '@/api/types'
 import { emptyShiftPackage, emptyCompletionPackage } from '@/test/fixtures/shiftPackage'
 
@@ -356,6 +357,9 @@ describe('PortalShiftDetailPage: Before', () => {
     expect(names[0]).toContain('First Person')
     expect(within(region).getByRole('link', { name: /call mobile 0400 000 111/i, hidden: true })).toHaveAttribute('href', 'tel:0400000111')
     expect(within(region).getByRole('link', { name: /call mobile 0411 000 222/i, hidden: true })).toHaveAttribute('href', 'tel:0411000222')
+    // The tel: anchors wear Button's secondary look, not a hand-made one.
+    const secondary = buttonClasses('secondary', 'md').split(' ').filter(Boolean)
+    for (const link of within(region).getAllByRole('link', { name: /^call /i, hidden: true })) expect(link).toHaveClass(...secondary, 'min-h-[44px]')
   })
 
   it('shows the withheld reason instead of the handover, contacts and address', () => {
@@ -382,6 +386,12 @@ describe('PortalShiftDetailPage: Before', () => {
 
 describe('PortalShiftDetailPage: During', () => {
   const inProgress = (over: Partial<PortalShiftDetailDto> = {}) => makeDetail({ status: 'InProgress', completion: makeCompletion(), ...over })
+
+  it('counts two as-needed medicines in the plural', () => {
+    const prn = (id: string) => ({ medicationId: id, medicationName: 'Ibuprofen', strength: null, doseDescription: '1 tablet', form: 'Tablet', route: 'Oral', directions: null, supportLevel: 'Administer', isHighRisk: false, indication: 'Pain', maxDosesPer24h: 3, minIntervalMinutes: 240, dosesInLast24h: 0, lastDoseAt: null, maxDosesReached: false, nextAvailableAt: null, outcomePendingAdministrationId: null })
+    show(inProgress({ prn: [prn('p1'), prn('p2')] as never }))
+    expect(within(screen.getByRole('region', { name: 'During the shift' })).getByText('As needed · 2 medicines')).toBeInTheDocument()
+  })
 
   it('puts overdue doses at the top in the warning group, with a PRN group', () => {
     show(inProgress({
@@ -572,6 +582,17 @@ describe('PortalShiftDetailPage: the five-step finish (SHAPE §4)', () => {
     expect(screen.getByLabelText('Reason')).toBeInTheDocument()
   })
 
+  it('step 2 counts two missing outcomes in the plural', () => {
+    show(inProgress({
+      medicationsDue: [dose({ medicationId: 'm1', state: 'Overdue', isOverdue: true }), dose({ medicationId: 'm2', state: 'Overdue', isOverdue: true })] as never,
+      finishBlockers: [blocker('Paracetamol at 12:00 needs an outcome.'), blocker('Ibuprofen at 12:00 needs an outcome.')] as never,
+    }))
+    endShift()
+    forward('Confirm times')
+    forward('Next')
+    expect(screen.getByRole('alert')).toHaveTextContent('Record an outcome for 2 doses before you go on.')
+  })
+
   it("step 2 shows unticked routines without blocking (owner decision 7), ticks them in place, and folds the as-needed medicines", async () => {
     const routine = (id: string, title: string, isCritical: boolean) => ({ id, title, description: '', category: 'PersonalCare', isCritical, startTime: null, endTime: null, occursAt: null, afterMidnight: false, isChecked: false, checkedAt: null, checkedByName: null, fromTickSnapshot: false })
     const prn = { medicationId: 'p', medicationName: 'Ibuprofen', strength: null, doseDescription: '1 tablet', form: 'Tablet', route: 'Oral', directions: null, supportLevel: 'Administer', isHighRisk: false, indication: 'Pain', maxDosesPer24h: 3, minIntervalMinutes: 240, dosesInLast24h: 0, lastDoseAt: null, maxDosesReached: false, nextAvailableAt: null, outcomePendingAdministrationId: null }
@@ -720,6 +741,16 @@ describe('PortalShiftDetailPage: the five-step finish (SHAPE §4)', () => {
     expect(heading('Your times')).toBeInTheDocument()
   })
 
+  it('step 4 counts two notes in the plural', () => {
+    mockUseShiftNotes.mockReturnValue({ data: [noteWith({ id: 'n1' }), noteWith({ id: 'n2' })] })
+    show(inProgress())
+    endShift()
+    forward('Confirm times')
+    forward('Next')
+    forward('Skip')
+    expect(screen.getByText('2 notes on this shift.')).toBeInTheDocument()
+  })
+
   it('step 4 counts the notes, and Add or edit notes opens the Notes tab, keeping every entry (plan check S1)', async () => {
     mockUseShiftNotes.mockReturnValue({ data: [noteWith()] })
     show(inProgress())
@@ -795,6 +826,7 @@ describe('PortalShiftDetailPage: other states', () => {
     try {
       show(makeDetail({ status: 'InProgress', completion: makeCompletion() }))
       expect(screen.getByRole('alert')).toHaveTextContent(/you're offline/i)
+      expect(screen.getByRole('alert')).toHaveAttribute('aria-live', 'assertive')
       expect(screen.getByRole('button', { name: 'Start break' })).toBeDisabled()
     } finally {
       Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true })

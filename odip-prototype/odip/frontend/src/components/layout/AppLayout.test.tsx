@@ -201,6 +201,11 @@ describe('AppLayout — skip link and labelled landmarks (I-4)', () => {
     localStorage.clear()
   })
 
+  it('gives the header menu toggle the house keyboard focus ring', () => {
+    renderAt('/inquiries')
+    expect(screen.getByRole('button', { name: 'Open menu' })).toHaveClass('focus-visible:ring-2', 'focus-visible:ring-[var(--color-ring)]')
+  })
+
   it('renders a skip-to-content link as the first focusable element, pointing at #main', () => {
     renderAt('/trips')
     const skipLink = screen.getByRole('link', { name: /skip to content/i })

@@ -295,3 +295,11 @@ describe('UserSwitcher — label stays on one line in the header bar', () => {
     expect(idle.className).toContain('min-[1400px]:max-w-[20rem]')
   })
 })
+
+describe('UserSwitcher: focus ring', () => {
+  it('carries the house keyboard focus ring', () => {
+    setSuperAdminSignedIn()
+    render(<UserSwitcher />)
+    expect(screen.getByRole('button', { name: /view as user/i })).toHaveClass('focus-visible:ring-2', 'focus-visible:ring-[var(--color-ring)]')
+  })
+})

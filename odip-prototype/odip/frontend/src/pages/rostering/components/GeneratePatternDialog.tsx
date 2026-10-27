@@ -59,7 +59,7 @@ export function GeneratePatternDialog({ pattern, onClose }: GeneratePatternDialo
         message={
           <>
             <p>
-              Created <strong className="text-foreground">{result.created}</strong> shift{result.created === 1 ? '' : 's'}.
+              Created <strong className="text-foreground">{plural(result.created, 'shift')}</strong>.
             </p>
             <p>
               Skipped <strong className="text-foreground">{result.skipped}</strong> — already on the roster from this pattern{pattern?.sourceDraftId ? ', or a public holiday the agreement skips' : ''}.

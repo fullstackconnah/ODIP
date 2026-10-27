@@ -217,6 +217,7 @@ describe('ShiftNotesSection', () => {
       renderSection()
 
       expect(screen.getByRole('status')).toHaveTextContent(/this note mentions falls/i)
+      expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite')
       expect(screen.getByRole('button', { name: /file incident report/i })).toBeInTheDocument()
     })
 

@@ -105,7 +105,7 @@ export default function NotificationBell() {
         aria-expanded={open}
         aria-controls={!isBelowLg && open ? panelId : undefined}
         aria-haspopup={isBelowLg ? 'dialog' : undefined}
-        className="w-8 h-8 pointer-coarse:size-[var(--tap-min)] flex items-center justify-center rounded-full hover:bg-[var(--color-accent)] transition-colors"
+        className="w-8 h-8 pointer-coarse:size-[var(--tap-min)] flex items-center justify-center rounded-full hover:bg-[var(--color-accent)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
       >
         {/* The badge sits on the icon exactly as the bottom bar places it. */}
         <span className="relative inline-flex">
