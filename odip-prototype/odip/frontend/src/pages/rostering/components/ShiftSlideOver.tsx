@@ -689,10 +689,10 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
         {budgetNote && <p className="text-[13px] text-[var(--color-muted-foreground)]">{budgetNote}</p>}
 
         {footError && (
-          <div ref={el => showFootNotice(el, footError)} role="alert" className="scroll-mb-[var(--card-pad)] rounded-[var(--radius-sm)] bg-error-container px-3 py-2 text-sm text-destructive">
+          <Callout ref={el => showFootNotice(el, footError)} tone="error" className="scroll-mb-[var(--card-pad)]">
             {footError}
             {shownError?.boardChanged && <RefreshBoardAction announce={setRefreshSaid} onRefreshed={boardRefreshed} />}
-          </div>
+          </Callout>
         )}
         {refreshDone && <div ref={el => showFootNotice(el, refreshDone.text)} className="scroll-mb-[var(--card-pad)]"><Callout tone={refreshDone.gone ? 'warning' : 'success'} announce={false}>{refreshDone.text}</Callout></div>}
       </SlideOver>
