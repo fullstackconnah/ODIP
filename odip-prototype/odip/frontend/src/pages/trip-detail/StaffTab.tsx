@@ -22,6 +22,8 @@ import type { StaffAssignmentDto, StaffListDto, UpdateStaffAssignmentDto } from 
 import type { RosterFindingDto } from '@/api/types'
 import { Button } from '@/components/Button'
 import { Modal } from '@/components/Modal'
+import { FormField } from '@/components/FormField'
+import { modalGrid } from '@/lib/formGrid'
 
 const ASSIGNMENT_STATUS_ITEMS: DropdownItem[] = ASSIGNMENT_STATUSES.map(s => ({ value: s, label: s }))
 
@@ -360,37 +362,21 @@ export default function StaffTab({ tripId, trip, staff, canWrite }: StaffTabProp
         >
           <div className="space-y-4">
             {/* Assignment Role */}
-            <div>
-              <label className="block text-sm font-medium mb-1">Assignment Role</label>
-              <input type="text" value={editStaffForm.assignmentRole} onChange={e => setEditStaffForm({ ...editStaffForm, assignmentRole: e.target.value })}
-                className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
-                placeholder="e.g. Support Worker" />
-            </div>
+            <FormField label="Assignment Role"><input type="text" value={editStaffForm.assignmentRole} onChange={e => setEditStaffForm({ ...editStaffForm, assignmentRole: e.target.value })}
+                placeholder="e.g. Support Worker" /></FormField>
 
             {/* Status */}
-            <div>
-              <label id="editStaffStatusLabel" className="block text-sm font-medium mb-1">Status</label>
-              <Dropdown
+            <FormField label="Status"><Dropdown
                 variant="form"
-                aria-labelledby="editStaffStatusLabel"
                 value={editStaffForm.status}
                 onChange={val => setEditStaffForm({ ...editStaffForm, status: val as AssignmentStatus })}
                 items={ASSIGNMENT_STATUS_ITEMS}
-              />
-            </div>
+              /></FormField>
 
             {/* Dates */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium mb-1">Assignment Start</label>
-                <input type="date" value={editStaffForm.assignmentStart} onChange={e => setEditStaffForm({ ...editStaffForm, assignmentStart: e.target.value })}
-                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Assignment End</label>
-                <input type="date" value={editStaffForm.assignmentEnd} onChange={e => setEditStaffForm({ ...editStaffForm, assignmentEnd: e.target.value })}
-                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-              </div>
+            <div className={modalGrid}>
+              <FormField label="Assignment Start"><input type="date" value={editStaffForm.assignmentStart} onChange={e => setEditStaffForm({ ...editStaffForm, assignmentStart: e.target.value })} /></FormField>
+              <FormField label="Assignment End"><input type="date" value={editStaffForm.assignmentEnd} onChange={e => setEditStaffForm({ ...editStaffForm, assignmentEnd: e.target.value })} /></FormField>
             </div>
 
             {/* Is Driver */}
@@ -403,24 +389,16 @@ export default function StaffTab({ tripId, trip, staff, canWrite }: StaffTabProp
             </div>
 
             {/* Sleepover Type */}
-            <div>
-              <label id="editStaffSleepoverTypeLabel" className="block text-sm font-medium mb-1">Sleepover Type</label>
-              <Dropdown
+            <FormField label="Sleepover Type"><Dropdown
                 variant="form"
-                aria-labelledby="editStaffSleepoverTypeLabel"
                 value={editStaffForm.sleepoverType}
                 onChange={val => setEditStaffForm({ ...editStaffForm, sleepoverType: val as SleepoverType })}
                 items={SLEEPOVER_TYPE_ITEMS}
-              />
-            </div>
+              /></FormField>
 
             {/* Shift Notes */}
-            <div>
-              <label className="block text-sm font-medium mb-1">Shift Notes</label>
-              <textarea value={editStaffForm.shiftNotes} onChange={e => setEditStaffForm({ ...editStaffForm, shiftNotes: e.target.value })} rows={3}
-                className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm resize-none focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
-                placeholder="Optional notes..." />
-            </div>
+            <FormField label="Shift Notes"><textarea value={editStaffForm.shiftNotes} onChange={e => setEditStaffForm({ ...editStaffForm, shiftNotes: e.target.value })} rows={3} className="resize-none"
+                placeholder="Optional notes..." /></FormField>
 
             {/* Conflict findings — same gate as StaffAssignModal, via the shared RosterGateFields */}
             <RosterGateFields
@@ -484,25 +462,13 @@ export default function StaffTab({ tripId, trip, staff, canWrite }: StaffTabProp
             </div>
 
             {/* Assignment Role */}
-            <div>
-              <label className="block text-sm font-medium mb-1">Assignment Role</label>
-              <input type="text" value={staffAssignmentRole} onChange={e => setStaffAssignmentRole(e.target.value)}
-                className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
-                placeholder="e.g. Support Worker" />
-            </div>
+            <FormField label="Assignment Role"><input type="text" value={staffAssignmentRole} onChange={e => setStaffAssignmentRole(e.target.value)}
+                placeholder="e.g. Support Worker" /></FormField>
 
             {/* Dates */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium mb-1">Start Date</label>
-                <input type="date" value={staffAssignmentStart} onChange={e => setStaffAssignmentStart(e.target.value)}
-                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">End Date</label>
-                <input type="date" value={staffAssignmentEnd} onChange={e => setStaffAssignmentEnd(e.target.value)}
-                  className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-              </div>
+            <div className={modalGrid}>
+              <FormField label="Start Date"><input type="date" value={staffAssignmentStart} onChange={e => setStaffAssignmentStart(e.target.value)} /></FormField>
+              <FormField label="End Date"><input type="date" value={staffAssignmentEnd} onChange={e => setStaffAssignmentEnd(e.target.value)} /></FormField>
             </div>
 
             {/* Is Driver */}
@@ -515,24 +481,16 @@ export default function StaffTab({ tripId, trip, staff, canWrite }: StaffTabProp
             </div>
 
             {/* Sleepover Type */}
-            <div>
-              <label id="addStaffSleepoverTypeLabel" className="block text-sm font-medium mb-1">Sleepover Type</label>
-              <Dropdown
+            <FormField label="Sleepover Type"><Dropdown
                 variant="form"
-                aria-labelledby="addStaffSleepoverTypeLabel"
                 value={staffSleepoverType}
                 onChange={setStaffSleepoverType}
                 items={SLEEPOVER_TYPE_ITEMS}
-              />
-            </div>
+              /></FormField>
 
             {/* Shift Notes */}
-            <div>
-              <label className="block text-sm font-medium mb-1">Shift Notes</label>
-              <textarea value={staffShiftNotes} onChange={e => setStaffShiftNotes(e.target.value)} rows={3}
-                className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm resize-none focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
-                placeholder="Optional notes..." />
-            </div>
+            <FormField label="Shift Notes"><textarea value={staffShiftNotes} onChange={e => setStaffShiftNotes(e.target.value)} rows={3} className="resize-none"
+                placeholder="Optional notes..." /></FormField>
 
             {/* Conflict findings — same gate as the edit modal, via the shared RosterGateFields */}
             <RosterGateFields

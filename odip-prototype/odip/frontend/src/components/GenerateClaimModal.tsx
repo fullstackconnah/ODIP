@@ -9,6 +9,7 @@ import { plural } from '@/lib/format'
 import { extractErrorMessage, formatCurrency, formatDateAu } from '@/lib/utils'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
+import { FormField } from '@/components/FormField'
 
 interface GenerateClaimModalProps {
   tripId: string
@@ -71,8 +72,6 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
     )
   }
 
-  const inputClass = "w-full px-3 h-[var(--control-h)] rounded-[var(--radius-md)] border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] bg-[var(--color-surface)]"
-  const labelClass = "block text-sm text-[var(--color-muted-foreground)] mb-1"
 
   return (
     <Modal
@@ -125,36 +124,24 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
             <div className="mb-[var(--section-gap)]">
               <h4 className="text-sm font-medium text-[var(--color-muted-foreground)] mb-3">Confirm Trip Times</h4>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-[var(--field-gap-x)] gap-y-[var(--field-gap-y)]">
-                <div>
-                  <label className={labelClass}>Departure Time</label>
-                  <input
+                <FormField label="Departure Time"><input
                     type="time"
                     value={departureTime}
                     onChange={e => setDepartureTime(e.target.value)}
-                    className={inputClass}
-                  />
-                </div>
-                <div>
-                  <label className={labelClass}>Return Time</label>
-                  <input
+                  /></FormField>
+                <FormField label="Return Time"><input
                     type="time"
                     value={returnTime}
                     onChange={e => setReturnTime(e.target.value)}
-                    className={inputClass}
-                  />
-                </div>
-                <div>
-                  <label className={labelClass}>Active Hours/Day</label>
-                  <input
+                  /></FormField>
+                <FormField label="Active Hours/Day"><input
                     type="number"
                     min="0"
                     max="24"
                     step="0.5"
                     value={activeHoursPerDay}
                     onChange={e => setActiveHoursPerDay(parseFloat(e.target.value) || 0)}
-                    className={inputClass}
-                  />
-                </div>
+                  /></FormField>
               </div>
             </div>
 

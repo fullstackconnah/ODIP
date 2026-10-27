@@ -372,3 +372,14 @@ describe('BookingsTab — support ratio override labels', () => {
     expect(screen.queryByRole('option', { name: 'Shared' })).not.toBeInTheDocument()
   })
 })
+
+describe('BookingsTab — Add Booking field labels', () => {
+  it('names the booking fields so each label finds its control', async () => {
+    const user = userEvent.setup()
+    renderTab([], [])
+    await user.click(screen.getByRole('button', { name: /add participant/i }))
+    expect(screen.getByLabelText('Booking Notes')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Booking Status' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Support Ratio Override' })).toBeInTheDocument()
+  })
+})

@@ -19,6 +19,8 @@ import { Button } from '@/components/Button'
 import { Modal } from '@/components/Modal'
 import { EditBookingModal } from './EditBookingModal'
 import { Callout } from '@/components/Callout'
+import { FormField } from '@/components/FormField'
+import { modalGrid } from '@/lib/formGrid'
 
 // Create-form subset of BOOKING_STATUSES — Cancelled/Completed/NoLongerAttending are reached via
 // dedicated actions elsewhere, not offered when first adding a participant to a trip.
@@ -226,21 +228,17 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
             </div>
 
             {/* Booking Status */}
-            <div>
-              <label id="addBookingStatusLabel" className="block text-sm font-medium mb-1">Booking Status</label>
-              <Dropdown
+            <FormField label="Booking Status"><Dropdown
                 variant="form"
-                aria-labelledby="addBookingStatusLabel"
                 value={bookingStatus}
                 onChange={setBookingStatus}
                 items={NEW_BOOKING_STATUS_ITEMS}
-              />
-            </div>
+              /></FormField>
 
             {/* Support Overrides */}
             <div>
-              <label className="block text-sm font-medium mb-2">Support Requirements</label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <p className="block text-sm font-medium mb-2">Support Requirements</p>
+              <div className={modalGrid}>
                 <label className="flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={wheelchairRequired} onChange={e => setWheelchairRequired(e.target.checked)}
                     className="rounded border-[var(--color-border)]" />
@@ -265,67 +263,39 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
             </div>
 
             {/* Support Ratio Override */}
-            <div>
-              <label id="addBookingSupportRatioLabel" className="block text-sm font-medium mb-1">Support Ratio Override</label>
-              <Dropdown
+            <FormField label="Support Ratio Override"><Dropdown
                 variant="form"
-                aria-labelledby="addBookingSupportRatioLabel"
                 label="No override"
                 value={supportRatioOverride}
                 onChange={setSupportRatioOverride}
                 items={SUPPORT_RATIO_ITEMS}
-              />
-            </div>
+              /></FormField>
 
             {/* Notes */}
-            <div>
-              <label className="block text-sm font-medium mb-1">Booking Notes</label>
-              <textarea value={bookingNotes} onChange={e => setBookingNotes(e.target.value)} rows={3}
-                className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm resize-none focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
-                placeholder="Optional notes..." />
-            </div>
+            <FormField label="Booking Notes"><textarea value={bookingNotes} onChange={e => setBookingNotes(e.target.value)} rows={3} className="resize-none"
+                placeholder="Optional notes..." /></FormField>
 
             {/* Insurance */}
             <div className="border-t border-[var(--color-border)]/15 pt-4 mt-2">
-              <label className="block text-sm font-medium mb-3">Travel Insurance</label>
+              <p className="block text-sm font-medium mb-3">Travel Insurance</p>
               <div className="space-y-3">
-                <div>
-                  <label id="addBookingInsuranceStatusLabel" className="block text-xs text-[var(--color-muted-foreground)] mb-1">Status</label>
-                  <Dropdown
+                <FormField label="Status"><Dropdown
                     variant="form"
-                    aria-labelledby="addBookingInsuranceStatusLabel"
                     value={insuranceStatus}
                     onChange={setInsuranceStatus}
                     items={INSURANCE_STATUS_ITEMS}
-                  />
-                </div>
+                  /></FormField>
                 {insuranceStatus !== 'None' && (
                   <>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Provider</label>
-                        <input type="text" value={insuranceProvider} onChange={e => setInsuranceProvider(e.target.value)}
-                          className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
-                          placeholder="e.g. Allianz" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Policy Number</label>
-                        <input type="text" value={insurancePolicyNumber} onChange={e => setInsurancePolicyNumber(e.target.value)}
-                          className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm"
-                          placeholder="e.g. POL-12345" />
-                      </div>
+                    <div className={modalGrid}>
+                      <FormField label="Provider"><input type="text" value={insuranceProvider} onChange={e => setInsuranceProvider(e.target.value)}
+                          placeholder="e.g. Allianz" /></FormField>
+                      <FormField label="Policy Number"><input type="text" value={insurancePolicyNumber} onChange={e => setInsurancePolicyNumber(e.target.value)}
+                          placeholder="e.g. POL-12345" /></FormField>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Coverage Start</label>
-                        <input type="date" value={insuranceCoverageStart} onChange={e => setInsuranceCoverageStart(e.target.value)}
-                          className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-[var(--color-muted-foreground)] mb-1">Coverage End</label>
-                        <input type="date" value={insuranceCoverageEnd} onChange={e => setInsuranceCoverageEnd(e.target.value)}
-                          className="w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all" />
-                      </div>
+                    <div className={modalGrid}>
+                      <FormField label="Coverage Start"><input type="date" value={insuranceCoverageStart} onChange={e => setInsuranceCoverageStart(e.target.value)} /></FormField>
+                      <FormField label="Coverage End"><input type="date" value={insuranceCoverageEnd} onChange={e => setInsuranceCoverageEnd(e.target.value)} /></FormField>
                     </div>
                   </>
                 )}

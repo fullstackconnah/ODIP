@@ -466,3 +466,13 @@ describe('StaffTab — Remove Staff offers only what the server does', () => {
     expect(screen.queryByText(/Delete permanently/)).not.toBeInTheDocument()
   })
 })
+
+describe('StaffTab — Add Staff field labels', () => {
+  it('names the assignment fields so each label finds its control', async () => {
+    const user = openAddStaffModal()
+    await user.click(screen.getByRole('button', { name: /add staff/i }))
+    for (const label of ['Assignment Role', 'Start Date', 'End Date', 'Shift Notes']) {
+      expect(screen.getByLabelText(label)).toBeInTheDocument()
+    }
+  })
+})
