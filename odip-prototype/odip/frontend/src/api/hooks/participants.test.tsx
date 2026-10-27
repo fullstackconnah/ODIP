@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import { useBeginServices, useCreateParticipant, useDeleteParticipant, useMakeParticipantActive, usePatchParticipant, useParticipants, useSupportProfile, useUpdateSupportProfile } from './participants'
+import { useBeginServices, useCreateParticipant, useDeleteParticipant, useMakeParticipantActive, usePatchParticipant, useParticipants, useSaveParticipantIntake, useSupportProfile, useUpdateSupportProfile } from './participants'
 import type { PatchParticipantDto, SupportProfileDto } from '../types'
 
 // CORE-02: usePatchParticipant is a thin TanStack Query mutation wrapper around apiPatchRaw — only
@@ -68,6 +68,38 @@ describe('usePatchParticipant', () => {
 
     await waitFor(() => expect(result.current.isError).toBe(true))
     expect(invalidateSpy).not.toHaveBeenCalled()
+  })
+})
+
+// Funding source Other drops a participant out of the NDIS ledger (and back), so any save that can change it must refresh the ledger and the figures built on it.
+describe('a participant save refreshes the budget figures', () => {
+  const expectFiguresRefreshed = (spy: ReturnType<typeof vi.spyOn>, id: string) => {
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['participant-funding', id, 'ledger'] })
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['participant-alerts-aggregate'] })
+  }
+
+  it('usePatchParticipant refreshes the ledger and the alerts for that participant', async () => {
+    mockApiPatchRaw.mockResolvedValue({ success: true, data: { id: 'p7' }, message: null, errors: null })
+    const queryClient = new QueryClient()
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
+    const { result } = renderHook(() => usePatchParticipant(), { wrapper: createWrapper(queryClient) })
+
+    result.current.mutate({ id: 'p7', data: { keyIdentifiers: { weightKg: 60 } } })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expectFiguresRefreshed(invalidateSpy, 'p7')
+  })
+
+  it('useSaveParticipantIntake refreshes the ledger and the alerts for that participant', async () => {
+    mockApiPutRaw.mockResolvedValue({ success: true, data: { id: 'p7' }, message: null, errors: null })
+    const queryClient = new QueryClient()
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
+    const { result } = renderHook(() => useSaveParticipantIntake(), { wrapper: createWrapper(queryClient) })
+
+    result.current.mutate({ id: 'p7', data: {} as never })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expectFiguresRefreshed(invalidateSpy, 'p7')
   })
 })
 
