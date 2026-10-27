@@ -4,6 +4,7 @@ import { BookOpen, HeartPulse, Phone } from 'lucide-react'
 import { useAcknowledgeHandover } from '@/api/hooks'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
+import { buttonClasses } from '@/components/buttonClasses'
 import { TAP_AREA } from '@/components/tapArea'
 import { formatWithTimeZone, formatDateAu } from '@/lib/utils'
 import { SHIFT_PACKAGE_ERROR_CODES } from '@/api/types'
@@ -137,6 +138,9 @@ function rankContacts(list: PortalEmergencyContactDto[]): PortalEmergencyContact
     || (x.priorityOrder ?? Number.MAX_SAFE_INTEGER) - (y.priorityOrder ?? Number.MAX_SAFE_INTEGER))
 }
 
+// A tel: link is an anchor, not a Button, but it takes Button's secondary look. h-auto! lets a long number wrap instead of spilling out of a fixed-height box.
+const CALL_LINK = buttonClasses('secondary', 'md', false, `${TAP_AREA} h-auto! min-h-[44px] py-2`)
+
 function telHref(number: string): string {
   return `tel:${number.replace(/[^\d+]/g, '')}`
 }
@@ -154,12 +158,12 @@ function Contacts({ contacts }: { contacts: PortalEmergencyContactDto[] }) {
           <p className="text-xs text-[var(--color-muted-foreground)]">{[c.roleLabel, c.relationship].filter(Boolean).join(', ')}</p>
           <div className="mt-1 flex flex-wrap gap-2">
             {c.mobile && (
-              <a href={telHref(c.mobile)} className={`${TAP_AREA} inline-flex items-center gap-1.5 min-h-[44px] px-3 rounded-lg border border-[var(--color-border)] font-medium`}>
+              <a href={telHref(c.mobile)} className={CALL_LINK}>
                 <Phone className="w-4 h-4" aria-hidden="true" /> Call mobile {c.mobile}
               </a>
             )}
             {c.phone && (
-              <a href={telHref(c.phone)} className={`${TAP_AREA} inline-flex items-center gap-1.5 min-h-[44px] px-3 rounded-lg border border-[var(--color-border)] font-medium`}>
+              <a href={telHref(c.phone)} className={CALL_LINK}>
                 <Phone className="w-4 h-4" aria-hidden="true" /> Call phone {c.phone}
               </a>
             )}

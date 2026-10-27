@@ -72,6 +72,19 @@ describe('GeneratePatternDialog buttons', () => {
   })
 })
 
+describe('GeneratePatternDialog — the created count', () => {
+  it.each([[1, '1 shift'], [3, '3 shifts']])('reads %i created as "%s"', async (created, words) => {
+    const user = userEvent.setup()
+    mockGenerate.mockResolvedValue({ created, skipped: 0 })
+    render(<GeneratePatternDialog pattern={pattern} onClose={vi.fn()} />)
+    await user.type(screen.getByLabelText(/from/i), '2026-09-14')
+    await user.type(screen.getByLabelText(/^to/i), '2026-09-28')
+    await user.click(screen.getByRole('button', { name: 'Generate' }))
+    await screen.findByRole('button', { name: 'Done' })
+    expect(screen.getByText(words)).toBeInTheDocument()
+  })
+})
+
 // ── What "skipped" means ─────────────────────────────────────────────────────────────────────────
 // The count now also holds the days an agreement's plan skips for a public holiday, so for an agreement pattern it cannot say they were all "already on the roster".
 describe('GeneratePatternDialog — what skipped means', () => {
