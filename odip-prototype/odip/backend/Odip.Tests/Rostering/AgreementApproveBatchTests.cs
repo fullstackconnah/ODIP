@@ -196,9 +196,18 @@ public class AgreementApproveBatchTests
     /// <summary>Moves the clock on after the first approval is saved, as a slow roster lock would.</summary>
     private sealed class AdvanceAfterApproval(Odip.Tests.Medications.FakeClock clock, TimeSpan by) : SaveChangesInterceptor
     {
+        private bool _approving;
+
+        // Entries are no longer Added once the save has finished, so note the approval on the way in.
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken ct = default)
+        {
+            _approving = eventData.Context!.ChangeTracker.Entries<ServiceAgreementDraftApproval>().Any(e => e.State == EntityState.Added);
+            return base.SavingChangesAsync(eventData, result, ct);
+        }
+
         public override ValueTask<int> SavedChangesAsync(SaveChangesCompletedEventData eventData, int result, CancellationToken ct = default)
         {
-            if (eventData.Context!.ChangeTracker.Entries<ServiceAgreementDraftApproval>().Any(e => e.State == EntityState.Added)) clock.Set(clock.GetUtcNow() + by);
+            if (_approving) { _approving = false; clock.Set(clock.GetUtcNow() + by); }
             return base.SavedChangesAsync(eventData, result, ct);
         }
     }
