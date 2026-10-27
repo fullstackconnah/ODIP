@@ -4,6 +4,7 @@ import App from './App'
 import './fonts.css'
 import { captureInstallEvents } from './lib/installPrompt'
 import { offlineQueue } from './lib/offline/queue'
+import { sweepExpired } from './lib/offline/store'
 
 // Local dev auto-login: with VITE_MOCK_PREVIEW=1 (set in .env.local) a fake token/user is seeded so the UI is
 // browsable against the mock API (mock-api/server.js) without going through the real sign-in form.
@@ -28,6 +29,7 @@ createRoot(document.getElementById('root')!).render(
 )
 
 // Unsent changes go out when the app opens, the signal returns, or the app comes back to the front.
+sweepExpired()
 void offlineQueue.replay()
 window.addEventListener('online', () => { void offlineQueue.replay() })
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') void offlineQueue.replay() })

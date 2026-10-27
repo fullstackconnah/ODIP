@@ -22,9 +22,10 @@ vi.mock('../client', () => ({
   apiPatch: vi.fn(),
 }))
 
-import { useCreateShiftNote, useMyShifts, usePortalShiftDetail, useRecordShiftDose, useStartShift } from './portal'
+import { useCreateShiftNote, useShiftNotes, useMyShifts, usePortalShiftDetail, useRecordShiftDose, useStartShift } from './portal'
 import { offlineQueue } from '@/lib/offline/queue'
 import { readSaved, writeSaved } from '@/lib/offline/store'
+import { refreshPortalAfterReplay } from '@/lib/offline/refresh'
 
 function wrapper(qc: QueryClient) {
   return ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>
@@ -124,5 +125,27 @@ describe('offline-aware portal hooks', () => {
     const { result } = renderHook(() => useRecordShiftDose(), { wrapper: wrapper(newClient()) })
     await expect(result.current.mutateAsync({ shiftId: 's1', medicationId: 'm1', data: { status: 'Administered' } as never })).rejects.toThrow('Network Error')
     expect(offlineQueue.getSnapshot()).toEqual([])
+  })
+
+  it('M1: after a replay sends the queued note, the notes refetch and the note is still listed', async () => {
+    online.mockReturnValue(false)
+    const qc = newClient()
+    qc.setQueryData(['portal-shift-detail', 's1'], detail)
+    writeSaved('u1', 'notes:s1', [])
+    const off = refreshPortalAfterReplay(qc)
+    const notes = renderHook(() => useShiftNotes('s1'), { wrapper: wrapper(qc) })
+    const create = renderHook(() => useCreateShiftNote('s1'), { wrapper: wrapper(qc) })
+    await waitFor(() => expect(notes.result.current.data).toEqual([]))
+    await create.result.current.mutateAsync('Settled well')
+    await waitFor(() => expect(notes.result.current.data).toHaveLength(1))
+    const [queued] = offlineQueue.getSnapshot()
+    // The server now has the note; online, the refetch must read it.
+    mockApiGet.mockResolvedValue([{ id: queued.id, shiftId: 's1', body: 'Settled well', createdAt: 'c', updatedAt: 'c', flaggedCategories: [], flagsAcknowledgedAt: null, incidentId: null }])
+    online.mockReturnValue(true)
+    await offlineQueue.replay()
+    await waitFor(() => expect(mockApiGet).toHaveBeenCalledWith('/portal/shifts/s1/notes'))
+    await waitFor(() => expect(notes.result.current.data).toMatchObject([{ id: queued.id, body: 'Settled well' }]))
+    expect(offlineQueue.getSnapshot()).toEqual([])
+    off()
   })
 })

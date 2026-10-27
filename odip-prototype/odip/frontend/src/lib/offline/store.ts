@@ -59,3 +59,17 @@ export function wipeOffline(opts: { keepQueue?: boolean; exceptUser?: string }):
     for (const k of doomed) localStorage.removeItem(k)
   } catch { /* ignore */ }
 }
+
+/** Reads every saved copy once, so any past 48 h is removed even if nobody opens that shift again. The queue and the replay lease are not saved copies. */
+export function sweepExpired(): void {
+  try {
+    const keys: string[] = []
+    for (let i = 0; i < localStorage.length; i++) keys.push(localStorage.key(i) ?? '')
+    for (const k of keys) {
+      if (!k.startsWith(OFFLINE_PREFIX)) continue
+      const [user, ...rest] = k.slice(OFFLINE_PREFIX.length).split(':')
+      const part = rest.join(':')
+      if (part !== 'queue' && part !== 'replay-lock') readSaved(user, part)
+    }
+  } catch { /* ignore */ }
+}

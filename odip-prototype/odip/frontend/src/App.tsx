@@ -1,10 +1,11 @@
-import React, { Suspense } from 'react'
+import React, { Suspense, useEffect } from 'react'
 import { Route, Navigate, Outlet, RouterProvider, createBrowserRouter, createRoutesFromElements, useParams } from 'react-router-dom'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { usePermissions, type PageKey } from './lib/permissions'
 import { UiPreferencesProvider } from './hooks/useUiPreferences'
 import AppLayout from './components/layout/AppLayout'
+import { refreshPortalAfterReplay } from './lib/offline/refresh'
 import './index.css'
 
 const LoginPage = React.lazy(() => import('./pages/LoginPage'))
@@ -199,6 +200,7 @@ const router = createBrowserRouter(
 )
 
 export default function App() {
+  useEffect(() => refreshPortalAfterReplay(queryClient), [])
   return (
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />

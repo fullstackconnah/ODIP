@@ -54,6 +54,13 @@ export interface ReplayResult { sent: number; notSent: number; waiting: number; 
 
 const RANK: Record<QueueKind, number> = { start: 0, note: 1, breakStart: 2, breakEnd: 2, tick: 3, untick: 3, ack: 4, finish: 5 }
 
+/** On a weak signal navigator.onLine stays true and a request can stall; give up so the record is queued and a replay never hangs. */
+const REQUEST_TIMEOUT_MS = 15_000
+/** A second tab's replay is ignored while this lease is younger than this. */
+const LEASE_MS = 30_000
+/** After a live send fails with a server blip, one more try this long after. */
+const RETRY_AFTER_MS = 30_000
+
 /** No response, a server blip, throttling, or a 401 that survived the refresh: the record stays Waiting. */
 const isTransient = (status: number | undefined) => status === undefined || status >= 500 || status === 408 || status === 429 || status === 401
 
@@ -62,7 +69,8 @@ export const replayBody = (rec: QueueRecord, asReplay: boolean): unknown =>
 
 export async function apiSend(rec: QueueRecord, asReplay: boolean): Promise<SendResult> {
   try {
-    const res = await apiClient.request({ url: rec.path, method: rec.method, data: replayBody(rec, asReplay) })
+    // A timeout has no response, so it reads as offline and the record is queued under the same id.
+    const res = await apiClient.request({ url: rec.path, method: rec.method, data: replayBody(rec, asReplay), timeout: REQUEST_TIMEOUT_MS })
     return { kind: 'ok', data: (res.data as { data?: unknown } | undefined)?.data }
   } catch (error) {
     const status = apiErrorStatus(error)
@@ -76,7 +84,7 @@ export type DetailLookup = { kind: 'ok'; status: string } | { kind: 'offline' } 
 
 export async function apiShiftStatus(shiftId: string): Promise<DetailLookup> {
   try {
-    const res = await apiClient.get<{ data: { status: string } }>(`/portal/shifts/${shiftId}`)
+    const res = await apiClient.get<{ data: { status: string } }>(`/portal/shifts/${shiftId}`, { timeout: REQUEST_TIMEOUT_MS })
     return { kind: 'ok', status: res.data.data.status }
   } catch (error) {
     const status = apiErrorStatus(error)
@@ -107,7 +115,10 @@ export interface SyncState { sending: boolean; allSentAt: number | null; stillOf
 export function createQueue(overrides: Partial<QueueDeps> = {}) {
   const deps: QueueDeps = { ...defaultDeps, ...overrides }
   const listeners = new Set<() => void>()
+  const sentListeners = new Set<() => void>()
   let running = false
+  // A replay asked for while one runs is not dropped: the running one goes round again.
+  let again = false
   let sync: SyncState = { sending: false, allSentAt: null, stillOffline: false }
   // useSyncExternalStore needs the same array back until something changes, so parse only when the raw text changed.
   let memoRaw: string | null | undefined
@@ -198,49 +209,89 @@ export function createQueue(overrides: Partial<QueueDeps> = {}) {
     if (out.kind === 'ok') return { queued: false, data: out.data }
     if (out.kind === 'refused') throw out.error
     // The live attempt may have reached the server; the id on the record makes the replay find the same row.
-    return { queued: true, record: enqueue({ ...input, id: rec.id }) }
+    const record = enqueue({ ...input, id: rec.id })
+    setTimeout(() => { void replay() }, RETRY_AFTER_MS)
+    return { queued: true, record }
   }
 
   const alreadyKey = (shiftId: string) => `already:${shiftId}`
 
+  const leaseKey = (userId: string) => `${OFFLINE_PREFIX}${userId}:replay-lock`
+  const stored = (r: QueueRecord) => loadAll(r.userId).find((x) => x.id === r.id)
+
+  /**
+   * One tab replays at a time: the lease is a timestamp in localStorage, refreshed before each send and taken over once
+   * it is 30 s old (the tab that held it died). Not navigator.locks: live is plain HTTP, and locks need a secure context.
+   */
+  // shortcut: check-then-set is not atomic across tabs; the stored-record re-check before each send covers the gap.
+  function takeLease(userId: string): boolean {
+    try {
+      const held = Number(localStorage.getItem(leaseKey(userId)))
+      if (held && deps.now() - held < LEASE_MS) return false
+      localStorage.setItem(leaseKey(userId), String(deps.now()))
+    } catch { /* storage blocked: replay anyway */ }
+    return true
+  }
+
   async function replay(): Promise<ReplayResult> {
     const result: ReplayResult = { sent: 0, notSent: 0, waiting: 0, offline: false }
-    if (running) return result
+    if (running) { again = true; return result }
     const s = deps.session()
     if (!s.userId) return result
+    if (!takeLease(s.userId)) return result
     running = true
     setSync({ sending: true, stillOffline: false })
     try {
-      const groups = new Map<string, QueueRecord[]>()
-      for (const r of mine()) groups.set(r.shiftId, [...(groups.get(r.shiftId) ?? []), r])
-      outer: for (const [shiftId, recs] of groups) {
-        if (recs.some((r) => r.status === 'notSent')) continue
-        const ordered = [...recs].sort((a, b) => RANK[a.kind] - RANK[b.kind] || a.createdAt - b.createdAt)
-        for (const r of ordered) {
-          if (r.kind === 'finish') {
-            const look = await deps.shiftStatus(shiftId)
-            if (look.kind === 'offline') { result.offline = true; break outer }
-            if (look.kind === 'refused' && look.status === 404) { patch(r, { status: 'notSent', httpStatus: 404, code: undefined }); result.notSent++; break }
-            if (look.kind === 'ok' && (look.status === 'PendingReview' || look.status === 'Completed')) {
-              writeSaved(s.userId, alreadyKey(shiftId), true)
-              remove(r)
+      do {
+        again = false
+        const groups = new Map<string, QueueRecord[]>()
+        for (const r of mine()) groups.set(r.shiftId, [...(groups.get(r.shiftId) ?? []), r])
+        outer: for (const [shiftId, recs] of groups) {
+          if (recs.some((r) => r.status === 'notSent')) continue
+          const ordered = [...recs].sort((a, b) => RANK[a.kind] - RANK[b.kind] || a.createdAt - b.createdAt)
+          for (const r of ordered) {
+            // The snapshot can be stale: another tab may have sent, discarded or failed this record since.
+            if (stored(r)?.status !== 'waiting') continue
+            if (r.kind === 'finish') {
+              const look = await deps.shiftStatus(shiftId)
+              if (look.kind === 'offline') { result.offline = true; break outer }
+              if (stored(r)?.status !== 'waiting') continue
+              if (look.kind === 'refused' && look.status === 404) { patch(r, { status: 'notSent', httpStatus: 404, code: undefined }); result.notSent++; break }
+              if (look.kind === 'ok' && (look.status === 'PendingReview' || look.status === 'Completed')) {
+                writeSaved(s.userId, alreadyKey(shiftId), true)
+                remove(r)
+                result.sent++
+                continue
+              }
+            }
+            try { localStorage.setItem(leaseKey(s.userId), String(deps.now())) } catch { /* storage blocked */ }
+            const out = await deps.send(r, true)
+            if (out.kind === 'offline') { result.offline = true; break outer }
+            if (out.kind === 'ok') {
+              const now = stored(r)
+              if (now && JSON.stringify(now.body) !== JSON.stringify(r.body)) {
+                // The worker edited this note while its POST was in flight: keep the edit as a PUT of the new text.
+                const text = (now.body as { body?: string }).body
+                patch(r, { path: `/portal/notes/${r.id}`, method: 'PUT', body: { body: text } })
+                again = true
+              } else remove(r)
               result.sent++
               continue
             }
+            patch(r, { status: 'notSent', httpStatus: out.status, code: out.code, blockers: out.blockers })
+            result.notSent++
+            break
           }
-          const out = await deps.send(r, true)
-          if (out.kind === 'offline') { result.offline = true; break outer }
-          if (out.kind === 'ok') { remove(r); result.sent++; continue }
-          patch(r, { status: 'notSent', httpStatus: out.status, code: out.code, blockers: out.blockers })
-          result.notSent++
-          break
         }
-      }
+      } while (again && !result.offline)
     } finally {
       running = false
+      again = false
+      try { localStorage.removeItem(leaseKey(s.userId)) } catch { /* storage blocked */ }
       const left = mine()
       result.waiting = left.filter((r) => r.status === 'waiting').length
       setSync({ sending: false, stillOffline: result.offline, allSentAt: !result.offline && result.sent > 0 && left.length === 0 ? deps.now() : sync.allSentAt })
+      if (result.sent > 0) sentListeners.forEach((l) => l())
     }
     return result
   }
@@ -273,6 +324,8 @@ export function createQueue(overrides: Partial<QueueDeps> = {}) {
     subscribe: (l: () => void) => { listeners.add(l); return () => { listeners.delete(l) } },
     getSnapshot: mine,
     getSyncState: () => sync,
+    /** Called once at the end of any replay that sent something; returns the unsubscribe. */
+    onReplaySent: (l: () => void) => { sentListeners.add(l); return () => { sentListeners.delete(l) } },
     enqueue,
     sendOrQueue,
     replay,

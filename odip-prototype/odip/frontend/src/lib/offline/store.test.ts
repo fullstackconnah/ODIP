@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { OFFLINE_PREFIX, readSaved, readSession, wipeOffline, writeSaved } from './store'
+import { OFFLINE_PREFIX, readSaved, readSession, sweepExpired, wipeOffline, writeSaved } from './store'
 
 const H = 3_600_000
 
@@ -64,5 +64,20 @@ describe('offline store', () => {
     localStorage.setItem('odip_viewing_user', 'them')
     localStorage.setItem('odip_viewing_tenant', 't9')
     expect(readSession()).toEqual({ userId: 'them', viewAsTenant: 't9', viewAsUser: 'them' })
+  })
+
+  it('sweepExpired removes saved copies past 48h that were never read, and keeps fresh copies, the queue and the lease', () => {
+    writeSaved('u1', 'detail:old', { a: 1 })
+    localStorage.setItem(`${OFFLINE_PREFIX}u1:queue`, '[{"id":"r1"}]')
+    localStorage.setItem(`${OFFLINE_PREFIX}u1:replay-lock`, '1')
+    localStorage.setItem('unrelated', 'x')
+    vi.setSystemTime(Date.now() + 49 * H)
+    writeSaved('u1', 'detail:fresh', { b: 2 })
+    sweepExpired()
+    expect(localStorage.getItem(`${OFFLINE_PREFIX}u1:detail:old`)).toBeNull()
+    expect(readSaved('u1', 'detail:fresh')?.data).toEqual({ b: 2 })
+    expect(localStorage.getItem(`${OFFLINE_PREFIX}u1:queue`)).toBe('[{"id":"r1"}]')
+    expect(localStorage.getItem(`${OFFLINE_PREFIX}u1:replay-lock`)).toBe('1')
+    expect(localStorage.getItem('unrelated')).toBe('x')
   })
 })

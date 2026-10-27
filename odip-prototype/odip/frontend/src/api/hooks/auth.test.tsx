@@ -188,6 +188,18 @@ describe('useResendVerification', () => {
 })
 
 describe('storeSession', () => {
+  let replay: ReturnType<typeof vi.spyOn>
+  beforeEach(async () => {
+    const { offlineQueue } = await import('@/lib/offline/queue')
+    replay = vi.spyOn(offlineQueue, 'replay').mockResolvedValue({ sent: 0, notSent: 0, waiting: 0, offline: false })
+  })
+
+  it('signing in sends what this worker left waiting, once the other users are dropped', async () => {
+    const { storeSession } = await import('./auth')
+    storeSession({ token: 't', id: 'u1' } as never)
+    expect(replay).toHaveBeenCalledTimes(1)
+  })
+
   it('leaves no view-as state from an earlier SuperAdmin session behind', async () => {
     const { storeSession } = await import('./auth')
     localStorage.setItem('odip_viewing_user', '{"id":"u1"}')

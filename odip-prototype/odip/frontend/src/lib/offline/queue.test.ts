@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it } from 'vitest'
-import { createQueue, replayBody, type NewRecord, type QueueRecord, type SendResult } from './queue'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { apiClient } from '@/api/client'
+import { apiSend, apiShiftStatus, createQueue, replayBody, type NewRecord, type QueueRecord, type SendResult } from './queue'
 
 const label = { participant: 'Jordan Smith', serviceDate: '2026-10-28', rostered: '9:00 am - 1:00 pm' }
 const ok: SendResult = { kind: 'ok', data: {} }
@@ -286,5 +287,131 @@ describe('offline queue', () => {
     expect(q.getSnapshot()).toHaveLength(1)
     q.dropOtherUsers('u9')
     expect(q.getSnapshot()).toHaveLength(0)
+  })
+})
+
+describe('offline queue: replay under load', () => {
+  const LOCK = 'odip_offline:u1:replay-lock'
+  const tick = () => new Promise((r) => setTimeout(r, 0))
+  let gate: Promise<void>
+  let release: () => void
+  /** A queue whose first send waits for release(); later sends answer at once. */
+  function gated(onFirst?: () => void) {
+    gate = new Promise<void>((r) => { release = r })
+    return createQueue({
+      send: async (rec, asReplay) => {
+        sent.push({ rec, asReplay, body: replayBody(rec, asReplay) })
+        if (sent.length === 1) { onFirst?.(); await gate }
+        return ok
+      },
+      shiftStatus: async () => status,
+      now: () => (clock += 1000),
+      newId: () => `id-${++ids}`,
+      isOnline: () => online,
+    })
+  }
+  afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers() })
+
+  it('M1: onReplaySent fires once after a replay that sent something, not after one that sent nothing, and unsubscribes', async () => {
+    const q = make()
+    const cb = vi.fn()
+    const off = q.onReplaySent(cb)
+    online = true
+    await q.replay()
+    expect(cb).not.toHaveBeenCalled()
+    q.enqueue(rec('note')); q.enqueue(rec('tick'))
+    await q.replay()
+    expect(cb).toHaveBeenCalledTimes(1)
+    off()
+    q.enqueue(rec('note'))
+    await q.replay()
+    expect(cb).toHaveBeenCalledTimes(1)
+  })
+
+  it('S1: a record queued while a replay is sending goes out in the same run', async () => {
+    const q = gated()
+    q.enqueue(rec('note', { id: 'n1' }))
+    online = true
+    const first = q.replay()
+    await tick()
+    await q.sendOrQueue(rec('note', { id: 'n2' }))
+    release()
+    await first
+    expect(sent.map((s) => s.rec.id)).toEqual(['n1', 'n2'])
+    expect(q.pendingCount()).toBe(0)
+  })
+
+  it('S1: a live send that fails with a server blip is tried again 30 seconds later', async () => {
+    vi.useFakeTimers()
+    const q = make()
+    online = true
+    answer = () => ({ kind: 'offline' })
+    const out = await q.sendOrQueue(rec('note', { id: 'n1' }))
+    expect(out.queued).toBe(true)
+    expect(sent).toHaveLength(1)
+    answer = () => ok
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(sent.map((s) => s.asReplay)).toEqual([false, true])
+    expect(q.pendingCount()).toBe(0)
+  })
+
+  it('S2: requests carry a 15 s timeout, and a timed-out live send is queued under the same id', async () => {
+    const request = vi.spyOn(apiClient, 'request').mockRejectedValue({ code: 'ECONNABORTED' })
+    const get = vi.spyOn(apiClient, 'get').mockRejectedValue({ code: 'ECONNABORTED' })
+    const q = createQueue({ send: apiSend, shiftStatus: apiShiftStatus, now: () => (clock += 1000), newId: () => `id-${++ids}`, isOnline: () => true })
+    const out = await q.sendOrQueue(rec('note', { id: 'n1' }))
+    expect(out).toMatchObject({ queued: true, record: { id: 'n1', status: 'waiting' } })
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({ timeout: 15_000 }))
+    expect(await apiShiftStatus('s1')).toEqual({ kind: 'offline' })
+    expect(get).toHaveBeenCalledWith('/portal/shifts/s1', expect.objectContaining({ timeout: 15_000 }))
+  })
+
+  it('S3: a second tab replaying while the first is sending sends nothing; a tick then an untick arrive in that order, each once', async () => {
+    const a = gated()
+    const b = make()
+    online = true
+    a.enqueue(rec('tick', { target: 'r1' }))
+    const first = a.replay()
+    await tick()
+    await a.sendOrQueue(rec('untick', { target: 'r1' }))
+    expect(await b.replay()).toMatchObject({ sent: 0 })
+    release()
+    await first
+    expect(sent.map((s) => s.rec.kind)).toEqual(['tick', 'untick'])
+    expect(localStorage.getItem(LOCK)).toBeNull()
+  })
+
+  it('S3: a lease older than 30 s is taken over; a younger one is respected', async () => {
+    const q = make()
+    online = true
+    q.enqueue(rec('note'))
+    localStorage.setItem(LOCK, String(clock - 1000))
+    expect(await q.replay()).toMatchObject({ sent: 0 })
+    localStorage.setItem(LOCK, String(clock - 31_000))
+    expect(await q.replay()).toMatchObject({ sent: 1 })
+    expect(localStorage.getItem(LOCK)).toBeNull()
+  })
+
+  it('S3: a record another tab removed after this replay took its snapshot is not sent', async () => {
+    const b = make()
+    const a = gated(() => b.discard('n2'))
+    a.enqueue(rec('start', { id: 'n1' })); a.enqueue(rec('note', { id: 'n2' }))
+    online = true
+    release()
+    await a.replay()
+    expect(sent.map((s) => s.rec.id)).toEqual(['n1'])
+  })
+
+  it('S5: a note edited while its POST is in flight is sent again as a PUT with the new text', async () => {
+    const q = gated(() => q.rewriteBody('n1', { id: 'n1', createdAt: 'c', body: 'new' }))
+    q.enqueue(rec('note', { id: 'n1', body: { id: 'n1', createdAt: 'c', body: 'old' } }))
+    online = true
+    release()
+    await q.replay()
+    expect(sent.map((s) => [s.rec.method, s.rec.path, s.body])).toEqual([
+      ['POST', '/portal/shifts/s1/note', { id: 'n1', createdAt: 'c', body: 'old' }],
+      ['PUT', '/portal/notes/n1', { body: 'new' }],
+    ])
+    expect(q.pendingCount()).toBe(0)
   })
 })
