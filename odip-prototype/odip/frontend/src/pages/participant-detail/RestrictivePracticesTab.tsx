@@ -25,6 +25,7 @@ import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { RpAuthorisationBadge } from '@/pages/incidents/RpAuthorisationBadge'
 import { isRpAuthorised } from '@/lib/incidentPrefill'
+import { apiErrorStatus } from '@/lib/shiftPackageErrors'
 
 // Overdue from the day AFTER the review date (a DateOnly), the rule the server's own alert uses (ReviewDate < today), not from UTC midnight.
 const isReviewOverdue = (dateStr: string | null) => isPastDue(dateStr)
@@ -205,11 +206,14 @@ export default function RestrictivePracticesTab({ participantId }: { participant
       reviewDate: form.reviewDate || null,
       relatedMedicationId: form.type === 'ChemicalRestraint' ? (form.relatedMedicationId || null) : null,
       isActive: form.isActive,
+      expectedUpdatedAt: editingPractice.updatedAt,
     }
     try {
       await updatePractice.mutateAsync({ id: editingPractice.id, data: payload })
       closeModal()
     } catch (err) {
+      // So closing and reopening the entry carries the version someone else just saved.
+      if (apiErrorStatus(err) === 409) void practicesQuery.refetch()
       setModalError(extractErrorMessage(err, 'Failed to save restrictive practice entry.'))
     }
   }

@@ -724,7 +724,7 @@ describe('RestrictivePracticesTab — edit form authorised checkbox', () => {
   it('shows the conflict sentence, keeps the form as typed and refetches the list when someone else changed the entry', async () => {
     const user = userEvent.setup()
     const refetch = vi.fn()
-    mockUseRestrictivePractices.mockReturnValue({ data: [makePractice()], isLoading: false, refetch })
+    mockUseRestrictivePractices.mockReturnValue({ data: [makePractice()], isLoading: false, refetch } as never)
     mockUpdateMutateAsync.mockRejectedValueOnce({
       response: { status: 409, data: { success: false, errors: ['Someone else just changed this entry. Close it and open it again to see their changes.'] } },
     })
