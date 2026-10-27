@@ -13,6 +13,7 @@ import { parseServiceStreams } from '@/api/types/participants'
 import { ParticipantAlertsBanner } from '@/components/ParticipantAlertsBanner'
 import { PageHeader, PageHeaderMeta } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
 import { BackButton } from '@/components/BackButton'
 import { useTabParam } from '@/hooks/useTabParam'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
@@ -359,23 +360,24 @@ export default function ParticipantDetailPage() {
               IntakeCompletedAt set + IsDraft -> "Continue profile"; IsDraft false -> no banner at all. */}
           {p.isDraft && (
             <section id="onboarding" aria-label="Onboarding" className="scroll-mt-12">
-              <div role="status" className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-[var(--radius-sm)] bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)] text-sm border border-[var(--color-on-warning-container)]/20">
-                <span className="flex items-center gap-2">
-                  <FileEdit className="w-4 h-4 shrink-0" aria-hidden="true" />
-                  {p.servicesStartedAt && p.isActive
-                    ? 'Services have started, and onboarding is still open. They can be rostered and supported; the checklist shows what is left before they are made active.'
-                    : p.intakeCompletedAt
-                    ? "Intake is complete, but this participant's profile isn't finished yet. Excluded from rosters, claims, and other operational lists until finalised."
-                    : "This participant is a draft — intake hasn't been completed yet. Excluded from rosters, claims, and other operational lists until finalised."}
-                </span>
-                {p.servicesStartedAt && p.isActive ? (
+              <Callout
+                tone="warning"
+                polite
+                icon={FileEdit}
+                actions={p.servicesStartedAt && p.isActive ? (
                   <Button variant="secondary" size="sm" className="shrink-0" to={`/onboarding/${id}`}>Open checklist</Button>
                 ) : canWrite && (
                   <Button variant="secondary" size="sm" className="shrink-0" to={p.intakeCompletedAt ? `/participants/${id}/profile` : `/participants/${id}/intake`}>
                     <Pencil className="w-4 h-4" /> {p.intakeCompletedAt ? 'Continue profile' : 'Resume intake'}
                   </Button>
                 )}
-              </div>
+              >
+                {p.servicesStartedAt && p.isActive
+                  ? 'Services have started, and onboarding is still open. They can be rostered and supported; the checklist shows what is left before they are made active.'
+                  : p.intakeCompletedAt
+                  ? "Intake is complete, but this participant's profile isn't finished yet. Excluded from rosters, claims, and other operational lists until finalised."
+                  : "This participant is a draft — intake hasn't been completed yet. Excluded from rosters, claims, and other operational lists until finalised."}
+              </Callout>
             </section>
           )}
           {otherAlerts && alertsData && (

@@ -49,6 +49,7 @@ import { DailyLivingStep } from '../profile/steps/DailyLivingStep'
 import { AboutYouStep } from './steps/AboutYouStep'
 import { hydrateFormFromProjection, hydrateBase } from './hydrate'
 import { changedLeaves } from './changedLeaves'
+import { Callout } from '@/components/Callout'
 
 export type CaregiverFormData = ParticipantFormData & { caregiverName: string; caregiverRelationship?: string }
 
@@ -205,9 +206,9 @@ export default function CaregiverWizardPage() {
     <PublicShell>
       {unsavedChangesDialog}
       {form.data.rejectionNote && (
-        <div role="status" className="mb-4 p-3 rounded-[var(--radius-sm)] bg-[var(--color-warning-container,var(--color-accent))] text-sm">
+        <Callout tone="warning" polite className="mb-4">
           <strong>Your previous submission was sent back with a note:</strong> {form.data.rejectionNote}
-        </div>
+        </Callout>
       )}
       {saveError && <p role="alert" className="mb-4 text-sm text-[var(--color-destructive)]">{saveError}</p>}
       {/* Always mounted: screen readers announce a change inside a live region, not a region inserted already filled. */}

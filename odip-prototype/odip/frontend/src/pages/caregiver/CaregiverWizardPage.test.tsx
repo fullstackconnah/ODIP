@@ -228,6 +228,10 @@ describe('CaregiverWizardPage — rejected state', () => {
     })
     renderCaregiverPage()
     expect(await screen.findByText(/please double check the phone number/i)).toBeInTheDocument()
+    // A standing note, announced politely, with the warning tone's icon.
+    const note = screen.getByText(/please double check the phone number/i).closest('[role="status"]')!
+    expect(note).toHaveAttribute('aria-live', 'polite')
+    expect(note.querySelector('svg')).not.toBeNull()
     expect(screen.getByLabelText(/your name/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/your name/i)).not.toBeDisabled()
   })

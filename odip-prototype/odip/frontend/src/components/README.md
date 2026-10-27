@@ -39,6 +39,7 @@ copying it.
 - [Tabs](#tabs) and [useTabParam](#usetabparam) (the active tab in the URL)
 - [ActionButtons](#actionbuttons)
 - [Touch hit areas](#touch-hit-areas) (`TAP_AREA`, `TAP_FLOOR`, `TAP_AREA_LINKS`, `--tap-min`)
+- [Callout](#callout) (`Callout.tsx`: the one banner; `polite` and `ref`)
 - [NoticesRegion](#noticesregion) (`hooks/useNotices.ts`: what became of a row or detail-page action, kept at the top until dismissed)
 - [AnnouncementRegion](#announcementregion) (`hooks/useRefocusWhenLost.ts`: a create's done view, audible and with focus kept)
 - [ErrorBoundary](#errorboundary)
@@ -1060,6 +1061,15 @@ Three more pieces of the same story (all in `tapArea.ts` or built on it):
   overlap.
 
 ---
+
+## Callout
+
+`<Callout tone title icon actions className announce polite ref>` is the one banner for a warning, an error, a note or a success. Do not hand-build a bordered tinted `div`: the tone gives the border, icon and ink, and the role.
+
+- `tone`: `error`/`danger` and `warning` announce assertively (`role="alert"`); `info` and `success` politely (`role="status"`).
+- `polite`: announce as `role="status"`, `aria-live="polite"` whatever the tone, for a standing note nobody just caused (a draft participant, a plan-type warning). `announce={false}` still wins (no role at all).
+- `ref`: the root element, for a caller that scrolls the banner into view or moves focus to it (the roster panels' error notices).
+- `actions`: to the right of the text, wrapping under it on a narrow screen. `icon`: a `LucideIcon` to replace the tone's, or `null` for none.
 
 ## NoticesRegion
 

@@ -356,9 +356,7 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
         </FormField>
 
         {error && !error.noLength && (
-          <div ref={errorRef} role="alert" className="rounded-[var(--radius-sm)] bg-error-container px-3 py-2 text-sm text-destructive">
-            {error.message}
-          </div>
+          <Callout ref={errorRef} tone="error">{error.message}</Callout>
         )}
         </>)}
       </SlideOver>

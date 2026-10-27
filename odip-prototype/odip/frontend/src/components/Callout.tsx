@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { ReactNode, Ref } from 'react'
 import { AlertTriangle, AlertCircle, Info, CheckCircle2, type LucideIcon } from 'lucide-react'
 import clsx from 'clsx'
 import { toneOf } from '@/lib/tone'
@@ -79,6 +79,13 @@ export type CalloutProps = {
    * announce it twice.
    */
   announce?: boolean
+  /**
+   * Announce politely (`role="status"`, `aria-live="polite"`) whatever the tone, for a standing note the person did not just cause (a draft
+   * participant, a plan-type warning) that should not interrupt the screen reader. `announce={false}` still wins.
+   */
+  polite?: boolean
+  /** The root element, for a caller that scrolls it into view or moves focus to it. */
+  ref?: Ref<HTMLDivElement>
 }
 
 /**
@@ -91,13 +98,15 @@ export type CalloutProps = {
  *   info and success are polite (`status`).
  * - The icon is decorative (`aria-hidden`); the visible text is the source of meaning.
  */
-export function Callout({ tone, title, children, icon, actions, className, announce = true }: CalloutProps) {
+export function Callout({ tone, title, children, icon, actions, className, announce = true, polite = false, ref }: CalloutProps) {
   const style = TONE_STYLES[toneOf(tone) as keyof typeof TONE_STYLES]
   const Icon = icon === null ? null : (icon ?? style.icon)
+  const [role, ariaLive] = polite ? (['status', 'polite'] as const) : [style.role, style.ariaLive]
   return (
     <div
-      role={announce ? style.role : undefined}
-      aria-live={announce ? style.ariaLive : undefined}
+      ref={ref}
+      role={announce ? role : undefined}
+      aria-live={announce ? ariaLive : undefined}
       className={clsx(
         'flex flex-wrap items-start gap-3 p-3 rounded-lg border text-sm',
         style.container,
