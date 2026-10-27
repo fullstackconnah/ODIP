@@ -302,4 +302,18 @@ describe('UserSwitcher: focus ring', () => {
     render(<UserSwitcher />)
     expect(screen.getByRole('button', { name: /view as user/i })).toHaveClass('focus-visible:ring-2', 'focus-visible:ring-[var(--color-ring)]')
   })
+
+  it('gives the exit-view row and every user row the keyboard focus ring', async () => {
+    setSuperAdminSignedIn()
+    localStorage.setItem('odip_viewing_user', 'user-support-1')
+    const user = userEvent.setup()
+    render(<UserSwitcher />)
+
+    await user.click(screen.getByRole('button', { name: /^usr/i }))
+    const rows = [screen.getByRole('button', { name: /exit view/i }), screen.getByRole('button', { name: /^casey coordinator/i })]
+    for (const row of rows) {
+      expect(row).toHaveClass('focus-visible:ring-2', 'focus-visible:ring-[var(--color-ring)]')
+      expect(row).not.toHaveClass('focus:ring-2')
+    }
+  })
 })

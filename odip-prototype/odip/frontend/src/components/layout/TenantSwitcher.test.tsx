@@ -173,4 +173,14 @@ describe('TenantSwitcher: focus ring', () => {
     render(<TenantSwitcher />)
     expect(screen.getByRole('button', { name: /demo/i })).toHaveClass('focus-visible:ring-2', 'focus-visible:ring-[var(--color-ring)]')
   })
+
+  it('gives every menu row the keyboard focus ring', async () => {
+    const user = userEvent.setup()
+    render(<TenantSwitcher />)
+
+    await user.click(screen.getByRole('button', { name: 'SA Demo' }))
+    const row = screen.getByRole('button', { name: /^Acme/ })
+    expect(row).toHaveClass('focus-visible:outline-none', 'focus-visible:ring-2', 'focus-visible:ring-[var(--color-ring)]')
+    expect(row).not.toHaveClass('focus:ring-2')
+  })
 })
