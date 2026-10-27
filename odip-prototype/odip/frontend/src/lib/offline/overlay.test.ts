@@ -10,7 +10,7 @@ const rec = (extra: Partial<QueueRecord>): QueueRecord => ({
 
 const detail = {
   id: 's1', status: 'Published', timeZoneId: 'Australia/Sydney', completion: null, breaks: [],
-  routines: [{ id: 'rt1', isChecked: false, checkedAt: null, checkedByName: null }, { id: 'rt2', isChecked: true, checkedAt: 'x', checkedByName: 'Sam' }],
+  shiftRoutines: [{ id: 'rt1', isChecked: false, checkedAt: null, checkedByName: null }, { id: 'rt2', isChecked: true, checkedAt: 'x', checkedByName: 'Sam' }],
   handover: { isRead: false, readAt: null }, finishBlockers: [{ code: 'BREAK_RUNNING' }],
 } as unknown as PortalShiftDetailDto
 
@@ -23,7 +23,7 @@ describe('applyQueued', () => {
 
   it('a queued tick shows as done and a queued untick as not done', () => {
     const out = applyQueued(detail, [rec({ kind: 'tick', target: 'rt1' }), rec({ id: 'r2', kind: 'untick', target: 'rt2' })])
-    expect(out.routines.map((r) => r.isChecked)).toEqual([true, false])
+    expect(out.shiftRoutines.map((r) => r.isChecked)).toEqual([true, false])
   })
 
   it('a queued handover read shows as read', () => {

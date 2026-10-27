@@ -56,7 +56,7 @@ describe('shift package hooks — breaks', () => {
     await result.current.mutateAsync({ id: 'shift-1' })
 
     expect(mockRequest).toHaveBeenCalledTimes(1)
-    const sent = mockRequest.mock.calls[0][0] as { url: string; method: string; data: { breakId: string } }
+    const sent = (mockRequest.mock.calls[0] as unknown[])[0] as { url: string; method: string; data: { breakId: string } }
     expect(sent).toEqual({ url: '/portal/shifts/shift-1/breaks/start', method: 'POST', data: { breakId: expect.any(String) } })
     expect(sent.data.breakId.length).toBeGreaterThan(10)
     // The cached shift is replaced by the response (structural sharing means equal, not necessarily identical).

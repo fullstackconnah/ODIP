@@ -37,7 +37,7 @@ export function applyQueued(detail: PortalShiftDetailDto, records: readonly Queu
       case 'tick':
       case 'untick': {
         const on = r.kind === 'tick'
-        out = { ...out, routines: out.routines.map((x) => (x.id === r.target ? { ...x, isChecked: on, checkedAt: on ? r.clientTime : null, checkedByName: on ? (x.checkedByName ?? '') : null } : x)) }
+        out = { ...out, shiftRoutines: out.shiftRoutines.map((x) => (x.id === r.target ? { ...x, isChecked: on, checkedAt: on ? r.clientTime : null, checkedByName: on ? (x.checkedByName ?? '') : null } : x)) }
         break
       }
       case 'ack':

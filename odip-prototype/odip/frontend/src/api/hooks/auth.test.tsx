@@ -199,4 +199,18 @@ describe('storeSession', () => {
     expect(localStorage.getItem('odip_viewing_user')).toBeNull()
     expect(localStorage.getItem('odip_superadmin_user')).toBeNull()
   })
+
+  it('a different user signing in drops the earlier users saved shifts and queue; the same user keeps theirs', async () => {
+    const { storeSession } = await import('./auth')
+    localStorage.setItem('odip_offline:u1:queue', '[{"id":"r1"}]')
+    localStorage.setItem('odip_offline:u1:detail:s1', '{}')
+
+    storeSession({ token: 't', id: 'u1' } as never)
+    expect(localStorage.getItem('odip_offline:u1:queue')).toBe('[{"id":"r1"}]')
+    expect(localStorage.getItem('odip_offline:u1:detail:s1')).toBe('{}')
+
+    storeSession({ token: 't2', id: 'u2' } as never)
+    expect(localStorage.getItem('odip_offline:u1:queue')).toBeNull()
+    expect(localStorage.getItem('odip_offline:u1:detail:s1')).toBeNull()
+  })
 })

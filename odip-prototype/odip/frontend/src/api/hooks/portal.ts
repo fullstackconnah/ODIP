@@ -219,7 +219,7 @@ export function useDeleteBreak() {
  */
 export function useCheckRoutine() {
   return useQueuedWrite<{ id: string; routineId: string }, PortalShiftDetailDto>(
-    ({ id, routineId }, detail) => ({ kind: 'tick', path: `/portal/shifts/${id}/routines/${routineId}/check`, method: 'POST', body: undefined, target: routineId, routine: detail?.routines?.find((r) => r.id === routineId)?.title }),
+    ({ id, routineId }, detail) => ({ kind: 'tick', path: `/portal/shifts/${id}/routines/${routineId}/check`, method: 'POST', body: undefined, target: routineId, routine: detail?.shiftRoutines?.find((r) => r.id === routineId)?.title }),
     takeDetail,
   )
 }
@@ -227,7 +227,7 @@ export function useCheckRoutine() {
 /** DELETE portal/shifts/{id}/routines/{routineId}/check - untick a routine (the removal is audited). Idempotent; same scoping as `useCheckRoutine`. */
 export function useUncheckRoutine() {
   return useQueuedWrite<{ id: string; routineId: string }, PortalShiftDetailDto>(
-    ({ id, routineId }, detail) => ({ kind: 'untick', path: `/portal/shifts/${id}/routines/${routineId}/check`, method: 'DELETE', body: undefined, target: routineId, routine: detail?.routines?.find((r) => r.id === routineId)?.title }),
+    ({ id, routineId }, detail) => ({ kind: 'untick', path: `/portal/shifts/${id}/routines/${routineId}/check`, method: 'DELETE', body: undefined, target: routineId, routine: detail?.shiftRoutines?.find((r) => r.id === routineId)?.title }),
     takeDetail,
   )
 }

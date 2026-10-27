@@ -24,6 +24,10 @@ import { readStoredOpenGroups, storeGroupOpen } from '@/components/layout/navOpe
 import { usePermissions } from '@/lib/permissions'
 import { usePendingWitnessRequests, usePendingLeaveCount, usePendingCompletionCount, useModuleVisibility } from '@/api/hooks'
 import { endSession } from '@/api/client'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { useQueueRecords } from '@/api/hooks/portal'
+import { offlineQueue } from '@/lib/offline/queue'
+import { plural } from '@/lib/format'
 import { Wordmark } from '@/components/Wordmark'
 import { useUiPreferences } from '@/hooks/useUiPreferences'
 import { RailFlyout } from '@/components/layout/RailFlyout'
@@ -392,6 +396,8 @@ function useSidebarGlide(
 
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const unsent = useQueueRecords().length
+  const [confirmSignOut, setConfirmSignOut] = useState(false)
   const drawerRef = useRef<HTMLElement>(null)
   const location = useLocation()
   const { prefs, setPref } = useUiPreferences()
@@ -516,6 +522,17 @@ export default function AppLayout() {
       >
         Skip to content
       </a>
+      <ConfirmDialog
+        open={confirmSignOut}
+        title="Sign out and delete unsent changes?"
+        message={`${plural(unsent, 'change')} on this phone ${unsent === 1 ? 'hasn’t' : 'haven’t'} been sent yet. Signing out deletes ${unsent === 1 ? 'it' : 'them'} from this phone.`}
+        confirmLabel="Sign out and delete"
+        cancelLabel="Stay signed in"
+        variant="danger"
+        focusCancel
+        onCancel={() => setConfirmSignOut(false)}
+        onConfirm={() => { offlineQueue.wipeAll(); void endSession() }}
+      />
       {/*
         Mobile overlay. Below lg the open drawer (z-[60]) and its scrim (z-[55]) sit ABOVE the fixed bottom nav
         (z-50). They used to be z-50 and z-40: the nav comes later in the DOM, so it painted over the drawer's own
@@ -610,7 +627,7 @@ export default function AppLayout() {
 
         {/* Bottom */}
         <div data-foot className={`pt-2 shrink-0 ${footRail ? 'space-y-0.5' : ''}`}>
-          <button onClick={() => endSession()}
+          <button onClick={() => (unsent > 0 ? setConfirmSignOut(true) : endSession())}
             data-glide="signout"
             className={`${footRail ? RAIL_ITEM : WIDE_FOOT_ROW} text-[var(--color-secondary)] hover:bg-[var(--color-sidebar-accent)]`}
             {...(rail ? rail.tip('Sign out', 0) : {})}>

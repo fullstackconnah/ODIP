@@ -22,7 +22,7 @@ vi.mock('../client', () => ({
   apiPatch: vi.fn(),
 }))
 
-import { useCreateShiftNote, usePortalShiftDetail, useRecordShiftDose, useStartShift } from './portal'
+import { useCreateShiftNote, useMyShifts, usePortalShiftDetail, useRecordShiftDose, useStartShift } from './portal'
 import { offlineQueue } from '@/lib/offline/queue'
 import { readSaved, writeSaved } from '@/lib/offline/store'
 
@@ -30,7 +30,7 @@ function wrapper(qc: QueryClient) {
   return ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>
 }
 
-const detail = { id: 's1', status: 'Published', serviceDate: '2026-10-28', startTime: '09:00:00', endTime: '13:00:00', timeZoneId: 'Australia/Sydney', participant: { fullName: 'Jordan Smith' }, routines: [], breaks: [], finishBlockers: [], handover: null } as unknown as PortalShiftDetailDto
+const detail = { id: 's1', status: 'Published', serviceDate: '2026-10-28', startTime: '09:00:00', endTime: '13:00:00', timeZoneId: 'Australia/Sydney', participant: { fullName: 'Jordan Smith' }, shiftRoutines: [], breaks: [], finishBlockers: [], handover: null } as unknown as PortalShiftDetailDto
 const newClient = () => new QueryClient({ defaultOptions: { queries: { retry: false } } })
 
 let online: ReturnType<typeof vi.spyOn>
@@ -59,6 +59,16 @@ describe('offline-aware portal hooks', () => {
     const { result } = renderHook(() => usePortalShiftDetail('s1'), { wrapper: wrapper(newClient()) })
     await waitFor(() => expect(result.current.data?.id).toBe('s1'))
     expect(mockApiGet).not.toHaveBeenCalled()
+  })
+
+  it('cold start with no signal: My shifts renders the week saved on the phone and never asks the server', async () => {
+    const week = { shifts: [{ id: 's1', participantName: 'Jordan Smith', serviceDate: '2026-10-28', startTime: '09:00:00', endTime: '13:00:00', status: 'Published' }], tripAssignments: [], timeZoneId: 'Australia/Sydney' }
+    writeSaved('u1', 'shifts:2026-10-26:2026-11-01', week)
+    online.mockReturnValue(false)
+    const { result } = renderHook(() => useMyShifts('2026-10-26', '2026-11-01'), { wrapper: wrapper(newClient()) })
+    await waitFor(() => expect(result.current.data?.shifts[0].id).toBe('s1'))
+    // Today's details are prefetched (and fail quietly offline); the week itself is never asked for.
+    expect(mockApiGet).not.toHaveBeenCalledWith('/portal/my-shifts', expect.anything())
   })
 
   it('a dropped connection (no response) falls back to the saved copy; a server refusal does not', async () => {

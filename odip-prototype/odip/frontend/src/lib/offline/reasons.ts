@@ -32,3 +32,13 @@ export function reasonFor(rec: QueueRecord, ctx: { returnCount?: number } = {}):
   if (status === 404) return "This shift isn't yours any more. It may have been given to someone else."
   return code ? `Bunya Support couldn't accept this (code ${code}). Tell your coordinator.` : "Bunya Support couldn't accept this. Tell your coordinator."
 }
+
+/** "Shift details saved at 2:05 pm." / "…saved yesterday at 4:10 pm." (SHAPE 3a); older than yesterday names the day. */
+export function savedLine(savedAt: number, now = Date.now()): string {
+  const day = (t: number) => new Date(t).toDateString()
+  const time = clockTime(new Date(savedAt).toISOString())
+  if (day(savedAt) === day(now)) return `Shift details saved at ${time}.`
+  if (day(savedAt) === day(now - 86_400_000)) return `Shift details saved yesterday at ${time}.`
+  const when = new Date(savedAt).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })
+  return `Shift details saved ${when} at ${time}.`
+}

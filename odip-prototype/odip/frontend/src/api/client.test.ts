@@ -158,6 +158,30 @@ describe('endSession', () => {
     for (const key of KEYS) expect(localStorage.getItem(key), key).toBeNull()
   })
 
+  it('an explicit end wipes the saved shifts and the unsent queue', async () => {
+    localStorage.setItem('odip_offline:u1:detail:s1', '{}')
+    localStorage.setItem('odip_offline:u1:queue', '[{"id":"r1"}]')
+    await endSessionWith(() => ({ status: 200, data: { success: true } }))
+    expect(localStorage.getItem('odip_offline:u1:detail:s1')).toBeNull()
+    expect(localStorage.getItem('odip_offline:u1:queue')).toBeNull()
+  })
+
+  it('a forced end (refresh refused) wipes the saved shifts but keeps the unsent queue', async () => {
+    const client = await freshClient()
+    const jsdomNoise = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      localStorage.setItem('odip_token', 'the-old-token')
+      localStorage.setItem('odip_offline:u1:detail:s1', '{}')
+      localStorage.setItem('odip_offline:u1:queue', '[{"id":"r1"}]')
+      script(client, url => (url === '/auth/exchange' ? refusal('TenantInactive') : { status: 401, data: {} }))
+      await outcome(client.apiGet('/participants'))
+      expect(localStorage.getItem('odip_offline:u1:detail:s1')).toBeNull()
+      expect(localStorage.getItem('odip_offline:u1:queue')).toBe('[{"id":"r1"}]')
+    } finally {
+      jsdomNoise.mockRestore()
+    }
+  })
+
   // The person is signed out of this browser at once; telling the server (the cookie) comes after and is best effort, so a slow or unreachable API cannot leave
   // the app usable behind a Sign out button that looks dead. The adapter below does what a real one does with `timeout`: gives up when it is up.
   it('clears the keys and signs out of Firebase before the logout request is answered, and leaves after its 5 s limit', async () => {
