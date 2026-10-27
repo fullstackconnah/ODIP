@@ -54,7 +54,7 @@ export interface CreateTenantWithSetupDto {
     address: string
     state?: string
     gstRegistered: boolean
-    isPaceProvider: boolean
+    isPaceProvider?: boolean // the server stores false when it is left out
     bankAccountName?: string
     bsb?: string
     accountNumber?: string

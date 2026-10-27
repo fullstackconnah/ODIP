@@ -290,11 +290,6 @@ function ProviderSettingsGrid({ settings }: { settings: ProviderSettingsDto }) {
           activeLabel="GST Registered"
           inactiveLabel="Not GST Registered"
         />
-        <Badge
-          active={settings.isPaceProvider}
-          activeLabel="PACE Provider"
-          inactiveLabel="Not PACE Provider"
-        />
       </div>
 
       {/* Bank details */}
