@@ -6,7 +6,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Callout } from '@/components/Callout'
 import type { ScalarGroupKey } from '@/api/types/participant-patch'
 import { isSectionChanged, sectionChangedRevisions } from '@/lib/sectionConflict'
-import { CardPinContext } from './cardPin'
+import { DirtyEditsContext } from './dirtyEdits'
 
 /**
  * PD-6/PD-7 shared chrome for section-level "edit this card in place" panels (see SPEC-03's PD-7
@@ -73,11 +73,11 @@ export function SectionEditPanel({ title, className, canEdit, isDirty, onEditSta
   const [refusals, setRefusals] = useState(0)
   const calloutRef = useRef<HTMLDivElement>(null)
   const labelId = useId()
-  const { pin } = useContext(CardPinContext)
+  const { hold } = useContext(DirtyEditsContext)
   // "Refetched" is a fact: the panel's revisions have caught up with what the 409 reported for every group it saves.
   const landed = refused !== null && groups.every(k => (revisions?.[k] ?? 0) >= (refused[k] ?? 0))
 
-  useEffect(() => (editing ? pin() : undefined), [editing, pin])
+  useEffect(() => (editing && isDirty ? hold() : undefined), [editing, isDirty, hold])
 
   useEffect(() => {
     if (refusals === 0) return
@@ -222,6 +222,8 @@ export function SectionEditPanel({ title, className, canEdit, isDirty, onEditSta
         title="Discard changes?"
         message="You have unsaved changes in this section. Discard them?"
         confirmLabel="Discard"
+        cancelLabel="Keep editing"
+        focusCancel
         variant="danger"
       />
     </Card>

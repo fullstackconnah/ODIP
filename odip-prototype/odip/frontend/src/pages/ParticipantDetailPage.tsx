@@ -20,10 +20,10 @@ import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { PageState } from '@/components/PageState'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { FileEdit, Pencil, Download, Loader2, Link2, Link2Off, FileText, ClipboardCheck } from 'lucide-react'
-import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
 import AuditHistoryTab from '@/components/AuditHistoryTab'
 import { usePermissions } from '@/lib/permissions'
-import { CardPinContext } from './participant-detail/cardPin'
+import { DirtyEditsContext } from './participant-detail/dirtyEdits'
 import { formatDateAu, extractErrorMessage } from '@/lib/utils'
 import { copyText } from '@/lib/clipboard'
 import {
@@ -35,7 +35,6 @@ import {
   ParticipantMealsDietSection, ParticipantAboutMeSection, ParticipantRisksHazardsSummarySection,
   hasAddressLiving, hasTopic, answeredChecklist, hasKeyIdentifiers, hasCulturalBackground, hasMedical, hasBehaviourCommunication, hasMealsDiet, hasAboutMe, hasRisksHazardsSummary,
   hasMobilityPersonalCare, hasEquipmentOvernight, hasTypicalDay, hasTransportTravel, hasSupportNeeds,
-  NotRecordedFold,
 } from './participant-detail'
 import {
   SupportNeedsSection, MobilityAidsSection, OvernightSupportSection, EquipmentSection, MobilityFunctionalSection, SupportNotesSection,
@@ -45,15 +44,15 @@ import { SupportProfileTopicCard, type SupportProfileState, type TopicField } fr
 import { SeeSectionLink } from './participant-detail/SeeSectionLink'
 import { managementLabel } from '@/lib/fundingPlan'
 import { ServicesCard } from './participant-detail/ServicesCard'
-import { JumpPanel } from './participant-detail/JumpTo'
 import { ParticipantSafetyFlags } from './participant-detail/ParticipantSafetyFlags'
 import { BeforeYouStartCard } from './participant-detail/BeforeYouStartCard'
 import { ParticipantMoreMenu } from './participant-detail/ParticipantMoreMenu'
 import { useParticipantTabCounts } from './participant-detail/useParticipantTabCounts'
 import {
-  NEW_TABS, PARTICIPANT_TAB_KEYS, useParticipantTabRedirect, useParticipantGoTo, useScrollToHash, type ParticipantTabKey,
+  NEW_TABS, PARTICIPANT_TAB_KEYS, useParticipantTabRedirect, useParticipantGoTo, useScrollToHash, useParticipantSection, visibleSubTabs,
+  type ParticipantTabKey, type GroupedTabKey, type SubTab,
 } from './participant-detail/participantTabs'
-import { joinList, plural, formatRelative } from '@/lib/format'
+import { plural, formatRelative } from '@/lib/format'
 import { Card } from '@/components/Card'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { retryingAfterError } from '@/lib/queryPhase'
@@ -77,62 +76,19 @@ const CARD_GRID = 'grid grid-cols-[repeat(auto-fill,minmax(min(26rem,100%),1fr))
 /**
  * One anchored section of a tab. `id` is the deep-link target (`#medical`), so it is the contract with the flag chips, the alerts and the
  * old `?tab=` keys. A component with no heading of its own gets a screen-reader-only one, which is also where focus lands after a jump.
- * `data-jump` lists it in the tab's Jump to menu and rail.
+ * A card reads at 48rem; a list (`wide`) takes the panel's width, and so does a card whose save was refused, so its error has room.
  */
 function Section({ id, label, srHeading, wide, children }: { id: string; label: string; srHeading?: boolean; wide?: boolean; children: ReactNode }) {
   return (
-    <section id={id} aria-label={label} data-jump className={`scroll-mt-12 has-[[data-save-refused]]:col-span-full ${wide ? 'col-span-full' : ''}`}>
+    <section id={id} aria-label={label} className={`scroll-mt-28 max-md:scroll-mt-32 has-[[data-save-refused]]:max-w-none ${wide ? '' : 'max-w-3xl'}`}>
       {srHeading && <h3 className="sr-only">{label}</h3>}
       {children}
     </section>
   )
 }
 
+/** A section's card: `has` is false while nothing is recorded, which makes its sub-tab quiet. */
 type ShortCard = { id: string; title: string; has: boolean; node: ReactNode }
-
-/**
- * The sections with something recorded, in order, then the empty ones folded into one line for every role (D2): an editor opens the fold to
- * reach each card's Add, a viewer reads the line. A section that is still loading counts as recorded, so nothing folds before its data is in.
- */
-function ShortCards({ cards, canEdit, also }: { cards: ShortCard[]; canEdit: boolean; also?: Record<string, boolean> }) {
-  // While a panel in this tab edits, every card keeps the placement it had: a refetch that flips `has` would move the card to the other
-  // parent (top level or the fold), remount it and lose the draft. `also` is the placement of a card rendered inside another card.
-  const [frozen, setFrozen] = useState<Record<string, boolean> | null>(null)
-  const current = useRef<Record<string, boolean>>({})
-  useEffect(() => { current.current = { ...also, ...Object.fromEntries(cards.map(c => [c.id, c.has])) } })
-  const open = useRef(0)
-  const pin = useCallback(() => {
-    if (open.current++ === 0) setFrozen(current.current)
-    return () => { if (--open.current === 0) setFrozen(null) }
-  }, [])
-  const held = useCallback((id: string, has: boolean) => frozen?.[id] ?? has, [frozen])
-  const value = useMemo(() => ({ pin, held }), [pin, held])
-  const placed = cards.map(c => ({ ...c, has: held(c.id, c.has) }))
-  const empty = placed.filter(c => !c.has)
-  return (
-    <CardPinContext.Provider value={value}>
-      {placed.filter(c => c.has).map(c => c.node)}
-      {empty.length > 0 && (canEdit ? (
-        <NotRecordedFold className="col-span-full" summary={joinList(empty.map(c => c.title))}>
-          <div className={CARD_GRID}>{empty.map(c => c.node)}</div>
-        </NotRecordedFold>
-      ) : (
-        <p className="col-span-full text-[13px] text-[var(--color-muted-foreground)]">Not recorded: {joinList(empty.map(c => c.title))}</p>
-      ))}
-    </CardPinContext.Provider>
-  )
-}
-
-/** The Risks & Hazards Summary sits inside the Risks card, so it is placed through the same pin as the ShortCards around it. */
-function RisksSummaryCards({ summary, canEdit, slot }: { summary: ShortCard; canEdit: boolean; slot: 'top' | 'fold' }) {
-  const has = useContext(CardPinContext).held(summary.id, summary.has)
-  if (slot === 'top') return has ? <>{summary.node}</> : null
-  return canEdit && !has ? (
-    <NotRecordedFold className="col-span-full" summary={summary.title}>
-      <div className={CARD_GRID}>{summary.node}</div>
-    </NotRecordedFold>
-  ) : null
-}
 
 export default function ParticipantDetailPage() {
   const { canWrite, canViewAlerts, canWriteParticipantDetails, canWriteSupportProfile, canWriteRestrictivePractices, canManageFunding, canManageParticipantLifecycle, canAccessPage, isAdmin, isSuperAdmin } = usePermissions()
@@ -151,7 +107,7 @@ export default function ParticipantDetailPage() {
     () => PARTICIPANT_TAB_KEYS.filter(key => key !== 'funding' || showFunding),
     [showFunding],
   )
-  const [tab, setTab] = useTabParam(tabKeys, 'overview')
+  const [tab] = useTabParam(tabKeys, 'overview')
   const goTo = useParticipantGoTo(tabKeys)
   useParticipantTabRedirect(tabKeys)
   useScrollToHash(id)
@@ -159,6 +115,21 @@ export default function ParticipantDetailPage() {
   const pageQuery = useParticipant(id)
   const supportProfile = useSupportProfile(id)
   const { data: p, isLoading, isError, error, refetch } = pageQuery
+  // The Community Access stream gates the two cards that were its one card: behaviour support (Health) and the typical day (Daily).
+  const inCommunityStream = !!p && parseServiceStreams(p.serviceStreams).includes('CommunityAccessDailyLiving')
+  const earlierChecklist = p && inCommunityStream ? answeredChecklist(p).length : 0
+  // The sub-tabs of the open tab: the rows this role and participant can see. Above the early returns, so the hooks keep their order.
+  const rows = tab === 'overview' ? [] : visibleSubTabs(tab, {
+    rostering: canAccessRostering, planBudget: canManageFunding, claims: canAccessClaims, history: canSeeHistory,
+    communityStream: inCommunityStream, earlierChecklist: earlierChecklist > 0,
+  })
+  const { section, setSection, selectTab } = useParticipantSection(tab, rows)
+  // An open SectionEditPanel with unsaved edits holds the register; a tab or sub-tab switch then asks before it unmounts the draft.
+  const holds = useRef(0)
+  const dirtyEdits = useMemo(() => ({ hold: () => { holds.current++; let on = true; return () => { if (on) { on = false; holds.current-- } } } }), [])
+  const [pendingSwitch, setPendingSwitch] = useState<(() => void) | null>(null)
+  const guarded = (go: () => void) => { if (holds.current > 0) setPendingSwitch(() => go); else go() }
+  const stripRef = useRef<HTMLDivElement>(null)
   const { data: alertsData } = useParticipantAlerts(id, canViewAlerts)
   // DOC-01 — Documents header buttons. Hooks called unconditionally, ahead of the isLoading/!p
   // early returns below, per the rules of hooks.
@@ -188,7 +159,7 @@ export default function ParticipantDetailPage() {
   }
 
   const edit = { p, participantId: id!, canEdit: canWriteParticipantDetails }
-  // The sections of a tab in page order. `has` is false for one with nothing recorded yet; it folds (ShortCards). A section that always has
+  // The sections of a tab in page order. `has` is false for one with nothing recorded yet (its sub-tab goes quiet). A section that always has
   // content (Identity, NDIS & Funding, the lists that fold themselves) passes true. `wide` spans the grid.
   const card = (cid: string, title: string, has: boolean, node: ReactNode, opts?: { wide?: boolean; srHeading?: boolean }): ShortCard => ({
     id: cid, title, has, node: <Section key={cid} id={cid} label={title} wide={opts?.wide} srHeading={opts?.srHeading}>{node}</Section>,
@@ -214,10 +185,7 @@ export default function ParticipantDetailPage() {
     card('culture-and-rights', 'Cultural Background', hasCulturalBackground(p), <ParticipantCulturalBackgroundSection {...edit} />),
     card('about-me', 'About Me', hasAboutMe(p), <ParticipantAboutMeSection {...edit} />),
   ]
-  // The Community Access stream gates the two cards that were its one card: behaviour support (Health) and the typical day (Daily).
-  const inCommunityStream = parseServiceStreams(p.serviceStreams).includes('CommunityAccessDailyLiving')
   const risksSummary = card('risks-summary', 'Risks & Hazards Summary', hasRisksHazardsSummary(p), <ParticipantRisksHazardsSummarySection {...edit} />)
-  const earlierChecklist = inCommunityStream ? answeredChecklist(p).length : 0
   const healthCards = [
     card('emergency', 'Emergency', spHas('emergencyConsiderations'), topic('Emergency', 'emergencyConsiderations')),
     card('medical', 'Medical', hasMedical(p) || spHas('medicationHealthSummary'),
@@ -234,9 +202,8 @@ export default function ParticipantDetailPage() {
     // INTAKE-09 — the risk entries are a compact section rather than their own tab; the summary card shares the section's inner grid.
     card('risks', 'Risks and hazards', true, (
       <div className={CARD_GRID}>
-        <RisksSummaryCards summary={risksSummary} canEdit={canWriteParticipantDetails} slot="top" />
+        {risksSummary.node}
         <Card className="col-span-full"><RiskEntriesSection participantId={id} /></Card>
-        <RisksSummaryCards summary={risksSummary} canEdit={canWriteParticipantDetails} slot="fold" />
       </div>
     ), { wide: true }),
     card('restrictive-practices', 'Restrictive practices', true, stack(
@@ -263,6 +230,42 @@ export default function ParticipantDetailPage() {
     card('transport-and-travel', 'Transport and travel', hasTransportTravel(p) || spHas('travelSpecificNotes'), stack(
       <SupportNotesSection {...edit} field="transportRequirements" />, topic('Travel-specific notes', 'travelSpecificNotes'))),
   ]
+  const peopleCards = [
+    card('contacts', 'Contacts', true, <ContactsTab participantId={id} participant={p} />, { wide: true, srHeading: true }),
+    card('roster', 'Rostering', true, <RosteringTab participantId={id!} />, { wide: true, srHeading: true }),
+    card('trips', 'Bookings', true, <BookingsTab participantId={id} />, { wide: true, srHeading: true }),
+  ]
+  const fundingCards = [
+    card('plan-budget', 'Plan budget', true, (
+      <>
+        <p className="mb-3 flex flex-wrap items-center gap-x-2 text-sm">
+          Plan type: {managementLabel(p.planType)}
+          <SeeSectionLink tab="about" hash="ndis-plan" section="NDIS plan" canEdit={canWriteParticipantDetails} />
+        </p>
+        <FundingTab participantId={id!} planType={p.planType} />
+      </>
+    ), { wide: true, srHeading: true }),
+    card('claims', 'Claims', true, <ClaimsTab participantId={id!} canWrite={canWrite} />, { wide: true, srHeading: true }),
+  ]
+  const recordsCards = [
+    card('notes', 'Notes', true, <NotesTab participantId={id} />, { wide: true, srHeading: true }),
+    card('consents', 'Consents', true, <Card><ParticipantConsentsSection participantId={id} /></Card>, { wide: true }),
+    card('history', 'History', true, <AuditHistoryTab entityType="Participant" entityId={String(p.id)} />, { wide: true, srHeading: true }),
+  ]
+  const cards: Record<GroupedTabKey, ShortCard[]> = { about: aboutCards, health: healthCards, daily: dailyCards, people: peopleCards, funding: fundingCards, records: recordsCards }
+  // Counts ride on the four list rows: the numeral for sight, the spoken noun for a screen reader. An empty non-list section is a quiet chip.
+  const subItems = (tab: GroupedTabKey, rows: readonly SubTab[], active: string | undefined) => rows.map(r => {
+    const n = r.count ? counts[r.count] : undefined
+    const noun = r.count ? NEW_TABS.find(t => t.id === r.count)?.noun : undefined
+    const quiet = !r.list && r.id !== active && !cards[tab].find(c => c.id === r.id)?.has
+    return {
+      id: r.id,
+      label: <span className="relative">{r.label}{n && noun ? <span className="sr-only">, {plural(n, noun[0], noun[1])}</span> : null}{quiet ? <span className="sr-only">, not recorded</span> : null}</span>,
+      badge: n,
+      quiet,
+      panelId: r.id === active ? `sub-${tab}-panel` : undefined,
+    }
+  })
   // Back goes where the user came from; with no history (a deep link) it falls back to the list this participant is on. A draft is never on
   // Active participants: before intake is complete it is a Draft intake row on Enquiries, after it a row on Onboarding.
   const [backTo, backLabel] = !p.isDraft ? ['/participants', 'participants']
@@ -337,21 +340,53 @@ export default function ParticipantDetailPage() {
         <ParticipantAlertsBanner severity="critical" alerts={alertsData.alerts} onSelectTab={goTo} />
       )}
 
-      <Tabs
-        overflow="scroll"
-        tabs={NEW_TABS.filter(t => tabKeys.includes(t.id)).map(t => {
-          const n = t.id === 'health' ? counts.health : t.id === 'daily' ? counts.daily : t.id === 'people' ? counts.people : t.id === 'records' ? counts.records : undefined
-          return {
-            id: t.id,
-            // relative: the absolutely positioned sr-only text would otherwise escape the strip's overflow clip and widen the page
-            label: <span className="relative">{t.label}{n && t.noun ? <span className="sr-only">, {plural(n, t.noun[0], t.noun[1])}</span> : null}</span>,
-            badge: n,
-          }
-        })}
-        active={tab}
-        onChange={setTab}
-        ariaLabel="Participant sections"
-      />
+      <DirtyEditsContext.Provider value={dirtyEdits}>
+      {/* Two levels: the main strip, then (on a grouped tab) one sub-tab per section. A plain block, not the flex column, so the strip
+          and its panel sit close and the page's 24px gap stays between whole bands. */}
+      <div>
+        <Tabs
+          overflow="scroll"
+          tabs={NEW_TABS.filter(t => tabKeys.includes(t.id)).map(t => {
+            const n = t.id === 'health' ? counts.health : t.id === 'daily' ? counts.daily : t.id === 'people' ? counts.people : t.id === 'records' ? counts.records : undefined
+            return {
+              id: t.id,
+              // relative: the absolutely positioned sr-only text would otherwise escape the strip's overflow clip and widen the page
+              label: <span className="relative">{t.label}{n && t.noun ? <span className="sr-only">, {plural(n, t.noun[0], t.noun[1])}</span> : null}</span>,
+              badge: n,
+            }
+          })}
+          active={tab}
+          onChange={next => { if (next !== tab && (tabKeys as readonly string[]).includes(next)) guarded(() => selectTab(next as ParticipantTabKey)) }}
+          ariaLabel="Participant sections"
+        />
+
+        {tab !== 'overview' && section && (
+          <>
+            <div ref={stripRef} className="mt-3">
+              <Tabs
+                variant="sub"
+                tabs={subItems(tab, rows, section)}
+                active={section}
+                onChange={next => {
+                  if (next === section) return
+                  guarded(() => {
+                    setSection(next)
+                    // A short panel leaves the page near the strip's own height: bring the strip back under the sticky header so the new section starts in view.
+                    const top = stripRef.current?.getBoundingClientRect().top ?? 0
+                    if (top < 48) window.scrollTo({ top: window.scrollY + top - 56, behavior: 'auto' })
+                  })
+                }}
+                ariaLabel={`${NEW_TABS.find(t => t.id === tab)!.label} sections`}
+                idPrefix={`sub-${tab}`}
+              />
+            </div>
+            <div role="tabpanel" id={`sub-${tab}-panel`} aria-labelledby={`sub-${tab}-tab-${section}`} tabIndex={0} className="mt-6 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2">
+              <div key={section}>{cards[tab].find(c => c.id === section)?.node}</div>
+            </div>
+          </>
+        )}
+      </div>
+
 
       <TabPanel tab={tab} id="overview">
         <div className="flex flex-col gap-[var(--section-gap)]">
@@ -389,69 +424,19 @@ export default function ParticipantDetailPage() {
           {topic('Support profile review', 'reviewDate')}
         </div>
       </TabPanel>
+      </DirtyEditsContext.Provider>
 
-      <TabPanel tab={tab} id="about">
-        <JumpPanel>
-          <div className={CARD_GRID}>
-            <ShortCards cards={aboutCards} canEdit={canWriteParticipantDetails} />
-          </div>
-        </JumpPanel>
-      </TabPanel>
-
-      <TabPanel tab={tab} id="health">
-        <JumpPanel>
-          <div className={CARD_GRID}>
-            <ShortCards cards={healthCards} canEdit={canWriteParticipantDetails} also={{ [risksSummary.id]: risksSummary.has }} />
-          </div>
-        </JumpPanel>
-      </TabPanel>
-
-      <TabPanel tab={tab} id="daily">
-        <JumpPanel>
-          <div className={CARD_GRID}>
-            <ShortCards cards={dailyCards} canEdit={canWriteParticipantDetails} />
-          </div>
-        </JumpPanel>
-      </TabPanel>
-
-      <TabPanel tab={tab} id="people">
-        <JumpPanel>
-          <div className={CARD_GRID}>
-            <Section id="contacts" label="Contacts" srHeading wide><ContactsTab participantId={id} participant={p} /></Section>
-            {canAccessRostering && <Section id="roster" label="Rostering" srHeading wide><RosteringTab participantId={id!} /></Section>}
-            <Section id="trips" label="Bookings" srHeading wide><BookingsTab participantId={id} /></Section>
-          </div>
-        </JumpPanel>
-      </TabPanel>
-
-      <TabPanel tab={tab} id="funding">
-        <JumpPanel>
-          <div className={CARD_GRID}>
-            {canManageFunding && <Section id="plan-budget" label="Plan budget" srHeading wide>
-              <p className="mb-3 flex flex-wrap items-center gap-x-2 text-sm">
-                Plan type: {managementLabel(p.planType)}
-                <SeeSectionLink tab="about" hash="ndis-plan" section="NDIS plan" canEdit={canWriteParticipantDetails} />
-              </p>
-              <FundingTab participantId={id!} planType={p.planType} />
-            </Section>}
-            {canAccessClaims && <Section id="claims" label="Claims" srHeading wide><ClaimsTab participantId={id!} canWrite={canWrite} /></Section>}
-          </div>
-        </JumpPanel>
-      </TabPanel>
-
-      <TabPanel tab={tab} id="records">
-        <JumpPanel>
-          <div className={CARD_GRID}>
-            <Section id="notes" label="Notes" srHeading wide><NotesTab participantId={id} /></Section>
-            <Section id="consents" label="Consents" wide>
-              <Card><ParticipantConsentsSection participantId={id} /></Card>
-            </Section>
-            {canSeeHistory && (
-              <Section id="history" label="History" srHeading wide><AuditHistoryTab entityType="Participant" entityId={String(p.id)} /></Section>
-            )}
-          </div>
-        </JumpPanel>
-      </TabPanel>
+      <ConfirmDialog
+        open={pendingSwitch !== null}
+        onCancel={() => setPendingSwitch(null)}
+        onConfirm={() => { pendingSwitch?.(); setPendingSwitch(null) }}
+        title="Discard changes?"
+        message="You have unsaved changes in this section. Discard them?"
+        confirmLabel="Discard"
+        cancelLabel="Keep editing"
+        focusCancel
+        variant="danger"
+      />
 
       {archiveRestore.confirmDialog}
     </div>

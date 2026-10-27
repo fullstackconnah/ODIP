@@ -65,6 +65,20 @@ async function openAndSave(text = 'mine') {
   await userEvent.click(saveBtn())
 }
 
+describe('SectionEditPanel discard guard', () => {
+  it('Cancel with a dirty draft asks first, focuses Keep editing, and Keep editing keeps the draft', async () => {
+    render(<Refusable onSave={vi.fn()} />)
+    await userEvent.click(screen.getByRole('button', { name: /Edit/ }))
+    await userEvent.type(screen.getByLabelText('goals'), 'mine')
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    const keep = screen.getByRole('button', { name: 'Keep editing' })
+    expect(keep).toHaveFocus()
+    expect(screen.getByRole('button', { name: 'Discard' }).className).toContain('bg-[var(--color-destructive)]')
+    await userEvent.click(keep)
+    expect(screen.getByLabelText('goals')).toHaveValue('mine')
+  })
+})
+
 describe('SectionEditPanel refused save', () => {
   it('F0 the status live region exists before a refusal', async () => {
     render(<Refusable onSave={vi.fn().mockRejectedValue(refusal(4))} aboutMe={3} />)

@@ -8,7 +8,6 @@ import { FactList } from '@/components/FactList'
 import { MaskedValue } from '@/components/MaskedValue'
 import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
-import { hasKeyIdentifiers } from './recorded'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 
 /** PD-7: Key Identifiers card — CORE-02's `keyIdentifiers` group, fully rendered (all fields optional, no merge needed). */
@@ -37,9 +36,6 @@ export function ParticipantKeyIdentifiersSection({ p, participantId, canEdit }: 
   const saved = readKeyIdentifiers(p)
   const [draft, setDraft] = useState<KeyIdentifiersDraft>(saved)
   const isDirty = (Object.keys(saved) as (keyof KeyIdentifiersDraft)[]).some((k) => draft[k] !== saved[k])
-  const hasAnyData = hasKeyIdentifiers(p)
-
-  if (!canEdit && !hasAnyData) return null
 
   async function handleSave(expected: PatchParticipantDto['expectedRevisions']) {
     try {

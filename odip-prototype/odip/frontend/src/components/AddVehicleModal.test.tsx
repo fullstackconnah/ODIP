@@ -151,7 +151,7 @@ describe('AddVehicleModal — Add New Vehicle: a retry after the assignment fail
 
     await user.click(screen.getByRole('button', { name: 'Add New Vehicle' }))
     await user.type(screen.getByPlaceholderText('e.g. Toyota HiAce'), 'Spare van')
-    await user.click(screen.getByRole('button', { name: /select type/i }))
+    await user.click(screen.getByRole('button', { name: /^type/i }))
     await user.click(screen.getByRole('option', { name: 'Van' }))
     await user.type(screen.getAllByRole('spinbutton')[0], '8') // Total seats; Wheelchair positions is the second
     await user.click(screen.getByRole('button', { name: /create vehicle & assign/i }))
@@ -163,7 +163,9 @@ describe('AddVehicleModal — Add New Vehicle: a retry after the assignment fail
     expect(screen.getByText('Vehicle created. Assigning it to the trip failed: try again.')).toBeInTheDocument()
     expect(screen.getByPlaceholderText('e.g. Toyota HiAce')).toBeDisabled()
     expect(screen.getAllByRole('spinbutton')[0]).toBeDisabled()
-    expect(screen.getByRole('button', { name: /^van/i })).toBeDisabled() // the type picker, now showing the chosen type
+    const typePicker = screen.getByRole('button', { name: /^type/i }) // its name is the label now, so the chosen type is read from the text
+    expect(typePicker).toBeDisabled()
+    expect(typePicker).toHaveTextContent('Van')
     expect(screen.queryByRole('button', { name: /create vehicle & assign/i })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /^assign vehicle$/i }))
@@ -180,5 +182,25 @@ describe('AddVehicleModal — wheelchair wording', () => {
     mockCheckMutate.mockImplementation(() => {})
     renderModal()
     expect(screen.getByText(/ABC123 · Bus · 10 seats · 2 wheelchair positions/)).toBeInTheDocument()
+  })
+})
+
+describe('AddVehicleModal — form labels and search', () => {
+  it('names the new-vehicle fields, marking name, type and seats required', async () => {
+    const user = userEvent.setup()
+    renderModal()
+    await user.click(screen.getByRole('button', { name: 'Add New Vehicle' }))
+    expect(screen.getByLabelText(/^Vehicle name/)).toBeRequired()
+    expect(screen.getByLabelText(/^Total seats/)).toBeRequired()
+    expect(screen.getByRole('button', { name: /^Type/ })).toHaveAttribute('aria-required', 'true')
+    expect(screen.getByLabelText('Registration')).toBeInTheDocument()
+    expect(screen.getByLabelText('Wheelchair positions')).toBeInTheDocument()
+  })
+
+  it('searches the existing vehicles with the shared search input', async () => {
+    const user = userEvent.setup()
+    renderModal()
+    await user.type(screen.getByRole('textbox', { name: 'Search by name or rego...' }), 'zzz')
+    expect(screen.getByText('No vehicles found')).toBeInTheDocument()
   })
 })

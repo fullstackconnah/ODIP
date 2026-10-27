@@ -4,7 +4,6 @@ import { FormField } from '@/components/FormField'
 import { FactList } from '@/components/FactList'
 import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
-import { hasRisksHazardsSummary } from './recorded'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 import { rethrowSectionError } from '@/lib/sectionConflict'
 import type { PatchParticipantDto } from '@/api/types/participant-patch'
@@ -25,9 +24,6 @@ export function ParticipantRisksHazardsSummarySection({ p, participantId, canEdi
   const saved = readRisksHazardsSummary(p)
   const [draft, setDraft] = useState<RisksHazardsSummaryDraft>(saved)
   const isDirty = draft.behaviourRiskSummary !== saved.behaviourRiskSummary || draft.notes !== saved.notes
-
-  const hasAnyData = hasRisksHazardsSummary(p)
-  if (!canEdit && !hasAnyData) return null
 
   async function handleSave(expected: PatchParticipantDto['expectedRevisions']) {
     try {

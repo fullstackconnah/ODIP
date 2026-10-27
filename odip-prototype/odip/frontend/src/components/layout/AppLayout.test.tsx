@@ -490,7 +490,7 @@ describe('AppLayout — 44px coarse-pointer hit areas', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
     const { container } = renderAt('/trips')
     const nav = screen.getByRole('navigation', { name: 'Mobile' })
-    expect(nav).toHaveClass('h-[var(--mobile-nav-h)]', 'fixed', 'bottom-0', 'lg:hidden')
+    expect(nav).toHaveClass('h-[var(--mobile-nav-h)]', 'fixed', 'bottom-0', 'lg:hidden', 'pb-[var(--safe-bottom)]', 'pl-[max(0.5rem,var(--safe-left))]', 'pr-[max(0.5rem,var(--safe-right))]')
     // The clearance moved from main to the platform footer, the last thing in the content column.
     const main = container.querySelector('main')!
     expect(main).toHaveClass('pb-6')
@@ -498,7 +498,7 @@ describe('AppLayout — 44px coarse-pointer hit areas', () => {
     const footer = screen.getByRole('contentinfo')
     expect(main.nextElementSibling).toBe(footer)
     expect(footer.parentElement!.lastElementChild).toBe(footer)
-    expect(footer).toHaveClass('pb-[calc(var(--mobile-nav-h)+env(safe-area-inset-bottom)+0.75rem)]', 'lg:pb-3')
+    expect(footer).toHaveClass('pb-[calc(var(--mobile-nav-h)+0.75rem)]', 'lg:pb-3')
     // md:p-6 once overrode the clearance between 768 and 1024px; no breakpoint below lg may set padding-bottom on either element.
     expect(footer.className).not.toMatch(/(^|\s)(sm|md):pb-/)
     expect(main.className).not.toMatch(/(^|\s)(sm|md|lg):pb-/)
@@ -518,12 +518,21 @@ describe('AppLayout — 44px coarse-pointer hit areas', () => {
     }
   })
 
+  it('pads the sticky header below the notch and away from landscape side insets (safe-area tokens, 48px of content)', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
+    renderAt('/trips')
+    const header = document.querySelector('header')!
+    expect(header).toHaveClass('h-[calc(3rem+var(--safe-top))]', 'pt-[var(--safe-top)]')
+    expect(header.firstElementChild).toHaveClass('pl-[max(var(--gutter,20px),var(--safe-left))]', 'pr-[max(var(--gutter,20px),var(--safe-right))]')
+  })
+
   it('defines --mobile-nav-h for both pointer types as exactly what the nav content needs: 12px + the taller of the 42px link and --tap-min + 12px', () => {
     // jsdom does no layout, so read the source of truth: index.css. The bottom nav's links are 42px of icon + label and take a
     // --tap-min floor (0px on a mouse, 44px under `pointer: coarse`); the nav pads 12px above and below them. If the var and
     // the content drift apart the sticky wizard footer either floats above a gap or slides under the nav (the bug this pins).
     const css = readFileSync(resolve(__dirname, '../../index.css'), 'utf8')
-    const navH = [...css.matchAll(/--mobile-nav-h:\s*(\d+)px/g)].map(m => Number(m[1]))
+    const navH = [...css.matchAll(/--mobile-nav-h:\s*calc\((\d+)px \+ var\(--safe-bottom\)\)/g)].map(m => Number(m[1]))
+    expect(css).toMatch(/--safe-bottom:\s*env\(safe-area-inset-bottom,\s*0px\)/) // the inset is counted once, inside the nav height
     const tapMin = [...css.matchAll(/--tap-min:\s*(\d+)px/g)].map(m => Number(m[1]))
     expect(tapMin).toEqual([0, 44]) // fine pointer, then the coarse block
     expect(navH).toHaveLength(2)

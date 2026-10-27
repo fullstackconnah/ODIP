@@ -406,6 +406,13 @@ used through the `text-display` utility. It is not a density token: it does not 
 `lg` buttons are `--control-h` + 4px (36px / 48px). Mobile bottom-nav links, Tabs, sidebar and drawer items and
 standalone action links carry a `--tap-min` floor.
 
+**Safe-area tokens.** `--safe-top`, `--safe-bottom`, `--safe-left` and `--safe-right` are the device insets (`env(safe-area-inset-*, 0px)`):
+0 in a browser tab, real once the app is installed (the viewport meta carries `viewport-fit=cover`). Components read these vars and never
+`env()`. The inset is counted once: `--mobile-nav-h` is `calc(66px + var(--safe-bottom))` (68px under a coarse pointer), the bottom nav
+pads `--safe-bottom` inside that height, and anything that sits above or clears the nav (the wizard footer, `ActionBar`, `Modal`, the
+`PlatformFooter` shell) uses `--mobile-nav-h` alone. The sticky header is `3rem + --safe-top` tall and pads the top inset; header and nav
+pad their sides with `max(<usual>, var(--safe-left|right))` for landscape notches.
+
 ### Form grid: width by content
 `lib/formGrid.ts` supplies a 12-column grid. One column below 768px; two columns from `md`; twelve from
 `xl` (1280px). Each field declares a span by the size of its content: `short` (codes, numbers, dates,
@@ -494,7 +501,7 @@ panel covers it.
 
 | z | Layer |
 |---|---|
-| 40 | `SlideOver` scrim (`bg-black/40`) |
+| 40 | `SlideOver` scrim (`bg-black/40`); the install card (fixed above the bottom nav, below `lg`) |
 | 50 | `Modal` and its backdrop (`bg-black/50`), the `SlideOver` panel, the desktop sidebar, the mobile bottom nav |
 | 55 / 60 | The mobile nav drawer's scrim / the drawer, below `lg` only: above the bottom nav it overlays |
 
@@ -621,11 +628,20 @@ tone's ink, a 20px circle with a 14px icon), so a problem is louder than the wai
 - **A page that throws, or is still loading,** takes over the page area, not the shell: the sidebar, header and bar stay (a lazy chunk
   shows "Loading..." in the page area, and a crash shows the error with its nav a click from safety), and navigating away clears the error.
 - **Tabs:** `text-sm` medium, olive underline on the active tab, `--tap-min` minimum height; the active tab lives in the URL (`?tab=`, through `useTabParam`: written with `replace`, dropped at the default, other params kept), so a reload and a shared link land on the same tab; count
+  - A tab that groups several sections gets a second level, `variant="sub"`: Pale Sprout chips in the sidebar's active-item shape (`rounded-md`), 13 px, no baseline, 12 px under the main strip and 24 px over the content; one row that scrolls with the fade below md, wrapped from md. Use it only inside a tab, never as a page's first level; counts are a numeral in the chip; an empty section's chip is dashed.
   chips are round. Below `md` the strip is ONE row that scrolls sideways (`flex-nowrap`, scrollbar hidden),
   so ten tabs cost a single 44px row on a phone instead of five wrapped ones, and the active tab is scrolled
   into view inside the strip when it changes; from `md` the strip wraps as it always did, except a strip asked to stay one row (`overflow="scroll"`, Settings) which fades out over its last 2rem (a CSS mask) and pads its end by the same, so a cut tab reads as "more this way". Keyboard
   (arrows, Home, End, roving tabindex) and ARIA are the same at every width.
 - Icons are Material Symbols Outlined, always preceding the label (16-20px in chrome).
+- **Install card** (`InstallPrompt`, mounted in `AppLayout` after the platform footer). A house `Callout` (`tone="info"`, no live-region
+  announce) with `--shadow-float`, fixed at `bottom-[calc(var(--mobile-nav-h)+0.5rem)]`, z-40, `lg:hidden`, so it floats over the end of
+  the page; an aria-hidden spacer of the card's measured height + 8px at the end of the column lets the last content scroll clear of it,
+  and nothing above moves when it appears or leaves. Shown only on `/` and `/portal`, below `md`, on a coarse pointer in a secure context,
+  in a browser tab (not standalone), until installed or dismissed. Android/Chromium: Install (the native dialog) and Not now. iOS Safari:
+  a two-step list with the Share glyph and Not now only. Not now or a declined dialog snoozes it 30 days, per user
+  (`odip_install_prompt:<userId>`) and moves focus to `#main`. Enter 200ms (fade + 8px rise), exit 150ms along the same path; reduced
+  motion fades only. The copy never promises offline use.
 
 ### Page header
 
@@ -911,7 +927,7 @@ not. Never hand-roll a `fixed right-0` panel: use `SlideOver`.
 - **Do** derive a glance segment's chip and tint from one tone with `glanceState`
 - **Do** colour a status by its tone: add the word to `STATUS_TONE` (or pass a `colorMap` of tones for a domain whose word means something else), never a class string of its own
 - **Do** make nouns agree with counts through `plural()`, spell ratios through `formatRatio()` ("x / y") and relative times through `formatRelative()` (`src/lib/format.ts`), and state a dated deadline through `deadlineState()` and `deadlineLabel()` (`src/lib/deadline.ts`), never by hand
-- **Do** early-return a record that is loading, failed or missing through `PageState`, give a detail page one `BackButton` that names its destination, and keep its active tab in the URL with `useTabParam`
+- **Do** early-return a record that is loading, failed or missing through `PageState`, give a detail page one `BackButton` that names its destination, and keep its active tab in the URL with `useTabParam` (and the open section of a grouped tab in `?section=`, written with `replace`)
 - **Do** put what needs action in the attention band, as a tall tile with its figure, a line saying what it means and a link to where it is fixed, and the everyday counts in the header's meta row, so the loudest thing on the dashboard is the thing to act on; **do** let the all-clear be the Pale Sprout row and field and nothing else
 - **Do** show an en dash, not a `0`, for a figure whose request is still loading (`aria-busy`) or has failed ("Couldn't load"), and never an "All clear" without data
 - **Do** read every date and time by its kind (instant, wall clock, date: "Time on the wire"), take "today" from the provider (server) or the viewer's local date (browser), and call a due day overdue only from the day after it (`deadlineState`, `isPastDue`)

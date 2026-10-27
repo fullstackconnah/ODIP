@@ -4,7 +4,7 @@ import { TAP_AREA } from './tapArea'
 export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'ghost-danger'
 export type ButtonSize = 'sm' | 'md' | 'lg'
 
-const BASE = 'inline-flex items-center justify-center gap-2 rounded-[var(--radius-sm)] font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]'
+const BASE = 'inline-flex items-center justify-center gap-2 rounded-[var(--radius-sm)] font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]'
 
 const VARIANT: Record<ButtonVariant, string> = {
   primary: 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)] hover:bg-[var(--color-primary)]/90 shadow-md shadow-[var(--color-primary)]/20',

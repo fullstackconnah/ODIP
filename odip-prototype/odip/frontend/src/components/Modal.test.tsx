@@ -194,7 +194,7 @@ describe('Modal above the phone bottom nav', () => {
   it('keeps the dialog out of the bottom nav strip below lg, and no taller than what is left', () => {
     render(<Modal open onClose={() => {}} title="Example"><p>Body</p></Modal>)
     const dialog = screen.getByRole('dialog')
-    expect(dialog.parentElement).toHaveClass('pb-[calc(var(--mobile-nav-h)+env(safe-area-inset-bottom))]', 'lg:pb-0')
+    expect(dialog.parentElement).toHaveClass('pb-[var(--mobile-nav-h)]', 'lg:pb-0')
     expect(dialog).toHaveClass('max-h-[min(90vh,100%)]')
   })
 })

@@ -58,6 +58,14 @@ describe('StaffTab — UX-01 Add Staff picker (SearchableSelect)', () => {
     expect(screen.getByRole('combobox', { name: 'Staff Member' })).toBeInTheDocument()
   })
 
+  it('labels the Staff Member picker with the shared form label', async () => {
+    const user = openAddStaffModal()
+    await user.click(screen.getByRole('button', { name: /add staff/i }))
+
+    // FormField's label points at the control with htmlFor; the old hand-written label only used aria-labelledby.
+    expect(screen.getByText('Staff Member')).toHaveAttribute('for', screen.getByRole('combobox', { name: 'Staff Member' }).id)
+  })
+
   it('adds the selected staff member on submit', async () => {
     const user = openAddStaffModal()
     await user.click(screen.getByRole('button', { name: /add staff/i }))
@@ -464,5 +472,15 @@ describe('StaffTab — Remove Staff offers only what the server does', () => {
     await user.click(screen.getByTitle('Remove from trip'))
     expect(screen.getByRole('button', { name: /Cancel assignment/ })).toBeInTheDocument()
     expect(screen.queryByText(/Delete permanently/)).not.toBeInTheDocument()
+  })
+})
+
+describe('StaffTab — Add Staff field labels', () => {
+  it('names the assignment fields so each label finds its control', async () => {
+    const user = openAddStaffModal()
+    await user.click(screen.getByRole('button', { name: /add staff/i }))
+    for (const label of ['Assignment Role', 'Start Date', 'End Date', 'Shift Notes']) {
+      expect(screen.getByLabelText(label)).toBeInTheDocument()
+    }
   })
 })
