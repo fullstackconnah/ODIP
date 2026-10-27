@@ -3,8 +3,9 @@ import { useSearchParams } from 'react-router-dom'
 import { format } from 'date-fns'
 import { CalendarOff, Plus } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
+import { useIsMdToXl } from '@/hooks/useIsMdToXl'
 import { PageHeader } from '@/components/PageHeader'
-import { DataTable, type Column } from '@/components/DataTable'
+import { CellText, DataTable, type Column } from '@/components/DataTable'
 import { EmptyState } from '@/components/EmptyState'
 import { Callout } from '@/components/Callout'
 import { PageState } from '@/components/PageState'
@@ -138,6 +139,7 @@ function OverlapShiftsList({ shifts, unassigningShiftId, unassignedShiftIds, una
 
 export default function LeaveApprovalsPage() {
   const { canApproveLeave, id: viewerId } = usePermissions()
+  const stacked = useIsMdToXl()
   const [searchParams] = useSearchParams()
   // A ?userId= link (e.g. from a staff profile) means "show me this person's history" — the
   // default Pending-only view would otherwise hide everything but their live requests.
@@ -488,30 +490,42 @@ export default function LeaveApprovalsPage() {
     return keepDatesWhole(`${who} · ${format(parseApiDate(requestedAt), 'd MMM yyyy')}`)
   }
 
-  // Column budget (density §4): the Edit / Decline / Approve buttons took ~260px at md (~170px now they are sm), so with uncapped text columns this table needed ~1170px
-  // against a ~1006px box at 1280 and pushed the buttons off-screen. Staff is capped (ellipsis, full text in the tooltip); Type, Dates and Requested wrap to two lines above a floor width, so the table squeezes
-  // them before it scrolls and no text ends up under the pinned buttons. The buttons stay pinned while a still-too-wide table scrolls in its box (DataTable's column rule).
-  const columns: Column<ApprovalRow>[] = [
-    { key: 'staff', header: 'Staff', maxWidth: '10rem', render: row => isOwn(row) ? (
+  // Column budget (density §4): from xl up six columns fit; between md and xl (1024 is 752px with the sidebar open) two pairs merge into stacked cells, four columns, about 722px worst case.
+  // Staff is capped (ellipsis, full text in the tooltip); the rest wrap above a floor width, so the table squeezes them before it scrolls and no text ends up under the pinned buttons.
+  // The buttons stay pinned while a still-too-wide table scrolls in its box (DataTable's column rule). Nothing leaves the screen: Type and Requested move under a neighbour.
+  const staffColumn: Column<ApprovalRow> = { key: 'staff', header: 'Staff', maxWidth: '10rem', render: row => isOwn(row) ? (
       <span className="flex min-w-0 items-center gap-2">
         <span className="min-w-0 truncate">{row.data.userFullName}</span>
         <StatusBadge tone="neutral" label="Your request" className="shrink-0 whitespace-nowrap" />
       </span>
-    ) : row.data.userFullName },
-    { key: 'type', header: 'Type', wrap: true, minWidth: '6rem', render: rowType },
-    { key: 'window', header: 'Dates', wrap: true, minWidth: '11rem', render: rowWindowText },
-    { key: 'requestedAt', header: 'Requested', wrap: true, minWidth: '9rem', render: rowRequestedBy },
+    ) : row.data.userFullName }
+  const staffTypeColumn: Column<ApprovalRow> = { key: 'staff', header: 'Staff · Type', render: row => (
+      <div className="py-1.5">
+        <CellText className="font-medium md:max-w-[9rem]" title={row.data.userFullName}>{row.data.userFullName}</CellText>
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--color-muted-foreground)]">
+          <span className="whitespace-nowrap">{rowType(row)}</span>
+          {isOwn(row) && <StatusBadge tone="neutral" label="Your request" className="shrink-0 whitespace-nowrap" />}
+        </span>
+      </div>
+    ) }
+  const datesRequestedColumn: Column<ApprovalRow> = { key: 'window', header: 'Dates · Requested', wrap: true, minWidth: '11rem', render: row => (
+      <div className="py-1.5">
+        <span className="block">{rowWindowText(row)}</span>
+        {row.rowKind !== 'legacy' && <span className="block text-xs text-[var(--color-muted-foreground)]">{rowRequestedBy(row)}</span>}
+      </div>
+    ) }
+  const sharedTail: Column<ApprovalRow>[] = [
     { key: 'status', header: 'Status', render: row => row.rowKind === 'legacy' ? (
       <StatusBadge status="Record" colorMap={LEGACY_RECORD_COLOR} />
     ) : (
       <div>
         <StatusBadge status={row.data.status} colorMap={LEAVE_STATUS_COLORS} />
         {row.data.status === 'Declined' && row.data.decisionNote && (
-          <p className="mt-1 text-xs text-[var(--color-muted-foreground)] md:max-w-[12rem] md:truncate" title={row.data.decisionNote}>{row.data.decisionNote}</p>
+          <p className={`mt-1 text-xs text-[var(--color-muted-foreground)] ${stacked ? 'md:max-w-[10rem]' : 'md:max-w-[12rem]'} md:truncate`} title={row.data.decisionNote}>{row.data.decisionNote}</p>
         )}
         {row.rowKind === 'leave' && row.data.sentHours != null && (
-          <p className="mt-1 whitespace-normal text-xs text-[var(--color-muted-foreground)] md:min-w-[12rem]">
-            {`In Employment Hero · ${hoursLabel(row.data.sentHours)}${row.data.sentHoursDefaulted ? " (7.6 h a day: our default)" : ''}`}
+          <p className={`mt-1 whitespace-normal text-xs text-[var(--color-muted-foreground)] ${stacked ? 'md:min-w-[10rem]' : 'md:min-w-[12rem]'}`}>
+            {`In Employment Hero · ${hoursLabel(row.data.sentHours)}${row.data.sentHoursDefaulted ? " (7.6 h a day: our default)" : ''}`}
           </p>
         )}
       </div>
@@ -525,7 +539,11 @@ export default function LeaveApprovalsPage() {
             Edit
           </Button>
         )
-        if (fromEh(row)) return <span className="text-[13px] text-[var(--color-muted-foreground)]">Change it in Employment Hero</span>
+        if (fromEh(row)) {
+          return stacked
+            ? <span className="inline-block whitespace-normal text-right text-[13px] text-[var(--color-muted-foreground)] md:max-w-[8.5rem]">{'Change it in Employment\u00a0Hero'}</span>
+            : <span className="text-[13px] text-[var(--color-muted-foreground)]">Change it in Employment Hero</span>
+        }
         if (row.rowKind === 'legacy') {
           return (
             <div className="flex justify-end gap-1.5 pointer-coarse:gap-2">
@@ -566,6 +584,15 @@ export default function LeaveApprovalsPage() {
       },
     }] : []),
   ]
+  const columns: Column<ApprovalRow>[] = stacked
+    ? [staffTypeColumn, datesRequestedColumn, ...sharedTail]
+    : [
+      staffColumn,
+      { key: 'type', header: 'Type', wrap: true, minWidth: '6rem', render: rowType },
+      { key: 'window', header: 'Dates', wrap: true, minWidth: '11rem', render: rowWindowText },
+      { key: 'requestedAt', header: 'Requested', wrap: true, minWidth: '9rem', render: rowRequestedBy },
+      ...sharedTail,
+    ]
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
