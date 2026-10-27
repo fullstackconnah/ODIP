@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import PortalShiftDetailPage from './PortalShiftDetailPage'
+import { buttonClasses } from '@/components/buttonClasses'
 import type { PortalShiftDetailDto } from '@/api/types'
 import { emptyShiftPackage, emptyCompletionPackage } from '@/test/fixtures/shiftPackage'
 
@@ -356,6 +357,9 @@ describe('PortalShiftDetailPage: Before', () => {
     expect(names[0]).toContain('First Person')
     expect(within(region).getByRole('link', { name: /call mobile 0400 000 111/i, hidden: true })).toHaveAttribute('href', 'tel:0400000111')
     expect(within(region).getByRole('link', { name: /call mobile 0411 000 222/i, hidden: true })).toHaveAttribute('href', 'tel:0411000222')
+    // The tel: anchors wear Button's secondary look, not a hand-made one.
+    const secondary = buttonClasses('secondary', 'md').split(' ').filter(Boolean)
+    for (const link of within(region).getAllByRole('link', { name: /^call /i, hidden: true })) expect(link).toHaveClass(...secondary, 'min-h-[44px]')
   })
 
   it('shows the withheld reason instead of the handover, contacts and address', () => {
