@@ -125,7 +125,7 @@ export default function ParticipantAdlAssessmentsSection({ participantId }: { pa
       // idiom (see ParticipantDetailPage.tsx's Community Access card): a participant who no longer
       // has the CA stream but still has saved howToHelpNotes data still gets to see it here.
       ...(assessments.some((a) => a.howToHelpNotes)
-        ? [{ key: 'howToHelpNotes', header: 'How To Help Me', width: '22%', wrap: true, className: 'md:py-1 [overflow-wrap:anywhere]', render: (row: ParticipantAdlAssessmentDto) => row.howToHelpNotes || '—' }]
+        ? [{ key: 'howToHelpNotes', header: 'How To Help Me', width: '28%', wrap: true, className: 'md:py-1 [overflow-wrap:anywhere]', render: (row: ParticipantAdlAssessmentDto) => row.howToHelpNotes || '—' }]
         : []),
       {
         key: 'edit', header: '', align: 'right', width: 72,
