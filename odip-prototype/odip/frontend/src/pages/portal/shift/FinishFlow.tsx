@@ -11,7 +11,7 @@ import type { WizardStepDef } from '@/components/wizard/types'
 import { apiErrorCode, apiErrorMessages, apiErrorStatus, finishBlockersFromError, shiftDetailFromError } from '@/lib/shiftPackageErrors'
 import type { ShiftIncidentPrefillState, ShiftNoteIncidentPrefillState } from '@/lib/incidentPrefill'
 import type { ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
-import { breaksSignature, buildChecklist, clockLabel, dueDoseKeys, FINISH_STEPS, handoverForward, movedTimes, parseKilometres, stepForCode, timesError, type FinishStepKey, type TimesField, type TimesInput } from './checklist'
+import { breaksSignature, clockLabel, FINISH_STEPS, handoverForward, movedTimes, offlineDueDoses, parseKilometres, stepForCode, timesError, type FinishStepKey, type TimesField, type TimesInput } from './checklist'
 import { clearEndDraft, EMPTY_END_DRAFT, loadEndDraft, saveEndDraft, type EndDraft } from './endDraft'
 import { DosesStep, HandoverStep, ReportStep, SubmitStep, TimesStep, type Refusal } from './finishSteps'
 import { requestGeolocation } from './geolocation'
@@ -31,12 +31,6 @@ function openDraft(shift: PortalShiftDetailDto): { draft: EndDraft; breaksChange
   const saved = loadEndDraft(shift.id) ?? EMPTY_END_DRAFT
   const breaksChanged = saved.timesSig !== null && saved.timesSig !== breaksSignature(shift.breaks)
   return { draft: { ...saved, step: breaksChanged ? 'times' : saved.step ?? 'times' }, breaksChanged }
-}
-
-/** The doses still due with no outcome: recording one needs a connection, so with no signal Finish waits for them (SHAPE 5). */
-function offlineDueDoses(shift: PortalShiftDetailDto) {
-  const due = dueDoseKeys(shift.finishBlockers)
-  return buildChecklist(shift).groups.flatMap(g => g.items).flatMap(i => (i.kind === 'dose' && due.has(i.key) ? [i.slot] : []))
 }
 
 function blockedDoseMessage(doses: ReturnType<typeof offlineDueDoses>): string {
