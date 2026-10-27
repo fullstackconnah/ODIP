@@ -30,7 +30,7 @@ import { SlideOver } from '@/components/SlideOver'
 import { TAP_FLOOR } from '@/components/tapArea'
 import { bringIntoView } from '@/lib/bringIntoView'
 import { modalGrid } from '@/lib/formGrid'
-import { getRosterGate } from '../lib/rosterGate'
+import { blockedOnlyByDoubleBooking, getRosterGate } from '../lib/rosterGate'
 import { canDeleteShift, lockedWords } from '../lib/rosterDrag'
 import { RATIO_LABELS, NIGHT_TYPE_LABELS, formatShiftTimeRange, shiftSource } from '../lib/roster'
 import { NO_LENGTH_MESSAGE, hasNoLength, oneHourAfter, refusalOf, type PanelRefusal } from '../lib/shiftTimes'
@@ -73,6 +73,7 @@ function toTimeInputValue(time: string | undefined): string {
 }
 
 /** What the panel says when the budget refuses the shift (the hard limit, for a Coordinator): one line, in the budget's words and not the roster conflict gate's. */
+const DOUBLE_BOOKED_REFUSAL_SENTENCE = "This worker is already booked at that time, so the shift can't be saved as it is. Change the time or the worker, or ask an admin to override."
 const BUDGET_REFUSAL_SENTENCE = "The hard limit is on, so this shift can't be saved as it is."
 
 /** No findings, one stable array (a new `[]` each render would look like a change). */
@@ -293,7 +294,8 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   const saveWithheld = stillBlocking.length > 0 || (refusedOnBudget && !emergencyReady)
   // The standing sentence under a Blocking finding is said in the budget's own words when the budget is the ONLY thing blocking; any other blocking finding keeps the roster's generic sentence.
   const blockingAnswered = emergencyActive && stillBlocking.length === 0
-  const blockingSentence = blockingFindings.length > 0 && blockingFindings.every(f => f.code === BUDGET_FINDING_CODES.forecastOver) ? BUDGET_REFUSAL_SENTENCE : undefined
+  const blockingSentence = blockingFindings.length > 0 && blockingFindings.every(f => f.code === BUDGET_FINDING_CODES.forecastOver) ? BUDGET_REFUSAL_SENTENCE
+    : blockedOnlyByDoubleBooking(blockingFindings) ? DOUBLE_BOOKED_REFUSAL_SENTENCE : undefined
   const refusalShown = blockingFindings.length > 0 && !blockingAnswered
   // A reason that only the budget asks for is asked for in the budget's words; when another finding asks too, the generic words cover both.
   const budgetAsksForReason = reasonRequiredFindings.length > 0 && reasonRequiredFindings.every(f => f.code === BUDGET_FINDING_CODES.forecastOver)

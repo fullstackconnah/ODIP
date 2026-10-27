@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getRosterGate } from './rosterGate'
+import { blockedOnlyByDoubleBooking, getRosterGate } from './rosterGate'
 import type { RosterFindingDto } from '@/api/types'
 
 const warningRequiresReason: RosterFindingDto = {
@@ -52,5 +52,17 @@ describe('getRosterGate', () => {
     expect(gate.needsReason).toBe(true)
     expect(gate.blockingFindings).toEqual([blocking])
     expect(gate.reasonRequiredFindings).toEqual([warningRequiresReason])
+  })
+})
+
+describe('blockedOnlyByDoubleBooking', () => {
+  const doubleBooked: RosterFindingDto = { code: 'DOUBLE_BOOKED_SHIFT', severity: 'Blocking', message: 'Overlaps.', requiresReason: false }
+
+  it('is true only when every Blocking finding is a double-booking', () => {
+    expect(blockedOnlyByDoubleBooking([doubleBooked, warningNoReason])).toBe(true)
+    expect(blockedOnlyByDoubleBooking([doubleBooked, blocking])).toBe(false)
+    expect(blockedOnlyByDoubleBooking([blocking])).toBe(false)
+    expect(blockedOnlyByDoubleBooking([warningRequiresReason])).toBe(false)
+    expect(blockedOnlyByDoubleBooking([])).toBe(false)
   })
 })

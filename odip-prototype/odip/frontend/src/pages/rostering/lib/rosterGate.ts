@@ -24,3 +24,12 @@ export function getRosterGate(findings: RosterFindingDto[]): RosterGate {
     needsReason: reasonRequiredFindings.length > 0,
   }
 }
+
+/** The code of the rule that stops a worker being booked on two shifts at once (Odip.Domain RosterConflictService.DoubleBookedShift). */
+export const DOUBLE_BOOKED_SHIFT = 'DOUBLE_BOOKED_SHIFT'
+
+/** True when every Blocking finding is a double-booking: the one block an admin can override, so the copy can say to ask one. */
+export function blockedOnlyByDoubleBooking(findings: RosterFindingDto[]): boolean {
+  const blocking = findings.filter(f => f.severity === 'Blocking')
+  return blocking.length > 0 && blocking.every(f => f.code === DOUBLE_BOOKED_SHIFT)
+}
