@@ -172,6 +172,12 @@ export function Dropdown({
     if (!open) setSearchQuery('')
   }, [open])
 
+  // The panel scrolls past maxPanelHeight: keep the active row in view (a no-op when it already is, so hover is harmless). jsdom lacks scrollIntoView.
+  useEffect(() => {
+    if (!open || focusedIndex < 0) return
+    panelRef.current?.querySelectorAll('[role="option"]')[focusedIndex]?.scrollIntoView?.({ block: 'nearest' })
+  }, [open, focusedIndex])
+
   // Reset focusedIndex when query changes
   useEffect(() => {
     setFocusedIndex(-1)

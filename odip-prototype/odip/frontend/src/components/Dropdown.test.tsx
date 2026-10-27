@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Dropdown } from './Dropdown'
@@ -54,6 +54,26 @@ describe('Dropdown — 44px coarse-pointer hit area on the compact triggers', ()
     rerender(<Dropdown variant="icon" label="Pick" icon={<span>i</span>} items={ITEMS} onSelect={() => {}} />)
     await user.keyboard('{Enter}')
     expect(screen.getByRole('button', { name: 'Pick' })).toHaveAttribute('aria-activedescendant', 'dd-opt-a')
+  })
+
+  // The panel scrolls past 320px, so a keyboard open on a far-down chosen row, and each arrow press, must bring the active row into view.
+  it('scrolls the keyboard-active row into view on open and on ArrowDown', async () => {
+    const scrollIntoView = vi.fn()
+    const original = Element.prototype.scrollIntoView
+    Element.prototype.scrollIntoView = scrollIntoView
+    try {
+      const items = Array.from({ length: 40 }, (_, i) => ({ value: `v${i + 1}`, label: `Row ${i + 1}` }))
+      const user = userEvent.setup()
+      render(<Dropdown variant="icon" label="Pick" icon={<span>i</span>} items={items} value="v30" onSelect={() => {}} />)
+      await user.tab()
+      await user.keyboard('{Enter}')
+      expect(scrollIntoView.mock.contexts.at(-1)).toBe(document.getElementById('dd-opt-v30'))
+      expect(scrollIntoView).toHaveBeenLastCalledWith({ block: 'nearest' })
+      await user.keyboard('{ArrowDown}')
+      expect(scrollIntoView.mock.contexts.at(-1)).toBe(document.getElementById('dd-opt-v31'))
+    } finally {
+      Element.prototype.scrollIntoView = original
+    }
   })
 
   // A header action is one primary md Button (UI survey s.1), menu or not: no gradient pill. md is --control-h, 44px on a touch screen,
