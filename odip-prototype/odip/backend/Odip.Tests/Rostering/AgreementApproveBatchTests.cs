@@ -192,4 +192,34 @@ public class AgreementApproveBatchTests
         Assert.Equal(ServiceAgreementsController.FailedWords, Assert.Single(data![0].Reasons));
         Assert.Empty(db.ChangeTracker.Entries());
     }
+
+    /// <summary>Moves the clock on after the first approval is saved, as a slow roster lock would.</summary>
+    private sealed class AdvanceAfterApproval(Odip.Tests.Medications.FakeClock clock, TimeSpan by) : SaveChangesInterceptor
+    {
+        public override ValueTask<int> SavedChangesAsync(SaveChangesCompletedEventData eventData, int result, CancellationToken ct = default)
+        {
+            if (eventData.Context!.ChangeTracker.Entries<ServiceAgreementDraftApproval>().Any(e => e.State == EntityState.Added)) clock.Set(clock.GetUtcNow() + by);
+            return base.SavedChangesAsync(eventData, result, ct);
+        }
+    }
+
+    [Fact]
+    public async Task Once_the_time_budget_is_spent_the_remaining_items_are_answered_Busy_and_not_approved()
+    {
+        await using var f = await SetUpAsync();
+        var p2 = await ParticipantAsync(f, "Ben");
+        var p3 = await ParticipantAsync(f, "Cal");
+        var d1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
+        var d2 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, participantId: p2);
+        var d3 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, participantId: p3);
+        await using var db = NewDb(f.DbName, false, new AdvanceAfterApproval(f.Clock, ServiceAgreementsController.BatchBudget + TimeSpan.FromSeconds(1)));
+        var approval = new ServiceAgreementApprovalService(db, new RosterPlacementGate(), new RosterShiftGenerator(), clock: f.Clock);
+
+        var (status, data) = await PostAsync(Controller(db, f, approval: approval), Batch((f.ParticipantId, d1.Id), (p2, d2.Id), (p3, d3.Id)));
+
+        Assert.Equal(200, status);
+        Assert.Equal(new[] { "Approved", "Busy", "Busy" }, data!.Select(r => r.Outcome));
+        Assert.Equal(new[] { d1.Id, d2.Id, d3.Id }, data!.Select(r => r.DraftId));
+        Assert.Equal(new[] { d1.Id }, await f.Db.ServiceAgreementDraftApprovals.Select(a => a.DraftId).ToArrayAsync());
+    }
 }
