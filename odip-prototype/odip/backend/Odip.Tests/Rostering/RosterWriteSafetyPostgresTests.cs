@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Moq;
@@ -43,8 +45,14 @@ public class RosterWriteSafetyPostgresTests : IClassFixture<PostgresFixture>
     private sealed class FixedClock(DateTimeOffset now) : TimeProvider { public override DateTimeOffset GetUtcNow() => now; }
     private static readonly TimeProvider BeforeTheWeek = new FixedClock(new DateTimeOffset(2026, 8, 20, 0, 0, 0, TimeSpan.Zero));
 
-    private static RosteringController Controller(OdipDbContext db, Guid tenantId, TimeSpan? lockWait = null) =>
-        new(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db), clock: BeforeTheWeek, tenant: TenantOf(tenantId), generator: new RosterShiftGenerator(lockWait));
+    private static RosteringController Controller(OdipDbContext db, Guid tenantId, TimeSpan? lockWait = null, string role = "Coordinator") =>
+        new(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db), clock: BeforeTheWeek, tenant: TenantOf(tenantId), generator: new RosterShiftGenerator(lockWait))
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity(new[] { new Claim(ClaimTypes.Role, role) }, "test")) },
+            },
+        };
 
     private async Task<Guid> NewOrganisationAsync()
     {
@@ -244,10 +252,12 @@ public class RosterWriteSafetyPostgresTests : IClassFixture<PostgresFixture>
         Assert.True(await check.Shifts.AnyAsync(s => s.Id == shiftId));
     }
 
-    // SURVEY section 2 item 4: plain POST shifts took no lock, so two creates for one worker could both read an empty day. DOUBLE_BOOKED_SHIFT is a warning that needs no reason, so both saves
-    // succeed; what the lock orders is who sees whom: exactly one of the two stored shifts (the later) carries the double-booking.
-    [SkippableFact]
-    public async Task TwoPlainCreatesForOneWorkerAtOnce_AreOrdered_TheSecondSeesTheFirstAsDoubleBooked()
+    // SURVEY section 2 item 4: plain POST shifts took no lock, so two creates for one worker could both read an empty day. Double-booking is refused for a Coordinator and needs a reason from an Admin
+    // (2026-10-27); what the lock orders is who sees whom: for a Coordinator exactly one of two simultaneous creates saves, for an Admin with a reason both do and the later carries the double-booking.
+    [SkippableTheory]
+    [InlineData("Coordinator")]
+    [InlineData("Admin")]
+    public async Task TwoPlainCreatesForOneWorkerAtOnce_AreOrdered_TheSecondSeesTheFirstAsDoubleBooked(string role)
     {
         RequirePostgres();
         var tenantId = await NewOrganisationAsync();
@@ -262,7 +272,7 @@ public class RosterWriteSafetyPostgresTests : IClassFixture<PostgresFixture>
         CreateShiftDto For(Guid participantId, DateOnly day) => new()
         {
             ParticipantId = participantId, StaffId = samId, ServiceDate = day, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(15, 0),
-            Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None,
+            Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, OverrideReason = "Both shifts agreed with the worker.", AcknowledgedFindingCodes = ["DOUBLE_BOOKED_SHIFT"],
         };
 
         // A few rounds, each on a day of its own, both requests released together by a gate.
@@ -274,18 +284,27 @@ public class RosterWriteSafetyPostgresTests : IClassFixture<PostgresFixture>
             {
                 await using var db = Open(tenantId);
                 await gate.Task;
-                return await Controller(db, tenantId).CreateShift(For(participantId, day), default);
+                return await Controller(db, tenantId, role: role).CreateShift(For(participantId, day), default);
             }
             var one = Create(miaId);
             var two = Create(ivyId);
             gate.SetResult();
             var results = await Task.WhenAll(one, two);
 
-            Assert.All(results, r => Assert.IsType<OkObjectResult>(r.Result));
             await using var check = Open(tenantId);
             var made = await check.Shifts.Where(s => s.UserId == samId && s.ServiceDate == day).Select(s => s.AcknowledgedFindingCodes).ToListAsync();
-            Assert.Equal(2, made.Count);
-            Assert.Equal(1, made.Count(codes => codes != null && codes.Contains("DOUBLE_BOOKED_SHIFT")));
+            if (role == "Coordinator")
+            {
+                Assert.Equal(1, results.Count(r => r.Result is OkObjectResult));
+                Assert.Equal(1, results.Count(r => r.Result is UnprocessableEntityObjectResult));
+                Assert.Single(made);
+            }
+            else
+            {
+                Assert.All(results, r => Assert.IsType<OkObjectResult>(r.Result));
+                Assert.Equal(2, made.Count);
+                Assert.Equal(1, made.Count(codes => codes != null && codes.Contains("DOUBLE_BOOKED_SHIFT")));
+            }
         }
     }
 

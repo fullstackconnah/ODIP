@@ -41,6 +41,7 @@ public sealed record PublicHolidayRef(DateOnly Date, string Name);
 /// <see cref="RosterConflictService.Check"/> to fire <see cref="RosterConflictService.PublicHoliday"/>.
 /// Last positional parameter so existing callers keep compiling; null and an empty list are both
 /// treated as "no holidays" — see <see cref="RosterConflictService.Check"/>.</param>
+/// <param name="CallerIsAdmin">Who is making the write, for the rules that only an admin may override (DOUBLE_BOOKED_SHIFT, 2026-10-27). Null (the board display, the generator, Publish week, the import, trips) keeps a plain Warning; false makes it Blocking; true makes it a Warning that needs a reason. Last positional parameter so existing callers keep compiling.</param>
 public sealed record RosterCheckContext(
     User Staff,
     Participant? Participant,
@@ -50,7 +51,8 @@ public sealed record RosterCheckContext(
     IReadOnlyList<UnavailabilityWindow> Availability,
     CompatibilityLevel Compatibility,
     decimal WeeklyHoursThreshold,
-    IReadOnlyList<PublicHolidayRef>? PublicHolidays = null);
+    IReadOnlyList<PublicHolidayRef>? PublicHolidays = null,
+    bool? CallerIsAdmin = null);
 
 /// <summary>One other (non-cancelled) trip window this vehicle already covers, used by
 /// <see cref="RosterConflictService.CheckVehicleAssignment"/> to detect an overlap. AssignmentId
