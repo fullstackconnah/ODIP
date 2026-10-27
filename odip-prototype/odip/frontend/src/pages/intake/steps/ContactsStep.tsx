@@ -13,6 +13,7 @@ import { CheckboxField } from '@/components/CheckboxField'
 import { Card } from '@/components/Card'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { ToggleGroup } from '@/components/ToggleGroup'
+import { Button } from '@/components/Button'
 import { CONTACT_ROLE_TYPES } from '@/api/types/enums'
 import type { ContactRoleType, PlanType } from '@/api/types/enums'
 import { CONTACT_ROLE_TYPE_LABELS, availableContactRoleTypes, selectableContactRoleTypes, contactRoleGateError, unionRelevantFields } from '@/api/types/contacts'
@@ -121,15 +122,9 @@ export function ContactsStep({
                         </div>
                       )}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => removeContactRole(index)}
-                      aria-label={`Remove contact ${index + 1}`}
-                      title="Remove contact"
-                      className="mt-6 p-1.5 min-w-[var(--control-h)] min-h-[var(--control-h)] rounded-[var(--radius-sm)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-destructive)]/10 hover:text-[var(--color-destructive)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <Button variant="ghost-danger" iconOnly className="mt-7" onClick={() => removeContactRole(index)} aria-label={`Remove contact ${index + 1}`} title="Remove contact">
+                      <Trash2 className="w-4 h-4" aria-hidden />
+                    </Button>
                   </div>
 
                   <FormField label="Role types" className="mb-0" error={errors.contactRoles?.[index]?.roleTypes?.message}>
@@ -190,13 +185,12 @@ export function ContactsStep({
             })}
           </div>
         )}
-        <button
-          type="button"
+        <Button
+          variant="secondary"
           onClick={() => appendContactRole({ personMode: 'existing', personId: '', newPersonFirstName: '', newPersonLastName: '', roleTypes: [availableContactRoleTypes(CONTACT_ROLE_TYPES, planType, dateOfBirth)[0] ?? 'NextOfKin'], relationshipToParticipant: '', isPrimary: false, registeredProviderFlag: false })}
-          className="inline-flex items-center gap-1.5 h-[var(--control-h)] px-3 text-sm font-medium text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded-[var(--radius-sm)]"
         >
-          <Plus className="w-4 h-4" /> Add contact
-        </button>
+          <Plus className="w-4 h-4" aria-hidden /> Add contact
+        </Button>
       </Card>
     </div>
   )

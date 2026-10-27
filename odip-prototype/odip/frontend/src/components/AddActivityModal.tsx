@@ -6,6 +6,7 @@ import { Dropdown } from './Dropdown'
 import type { ActivityDto, ScheduledActivityDto, CreateScheduledActivityDto, UpdateScheduledActivityDto } from '@/api/types'
 import type { ScheduledActivityStatus } from '@/api/types/enums'
 import { Button } from '@/components/Button'
+import { FormField } from '@/components/FormField'
 
 interface AddActivityModalProps {
   tripDayId: string
@@ -130,9 +131,6 @@ export default function AddActivityModal({ tripDayId, editingActivity, eventTemp
 
   const isSubmitting = createActivity.isPending || updateActivity.isPending
 
-  const inputClass = "w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
-  const labelClass = "block text-sm font-medium mb-1"
-
   return (
     <Modal
       open
@@ -160,9 +158,7 @@ export default function AddActivityModal({ tripDayId, editingActivity, eventTemp
         )}
 
         {sourceTab === 'library' && !editingActivity && (
-          <div className="mb-4">
-            <label className={labelClass}>Activity Library</label>
-            <Dropdown
+          <FormField label="Activity Library" className="mb-4"><Dropdown
               variant="form"
               value={selectedActivityId}
               onChange={handleLibrarySelect}
@@ -172,76 +168,42 @@ export default function AddActivityModal({ tripDayId, editingActivity, eventTemp
                 { value: '', label: 'Select an activity...' },
                 ...filteredActivities.map((a: ActivityDto) => ({ value: String(a.id), label: `${a.activityName} (${a.category})` })),
               ]}
-            />
-          </div>
+            /></FormField>
         )}
 
         <div className={modalGrid}>
-          <div className={modalSpan.full}>
-            <label className={labelClass}>Title *</label>
-            <input value={title} onChange={e => setTitle(e.target.value)} className={inputClass} placeholder="Activity title" maxLength={200} />
-          </div>
+          <FormField label="Title" required className={modalSpan.full}><input value={title} onChange={e => setTitle(e.target.value)} placeholder="Activity title" maxLength={200} /></FormField>
 
           <div className="contents">
-            <div className={modalSpan.half}>
-              <label className={labelClass}>Start Time</label>
-              <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className={inputClass} />
-            </div>
-            <div className={modalSpan.half}>
-              <label className={labelClass}>End Time</label>
-              <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className={inputClass} />
-            </div>
+            <FormField label="Start Time" className={modalSpan.half}><input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} /></FormField>
+            <FormField label="End Time" className={modalSpan.half}><input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} /></FormField>
           </div>
 
-          <div className={modalSpan.full}>
-            <label className={labelClass}>Location</label>
-            <input value={location} onChange={e => setLocation(e.target.value)} className={inputClass} placeholder="Location" maxLength={200} />
-          </div>
+          <FormField label="Location" className={modalSpan.full}><input value={location} onChange={e => setLocation(e.target.value)} placeholder="Location" maxLength={200} /></FormField>
 
           <div className="contents">
-            <div className={modalSpan.half}>
-              <label className={labelClass}>Status *</label>
-              <Dropdown
+            <FormField label="Status" required className={modalSpan.half}><Dropdown
                 variant="form"
                 value={status}
                 onChange={setStatus}
                 items={STATUS_OPTIONS.map(s => ({ value: s, label: s }))}
-              />
-            </div>
-            <div className={modalSpan.half}>
-              <label className={labelClass}>Estimated Cost</label>
-              <input type="number" min="0" step="0.01" value={estimatedCost} onChange={e => setEstimatedCost(e.target.value)} className={inputClass} placeholder="0.00" />
-            </div>
+              /></FormField>
+            <FormField label="Estimated Cost" className={modalSpan.half}><input type="number" min="0" step="0.01" value={estimatedCost} onChange={e => setEstimatedCost(e.target.value)} placeholder="0.00" /></FormField>
           </div>
 
-          <div className={modalSpan.full}>
-            <label className={labelClass}>Booking Reference</label>
-            <input value={bookingReference} onChange={e => setBookingReference(e.target.value)} className={inputClass} placeholder="e.g. BK-12345" maxLength={200} />
-          </div>
+          <FormField label="Booking Reference" className={modalSpan.full}><input value={bookingReference} onChange={e => setBookingReference(e.target.value)} placeholder="e.g. BK-12345" maxLength={200} /></FormField>
 
           <details className="group sm:col-span-2">
             <summary className="text-sm font-medium cursor-pointer text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]">
               Provider Details
             </summary>
             <div className={`mt-3 pl-2 border-l-2 border-[var(--color-border)] ${modalGrid}`}>
-              <div className={modalSpan.full}>
-                <label className={labelClass}>Provider Name</label>
-                <input value={providerName} onChange={e => setProviderName(e.target.value)} className={inputClass} placeholder="Provider name" maxLength={200} />
-              </div>
+              <FormField label="Provider Name" className={modalSpan.full}><input value={providerName} onChange={e => setProviderName(e.target.value)} placeholder="Provider name" maxLength={200} /></FormField>
               <div className="contents">
-                <div className={modalSpan.half}>
-                  <label className={labelClass}>Phone</label>
-                  <input value={providerPhone} onChange={e => setProviderPhone(e.target.value)} className={inputClass} placeholder="Phone" maxLength={50} />
-                </div>
-                <div className={modalSpan.half}>
-                  <label className={labelClass}>Email</label>
-                  <input type="email" value={providerEmail} onChange={e => setProviderEmail(e.target.value)} className={inputClass} placeholder="Email" maxLength={200} />
-                </div>
+                <FormField label="Phone" className={modalSpan.half}><input value={providerPhone} onChange={e => setProviderPhone(e.target.value)} placeholder="Phone" maxLength={50} /></FormField>
+                <FormField label="Email" className={modalSpan.half}><input type="email" value={providerEmail} onChange={e => setProviderEmail(e.target.value)} placeholder="Email" maxLength={200} /></FormField>
               </div>
-              <div className={modalSpan.full}>
-                <label className={labelClass}>Website</label>
-                <input value={providerWebsite} onChange={e => setProviderWebsite(e.target.value)} className={inputClass} placeholder="https://..." maxLength={500} />
-              </div>
+              <FormField label="Website" className={modalSpan.full}><input value={providerWebsite} onChange={e => setProviderWebsite(e.target.value)} placeholder="https://..." maxLength={500} /></FormField>
             </div>
           </details>
 
@@ -250,14 +212,8 @@ export default function AddActivityModal({ tripDayId, editingActivity, eventTemp
               Notes
             </summary>
             <div className={`mt-3 pl-2 border-l-2 border-[var(--color-border)] ${modalGrid}`}>
-              <div className={modalSpan.full}>
-                <label className={labelClass}>Accessibility Notes</label>
-                <textarea value={accessibilityNotes} onChange={e => setAccessibilityNotes(e.target.value)} className={inputClass} rows={3} placeholder="Accessibility requirements..." />
-              </div>
-              <div className={modalSpan.full}>
-                <label className={labelClass}>General Notes</label>
-                <textarea value={notes} onChange={e => setNotes(e.target.value)} className={inputClass} rows={3} placeholder="Additional notes..." />
-              </div>
+              <FormField label="Accessibility Notes" className={modalSpan.full}><textarea value={accessibilityNotes} onChange={e => setAccessibilityNotes(e.target.value)} rows={3} placeholder="Accessibility requirements..." /></FormField>
+              <FormField label="General Notes" className={modalSpan.full}><textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="Additional notes..." /></FormField>
             </div>
           </details>
         </div>

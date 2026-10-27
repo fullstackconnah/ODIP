@@ -248,15 +248,9 @@ function AddRestrictivePracticeDialogBody({ participantId, onClose, onSaved, def
     render: row => {
       const rowNumber = bulkRows.findIndex(r => r.id === row.id) + 1
       return (
-        <button
-          type="button"
-          onClick={() => removeBulkRow(row.id)}
-          disabled={bulkRows.length <= 1}
-          aria-label={`Remove row ${rowNumber}`}
-          className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] rounded-lg text-[var(--color-muted-foreground)] hover:text-[var(--color-destructive)] hover:bg-[var(--color-destructive)]/10 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-[var(--color-muted-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
+        <Button variant="ghost-danger" iconOnly onClick={() => removeBulkRow(row.id)} disabled={bulkRows.length <= 1} aria-label={`Remove row ${rowNumber}`}>
+          <Trash2 className="w-4 h-4" aria-hidden />
+        </Button>
       )
     },
   }
@@ -364,13 +358,9 @@ function AddRestrictivePracticeDialogBody({ participantId, onClose, onSaved, def
           emptyMessage="No rows yet — add one below."
         />
         {!single && (
-          <button
-            type="button"
-            onClick={addBulkRow}
-            className="flex items-center gap-2 min-h-[44px] px-4 py-2 rounded-lg border border-dashed border-[var(--color-border)] text-sm font-medium text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] hover:border-[var(--color-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
-          >
-            <Plus className="w-4 h-4" /> Add row
-          </button>
+          <Button variant="secondary" onClick={addBulkRow}>
+            <Plus className="w-4 h-4" aria-hidden /> Add row
+          </Button>
         )}
       </div>
     </Modal>
