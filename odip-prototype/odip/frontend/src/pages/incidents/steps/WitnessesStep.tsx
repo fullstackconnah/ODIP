@@ -13,6 +13,7 @@ import type { IncidentFormData } from '../incidentFormSchema'
 import type { Tone } from '@/lib/tone'
 import { X } from 'lucide-react'
 import { Button } from '@/components/Button'
+import { ToggleGroup } from '@/components/ToggleGroup'
 
 export type WitnessesStepProps = {
   control: Control<IncidentFormData>
@@ -103,14 +104,9 @@ export function WitnessesStep({ control, errors, reportedByStaffId, staff, exist
       header: '',
       align: 'right',
       render: (_row, rowIndex) => (
-        <button
-          type="button"
-          onClick={() => remove(rowIndex)}
-          className="p-1.5 rounded-[var(--radius-sm)] hover:bg-[var(--color-accent)] text-[var(--color-muted-foreground)]"
-          aria-label="Remove witness"
-        >
-          <X className="w-4 h-4" />
-        </button>
+        <Button variant="ghost" iconOnly onClick={() => remove(rowIndex)} aria-label="Remove witness">
+          <X className="w-4 h-4" aria-hidden />
+        </Button>
       ),
     },
   ]
@@ -124,26 +120,12 @@ export function WitnessesStep({ control, errors, reportedByStaffId, staff, exist
 
         <div className="grid md:grid-cols-[1fr_1fr_auto] gap-3 items-end p-[var(--card-pad)] rounded-[var(--radius-md)] bg-[var(--color-accent)]/40 border border-[var(--color-border)] mb-3">
           <FormField label="Witness type">
-            <div className="flex gap-2" role="radiogroup" aria-label="Witness type">
-              <button
-                type="button"
-                role="radio"
-                aria-checked={mode === 'staff'}
-                onClick={() => setMode('staff')}
-                className={`h-[var(--control-h)] flex-1 px-3 rounded-[var(--radius-sm)] border text-sm ${mode === 'staff' ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10' : 'border-[var(--color-border)]'}`}
-              >
-                Staff member
-              </button>
-              <button
-                type="button"
-                role="radio"
-                aria-checked={mode === 'external'}
-                onClick={() => setMode('external')}
-                className={`h-[var(--control-h)] flex-1 px-3 rounded-[var(--radius-sm)] border text-sm ${mode === 'external' ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10' : 'border-[var(--color-border)]'}`}
-              >
-                Someone else
-              </button>
-            </div>
+            <ToggleGroup
+              ariaLabel="Witness type"
+              value={mode}
+              onChange={(key) => setMode(key as 'staff' | 'external')}
+              options={[{ key: 'staff', label: 'Staff member' }, { key: 'external', label: 'Someone else' }]}
+            />
           </FormField>
 
           {mode === 'staff' ? (
