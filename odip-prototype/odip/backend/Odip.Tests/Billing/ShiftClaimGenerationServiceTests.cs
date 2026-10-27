@@ -360,23 +360,32 @@ public class ShiftClaimGenerationServiceTests
         Assert.Empty(db.TripClaims);
     }
 
-    // A participant funded another way has no NDIS number by design: their shifts are claimable as before (only an NDIS-funded participant is skipped).
-    [Fact]
-    public async Task Generate_ForAParticipantFundedAnotherWay_WithoutAnNdisNumber_StillBuildsLines()
+    // A participant funded another way is never claimed to the NDIS, with or without an NDIS number still on file: every shift is left out and the refusal says to invoice them.
+    [Theory]
+    [InlineData(null)]
+    [InlineData("430000007")]
+    public async Task Generate_AndPreview_ForAnOtherFundedParticipant_LeaveEveryShiftOut(string? ndisNumber)
     {
         using var db = CreateDb();
         SeedProviderSettings(db);
         var participant = SeedParticipant(db);
-        participant.NdisNumber = null;
+        participant.NdisNumber = ndisNumber;
         participant.FundingSource = ParticipantFundingSource.Other;
         SeedCatalogueItem(db, ClaimDayType.Weekday, false, vicPrice: 40m);
         SeedShift(db, participant.Id, new DateOnly(2026, 9, 7));
         await db.SaveChangesAsync();
+        var service = new ShiftClaimGenerationService(db);
 
-        var generated = await new ShiftClaimGenerationService(db).GenerateAsync(participant.Id, new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 7));
+        var generate = await Assert.ThrowsAsync<InvalidOperationException>(() => service.GenerateAsync(participant.Id, new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 7)));
+        var preview = await Assert.ThrowsAsync<InvalidOperationException>(() => service.PreviewAsync(participant.Id, new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 7)));
 
-        Assert.Single(db.ClaimLineItems.Where(l => l.TripClaimId == generated.Claim.Id));
-        Assert.Empty(generated.LeftOut);
+        foreach (var message in new[] { generate.Message, preview.Message })
+        {
+            Assert.Contains("Invoice them directly", message);
+            Assert.DoesNotContain("NDIS number missing", message);
+        }
+        Assert.Empty(db.TripClaims);
+        Assert.Empty(db.ClaimLineItems);
     }
 
     // ── PreviewAsync ──────────────────────────────────────────────────
