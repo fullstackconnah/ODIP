@@ -56,8 +56,8 @@ describe('shift package hooks — breaks', () => {
     await result.current.mutateAsync({ id: 'shift-1' })
 
     expect(mockRequest).toHaveBeenCalledTimes(1)
-    const sent = (mockRequest.mock.calls[0] as unknown[])[0] as { url: string; method: string; data: { breakId: string } }
-    expect(sent).toEqual({ url: '/portal/shifts/shift-1/breaks/start', method: 'POST', data: { breakId: expect.any(String) } })
+    const sent = (mockRequest.mock.calls[0] as unknown[])[0] as { url: string; method: string; timeout: number; data: { breakId: string } }
+    expect(sent).toEqual({ url: '/portal/shifts/shift-1/breaks/start', method: 'POST', timeout: 15_000, data: { breakId: expect.any(String) } })
     expect(sent.data.breakId.length).toBeGreaterThan(10)
     // The cached shift is replaced by the response (structural sharing means equal, not necessarily identical).
     expect(qc.getQueryData(['portal-shift-detail', 'shift-1'])).toEqual(detail)
@@ -70,7 +70,7 @@ describe('shift package hooks — breaks', () => {
 
     await result.current.mutateAsync({ id: 'shift-1', breakId: 'brk-1' })
 
-    expect(mockRequest).toHaveBeenCalledWith({ url: '/portal/shifts/shift-1/breaks/brk-1/end', method: 'POST', data: undefined })
+    expect(mockRequest).toHaveBeenCalledWith({ url: '/portal/shifts/shift-1/breaks/brk-1/end', method: 'POST', data: undefined, timeout: 15_000 })
     expect(qc.getQueryData(['portal-shift-detail', 'shift-1'])).toBe(detail)
   })
 
@@ -124,7 +124,7 @@ describe('shift package hooks — routine ticks', () => {
 
     await result.current.mutateAsync({ id: 'shift-1', routineId: 'rt-1' })
 
-    expect(mockRequest).toHaveBeenCalledWith({ url: '/portal/shifts/shift-1/routines/rt-1/check', method: 'POST', data: undefined })
+    expect(mockRequest).toHaveBeenCalledWith({ url: '/portal/shifts/shift-1/routines/rt-1/check', method: 'POST', data: undefined, timeout: 15_000 })
     expect(qc.getQueryData(['portal-shift-detail', 'shift-1'])).toEqual(detail)
     expect(spy).toHaveBeenCalledWith({ queryKey: ['portal-shift-detail', 'shift-1'] })
   })
@@ -135,7 +135,7 @@ describe('shift package hooks — routine ticks', () => {
 
     await result.current.mutateAsync({ id: 'shift-1', routineId: 'rt-1' })
 
-    expect(mockRequest).toHaveBeenCalledWith({ url: '/portal/shifts/shift-1/routines/rt-1/check', method: 'DELETE', data: undefined })
+    expect(mockRequest).toHaveBeenCalledWith({ url: '/portal/shifts/shift-1/routines/rt-1/check', method: 'DELETE', data: undefined, timeout: 15_000 })
     expect(qc.getQueryData(['portal-shift-detail', 'shift-1'])).toBe(detail)
   })
 
@@ -159,7 +159,7 @@ describe('shift package hooks — handover', () => {
 
     await result.current.mutateAsync({ id: 'shift-1', data: { completionId: 'sc-prev-1' } })
 
-    expect(mockRequest).toHaveBeenCalledWith({ url: '/portal/shifts/shift-1/handover/ack', method: 'POST', data: { completionId: 'sc-prev-1' } })
+    expect(mockRequest).toHaveBeenCalledWith({ url: '/portal/shifts/shift-1/handover/ack', method: 'POST', data: { completionId: 'sc-prev-1' }, timeout: 15_000 })
     expect(qc.getQueryData(['portal-shift-detail', 'shift-1'])).toBe(detail)
   })
 
@@ -169,7 +169,7 @@ describe('shift package hooks — handover', () => {
 
     await result.current.mutateAsync({ id: 'shift-1' })
 
-    expect(mockRequest).toHaveBeenCalledWith({ url: '/portal/shifts/shift-1/handover/ack', method: 'POST', data: {} })
+    expect(mockRequest).toHaveBeenCalledWith({ url: '/portal/shifts/shift-1/handover/ack', method: 'POST', data: {}, timeout: 15_000 })
   })
 })
 
@@ -240,7 +240,7 @@ describe('shift package hooks — Finish carries the handover and the confirmati
     const data = { geolocationDeclined: false, handoverText: 'Check the left heel.', nothingToHandOver: false, nothingToNote: true }
     await result.current.mutateAsync({ id: 'shift-1', data })
 
-    expect(mockRequest).toHaveBeenCalledWith({ url: '/portal/shifts/shift-1/finish', method: 'POST', data })
+    expect(mockRequest).toHaveBeenCalledWith({ url: '/portal/shifts/shift-1/finish', method: 'POST', data, timeout: 15_000 })
   })
 })
 
