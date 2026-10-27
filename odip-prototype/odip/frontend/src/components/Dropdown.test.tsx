@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
+import type { ReactNode } from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Dropdown } from './Dropdown'
@@ -223,7 +224,7 @@ describe('Dropdown — which way the panel opens', () => {
 
 // Agreements FIX3 (M8): a disabled menu item with a reason dims only its label, so the reason stays readable (4.5:1).
 describe('Dropdown — disabled item with a description', () => {
-  const open = (items: { value: string; label: string; description?: string; disabled?: boolean; icon?: JSX.Element }[], onSelect = () => {}) => {
+  const open = (items: { value: string; label: string; description?: string; disabled?: boolean; icon?: ReactNode }[], onSelect = () => {}) => {
     render(<Dropdown variant="menu" label="Actions" items={items} onSelect={onSelect} />)
     fireEvent.click(screen.getByRole('button', { name: 'Actions' }))
   }
