@@ -88,7 +88,11 @@
   --field-gap-x: 16px;     /* form grid column gap */
   --gutter: 20px;          /* main content side padding */
   --tap-min: 0px;          /* touch-target floor (min-height/width) for content-sized controls — tabs, standalone action links; none on fine pointers */
-  --mobile-nav-h: 66px;    /* fixed bottom nav below lg (AppLayout): 12px + the 42px icon-over-label link + 12px. The nav is exactly this tall, so anything that has to sit above it (the wizard footer, main's bottom padding) offsets by this same var */
+  --safe-top: env(safe-area-inset-top, 0px);       /* device insets (notch, home indicator): 0 in a browser tab, real once installed with viewport-fit=cover. Components read these, never env() */
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --mobile-nav-h: calc(66px + var(--safe-bottom));    /* fixed bottom nav below lg (AppLayout): 12px + the 42px icon-over-label link + 12px, plus the home-indicator inset (the nav pads it). The nav is exactly this tall, so anything that has to sit above it (the wizard footer, main's bottom padding) offsets by this same var, and the inset is counted once */
 
   /*
    * Type: the ONE display step, above the 20px headline. Opt-in and reserved for detail pages: the title of
@@ -117,7 +121,7 @@
     --field-gap-x: 16px;
     --gutter: 16px;
     --tap-min: 44px;
-    --mobile-nav-h: 68px;  /* the links reach the 44px --tap-min floor here: 12px + 44px + 12px */
+    --mobile-nav-h: calc(68px + var(--safe-bottom));  /* the links reach the 44px --tap-min floor here: 12px + 44px + 12px */
   }
 }
 
