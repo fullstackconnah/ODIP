@@ -98,7 +98,7 @@ export default function UserSwitcher() {
   setOpen(false);
   setConfirmingExit(true);
 }}
-                className="w-full flex min-h-[var(--tap-min)] items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors hover:bg-[var(--color-accent)] mb-1 border-b border-[var(--color-border)] pb-2"
+                className="w-full flex min-h-[var(--tap-min)] items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] hover:bg-[var(--color-accent)] mb-1 border-b border-[var(--color-border)] pb-2"
               >
                 <span className="text-sm text-[var(--color-muted-foreground)]">↩ Exit view</span>
               </button>
@@ -118,7 +118,7 @@ export default function UserSwitcher() {
   setPendingUser(user);
 }}
                 disabled={!user.isActive}
-                className={`w-full flex min-h-[var(--tap-min)] items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors ${
+                className={`w-full flex min-h-[var(--tap-min)] items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] ${
                   user.id === viewingUserId
                     ? TONE.warning.soft
                     : user.isActive ? 'hover:bg-[var(--color-accent)]' : ''
