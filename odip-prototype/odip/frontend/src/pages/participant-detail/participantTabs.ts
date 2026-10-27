@@ -29,6 +29,78 @@ export const OLD_KEY_TARGET: Record<string, { tab: ParticipantTabKey; hash?: str
   history: { tab: 'records', hash: 'history' },
 }
 
+/** What hides a section, beyond the tab itself. The page computes each from the role and the participant. */
+export type SectionGate = 'rostering' | 'planBudget' | 'claims' | 'history' | 'communityStream' | 'earlierChecklist'
+export type CountKey = 'health' | 'daily' | 'people' | 'records' // useParticipantTabCounts' keys, which are also tab ids
+/** `list`: never quiet, it owns its empty state. `nested`: ids of elements inside this section that a `#hash` may name. */
+export type SubTab = { id: string; label: string; list?: true; count?: CountKey; gate?: SectionGate; nested?: readonly string[] }
+export type GroupedTabKey = Exclude<ParticipantTabKey, 'overview'>
+
+/** The sections of each grouped tab in page order, one sub-tab each. Labels are the short chip labels; a section's card keeps its full heading. */
+export const SUB_TABS: Record<GroupedTabKey, readonly SubTab[]> = {
+  about: [
+    { id: 'identity', label: 'Identity' }, { id: 'home-and-living', label: 'Address & living' }, { id: 'ndis-plan', label: 'NDIS & funding' },
+    { id: 'services', label: 'Services' }, { id: 'key-identifiers', label: 'Key identifiers' }, { id: 'culture-and-rights', label: 'Cultural background' },
+    { id: 'about-me', label: 'About me' },
+  ],
+  health: [
+    { id: 'emergency', label: 'Emergency' }, { id: 'medical', label: 'Medical' }, { id: 'health-conditions', label: 'Conditions', list: true },
+    { id: 'medications', label: 'Medications', list: true }, { id: 'behaviour-and-communication', label: 'Behaviour & communication' },
+    { id: 'behaviour-support', label: 'Behaviour support' }, { id: 'risks', label: 'Risks', list: true, count: 'health', nested: ['risks-summary'] },
+    { id: 'restrictive-practices', label: 'Restrictive practices', list: true }, { id: 'community-access-risk', label: 'Earlier checklist', gate: 'earlierChecklist' },
+  ],
+  daily: [
+    { id: 'support-needs', label: 'Support needs' }, { id: 'mobility-and-personal-care', label: 'Mobility & personal care' },
+    { id: 'equipment-and-overnight', label: 'Equipment & overnight' }, { id: 'daily-living', label: 'Daily living', list: true },
+    { id: 'routines', label: 'Routines', list: true, count: 'daily' }, { id: 'meals', label: 'Meals & diet' },
+    { id: 'typical-day', label: 'Typical day', gate: 'communityStream' }, { id: 'transport-and-travel', label: 'Transport & travel' },
+  ],
+  people: [
+    { id: 'contacts', label: 'Contacts', list: true, count: 'people' }, { id: 'roster', label: 'Rostering', list: true, gate: 'rostering' },
+    { id: 'trips', label: 'Bookings', list: true },
+  ],
+  funding: [{ id: 'plan-budget', label: 'Plan budget', gate: 'planBudget' }, { id: 'claims', label: 'Claims', list: true, gate: 'claims' }],
+  records: [
+    { id: 'notes', label: 'Notes', list: true, count: 'records' }, { id: 'consents', label: 'Consents', list: true },
+    { id: 'history', label: 'History', list: true, gate: 'history' },
+  ],
+}
+
+export const visibleSubTabs = (tab: GroupedTabKey, gates: Record<SectionGate, boolean>) => SUB_TABS[tab].filter(r => !r.gate || gates[r.gate])
+
+/** The section a hash names on this tab: a row id, or an element nested in one (`risks-summary` is in `risks`). Another tab's id is null. */
+export const sectionForHash = (rows: readonly SubTab[], hashId: string) => rows.find(r => r.id === hashId || r.nested?.includes(hashId))?.id ?? null
+
+/** The shown section: the hash's, else a visible `section=`, else the first visible row. An unknown or hidden `section=` falls back. */
+export const resolveSection = (rows: readonly SubTab[], hashId: string, param: string | null) =>
+  sectionForHash(rows, hashId) ?? (rows.some(r => r.id === param) ? param! : rows[0]?.id)
+
+/** The hash is read during render now, so a malformed one (`#%E0`) must not throw: it matches no row. */
+export const safeDecode = (s: string) => { try { return decodeURIComponent(s) } catch { return s } }
+
+/**
+ * `?section=` for the open grouped tab, and the two setters. Both write with `replace`, drop the hash (a leftover `#id` would override the next
+ * choice) and do nothing for the current value (Tabs fires onChange on a click on the active tab). `selectTab` also drops `section`, in the same write.
+ */
+export function useParticipantSection(tab: ParticipantTabKey, rows: readonly SubTab[]) {
+  const [params] = useSearchParams()
+  const { hash } = useLocation()
+  const navigate = useNavigate()
+  const section = tab === 'overview' ? undefined : resolveSection(rows, safeDecode(hash.slice(1)), params.get('section'))
+  const write = (mutate: (p: URLSearchParams) => void) => {
+    const next = new URLSearchParams(params)
+    mutate(next)
+    navigate({ search: next.toString(), hash: '' }, { replace: true })
+  }
+  const setSection = (id: string) => {
+    if (id !== section && rows.some(r => r.id === id)) write(p => { if (id === rows[0].id) p.delete('section'); else p.set('section', id) })
+  }
+  const selectTab = (next: ParticipantTabKey) => {
+    if (next !== tab) write(p => { p.delete('section'); if (next === 'overview') p.delete('tab'); else p.set('tab', next) })
+  }
+  return { section, setSection, selectTab }
+}
+
 /** An old or new tab key as {tab, hash}. A hidden tab lands on Overview with no hash; an unknown key is null. */
 export function resolveTabKey(raw: string, visible: readonly ParticipantTabKey[]): { tab: ParticipantTabKey; hash?: string } | null {
   const t = OLD_KEY_TARGET[raw] ?? (isTabKey(raw) ? { tab: raw } : null)
@@ -46,6 +118,7 @@ export function useParticipantTabRedirect(visible: readonly ParticipantTabKey[])
     const t = resolveTabKey(raw, visible)!
     const next = new URLSearchParams(params)
     if (t.tab === 'overview') next.delete('tab'); else next.set('tab', t.tab)
+    if (t.hash) next.set('section', t.hash); else next.delete('section')
     navigate({ search: next.toString(), hash: t.hash ?? '' }, { replace: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the key or the visible tabs change, not on every params object
   }, [raw, visible.join()])
@@ -60,13 +133,14 @@ export function useParticipantGoTo(visible: readonly ParticipantTabKey[]) {
     if (!t) return
     const next = new URLSearchParams(params)
     if (t.tab === 'overview') next.delete('tab'); else next.set('tab', t.tab)
+    if (t.hash) next.set('section', t.hash); else next.delete('section')
     navigate({ search: next.toString(), hash: t.hash ?? '' })
   }
 }
 
 /**
  * Scrolls to `#section` and focuses its heading, once per hash, when the element exists and none of this participant's queries is fetching (cards
- * mount after their data, so an early scroll lands short). It stops waiting after 5 s. An enclosing <details> (the not-recorded fold) opens first.
+ * mount after their data, so an early scroll lands short). It stops waiting after 5 s. An enclosing <details> (a fixed-list fold) opens first.
  */
 export function useScrollToHash(participantId: string | undefined) {
   const { hash, key } = useLocation()

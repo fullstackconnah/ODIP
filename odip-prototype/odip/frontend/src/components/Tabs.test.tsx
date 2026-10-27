@@ -483,3 +483,61 @@ describe('Tabs primitive — overflow="scroll" carries an edge fade', () => {
     expect(screen.getByRole('tablist', { name: 'Many' }).className).not.toMatch(/mask-image/)
   })
 })
+
+// variant="sub": the second level inside a tab that groups sections (participant page). Same contract as the underline strip, a different paint.
+describe('Tabs primitive — variant="sub"', () => {
+  const subTabs: TabItem[] = [
+    { id: 'a', label: 'Alpha', panelId: 'p-a' },
+    { id: 'b', label: 'Beta', badge: 3, quiet: true },
+    { id: 'c', label: 'Gamma', badge: 0 },
+  ]
+  function SubHarness({ initial = 'a' }: { initial?: string }) {
+    const [active, setActive] = useState(initial)
+    return <Tabs variant="sub" tabs={subTabs} active={active} onChange={setActive} ariaLabel="Sub tabs" idPrefix="sub" />
+  }
+
+  it('is still a tablist of tabs; arrows, Home and End move and activate; aria-controls is the panelId', async () => {
+    const user = userEvent.setup()
+    render(<SubHarness />)
+    expect(screen.getByRole('tablist', { name: 'Sub tabs' })).toBeInTheDocument()
+    const alpha = screen.getByRole('tab', { name: 'Alpha' })
+    expect(alpha).toHaveAttribute('aria-controls', 'p-a')
+    expect(screen.getByRole('tab', { name: /Beta/ })).not.toHaveAttribute('aria-controls')
+    alpha.focus()
+    await user.keyboard('{ArrowRight}')
+    expect(screen.getByRole('tab', { name: /Beta/ })).toHaveAttribute('aria-selected', 'true')
+    await user.keyboard('{End}')
+    expect(screen.getByRole('tab', { name: 'Gamma' })).toHaveAttribute('aria-selected', 'true')
+    await user.keyboard('{Home}')
+    expect(screen.getByRole('tab', { name: 'Alpha' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('shows a badge as a plain aria-hidden numeral (no chip) and only when above zero', () => {
+    render(<SubHarness />)
+    const numeral = screen.getByText('3')
+    expect(numeral).toHaveAttribute('aria-hidden', 'true')
+    expect(numeral.className).not.toMatch(/rounded-full/)
+    expect(screen.getByRole('tab', { name: 'Gamma' })).not.toHaveTextContent('0')
+  })
+
+  it('draws a quiet tab dashed only while it is not the active one', async () => {
+    const user = userEvent.setup()
+    render(<SubHarness />)
+    const chip = () => screen.getByRole('tab', { name: /Beta/ }).firstElementChild!
+    expect(chip().className).toMatch(/border-dashed/)
+    await user.click(screen.getByRole('tab', { name: /Beta/ }))
+    expect(chip().className).not.toMatch(/border-dashed/)
+    expect(screen.getByRole('tab', { name: 'Alpha' }).firstElementChild!.className).not.toMatch(/border-dashed/)
+  })
+
+  it('has no baseline, scrolls in one row below md and wraps from md; the underline strip is unchanged', () => {
+    const { unmount } = render(<SubHarness />)
+    const sub = screen.getByRole('tablist', { name: 'Sub tabs' })
+    expect(sub.className).not.toMatch(/border-b/)
+    expect(sub).toHaveClass('flex-nowrap', 'md:flex-wrap', 'max-md:[mask-image:linear-gradient(to_right,black_calc(100%_-_2rem),transparent)]', 'max-md:pr-8')
+    unmount()
+    render(<Tabs tabs={subTabs} active="a" onChange={() => {}} ariaLabel="Under" />)
+    expect(screen.getByRole('tablist', { name: 'Under' })).toHaveClass('border-b')
+    expect(screen.getByRole('tab', { name: 'Alpha' }).className).toContain('border-b-2')
+  })
+})
