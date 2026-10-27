@@ -314,4 +314,12 @@ describe('Button — keyboard-only focus ring', () => {
     expect(btn).toHaveClass('focus-visible:ring-2', 'focus-visible:ring-[var(--color-ring)]')
     expect(btn).not.toHaveClass('focus:ring-2')
   })
+
+  it('squeezes on press with a 100 ms transform transition, and only when the button is enabled', () => {
+    render(<Button>Save</Button>)
+    const btn = screen.getByRole('button', { name: 'Save' })
+    expect(btn).toHaveClass('transition-[color,background-color,border-color,transform]', 'duration-100', 'ease-out')
+    // not-disabled / not-aria-disabled: a disabled or busy (aria-disabled) button never scales.
+    expect(btn).toHaveClass('not-disabled:not-aria-disabled:active:scale-[0.97]')
+  })
 })
