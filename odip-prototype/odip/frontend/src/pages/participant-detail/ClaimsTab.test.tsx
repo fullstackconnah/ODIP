@@ -48,11 +48,11 @@ function shiftClaim(overrides: Partial<TripClaimListDto> = {}): TripClaimListDto
   }
 }
 
-function renderTab(canWrite = true) {
+function renderTab(canWrite = true, funding: { otherFunded?: boolean; funder?: string | null } = {}) {
   return render(
     <MemoryRouter initialEntries={['/participants/participant-1']}>
       <Routes>
-        <Route path="/participants/:id" element={<ClaimsTab participantId="participant-1" canWrite={canWrite} />} />
+        <Route path="/participants/:id" element={<ClaimsTab participantId="participant-1" canWrite={canWrite} {...funding} />} />
         <Route path="/claims/:id" element={<div>Claim detail page</div>} />
         <Route path="/trips/:id" element={<div>Trip detail page</div>} />
       </Routes>
@@ -92,6 +92,30 @@ describe('ClaimsTab — list', () => {
   it('shows an empty state when the participant has no claims', () => {
     renderTab()
     expect(screen.getByText('No claims yet')).toBeInTheDocument()
+  })
+})
+
+describe('ClaimsTab — other-funded participant', () => {
+  it('tells an other-funded participant their shifts are invoiced to their funder, not claimed', () => {
+    renderTab(true, { otherFunded: true, funder: 'Acme Health' })
+
+    expect(screen.getByText('Not claimed to the NDIS')).toBeInTheDocument()
+    expect(screen.getByText(/Invoice Acme Health directly\./)).toBeInTheDocument()
+    expect(screen.queryByText('No claims yet')).not.toBeInTheDocument()
+    expect(document.body).not.toHaveTextContent('Generate a claim once')
+  })
+
+  it('falls back to "their funder" when no organisation is recorded', () => {
+    renderTab(true, { otherFunded: true, funder: '  ' })
+    expect(screen.getByText(/Invoice their funder directly\./)).toBeInTheDocument()
+  })
+
+  it('still shows the claims table for an other-funded participant with older claims', () => {
+    mockUseParticipantClaims.mockReturnValue({ data: [tripClaim()], isLoading: false })
+    renderTab(true, { otherFunded: true, funder: 'Acme Health' })
+
+    expect(screen.getByText('CLM-001')).toBeInTheDocument()
+    expect(screen.queryByText('Not claimed to the NDIS')).not.toBeInTheDocument()
   })
 })
 
