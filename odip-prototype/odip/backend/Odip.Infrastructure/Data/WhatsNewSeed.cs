@@ -103,8 +103,11 @@ public static class WhatsNewSeed
         new Item("2026-10-install-app", "Add Bunya Support to your phone",
             "On your phone, you can add Bunya Support to your home screen and open it like an app. After you sign in, look for the card above the menu bar.",
             WhatsNewAudience.All, false),
+        new Item("2026-10-logo-mark", "A new Bunya Support logo",
+            "The small logo in the side menu is now the \"b\" from the Bunya Support name. When you fold the side menu away, the name folds into it.",
+            WhatsNewAudience.All, false),
         new Item("2026-10-logo-icons", "The new logo on your tab and home screen",
-            "Your browser tab and the Bunya Support app on your phone now show the same \"b\" logo as the side menu.",
+            "Your browser tab and the Bunya Support app on your phone now show the same \"b\" logo as the side menu. If you added Bunya Support to your home screen before today and it still shows the old logo, remove it and add it again.",
             WhatsNewAudience.All, false),
     };
 

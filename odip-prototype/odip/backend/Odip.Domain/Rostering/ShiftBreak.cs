@@ -62,6 +62,9 @@ public enum ShiftBreakViolation
 
     /// <summary>An already-ended break was edited to have no end; only a running break may have none.</summary>
     EndRequired,
+
+    /// <summary>A client-recorded time is more than <see cref="ClientTimeRules.MaxAge"/> old.</summary>
+    ClientTimeTooOld,
 }
 
 /// <summary>

@@ -18,6 +18,21 @@ public record StartShiftDto
     [Range(-180.0, 180.0)]
     public decimal? Longitude { get; init; }
     public bool GeolocationDeclined { get; init; }
+    /// <summary>When the phone recorded the tap, if it was sent late (UTC). Null: the server clock stamps it.</summary>
+    public DateTime? StartedAt { get; init; }
+}
+
+/// <summary>Start Break body. Optional as a whole: an old client posts none.</summary>
+public record StartBreakDto
+{
+    /// <summary>The client's id for the break, so a re-sent request is a no-op.</summary>
+    public Guid? BreakId { get; init; }
+    public DateTime? StartedAt { get; init; }
+}
+
+public record EndBreakDto
+{
+    public DateTime? EndedAt { get; init; }
 }
 
 public record FinishShiftDto
@@ -62,6 +77,9 @@ public record FinishShiftDto
 
     /// <summary>"Anything to report?": true, false, or null when skipped. Informational only.</summary>
     public bool? AnythingToReport { get; init; }
+
+    /// <summary>When the phone recorded the tap, if it was sent late (UTC). Null: the server clock stamps it.</summary>
+    public DateTime? FinishedAt { get; init; }
 }
 
 /// <summary>
@@ -141,7 +159,9 @@ public record ShiftCompletionDto(
     /// <summary>Kilometres driven with the participant, one decimal place; null when not given.</summary>
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] decimal? Kilometres,
     /// <summary>"Anything to report?" at Finish: true, false, or null when skipped.</summary>
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] bool? AnythingToReport);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] bool? AnythingToReport,
+    /// <summary>The worker sent a time recorded offline; the review page marks it.</summary>
+    bool SentFromOffline);
 
 /// <summary>Connection-map reverse link (Deliverable 2) summary row — one active IncidentReport
 /// raised against a shift, as surfaced on <see cref="ShiftCompletionDto.Incidents"/>.</summary>
