@@ -381,6 +381,15 @@
 }
 
 /*
+ * The sidebar folding (AppLayout `data-folding`, set from the click until the nav swaps to the rail 80ms later): the words and nested rows
+ * fade over 60ms, so they are gone before the swap; badges and chevrons go at once, because the edge reaches them in about 8ms.
+ * A click back removes the attribute and the transition carries them home from their current opacity.
+ */
+[data-fold] { transition: opacity 60ms cubic-bezier(0.16, 1, 0.3, 1); }
+aside[data-folding] [data-fold] { opacity: 0; }
+aside[data-folding] [data-fold="trail"] { transition-duration: 0s; }
+
+/*
  * Reduced motion — applied product-wide rather than per-component. Neutralises animation and
  * transition *duration/delay* so state changes (colour, opacity, width, transform) still happen
  * and are still perceivable, they just resolve instantly instead of animating. This deliberately

@@ -1473,20 +1473,95 @@ describe('AppLayout — the sidebar collapses to an icon rail (from lg)', () => 
     expect(same).toBe(toggle)
     expect(document.activeElement).toBe(toggle)
     expect(aside()).toHaveClass('lg:w-16')
-    // The item layout follows once the width has settled (jsdom never fires transitionend: the 260ms fallback does).
+    // The foot rows go square at once; the nav follows at 80ms (jsdom never fires transitionend, and there is no handler for it).
+    expect(toggle).toHaveClass('size-10')
+    expect(aside()).toHaveAttribute('data-folding')
     expect(dashboard()).not.toHaveClass('size-10')
-    act(() => { vi.advanceTimersByTime(300) })
+    act(() => { vi.advanceTimersByTime(79) })
+    expect(dashboard()).not.toHaveClass('size-10')
+    expect(aside()).toHaveAttribute('data-folding')
+    act(() => { vi.advanceTimersByTime(1) })
     expect(dashboard()).toHaveClass('size-10')
+    expect(aside()).not.toHaveAttribute('data-folding')
     fireEvent.click(same)
     expect(stored().sidebarCollapsed).toBe(false)
     expect(dashboard()).not.toHaveClass('size-10')
+    // The foot rows stay square until the edge has passed the wide toggle's ring (110ms).
+    expect(toggle).toHaveClass('size-10')
+    act(() => { vi.advanceTimersByTime(109) })
+    expect(toggle).toHaveClass('size-10')
+    act(() => { vi.advanceTimersByTime(1) })
+    expect(toggle).not.toHaveClass('size-10')
+    expect(toggle).toHaveClass('h-8')
+    expect(document.activeElement).toBe(toggle)
   })
 
-  it('T2b reduced motion switches the item layout at once', () => {
+  it('T2b reduced motion switches the nav and the foot rows at once, both ways, with no folding', () => {
     stubMedia({ reduce: true })
     renderRail('/')
-    fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }))
+    const toggle = screen.getByRole('button', { name: 'Collapse sidebar' })
+    fireEvent.click(toggle)
     expect(dashboard()).toHaveClass('size-10')
+    expect(toggle).toHaveClass('size-10')
+    expect(aside()).not.toHaveAttribute('data-folding')
+    fireEvent.click(toggle)
+    expect(dashboard()).not.toHaveClass('size-10')
+    expect(toggle).not.toHaveClass('size-10')
+    expect(aside()).not.toHaveAttribute('data-folding')
+  })
+
+  it('T2c a click works without WAAPI, and a second click mid-fold reverses it for good', () => {
+    expect(Element.prototype.animate).toBeUndefined()
+    renderRail('/', { sidebarCollapsed: false })
+    const toggle = screen.getByRole('button', { name: 'Collapse sidebar' })
+    fireEvent.click(toggle)
+    expect(aside()).toHaveClass('lg:w-16')
+    act(() => { vi.advanceTimersByTime(40) })
+    fireEvent.click(screen.getByRole('button', { name: 'Expand sidebar' }))
+    expect(aside()).not.toHaveClass('lg:w-16')
+    expect(aside()).not.toHaveAttribute('data-folding')
+    act(() => { vi.advanceTimersByTime(200) })
+    expect(dashboard()).not.toHaveClass('size-10')
+    expect(toggle).not.toHaveClass('size-10')
+  })
+
+  it('T2d no folding element carries its own transition (the unlayered fold rule would override it and snap the group)', () => {
+    renderRail('/', { sidebarCollapsed: false })
+    fireEvent.click(trigger(/Trips$/))
+    expect(trigger(/Trips$/)).toHaveAttribute('aria-expanded', 'true')
+    const folds = Array.from(aside().querySelectorAll('[data-fold]'))
+    expect(folds.length).toBeGreaterThan(0)
+    expect(folds.filter(el => (el.getAttribute('class') ?? '').includes('transition-'))).toEqual([])
+  })
+
+  describe('with WAAPI', () => {
+    const animate = vi.fn(() => ({ cancel() {}, finished: Promise.resolve() }))
+    beforeEach(() => {
+      animate.mockClear()
+      Object.assign(Element.prototype, { animate, getAnimations: () => [] })
+    })
+    afterEach(() => {
+      Reflect.deleteProperty(Element.prototype, 'animate')
+      Reflect.deleteProperty(Element.prototype, 'getAnimations')
+    })
+    const collapseAndSettle = () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }))
+      act(() => { vi.advanceTimersByTime(200) })
+    }
+
+    it('T2e collapsing animates', () => {
+      renderRail('/', { sidebarCollapsed: false })
+      collapseAndSettle()
+      expect(animate).toHaveBeenCalled()
+    })
+
+    it('T2f reduced motion animates nothing', () => {
+      stubMedia({ reduce: true })
+      renderRail('/', { sidebarCollapsed: false })
+      collapseAndSettle()
+      fireEvent.click(screen.getByRole('button', { name: 'Expand sidebar' }))
+      expect(animate).not.toHaveBeenCalled()
+    })
   })
 
   it('T3 every rail link keeps its accessible name, and a group keeps its count in the name', () => {

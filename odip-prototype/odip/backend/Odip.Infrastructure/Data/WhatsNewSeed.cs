@@ -88,6 +88,9 @@ public static class WhatsNewSeed
         new Item("2026-10-row-buttons-one-look", "Add and remove buttons match",
             "The add and remove buttons on intake contacts and risks, incident witnesses and restrictive practices now look and work like the rest of the app, and the witness choice works with arrow keys.",
             WhatsNewAudience.All, false),
+        new Item("2026-10-sidebar-motion", "The side menu folds away more smoothly",
+            "When you collapse or expand the side menu, the labels fade and the icons glide into place instead of jumping.",
+            WhatsNewAudience.All, false),
     };
 
     /// <summary>Inserts the keys the table lacks, one save each, so a key another instance inserted first costs only that row.</summary>
