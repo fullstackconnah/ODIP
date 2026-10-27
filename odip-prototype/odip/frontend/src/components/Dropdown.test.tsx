@@ -88,6 +88,36 @@ describe('Dropdown — 44px coarse-pointer hit area on the compact triggers', ()
     }
   })
 
+  // The search input is focused as the panel opens, while it is still unstyled at the end of body; focus() without preventScroll scrolls the WINDOW to it.
+  it('focuses the search input without scrolling, on first open and on reopen, while the panel is unstyled', async () => {
+    // Record the panel's position at focus time: '' (unstyled) both times proves the close reset; a stale style would read 'fixed' on reopen.
+    const positions: string[] = []
+    const original = HTMLElement.prototype.focus
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus').mockImplementation(function (this: HTMLElement, options?: FocusOptions) {
+      if (this.tagName === 'INPUT') positions.push(screen.getByRole('listbox').style.position)
+      original.call(this, options)
+    })
+    try {
+      const user = userEvent.setup()
+      render(<Dropdown variant="icon" label="Pick" icon={<span>i</span>} items={ITEMS} searchable onSelect={() => {}} />)
+      const searchFocuses = () => focus.mock.calls.filter((_, i) => (focus.mock.contexts[i] as HTMLElement).tagName === 'INPUT')
+      await user.tab()
+      await user.keyboard('{Enter}')
+      expect(screen.getByRole('textbox')).toHaveFocus()
+      expect(searchFocuses()).toEqual([[{ preventScroll: true }]])
+      expect(positions).toEqual([''])
+      // Close and reopen: the focus still lands unscrolled, on a panel whose style was reset.
+      await user.keyboard('{Escape}')
+      focus.mockClear()
+      await user.keyboard('{Enter}')
+      expect(screen.getByRole('textbox')).toHaveFocus()
+      expect(searchFocuses()).toEqual([[{ preventScroll: true }]])
+      expect(positions).toEqual(['', ''])
+    } finally {
+      focus.mockRestore()
+    }
+  })
+
   // A header action is one primary md Button (UI survey s.1), menu or not: no gradient pill. md is --control-h, 44px on a touch screen,
   // so the menu trigger needs no pad, like the form trigger.
   it('draws the menu trigger exactly as a primary md Button', () => {

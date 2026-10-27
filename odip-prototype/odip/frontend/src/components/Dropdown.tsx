@@ -163,7 +163,8 @@ export function Dropdown({
   // Auto-focus search input when panel opens in searchable mode
   useEffect(() => {
     if (open && searchable && searchRef.current) {
-      searchRef.current.focus()
+      // preventScroll: the panel is still unstyled at the end of body here, and focusing it would scroll the window.
+      searchRef.current.focus({ preventScroll: true })
     }
   }, [open, searchable])
 
