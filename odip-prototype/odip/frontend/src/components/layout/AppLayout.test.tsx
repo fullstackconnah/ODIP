@@ -1520,6 +1520,45 @@ describe('AppLayout — the sidebar collapses to an icon rail (from lg)', () => 
     expect(toggle).not.toHaveClass('size-10')
   })
 
+  it('T2d no folding element carries its own transition (the unlayered fold rule would override it and snap the group)', () => {
+    renderRail('/', { sidebarCollapsed: false })
+    fireEvent.click(trigger(/Trips$/))
+    expect(trigger(/Trips$/)).toHaveAttribute('aria-expanded', 'true')
+    const folds = Array.from(aside().querySelectorAll('[data-fold]'))
+    expect(folds.length).toBeGreaterThan(0)
+    expect(folds.filter(el => (el.getAttribute('class') ?? '').includes('transition-'))).toEqual([])
+  })
+
+  describe('with WAAPI', () => {
+    const animate = vi.fn(() => ({ cancel() {}, finished: Promise.resolve() }))
+    beforeEach(() => {
+      animate.mockClear()
+      Object.assign(Element.prototype, { animate, getAnimations: () => [] })
+    })
+    afterEach(() => {
+      Reflect.deleteProperty(Element.prototype, 'animate')
+      Reflect.deleteProperty(Element.prototype, 'getAnimations')
+    })
+    const collapseAndSettle = () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }))
+      act(() => { vi.advanceTimersByTime(200) })
+    }
+
+    it('T2e collapsing animates', () => {
+      renderRail('/', { sidebarCollapsed: false })
+      collapseAndSettle()
+      expect(animate).toHaveBeenCalled()
+    })
+
+    it('T2f reduced motion animates nothing', () => {
+      stubMedia({ reduce: true })
+      renderRail('/', { sidebarCollapsed: false })
+      collapseAndSettle()
+      fireEvent.click(screen.getByRole('button', { name: 'Expand sidebar' }))
+      expect(animate).not.toHaveBeenCalled()
+    })
+  })
+
   it('T3 every rail link keeps its accessible name, and a group keeps its count in the name', () => {
     mockUsePendingLeaveCount.mockReturnValue(3)
     renderRail('/', { sidebarCollapsed: true })

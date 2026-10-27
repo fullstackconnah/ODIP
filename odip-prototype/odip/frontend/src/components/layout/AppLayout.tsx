@@ -3,7 +3,7 @@ import { usePreviousAppPathTracker } from '@/hooks/useBackNavigation'
 import { useDialogBehavior } from '@/hooks/useDialogBehavior'
 import { useIsBelowLg } from '@/hooks/useIsBelowLg'
 import { LogOut, Menu, X, ChevronDown } from 'lucide-react'
-import { Suspense, useCallback, useId, useLayoutEffect, useState, useRef, type RefObject } from 'react'
+import { Suspense, useCallback, useEffect, useId, useLayoutEffect, useState, useRef, type RefObject } from 'react'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import TenantSwitcher from '@/components/layout/TenantSwitcher'
 import UserSwitcher from '@/components/layout/UserSwitcher'
@@ -159,21 +159,22 @@ function SidebarGroup({ group, leaves, open, onToggle, pathname, counts, onNavig
         <span className="material-symbols-outlined shrink-0" aria-hidden="true" style={{ fontSize: '18px' }}>{group.msIcon}</span>
         <span data-fold="label" className="flex-1 text-left truncate">{group.label}</span>
         {!open && <NavCountBadge count={count} fold />}
-        <ChevronDown
-          aria-hidden="true"
-          data-fold="trail"
-          className={`w-4 h-4 shrink-0 transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
-        />
+        {/* The fold wrapper carries data-fold: its unlayered opacity transition would override the chevron's own transform transition. */}
+        <span data-fold="trail" className="inline-flex shrink-0">
+          <ChevronDown
+            aria-hidden="true"
+            className={`w-4 h-4 transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
+          />
+        </span>
       </button>
       <div
         id={panelId}
         aria-hidden={!open}
-        data-fold="label"
         className={`grid overflow-hidden transition-[grid-template-rows] duration-200 ease-in-out motion-reduce:transition-none motion-reduce:duration-0 ${
           open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
         }`}
       >
-        <div className="min-h-0 space-y-0.5">
+        <div data-fold="label" className="min-h-0 space-y-0.5">
           {leaves.map(leaf => (
             <SidebarLink key={leaf.to} leaf={leaf} nested tabbable={open} pathname={pathname} counts={counts} onNavigate={onNavigate} />
           ))}
@@ -435,6 +436,7 @@ export default function AppLayout() {
     setOpenFlyout(null)
     if (focusTrigger) openFlyout?.trigger.focus()
   }, [openFlyout])
+  useEffect(() => () => clearTimeout(settleTimer.current), [])
   const hideTip = railTip.hide
   const toggleFlyout = useCallback((id: string, trigger: HTMLElement) => {
     hideTip()

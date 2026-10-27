@@ -108,7 +108,7 @@ const INSTALL = (pauseOnClick) => {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
-async function open(browser, vp, { collapsed, reduced = false, clock = true }) {
+async function open(browser, vp, { collapsed, reduced = false, clock = true, drawer = false }) {
   const context = await browser.newContext({
     viewport: vp, locale: 'en-AU', timezoneId: 'Australia/Sydney', reducedMotion: reduced ? 'reduce' : 'no-preference',
   })
@@ -128,7 +128,9 @@ async function open(browser, vp, { collapsed, reduced = false, clock = true }) {
   await signIn.click()
   await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 })
   await page.goto(`${BASE_URL}/trips`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
-  await page.locator('aside#app-menu [data-glide="toggle"]').waitFor({ state: 'visible', timeout: 60_000 })
+  // below lg the toggle is hidden and the aside is a drawer behind the header's menu button
+  if (drawer) await page.getByRole('button', { name: 'Open menu' }).waitFor({ state: 'visible', timeout: 60_000 })
+  else await page.locator('aside#app-menu [data-glide="toggle"]').waitFor({ state: 'visible', timeout: 60_000 })
   // the pending-leave badge shows up when the (mock) leave queue answers
   await page.waitForFunction(() => [...document.querySelectorAll('aside#app-menu span.rounded-full')].some((s) => /^\d/.test(s.textContent)), null, { timeout: 30_000, polling: 100 })
   await page.evaluate(INSTALL, clock)
@@ -194,6 +196,10 @@ async function run(browser, vp, dir) {
       if (T === 120) check(`${L} label 1, foot wide, row badge > 0`, near(m.labelOpacity, 1, 0.05) && near(m.toggleSize[0], 208, 2) && (m.rowBadgeOpacity ?? 0) > 0, `${m.labelOpacity?.toFixed(2)} / ${m.rowBadgeOpacity?.toFixed?.(2)} toggle=${Math.round(m.toggleSize[0])}`)
     }
     if (vp.width === 1280 && (dir === 'collapse' || T === 200)) await crop(`T${T}`)
+    if (vp.width === 1280 && dir === 'collapse' && (T === 0 || T === 200)) {
+      const w = T === 0 ? 240 : 72
+      await page.screenshot({ path: path.join(OUT_DIR, `1280-brand-row-${T === 0 ? 'expanded' : 'collapsed'}.png`), clip: { x: 0, y: 0, width: w, height: 72 } })
+    }
     if (T === 0) check(`${L} width transition ${dir === 'collapse' ? 140 : 160}ms`, m.widthDur.includes(dir === 'collapse' ? 140 : 160), JSON.stringify(m.widthDur))
   }
   const left = await page.evaluate(() => document.getAnimations().map((a) => `${a.id || a.constructor.name}:${a.transitionProperty ?? ''}:${a.playState}`))
@@ -216,6 +222,40 @@ async function reduced(browser, vp) {
   await context.close()
 }
 
+// Opening and closing a nav group keeps its own transitions (the fold rule must not override them): the panel grows over 200ms, the chevron turns over 150ms.
+async function groups(browser, vp, drawer) {
+  const { context, page } = await open(browser, vp, { collapsed: false, clock: false, drawer })
+  if (drawer) {
+    await page.getByRole('button', { name: 'Open menu' }).click()
+    await page.locator('aside#app-menu').getByRole('button', { name: /Trips/ }).waitFor({ state: 'visible' })
+    await sleep(500)
+  }
+  const m = await page.evaluate(async () => {
+    const g = [...document.querySelectorAll('aside#app-menu button[aria-controls]')].find((b) => /Trips/.test(b.textContent))
+    const panel = document.getElementById(g.getAttribute('aria-controls'))
+    const chevron = g.querySelector('svg')
+    const h = () => panel.getBoundingClientRect().height
+    const openH = h()
+    g.click()
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))) // React commits, the transition starts
+    const ps = getComputedStyle(panel)
+    const cs = getComputedStyle(chevron)
+    const out = { openH, panelProp: ps.transitionProperty, panelDur: ps.transitionDuration, chevProp: cs.transitionProperty, chevDur: cs.transitionDuration }
+    const anims = document.getAnimations().filter((a) => a.transitionProperty === 'grid-template-rows')
+    anims.forEach((a) => { a.pause(); a.currentTime = 100 })
+    out.nAnims = anims.length
+    out.midH = h()
+    anims.forEach((a) => a.finish())
+    out.closedH = h()
+    return out
+  })
+  const L = `${vp.width}${drawer ? ' drawer' : ''} group`
+  check(`${L} panel transition grid-template-rows 200ms`, m.panelProp.includes('grid-template-rows') && m.panelDur.includes('0.2s'), `${m.panelProp} ${m.panelDur}`)
+  check(`${L} chevron transition transform 150ms`, m.chevProp.includes('transform') && m.chevDur.includes('0.15s'), `${m.chevProp} ${m.chevDur}`)
+  check(`${L} panel height at 100ms is between closed and open`, m.nAnims > 0 && m.midH > m.closedH && m.midH < m.openH, `closed=${m.closedH} mid=${m.midH.toFixed(1)} open=${m.openH} anims=${m.nAnims}`)
+  await context.close()
+}
+
 const browser = await chromium.launch({ headless: true })
 try {
   for (const vp of [{ width: 1280, height: 800 }, { width: 1024, height: 768 }]) {
@@ -223,6 +263,8 @@ try {
     await run(browser, vp, 'expand')
     await reduced(browser, vp)
   }
+  await groups(browser, { width: 1280, height: 800 }, false)
+  await groups(browser, { width: 390, height: 844 }, true)
 } finally {
   await browser.close()
 }
