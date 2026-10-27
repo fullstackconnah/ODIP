@@ -227,7 +227,7 @@ public static class ShiftCompletionMapper
             c.HandoverText, c.NothingToHandOver, c.NothingToNoteConfirmed,
             c.OriginalActualStart is not null || c.OriginalActualEnd is not null,
             c.OriginalActualStart, c.OriginalActualEnd, c.TimeAdjustmentReason, c.Kilometres, c.AnythingToReport,
-            c.SentFromOffline, c.SubmittedAt);
+            c.SentFromOffline);
     }
 
     /// <summary>

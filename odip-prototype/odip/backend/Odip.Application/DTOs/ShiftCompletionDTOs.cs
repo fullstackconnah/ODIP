@@ -161,9 +161,7 @@ public record ShiftCompletionDto(
     /// <summary>"Anything to report?" at Finish: true, false, or null when skipped.</summary>
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] bool? AnythingToReport,
     /// <summary>The worker sent a time recorded offline; the review page marks it.</summary>
-    bool SentFromOffline,
-    /// <summary>When the server received the Finish (the same instant as <see cref="SubmittedAt"/>); null while in progress.</summary>
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] DateTime? ReceivedAt);
+    bool SentFromOffline);
 
 /// <summary>Connection-map reverse link (Deliverable 2) summary row — one active IncidentReport
 /// raised against a shift, as surfaced on <see cref="ShiftCompletionDto.Incidents"/>.</summary>

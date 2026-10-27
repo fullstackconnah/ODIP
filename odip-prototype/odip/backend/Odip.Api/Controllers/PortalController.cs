@@ -589,11 +589,18 @@ public class PortalController : ControllerBase
             if (reason is null)
                 return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(
                     "Say why your times changed.", ShiftErrorCodes.ShiftTimeAdjustmentReasonRequired));
+        }
+        // A queued Finish can carry a phone time that lands before a break the server stamped, so FinishedAt is checked too.
+        if (startMoved || endMoved || dto.FinishedAt is not null)
+        {
             // NetWorked would clamp a break to the new span, but the coordinator would still see a break outside the shift.
             var breaks = await _db.ShiftBreaks.Where(b => b.ShiftCompletionId == completion.Id).ToListAsync(ct);
             if (breaks.Any(b => b.StartedAt < actualStart || (b.EndedAt ?? actualEnd) > actualEnd))
                 return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(
                     "Your times must include your breaks. Change the break first, or your times.", ShiftErrorCodes.ShiftBreakOutsideTimes));
+        }
+        if (startMoved || endMoved)
+        {
             completion.OriginalActualStart = startMoved ? completion.ActualStart : null;
             completion.OriginalActualEnd = endMoved ? endStamp : null;
         }
@@ -1070,7 +1077,7 @@ public class PortalController : ControllerBase
 
         var note = new ShiftNote
         {
-            Id = dto.Id ?? Guid.NewGuid(),
+            Id = dto.Id is { } clientId && clientId != Guid.Empty ? clientId : Guid.NewGuid(),
             TenantId = shiftTenantId.Value,   // the shift's organisation: an unscoped SuperAdmin has no current tenant to stamp it from
             ShiftId = id,
             AuthorUserId = staffId.Value,

@@ -224,6 +224,24 @@ public class PortalLateWritesTests
         Assert.Equal(Now.AddMinutes(-30), (await f.Db.ShiftCompletions.SingleAsync()).ActualEnd);
     }
 
+    [Fact]
+    public async Task Finish_FinishedAt_BeforeALiveBreakEnd_400_BreakOutsideTimes()
+    {
+        var f = Create();
+        f.Advance(TimeSpan.FromMinutes(1));
+        Detail(await f.Controller.StartBreak(f.Shift.Id, null, default));
+        f.Advance(TimeSpan.FromMinutes(5));
+        Detail(await f.Controller.EndBreak(f.Shift.Id, (await f.Db.ShiftBreaks.SingleAsync()).Id, null, default));   // ended by the server clock, 01:06Z
+        f.Advance(TimeSpan.FromSeconds(20));
+
+        // A phone a couple of minutes behind: its finish time lands before the break the server stamped.
+        Assert.Equal(ShiftErrorCodes.ShiftBreakOutsideTimes, await Code(f.Controller.FinishShift(f.Shift.Id, Fin(Now.AddMinutes(4)), default), 400));
+
+        var c = await f.Db.ShiftCompletions.SingleAsync();
+        Assert.Null(c.ActualEnd);
+        Assert.Equal(ShiftStatus.InProgress, f.Shift.Status);
+    }
+
     // ── Breaks ──
 
     [Fact]
@@ -282,6 +300,32 @@ public class PortalLateWritesTests
     }
 
     [Fact]
+    public async Task Break_ClientEnd_TooOld_400()
+    {
+        var f = Create();
+        var id = Guid.NewGuid();
+        Detail(await f.Controller.StartBreak(f.Shift.Id, new StartBreakDto { BreakId = id, StartedAt = Now.AddMinutes(-30) }, default));
+
+        Assert.Equal(ShiftErrorCodes.ShiftClientTimeTooOld, await Code(f.Controller.EndBreak(f.Shift.Id, id, new EndBreakDto { EndedAt = Now.AddHours(-49) }, default), 400));
+        Assert.Null((await f.Db.ShiftBreaks.SingleAsync()).EndedAt);
+    }
+
+    [Fact]
+    public async Task Break_EmptyGuidId_IsNotAClientId_TwoBreaksTwoRows()
+    {
+        var f = Create();
+        Detail(await f.Controller.StartBreak(f.Shift.Id, new StartBreakDto { BreakId = Guid.Empty, StartedAt = Now.AddMinutes(-40) }, default));
+        var first = await f.Db.ShiftBreaks.SingleAsync();
+        Detail(await f.Controller.EndBreak(f.Shift.Id, first.Id, new EndBreakDto { EndedAt = Now.AddMinutes(-30) }, default));
+
+        Detail(await f.Controller.StartBreak(f.Shift.Id, new StartBreakDto { BreakId = Guid.Empty, StartedAt = Now.AddMinutes(-20) }, default));
+
+        var rows = await f.Db.ShiftBreaks.ToListAsync();
+        Assert.Equal(2, rows.Count);
+        Assert.DoesNotContain(rows, b => b.Id == Guid.Empty);
+    }
+
+    [Fact]
     public async Task Break_ClientStart_TooOld_400_AndFutureKeepsTheExistingCode()
     {
         var f = Create();
@@ -330,6 +374,46 @@ public class PortalLateWritesTests
 
         Assert.Equal((409, ShiftErrorCodes.ShiftNoteIdConflict), (refused.Status, refused.Code));
         Assert.Null(refused.Note);
+    }
+
+    [Fact]
+    public async Task Note_SameId_SameAuthor_OtherShift_409()
+    {
+        var f = Create();
+        var dto = new CreateShiftNoteDto { Id = Guid.NewGuid(), Body = "Quiet shift." };
+        await Note(f, dto);
+        var otherShift = new Shift
+        {
+            Id = Guid.NewGuid(), TenantId = f.Shift.TenantId, ParticipantId = f.Participant.Id, UserId = f.Worker.Id, ServiceDate = ServiceDate.AddDays(1),
+            StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Status = ShiftStatus.InProgress,
+        };
+        f.Db.Shifts.Add(otherShift);
+        f.Db.ShiftCompletions.Add(new ShiftCompletion
+        {
+            Id = Guid.NewGuid(), TenantId = f.Shift.TenantId, ShiftId = otherShift.Id, ActualStart = ActualStartUtc, TimeZoneId = "Australia/Sydney",
+            SubmittedByUserId = f.Worker.Id, StartedAt = ActualStartUtc, IsActive = true,
+        });
+        f.Db.SaveChanges();
+
+        var result = await f.Controller.CreateShiftNote(otherShift.Id, dto, default);
+
+        var obj = Assert.IsAssignableFrom<ObjectResult>(result.Result);
+        Assert.Equal(409, obj.StatusCode);
+        Assert.Equal(ShiftErrorCodes.ShiftNoteIdConflict, Assert.IsType<ApiResponse<ShiftNoteDto>>(obj.Value).Code);
+    }
+
+    [Fact]
+    public async Task Note_EmptyGuidId_IsNotAClientId_TwoNotesTwoRows()
+    {
+        var f = Create();
+
+        await Note(f, new CreateShiftNoteDto { Id = Guid.Empty, Body = "First." });
+        var second = await Note(f, new CreateShiftNoteDto { Id = Guid.Empty, Body = "Second." });
+
+        Assert.Equal(200, second.Status);
+        var rows = await f.Db.ShiftNotes.ToListAsync();
+        Assert.Equal(2, rows.Count);
+        Assert.DoesNotContain(rows, n => n.Id == Guid.Empty);
     }
 
     [Theory]

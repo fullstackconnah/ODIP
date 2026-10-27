@@ -419,7 +419,6 @@ public class ShiftCompletionReviewDtoTests
 
         var c = Review(await a.Controller.GetShiftCompletionReview(a.Shift.Id, default)).Completion;
         Assert.True(c.SentFromOffline);
-        Assert.Equal(a.Completion.SubmittedAt, c.ReceivedAt);
     }
 
     [Fact]

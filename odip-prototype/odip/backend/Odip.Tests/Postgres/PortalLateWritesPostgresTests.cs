@@ -146,4 +146,24 @@ public class PortalLateWritesPostgresTests : IClassFixture<PostgresFixture>
 
         Assert.Equal(409, Assert.IsAssignableFrom<ObjectResult>(result.Result).StatusCode);
     }
+
+    [SkippableFact]
+    public async Task AnIdOfAnotherTenantsNote_IsFoundPastTheTenantFilter_AndRefused409()
+    {
+        RequirePostgres();
+        var (otherDb, _) = await _pg.NewTenantContextAsync();
+        await using var _other = otherDb;
+        var (otherShift, otherUser, _) = await SeedAsync(otherDb);
+        var theirs = new ShiftNote { Id = Guid.NewGuid(), ShiftId = otherShift, AuthorUserId = otherUser, AuthorName = "Ben Turner", Body = "Theirs." };
+        otherDb.ShiftNotes.Add(theirs);
+        await otherDb.SaveChangesAsync();
+
+        var (db, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _db = db;
+        var (shiftId, userId, _) = await SeedAsync(db);
+
+        var result = await PortalFor(db, tenantId, userId).CreateShiftNote(shiftId, new CreateShiftNoteDto { Id = theirs.Id, Body = "Mine." }, default);
+
+        Assert.Equal(409, Assert.IsAssignableFrom<ObjectResult>(result.Result).StatusCode);
+    }
 }

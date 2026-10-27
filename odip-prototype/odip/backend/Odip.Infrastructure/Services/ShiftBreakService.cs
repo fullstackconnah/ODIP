@@ -107,7 +107,7 @@ public sealed class ShiftBreakService
         if (startedAtUtc is not null) completion.SentFromOffline = true;
         var created = new ShiftBreak
         {
-            Id = breakId ?? Guid.NewGuid(), TenantId = completion.TenantId, ShiftCompletionId = completion.Id, StartedAt = start, CreatedByUserId = userId,
+            Id = breakId is { } clientId && clientId != Guid.Empty ? clientId : Guid.NewGuid(), TenantId = completion.TenantId, ShiftCompletionId = completion.Id, StartedAt = start, CreatedByUserId = userId,
             CreatedAt = now, UpdatedAt = now,
         };
         _db.ShiftBreaks.Add(created);
