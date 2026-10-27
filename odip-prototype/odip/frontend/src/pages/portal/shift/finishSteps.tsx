@@ -13,6 +13,7 @@ import { breaksLabel, clockLabel, FINISH_STEPS, dosesSummary, REASON_MAX, timeBo
 import { PrnRow, RoutineRow } from './DuringSection'
 import { minutesBetween, providerLocalToUtcInstant, utcInstantToProviderLocal } from './shiftTime'
 import { Fold } from './ui'
+import { plural } from '@/lib/format'
 import type { DoseTarget } from './DoseSheet'
 import type { EndDraft } from './endDraft'
 import type { PortalFinishBlockerDto, PortalShiftDetailDto, ShiftBreakDto, ShiftNoteDto } from '@/api/types'
@@ -248,7 +249,7 @@ export function DosesStep({ shift, online, canAct, onRecord }: {
       {shift.prn.length > 0 && (
         <section aria-labelledby="finish-prn" className="space-y-2">
           <h3 id="finish-prn" className="text-sm font-semibold">Did you give an as-needed medicine?</h3>
-          <Fold summary={`As needed · ${shift.prn.length} medicine${shift.prn.length === 1 ? '' : 's'}`}>
+          <Fold summary={`As needed · ${plural(shift.prn.length, 'medicine')}`}>
             <ul className="divide-y divide-[var(--color-border)]">
               {shift.prn.map(prn => <PrnRow key={prn.medicationId} prn={prn} tz={shift.timeZoneId} canAct={canRecord} onRecord={t => onRecord(t, false)} />)}
             </ul>
@@ -297,7 +298,7 @@ export function HandoverStep({ noteCount, draft, set, onEditNotes }: {
     <div className="space-y-4">
       <section aria-labelledby="finish-notes" className="space-y-2">
         <h3 id="finish-notes" className="text-sm font-semibold">Your notes</h3>
-        <p className="text-sm">{noteCount > 0 ? `${noteCount} note${noteCount === 1 ? '' : 's'} on this shift.` : 'No notes yet.'}</p>
+        <p className="text-sm">{noteCount > 0 ? `${plural(noteCount, 'note')} on this shift.` : 'No notes yet.'}</p>
         <Button variant="secondary" size="md" onClick={onEditNotes}>Add or edit notes</Button>
         {noteCount === 0 && (
           <label className="flex items-center gap-2 text-sm min-h-[44px]">
@@ -345,7 +346,7 @@ export function SubmitStep({ shift, draft, noteCount, now, refusals, go, moved, 
     { step: 'doses', title: 'Doses and routines', items: [{ label: 'Recorded', value: dosesSummary(shift.medicationsDue, shift.shiftRoutines) || 'Nothing due' }] },
     { step: 'report', title: 'Report', items: [{ label: 'Anything to report', value: draft.anythingToReport === 'yes' ? 'Yes' : draft.anythingToReport === 'no' ? 'No' : 'Not answered' }] },
     { step: 'handover', title: 'Notes and handover', items: [
-      { label: 'Notes', value: noteCount > 0 ? `${noteCount} note${noteCount === 1 ? '' : 's'}` : 'Nothing to note' },
+      { label: 'Notes', value: noteCount > 0 ? plural(noteCount, 'note') : 'Nothing to note' },
       { label: 'Handover', value: draft.nothingToHandOver || !handover ? 'Nothing to hand over' : handover.split('\n')[0] },
     ] },
   ]
