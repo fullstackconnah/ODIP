@@ -108,6 +108,7 @@ export default function ParticipantAdlAssessmentsSection({ participantId }: { pa
   }
 
   // Both tables take these widths, so Level starts at the same x in each. Notes takes the rest.
+  // The two prose columns break unspaced text (a pasted URL) and pad a little, so long notes clear the row lines.
   function columns(): Column<ParticipantAdlAssessmentDto>[] {
     return [
       { key: 'adlType', header: 'Activity', width: '22%', render: (row) => ADL_TYPE_LABELS[row.adlType] },
@@ -118,13 +119,13 @@ export default function ParticipantAdlAssessmentsSection({ participantId }: { pa
           return <StatusBadge status={status} label={label} />
         },
       },
-      { key: 'notes', header: 'Notes', wrap: true, render: (row) => row.notes || '—' },
+      { key: 'notes', header: 'Notes', wrap: true, className: 'md:py-1 [overflow-wrap:anywhere]', render: (row) => row.notes || '—' },
       // INTAKE-03, CommunityAccessDailyLiving stream-specific — shown as its own column whenever
       // ANY row across the grid has a value, matching this page's whole-card presence-or-relevance
       // idiom (see ParticipantDetailPage.tsx's Community Access card): a participant who no longer
       // has the CA stream but still has saved howToHelpNotes data still gets to see it here.
       ...(assessments.some((a) => a.howToHelpNotes)
-        ? [{ key: 'howToHelpNotes', header: 'How To Help Me', width: '22%', wrap: true, render: (row: ParticipantAdlAssessmentDto) => row.howToHelpNotes || '—' }]
+        ? [{ key: 'howToHelpNotes', header: 'How To Help Me', width: '22%', wrap: true, className: 'md:py-1 [overflow-wrap:anywhere]', render: (row: ParticipantAdlAssessmentDto) => row.howToHelpNotes || '—' }]
         : []),
       {
         key: 'edit', header: '', align: 'right', width: 72,
