@@ -10,7 +10,7 @@
  */
 import { Controller } from 'react-hook-form'
 import type { Control, FieldPath } from 'react-hook-form'
-import { AlertTriangle } from 'lucide-react'
+import { Callout } from '@/components/Callout'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { FormField } from '@/components/FormField'
 import type { ParticipantFormData } from '@/lib/participantSchema'
@@ -63,13 +63,5 @@ export function YesNoToggleField({ control, name, label, hint, ariaLabel, hideLa
  */
 export function PlanTypeComplianceBanner({ message }: { message: string | null | undefined }) {
   if (!message) return null
-  return (
-    <div
-      role="status"
-      className="flex items-start gap-2 p-3 rounded-[var(--radius-sm)] bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)] text-sm border border-[var(--color-on-warning-container)]/20"
-    >
-      <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
-      <span>{message}</span>
-    </div>
-  )
+  return <Callout tone="warning" polite>{message}</Callout>
 }
