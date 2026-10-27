@@ -249,14 +249,17 @@ public sealed class RosterConflictService
     {
         foreach (var other in ctx.StaffShiftsInWeek)
         {
-            if (other.Id == excludeShiftId)
+            if (other.Id == excludeShiftId || other.Status == ShiftStatus.Cancelled)
                 continue;
 
             var otherWindow = ToWindow(other.ServiceDate, other.StartTime, other.EndTime, other.EndsNextDay);
             if (Overlaps(candidateWindow, otherWindow))
             {
-                findings.Add(new RosterFinding(DoubleBookedShift, RosterFindingSeverity.Warning,
-                    $"{ctx.Staff.FullName} already has a shift on {Fmt(other.ServiceDate)} that overlaps this one."));
+                // Same shape as the budget hard limit (ShiftBudgetAssessor): a coordinator is refused, an admin overrides with a reason, and null (the board display, the generator, Publish week, the import, trips) stays a warning.
+                var blocked = ctx.CallerIsAdmin == false;
+                findings.Add(new RosterFinding(DoubleBookedShift, blocked ? RosterFindingSeverity.Blocking : RosterFindingSeverity.Warning,
+                    $"{ctx.Staff.FullName} already has a shift on {Fmt(other.ServiceDate)}, {other.StartTime.ToString("HH:mm", CultureInfo.InvariantCulture)}-{other.EndTime.ToString("HH:mm", CultureInfo.InvariantCulture)}, that overlaps this one.{(blocked ? " An admin can override this." : string.Empty)}",
+                    RequiresReason: ctx.CallerIsAdmin == true));
             }
         }
     }

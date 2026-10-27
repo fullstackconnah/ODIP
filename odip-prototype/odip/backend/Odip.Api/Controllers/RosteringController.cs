@@ -513,7 +513,11 @@ public class RosteringController : ControllerBase
             Ratio = dto.Ratio, NightType = dto.NightType
         };
 
-        var findings = await CheckAsync(candidate, dto.Id, ct);
+        var findings = await CheckAsync(candidate, dto.Id, ct, callerIsAdmin: CallerIsAdmin);
+        // The live check of an edit says what the save will say, so an existing clash is not shown as blocking either.
+        var saved = dto.Id is { } savedId ? await _db.Shifts.AsNoTracking().FirstOrDefaultAsync(x => x.Id == savedId, ct) : null;
+        if (ClashIsInherited(saved, dto.Status, dto.StaffId, dto.ServiceDate, dto.StartTime, dto.EndTime, dto.EndsNextDay))
+            findings.RemoveAll(f => f.Code == RosterConflictService.DoubleBookedShift);
 
         // Budget phase 3: after the domain check and OUTSIDE its early return for an unfilled shift (a budget is about the participant, not the worker). The envelope's message carries the one
         // informational line a shift the estimator cannot price gets; it is not a finding and never blocks.
@@ -574,7 +578,7 @@ public class RosteringController : ControllerBase
         };
 
         // A person moving here is judged without the shift they leave (no false DOUBLE_BOOKED_SHIFT against it).
-        var findings = await CheckAsync(shift, null, ct, leavingShiftId: movingFrom?.Id);
+        var findings = await CheckAsync(shift, null, ct, leavingShiftId: movingFrom?.Id, callerIsAdmin: CallerIsAdmin);
         findings.AddRange((await CheckBudgetAsync(shift, null, ShiftStatus.Draft, ct)).Findings);
 
         var budgetGate = ShiftBudgetGate.Resolve(findings, dto.Emergency, dto.OverrideReason);
@@ -686,7 +690,10 @@ public class RosteringController : ControllerBase
             Ratio = dto.Ratio, NightType = dto.NightType
         };
 
-        var findings = await CheckAsync(candidate, shift.Id, ct);
+        var findings = await CheckAsync(candidate, shift.Id, ct, callerIsAdmin: CallerIsAdmin);
+        // Like the length rule above: rows saved before the double-booking block may already clash, and cancelling one, or editing only its notes, must still work. Only an edit that sets the worker or the times can clash.
+        if (ClashIsInherited(shift, dto.Status, dto.StaffId, dto.ServiceDate, dto.StartTime, dto.EndTime, dto.EndsNextDay))
+            findings.RemoveAll(f => f.Code == RosterConflictService.DoubleBookedShift);
         findings.AddRange((await CheckBudgetAsync(candidate, shift.Id, dto.Status, ct)).Findings);
 
         var budgetGate = ShiftBudgetGate.Resolve(findings, dto.Emergency, dto.OverrideReason);
@@ -822,7 +829,7 @@ public class RosteringController : ControllerBase
 
         var candidate = WithWorker(shift, dto.StaffId);
 
-        var findings = await CheckAsync(candidate, shift.Id, ct);
+        var findings = await CheckAsync(candidate, shift.Id, ct, callerIsAdmin: CallerIsAdmin);
         var rejection = EvaluateFindings(findings, dto.OverrideReason);
         if (rejection != null) return UnprocessableEntity(rejection);
 
@@ -877,8 +884,8 @@ public class RosteringController : ControllerBase
                 ?? (back is { } b ? await PlacementRefusalAsync(b, from.ParticipantId, ct) : null);
             if (refusal != null) return BadRequest(ApiResponse<ShiftDto>.Fail(refusal));
 
-            var toFindings = await CheckAsync(WithWorker(to, mover), to.Id, ct, leavingShiftId: from.Id);
-            var fromFindings = back is { } swapped ? await CheckAsync(WithWorker(from, swapped), from.Id, ct, leavingShiftId: to.Id) : new List<RosterFinding>();
+            var toFindings = await CheckAsync(WithWorker(to, mover), to.Id, ct, leavingShiftId: from.Id, callerIsAdmin: CallerIsAdmin);
+            var fromFindings = back is { } swapped ? await CheckAsync(WithWorker(from, swapped), from.Id, ct, leavingShiftId: to.Id, callerIsAdmin: CallerIsAdmin) : new List<RosterFinding>();
             var rejection = EvaluateFindings(toFindings.Concat(fromFindings).ToList(), dto.OverrideReason);
             if (rejection != null) return UnprocessableEntity(rejection);
 
@@ -2099,9 +2106,9 @@ public class RosteringController : ControllerBase
     /// null) skip every staff-dependent rule entirely, per the M4 design brief, rather than
     /// attempting to load a staff member that doesn't exist. <paramref name="excludeId"/> is
     /// the shift's own prior Id on an update/assign (falls back to <paramref name="candidate"/>'s
-    /// own Id), so a shift never conflicts with itself.
+    /// own Id), so a shift never conflicts with itself. <paramref name="callerIsAdmin"/> is passed only by the writes that place a worker (null for Publish week): it decides whether a double-booking blocks.
     /// </summary>
-    private async Task<List<RosterFinding>> CheckAsync(Shift candidate, Guid? excludeId, CancellationToken ct, Guid? leavingShiftId = null)
+    private async Task<List<RosterFinding>> CheckAsync(Shift candidate, Guid? excludeId, CancellationToken ct, Guid? leavingShiftId = null, bool? callerIsAdmin = null)
     {
         if (candidate.UserId is not { } userId) return new List<RosterFinding>();
         var weekStart = WeekStart(candidate.ServiceDate);
@@ -2109,7 +2116,7 @@ public class RosteringController : ControllerBase
         // shortcut: participantShiftsOnDate still counts them on the shift they leave, so a swap inside one 2:1 pair can warn RATIO_SHORTFALL falsely; filter it there too if pairs get swapped often.
         // The week and the day either side (RosterAvailability.LoadAsync), as before: an overnight shift across the week edge is double-booking checked; OVER_HOURS still counts the candidate's own week.
         var snapshot = await _availability.LoadAsync([userId], [candidate.ParticipantId], weekStart, weekStart.AddDays(6), ct);
-        return snapshot.Check(candidate, excludeId ?? candidate.Id, leavingShiftId);
+        return snapshot.Check(candidate, excludeId ?? candidate.Id, leavingShiftId, callerIsAdmin);
     }
 
     /// <summary>
@@ -2284,6 +2291,14 @@ public class RosteringController : ControllerBase
             return null;
         }
     }
+
+    /// <summary>
+    /// True when an edit cannot have made its shift clash with the worker's other shifts: it cancels the shift, or sets the same worker, date and times the saved row already has. Rows saved before the
+    /// double-booking block may clash, and cancelling or annotating one must still work (2026-10-27).
+    /// </summary>
+    private static bool ClashIsInherited(Shift? saved, ShiftStatus? status, Guid? staffId, DateOnly date, TimeOnly start, TimeOnly end, bool endsNextDay) =>
+        status == ShiftStatus.Cancelled
+        || (saved is not null && saved.UserId == staffId && saved.ServiceDate == date && saved.StartTime == start && saved.EndTime == end && saved.EndsNextDay == endsNextDay);
 
     private bool CallerIsAdmin => User?.IsInRole("Admin") == true || User?.IsInRole("SuperAdmin") == true;
 
