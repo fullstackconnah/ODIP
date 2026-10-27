@@ -19,10 +19,12 @@ export type InstallPromptEnv = {
   hasDeferred: boolean
   iosSafari: boolean
   path: string
+  /** Unsent changes own the bottom of the screen (SHAPE 4a): the prompt waits. */
+  syncBarVisible: boolean
 }
 
 export function installPromptMode(e: InstallPromptEnv): 'android' | 'ios' | null {
-  const eligible = e.belowMd && e.coarse && e.secure && !e.standalone && !e.installed && !(e.dismissedUntil > e.now) && LANDING_PATHS.includes(e.path)
+  const eligible = e.belowMd && e.coarse && e.secure && !e.standalone && !e.installed && !(e.dismissedUntil > e.now) && LANDING_PATHS.includes(e.path) && !e.syncBarVisible
   if (!eligible) return null
   if (e.hasDeferred) return 'android'
   return e.iosSafari ? 'ios' : null

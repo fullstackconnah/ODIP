@@ -1,22 +1,97 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useCallback, useEffect, useSyncExternalStore } from 'react'
+import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { apiGet, apiPost, apiPostRaw, apiPut, apiDeleteRaw } from '../client'
 import type {
   PortalShiftsResponseDto, PortalShiftDetailDto, PortalWitnessRequestDto, ShiftNoteDto, StartShiftDto, FinishShiftDto,
   EditShiftBreakDto, AcknowledgeHandoverDto, CreateAdministrationDto, AdministrationDto,
 } from '../types'
+import { apiErrorStatus } from '@/lib/shiftPackageErrors'
+import { newCompletionRequestId } from '@/lib/completionRequestId'
+import { offlineQueue, type NewRecord } from '@/lib/offline/queue'
+import { readSaved, readSession, writeSaved } from '@/lib/offline/store'
+import { applyQueued, applyQueuedList, applyQueuedNotes } from '@/lib/offline/overlay'
+import { shiftLabel } from '@/lib/offline/label'
+
+// ══════════════════════════════════════════════════════════════
+// OFFLINE: the portal reads fall back to the copy saved on this phone, and the worker's writes go through the
+// send-later queue (lib/offline/queue.ts). `networkMode: 'always'` on both: React Query's default pauses a request
+// while the browser says it is offline and then resends it on reconnect, which would send outside the queue.
+// ══════════════════════════════════════════════════════════════
+
+/** The worker's own unsent changes, live: re-renders when one is queued, sent or discarded. */
+export function useQueueRecords() {
+  return useSyncExternalStore(offlineQueue.subscribe, offlineQueue.getSnapshot)
+}
+
+/** When the saved copy under `part` was written (ms), or null. */
+export function savedAtFor(part: string): number | null {
+  const userId = readSession().userId
+  return userId ? (readSaved(userId, part)?.savedAt ?? null) : null
+}
+
+function offlineQueryOptions<T>(queryKey: readonly unknown[], part: string | undefined, fetcher: () => Promise<T>) {
+  const userId = readSession().userId
+  const stored = () => (userId && part ? readSaved<T>(userId, part) : null)
+  const first = stored()
+  return {
+    queryKey,
+    networkMode: 'always' as const,
+    initialData: first?.data,
+    initialDataUpdatedAt: first?.savedAt,
+    queryFn: async (): Promise<T> => {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        const s = stored()
+        if (s) return s.data
+      }
+      try {
+        const data = await fetcher()
+        if (userId && part) writeSaved(userId, part, data)
+        return data
+      } catch (error) {
+        const status = apiErrorStatus(error)
+        if (status === undefined || status >= 500) {
+          const s = stored()
+          if (s) return s.data
+        }
+        throw error
+      }
+    },
+  }
+}
+
+const detailQuery = (id: string) => offlineQueryOptions(['portal-shift-detail', id], `detail:${id}`, () => apiGet<PortalShiftDetailDto>(`/portal/shifts/${id}`))
+const notesQuery = (id: string) => offlineQueryOptions(['portal-shift-notes', id], `notes:${id}`, () => apiGet<ShiftNoteDto[]>(`/portal/shifts/${id}/notes`))
+
+/** Today's shifts, and any in progress, are saved in full as soon as the list loads, so they open with no signal. */
+function useSaveTodaysShifts(data: PortalShiftsResponseDto | undefined) {
+  const qc = useQueryClient()
+  useEffect(() => {
+    if (!data) return
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: data.timeZoneId || undefined }).format(new Date())
+    for (const s of data.shifts) {
+      if (s.serviceDate.slice(0, 10) !== today && s.status !== 'InProgress') continue
+      void qc.prefetchQuery({ ...detailQuery(s.id), staleTime: 60_000 })
+      void qc.prefetchQuery({ ...notesQuery(s.id), staleTime: 60_000 })
+    }
+  }, [data, qc])
+}
 
 export function useMyShifts(from?: string, to?: string) {
-  return useQuery({
-    queryKey: ['portal-my-shifts', from, to],
-    queryFn: () => apiGet<PortalShiftsResponseDto>('/portal/my-shifts', { from, to }),
+  const records = useQueueRecords()
+  const query = useQuery({
+    ...offlineQueryOptions(['portal-my-shifts', from, to], `shifts:${from}:${to}`, () => apiGet<PortalShiftsResponseDto>('/portal/my-shifts', { from, to })),
+    select: useCallback((d: PortalShiftsResponseDto) => applyQueuedList(d, records), [records]),
   })
+  useSaveTodaysShifts(query.data)
+  return query
 }
 
 export function usePortalShiftDetail(id: string | undefined) {
+  const records = useQueueRecords()
   return useQuery({
-    queryKey: ['portal-shift-detail', id],
-    queryFn: () => apiGet<PortalShiftDetailDto>(`/portal/shifts/${id}`),
+    ...detailQuery(id ?? ''),
     enabled: !!id,
+    select: useCallback((d: PortalShiftDetailDto) => applyQueued(d, records), [records]),
   })
 }
 
@@ -24,35 +99,56 @@ export function usePortalShiftDetail(id: string | undefined) {
 // SHIFT COMPLETION (design spec §2/§4) — Start/Finish on the worker's own shift.
 // ══════════════════════════════════════════════════════════════
 
+const detailOf = (qc: QueryClient, id: string) => qc.getQueryData<PortalShiftDetailDto>(['portal-shift-detail', id])
+
 /**
- * Invalidates the shift detail (status/completion flip to InProgress), the shift-notes cache
- * (harmless no-op here, kept only for symmetry with useFinishShift) and the my-shifts list (its
- * status chip needs to flip too) — same three-cache invalidation useFinishShift uses.
+ * Sends a shift write now, or keeps it on the phone to send later. A queued write resolves to `undefined` (nothing for the
+ * screen to refresh: the unsent change is laid over the saved copy by lib/offline/overlay.ts); a sent one to the server's answer.
  */
-export function useStartShift() {
+function useQueuedWrite<TVars extends { id: string }, TData>(
+  build: (vars: TVars, detail: PortalShiftDetailDto | undefined) => Omit<NewRecord, 'shiftId' | 'label'> & { routine?: string },
+  onSent: (qc: QueryClient, data: TData, vars: TVars) => void,
+) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: StartShiftDto }) =>
-      apiPost<PortalShiftDetailDto>(`/portal/shifts/${id}/start`, data),
-    onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ['portal-shift-detail', vars.id] })
-      qc.invalidateQueries({ queryKey: ['portal-shift-notes', vars.id] })
-      qc.invalidateQueries({ queryKey: ['portal-my-shifts'] })
+    networkMode: 'always',
+    mutationFn: async (vars: TVars): Promise<TData | undefined> => {
+      const detail = detailOf(qc, vars.id)
+      const { routine, ...rec } = build(vars, detail)
+      const out = await offlineQueue.sendOrQueue({ ...rec, shiftId: vars.id, label: shiftLabel(detail, routine) })
+      return out.queued ? undefined : (out.data as TData)
+    },
+    onSuccess: (data, vars) => {
+      if (data !== undefined) onSent(qc, data, vars)
     },
   })
 }
 
+const refreshShift = (qc: QueryClient, id: string) => {
+  qc.invalidateQueries({ queryKey: ['portal-shift-detail', id] })
+  qc.invalidateQueries({ queryKey: ['portal-shift-notes', id] })
+  qc.invalidateQueries({ queryKey: ['portal-my-shifts'] })
+}
+
+/**
+ * Invalidates the shift detail (status/completion flip to InProgress), the shift-notes cache
+ * (harmless no-op here, kept only for symmetry with useFinishShift) and the my-shifts list (its
+ * status chip needs to flip too) — same three-cache invalidation useFinishShift uses.
+ * Queued while offline; the replay carries `startedAt` (the moment of the tap).
+ */
+export function useStartShift() {
+  return useQueuedWrite<{ id: string; data: StartShiftDto }, PortalShiftDetailDto>(
+    ({ id, data }) => ({ kind: 'start', path: `/portal/shifts/${id}/start`, method: 'POST', body: data, clientTimeField: 'startedAt' }),
+    (qc, _, vars) => refreshShift(qc, vars.id),
+  )
+}
+
+/** Queued while offline; the replay carries `finishedAt` (the moment of the tap) with every other field as entered. */
 export function useFinishShift() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: FinishShiftDto }) =>
-      apiPost<PortalShiftDetailDto>(`/portal/shifts/${id}/finish`, data),
-    onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ['portal-shift-detail', vars.id] })
-      qc.invalidateQueries({ queryKey: ['portal-shift-notes', vars.id] })
-      qc.invalidateQueries({ queryKey: ['portal-my-shifts'] })
-    },
-  })
+  return useQueuedWrite<{ id: string; data: FinishShiftDto }, PortalShiftDetailDto>(
+    ({ id, data }) => ({ kind: 'finish', path: `/portal/shifts/${id}/finish`, method: 'POST', body: data, clientTimeField: 'finishedAt' }),
+    (qc, _, vars) => refreshShift(qc, vars.id),
+  )
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -73,15 +169,32 @@ function useShiftDetailWrite<TVars extends { id: string }>(mutationFn: (vars: TV
   })
 }
 
-/** POST portal/shifts/{id}/breaks/start — 409 SHIFT_BREAK_ALREADY_RUNNING if a break is already running. */
-export function useStartBreak() {
-  return useShiftDetailWrite(({ id }: { id: string }) => apiPost<PortalShiftDetailDto>(`/portal/shifts/${id}/breaks/start`))
+/** The server's answer replaces the cached detail in one step, then it refetches. A queued write leaves the cache to the overlay. */
+const takeDetail = (qc: QueryClient, detail: PortalShiftDetailDto, vars: { id: string }) => {
+  qc.setQueryData(['portal-shift-detail', vars.id], detail)
+  qc.invalidateQueries({ queryKey: ['portal-shift-detail', vars.id] })
 }
 
-/** POST portal/shifts/{id}/breaks/{breakId}/end — idempotent. */
+/**
+ * POST portal/shifts/{id}/breaks/start — 409 SHIFT_BREAK_ALREADY_RUNNING if a break is already running. The break's id is made here and
+ * rides the live send AND the replay (`breakId`), so a response lost on the way back cannot create a second break; the replay adds `startedAt`.
+ */
+export function useStartBreak() {
+  return useQueuedWrite<{ id: string }, PortalShiftDetailDto>(
+    ({ id }) => {
+      const breakId = newCompletionRequestId()
+      return { id: breakId, kind: 'breakStart', path: `/portal/shifts/${id}/breaks/start`, method: 'POST', body: { breakId }, clientTimeField: 'startedAt' }
+    },
+    takeDetail,
+  )
+}
+
+/** POST portal/shifts/{id}/breaks/{breakId}/end — idempotent. The replay adds `endedAt`. */
 export function useEndBreak() {
-  return useShiftDetailWrite(({ id, breakId }: { id: string; breakId: string }) =>
-    apiPost<PortalShiftDetailDto>(`/portal/shifts/${id}/breaks/${breakId}/end`))
+  return useQueuedWrite<{ id: string; breakId: string }, PortalShiftDetailDto>(
+    ({ id, breakId }) => ({ kind: 'breakEnd', path: `/portal/shifts/${id}/breaks/${breakId}/end`, method: 'POST', body: undefined, clientTimeField: 'endedAt', target: breakId }),
+    takeDetail,
+  )
 }
 
 /** PUT portal/shifts/{id}/breaks/{breakId} — correct a break's times (UTC) before Finish. */
@@ -105,16 +218,18 @@ export function useDeleteBreak() {
  * occurrence time recorded on it). Replaces the cached shift detail with the response (`shiftRoutines[].isChecked` / `checkedAt` / `checkedByName`).
  */
 export function useCheckRoutine() {
-  return useShiftDetailWrite(({ id, routineId }: { id: string; routineId: string }) =>
-    apiPost<PortalShiftDetailDto>(`/portal/shifts/${id}/routines/${routineId}/check`))
+  return useQueuedWrite<{ id: string; routineId: string }, PortalShiftDetailDto>(
+    ({ id, routineId }, detail) => ({ kind: 'tick', path: `/portal/shifts/${id}/routines/${routineId}/check`, method: 'POST', body: undefined, target: routineId, routine: detail?.shiftRoutines?.find((r) => r.id === routineId)?.title }),
+    takeDetail,
+  )
 }
 
 /** DELETE portal/shifts/{id}/routines/{routineId}/check - untick a routine (the removal is audited). Idempotent; same scoping as `useCheckRoutine`. */
 export function useUncheckRoutine() {
-  return useShiftDetailWrite(async ({ id, routineId }: { id: string; routineId: string }) => {
-    const response = await apiDeleteRaw<PortalShiftDetailDto>(`/portal/shifts/${id}/routines/${routineId}/check`)
-    return response.data as PortalShiftDetailDto
-  })
+  return useQueuedWrite<{ id: string; routineId: string }, PortalShiftDetailDto>(
+    ({ id, routineId }, detail) => ({ kind: 'untick', path: `/portal/shifts/${id}/routines/${routineId}/check`, method: 'DELETE', body: undefined, target: routineId, routine: detail?.shiftRoutines?.find((r) => r.id === routineId)?.title }),
+    takeDetail,
+  )
 }
 
 /**
@@ -124,8 +239,10 @@ export function useUncheckRoutine() {
  * message says from when).
  */
 export function useAcknowledgeHandover() {
-  return useShiftDetailWrite(({ id, data }: { id: string; data?: AcknowledgeHandoverDto }) =>
-    apiPost<PortalShiftDetailDto>(`/portal/shifts/${id}/handover/ack`, data ?? {}))
+  return useQueuedWrite<{ id: string; data?: AcknowledgeHandoverDto }, PortalShiftDetailDto>(
+    ({ id, data }) => ({ kind: 'ack', path: `/portal/shifts/${id}/handover/ack`, method: 'POST', body: data ?? {} }),
+    takeDetail,
+  )
 }
 
 /**
@@ -173,25 +290,47 @@ export function useRecordShiftDose() {
 // ══════════════════════════════════════════════════════════════
 
 export function useShiftNotes(shiftId: string | undefined) {
+  const records = useQueueRecords()
   return useQuery({
-    queryKey: ['portal-shift-notes', shiftId],
-    queryFn: () => apiGet<ShiftNoteDto[]>(`/portal/shifts/${shiftId}/notes`),
+    ...notesQuery(shiftId ?? ''),
     enabled: !!shiftId,
+    select: useCallback((d: ShiftNoteDto[]) => (shiftId ? applyQueuedNotes(d, records, shiftId) : d), [records, shiftId]),
   })
 }
 
+/**
+ * The note's id and `createdAt` are made here and ride the live send AND the replay, so a response lost on the way back cannot make a second
+ * note and the note keeps the time it was written. Queued while offline.
+ */
 export function useCreateShiftNote(shiftId: string | undefined) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (body: string) => apiPost<ShiftNoteDto>(`/portal/shifts/${shiftId}/notes`, { body }),
+    networkMode: 'always',
+    mutationFn: async (body: string) => {
+      const id = newCompletionRequestId()
+      const detail = shiftId ? detailOf(qc, shiftId) : undefined
+      const out = await offlineQueue.sendOrQueue({
+        id, shiftId: shiftId ?? '', kind: 'note', path: `/portal/shifts/${shiftId}/notes`, method: 'POST',
+        body: { id, createdAt: new Date().toISOString(), body }, label: shiftLabel(detail),
+      })
+      return out.queued ? undefined : (out.data as ShiftNoteDto)
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['portal-shift-notes', shiftId] }),
   })
 }
 
+/** A note still waiting to send is rewritten in place; editing one the server already has needs a connection (the screen says so). */
 export function useUpdateShiftNote(shiftId: string | undefined) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, body }: { id: string; body: string }) => apiPut<ShiftNoteDto>(`/portal/notes/${id}`, { body }),
+    mutationFn: async ({ id, body }: { id: string; body: string }) => {
+      const queued = offlineQueue.getSnapshot().find((r) => r.id === id && r.kind === 'note' && r.status === 'waiting')
+      if (queued) {
+        offlineQueue.rewriteBody(id, { ...(queued.body as object), body })
+        return undefined
+      }
+      return apiPut<ShiftNoteDto>(`/portal/notes/${id}`, { body })
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['portal-shift-notes', shiftId] }),
   })
 }

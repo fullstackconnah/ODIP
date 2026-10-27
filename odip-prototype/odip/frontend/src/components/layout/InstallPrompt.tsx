@@ -3,6 +3,8 @@ import { useLocation } from 'react-router-dom'
 import { Download, Share } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
+import { useSyncBarVisible } from '@/pages/portal/sync/syncState'
+import { usePermissions } from '@/lib/permissions'
 import { useIsBelowMd } from '@/hooks/useIsBelowMd'
 import {
   consumeDeferred, currentUserId, getInstallSnapshot, installPromptMode, isIosSafari, markInstalled, readInstallRecord,
@@ -22,6 +24,7 @@ export default function InstallPrompt() {
   const { pathname } = useLocation()
   const belowMd = useIsBelowMd()
   const { deferred, installed: installedEvent } = useSyncExternalStore(subscribeInstall, getInstallSnapshot)
+  const { isSupportWorker } = usePermissions()
   const userId = currentUserId()
   const [record, setRecord] = useState(() => (userId ? readInstallRecord(userId) : { dismissedUntil: 0, installed: false }))
   const [now] = useState(() => Date.now()) // read once, not during render; a 30-day snooze needs no fresher clock
@@ -29,6 +32,7 @@ export default function InstallPrompt() {
   const [cardH, setCardH] = useState(0)
   const cardRef = useRef<HTMLElement>(null)
 
+  const syncBarVisible = useSyncBarVisible()
   const mode = installPromptMode({
     belowMd,
     coarse: matches('(pointer: coarse)'),
@@ -40,6 +44,7 @@ export default function InstallPrompt() {
     hasDeferred: deferred !== null,
     iosSafari: isIosSafari(navigator.userAgent, navigator.maxTouchPoints),
     path: pathname,
+    syncBarVisible,
   })
 
   useEffect(() => {
@@ -100,7 +105,10 @@ export default function InstallPrompt() {
                 {mode === 'android' ? 'Install Bunya Support' : 'Add Bunya Support to your Home Screen'}
               </p>
               {mode === 'android' ? (
-                <p>Open it from your home screen like any other app, full screen with no browser bars.</p>
+                <>
+                  <p>Open it from your home screen like any other app, full screen with no browser bars.</p>
+                  {isSupportWorker && <p>Today&rsquo;s shifts stay open even with no signal.</p>}
+                </>
               ) : (
                 <ol className="space-y-1">
                   <li className="flex gap-2">
