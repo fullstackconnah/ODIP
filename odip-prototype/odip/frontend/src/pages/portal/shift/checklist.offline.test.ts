@@ -6,7 +6,7 @@ const dose = (over: Partial<PortalDoseSlotDto>): PortalDoseSlotDto => ({
   medicationId: 'm1', medicationName: 'Panadol', strength: null, scheduledAt: '2026-10-28T13:00:00', scheduledTime: '13:00', state: 'Due', outcome: null, ...over,
 } as PortalDoseSlotDto)
 const shift = (slots: PortalDoseSlotDto[], blockers: unknown[] = []) =>
-  ({ timeZoneId: 'Australia/Sydney', medicationsDue: slots, shiftRoutines: [], finishBlockers: blockers }) as unknown as PortalShiftDetailDto
+  ({ timeZoneId: 'Australia/Sydney', canRecordDoses: true, medicationsDue: slots, shiftRoutines: [], finishBlockers: blockers }) as unknown as PortalShiftDetailDto
 // 17:00 Sydney (AEDT, UTC+11) on 28 Oct 2026
 const at5pm = new Date('2026-10-28T06:00:00Z')
 
@@ -17,6 +17,10 @@ describe('offline Finish dose block (S4)', () => {
   it('lists a dose that is both a saved blocker and past due once', () => {
     const blockers = [{ code: 'DOSE_OUTCOME_MISSING', medicationId: 'm1', scheduledAt: '2026-10-28T13:00:00' }]
     expect(offlineDueDoses(shift([dose({})], blockers), at5pm)).toHaveLength(1)
+  })
+  it('does not block a worker who cannot record doses, as the server adds no dose blockers for them', () => {
+    const noDoses = { ...shift([dose({})]), canRecordDoses: false } as PortalShiftDetailDto
+    expect(offlineDueDoses(noDoses, at5pm)).toEqual([])
   })
   it('never blocks on a dose with an outcome or one still in the future', () => {
     const done = dose({ outcome: { status: 'Administered' } as never })

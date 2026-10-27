@@ -12,14 +12,15 @@ export function storeSession(session: AuthResponseDto) {
   localStorage.setItem('odip_user', JSON.stringify(session))
   // Another worker's unsent changes and saved shifts never reach this sign-in; the same worker's queue stays to send.
   offlineQueue.dropOtherUsers(session.id)
-  // Sent now, not at the next app open: signing back in is a navigate(), so nothing else would trigger it.
-  void offlineQueue.replay()
   if (session.tenantId) localStorage.setItem('odip_viewing_tenant', session.tenantId)
   // A password sign-in must not inherit a Microsoft refresh route from an earlier session; the Microsoft landing sets this again after.
   localStorage.removeItem('odip_sign_in_method')
   // Nor may it inherit a SuperAdmin's view-as state from a browser that was never logged out.
   localStorage.removeItem('odip_viewing_user')
   localStorage.removeItem('odip_superadmin_user')
+  // Sent now, not at the next app open: signing back in is a navigate(), so nothing else would trigger it.
+  // Last, because the queue matches records on the view-as tenant set above.
+  void offlineQueue.replay()
 }
 
 /**

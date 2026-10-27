@@ -240,7 +240,7 @@ describe('shift package hooks — Finish carries the handover and the confirmati
     const data = { geolocationDeclined: false, handoverText: 'Check the left heel.', nothingToHandOver: false, nothingToNote: true }
     await result.current.mutateAsync({ id: 'shift-1', data })
 
-    expect(mockRequest).toHaveBeenCalledWith({ url: '/portal/shifts/shift-1/finish', method: 'POST', data, timeout: 15_000 })
+    expect(mockRequest).toHaveBeenCalledWith({ url: '/portal/shifts/shift-1/finish', method: 'POST', data, timeout: 45_000 })
   })
 })
 

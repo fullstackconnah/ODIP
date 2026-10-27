@@ -200,6 +200,20 @@ describe('storeSession', () => {
     expect(replay).toHaveBeenCalledTimes(1)
   })
 
+  it('replays only once the view-as tenant is restored, because the queue matches records on it', async () => {
+    const { storeSession } = await import('./auth')
+    localStorage.removeItem('odip_viewing_tenant')
+    let tenantAtReplay: string | null = null
+    replay.mockImplementation(async () => {
+      tenantAtReplay = localStorage.getItem('odip_viewing_tenant')
+      return { sent: 0, notSent: 0, waiting: 0, offline: false }
+    })
+
+    storeSession({ token: 't', id: 'u1', tenantId: 't1' } as never)
+
+    expect(tenantAtReplay).toBe('t1')
+  })
+
   it('leaves no view-as state from an earlier SuperAdmin session behind', async () => {
     const { storeSession } = await import('./auth')
     localStorage.setItem('odip_viewing_user', '{"id":"u1"}')

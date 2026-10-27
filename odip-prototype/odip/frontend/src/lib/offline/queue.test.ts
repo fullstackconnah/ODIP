@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiClient } from '@/api/client'
-import { apiSend, apiShiftStatus, createQueue, replayBody, type NewRecord, type QueueRecord, type SendResult } from './queue'
+import { apiSend, apiShiftStatus, createQueue, FINISH_TIMEOUT_MS, LEASE_MS, replayBody, type NewRecord, type QueueRecord, type SendResult } from './queue'
 
 const label = { participant: 'Jordan Smith', serviceDate: '2026-10-28', rostered: '9:00 am - 1:00 pm' }
 const ok: SendResult = { kind: 'ok', data: {} }
@@ -381,15 +381,51 @@ describe('offline queue: replay under load', () => {
     expect(localStorage.getItem(LOCK)).toBeNull()
   })
 
-  it('S3: a lease older than 30 s is taken over; a younger one is respected', async () => {
+  it('S3: a stale lease is taken over; a younger one is respected', async () => {
     const q = make()
     online = true
     q.enqueue(rec('note'))
     localStorage.setItem(LOCK, String(clock - 1000))
     expect(await q.replay()).toMatchObject({ sent: 0 })
-    localStorage.setItem(LOCK, String(clock - 31_000))
+    localStorage.setItem(LOCK, String(clock - LEASE_MS - 1000))
     expect(await q.replay()).toMatchObject({ sent: 1 })
     expect(localStorage.getItem(LOCK)).toBeNull()
+  })
+
+  it('Should 3: a replay the lease refuses is retried once the lease has lapsed, with one timer however often it is refused', async () => {
+    vi.useFakeTimers()
+    const q = make()
+    online = true
+    q.enqueue(rec('note'))
+    localStorage.setItem(LOCK, String(clock))
+    const before = vi.getTimerCount()
+    expect(await q.replay()).toMatchObject({ sent: 0 })
+    expect(await q.replay()).toMatchObject({ sent: 0 })
+    expect(vi.getTimerCount() - before).toBe(1)
+    clock += LEASE_MS
+    await vi.advanceTimersByTimeAsync(LEASE_MS)
+    expect(sent).toHaveLength(1)
+    expect(q.pendingCount()).toBe(0)
+  })
+
+  it('Nit 2: a replay releases only its own lease, not one another tab took over', async () => {
+    const a = gated(() => localStorage.setItem(LOCK, 'other-tab'))
+    a.enqueue(rec('note'))
+    online = true
+    const run = a.replay()
+    await tick()
+    release()
+    await run
+    expect(localStorage.getItem(LOCK)).toBe('other-tab')
+  })
+
+  it('Nit 3: a Finish is sent with the 45 s timeout and any other request with 15 s', async () => {
+    const request = vi.spyOn(apiClient, 'request').mockResolvedValue({ data: { data: {} } })
+    const row = (kind: string) => ({ id: `r-${kind}`, kind, path: `/portal/shifts/s1/${kind}`, method: 'POST', body: {} }) as unknown as QueueRecord
+    await apiSend(row('finish'), false)
+    await apiSend(row('note'), false)
+    expect(request.mock.calls.map(([c]) => c.timeout)).toEqual([FINISH_TIMEOUT_MS, 15_000])
+    expect(FINISH_TIMEOUT_MS).toBe(45_000)
   })
 
   it('S3: a record another tab removed after this replay took its snapshot is not sent', async () => {

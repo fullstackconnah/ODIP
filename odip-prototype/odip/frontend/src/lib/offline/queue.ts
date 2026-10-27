@@ -56,8 +56,10 @@ const RANK: Record<QueueKind, number> = { start: 0, note: 1, breakStart: 2, brea
 
 /** On a weak signal navigator.onLine stays true and a request can stall; give up so the record is queued and a replay never hangs. */
 const REQUEST_TIMEOUT_MS = 15_000
-/** A second tab's replay is ignored while this lease is younger than this. */
-const LEASE_MS = 30_000
+/** The Finish commit does more on the server than any other write, so it gets longer before it reads as offline. */
+export const FINISH_TIMEOUT_MS = 45_000
+/** A second tab's replay is ignored while this lease is younger than this: one record's status lookup (15 s) plus its Finish (45 s), with margin. */
+export const LEASE_MS = 75_000
 /** After a live send fails with a server blip, one more try this long after. */
 const RETRY_AFTER_MS = 30_000
 
@@ -70,7 +72,7 @@ export const replayBody = (rec: QueueRecord, asReplay: boolean): unknown =>
 export async function apiSend(rec: QueueRecord, asReplay: boolean): Promise<SendResult> {
   try {
     // A timeout has no response, so it reads as offline and the record is queued under the same id.
-    const res = await apiClient.request({ url: rec.path, method: rec.method, data: replayBody(rec, asReplay), timeout: REQUEST_TIMEOUT_MS })
+    const res = await apiClient.request({ url: rec.path, method: rec.method, data: replayBody(rec, asReplay), timeout: rec.kind === 'finish' ? FINISH_TIMEOUT_MS : REQUEST_TIMEOUT_MS })
     return { kind: 'ok', data: (res.data as { data?: unknown } | undefined)?.data }
   } catch (error) {
     const status = apiErrorStatus(error)
@@ -119,6 +121,9 @@ export function createQueue(overrides: Partial<QueueDeps> = {}) {
   let running = false
   // A replay asked for while one runs is not dropped: the running one goes round again.
   let again = false
+  /** This tab's own lease stamp, so a release never removes a lease another tab took over. */
+  let myStamp = ''
+  let leaseRetry: ReturnType<typeof setTimeout> | undefined
   let sync: SyncState = { sending: false, allSentAt: null, stillOffline: false }
   // useSyncExternalStore needs the same array back until something changes, so parse only when the raw text changed.
   let memoRaw: string | null | undefined
@@ -220,16 +225,22 @@ export function createQueue(overrides: Partial<QueueDeps> = {}) {
   const stored = (r: QueueRecord) => loadAll(r.userId).find((x) => x.id === r.id)
 
   /**
-   * One tab replays at a time: the lease is a timestamp in localStorage, refreshed before each send and taken over once
-   * it is 30 s old (the tab that held it died). Not navigator.locks: live is plain HTTP, and locks need a secure context.
+   * One tab replays at a time: the lease is a timestamp in localStorage, refreshed before each record and taken over once
+   * it is LEASE_MS old (the tab that held it died). Not navigator.locks: live is plain HTTP, and locks need a secure context.
    */
   // shortcut: check-then-set is not atomic across tabs; the stored-record re-check before each send covers the gap.
+  function stampLease(userId: string) {
+    try {
+      myStamp = String(deps.now())
+      localStorage.setItem(leaseKey(userId), myStamp)
+    } catch { /* storage blocked */ }
+  }
   function takeLease(userId: string): boolean {
     try {
       const held = Number(localStorage.getItem(leaseKey(userId)))
       if (held && deps.now() - held < LEASE_MS) return false
-      localStorage.setItem(leaseKey(userId), String(deps.now()))
     } catch { /* storage blocked: replay anyway */ }
+    stampLease(userId)
     return true
   }
 
@@ -238,7 +249,11 @@ export function createQueue(overrides: Partial<QueueDeps> = {}) {
     if (running) { again = true; return result }
     const s = deps.session()
     if (!s.userId) return result
-    if (!takeLease(s.userId)) return result
+    if (!takeLease(s.userId)) {
+      // Whoever holds the lease cannot see what was queued after it started, so look again once the lease has lapsed.
+      leaseRetry ??= setTimeout(() => { leaseRetry = undefined; void replay() }, LEASE_MS)
+      return result
+    }
     running = true
     setSync({ sending: true, stillOffline: false })
     try {
@@ -250,6 +265,7 @@ export function createQueue(overrides: Partial<QueueDeps> = {}) {
           if (recs.some((r) => r.status === 'notSent')) continue
           const ordered = [...recs].sort((a, b) => RANK[a.kind] - RANK[b.kind] || a.createdAt - b.createdAt)
           for (const r of ordered) {
+            stampLease(s.userId)
             // The snapshot can be stale: another tab may have sent, discarded or failed this record since.
             if (stored(r)?.status !== 'waiting') continue
             if (r.kind === 'finish') {
@@ -264,7 +280,6 @@ export function createQueue(overrides: Partial<QueueDeps> = {}) {
                 continue
               }
             }
-            try { localStorage.setItem(leaseKey(s.userId), String(deps.now())) } catch { /* storage blocked */ }
             const out = await deps.send(r, true)
             if (out.kind === 'offline') { result.offline = true; break outer }
             if (out.kind === 'ok') {
@@ -287,7 +302,8 @@ export function createQueue(overrides: Partial<QueueDeps> = {}) {
     } finally {
       running = false
       again = false
-      try { localStorage.removeItem(leaseKey(s.userId)) } catch { /* storage blocked */ }
+      // Not another tab's lease, if it took over after this one lapsed.
+      try { if (localStorage.getItem(leaseKey(s.userId)) === myStamp) localStorage.removeItem(leaseKey(s.userId)) } catch { /* storage blocked */ }
       const left = mine()
       result.waiting = left.filter((r) => r.status === 'waiting').length
       setSync({ sending: false, stillOffline: result.offline, allSentAt: !result.offline && result.sent > 0 && left.length === 0 ? deps.now() : sync.allSentAt })

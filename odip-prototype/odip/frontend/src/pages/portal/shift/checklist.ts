@@ -251,5 +251,5 @@ export function offlineDueDoses(shift: PortalShiftDetailDto, now: Date = new Dat
   // The saved blockers were worked out when the detail was saved; a dose that came due since is not in them, so the clock decides too.
   const nowLocal = utcInstantToProviderLocal(now.toISOString(), shift.timeZoneId)
   return buildChecklist(shift).groups.flatMap(g => g.items).flatMap(i =>
-    (i.kind === 'dose' && (due.has(i.key) || (!i.slot.outcome && toDatetimeInputValue(i.slot.scheduledAt) <= nowLocal)) ? [i.slot] : []))
+    (i.kind === 'dose' && (due.has(i.key) || (shift.canRecordDoses && !i.slot.outcome && toDatetimeInputValue(i.slot.scheduledAt) <= nowLocal)) ? [i.slot] : []))
 }
