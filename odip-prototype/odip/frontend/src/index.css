@@ -389,6 +389,12 @@
 aside[data-folding] [data-fold] { opacity: 0; }
 aside[data-folding] [data-fold="trail"] { transition-duration: 0s; }
 
+/* The brand (logo fold): the tail of the wordmark slides into the "b" as it fades; the tile grows in behind the "b" once the nav is the rail (100ms glide) and drops away first on the way out (60ms). */
+[data-fold="word"] { transition-property: opacity, transform; }
+aside[data-folding] [data-fold="word"] { transform: translateX(-12px); }
+[data-brand-tile] { opacity: 0; transform: scale(0.8); transition: opacity 60ms cubic-bezier(0.16, 1, 0.3, 1), transform 60ms cubic-bezier(0.16, 1, 0.3, 1); }
+[data-brand-tile][data-on] { opacity: 1; transform: none; transition-duration: 100ms; transition-timing-function: cubic-bezier(0.2, 0, 0, 1); }
+
 /*
  * Reduced motion — applied product-wide rather than per-component. Neutralises animation and
  * transition *duration/delay* so state changes (colour, opacity, width, transform) still happen
