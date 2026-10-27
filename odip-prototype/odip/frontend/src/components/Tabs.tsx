@@ -96,7 +96,7 @@ const SCROLL_FADE = '[mask-image:linear-gradient(to_right,black_calc(100%_-_2rem
  */
 // The sub variant: the list, and the chip (the 32px pill inside the 44px-floor button) in each state. Every chip has a transparent border so a quiet
 // (dashed) one never changes a width. Quiet colours are muted-foreground mixed down, because --color-border is under 2:1 and fails WCAG 1.4.11.
-const SUB_LIST = 'flex flex-nowrap gap-x-2 gap-y-2 overflow-x-auto scroll-smooth max-md:[scrollbar-width:none] max-md:[&::-webkit-scrollbar]:hidden md:flex-wrap max-md:[mask-image:linear-gradient(to_right,black_calc(100%_-_2rem),transparent)] max-md:pr-8'
+const SUB_LIST = '-m-1 p-1 flex flex-nowrap gap-x-2 gap-y-2 overflow-x-auto scroll-smooth max-md:[scrollbar-width:none] max-md:[&::-webkit-scrollbar]:hidden md:flex-wrap max-md:[mask-image:linear-gradient(to_right,black_calc(100%_-_2rem),transparent)] max-md:pr-9'
 const SUB_CHIP = 'inline-flex h-8 items-center rounded-md border px-3 text-[13px] font-medium whitespace-nowrap transition-colors group-focus-visible:ring-2 group-focus-visible:ring-[var(--color-ring)] group-focus-visible:ring-offset-2'
 const SUB_ACTIVE = 'border-transparent bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]'
 const SUB_IDLE = 'border-transparent text-[var(--color-muted-foreground)] group-hover:bg-[var(--color-accent)] group-hover:text-[var(--color-foreground)] group-active:bg-[var(--color-surface-container-high)]'

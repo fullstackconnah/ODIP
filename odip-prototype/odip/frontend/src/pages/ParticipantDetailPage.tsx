@@ -126,7 +126,7 @@ export default function ParticipantDetailPage() {
   const { section, setSection, selectTab } = useParticipantSection(tab, rows)
   // An open SectionEditPanel with unsaved edits holds the register; a tab or sub-tab switch then asks before it unmounts the draft.
   const holds = useRef(0)
-  const dirtyEdits = useMemo(() => ({ hold: () => { holds.current++; return () => { holds.current-- } } }), [])
+  const dirtyEdits = useMemo(() => ({ hold: () => { holds.current++; let on = true; return () => { if (on) { on = false; holds.current-- } } } }), [])
   const [pendingSwitch, setPendingSwitch] = useState<(() => void) | null>(null)
   const guarded = (go: () => void) => { if (holds.current > 0) setPendingSwitch(() => go); else go() }
   const stripRef = useRef<HTMLDivElement>(null)
@@ -380,7 +380,7 @@ export default function ParticipantDetailPage() {
                 idPrefix={`sub-${tab}`}
               />
             </div>
-            <div role="tabpanel" id={`sub-${tab}-panel`} aria-labelledby={`sub-${tab}-tab-${section}`} className="mt-6">
+            <div role="tabpanel" id={`sub-${tab}-panel`} aria-labelledby={`sub-${tab}-tab-${section}`} tabIndex={0} className="mt-6 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2">
               <div key={section}>{cards[tab].find(c => c.id === section)?.node}</div>
             </div>
           </>
@@ -435,6 +435,7 @@ export default function ParticipantDetailPage() {
         confirmLabel="Discard"
         cancelLabel="Keep editing"
         focusCancel
+        variant="danger"
       />
 
       {archiveRestore.confirmDialog}

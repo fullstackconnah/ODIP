@@ -147,7 +147,7 @@ export function useScrollToHash(participantId: string | undefined) {
   const qc = useQueryClient()
   useEffect(() => {
     if (!hash) return
-    const id = decodeURIComponent(hash.slice(1))
+    const id = safeDecode(hash.slice(1))
     let done = false
     const holds: (() => void)[] = []
     const go = (force: boolean) => {

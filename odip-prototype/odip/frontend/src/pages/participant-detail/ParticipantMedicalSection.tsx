@@ -72,7 +72,6 @@ export function ParticipantMedicalSection({ p, participantId, canEdit }: { p: Pa
     || draft.hidpaNotes !== saved.hidpaNotes || draft.medicalSummary !== saved.medicalSummary
     || draft.allergiesDetail !== saved.allergiesDetail || draft.isAnaphylaxisRisk !== saved.isAnaphylaxisRisk || draft.allergyManagementNotes !== saved.allergyManagementNotes
 
-
   async function handleSave(expected: PatchParticipantDto['expectedRevisions']) {
     const resolvedPrimary = draft.primaryDiagnosis === DIAGNOSIS_OTHER_SENTINEL ? draft.primaryDiagnosisOther.trim() : draft.primaryDiagnosis
     try {

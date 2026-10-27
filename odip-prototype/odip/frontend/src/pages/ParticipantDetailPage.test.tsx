@@ -1817,6 +1817,10 @@ describe('ParticipantDetailPage — seven tabs (slice 1)', () => {
       setUserRole('SupportWorker')
       renderAtTab('participant-1', 'funding')
       expect(screen.queryByRole('tab', { name: /Funding & claims/ })).not.toBeInTheDocument()
+      cleanup()
+      setUserRole('ReadOnly')
+      renderAtTab('participant-1', 'funding')
+      expect(screen.queryByRole('tab', { name: /Funding & claims/ })).not.toBeInTheDocument()
     })
   })
 
@@ -2202,6 +2206,37 @@ describe('ParticipantDetailPage — sub-tabs', () => {
     await user.click(screen.getByRole('button', { name: 'Discard' }))
     expect(selectedTabName()[0]).toMatch(/^Health/)
     expect(probe().path).toBe('?tab=health')
+  })
+
+  it('j: an arrow key on the strip with unsaved edits asks first; Keep editing leaves the sub-tab and the URL alone', async () => {
+    const { user, probe } = await editedAboutMe()
+    await user.type(screen.getByLabelText('Goals'), 'mine')
+    subTab('About me').focus()
+    await user.keyboard('{ArrowLeft}')
+    const dialog = screen.getByRole('alertdialog', { name: 'Discard changes?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Keep editing' }))
+    expect(selectedSub()).toEqual(['About me'])
+    expect(probe().path).toBe('?tab=about&section=about-me')
+  })
+
+  it('j: the Discard button in the dialog is the danger style', async () => {
+    const { user } = await editedAboutMe()
+    await user.type(screen.getByLabelText('Goals'), 'mine')
+    await user.click(subTab('Identity'))
+    expect(screen.getByRole('button', { name: 'Discard' }).className).toContain('bg-[var(--color-destructive)]')
+  })
+
+  it('d: a hash that is not valid percent-encoding shows the first sub-tab and no error', () => {
+    setUserRole('Admin')
+    renderWithProbe('/participants/p-1?tab=health#%E0')
+    expect(selectedSub()).toEqual(['Emergency'])
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('k: the sub-tab panel is a focus stop with a visible ring', () => {
+    setUserRole('Admin')
+    renderAtTab('participant-1', 'health')
+    expect(screen.getByRole('tabpanel')).toHaveAttribute('tabindex', '0')
   })
 
   it('k: arrows, Home and End move between sub-tabs and write section=; Tab goes into the panel', async () => {

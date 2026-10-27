@@ -534,7 +534,7 @@ describe('Tabs primitive — variant="sub"', () => {
     const { unmount } = render(<SubHarness />)
     const sub = screen.getByRole('tablist', { name: 'Sub tabs' })
     expect(sub.className).not.toMatch(/border-b/)
-    expect(sub).toHaveClass('flex-nowrap', 'md:flex-wrap', 'max-md:[mask-image:linear-gradient(to_right,black_calc(100%_-_2rem),transparent)]', 'max-md:pr-8')
+    expect(sub).toHaveClass('flex-nowrap', 'md:flex-wrap', 'max-md:[mask-image:linear-gradient(to_right,black_calc(100%_-_2rem),transparent)]', 'max-md:pr-9', '-m-1', 'p-1')
     unmount()
     render(<Tabs tabs={subTabs} active="a" onChange={() => {}} ariaLabel="Under" />)
     expect(screen.getByRole('tablist', { name: 'Under' })).toHaveClass('border-b')

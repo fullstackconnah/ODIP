@@ -28,7 +28,6 @@ export function ParticipantAboutMeSection({ p, participantId, canEdit }: { p: Pa
   const [draft, setDraft] = useState<AboutMeDraft>(saved)
   const isDirty = (Object.keys(saved) as (keyof AboutMeDraft)[]).some((k) => draft[k] !== saved[k])
 
-
   async function handleSave(expected: PatchParticipantDto['expectedRevisions']) {
     try {
       await patchParticipant.mutateAsync({
