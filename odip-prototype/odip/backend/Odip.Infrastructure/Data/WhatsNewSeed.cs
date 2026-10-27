@@ -73,6 +73,9 @@ public static class WhatsNewSeed
         new Item("2026-10-adl-notes-in-full", "ADL notes show in full",
             "Long ADL notes and \"how to help me\" text now wrap on a participant's page instead of being cut off.",
             WhatsNewAudience.All, false),
+        new Item("2026-10-unsaved-prompt-clear-of-nav", "Unsaved changes prompt fits phones",
+            "On a phone, the \"unsaved changes\" prompt no longer sits under the bottom menu.",
+            WhatsNewAudience.All, false),
     };
 
     /// <summary>Inserts the keys the table lacks, one save each, so a key another instance inserted first costs only that row.</summary>
