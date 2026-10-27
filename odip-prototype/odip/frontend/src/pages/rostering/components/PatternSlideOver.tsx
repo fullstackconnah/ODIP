@@ -356,7 +356,7 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
         </FormField>
 
         {error && !error.noLength && (
-          <Callout ref={errorRef} tone="error">{error.message}</Callout>
+          <Callout ref={errorRef} tone="error" className="scroll-mb-[var(--card-pad)]">{error.message}</Callout>
         )}
         </>)}
       </SlideOver>

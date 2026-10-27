@@ -1064,7 +1064,7 @@ Three more pieces of the same story (all in `tapArea.ts` or built on it):
 
 ## Callout
 
-`<Callout tone title icon actions className announce polite ref>` is the one banner for a warning, an error, a note or a success. Do not hand-build a bordered tinted `div`: the tone gives the border, icon and ink, and the role.
+`<Callout tone title children icon actions className announce polite ref>` is the one banner for a warning, an error, a note or a success. Do not hand-build a bordered tinted `div`: the tone gives the border, icon and ink, and the role.
 
 - `tone`: `error`/`danger` and `warning` announce assertively (`role="alert"`); `info` and `success` politely (`role="status"`).
 - `polite`: announce as `role="status"`, `aria-live="polite"` whatever the tone, for a standing note nobody just caused (a draft participant, a plan-type warning). `announce={false}` still wins (no role at all).

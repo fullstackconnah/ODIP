@@ -95,7 +95,7 @@ export type CalloutProps = {
  *
  * Accessibility:
  * - `role` and `aria-live` are derived from `tone`. Error and warning interrupt (assertive);
- *   info and success are polite (`status`).
+ *   info and success are polite (`status`). `polite` forces `status` for a standing note at any tone.
  * - The icon is decorative (`aria-hidden`); the visible text is the source of meaning.
  */
 export function Callout({ tone, title, children, icon, actions, className, announce = true, polite = false, ref }: CalloutProps) {
