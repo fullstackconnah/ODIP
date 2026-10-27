@@ -198,6 +198,16 @@ describe('RosterBoardPage drag and drop: when the server says no', () => {
     expect(await screen.findByRole('alertdialog', { name: "Can't assign this shift" })).toBeInTheDocument()
   })
 
+  it("tells the coordinator an admin can override when the blocking finding is a double-booking", async () => {
+    h.assign.mockRejectedValueOnce({ response: { status: 422, data: { success: false, data: [makeFinding({ code: 'DOUBLE_BOOKED_SHIFT', severity: 'Blocking', requiresReason: false, message: 'Sam Wilson already has a shift on 24 Aug 2026, 16:00-20:00, that overlaps this one. An admin can override this.' })] } } })
+    renderPage()
+    await drop(sam, onShift(OPEN))
+
+    const dialog = await screen.findByRole('alertdialog', { name: "Can't assign this shift" })
+    expect(within(dialog).getByText("This worker is already booked at that time, so ask an admin to make the assignment.")).toBeInTheDocument()
+    expect(within(dialog).queryByText(/can't be overridden/)).not.toBeInTheDocument()
+  })
+
   it("shows any other refusal in today's error Callout, in the server's words", async () => {
     const STALE = 'This shift changed after the board was loaded. Refresh the board and try again.'
     h.move.mockRejectedValueOnce({ response: { status: 409, data: { success: false, errors: [STALE] } } })
