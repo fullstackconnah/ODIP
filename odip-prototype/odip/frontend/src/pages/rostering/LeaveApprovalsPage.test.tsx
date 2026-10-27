@@ -896,6 +896,28 @@ describe('LeaveApprovalsPage — between md and xl (1024): Staff over Type, Date
     expect(screen.getByText('Short-staffed that day.').className).toContain('md:max-w-[10rem]')
     expect(screen.getByText('In Employment Hero · 36 h').className).toContain('md:min-w-[10rem]')
   })
+
+  // Stacked cells keep the same per-row rules as the six columns.
+  it('keeps your own pending request decision-free, with the "Your request" badge', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator', id: 'u-me' }))
+    mockUseLeaveRequests.mockReturnValue(ok([makeLeaveRequest({ id: 'leave-me', userId: 'u-me', userFullName: 'Dana Me', status: 'Pending' })]))
+    renderPage()
+    expect(screen.queryByRole('button', { name: /^(Approve|Decline|Edit): Dana Me/ })).not.toBeInTheDocument()
+    expect(screen.getByText('Your request')).toBeInTheDocument()
+  })
+
+  it('gives an Employment Hero approved row no buttons', () => {
+    mockUseLeaveRequests.mockReturnValue(ok([makeLeaveRequest({ status: 'Approved', source: 'EmploymentHero' })]))
+    renderPage()
+    for (const name of [/^Edit/, /^Approve/, /^Decline/, /^Cancel leave/]) expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
+  })
+
+  it('keeps Edit and Delete on a legacy record', () => {
+    mockUseStaffAvailabilityRecords.mockReturnValue(ok([makeAvailabilityRecord()]))
+    renderPage('/rostering/leave?userId=staff-1')
+    expect(screen.getByRole('button', { name: 'Edit: Alex Rivera, 14 Sep 2026 – 18 Sep 2026' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete: Alex Rivera, 14 Sep 2026 – 18 Sep 2026' })).toBeInTheDocument()
+  })
 })
 
 describe('LeaveApprovalsPage — xl and phones', () => {
@@ -903,5 +925,21 @@ describe('LeaveApprovalsPage — xl and phones', () => {
     mockUseLeaveRequests.mockReturnValue({ data: [makeLeaveRequest()], isLoading: false, isError: false, refetch: vi.fn() })
     renderPage()
     expect(screen.getAllByRole('columnheader').map(h => h.textContent)).toEqual(['Staff', 'Type', 'Dates', 'Requested', 'Status', ''])
+  })
+
+  it('keeps the six columns when matchMedia says the width is not between md and xl', () => {
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: false, media: query, addEventListener: () => {}, removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia
+    try {
+      mockUseLeaveRequests.mockReturnValue({ data: [makeLeaveRequest()], isLoading: false, isError: false, refetch: vi.fn() })
+      renderPage()
+      expect(screen.getAllByRole('columnheader').map(h => h.textContent)).toEqual(['Staff', 'Type', 'Dates', 'Requested', 'Status', ''])
+      const type = screen.getAllByRole('cell').find(c => c.getAttribute('data-label') === 'Type')!
+      expect(type).toHaveTextContent('Leave — Annual')
+      expect(screen.getByRole('button', { name: 'Approve: Alex Rivera, 14 Sep 2026 – 18 Sep 2026' })).toBeInTheDocument()
+    } finally {
+      Reflect.deleteProperty(window, 'matchMedia')
+    }
   })
 })

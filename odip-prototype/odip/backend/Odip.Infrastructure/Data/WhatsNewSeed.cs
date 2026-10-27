@@ -72,7 +72,7 @@ public static class WhatsNewSeed
             WhatsNewAudience.All, false),
         new Item("2026-10-leave-approvals-1024", "Leave fits smaller screens",
             "On a laptop-sized screen the leave table now shows each person with their leave type, and the dates with who asked, so nothing scrolls sideways.",
-            WhatsNewAudience.Admin | WhatsNewAudience.Coordinator, false),
+            Staff, false),
     };
 
     /// <summary>Inserts the keys the table lacks, one save each, so a key another instance inserted first costs only that row.</summary>

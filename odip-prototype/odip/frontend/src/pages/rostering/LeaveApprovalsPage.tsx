@@ -525,7 +525,7 @@ export default function LeaveApprovalsPage() {
         )}
         {row.rowKind === 'leave' && row.data.sentHours != null && (
           <p className={`mt-1 whitespace-normal text-xs text-[var(--color-muted-foreground)] ${stacked ? 'md:min-w-[10rem]' : 'md:min-w-[12rem]'}`}>
-            {`In Employment Hero · ${hoursLabel(row.data.sentHours)}${row.data.sentHoursDefaulted ? " (7.6 h a day: our default)" : ''}`}
+            {`In Employment Hero · ${hoursLabel(row.data.sentHours)}${row.data.sentHoursDefaulted ? " (7.6 h a day: our default)" : ''}`}
           </p>
         )}
       </div>
