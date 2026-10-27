@@ -312,7 +312,7 @@ describe('UserSwitcher: focus ring', () => {
     await user.click(screen.getByRole('button', { name: /^usr/i }))
     const rows = [screen.getByRole('button', { name: /exit view/i }), screen.getByRole('button', { name: /^casey coordinator/i })]
     for (const row of rows) {
-      expect(row).toHaveClass('focus-visible:ring-2', 'focus-visible:ring-[var(--color-ring)]')
+      expect(row).toHaveClass('focus-visible:ring-2', 'focus-visible:ring-[var(--color-ring)]', 'focus-visible:relative')
       expect(row).not.toHaveClass('focus:ring-2')
     }
   })

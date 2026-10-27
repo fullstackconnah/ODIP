@@ -180,7 +180,7 @@ describe('TenantSwitcher: focus ring', () => {
 
     await user.click(screen.getByRole('button', { name: 'SA Demo' }))
     const row = screen.getByRole('button', { name: /^Acme/ })
-    expect(row).toHaveClass('focus-visible:outline-none', 'focus-visible:ring-2', 'focus-visible:ring-[var(--color-ring)]')
+    expect(row).toHaveClass('focus-visible:outline-none', 'focus-visible:ring-2', 'focus-visible:ring-[var(--color-ring)]', 'focus-visible:relative')
     expect(row).not.toHaveClass('focus:ring-2')
   })
 })

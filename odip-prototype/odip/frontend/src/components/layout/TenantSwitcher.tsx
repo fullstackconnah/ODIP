@@ -113,7 +113,7 @@ export default function TenantSwitcher() {
   setOpen(false);
   setPendingTenant({ id: tenant.id, name: tenant.name });
 }}
-                className={`w-full flex min-h-[var(--tap-min)] items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] ${
+                className={`w-full flex min-h-[var(--tap-min)] items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:relative ${
                   tenant.id === viewingId
                     ? TONE.info.soft
                     : 'hover:bg-[var(--color-accent)]'
