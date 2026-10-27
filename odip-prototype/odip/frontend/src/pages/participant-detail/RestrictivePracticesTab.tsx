@@ -172,7 +172,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
       reviewDate: practice.reviewDate ? practice.reviewDate.split('T')[0] : '',
       relatedMedicationId: practice.relatedMedicationId ?? '',
       isActive: practice.isActive,
-      authorised: isRpAuthorised(practice),
+      authorised: !!practice.authorisedBy?.trim() || !!practice.authorisationDate,
     })
     setErrors({})
     setModalError(null)
@@ -298,6 +298,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
         onClose={closeModal}
         title="Edit restrictive practice entry"
         size="md"
+        stickyFooter
         footer={
           <>
             <Button variant="secondary" onClick={closeModal}>
@@ -352,7 +353,8 @@ export default function RestrictivePracticesTab({ participantId }: { participant
           )}
           <CheckboxField
             label="This restrictive practice is authorised"
-            hint="Authorised practices need who authorised it and the date."
+            hint="If ticked, add who authorised it and the date."
+            className="[&_input]:size-4 [&_input]:rounded"
             checked={form.authorised}
             onChange={e => setForm(f => ({ ...f, authorised: e.target.checked }))}
           />

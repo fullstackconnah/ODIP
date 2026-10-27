@@ -139,10 +139,10 @@ function AddRestrictivePracticeDialogBody({ participantId, onClose, onSaved, def
     const nextErrors = new Map<string, string>()
     for (const row of bulkRows) {
       const problems: string[] = []
-      if (!row.description.trim()) problems.push('Description is required')
-      if (authorised && !row.authorisedBy.trim()) problems.push('Add who authorised it')
-      if (authorised && !row.authorisationDate) problems.push('Add the date it was authorised')
-      if (problems.length > 0) nextErrors.set(row.id, problems.join('. '))
+      if (!row.description.trim()) problems.push('Add a description.')
+      if (authorised && !row.authorisedBy.trim()) problems.push('Add who authorised it.')
+      if (authorised && !row.authorisationDate) problems.push('Add the date it was authorised.')
+      if (problems.length > 0) nextErrors.set(row.id, problems.join(' '))
     }
     if (nextErrors.size > 0) {
       setBulkRowErrors(nextErrors)
@@ -305,7 +305,8 @@ function AddRestrictivePracticeDialogBody({ participantId, onClose, onSaved, def
           </FormField>
           <CheckboxField
             label="This restrictive practice is authorised"
-            hint="Authorised practices need who authorised it and the date."
+            hint="If ticked, add who authorised it and the date."
+            className="[&_input]:size-4 [&_input]:rounded"
             checked={authorised}
             onChange={e => setAuthorised(e.target.checked)}
           />
