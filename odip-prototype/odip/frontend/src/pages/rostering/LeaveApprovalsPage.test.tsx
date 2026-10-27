@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
@@ -808,6 +808,138 @@ describe('LeaveApprovalsPage — Employment Hero leave', () => {
       const cell = screen.getAllByRole('cell').find(c => c.getAttribute('data-label') === header)!
       expect(cell.className).not.toContain('whitespace-nowrap')
       expect(cell.querySelector('.truncate, [class*="md:truncate"]')).toBeNull()
+    }
+  })
+})
+
+// Between md and xl (the 1024 laptop) two pairs of columns merge so the table fits its box without scrolling sideways (approvals-1024).
+describe('LeaveApprovalsPage — between md and xl (1024): Staff over Type, Dates over Requested', () => {
+  const ok = (data: unknown[]) => ({ data, isLoading: false, isError: false, refetch: vi.fn() })
+  const stubMdToXl = () => {
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query.includes('max-width: 79.99rem'),
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia
+  }
+  const cellsOf = (name: string) => within(screen.getByText(name).closest('tr')!).getAllByRole('cell')
+
+  beforeEach(stubMdToXl)
+  afterEach(() => { Reflect.deleteProperty(window, 'matchMedia') })
+
+  it('stacks the pairs under two headers', () => {
+    mockUseLeaveRequests.mockReturnValue(ok([makeLeaveRequest()]))
+    renderPage()
+    expect(screen.getAllByRole('columnheader').map(h => h.textContent)).toEqual(['Staff · Type', 'Dates · Requested', 'Status', ''])
+  })
+
+  it('puts the type under the name and the requester under the dates in the same cell', () => {
+    mockUseLeaveRequests.mockReturnValue(ok([makeLeaveRequest({ requestedAt: '2026-09-07T09:00:00Z' })]))
+    renderPage()
+    const cells = cellsOf('Alex Rivera')
+    expect(within(cells[0]).getByText('Leave — Annual')).toBeInTheDocument()
+    expect(cells[1].textContent).toContain('14\u00a0Sep\u00a02026\u00a0– 18\u00a0Sep\u00a02026')
+    expect(cells[1].textContent).toContain('Self · 7\u00a0Sep\u00a02026')
+  })
+
+  it('moves "Your request" under the name, after the type', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator', id: 'u-me' }))
+    mockUseLeaveRequests.mockReturnValue(ok([makeLeaveRequest({ id: 'leave-me', userId: 'u-me', userFullName: 'Dana Me' })]))
+    renderPage()
+    const cell = cellsOf('Dana Me')[0]
+    const badge = within(cell).getByText('Your request')
+    expect(badge).toBeInTheDocument()
+    expect(screen.getByText('Dana Me')).not.toContainElement(badge)
+    expect(cell.textContent).toMatch(/Dana Me.*Leave — Annual.*Your request/)
+  })
+
+  it('caps a long name with its full text in the title', () => {
+    const name = 'Alexandra Montgomery-Fitzwilliam'
+    mockUseLeaveRequests.mockReturnValue(ok([makeLeaveRequest({ userFullName: name })]))
+    renderPage()
+    const el = screen.getByText(name)
+    expect(el).toHaveAttribute('title', name)
+    expect(el.className).toContain('md:max-w-[9rem]')
+  })
+
+  it('skips the Requested line on a legacy record', () => {
+    mockUseStaffAvailabilityRecords.mockReturnValue(ok([makeAvailabilityRecord()]))
+    renderPage('/rostering/leave?userId=staff-1') // a linked user shows every status, legacy records included
+    expect(cellsOf('Alex Rivera')[1]).not.toHaveTextContent('—')
+  })
+
+  it('lets the Employment Hero action text wrap without breaking the name', () => {
+    mockUseLeaveRequests.mockReturnValue(ok([makeLeaveRequest({ status: 'Approved', source: 'EmploymentHero' })]))
+    renderPage()
+    const text = screen.getByText('Change it in Employment Hero')
+    expect(text.className).toContain('md:max-w-[8.5rem]')
+    expect(text.textContent).toContain('Employment\u00a0Hero')
+  })
+
+  it('keeps every action and its row-named label', async () => {
+    mockUseLeaveRequests.mockReturnValue(ok([makeLeaveRequest()]))
+    renderPage()
+    const label = (verb: string) => `${verb}: Alex Rivera, 14 Sep 2026 – 18 Sep 2026`
+    expect(screen.getByRole('button', { name: label('Edit') })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: label('Decline') })).toBeInTheDocument()
+    await userEvent.setup().click(screen.getByRole('button', { name: label('Approve') }))
+    expect(screen.getByRole('heading', { name: 'Approve request' })).toBeInTheDocument()
+  })
+
+  it('narrows the status sub-lines', () => {
+    mockUseLeaveRequests.mockReturnValue(ok([
+      makeLeaveRequest({ id: 'd', userFullName: 'Dee Declined', status: 'Declined', decisionNote: 'Short-staffed that day.' }),
+      makeLeaveRequest({ id: 's', userFullName: 'Sam Sent', status: 'Approved', sentHours: 36, sentHoursDefaulted: false }),
+    ]))
+    renderPage()
+    expect(screen.getByText('Short-staffed that day.').className).toContain('md:max-w-[10rem]')
+    expect(screen.getByText('In Employment Hero · 36 h').className).toContain('md:min-w-[10rem]')
+  })
+
+  // Stacked cells keep the same per-row rules as the six columns.
+  it('keeps your own pending request decision-free, with the "Your request" badge', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator', id: 'u-me' }))
+    mockUseLeaveRequests.mockReturnValue(ok([makeLeaveRequest({ id: 'leave-me', userId: 'u-me', userFullName: 'Dana Me', status: 'Pending' })]))
+    renderPage()
+    expect(screen.queryByRole('button', { name: /^(Approve|Decline|Edit): Dana Me/ })).not.toBeInTheDocument()
+    expect(screen.getByText('Your request')).toBeInTheDocument()
+  })
+
+  it('gives an Employment Hero approved row no buttons', () => {
+    mockUseLeaveRequests.mockReturnValue(ok([makeLeaveRequest({ status: 'Approved', source: 'EmploymentHero' })]))
+    renderPage()
+    for (const name of [/^Edit/, /^Approve/, /^Decline/, /^Cancel leave/]) expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
+  })
+
+  it('keeps Edit and Delete on a legacy record', () => {
+    mockUseStaffAvailabilityRecords.mockReturnValue(ok([makeAvailabilityRecord()]))
+    renderPage('/rostering/leave?userId=staff-1')
+    expect(screen.getByRole('button', { name: 'Edit: Alex Rivera, 14 Sep 2026 – 18 Sep 2026' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete: Alex Rivera, 14 Sep 2026 – 18 Sep 2026' })).toBeInTheDocument()
+  })
+})
+
+describe('LeaveApprovalsPage — xl and phones', () => {
+  it('keeps the six columns at xl+ and on phones', () => {
+    mockUseLeaveRequests.mockReturnValue({ data: [makeLeaveRequest()], isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+    expect(screen.getAllByRole('columnheader').map(h => h.textContent)).toEqual(['Staff', 'Type', 'Dates', 'Requested', 'Status', ''])
+  })
+
+  it('keeps the six columns when matchMedia says the width is not between md and xl', () => {
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: false, media: query, addEventListener: () => {}, removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia
+    try {
+      mockUseLeaveRequests.mockReturnValue({ data: [makeLeaveRequest()], isLoading: false, isError: false, refetch: vi.fn() })
+      renderPage()
+      expect(screen.getAllByRole('columnheader').map(h => h.textContent)).toEqual(['Staff', 'Type', 'Dates', 'Requested', 'Status', ''])
+      const type = screen.getAllByRole('cell').find(c => c.getAttribute('data-label') === 'Type')!
+      expect(type).toHaveTextContent('Leave — Annual')
+      expect(screen.getByRole('button', { name: 'Approve: Alex Rivera, 14 Sep 2026 – 18 Sep 2026' })).toBeInTheDocument()
+    } finally {
+      Reflect.deleteProperty(window, 'matchMedia')
     }
   })
 })

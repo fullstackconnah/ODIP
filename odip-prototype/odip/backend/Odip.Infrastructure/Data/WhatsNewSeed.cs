@@ -73,6 +73,9 @@ public static class WhatsNewSeed
         new Item("2026-10-adl-notes-in-full", "ADL notes show in full",
             "Long ADL notes and \"how to help me\" text now wrap on a participant's page instead of being cut off.",
             WhatsNewAudience.All, false),
+        new Item("2026-10-leave-approvals-1024", "Leave fits smaller screens",
+            "On a laptop-sized screen the leave table now shows each person with their leave type, and the dates with who asked, so nothing scrolls sideways.",
+            Staff, false),
     };
 
     /// <summary>Inserts the keys the table lacks, one save each, so a key another instance inserted first costs only that row.</summary>
