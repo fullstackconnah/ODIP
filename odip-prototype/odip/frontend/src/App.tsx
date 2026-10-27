@@ -51,6 +51,7 @@ const ImportWizardPage = React.lazy(() => import('@/pages/settings/ImportWizardP
 const QualificationsPage = React.lazy(() => import('./pages/QualificationsPage'))
 const ClaimDetailPage = React.lazy(() => import('./pages/ClaimDetailPage'))
 const BudgetsPage = React.lazy(() => import('@/pages/BudgetsPage'))
+const AgreementsPage = React.lazy(() => import('@/pages/AgreementsPage'))
 const InvoicesPage = React.lazy(() => import('@/pages/InvoicesPage'))
 const RosterBoardPage = React.lazy(() => import('@/pages/rostering/RosterBoardPage'))
 const PatternsPage = React.lazy(() => import('@/pages/rostering/PatternsPage'))
@@ -174,6 +175,7 @@ const router = createBrowserRouter(
         <Route path="/settings/import/:kind" element={<PrivateRoute page="settings" requiresDataImport><ImportWizardPage /></PrivateRoute>} />
         <Route path="/qualifications" element={<PrivateRoute page="qualifications"><QualificationsPage /></PrivateRoute>} />
         <Route path="/claims/:id" element={<PrivateRoute page="claims"><ClaimDetailPage /></PrivateRoute>} />
+        <Route path="/agreements" element={<PrivateRoute page="agreements" requiresParticipantLifecycleMutation><AgreementsPage /></PrivateRoute>} />
         <Route path="/budgets" element={<PrivateRoute page="budgets"><BudgetsPage /></PrivateRoute>} />
         <Route path="/invoices" element={<PrivateRoute page="claims"><InvoicesPage /></PrivateRoute>} />
         <Route path="/rostering" element={<PrivateRoute page="rostering"><RosterBoardPage /></PrivateRoute>} />

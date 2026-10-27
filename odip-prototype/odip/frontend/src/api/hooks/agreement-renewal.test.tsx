@@ -58,7 +58,7 @@ describe('useRenewAgreement', () => {
     expect([seen[0].method, seen[0].url, seen[0].data]).toEqual(['post', '/participants/p-1/service-agreement-drafts/d-1/renew', undefined])
     const keys = invalidate.mock.calls.map(([filters]) => filters?.queryKey)
     expect(keys).toEqual(expect.arrayContaining([
-      ['service-agreement-drafts', 'p-1'], ['onboarding', 'p-1'], ['participant-onboarding-worklist'], ['agreements-ending'], ['participant-alerts', 'p-1'], ['participant-alerts-aggregate'],
+      ['service-agreement-drafts', 'p-1'], ['onboarding', 'p-1'], ['participant-onboarding-worklist'], ['agreements-ending'], ['service-agreements'], ['participant-alerts', 'p-1'], ['participant-alerts-aggregate'],
     ]))
   })
 
@@ -86,5 +86,6 @@ describe('useApproveServiceAgreementDraft', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(invalidate.mock.calls.map(([filters]) => filters?.queryKey)).toContainEqual(['agreements-ending'])
+    expect(invalidate.mock.calls.map(([filters]) => filters?.queryKey)).toContainEqual(['service-agreements'])
   })
 })

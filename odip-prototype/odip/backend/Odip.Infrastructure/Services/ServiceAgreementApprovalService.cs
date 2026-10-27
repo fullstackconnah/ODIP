@@ -39,7 +39,7 @@ public enum ApprovalStatus
 
 public sealed record ApprovalOutcome(
     ApprovalStatus Status, ServiceAgreementDraft? Draft = null, ServiceAgreementDraftApproval? Approval = null, OldShiftsRemainingDto? OldShifts = null,
-    IReadOnlyList<string>? Errors = null, DraftApprovalPreviewDto? Preview = null, int? NewestVersion = null);
+    IReadOnlyList<string>? Errors = null, DraftApprovalPreviewDto? Preview = null, int? NewestVersion = null, IReadOnlyList<string>? ReasonCodes = null);
 
 /// <summary>
 /// "Mark approved" (plan builder, phase D). Approving the NEWEST revision of an agreement draft, for a caller whose role the organisation lets approve, in one transaction: records who and when,
@@ -184,9 +184,9 @@ public sealed class ServiceAgreementApprovalService
 
         var plan = await PlanAsync(tenantId, draft, participant, ct, approving: true);
         if (plan.Superseded) return new ApprovalOutcome(ApprovalStatus.Superseded, Errors: new[] { SupersededMessage }, NewestVersion: plan.NewestVersion);
-        if (plan.Reasons.Count > 0) return new ApprovalOutcome(ApprovalStatus.Refused, Errors: plan.Reasons.Select(r => r.Message).ToList());
+        if (plan.Reasons.Count > 0) return new ApprovalOutcome(ApprovalStatus.Refused, Errors: plan.Reasons.Select(r => r.Message).ToList(), ReasonCodes: plan.Reasons.Select(r => r.Code).ToList());
         if (plan.Overlaps.Count > 0 && !acknowledgeOverlaps)
-            return new ApprovalOutcome(ApprovalStatus.Refused, Errors: new[] { OverlapMessage(plan.Overlaps.Count) });
+            return new ApprovalOutcome(ApprovalStatus.Refused, Errors: new[] { OverlapMessage(plan.Overlaps.Count) }, ReasonCodes: new[] { "Overlaps" });
 
         var approval = new ServiceAgreementDraftApproval
         {
@@ -651,7 +651,7 @@ public sealed class ServiceAgreementApprovalService
     // ── Who may approve ───────────────────────────────────────────────────────────
 
     /// <summary>The caller's role is one of the organisation's approver roles (Admin and Coordinator until it says otherwise), or the caller is a SuperAdmin acting for the organisation. Renewing asks the same (agreement PR 2).</summary>
-    internal static async Task<bool> MayApproveAsync(PlanPricingService pricing, Guid tenantId, ApprovalCaller caller, CancellationToken ct)
+    public static async Task<bool> MayApproveAsync(PlanPricingService pricing, Guid tenantId, ApprovalCaller caller, CancellationToken ct)
     {
         if (caller.IsSuperAdmin) return true;
         var allowed = PlanPricingPolicy.From(await pricing.FindSettingsAsync(tenantId, ct)).ApproverRoles;

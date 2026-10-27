@@ -65,7 +65,7 @@ export function NoticesRegion({ notices, onDismiss, focusAfterDismiss, className
       {notices.map(notice => (
         <div key={notice.id} data-tone={notice.tone}>
           <Callout
-            tone={notice.tone === 'success' ? 'success' : 'warning'}
+            tone={notice.tone === 'danger' ? 'warning' : notice.tone}
             title={notice.title}
             announce={false}
             actions={

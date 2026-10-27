@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 
-export type NoticeTone = 'success' | 'danger'
+export type NoticeTone = 'success' | 'danger' | 'info'
 
 /** One thing said about one person: "We've sent ann@example.com a link...", "No link was sent to bob@example.com...". */
 export interface Notice {

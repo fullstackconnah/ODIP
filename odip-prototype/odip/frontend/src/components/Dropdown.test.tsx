@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
+import type { ReactNode } from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Dropdown } from './Dropdown'
@@ -236,5 +237,44 @@ describe('Dropdown — which way the panel opens', () => {
       if (width) Object.defineProperty(HTMLElement.prototype, 'offsetWidth', width)
       Object.defineProperty(window, 'innerWidth', { configurable: true, value: restore.w })
     }
+  })
+})
+
+// Agreements FIX3 (M8): a disabled menu item with a reason dims only its label, so the reason stays readable (4.5:1).
+describe('Dropdown — disabled item with a description', () => {
+  const open = (items: { value: string; label: string; description?: string; disabled?: boolean; icon?: ReactNode }[], onSelect = () => {}) => {
+    render(<Dropdown variant="menu" label="Actions" items={items} onSelect={onSelect} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Actions' }))
+  }
+
+  it('dims the label and icon but not the reason', async () => {
+    open([{ value: 'a', label: 'Approve', description: 'No draft waiting.', disabled: true, icon: <svg data-testid="ic" /> }])
+    const option = await screen.findByRole('option')
+    expect(option).not.toHaveClass('opacity-40')
+    expect(screen.getByText('Approve')).toHaveClass('opacity-40')
+    expect(screen.getByTestId('ic').parentElement).toHaveClass('opacity-40')
+    expect(screen.getByText('No draft waiting.')).not.toHaveClass('opacity-40')
+  })
+
+  it('keeps the whole-item dimming when there is no description, and a click still does nothing', async () => {
+    const onSelect = vi.fn()
+    open([{ value: 'a', label: 'Approve', disabled: true }], onSelect)
+    const option = await screen.findByRole('option')
+    expect(option).toHaveClass('opacity-40')
+    fireEvent.click(option)
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('does not select a disabled item that has a description', async () => {
+    const onSelect = vi.fn()
+    open([{ value: 'a', label: 'Approve', description: 'No draft waiting.', disabled: true }], onSelect)
+    fireEvent.click(await screen.findByRole('option'))
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('leaves an enabled item undimmed', async () => {
+    open([{ value: 'a', label: 'Approve', description: 'Ready.' }])
+    expect(screen.getByText('Approve')).not.toHaveClass('opacity-40')
+    expect(await screen.findByRole('option')).not.toHaveClass('opacity-40')
   })
 })

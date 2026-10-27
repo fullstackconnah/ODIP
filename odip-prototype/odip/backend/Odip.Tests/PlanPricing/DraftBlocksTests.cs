@@ -626,6 +626,7 @@ public class DraftBlocksTests
             Assert.Null(older.Pricing);
             Assert.True(older.Total > 0m);                                     // but it still says what it came to
         }
+        Assert.All(listed, d => Assert.False(string.IsNullOrEmpty(d.PriceList)));   // the derived price list rides on the newest and on every summary
         Assert.Equal((2, 2), (listed[1].BlockCount, listed[1].LineCount));      // version 2 had both blocks
         Assert.Equal((1, 1), (listed[2].BlockCount, listed[2].LineCount));      // version 1 had one
         Assert.Equal(588.64m, listed[2].Total);

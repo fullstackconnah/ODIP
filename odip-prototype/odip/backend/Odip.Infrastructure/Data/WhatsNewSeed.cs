@@ -118,6 +118,9 @@ public static class WhatsNewSeed
         new Item("2026-10-rp-authorised-checkbox", "Mark a restrictive practice as authorised",
             "When you add or edit a restrictive practice, tick \"This restrictive practice is authorised\" to fill in who authorised it and when. Leave it unticked if it isn't authorised.",
             Staff, false),
+        new Item("2026-10-agreements-page", "Agreements page",
+            "A new Agreements page in the menu lists every participant's service agreement with its dates, total and price list. Where your organisation lets your role approve agreements, you can tick the ones with a draft waiting and approve them together. The Agreements ending view from Participants now lives here too.",
+            Staff, false),
     };
 
     /// <summary>Inserts the keys the table lacks, one save each, so a key another instance inserted first costs only that row.</summary>

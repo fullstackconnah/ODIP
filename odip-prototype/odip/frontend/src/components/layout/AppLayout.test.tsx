@@ -345,7 +345,7 @@ describe('AppLayout — participant lifecycle navigation', () => {
       // The New inquiry button now lives inside the Participants hub PageHeader, not the
       // sidebar — Draft intake is gone from the nav. Lifecycle roles still see the hub
       // entry, Medications and Caregiver forms.
-      'groupParticipants', 'pillMedications', 'checklist_rtlCaregiver forms',
+      'groupParticipants', 'verifiedAgreements', 'pillMedications', 'checklist_rtlCaregiver forms',
     ])
     // Draft intake must NOT be present anywhere in the nav (sidebar or mobile drawer).
     expect(screen.queryByRole('link', { name: /Draft intake$/ })).not.toBeInTheDocument()
@@ -721,7 +721,7 @@ describe('AppLayout — no New Trip shortcut in the sidebar, the drawer or the b
     expect(hrefs(mainNav())).toEqual([
       '/', '/portal',
       '/trips', '/schedule', '/bookings', '/accommodation', '/vehicles',
-      '/participants', '/medications', '/caregiver-submissions',
+      '/participants', '/agreements', '/medications', '/caregiver-submissions',
       '/rostering', '/rostering/patterns', '/rostering/compatibility', '/rostering/leave', '/rostering/completions', '/staff', '/qualifications',
       '/tasks', '/budgets', '/invoices',
       '/incidents', '/settings',
@@ -779,7 +779,7 @@ describe('AppLayout — the menu each role sees is generated from navConfig', ()
     'Dashboard',
     'My shifts',
     'Trips: Trips | Schedule | Bookings | Accommodation | Vehicles',
-    'Participants: Participants | Medications | Caregiver forms',
+    'Participants: Participants | Agreements | Medications | Caregiver forms',
     'Staff & roster: Roster board | Shift patterns | Compatibility | Leave | Completions | Staff | Qualifications',
     'Tasks',
     'Budgets',
