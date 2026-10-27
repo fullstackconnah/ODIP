@@ -408,6 +408,20 @@ public class ShiftCompletionReviewDtoTests
     }
 
     [Fact]
+    public async Task TheReview_ShowsASentFromOfflineMark_AndWhenTheServerReceivedIt()
+    {
+        var a = Arrange();
+        var before = Review(await a.Controller.GetShiftCompletionReview(a.Shift.Id, default)).Completion;
+        Assert.False(before.SentFromOffline);
+
+        a.Completion.SentFromOffline = true;
+        a.Db.SaveChanges();
+
+        var c = Review(await a.Controller.GetShiftCompletionReview(a.Shift.Id, default)).Completion;
+        Assert.True(c.SentFromOffline);
+    }
+
+    [Fact]
     public async Task AnUnmovedCompletion_IsNotFlagged_InTheReviewOrTheQueue()
     {
         var a = Arrange();

@@ -81,6 +81,9 @@ public class ShiftCompletion : ITenantEntity
     /// <summary>UTC. The Finish instant, kept when the worker moved <see cref="ActualEnd"/> earlier; null when not moved.</summary>
     public DateTime? OriginalActualEnd { get; set; }
 
+    /// <summary>The worker sent a time the phone recorded offline (Start, Finish or a break); the review page marks it. False for every row before the installable app.</summary>
+    public bool SentFromOffline { get; set; }
+
     /// <summary>Why the worker moved either time (max 500); null when nothing was moved.</summary>
     public string? TimeAdjustmentReason { get; set; }
 
