@@ -29,6 +29,12 @@ type ColumnBase<T> = {
    */
   minWidth?: number | string
   /**
+   * Width of the column (md+): a px number or any CSS length (`'22%'`). Unlike `className`, which only
+   * reaches body cells, it is applied to the header and every cell, so a table with no rows lays its
+   * columns out the same as a filled one beside it.
+   */
+  width?: number | string
+  /**
    * Cap for a plain-string cell (md+): a px number or any CSS length. Text longer than this is cut
    * with an ellipsis and its full text goes in the cell's `title`. Defaults to 24rem, so a free-text
    * column can never widen the table without bound. It applies only to cells DataTable renders as
@@ -422,7 +428,8 @@ export function DataTable<T>({
   const cellClass = `${cellPaddingX} align-middle`
   // Per-column classes shared by the header and body cells: which viewports keep the column, and
   // its `minWidth` (via a custom property so it, too, only applies from md up).
-  const columnClass = (col: Column<T>) => (col.minWidth != null ? 'md:min-w-[var(--col-min)]' : '')
+  const columnClass = (col: Column<T>) =>
+    `${col.minWidth != null ? 'md:min-w-[var(--col-min)]' : ''} ${col.width != null ? 'md:w-[var(--col-w)]' : ''}`
   const pins = pinsOf(visibleColumns)
   // The classes that hold a column to its edge, and fill it opaque once content is scrolled under it.
   const pinClass = (colIndex: number, head: boolean) => {
@@ -433,7 +440,12 @@ export function DataTable<T>({
     return `${head ? PIN_BASE_HEAD[pin] : PIN_BASE[pin]} ${fill}`
   }
   const columnStyle = (col: Column<T>): CSSProperties | undefined =>
-    col.minWidth != null ? ({ '--col-min': cssLength(col.minWidth) } as CSSProperties) : undefined
+    col.minWidth != null || col.width != null
+      ? ({
+          ...(col.minWidth != null && { '--col-min': cssLength(col.minWidth) }),
+          ...(col.width != null && { '--col-w': cssLength(col.width) }),
+        } as CSSProperties)
+      : undefined
   const bodyRowHeight = compact ? 'md:h-[calc(var(--row-h)-4px)]' : 'md:h-[var(--row-h)]'
   const headerRowHeight = 'h-[var(--table-head-h)]'
   const dividerClass = prefs.tableVerticalDividers ? 'divide-x divide-[var(--color-border)]' : ''

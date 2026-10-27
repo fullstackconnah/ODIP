@@ -251,3 +251,25 @@ describe('ParticipantAdlAssessmentsSection — shared column layout', () => {
     expect(widths(personal).some((c) => c.includes('md:w-['))).toBe(true)
   })
 })
+
+describe('ParticipantAdlAssessmentsSection — long notes and header widths', () => {
+  it('shows a 400-character note in full, not cut off', () => {
+    const note = 'x'.repeat(400)
+    const data = unassessedRows()
+    replaceAssessment(data, { adlType: 'Dressing', level: 'Assistance', notes: note })
+    mockUseParticipantAdlAssessments.mockReturnValue({ data, isLoading: false })
+    render(<ParticipantAdlAssessmentsSection participantId="participant-1" />)
+
+    const cell = screen.getByText(note)
+    expect(cell.className).not.toMatch(/truncate/)
+    expect(cell).not.toHaveAttribute('title')
+  })
+
+  it('puts the Level width on the header, so a table with no rows keeps its columns', () => {
+    render(<ParticipantAdlAssessmentsSection participantId="participant-1" />)
+
+    for (const th of screen.getAllByRole('columnheader', { name: 'Level' })) {
+      expect(th.getAttribute('style')).toContain('--col-w: 14%')
+    }
+  })
+})
