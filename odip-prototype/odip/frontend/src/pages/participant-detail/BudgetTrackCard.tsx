@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import { useBudgetSeries } from '@/api/hooks'
-import { BudgetTrackChart, BUDGET_TRACK_TITLE, useMeasuredWidth } from '@/components/BudgetTrackChart'
+import { BudgetTrackChart, BudgetTrackLegend, BUDGET_TRACK_TITLE, FULL_LEGEND, useMeasuredWidth } from '@/components/BudgetTrackChart'
 import { Button } from '@/components/Button'
 import { Card } from '@/components/Card'
 import { RetryCallout } from '@/components/PageState'
@@ -9,9 +9,6 @@ import { retryingAfterError } from '@/lib/queryPhase'
 
 // The budget graph's place on the Funding tab: its own request, so the ledger's figures never wait on it, and its own loading and failure, which say the figures below are not affected.
 // Rendered only for a ledger that has a running plan with pools (FundingLedger's main branch), so it never asks for a participant with no plan or one funded another way.
-
-/** The legend row the skeleton keeps room for: one line of 13px text. */
-const LEGEND_ROW = 20
 
 export default function BudgetTrackCard({ participantId }: { participantId: string }) {
   const query = useBudgetSeries(participantId)
@@ -24,7 +21,11 @@ export default function BudgetTrackCard({ participantId }: { participantId: stri
         <Card title={BUDGET_TRACK_TITLE}>
           {/* The loaded legend and plot take this exact height, so the pool cards below don't move when the chart arrives. */}
           <div ref={boxRef}>
-            <div data-chart-skeleton className="animate-pulse rounded-[var(--radius-md)] bg-[var(--color-surface-container)]" style={{ height: LEGEND_ROW + 8 + chartHeight(width ?? 0) }} />
+            <div data-chart-skeleton aria-hidden="true" className="animate-pulse rounded-[var(--radius-md)] bg-[var(--color-surface-container)]">
+              {/* The full legend, laid out unseen, so the skeleton wraps to as many lines as the loaded legend at this width. */}
+              <BudgetTrackLegend lines={FULL_LEGEND} className="invisible" />
+              <div style={{ height: 8 + chartHeight(width ?? 0) }} />
+            </div>
           </div>
           <p role="status" className="sr-only">Loading the budget chart…</p>
         </Card>

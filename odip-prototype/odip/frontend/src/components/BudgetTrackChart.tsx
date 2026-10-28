@@ -48,6 +48,22 @@ function LineKey({ line, width = 24 }: { line: Line; width?: number }) {
   )
 }
 
+/** Every line a chart can draw: the loading card lays this legend out unseen, so its height wraps exactly as the loaded one does at any width. */
+export const FULL_LEGEND: Line[] = ['budget', 'used', 'booked', 'expected']
+
+export function BudgetTrackLegend({ lines, className = 'mt-3' }: { lines: Line[]; className?: string }) {
+  return (
+    <ul className={`flex flex-wrap gap-x-4 gap-y-1 ${className}`}>
+      {lines.map(line => (
+        <li key={line} data-legend={line} className="flex items-center gap-1.5 text-[13px] text-[var(--color-muted-foreground)]">
+          <LineKey line={line} />
+          {LEGEND[line]}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 function Cell({ value }: { value: number | undefined }) {
   return value === undefined
     ? <td><span aria-hidden="true">—</span><span className="sr-only">none</span></td>
@@ -93,9 +109,16 @@ export function BudgetTrackChart({ series, width }: { series: BudgetSeries; widt
     return () => { document.removeEventListener('pointerdown', onDown); observer?.disconnect() }
   }, [pinned])
 
+  // Re-measured on resize too: the readout's first showing can load a font weight and grow after this runs.
   useLayoutEffect(() => {
-    const w = readoutRef.current?.offsetWidth
-    if (w) setReadoutW(w)
+    const el = readoutRef.current
+    if (!el) return
+    const measure = () => { if (el.offsetWidth) setReadoutW(el.offsetWidth) }
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
   }, [shown, key])
 
   const H = chartHeight(W)
@@ -178,14 +201,7 @@ export function BudgetTrackChart({ series, width }: { series: BudgetSeries; widt
             : <SelectField label="Show" options={options.map(o => ({ value: o.key, label: o.label }))} value={scope.scopeKey} onChange={e => choose(e.target.value)} className={W < NARROW ? 'w-full' : 'min-w-48'} />)}
         </div>
         <p id={sentenceId} className="mt-2 max-w-prose text-sm text-[var(--color-foreground)]">{budgetTrackSentence(series, scope)}</p>
-        <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
-          {legend.map(line => (
-            <li key={line} data-legend={line} className="flex items-center gap-1.5 text-[13px] text-[var(--color-muted-foreground)]">
-              <LineKey line={line} />
-              {LEGEND[line]}
-            </li>
-          ))}
-        </ul>
+        <BudgetTrackLegend lines={legend} />
         <div
           ref={plotRef}
           data-plot
@@ -239,7 +255,7 @@ export function BudgetTrackChart({ series, width }: { series: BudgetSeries; widt
                 return (
                   <g>
                     <circle className="bt-dot" data-dot="used" cx={r1(lx)} cy={r1(ly)} r={4} />
-                    <text x={flip ? lx + 8 : lx - 8} y={Math.max(ly - 8, M.top + 12)} textAnchor={flip ? 'start' : 'end'} className="fill-[var(--color-foreground)] text-xs tabular-nums">Used {money(labelPoint.used!)}</text>
+                    <text x={flip ? lx + 8 : lx - 8} y={Math.max(ly - 8, M.top + 12)} textAnchor={flip ? 'start' : 'end'} className="fill-[var(--color-foreground)] stroke-[var(--color-card)] text-xs tabular-nums [paint-order:stroke] [stroke-linejoin:round] [stroke-width:3px]">Used {money(labelPoint.used!)}</text>
                   </g>
                 )
               })()}
@@ -255,7 +271,7 @@ export function BudgetTrackChart({ series, width }: { series: BudgetSeries; widt
             <div
               ref={readoutRef}
               data-readout
-              className="bt-readout pointer-events-none absolute z-10 whitespace-nowrap rounded-[var(--radius-md)] bg-[var(--color-popover)] px-3 py-2 text-[var(--color-popover-foreground)] shadow-[var(--shadow-float)]"
+              className="bt-readout pointer-events-none absolute z-10 w-max whitespace-nowrap rounded-[var(--radius-md)] bg-[var(--color-popover)] px-3 py-2 text-[var(--color-popover-foreground)] shadow-[var(--shadow-float)]"
               style={{ left: readoutLeft, top: W < NARROW ? 0 : M.top }}
             >
               <p data-readout-header className="text-xs text-[var(--color-muted-foreground)]">{readoutHeader(at, series)}</p>
