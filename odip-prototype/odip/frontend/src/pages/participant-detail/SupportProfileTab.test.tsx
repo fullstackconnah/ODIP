@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import {
-  SupportNeedsSection, MobilityFunctionalSection, SupportNotesSection, EquipmentSection,
+  SupportNeedsSection, OvernightSupportSection, MobilityFunctionalSection, SupportNotesSection, EquipmentSection,
 } from './SupportProfileTab'
 import { SeeSectionLink } from './SeeSectionLink'
 import { AMBULANT_STATUSES } from '@/api/types/enums'
@@ -216,5 +216,36 @@ describe('Support cards refuse a stale save (S1-S3)', () => {
     const invalidate = vi.spyOn(qc, 'invalidateQueries')
     await editNotes(userEvent.setup(), makeParticipant({ groupRevisions: revs }))
     expect(invalidate).not.toHaveBeenCalled()
+  })
+})
+
+describe('Overnight support dropdown (I9: Sleepover Support is hidden for new entries)', () => {
+  async function startEdit(p: ParticipantDetailDto) {
+    const user = userEvent.setup()
+    render(wrap(<OvernightSupportSection {...common(p)} />))
+    await user.click(screen.getByRole('button', { name: /edit/i }))
+    return user
+  }
+  const trigger = () => document.querySelector('[aria-haspopup="listbox"]') as HTMLElement
+
+  it('offers Overnight Sleepover but not Sleepover Support when the record does not hold it', async () => {
+    const user = await startEdit(makeParticipant({ overnightSupport: 'None' }))
+    await user.click(trigger())
+    expect(screen.getByRole('option', { name: 'Overnight Sleepover' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Sleepover Support' })).toBeNull()
+  })
+
+  it('keeps Sleepover Support for a record that holds it, and saves it unchanged', async () => {
+    mockPatchMutateAsync.mockResolvedValue({ success: true })
+    const user = await startEdit(makeParticipant({ overnightSupport: 'SleepoverSupport' }))
+    expect(trigger()).toHaveTextContent('Sleepover Support')
+    await user.click(trigger())
+    expect(screen.getByRole('option', { name: 'Sleepover Support' })).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(mockPatchMutateAsync).toHaveBeenCalledWith({
+      id: 'participant-1',
+      data: { supportNeedsMobility: expect.objectContaining({ overnightSupport: 'SleepoverSupport' }), expectedRevisions: {} },
+    })
   })
 })

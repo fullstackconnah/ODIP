@@ -465,6 +465,19 @@ describe('IntakeWizardPage', () => {
     expect(document.getElementById('overnightRatio')).not.toBeNull()
   })
 
+  it('offers Overnight Sleepover but not Sleepover Support for a new entry', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await fillNameAndAdvance(user)
+    await user.click(screen.getByRole('button', { name: /^next$/i }))
+    await user.click(screen.getByRole('button', { name: /^next$/i }))
+    await user.click(screen.getByRole('button', { name: /^next$/i }))
+    await expectStep(/support needs/i)
+    await user.click(document.getElementById('overnightSupport') as HTMLElement)
+    expect(screen.getByRole('option', { name: 'Overnight Sleepover' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Sleepover Support' })).toBeNull()
+  })
+
   it('routes an inquiry-converted resume to the wizard rail rather than the legacy complete-intake form', () => {
     mockParticipant.mockReturnValue({ data: draft(), isLoading: false })
     renderPage('/participants/draft-1/intake')
