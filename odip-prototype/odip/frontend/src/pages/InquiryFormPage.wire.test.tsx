@@ -388,7 +388,7 @@ describe('InquiryFormPage (wire) — the intake visit', () => {
     await waitFor(() => expect(whoField.contains(document.activeElement)).toBe(true))   // SHAPE 4: focus on Who's going
     expect(screen.getByLabelText(/^Where/)).toHaveValue('Library')
     expect(screen.getByRole('button', { name: 'Save enquiry' })).toBeInTheDocument()   // edit mode, no remount
-    expect(screen.getByRole('button', { name: 'Back to enquiries' })).toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: 'Back to enquiries' })).toHaveLength(2)   // the header arrow and the footer button
     expect(screen.queryByText('Enquiries tab destination')).not.toBeInTheDocument()
 
     mockApiPut.mockImplementation(async (url: string) => (url.endsWith('/intake-booking')

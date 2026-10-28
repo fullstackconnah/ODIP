@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Callout } from '@/components/Callout'
 import { Card } from '@/components/Card'
 import { Button } from '@/components/Button'
-import { BackButton } from '@/components/BackButton'
+import { BackButton, BackActionButton } from '@/components/BackButton'
 import { FormField } from '@/components/FormField'
 import { TextField } from '@/components/TextField'
 import { TextAreaField } from '@/components/TextAreaField'
@@ -130,7 +130,7 @@ export default function InquiryFormPage() {
 
   const header = (
     <div className="flex items-start gap-4">
-      <BackButton to="/participants?tab=enquiries" label="enquiries" variant="icon" history={false} />
+      <BackButton to="/participants?tab=enquiries" label="enquiries" variant="icon" />
       <div className="flex-1">
         <PageHeader title={existing?.closedAt && !reopenedHere ? 'Closed enquiry' : editId ? 'Edit enquiry' : 'New enquiry'} />
       </div>
@@ -153,7 +153,6 @@ export default function InquiryFormPage() {
         initial={loadId ? existing! : null}
         focus={focus}
         onCreated={id => { setCreatedHere(id); setSearchParams({ id }, { replace: true }) }}
-        onCancel={() => navigate('/participants?tab=enquiries')}
         onReopened={() => setReopenedHere(true)}
         onDone={enquiryNotice => navigate('/participants?tab=enquiries', { state: { enquiryNotice } })}
       />
@@ -169,12 +168,11 @@ export default function InquiryFormPage() {
 }
 
 
-function InquiryFormBody({ initial, focus, onCreated, onCancel, onReopened, onDone }: {
+function InquiryFormBody({ initial, focus, onCreated, onReopened, onDone }: {
   initial: ParticipantInquiryDetailDto | null
   /** ?focus=: 'address' opens the details and focuses Street; 'contact' focuses the main contact's First name. */
   focus: string | null
   onCreated: (id: string) => void
-  onCancel: () => void
   onReopened: () => void
   onDone: (notice: EnquiryNotice) => void
 }) {
@@ -379,7 +377,6 @@ function InquiryFormBody({ initial, focus, onCreated, onCancel, onReopened, onDo
     return (
       <ClosedEnquiry
         row={initial}
-        onBack={onCancel}
         onReopened={answer => {
           setRow(answer); setReopened(true); onReopened()
           focusNext.current = 'reopened'
@@ -481,7 +478,7 @@ function InquiryFormBody({ initial, focus, onCreated, onCancel, onReopened, onDo
           <Button type="submit" aria-disabled={busy ? true : undefined} className={`${DISABLED_LOOK} w-full sm:w-auto`}>
             {busy === 'saving' ? 'Saving…' : busy === 'booking' ? 'Booking the visit…' : busy === 'resending' ? 'Sending the invite…' : row ? 'Save enquiry' : 'Capture enquiry'}
           </Button>
-          <Button variant="secondary" className="w-full sm:w-auto" onClick={onCancel}>{!initial && row ? 'Back to enquiries' : 'Cancel'}</Button>
+          <BackActionButton to="/participants?tab=enquiries" className="w-full sm:w-auto">{!initial && row ? 'Back to enquiries' : 'Cancel'}</BackActionButton>
           {/* Only an enquiry that hasn't started intake can close; never a new one (SHAPE section 11). */}
           {row && !row.participantId && <Button variant="ghost-danger" className="w-full sm:ml-auto sm:w-auto" onClick={() => setClosing(true)}>Close enquiry</Button>}
         </div>

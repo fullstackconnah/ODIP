@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { ParticipantInquiryDetailDto, ParticipantInquiryDto } from '@/api/types/inquiries'
+import { BackActionButton } from '@/components/BackButton'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { Card } from '@/components/Card'
@@ -13,10 +14,9 @@ import { ReopenInquiryDialog } from './ReopenInquiryDialog'
  * A closed enquiry in the form (SHAPE.md section 11): read-only. Why and when it closed, with Reopen; the details as facts, not disabled inputs;
  * where its other contacts went; one way back. The main contact lives in the enquiry's own columns, so it survives a close (2026-10-16 redesign). No Intake visit card: an upcoming visit was cancelled with the close.
  */
-export function ClosedEnquiry({ row, onReopened, onBack }: {
+export function ClosedEnquiry({ row, onReopened }: {
   row: ParticipantInquiryDetailDto
   onReopened: (answer: ParticipantInquiryDto) => void
-  onBack: () => void
 }) {
   const [reopening, setReopening] = useState(false)
   const when = row.closedAt ? visitDay(row.closedAt, row.timeZoneId || FALLBACK_ZONE) : ''
@@ -45,7 +45,7 @@ export function ClosedEnquiry({ row, onReopened, onBack }: {
         <p className="text-sm">Other contacts were deleted when this enquiry closed.</p>
       </Card>
       <div className="flex gap-2">
-        <Button variant="secondary" onClick={onBack}>Back to enquiries</Button>
+        <BackActionButton to="/participants?tab=enquiries">Back to enquiries</BackActionButton>
       </div>
       {reopening && <ReopenInquiryDialog row={row} onCancel={() => setReopening(false)} onDone={answer => { setReopening(false); onReopened(answer) }} />}
     </div>
