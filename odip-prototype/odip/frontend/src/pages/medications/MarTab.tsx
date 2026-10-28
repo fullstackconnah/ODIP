@@ -149,11 +149,11 @@ export default function MarTab() {
       {/* Date navigation + participant filter */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2">
-          <Button variant="secondary" size="sm" iconOnly onClick={() => setDate(d => addDays(d, -1))} aria-label="Previous day">
+          <Button variant="secondary" size="md" className="w-[var(--control-h)] px-0!" onClick={() => setDate(d => addDays(d, -1))} aria-label="Previous day">
             <ChevronLeft className="w-4 h-4" />
           </Button>
-          <Button variant="secondary" size="sm" onClick={() => setDate(todayIso())}>Today</Button>
-          <Button variant="secondary" size="sm" iconOnly onClick={() => setDate(d => addDays(d, 1))} aria-label="Next day">
+          <Button variant="secondary" size="md" className="whitespace-nowrap" onClick={() => setDate(todayIso())}>Today</Button>
+          <Button variant="secondary" size="md" className="w-[var(--control-h)] px-0!" onClick={() => setDate(d => addDays(d, 1))} aria-label="Next day">
             <ChevronRight className="w-4 h-4" />
           </Button>
         </div>
@@ -161,7 +161,7 @@ export default function MarTab() {
           type="date"
           value={date}
           onChange={e => setDate(e.target.value)}
-          className="px-3 py-2 rounded-lg bg-[var(--color-input)] border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
+          className="h-[var(--control-h)] px-3 rounded-[var(--radius-sm)] bg-[var(--color-input)] border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
           aria-label="Select date"
         />
         <span className="text-sm text-[var(--color-muted-foreground)]">{formatDateAu(date)}</span>

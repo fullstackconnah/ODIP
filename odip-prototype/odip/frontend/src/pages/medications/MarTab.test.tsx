@@ -84,6 +84,24 @@ function renderTab() {
   )
 }
 
+describe('MarTab — day navigation', () => {
+  it('sizes the day buttons and the date field off the same control height', () => {
+    mockUseMar.mockReturnValue({ data: { entries: [], prnMedications: [] }, isLoading: false })
+    mockUseParticipants.mockReturnValue({ data: [] })
+    mockUseRecordPrnOutcome.mockReturnValue({ mutateAsync: vi.fn() })
+
+    renderTab()
+
+    const controls = [
+      screen.getByRole('button', { name: 'Previous day' }),
+      screen.getByRole('button', { name: 'Today' }),
+      screen.getByRole('button', { name: 'Next day' }),
+      screen.getByLabelText('Select date'),
+    ]
+    for (const c of controls) expect(c.className).toContain('h-[var(--control-h)]')
+  })
+})
+
 describe('MarTab — cross-domain links', () => {
   it('links a scheduled entry\'s participant name to their Medications tab', () => {
     mockUseMar.mockReturnValue({ data: { entries: [scheduledEntry()], prnMedications: [] }, isLoading: false })
