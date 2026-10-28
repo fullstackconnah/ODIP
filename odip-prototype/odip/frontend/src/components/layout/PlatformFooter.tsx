@@ -32,6 +32,15 @@ const LIST: Record<Variant, string> = {
  */
 const LINK = `${TAP_FLOOR} min-w-[var(--tap-min)] pointer-coarse:justify-center rounded-sm font-medium underline underline-offset-2 hover:text-[var(--color-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]`
 
+/** The in-app pages open in a new tab so a half-filled form is not lost (owner, 2026-10-23). */
+function NewTabLink({ to, children }: { to: string; children: string }) {
+  return (
+    <Link to={to} target="_blank" rel="noopener noreferrer" className={LINK}>
+      {children}<span className="sr-only"> (opens in a new tab)</span>
+    </Link>
+  )
+}
+
 /**
  * The platform footer: who runs Odip, which build this is, and where help and the rules are. Scroll-end content, never fixed or sticky.
  * It is a <footer> beside <main>, so it is the page's one contentinfo landmark. It holds no <nav>, because the caregiver tests find the
@@ -76,11 +85,11 @@ export default function PlatformFooter({ variant, support = true, info = PLATFOR
             )}
             {facts.legal && (
               <>
-                <li><Link to="/legal/privacy" className={LINK}>Privacy</Link></li>
-                <li><Link to="/legal/terms" className={LINK}>Terms</Link></li>
+                <li><NewTabLink to="/legal/privacy">Privacy</NewTabLink></li>
+                <li><NewTabLink to="/legal/terms">Terms</NewTabLink></li>
               </>
             )}
-            <li><Link to="/accessibility" className={LINK}>Accessibility</Link></li>
+            <li><NewTabLink to="/accessibility">Accessibility</NewTabLink></li>
             {facts.statusUrl && (
               <li>
                 <a href={facts.statusUrl} target="_blank" rel="noopener noreferrer" className={LINK}>
