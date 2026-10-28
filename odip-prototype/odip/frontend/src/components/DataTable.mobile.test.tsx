@@ -112,3 +112,45 @@ describe('DataTable pager with an empty list', () => {
     expect(screen.queryByText(/Showing/)).not.toBeInTheDocument()
   })
 })
+
+// The actions cell is the card's last line whatever the row holds: the same placement classes for a short and a long row.
+describe('DataTable phone card: the actions cell', () => {
+  type ARow = { id: string; title: string }
+  const aRows: ARow[] = [{ id: '1', title: 'Hi' }, { id: '2', title: 'A very long title that wraps over several lines on a phone' }]
+  const columns: Column<ARow>[] = [
+    { key: 'title', header: 'Task', mobile: 'primary' },
+    { key: 'actions', header: '', render: row => (row.id === '1' ? <RowActions><Button size="sm">Edit {row.id}</Button></RowActions> : <Button size="sm">Edit {row.id}</Button>) },
+  ]
+
+  it('takes the whole card line, right-aligned, for a short row and a long one alike, without switching on the title layout', () => {
+    render(<DataTable data={aRows} columns={columns} keyField="id" />)
+
+    for (const name of ['Edit 1', 'Edit 2']) {
+      const cell = screen.getByRole('button', { name }).closest('td') as HTMLElement
+      expect(cell).toHaveClass('max-md:basis-full', 'max-md:text-right')
+      expect(cell).not.toHaveAttribute('data-card')
+    }
+  })
+
+  it('leaves no strip on a row with no actions: the empty cell is hidden below md', () => {
+    const { container } = render(<DataTable data={aRows} columns={[columns[0], { key: 'actions', header: '', render: () => null }]} keyField="id" />)
+
+    const cell = container.querySelector('tbody td:last-child') as HTMLElement
+    expect(cell).toBeEmptyDOMElement()
+    expect(cell).toHaveClass('max-md:empty:hidden')
+  })
+
+  it('leaves no strip on a row whose actions are all false: the cluster renders nothing, so the cell stays empty and hidden', () => {
+    const { container } = render(<DataTable data={aRows} columns={[columns[0], { key: 'actions', header: '', render: () => <RowActions>{false}</RowActions> }]} keyField="id" />)
+
+    const cell = container.querySelector('tbody td:last-child') as HTMLElement
+    expect(cell).toBeEmptyDOMElement()
+    expect(cell).toHaveClass('max-md:empty:hidden')
+  })
+
+  it('does not touch other columns', () => {
+    render(<DataTable data={aRows} columns={columns} keyField="id" />)
+
+    expect(cellOf('Hi')).not.toHaveClass('max-md:basis-full')
+  })
+})
