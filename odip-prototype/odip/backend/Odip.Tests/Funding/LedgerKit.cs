@@ -3,6 +3,7 @@ using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Query.Internal;
+using Microsoft.Extensions.Caching.Memory;
 using Moq;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
@@ -37,6 +38,9 @@ internal sealed class LedgerKit : IDisposable
     public OdipDbContext Db { get; }
     public FakeClock Clock { get; }
     public BudgetLedgerService Ledger { get; }
+
+    /// <summary>A budget graph service over this context, with a cache of its own.</summary>
+    public BudgetSeriesService NewSeries() => new(Db, Ledger, new PlanPricingService(Db), new MemoryCache(new MemoryCacheOptions()));
     public Guid TenantId { get; }
     /// <summary>The tenant the context is scoped to; null for a kit wrapped round a context the caller made (the PostgreSQL tests).</summary>
     public ICurrentTenant? Tenant { get; }
