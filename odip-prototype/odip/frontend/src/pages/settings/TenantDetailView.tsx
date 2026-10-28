@@ -7,7 +7,9 @@ import { DataTable, RowActions } from '@/components/DataTable'
 import type { TenantSummaryDto, TenantUserDto, ProviderSettingsDto } from '@/api/types'
 import { Button } from '@/components/Button'
 import { StatusBadge } from '@/components/StatusBadge'
+import { PageState, RetryCallout } from '@/components/PageState'
 import { formatInstantDateAu } from '@/lib/format'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 // ---------------------------------------------------------------------------
 // Props
@@ -50,10 +52,11 @@ export default function TenantDetailView({
   openingUserId = null,
   usersNotice,
 }: TenantDetailViewProps) {
-  const { data: usersResponse, isLoading: usersLoading } = useAdminTenantUsers(tenant.id)
+  const usersQuery = useAdminTenantUsers(tenant.id)
+  const { data: usersResponse, isLoading: usersLoading } = usersQuery
   const users: TenantUserDto[] = useMemo(() => usersResponse?.data ?? [], [usersResponse?.data])
-  const { data: providerSettings, isLoading: providerLoading } =
-    useAdminTenantProviderSettings(tenant.id)
+  const providerQuery = useAdminTenantProviderSettings(tenant.id)
+  const { data: providerSettings, isLoading: providerLoading } = providerQuery
 
   const [providerOpen, setProviderOpen] = useState(false)
 
@@ -127,73 +130,67 @@ export default function TenantDetailView({
           <h4 className="text-sm font-semibold text-[var(--color-foreground)]">Users</h4>
         </div>
 
-        {usersLoading ? (
-          <div className="flex items-center justify-center py-12 text-sm text-[var(--color-muted-foreground)]">
-            Loading users...
-          </div>
-        ) : users.length === 0 ? (
-          <div className="text-center py-12 text-sm text-[var(--color-muted-foreground)]">
-            No users in this tenant yet.
-          </div>
-        ) : (
-          <DataTable
-            data={users}
-            keyField="id"
-            className="w-full"
-            columns={[
-              { key: 'fullName', header: 'Name', className: 'font-medium' },
-              {
-                key: 'role',
-                header: 'Role',
-                render: (user: TenantUserDto) => (
-                  <span
-                    className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      ROLE_COLORS[user.role] ?? 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
-                    }`}
+        <DataTable
+          data={users}
+          keyField="id"
+          className="w-full"
+          loading={usersLoading}
+          error={usersQuery.isError || retryingAfterError(usersQuery)}
+          onRetry={() => usersQuery.refetch()}
+          emptyMessage="No users in this tenant yet."
+          columns={[
+            { key: 'fullName', header: 'Name', className: 'font-medium' },
+            {
+              key: 'role',
+              header: 'Role',
+              render: (user: TenantUserDto) => (
+                <span
+                  className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    ROLE_COLORS[user.role] ?? 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
+                  }`}
+                >
+                  {user.role}
+                </span>
+              ),
+            },
+            {
+              key: 'isActive',
+              header: 'Status',
+              render: (user: TenantUserDto) => (
+                <span
+                  className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    user.isActive
+                      ? 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]'
+                      : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
+                  }`}
+                >
+                  {user.isActive ? 'Active' : 'Inactive'}
+                </span>
+              ),
+            },
+            {
+              key: 'actions',
+              header: '',
+              align: 'right',
+              render: (user: TenantUserDto) => (
+                <RowActions>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onEditUser(user)}
+                    data-edit-user={user.id}
+                    aria-disabled={openingUserId !== null || undefined}
+                    aria-busy={openingUserId === user.id || undefined}
+                    className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
+                    aria-label={`Edit: ${user.fullName}`}
                   >
-                    {user.role}
-                  </span>
-                ),
-              },
-              {
-                key: 'isActive',
-                header: 'Status',
-                render: (user: TenantUserDto) => (
-                  <span
-                    className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      user.isActive
-                        ? 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]'
-                        : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
-                    }`}
-                  >
-                    {user.isActive ? 'Active' : 'Inactive'}
-                  </span>
-                ),
-              },
-              {
-                key: 'actions',
-                header: '',
-                align: 'right',
-                render: (user: TenantUserDto) => (
-                  <RowActions>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onEditUser(user)}
-                      data-edit-user={user.id}
-                      aria-disabled={openingUserId !== null || undefined}
-                      aria-busy={openingUserId === user.id || undefined}
-                      className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
-                      aria-label={`Edit: ${user.fullName}`}
-                    >
-                      Edit
-                    </Button>
-                  </RowActions>
-                ),
-              },
-            ]}
-          />
-        )}
+                    Edit
+                  </Button>
+                </RowActions>
+              ),
+            },
+          ]}
+        />
       </div>
 
       {/* ── Provider Settings (collapsible) ────────────────────── */}
@@ -219,10 +216,10 @@ export default function TenantDetailView({
 
         {providerOpen && (
           <div className="border-t border-[var(--color-border)] px-4 py-4">
-            {providerLoading ? (
-              <p className="text-sm text-[var(--color-muted-foreground)]">
-                Loading provider settings...
-              </p>
+            {providerQuery.isError || retryingAfterError(providerQuery) ? (
+              <RetryCallout onRetry={() => providerQuery.refetch()}>Couldn't load the provider settings. Check your connection and try again.</RetryCallout>
+            ) : providerLoading ? (
+              <PageState kind="loading" noun="provider settings" />
             ) : !providerSettings ? (
               <p className="text-sm text-[var(--color-muted-foreground)]">
                 No provider settings configured for this tenant.
