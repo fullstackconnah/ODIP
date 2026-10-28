@@ -58,8 +58,8 @@ export interface EditorState {
   planStart: string
   planEnd: string
   reassessmentDate: string
-  /** 1, 3, 6 or 12; null = the plan has no funding periods. */
-  periodLengthMonths: number | null
+  /** 1, 3, 6 or 12; null = the whole plan is one period; undefined = a new plan whose release period has not been chosen yet. */
+  periodLengthMonths: number | null | undefined
   evidence: BudgetEvidenceSource
   confirmedOn: string
   confirmedByName: string
@@ -106,7 +106,7 @@ export const newPoolKey = (): string => `pool-${++poolCounter}`
 
 export function emptyEditorState(): EditorState {
   return {
-    planStart: '', planEnd: '', reassessmentDate: '', periodLengthMonths: 3, evidence: 'PlanCopy',
+    planStart: '', planEnd: '', reassessmentDate: '', periodLengthMonths: undefined, evidence: 'PlanCopy',
     confirmedOn: '', confirmedByName: '', notes: '', pools: [],
   }
 }
@@ -154,6 +154,7 @@ export function editorStateFromPlan(plan: FundingPlanDto): EditorState {
  * only when `zeroConfirmed` says the person meant it; otherwise it is read as blank.
  */
 export function proposedPeriods(state: Pick<EditorState, 'planStart' | 'planEnd' | 'periodLengthMonths'>, totalText: string, setAsideText: string, zeroConfirmed = false): EditorPeriod[] {
+  if (state.periodLengthMonths === undefined) return []   // not chosen yet: nothing to split into
   const total = moneyOf(totalText)
   const setAside = setAsideOf({ setAsideText, setAsideZeroConfirmed: zeroConfirmed })
   const proposal = proposePeriods({
@@ -357,6 +358,7 @@ export interface PoolProblems {
 }
 
 export interface Problems {
+  periodLength?: string
   planStart?: string
   planEnd?: string
   confirmedByName?: string
@@ -368,6 +370,7 @@ export interface Problems {
   any: boolean
 }
 
+const CHOOSE_RELEASE_PERIOD = 'Choose how the funding is released.'
 const NOT_AN_AMOUNT = 'Enter dollars and cents, like 8000.00.'
 const TOO_LARGE = 'The most a plan amount can be is $99,999,999.99.'
 /** A set-aside typed in the box that no period carries (the periods are what is saved, so it would be saved as none). Also said live, beside the periods, as soon as it is so. */
@@ -391,6 +394,7 @@ function dayProblem(text: string, missing: string): string | undefined {
 export function validate(state: EditorState): Problems {
   const problems: Problems = { general: [], pools: {}, any: false }
 
+  if (state.periodLengthMonths === undefined) problems.periodLength = CHOOSE_RELEASE_PERIOD
   problems.planStart = dayProblem(state.planStart, 'Give the day the plan starts.')
   problems.planEnd = dayProblem(state.planEnd, 'Give the day the plan ends.')
   const start = parseDateOnly(state.planStart)
@@ -414,7 +418,7 @@ export function validate(state: EditorState): Problems {
     if (!found.setAside && total !== null && setAside !== null && toCents(setAside) > toCents(total)) found.setAside = 'The set-aside cannot be more than the plan amount.'
 
     // With funding periods each one carries its own amounts, and they are what is saved. With none the single period is the totals themselves, so there is nothing more to check.
-    if (state.periodLengthMonths !== null) {
+    if (typeof state.periodLengthMonths === 'number') {
       const anySetAside = pool.periods.some(period => !isBlank(period.setAside))
       pool.periods.forEach((period, index) => {
         const row: { planAmount?: string; setAside?: string } = {}
@@ -439,7 +443,7 @@ export function validate(state: EditorState): Problems {
     if (found.name || found.notes || found.total || found.setAside || found.general.length > 0 || Object.keys(found.periods).length > 0) problems.pools[pool.key] = found
   }
 
-  problems.any = Boolean(problems.planStart || problems.planEnd || problems.confirmedByName || problems.notes || problems.general.length > 0 || Object.keys(problems.pools).length > 0)
+  problems.any = Boolean(problems.periodLength || problems.planStart || problems.planEnd || problems.confirmedByName || problems.notes || problems.general.length > 0 || Object.keys(problems.pools).length > 0)
   return problems
 }
 
