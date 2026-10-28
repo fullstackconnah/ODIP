@@ -213,14 +213,14 @@ describe('ShiftChip cross-domain links', () => {
     const shift = makeShift({ participantId: 'participant-9', participantName: 'Mia Chen' })
     renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
 
-    expect(screen.getByRole('link', { name: 'Mia Chen' })).toHaveAttribute('href', '/participants/participant-9')
+    expect(screen.getByRole('link', { name: 'Mia Chen' })).toHaveAttribute('href', '/participants/participant-9?tab=people&section=week&week=2026-08-17')
   })
 
   it('links the staff name to their staff detail page when the shift is filled (participant-row chip)', () => {
     const shift = makeShift({ staffId: 'staff-9', staffName: 'Alex Rivera' })
     renderChip(<ShiftChip shift={shift} canWrite context="participant" onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
 
-    expect(screen.getByRole('link', { name: 'Alex Rivera' })).toHaveAttribute('href', '/staff/staff-9')
+    expect(screen.getByRole('link', { name: 'Alex Rivera' })).toHaveAttribute('href', '/staff/staff-9?tab=week&week=2026-08-17')
   })
 
   it('renders no staff link for an unfilled (dashed) chip', () => {
@@ -346,7 +346,7 @@ describe('ShiftChip keeps the name readable in a narrow day column', () => {
     const time = screen.getByText(formatShiftTimeRange(shift.startTime, shift.endTime))
     const link = screen.getByRole('link', { name: "Jack O'Sullivan" })
     expect(link).toHaveTextContent("Jack O'Sullivan")
-    expect(link).toHaveAttribute('href', '/participants/participant-7')
+    expect(link).toHaveAttribute('href', '/participants/participant-7?tab=people&section=week&week=2026-08-17')
     expect(time.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 

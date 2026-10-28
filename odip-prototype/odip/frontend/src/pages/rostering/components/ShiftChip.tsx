@@ -5,7 +5,7 @@ import { AlertOctagon, AlertTriangle, Asterisk, CalendarOff, Check, FileCheck, G
 import type { RosterFindingDto, ShiftDto } from '@/api/types'
 import { Dropdown } from '@/components/Dropdown'
 import { TAP_AREA } from '@/components/tapArea'
-import { formatShiftTimeRange, isUnfilledShift, RATIO_LABELS, shiftSource } from '../lib/roster'
+import { formatShiftTimeRange, isUnfilledShift, participantWeekHref, RATIO_LABELS, shiftSource, staffWeekHref, weekStartFromDateParam } from '../lib/roster'
 import { plural } from '@/lib/format'
 import { ON_TINT, TONE } from '@/lib/tone'
 import { OVER_BUDGET_MARKER, markerForAcknowledgedCodes } from './parallel-budget-override'
@@ -208,7 +208,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
   const hasLead = canPick || (canWrite && draggable)
   const hasMenu = canWrite && !busy && !carrying
 
-  // A link to the person's own page, or plain "Needs staff" text in a participant row when nobody covers
+  // A link to the person's roster week on their profile (the week this shift is in), or plain "Needs staff" text in a participant row when nobody covers
   // the shift (a staff-row chip is never unfilled: it exists because that staff member holds it).
   // stopPropagation keeps a name click from also bubbling up to the open-shift div.
   const label = busy
@@ -217,7 +217,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
     ? isFilled
       ? (
         <Link
-          to={`/staff/${shift.staffId}`}
+          to={staffWeekHref(shift.staffId!, weekStartFromDateParam(shift.serviceDate))}
           onClick={e => e.stopPropagation()}
           className={LABEL_LINK}
           title={shift.staffName ?? undefined}
@@ -229,7 +229,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
       : shift.regularAwayReason ? awayFlag : spanPlus ? null : <span className="min-w-0 flex-1 truncate italic text-muted-foreground">Needs staff</span>
     : (
       <Link
-        to={`/participants/${shift.participantId}`}
+        to={participantWeekHref(shift.participantId, weekStartFromDateParam(shift.serviceDate))}
         onClick={e => e.stopPropagation()}
         className={LABEL_LINK}
         title={subjectLabel}
