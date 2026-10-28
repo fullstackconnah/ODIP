@@ -896,7 +896,7 @@ The support worker's shift screen (`/portal/shifts/:id`) is a "Shift Checklist" 
 - Every empty At a glance field prints "Not recorded"; a null is never shown as "No".
 - Recording a dose is a sheet, not a page. A failed save keeps every entry and the same idempotency key, so a retry cannot record twice.
 - Times follow "Time on the wire": slots and routines are wall clock; a time typed into a datetime-local control (break edits, time given) is read in the provider zone and sent as a UTC instant with Z.
-- The screen is online-only: offline shows a banner and switches the actions off. Start is refused more than 60 minutes before the rostered start; the server message names when it opens.
+- The worker portal works offline (PR3): the shifts list and each shift's details are saved on the phone (`lib/offline`, `odip_offline:<userId>:<part>`, 48 hours; the unsent queue never expires). Start, notes, breaks, routine ticks, handover read and Finish are saved to the queue and sent when the connection returns; a sticky sync row (`SyncRow`/`SyncBar`) shows what is waiting and the Not sent list. Medication, and editing or deleting a break, need a connection. Signing out with unsent changes asks first. Start is refused more than 60 minutes before the rostered start; the server message names when it opens.
 
 ### Modals
 

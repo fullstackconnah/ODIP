@@ -1,5 +1,6 @@
 import axios, { type AxiosRequestConfig } from 'axios'
 import type { ApiResponse } from './types'
+import { wipeOffline } from '@/lib/offline/store'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 
@@ -22,11 +23,14 @@ let loggingOut = false
  * token is sent), with the token the keys held; that is best effort and gives up after 5 s. A step that fails does not stop the others.
  *
  * `reason` is a Microsoft outcome code (MicrosoftSessionEnded) the login page words for the person, so they know why they were signed out.
+ * The saved shifts always go. `keepQueue` (a forced end, e.g. a failed token refresh) keeps the unsent changes on the phone for the same worker's next sign-in;
+ * an explicit Sign out that reaches here has already asked the worker, and wipes them too.
  */
-export async function endSession(reason?: string) {
+export async function endSession(reason?: string, opts?: { keepQueue?: boolean }) {
   if (loggingOut) return
   loggingOut = true
   const token = localStorage.getItem('odip_token')
+  wipeOffline({ keepQueue: opts?.keepQueue })
   for (const key of ['odip_token', 'odip_user', 'odip_viewing_tenant', 'odip_viewing_user', 'odip_superadmin_user', 'odip_sign_in_method']) localStorage.removeItem(key)
   try {
     const { auth } = await import('../lib/firebase')
@@ -55,6 +59,9 @@ apiClient.interceptors.request.use((config) => {
   return config
 })
 
+// A refresh that never answers would hold every request waiting on it (the queue has its own 15 s per send); a timed-out one takes the failed-refresh path below.
+const REFRESH_TIMEOUT_MS = 15_000
+
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -81,7 +88,7 @@ apiClient.interceptors.response.use(
           refreshPromise = (async () => {
             try {
               if (microsoft) {
-                const res = await apiClient.post<ApiResponse<{ token: string }>>('/auth/microsoft/refresh')
+                const res = await apiClient.post<ApiResponse<{ token: string }>>('/auth/microsoft/refresh', undefined, { timeout: REFRESH_TIMEOUT_MS })
                 const token = res.data.data?.token ?? null
                 if (token) localStorage.setItem('odip_token', token)
                 return token
@@ -92,7 +99,8 @@ apiClient.interceptors.response.use(
               const idToken = await currentUser.getIdToken(true)
               const exchangeRes = await apiClient.post<ApiResponse<{ token: string }>>(
                 '/auth/exchange',
-                { idToken }
+                { idToken },
+                { timeout: REFRESH_TIMEOUT_MS }
               )
               const newToken = exchangeRes.data.data?.token ?? null
               if (newToken) localStorage.setItem('odip_token', newToken)
@@ -111,7 +119,7 @@ apiClient.interceptors.response.use(
         // Refresh failed — fall through to logout. Only a 401 from the Microsoft refresh means its session is over; a network error or 5xx isn't that.
         refreshRefused = (e as { response?: { status?: number } })?.response?.status === 401
       }
-      await endSession(microsoft && refreshRefused ? 'MicrosoftSessionEnded' : undefined)
+      await endSession(microsoft && refreshRefused ? 'MicrosoftSessionEnded' : undefined, { keepQueue: true })
     }
     return Promise.reject(error)
   }
