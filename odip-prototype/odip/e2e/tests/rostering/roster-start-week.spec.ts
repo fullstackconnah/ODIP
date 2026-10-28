@@ -1,10 +1,10 @@
 import { test, expect, call } from '../../support/fixtures';
-import { approveDraft, ensureProviderSettings, makeParticipant, saveBlocksDraft } from '../../support/data';
+import { approveDraft, assignShift, ensureProviderSettings, makeParticipant, makeStaff, saveBlocksDraft } from '../../support/data';
 import { addDays, mondayOf, nextWednesday, sydneyToday } from '../../support/dates';
 
 // Start rostering (spec 2026-10-16), on the real API and PostgreSQL: an approved agreement's week is dormant until Start; Start makes its shifts as drafts, the banner
 // says staff can't see them, leaving the week asks first, and Publish week sends them. Its own week, past every other spec's agreement, and a week later on a retry: a retry finds it started.
-type BoardShift = { status: string; fromAgreement?: boolean };
+type BoardShift = { id: string; status: string; fromAgreement?: boolean };
 
 test('a week is started, guarded while its drafts are unpublished, then published', async ({ page, session }, testInfo) => {
   await ensureProviderSettings(session);
@@ -33,6 +33,10 @@ test('a week is started, guarded while its drafts are unpublished, then publishe
   const started = await mine();
   expect(started.started).toBe(true);
   expect(started.shifts.map(s => [s.status, s.fromAgreement])).toEqual([['Draft', true], ['Draft', true]]);
+  // Publish week holds a shift nobody is on, so staff both; the banner counts only staffed drafts.
+  const worker = await makeStaff(session);
+  for (const shift of started.shifts) await assignShift(session, shift.id, worker.id);
+  await page.reload();
   const banner = page.getByText(/^\d+ shifts? not visible to staff yet$/);
   await expect(banner).toBeVisible();
 

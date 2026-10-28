@@ -680,6 +680,10 @@ public class RosteringController : ControllerBase
                 "This shift's status can only be changed by starting, finishing, approving or returning it.",
                 ShiftErrorCodes.ShiftStatusLocked));
 
+        // Publish week holds a shift nobody is on until someone is; the single-shift path agrees, for every client. A shift already Published is untouched.
+        if (shift.Status != ShiftStatus.Published && dto.Status == ShiftStatus.Published && dto.StaffId is null)
+            return Conflict(ApiResponse<ShiftDto>.Fail("Put someone on this shift before publishing it."));
+
         // F6: once a shift has moved past Published (worker has started it), its rostered
         // ServiceDate/StartTime/EndTime/EndsNextDay are locked — the active ShiftCompletion's
         // variance is computed against those values, so editing them out from under an
@@ -919,8 +923,9 @@ public class RosteringController : ControllerBase
 
     /// <summary>
     /// Publish week (roster drag and drop, 2026-10-14): every Draft shift of the organisation in the Monday-start week holding <paramref name="weekStart"/>, for every participant the board
-    /// shows, unfilled ones too, becomes Published, and each worker on one from the provider's today on is told (ShiftAssigned). A filled Draft whose worker now has a Blocking finding stays
-    /// Draft and is counted as skipped, as a PUT publishing it alone would be refused. Under the organisation's roster lock: a second publish at the same time waits, finds nothing left, and
+    /// shows, that has someone on it, becomes Published, and each worker on one from the provider's today on is told (ShiftAssigned). A Draft nobody is on stays Draft (counted as unfilled, owner
+    /// 2026-10-28: hold until staffed) and goes out at the first publish after someone is put on it. A staffed Draft whose worker now has a Blocking finding stays Draft and is counted as skipped,
+    /// as a PUT publishing it alone would be refused. Under the organisation's roster lock: a second publish at the same time waits, finds nothing left, and
     /// tells nobody twice.
     /// </summary>
     [HttpPost("weeks/{weekStart}/publish")]
@@ -948,7 +953,7 @@ public class RosteringController : ControllerBase
 
             var published = new List<Shift>();
             var skipped = 0;
-            foreach (var shift in drafts)
+            foreach (var shift in drafts.Where(s => s.UserId.HasValue))
             {
                 // shortcut: only a lapsed screening is re-checked (the one Blocking rule today); check every filled draft again if another Blocking rule is added.
                 var mayBeBlocked = shift.UserId is { } worker && screeningExpiry.GetValueOrDefault(worker) is { } expiry && expiry < shift.ServiceDate;
@@ -985,7 +990,7 @@ public class RosteringController : ControllerBase
             {
                 Published = published.Count,
                 Notified = toTell.Count(g => emails.ContainsKey(g.Key)),
-                Unfilled = published.Count(s => s.UserId is null),
+                Unfilled = drafts.Count(s => s.UserId is null),
                 Skipped = skipped,
             }));
         }

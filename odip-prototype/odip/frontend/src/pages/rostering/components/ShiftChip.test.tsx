@@ -1069,8 +1069,34 @@ describe('ShiftChip Draft: tinted, worded, and publishable from its menu (card r
     expect(within(tray as HTMLElement).queryByText('Draft')).not.toBeInTheDocument()
   })
 
-  it('a Draft chip keeps its problem signals: the severity marker, and the dashed box of an open shift', () => {
-    const open = makeUnfilledShift({ status: 'Draft', findings: [makeFinding({ severity: 'Blocking' })] })
+  // Owner 2026-10-28: a shift with nobody on it is not a draft; it turns yellow once someone is put on it.
+  describe.each(['staff', 'participant'] as const)('unstaffed Draft in a %s row', context => {
+    it('is the dashed neutral Needs staff card: no warning tint, no word Draft, and the name and title say Needs staff', () => {
+      const open = makeUnfilledShift({ status: 'Draft' })
+      const { container } = renderChip(<ShiftChip shift={open} canWrite dashed context={context} onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+      const tray = container.querySelector('[data-shift-chip]')!
+      expect(tray).not.toHaveClass('bg-[var(--color-warning-container)]')
+      expect(tray).toHaveClass('bg-surface-container-low')
+      expect(container.querySelector('[data-shift-box]')).toHaveClass('border-dashed')
+      expect(within(tray as HTMLElement).queryByText('Draft')).not.toBeInTheDocument()
+      expect(getOpenButton(open).getAttribute('aria-label')).not.toMatch(/Draft/)
+      expect(getOpenButton(open).getAttribute('aria-label')).toMatch(/Needs staff$/)
+      expect(tray.getAttribute('title')).toBe('Needs staff')
+    })
+
+    it('a staffed Draft keeps the tint and the word; an unstaffed Published shift is unchanged', () => {
+      const { container, rerender } = renderChip(<ShiftChip shift={draft} canWrite context={context} onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+      const tray = container.querySelector('[data-shift-chip]')!
+      expect(tray).toHaveClass('bg-[var(--color-warning-container)]')
+      expect(within(tray as HTMLElement).getByText('Draft')).toBeInTheDocument()
+      rerender(<MemoryRouter><ShiftChip shift={makeUnfilledShift({ status: 'Published' })} canWrite dashed context={context} onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} /></MemoryRouter>)
+      expect(tray).toHaveClass('bg-surface-container-low')
+      expect(tray.getAttribute('title')).toBe('Published')
+    })
+  })
+
+  it('a Draft chip keeps its problem signals: the severity marker, and the dashed box of a worker on leave', () => {
+    const open = makeShift({ status: 'Draft', assigneeOnApprovedLeave: true, findings: [makeFinding({ severity: 'Blocking' })] })
     const { container } = renderChip(<ShiftChip shift={open} canWrite dashed onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
     expect(screen.getByRole('img', { name: /1 blocking issue/ })).toBeInTheDocument()
     expect(container.querySelector('[data-shift-box]')).toHaveClass('border-dashed', 'bg-card')
@@ -1106,6 +1132,25 @@ describe('ShiftChip Draft: tinted, worded, and publishable from its menu (card r
     chipIn({ ...draft, status: 'Published' })
     await openMenu(user)
     expect(screen.queryByRole('option', { name: 'Publish' })).not.toBeInTheDocument()
+  })
+
+  it('an unstaffed Draft is not offered Publish (Publish week holds it until someone is on it); a staffed Draft is', async () => {
+    const user = userEvent.setup()
+    chipIn(makeUnfilledShift({ status: 'Draft' }))
+    await openMenu(user)
+    expect(screen.queryByRole('option', { name: 'Publish' })).not.toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Edit' })).toBeInTheDocument()
+    cleanup()
+    chipIn(draft)
+    await openMenu(user)
+    expect(screen.getByRole('option', { name: 'Publish' })).toBeInTheDocument()
+  })
+
+  it('a Draft with a worker id but no name is still staffed: it offers Publish, as the Publish week count does', async () => {
+    const user = userEvent.setup()
+    chipIn({ ...draft, staffName: undefined })
+    await openMenu(user)
+    expect(screen.getByRole('option', { name: 'Publish' })).toBeInTheDocument()
   })
 
   it('no Publish where the page offers none (a reader, or outside the board)', async () => {

@@ -242,8 +242,9 @@ export default function RosterBoardPage() {
   const boardLeave = useMemo(() => (!board ? [] : board.groupBy === 'Participant' ? board.staffLeave ?? [] : leaveFromStaffRows(board.staffRows)), [board])
   const publishWeek = usePublishWeek()
   const [publishOpen, setPublishOpen] = useState(false)
-  // Counted from the raw board, all participants (the brief, section 8); the server publishes the same week for every participant the board shows.
-  const drafts = useMemo(() => boardShifts.filter(s => s.status === 'Draft'), [boardShifts])
+  // Counted from the raw board, all participants (the brief, section 8); the server publishes the same week for every participant the board shows. Only staffed Drafts: Publish week holds a shift nobody is on until someone is (owner, 2026-10-28).
+  const drafts = useMemo(() => boardShifts.filter(s => s.status === 'Draft' && !isUnfilledShift(s)), [boardShifts])
+  const heldDrafts = useMemo(() => boardShifts.filter(s => s.status === 'Draft' && isUnfilledShift(s)).length, [boardShifts])
   // Only an explicit false is unstarted: a board without the field (old fixtures) reads as started.
   const unstarted = board?.weekStarted === false
   const blocked = useMemo(() => drafts.filter(isBlocked), [drafts])
@@ -649,6 +650,7 @@ export default function RosterBoardPage() {
           canWrite={canWrite}
           onNewShift={() => setSlideOverTarget({ mode: 'create', serviceDate: weekStart })}
           allPublished={!!board && !unstarted && !weekHasNoShifts && drafts.length === 0}
+          heldBack={heldDrafts > 0}
           newShiftSecondary={unstarted || publishable.length > 0}
         />
       </div>
@@ -906,7 +908,7 @@ export default function RosterBoardPage() {
         onCancel={() => setPublishOpen(false)}
         onConfirm={handlePublishWeek}
         title={`Publish ${formatWeekSpan(days)}?`}
-        message={<p>{publishWeekMessage(publishable)}</p>}
+        message={<p>{publishWeekMessage(publishable, heldDrafts)}</p>}
         confirmLabel={`Publish ${plural(publishable.length, 'shift')}`}
         loading={publishWeek.isPending}
       />

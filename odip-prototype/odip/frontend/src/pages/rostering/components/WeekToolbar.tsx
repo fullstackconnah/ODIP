@@ -28,6 +28,8 @@ export type WeekToolbarProps = {
   onNewShift: () => void
   /** "All published" beside the range: a started week whose shifts are all published. The drafts count and Publish week are the page's banner now (2026-10-16). */
   allPublished?: boolean
+  /** Unstaffed Drafts are still held back, so the week is not wholly out. */
+  heldBack?: boolean
   /** The page's one primary is elsewhere (Start, or the banner's Publish week), so New shift steps back. */
   newShiftSecondary?: boolean
 }
@@ -55,6 +57,7 @@ export function WeekToolbar({
   canWrite,
   onNewShift,
   allPublished,
+  heldBack,
   newShiftSecondary,
 }: WeekToolbarProps) {
   // Every control here is a --control-h row: Button md / ToggleGroup / Dropdown form are all 32px at a
@@ -85,7 +88,7 @@ export function WeekToolbar({
           </Button>
         </div>
         <h2 id={WEEK_HEADING_ID} tabIndex={-1} className="whitespace-nowrap font-display text-sm font-semibold tabular-nums text-foreground outline-none">{formatWeekRange(days)}</h2>
-        {allPublished && <StatusBadge tone="info" label="All published" className="shrink-0 whitespace-nowrap" />}
+        {allPublished && <StatusBadge tone="info" label={heldBack ? 'All staffed shifts published' : 'All published'} className="shrink-0 whitespace-nowrap" />}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">

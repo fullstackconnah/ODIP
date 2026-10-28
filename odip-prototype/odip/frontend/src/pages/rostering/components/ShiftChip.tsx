@@ -109,11 +109,13 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
   // Where the shift came from (spec 2026-10-15, decision B), derived: Agreed, Pattern or Ad hoc. Neutral ink for all three: colour on a chip means something is wrong.
   const source = shiftSource(shift)
   const SourceIcon = SOURCE_ICON[source.kind]
-  // The accessible name and the hover title end with the shift's state (the brief, section 8): Draft or Published, or why it is locked.
-  const statusWords = locked ? lockTitle : shift.status
+  // A Draft shift with nobody on it is not a draft on screen (owner, 2026-10-28): it is a Needs staff card, and turns into a draft once someone is put on it. The status is unchanged; this is display only.
+  const unstaffedDraft = shift.status === 'Draft' && isUnfilledShift(shift)
+  // The accessible name and the hover title end with the shift's state (the brief, section 8): Draft or Published, or why it is locked; Needs staff for an unstaffed Draft.
+  const statusWords = locked ? lockTitle : unstaffedDraft ? 'Needs staff' : shift.status
 
   // Draft (card roster-draft-publish): the tray takes the warning tint and says the word where it fits, so an unpublished shift stands out. Only the tray tints: the box keeps the card fill, so a problem's dashed edge, its marker and the name read as on any chip.
-  const isDraft = shift.status === 'Draft'
+  const isDraft = shift.status === 'Draft' && !isUnfilledShift(shift)
   const publishing = publishingIds?.has(shift.id) ?? false
 
   // Budget phase 3: a shift saved past its budget on purpose carries a marker, read from the codes the SERVER stored (never from the reason's words). It stands in for the generic override mark: one shield, not two.
@@ -140,7 +142,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
 
   const menuItems = [
     { value: 'edit', label: 'Edit' },
-    // Publish (card roster-draft-publish): a Draft shift, for the writers the menu is already for. It waits while its own write is out.
+    // Publish (card roster-draft-publish): a staffed Draft shift, for the writers the menu is already for (an unstaffed one is held until someone is on it). It waits while its own write is out.
     ...(isDraft && publish ? [{ value: 'publish', label: publishing ? 'Publishing…' : 'Publish', disabled: publishing || dragsOff }] : []),
     // The owner's words (the brief, section 5): Replace and Remove name the person, which keeps Remove apart from Delete and says who is meant in the Staff view.
     { value: 'assign', label: dashed || !shift.staffId ? 'Assign to…' : `Replace ${firstName(shift.staffName)}…`, disabled: canPick && dragsOff },
