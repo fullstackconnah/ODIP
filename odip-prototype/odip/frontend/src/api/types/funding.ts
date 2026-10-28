@@ -314,7 +314,7 @@ export interface BudgetListRow {
 
 /**
  * Why an NDIS-funded participant has no row: no plan is recorded, the plan they have has ended, or a plan is recorded for later (and `planStart` is its first day: the soonest one, which outranks a
- * plan that ended, because the next plan is already there).
+ * plan that ended, because the next plan is already there); `OtherFunded` is only ever sent by the agreement check (the participant is funded another way).
  */
 export const BUDGET_LIST_NO_BUDGET_REASONS = ['NotRecorded', 'PlanEnded', 'NotStarted', 'OtherFunded'] as const
 export type BudgetListNoBudgetReason = typeof BUDGET_LIST_NO_BUDGET_REASONS[number]

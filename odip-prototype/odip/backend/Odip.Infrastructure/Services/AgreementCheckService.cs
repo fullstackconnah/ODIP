@@ -82,7 +82,7 @@ public sealed class AgreementCheckService
         var ledger = ledgers[participantId];
         if (ledger.Ledger is not { PlanIsCurrent: true } plan)
         {
-            // The same three reasons as the Budgets list: a plan is recorded for later (and says when it starts, outranking one that ended), or the one there is has ended, or none is recorded.
+            // The Budgets list's three reasons, plus OtherFunded: a plan is recorded for later (and says when it starts, outranking one that ended), or the one there is has ended, or none is recorded.
             // A participant funded another way has no NDIS budget whatever plan is recorded (the ledger sets none aside for them), so the dates stay null.
             var otherFunded = person.FundingSource == ParticipantFundingSource.Other;
             var upcoming = otherFunded ? null : ledger.NextPlanStart;

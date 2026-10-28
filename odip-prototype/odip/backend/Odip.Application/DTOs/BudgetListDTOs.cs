@@ -51,7 +51,7 @@ public record BudgetListRowDto
     public NdiaRejectionDto? NdiaRejection { get; init; }
 }
 
-/// <summary>Why an NDIS-funded participant has no row.</summary>
+/// <summary>Why an NDIS-funded participant has no row, and (agreement check only) that a participant funded another way has no NDIS budget.</summary>
 public enum BudgetListNoBudgetReason
 {
     /// <summary>No plan budget is recorded at all (one that has ended, or is yet to start, is the next two).</summary>

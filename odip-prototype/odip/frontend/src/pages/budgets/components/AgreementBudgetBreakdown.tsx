@@ -131,7 +131,7 @@ export function AgreementBudgetBreakdown({ view }: { view: AgreementBudgetBreakd
   }
 
   if (view.status === 'none') {
-    // "No budget recorded" is the commonest state and must offer a way to record one (in place, or on the Funding tab), never warn (SHAPE-BRIEF §5).
+    // "No budget recorded" is the commonest state and must offer a way to record one (in place, or on the Funding tab), except OtherFunded, where nothing can be recorded, never warn (SHAPE-BRIEF §5).
     return (
       <div className={`flex flex-wrap items-center gap-2 ${NOTE}`}>
         <p>
