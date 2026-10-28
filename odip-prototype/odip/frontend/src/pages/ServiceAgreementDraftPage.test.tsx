@@ -24,6 +24,7 @@ vi.mock('@/api/hooks', () => ({
   useServiceAgreementDraft: () => oldDraft(),
   useAgreementsEnding: (enabled?: boolean) => endingRows(enabled),
   usePlanBudget: () => budget(),
+  usePlanPeriodQuote: () => ({ data: undefined, isError: false, isFetching: false, failureCount: 0 }),
   useAgreementCheck: () => check(),
 }))
 
