@@ -139,6 +139,9 @@ public static class WhatsNewSeed
         new Item("2026-10-roster-needs-staff", "Shifts with nobody on them are no longer drafts",
             "On the roster, a shift with nobody on it now shows as a dashed card that needs staff, not a yellow draft, and Publish week leaves it out. Once you put someone on it, it turns yellow and goes out with your next Publish week.",
             Staff, false),
+        new Item("2026-10-shift-cancel-notice", "Workers are told when a shift is cancelled",
+            "When you cancel a published shift that has a worker on it, they now get a bell notice and an email (when email is on) saying the shift was cancelled, with a link to it. Draft shifts, shifts with nobody on them and shifts before today stay quiet.",
+            Staff, false),
     };
 
     /// <summary>Inserts the keys the table lacks, one save each, so a key another instance inserted first costs only that row.</summary>
