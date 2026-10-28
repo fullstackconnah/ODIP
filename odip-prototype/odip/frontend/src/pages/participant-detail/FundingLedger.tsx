@@ -43,7 +43,7 @@ function BudgetStatusBadge({ status, size }: { status: keyof typeof BUDGET_STATU
  * The participant's budget ledger. With no plan that has started it says so in one sentence and shows no figure at all: an absent plan is not a zero balance, and nothing here ever
  * implies a confirmed NDIA balance (these are ODIP's own figures against the recorded plan).
  */
-export default function FundingLedger({ participantId, enabled = true, nextPlanStart }: { participantId: string; enabled?: boolean; nextPlanStart?: string }) {
+export default function FundingLedger({ participantId, enabled = true, nextPlanStart, otherFunded }: { participantId: string; enabled?: boolean; nextPlanStart?: string; otherFunded?: boolean }) {
   const query = useFundingLedger(participantId, enabled)
 
   if (query.isLoading && !retryingAfterError(query)) return <PageState kind="loading" noun="budget ledger" />
@@ -61,7 +61,7 @@ export default function FundingLedger({ participantId, enabled = true, nextPlanS
           <div className="mt-2"><Button variant="secondary" size="sm" onClick={() => { void query.refetch() }}>Try again</Button></div>
         </Callout>
       )}
-      <LedgerBody data={data} nextPlanStart={nextPlanStart} />
+      <LedgerBody data={data} nextPlanStart={nextPlanStart} otherFunded={otherFunded} />
     </div>
   )
 }
@@ -73,7 +73,7 @@ export default function FundingLedger({ participantId, enabled = true, nextPlanS
  * STARTED, so between a plan that has ended and the next one the ledger would be the ended plan's under the upcoming plan's card. There it says no plan is running instead of showing the ended plan's
  * figures; everywhere else it names the plan the figures are for.
  */
-export function LedgerBody({ data, nextPlanStart }: { data: ParticipantLedgerDto; nextPlanStart?: string }) {
+export function LedgerBody({ data, nextPlanStart, otherFunded = false }: { data: ParticipantLedgerDto; nextPlanStart?: string; otherFunded?: boolean }) {
   if (data.planId && !data.planIsCurrent && nextPlanStart) {
     return (
       <Card>
@@ -109,9 +109,11 @@ export function LedgerBody({ data, nextPlanStart }: { data: ParticipantLedgerDto
       <>
         <Card>
           <div className="flex max-w-prose flex-col items-start gap-2">
-            <h3 className="text-sm font-semibold">No budget figures yet</h3>
+            <h3 className="text-sm font-semibold">{otherFunded ? 'No NDIS budget' : 'No budget figures yet'}</h3>
             <p className="text-sm text-[var(--color-muted-foreground)]">
-              {data.planIsCurrent
+              {otherFunded
+                ? 'This participant is funded another way, so their shifts are not counted against an NDIS plan.'
+                : data.planIsCurrent
                 ? 'This plan has no pools recorded, so there is nothing to spend against yet.'
                 : 'No plan has started, so there is nothing to spend against yet. The figures come from the plan the participant shares, or their plan manager.'}
             </p>

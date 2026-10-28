@@ -356,6 +356,10 @@
   from { transform: translateX(100%); }
   to { transform: translateX(0); }
 }
+/* Modal: the dialog eases in from 3% smaller over a fading scrim (the panel is the scrim's child, so the scrim's fade carries it; a fade of its own would multiply into a flat, late start). Enter only, like SlideOver; close is instant. */
+@keyframes modalIn {
+  from { transform: scale(0.97); }
+}
 @keyframes scrimIn {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -363,6 +367,8 @@
 @media (prefers-reduced-motion: no-preference) {
   .slide-over-panel { animation: slideOverIn 0.2s ease-out; }
   .slide-over-scrim { animation: scrimIn 0.2s ease-out; }
+  .modal-scrim { animation: scrimIn 0.15s ease-out; }
+  .modal-panel { animation: modalIn 0.16s cubic-bezier(0.2, 0, 0, 1); }
 }
 
 /*

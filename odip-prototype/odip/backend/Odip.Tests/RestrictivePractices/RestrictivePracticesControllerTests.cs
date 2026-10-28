@@ -1072,4 +1072,75 @@ public class RestrictivePracticesControllerTests
         Assert.IsType<BadRequestObjectResult>(result.Result);
         Assert.Equal("Dr. Chen", (await db.RestrictivePractices.SingleAsync()).AuthorisedBy);
     }
+
+    [Fact]
+    public async Task Update_StaleExpectedUpdatedAt_ReturnsConflictAndChangesNothing()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var practice = SeedPractice(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
+
+        var result = await controller.Update(practice.Id,
+            new UpdateRestrictivePracticeDto { Description = "Stale edit", IsActive = true, ExpectedUpdatedAt = practice.UpdatedAt.AddMinutes(-1) },
+            CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<RestrictivePracticeDto>>(Assert.IsType<ConflictObjectResult>(result.Result).Value);
+        Assert.Equal("Someone else just changed this entry, so your changes weren't saved. Close it and open it again to see theirs.", body.Errors![0]);
+        Assert.Equal("Original", (await db.RestrictivePractices.AsNoTracking().SingleAsync()).Description);
+    }
+
+    [Fact]
+    public async Task Update_MatchingExpectedUpdatedAt_SavesAndMovesTheVersion()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var practice = SeedPractice(db);
+        practice.UpdatedAt = DateTime.UtcNow.AddHours(-1);
+        db.SaveChanges();
+        var loaded = practice.UpdatedAt;
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
+
+        var result = await controller.Update(practice.Id,
+            new UpdateRestrictivePracticeDto { Description = "Fresh edit", IsActive = true, ExpectedUpdatedAt = loaded }, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<RestrictivePracticeDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.True(body.Data!.UpdatedAt > loaded);
+        Assert.Equal("Fresh edit", (await db.RestrictivePractices.AsNoTracking().SingleAsync()).Description);
+    }
+
+    [Fact]
+    public async Task Update_NoExpectedUpdatedAt_StillSaves()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var practice = SeedPractice(db);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
+
+        var result = await controller.Update(practice.Id,
+            new UpdateRestrictivePracticeDto { Description = "Older tab", IsActive = true }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public void UpdatedAt_IsTheRestrictivePracticeConcurrencyToken()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        Assert.True(db.Model.FindEntityType(typeof(Domain.Entities.RestrictivePractice))!
+            .FindProperty(nameof(Domain.Entities.RestrictivePractice.UpdatedAt))!.IsConcurrencyToken);
+    }
+
+    [Fact]
+    public async Task Update_StaleExpectedUpdatedAt_IsRefusedBeforeTheAuthorisationPairCheck()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var practice = SeedPractice(db, by: "Dr Lee", date: new DateOnly(2026, 3, 1));
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
+
+        // A's form still shows the legacy half-filled entry (who, no date); B has since added the date.
+        var result = await controller.Update(practice.Id,
+            new UpdateRestrictivePracticeDto { Description = "Original", AuthorisedBy = "Dr Lee", IsActive = true, ExpectedUpdatedAt = practice.UpdatedAt.AddMinutes(-1) },
+            CancellationToken.None);
+
+        Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal(new DateOnly(2026, 3, 1), (await db.RestrictivePractices.AsNoTracking().SingleAsync()).AuthorisationDate);
+    }
 }
