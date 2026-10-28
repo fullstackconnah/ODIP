@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react'
+import { CloudUpload } from 'lucide-react'
 import { TONE, type Tone } from '@/lib/tone'
+import { SyncRow } from '../sync/SyncRow'
 
 /**
  * A card with a heading. Every Shift Checklist block is one. With `collapse`, the card is a disclosure that starts closed: its heading and
@@ -57,6 +59,7 @@ export function ActionBar({ children, notice, className = '' }: { children: Reac
       aria-label="Shift actions"
       className={`sticky bottom-[var(--mobile-nav-h)] lg:bottom-0 z-20 -mx-4 flex flex-wrap gap-2 border-t border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3 lg:mx-0 lg:justify-end lg:rounded-lg lg:border ${className}`}
     >
+      <SyncRow />
       {/* A refusal sits in the bar, above its buttons, so it is on screen however long the step is. */}
       {notice && <div className="basis-full">{notice}</div>}
       {children}
@@ -74,5 +77,15 @@ export function Fold({ summary, children }: { summary: ReactNode; children: Reac
       </summary>
       <div className="space-y-2 pt-2">{children}</div>
     </details>
+  )
+}
+
+/** The marker on anything recorded on this phone that Bunya Support has not received yet (SHAPE 3d). */
+export function WaitingToSend({ id, className = '' }: { id?: string; className?: string }) {
+  return (
+    <span id={id} className={`inline-flex items-center gap-1 whitespace-nowrap text-xs text-[var(--color-muted-foreground)] ${className}`}>
+      <CloudUpload className="size-3.5" aria-hidden="true" />
+      Waiting to send
+    </span>
   )
 }

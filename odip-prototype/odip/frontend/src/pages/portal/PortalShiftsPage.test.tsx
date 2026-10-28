@@ -67,7 +67,7 @@ describe('PortalShiftsPage', () => {
     mockUseMyShifts.mockReturnValue({ data: undefined, isLoading: true, isError: false })
     renderPage()
 
-    expect(screen.getByRole('status')).toHaveTextContent(/loading your shifts/i)
+    expect(screen.getByText(/loading your shifts/i).closest('[role="status"]')).not.toBeNull()
     expect(screen.queryByText(/nothing rostered this week/i)).not.toBeInTheDocument()
   })
 
@@ -245,5 +245,46 @@ describe('PortalShiftsPage: a response with no provider zone (review deep nit)',
     renderPage()
 
     expect(screen.getByRole('region', { name: 'Earlier' })).toBeInTheDocument()
+  })
+})
+
+describe('PortalShiftsPage offline (SHAPE 3b)', () => {
+  const saved = (part: string) => localStorage.setItem(`odip_offline:u1:${part}`, JSON.stringify({ savedAt: new Date('2026-08-19T08:05:00+10:00').getTime(), data: {} }))
+  beforeEach(() => {
+    localStorage.setItem('odip_user', JSON.stringify({ id: 'u1' }))
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false })
+  })
+  afterEach(() => {
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true })
+    localStorage.clear()
+  })
+
+  it('shows the saved week with a notice; a card with no saved detail is not a link and says why', () => {
+    saved('shifts:2026-08-17:2026-08-23')
+    mockUseMyShifts.mockReturnValue({ data: makeShiftsResponse(), isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+
+    expect(screen.getByText(/These are your shifts as saved at .*Only today.s shifts can be opened until you.re back online\./)).toBeInTheDocument()
+    expect(screen.getByText('Mia Chen')).toBeInTheDocument()
+    expect(screen.getByText('Needs a connection to open')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Mia Chen/ })).not.toBeInTheDocument()
+  })
+
+  it('a card whose detail is saved on the phone still opens', () => {
+    saved('shifts:2026-08-17:2026-08-23')
+    saved('detail:shift-1')
+    mockUseMyShifts.mockReturnValue({ data: makeShiftsResponse(), isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+
+    expect(screen.getByRole('link', { name: /Mia Chen/ })).toHaveAttribute('href', '/portal/shifts/shift-1')
+    expect(screen.queryByText('Needs a connection to open')).not.toBeInTheDocument()
+  })
+
+  it('a week that was never saved says so and offers the way back', () => {
+    mockUseMyShifts.mockReturnValue({ data: undefined, isLoading: false, isError: true, refetch: vi.fn() })
+    renderPage()
+
+    expect(screen.getByText("This week isn't saved on this phone.")).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Back to this week' })).toBeInTheDocument()
   })
 })

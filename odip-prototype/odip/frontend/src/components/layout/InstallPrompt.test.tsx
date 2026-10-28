@@ -53,6 +53,20 @@ describe('InstallPrompt', () => {
     expect(stored()).toEqual({ installed: true })
   })
 
+  it('Android: the worker sentence shows for a support worker', () => {
+    renderAt()
+    offer(win)
+    expect(screen.getByText('Today’s shifts stay open even with no signal.')).toBeInTheDocument()
+  })
+
+  it('Android: a coordinator does not get the worker sentence', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ id: 'u1', role: 'Coordinator' }))
+    renderAt()
+    offer(win)
+    expect(screen.getByRole('region', { name: 'Install Bunya Support' })).toBeInTheDocument()
+    expect(screen.queryByText(/stay open even with no signal/)).toBeNull()
+  })
+
   it('a declined native dialog counts as Not now: 30 days', async () => {
     const user = userEvent.setup()
     const before = Date.now()
@@ -114,7 +128,8 @@ describe('InstallPrompt', () => {
     await waitFor(() => expect(container.querySelector('[data-install-spacer]')).toBeNull())
   })
 
-  it('names no offline promise (PR1 copy)', () => {
+  it('names no offline promise to anyone but a support worker', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ id: 'u1', role: 'Coordinator' }))
     renderAt()
     offer(win)
     expect(screen.getByRole('region').textContent).not.toMatch(/offline|signal/i)

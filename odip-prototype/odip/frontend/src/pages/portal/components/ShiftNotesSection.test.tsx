@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
@@ -323,5 +323,47 @@ describe('ShiftNotesSection', () => {
       expect(screen.queryByRole('link', { name: /view report/i })).not.toBeInTheDocument()
       expect(screen.getByRole('button', { name: /file incident report/i })).toBeInTheDocument()
     })
+  })
+})
+
+describe('ShiftNotesSection offline (SHAPE 3c, 3d)', () => {
+  const goOffline = () => Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false })
+  afterEach(() => Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true }))
+
+  it('a note waiting to send says "You", its time and Waiting to send, and can still be edited', () => {
+    goOffline()
+    setCurrentUser('user-1')
+    const waiting = { ...makeNote({ id: 'q1', authorName: '', body: 'Settled well' }), waiting: true }
+    mockUseShiftNotes.mockReturnValue({ data: [waiting], isLoading: false, isError: false, refetch: mockRefetch })
+    renderSection()
+
+    expect(screen.getByText('Settled well')).toBeInTheDocument()
+    expect(screen.getByText('You')).toBeInTheDocument()
+    expect(screen.getByText('Waiting to send')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeEnabled()
+  })
+
+  it('a sent note cannot be edited with no signal, and says why', () => {
+    goOffline()
+    setCurrentUser('user-1')
+    mockUseShiftNotes.mockReturnValue({ data: [makeNote()], isLoading: false, isError: false, refetch: mockRefetch })
+    renderSection()
+
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(screen.getByText('Editing a sent note needs a connection.')).toBeInTheDocument()
+  })
+
+  it('adding a note stays on offline: the full body goes to the create hook', async () => {
+    goOffline()
+    setCurrentUser('user-1')
+    mockUseShiftNotes.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: mockRefetch })
+    mockCreateMutateAsync.mockResolvedValue(undefined)
+    renderSection()
+
+    await userEvent.type(screen.getByLabelText('Add a note'), 'Had lunch')
+    const add = screen.getByRole('button', { name: /add note|save note|post/i })
+    expect(add).toBeEnabled()
+    await userEvent.click(add)
+    await waitFor(() => expect(mockCreateMutateAsync).toHaveBeenCalledWith('Had lunch'))
   })
 })
