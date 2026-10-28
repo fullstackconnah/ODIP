@@ -2001,6 +2001,11 @@ const everyFlag = {
   isAnaphylaxisRisk: true, allergiesDetail: 'Peanuts', chokingRiskMealDetail: 'Cut small', fallsRiskRating: 'High', behaviourRiskRating: 'High', hasRestrictivePracticeFlag: true,
   serviceStreams: 'CommunityAccessDailyLiving',
 } as unknown as Partial<ParticipantDetailDto>
+/** After a vetoed switch: focus and the one tabbable chip are back on the selected sub-tab. */
+const expectSubFocusOnAboutMe = () => {
+  expect(subTab('About me')).toHaveFocus()
+  for (const t of within(subStrip()).getAllByRole('tab')) expect(t).toHaveAttribute('tabindex', subLabel(t) === 'About me' ? '0' : '-1')
+}
 const editedAboutMe = async (role = 'Coordinator') => {
   setUserRole(role)
   mockUseParticipant.mockReturnValue({ data: makeParticipant({ groupRevisions: { aboutMe: 0 } as ParticipantDetailDto['groupRevisions'] }), isLoading: false })
@@ -2178,6 +2183,7 @@ describe('ParticipantDetailPage — sub-tabs', () => {
     expect(within(dialog).getByRole('button', { name: 'Keep editing' })).toHaveFocus()
     await user.click(within(dialog).getByRole('button', { name: 'Keep editing' }))
     expect(selectedSub()).toEqual(['About me'])
+    expectSubFocusOnAboutMe()
     expect(screen.getByLabelText('Goals')).toHaveValue('mine')
     expect(probe().path).toBe('?tab=about&section=about-me')
     await user.click(subTab('Identity'))
@@ -2217,6 +2223,32 @@ describe('ParticipantDetailPage — sub-tabs', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Keep editing' }))
     expect(selectedSub()).toEqual(['About me'])
     expect(probe().path).toBe('?tab=about&section=about-me')
+    expectSubFocusOnAboutMe()
+  })
+
+  // About me is the last sub-tab, so End would pick itself (no veto): End is covered on the main strip below.
+  it('j: Home on the strip with unsaved edits: Keep editing returns focus to the current sub-tab', async () => {
+    const { user } = await editedAboutMe()
+    await user.type(screen.getByLabelText('Goals'), 'mine')
+    subTab('About me').focus()
+    await user.keyboard('{Home}')
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Keep editing' }))
+    expect(selectedSub()).toEqual(['About me'])
+    expectSubFocusOnAboutMe()
+  })
+
+  it.each(['ArrowRight', 'End'])('j: %s on the main strip with unsaved edits: Keep editing returns focus to the current main tab', async key => {
+    const { user } = await editedAboutMe()
+    await user.type(screen.getByLabelText('Goals'), 'mine')
+    const main = within(screen.getByRole('tablist', { name: 'Participant sections' }))
+    const about = main.getByRole('tab', { name: /^About/ })
+    about.focus()
+    await user.keyboard(`{${key}}`)
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Keep editing' }))
+    expect(about).toHaveFocus()
+    expect(about).toHaveAttribute('tabindex', '0')
+    const others = main.getAllByRole('tab').filter(t => t !== about)
+    for (const t of others) expect(t).toHaveAttribute('tabindex', '-1')
   })
 
   it('j: the Discard button in the dialog is the danger style', async () => {

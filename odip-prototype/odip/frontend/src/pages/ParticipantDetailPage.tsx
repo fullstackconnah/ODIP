@@ -20,7 +20,7 @@ import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { PageState } from '@/components/PageState'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { FileEdit, Pencil, Download, Loader2, Link2, Link2Off, FileText, ClipboardCheck } from 'lucide-react'
-import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import AuditHistoryTab from '@/components/AuditHistoryTab'
 import { usePermissions } from '@/lib/permissions'
 import { DirtyEditsContext } from './participant-detail/dirtyEdits'
@@ -128,7 +128,19 @@ export default function ParticipantDetailPage() {
   const holds = useRef(0)
   const dirtyEdits = useMemo(() => ({ hold: () => { holds.current++; let on = true; return () => { if (on) { on = false; holds.current-- } } } }), [])
   const [pendingSwitch, setPendingSwitch] = useState<(() => void) | null>(null)
-  const guarded = (go: () => void) => { if (holds.current > 0) setPendingSwitch(() => go); else go() }
+  // The strip that parked the switch: once the dialog closes, focus goes back to its selected chip (Tabs had moved it to the neighbour or the clicked chip).
+  const refocus = useRef<HTMLElement | null>(null)
+  const guarded = (go: () => void) => {
+    if (holds.current === 0) return go()
+    refocus.current = document.activeElement?.closest<HTMLElement>('[role="tablist"]') ?? null
+    setPendingSwitch(() => go)
+  }
+  // An effect, not onCancel: the dialog's own focus-return cleanup runs first in the same commit, so this one wins.
+  useEffect(() => {
+    if (pendingSwitch !== null || !refocus.current) return
+    refocus.current.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.focus()
+    refocus.current = null
+  }, [pendingSwitch])
   const stripRef = useRef<HTMLDivElement>(null)
   const { data: alertsData } = useParticipantAlerts(id, canViewAlerts)
   // DOC-01 — Documents header buttons. Hooks called unconditionally, ahead of the isLoading/!p
