@@ -229,6 +229,17 @@ describe('NotesTab', () => {
     expect(call.data.description).toBe('Dim the lights from 8pm.')
   })
 
+  it('row actions are house ghost buttons (not underlined links) and Archive is the danger variant', () => {
+    mockUseParticipantNotes.mockReturnValue({ data: [makeNote()], isLoading: false })
+
+    render(<NotesTab participantId="participant-1" />)
+
+    const edit = screen.getByRole('button', { name: 'Edit' })
+    expect(edit).toHaveClass('h-[var(--control-h-sm)]')
+    expect(edit).not.toHaveClass('hover:underline')
+    expect(screen.getByRole('button', { name: 'Archive' })).toHaveClass('text-[var(--color-destructive)]')
+  })
+
   it('hides write actions for a ReadOnly user', () => {
     setUserRole('ReadOnly')
     mockUseParticipantNotes.mockReturnValue({ data: [makeNote()], isLoading: false })

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useShowAll } from '@/components/ShowAllButton'
-import { ShieldAlert, AlertTriangle, ChevronDown, Plus, Pill } from 'lucide-react'
+import { ShieldAlert, AlertTriangle, Plus, Pill } from 'lucide-react'
 import {
   useRestrictivePractices, useUpdateRestrictivePractice, useDeleteRestrictivePractice,
   useParticipantMedications,
@@ -22,6 +22,7 @@ import type { RestrictivePracticeDto, RestrictivePracticeType } from '@/api/type
 import { AddRestrictivePracticeDialog } from './AddRestrictivePracticeDialog'
 import { isPastDue } from '@/lib/deadline'
 import { Button } from '@/components/Button'
+import { DisclosureToggle } from '@/components/DisclosureToggle'
 import { Callout } from '@/components/Callout'
 import { RpAuthorisationBadge } from '@/pages/incidents/RpAuthorisationBadge'
 import { isRpAuthorised } from '@/lib/incidentPrefill'
@@ -104,21 +105,13 @@ function PracticeCard({ practice, canWrite, onEdit, onDelete }: {
           )}
         </div>
         {canWrite && (
-          <div className="flex items-center gap-1 shrink-0">
-            <button
-              type="button"
-              onClick={onEdit}
-              className="text-xs font-medium text-[var(--color-primary)] hover:underline px-2 py-1.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
-            >
+          <div className="flex items-center gap-1 pointer-coarse:gap-2 shrink-0">
+            <Button variant="ghost" size="sm" onClick={onEdit}>
               Edit
-            </button>
-            <button
-              type="button"
-              onClick={onDelete}
-              className="text-xs font-medium text-[var(--color-muted-foreground)] hover:text-[var(--color-destructive)] px-2 py-1.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
-            >
+            </Button>
+            <Button variant="ghost-danger" size="sm" onClick={onDelete}>
               Delete
-            </button>
+            </Button>
           </div>
         )}
       </div>
@@ -289,17 +282,9 @@ export default function RestrictivePracticesTab({ participantId }: { participant
 
       {inactivePractices.length > 0 && (
         <div>
-          <button
-            type="button"
-            onClick={() => setShowInactive(v => !v)}
-            className="flex items-center gap-2 text-sm font-medium text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded transition-colors"
-            aria-expanded={showInactive}
-          >
-            <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showInactive ? 'rotate-180' : ''}`} />
-            Inactive ({inactivePractices.length})
-          </button>
+          <DisclosureToggle label={`Inactive (${inactivePractices.length})`} open={showInactive} onToggle={() => setShowInactive(v => !v)} controls="practices-inactive-list" />
           {showInactive && (
-            <div className="space-y-3 mt-3">
+            <div id="practices-inactive-list" className="space-y-3 mt-3">
               {inactivePractices.map(p => (
                 <PracticeCard key={p.id} practice={p} canWrite={canWriteRestrictivePractices} onEdit={() => openEdit(p)} onDelete={() => setDeletingPractice(p)} />
               ))}

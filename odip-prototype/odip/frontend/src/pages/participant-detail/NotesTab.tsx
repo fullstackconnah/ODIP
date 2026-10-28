@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { useShowAll } from '@/components/ShowAllButton'
-import { StickyNote, Pin, ChevronDown, Plus, Sparkles, AlertTriangle } from 'lucide-react'
+import { StickyNote, Pin, Plus, Sparkles, AlertTriangle } from 'lucide-react'
 import { useParticipantNotes, useCreateNote, useUpdateNote, useDismissNoteDrift, useRegenerateNote } from '@/api/hooks'
 import { Modal } from '@/components/Modal'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -13,6 +13,7 @@ import { parseApiDate, extractErrorMessage } from '@/lib/utils'
 import { formatRelative } from '@/lib/format'
 import type { ParticipantNoteDto } from '@/api/types/notes'
 import { Button } from '@/components/Button'
+import { DisclosureToggle } from '@/components/DisclosureToggle'
 import { Callout } from '@/components/Callout'
 
 type NoteFormState = { title: string; description: string; isPinned: boolean }
@@ -45,30 +46,18 @@ function NoteCard({ note, canWrite, onEdit, onArchive, onRestore, onDismissDrift
           )}
         </div>
         {canWrite && (
-          <div className="flex items-center gap-1 shrink-0">
-            <button
-              type="button"
-              onClick={onEdit}
-              className="text-xs font-medium text-[var(--color-primary)] hover:underline px-2 py-1.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
-            >
+          <div className="flex items-center gap-1 pointer-coarse:gap-2 shrink-0">
+            <Button variant="ghost" size="sm" onClick={onEdit}>
               Edit
-            </button>
+            </Button>
             {note.isArchived ? (
-              <button
-                type="button"
-                onClick={onRestore}
-                className="text-xs font-medium text-[var(--color-primary)] hover:underline px-2 py-1.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
-              >
+              <Button variant="ghost" size="sm" onClick={onRestore}>
                 Restore
-              </button>
+              </Button>
             ) : (
-              <button
-                type="button"
-                onClick={onArchive}
-                className="text-xs font-medium text-[var(--color-muted-foreground)] hover:text-[var(--color-destructive)] px-2 py-1.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
-              >
+              <Button variant="ghost-danger" size="sm" onClick={onArchive}>
                 Archive
-              </button>
+              </Button>
             )}
           </div>
         )}
@@ -81,22 +70,12 @@ function NoteCard({ note, canWrite, onEdit, onArchive, onRestore, onDismissDrift
             <p>Source data has changed since this note was edited.</p>
             {canWrite && (
               <div className="flex items-center gap-3 mt-1.5">
-                <button
-                  type="button"
-                  onClick={onDismissDrift}
-                  disabled={isDriftActionPending}
-                  className="font-medium hover:underline disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded"
-                >
+                <Button variant="ghost" size="sm" onClick={onDismissDrift} disabled={isDriftActionPending}>
                   Dismiss
-                </button>
-                <button
-                  type="button"
-                  onClick={onRegenerate}
-                  disabled={isDriftActionPending}
-                  className="font-medium hover:underline disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded"
-                >
+                </Button>
+                <Button variant="ghost" size="sm" onClick={onRegenerate} disabled={isDriftActionPending}>
                   Regenerate
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -288,17 +267,9 @@ export default function NotesTab({ participantId }: { participantId: string | un
 
       {archivedNotes.length > 0 && (
         <div>
-          <button
-            type="button"
-            onClick={() => setShowArchivedSection(v => !v)}
-            className="flex min-h-[var(--tap-min)] items-center gap-2 text-sm font-medium text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded transition-colors"
-            aria-expanded={showArchivedSection}
-          >
-            <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showArchivedSection ? 'rotate-180' : ''}`} />
-            Archived ({archivedNotes.length})
-          </button>
+          <DisclosureToggle label={`Archived (${archivedNotes.length})`} open={showArchivedSection} onToggle={() => setShowArchivedSection(v => !v)} controls="notes-archived-list" />
           {showArchivedSection && (
-            <div className="space-y-3 mt-3">
+            <div id="notes-archived-list" className="space-y-3 mt-3">
               {archivedNotes.map(n => (
                 <NoteCard key={n.id} note={n} canWrite={canWriteNotes} onEdit={() => openEdit(n)} onArchive={() => setArchivingNote(n)} onRestore={() => restoreNote(n)} onDismissDrift={() => handleDismissDrift(n)} onRegenerate={() => handleRegenerate(n)} isDriftActionPending={isDriftActionPending} />
               ))}

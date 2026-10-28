@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { useShowAll } from '@/components/ShowAllButton'
-import { ListChecks, AlertTriangle, ChevronDown, Plus, Clock, CalendarDays } from 'lucide-react'
+import { ListChecks, AlertTriangle, Plus, Clock, CalendarDays } from 'lucide-react'
 import { useParticipantRoutines, useCreateRoutine, useUpdateRoutine, useDeleteRoutine } from '@/api/hooks'
 import { formatShiftTime, extractErrorMessage } from '@/lib/utils'
 import { Modal } from '@/components/Modal'
@@ -16,6 +16,7 @@ import { ROUTINE_CATEGORY_LABELS } from '@/api/types/routines'
 import type { ParticipantRoutineDto } from '@/api/types/routines'
 import type { RoutineCategory } from '@/api/types/enums'
 import { Button } from '@/components/Button'
+import { DisclosureToggle } from '@/components/DisclosureToggle'
 import { Callout } from '@/components/Callout'
 
 /** Monday-first for display, independent of the .NET DayOfWeek (Sunday=0) wire ordering. */
@@ -141,22 +142,14 @@ function RoutineCard({ routine, canWrite, canDelete, onEdit, onDelete }: {
           )}
         </div>
         {canWrite && (
-          <div className="flex items-center gap-1 shrink-0">
-            <button
-              type="button"
-              onClick={onEdit}
-              className="text-xs font-medium text-[var(--color-primary)] hover:underline px-2 py-1.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
-            >
+          <div className="flex items-center gap-1 pointer-coarse:gap-2 shrink-0">
+            <Button variant="ghost" size="sm" onClick={onEdit}>
               Edit
-            </button>
+            </Button>
             {canDelete && (
-              <button
-                type="button"
-                onClick={onDelete}
-                className="text-xs font-medium text-[var(--color-muted-foreground)] hover:text-[var(--color-destructive)] px-2 py-1.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
-              >
+              <Button variant="ghost-danger" size="sm" onClick={onDelete}>
                 Delete
-              </button>
+              </Button>
             )}
           </div>
         )}
@@ -343,23 +336,15 @@ export default function RoutinesTab({ participantId }: { participantId: string |
       )}
 
       {/*
-        ChevronDown is reserved for interactive disclosures like this one — it's kept off the
+        The chevron (DisclosureToggle) is reserved for interactive disclosures like this one — it's kept off the
         day-group headings above so a static icon never implies a toggle that isn't there,
         matching how Notes' Archived section and Medications' Ceased section use it.
       */}
       {inactiveRoutines.length > 0 && (
         <div>
-          <button
-            type="button"
-            onClick={() => setShowInactive(v => !v)}
-            className="flex items-center gap-2 text-sm font-medium text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded transition-colors"
-            aria-expanded={showInactive}
-          >
-            <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showInactive ? 'rotate-180' : ''}`} />
-            Inactive ({inactiveRoutines.length})
-          </button>
+          <DisclosureToggle label={`Inactive (${inactiveRoutines.length})`} open={showInactive} onToggle={() => setShowInactive(v => !v)} controls="routines-inactive-list" />
           {showInactive && (
-            <div className="space-y-3 mt-3">
+            <div id="routines-inactive-list" className="space-y-3 mt-3">
               {inactiveRoutines.map(r => (
                 <RoutineCard key={r.id} routine={r} canWrite={canWriteRoutines} canDelete={canDeleteRoutines} onEdit={() => openEdit(r)} onDelete={() => setDeletingRoutine(r)} />
               ))}
