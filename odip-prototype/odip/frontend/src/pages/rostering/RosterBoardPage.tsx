@@ -71,7 +71,7 @@ const noop = () => {}
 export default function RosterBoardPage() {
   const { canWrite } = usePermissions()
   // `?date=` (the server's "Re-cover shift" task link) opens the week that contains it, and a later change of it moves the board there; the toolbar owns the week in between.
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const dateParam = searchParams.get('date')
   const [weekStart, setWeekStart] = useState(() => weekStartFromDateParam(dateParam))
   // Declared above the ?date= block, which clears it: a week's notices belong to that week (the brief, 2.3).
@@ -148,6 +148,17 @@ export default function RosterBoardPage() {
   })
 
   const { data: board, isLoading, isError, refetch } = useRosterBoard(weekStart, groupBy)
+  // `?shift=<id>` (a shift clicked on a person's roster week, spec 2026-10-28) opens that shift's editor once its week has loaded. Read once, then dropped from the address with replace.
+  const [pendingShiftId, setPendingShiftId] = useState(() => searchParams.get('shift'))
+  useEffect(() => {
+    if (searchParams.has('shift')) setSearchParams(prev => { const p = new URLSearchParams(prev); p.delete('shift'); return p }, { replace: true })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps -- once, on mount
+  // Render-time, like the ?date= block above: no effect for state.
+  if (pendingShiftId && board && board.weekStart === weekStart) {
+    setPendingShiftId(null)
+    const shift = allBoardShifts(board).find(s => s.id === pendingShiftId)
+    if (shift) setSlideOverTarget({ mode: 'edit', shift })
+  }
   // A refetch that fails (Refresh the board, a refocus) keeps the week on screen with the data it has: only a week that never loaded is the load-error page.
   const loadFailed = isError && !board
   // INTAKE-08: the board's participant filter/assignment picker excludes drafts (the board
@@ -260,9 +271,13 @@ export default function RosterBoardPage() {
 
   /** Moves the board to another week. Its notices (Start's result, a regular's change) belong to the week they were about (the brief, 2.3 and 5.2). */
   function showWeek(target: string) {
+    // Ahead of the address write below, so the leave guard (blockIf) already measures against the week being moved to and doesn't ask again.
+    shownWeek.current = target
     setWeekStart(target)
     setStartNotice(null)
     setRegularNotice(null)
+    // The week goes in the address (merged, so the filters stay), so Back from a profile comes home to it (spec 2026-10-28).
+    setSearchParams(prev => { const p = new URLSearchParams(prev); p.set('date', target); return p }, { replace: true })
   }
 
   const setRegular = useSetRegular()
@@ -299,7 +314,7 @@ export default function RosterBoardPage() {
     // Another week by address (a bell or task link) leaves this one; the filters (?participant=, ?unfilled=) keep it.
     blockIf: (_current, next) => {
       const date = new URLSearchParams(next.search).get('date')
-      return date !== null && weekStartFromDateParam(date) !== weekStart
+      return date !== null && weekStartFromDateParam(date) !== shownWeek.current
     },
   })
   const [pendingWeek, setPendingWeek] = useState<string | null>(null)

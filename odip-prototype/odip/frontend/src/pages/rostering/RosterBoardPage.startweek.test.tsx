@@ -399,6 +399,20 @@ describe('leaving a week with publishable drafts', () => {
     expect(lastWeekAsked()).toEqual(['2026-08-24', 'participant'])
   })
 
+  // Spec 2026-10-28: the week move now writes ?date=, and that write must not trip the address guard into asking a second time.
+  it('Leave moves once: no second dialog, and the address names the new week', async () => {
+    const user = userEvent.setup()
+    const { router } = renderPage()
+
+    await user.click(screen.getByRole('button', { name: 'Next week' }))
+    expect(new URLSearchParams(router.state.location.search).get('date')).toBe('2026-08-17')
+    await user.click(screen.getByRole('button', { name: 'Leave without publishing' }))
+
+    await waitFor(() => expect(new URLSearchParams(router.state.location.search).get('date')).toBe('2026-08-24'))
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(lastWeekAsked()).toEqual(['2026-08-24', 'participant'])
+  })
+
   it('Previous asks too; This week on the week already shown asks nothing', async () => {
     const user = userEvent.setup()
     renderPage(`/rostering?date=${weekStartOf(new Date())}`)
