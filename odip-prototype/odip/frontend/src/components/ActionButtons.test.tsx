@@ -126,3 +126,12 @@ describe('ActionButtons — labelled (card footer)', () => {
     expect(screen.queryByRole('button', { name: 'Archive' })).not.toBeInTheDocument()
   })
 })
+
+describe('ActionButtons — touch wash', () => {
+  it('washes the icon buttons on a coarse pointer like the ghost Button, Archive with the danger pair', () => {
+    const [link, editBtn, archive, restore] = allControls()
+
+    for (const el of [link, editBtn, restore]) expect(el).toHaveClass('pointer-coarse:bg-[var(--color-accent)]', 'pointer-coarse:rounded-[var(--radius-sm)]')
+    expect(archive).toHaveClass('pointer-coarse:bg-[var(--color-error-container)]', 'pointer-coarse:rounded-[var(--radius-sm)]')
+  })
+})

@@ -193,7 +193,7 @@ function BookingPanel({ row, focusDate = false, onClose, onRequestCancel }: Omit
   const footer = (
     <>
       {booked && !past ? <Button variant="ghost-danger" onClick={() => onRequestCancel(current)}>Cancel visit</Button> : <span />}
-      <div className="flex items-center gap-3">
+      <div className="ml-auto flex items-center gap-3 max-sm:gap-2">
         <Button variant="ghost" onClick={onClose}>{booked ? 'Close' : 'Cancel'}</Button>
         {(!booked || dirty) && (
           <Button onClick={submit} aria-disabled={busy === 'save' || undefined} className={DISABLED_LOOK}>
@@ -214,7 +214,7 @@ function BookingPanel({ row, focusDate = false, onClose, onRequestCancel }: Omit
       description={booked ? undefined : inviteEmail(current) ? `Pick a time and we'll email ${invitee(current)} an invite with a calendar file.` : current.email ? "Pick a time. The email on file can't take an invite, so the visit is booked without one." : 'Pick a time. With no email, the visit is booked without an invite.'}
       dirty={dirty}
       initialFocusRef={!booked || focusDate ? firstFieldRef : undefined}
-      footerClassName="flex items-center justify-between gap-3"
+      footerClassName="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 max-sm:gap-x-2 [&_button]:whitespace-nowrap"
       footer={footer}
     >
       {/* Mounted first and kept in place, so each outcome written into it is announced once (the visible Callouts do not announce). */}
