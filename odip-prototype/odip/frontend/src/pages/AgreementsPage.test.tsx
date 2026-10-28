@@ -292,6 +292,12 @@ describe('AgreementsBulkBar', () => {
   const bar = (selected: number) => (
     <AgreementsBulkBar selected={selected} approvable={selected} canApprove shown={200} allShownSelected={false} onToggleShown={vi.fn()} onClear={vi.fn()} onApprove={vi.fn()} />
   )
+  it('sticks under the app header below xl and stays in flow from xl up', () => {
+    render(bar(2))
+    const region = screen.getByRole('region', { name: 'Selection' })
+    expect(region).toHaveClass('max-xl:sticky', 'max-xl:top-[calc(3rem+var(--safe-top))]')
+  })
+
   it('refuses more than 100 ticked rows, in words', () => {
     render(bar(101))
     expect(screen.getByText('Choose 100 or fewer (101 selected).')).toBeInTheDocument()

@@ -24,7 +24,7 @@ interface Props {
   note?: string
 }
 
-/** The bar above the table: how many are ticked, Clear, and Approve. In flow (never sticky), so nothing covers it and ticking moves nothing. */
+/** The bar above the table: how many are ticked, Clear, and Approve. Below xl it sticks under the app header (paper fill, hairline shadow) so it stays in reach while the list scrolls; from xl up it stays in flow. Its height never depends on the count, so ticking moves nothing. */
 export function AgreementsBulkBar({ selected, approvable, canApprove, shown, allShownSelected, onToggleShown, onClear, onApprove, onAction, note }: Props) {
   const narrow = useIsBelowMd()
   const tooMany = selected > MAX_SELECTED
@@ -46,7 +46,7 @@ export function AgreementsBulkBar({ selected, approvable, canApprove, shown, all
     ...(canApprove ? [{ value: 'approve', label, description: reason ?? approveReason ?? undefined, disabled: approveOff }] : []),
   ]
   return (
-    <div className="mb-3 flex min-h-11 flex-wrap items-center gap-x-4 gap-y-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-1.5 max-md:flex-nowrap max-md:gap-x-3" role="region" aria-label="Selection">
+    <div className="mb-3 max-xl:sticky max-xl:top-[calc(3rem+var(--safe-top))] max-xl:z-20 max-xl:shadow-[var(--shadow-hairline)] flex min-h-11 flex-wrap items-center gap-x-4 gap-y-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-1.5 max-md:flex-nowrap max-md:gap-x-3" role="region" aria-label="Selection">
       {narrow && (
         // The same box as the table's row boxes (DataTable), so it wears the house accent and a 44 px target.
         <label className="inline-flex min-h-[var(--tap-min)] min-w-[var(--tap-min)] shrink-0 items-center justify-center">

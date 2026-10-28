@@ -64,14 +64,26 @@ export function termView(r: AgreementRow): TermView {
   }
 }
 
-/** What the server will leave alone in a bulk run, one line per reason, each row counted once (waiting draft, then ended, then already on the list). The server still decides per agreement. */
-export function bulkSkipNotes(selected: readonly AgreementRow[], action: AgreementBulkAction, list?: PriceList | null): string[] {
+/** What the server will leave alone in a bulk run, each row counted once for the first reason (waiting draft, then ended, then already on the list). The server still decides per agreement. */
+function skipCounts(selected: readonly AgreementRow[], action: AgreementBulkAction, list?: PriceList | null) {
   let waiting = 0, ended = 0, already = 0
   for (const r of selected) {
     if (r.hasWaitingDraft) waiting++
     else if (action === 'reprice' && r.endingState === 'Ended') ended++
     else if (action === 'reprice' && list && r.priceList && r.priceList.start >= list.start) already++
   }
+  return { waiting, ended, already }
+}
+
+/** How many ticked rows the run will skip: the button counts the rest. */
+export function bulkSkipCount(selected: readonly AgreementRow[], action: AgreementBulkAction, list?: PriceList | null): number {
+  const { waiting, ended, already } = skipCounts(selected, action, list)
+  return waiting + ended + already
+}
+
+/** One line per skip reason. */
+export function bulkSkipNotes(selected: readonly AgreementRow[], action: AgreementBulkAction, list?: PriceList | null): string[] {
+  const { waiting, ended, already } = skipCounts(selected, action, list)
   const has = (n: number) => (n === 1 ? 'has' : 'have')
   return [
     waiting && `${waiting} ${has(waiting)} a draft waiting and will be skipped.`,

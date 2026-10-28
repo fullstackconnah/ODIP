@@ -12,7 +12,7 @@ import { extractErrorMessage } from '@/lib/utils'
 import { plural } from '@/lib/format'
 import { CHUNK } from '@/lib/runInChunks'
 import { addDays, formatServiceDate, isPricingDate } from '@/lib/planQuote'
-import { bulkSkipNotes, latestEnd } from './agreementRows'
+import { bulkSkipCount, bulkSkipNotes, latestEnd } from './agreementRows'
 
 /** A run that stopped partway: what the earlier requests answered, and how many items were never sent. `noReply`: the failed request got no answer, so some of its drafts may exist. */
 export interface BulkStopped { done: number; total: number; notSent: number; noReply: boolean }
@@ -39,7 +39,7 @@ const noReply = (error: unknown) => { const s = statusOf(error); return s === un
 const failureWords = (error: unknown) => {
   const status = statusOf(error)
   return status === 429 ? 'Another save is running for your organisation. Nothing was changed. Try again in a moment.'
-    : status === 400 || status === 403 ? `${extractErrorMessage(error, 'Something went wrong.')} Nothing was changed.`
+    : status === 400 || status === 403 ? `${extractErrorMessage(error, status === 403 ? "Your role can't do this." : 'Something went wrong.')} Nothing was changed.`
     : 'Could not make these drafts. Nothing was changed. Try again.'
 }
 
@@ -61,7 +61,9 @@ export function AgreementActionDialog({ action, selected, onClose, onDone, onSho
   const ready = action === 'renew' || (action === 'reprice' ? !!list : isPricingDate(endDate) && !dateTooEarly)
   const notes = bulkSkipNotes(selected, action, list)
   const running = phase === 'running'
-  const make = `Make ${plural(count, 'draft')}`
+  const makeCount = count - bulkSkipCount(selected, action, list)
+  const make = makeCount > 0 ? `Make ${plural(makeCount, 'draft')}` : 'Nothing to make'
+  const noLists = action === 'reprice' && lists.data?.length === 0
   const dayFrom = list ? formatServiceDate(list.start) : ''
 
   const run = async () => {
@@ -91,7 +93,7 @@ export function AgreementActionDialog({ action, selected, onClose, onDone, onSho
       ) : (
         <>
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button onClick={run} disabled={!ready || failure?.kind === 'refused' || failure?.kind === 'noReply'}>{make}</Button>
+          <Button onClick={run} disabled={!ready || makeCount === 0 || failure?.kind === 'refused' || failure?.kind === 'noReply'}>{make}</Button>
         </>
       )}
     >
@@ -114,8 +116,9 @@ export function AgreementActionDialog({ action, selected, onClose, onDone, onSho
               <SelectField
                 label="Price list" required value={list?.version ?? ''} onChange={e => setChosen(e.target.value)} disabled={!list}
                 options={list ? lists.data!.map(l => ({ value: l.version, label: `${l.version} · starts ${formatServiceDate(l.start)}` }))
-                  : [{ value: '', label: lists.isError ? "Couldn't load price lists." : 'Loading price lists…' }]}
+                  : [{ value: '', label: lists.isError ? "Couldn't load price lists." : noLists ? 'No price lists yet' : 'Loading price lists…' }]}
               />
+              {noLists && <p>An Admin can add one in Settings, Plan pricing.</p>}
               {lists.isError && <Button variant="secondary" size="sm" onClick={() => lists.refetch()}>Try again</Button>}
               {list && <p>{`New prices apply from ${dayFrom} to each agreement's end. Days before that keep their prices. If an agreement started after ${dayFrom}, it is repriced from its start.`}</p>}
               <p>{`The supports stay the same. ${SAVED_AS_DRAFTS}`}</p>

@@ -41,7 +41,7 @@ describe('AgreementActionDialog', () => {
   })
 
   it('reprices: defaults to the newest list, sends the chosen version, and warns when it started in the past', async () => {
-    const { onDone } = open('reprice', [row('Ana')])
+    const { onDone } = open('reprice', [row('Ana', '2026-12-31', { priceList: { version: '2024-25', start: '2024-07-01' } })])
     expect(screen.getByLabelText(/Price list/)).toHaveValue('2026-27')
     expect(screen.getByText(/started [A-Za-z]+ 1 Jul 2026, before today/)).toBeInTheDocument()
     await userEvent.selectOptions(screen.getByLabelText(/Price list/), '2025-26')
@@ -80,6 +80,23 @@ describe('AgreementActionDialog', () => {
     expect(screen.getByText('1 has a draft waiting and will be skipped.')).toBeInTheDocument()
   })
 
+  it('counts only the drafts that will be made, and says so when none will be', () => {
+    open('renew', [row('Ana'), row('Ben', '2026-12-31', { hasWaitingDraft: true }), row('Cy', '2026-12-31', { hasWaitingDraft: true })])
+    expect(screen.getByRole('button', { name: 'Make 1 draft' })).toBeEnabled()
+    cleanup()
+    open('renew', [row('Ben', '2026-12-31', { hasWaitingDraft: true })])
+    expect(screen.getByRole('button', { name: 'Nothing to make' })).toBeDisabled()
+  })
+
+  it('reprice with no price lists at all says so, with where to add one, instead of loading forever', () => {
+    mockLists.mockReturnValue(lists([]))
+    open('reprice', [row('Ana')])
+    expect(screen.getByRole('option', { name: 'No price lists yet' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Loading price lists…' })).not.toBeInTheDocument()
+    expect(screen.getByText('An Admin can add one in Settings, Plan pricing.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Make 1 draft' })).toBeDisabled()
+  })
+
   it('shows progress for a long run and cannot be closed while it runs', async () => {
     let finish!: (v: unknown) => void
     mockBulk.mockReturnValue(new Promise(resolve => { finish = resolve }))
@@ -95,6 +112,7 @@ describe('AgreementActionDialog', () => {
   it.each([
     [429, undefined, /Another save is running/],
     [403, ['Only an approver can renew agreements.'], /^Only an approver can renew agreements\. Nothing was changed\.$/],
+    [403, undefined, /^Your role can't do this. Nothing was changed.$/],
     [400, ['Choose a price list.'], /^Choose a price list\. Nothing was changed\.$/],
     [400, undefined, /^Something went wrong\. Nothing was changed\.$/],
   ])('keeps the dialog open when the first request is refused with %i', async (status, errors, words) => {

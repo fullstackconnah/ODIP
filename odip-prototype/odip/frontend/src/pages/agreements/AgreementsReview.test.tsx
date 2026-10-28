@@ -103,6 +103,27 @@ describe('AgreementsReview', () => {
     expect(onBack).toHaveBeenCalled()
   })
 
+  it('says no drafts were made, not 0 drafts', () => {
+    show(run({ results: [] }))
+    expect(screen.getByText('No drafts were made.')).toBeInTheDocument()
+  })
+
+  it('labels the two dates on each card with their column headers', () => {
+    show(run())
+    const ana = screen.getByText('Ana Lee').closest('tr')!
+    expect(within(ana).getByText('Last term')).toHaveClass('md:hidden')
+    expect(within(ana).getByText('New term')).toHaveClass('md:hidden')
+  })
+
+  it('gives the notices block a focus ring after a keyboard Approve', async () => {
+    mockApprove.mockResolvedValue({ results: [{ participantId: 'a', draftId: 'n-a', participantName: 'Ana Lee', outcome: 'Approved', reasons: [] }], stopped: null })
+    show(run())
+    await tick('Ana Lee')
+    await userEvent.click(screen.getByRole('button', { name: 'Approve 1' }))
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Approve 1' }))
+    await waitFor(() => expect(document.activeElement).toHaveClass('focus-visible:ring-2'))
+  })
+
   it('All agreements goes back', async () => {
     const { onBack } = show(run())
     await userEvent.click(screen.getByRole('button', { name: 'All agreements' }))

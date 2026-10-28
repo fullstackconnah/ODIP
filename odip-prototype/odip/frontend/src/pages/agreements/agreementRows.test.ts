@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AgreementRevisionRef, AgreementRow } from '@/api/types'
-import { approveTargets, bulkSkipNotes, filterRows, latestEnd, listOptions, parseShow, statusBadge, termView } from './agreementRows'
+import { approveTargets, bulkSkipCount, bulkSkipNotes, filterRows, latestEnd, listOptions, parseShow, statusBadge, termView } from './agreementRows'
 
 const rev = (n: number, start: string, end: string, total = 1000): AgreementRevisionRef => ({ draftId: `d${n}`, version: n, agreementStartDate: start, agreementEndDate: end, total })
 const row = (over: Partial<AgreementRow> & { participantName: string }): AgreementRow => ({
@@ -77,6 +77,15 @@ describe('bulkSkipNotes', () => {
   it('says nothing when nothing is skipped, and ended rows are renewed', () => {
     expect(bulkSkipNotes([rows[0], rows[2]], 'renew')).toEqual([])
     expect(bulkSkipNotes([rows[0]], 'reprice', list)).toEqual([])
+  })
+})
+
+describe('bulkSkipCount', () => {
+  const list = { version: '2026-27', start: '2026-07-01' }
+  it('adds up every row the notes name, once each', () => {
+    expect(bulkSkipCount(rows, 'renew')).toBe(2)
+    expect(bulkSkipCount(rows, 'reprice', list)).toBe(4)
+    expect(bulkSkipCount([rows[0]], 'extend')).toBe(0)
   })
 })
 

@@ -10,7 +10,6 @@ import { NoticesRegion } from '@/components/NoticesRegion'
 import { StatusBadge } from '@/components/StatusBadge'
 import { useNotices } from '@/hooks/useNotices'
 import { formatDateRange } from '@/lib/dateRange'
-import { plural } from '@/lib/format'
 import { addDays, formatServiceDate } from '@/lib/planQuote'
 import { formatCurrency } from '@/lib/utils'
 import { ApproveAgreementsDialog, type ApprovePhase } from './ApproveAgreementsDialog'
@@ -112,14 +111,17 @@ export function AgreementsReview({ run, canApprove, onBack }: Props) {
   const participant: Column<AgreementBulkResult> = { key: 'name', header: 'Participant', mobile: 'primary', render: link }
   const col = (key: string, header: string, render: (r: AgreementBulkResult) => ReactNode, money = false): Column<AgreementBulkResult> =>
     ({ key, header, mobile: 'meta', render, wrap: !money, ...(money && { align: 'right' as const, className: moneyCell }) })
+  // On a phone card the meta values run together on one line, so a date carries its column's label; desktop has the column header.
+  const dated = (key: string, header: string, render: (r: AgreementBulkResult) => string) =>
+    col(key, header, r => { const value = render(r); return value ? <><span className="font-medium md:hidden">{header}</span>{' '}{value}</> : '' })
   const change = col('change', 'Change', r => (r.before && r.after ? changeWords(r.before.total, r.after.total) : ''), true)
   const columns: Column<AgreementBulkResult>[] = action === 'reprice'
-    ? [participant, col('term', 'Term', r => range(r.before)), col('before', 'Before', r => money(r.before?.total), true), col('after', 'After', r => money(r.after?.total), true), change, checkColumn]
+    ? [participant, dated('term', 'Term', r => range(r.before)), col('before', 'Before', r => money(r.before?.total), true), col('after', 'After', r => money(r.after?.total), true), change, checkColumn]
     : action === 'extend'
-      ? [participant, col('last', 'Last term', r => range(r.before)), col('lastTotal', 'Last total', r => money(r.before?.total), true),
-        col('added', 'Added days', r => (r.before && r.after ? formatDateRange(addDays(r.before.end, 1), r.after.end) : '')), col('addedTotal', 'Added total', r => money(r.after?.total), true), checkColumn]
-      : [participant, col('last', 'Last term', r => range(r.before)), col('lastTotal', 'Last total', r => money(r.before?.total), true),
-        col('new', 'New term', r => range(r.after)), col('newTotal', 'New total', r => money(r.after?.total), true), change, checkColumn]
+      ? [participant, dated('last', 'Last term', r => range(r.before)), col('lastTotal', 'Last total', r => money(r.before?.total), true),
+        dated('added', 'Added days', r => (r.before && r.after ? formatDateRange(addDays(r.before.end, 1), r.after.end) : '')), col('addedTotal', 'Added total', r => money(r.after?.total), true), checkColumn]
+      : [participant, dated('last', 'Last term', r => range(r.before)), col('lastTotal', 'Last total', r => money(r.before?.total), true),
+        dated('new', 'New term', r => range(r.after)), col('newTotal', 'New total', r => money(r.after?.total), true), change, checkColumn]
   const reasonColumns = (danger: boolean): Column<AgreementBulkResult>[] => [
     { key: 'name', header: 'Participant', mobile: 'primary', render: r => <Link to={`/participants/${r.participantId}/agreement-draft`} className="font-medium text-[var(--color-primary)] hover:underline">{r.name}</Link> },
     {
@@ -143,7 +145,7 @@ export function AgreementsReview({ run, canApprove, onBack }: Props) {
         <Button variant="ghost" size="sm" onClick={onBack}><ArrowLeft className="h-4 w-4" aria-hidden="true" />All agreements</Button>
       </div>
 
-      <div ref={noticesRef} tabIndex={-1} className="outline-none empty:hidden">
+      <div ref={noticesRef} tabIndex={-1} className="rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] empty:hidden">
         <NoticesRegion notices={notices} onDismiss={dismiss} className="empty:hidden" />
       </div>
 
@@ -184,7 +186,7 @@ export function AgreementsReview({ run, canApprove, onBack }: Props) {
       ))}
       {skipped.length > 0 && group('bulk-skipped', `Skipped (${skipped.length})`, <DataTable data={skipped} columns={reasonColumns(false)} keyField="participantId" sortable={false} />)}
       {failed.length > 0 && group('bulk-failed', `Failed (${failed.length})`, <DataTable data={failed} columns={reasonColumns(true)} keyField="participantId" sortable={false} />)}
-      {results.length === 0 && <p className="text-sm text-[var(--color-muted-foreground)]">{`Nothing was made. ${plural(0, 'draft')}.`}</p>}
+      {results.length === 0 && <p className="text-sm text-[var(--color-muted-foreground)]">{'No drafts were made.'}</p>}
 
       <ApproveAgreementsDialog
         open={dialog.open} phase={dialog.phase} count={dialog.phase === 'confirm' ? ready.length : count} skipped={0} leftOut={leftOut} progress={dialog.progress}

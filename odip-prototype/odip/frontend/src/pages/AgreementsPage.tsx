@@ -217,23 +217,23 @@ export default function AgreementsPage() {
               onApprove={() => setDialog({ open: true, phase: 'confirm', progress: 0, error: null, refused: false, results: [], stopped: null })}
             />
           )}
+          {/* The bar sticks below xl, and a sticky element holds only inside its parent: so the table shares this one. */}
+          {phase === 'ready' && shown.length === 0 ? (
+            <EmptyState icon={CalendarClock} size="inline" title={emptyWords} />
+          ) : (
+            <DataTable
+              data={shown} columns={columns} keyField="participantId" sortable={false}
+              loading={phase === 'loading'}
+              error={phase === 'error'} onRetry={() => query.refetch()}
+              selectable selectedRows={selected} onSelectionChange={setSelected}
+              onRowClick={row => navigate(`/participants/${row.participantId}/agreement-draft`)}
+            />
+          )}
         </div>
-      ) : null}
-
-      {phase === 'ready' && rows.length === 0 ? (
+      ) : (
         <EmptyState
           icon={FileText} title="No agreements yet"
           description="A participant shows here once their first service agreement is saved. Write one from the participant's page."
-        />
-      ) : phase === 'ready' && shown.length === 0 ? (
-        <EmptyState icon={CalendarClock} size="inline" title={emptyWords} />
-      ) : (
-        <DataTable
-          data={shown} columns={columns} keyField="participantId" sortable={false}
-          loading={phase === 'loading'}
-          error={phase === 'error'} onRetry={() => query.refetch()}
-          selectable selectedRows={selected} onSelectionChange={setSelected}
-          onRowClick={row => navigate(`/participants/${row.participantId}/agreement-draft`)}
         />
       )}
 
