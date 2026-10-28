@@ -1,8 +1,9 @@
 import { useRef } from 'react'
 import { useBudgetSeries } from '@/api/hooks'
-import { BudgetTrackChart, BudgetTrackLegend, BUDGET_TRACK_TITLE, FULL_LEGEND, useMeasuredWidth } from '@/components/BudgetTrackChart'
+import { BudgetTrackChart, BudgetTrackLegend, BUDGET_TRACK_TITLE } from '@/components/BudgetTrackChart'
 import { Button } from '@/components/Button'
 import { Card } from '@/components/Card'
+import { useMeasuredWidth } from '@/hooks/useMeasuredWidth'
 import { RetryCallout } from '@/components/PageState'
 import { chartHeight } from '@/lib/budgetTrack'
 import { retryingAfterError } from '@/lib/queryPhase'
@@ -23,7 +24,7 @@ export default function BudgetTrackCard({ participantId }: { participantId: stri
           <div ref={boxRef}>
             <div data-chart-skeleton aria-hidden="true" className="animate-pulse rounded-[var(--radius-md)] bg-[var(--color-surface-container)]">
               {/* The full legend, laid out unseen, so the skeleton wraps to as many lines as the loaded legend at this width. */}
-              <BudgetTrackLegend lines={FULL_LEGEND} className="invisible" />
+              <BudgetTrackLegend className="invisible" />
               <div style={{ height: 8 + chartHeight(width ?? 0) }} />
             </div>
           </div>

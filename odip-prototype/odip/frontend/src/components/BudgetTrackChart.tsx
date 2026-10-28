@@ -1,4 +1,5 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type RefObject } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react'
+import { useMeasuredWidth } from '@/hooks/useMeasuredWidth'
 import type { BudgetSeries } from '@/api/types'
 import { money } from '@/lib/budgetLedger'
 import { budgetTrackFootnotes, budgetTrackSentence, chartHeight, compactAud, expectedDrawn, liveLine, readoutHeader, readoutRows, xTicks, yTicks } from '@/lib/budgetTrack'
@@ -23,22 +24,6 @@ const r1 = (n: number) => Math.round(n * 10) / 10
 type Line = 'budget' | 'used' | 'booked' | 'expected'
 const LEGEND: Record<Line, string> = { budget: 'Budget, spread evenly', used: 'Used', booked: 'Booked ahead', expected: 'Expected from the agreement (estimate)' }
 
-/** The element's content width, kept current with a ResizeObserver; undefined until measured. */
-export function useMeasuredWidth(ref: RefObject<HTMLElement | null>): number | undefined {
-  const [width, setWidth] = useState<number>()
-  useLayoutEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const measure = () => setWidth(el.clientWidth)
-    measure()
-    if (typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(measure)
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [ref])
-  return width
-}
-
 /** A series' line key: the mark's own class, so its colour, width and dash are the line's. */
 function LineKey({ line, width = 24 }: { line: Line; width?: number }) {
   return (
@@ -48,10 +33,8 @@ function LineKey({ line, width = 24 }: { line: Line; width?: number }) {
   )
 }
 
-/** Every line a chart can draw: the loading card lays this legend out unseen, so its height wraps exactly as the loaded one does at any width. */
-export const FULL_LEGEND: Line[] = ['budget', 'used', 'booked', 'expected']
-
-export function BudgetTrackLegend({ lines, className = 'mt-3' }: { lines: Line[]; className?: string }) {
+/** The legend; with no lines given it has every line, which the loading card lays out unseen so its height wraps as the loaded one does at any width. */
+export function BudgetTrackLegend({ lines = ['budget', 'used', 'booked', 'expected'], className = 'mt-3' }: { lines?: Line[]; className?: string }) {
   return (
     <ul className={`flex flex-wrap gap-x-4 gap-y-1 ${className}`}>
       {lines.map(line => (

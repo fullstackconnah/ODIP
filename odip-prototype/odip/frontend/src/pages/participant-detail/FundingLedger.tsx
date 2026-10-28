@@ -12,7 +12,7 @@ import { ALERT_TYPE_LABELS } from '@/components/alertSeverityStyles'
 import { PageState } from '@/components/PageState'
 import { retryingAfterError } from '@/lib/queryPhase'
 import { StatusBadge } from '@/components/StatusBadge'
-import { chipToneOf, focusPeriodOf, money, paceSentence, poolSentence, quietEstimateLine, rowsByGroup, unpricedShiftSentence, unpricedTripDaySentence } from '@/lib/budgetLedger'
+import { betweenPlans, chipToneOf, focusPeriodOf, hasNoPlan, ledgerHasMainBranch, money, paceSentence, poolSentence, quietEstimateLine, rowsByGroup, unpricedShiftSentence, unpricedTripDaySentence } from '@/lib/budgetLedger'
 import { formatDateRange, formatDayMonth } from '@/lib/dateRange'
 import { writtenDay, writtenSpan } from '@/lib/fundingPlan'
 import { plural } from '@/lib/format'
@@ -66,13 +66,6 @@ export default function FundingLedger({ participantId, enabled = true, nextPlanS
     </div>
   )
 }
-
-/** Between an ended plan and the next one that has not started: the ledger says no plan is running. */
-const betweenPlans = (data: ParticipantLedgerDto, nextPlanStart?: string) => !!data.planId && !data.planIsCurrent && !!nextPlanStart
-const hasNoPlan = (data: ParticipantLedgerDto) => !data.planId || data.pools.length === 0
-
-/** Whether the ledger shows a plan's figures: the only state the budget graph is drawn (and asked for) in. Never for a participant funded another way. */
-export const ledgerHasMainBranch = (data: ParticipantLedgerDto, nextPlanStart?: string, otherFunded = false) => !otherFunded && !betweenPlans(data, nextPlanStart) && !hasNoPlan(data)
 
 /**
  * The whole ledger for a loaded answer, so the sections can be rendered from a fixture with no query behind it.
