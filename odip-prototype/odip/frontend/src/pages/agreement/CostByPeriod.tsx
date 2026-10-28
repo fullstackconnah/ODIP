@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { usePlanPeriodQuote } from '@/api/hooks'
 import { Button } from '@/components/Button'
 import { FormField } from '@/components/FormField'
+import { TAP_AREA } from '@/components/tapArea'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { PERIOD_KINDS, offeredKinds, periodAt, periodCount, type PeriodKind } from '@/lib/agreementPeriods'
@@ -25,7 +26,7 @@ const FIGURE_SLOT = 'flex min-h-[max(1.5625rem,var(--control-h-sm))] items-cente
 const STEP_BUTTON = 'w-[var(--control-h)] px-0! aria-disabled:cursor-not-allowed aria-disabled:opacity-50'
 const SUFFIX: Partial<Record<View, string>> = { pricing: ' · pricing…', updating: ' · updating…', busy: ' · the pricing service is busy, trying again…' }
 
-type Props = { pricing: Pick<ReturnType<typeof useAgreementPricing>, 'from' | 'to' | 'settled' | 'settling' | 'quoteReady' | 'fromStore'> }
+type Props = { pricing: Pick<ReturnType<typeof useAgreementPricing>, 'from' | 'to' | 'settled' | 'settling' | 'quoteReady' | 'fromStore' | 'budgetFailed' | 'budgetFetching' | 'error' | 'retry'> }
 
 /**
  * Check step: what the agreement costs over one period of it, priced on the real calendar (public holidays, weekends, month lengths) and never as a multiple of the ordinary week. Periods
@@ -44,6 +45,8 @@ export function CostByPeriod({ pricing }: Props) {
   const [lastNotes, setLastNotes] = useState('')
 
   const kind: Choice | null = choice === 'custom' ? 'custom' : kinds.includes(choice) ? choice : kinds.includes('month') ? 'month' : kinds[0] ?? null
+  // A kind that is no longer offered gives way to the default, from its first period.
+  if (kind && kind !== choice) { setChoice(kind); setStepIndex(0) }
   const count = kind && kind !== 'custom' ? periodCount(kind, start, end) : 0
   const index = Math.min(stepIndex, Math.max(count - 1, 0))
 
@@ -57,7 +60,7 @@ export function CostByPeriod({ pricing }: Props) {
     if (!errors.from && !errors.to) {
       const from = typed.from < start ? start : typed.from, to = typed.to > end ? end : typed.to
       if (typed.to < typed.from) errors.to = 'This is before the From date.'
-      else if (from > to) errors.to = 'This is outside the agreement dates.'
+      else if (from > to) errors.from = 'This is outside the agreement dates.'
       else range = { from, to, part: false, clampedFrom: from !== typed.from, clampedTo: to !== typed.to }
     }
   } else if (kind) {
@@ -69,9 +72,12 @@ export function CostByPeriod({ pricing }: Props) {
   const asked = useDebouncedValue(wanted, 300)
   const query = usePlanPeriodQuote(pricing.settled, asked?.from ?? '', asked?.to ?? '', !fromStore && pricing.quoteReady && asked !== null)
   const current = !!wanted && asked?.from === wanted.from && asked.to === wanted.to && pricing.quoteReady && !pricing.settling && !fromStore
-  const retrying = query.isError && query.isFetching
+  // The budget failing to refresh leaves no answer to price a period against, so it reads as this section failing; Try again then asks the budget, and the period follows once it answers.
+  const budgetFailed = pricing.budgetFailed && !!wanted
+  const retrying = budgetFailed ? pricing.budgetFetching : query.isError && query.isFetching
   const data = query.data
   const view: View = !wanted ? 'idle'
+    : budgetFailed ? 'failed'
     : !current ? (answered ? 'updating' : 'pricing')
     : query.isError ? 'failed'
     : data && !query.isFetching ? (pricedNothing(data) ? 'nothing' : 'ready')
@@ -88,7 +94,7 @@ export function CostByPeriod({ pricing }: Props) {
   // What the quote adds under the figure. While a new answer is awaited the last notes keep their box, hidden, so the section does not shrink and grow back.
   const notes: string | null = view === 'ready' && data ? (totalsCaption(data).text ? `${asSentence(totalsCaption(data).text)}.` : '')
     : view === 'nothing' ? 'Nothing in this period is priced.'
-    : view === 'failed' ? (retrying ? '' : describeQuoteError(query.error).detail ?? '')
+    : view === 'failed' ? (retrying ? null : describeQuoteError(budgetFailed ? pricing.error : query.error).detail ?? '')
     : view === 'idle' ? '' : null
   if (notes !== null && notes !== lastNotes) setLastNotes(notes)
   if ((view === 'ready' || view === 'nothing') && !answered) setAnswered(true)
@@ -119,7 +125,7 @@ export function CostByPeriod({ pricing }: Props) {
   if (!kind) return <section aria-labelledby="check-by-period" className="flex flex-col gap-2">{heading}<p className={MUTED}>The agreement is a fortnight or shorter, so its whole cost above is the only period.</p></section>
 
   const line = range && (
-    <p className={`${LABEL} tabular-nums`}><span className="whitespace-nowrap">{where}</span>{' · '}<span className="whitespace-nowrap">{dates}</span>{SUFFIX[view]}</p>
+    <p className={`${LABEL} min-w-0 flex-1 tabular-nums`}><span className="whitespace-nowrap">{where}</span>{' · '}<span className="whitespace-nowrap">{dates}</span>{SUFFIX[view]}</p>
   )
   const unit = kind === 'custom' ? '' : PERIOD_KINDS[kind].unit
   const shownNotes = notes ?? lastNotes
@@ -144,7 +150,7 @@ export function CostByPeriod({ pricing }: Props) {
           {line}
         </>
       ) : (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <div className="flex min-h-12 items-center gap-x-3 sm:min-h-0">
           <div className="flex gap-1">
             <Button variant="secondary" size="md" aria-label={`Previous ${unit}`} aria-disabled={index === 0 || undefined} onClick={() => step(-1)} className={STEP_BUTTON}><ChevronLeft className="h-4 w-4" /></Button>
             <Button variant="secondary" size="md" aria-label={`Next ${unit}`} aria-disabled={index >= count - 1 || undefined} onClick={() => step(1)} className={STEP_BUTTON}><ChevronRight className="h-4 w-4" /></Button>
@@ -162,8 +168,8 @@ export function CostByPeriod({ pricing }: Props) {
           <>
             <p className="text-sm text-[var(--color-muted-foreground)]">{retrying ? 'Trying again…' : "Couldn't price this period."}</p>
             <Button
-              variant="secondary" size="sm" aria-disabled={retrying || undefined} aria-busy={retrying || undefined} className="aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-              onClick={() => { if (retrying) return; setArmed(true); void query.refetch() }}
+              variant="secondary" size="sm" aria-disabled={retrying || undefined} aria-busy={retrying || undefined} className={`${TAP_AREA} aria-disabled:cursor-not-allowed aria-disabled:opacity-50`}
+              onClick={() => { if (retrying) return; setArmed(true); if (budgetFailed) pricing.retry(); else void query.refetch() }}
             >Try again</Button>
           </>
         )}

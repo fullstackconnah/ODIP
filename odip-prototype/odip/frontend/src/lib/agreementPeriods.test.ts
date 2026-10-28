@@ -38,6 +38,13 @@ describe('the end of the agreement', () => {
     expect(periodAt('month', '2027-07-01', '2027-08-10', 1)).toEqual({ from: '2027-08-01', to: '2027-08-10', part: true })
   })
 
+  it('marks a last period that ends exactly on the agreement end as a whole period', () => {
+    expect(periodCount('month', '2027-01-01', '2027-02-28')).toBe(2)
+    expect(periodAt('month', '2027-01-01', '2027-02-28', 1)).toEqual({ from: '2027-02-01', to: '2027-02-28', part: false })
+    expect(periodCount('fortnight', '2027-01-01', '2027-01-28')).toBe(2)
+    expect(periodAt('fortnight', '2027-01-01', '2027-01-28', 1)).toEqual({ from: '2027-01-15', to: '2027-01-28', part: false })
+  })
+
   it('counts a period that starts on the agreement end day, and not one that starts after it', () => {
     expect(periodCount('fortnight', '2027-01-01', '2027-01-15')).toBe(2)
     expect(periodCount('fortnight', '2027-01-01', '2027-01-14')).toBe(1)

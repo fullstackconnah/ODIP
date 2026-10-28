@@ -111,6 +111,8 @@ export function usePlanPeriodQuote(blocks: readonly PlanBlock[], from: string, t
     queryKey: ['plan-period-quote', JSON.stringify({ blocks, from, to })],
     enabled: ready,
     staleTime: 30_000,
+    // Returning to the tab would send a third quote beside the budget's and the check's; its inputs change only through the screen, which keys the query.
+    refetchOnWindowFocus: false,
     retry: retryWhenBusy,
     retryDelay: busyDelay,
     queryFn: ({ signal }) => postQuote({ blocks: [...blocks], periodFrom: from, periodTo: to, includeLines: false }, signal),

@@ -4,17 +4,20 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { ReactElement } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { PlanBlock, PlanQuote } from '@/api/types'
+import { blocksToShifts } from '@/lib/agreementShifts'
 import { emptyBlock } from '@/lib/planBlocks'
 import { formatCurrency } from '@/lib/utils'
 import { emptyTotals, quote } from '@/test/fixtures/planPricing'
 import { CostByPeriod } from './CostByPeriod'
+import { useAgreementPricing } from './useAgreementPricing'
 
 const post = vi.hoisted(() => vi.fn())
-vi.mock('@/api/client', async importOriginal => ({ ...(await importOriginal<typeof import('@/api/client')>()), apiClient: { post } }))
+const get = vi.hoisted(() => vi.fn())
+vi.mock('@/api/client', async importOriginal => ({ ...(await importOriginal<typeof import('@/api/client')>()), apiClient: { post, get } }))
 
 const reply = (amount: number, changes: Partial<PlanQuote> = {}): PlanQuote =>
   quote({ totals: { ...emptyTotals(), amount, supportHours: 10, lineCount: 4 }, ...changes })
@@ -23,13 +26,13 @@ const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 const block = (changes: Partial<PlanBlock> = {}): PlanBlock => ({ ...emptyBlock('b1', 'NSW'), days: ['Monday', 'Wednesday'], ...changes })
 const pricing = (changes: Partial<Parameters<typeof CostByPeriod>[0]['pricing']> = {}) =>
-  ({ from: '2027-01-01', to: '2027-06-30', settled: [block()], settling: false, quoteReady: true, fromStore: false, ...changes })
+  ({ from: '2027-01-01', to: '2027-06-30', settled: [block()], settling: false, quoteReady: true, fromStore: false, budgetFailed: false, budgetFetching: false, error: null as unknown, retry: () => undefined, ...changes })
 
 function show(ui: ReactElement) {
   const client = new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } })
   const wrap = (element: ReactElement) => <QueryClientProvider client={client}>{element}</QueryClientProvider>
   const view = render(wrap(ui))
-  return { ...view, again: (next: ReactElement) => view.rerender(wrap(next)) }
+  return { ...view, client, again: (next: ReactElement) => view.rerender(wrap(next)) }
 }
 
 const period = () => document.querySelector('section p.text-xs') as HTMLElement
@@ -38,6 +41,8 @@ const lastBody = () => post.mock.calls.at(-1)?.[1]
 
 beforeEach(() => {
   post.mockReset()
+  get.mockReset()
+  get.mockImplementation(async () => answer({}))
   post.mockImplementation(async () => answer(reply(1234.5)))
 })
 
@@ -202,6 +207,50 @@ describe('Cost by period: never a stale figure', () => {
   })
 })
 
+describe('Cost by period: dates that move under a period', () => {
+  it('keeps the kind and clamps the period when the agreement gets shorter', async () => {
+    const user = userEvent.setup()
+    const view = show(<CostByPeriod pricing={pricing()} />)
+    await screen.findByText('$1,234.50')
+    const next = screen.getByRole('button', { name: 'Next month' })
+    for (let i = 0; i < 4; i += 1) await user.click(next)
+    expect(period()).toHaveTextContent('Month 5 of 6 · 1–31 May 2027')
+
+    view.again(<CostByPeriod pricing={pricing({ to: '2027-03-15' })} />)
+
+    expect(period()).toHaveTextContent('Month 3 of 3 · 1–15 Mar 2027')
+    await waitFor(() => expect(lastBody()).toMatchObject({ periodFrom: '2027-03-01', periodTo: '2027-03-15' }))
+  })
+
+  it('goes back to the first period of the fallback kind when the chosen kind is no longer offered', async () => {
+    const user = userEvent.setup()
+    const view = show(<CostByPeriod pricing={pricing({ to: '2027-12-31' })} />)
+    await screen.findByText('$1,234.50')
+    await user.click(screen.getByRole('radio', { name: 'Quarter' }))
+    await user.click(screen.getByRole('button', { name: 'Next quarter' }))
+    await user.click(screen.getByRole('button', { name: 'Next quarter' }))
+    expect(period()).toHaveTextContent('Quarter 3 of 4')
+
+    view.again(<CostByPeriod pricing={pricing({ to: '2027-03-31' })} />)
+
+    expect(period()).toHaveTextContent('Month 1 of 3 · 1–31 Jan 2027')
+  })
+
+  it('puts the error on From when both dates are before the agreement', async () => {
+    const user = userEvent.setup()
+    show(<CostByPeriod pricing={pricing()} />)
+    await screen.findByText('$1,234.50')
+    await user.click(screen.getByRole('radio', { name: 'Custom' }))
+
+    fireEvent.change(screen.getByLabelText('To'), { target: { value: '2026-12-20' } })
+    fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-11-01' } })
+
+    expect(await screen.findByText('This is outside the agreement dates.')).toBeInTheDocument()
+    expect(screen.getByLabelText('From')).toHaveAccessibleDescription(/outside the agreement dates/)
+    expect(screen.getByLabelText('To')).not.toHaveAccessibleDescription(/outside the agreement dates/)
+  })
+})
+
 describe('Cost by period: the service', () => {
   it('says the service is busy while a 429 is tried again, then shows the figure', async () => {
     post.mockRejectedValueOnce({ response: { status: 429, headers: { 'retry-after': '0' }, data: {} } })
@@ -225,12 +274,111 @@ describe('Cost by period: the service', () => {
     expect(region()).toHaveTextContent('Month 1 of 6, 1–31 Jan 2027: $1,234.50.')
   })
 
+  it('keeps the failure detail in its box, hidden, while Try again is running, and gives Try again a 44px hit area', async () => {
+    const user = userEvent.setup()
+    post.mockRejectedValueOnce({ response: { status: 500, data: {} } })
+    show(<CostByPeriod pricing={pricing()} />)
+    const detail = 'Check your connection and try again. Nothing you entered is lost.'
+    expect(await screen.findByText(detail)).not.toHaveClass('invisible')
+    const again = screen.getByRole('button', { name: 'Try again' })
+    expect(again.className).toContain('before:min-w-[var(--tap-min)]')
+    post.mockImplementationOnce(() => new Promise(() => undefined))
+
+    await user.click(again)
+
+    await waitFor(() => expect(period()).toHaveTextContent('· pricing…'))
+    expect(screen.getByText(detail)).toHaveClass('invisible')
+  })
+
+  it('shows the failed state, not updating, when the budget could not be asked again, and Try again asks the budget', async () => {
+    const user = userEvent.setup()
+    const retry = vi.fn()
+    show(<CostByPeriod pricing={pricing({ quoteReady: false, budgetFailed: true, error: { response: { status: 500, data: {} } }, retry })} />)
+
+    expect(await screen.findByText("Couldn't price this period.")).toBeInTheDocument()
+    expect(period()).not.toHaveTextContent('updating')
+    await user.click(screen.getByRole('button', { name: 'Try again' }))
+
+    expect(retry).toHaveBeenCalledTimes(1)
+    expect(post).not.toHaveBeenCalled()
+  })
+
   it('says nothing is priced rather than showing a $0.00 price', async () => {
     post.mockImplementation(async () => answer(quote()))
     show(<CostByPeriod pricing={pricing()} />)
 
     expect(await screen.findByText('Nothing in this period is priced.')).toBeInTheDocument()
     expect(screen.queryByText('$0.00')).toBeNull()
+  })
+})
+
+// The real pricing hook beside the section: what gates the period quote and what a budget failure does to it.
+const shifts = blocksToShifts([{ block: block(), requirements: { workerGender: 'NoPreference', driver: false, skills: [] } }])
+function Live() {
+  const live = useAgreementPricing({ participantId: '', shifts, state: 'NSW', zone: 'National', from: '2027-01-01', to: '2027-06-30', canQuote: true })
+  return <CostByPeriod pricing={live} />
+}
+type Body = { periodFrom: string; periodTo: string }
+const wholeAgreement = (body: Body) => body.periodFrom === '2027-01-01' && body.periodTo === '2027-06-30'
+
+describe('Cost by period with the real pricing hook', () => {
+  it('asks for the period only after the budget has finished', async () => {
+    let release = () => {}
+    post.mockImplementation(async (_url: string, body: Body) => {
+      if (wholeAgreement(body)) await new Promise<void>(resolve => { release = resolve })
+      return answer(reply(1234.5))
+    })
+    show(<Live />)
+    await wait(450)
+
+    expect(period()).toHaveTextContent('· pricing…')
+    expect(post.mock.calls.some(call => call[1].periodTo === '2027-01-31')).toBe(false)
+
+    release()
+    expect(await screen.findByText('$1,234.50')).toBeInTheDocument()
+    expect(lastBody()).toMatchObject({ periodFrom: '2027-01-01', periodTo: '2027-01-31' })
+  })
+
+  it('shows the failed state with Try again, not updating, when the budget refetch fails; Try again asks the budget', async () => {
+    const user = userEvent.setup()
+    let budgetDown = false
+    post.mockImplementation(async (_url: string, body: Body) => {
+      if (budgetDown && wholeAgreement(body)) throw { response: { status: 500, data: {} } }
+      return answer(reply(1234.5))
+    })
+    const view = show(<Live />)
+    await screen.findByText('$1,234.50')
+
+    budgetDown = true
+    await act(async () => { await view.client.invalidateQueries({ queryKey: ['plan-budget'] }) })
+
+    expect(await screen.findByText("Couldn't price this period.")).toBeInTheDocument()
+    expect(period()).not.toHaveTextContent('updating')
+    expect(screen.queryByText('$1,234.50')).toBeNull()
+
+    budgetDown = false
+    await user.click(screen.getByRole('button', { name: 'Try again' }))
+
+    expect(await screen.findByText('$1,234.50')).toBeInTheDocument()
+    expect(screen.queryByText("Couldn't price this period.")).toBeNull()
+  })
+
+  it('does not ask for the period again when the tab regains focus', async () => {
+    const view = show(<CostByPeriod pricing={pricing()} />)
+    await screen.findByText('$1,234.50')
+    const asked = post.mock.calls.length
+
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(Date.now() + 60_000)
+      await act(async () => { focusManager.setFocused(false); focusManager.setFocused(true); await wait(50) })
+    } finally {
+      vi.useRealTimers()
+      focusManager.setFocused(undefined)
+    }
+
+    expect(post.mock.calls.length).toBe(asked)
+    expect(view.client.isFetching()).toBe(0)
   })
 })
 
