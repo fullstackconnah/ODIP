@@ -457,18 +457,128 @@ public class RosterBoardDragDropTests
         Assert.Equal(sam.Id, (await Reload(db, shift.Id)).UserId);
     }
 
-    [Theory]
-    [InlineData(ShiftStatus.Draft)]
-    [InlineData(ShiftStatus.Cancelled)]
-    public async Task UpdateShift_PublishedToDraftOrCancelled_SendsNothing(ShiftStatus to)
+    [Fact]
+    public async Task UpdateShift_PublishedToDraft_SendsNothing()
     {
         using var db = TestDb.Create();
         var alex = SeedStaff(db, "Alex", "Ng");
         var shift = SeedShift(db, SeedParticipant(db).Id, alex.Id, ShiftStatus.Published);
 
-        Body(await Controller(db).UpdateShift(shift.Id, Put(shift, alex.Id, to), default));
+        Body(await Controller(db).UpdateShift(shift.Id, Put(shift, alex.Id, ShiftStatus.Draft), default));
 
         Assert.Empty(await Notices(db));
+    }
+
+    // ── Cancelling a Published shift tells its worker (shift-cancel-notice, 2026-10-28; reverses decision 9 for Cancelled only) ──
+
+    [Fact]
+    public async Task UpdateShift_PublishedToCancelled_TellsTheWorkerOnce_WithTheCancelledFlag_AndNoNotes()
+    {
+        using var db = TestDb.Create();
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var shift = SeedShift(db, SeedParticipant(db).Id, alex.Id, ShiftStatus.Published);
+
+        Body(await Controller(db).UpdateShift(shift.Id, Put(shift, alex.Id, ShiftStatus.Cancelled) with { Notes = "Family emergency, see Mia's file" }, default));
+
+        Assert.Equal(new[] { (NotificationEventType.ShiftUnassigned, alex.Id) }, await Notices(db));
+        var row = await db.NotificationOutbox.AsNoTracking().SingleAsync();
+        Assert.Contains("\"Cancelled\":true", row.PayloadJson);
+        Assert.DoesNotContain("emergency", row.PayloadJson);
+        var bell = await db.InAppNotifications.AsNoTracking().SingleAsync();
+        Assert.Equal("Your shift with Mia Chen on Mon 24 Aug at 9:00 am was cancelled.", bell.Title);
+        Assert.Equal($"/portal/shifts/{shift.Id}", bell.LinkTo);
+        Assert.DoesNotContain("emergency", bell.Title);
+    }
+
+    [Fact]
+    public async Task UpdateShift_CancellingADraft_SendsNothing()
+    {
+        using var db = TestDb.Create();
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var shift = SeedShift(db, SeedParticipant(db).Id, alex.Id, ShiftStatus.Draft);
+
+        Body(await Controller(db).UpdateShift(shift.Id, Put(shift, alex.Id, ShiftStatus.Cancelled), default));
+
+        Assert.Empty(await Notices(db));
+    }
+
+    [Fact]
+    public async Task UpdateShift_CancellingAnUnassignedPublishedShift_SendsNothing()
+    {
+        using var db = TestDb.Create();
+        var shift = SeedShift(db, SeedParticipant(db).Id, null, ShiftStatus.Published);
+
+        Body(await Controller(db).UpdateShift(shift.Id, Put(shift, null, ShiftStatus.Cancelled), default));
+
+        Assert.Empty(await Notices(db));
+    }
+
+    [Fact]
+    public async Task UpdateShift_CancellingAPublishedShiftBeforeTodayInTheProvidersZone_SendsNothing()
+    {
+        using var db = TestDb.Create();
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var shift = SeedShift(db, SeedParticipant(db).Id, alex.Id, ShiftStatus.Published, day: new DateOnly(2026, 8, 19));   // the provider's today is 2026-08-20
+
+        Body(await Controller(db).UpdateShift(shift.Id, Put(shift, alex.Id, ShiftStatus.Cancelled), default));
+
+        Assert.Empty(await Notices(db));
+    }
+
+    [Fact]
+    public async Task UpdateShift_CancellingAPublishedShiftOnTodayItself_TellsTheWorker()
+    {
+        using var db = TestDb.Create();
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var shift = SeedShift(db, SeedParticipant(db).Id, alex.Id, ShiftStatus.Published, day: new DateOnly(2026, 8, 20));
+
+        Body(await Controller(db).UpdateShift(shift.Id, Put(shift, alex.Id, ShiftStatus.Cancelled), default));
+
+        Assert.Equal(new[] { (NotificationEventType.ShiftUnassigned, alex.Id) }, await Notices(db));
+    }
+
+    [Fact]
+    public async Task UpdateShift_CancellingAndChangingTheWorker_TellsOnlyTheOldWorker()
+    {
+        using var db = TestDb.Create();
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var sam = SeedStaff(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, alex.Id, ShiftStatus.Published);
+
+        Body(await Controller(db).UpdateShift(shift.Id, Put(shift, sam.Id, ShiftStatus.Cancelled), default));
+
+        Assert.Equal(new[] { (NotificationEventType.ShiftUnassigned, alex.Id) }, await Notices(db));
+        Assert.Contains("\"Cancelled\":true", (await db.NotificationOutbox.AsNoTracking().SingleAsync()).PayloadJson);
+        // the shift is Sam's now, so Alex's notice opens My shifts: the shift page would answer "Shift not found"
+        Assert.Equal("/portal", (await db.InAppNotifications.AsNoTracking().SingleAsync()).LinkTo);
+    }
+
+    [Fact]
+    public async Task UpdateShift_CancellingAPublishedShiftOnTheProvidersTodayInSydney_IsBeforeTodayAndSendsNothing()
+    {
+        using var db = TestDb.Create();
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var shift = SeedShift(db, SeedParticipant(db).Id, alex.Id, ShiftStatus.Published, day: new DateOnly(2026, 8, 19));
+        // 15:00Z on 19 Aug is 01:00 on 20 Aug in Sydney (no provider settings, so the Sydney default): the shift is already yesterday there, though it is still today in UTC
+        var clock = new FixedClock(new DateTimeOffset(2026, 8, 19, 15, 0, 0, TimeSpan.Zero));
+
+        Body(await Controller(db, clock: clock).UpdateShift(shift.Id, Put(shift, alex.Id, ShiftStatus.Cancelled), default));
+
+        Assert.Empty(await Notices(db));
+    }
+
+    [Fact]
+    public async Task UpdateShift_CancelThenUncancel_SendsCancelledThenShiftAssigned()
+    {
+        using var db = TestDb.Create();
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var shift = SeedShift(db, SeedParticipant(db).Id, alex.Id, ShiftStatus.Published);
+        var controller = Controller(db);
+
+        Body(await controller.UpdateShift(shift.Id, Put(shift, alex.Id, ShiftStatus.Cancelled), default));
+        Body(await controller.UpdateShift(shift.Id, Put(shift, alex.Id, ShiftStatus.Published), default));
+
+        Assert.Equal(new[] { (NotificationEventType.ShiftAssigned, alex.Id), (NotificationEventType.ShiftUnassigned, alex.Id) }, await Notices(db));
     }
 
     // ── POST /shifts/move-staff: one all-or-nothing request ──

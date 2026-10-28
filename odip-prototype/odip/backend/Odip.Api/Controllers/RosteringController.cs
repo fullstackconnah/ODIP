@@ -727,7 +727,7 @@ public class RosteringController : ControllerBase
         if (previousUserId != shift.UserId || shift.Status == ShiftStatus.Cancelled)
             await _obligationTasks.CompleteByShiftAsync(shift.Id, TaskType.LeaveCoverage, ct);
 
-        // The slide-over's Staff field is the menus' way to assign (the brief, section 7), so a PUT tells people exactly as a drop does; becoming Published tells the worker (decision 9).
+        // The slide-over's Staff field is the menus' way to assign (the brief, section 7), so a PUT tells people exactly as a drop does; becoming Published tells the worker, and a Published shift that is cancelled tells the worker it was cancelled (decision 9, reversed for Cancelled on 2026-10-28).
         // shortcut: two coordinators editing ONE shift in the slide-over is still last-write-wins on the worker (the PUT carries no ExpectedStaffId as the board's drops do), though the
         // locks above keep it from writing over a publish or a move; add one if that ever collides.
         await NotifyStaffChangeAsync(shift, previousUserId, wasPublished: previousStatus == ShiftStatus.Published, ct);
@@ -2186,12 +2186,16 @@ public class RosteringController : ControllerBase
     /// Roster drag and drop (2026-10-14), decision 9: a worker hears about a shift only once it is Published. Call it once the shift holds its new worker and status, before the
     /// caller's one save, so the outbox rows commit with the change (a refused write sends nothing). The worker on a Published shift gets ShiftAssigned when it is newly theirs or
     /// has just become Published; whoever came off a shift that was already Published gets ShiftUnassigned, even when the same save takes it off Published (deep review S2). Draft changes, and a
-    /// Published shift going back to Draft or Cancelled with its worker kept, stay silent.
+    /// Published shift going back to Draft with its worker kept, stay silent. A Published shift that is Cancelled (2026-10-28, reverses decision 9 for Cancelled only) tells its previous worker with
+    /// ShiftUnassigned { Cancelled = true } unless its date is before the provider's today; that one notice replaces "taken off", so a worker changed in the same save still hears only "cancelled".
+    /// Do not make a cancel silent again: the worker would learn of it only by opening the app.
     /// </summary>
     private async Task NotifyStaffChangeAsync(Shift shift, Guid? previousUserId, bool wasPublished, CancellationToken ct)
     {
         var assignedTo = shift.Status == ShiftStatus.Published && shift.UserId is { } now && (now != previousUserId || !wasPublished) ? now : (Guid?)null;
-        var takenOff = wasPublished && previousUserId is { } before && before != shift.UserId ? before : (Guid?)null;
+        var cancelled = wasPublished && shift.Status == ShiftStatus.Cancelled && previousUserId is not null
+            && shift.ServiceDate >= await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
+        var takenOff = wasPublished && previousUserId is { } before && (cancelled || before != shift.UserId) ? before : (Guid?)null;
         if (assignedTo is null && takenOff is null) return;
 
         var participantName = await _db.Participants.Where(p => p.Id == shift.ParticipantId)
@@ -2203,7 +2207,7 @@ public class RosteringController : ControllerBase
         if (takenOff is { } t && await _db.Users.FirstOrDefaultAsync(u => u.Id == t, ct) is { } removed)
             await _notificationRaiser.RaiseAsync(
                 Odip.Domain.Notifications.NotificationEventType.ShiftUnassigned, "Shift", shift.Id, new[] { removed.Id },
-                new Odip.Infrastructure.Notifications.Templates.ShiftUnassignedPayload(removed.Email, participantName, shift.ServiceDate, shift.StartTime, shift.EndTime), ct);
+                new Odip.Infrastructure.Notifications.Templates.ShiftUnassignedPayload(removed.Email, participantName, shift.ServiceDate, shift.StartTime, shift.EndTime, cancelled, StillTheirs: shift.UserId == removed.Id), ct);
     }
 
     /// <summary>
