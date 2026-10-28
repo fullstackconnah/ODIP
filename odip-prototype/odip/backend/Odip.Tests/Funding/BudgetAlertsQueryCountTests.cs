@@ -43,7 +43,7 @@ public class BudgetAlertsQueryCountTests(Xunit.Abstractions.ITestOutputHelper ou
         // Every participant really was worked out (the count is of work done, not of an early exit): over, approaching or forecast over, plus the NDIA's word.
         Assert.Equal(participants, withBudget.Count);
         Assert.All(withBudget, p => Assert.Contains(p.Alerts, a => a.Type == "budget-ndia-exhausted"));
-        Assert.All(withBudget, p => Assert.Contains(p.Alerts, a => a.Type == "budget-approaching" || a.Type == "budget-forecast-over"));
+        Assert.All(withBudget, p => Assert.Contains(p.Alerts, a => a.Type is "budget-over" or "budget-approaching" or "budget-forecast-over"));
 
         counter = LedgerQueryCounter.Start();
         await new ParticipantAlertsService(kit.Db, kit.Clock).GetAlertsAsync(participantId: null, activeOnly: true);

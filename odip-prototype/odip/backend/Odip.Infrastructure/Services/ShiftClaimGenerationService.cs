@@ -167,7 +167,7 @@ public class ShiftClaimGenerationService
             .Where(s => s.ParticipantId == participantId
                 && s.Status == ShiftStatus.Completed
                 && s.ServiceDate >= from && s.ServiceDate <= to
-                && !_db.ClaimLineItems.Any(l => l.ShiftId == s.Id))
+                && !_db.ClaimLineItems.Where(BudgetLedgerService.ClaimLineStillCounts).Any(l => l.ShiftId == s.Id))
             .OrderBy(s => s.ServiceDate)
             .ToListAsync(ct);
 

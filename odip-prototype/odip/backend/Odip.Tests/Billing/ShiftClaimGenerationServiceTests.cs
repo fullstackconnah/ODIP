@@ -475,4 +475,52 @@ public class ShiftClaimGenerationServiceTests
         Assert.NotEmpty(lines);
         Assert.All(lines, l => Assert.True(l.ShiftId.HasValue ^ l.ParticipantBookingId.HasValue));
     }
+
+    // ── Rejected and cancelled claims give their shifts back ──────────
+
+    private static async Task<(Guid ParticipantId, Shift Shift)> ArrangeShiftWithClaimLine(OdipDbContext db, TripClaimStatus claimStatus, ClaimLineItemStatus lineStatus)
+    {
+        SeedProviderSettings(db);
+        var participant = SeedParticipant(db);
+        SeedCatalogueItem(db, ClaimDayType.Weekday, false, vicPrice: 10m);
+        var shift = SeedShift(db, participant.Id, new DateOnly(2026, 9, 7));
+        var claim = new TripClaim { Id = Guid.NewGuid(), Kind = ClaimKind.Shift, ParticipantId = participant.Id, Status = claimStatus, ClaimReference = "TC-OLD", TotalAmount = 80m };
+        db.TripClaims.Add(claim);
+        db.ClaimLineItems.Add(new ClaimLineItem
+        {
+            Id = Guid.NewGuid(), TripClaimId = claim.Id, ShiftId = shift.Id, SupportItemCode = "04_Weekday_STD", DayType = ClaimDayType.Weekday,
+            SupportsDeliveredFrom = shift.ServiceDate, SupportsDeliveredTo = shift.ServiceDate, Hours = 8m, UnitPrice = 10m, TotalAmount = 80m, Status = lineStatus,
+        });
+        await db.SaveChangesAsync();
+        return (participant.Id, shift);
+    }
+
+    [Theory]
+    [InlineData(TripClaimStatus.Rejected, ClaimLineItemStatus.Rejected)]
+    [InlineData(TripClaimStatus.Cancelled, ClaimLineItemStatus.Draft)]
+    [InlineData(TripClaimStatus.Draft, ClaimLineItemStatus.Rejected)]
+    public async Task GenerateDraftClaimAsync_ShiftWhoseClaimOrLineWasRejectedOrCancelled_IsClaimedAgain(TripClaimStatus claimStatus, ClaimLineItemStatus lineStatus)
+    {
+        using var db = CreateDb();
+        var (participantId, shift) = await ArrangeShiftWithClaimLine(db, claimStatus, lineStatus);
+
+        var claim = await new ShiftClaimGenerationService(db).GenerateDraftClaimAsync(participantId, shift.ServiceDate, shift.ServiceDate);
+
+        Assert.Equal(shift.Id, (await db.ClaimLineItems.SingleAsync(l => l.TripClaimId == claim.Id)).ShiftId);
+        Assert.Equal(2, await db.TripClaims.CountAsync()); // the old claim stays as the record
+    }
+
+    [Theory]
+    [InlineData(TripClaimStatus.Draft)]
+    [InlineData(TripClaimStatus.Submitted)]
+    [InlineData(TripClaimStatus.Approved)]
+    [InlineData(TripClaimStatus.Paid)]
+    public async Task GenerateDraftClaimAsync_ShiftOnALiveClaim_IsNotClaimedTwice(TripClaimStatus claimStatus)
+    {
+        using var db = CreateDb();
+        var (participantId, shift) = await ArrangeShiftWithClaimLine(db, claimStatus, ClaimLineItemStatus.Draft);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            new ShiftClaimGenerationService(db).GenerateDraftClaimAsync(participantId, shift.ServiceDate, shift.ServiceDate));
+    }
 }

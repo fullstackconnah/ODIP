@@ -438,4 +438,70 @@ public class ClaimEditGuardsTests
         var stored = await db.ClaimLineItems.AsNoTracking().SingleAsync(l => l.Id == line.Id);
         Assert.Equal((2m, 50m, 100m), (stored.Hours, stored.UnitPrice, stored.TotalAmount));
     }
+
+    // ── A shift on another claim that counts is never billed twice ────────────────
+
+    /// <summary>A second Draft claim for the same participant holding a counting line for the same shift as <paramref name="line"/> (what Generate claims makes once the first line stops counting).</summary>
+    private static TripClaim ReclaimOn(OdipDbContext db, TripClaim from, ClaimLineItem line)
+    {
+        var other = new TripClaim { Id = Guid.NewGuid(), Kind = ClaimKind.Shift, ParticipantId = from.ParticipantId, Status = TripClaimStatus.Draft, ClaimReference = $"TC-{Guid.NewGuid():N}"[..20], TotalAmount = line.TotalAmount };
+        db.AddRange(other, new ClaimLineItem
+        {
+            Id = Guid.NewGuid(), TripClaimId = other.Id, ShiftId = line.ShiftId, SupportItemCode = line.SupportItemCode, DayType = ClaimDayType.Weekday,
+            SupportsDeliveredFrom = line.SupportsDeliveredFrom, SupportsDeliveredTo = line.SupportsDeliveredTo, Hours = line.Hours, UnitPrice = line.UnitPrice, TotalAmount = line.TotalAmount,
+        });
+        db.SaveChanges();
+        return other;
+    }
+
+    [Theory]
+    [InlineData(TripClaimStatus.Rejected, ClaimLineItemStatus.Draft)]
+    [InlineData(TripClaimStatus.Draft, ClaimLineItemStatus.Rejected)]
+    public async Task ASubmitWhoseShiftIsOnAnotherCountingClaim_IsRefused_AndNothingIsIssued(TripClaimStatus claimStatus, ClaimLineItemStatus lineStatus)
+    {
+        var (db, controller) = Create();
+        var (claim, first, _) = Seed(db, claimStatus);
+        first.Status = lineStatus;
+        db.SaveChanges();
+        var other = ReclaimOn(db, claim, first);
+
+        var result = await controller.UpdateClaim(claim.Id, new UpdateClaimDto { Status = TripClaimStatus.Submitted }, Ct);
+
+        Assert.Equal(409, StatusOf(result));
+        Assert.Equal($"This claim includes a shift that is already on claim {other.ClaimReference}. Remove it from this claim before submitting.", RefusalOf(result));
+        db.ChangeTracker.Clear();
+        Assert.Equal(claimStatus, (await db.TripClaims.AsNoTracking().SingleAsync(c => c.Id == claim.Id)).Status);
+        Assert.Empty(db.Invoices);
+    }
+
+    [Fact]
+    public async Task ASubmitWhoseShiftsAreOnNoOtherCountingClaim_StillIssues()
+    {
+        var (db, controller) = Create();
+        var (claim, first, _) = Seed(db, TripClaimStatus.Rejected);
+        var gone = ReclaimOn(db, claim, first);
+        gone.Status = TripClaimStatus.Cancelled;
+        db.SaveChanges();
+
+        Assert.Equal(200, StatusOf(await controller.UpdateClaim(claim.Id, new UpdateClaimDto { Status = TripClaimStatus.Submitted }, Ct)));
+        db.ChangeTracker.Clear();
+        Assert.Equal(TripClaimStatus.Submitted, (await db.TripClaims.AsNoTracking().SingleAsync(c => c.Id == claim.Id)).Status);
+        Assert.NotEmpty(db.Invoices);
+    }
+
+    [Fact]
+    public async Task ARejectedLineCannotLeaveRejected_WhileItsShiftIsOnAnotherCountingClaim()
+    {
+        var (db, controller) = Create();
+        var (claim, first, _) = Seed(db, TripClaimStatus.Submitted);
+        first.Status = ClaimLineItemStatus.Rejected;
+        db.SaveChanges();
+        ReclaimOn(db, claim, first);
+
+        var result = await controller.UpdateLineItem(claim.Id, first.Id, new UpdateClaimLineItemDto { Status = ClaimLineItemStatus.Paid }, Ct);
+
+        Assert.Equal(409, StatusOf(result));
+        db.ChangeTracker.Clear();
+        Assert.Equal(ClaimLineItemStatus.Rejected, (await db.ClaimLineItems.AsNoTracking().SingleAsync(l => l.Id == first.Id)).Status);
+    }
 }
