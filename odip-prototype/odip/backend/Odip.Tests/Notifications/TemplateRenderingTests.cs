@@ -182,4 +182,28 @@ public class TemplateRenderingTests
             message.PlainTextBody);
         Assert.Contains("https://odip.test/portal", message.HtmlBody);
     }
+
+    [Fact]
+    public void ShiftUnassignedTemplate_Cancelled_RendersTheCancelledWording()
+    {
+        var payload = new ShiftUnassignedPayload("worker@example.com", "Alice Participant", new DateOnly(2026, 9, 15), new TimeOnly(9, 0), new TimeOnly(15, 0), Cancelled: true);
+        var message = ShiftUnassignedTemplate.Render(payload, BaseUrl);
+
+        Assert.Equal("Shift cancelled: Alice Participant on 15 Sep 2026", message.Subject);
+        Assert.Equal(
+            "Your shift with Alice Participant, 15 Sep 2026 9:00 AM to 3:00 PM has been cancelled.\n\nView your shifts: https://odip.test/portal",
+            message.PlainTextBody);
+        Assert.Contains("Your shift with Alice Participant, 15 Sep 2026 9:00 AM to 3:00 PM has been cancelled.", message.HtmlBody);
+        Assert.Contains("View your shifts", message.HtmlBody);
+    }
+
+    [Fact]
+    public void ShiftUnassignedPayload_FromAnOldOutboxRow_DefaultsToNotCancelled()
+    {
+        const string oldRow = "{\"RecipientEmail\":\"w@example.com\",\"ParticipantName\":\"Alice Participant\",\"ServiceDate\":\"2026-09-15\",\"StartTime\":\"09:00:00\",\"EndTime\":\"15:00:00\"}";
+        var payload = System.Text.Json.JsonSerializer.Deserialize<ShiftUnassignedPayload>(oldRow)!;
+
+        Assert.False(payload.Cancelled);
+        Assert.Equal("Shift change: Alice Participant on 15 Sep 2026", ShiftUnassignedTemplate.Render(payload, BaseUrl).Subject);
+    }
 }
