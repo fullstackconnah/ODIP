@@ -274,3 +274,47 @@ describe.skipIf(!existsSync(FUNDING))('the mock API serves the budget warnings (
     expect(everything).not.toContain(':null')
   })
 })
+
+// The budget graph's mock payloads (mock-budget-series.js): the captures rely on each fixture's state, and the whole plan must agree with its pools as the server's does.
+describe.skipIf(!existsSync(FUNDING))('the mock API serves the budget graph', () => {
+  type Point = { date: string; budget: number; used?: number; usedAndBooked?: number; expected?: number; isEdge: boolean }
+  type Scope = { scopeKey: string; limit: number; points: Point[]; summary: Record<string, number | undefined> }
+  type Series = { chart: string; planIsCurrent: boolean; expected: { status: string; startsOn?: string; revisionChanges: string[] }; scopes: Scope[] }
+  let series: (id: string, fixture?: string) => Series & { status?: number }
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-08T03:00:00Z'))
+    const route = handler(load().get, 'participants/:id/funding/ledger/series')
+    series = (id, fixture) => route(id, new URLSearchParams(fixture ? { fixture } : {})) as Series & { status?: number }
+  })
+  afterEach(() => { vi.useRealTimers() })
+
+  it('draws the whole plan as the sum of its pools, point for point, with the plan-end budget the limit', () => {
+    const { chart, scopes } = series('p-0002')
+    expect(chart).toBe('Ok')
+    expect(scopes.map(s => s.scopeKey)[0]).toBe('plan')
+    const [whole, ...pools] = scopes
+    expect(whole.limit).toBe(pools.reduce((t, p) => t + p.limit, 0))
+    expect(whole.points.at(-1)!.budget).toBe(whole.limit)
+    whole.points.forEach((p, i) => expect(p.used ?? 0).toBeCloseTo(pools.reduce((t, s) => t + (s.points[i].used ?? 0), 0), 2))
+    expect(whole.points.find(p => p.date === '2026-10-08')!.used).toBe(whole.summary.used)
+  })
+
+  it('serves each state the captures name', () => {
+    const ended = series('p-0003')
+    expect(ended.planIsCurrent).toBe(false)
+    expect(ended.scopes[0].summary.leftAtEnd).toBeDefined()
+    expect(ended.scopes[0].summary.pace).toBeUndefined()
+    expect(ended.scopes[0].points.some(p => p.usedAndBooked !== undefined)).toBe(false)
+    expect(series('p-0004').expected.status).toBe('NoAgreement')
+    const revision = series('p-0005').expected
+    expect(revision.startsOn).toBe('2026-07-11')
+    expect(revision.revisionChanges).toEqual(['2026-09-30'])
+    expect(series('p-0002', 'noSpend').scopes[2].summary.used).toBe(0)
+    expect(series('p-0002', 'fourPool').scopes).toHaveLength(5)
+    expect(series('p-0002', 'noPricing')).toMatchObject({ chart: 'NoPricing', scopes: [] })
+    expect(series('p-0002', 'failing').status).toBe(500)
+    expect(series('p-0001').chart).toBe('None')
+  })
+})

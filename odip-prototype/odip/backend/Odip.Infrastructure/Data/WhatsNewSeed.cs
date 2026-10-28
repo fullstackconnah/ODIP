@@ -145,6 +145,9 @@ public static class WhatsNewSeed
         new Item("2026-10-list-badges-tidy", "Tidier status labels and page controls in lists",
             "Status labels now look the same everywhere. On Staff and Participants, Active is green and Inactive is red. On Trips, waitlist counts use the same label style as the trip status.\n\nOn Completion review, the page controls now sit under the table in the same place as other lists, and the shifts you tick stay ticked when you move to another page.",
             WhatsNewAudience.All, false),
+        new Item("2026-10-budget-graph", "See how a budget is tracking",
+            "See how a participant's budget is tracking: the Funding tab now charts what's used against an even spread of the plan and what the agreement expects.",
+            Staff, false),
     };
 
     /// <summary>Inserts the keys the table lacks, one save each, so a key another instance inserted first costs only that row.</summary>
