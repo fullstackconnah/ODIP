@@ -298,7 +298,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
             <GripVertical className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         ) : locked ? (
-          <span className="relative z-[1] col-start-1 row-start-2 ml-0.5 flex w-[18px] shrink-0 items-center justify-center text-muted-foreground pointer-coarse:mx-[13px]" title={lockTitle}>
+          <span className={`relative z-[1] col-start-1 row-start-2 ml-0.5 flex w-[18px] shrink-0 items-center justify-center text-muted-foreground ${canWrite ? 'pointer-coarse:mx-[13px]' : ''}`} title={lockTitle}>
             <Lock className="h-3 w-3" aria-hidden="true" />
           </span>
         ) : (

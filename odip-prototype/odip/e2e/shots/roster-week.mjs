@@ -201,6 +201,21 @@ try {
         })
         check(`${name} locked chips each show one Lock inside the chip, unlocked show none`, lk, lk.locked === 3 && lk.locks === 3 && lk.inside === 3)
       }
+      // Fix round 5: on a touch screen the read-only Lock keeps the desktop indent, so a locked chip's name starts one Lock (12px) plus its gap right of an unlocked one's (about 15px, as at 1280), not a 44px gutter further.
+      if (st.name === 'staff-full' && tag === '390') {
+        const ind = await sec.evaluate((el) => {
+          const left = (box) => box.querySelector('a')?.getBoundingClientRect().left
+          const boxes = [...el.querySelectorAll('[data-shift-box]')]
+          const lockOf = (box) => box.closest('[data-shift-chip]').querySelector('svg.lucide-lock') // the Lock sits in the chip's lead cell, outside the box
+          const locked = boxes.filter(lockOf); const plain = boxes.filter((b) => !lockOf(b))
+          if (!locked.length || !plain.length) return null
+          const lock = lockOf(locked[0]).getBoundingClientRect(); const nameL = left(locked[0])
+          const gap = Math.round((nameL - lock.right) * 10) / 10
+          const delta = (l) => Math.round((left(l) - left(plain[0])) * 10) / 10
+          return { lockW: Math.round(lock.width), gap, deltas: locked.map(delta) }
+        })
+        check(`${name} touch: locked name starts one Lock + gap right of an unlocked name`, ind, !!ind && ind.deltas.every((d) => Math.abs(d - (ind.lockW + ind.gap)) <= 4))
+      }
       // Fix round 1 (touch chip tap, partial-day unavailability, today heading): the changed 390 list states, as numbers.
       if (st.name === 'staff-full' && tag === '390') {
         const unav = await sec.getByText('Unavailable 6am–8am (pending)').first().isVisible()

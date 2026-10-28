@@ -714,7 +714,12 @@ describe('ShiftChip in the Participant view with drag and drop (draggable)', () 
     const lock = 'span[title*="be changed here"] svg.lucide-lock'
     const locked = chip(makeShift({ status: 'InProgress' }), { canWrite: false })
     expect(locked.container.querySelector(lock)?.parentElement).toHaveAttribute('title', "In progress: can't be changed here")
+    // The 13px coarse margin only clears a grip's tap pad; a reader has none, so names keep the desktop indent on phones.
+    expect(locked.container.querySelector(lock)?.parentElement).not.toHaveClass('pointer-coarse:mx-[13px]')
     locked.unmount()
+    const writer = chip(makeShift({ status: 'InProgress' }))
+    expect(writer.container.querySelector(lock)?.parentElement).toHaveClass('pointer-coarse:mx-[13px]')
+    writer.unmount()
     const open = chip(makeShift({ status: 'Published' }), { canWrite: false })
     expect(open.container.querySelector(lock)).toBeNull()
   })
