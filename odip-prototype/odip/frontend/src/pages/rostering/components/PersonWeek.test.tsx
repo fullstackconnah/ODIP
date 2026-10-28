@@ -221,6 +221,18 @@ describe('PersonWeek: extras', () => {
     expect(within(lane).getByRole('link', { name: /Coast trip/ })).toHaveClass('h-[var(--control-h-sm)]', 'pointer-coarse:h-[var(--control-h)]')
   })
 
+  // A recurring window is regular unavailability, not leave: on the list it is a full-width line in the chip's own time format; the grid lane keeps the time-proportional sliver.
+  it('a partial-day recurring unavailability reads in words on the list and keeps its sliver in the lane', async () => {
+    const rule = { startDate: '2026-11-03', endDate: '2026-11-03', availabilityType: 'Leave', notes: null, kind: 'PendingRecurringRule' as const, startTime: '06:00:00', endTime: '08:00:00' }
+    mockApiGet.mockResolvedValue(staffWeek({ shifts: [shiftOn({})], leave: [rule] }))
+    renderWeek('staff')
+    const words = await screen.findByText('Unavailable 6am–8am (pending)')
+    expect(words.parentElement).not.toHaveAttribute('style', expect.stringContaining('left'))
+    expect(words.parentElement).toHaveClass('border-dashed')
+    const lane = screen.getByRole('list', { name: 'Leave and trips' })
+    expect(within(lane).getByText('06:00–08:00 (pending)').parentElement).toHaveStyle({ left: '25%' })
+  })
+
   // The over-target fill is the "Over target" ink, which clears 3:1 on the input track in both themes; the plain warning amber was 1.66:1 in light.
   it('over target fills the meter with the warning ink', async () => {
     mockApiGet.mockResolvedValue(staffWeek({ shifts: [shiftOn({})], rosteredHours: 40, targetHours: 38 }))

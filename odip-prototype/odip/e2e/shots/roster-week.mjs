@@ -189,6 +189,21 @@ try {
           check(`${name} contrast ${k} >=${min}`, v, v !== null && v >= min)
         }
       }
+      // Fix round 1 (touch chip tap, partial-day unavailability, today heading): the changed 390 list states, as numbers.
+      if (st.name === 'staff-full' && tag === '390') {
+        const unav = await sec.getByText('Unavailable 6am–8am (pending)').first().isVisible()
+        check(`${name} list: partial-day unavailability reads in words`, unav, unav)
+        const c = await sec.evaluate((el) => {
+          const link = el.querySelector('[data-shift-box] a'); const box = link?.closest('[data-shift-box]')
+          if (!link || !box) return null
+          const l = link.getBoundingClientRect(); const b = box.getBoundingClientRect()
+          const hit = document.elementFromPoint(l.right + 8, l.top + l.height / 2)
+          const today = el.querySelector('li[aria-current="date"]'); const head = today?.querySelector('h2, h3, h4, h5, h6')
+          return { linkW: Math.round(l.width), boxW: Math.round(b.width), linkH: Math.round(l.height), pastNameHitsLink: !!hit?.closest('a'), todayHasShifts: !!today?.querySelector('ul'), headW: head ? Math.round(head.getBoundingClientRect().width) : null, dayW: today ? Math.round(today.getBoundingClientRect().width) : null }
+        })
+        check(`${name} coarse chip: name link covers only the name (link width vs box width)`, c, !!c && c.linkW < c.boxW - 16 && c.linkH >= 43.5 && !c.pastNameHitsLink)
+        if (c?.todayHasShifts) check(`${name} today heading hugs its text on a day with shifts`, c, c.headW < c.dayW - 40)
+      }
       if (st.name === 'participant' && (tag === '1280' || tag === '1280-dark')) check(`${name} contrast No shifts >=4.5`, m.contrast.noShifts, m.contrast.noShifts !== null && m.contrast.noShifts >= 4.5)
 
       const bb = await sec.boundingBox()

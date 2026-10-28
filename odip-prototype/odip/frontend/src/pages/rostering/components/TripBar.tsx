@@ -12,8 +12,8 @@ export type TripBarProps = {
  * Trip staffing rendered read-only on the roster board — visibly a different material from a
  * shift chip (filled secondary surface, no border, a map glyph) so a coordinator never mistakes
  * it for something editable here. Not draggable, no menu; the only interaction is navigating to
- * the trip itself. Sits in the row's second lane at --control-h-sm (24px), not chip height: it's a
- * span marker, not a target.
+ * the trip itself. Sits in the row's second lane at --control-h-sm (24px) with a mouse; under a coarse
+ * pointer it is a link, so it takes --control-h (44px), the touch target.
  */
 export function TripBar({ tripBar, days }: TripBarProps) {
   const startCol = clampedDayIndex(tripBar.startDate, days) + 1

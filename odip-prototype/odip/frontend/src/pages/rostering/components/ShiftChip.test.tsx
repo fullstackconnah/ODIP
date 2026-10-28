@@ -223,10 +223,13 @@ describe('ShiftChip cross-domain links', () => {
     expect(screen.getByRole('link', { name: 'Alex Rivera' })).toHaveAttribute('href', '/staff/staff-9?tab=week&week=2026-08-17')
   })
 
-  // Roster week shots (SHAPE §8.5): a 20px name link is 44px tall under a coarse pointer, as a block line so it still truncates.
-  it('gives both name links a 44px line under a coarse pointer', () => {
-    renderChip(<ShiftChip shift={makeShift()} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
-    expect(screen.getByRole('link', { name: 'Mia Chen' })).toHaveClass('truncate', 'pointer-coarse:leading-[var(--tap-min)]')
+  // Roster week shots (SHAPE §8.5): a 20px name link is 44px tall under a coarse pointer, as a block line so it still truncates. It stops growing there (flex-initial), so a tap past the name still opens the shift;
+  // the fine pointer keeps flex-1, and the first tail marker takes the trailing edge the link used to push it to.
+  it('gives both name links a 44px line that covers only the name under a coarse pointer', () => {
+    renderChip(<ShiftChip shift={makeShift({ overrideReason: 'Covering a gap' })} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+    const link = screen.getByRole('link', { name: 'Mia Chen' })
+    expect(link).toHaveClass('truncate', 'min-w-0', 'flex-1', 'pointer-coarse:flex-initial', 'pointer-coarse:leading-[var(--tap-min)]')
+    expect(link.parentElement).toHaveClass('pointer-coarse:[&>a+span]:ml-auto')
   })
 
   it('renders no staff link for an unfilled (dashed) chip', () => {

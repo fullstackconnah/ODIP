@@ -81,7 +81,7 @@ export function PersonWeek({ kind, personId, name, headingLevel }: PersonWeekPro
     ].filter(b => barOverlapsWeek(b.start, b.end, days))
     const label = (s: ShiftDto) => (kind === 'staff' ? s.participantName : s.staffName ?? '')
     const shifts = [...row.shifts].sort((a, b) => a.startTime.localeCompare(b.startTime) || label(a).localeCompare(label(b)))
-    const renderBar = (b: Bar, barDays: string[]) => (b.trip ? <TripBar tripBar={b.trip} days={barDays} /> : <LeaveBar leave={b.leave!} days={barDays} />)
+    const renderBar = (b: Bar, barDays: string[], fullWidth?: boolean) => (b.trip ? <TripBar tripBar={b.trip} days={barDays} /> : <LeaveBar leave={b.leave!} days={barDays} fullWidth={fullWidth} />)
 
     body = shifts.length === 0 && bars.length === 0 ? (
       <EmptyState
@@ -101,7 +101,7 @@ export function PersonWeek({ kind, personId, name, headingLevel }: PersonWeekPro
             const dayBars = bars.filter(b => barOverlapsWeek(b.start, b.end, [day]))
             return (
               <li key={day} aria-current={today ? 'date' : undefined} className={`flex min-w-0 flex-col ${dayShifts.length === 0 ? `@max-[58rem]:flex-row @max-[58rem]:flex-wrap @max-[58rem]:items-baseline` : ''}`}>
-                <DayHeading className={`flex items-baseline gap-1.5 rounded-sm px-2 py-1 @[58rem]:rounded-none @[58rem]:border-b @[58rem]:border-border @[58rem]:px-3 @[58rem]:py-1.5 ${today ? HEADER_BG_TODAY : `@[58rem]:bg-surface-container-low`}`}>
+                <DayHeading className={`flex items-baseline gap-1.5 rounded-sm px-2 py-1 @max-[58rem]:self-start @[58rem]:rounded-none @[58rem]:border-b @[58rem]:border-border @[58rem]:px-3 @[58rem]:py-1.5 ${today ? HEADER_BG_TODAY : `@[58rem]:bg-surface-container-low`}`}>
                   <span aria-hidden="true" className="text-sm font-semibold leading-5 text-foreground">{weekday}</span>
                   <span aria-hidden="true" className="text-[13px] tabular-nums text-muted-foreground">{dayNum}</span>
                   <span className="sr-only">{formatDayAccessibleName(day)}{today ? ', today' : ''}</span>
@@ -130,7 +130,7 @@ export function PersonWeek({ kind, personId, name, headingLevel }: PersonWeekPro
                 {/* On the list, a day's leave and trips follow its shifts, one line a day; the grid draws them once, spanning, in the lane below. */}
                 {dayBars.length > 0 && (
                   <div className="grid w-full grid-cols-1 gap-y-0.5 px-1 @[58rem]:hidden">
-                    {dayBars.map(b => <div key={b.key} className="contents">{renderBar(b, [day])}</div>)}
+                    {dayBars.map(b => <div key={b.key} className="contents">{renderBar(b, [day], true)}</div>)}
                   </div>
                 )}
               </li>

@@ -52,9 +52,9 @@ export type ShiftChipProps = {
   onSetRegular?: (shift: ShiftDto) => void
 }
 
-// pointer-coarse: a 44px line, not a TAP_AREA pad, which would reach over the chip's own open target.
+// pointer-coarse: a 44px line that covers only the name (flex-initial, not flex-1), so a tap on the rest of the box still opens the shift; not a TAP_AREA pad, which would reach over the chip's own open target.
 const LABEL_LINK =
-  'min-w-0 flex-1 truncate rounded-sm pointer-coarse:leading-[var(--tap-min)] text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring'
+  'min-w-0 flex-1 pointer-coarse:flex-initial truncate rounded-sm pointer-coarse:leading-[var(--tap-min)] text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring'
 
 /**
  * The one chip type rendered in staff rows, participant rows and the Unfilled lane. Colour is
@@ -354,7 +354,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
             overKind === 'assign' || overKind === 'move' || overKind === 'prompt' || picking ? 'ring-2 ring-ring' : ''
           }`}
         >
-          <span className={`col-start-2 flex min-w-0 items-center overflow-hidden ${hasLead ? 'pl-0.5' : 'pl-1.5'} ${hasMenu ? '' : 'pr-1.5'}`}>
+          <span className={`col-start-2 flex min-w-0 items-center overflow-hidden pointer-coarse:[&>a+span]:ml-auto ${hasLead ? 'pl-0.5' : 'pl-1.5'} ${hasMenu ? '' : 'pr-1.5'}`}>
             {label}
             {/*
               Priority on a chip, narrowest-first: time > name > ratio > everything else. Time is what a
