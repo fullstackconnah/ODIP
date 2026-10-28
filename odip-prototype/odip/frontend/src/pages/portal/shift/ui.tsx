@@ -16,11 +16,11 @@ export function Section({ title, icon, children, id, className = '', collapse }:
   if (collapse) {
     // Folded, the row is the 44px target itself, so the card needs less vertical padding.
     return (
-      <details id={id} data-collapsed-section className={`${base} py-2 lg:py-2`}>
+      <details id={id} data-collapsed-section className={`group/section ${base} py-2 lg:py-2`}>
         {/* Folded, the heading and its summary share one line. */}
         <summary className="cursor-pointer min-h-[44px] flex flex-wrap items-center gap-x-3 gap-y-1 list-none [&::-webkit-details-marker]:hidden">
           {heading}
-          <div className="text-sm text-[var(--color-muted-foreground)] flex flex-wrap items-center gap-2">{collapse.summary}<span className="underline">Show</span></div>
+          <div className="text-sm text-[var(--color-muted-foreground)] flex flex-wrap items-center gap-2">{collapse.summary}<span className="underline group-open/section:hidden">Show</span><span className="underline hidden group-open/section:inline">Hide</span></div>
         </summary>
         <div className="space-y-3 pt-3">{children}</div>
       </details>
@@ -67,13 +67,13 @@ export function ActionBar({ children, notice, className = '' }: { children: Reac
   )
 }
 
-/** A group folded to one line with Show, Section's collapse idea inside a card: done work and the as-needed list, out of the way (SHAPE §3). */
+/** A group folded to one line with Show (Hide once open), Section's collapse idea inside a card: done work and the as-needed list, out of the way (SHAPE §3). */
 export function Fold({ summary, children }: { summary: ReactNode; children: ReactNode }) {
   return (
-    <details>
+    <details className="group/fold">
       <summary className="cursor-pointer min-h-[44px] flex items-center gap-2 text-sm list-none [&::-webkit-details-marker]:hidden">
         <span className="font-semibold">{summary}</span>
-        <span className="underline text-[var(--color-muted-foreground)]">Show</span>
+        <span className="underline text-[var(--color-muted-foreground)] group-open/fold:hidden">Show</span><span className="underline text-[var(--color-muted-foreground)] hidden group-open/fold:inline">Hide</span>
       </summary>
       <div className="space-y-2 pt-2">{children}</div>
     </details>
