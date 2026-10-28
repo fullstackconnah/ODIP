@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react'
-import { Plus, Search } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { useAdminTenantsSummary } from '@/api/hooks/admin'
 import { DataTable, RowActions } from '@/components/DataTable'
 import type { TenantSummaryDto } from '@/api/types'
 import { Button } from '@/components/Button'
 import { PageState } from '@/components/PageState'
+import { SearchInput } from '@/components/SearchInput'
 import { formatInstantDateAu } from '@/lib/format'
 import { retryingAfterError } from '@/lib/queryPhase'
 
@@ -48,16 +49,7 @@ export default function TenantsTab({
     <div className="space-y-4">
       {/* Filter bar */}
       <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-muted-foreground)]" />
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search by name or domain..."
-            className="w-full pl-9 pr-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-accent)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-all"
-          />
-        </div>
+        <SearchInput value={search} onChange={setSearch} placeholder="Search by name or domain..." className="flex-1 max-w-sm" />
 
         <Button onClick={onAddTenant}>
           <Plus className="w-4 h-4" /> New tenant

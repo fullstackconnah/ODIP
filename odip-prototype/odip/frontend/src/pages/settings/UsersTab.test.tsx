@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import UsersTab from './UsersTab'
 
 const { mockUseAdminUsers } = vi.hoisted(() => ({ mockUseAdminUsers: vi.fn() }))
@@ -38,5 +39,40 @@ describe('UsersTab: Last sign-in', () => {
     for (const text of ['Never', 'Just now', '5m ago', '1h ago', '3d ago', '14d ago', new Date(monthOld).toLocaleDateString('en-AU')]) {
       expect(screen.getByText(text)).toBeInTheDocument()
     }
+  })
+})
+
+describe('UsersTab: search and pager are the house parts', () => {
+  // 23 users over two pages of 20, served by the page the tab asks for.
+  const serve = (args: { page: number }) => {
+    const items = Array.from({ length: args.page === 1 ? 20 : 3 }, (_, i) => user(i + (args.page - 1) * 20, null))
+    return { data: { items, totalCount: 23, page: args.page, pageSize: 20, totalPages: 2, hasNext: args.page === 1, hasPrevious: args.page === 2 }, isLoading: false }
+  }
+
+  it('searches with the house SearchInput and goes back to page 1', async () => {
+    mockUseAdminUsers.mockImplementation(serve)
+    render(<UsersTab onAddUser={vi.fn()} onEditUser={vi.fn()} />)
+    const ui = userEvent.setup()
+
+    await ui.click(screen.getByRole('button', { name: 'Next page' }))
+    expect(mockUseAdminUsers).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 }))
+    const search = screen.getByRole('textbox', { name: 'Search users...' })
+    expect(search).toHaveClass('bg-[var(--color-input)]')
+    await ui.type(search, 'a')
+
+    expect(mockUseAdminUsers).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, search: 'a' }))
+  })
+
+  it('pages with the DataTable pager: first page, then last page', async () => {
+    mockUseAdminUsers.mockImplementation(serve)
+    render(<UsersTab onAddUser={vi.fn()} onEditUser={vi.fn()} />)
+    const ui = userEvent.setup()
+
+    expect(screen.getByText(/Showing 1-20/)).toHaveTextContent('of 23')
+    expect(screen.getByRole('button', { name: 'Previous page' })).toBeDisabled()
+    await ui.click(screen.getByRole('button', { name: 'Next page' }))
+
+    expect(screen.getByText(/Showing 21-23/)).toHaveTextContent('of 23')
+    expect(screen.getByRole('button', { name: 'Next page' })).toBeDisabled()
   })
 })

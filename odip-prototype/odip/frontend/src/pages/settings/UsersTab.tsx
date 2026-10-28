@@ -1,14 +1,14 @@
 import { useState } from 'react'
-import { Search, Pencil, Mail, Plus } from 'lucide-react'
+import { Pencil, Mail, Plus } from 'lucide-react'
 import { useAdminUsers, useAdminTenantsSummary, useEnsureUserSignInAccount } from '@/api/hooks'
 import type { AdminUserDto } from '@/api/types'
 import { Button } from '@/components/Button'
-import { inputClass } from '@/components/FormField'
+import { SearchInput } from '@/components/SearchInput'
 import { Dropdown } from '@/components/Dropdown'
 import { DataTable, RowActions } from '@/components/DataTable'
 import { NoticesRegion } from '@/components/NoticesRegion'
 import { useNotices, type Notice } from '@/hooks/useNotices'
-import { formatRelative, plural } from '@/lib/format'
+import { formatRelative } from '@/lib/format'
 import { canSendSetPasswordEmail, sendActionLabel } from '@/lib/setPasswordEmail'
 import { describeEmailOutcome, ensureAndSendSetPasswordEmail } from '@/lib/signInEmail'
 import { parseApiDate } from '@/lib/utils'
@@ -99,11 +99,6 @@ export default function UsersTab({ onAddUser, onEditUser, notices: lifted }: Use
 
   const users = pagedResult?.items ?? []
   const totalCount = pagedResult?.totalCount ?? 0
-  const hasNext = pagedResult?.hasNext ?? false
-  const hasPrevious = pagedResult?.hasPrevious ?? false
-
-  const startItem = totalCount === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
-  const endItem = Math.min(page * PAGE_SIZE, totalCount)
 
   // The server makes sure the account exists first (a user can have a row and no Firebase account), then Firebase is asked to send the link;
   // what is said afterwards follows what actually happened in those two steps (lib/signInEmail.ts).
@@ -169,16 +164,12 @@ export default function UsersTab({ onAddUser, onEditUser, notices: lifted }: Use
           />
         </div>
 
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-muted-foreground)]" />
-          <input
-            type="text"
-            value={search}
-            onChange={e => { setSearch(e.target.value); setPage(1) }}
-            placeholder="Search users..."
-            className={`${inputClass} pl-9`}
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={v => { setSearch(v); setPage(1) }}
+          placeholder="Search users..."
+          className="flex-1 min-w-[200px]"
+        />
 
         <Button onClick={() => onAddUser(tenantId || undefined)}>
           <Plus className="w-4 h-4" /> New user
@@ -196,6 +187,7 @@ export default function UsersTab({ onAddUser, onEditUser, notices: lifted }: Use
         error={isError || retryingAfterError(pageQuery)}
         onRetry={() => refetch()}
         emptyMessage="No users found."
+        pagination={{ page, pageSize: PAGE_SIZE, totalCount, onPageChange: setPage }}
         columns={[
           { key: 'fullName', header: 'Name', className: 'font-medium' },
           { key: 'email', header: 'Email', className: 'text-[var(--color-muted-foreground)]' },
@@ -272,31 +264,6 @@ export default function UsersTab({ onAddUser, onEditUser, notices: lifted }: Use
           },
         ]}
       />
-
-      {/* Pagination */}
-      {totalCount > 0 && (
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-[var(--color-muted-foreground)]">
-            Showing {startItem}-{endItem} of {plural(totalCount, 'user')}
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setPage(p => p - 1)}
-              disabled={!hasPrevious}
-              className="px-3 py-1.5 rounded-full border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              Previous
-            </button>
-            <button
-              onClick={() => setPage(p => p + 1)}
-              disabled={!hasNext}
-              className="px-3 py-1.5 rounded-full border border-[var(--color-border)] text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              Next
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

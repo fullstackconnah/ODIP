@@ -34,6 +34,12 @@ describe('Tenant tables: row actions', () => {
     expect(onViewTenantDetail).toHaveBeenCalledWith(tenant)
   })
 
+  it('searches with the house SearchInput', () => {
+    render(<MemoryRouter><TenantsTab onAddTenant={vi.fn()} onEditTenant={vi.fn()} onViewTenantDetail={vi.fn()} /></MemoryRouter>)
+
+    expect(screen.getByRole('textbox', { name: 'Search by name or domain...' })).toHaveClass('bg-[var(--color-input)]')
+  })
+
   it('names a tenant user\'s Edit for the user and runs it', async () => {
     const onEditUser = vi.fn()
     render(<MemoryRouter><TenantDetailView tenant={tenant} onBack={vi.fn()} onEditTenant={vi.fn()} onAddUser={vi.fn()} onEditUser={onEditUser} /></MemoryRouter>)
