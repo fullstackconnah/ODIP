@@ -125,6 +125,11 @@ describe('ClaimsTab — permission gate', () => {
     expect(screen.getByRole('button', { name: 'Generate from shifts' })).toBeInTheDocument()
   })
 
+  it('hides the "Generate from shifts" button for an Other-funded participant', () => {
+    renderTab(true, { otherFunded: true, funder: 'Acme Health' })
+    expect(screen.queryByRole('button', { name: 'Generate from shifts' })).not.toBeInTheDocument()
+  })
+
   it('hides the "Generate from shifts" button when canWrite is false', () => {
     renderTab(false)
     expect(screen.queryByRole('button', { name: 'Generate from shifts' })).not.toBeInTheDocument()

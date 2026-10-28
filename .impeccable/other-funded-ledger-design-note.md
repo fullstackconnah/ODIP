@@ -19,7 +19,7 @@ Two existing empty states say what is true for a participant funded another way.
 | Other-funded, Claims tab, no claims, no funder | same, "Invoice their funder directly." |
 | Other-funded with older claims | claims table as today, no banner |
 | Loading / error | unchanged PageState branches, which sit before the empty branch |
-| Generate from shifts button | unchanged (the generate dialog already says why shifts are left out) |
+| Generate from shifts button | hidden for an Other-funded participant: generation always leaves their shifts out |
 
 ## Rules applied
 Copy: plain English, no em dashes, "Bunya Support". Text wraps (no truncation); the funder name is inline text in a paragraph so a long name wraps at 390. Contrast, focus and touch targets are inherited from the existing components (nothing interactive is added). No motion.

@@ -64,7 +64,7 @@ export default function ClaimsTab({ participantId, canWrite, otherFunded = false
     <Card
       title="NDIS Claims"
       action={
-        canWrite ? (
+        canWrite && !otherFunded ? (
           <Button onClick={() => setShowGenerateModal(true)}>
             Generate from shifts
           </Button>
