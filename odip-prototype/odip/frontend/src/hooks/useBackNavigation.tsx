@@ -23,7 +23,11 @@ const STORE_KEY = 'odip.backPaths'
 const pathByIdx = new Map<number, string>(
   (() => {
     try {
-      return JSON.parse(sessionStorage.getItem(STORE_KEY) ?? '[]') as [number, string][]
+      // Valid JSON that is not a list of [number, string] pairs must not throw at import (a blank app).
+      const stored: unknown = JSON.parse(sessionStorage.getItem(STORE_KEY) ?? '[]')
+      return (stored as unknown[]).filter(
+        (e): e is [number, string] => Array.isArray(e) && typeof e[0] === 'number' && typeof e[1] === 'string',
+      )
     } catch {
       return []
     }

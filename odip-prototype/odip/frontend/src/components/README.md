@@ -890,7 +890,7 @@ The trip detail page opts in with a status-led meta row, and the dashboard opts 
 
 ## BackButton
 
-`BackButton.tsx` is the one Back control: the first action in a detail header, secondary, and it names its destination.
+`BackButton.tsx` is the one Back control: the first action in a detail header, secondary, and it names its destination when it is known, otherwise it reads "Go back".
 
 **Props**: `to` (a real route) **or** `onBack` (the in-page form, below), `label` (lower-case noun for where it goes: `label="staff"` names it "Back to staff"), `variant?: 'button' | 'icon' | 'link'`
 (default `button`), `className?` (spacing only: `mt-1`, `py-3`), `data-testid?`.
