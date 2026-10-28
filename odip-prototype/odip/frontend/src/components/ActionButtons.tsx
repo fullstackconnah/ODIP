@@ -21,7 +21,7 @@ export type ActionButtonsProps = {
  * `pointer-coarse:gap-2` gives; a mouse keeps `gap-1`. Inside a DataTable row `RowActions` pins the same 24px / 36px square from outside
  * (see ROW_ACTIONS_LEGACY_ICONS), and the two agree on touch.
  */
-const ICON_BUTTON = `${TAP_ICON_SQUARE} rounded p-1.5 text-[var(--color-muted-foreground)] transition-colors`
+const ICON_BUTTON = `${TAP_ICON_SQUARE} rounded p-1.5 pointer-coarse:rounded-md text-[var(--color-muted-foreground)] transition-colors`
 
 export function ActionButtons({ editTo, onEdit, onDelete, onRestore, showArchived, labelled }: ActionButtonsProps) {
   const stop = (e: React.MouseEvent, fn?: () => void) => {
@@ -43,28 +43,28 @@ export function ActionButtons({ editTo, onEdit, onDelete, onRestore, showArchive
     <div className="flex items-center gap-1 pointer-coarse:gap-2">
       {editTo && (
         <Link to={editTo} onClick={e => e.stopPropagation()}
-          className={`${ICON_BUTTON} inline-block hover:bg-[var(--color-accent)] hover:text-[var(--color-primary)]`}
+          className={`${ICON_BUTTON} inline-block pointer-coarse:bg-[var(--color-accent)] hover:bg-[var(--color-accent)] hover:text-[var(--color-primary)]`}
           title="Edit" aria-label="Edit">
           <Pencil className="w-4 h-4" />
         </Link>
       )}
       {onEdit && (
         <button onClick={e => stop(e, onEdit)}
-          className={`${ICON_BUTTON} hover:bg-[var(--color-accent)] hover:text-[var(--color-primary)]`}
+          className={`${ICON_BUTTON} pointer-coarse:bg-[var(--color-accent)] hover:bg-[var(--color-accent)] hover:text-[var(--color-primary)]`}
           title="Edit" aria-label="Edit">
           <Pencil className="w-4 h-4" />
         </button>
       )}
       {showArchived && onRestore && (
         <button onClick={e => stop(e, onRestore)}
-          className={`${ICON_BUTTON} hover:bg-[var(--color-primary-fixed)]/40 hover:text-[var(--color-primary)]`}
+          className={`${ICON_BUTTON} pointer-coarse:bg-[var(--color-accent)] hover:bg-[var(--color-primary-fixed)]/40 hover:text-[var(--color-primary)]`}
           title="Restore" aria-label="Restore">
           <ArchiveRestore className="w-4 h-4" />
         </button>
       )}
       {!showArchived && onDelete && (
         <button onClick={e => stop(e, onDelete)}
-          className={`${ICON_BUTTON} hover:bg-[var(--color-error-container)] hover:text-[var(--color-destructive)]`}
+          className={`${ICON_BUTTON} pointer-coarse:bg-[var(--color-error-container)] hover:bg-[var(--color-error-container)] hover:text-[var(--color-destructive)]`}
           title="Archive" aria-label="Archive">
           <Trash2 className="w-4 h-4" />
         </button>
