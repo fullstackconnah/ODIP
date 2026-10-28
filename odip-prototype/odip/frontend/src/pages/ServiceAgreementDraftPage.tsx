@@ -353,7 +353,7 @@ function DraftPage() {
   const submit = (event: FormEvent) => {
     event.preventDefault()
     if (step !== 'save') next()
-    else if (readOnly) navigate(backHref)
+    else if (readOnly) navigate(backHref, { replace: true })
     else save()
   }
   const stepIndex = STEPS.findIndex(entry => entry.key === step)
@@ -382,7 +382,7 @@ function DraftPage() {
     )}
     {unsavedChangesDialog}
     <div className="flex items-start gap-4">
-      <BackButton to={backHref} label={fromOnboarding ? 'onboarding' : 'participant'} variant="icon" history={false} className="mt-1" />
+      <BackButton to={backHref} label={fromOnboarding ? 'onboarding' : 'participant'} variant="icon" className="mt-1" />
       <div className="flex-1"><PageHeader title="Service agreement" subtitle={participant.data.fullName} /></div>
     </div>
 
@@ -488,7 +488,6 @@ function DraftPage() {
           isReviewStep={step === 'save'}
           secondaryActions={[]}
           cancelTo={backHref}
-          history={false}
           submitLabel={readOnly ? 'Close' : 'Save agreement'}
           isSubmitting={create.isPending || loadingNewest}
           summary={total}

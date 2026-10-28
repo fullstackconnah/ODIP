@@ -1,4 +1,4 @@
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, useWatch, Controller, type Resolver, type FieldErrors } from 'react-hook-form'
 import { z } from 'zod'
@@ -130,7 +130,6 @@ function extractMedicationErrorMessage(err: unknown, isEdit: boolean): string {
 }
 
 export default function MedicationFormPage() {
-  const navigate = useNavigate()
   const { id } = useParams()
   const [searchParams] = useSearchParams()
   const participantIdParam = searchParams.get('participantId')
@@ -275,13 +274,13 @@ export default function MedicationFormPage() {
         const res = await updateMedication.mutateAsync({ id: id!, data: updatePayload })
         if (res.success) {
           flushSync(() => reset(data))
-          navigate(back.to)
+          back.leave()
         }
       } else if (participantId) {
         const res = await createMedication.mutateAsync({ participantId, data: payload })
         if (res.success) {
           flushSync(() => reset(data))
-          navigate(back.to)
+          back.leave()
         }
       }
     } catch {
@@ -693,7 +692,7 @@ export default function MedicationFormPage() {
 
         {/* Submit */}
         {!viewOnly && <div className="flex justify-end gap-2">
-          <Button to={back.to} variant="secondary">Cancel</Button>
+          <Button to={back.to} onClick={back.onLinkClick} variant="secondary">Cancel</Button>
           <Button type="submit" disabled={mutation.isPending}>
             {mutation.isPending ? (isEdit ? 'Saving…' : 'Creating…') : (isEdit ? 'Save' : 'Create medication')}
           </Button>

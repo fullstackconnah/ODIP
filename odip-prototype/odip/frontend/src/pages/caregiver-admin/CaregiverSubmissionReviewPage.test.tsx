@@ -163,7 +163,7 @@ describe('CaregiverSubmissionReviewPage', () => {
     await user.click(within(dialog).getByRole('button', { name: /^accept$/i }))
 
     expect(mockAcceptMutateAsync).toHaveBeenCalledWith({ id: 'sub-1', participantId: 'p1' })
-    expect(mockNavigate).toHaveBeenCalledWith('/caregiver-submissions')
+    expect(mockNavigate).toHaveBeenCalledWith('/caregiver-submissions', { replace: true })
   })
 
   it("Reject's button is disabled until the note is non-empty, then calls the mutation", async () => {
@@ -181,7 +181,7 @@ describe('CaregiverSubmissionReviewPage', () => {
     await user.click(confirmRejectButton)
 
     expect(mockRejectMutateAsync).toHaveBeenCalledWith({ id: 'sub-1', note: 'Please update the phone number.' })
-    expect(mockNavigate).toHaveBeenCalledWith('/caregiver-submissions')
+    expect(mockNavigate).toHaveBeenCalledWith('/caregiver-submissions', { replace: true })
   })
 })
 
@@ -261,11 +261,13 @@ describe('CaregiverSubmissionReviewPage — links', () => {
     expect(screen.getByRole('link', { name: 'View participant record' })).toHaveAttribute('href', '/participants/p1')
   })
 
-  it('Back returns to the participant when the review was opened from there', () => {
-    __testHooks.recordCurrentPath('/participants/p1')
-    __testHooks.recordCurrentPath('/caregiver-submissions/sub-1')
+  it('Back returns to the participant when the review was opened from there', async () => {
+    __testHooks.seedHistory('/participants/p1', '/caregiver-submissions/sub-1')
     renderPage()
-    expect(screen.getByRole('link', { name: /^Back to / })).toHaveAttribute('href', '/participants/p1')
+    const back = screen.getByRole('link', { name: 'Back to participant' })
+    expect(back).toHaveAttribute('href', '/caregiver-submissions')
+    await userEvent.setup().click(back)
+    expect(mockNavigate).toHaveBeenCalledWith(-1)
     __testHooks.reset()
   })
 })

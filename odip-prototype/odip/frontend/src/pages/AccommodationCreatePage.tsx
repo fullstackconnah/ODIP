@@ -8,7 +8,7 @@ import { FormField } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { Button } from '@/components/Button'
 import { PageHeader } from '@/components/PageHeader'
-import { BackButton } from '@/components/BackButton'
+import { BackButton, BackActionButton } from '@/components/BackButton'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { extractErrorMessage } from '@/pages/intake/intakeFormat'
 import { formGrid, span } from '@/lib/formGrid'
@@ -112,13 +112,13 @@ export default function AccommodationCreatePage() {
         const res = await updateAccommodation.mutateAsync({ id, data: payload })
         if (res.success) {
           flushSync(() => reset(data))
-          navigate(`/accommodation/${id}`)
+          navigate(`/accommodation/${id}`, { replace: true })
         }
       } else {
         const res = await createAccommodation.mutateAsync(payload)
         if (res.success && res.data?.id) {
           flushSync(() => reset(data))
-          navigate(`/accommodation/${res.data.id}`)
+          navigate(`/accommodation/${res.data.id}`, { replace: true })
         }
       }
     } catch {
@@ -140,7 +140,7 @@ export default function AccommodationCreatePage() {
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       {unsavedChangesDialog}
       <div className="flex items-start gap-2">
-        <BackButton to={isEdit ? `/accommodation/${id}` : '/accommodation'} label="accommodation" variant="icon" history={false} />
+        <BackButton to={isEdit ? `/accommodation/${id}` : '/accommodation'} label="accommodation" variant="icon" />
         <div className="flex-1 min-w-0"><PageHeader title={isEdit ? 'Edit accommodation' : 'New accommodation'} /></div>
       </div>
 
@@ -259,7 +259,7 @@ export default function AccommodationCreatePage() {
 
         {/* Submit */}
         <div className="flex justify-end gap-3">
-          <Button variant="secondary" to={isEdit ? `/accommodation/${id}` : '/accommodation'}>Cancel</Button>
+          <BackActionButton to={isEdit ? `/accommodation/${id}` : '/accommodation'} />
           <Button type="submit" disabled={mutation.isPending}>
             {mutation.isPending ? (isEdit ? 'Saving…' : 'Creating…') : (isEdit ? 'Save' : 'Create accommodation')}
           </Button>

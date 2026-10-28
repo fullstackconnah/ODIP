@@ -211,7 +211,7 @@ export default function PortalShiftDetailPage() {
     if (isError && httpStatusOf(error) === 403) {
       return (
         <div className="space-y-4 animate-fade-in">
-          <BackButton to="/portal" label="my shifts" variant="link" history={false} className="py-3" />
+          <BackButton to="/portal" label="my shifts" variant="link" className="py-3" />
           <Callout tone="info" title="You can't open this shift">This shift isn't assigned to you.</Callout>
         </div>
       )
@@ -392,7 +392,7 @@ export default function PortalShiftDetailPage() {
   return (
     <div className="space-y-3 lg:space-y-4 animate-fade-in lg:pb-4">
       <AnnouncementRegion message={finishWaiting ? "Shift finished on this phone. It's sent to your coordinator when you're back online." : submitted ? 'Shift submitted. A coordinator will review it.' : ''} />
-      <BackButton to="/portal" label="my shifts" variant="link" history={false} className="py-3" />
+      <BackButton to="/portal" label="my shifts" variant="link" className="py-3" />
       <PageHeader
         variant="detail"
         title={participant.fullName}

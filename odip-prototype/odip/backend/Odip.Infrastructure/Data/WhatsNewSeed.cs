@@ -133,6 +133,9 @@ public static class WhatsNewSeed
         new Item("2026-10-agreements-bulk", "Renew, reprice or extend agreements together",
             "On the Agreements page, tick the agreements you want, then choose Renew, Reprice or Extend. Bunya Support makes a draft for each one, which you then check and approve. Nothing changes on the roster until a draft is approved.",
             Staff, false),
+        new Item("2026-10-back-goes-back", "Back takes you where you came from",
+            "Back now returns to the page you were on before. If you opened a page from a link or in a new tab, it goes to that page's main list instead.",
+            Staff, false),
     };
 
     /// <summary>Inserts the keys the table lacks, one save each, so a key another instance inserted first costs only that row.</summary>

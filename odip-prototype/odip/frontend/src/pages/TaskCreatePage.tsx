@@ -9,7 +9,7 @@ import { FormField } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { Button } from '@/components/Button'
 import { PageHeader } from '@/components/PageHeader'
-import { BackButton } from '@/components/BackButton'
+import { BackButton, BackActionButton } from '@/components/BackButton'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
@@ -117,13 +117,13 @@ export default function TaskCreatePage() {
         const res = await updateTask.mutateAsync({ id, data: payload })
         if (res.success) {
           flushSync(() => reset(data))
-          navigate('/tasks')
+          navigate('/tasks', { replace: true })
         }
       } else {
         const res = await createTask.mutateAsync(payload)
         if (res.success) {
           flushSync(() => reset(data))
-          navigate('/tasks')
+          navigate('/tasks', { replace: true })
         }
       }
     } catch {
@@ -150,7 +150,7 @@ export default function TaskCreatePage() {
     return (
       <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
         <div className="flex items-start gap-2">
-          <BackButton to="/tasks" label="tasks" variant="icon" history={false} />
+          <BackButton to="/tasks" label="tasks" variant="icon" />
           <div className="flex-1 min-w-0"><PageHeader title={viewOnly ? 'View task' : 'Edit task'} /></div>
         </div>
         <Callout tone="error">
@@ -164,7 +164,7 @@ export default function TaskCreatePage() {
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       {unsavedChangesDialog}
       <div className="flex items-start gap-2">
-        <BackButton to="/tasks" label="tasks" variant="icon" history={false} />
+        <BackButton to="/tasks" label="tasks" variant="icon" />
         <div className="flex-1 min-w-0"><PageHeader title={viewOnly ? 'View task' : isEdit ? 'Edit task' : 'New task'} /></div>
       </div>
 
@@ -293,7 +293,7 @@ export default function TaskCreatePage() {
 
         {/* Submit */}
         {!viewOnly && <div className="flex justify-end gap-3">
-          <Button variant="secondary" to="/tasks">Cancel</Button>
+          <BackActionButton to="/tasks" />
           <Button type="submit" disabled={mutation.isPending}>
             {mutation.isPending ? (isEdit ? 'Saving…' : 'Creating…') : (isEdit ? 'Save' : 'Create task')}
           </Button>
