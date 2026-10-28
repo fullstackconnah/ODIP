@@ -1,0 +1,11 @@
+## Impeccable design note (written before the first edit)
+- **What and where:** worker portal Shifts list (`pages/portal/PortalShiftsPage.tsx`). A shift the coordinator sent back (Published, returnCount > 0) whose end has passed moves from "Earlier" to "Coming up". The only code change is `hasEnded` in `pages/portal/lib/portal.ts`.
+- **House component:** the existing `ShiftLink` card with its existing "Returned" badge (`portalStatusLabel`). No new section, component, token or copy.
+- **Why (Operate mode):** the worker must act on a returned shift; filing it with finished work hides the one actionable item. Coming up is the "needs me" run.
+- **States:**
+  - returned past shift: Coming up, day heading in ascending order, so yesterday's sorts first (oldest, most urgent), badge "Returned";
+  - returned future shift: unchanged, Coming up, badge "Returned";
+  - normal past Rostered shift (returnCount 0): stays Earlier;
+  - InProgress / PendingReview / Completed: unchanged;
+  - empty Coming up: with a returned past shift it now shows (the section was hidden before); with none, still not drawn.
+- **apple-design rules applied:** familiarity/consistency (same card and badge, same place a returned shift already lives when future); simplicity (no new chrome); touch targets unchanged (card is the existing full-width link, 44px+); no motion added.
