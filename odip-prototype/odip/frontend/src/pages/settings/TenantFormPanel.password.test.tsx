@@ -51,7 +51,7 @@ describe('TenantFormPanel: the first user\'s password', () => {
     await openFirstUser()
 
     expect(screen.getByRole('button', { name: 'Generate' })).toHaveClass(
-      'focus-visible:ring-[var(--color-ring)]', 'h-[var(--control-h)]', 'border', 'bg-[var(--color-card)]',
+      'focus-visible:outline-[var(--color-ring)]', 'h-[var(--control-h)]', 'border', 'bg-[var(--color-card)]',
     )
   })
 
