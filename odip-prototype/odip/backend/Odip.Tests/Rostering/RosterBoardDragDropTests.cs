@@ -549,6 +549,22 @@ public class RosterBoardDragDropTests
 
         Assert.Equal(new[] { (NotificationEventType.ShiftUnassigned, alex.Id) }, await Notices(db));
         Assert.Contains("\"Cancelled\":true", (await db.NotificationOutbox.AsNoTracking().SingleAsync()).PayloadJson);
+        // the shift is Sam's now, so Alex's notice opens My shifts: the shift page would answer "Shift not found"
+        Assert.Equal("/portal", (await db.InAppNotifications.AsNoTracking().SingleAsync()).LinkTo);
+    }
+
+    [Fact]
+    public async Task UpdateShift_CancellingAPublishedShiftOnTheProvidersTodayInSydney_IsBeforeTodayAndSendsNothing()
+    {
+        using var db = TestDb.Create();
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var shift = SeedShift(db, SeedParticipant(db).Id, alex.Id, ShiftStatus.Published, day: new DateOnly(2026, 8, 19));
+        // 15:00Z on 19 Aug is 01:00 on 20 Aug in Sydney (no provider settings, so the Sydney default): the shift is already yesterday there, though it is still today in UTC
+        var clock = new FixedClock(new DateTimeOffset(2026, 8, 19, 15, 0, 0, TimeSpan.Zero));
+
+        Body(await Controller(db, clock: clock).UpdateShift(shift.Id, Put(shift, alex.Id, ShiftStatus.Cancelled), default));
+
+        Assert.Empty(await Notices(db));
     }
 
     [Fact]

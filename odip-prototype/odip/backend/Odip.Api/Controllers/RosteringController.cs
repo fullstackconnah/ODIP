@@ -2207,7 +2207,7 @@ public class RosteringController : ControllerBase
         if (takenOff is { } t && await _db.Users.FirstOrDefaultAsync(u => u.Id == t, ct) is { } removed)
             await _notificationRaiser.RaiseAsync(
                 Odip.Domain.Notifications.NotificationEventType.ShiftUnassigned, "Shift", shift.Id, new[] { removed.Id },
-                new Odip.Infrastructure.Notifications.Templates.ShiftUnassignedPayload(removed.Email, participantName, shift.ServiceDate, shift.StartTime, shift.EndTime, cancelled), ct);
+                new Odip.Infrastructure.Notifications.Templates.ShiftUnassignedPayload(removed.Email, participantName, shift.ServiceDate, shift.StartTime, shift.EndTime, cancelled, StillTheirs: shift.UserId == removed.Id), ct);
     }
 
     /// <summary>
