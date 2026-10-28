@@ -3,6 +3,7 @@ import { Search, Pencil, Mail, Plus } from 'lucide-react'
 import { useAdminUsers, useAdminTenantsSummary, useEnsureUserSignInAccount } from '@/api/hooks'
 import type { AdminUserDto } from '@/api/types'
 import { Button } from '@/components/Button'
+import { inputClass } from '@/components/FormField'
 import { Dropdown } from '@/components/Dropdown'
 import { DataTable, RowActions } from '@/components/DataTable'
 import { NoticesRegion } from '@/components/NoticesRegion'
@@ -120,9 +121,6 @@ export default function UsersTab({ onAddUser, onEditUser, notices: lifted }: Use
   // Dismissing the last notice about someone hands focus back to the button that raised it, which is still in their row.
   const focusSendButtonOf = (dismissed: Notice) =>
     dismissed.subject ? document.querySelector<HTMLElement>(`[data-send-user="${dismissed.subject}"]`) : null
-
-  const inputClass =
-    'w-full px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-accent)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
 
   return (
     <div className="space-y-4">

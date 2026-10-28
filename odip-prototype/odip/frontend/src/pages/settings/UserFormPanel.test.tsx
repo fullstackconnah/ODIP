@@ -125,3 +125,10 @@ describe('UserFormPanel — Active switch', () => {
     expect(toggle).toHaveAttribute('aria-checked', 'false')
   })
 })
+
+describe('UserFormPanel inputs', () => {
+  it('use the house Field Grey input surface, not a local fill', () => {
+    render(<UserFormPanel isOpen onClose={() => {}} user={user1} />)
+    expect(screen.getByLabelText(/first name/i).className).toContain('bg-[var(--color-input)]')
+  })
+})

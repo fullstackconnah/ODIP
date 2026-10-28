@@ -1,4 +1,4 @@
-import { labelClass } from '@/components/FormField'
+import { inputClass, labelClass } from '@/components/FormField'
 import { useState, useEffect, useId, useRef } from 'react'
 import {
   useAdminTenantsSummary,
@@ -272,9 +272,6 @@ export default function UserFormPanel({
       setError("Couldn't generate a password in this browser. Type one instead.")
     }
   }
-
-  const inputClass =
-    'w-full px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-accent)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
 
   if (!isOpen) return null
 
