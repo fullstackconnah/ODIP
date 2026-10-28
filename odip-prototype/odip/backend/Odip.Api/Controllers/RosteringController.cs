@@ -672,7 +672,7 @@ public class RosteringController : ControllerBase
                 ShiftErrorCodes.ShiftStatusLocked));
 
         // Publish week holds a shift nobody is on until someone is; the single-shift path agrees, for every client. A shift already Published is untouched.
-        if (shift.Status == ShiftStatus.Draft && dto.Status == ShiftStatus.Published && dto.StaffId is null)
+        if (shift.Status != ShiftStatus.Published && dto.Status == ShiftStatus.Published && dto.StaffId is null)
             return Conflict(ApiResponse<ShiftDto>.Fail("Put someone on this shift before publishing it."));
 
         // F6: once a shift has moved past Published (worker has started it), its rostered

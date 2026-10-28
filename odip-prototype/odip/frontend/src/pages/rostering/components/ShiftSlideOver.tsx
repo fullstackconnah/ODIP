@@ -561,7 +561,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
         {isEdit && (
           <FormField
             label="Status"
-            hint={statusLocked ? 'Set automatically as the worker starts/finishes the shift and a reviewer approves or returns it — it can’t be changed here.' : undefined}
+            hint={statusLocked ? 'Set automatically as the worker starts/finishes the shift and a reviewer approves or returns it — it can’t be changed here.' : !staffId && existing?.status !== 'Published' ? 'Put someone on this shift before publishing it.' : undefined}
           >
             <Dropdown
               variant="form"

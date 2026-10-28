@@ -322,6 +322,7 @@ describe('ShiftSlideOver status (PP-8)', () => {
     await user.click(screen.getByRole('option', { name: 'Draft' }))
     await user.click(screen.getByLabelText('Status'))
     expect(screen.getByRole('option', { name: 'Published' })).toBeInTheDocument()
+    expect(screen.queryByText('Put someone on this shift before publishing it.')).not.toBeInTheDocument()
   })
 
   it('stops offering Published, and does not save it, when the staff are cleared from a Draft that was set to Published', async () => {
@@ -330,8 +331,10 @@ describe('ShiftSlideOver status (PP-8)', () => {
 
     await user.click(screen.getByLabelText('Status'))
     await user.click(screen.getByRole('option', { name: 'Published' }))
+    expect(screen.queryByText('Put someone on this shift before publishing it.')).not.toBeInTheDocument()
     await user.click(screen.getByLabelText('Staff'))
     await user.click(screen.getByRole('option', { name: 'Unassigned' }))
+    expect(screen.getByText('Put someone on this shift before publishing it.')).toBeInTheDocument()
     await user.click(screen.getByLabelText('Status'))
     expect(screen.queryByRole('option', { name: 'Published' })).not.toBeInTheDocument()
     await user.click(screen.getByRole('option', { name: 'Draft' }))

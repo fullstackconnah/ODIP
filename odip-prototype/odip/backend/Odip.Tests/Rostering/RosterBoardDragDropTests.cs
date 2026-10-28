@@ -286,6 +286,20 @@ public class RosterBoardDragDropTests
     }
 
     [Fact]
+    public async Task UpdateShift_UnstaffedCancelledToPublished_IsRefused()
+    {
+        using var db = TestDb.Create();
+        var shift = SeedShift(db, SeedParticipant(db).Id, null, ShiftStatus.Cancelled);
+
+        var result = await Controller(db).UpdateShift(shift.Id, Put(shift, null, ShiftStatus.Published), default);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal(new[] { "Put someone on this shift before publishing it." }, Assert.IsType<ApiResponse<ShiftDto>>(conflict.Value).Errors);
+        Assert.Equal(ShiftStatus.Cancelled, (await db.Shifts.AsNoTracking().SingleAsync(s => s.Id == shift.Id)).Status);
+        Assert.Empty(await Notices(db));
+    }
+
+    [Fact]
     public async Task UpdateShift_AlreadyPublishedUnstaffedShift_SavedAsPublished_StillSucceeds()
     {
         using var db = TestDb.Create();
