@@ -504,4 +504,41 @@ public class ClaimEditGuardsTests
         db.ChangeTracker.Clear();
         Assert.Equal(ClaimLineItemStatus.Rejected, (await db.ClaimLineItems.AsNoTracking().SingleAsync(l => l.Id == first.Id)).Status);
     }
+
+    // ── A line can't be rejected until its claim has gone to the NDIA ──────────────────────────────
+
+    [Theory]
+    [InlineData(TripClaimStatus.Draft)]
+    [InlineData(TripClaimStatus.Ready)]
+    public async Task ALineCannotBeRejected_WhileItsClaimIsNotYetSubmitted_AndNothingIsWritten(TripClaimStatus status)
+    {
+        var (db, controller) = Create();
+        var (claim, line, _) = Seed(db, status);
+        var lineStatus = line.Status;
+
+        var result = await controller.UpdateLineItem(claim.Id, line.Id, new UpdateClaimLineItemDto { Status = ClaimLineItemStatus.Rejected, RejectionReason = "Not funded" }, Ct);
+
+        Assert.Equal(409, StatusOf(result));
+        Assert.Equal($"{claim.ClaimReference} hasn't been submitted to the NDIA yet, so its lines can't be marked as rejected.", RefusalOf(result));
+        db.ChangeTracker.Clear();
+        var stored = await db.ClaimLineItems.AsNoTracking().SingleAsync(l => l.Id == line.Id);
+        Assert.Equal((lineStatus, (string?)null), (stored.Status, stored.RejectionReason));
+        Assert.Equal(status, (await db.TripClaims.AsNoTracking().SingleAsync(c => c.Id == claim.Id)).Status);
+    }
+
+    [Fact]
+    public async Task TheOnlyLineOfADraftClaim_CannotBeRejected()
+    {
+        var (db, controller) = Create();
+        var (claim, only, other) = Seed(db, TripClaimStatus.Draft);
+        var lineStatus = only.Status;
+        db.ClaimLineItems.Remove(other);
+        await db.SaveChangesAsync();
+
+        var result = await controller.UpdateLineItem(claim.Id, only.Id, new UpdateClaimLineItemDto { Status = ClaimLineItemStatus.Rejected }, Ct);
+
+        Assert.Equal(409, StatusOf(result));
+        db.ChangeTracker.Clear();
+        Assert.Equal((TripClaimStatus.Draft, lineStatus), ((await db.TripClaims.AsNoTracking().SingleAsync(c => c.Id == claim.Id)).Status, (await db.ClaimLineItems.AsNoTracking().SingleAsync(l => l.Id == only.Id)).Status));
+    }
 }
