@@ -47,35 +47,38 @@ function PatternRowActions({
   const worker = workerOfPairLabel(pattern)
   const which = `${pattern.participantName}'s ${pattern.dayOfWeek} ${formatShiftRange(pattern.startTime, pattern.endTime, pattern.endsNextDay)} pattern${worker ? ` (${worker})` : ''}`
   return (
-    <div className="flex items-center justify-end gap-1">
-      <button
-        type="button"
+    <div className="flex items-center justify-end gap-1 pointer-coarse:gap-2">
+      <Button
+        variant="ghost"
+        size="sm"
+        iconOnly
         onClick={onEdit}
         title="Edit pattern"
         aria-label={`Edit ${which}`}
-        className="rounded-lg p-1.5 text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <Pencil className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        iconOnly
         onClick={onGenerate}
         disabled={!pattern.isActive}
         title={pattern.isActive ? 'Generate shifts' : 'Inactive patterns generate nothing'}
         aria-label={`Generate shifts for ${which}`}
-        className="rounded-lg p-1.5 text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-30 disabled:pointer-events-none"
       >
         <Repeat className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        iconOnly
         onClick={onToggleActive}
         title={pattern.isActive ? 'Deactivate pattern' : 'Activate pattern'}
         aria-label={`${pattern.isActive ? 'Deactivate' : 'Activate'} ${which}`}
-        className="rounded-lg p-1.5 text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <Power className="h-4 w-4" />
-      </button>
+      </Button>
     </div>
   )
 }

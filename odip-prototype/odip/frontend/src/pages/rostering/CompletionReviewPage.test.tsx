@@ -254,12 +254,29 @@ describe('CompletionReviewPage', () => {
     })
     renderPage()
 
-    expect(screen.getByText(/75 shifts · page 1 of 2/i)).toBeInTheDocument()
-    const nextButton = screen.getByRole('button', { name: /next/i })
+    expect(screen.getByText('Page 1 of 2')).toBeInTheDocument()
+    const nextButton = screen.getByRole('button', { name: 'Next page' })
     expect(nextButton).not.toBeDisabled()
     await user.click(nextButton)
 
     expect(mockUseCompletions).toHaveBeenCalledWith(expect.objectContaining({ status: 'PendingReview' }), 2, 50)
+  })
+
+  it('keeps the selected rows when the page changes, through the table pager', async () => {
+    const user = userEvent.setup()
+    mockUseCompletions.mockImplementation((_filters: unknown, page: number) => ({
+      data: makePaged([makeQueueItem({ shiftId: `shift-p${page}` })], { totalCount: 75, totalPages: 2, page, hasNext: page === 1, hasPrevious: page === 2 }),
+      isLoading: false, isError: false, refetch: vi.fn(),
+    }))
+    renderPage()
+
+    await user.click(screen.getByLabelText('Select row shift-p1'))
+    expect(screen.getByRole('button', { name: /approve selected \(1\)/i })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Next page' }))
+
+    expect(screen.getByText('Page 2 of 2')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /approve selected \(1\)/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Previous page' })).not.toBeDisabled()
   })
 })
 
