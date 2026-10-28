@@ -31,7 +31,7 @@
  * else: completing a profile never makes a participant Active (owner decision 2026-10-13; that is "Make active" on the onboarding checklist).
  * It used to finalise the participant too. It returns to where the wizard was opened from: the checklist (`?from=onboarding`) or the record.
  */
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, useFieldArray, useWatch } from 'react-hook-form'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -110,7 +110,6 @@ const FIELD_DERIVATIONS: FieldDerivationDef<ParticipantFormData>[] = [
 
 export default function ProfileWizardPage() {
   const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
   // Back to the onboarding checklist when the wizard was opened from it, else the participant's record: the fallback when there is no in-app history.
   const [searchParams] = useSearchParams()
   const returnTo = searchParams.get('from') === 'onboarding' ? `/onboarding/${id}` : `/participants/${id}`
@@ -422,7 +421,7 @@ export default function ProfileWizardPage() {
       // edit in it asks "Leave without saving?" on its way out.
       flushSync(() => reset(getValues()))
       // Back where Save was reached from (history first: the checklist, the record and its tab), else the checklist or record by `?from=`.
-      navigate(back.to)
+      back.leave()
     } catch (err) {
       setSaveError(extractErrorMessage(err, 'Failed to save the profile. Please try again.'))
     } finally {

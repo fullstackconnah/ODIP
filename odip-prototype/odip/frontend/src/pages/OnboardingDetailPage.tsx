@@ -79,7 +79,7 @@ export default function OnboardingDetailPage() {
 
   return <div className="flex flex-col gap-[var(--section-gap)]">
     <div className="flex items-start gap-2">
-      <BackButton to="/participants?tab=onboarding" label="onboarding" variant="icon" history={false} className="mt-1.5" />
+      <BackButton to="/participants?tab=onboarding" label="onboarding" variant="icon" className="mt-1.5" />
       <div className="min-w-0 flex-1">
         <PageHeader
           variant="detail"

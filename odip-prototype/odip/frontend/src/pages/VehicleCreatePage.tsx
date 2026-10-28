@@ -9,7 +9,7 @@ import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { Card } from '@/components/Card'
 import { Button } from '@/components/Button'
 import { PageHeader } from '@/components/PageHeader'
-import { BackButton } from '@/components/BackButton'
+import { BackButton, BackActionButton } from '@/components/BackButton'
 import { usePermissions } from '@/lib/permissions'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { extractErrorMessage } from '@/pages/intake/intakeFormat'
@@ -94,13 +94,13 @@ export default function VehicleCreatePage() {
         const res = await updateVehicle.mutateAsync({ id, data: payload })
         if (res.success) {
           flushSync(() => reset(data))
-          navigate('/vehicles')
+          navigate('/vehicles', { replace: true })
         }
       } else {
         const res = await createVehicle.mutateAsync(payload)
         if (res.success) {
           flushSync(() => reset(data))
-          navigate('/vehicles')
+          navigate('/vehicles', { replace: true })
         }
       }
     } catch {
@@ -122,7 +122,7 @@ export default function VehicleCreatePage() {
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       {unsavedChangesDialog}
       <div className="flex items-start gap-2">
-        <BackButton to="/vehicles" label="vehicles" variant="icon" history={false} />
+        <BackButton to="/vehicles" label="vehicles" variant="icon" />
         <div className="flex-1 min-w-0"><PageHeader title={viewOnly ? 'View vehicle' : isEdit ? 'Edit vehicle' : 'New vehicle'} /></div>
       </div>
 
@@ -207,7 +207,7 @@ export default function VehicleCreatePage() {
 
         {/* Submit */}
         {!viewOnly && <div className="flex justify-end gap-3">
-          <Button variant="secondary" to="/vehicles">Cancel</Button>
+          <BackActionButton to="/vehicles" />
           <Button type="submit" disabled={mutation.isPending}>
             {mutation.isPending ? (isEdit ? 'Saving…' : 'Creating…') : (isEdit ? 'Save' : 'Create vehicle')}
           </Button>

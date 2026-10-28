@@ -1,5 +1,5 @@
-import { Link } from 'react-router-dom'
 import { useProviderSettings } from '@/api/hooks'
+import { BackButton } from '@/components/BackButton'
 import { Callout } from '@/components/Callout'
 import { PageHeader } from '@/components/PageHeader'
 import StaffCreatePage from './StaffCreatePage'
@@ -13,7 +13,7 @@ export default function StaffNewRoute() {
       <div className="flex flex-col gap-[var(--section-gap)]">
         <PageHeader title="New staff member" />
         <Callout tone="info" title="Staff come from Employment Hero for this organisation. Add them there; they appear here within 30 minutes.">
-          <Link to="/staff" className="underline">Back to staff</Link>
+          <BackButton to="/staff" label="staff" variant="link" />
         </Callout>
       </div>
     )

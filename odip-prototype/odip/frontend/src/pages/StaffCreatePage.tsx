@@ -12,7 +12,7 @@ import { Card } from '@/components/Card'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Button } from '@/components/Button'
 import { PageHeader } from '@/components/PageHeader'
-import { BackButton } from '@/components/BackButton'
+import { BackButton, BackActionButton } from '@/components/BackButton'
 import { SignInEmailOutcome } from '@/components/SignInEmailOutcome'
 import { useRefocusWhenLost } from '@/hooks/useRefocusWhenLost'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
@@ -189,7 +189,7 @@ export default function StaffCreatePage() {
         const res = await updateStaff.mutateAsync({ id, data: { ...payload, isActive: current?.isActive ?? existing?.isActive ?? true } })
         if (res.success) {
           flushSync(() => reset(data))
-          navigate('/staff')
+          navigate('/staff', { replace: true })
         }
       } else {
         const res = await createStaff.mutateAsync(payload)
@@ -201,7 +201,7 @@ export default function StaffCreatePage() {
             const outcome = await ensureAndSendSetPasswordEmail(person.email, () => ensureStaffAccount.mutateAsync(person.id))
             setCreated({ id: person.id, name: person.fullName, email: person.email, outcome })
           } else {
-            navigate('/staff')
+            navigate('/staff', { replace: true })
           }
         }
       }
@@ -265,7 +265,7 @@ export default function StaffCreatePage() {
     return (
       <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
         <div className="flex items-start gap-2">
-          <BackButton to="/staff" label="staff" variant="icon" history={false} />
+          <BackButton to="/staff" label="staff" variant="icon" />
           <div className="flex-1 min-w-0"><PageHeader title="Edit staff member" /></div>
         </div>
         <Card className="space-y-2">
@@ -284,7 +284,7 @@ export default function StaffCreatePage() {
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       <AnnouncementRegion message={announcement} />
       <div className="flex items-start gap-2">
-        <BackButton to="/staff" label="staff" variant="icon" history={false} />
+        <BackButton to="/staff" label="staff" variant="icon" />
         <div className="flex-1 min-w-0"><PageHeader title={isEdit ? 'Edit staff member' : 'New staff member'} /></div>
       </div>
 
@@ -453,7 +453,7 @@ export default function StaffCreatePage() {
 
         {/* Submit */}
         <div className="flex justify-end gap-3">
-          <Button variant="secondary" to="/staff">Cancel</Button>
+          <BackActionButton to="/staff" />
           <Button type="submit" disabled={mutation.isPending || submitting}>
             {mutation.isPending || (isEdit && submitting)
               ? (isEdit ? 'Saving…' : 'Creating…')

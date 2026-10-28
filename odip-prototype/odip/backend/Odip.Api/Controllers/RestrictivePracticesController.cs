@@ -160,6 +160,8 @@ public class RestrictivePracticesController : ControllerBase
 
     private const string ChangedByOther = "Someone else just changed this entry, so your changes weren't saved. Close it and open it again to see theirs.";
 
+    private const string DeleteChangedByOther = "Someone else just changed this entry, so it wasn't deleted. Check their change, then delete it again if you still want to.";
+
     [HttpPut("participants/restrictive-practices/{id:guid}")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<RestrictivePracticeDto>>> Update(
@@ -224,10 +226,15 @@ public class RestrictivePracticesController : ControllerBase
 
     [HttpDelete("participants/restrictive-practices/{id:guid}")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
-    public async Task<ActionResult<ApiResponse<bool>>> Delete(Guid id, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<bool>>> Delete(
+        Guid id, CancellationToken ct, [FromQuery] DateTimeOffset? expectedUpdatedAt = null)
     {
         var practice = await _db.RestrictivePractices.FirstOrDefaultAsync(rp => rp.Id == id, ct);
         if (practice == null) return NotFound(ApiResponse<bool>.Fail("Restrictive practice entry not found"));
+
+        // As Update: no version (an older tab) deletes as before; a stale one is refused. A DateTimeOffset binds without a Local-kind shift.
+        if (expectedUpdatedAt is DateTimeOffset expected && expected.UtcDateTime != practice.UpdatedAt)
+            return Conflict(ApiResponse<bool>.Fail(DeleteChangedByOther));
 
         _db.RestrictivePractices.Remove(practice);
 
@@ -247,7 +254,14 @@ public class RestrictivePracticesController : ControllerBase
             await _safetyNoteSync.SyncRestrictivePracticeNoteAsync(participant, ct);
         }
 
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Conflict(ApiResponse<bool>.Fail(DeleteChangedByOther));
+        }
 
         return Ok(ApiResponse<bool>.Ok(true));
     }
