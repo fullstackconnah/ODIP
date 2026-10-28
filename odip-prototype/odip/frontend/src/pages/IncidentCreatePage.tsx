@@ -211,7 +211,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
   const { data: trips = [] } = useTrips()
   const { data: staff = [] } = useStaff()
   const { data: participants = [] } = useParticipants()
-  const { id: currentUserId, isSupportWorker } = usePermissions()
+  const { id: currentUserId, fullName, isSupportWorker } = usePermissions()
   // The server files a support worker's incident under their own name, so the form shows that instead of a picker a prefill could seed with a colleague.
   const lockedReporterId = !isEdit && isSupportWorker ? currentUserId : null
 
@@ -469,7 +469,9 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
 
   const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(isDirty)
 
-  const staffName = (staffId: string | null | undefined) => staff.find((s) => s.id === staffId)?.fullName ?? '—'
+  // A support worker's own name comes from the sign-in profile, so it is right before /staff returns.
+  const staffName = (staffId: string | null | undefined) =>
+    (staffId && staffId === lockedReporterId ? fullName : null) ?? staff.find((s) => s.id === staffId)?.fullName ?? '—'
   const tripName = (tripId: string | null | undefined) => trips.find((t) => t.id === tripId)?.tripName ?? '—'
   // I1 (final review): the client-side lookup lists are server-capped (participants at 50), so a
   // participant/practice past the cap silently resolves to '—' even though the loaded incident

@@ -14,7 +14,7 @@ import { INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS } from '@/api/types/enum
 
 const {
   mockUseIncident, mockCreateMutateAsync, mockUpdateMutateAsync, mockUseRestrictivePractices, mockApiPost,
-  mockUseCreateIncident, mockBulkCreateMutateAsync,
+  mockUseCreateIncident, mockBulkCreateMutateAsync, staffList,
 } = vi.hoisted(() => ({
   mockUseIncident: vi.fn(),
   mockCreateMutateAsync: vi.fn(),
@@ -23,6 +23,17 @@ const {
   mockApiPost: vi.fn(),
   mockUseCreateIncident: vi.fn(),
   mockBulkCreateMutateAsync: vi.fn(),
+  // 'staff-3' deliberately shares a fullName with 'staff-1' — a same-name-different-id fixture
+  // for the INC-03 Reported-By prefill: it must never resolve by name (see the test below).
+  // `loading` empties the list, standing in for /staff not having returned yet.
+  staffList: {
+    loading: false,
+    all: [
+      { id: 'staff-1', fullName: 'Alex Rivera' },
+      { id: 'staff-3', fullName: 'Alex Rivera' },
+      { id: 'staff-2', fullName: 'Cora Lane' },
+    ],
+  },
 }))
 
 // Only the API layer is mocked — FormField, Card are the real components, so this exercises the
@@ -33,13 +44,7 @@ vi.mock('@/api/hooks', () => ({
   useUpdateIncident: () => ({ mutateAsync: mockUpdateMutateAsync, isPending: false, isError: false }),
   useIncident: mockUseIncident,
   useTrips: () => ({ data: [{ id: 'trip-1', tripName: 'Gold Coast Beach Break' }, { id: 'trip-2', tripName: 'Blue Mountains Adventure' }] }),
-  // 'staff-3' deliberately shares a fullName with 'staff-1' — a same-name-different-id fixture
-  // for the INC-03 Reported-By prefill: it must never resolve by name (see the test below).
-  useStaff: () => ({ data: [
-    { id: 'staff-1', fullName: 'Alex Rivera' },
-    { id: 'staff-3', fullName: 'Alex Rivera' },
-    { id: 'staff-2', fullName: 'Cora Lane' },
-  ] }),
+  useStaff: () => ({ data: staffList.loading ? [] : staffList.all }),
   useParticipants: () => ({ data: [{ id: 'participant-1', firstName: 'Sophie', lastName: 'Brown', fullName: 'Sophie Brown' }] }),
   // INC-04/INC-05/IN-4
   useRestrictivePractices: mockUseRestrictivePractices,
@@ -170,6 +175,7 @@ beforeEach(() => {
   mockUseRestrictivePractices.mockReturnValue({ data: [] })
   mockApiPost.mockReset().mockResolvedValue({ success: true, data: null })
   mockBulkCreateMutateAsync.mockReset()
+  staffList.loading = false
   localStorage.clear()
 })
 
@@ -1761,6 +1767,47 @@ describe('IncidentCreatePage — a support worker is the reporter', () => {
     await user.click(screen.getByLabelText('Staff member'))
     expect(screen.queryByRole('option', { name: 'Cora Lane' })).not.toBeInTheDocument()
     expect(screen.getAllByRole('option', { name: 'Alex Rivera' })).toHaveLength(2)
+  })
+
+  const colleagueMar: MarIncidentPrefillState = {
+    source: 'mar-administration', outcome: 'WrongMedication', participantId: 'participant-1', participantName: 'Sophie Brown',
+    medicationName: 'Insulin', strength: '18 units', doseDescription: null, scheduledAt: '2026-08-01T00:30:00Z',
+    administeredAt: '2026-08-01T01:00:00Z', administeredAtTimeZone: 'Australia/Brisbane', recordedByName: 'Alex Rivera',
+    recordedByUserId: 'staff-1', reason: 'Grabbed the wrong blister pack', notes: null, tripInstanceId: null,
+    medicationAdministrationId: 'admin-1',
+  }
+  const colleagueShift: ShiftIncidentPrefillState = {
+    source: 'shift', shiftId: 'shift-9', participantId: 'participant-1', participantName: 'Sophie Brown',
+    serviceDate: '2026-08-17', startTime: '09:00:00', endTime: '17:00:00', endsNextDay: false, reportedByUserId: 'staff-1',
+    returnTo: '/portal/shifts/shift-9',
+  }
+
+  it.each([['MAR', colleagueMar], ['shift', colleagueShift]] as const)(
+    'shows the worker, not the colleague, from a %s prefill and submits their id', async (_label, state) => {
+      signInAs('SupportWorker')
+      const user = userEvent.setup()
+      renderCreatePage({ pathname: '/incidents/new', state })
+
+      expect(screen.getByLabelText('Reported By')).toHaveValue('Cora Lane')
+      // The MAR prefill picks the incident type; the shift prefill leaves it for the worker to name.
+      if (state.source === 'shift') await user.type(screen.getByPlaceholderText('Describe the incident type'), 'Fall in the garden')
+      await clickNext(user) // Basics -> Incident Details
+      await clickNext(user) // -> Witnesses
+      await clickNext(user) // -> Review
+      await user.click(screen.getByRole('button', { name: /submit incident report/i }))
+      expect(mockCreateMutateAsync.mock.calls[0][0]).toMatchObject({ reportedByStaffId: 'staff-2' })
+    })
+
+  it("shows the worker's own name on Basics and Review before /staff has loaded", async () => {
+    signInAs('SupportWorker')
+    staffList.loading = true
+    const user = userEvent.setup()
+    renderCreatePage({ pathname: '/incidents/new' })
+
+    expect(screen.getByLabelText('Reported By')).toHaveValue('Cora Lane')
+    await fillBasicsMinimallyAndNext(user)
+    await fillDetailsMinimallyAndNext(user)
+    expect(reviewValueFor('Reported By')).toBe('Cora Lane')
   })
 
   it('leaves a coordinator the picker, seeded with the prefill reporter', () => {
