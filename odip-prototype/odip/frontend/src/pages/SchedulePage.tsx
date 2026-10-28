@@ -13,6 +13,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { EmptyState } from '@/components/EmptyState'
 import { PageState } from '@/components/PageState'
 import { PageHeader } from '@/components/PageHeader'
+import { StatusBadge } from '@/components/StatusBadge'
 import {
   ScheduleAssignmentCell, QualBadgeList, ScheduleSummary, TripStatusBadge, AvailabilityList,
   StaffAssignModal, VehicleAssignModal,
@@ -218,9 +219,7 @@ export default function SchedulePage() {
                             {formatRatio(trip.staffAssignedCount, trip.staffRequired ?? '?')} staff · {formatRatio(trip.currentParticipantCount, trip.maxParticipants ?? '?')} pax
                           </span>
                           {trip.preferenceMatchCount > 0 && (
-                            <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-[var(--color-warning-container)] px-2 py-0.5 text-xs font-semibold text-[var(--color-on-warning-container)]">
-                              ★ {trip.preferenceMatchCount} preferred
-                            </span>
+                            <StatusBadge tone="warning" label={`★ ${trip.preferenceMatchCount} preferred`} className="whitespace-nowrap" />
                           )}
                         </div>
                       </div>

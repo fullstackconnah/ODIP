@@ -78,12 +78,7 @@ function FlaggedNotesTab({ flaggedNotes, isLoading, isError, onRetry }: { flagge
         <div className="md:max-w-[16rem] md:overflow-hidden">
           <div className="flex flex-wrap gap-1 md:w-max md:flex-nowrap">
             {row.flaggedCategories.map(category => (
-              <span
-                key={category}
-                className="inline-flex items-center rounded-full bg-[var(--color-warning-container)] px-2 py-0.5 text-xs font-medium text-[var(--color-on-warning-container)]"
-              >
-                {SHIFT_NOTE_FLAG_LABELS[category] ?? category}
-              </span>
+              <StatusBadge key={category} tone="warning" label={SHIFT_NOTE_FLAG_LABELS[category] ?? category} />
             ))}
           </div>
         </div>

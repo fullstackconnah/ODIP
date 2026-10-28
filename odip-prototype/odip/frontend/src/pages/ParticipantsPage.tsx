@@ -1,6 +1,7 @@
 import { useParticipants, useDeleteParticipant, useRestoreParticipant, useUpdateParticipantStatus, useParticipantAlertsAggregate } from '@/api/hooks'
 import { extractErrorMessage, maskNdisNumber } from '@/lib/utils'
 import { MaskedValue } from '@/components/MaskedValue'
+import { StatusBadge } from '@/components/StatusBadge'
 import { DataTable, RowActions, type Column } from '@/components/DataTable'
 import { SearchInput } from '@/components/SearchInput'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
@@ -24,11 +25,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { usePermissions } from '@/lib/permissions'
 import { queryPhase } from '@/lib/queryPhase'
 import { readParticipantActivatedNotice } from './profile/participantActivated'
-
-const ACTIVE_STATUS_COLORS: Record<string, string> = {
-  Active: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
-  Inactive: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
-}
 
 /** The views of the register: finalised participants only (a draft is an Enquiries or an Onboarding row). The agreements ending view moved to the Agreements page. */
 type View = 'active' | 'archived'
@@ -273,11 +269,8 @@ function useParticipantsScreen() {
       render: (p) => {
         const current = p.isActive ? 'Active' : 'Inactive'
         return (
-          <span
-            aria-label={`Status: ${current}`}
-            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${ACTIVE_STATUS_COLORS[current]}`}
-          >
-            {current}
+          <span aria-label={`Status: ${current}`}>
+            <StatusBadge status={current} />
           </span>
         )
       },
