@@ -199,8 +199,8 @@ export type AgreementBudgetBreakdownView = {
   notInARecordedPool: BudgetAmount
   /** The part delivered outside the plan's dates: shown, never dropped. */
   outsideThePlan: BudgetAmount
-  /** Why there is none, when `status` is `none`: nothing is recorded, the recorded plan ended on `planEnd`, or a plan is recorded for later and starts on `planStart`. Omitted means nothing is recorded. */
-  noBudgetReason?: 'NotRecorded' | 'PlanEnded' | 'NotStarted'
+  /** Why there is none, when `status` is `none`: nothing is recorded, the recorded plan ended on `planEnd`, a plan is recorded for later and starts on `planStart`, or the participant is funded another way (`OtherFunded`: no action, nothing to record). Omitted means nothing is recorded. */
+  noBudgetReason?: 'NotRecorded' | 'PlanEnded' | 'NotStarted' | 'OtherFunded'
   /** The last day of the plan that ended, when `noBudgetReason` is `PlanEnded`. */
   planEnd?: string
   /** The first day of the plan recorded for later, when `noBudgetReason` is `NotStarted`. */

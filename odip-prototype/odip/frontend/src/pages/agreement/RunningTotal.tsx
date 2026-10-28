@@ -23,7 +23,7 @@ type RunningTotalProps = {
 /** How the agreement stands against the participant's pools, in the few words the footer has room for. The server's verdict is only read: nothing is compared here. */
 function budgetWords(view: AgreementBudgetBreakdownView | null): { long: string; short: string; over?: boolean } | null {
   if (!view || view.status === 'loading') return null
-  if (view.status === 'none') return { long: 'no budget recorded', short: 'no budget' }
+  if (view.status === 'none') return view.noBudgetReason === 'OtherFunded' ? { long: 'no NDIS budget', short: 'no budget' } : { long: 'no budget recorded', short: 'no budget' }
   if (view.status === 'failed') return { long: 'budget not checked', short: 'not checked' }
   const over = view.pools.reduce((sum, pool) => sum + (pool.overBy ?? 0), 0)
   return over > 0 ? { long: `over by ${formatCurrency(over)}`, short: 'over budget', over: true } : { long: 'within budget', short: 'within' }

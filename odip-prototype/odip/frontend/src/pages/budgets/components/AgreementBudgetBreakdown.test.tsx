@@ -6,7 +6,7 @@ import { TONE } from '@/lib/tone'
 import { AgreementBudgetBreakdown } from './AgreementBudgetBreakdown'
 import { agreementLine, agreementPool, breakdown } from './fixtures'
 import type { AgreementBudgetBreakdownView } from './viewModel'
-import { AGREEMENT_NO_BUDGET, AGREEMENT_WARNING_ONLY, NO_FIGURE } from './wording'
+import { AGREEMENT_NO_BUDGET, AGREEMENT_OTHER_FUNDED, AGREEMENT_WARNING_ONLY, NO_FIGURE } from './wording'
 
 // The agreement budget bar's comparison. What these tests hold:
 //   - each pool the agreement touches is a heading, and each funding period of it is one sentence: "Agreement {cost} against {remaining} left in {period}", then the verdict; a pool that spans several
@@ -86,6 +86,18 @@ describe('AgreementBudgetBreakdown: the states that are not an answer', () => {
     expect(screen.getByRole('link', { name: 'Open the Funding tab' })).toHaveAttribute('href', '/participants/p-1?tab=funding')
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.queryByText(/No budget recorded/)).not.toBeInTheDocument()
+  })
+
+  // A participant funded another way has no NDIS budget to record: the text says so and there is nothing to press. The literal is pinned here once.
+  it('says a participant funded another way has no NDIS budget, with nothing to press', () => {
+    renderView({ status: 'none', figures: { visible: true }, pools: [], notInARecordedPool: null, outsideThePlan: null, noBudgetReason: 'OtherFunded' })
+
+    expect(screen.getByText('This participant is funded another way, so there is no NDIS budget to compare the agreement against.')).toBeInTheDocument()
+    expect(screen.getByText(AGREEMENT_OTHER_FUNDED)).toBeInTheDocument()
+    expect(screen.queryByText(AGREEMENT_NO_BUDGET)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('says no budget is recorded without a link when there is nowhere to point', () => {

@@ -43,7 +43,7 @@ public sealed class AgreementCheckService
 
     public async Task<AgreementCheckResult> CheckAsync(Guid tenantId, Guid participantId, AgreementCheckRequestDto request, CancellationToken ct)
     {
-        var person = await _db.Participants.AsNoTracking().Where(p => p.Id == participantId && p.TenantId == tenantId).Select(p => new { p.PlanType }).FirstOrDefaultAsync(ct);
+        var person = await _db.Participants.AsNoTracking().Where(p => p.Id == participantId && p.TenantId == tenantId).Select(p => new { p.PlanType, p.FundingSource }).FirstOrDefaultAsync(ct);
         if (person is null) return AgreementCheckResult.Missing(FundingPlanService.ParticipantNotFound);
 
         // What to price: a saved draft's own blocks and dates, or the blocks and dates sent. Exactly one of the two.
@@ -82,13 +82,15 @@ public sealed class AgreementCheckService
         var ledger = ledgers[participantId];
         if (ledger.Ledger is not { PlanIsCurrent: true } plan)
         {
-            // The same three reasons as the Budgets list: a plan is recorded for later (and says when it starts, outranking one that ended), or the one there is has ended, or none is recorded.
-            var upcoming = ledger.NextPlanStart;
-            var ended = upcoming is null && ledger.Ledger is { PlanIsCurrent: false } endedPlan ? endedPlan.Plan : null;
+            // The Budgets list's three reasons, plus OtherFunded: a plan is recorded for later (and says when it starts, outranking one that ended), or the one there is has ended, or none is recorded.
+            // A participant funded another way has no NDIS budget whatever plan is recorded (the ledger sets none aside for them), so the dates stay null.
+            var otherFunded = person.FundingSource == ParticipantFundingSource.Other;
+            var upcoming = otherFunded ? null : ledger.NextPlanStart;
+            var ended = !otherFunded && upcoming is null && ledger.Ledger is { PlanIsCurrent: false } endedPlan ? endedPlan.Plan : null;
             return AgreementCheckResult.Answer(new AgreementCheckDto
             {
                 HasBudget = false, AsOf = ledger.Today, PeriodFrom = from, PeriodTo = to,
-                NoBudgetReason = upcoming is not null ? BudgetListNoBudgetReason.NotStarted : ended is null ? BudgetListNoBudgetReason.NotRecorded : BudgetListNoBudgetReason.PlanEnded,
+                NoBudgetReason = otherFunded ? BudgetListNoBudgetReason.OtherFunded : upcoming is not null ? BudgetListNoBudgetReason.NotStarted : ended is null ? BudgetListNoBudgetReason.NotRecorded : BudgetListNoBudgetReason.PlanEnded,
                 PlanStart = upcoming, PlanEnd = ended?.PlanEnd,
             });
         }

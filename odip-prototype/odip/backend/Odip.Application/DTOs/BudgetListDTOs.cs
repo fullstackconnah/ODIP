@@ -51,7 +51,7 @@ public record BudgetListRowDto
     public NdiaRejectionDto? NdiaRejection { get; init; }
 }
 
-/// <summary>Why an NDIS-funded participant has no row.</summary>
+/// <summary>Why an NDIS-funded participant has no row, and (agreement check only) that a participant funded another way has no NDIS budget.</summary>
 public enum BudgetListNoBudgetReason
 {
     /// <summary>No plan budget is recorded at all (one that has ended, or is yet to start, is the next two).</summary>
@@ -60,6 +60,8 @@ public enum BudgetListNoBudgetReason
     PlanEnded = 1,
     /// <summary>A plan is recorded for later and none is running: there is nothing to spend against yet, and the entry says when it starts. It outranks a plan that ended: the next plan is already there.</summary>
     NotStarted = 2,
+    /// <summary>The participant is funded another way, so no NDIS budget applies. Only the agreement check says this.</summary>
+    OtherFunded = 3,
 }
 
 /// <summary>An NDIS-funded participant with no budget in force, kept apart from the rows: there is no figure for them and nothing ever warns about them.</summary>

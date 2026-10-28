@@ -277,6 +277,28 @@ public class AgreementCheckTests
         Assert.Equal((BudgetListNoBudgetReason.NotStarted, (DateOnly?)D(2027, 1, 1), (DateOnly?)null), (upcoming.NoBudgetReason, upcoming.PlanStart, upcoming.PlanEnd));
     }
 
+    // A participant funded another way has no NDIS budget whatever plan is recorded: the answer says so, not "plan starts" or "plan ended", and gives no dates.
+    [Theory]
+    [InlineData(false)]   // a plan running now
+    [InlineData(true)]    // a plan recorded for later
+    public async Task AnOtherFundedParticipant_IsToldThereIsNoNdisBudget_WhateverPlanIsRecorded(bool upcomingPlan)
+    {
+        using var a = await ArrangeAsync();
+        if (upcomingPlan) a.Kit.SeedPlan(a.Person, D(2027, 1, 1), D(2027, 12, 31), Core(PlanType.PlanManaged, new PeriodSpec(D(2027, 1, 1), D(2027, 12, 31), 5000m)));
+        else TwoPoolPlan(a);
+        a.Person.FundingSource = ParticipantFundingSource.Other;
+        a.Kit.Db.SaveChanges();
+
+        var check = Body(await a.Controller().Check(a.Person.Id, Blocks(Mondays()), CancellationToken.None));
+
+        Assert.False(check.HasBudget);
+        Assert.Equal(BudgetListNoBudgetReason.OtherFunded, check.NoBudgetReason);
+        Assert.Null(check.PlanStart);
+        Assert.Null(check.PlanEnd);
+        Assert.Null(check.PlanId);
+        Assert.Empty(check.Pools);
+    }
+
     // ── A saved draft ───────────────────────────────────────────────────────
 
     private static ServiceAgreementDraft SavedDraft(Arrangement a, params PlanBlock[] blocks)

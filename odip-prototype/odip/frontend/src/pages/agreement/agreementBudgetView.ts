@@ -36,6 +36,8 @@ export function agreementBudgetView(participantId: string, state: AgreementCheck
   // No plan is running: nothing to compare against, never a warning. A person who may record a budget does it in place (the page's `onRecord` opens the editor over the agreement); for anyone else the way on is the Funding tab. An ended plan is told apart from none recorded (the Funding tab shows that plan), and
   // its way on is to record a new one; a plan recorded for later says when it starts; an answer from an older server that gives no reason reads as nothing recorded.
   if (!data.hasBudget) {
+    // Funded another way: the server says no NDIS budget applies, so there is nothing to record or open.
+    if (data.noBudgetReason === 'OtherFunded') return { ...empty, status: 'none', refreshing: state.pending, noBudgetReason: 'OtherFunded' }
     const ended = data.noBudgetReason === 'PlanEnded'
     // A plan recorded for later is on the Funding tab already: the bar says when it starts and points there, and there is nothing to record.
     const notStarted = data.noBudgetReason === 'NotStarted'
