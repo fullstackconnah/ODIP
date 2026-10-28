@@ -43,7 +43,7 @@ export function sumAmounts(values: readonly number[]): number {
 
 /** How the plan prints the length of its funding periods, for a fact list or a table cell. */
 export function periodLengthLabel(months: number | null | undefined): string {
-  if (months === null || months === undefined) return 'No funding periods'
+  if (months === null || months === undefined) return 'Whole plan'
   return months === 1 ? 'Monthly' : `${months}-monthly`
 }
 

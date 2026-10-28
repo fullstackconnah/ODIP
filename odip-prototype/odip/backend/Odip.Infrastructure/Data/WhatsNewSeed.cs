@@ -139,6 +139,9 @@ public static class WhatsNewSeed
         new Item("2026-10-roster-needs-staff", "Shifts with nobody on them are no longer drafts",
             "On the roster, a shift with nobody on it now shows as a dashed card that needs staff, not a yellow draft, and Publish week leaves it out. Once you put someone on it, it turns yellow and goes out with your next Publish week.",
             Staff, false),
+        new Item("2026-10-release-period-required", "New plans ask how funding is released",
+            "The funding plan editor now asks you to choose a release period for a new plan before it saves. \"Whole plan\" replaces \"No funding periods\" for a plan that is not split into periods. Plans already saved are unchanged.",
+            Staff, false),
     };
 
     /// <summary>Inserts the keys the table lacks, one save each, so a key another instance inserted first costs only that row.</summary>
