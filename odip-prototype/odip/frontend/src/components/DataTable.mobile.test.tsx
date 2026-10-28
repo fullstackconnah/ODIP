@@ -153,4 +153,16 @@ describe('DataTable phone card: the actions cell', () => {
 
     expect(cellOf('Hi')).not.toHaveClass('max-md:basis-full')
   })
+
+  it('wraps on a phone without breaking a label: nowrap spans, buttons pushed right, room above the pager', () => {
+    render(<DataTable data={rows} columns={columns} keyField="id" pagination={{ page: 2, pageSize: 50, totalCount: 1234, onPageChange: vi.fn() }} />)
+
+    const showing = screen.getByText(/^Showing/)
+    const pager = showing.parentElement as HTMLElement
+    expect(pager).toHaveClass('max-md:flex-wrap', 'max-md:gap-y-2', 'max-md:py-2', 'max-md:mt-3')
+    expect(showing).toHaveClass('whitespace-nowrap')
+    const page = screen.getByText(/^Page 2 of 25/)
+    expect(page).toHaveClass('whitespace-nowrap')
+    expect(page.parentElement).toHaveClass('max-md:ml-auto')
+  })
 })

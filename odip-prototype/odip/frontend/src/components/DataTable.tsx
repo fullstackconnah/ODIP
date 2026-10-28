@@ -665,13 +665,13 @@ export function DataTable<T>({
       </table>
       {/* One page has nothing to page through; a later page keeps its way back while the list still has rows. */}
       {pagination && pagination.totalCount > 0 && (pagination.totalCount > pagination.pageSize || pagination.page > 1) && (
-        <div className={`flex min-h-[var(--row-h)] items-center justify-between text-sm ${cellPaddingX} border-t border-[var(--color-border)]`}>
-          <span className="text-[var(--color-muted-foreground)]" aria-live="polite">
+        <div className={`flex min-h-[var(--row-h)] items-center justify-between text-sm max-md:flex-wrap max-md:gap-y-2 max-md:py-2 max-md:mt-3 ${cellPaddingX} border-t border-[var(--color-border)]`}>
+          <span className="whitespace-nowrap text-[var(--color-muted-foreground)]" aria-live="polite">
             Showing {(pagination.page - 1) * pagination.pageSize + 1}-
             {Math.min(pagination.page * pagination.pageSize, pagination.totalCount)} of {pagination.totalCount}
           </span>
-          <div className="flex items-center gap-2">
-            <span className="text-[var(--color-muted-foreground)]" aria-current="page">
+          <div className="flex items-center gap-2 max-md:ml-auto">
+            <span className="whitespace-nowrap text-[var(--color-muted-foreground)]" aria-current="page">
               Page {pagination.page} of {Math.max(1, Math.ceil(pagination.totalCount / pagination.pageSize))}
             </span>
             <button
