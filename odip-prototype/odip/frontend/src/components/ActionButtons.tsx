@@ -21,7 +21,7 @@ export type ActionButtonsProps = {
  * `pointer-coarse:gap-2` gives; a mouse keeps `gap-1`. Inside a DataTable row `RowActions` pins the same 24px / 36px square from outside
  * (see ROW_ACTIONS_LEGACY_ICONS), and the two agree on touch.
  */
-const ICON_BUTTON = `${TAP_ICON_SQUARE} rounded p-1.5 pointer-coarse:rounded-md text-[var(--color-muted-foreground)] transition-colors`
+const ICON_BUTTON = `${TAP_ICON_SQUARE} rounded p-1.5 pointer-coarse:rounded-[var(--radius-sm)] text-[var(--color-muted-foreground)] transition-colors`
 
 export function ActionButtons({ editTo, onEdit, onDelete, onRestore, showArchived, labelled }: ActionButtonsProps) {
   const stop = (e: React.MouseEvent, fn?: () => void) => {
