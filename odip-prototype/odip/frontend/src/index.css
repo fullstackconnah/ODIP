@@ -27,6 +27,11 @@
   --color-border: #c3c9b5;
   --color-input: #e4e2de;
   --color-ring: #396200;
+  /* The budget graph's series (Funding tab): identity, never meaning, and only for data marks. DESIGN.md "Chart series". */
+  --color-chart-budget: #7a8070;
+  --color-chart-actual: var(--color-primary);
+  --color-chart-expected: #2f6db5;
+  --color-chart-grid: var(--color-border);
   /* Microsoft's own button colours for Sign in with Microsoft (light and dark variants of its branding guidance). */
   --ms-button-bg: #ffffff;
   --ms-button-fg: #5e5e5e;
@@ -404,6 +409,31 @@
 }
 
 /*
+ * The budget graph (Funding tab). Strokes are classes, never presentation attributes, so forced colours can re-point them; pattern and width carry each series' identity there.
+ * The readout fades in over 100ms like the rail tooltip; the crosshair and dots follow the pointer with no transition.
+ */
+.bt-budget, .bt-used, .bt-booked, .bt-expected, .bt-grid, .bt-today, .bt-cross { fill: none; vector-effect: non-scaling-stroke; }
+.bt-budget { stroke: var(--color-chart-budget); stroke-width: 1.5px; }
+.bt-used { stroke: var(--color-chart-actual); stroke-width: 2px; stroke-linecap: round; stroke-linejoin: round; }
+.bt-booked { stroke: var(--color-chart-actual); stroke-width: 2px; stroke-dasharray: 6 4; stroke-linejoin: round; }
+.bt-expected { stroke: var(--color-chart-expected); stroke-width: 2.5px; stroke-dasharray: 0 5; stroke-linecap: round; }
+.bt-grid { stroke: var(--color-chart-grid); stroke-width: 1px; }
+.bt-today { stroke: var(--color-muted-foreground); stroke-width: 1px; stroke-dasharray: 2 3; }
+.bt-cross { stroke: var(--color-foreground); stroke-width: 1px; }
+.bt-tick { stroke: var(--color-chart-expected); stroke-width: 2px; vector-effect: non-scaling-stroke; }
+.bt-dot { stroke: var(--color-card); stroke-width: 2px; }
+.bt-plot { outline: 2px solid transparent; touch-action: pan-y; }
+.bt-plot:focus-visible { outline: 2px solid var(--color-ring); outline-offset: 2px; }
+.bt-readout { animation: railFadeIn 0.1s ease-out; }
+@media (forced-colors: active) {
+  .bt-budget, .bt-grid, .bt-today { stroke: GrayText; }
+  .bt-used, .bt-booked, .bt-expected, .bt-tick { stroke: CanvasText; }
+  .bt-cross { stroke: Highlight; }
+  .bt-dot { fill: Highlight; stroke: Canvas; }
+  .bt-readout { background: Canvas; color: CanvasText; border: 1px solid CanvasText; }
+}
+
+/*
  * The sidebar folding (AppLayout `data-folding`, set from the click until the nav swaps to the rail 80ms later): the words and nested rows
  * fade over 60ms, so they are gone before the swap; badges and chevrons go at once, because the edge reaches them in about 8ms.
  * A click back removes the attribute and the transition carries them home from their current opacity.
@@ -495,6 +525,8 @@ aside[data-folding] [data-fold="word"] { transform: translateX(-12px); }
   --color-border: #434a3e;
   --color-input: #2b2f28;
   --color-ring: #a6d66b;
+  --color-chart-budget: #8a9180;
+  --color-chart-expected: #5f95e0;
   --ms-button-bg: #2f2f2f;
   --ms-button-fg: #ffffff;
   --ms-button-border: #8c8c8c;
