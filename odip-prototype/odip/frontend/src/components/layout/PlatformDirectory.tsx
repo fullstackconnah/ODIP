@@ -11,6 +11,7 @@ import { TAP_FLOOR } from '@/components/tapArea'
 import type { usePermissions } from '@/lib/permissions'
 import { pageDescription, platformLeaves } from './platformDirectoryModel'
 import type { ResolvedEntry } from './navConfig'
+import { getViewAs } from '@/lib/viewAs'
 
 export function PlatformDirectoryTrigger({ entries, compact = false, tight = false }: { entries: ResolvedEntry[]; compact?: boolean; tight?: boolean }) {
   const [open, setOpen] = useState(false)
@@ -71,7 +72,7 @@ export function DashboardShortcuts({ entries, permissions }: { entries: Resolved
   const navigate = useNavigate()
   const leaves = platformLeaves(entries)
   const has = (to: string) => leaves.some(leaf => leaf.to === to)
-  const inOrganisation = !permissions.isSuperAdmin || !!localStorage.getItem('odip_viewing_tenant')
+  const inOrganisation = !permissions.isSuperAdmin || !!getViewAs('odip_viewing_tenant')
   const items = inOrganisation ? [
     ...(permissions.canWrite && has('/trips') ? [{ value: '/trips/new', label: 'New trip' }] : []),
     ...(permissions.canManageParticipantLifecycle && has('/participants') ? [{ value: '/participants/new-inquiry', label: 'New enquiry' }] : []),

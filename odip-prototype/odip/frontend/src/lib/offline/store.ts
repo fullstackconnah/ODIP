@@ -5,6 +5,8 @@
  * expires 48 hours after it was saved (the queue, a separate key, never expires). Every storage call is guarded:
  * a private window or a full disk degrades to "nothing saved", never to a crash.
  */
+import { currentProfile, getViewAs } from '@/lib/viewAs'
+
 // shortcut: localStorage caps near 5 MB per origin, so a very large week could fail to save; move to IndexedDB if that bites.
 export const OFFLINE_PREFIX = 'odip_offline:'
 export const SAVED_TTL_MS = 48 * 3_600_000
@@ -16,11 +18,11 @@ const get = (k: string): string | null => {
 }
 
 export function readSession(): OfflineSession {
-  const viewAsTenant = get('odip_viewing_tenant')
-  const viewAsUser = get('odip_viewing_user')
+  const viewAsTenant = getViewAs('odip_viewing_tenant')
+  const viewAsUser = getViewAs('odip_viewing_user')
   let own: string | null = null
   try {
-    const id = (JSON.parse(get('odip_user') || '{}') as { id?: unknown })?.id
+    const id = currentProfile().id
     own = typeof id === 'string' ? id : null
   } catch { /* unreadable user record */ }
   return { userId: viewAsUser || own, viewAsTenant, viewAsUser }

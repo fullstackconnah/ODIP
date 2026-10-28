@@ -49,7 +49,7 @@ describe('MicrosoftSignInPage', () => {
     expect(apiPostRaw).toHaveBeenCalledWith('/auth/microsoft/refresh')
     expect(localStorage.getItem('odip_token')).toBe('the-token')
     expect(JSON.parse(localStorage.getItem('odip_user')!)).toMatchObject({ fullName: 'Jane Smith' })
-    expect(localStorage.getItem('odip_viewing_tenant')).toBe('tenant-1')
+    expect(sessionStorage.getItem('odip_viewing_tenant')).toBe('tenant-1')
     expect(localStorage.getItem('odip_sign_in_method')).toBe('microsoft')
   })
 

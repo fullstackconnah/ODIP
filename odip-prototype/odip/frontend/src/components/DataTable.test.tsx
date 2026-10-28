@@ -623,6 +623,25 @@ describe('DataTable — density row geometry (spec §1/§4)', () => {
   })
 })
 
+describe('DataTable — pager groups', () => {
+  it('keeps the page summary and the Page / Previous / Next controls as separate groups, and hides the pager for one page', () => {
+    const { rerender } = render(
+      <DataTable data={rows} columns={columns} keyField="id" pagination={{ page: 1, pageSize: 2, totalCount: 5, onPageChange: vi.fn() }} />,
+    )
+    const summary = screen.getByText(/showing 1-2 of 5/i)
+    const pageLabel = screen.getByText(/page 1 of 3/i)
+    const controls = pageLabel.parentElement as HTMLElement
+    // the bar wraps between the two groups; neither label shares an element with the other
+    expect(summary.contains(pageLabel)).toBe(false)
+    expect(controls.contains(summary)).toBe(false)
+    expect(controls).toContainElement(screen.getByRole('button', { name: /previous page/i }))
+    expect(controls).toContainElement(screen.getByRole('button', { name: /next page/i }))
+
+    rerender(<DataTable data={rows} columns={columns} keyField="id" pagination={{ page: 1, pageSize: 5, totalCount: 5, onPageChange: vi.fn() }} />)
+    expect(screen.queryByText(/showing/i)).not.toBeInTheDocument()
+  })
+})
+
 describe('DataTable — RowActions (hover / focus reveal)', () => {
   const actionColumns: Column<Row>[] = [
     ...columns,

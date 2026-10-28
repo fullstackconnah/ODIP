@@ -4,8 +4,8 @@ import { caregiverApiClient } from './caregiverClient'
 describe('caregiverApiClient', () => {
   beforeEach(() => {
     localStorage.setItem('odip_token', 'should-not-be-sent')
-    localStorage.setItem('odip_viewing_tenant', 'tenant-should-not-be-sent')
-    localStorage.setItem('odip_viewing_user', 'user-should-not-be-sent')
+    sessionStorage.setItem('odip_viewing_tenant', 'tenant-should-not-be-sent')
+    sessionStorage.setItem('odip_viewing_user', 'user-should-not-be-sent')
   })
 
   it('sends no Authorization or X-View-As-* headers and no credentials, even when a session exists', async () => {

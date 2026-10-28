@@ -202,10 +202,10 @@ describe('storeSession', () => {
 
   it('replays only once the view-as tenant is restored, because the queue matches records on it', async () => {
     const { storeSession } = await import('./auth')
-    localStorage.removeItem('odip_viewing_tenant')
+    sessionStorage.removeItem('odip_viewing_tenant')
     let tenantAtReplay: string | null = null
     replay.mockImplementation(async () => {
-      tenantAtReplay = localStorage.getItem('odip_viewing_tenant')
+      tenantAtReplay = sessionStorage.getItem('odip_viewing_tenant')
       return { sent: 0, notSent: 0, waiting: 0, offline: false }
     })
 
@@ -216,13 +216,13 @@ describe('storeSession', () => {
 
   it('leaves no view-as state from an earlier SuperAdmin session behind', async () => {
     const { storeSession } = await import('./auth')
-    localStorage.setItem('odip_viewing_user', '{"id":"u1"}')
+    sessionStorage.setItem('odip_viewing_user', '{"id":"u1"}')
     localStorage.setItem('odip_superadmin_user', '{"id":"sa"}')
 
     storeSession({ token: 'the-token', tenantId: 'tenant-1' } as never)
 
     expect(localStorage.getItem('odip_token')).toBe('the-token')
-    expect(localStorage.getItem('odip_viewing_user')).toBeNull()
+    expect(sessionStorage.getItem('odip_viewing_user')).toBeNull()
     expect(localStorage.getItem('odip_superadmin_user')).toBeNull()
   })
 

@@ -63,7 +63,7 @@ describe('DashboardPage — who decides what (SHAPE §3)', () => {
 
   it('decides as an Admin does for a SuperAdmin viewing an organisation', () => {
     asRole('SuperAdmin')
-    localStorage.setItem('odip_viewing_tenant', 'tenant-1')
+    sessionStorage.setItem('odip_viewing_tenant', 'tenant-1')
     renderPage()
 
     expect(mockUseDecisionGroups).toHaveBeenLastCalledWith(ALL_GATES, expect.objectContaining({ mayCloseBudgetReview: true }))

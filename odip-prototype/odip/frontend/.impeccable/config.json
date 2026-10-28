@@ -1,0 +1,14 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "design-system-font",
+        "value": "material symbols outlined",
+        "createdAt": "2026-10-28T19:07:29.288Z",
+        "reason": "Owner: pre-existing app icon font in src/index.css, not typography"
+      }
+    ]
+  }
+}
