@@ -214,7 +214,23 @@ describe('RestrictivePracticesTab', () => {
     const dialog = screen.getByRole('alertdialog')
     await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
 
-    expect(mockDeleteMutateAsync).toHaveBeenCalledWith({ id: 'rp-1', participantId: 'participant-1' })
+    expect(mockDeleteMutateAsync).toHaveBeenCalledWith({ id: 'rp-1', participantId: 'participant-1', expectedUpdatedAt: makePractice().updatedAt })
+  })
+
+  it('shows the delete refusal in the list error and refetches the list when someone else changed the entry', async () => {
+    const user = userEvent.setup()
+    const refetch = vi.fn()
+    const message = "Someone else just changed this entry, so it wasn't deleted. Check their change, then delete it again if you still want to."
+    mockUseRestrictivePractices.mockReturnValue({ data: [makePractice()], isLoading: false, refetch } as never)
+    mockDeleteMutateAsync.mockRejectedValueOnce({ response: { status: 409, data: { success: false, errors: [message] } } })
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' }))
+
+    expect(await screen.findByText(message)).toBeInTheDocument()
+    expect(refetch).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
   })
 
   const EXPLANATIONS = ['No authorisation date on file', 'No authoriser on file', 'No authorisation recorded']

@@ -330,6 +330,62 @@ public class RestrictivePracticesControllerTests
         Assert.IsType<NotFoundObjectResult>(result.Result);
     }
 
+    private static async Task<(OdipDbContext Db, Participant Participant, Domain.Entities.RestrictivePractice Practice)> SeedActivePracticeAsync()
+    {
+        var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        participant.HasRestrictivePracticeFlag = true;
+        var practice = new Domain.Entities.RestrictivePractice
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, Description = "d", IsActive = true,
+            UpdatedAt = new DateTime(2026, 10, 1, 3, 0, 0, DateTimeKind.Utc),
+        };
+        db.RestrictivePractices.Add(practice);
+        await db.SaveChangesAsync();
+        return (db, participant, practice);
+    }
+
+    [Fact]
+    public async Task Delete_StaleVersion_Returns409_KeepsRowAndFlag()
+    {
+        var (db, participant, practice) = await SeedActivePracticeAsync();
+        using var _ = db;
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
+
+        var result = await controller.Delete(practice.Id, CancellationToken.None, new DateTimeOffset(practice.UpdatedAt.AddMinutes(-5), TimeSpan.Zero));
+
+        Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal(1, await db.RestrictivePractices.CountAsync(rp => rp.Id == practice.Id));
+        Assert.True((await db.Participants.SingleAsync(p => p.Id == participant.Id)).HasRestrictivePracticeFlag);
+    }
+
+    [Fact]
+    public async Task Delete_CurrentVersion_RemovesRow()
+    {
+        var (db, _, practice) = await SeedActivePracticeAsync();
+        using var __ = db;
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
+
+        // A non-UTC offset for the same instant must still match.
+        var result = await controller.Delete(practice.Id, CancellationToken.None, new DateTimeOffset(practice.UpdatedAt).ToOffset(TimeSpan.FromHours(10)));
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(0, await db.RestrictivePractices.CountAsync(rp => rp.Id == practice.Id));
+    }
+
+    [Fact]
+    public async Task Delete_NoVersion_StillRemovesRow()
+    {
+        var (db, _, practice) = await SeedActivePracticeAsync();
+        using var __ = db;
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
+
+        var result = await controller.Delete(practice.Id, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(0, await db.RestrictivePractices.CountAsync(rp => rp.Id == practice.Id));
+    }
+
     [Fact]
     public async Task Delete_Valid_RemovesRowFromDatabase()
     {

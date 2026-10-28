@@ -231,10 +231,12 @@ export default function RestrictivePracticesTab({ participantId }: { participant
     if (!deletingPractice || !participantId) return
     setListError(null)
     try {
-      await deletePractice.mutateAsync({ id: deletingPractice.id, participantId })
+      await deletePractice.mutateAsync({ id: deletingPractice.id, participantId, expectedUpdatedAt: deletingPractice.updatedAt })
       setDeletingPractice(null)
     } catch (err) {
       setDeletingPractice(null)
+      // So the list shows the change that stopped the delete.
+      if (apiErrorStatus(err) === 409) void practicesQuery.refetch()
       setListError(extractErrorMessage(err, 'Failed to delete restrictive practice entry.'))
     }
   }
