@@ -17,7 +17,9 @@ import { CheckboxField } from '@/components/CheckboxField'
 import { Card } from '@/components/Card'
 import type { ParticipantFormData } from '@/lib/participantSchema'
 import { formGrid, span } from '@/lib/formGrid'
-import { OVERNIGHT_RATIO_ITEMS, OVERNIGHT_SUPPORT_ITEMS, SUPPORT_RATIO_ITEMS } from '../intakeOptions'
+import { OVERNIGHT_RATIO_ITEMS, OVERNIGHT_SUPPORT_ITEMS, SUPPORT_RATIO_ITEMS, itemsIncludingCurrent } from '../intakeOptions'
+import { OVERNIGHT_SUPPORT_LABELS } from '@/api/types/participants'
+import type { OvernightSupportType } from '@/api/types/enums'
 
 export function SupportNeedsStep({ control, register, errors, overnightSupportValue }: {
   control: Control<ParticipantFormData>
@@ -73,7 +75,7 @@ export function SupportNeedsStep({ control, register, errors, overnightSupportVa
                   value={field.value ?? ''}
                   onChange={field.onChange}
                   onBlur={field.onBlur}
-                  items={OVERNIGHT_SUPPORT_ITEMS}
+                  items={itemsIncludingCurrent(OVERNIGHT_SUPPORT_ITEMS, overnightSupportValue, (value) => OVERNIGHT_SUPPORT_LABELS[value as OvernightSupportType])}
                 />
               )}
             />

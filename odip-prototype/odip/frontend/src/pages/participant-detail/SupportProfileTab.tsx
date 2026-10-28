@@ -8,11 +8,12 @@ import { Dropdown } from '@/components/Dropdown'
 import { FactList } from '@/components/FactList'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { SectionEditPanel } from './SectionEditPanel'
+import { OVERNIGHT_SUPPORT_ITEMS, itemsIncludingCurrent } from '../intake/intakeOptions'
 import {
   MOBILITY_SUPPORT_OPTIONS, OVERNIGHT_SUPPORT_LABELS, OVERNIGHT_RATIO_LABELS,
   AMBULANT_STATUS_LABELS, PERSONAL_CARE_LEVEL_LABELS, RISK_RATING_LEVEL_LABELS,
 } from '@/api/types/participants'
-import { OVERNIGHT_SUPPORT_TYPES, SUPPORT_RATIOS, AMBULANT_STATUSES, PERSONAL_CARE_LEVELS, RISK_RATING_LEVELS } from '@/api/types/enums'
+import { SUPPORT_RATIOS, AMBULANT_STATUSES, PERSONAL_CARE_LEVELS, RISK_RATING_LEVELS } from '@/api/types/enums'
 import type { AmbulantStatus, PersonalCareLevel, RiskRatingLevel, OvernightSupportType, SupportRatio } from '@/api/types/enums'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 import type { PatchParticipantDto } from '@/api/types/participant-patch'
@@ -305,7 +306,7 @@ export function OvernightSupportSection({ p, participantId, canEdit }: CommonSec
               variant="form"
               value={draft.overnightSupport}
               onChange={(v) => setDraft((d) => ({ ...d, overnightSupport: v as OvernightSupportType }))}
-              items={OVERNIGHT_SUPPORT_TYPES.map((t) => ({ value: t, label: OVERNIGHT_SUPPORT_LABELS[t] }))}
+              items={itemsIncludingCurrent(OVERNIGHT_SUPPORT_ITEMS, saved.overnightSupport, (value) => OVERNIGHT_SUPPORT_LABELS[value as OvernightSupportType])}
             />
           </FormField>
           {draft.overnightSupport !== 'None' && (
