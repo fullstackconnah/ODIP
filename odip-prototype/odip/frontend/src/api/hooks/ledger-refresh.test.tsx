@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiClient } from '@/api/client'
-import { useFundingLedger } from '@/api/hooks/funding-ledger'
+import { cachedLedgerParticipants, refreshLedgers, useBudgetSeries, useFundingLedger } from '@/api/hooks/funding-ledger'
 import { useClaim } from '@/api/hooks/claims'
 import { useUpdateBudgetSettings } from '@/api/hooks/funding'
 import {
@@ -18,6 +18,7 @@ import { useCancelBooking, useCreateBooking, useDeleteBooking, usePatchBooking, 
 import { usePatchTrip, useUpdateTrip } from '@/api/hooks/trips'
 import { useApproveServiceAgreementDraft } from '@/api/hooks/service-agreement-drafts'
 import { participantLedger } from '@/test/fixtures/ledger'
+import { budgetSeries } from '@/test/fixtures/budgetSeries'
 
 // ---------------------------------------------------------------------------
 // The 2026-10-08 review, L5-05: a cached ledger (and the budget block on a claim page) was refreshed after claim and plan writes only. A shift or a trip booking changes what the
@@ -31,6 +32,7 @@ import { participantLedger } from '@/test/fixtures/ledger'
 const LEDGER_URL = '/participants/participant-1/funding/ledger'
 const LEDGER_URL_2 = '/participants/participant-2/funding/ledger'
 const CLAIM_URL = '/claims/claim-1'
+const SERIES_URL = '/participants/participant-1/funding/ledger/series'
 
 interface Call {
   method: string
@@ -50,6 +52,7 @@ beforeEach(() => {
     const method = String(config.method ?? 'get').toLowerCase()
     calls.push({ method, url })
     if (method === 'get' && (url === LEDGER_URL || url === LEDGER_URL_2)) return axiosPayload(participantLedger())
+    if (method === 'get' && url === SERIES_URL) return axiosPayload(budgetSeries())
     if (method === 'get' && url === CLAIM_URL) return axiosPayload({ id: 'claim-1', kind: 'Trip', lineItems: [] })
     if (method === 'get') throw new Error(`test: unmocked GET ${url}`)
     return axiosPayload(true)   // every write answers success: what is under test is what the hook does with it
@@ -151,5 +154,22 @@ describe('a write that moves a participant\'s money refreshes the ledgers this c
     await mutation.result.current.mutateAsync({ participantId: 'participant-1' } as never)
 
     expect(calls.filter(c => c.method === 'get')).toEqual([])   // nothing was held, so nothing is read: the refresh walks the cache and invents no key
+  })
+})
+
+describe('the budget graph series rides on the ledger key', () => {
+  it('refreshing a ledger also refreshes its series, and the cache lists each participant once', async () => {
+    const qc = makeClient()
+    const wrapper = wrapperFor(qc)
+    const ledger = renderHook(() => useFundingLedger('participant-1'), { wrapper })
+    const series = renderHook(() => useBudgetSeries('participant-1'), { wrapper })
+    await waitFor(() => expect(ledger.result.current.isSuccess && series.result.current.isSuccess).toBe(true))
+    expect(gets(SERIES_URL)).toBe(1)
+
+    expect(cachedLedgerParticipants(qc)).toEqual(['participant-1'])   // the series entry sits under the ledger's key, so the walk sees the participant twice
+    refreshLedgers(qc)
+
+    await waitFor(() => expect(gets(SERIES_URL)).toBe(2), { timeout: 2000 })
+    expect(gets(LEDGER_URL)).toBe(2)
   })
 })

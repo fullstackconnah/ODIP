@@ -267,7 +267,7 @@ for the secondary and accessibility roles. Unchanged by the density work.
 - Surfaces are a deep green-tinted neutral, never black (page `#131512`), and text is a warm off-white, never `#ffffff`. The Warm Base Rule holds in both themes.
 - Depth stays tonal and inverts: a raised surface is lighter (page < sidebar < card < fill/popover < high). Dropdown and SearchableSelect panels use `popover` so they stand off a card; shadows go near-black and only help.
 - `primary` is light olive-lime as ink (success text, links, the ring) and takes dark ink through `primary-foreground` as a fill. Never write `text-white` or a literal colour in a component: use the foreground tokens.
-- Tones become deep tints with pale inks; amber stays amber (a fill in both themes, ink on it is `warning-foreground`). No new hues.
+- Tones become deep tints with pale inks; amber stays amber (a fill in both themes, ink on it is `warning-foreground`). No new hues, with one exception: the chart series tokens below (see "Chart series").
 - Every pair is held to WCAG AA (4.5:1 text, 3:1 non-text) in both themes by `toneContrast.test.ts`. The dark block at the end of `src/index.css` is the source of truth; the table is a copy.
 
 | Token | Light | Dark |
@@ -317,13 +317,19 @@ for the secondary and accessibility roles. Unchanged by the density work.
 | `warning-foreground` | `#1b1c1a` | `#1b1c1a` |
 | `hover-wash` | `rgba(0,0,0,0.05)` | `rgba(255,255,255,0.06)` |
 | `focus-ring-soft` | `rgba(57,98,0,0.18)` | `rgba(166,214,107,0.28)` |
+| `chart-budget` | `#7a8070` | `#8a9180` |
+| `chart-actual` | `primary` | `primary` |
+| `chart-expected` | `#2f6db5` | `#5f95e0` |
+| `chart-grid` | `border` | `border` |
+
+**Chart series** (the budget graph on the Funding tab). The `chart-*` tokens are identity, never meaning: they tell one line from another and go only on data marks (strokes, dots, legend swatches), never on text, fills or controls. Text beside a mark stays in the foreground and muted inks. `chart-expected` is the one new hue in the system, a blue far enough from `secondary` (info) to never read as it. Each is held to 3:1 on the card in both themes by `toneContrast.test.ts`. Under forced colours the strokes move to system colours (budget and grid GrayText, the rest CanvasText) and dash pattern and width carry identity. The dark `chart-actual` is the dark `primary` (L 0.819, 9.88:1 on the card), lighter than the other series by the brand's choice, not by contrast need.
 
 ### Named Rules
 
 **The Semantic Colour Rule.** A colour never carries meaning twice. `primary` is "go / selected /
 success", `secondary` is "information", `destructive` is "destructive", `warning` is "time-bound
 compliance", `accessible-container` is "accessibility". If a screen is reaching for a colour that
-isn't on this list, it is reaching for the wrong thing.
+isn't on this list, it is reaching for the wrong thing. Chart series colours (`chart-*`) are identity, never meaning, and only for data marks.
 
 **The Tone Rule.** A status is never given a colour of its own. Every status word, priority, plan type and alert severity maps to one of six
 tones (neutral, info, success, warning, danger, accessible), and every tone maps to colours that already exist (the tone table under Status
