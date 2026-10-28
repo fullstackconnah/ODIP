@@ -308,10 +308,11 @@ describe('Button — no destructive colour overrides on a ghost button', () => {
 })
 
 describe('Button — keyboard-only focus ring', () => {
-  it('rings on keyboard focus (focus-visible) and not on every focus, so a mouse press shows no ring', () => {
+  it('outlines on keyboard focus (focus-visible), offset from the fill so a primary ring shows, and not on every focus', () => {
     render(<Button>Save</Button>)
     const btn = screen.getByRole('button', { name: 'Save' })
-    expect(btn).toHaveClass('focus-visible:ring-2', 'focus-visible:ring-[var(--color-ring)]')
+    expect(btn).toHaveClass('focus-visible:outline-2', 'focus-visible:outline-offset-2', 'focus-visible:outline-solid', 'focus-visible:outline-[var(--color-ring)]')
+    expect(btn).not.toHaveClass('focus-visible:ring-2')
     expect(btn).not.toHaveClass('focus:ring-2')
   })
 
