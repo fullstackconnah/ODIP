@@ -506,6 +506,15 @@ describe('no plan, no figure', () => {
     expect(screen.queryByText('Plan total')).not.toBeInTheDocument()
   })
 
+  it('says there is no NDIS budget for an other-funded participant, not that no plan has started', () => {
+    render(<MemoryRouter><LedgerBody data={noLedger()} otherFunded /></MemoryRouter>)
+
+    expect(screen.getByText('No NDIS budget')).toBeInTheDocument()
+    expect(screen.getByText(/funded another way, so their shifts are not counted against an NDIS plan/)).toBeInTheDocument()
+    expect(document.body).not.toHaveTextContent('No plan has started')
+    expect(screen.queryByText('No budget figures yet')).not.toBeInTheDocument()
+  })
+
   it('says a current plan with no pools is empty rather than absent', () => {
     renderLedger(participantLedger({ planId: 'plan-1', pools: [] }))
 

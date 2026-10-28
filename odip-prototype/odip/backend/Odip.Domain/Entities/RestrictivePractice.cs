@@ -43,5 +43,8 @@ public class RestrictivePractice : ITenantEntity
     public bool IsActive { get; set; } = true;
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    /// <summary>The row's version as well as its last change: a concurrency token (OdipDbContext). Held in whole microseconds, as PostgreSQL stores it, so the value a GET sends, returned as ExpectedUpdatedAt, still matches the stored one.</summary>
+    public DateTime UpdatedAt { get => _updatedAt; set => _updatedAt = Micro(value); }
+    private DateTime _updatedAt = Micro(DateTime.UtcNow);
+    private static DateTime Micro(DateTime value) => new(value.Ticks - value.Ticks % 10, value.Kind);
 }

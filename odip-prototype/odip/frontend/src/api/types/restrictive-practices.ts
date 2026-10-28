@@ -53,6 +53,8 @@ export interface UpdateRestrictivePracticeDto {
   reviewDate?: string | null
   relatedMedicationId?: string | null
   isActive: boolean
+  /** The version the form loaded: the server answers 409 if the entry changed since. */
+  expectedUpdatedAt?: string
 }
 
 /**

@@ -98,7 +98,8 @@ public sealed class BudgetLedgerService
         var withPlan = new List<PersonRow>();
         foreach (var person in people)
         {
-            if (currentPlans.GetValueOrDefault(person.Id) is null) result[person.Id] = new ParticipantLedger(person.Id, person.Name, today, timeBasis, approaching, null, Array.Empty<LedgerItem>(), nextStarts.GetValueOrDefault(person.Id));
+            // An other-funded participant has no NDIS ledger: their shifts are never claimed (ClaimFunding.OtherFundedNotClaimed), so they would sit as pending NDIS money forever. Read on every call, so switching back restores it.
+            if (currentPlans.GetValueOrDefault(person.Id) is null || person.FundingSource == ParticipantFundingSource.Other) result[person.Id] = new ParticipantLedger(person.Id, person.Name, today, timeBasis, approaching, null, Array.Empty<LedgerItem>(), nextStarts.GetValueOrDefault(person.Id));
             else withPlan.Add(person);
         }
         if (withPlan.Count == 0) return result;
@@ -150,7 +151,7 @@ public sealed class BudgetLedgerService
     private Task<List<PersonRow>> PeopleAsync(Guid tenantId, IReadOnlyCollection<Guid> participantIds, CancellationToken ct) =>
         _db.Participants.AsNoTracking()
             .Where(p => p.TenantId == tenantId && participantIds.Contains(p.Id))
-            .Select(p => new PersonRow(p.Id, p.FirstName, p.LastName, p.PreferredName, p.PlanType, p.IsIntensiveSupport, p.AddressState, p.NdisNumber))
+            .Select(p => new PersonRow(p.Id, p.FirstName, p.LastName, p.PreferredName, p.PlanType, p.IsIntensiveSupport, p.AddressState, p.NdisNumber, p.FundingSource))
             .ToListAsync(ct);
 
     private Task<List<FundingPlan>> PlansAsync(Guid tenantId, IReadOnlyCollection<Guid> participantIds, CancellationToken ct) =>
@@ -275,7 +276,7 @@ public sealed class BudgetLedgerService
 
     // ── Loading ─────────────────────────────────────────────────────────────
 
-    private sealed record PersonRow(Guid Id, string FirstName, string LastName, string? PreferredName, PlanType PlanType, bool IsIntensive, string? AddressState, string? NdisNumber)
+    private sealed record PersonRow(Guid Id, string FirstName, string LastName, string? PreferredName, PlanType PlanType, bool IsIntensive, string? AddressState, string? NdisNumber, ParticipantFundingSource FundingSource)
     {
         // The participant's own full name rule (preferred name, else first name, then last).
         public string Name => string.IsNullOrWhiteSpace(PreferredName) ? $"{FirstName} {LastName}".Trim() : $"{PreferredName} {LastName}".Trim();

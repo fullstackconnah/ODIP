@@ -66,6 +66,20 @@ public class ShiftBudgetCheckTests : IDisposable
     }
 
     [Fact]
+    public async Task SavingAShiftForAnOtherFundedParticipant_IsQuiet()
+    {
+        var (participant, _) = Seed(october: 100m);
+        Mode(BudgetLimitMode.HardLimit);
+        participant.FundingSource = ParticipantFundingSource.Other;
+        _kit.Db.SaveChanges();
+
+        var outcome = await Service().CheckAsync(Request(participant, Mon12Oct), default);
+
+        Assert.Empty(outcome.Findings);
+        Assert.Null(outcome.NotCheckedReason);
+    }
+
+    [Fact]
     public async Task AShiftWithinTheBudget_GetsNoFinding()
     {
         var (participant, _) = Seed(october: 5000m);

@@ -409,7 +409,7 @@ export function Dropdown({
           disabled={disabled || loading}
           onClick={() => setOpen(v => !v)}
           onKeyDown={handleKeyDown}
-          className={`${TAP_AREA} text-xs pl-2.5 pr-6 py-1 rounded-full font-medium cursor-pointer transition-all focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] hover:shadow-[0_0_0_2px_var(--color-focus-ring-soft)] disabled:opacity-60 disabled:pointer-events-none ${colorClass}`}
+          className={`${TAP_AREA} text-xs pl-2.5 pr-6 py-1 rounded-full font-medium cursor-pointer transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] hover:shadow-[0_0_0_2px_var(--color-focus-ring-soft)] disabled:opacity-60 disabled:pointer-events-none ${colorClass}`}
         >
           {selectedLabel ?? label ?? '—'}
         </button>
@@ -440,7 +440,7 @@ export function Dropdown({
           disabled={disabled || loading}
           onClick={() => setOpen(v => !v)}
           onKeyDown={handleKeyDown}
-          className="w-full flex items-center justify-between h-[var(--control-h)] px-3 rounded-[var(--radius-sm)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] hover:shadow-[0_0_0_2px_var(--color-focus-ring-soft)] transition-all disabled:opacity-60 disabled:pointer-events-none bg-[var(--color-input)] text-[var(--color-foreground)]"
+          className="w-full flex items-center justify-between h-[var(--control-h)] px-3 rounded-[var(--radius-sm)] text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] hover:shadow-[0_0_0_2px_var(--color-focus-ring-soft)] transition-all disabled:opacity-60 disabled:pointer-events-none bg-[var(--color-input)] text-[var(--color-foreground)]"
         >
           <span className={selectedLabel ? '' : 'opacity-50 text-[var(--color-muted-foreground)]'}>
             {selectedLabel ?? label ?? 'Select…'}

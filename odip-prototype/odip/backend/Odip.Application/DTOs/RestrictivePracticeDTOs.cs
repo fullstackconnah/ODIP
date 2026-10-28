@@ -36,6 +36,9 @@ public record UpdateRestrictivePracticeDto
     public DateOnly? ReviewDate { get; init; }
     public Guid? RelatedMedicationId { get; init; }
     public bool IsActive { get; init; }
+
+    /// <summary>The version the form loaded (RestrictivePracticeDto.UpdatedAt): the server answers 409 if the entry changed since. Absent from older open tabs, which save as before.</summary>
+    public DateTime? ExpectedUpdatedAt { get; init; }
 }
 
 // ══════════════════════════════════════════════════════════════

@@ -3857,6 +3857,7 @@ namespace Odip.Infrastructure.Migrations
                         .HasColumnType("integer");
 
                     b.Property<DateTime>("UpdatedAt")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamp without time zone");
 
                     b.HasKey("Id");
