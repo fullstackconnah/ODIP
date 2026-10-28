@@ -21,7 +21,7 @@ namespace Odip.Tests.Funding;
 public class LedgerNdiaNoteTests
 {
     private static ParticipantFundingLedgerController ControllerFor(LedgerKit kit) =>
-        new(kit.Tenant!, kit.Ledger, new NdiaRejectionReader(kit.Db, kit.Clock));
+        new(kit.Tenant!, kit.Ledger, kit.NewSeries(), new Odip.Api.RateLimiting.PlanQuoteConcurrencyLimiter(), new NdiaRejectionReader(kit.Db, kit.Clock));
 
     private static LedgerKit Arrange(out Participant person, out FundingPlan plan)
     {
@@ -122,7 +122,7 @@ public class LedgerNdiaNoteTests
         var tenant = new Mock<ICurrentTenant>();
         tenant.Setup(t => t.TenantId).Returns(LedgerKit.TenantA);
 
-        var ledger = Ledger(await new ParticipantFundingLedgerController(tenant.Object, kit.Ledger).Ledger(person.Id, CancellationToken.None));
+        var ledger = Ledger(await new ParticipantFundingLedgerController(tenant.Object, kit.Ledger, kit.NewSeries(), new Odip.Api.RateLimiting.PlanQuoteConcurrencyLimiter()).Ledger(person.Id, CancellationToken.None));
 
         Assert.All(ledger.Pools, p => Assert.Null(p.NdiaRejection));
     }

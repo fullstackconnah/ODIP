@@ -185,6 +185,7 @@ builder.Services.AddScoped<Odip.Infrastructure.Services.FundingPlanService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.BudgetLedgerService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.BudgetListService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.AgreementCheckService>();
+builder.Services.AddScoped<Odip.Infrastructure.Services.BudgetSeriesService>();
 // Budget phase 3: the roster's budget check, with the one seam to the shift estimator (the ledger's own pricing).
 builder.Services.AddScoped<Odip.Infrastructure.Services.IShiftCostSource, Odip.Infrastructure.Services.LedgerShiftCostSource>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.ShiftBudgetCheck>();
