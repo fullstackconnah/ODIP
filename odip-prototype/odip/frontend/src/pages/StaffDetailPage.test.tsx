@@ -6,7 +6,8 @@ import StaffDetailPage from './StaffDetailPage'
 import type { StaffOverviewDto } from '@/api/types/staff'
 import type { StaffDetailDto } from '@/api/types/staff'
 
-const { mockUseStaffOverview, mockUseSettings, mockVisibility, mockBalances } = vi.hoisted(() => ({
+const { mockUseStaffOverview, mockUseSettings, mockVisibility, mockBalances, mockPersonWeek } = vi.hoisted(() => ({
+  mockPersonWeek: vi.fn(() => ({ data: undefined, isLoading: true, isError: false, isPlaceholderData: false, refetch: vi.fn() })),
   mockVisibility: vi.fn(() => ({ data: { employmentHeroConnected: false } })),
   mockBalances: vi.fn<(id: string, enabled: boolean) => { data: unknown; isLoading: boolean; isError: boolean; refetch: () => unknown }>(() => ({ data: undefined, isLoading: true, isError: false, refetch: vi.fn() })),
   mockUseStaffOverview: vi.fn(),
@@ -19,6 +20,7 @@ vi.mock('@/api/hooks', () => ({
   useModuleVisibility: mockVisibility,
   useStaffLeaveBalances: mockBalances,
   useEnsureStaffSignInAccount: () => ({ mutateAsync: vi.fn() }),
+  useRosterPersonWeek: mockPersonWeek,
 }))
 
 function setUserRole(role: string) {
@@ -548,5 +550,34 @@ describe('StaffDetailPage — leave balances', () => {
     mockUseStaffOverview.mockReturnValue({ data: makeOverview(), isLoading: false })
     renderAt('staff-1')
     expect(screen.queryByRole('heading', { name: 'Leave balances' })).not.toBeInTheDocument()
+  })
+})
+
+// Spec 2026-10-28: the staff member's roster week, for the roles that roster.
+describe('StaffDetailPage — Week tab', () => {
+  beforeEach(() => {
+    mockUseStaffOverview.mockReturnValue({ data: makeOverview(), isLoading: false })
+    mockPersonWeek.mockClear()
+  })
+
+  it('sits between Credentials and Upcoming for a coordinator, and shows the week the address names', () => {
+    setUserRole('Coordinator')
+    renderAtTab('staff-1', 'week&week=2026-11-04')
+
+    expect(screen.getAllByRole('tab').map(t => t.textContent)).toEqual(['Availability', 'Credentials', 'Week', 'Upcoming', 'Incidents', 'Completions'])
+    expect(screen.getByRole('tab', { name: 'Week' })).toHaveAttribute('aria-selected', 'true')
+    expect(mockPersonWeek).toHaveBeenCalledWith('staff', 'staff-1', '2026-11-02')
+    expect(screen.getByRole('heading', { level: 2, name: '2 – 8 Nov 2026' })).toBeInTheDocument()
+  })
+
+  it('is absent for a support worker and a read-only user, who land on Availability and never ask for the board', () => {
+    for (const role of ['SupportWorker', 'ReadOnly']) {
+      setUserRole(role)
+      const { unmount } = renderAtTab('staff-1', 'week')
+      expect(screen.queryByRole('tab', { name: 'Week' }), role).toBeNull()
+      expect(screen.getByRole('tab', { name: 'Availability' }), role).toHaveAttribute('aria-selected', 'true')
+      unmount()
+    }
+    expect(mockPersonWeek).not.toHaveBeenCalled()
   })
 })

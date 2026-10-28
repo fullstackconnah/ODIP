@@ -631,3 +631,72 @@ describe('RosterBoardPage — a delete the server refuses is shown, and the dial
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })
+
+// Spec 2026-10-28 (roster week per person): a shift clicked on a person's roster week lands on /rostering?date=<week>&shift=<id>, and the
+// board keeps the week it shows in the address, so Back from a profile comes home to the same week.
+describe('RosterBoardPage — ?shift= opens a shift, and the week stays in the address', () => {
+  const participantBoard = () => makeParticipantBoard({
+    participantRows: [makeParticipantRow({
+      participantId: 'p-1', fullName: 'Mia Chen',
+      shifts: [makeShift({ id: 'sh1', participantId: 'p-1', participantName: 'Mia Chen', serviceDate: '2026-08-18', readinessIssues: ['Intake not complete'] })],
+    })],
+  })
+
+  beforeEach(() => {
+    mockUseRosterBoard.mockReset()
+    mockUseParticipants.mockReturnValue({ data: [] })   // a listed participant's fresh readiness would replace the shift's own, which these tests read
+    sessionStorage.clear()
+  })
+
+  it("?shift=<id> opens that shift's editor once the week loads, then leaves the address", async () => {
+    mockUseRosterBoard.mockReturnValue({ data: participantBoard(), isLoading: false, isError: false, refetch: vi.fn() })
+    const { router } = renderPage('/rostering?date=2026-08-19&shift=sh1')
+
+    const panel = await screen.findByRole('dialog', { name: 'Shift details' })
+    expect(await within(panel).findByText('Not ready: Intake not complete')).toBeInTheDocument()
+    await waitFor(() => expect(router.state.location.search).toBe('?date=2026-08-19'))
+  })
+
+  it('?shift= in the Staff view opens an unfilled shift too', async () => {
+    sessionStorage.setItem('odip.roster.boardView', 'staff')
+    const board = makeStaffBoard({
+      staffRows: [makeStaffRow({ staffId: 'staff-1', fullName: 'Casey Roe' })],
+      unfilled: [makeUnfilledShift({ id: 'open-1', participantId: 'p-1', participantName: 'Mia Chen', serviceDate: '2026-08-18', readinessIssues: ['Plan expired'] })],
+    })
+    mockUseRosterBoard.mockReturnValue({ data: board, isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage('/rostering?date=2026-08-17&shift=open-1')
+
+    const panel = await screen.findByRole('dialog', { name: 'Shift details' })
+    expect(await within(panel).findByText('Not ready: Plan expired')).toBeInTheDocument()
+  })
+
+  it('?shift= for a shift not on the week is dropped quietly', async () => {
+    mockUseRosterBoard.mockReturnValue({ data: participantBoard(), isLoading: false, isError: false, refetch: vi.fn() })
+    const { router } = renderPage('/rostering?date=2026-08-17&shift=gone')
+
+    await waitFor(() => expect(router.state.location.search).toBe('?date=2026-08-17'))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getAllByText(/Mia Chen/).length).toBeGreaterThan(0)
+  })
+
+  it('waits for the named week before opening: a board still on another week opens nothing', () => {
+    mockUseRosterBoard.mockReturnValue({ data: participantBoard(), isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage('/rostering?date=2026-08-26&shift=sh1')   // the board answers 17 Aug, the address names 24 Aug
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('previous and next write ?date= with replace and keep the filters', async () => {
+    const user = userEvent.setup()
+    mockUseRosterBoard.mockReturnValue({ data: participantBoard(), isLoading: false, isError: false, refetch: vi.fn() })
+    const { router } = renderPage('/rostering?date=2026-08-17&participant=p-1')
+
+    await user.click(screen.getByRole('button', { name: 'Next week' }))
+
+    const params = new URLSearchParams(router.state.location.search)
+    expect(params.get('date')).toBe('2026-08-24')
+    expect(params.get('participant')).toBe('p-1')
+    expect(router.state.historyAction).toBe('REPLACE')
+    expect(mockUseRosterBoard.mock.calls.at(-1)?.[0]).toBe('2026-08-24')
+  })
+})

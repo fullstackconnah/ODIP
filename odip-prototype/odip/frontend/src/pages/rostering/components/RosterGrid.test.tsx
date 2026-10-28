@@ -105,7 +105,7 @@ describe('RosterGrid — cross-domain links', () => {
       participantRows: [makeParticipantRow({ participantId: 'p1', fullName: 'Mia Chen' })],
     })
     renderGrid(<RosterGrid board={board} weekHasNoShifts {...baseProps} />)
-    expect(screen.getByRole('link', { name: 'Mia Chen' })).toHaveAttribute('href', '/participants/p1')
+    expect(screen.getByRole('link', { name: 'Mia Chen' })).toHaveAttribute('href', '/participants/p1?tab=people&section=week&week=2026-08-17')
   })
 
   it('links a filled shift chip\'s participant and staff names', () => {
@@ -119,8 +119,8 @@ describe('RosterGrid — cross-domain links', () => {
     })
     renderGrid(<RosterGrid board={board} weekHasNoShifts={false} {...baseProps} />)
 
-    expect(screen.getByRole('link', { name: 'Mia Chen' })).toHaveAttribute('href', '/participants/p1')
-    expect(screen.getByRole('link', { name: 'Alex Rivera' })).toHaveAttribute('href', '/staff/staff-9')
+    expect(screen.getByRole('link', { name: 'Mia Chen' })).toHaveAttribute('href', '/participants/p1?tab=people&section=week&week=2026-08-17')
+    expect(screen.getByRole('link', { name: 'Alex Rivera' })).toHaveAttribute('href', '/staff/staff-9?tab=week&week=2026-08-17')
   })
 })
 
@@ -138,7 +138,7 @@ describe('RosterGrid — density', () => {
 
     // The participant appears once (the row header); the covering staff member once (the chip label).
     expect(screen.getAllByText('Mia Chen')).toHaveLength(1)
-    expect(screen.getByRole('link', { name: 'Alex Rivera' })).toHaveAttribute('href', '/staff/staff-9')
+    expect(screen.getByRole('link', { name: 'Alex Rivera' })).toHaveAttribute('href', '/staff/staff-9?tab=week&week=2026-08-17')
   })
 
   it('shows "Needs staff" on an unfilled shift inside a participant row', () => {

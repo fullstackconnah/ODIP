@@ -51,6 +51,11 @@ export function weekStartFromDateParam(value: string | null, fallback: Date = ne
   return weekStartOf(fallback)
 }
 
+/** A staff member's roster week on their profile (spec 2026-10-28). `week` is any date; the tab normalises it to its Monday. */
+export const staffWeekHref = (staffId: string, week: string) => `/staff/${staffId}?tab=week&week=${week}`
+/** A participant's roster week, the Week section of People & roster (spec 2026-10-28). */
+export const participantWeekHref = (participantId: string, week: string) => `/participants/${participantId}?tab=people&section=week&week=${week}`
+
 export function shiftWeek(weekStart: string, deltaWeeks: number): string {
   return format(addWeeks(parseISO(weekStart), deltaWeeks), 'yyyy-MM-dd')
 }

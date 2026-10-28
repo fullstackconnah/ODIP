@@ -213,14 +213,23 @@ describe('ShiftChip cross-domain links', () => {
     const shift = makeShift({ participantId: 'participant-9', participantName: 'Mia Chen' })
     renderChip(<ShiftChip shift={shift} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
 
-    expect(screen.getByRole('link', { name: 'Mia Chen' })).toHaveAttribute('href', '/participants/participant-9')
+    expect(screen.getByRole('link', { name: 'Mia Chen' })).toHaveAttribute('href', '/participants/participant-9?tab=people&section=week&week=2026-08-17')
   })
 
   it('links the staff name to their staff detail page when the shift is filled (participant-row chip)', () => {
     const shift = makeShift({ staffId: 'staff-9', staffName: 'Alex Rivera' })
     renderChip(<ShiftChip shift={shift} canWrite context="participant" onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
 
-    expect(screen.getByRole('link', { name: 'Alex Rivera' })).toHaveAttribute('href', '/staff/staff-9')
+    expect(screen.getByRole('link', { name: 'Alex Rivera' })).toHaveAttribute('href', '/staff/staff-9?tab=week&week=2026-08-17')
+  })
+
+  // Roster week shots (SHAPE §8.5): a 20px name link is 44px tall under a coarse pointer, as a block line so it still truncates. It stops growing there (flex-initial), so a tap past the name still opens the shift;
+  // the fine pointer keeps flex-1, and the first tail marker takes the trailing edge the link used to push it to.
+  it('gives both name links a 44px line that covers only the name under a coarse pointer', () => {
+    renderChip(<ShiftChip shift={makeShift({ overrideReason: 'Covering a gap' })} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+    const link = screen.getByRole('link', { name: 'Mia Chen' })
+    expect(link).toHaveClass('truncate', 'min-w-0', 'flex-1', 'pointer-coarse:flex-initial', 'pointer-coarse:leading-[var(--tap-min)]')
+    expect(link.parentElement).toHaveClass('pointer-coarse:[&>a+span]:ml-auto')
   })
 
   it('renders no staff link for an unfilled (dashed) chip', () => {
@@ -346,7 +355,7 @@ describe('ShiftChip keeps the name readable in a narrow day column', () => {
     const time = screen.getByText(formatShiftTimeRange(shift.startTime, shift.endTime))
     const link = screen.getByRole('link', { name: "Jack O'Sullivan" })
     expect(link).toHaveTextContent("Jack O'Sullivan")
-    expect(link).toHaveAttribute('href', '/participants/participant-7')
+    expect(link).toHaveAttribute('href', '/participants/participant-7?tab=people&section=week&week=2026-08-17')
     expect(time.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
@@ -699,6 +708,21 @@ describe('ShiftChip in the Participant view with drag and drop (draggable)', () 
       expect(container.querySelector(`[title="${words}: can't be changed here"]`)).not.toBeNull()
     },
   )
+
+  it('shows the lock to a read-only viewer on a locked shift, and nothing on an unlocked one', () => {
+    // The open control's title carries the lock words too, so look for the glyph itself.
+    const lock = 'span[title*="be changed here"] svg.lucide-lock'
+    const locked = chip(makeShift({ status: 'InProgress' }), { canWrite: false })
+    expect(locked.container.querySelector(lock)?.parentElement).toHaveAttribute('title', "In progress: can't be changed here")
+    // The 13px coarse margin only clears a grip's tap pad; a reader has none, so names keep the desktop indent on phones.
+    expect(locked.container.querySelector(lock)?.parentElement).not.toHaveClass('pointer-coarse:mx-[13px]')
+    locked.unmount()
+    const writer = chip(makeShift({ status: 'InProgress' }))
+    expect(writer.container.querySelector(lock)?.parentElement).toHaveClass('pointer-coarse:mx-[13px]')
+    writer.unmount()
+    const open = chip(makeShift({ status: 'Published' }), { canWrite: false })
+    expect(open.container.querySelector(lock)).toBeNull()
+  })
 
   it("strikes through a cancelled shift's time", () => {
     chip(makeShift({ status: 'Cancelled' }))
