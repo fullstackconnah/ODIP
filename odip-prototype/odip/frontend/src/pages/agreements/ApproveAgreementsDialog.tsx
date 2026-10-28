@@ -19,6 +19,8 @@ interface Props {
   /** Agreements that will be sent, and ticked rows with no draft (left as they are). */
   count: number
   skipped: number
+  /** Replaces the skipped sentence (the review screen words its own left-out rows). */
+  leftOut?: string
   /** Running: how many answers are in. */
   progress: number
   /** Confirm: a refused request (429, 403...) in words; the dialog stays open. */
@@ -32,7 +34,7 @@ interface Props {
 }
 
 /** Confirm, run and report for the bulk Approve. While requests are in flight nothing closes it (no X, Escape and the backdrop do nothing) so the person cannot lose the answers. */
-export function ApproveAgreementsDialog({ open, phase, count, skipped, progress, error, refused, results, stopped, onConfirm, onClose }: Props) {
+export function ApproveAgreementsDialog({ open, phase, count, skipped, leftOut, progress, error, refused, results, stopped, onConfirm, onClose }: Props) {
   const running = phase === 'running'
   const listed = groupResults(results)
   const heading = resultHeading(results, stopped?.total ?? results.length)
@@ -58,7 +60,7 @@ export function ApproveAgreementsDialog({ open, phase, count, skipped, progress,
         <div className="space-y-3 text-sm text-[var(--color-muted-foreground)]">
           <p>
             Each one is checked again as it is approved, and the roster is made from it.
-            {skipped > 0 && ` ${plural(skipped, 'ticked row')} ${skipped === 1 ? 'has' : 'have'} no draft and ${skipped === 1 ? 'is' : 'are'} left as ${skipped === 1 ? 'it is' : 'they are'}.`}
+            {leftOut ? ` ${leftOut}` : skipped > 0 && `${plural(skipped, 'ticked row')} ${skipped === 1 ? 'has' : 'have'} no draft and ${skipped === 1 ? 'is' : 'are'} left as ${skipped === 1 ? 'it is' : 'they are'}.`}
           </p>
           {error && <Callout tone="danger">{error}</Callout>}
         </div>

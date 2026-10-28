@@ -130,6 +130,9 @@ public static class WhatsNewSeed
         new Item("2026-10-other-funded-budgets", "Other-funded participants leave the NDIS budget",
             "A participant who is funded another way no longer counts against an NDIS budget. Their shifts stop showing as pending NDIS money on the Budgets page and on their Funding tab, and their Claims tab now says to invoice their funder directly.",
             Staff, false),
+        new Item("2026-10-agreements-bulk", "Renew, reprice or extend agreements together",
+            "On the Agreements page, tick the agreements you want, then choose Renew, Reprice or Extend. Bunya Support makes a draft for each one, which you then check and approve. Nothing changes on the roster until a draft is approved.",
+            Staff, false),
     };
 
     /// <summary>Inserts the keys the table lacks, one save each, so a key another instance inserted first costs only that row.</summary>

@@ -344,6 +344,14 @@ public record AgreementRowDto
 public record AgreementListDto { public bool CanApprove { get; init; } public List<AgreementRowDto> Rows { get; init; } = []; }
 public record AgreementDraftRefDto { public Guid ParticipantId { get; init; } public Guid DraftId { get; init; } }
 public record AgreementApproveBatchDto { public List<AgreementDraftRefDto> Items { get; init; } = []; }
+/// <summary>Renew, reprice or extend many agreements: Action is renew, reprice or extend; EndDate is the extend's new last day; PriceList is the reprice's list version (its start is read from the catalogue, never sent).</summary>
+public record AgreementBulkRequestDto
+{
+    public string Action { get; init; } = "";
+    public List<Guid> ParticipantIds { get; init; } = [];
+    public DateOnly? EndDate { get; init; }
+    public string? PriceList { get; init; }
+}
 public record AgreementApproveResultDto
 {
     public Guid ParticipantId { get; init; }
