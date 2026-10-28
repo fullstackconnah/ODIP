@@ -36,7 +36,7 @@ function profileMismatch(profile: { start?: string; end?: string }, plan: Fundin
  * read-only sections, each titled by its dates. Phase 1 holds the record only: spending, forecasts and warnings arrive in a later release, and the tab says so in one muted line rather than
  * showing a figure it has not got.
  */
-export default function FundingTab({ participantId, planType }: { participantId: string; planType: PlanType }) {
+export default function FundingTab({ participantId, planType, otherFunded }: { participantId: string; planType: PlanType; otherFunded?: boolean }) {
   const plansQuery = useFundingPlans(participantId)
   const applyDates = useApplyPlanDatesToProfile(participantId)
   const [editing, setEditing] = useState<Editing | null>(null)
@@ -133,7 +133,7 @@ export default function FundingTab({ participantId, planType }: { participantId:
       </Card>
 
       {/* When the plan above has not started, the ledger is of the plan before it (or of none): it says so rather than showing that plan's figures under this plan's card. */}
-      <FundingLedger participantId={participantId} nextPlanStart={planStatus(current, today) === 'Upcoming' ? current.planStart : undefined} />
+      <FundingLedger participantId={participantId} otherFunded={otherFunded} nextPlanStart={planStatus(current, today) === 'Upcoming' ? current.planStart : undefined} />
 
       <PlanGroup title="Upcoming plans" plans={upcoming} today={today} />
       <PlanGroup title="Past plans" plans={past} today={today} />

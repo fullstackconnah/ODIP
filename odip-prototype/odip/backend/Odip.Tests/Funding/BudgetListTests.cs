@@ -373,6 +373,22 @@ public class BudgetListTests
     }
 
     [Fact]
+    public async Task AnOtherFundedParticipantWithAPlanAndCompletedShifts_HasNoRowAndIsNotInTheTail()
+    {
+        using var kit = Arrange();
+        var privately = kit.SeedParticipant(first: "Priv", last: "Ate");
+        OctoberPlan(kit, privately);
+        kit.SeedShift(privately, D(2026, 10, 2), ShiftStatus.Completed);
+        privately.FundingSource = ParticipantFundingSource.Other;
+        kit.Db.SaveChanges();
+
+        var list = Body(await ListAsync(kit));
+
+        Assert.Empty(list.Rows);
+        Assert.Empty(list.NoBudget);
+    }
+
+    [Fact]
     public async Task ArchivedAndDraftParticipantsAreNotListed_AsTheAlertsAggregateDoesNotListThem()
     {
         using var kit = Arrange();

@@ -108,7 +108,7 @@ export function Callout({ tone, title, children, icon, actions, className, annou
       role={announce ? role : undefined}
       aria-live={announce ? ariaLive : undefined}
       className={clsx(
-        'flex flex-wrap items-start gap-3 p-3 rounded-lg border text-sm',
+        'flex flex-wrap items-start gap-3 p-3 rounded-lg border text-sm animate-fade-in',
         style.container,
         className,
       )}

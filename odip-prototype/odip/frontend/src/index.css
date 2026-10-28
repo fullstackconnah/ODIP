@@ -356,6 +356,10 @@
   from { transform: translateX(100%); }
   to { transform: translateX(0); }
 }
+/* Modal: the dialog eases in from 3% smaller over a fading scrim (the panel is the scrim's child, so the scrim's fade carries it; a fade of its own would multiply into a flat, late start). Enter only, like SlideOver; close is instant. */
+@keyframes modalIn {
+  from { transform: scale(0.97); }
+}
 @keyframes scrimIn {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -363,6 +367,8 @@
 @media (prefers-reduced-motion: no-preference) {
   .slide-over-panel { animation: slideOverIn 0.2s ease-out; }
   .slide-over-scrim { animation: scrimIn 0.2s ease-out; }
+  .modal-scrim { animation: scrimIn 0.15s ease-out; }
+  .modal-panel { animation: modalIn 0.16s cubic-bezier(0.2, 0, 0, 1); }
 }
 
 /*
@@ -430,6 +436,13 @@ aside[data-folding] [data-fold="word"] { transform: translateX(-12px); }
 @media (prefers-reduced-motion: reduce) {
   .install-card { animation: installFadeIn 150ms linear !important; }
   .install-card[data-leaving] { animation: installFadeOut 150ms linear forwards !important; }
+}
+
+/* Windows High Contrast removes box-shadows (every Tailwind ring) and many controls are outline-none: give keyboard focus a real outline. Unlayered, so it beats the outline-none utility. */
+@media (forced-colors: active) {
+  :focus-visible { outline: 2px solid CanvasText; outline-offset: 2px; }
+  /* The tab list is overflow-x-auto and clips anything outside a tab, so tabs draw the outline inside. */
+  [role="tab"]:focus-visible { outline-offset: -4px; }
 }
 
 :root { --wordmark-dot: var(--color-primary-fixed); }

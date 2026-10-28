@@ -150,3 +150,27 @@ describe('TAP_ICON_SQUARE — a small icon control on touch', () => {
     expect(TAP_ICON_SQUARE).toContain('before:min-h-[var(--tap-min)]')
   })
 })
+
+// Tailwind rings are box-shadows, which Windows High Contrast removes, and many controls are `outline-none`. One
+// unlayered forced-colours rule gives every keyboard-focused control a real outline in the system text colour.
+describe('forced-colours focus indicator', () => {
+  const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../index.css'), 'utf-8').split(String.fromCharCode(13, 10)).join(String.fromCharCode(10))
+  const block = css.match(/@media \(forced-colors: active\)\s*\{([\s\S]*?)\n\}\n/)?.[1] ?? ''
+
+  it('draws a 2px CanvasText outline on :focus-visible', () => {
+    expect(block).toMatch(/:focus-visible\s*\{[^}]*outline:\s*2px solid CanvasText/)
+    expect(block).toMatch(/outline-offset:\s*2px/)
+  })
+
+  // The tab list is overflow-x-auto, which clips anything drawn outside a tab, so tabs draw the outline inside.
+  it('draws the tab outline inside the tab', () => {
+    expect(block).toMatch(/\[role="tab"\]:focus-visible\s*\{[^}]*outline-offset:\s*-4px/)
+  })
+
+  it('sits outside @layer base so it beats the outline-none utilities', () => {
+    const idx = css.indexOf('@media (forced-colors: active)')
+    const layerStart = css.indexOf('@layer base {')
+    const layerEnd = css.indexOf('\n}\n', layerStart)
+    expect(idx).toBeGreaterThan(layerEnd)
+  })
+})
