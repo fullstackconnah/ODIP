@@ -8,6 +8,7 @@ import { Modal } from '@/components/Modal'
 import { SelectField } from '@/components/SelectField'
 import { TextField } from '@/components/TextField'
 import { localIsoDate } from '@/lib/dateOnly'
+import { extractErrorMessage } from '@/lib/utils'
 import { plural } from '@/lib/format'
 import { CHUNK } from '@/lib/runInChunks'
 import { addDays, formatServiceDate, isPricingDate } from '@/lib/planQuote'
@@ -38,8 +39,7 @@ const noReply = (error: unknown) => { const s = statusOf(error); return s === un
 const failureWords = (error: unknown) => {
   const status = statusOf(error)
   return status === 429 ? 'Another save is running for your organisation. Nothing was changed. Try again in a moment.'
-    : status === 400 ? 'Choose 100 or fewer agreements. Nothing was changed.'
-    : status === 403 ? "You can't make agreement drafts. Ask an administrator."
+    : status === 400 || status === 403 ? `${extractErrorMessage(error, 'Something went wrong.')} Nothing was changed.`
     : 'Could not make these drafts. Nothing was changed. Try again.'
 }
 

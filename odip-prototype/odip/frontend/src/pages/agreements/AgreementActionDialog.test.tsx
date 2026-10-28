@@ -93,11 +93,12 @@ describe('AgreementActionDialog', () => {
   })
 
   it.each([
-    [429, /Another save is running/],
-    [403, /You can't make agreement drafts/],
-    [400, /Choose 100 or fewer/],
-  ])('keeps the dialog open when the first request is refused with %i', async (status, words) => {
-    mockBulk.mockResolvedValue({ results: [], stopped: { error: { response: { status } }, notSent: 1 } })
+    [429, undefined, /Another save is running/],
+    [403, ['Only an approver can renew agreements.'], /^Only an approver can renew agreements\. Nothing was changed\.$/],
+    [400, ['Choose a price list.'], /^Choose a price list\. Nothing was changed\.$/],
+    [400, undefined, /^Something went wrong\. Nothing was changed\.$/],
+  ])('keeps the dialog open when the first request is refused with %i', async (status, errors, words) => {
+    mockBulk.mockResolvedValue({ results: [], stopped: { error: { response: { status, data: errors && { errors } } }, notSent: 1 } })
     const { onDone } = open('renew', [row('Ana')])
     await userEvent.click(screen.getByRole('button', { name: 'Make 1 draft' }))
     expect(await screen.findByText(words)).toBeInTheDocument()

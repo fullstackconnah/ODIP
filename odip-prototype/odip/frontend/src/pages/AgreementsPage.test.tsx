@@ -266,6 +266,29 @@ describe('AgreementsBulkBar', () => {
     expect(item).toHaveTextContent('None of the ticked rows has a draft waiting.')
   })
 
+  const RENEW_REASON = "Your role can't renew agreements. An Admin can change who may approve in Settings, Plan pricing."
+  it('turns Renew off with the reason for a role that cannot approve, and leaves Reprice and Extend on', () => {
+    const props = { selected: 2, approvable: 0, shown: 4, allShownSelected: false, onToggleShown: vi.fn(), onClear: vi.fn(), onApprove: vi.fn(), onAction: vi.fn() }
+    const { unmount } = render(<AgreementsBulkBar {...props} canApprove={false} />)
+    expect(screen.getByRole('button', { name: 'Renew 2' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Reprice to…' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Extend to…' })).toBeEnabled()
+    expect(screen.getByText(RENEW_REASON)).toBeInTheDocument()
+    unmount()
+    render(<AgreementsBulkBar {...props} canApprove />)
+    expect(screen.getByRole('button', { name: 'Renew 2' })).toBeEnabled()
+    expect(screen.queryByText(RENEW_REASON)).not.toBeInTheDocument()
+  })
+
+  it('on a phone gives the Renew item the reason when the role cannot approve', async () => {
+    mockNarrow.mockReturnValue(true)
+    render(<AgreementsBulkBar selected={2} approvable={0} canApprove={false} shown={4} allShownSelected={false} onToggleShown={vi.fn()} onClear={vi.fn()} onApprove={vi.fn()} onAction={vi.fn()} />)
+    await userEvent.click(screen.getByRole('button', { name: /Actions/ }))
+    expect(screen.getByRole('option', { name: /Renew 2/ })).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByRole('option', { name: /Renew 2/ })).toHaveTextContent(RENEW_REASON)
+    expect(screen.getByRole('option', { name: /Reprice/ })).not.toHaveAttribute('aria-disabled', 'true')
+  })
+
   const bar = (selected: number) => (
     <AgreementsBulkBar selected={selected} approvable={selected} canApprove shown={200} allShownSelected={false} onToggleShown={vi.fn()} onClear={vi.fn()} onApprove={vi.fn()} />
   )

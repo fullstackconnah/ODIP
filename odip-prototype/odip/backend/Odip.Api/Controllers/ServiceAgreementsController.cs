@@ -132,7 +132,7 @@ public class ServiceAgreementsController : ControllerBase
         var today = await ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct);
 
         var results = new List<AgreementApproveResultDto>();
-        var deadline = _clock.GetUtcNow() + BatchBudget;
+        var deadline = _clock.GetUtcNow() + AgreementBulkService.Budget;
         foreach (var item in items)
         {
             string outcome; List<string> reasons = [];
@@ -198,9 +198,6 @@ public class ServiceAgreementsController : ControllerBase
         var actor = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unknown";
         return Ok(ApiResponse<List<BulkItem>>.Ok(await _bulk.RunAsync(tenantId, action, ids, dto.EndDate, priceList, caller, actor, ct)));
     }
-
-    /// <summary>Wall time the items of one batch may use before the rest are answered Busy.</summary>
-    internal static readonly TimeSpan BatchBudget = TimeSpan.FromSeconds(40);
 
     private const string NotAnApproverWords = "Your role cannot approve agreements in your organisation. An Admin can change who may in Settings, Plan pricing.";
 

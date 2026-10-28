@@ -5,6 +5,8 @@ import type { AgreementBulkAction } from '@/api/types'
 import { useIsBelowMd } from '@/hooks/useIsBelowMd'
 import { MAX_SELECTED } from './agreementRows'
 
+const RENEW_REASON = "Your role can't renew agreements. An Admin can change who may approve in Settings, Plan pricing."
+
 interface Props {
   selected: number
   /** Ticked rows that have a draft waiting. */
@@ -31,13 +33,16 @@ export function AgreementsBulkBar({ selected, approvable, canApprove, shown, all
   const label = approvable > 0 ? `Approve ${approvable}` : 'Approve'
   const approveOff = tooMany || approvable === 0
   const draftOff = tooMany || selected === 0
+  // Renew needs an approver; Reprice and Extend do not.
+  const renewOff = !canApprove
+  const renewReason = renewOff && selected > 0 ? RENEW_REASON : null
   const verbs: { value: AgreementBulkAction; label: string; icon: typeof RefreshCw }[] = [
     { value: 'renew', label: selected > 0 ? `Renew ${selected}` : 'Renew', icon: RefreshCw },
     { value: 'reprice', label: 'Reprice to…', icon: TrendingUp },
     { value: 'extend', label: 'Extend to…', icon: CalendarPlus },
   ]
   const items = [
-    ...(onAction ? verbs.map(v => ({ value: v.value, label: v.label, description: reason ?? undefined, disabled: draftOff })) : []),
+    ...(onAction ? verbs.map(v => ({ value: v.value, label: v.label, description: reason ?? (v.value === 'renew' ? renewReason : null) ?? undefined, disabled: draftOff || (v.value === 'renew' && renewOff) })) : []),
     ...(canApprove ? [{ value: 'approve', label, description: reason ?? approveReason ?? undefined, disabled: approveOff }] : []),
   ]
   return (
@@ -54,7 +59,7 @@ export function AgreementsBulkBar({ selected, approvable, canApprove, shown, all
       {!narrow && (
         <>
           <Button variant="ghost" size="sm" onClick={onClear} className={selected > 0 ? "" : "invisible"}>Clear</Button>
-          <span className={`text-sm empty:hidden ${tooMany ? 'text-[var(--color-destructive)]' : 'text-[var(--color-muted-foreground)]'}`}>{tooMany ? reason : (canApprove && approveReason) || note}</span>
+          <span className={`text-sm empty:hidden ${tooMany ? 'text-[var(--color-destructive)]' : 'text-[var(--color-muted-foreground)]'}`}>{tooMany ? reason : (onAction && renewReason) || (canApprove && approveReason) || note}</span>
         </>
       )}
       {items.length > 0 && (
@@ -64,7 +69,7 @@ export function AgreementsBulkBar({ selected, approvable, canApprove, shown, all
           ) : (
             <div className="flex flex-wrap items-center justify-end gap-2">
               {onAction && verbs.map(v => (
-                <Button key={v.value} size="sm" variant="secondary" onClick={() => onAction(v.value)} disabled={draftOff}><v.icon className="h-4 w-4" aria-hidden="true" />{v.label}</Button>
+                <Button key={v.value} size="sm" variant="secondary" onClick={() => onAction(v.value)} disabled={draftOff || (v.value === 'renew' && renewOff)}><v.icon className="h-4 w-4" aria-hidden="true" />{v.label}</Button>
               ))}
               {canApprove && <Button size="sm" onClick={onApprove} disabled={approveOff} title={reason ?? approveReason ?? undefined}><ShieldCheck className="h-4 w-4" aria-hidden="true" />{label}</Button>}
             </div>
