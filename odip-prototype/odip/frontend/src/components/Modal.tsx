@@ -46,7 +46,7 @@ export function Modal({ open, onClose, title, size = 'md', footer, children, cla
 
   return (
     // Below lg the fixed bottom nav (AppLayout, z-50, later in the DOM) covers the screen foot: the bottom padding centres the dialog in what is left.
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 pb-[var(--mobile-nav-h)] lg:pb-0" onClick={closeOnBackdrop ? onClose : undefined}>
+    <div className="modal-scrim fixed inset-0 z-50 flex items-center justify-center bg-black/50 pb-[var(--mobile-nav-h)] lg:pb-0" onClick={closeOnBackdrop ? onClose : undefined}>
       <div
         ref={dialogRef}
         role={role}
@@ -55,7 +55,7 @@ export function Modal({ open, onClose, title, size = 'md', footer, children, cla
         aria-describedby={descriptionId}
         tabIndex={-1}
         // A sticky footer sticks to the scroll container's content box, so the dialog gives it no bottom padding: with it, the footer would float 16px above the dialog's edge and the body would show through the strip below.
-        className={`bg-[var(--color-card)] rounded-[var(--radius-lg)] border border-[var(--color-border)] ${footer && stickyFooter ? 'px-4 pt-4' : 'p-4'} w-full ${SIZE_MAP[size]} max-h-[min(90vh,100%)] mx-2 overflow-y-auto ${className ?? ''}`}
+        className={`modal-panel bg-[var(--color-card)] rounded-[var(--radius-lg)] border border-[var(--color-border)] ${footer && stickyFooter ? 'px-4 pt-4' : 'p-4'} w-full ${SIZE_MAP[size]} max-h-[min(90vh,100%)] mx-2 overflow-y-auto ${className ?? ''}`}
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-3">
