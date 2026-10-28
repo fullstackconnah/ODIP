@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import RestrictivePracticesTab from './RestrictivePracticesTab'
 import type { RestrictivePracticeDto } from '@/api/types/restrictive-practices'
@@ -603,7 +603,7 @@ describe('RestrictivePracticesTab — edit form authorised checkbox', () => {
     await user.click(screen.getByRole('button', { name: /save entry/i }))
 
     const [call] = mockUpdateMutateAsync.mock.calls[0]
-    expect(call).toEqual({ id: 'rp-1', data: { type: 'Unclassified', description: 'Locked doors overnight for safety.', reviewDate: null, relatedMedicationId: null, authorisedBy: null, authorisationDate: null, isActive: true } })
+    expect(call).toEqual({ id: 'rp-1', data: { type: 'Unclassified', description: 'Locked doors overnight for safety.', reviewDate: null, relatedMedicationId: null, authorisedBy: null, authorisationDate: null, isActive: true, expectedUpdatedAt: '2026-01-01T00:00:00Z' } })
   })
 
   it('ticked with a field emptied shows the field error and does not save', async () => {
@@ -631,7 +631,7 @@ describe('RestrictivePracticesTab — edit form authorised checkbox', () => {
     await user.click(screen.getByRole('button', { name: /save entry/i }))
 
     const [call] = mockUpdateMutateAsync.mock.calls[0]
-    expect(call).toEqual({ id: 'rp-1', data: { type: 'Unclassified', description: 'Locked doors overnight for safety.', reviewDate: null, relatedMedicationId: null, authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01', isActive: true } })
+    expect(call).toEqual({ id: 'rp-1', data: { type: 'Unclassified', description: 'Locked doors overnight for safety.', reviewDate: null, relatedMedicationId: null, authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01', isActive: true, expectedUpdatedAt: '2026-01-01T00:00:00Z' } })
   })
 
   it('opens ticked for an inactive record and a description-only edit posts both values unchanged', async () => {
@@ -646,7 +646,7 @@ describe('RestrictivePracticesTab — edit form authorised checkbox', () => {
     await user.click(screen.getByRole('button', { name: /save entry/i }))
 
     const [call] = mockUpdateMutateAsync.mock.calls[0]
-    expect(call).toEqual({ id: 'rp-1', data: { type: 'Unclassified', description: 'Locked doors overnight for safety. Reviewed.', reviewDate: null, relatedMedicationId: null, authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01', isActive: false } })
+    expect(call).toEqual({ id: 'rp-1', data: { type: 'Unclassified', description: 'Locked doors overnight for safety. Reviewed.', reviewDate: null, relatedMedicationId: null, authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01', isActive: false, expectedUpdatedAt: '2026-01-01T00:00:00Z' } })
   })
 
   it('opens ticked for a date-only record, shows the date, and blocks the save asking who', async () => {
@@ -693,5 +693,102 @@ describe('RestrictivePracticesTab — edit form authorised checkbox', () => {
     expect(box()).toBeChecked()
     expect(screen.getByLabelText(/^authorised by/i)).toHaveValue('Dr Lee')
     expect(screen.getByLabelText(/^authorisation date/i)).toHaveValue('2026-03-01')
+  })
+
+  it('sends the version the entry was opened with', async () => {
+    const user = userEvent.setup()
+    mockUseRestrictivePractices.mockReturnValue({ data: [makePractice()], isLoading: false })
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.type(screen.getByLabelText(/description/i), ' More.')
+    await user.click(screen.getByRole('button', { name: /save entry/i }))
+
+    expect(mockUpdateMutateAsync.mock.calls[0][0].data.expectedUpdatedAt).toBe('2026-01-01T00:00:00Z')
+  })
+
+  it('keeps sending the opened version when the list refetches behind the open form', async () => {
+    const user = userEvent.setup()
+    mockUseRestrictivePractices.mockReturnValue({ data: [makePractice()], isLoading: false })
+    const { rerender } = render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    mockUseRestrictivePractices.mockReturnValue({ data: [makePractice({ updatedAt: '2026-02-02T00:00:00Z' })], isLoading: false })
+    rerender(<RestrictivePracticesTab participantId="participant-1" />)
+    await user.type(screen.getByLabelText(/description/i), ' More.')
+    await user.click(screen.getByRole('button', { name: /save entry/i }))
+
+    expect(mockUpdateMutateAsync.mock.calls[0][0].data.expectedUpdatedAt).toBe('2026-01-01T00:00:00Z')
+  })
+
+  it('shows the conflict sentence, keeps the form as typed and refetches the list when someone else changed the entry', async () => {
+    const user = userEvent.setup()
+    const refetch = vi.fn()
+    mockUseRestrictivePractices.mockReturnValue({ data: [makePractice()], isLoading: false, refetch } as never)
+    mockUpdateMutateAsync.mockRejectedValueOnce({
+      response: { status: 409, data: { success: false, errors: ['Someone else just changed this entry, so your changes weren\'t saved. Close it and open it again to see theirs.'] } },
+    })
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.type(screen.getByLabelText(/description/i), ' My change.')
+    await user.click(screen.getByRole('button', { name: /save entry/i }))
+
+    expect(await screen.findByText('Someone else just changed this entry, so your changes weren\'t saved. Close it and open it again to see theirs.')).toBeInTheDocument()
+    expect(screen.getByLabelText(/description/i)).toHaveValue('Locked doors overnight for safety. My change.')
+    expect(refetch).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: /save entry/i })).toBeInTheDocument()
+  })
+
+  describe('a refused save is seen', () => {
+    const conflict = { response: { status: 409, data: { success: false, errors: ['Someone else just changed this entry, so your changes weren\'t saved. Close it and open it again to see theirs.'] } } }
+    const serverError = { response: { status: 500, data: { success: false, errors: ['Something went wrong on our side.'] } } }
+
+    async function openAndSave(user: ReturnType<typeof userEvent.setup>) {
+      render(<RestrictivePracticesTab participantId="participant-1" />)
+      await user.click(screen.getByRole('button', { name: 'Edit' }))
+      await user.type(screen.getByLabelText(/description/i), ' More.')
+      await user.click(screen.getByRole('button', { name: /save entry/i }))
+    }
+
+    it('a 409 is a warning and takes focus, with the Callout scrolled into view', async () => {
+      const user = userEvent.setup()
+      const scrollIntoView = vi.spyOn(Element.prototype, 'scrollIntoView')
+      mockUseRestrictivePractices.mockReturnValue({ data: [makePractice()], isLoading: false, refetch: vi.fn() } as never)
+      mockUpdateMutateAsync.mockRejectedValueOnce(conflict)
+      await openAndSave(user)
+
+      const alert = await screen.findByRole('alert')
+      expect(alert.className).toContain('--color-warning-container')
+      expect(alert.parentElement).toHaveFocus()
+      expect(alert.parentElement?.className).toContain('focus-visible:ring-2')
+      expect(scrollIntoView).toHaveBeenCalled()
+      scrollIntoView.mockRestore()
+    })
+
+    it('another error keeps the error tone', async () => {
+      const user = userEvent.setup()
+      mockUseRestrictivePractices.mockReturnValue({ data: [makePractice()], isLoading: false } as never)
+      mockUpdateMutateAsync.mockRejectedValueOnce(serverError)
+      await openAndSave(user)
+
+      const alert = await screen.findByRole('alert')
+      expect(alert.className).toContain('--color-destructive')
+      expect(alert.className).not.toContain('--color-warning-container')
+    })
+
+    it('a second refusal takes focus again', async () => {
+      const user = userEvent.setup()
+      mockUseRestrictivePractices.mockReturnValue({ data: [makePractice()], isLoading: false, refetch: vi.fn() } as never)
+      mockUpdateMutateAsync.mockRejectedValueOnce(conflict).mockRejectedValueOnce(conflict)
+      await openAndSave(user)
+      await screen.findByRole('alert')
+
+      await user.click(screen.getByLabelText(/description/i))
+      expect(screen.getByRole('alert').parentElement).not.toHaveFocus()
+      await user.click(screen.getByRole('button', { name: /save entry/i }))
+
+      await waitFor(() => expect(screen.getByRole('alert').parentElement).toHaveFocus())
+    })
   })
 })

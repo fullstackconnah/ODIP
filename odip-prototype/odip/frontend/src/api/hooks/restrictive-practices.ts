@@ -37,6 +37,9 @@ export function useUpdateRestrictivePractice() {
       apiPutRaw<RestrictivePracticeDto>(`/participants/restrictive-practices/${id}`, data),
     onSuccess: (res) => {
       if (res.data?.participantId) {
+        // Write the saved row first, so a reopen before the refetch lands sends its new version, not the old one.
+        const saved = res.data
+        qc.setQueriesData<RestrictivePracticeDto[]>({ queryKey: ['restrictive-practices', saved.participantId] }, (rows) => rows?.map((r) => (r.id === saved.id ? saved : r)))
         qc.invalidateQueries({ queryKey: ['restrictive-practices', res.data.participantId] })
         qc.invalidateQueries({ queryKey: ['participant', res.data.participantId] })
         qc.invalidateQueries({ queryKey: ['participants'] })
