@@ -277,6 +277,76 @@ export interface ParticipantLedgerDto {
   outsideThePlanDates: LedgerBucket
 }
 
+// ── The budget graph (Funding tab) ──────────────────────────────────────────
+// GET participants/{id}/funding/ledger/series: the current plan as weekly cumulative points, for the whole plan and each pool. Same roles as the ledger. Every figure is the server's; the
+// chart draws and formats. Nulls are left out of the JSON, so every nullable figure is optional here.
+
+export type BudgetChartStatus = 'Ok' | 'NoPricing' | 'None'
+export type BudgetExpectedStatus = 'Ok' | 'NoAgreement' | 'Unavailable'
+
+/** Cumulative to the end of `date` (the plan-start point is the start of that day, all zero). Absent where the line does not reach. */
+export interface BudgetSeriesPoint {
+  date: string
+  budget: number
+  used?: number
+  usedAndBooked?: number
+  expected?: number
+  /** An opening or closing point of the expected line: it shapes the line only, and is no row of the table, step of the keyboard or place for the readout. */
+  isEdge: boolean
+}
+
+export interface BudgetSeriesSummary {
+  used: number
+  evenToDate: number
+  /** Used minus the even spread to date: negative is under. */
+  aheadOfEven: number
+  /** Absent until a quarter of the plan has passed, and for an ended plan. */
+  pace?: number
+  paceGapAtEnd?: number
+  /** Absent when nothing is booked ahead or the plan has ended. */
+  bookedEnd?: number
+  expectedEnd?: number
+  expectedEndDate?: string
+  /** An ended plan only: the limit minus what was used (negative is over). */
+  leftAtEnd?: number
+}
+
+export interface BudgetSeriesScope {
+  /** "plan", or the pool's id. */
+  scopeKey: string
+  /** "The whole plan", or the pool as a sentence names it. */
+  name: string
+  limit: number
+  points: BudgetSeriesPoint[]
+  summary: BudgetSeriesSummary
+  unpricedShiftCount: number
+  unpricedShiftReasons: string[]
+}
+
+export interface BudgetExpected {
+  status: BudgetExpectedStatus
+  /** The first covered day, only when it is after the plan start. */
+  startsOn?: string
+  /** The last covered day, only when it is before the plan end. */
+  endsOn?: string
+  /** The first day of each later approved revision inside the plan. */
+  revisionChanges: string[]
+  /** Lines of the drawn agreement that today's price list has no price for, so the expected line leaves them out. */
+  unpricedLineCount: number
+}
+
+export interface BudgetSeries {
+  chart: BudgetChartStatus
+  planStart?: string
+  planEnd?: string
+  /** The provider's today. */
+  today: string
+  planIsCurrent: boolean
+  expected: BudgetExpected
+  /** [0] is the whole plan, then the pools by position. Empty unless `chart` is Ok. */
+  scopes: BudgetSeriesScope[]
+}
+
 // ── The Budgets list (phase 2b) ─────────────────────────────────────────────
 // GET api/v1/funding/budgets: every active participant's pools for the funding period running now, from the ledger's own figures, sorted by risk (Over, Forecast over, Approaching, On track).
 // SuperAdmin, Admin and Coordinator only (money). No screen adds anything up.
