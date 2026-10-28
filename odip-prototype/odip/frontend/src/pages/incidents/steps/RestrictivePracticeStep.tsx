@@ -6,6 +6,7 @@ import { useRestrictivePractices } from '@/api/hooks'
 import { FormField } from '@/components/FormField'
 import { CheckboxField } from '@/components/CheckboxField'
 import { Card } from '@/components/Card'
+import { DisclosureToggle } from '@/components/DisclosureToggle'
 import { Button } from '@/components/Button'
 import { Dropdown } from '@/components/Dropdown'
 import { RESTRICTIVE_PRACTICE_TYPES, RESTRICTIVE_PRACTICE_TYPE_LABELS } from '@/api/types/restrictive-practices'
@@ -282,17 +283,10 @@ export function RestrictivePracticeStep({
             </>
           )}
 
-          <button
-            type="button"
-            onClick={() => setShowInactive((v) => !v)}
-            className="text-sm font-medium text-[var(--color-primary)] hover:underline"
-            aria-expanded={showInactive}
-          >
-            {showInactive ? 'Hide' : 'Show'} inactive/retired practices
-          </button>
+          <DisclosureToggle label={`${showInactive ? 'Hide' : 'Show'} inactive/retired practices`} open={showInactive} onToggle={() => setShowInactive((v) => !v)} controls="incident-inactive-practices" />
 
           {showInactive && (
-            <div className="space-y-2">
+            <div id="incident-inactive-practices" className="space-y-2">
               {matchingInactivePractices.length === 0 ? (
                 <p className="text-sm text-[var(--color-muted-foreground)]">No inactive practices of this type on file.</p>
               ) : (

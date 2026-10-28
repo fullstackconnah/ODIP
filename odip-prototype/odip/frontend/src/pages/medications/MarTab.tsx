@@ -21,7 +21,6 @@ import { isIncidentTriggerOutcome, buildMarIncidentPrefill } from '@/lib/inciden
 import { Button } from '@/components/Button'
 import { retryingAfterError } from '@/lib/queryPhase'
 import { Callout } from '@/components/Callout'
-import { TAP_FLOOR } from '@/components/tapArea'
 
 /**
  * Connection map: for a Refused/Withheld/Missed/WrongMedication administration, either a link to
@@ -38,23 +37,12 @@ function IncidentLinkOrAction({
   if (!isIncidentTriggerOutcome(administration.status)) return null
   if (administration.incidentId) {
     return (
-      <Link
-        to={`/incidents/${administration.incidentId}`}
-        className="block text-xs text-[var(--color-primary)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded"
-      >
-        Incident filed
-      </Link>
+      <Button variant="ghost" size="sm" to={`/incidents/${administration.incidentId}`}>Incident filed</Button>
     )
   }
   if (!canFile) return null
   return (
-    <button
-      type="button"
-      onClick={() => navigate('/incidents/new', { state: buildMarIncidentPrefill(administration, { strength }) })}
-      className="block text-xs text-[var(--color-primary)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded"
-    >
-      File incident
-    </button>
+    <Button variant="ghost" size="sm" onClick={() => navigate('/incidents/new', { state: buildMarIncidentPrefill(administration, { strength }) })}>File incident</Button>
   )
 }
 
@@ -160,30 +148,14 @@ export default function MarTab() {
     <div className="flex flex-col gap-[var(--section-gap)]">
       {/* Date navigation + participant filter */}
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-1 bg-[var(--color-muted)] rounded-lg p-1">
-          <button
-            type="button"
-            onClick={() => setDate(d => addDays(d, -1))}
-            className="p-2 rounded-md hover:bg-[var(--color-card)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 transition-colors"
-            aria-label="Previous day"
-          >
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" size="sm" iconOnly onClick={() => setDate(d => addDays(d, -1))} aria-label="Previous day">
             <ChevronLeft className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setDate(todayIso())}
-            className="px-3 py-1.5 text-sm font-medium rounded-md hover:bg-[var(--color-card)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 transition-colors"
-          >
-            Today
-          </button>
-          <button
-            type="button"
-            onClick={() => setDate(d => addDays(d, 1))}
-            className="p-2 rounded-md hover:bg-[var(--color-card)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 transition-colors"
-            aria-label="Next day"
-          >
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setDate(todayIso())}>Today</Button>
+          <Button variant="secondary" size="sm" iconOnly onClick={() => setDate(d => addDays(d, 1))} aria-label="Next day">
             <ChevronRight className="w-4 h-4" />
-          </button>
+          </Button>
         </div>
         <input
           type="date"
@@ -270,20 +242,14 @@ export default function MarTab() {
                     </div>
                     <div className="shrink-0 flex items-center gap-2">
                       {entry.administration ? (
-                        <div className="text-right space-y-1">
+                        <div className="flex flex-col items-end gap-1 pointer-coarse:gap-2 text-right">
                           <StatusBadge status={entry.administration.status} />
                           <p className="text-xs text-[var(--color-muted-foreground)]">
                             {formatWithTimeZone(entry.administration.administeredAt, entry.administration.administeredAtTimeZone, { hour: '2-digit', minute: '2-digit' })}
                             {entry.administration.recordedByName ? ` · ${entry.administration.recordedByName}` : ''}
                           </p>
                           {canManageMedications && (
-                            <button
-                              type="button"
-                              onClick={() => setAmendingSlot(entry)}
-                              className="text-xs text-[var(--color-primary)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded"
-                            >
-                              Amend
-                            </button>
+                            <Button variant="ghost" size="sm" onClick={() => setAmendingSlot(entry)}>Amend</Button>
                           )}
                           <IncidentLinkOrAction
                             administration={entry.administration}
@@ -352,13 +318,7 @@ export default function MarTab() {
                       </Button>
                     )}
                     {prn.outcomePendingAdministrationId && (
-                      <button
-                        type="button"
-                        onClick={() => setOutcomeFor(prn)}
-                        className={`${TAP_FLOOR} text-sm text-[var(--color-primary)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded`}
-                      >
-                        Record outcome
-                      </button>
+                      <Button variant="ghost" size="sm" onClick={() => setOutcomeFor(prn)}>Record outcome</Button>
                     )}
                   </div>
                 </Card>
