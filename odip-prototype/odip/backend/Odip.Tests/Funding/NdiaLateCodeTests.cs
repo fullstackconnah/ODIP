@@ -53,7 +53,7 @@ public class NdiaLateCodeTests
 
     private static async Task<NdiaRejectionDto?> CoreNoteAsync(LedgerKit kit, Guid participantId)
     {
-        var controller = new ParticipantFundingLedgerController(kit.Tenant!, kit.Ledger, new NdiaRejectionReader(kit.Db, kit.Clock));
+        var controller = new ParticipantFundingLedgerController(kit.Tenant!, kit.Ledger, kit.NewSeries(), new Odip.Api.RateLimiting.PlanQuoteConcurrencyLimiter(), new NdiaRejectionReader(kit.Db, kit.Clock));
         var ok = Assert.IsType<OkObjectResult>((await controller.Ledger(participantId, CancellationToken.None)).Result);
         return Assert.IsType<ApiResponse<ParticipantLedgerDto>>(ok.Value).Data!.Pools.Single(p => p.Kind == FundingPoolKind.CoreFlexible).NdiaRejection;
     }

@@ -30,13 +30,23 @@ function parseColour(value: string): Rgba {
   throw new Error(`Unsupported colour value in index.css: ${value}`)
 }
 
-const readTokens = (block: string): Record<string, Rgba> =>
-  Object.fromEntries([...block.matchAll(/--color-([a-z0-9-]+):\s*([^;]+);/g)].map(m => [m[1], parseColour(m[2].trim())]))
+const readRaw = (block: string): Record<string, string> =>
+  Object.fromEntries([...block.matchAll(/--color-([a-z0-9-]+):\s*([^;]+);/g)].map(m => [m[1], m[2].trim()]))
 
-const TOKENS = readTokens(themeBlock)
+// A token may point at another (`--color-chart-actual: var(--color-primary)`): it is read in the theme it is used in, as the browser reads it.
+const resolve = (raw: Record<string, string>): Record<string, Rgba> => {
+  const colourOf = (value: string): Rgba => {
+    const ref = value.match(/^var\(--color-([a-z0-9-]+)\)$/)
+    return ref ? colourOf(raw[ref[1]]) : parseColour(value)
+  }
+  return Object.fromEntries(Object.entries(raw).map(([name, value]) => [name, colourOf(value)]))
+}
+
+const LIGHT_RAW = readRaw(themeBlock)
+const TOKENS = resolve(LIGHT_RAW)
 // The dark theme re-points the same tokens in one flat block at the end of index.css, opened by this marker comment.
 const darkStart = css.indexOf('/* Dark theme (dark-mode-2026-10)')
-const DARK_TOKENS = { ...TOKENS, ...readTokens(css.slice(darkStart, css.indexOf('}', darkStart))) }
+const DARK_TOKENS = resolve({ ...LIGHT_RAW, ...readRaw(css.slice(darkStart, css.indexOf('}', darkStart))) })
 const THEMES: [string, Record<string, Rgba>][] = [['light', TOKENS], ['dark', DARK_TOKENS]]
 
 const channel = (c: number) => {
@@ -122,6 +132,9 @@ describe.each(THEMES)('tone contrast (WCAG AA, 4.5:1), %s theme', (_theme, token
     })
     it.each(['card', 'background', 'popover', 'input'])('the focus ring is visible on %s (3:1)', surface => {
       expect(contrast(t(surface), t('ring'))).toBeGreaterThanOrEqual(3)
+    })
+    it.each(['chart-budget', 'chart-actual', 'chart-expected'])('the budget graph line %s is visible on the card (3:1)', name => {
+      expect(contrast(t('card'), t(name))).toBeGreaterThanOrEqual(3)
     })
     it.each(['primary', 'destructive', 'warning'])('the %s fill is visible against the card (3:1, light warning excepted: R2-12)', name => {
       if (_theme === 'light' && name === 'warning') return

@@ -61,7 +61,7 @@ public sealed class PlanQuoteConcurrencyFilter : IAsyncResourceFilter
     public async Task OnResourceExecutionAsync(ResourceExecutingContext context, ResourceExecutionDelegate next)
     {
         // The lease is held until the request has finished, the answer included: the permit is disposed when next() returns or throws.
-        using var lease = _limiter.TryEnter(KeyOf(context.HttpContext));
+        using var lease = _limiter.TryEnter(KeyOf(context.HttpContext, _tenant));
         if (!lease.IsAcquired)
         {
             context.HttpContext.Response.Headers.RetryAfter = "1";
@@ -72,9 +72,10 @@ public sealed class PlanQuoteConcurrencyFilter : IAsyncResourceFilter
         await next();
     }
 
-    private string KeyOf(HttpContext context)
+    /// <summary>The permit key: the tenant, else the caller, else the client. The budget graph takes its permit under the same key (ParticipantFundingLedgerController).</summary>
+    internal static string KeyOf(HttpContext context, ICurrentTenant tenant)
     {
-        if (_tenant.TenantId is { } tenantId) return "tenant:" + tenantId.ToString("N");
+        if (tenant.TenantId is { } tenantId) return "tenant:" + tenantId.ToString("N");
 
         var user = context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (!string.IsNullOrEmpty(user)) return "user:" + user;

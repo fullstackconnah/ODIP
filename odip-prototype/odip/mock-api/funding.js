@@ -13,7 +13,8 @@
 // kinds only) and the agreement check (POST participants/{id}/funding/agreement-check). The demo has one pool over (p-0005's Core), one forecast over (p-0002's Core), one approaching (p-0002's
 // Improved Daily Living Skills), and one on which the NDIA has refused a claim for want of funds (p-0004's Core, V27), so every alert and every state of the list can be seen.
 
-const { ledgerFor } = require('./mock-ledger.js')
+const { ledgerFor, currentPlanOf } = require('./mock-ledger.js')
+const series = require('./mock-budget-series.js')
 const { agreementCheckOf, alertsDto, budgetList } = require('./mock-budgets.js')
 
 const DAY = 86_400_000
@@ -196,6 +197,18 @@ function create({ respond, people = [], priceLines = () => [], agreementAlertsOf
     // The budget ledger (phase 2a): the current plan's pools, periods, figures, statuses and rows, worked out by
     // mock-ledger.js (the same rules as the server's calculator). Today is the mock's own date, as the screens use.
     ['participants/:id/funding/ledger', (id) => ledgerFor(plansOf, id, new Date().toISOString().slice(0, 10), settings.approachingPercent)],
+    // The budget graph: the same plan as the ledger, as weekly points (mock-budget-series.js). `?fixture=` picks a state for the captures; the screen never sends it.
+    ['participants/:id/funding/ledger/series', (id, searchParams) => {
+      const today = todayIso()
+      const ledger = ledgerOf(id)
+      const plan = currentPlanOf(plansOf(id), today)
+      if (!plan || ledger.pools.length === 0 || (!ledger.planIsCurrent && ledger.nextPlanStart)) return series.none(today)
+      const name = (searchParams && searchParams.get('fixture')) || series.BY_PARTICIPANT[id] || 'currentNormal'
+      if (name === 'failing') return respond(500, fail(['The budget chart could not be worked out.']))
+      if (name === 'noPricing') return series.noPricing(plan, today)
+      if (name === 'slow') return new Promise((resolve) => setTimeout(() => resolve(series.seriesFor(plan, today, 'currentNormal')), 2500))
+      return series.seriesFor(plan, today, name) || series.none(today)
+    }],
   ]
 
   const post = [

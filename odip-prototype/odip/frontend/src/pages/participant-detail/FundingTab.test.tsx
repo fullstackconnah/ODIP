@@ -22,6 +22,8 @@ vi.mock('@/api/hooks', () => ({
   // The tab renders the budget ledger (phase 2a) below the plan record. Every test here is about the
   // record, so the ledger is stubbed as a single marker: what the ledger itself does has its own tests.
   useFundingLedger: () => useFundingLedger(),
+  // The budget graph under the ledger asks on its own; here it stays loading, and its states have their own tests.
+  useBudgetSeries: () => ({ data: undefined, isLoading: true, isError: false, isFetching: true, refetch: vi.fn() }),
   useApplyPlanDatesToProfile: () => ({ mutate: apply, isPending: false, isError: false }),
 }))
 
