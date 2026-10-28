@@ -1,4 +1,4 @@
-import { getViewAs } from '@/lib/viewAs'
+import { currentProfile, getViewAs } from '@/lib/viewAs'
 export type UserRole = 'SuperAdmin' | 'Admin' | 'Coordinator' | 'SupportWorker' | 'ReadOnly';
 
 export type PageKey =
@@ -60,13 +60,7 @@ const READ_ONLY_REFUSED_PAGES: PageKey[] = [
   'agreements',
 ];
 
-function getCurrentUser(): Record<string, unknown> {
-  try {
-    return JSON.parse(localStorage.getItem('odip_user') || '{}');
-  } catch {
-    return {};
-  }
-}
+const getCurrentUser = currentProfile;
 
 export function usePermissions() {
   const user = getCurrentUser();

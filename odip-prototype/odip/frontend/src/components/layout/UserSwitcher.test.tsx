@@ -36,7 +36,7 @@ beforeEach(() => {
 })
 
 describe('UserSwitcher — RIDER: id-based self-exclusion under view-as', () => {
-  it('selectUser overrides id (not just fullName/role) in the stored odip_user blob', async () => {
+  it('selectUser overrides id (not just fullName/role) in this tab viewing profile', async () => {
     setSuperAdminSignedIn()
     const user = userEvent.setup()
     render(<UserSwitcher />)
@@ -47,7 +47,7 @@ describe('UserSwitcher — RIDER: id-based self-exclusion under view-as', () => 
     // actually fires.
     await user.click(screen.getByRole('button', { name: /^switch user$/i }))
 
-    const storedUser = JSON.parse(localStorage.getItem('odip_user') || '{}')
+    const storedUser = JSON.parse(sessionStorage.getItem('odip_viewing_profile') || '{}')
     // The bug this rider fixes: only fullName/role were overridden, leaving `id` at the
     // SuperAdmin's own id — usePermissions() reads `id` as the self-exclusion source (e.g. the
     // medication witness picker), so an impersonated user was never excluded from their own
@@ -59,12 +59,12 @@ describe('UserSwitcher — RIDER: id-based self-exclusion under view-as', () => 
     expect(sessionStorage.getItem('odip_viewing_user')).toBe('user-support-1')
     expect(window.location.reload).toHaveBeenCalledTimes(1)
 
-    // Original SuperAdmin identity (id included) preserved for restore-on-switch-back.
-    const savedAdmin = JSON.parse(localStorage.getItem('odip_superadmin_user') || '{}')
-    expect(savedAdmin.id).toBe('superadmin-1')
+    // The SuperAdmin's own profile is never overwritten: other tabs keep acting as them.
+    expect(JSON.parse(localStorage.getItem('odip_user') || '{}')).toEqual(SUPERADMIN_USER)
+    expect(localStorage.getItem('odip_superadmin_user')).toBeNull()
   })
 
-  it('preserves the original SuperAdmin id only on the FIRST impersonation in a session', async () => {
+  it('never overwrites the own profile of the SuperAdmin, however many users are viewed in turn', async () => {
     setSuperAdminSignedIn()
     const user = userEvent.setup()
     render(<UserSwitcher />)
@@ -75,15 +75,14 @@ describe('UserSwitcher — RIDER: id-based self-exclusion under view-as', () => 
 
     // Reopen (trigger now reads back "Jamie Support" from localStorage on this re-render — no
     // real page reload happened, reload() is stubbed) and switch to a different impersonated
-    // user: odip_superadmin_user must still hold the ORIGINAL SuperAdmin identity, not get
-    // clobbered with the first impersonated user's. The trigger's own accessible name now starts
+    // user: odip_user must still hold the ORIGINAL SuperAdmin identity. The trigger's own accessible name now starts
     // with the "USR" badge, not the user's name, so it's unambiguous against the dropdown row.
     await user.click(screen.getByRole('button', { name: /^usr/i }))
     await user.click(screen.getByRole('button', { name: /^casey coordinator/i }))
     await user.click(screen.getByRole('button', { name: /^switch user$/i }))
 
-    const savedAdmin = JSON.parse(localStorage.getItem('odip_superadmin_user') || '{}')
-    expect(savedAdmin.id).toBe('superadmin-1') // never overwritten with the impersonated user's id
+    expect(JSON.parse(localStorage.getItem('odip_user') || '{}').id).toBe('superadmin-1')
+    expect(JSON.parse(sessionStorage.getItem('odip_viewing_profile') || '{}').id).toBe('user-coord-1')
   })
 
   it('exposes aria-haspopup/aria-expanded on the trigger and closes the dropdown on Escape (PP-74)', async () => {
@@ -111,7 +110,7 @@ describe('UserSwitcher — RIDER: id-based self-exclusion under view-as', () => 
     await user.click(screen.getByRole('button', { name: /view as user/i }))
     await user.click(screen.getByRole('button', { name: /^jamie support/i }))
     await user.click(screen.getByRole('button', { name: /^switch user$/i }))
-    expect(JSON.parse(localStorage.getItem('odip_user') || '{}').id).toBe('user-support-1')
+    expect(JSON.parse(sessionStorage.getItem('odip_viewing_profile') || '{}').id).toBe('user-support-1')
 
     // Reopen the dropdown (selectUser closed it) to reach "Exit view".
     await user.click(screen.getByRole('button', { name: /^usr/i }))
@@ -122,7 +121,7 @@ describe('UserSwitcher — RIDER: id-based self-exclusion under view-as', () => 
     const restoredUser = JSON.parse(localStorage.getItem('odip_user') || '{}')
     expect(restoredUser.id).toBe('superadmin-1')
     expect(restoredUser.role).toBe('SuperAdmin')
-    expect(localStorage.getItem('odip_superadmin_user')).toBeNull()
+    expect(sessionStorage.getItem('odip_viewing_profile')).toBeNull()
     expect(sessionStorage.getItem('odip_viewing_user')).toBeNull()
     // Once for the earlier switch-user confirm, once for the exit-view confirm.
     expect(window.location.reload).toHaveBeenCalledTimes(2)
@@ -142,7 +141,7 @@ describe('UserSwitcher — RIDER: id-based self-exclusion under view-as', () => 
     // The confirm dialog is now open — cancel it instead of confirming.
     await user.click(screen.getByRole('button', { name: /^cancel$/i }))
 
-    expect(JSON.parse(localStorage.getItem('odip_user') || '{}').id).toBe('user-support-1')
+    expect(JSON.parse(sessionStorage.getItem('odip_viewing_profile') || '{}').id).toBe('user-support-1')
     expect(sessionStorage.getItem('odip_viewing_user')).toBe('user-support-1')
     expect(window.location.reload).toHaveBeenCalledTimes(1) // only from the earlier switch, not from exit
   })
@@ -212,6 +211,7 @@ describe('UserSwitcher — a switch whose reload was cancelled', () => {
 
     expect(sessionStorage.getItem('odip_viewing_user')).toBeNull()
     expect(JSON.parse(localStorage.getItem('odip_user') || '{}')).toEqual(SUPERADMIN_USER)
+    expect(sessionStorage.getItem('odip_viewing_profile')).toBeNull()
     expect(localStorage.getItem('odip_superadmin_user')).toBeNull()
   })
 })
@@ -228,14 +228,14 @@ describe("UserSwitcher dismissal", () => {
     const user = userEvent.setup();
     setSuperAdminSignedIn();
     if (flow === "exit") {
-      localStorage.setItem('odip_superadmin_user', localStorage.getItem('odip_user')!);
+      sessionStorage.setItem("odip_viewing_profile", JSON.stringify({ ...SUPERADMIN_USER, id: "user-support-1" }));
       sessionStorage.setItem("odip_viewing_user", "user-support-1");
     }
 
     const originalOverflow = document.body.style.overflow;
     const originalUser = localStorage.getItem("odip_user");
     const originalViewingUser = sessionStorage.getItem("odip_viewing_user");
-    const originalSuperAdmin = localStorage.getItem("odip_superadmin_user");
+    const originalProfile = sessionStorage.getItem("odip_viewing_profile");
     const originalViewingTenant = sessionStorage.getItem("odip_viewing_tenant");
 
     render(
@@ -279,7 +279,7 @@ describe("UserSwitcher dismissal", () => {
     expect(document.body.style.overflow).toBe(originalOverflow);
     expect(localStorage.getItem("odip_user")).toBe(originalUser);
     expect(sessionStorage.getItem("odip_viewing_user")).toBe(originalViewingUser);
-    expect(localStorage.getItem("odip_superadmin_user")).toBe(originalSuperAdmin);
+    expect(sessionStorage.getItem("odip_viewing_profile")).toBe(originalProfile);
     expect(sessionStorage.getItem("odip_viewing_tenant")).toBe(originalViewingTenant);
   });
 });

@@ -1,8 +1,8 @@
 import { clearViewAs, getViewAs, setViewAs } from '@/lib/viewAs'
 
 /** Every key a tenant or user switch writes; the API client sends the viewed tenant and user from them on every request. */
-const VIEW_KEYS = ['odip_user', 'odip_superadmin_user', 'odip_last_tenant'] as const
-const TAB_KEYS = ['odip_viewing_user', 'odip_viewing_tenant'] as const
+const VIEW_KEYS = ['odip_last_tenant'] as const
+const TAB_KEYS = ['odip_viewing_user', 'odip_viewing_profile', 'odip_viewing_tenant'] as const
 
 /** Anything the person can do first: a bare click or submit comes from a screen reader in browse mode, voice control or a scripted click. */
 const FIRST_ACTS = ['pointerdown', 'keydown', 'click', 'submit'] as const

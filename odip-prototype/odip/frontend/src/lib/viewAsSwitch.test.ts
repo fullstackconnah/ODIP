@@ -30,18 +30,20 @@ describe('switchViewAndReload', () => {
   it('puts the old organisation and user back when the reload was cancelled and the person carries on here', async () => {
     stubReload()
     sessionStorage.setItem('odip_viewing_tenant', 'tenant-a')
-    localStorage.setItem('odip_user', '{"id":"sa"}')
+    localStorage.setItem('odip_last_tenant', 'tenant-a')
     switchViewAndReload(() => {
       sessionStorage.setItem('odip_viewing_tenant', 'tenant-b')
       sessionStorage.setItem('odip_viewing_user', 'user-b')
-      localStorage.setItem('odip_user', '{"id":"user-b"}')
+      sessionStorage.setItem('odip_viewing_profile', '{"id":"user-b"}')
+      localStorage.setItem('odip_last_tenant', 'tenant-b')
     })
 
     window.dispatchEvent(new Event('pointerdown'))   // the first press after "Stay", before any button acts on it
 
     expect(sessionStorage.getItem('odip_viewing_tenant')).toBe('tenant-a')
     expect(sessionStorage.getItem('odip_viewing_user')).toBeNull()
-    expect(localStorage.getItem('odip_user')).toBe('{"id":"sa"}')
+    expect(sessionStorage.getItem('odip_viewing_profile')).toBeNull()
+    expect(localStorage.getItem('odip_last_tenant')).toBe('tenant-a')
     const headers = await nextRequestHeaders()
     expect(headers['X-View-As-Tenant']).toBe('tenant-a')
     expect(headers['X-View-As-User']).toBeUndefined()

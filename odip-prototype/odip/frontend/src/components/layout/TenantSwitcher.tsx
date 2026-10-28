@@ -70,12 +70,6 @@ export default function TenantSwitcher() {
   }, [open])
 
   const switchTenant = (tenantId: string) => switchViewAndReload(() => {
-    // Restore original SuperAdmin user if we were impersonating
-    const savedAdmin = localStorage.getItem('odip_superadmin_user')
-    if (savedAdmin) {
-      localStorage.setItem('odip_user', savedAdmin)
-      localStorage.removeItem('odip_superadmin_user')
-    }
     clearViewAs('odip_viewing_user')
     setViewAs('odip_viewing_tenant', tenantId)
     localStorage.setItem('odip_last_tenant', tenantId)

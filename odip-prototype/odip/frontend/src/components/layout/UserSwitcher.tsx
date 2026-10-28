@@ -38,32 +38,17 @@ export default function UserSwitcher() {
   }, [open])
 
   const selectUser = (user: TenantUserDto) => switchViewAndReload(() => {
-    // Preserve original SuperAdmin user object before first impersonation
-    if (!localStorage.getItem('odip_superadmin_user')) {
-      localStorage.setItem('odip_superadmin_user', localStorage.getItem('odip_user') || '{}')
-    }
-
-    // Override odip_user with the impersonated user's id, role and name. `id` matters just as
-    // much as fullName/role here: usePermissions() exposes it as the self-exclusion source (e.g.
-    // excluding yourself from a medication witness picker — see RecordAdministrationModal), and
-    // without this override that check kept comparing against the SuperAdmin's own id while
-    // "viewing as" someone else, so the impersonated user was never excluded from their own
-    // picker. odip_superadmin_user (saved above) still holds the original id, so switching back
-    // via clearUser restores it correctly.
+    // This tab's profile is the viewed user's id, role and name over the SuperAdmin's own blob (odip_user, which this never writes).
+    // `id` matters just as much as fullName/role: usePermissions() exposes it as the self-exclusion source (e.g. excluding yourself
+    // from a medication witness picker — see RecordAdministrationModal). It lives in this tab only, so no other tab acts as them.
     const currentUser = JSON.parse(localStorage.getItem('odip_user') || '{}')
-    const overriddenUser = { ...currentUser, id: user.id, fullName: user.fullName, role: user.role }
-    localStorage.setItem('odip_user', JSON.stringify(overriddenUser))
+    setViewAs('odip_viewing_profile', JSON.stringify({ ...currentUser, id: user.id, fullName: user.fullName, role: user.role }))
     setViewAs('odip_viewing_user', user.id)
 
     setOpen(false)
   })
 
   const clearUser = () => switchViewAndReload(() => {
-    const savedAdmin = localStorage.getItem('odip_superadmin_user')
-    if (savedAdmin) {
-      localStorage.setItem('odip_user', savedAdmin)
-      localStorage.removeItem('odip_superadmin_user')
-    }
     clearViewAs('odip_viewing_user')
   })
 
