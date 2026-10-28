@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -20,6 +21,25 @@ describe('DisclosureToggle', () => {
     expect(b.querySelector('svg')).toHaveClass('rotate-180')
     await userEvent.click(b)
     expect(onToggle).toHaveBeenCalledTimes(1)
+  })
+
+  it('is a native button that Enter and Space each flip', async () => {
+    const user = userEvent.setup()
+    function Harness() {
+      const [open, setOpen] = useState(false)
+      return <DisclosureToggle label="Inactive (2)" open={open} onToggle={() => setOpen(o => !o)} />
+    }
+    render(<Harness />)
+    const b = screen.getByRole('button', { name: 'Inactive (2)' })
+    expect(b.tagName).toBe('BUTTON')
+    expect(b).toHaveAttribute('type', 'button')
+
+    await user.tab()
+    expect(b).toHaveFocus()
+    await user.keyboard('{Enter}')
+    expect(b).toHaveAttribute('aria-expanded', 'true')
+    await user.keyboard(' ')
+    expect(b).toHaveAttribute('aria-expanded', 'false')
   })
 
   it('has the --tap-min floor and a keyboard-only focus ring', () => {
