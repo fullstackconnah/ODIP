@@ -22,3 +22,5 @@ Skills loaded first: ponytail:ponytail (full), impeccable:impeccable, apple-desi
 - **Copy (owner-side decision):** "Someone else just changed this entry, so your changes weren't saved. Close it and open it again to see theirs." It now states the outcome, not only the next step.
 - **States:** typed values stay, modal stays open, Save re-enables, list refetches silently; light and dark use the house warning-container tokens; touch targets unchanged (44 px).
 - **apple-design rules applied:** feedback must be seen where the user is looking (response and wayfinding); agency and forgiveness (typed work kept); restraint (no recovery button, no motion added, so reduced-motion needs nothing); the focus move is instant, with no animation.
+
+**FIX2 (written before the edit):** the refusal wrapper keeps `focus:outline-none` for pointer users but gains `focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]` (SectionEditPanel.tsx:173), so a keyboard user who presses Enter on Save sees the ring land on the Callout. One class string; no new element, no motion. apple-design: feedback must be visible where focus goes (wayfinding, craft).

@@ -326,7 +326,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
         <div className="space-y-4">
           {modalError && (
             // The key re-mounts it on each refusal, so a repeat Save is announced and scrolled to again.
-            <div key={refusals} ref={errorRef} tabIndex={-1} className="scroll-mt-4 rounded-lg focus:outline-none">
+            <div key={refusals} ref={errorRef} tabIndex={-1} className="scroll-mt-4 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]">
               <Callout tone={modalError.stale ? 'warning' : 'error'}>{modalError.message}</Callout>
             </div>
           )}

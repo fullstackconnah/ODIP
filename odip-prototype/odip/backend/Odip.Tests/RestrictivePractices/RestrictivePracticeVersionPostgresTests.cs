@@ -159,6 +159,29 @@ public class RestrictivePracticeVersionPostgresTests : IClassFixture<PostgresFix
             Assert.IsType<ConflictObjectResult>((await c2.Update(practiceId, ToBody("Stale", loaded), CancellationToken.None)).Result);
     }
 
+    [SkippableFact]
+    public async Task A_save_that_races_the_early_check_is_stopped_by_the_concurrency_token()
+    {
+        Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
+        var (tenantId, practiceId, participantId) = await SeedAsync();
+        DateTime loaded;
+        { var (db, c) = Request(tenantId); await using var _ = db; loaded = await LoadedAsync(c, participantId); }
+
+        // Editor A has already read the entry at the loaded version, so the controller finds it tracked and the early check passes.
+        var (db2, c2) = Request(tenantId);
+        await using (db2)
+        {
+            await db2.RestrictivePractices.SingleAsync(p => p.Id == practiceId);
+            { var (db, c) = Request(tenantId); await using var _ = db; Assert.IsType<OkObjectResult>((await c.Update(practiceId, Form("B", loaded), CancellationToken.None)).Result); }
+
+            Assert.IsType<ConflictObjectResult>((await c2.Update(practiceId, Form("A", loaded), CancellationToken.None)).Result);
+        }
+
+        var (check, _c) = Request(tenantId);
+        await using (check)
+            Assert.Equal("B", (await check.RestrictivePractices.SingleAsync()).Description);
+    }
+
     private static UpdateRestrictivePracticeDto ToBody(string description, DateTime expected) =>
         JsonSerializer.Deserialize<UpdateRestrictivePracticeDto>(
             JsonSerializer.Serialize(new { description, isActive = true, expectedUpdatedAt = expected }, Wire), Wire)!;

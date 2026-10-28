@@ -170,11 +170,8 @@ public class RestrictivePracticesController : ControllerBase
 
         // A form from an older tab sends no version and saves as before. A stale one is refused before any other check;
         // the token below (the UPDATE's WHERE) stays as the backstop for a save that races this read.
-        if (dto.ExpectedUpdatedAt is DateTime expected)
-        {
-            if (expected != practice.UpdatedAt) return Conflict(ApiResponse<RestrictivePracticeDto>.Fail(ChangedByOther));
-            _db.Entry(practice).Property(rp => rp.UpdatedAt).OriginalValue = expected;
-        }
+        if (dto.ExpectedUpdatedAt is DateTime expected && expected != practice.UpdatedAt)
+            return Conflict(ApiResponse<RestrictivePracticeDto>.Fail(ChangedByOther));
 
         if (dto.RelatedMedicationId.HasValue)
         {

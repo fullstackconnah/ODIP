@@ -761,6 +761,7 @@ describe('RestrictivePracticesTab — edit form authorised checkbox', () => {
       const alert = await screen.findByRole('alert')
       expect(alert.className).toContain('--color-warning-container')
       expect(alert.parentElement).toHaveFocus()
+      expect(alert.parentElement?.className).toContain('focus-visible:ring-2')
       expect(scrollIntoView).toHaveBeenCalled()
       scrollIntoView.mockRestore()
     })
