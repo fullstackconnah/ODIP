@@ -129,7 +129,7 @@ export default function InvoicesPage() {
               className={`${TAP_AREA} inline-flex items-center gap-1 whitespace-nowrap rounded-sm font-medium tabular-nums text-[var(--color-primary)] hover:underline focus:outline-none focus-visible:underline focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] aria-disabled:cursor-default aria-disabled:opacity-60`}
             >
               {row.displayNumber}
-              {busy ? <Loader2 className="size-3.5 motion-safe:animate-spin" aria-hidden="true" /> : <Download className="size-3.5" aria-hidden="true" />}
+              {busy ? <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> : <Download className="size-3.5" aria-hidden="true" />}
             </button>
             {isCredit && (
               <p className={MUTED_LINE} title={phrase}>

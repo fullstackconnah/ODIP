@@ -19,3 +19,7 @@ Response (feedback instant, 100 ms is below perceptible lag), restraint (no scal
 
 ## Not changed
 Summary looks and keyboard behaviour, tick row layout/hit area, offline queue, PR 1 and PR 2 files and lines. What's New: none.
+
+## FIX1
+Two more spinners keep turning under reduced motion (essential loading motion, decision 3): InvoicesPage download `Loader2` (`motion-safe:animate-spin` becomes `animate-spin`) and SyncRow `Loader2` (dropped `motion-reduce:animate-none`). No other spinner uses either class; no visual change with motion allowed.
+Stale ParticipantDetailsFold comment corrected: the fold content fades in over 150 ms (global `details[open]` rule); apple-design rules applied: reduced motion keeps essential signals, restraint.

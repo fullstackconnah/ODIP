@@ -17,7 +17,7 @@ type Field = keyof DetailsForm
 
 /**
  * The enquiry form's Participant details (SHAPE.md section 5): optional, gathered by intake later, so a fold that is closed on a new enquiry and open
- * on edit. The house fold (NotRecordedFold): a native <details> whose summary is the card's heading row, with no motion when it opens. `open` is the
+ * on edit. The house fold (NotRecordedFold): a native <details> whose summary is the card's heading row, whose content fades in over 150 ms when it opens (the global `details[open]` rule in `index.css`). `open` is the
  * form's, so Save and ?focus=address can open it before focusing a field inside. Dates take the house span.date (formGrid.test's R3 F-05 guard), and
  * Plan start opens its own row at xl so the plan's two dates sit together. Presentational: the form owns the state and the errors.
  */
