@@ -1,3 +1,4 @@
+import type { MouseEvent, ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import clsx from 'clsx'
@@ -25,18 +26,15 @@ type CommonProps = {
 
 export type BackButtonProps =
   | (CommonProps & {
-      /** The destination, a real route. It is a real link, so open-in-new-tab and copy-link work. */
-      to: string
       /**
-       * Default `true`: when the user got here from another in-app screen, Back returns to that screen (`useBackTarget`) and
-       * `to` is only the fallback for a deep link or a reload. `false` pins Back to `to`.
+       * The fallback, a real route: where Back goes when there is no earlier in-app page (a deep link, a new tab). Otherwise Back
+       * returns to the page the user came from (`useBackTarget`). It is the link's href, so open-in-new-tab and copy-link work.
        */
-      history?: boolean
+      to: string
       onBack?: undefined
     })
   | (CommonProps & {
       to?: undefined
-      history?: undefined
       /**
        * For a view that is switched in place and has no route to link to (a master/detail pane held in component state). It renders a real
        * `<button>`, because nothing navigates; every routed Back is a link.
@@ -60,26 +58,27 @@ type ControlProps = {
   name: string
   className?: string
   testId?: string
+  onClick?: (e: MouseEvent) => void
 }
 
 /** A routed Back: always an anchor with a real href. */
-function LinkControl({ variant, name, className, testId, href }: ControlProps & { href: string }) {
+function LinkControl({ variant, name, className, testId, href, onClick }: ControlProps & { href: string }) {
   if (variant === 'link') {
     return (
-      <Link to={href} aria-label={name} className={clsx(LINK, className)} data-testid={testId}>
+      <Link to={href} onClick={onClick} aria-label={name} className={clsx(LINK, className)} data-testid={testId}>
         <Arrow /> Back
       </Link>
     )
   }
   if (variant === 'icon') {
     return (
-      <Button to={href} variant="ghost" size="md" iconOnly aria-label={name} title={name} className={clsx(ICON_FLOOR, className)} data-testid={testId}>
+      <Button to={href} onClick={onClick} variant="ghost" size="md" iconOnly aria-label={name} title={name} className={clsx(ICON_FLOOR, className)} data-testid={testId}>
         <Arrow />
       </Button>
     )
   }
   return (
-    <Button to={href} variant="secondary" size="md" aria-label={name} className={className} data-testid={testId}>
+    <Button to={href} onClick={onClick} variant="secondary" size="md" aria-label={name} className={className} data-testid={testId}>
       <Arrow /> Back
     </Button>
   )
@@ -109,15 +108,23 @@ function ButtonControl({ variant, name, className, testId, onBack }: ControlProp
 }
 
 /** The routed form, split out so `useBackTarget` is only called where there is a `to` (the in-page form needs no router state). */
-function RoutedBack({ to, label, variant = 'button', history = true, className, 'data-testid': testId }: CommonProps & { to: string; history?: boolean }) {
+function RoutedBack({ to, label, variant = 'button', className, 'data-testid': testId }: CommonProps & { to: string }) {
   // The hook is called unconditionally and INSIDE this component, so a page can render a BackButton after an early return without
-  // putting a hook below it (the class of bug #155 fixed on the onboarding page). `history={false}` ignores the answer; it does
-  // not skip the call.
+  // putting a hook below it (the class of bug #155 fixed on the onboarding page).
   const target = useBackTarget(to)
-  const rerouted = history && target.to !== to
-  // The name always says where the control goes: the caller's label for the fallback, the previous screen's own label when history won.
-  const name = rerouted ? target.ariaLabel : `Back to ${label}`
-  return <LinkControl variant={variant} name={name} className={className} testId={testId} href={history ? target.to : to} />
+  // The name says where a click goes: the previous screen when it is known, "Go back" when history exists but the page is unknown
+  // (a click still runs navigate(-1)), else the caller's label (a deep link goes to the fallback).
+  const name = target.previousPath && target.previousPath !== to ? target.ariaLabel : target.goesBack && target.previousPath !== to ? 'Go back' : `Back to ${label}`
+  return <LinkControl variant={variant} name={name} className={className} testId={testId} href={to} onClick={target.onLinkClick} />
+}
+
+/**
+ * A form's Cancel (or an end-of-form "Back to ..." button): goes where the page's header Back goes, `to` being the same fallback.
+ * A component, not a hook call in the page, so it can sit below an early return.
+ */
+export function BackActionButton({ to, children = 'Cancel', className }: { to: string; children?: ReactNode; className?: string }) {
+  const target = useBackTarget(to)
+  return <Button variant="secondary" to={to} onClick={target.onLinkClick} className={className}>{children}</Button>
 }
 
 /**
@@ -125,9 +132,9 @@ function RoutedBack({ to, label, variant = 'button', history = true, className, 
  *
  *   <BackButton to="/staff" label="staff" />                                  // secondary button, "Back", named "Back to staff"
  *   <BackButton to="/participants" label="participants" variant="icon" />     // ghost icon, for a header with a title beside it
- *   <BackButton to="/portal" label="my shifts" variant="link" history={false} />
+ *   <BackButton to="/portal" label="my shifts" variant="link" />
  *
- * Always a link to a real route (`onBack` is the one escape hatch, for an in-page view that has no route). Under a coarse pointer every
+ * Back returns to the page the user came from, and `to` is the fallback for a deep link or a new tab. Always a link to a real route (`onBack` is the one escape hatch, for an in-page view that has no route). Under a coarse pointer every
  * variant is 44px tall.
  */
 export function BackButton(props: BackButtonProps) {

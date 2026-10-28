@@ -145,7 +145,7 @@ export default function TripDetailPage() {
       {/* Detail header pattern: display title + meta row (PageHeader variant="detail"), then the glance strip
           (FactBar variant="glance"). The tab strip and everything below it is the ordinary dense page. */}
       <div className="flex items-start gap-2">
-        <BackButton to="/trips" label="trips" variant="icon" history={false} className="mt-1.5" />
+        <BackButton to="/trips" label="trips" variant="icon" className="mt-1.5" />
         <div className="flex-1 min-w-0">
           <PageHeader
             variant="detail"

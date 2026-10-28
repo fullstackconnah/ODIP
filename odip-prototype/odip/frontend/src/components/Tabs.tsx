@@ -247,6 +247,8 @@ export function Tabs({ tabs, active, onChange, ariaLabel = 'Tabs', idPrefix, cla
                 : undefined}
               tabIndex={isFocused && !tab.disabled ? 0 : -1}
               disabled={tab.disabled}
+              // Roving tabindex follows focus, so a parent that vetoes a change and puts focus back on the active tab leaves it tabbable.
+              onFocus={() => setFocusedId(tab.id)}
               onClick={() => {
                 if (tab.disabled) return
                 setFocusedId(tab.id)

@@ -15,6 +15,7 @@ import { formatInstantDateAu } from '@/lib/format'
 import { StatusBadge } from '@/components/StatusBadge'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
+import { BackButton } from '@/components/BackButton'
 import { PageState } from '@/components/PageState'
 import { Callout } from '@/components/Callout'
 import { isNotFoundError } from '@/lib/httpStatus'
@@ -166,63 +167,68 @@ export default function ClaimDetailPage() {
         <span className="font-medium">Claim {claim.claimReference}</span>
       </div>
 
-      <PageHeader
-        title={`Claim ${claim.claimReference}`}
-        subtitle={
-          <div className="flex flex-wrap items-center gap-3">
-            <StatusBadge status={claim.status} />
-            <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-surface-container-low)] text-[var(--color-muted-foreground)] font-medium">
-              {claim.kind === 'Shift' ? 'Shift claim' : 'Trip claim'}
-            </span>
-          </div>
-        }
-        action={
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <Button
-              variant="secondary"
-              size="md"
-              onClick={() => downloadFile(`/claims/${id}/bpr-csv`, `${claim.claimReference}-bpr.csv`, "Couldn't download the BPR CSV. Try again.").catch((err: Error) => setStatusError(err.message))}
-            >
-              <Download className="w-4 h-4" />
-              BPR CSV
-            </Button>
-            {/* The moves CanMove allows; from Rejected it is the reissue path, and a shift claim has no other way back. */}
-            {(claim.status === 'Draft' || claim.status === 'Ready' || claim.status === 'Rejected') && (
-              <Button
-                variant="primary"
-                size="md"
-                onClick={() => { setStatusError(null); setSubmitting(true) }}
-                disabled={updateClaim.isPending}
-              >
-                <Check className="w-4 h-4" />
-                Mark as Submitted
-              </Button>
-            )}
-            {claim.status === 'Submitted' && (
-              <>
+      <div className="flex items-start gap-2">
+        <BackButton to="/trips" label="trips" variant="icon" className="mt-1.5" />
+        <div className="flex-1 min-w-0">
+          <PageHeader
+            title={`Claim ${claim.claimReference}`}
+            subtitle={
+              <div className="flex flex-wrap items-center gap-3">
+                <StatusBadge status={claim.status} />
+                <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-surface-container-low)] text-[var(--color-muted-foreground)] font-medium">
+                  {claim.kind === 'Shift' ? 'Shift claim' : 'Trip claim'}
+                </span>
+              </div>
+            }
+            action={
+              <div className="flex shrink-0 flex-wrap items-center gap-2">
                 <Button
-                  variant="primary"
+                  variant="secondary"
                   size="md"
-                  onClick={() => { setStatusError(null); setStatusConfirmTarget('Paid') }}
-                  disabled={updateClaim.isPending}
+                  onClick={() => downloadFile(`/claims/${id}/bpr-csv`, `${claim.claimReference}-bpr.csv`, "Couldn't download the BPR CSV. Try again.").catch((err: Error) => setStatusError(err.message))}
                 >
-                  <DollarSign className="w-4 h-4" />
-                  Mark as Paid
+                  <Download className="w-4 h-4" />
+                  BPR CSV
                 </Button>
-                <Button
-                  variant="danger"
-                  size="md"
-                  onClick={() => { setStatusError(null); setStatusConfirmTarget('Rejected') }}
-                  disabled={updateClaim.isPending}
-                >
-                  <XCircle className="w-4 h-4" />
-                  Mark as Rejected
-                </Button>
-              </>
-            )}
-          </div>
-        }
-      />
+                {/* The moves CanMove allows; from Rejected it is the reissue path, and a shift claim has no other way back. */}
+                {(claim.status === 'Draft' || claim.status === 'Ready' || claim.status === 'Rejected') && (
+                  <Button
+                    variant="primary"
+                    size="md"
+                    onClick={() => { setStatusError(null); setSubmitting(true) }}
+                    disabled={updateClaim.isPending}
+                  >
+                    <Check className="w-4 h-4" />
+                    Mark as Submitted
+                  </Button>
+                )}
+                {claim.status === 'Submitted' && (
+                  <>
+                    <Button
+                      variant="primary"
+                      size="md"
+                      onClick={() => { setStatusError(null); setStatusConfirmTarget('Paid') }}
+                      disabled={updateClaim.isPending}
+                    >
+                      <DollarSign className="w-4 h-4" />
+                      Mark as Paid
+                    </Button>
+                    <Button
+                      variant="danger"
+                      size="md"
+                      onClick={() => { setStatusError(null); setStatusConfirmTarget('Rejected') }}
+                      disabled={updateClaim.isPending}
+                    >
+                      <XCircle className="w-4 h-4" />
+                      Mark as Rejected
+                    </Button>
+                  </>
+                )}
+              </div>
+            }
+          />
+        </div>
+      </div>
 
       {/* A refused Mark Confirmed (the claim moved on while this page was open) says why; the dialogs show their own refusals. */}
       {statusError && !statusConfirmTarget && !recordingCode && <Callout tone="error">{statusError}</Callout>}

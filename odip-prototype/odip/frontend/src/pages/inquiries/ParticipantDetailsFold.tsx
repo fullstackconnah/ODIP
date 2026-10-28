@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { AU_STATES, type PlanType } from '@/api/types/enums'
 import { Card } from '@/components/Card'
@@ -17,7 +18,7 @@ type Field = keyof DetailsForm
 
 /**
  * The enquiry form's Participant details (SHAPE.md section 5): optional, gathered by intake later, so a fold that is closed on a new enquiry and open
- * on edit. The house fold (NotRecordedFold): a native <details> whose summary is the card's heading row, with no motion when it opens. `open` is the
+ * on edit. The house fold (NotRecordedFold): a native <details> whose summary is the card's heading row, whose content fades in over 150 ms when it opens (the global `details[open]` rule in `index.css`). `open` is the
  * form's, so Save and ?focus=address can open it before focusing a field inside. Dates take the house span.date (formGrid.test's R3 F-05 guard), and
  * Plan start opens its own row at xl so the plan's two dates sit together. Presentational: the form owns the state and the errors.
  */
@@ -31,9 +32,10 @@ export function ParticipantDetailsFold({ form, errors, open, today, onToggle, on
   onChange: (field: Field, value: string) => void
 }) {
   const text = (field: Field) => ({ value: form[field], autoComplete: 'off', error: errors[field as keyof InquiryErrors], onChange: (e: React.ChangeEvent<HTMLInputElement>) => onChange(field, e.target.value) })
+  const [openAtMount] = useState(open)
   return (
     <Card>
-      <details open={open} onToggle={e => onToggle(e.currentTarget.open)} className="group">
+      <details open={open} data-fold-static={openAtMount || undefined} onToggle={e => onToggle(e.currentTarget.open)} className="group">
         {/* A summary holds phrasing and heading content only, so the h3 and the status are its own children: below md the status takes the second
             row under the title, and the chevron stays on the first line. */}
         <summary className="grid min-h-[var(--control-h)] cursor-pointer select-none list-none grid-cols-[auto_1fr] items-baseline gap-x-2 gap-y-0.5 py-1.5 md:grid-cols-[auto_auto_1fr] [&::-webkit-details-marker]:hidden">

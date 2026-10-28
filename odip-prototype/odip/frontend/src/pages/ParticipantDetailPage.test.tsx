@@ -15,8 +15,9 @@ const {
   mockUseDownloadIntakeFormPdf, mockUseDownloadParticipantProfilePdf, mockUseDownloadClientOverviewPdf,
   mockPatchMutateAsync, mockUseStaff,
   mockUseGenerateCaregiverLink, mockUseRevokeCaregiverLink, mockUseCaregiverSubmissions,
-  mockDeleteMutate, mockNotes, mockRisks,
+  mockDeleteMutate, mockNotes, mockRisks, realAdl,
 } = vi.hoisted(() => ({
+  realAdl: { on: false },
   mockUseParticipant: vi.fn(),
   // The page reads the support profile once for Health, Daily and Overview; 404 / empty by default.
   mockUseSupportProfile: vi.fn<() => Record<string, unknown>>(() => ({ data: undefined, isLoading: false, isError: false, error: null, refetch: vi.fn() })),
@@ -70,6 +71,9 @@ vi.mock('@/api/hooks', () => ({
   useParticipantRoutines: () => ({ data: [] }),
   useParticipantContactRoles: () => ({ data: [] }),
   useParticipantNotes: mockNotes,
+  // Only read by the real ADL section (realAdl.on): one unassessed row, as the controller returns for a participant with none answered.
+  useParticipantAdlAssessments: () => ({ data: [{ id: null, participantId: 'participant-1', adlType: 'Dressing', level: null, notes: null, howToHelpNotes: null, createdAt: null, updatedAt: null }], isLoading: false }),
+  useUpsertAdlAssessment: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
 vi.mock('@/components/AuditHistoryTab', () => ({ default: () => <div data-testid="history-tab" /> }))
@@ -91,7 +95,8 @@ vi.mock('./participant-detail', async () => {
     RiskEntriesSection: () => <div data-testid="risk-entries-section" />,
     ParticipantConsentsSection: () => <div data-testid="consents-section" />,
     ParticipantHealthConditionsSection: () => <div data-testid="health-conditions-section" />,
-    ParticipantAdlAssessmentsSection: () => <div data-testid="adl-assessments-section" />,
+    // Real for the one empty-fold case (realAdl.on); every other test keeps the stub.
+    ParticipantAdlAssessmentsSection: (props: { participantId: string }) => realAdl.on ? <actual.ParticipantAdlAssessmentsSection {...props} /> : <div data-testid="adl-assessments-section" />,
     ContactsTab: () => <div data-testid="contacts-tab" />,
     // PD-6 — the Support Profile tab has its own dedicated test file (SupportProfileTab.test.tsx);
     // stubbed here so this page's tests stay about page composition/tab wiring, same "own hooks
@@ -1466,12 +1471,12 @@ describe('ParticipantDetailPage — Back returns to where the user came from, el
     expect(back()).toHaveAttribute('href', '/participants')
   })
 
-  it('returns to the previous in-app screen when there is one', () => {
-    __testHooks.recordCurrentPath('/onboarding/participant-1')
-    __testHooks.recordCurrentPath('/participants/participant-1')
+  it('names the previous in-app screen when there is one (the href stays the list fallback)', () => {
+    __testHooks.seedHistory('/onboarding/participant-1', '/participants/participant-1')
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
     renderAt('participant-1')
-    expect(back()).toHaveAttribute('href', '/onboarding/participant-1')
+    expect(back()).toHaveAccessibleName('Back to onboarding')
+    expect(back()).toHaveAttribute('href', '/participants')
   })
 })
 
@@ -2013,6 +2018,11 @@ const everyFlag = {
   isAnaphylaxisRisk: true, allergiesDetail: 'Peanuts', chokingRiskMealDetail: 'Cut small', fallsRiskRating: 'High', behaviourRiskRating: 'High', hasRestrictivePracticeFlag: true,
   serviceStreams: 'CommunityAccessDailyLiving',
 } as unknown as Partial<ParticipantDetailDto>
+/** After a vetoed switch: focus and the one tabbable chip are back on the selected sub-tab. */
+const expectSubFocusOnAboutMe = () => {
+  expect(subTab('About me')).toHaveFocus()
+  for (const t of within(subStrip()).getAllByRole('tab')) expect(t).toHaveAttribute('tabindex', subLabel(t) === 'About me' ? '0' : '-1')
+}
 const editedAboutMe = async (role = 'Coordinator') => {
   setUserRole(role)
   mockUseParticipant.mockReturnValue({ data: makeParticipant({ groupRevisions: { aboutMe: 0 } as ParticipantDetailDto['groupRevisions'] }), isLoading: false })
@@ -2159,6 +2169,18 @@ describe('ParticipantDetailPage — sub-tabs', () => {
     expect(panel.querySelector('details')).toBeNull()
   })
 
+  it('an editor opening an empty Daily living sub-tab sees its rows at once, with no click on a fold', () => {
+    setUserRole('Coordinator')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    realAdl.on = true
+    try {
+      renderAtTab('participant-1', 'daily', 'daily-living')
+      const panel = screen.getByRole('tabpanel')
+      expect(within(panel).getByText('Not recorded: Daily living').closest('details')).toHaveAttribute('open')
+      expect(within(panel).getByText('Dressing')).toBeVisible()
+    } finally { realAdl.on = false }
+  })
+
   it('g: a hidden section falls back to the first visible one without an error', () => {
     for (const [role, tab, section, shown] of [['SupportWorker', 'people', 'roster', 'Contacts'], ['Coordinator', 'records', 'history', 'Notes']]) {
       setUserRole(role)
@@ -2190,11 +2212,13 @@ describe('ParticipantDetailPage — sub-tabs', () => {
     expect(within(dialog).getByRole('button', { name: 'Keep editing' })).toHaveFocus()
     await user.click(within(dialog).getByRole('button', { name: 'Keep editing' }))
     expect(selectedSub()).toEqual(['About me'])
+    expectSubFocusOnAboutMe()
     expect(screen.getByLabelText('Goals')).toHaveValue('mine')
     expect(probe().path).toBe('?tab=about&section=about-me')
     await user.click(subTab('Identity'))
     await user.click(screen.getByRole('button', { name: 'Discard' }))
     expect(selectedSub()).toEqual(['Identity'])
+    expect(subTab('Identity')).toHaveFocus()
     expect(probe().path).toBe('?tab=about')
     await user.click(subTab('Services'))
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
@@ -2205,6 +2229,7 @@ describe('ParticipantDetailPage — sub-tabs', () => {
     await user.click(subTab('Identity'))
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     expect(selectedSub()).toEqual(['Identity'])
+    expect(subTab('Identity')).toHaveFocus()
   })
 
   it('j: the same ask for a main tab', async () => {
@@ -2212,11 +2237,13 @@ describe('ParticipantDetailPage — sub-tabs', () => {
     await user.type(screen.getByLabelText('Goals'), 'mine')
     await user.click(screen.getByRole('tab', { name: 'Health & safety' }))
     await user.click(screen.getByRole('button', { name: 'Keep editing' }))
+    expect(within(screen.getByRole('tablist', { name: 'Participant sections' })).getByRole('tab', { name: /^About/ })).toHaveFocus()
     expect(selectedTabName()[0]).toMatch(/^About/)
     expect(probe().path).toBe('?tab=about&section=about-me')
     await user.click(screen.getByRole('tab', { name: 'Health & safety' }))
     await user.click(screen.getByRole('button', { name: 'Discard' }))
     expect(selectedTabName()[0]).toMatch(/^Health/)
+    expect(screen.getByRole('tab', { name: 'Health & safety' })).toHaveFocus()
     expect(probe().path).toBe('?tab=health')
   })
 
@@ -2229,6 +2256,32 @@ describe('ParticipantDetailPage — sub-tabs', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Keep editing' }))
     expect(selectedSub()).toEqual(['About me'])
     expect(probe().path).toBe('?tab=about&section=about-me')
+    expectSubFocusOnAboutMe()
+  })
+
+  // About me is the last sub-tab, so End would pick itself (no veto): End is covered on the main strip below.
+  it('j: Home on the strip with unsaved edits: Keep editing returns focus to the current sub-tab', async () => {
+    const { user } = await editedAboutMe()
+    await user.type(screen.getByLabelText('Goals'), 'mine')
+    subTab('About me').focus()
+    await user.keyboard('{Home}')
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Keep editing' }))
+    expect(selectedSub()).toEqual(['About me'])
+    expectSubFocusOnAboutMe()
+  })
+
+  it.each(['ArrowRight', 'End'])('j: %s on the main strip with unsaved edits: Keep editing returns focus to the current main tab', async key => {
+    const { user } = await editedAboutMe()
+    await user.type(screen.getByLabelText('Goals'), 'mine')
+    const main = within(screen.getByRole('tablist', { name: 'Participant sections' }))
+    const about = main.getByRole('tab', { name: /^About/ })
+    about.focus()
+    await user.keyboard(`{${key}}`)
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Keep editing' }))
+    expect(about).toHaveFocus()
+    expect(about).toHaveAttribute('tabindex', '0')
+    const others = main.getAllByRole('tab').filter(t => t !== about)
+    for (const t of others) expect(t).toHaveAttribute('tabindex', '-1')
   })
 
   it('j: the Discard button in the dialog is the danger style', async () => {

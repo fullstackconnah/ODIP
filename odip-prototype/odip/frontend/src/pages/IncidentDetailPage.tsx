@@ -54,7 +54,7 @@ export default function IncidentDetailPage() {
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <div className="flex items-start gap-2">
-        <BackButton to="/incidents" label="incidents" variant="icon" history={false} className="mt-1" />
+        <BackButton to="/incidents" label="incidents" variant="icon" className="mt-1" />
         <div className="flex-1 min-w-0">
           <PageHeader
             title={incident.title}

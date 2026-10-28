@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Odip.Application.DTOs;
+using Odip.Domain.Billing.Pricing;
 using Odip.Domain.Entities;
 using Odip.Infrastructure.Data;
 
@@ -40,6 +41,9 @@ public static class AgreementPriceLists
     public static decimal LineTotal(decimal? total, decimal hours, decimal unitPrice) => total ?? Math.Floor(hours * unitPrice * 100m) / 100m;
 
     public static decimal LineTotal(ServiceAgreementDraftLine x) => LineTotal(x.Total, x.Hours, x.UnitPrice);
+
+    /// <summary>What a quote's priced lines add up to: each line's own total, already floored to the cent. A line that could not be priced is not money the agreement claims.</summary>
+    public static decimal PricedTotal(PlanQuote quote) => quote.Lines.Where(l => l.IsPriced).Sum(l => l.Total);
 }
 
 /// <summary>The one reading of "current" and "waiting" for the Agreements list and the bulk actions, so they never disagree about which revision is which.</summary>

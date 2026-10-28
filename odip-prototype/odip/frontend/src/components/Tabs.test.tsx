@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { render, cleanup, screen } from '@testing-library/react'
+import { render, cleanup, screen, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { Tabs, type TabItem } from './Tabs'
@@ -78,6 +78,14 @@ describe('Tabs primitive — accessibility and keyboard', () => {
     expect(screen.getByRole('tab', { name: 'Three' })).toHaveFocus()
     await user.keyboard('{Home}')
     expect(screen.getByRole('tab', { name: 'One' })).toHaveFocus()
+  })
+
+  it('moves the roving tabindex to a tab that takes focus without being activated', () => {
+    render(<Harness tabs={demoTabs} initial="two" />)
+    const one = screen.getByRole('tab', { name: 'One' })
+    act(() => one.focus())
+    expect(one).toHaveAttribute('tabindex', '0')
+    expect(screen.getByRole('tab', { name: 'Two' })).toHaveAttribute('tabindex', '-1')
   })
 
   it('uses roving tabindex so only the active tab is in the page tab order', async () => {
