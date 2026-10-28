@@ -80,6 +80,11 @@ export function agreementCheck(overrides: Partial<AgreementCheck> = {}): Agreeme
   }
 }
 
+/** The participant is funded another way: there is no NDIS budget to compare with, whatever plan is recorded. */
+export function otherFundedCheck(overrides: Partial<AgreementCheck> = {}): AgreementCheck {
+  return noBudgetCheck({ noBudgetReason: 'OtherFunded', ...overrides })
+}
+
 /** No plan is running: no budget recorded (or the plan ended: say so with noBudgetReason and planEnd). The server answers with the day and the reason, nothing else. */
 export function noBudgetCheck(overrides: Partial<AgreementCheck> = {}): AgreementCheck {
   return { hasBudget: false, noBudgetReason: 'NotRecorded', asOf: '2026-10-08', periodFrom: '2026-10-12', periodTo: '2026-12-20', agreementCost: 0, pools: [], notInARecordedPool: 0, outsideThePlan: 0, ...overrides }
