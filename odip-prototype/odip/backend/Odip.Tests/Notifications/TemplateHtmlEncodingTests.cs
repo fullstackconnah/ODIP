@@ -178,4 +178,14 @@ public class TemplateHtmlEncodingTests
         Assert.Contains(Encoded, message.HtmlBody);
         Assert.Contains(BaseUrl, message.HtmlBody);
     }
+
+    [Fact]
+    public void ShiftUnassignedTemplate_Cancelled_EncodesParticipantName()
+    {
+        var payload = new ShiftUnassignedPayload("worker@example.com", Payload, new DateOnly(2026, 9, 15), new TimeOnly(9, 0), new TimeOnly(15, 0), Cancelled: true);
+        var message = ShiftUnassignedTemplate.Render(payload, BaseUrl);
+
+        Assert.DoesNotContain("<script>", message.HtmlBody);
+        Assert.Contains(Encoded, message.HtmlBody);
+    }
 }
