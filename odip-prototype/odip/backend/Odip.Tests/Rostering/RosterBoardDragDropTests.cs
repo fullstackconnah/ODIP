@@ -272,6 +272,31 @@ public class RosterBoardDragDropTests
     }
 
     [Fact]
+    public async Task UpdateShift_UnstaffedDraftToPublished_IsRefused_AndStaysDraft()
+    {
+        using var db = TestDb.Create();
+        var shift = SeedShift(db, SeedParticipant(db).Id, null, ShiftStatus.Draft);
+
+        var result = await Controller(db).UpdateShift(shift.Id, Put(shift, null, ShiftStatus.Published), default);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal(new[] { "Put someone on this shift before publishing it." }, Assert.IsType<ApiResponse<ShiftDto>>(conflict.Value).Errors);
+        Assert.Equal(ShiftStatus.Draft, (await db.Shifts.AsNoTracking().SingleAsync(s => s.Id == shift.Id)).Status);
+        Assert.Empty(await Notices(db));
+    }
+
+    [Fact]
+    public async Task UpdateShift_AlreadyPublishedUnstaffedShift_SavedAsPublished_StillSucceeds()
+    {
+        using var db = TestDb.Create();
+        var shift = SeedShift(db, SeedParticipant(db).Id, null, ShiftStatus.Published);
+
+        Body(await Controller(db).UpdateShift(shift.Id, Put(shift, null, ShiftStatus.Published), default));
+
+        Assert.Equal(ShiftStatus.Published, (await db.Shifts.AsNoTracking().SingleAsync(s => s.Id == shift.Id)).Status);
+    }
+
+    [Fact]
     public async Task UpdateShift_ChangingTheWorkerOnAPublishedShift_TellsBothPeople()
     {
         using var db = TestDb.Create();

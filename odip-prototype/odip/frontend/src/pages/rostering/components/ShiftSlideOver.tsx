@@ -279,7 +279,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   const statusItems: DropdownItem[] = statusLocked
     ? [{ value: existing!.status, label: lockedWords(existing!.status), disabled: true }]
     // Published is not offered for a shift nobody is on (Publish week holds it until someone is); a shift already set to Published keeps it.
-    : COORDINATOR_SETTABLE_SHIFT_STATUSES.filter(s => s !== 'Published' || staffId || status === 'Published').map(s => ({ value: s, label: s }))
+    : COORDINATOR_SETTABLE_SHIFT_STATUSES.filter(s => s !== 'Published' || staffId || existing?.status === 'Published').map(s => ({ value: s, label: s }))
 
   const warningFindings = findings.filter(f => f.severity === 'Warning')
   // A Warning finding only forces a reason when the backend marks it requiresReason (e.g.
@@ -495,7 +495,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
           >
             <SearchableSelect
               value={staffId ?? ''}
-              onChange={v => setStaffId(v || null)}
+              onChange={v => { setStaffId(v || null); if (!v && status === 'Published' && existing?.status !== 'Published') setStatus('Draft') }}
               disabled={!canWrite || statusLocked}
               placeholder="Unassigned"
               items={[{ value: '', label: 'Unassigned' }, ...sortedStaffOptions]}

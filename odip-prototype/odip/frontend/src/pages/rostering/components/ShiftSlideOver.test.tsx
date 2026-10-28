@@ -314,6 +314,33 @@ describe('ShiftSlideOver status (PP-8)', () => {
     expect(screen.queryByRole('option', { name: 'Published' })).not.toBeInTheDocument()
   })
 
+  it('lets a Published shift with nobody on it be switched to Draft and back to Published', async () => {
+    const user = userEvent.setup()
+    render(<ShiftSlideOver target={{ mode: 'edit', shift: makeUnfilledShift({ status: 'Published', findings: [] }) }} onClose={noop} canWrite participantOptions={participantOptions} staffOptions={staffOptions} />)
+
+    await user.click(screen.getByLabelText('Status'))
+    await user.click(screen.getByRole('option', { name: 'Draft' }))
+    await user.click(screen.getByLabelText('Status'))
+    expect(screen.getByRole('option', { name: 'Published' })).toBeInTheDocument()
+  })
+
+  it('stops offering Published, and does not save it, when the staff are cleared from a Draft that was set to Published', async () => {
+    const user = userEvent.setup()
+    render(<ShiftSlideOver target={{ mode: 'edit', shift: makeShift({ status: 'Draft', findings: [] }) }} onClose={noop} canWrite participantOptions={participantOptions} staffOptions={staffOptions} />)
+
+    await user.click(screen.getByLabelText('Status'))
+    await user.click(screen.getByRole('option', { name: 'Published' }))
+    await user.click(screen.getByLabelText('Staff'))
+    await user.click(screen.getByRole('option', { name: 'Unassigned' }))
+    await user.click(screen.getByLabelText('Status'))
+    expect(screen.queryByRole('option', { name: 'Published' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('option', { name: 'Draft' }))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    const [call] = mockUpdateMutateAsync.mock.calls[0]
+    expect(call.data.status).toBe('Draft')
+  })
+
   it('says a shift stays with its participant on an existing shift, and not on a new one', () => {
     const hint = 'A shift stays with its participant. To roster another participant, add a new shift.'
     const props = { onClose: noop, canWrite: true, participantOptions, staffOptions }

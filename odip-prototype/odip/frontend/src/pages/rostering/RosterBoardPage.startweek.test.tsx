@@ -125,6 +125,8 @@ describe('the Publish banner', () => {
     renderPage()
     expect(screen.queryByText(/not visible to staff yet/)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Publish week' })).not.toBeInTheDocument()
+    expect(screen.getByText('All staffed shifts published')).toBeInTheDocument()
+    expect(screen.queryByText('All published')).not.toBeInTheDocument()
   })
 
   it('a reader sees the banner without Publish week', () => {

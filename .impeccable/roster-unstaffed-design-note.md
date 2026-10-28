@@ -28,4 +28,13 @@ Rule: Publish week acts on staffed Drafts only. An unstaffed Draft stays Draft i
 | staffed Draft whose worker is Blocking | unchanged (counted, blocked line) | unchanged | Publish (server refuses, as today) | unchanged |
 | Published, unstaffed | none | none | no Publish (not a Draft) | Published kept (it is the current value) |
 
-No new colour, motion or component. The third sentence is plain text in the existing ConfirmDialog body; "All published" beside the range still follows the staffed-draft count, as the brief says 0 behaves as today.
+No new colour, motion or component. The third sentence is plain text in the existing ConfirmDialog body; the badge beside the range reads "All staffed shifts published" while unstaffed Drafts are held back, and "All published" only when no Draft is left (FIX2).
+
+## FIX2
+
+Changes from the finish review; no new colour, motion or component.
+
+- **Toolbar label.** The badge beside the week range says "All staffed shifts published" when the week has no staffed Draft but still holds unstaffed Drafts, and "All published" only when no Draft of any kind is left. Same StatusBadge (info tone), same whitespace-nowrap, shrink-0; it is a few words longer, so it is checked at 390.
+- **Confirm copy.** Singular and plural agree with the held shifts as their own group: "1 draft shift goes out to staff. The 1 person on it is notified. 1 other shift has nobody on it yet. It stays unpublished until someone is put on it." Plain text in the existing ConfirmDialog body, no new element.
+- **Slide-over status list.** Published is offered when someone is on the shift, or when the saved status is Published (not the form's current pick). States: unstaffed Published shift switched to Draft keeps Published in the list; staffed Draft with Published picked then staff cleared drops Published and Save does not send it; unstaffed Draft never offers it.
+- **Chip.** A shift with a staffId but no name still counts as staffed (Draft tray and Publish item), matching the count and the server; the visible name falls back as before.

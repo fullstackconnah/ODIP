@@ -1137,6 +1137,13 @@ describe('ShiftChip Draft: tinted, worded, and publishable from its menu (card r
     expect(screen.getByRole('option', { name: 'Publish' })).toBeInTheDocument()
   })
 
+  it('a Draft with a worker id but no name is still staffed: it offers Publish, as the Publish week count does', async () => {
+    const user = userEvent.setup()
+    chipIn({ ...draft, staffName: undefined })
+    await openMenu(user)
+    expect(screen.getByRole('option', { name: 'Publish' })).toBeInTheDocument()
+  })
+
   it('no Publish where the page offers none (a reader, or outside the board)', async () => {
     const user = userEvent.setup()
     chipIn(draft, { publish: undefined })

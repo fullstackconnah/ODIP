@@ -635,6 +635,7 @@ export default function RosterBoardPage() {
           canWrite={canWrite}
           onNewShift={() => setSlideOverTarget({ mode: 'create', serviceDate: weekStart })}
           allPublished={!!board && !unstarted && !weekHasNoShifts && drafts.length === 0}
+          heldBack={heldDrafts > 0}
           newShiftSecondary={unstarted || publishable.length > 0}
         />
       </div>

@@ -371,7 +371,7 @@ describe('RosterBoardPage: Publish week', () => {
     expect(screen.getByText('3 shifts not visible to staff yet')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Publish week' }))
     const dialog = screen.getByRole('alertdialog', { name: 'Publish 17–23 Aug?' })
-    expect(within(dialog).getByText('3 draft shifts go out to staff. The 2 people on them are notified. 1 still needs staff and stays unpublished until someone is on it.')).toBeInTheDocument()
+    expect(within(dialog).getByText('3 draft shifts go out to staff. The 2 people on them are notified. 1 other shift has nobody on it yet. It stays unpublished until someone is put on it.')).toBeInTheDocument()
     await user.click(within(dialog).getByRole('button', { name: 'Publish 3 shifts' }))
 
     expect(h.publish).toHaveBeenCalledWith('2026-08-17')

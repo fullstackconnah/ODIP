@@ -671,6 +671,10 @@ public class RosteringController : ControllerBase
                 "This shift's status can only be changed by starting, finishing, approving or returning it.",
                 ShiftErrorCodes.ShiftStatusLocked));
 
+        // Publish week holds a shift nobody is on until someone is; the single-shift path agrees, for every client. A shift already Published is untouched.
+        if (shift.Status == ShiftStatus.Draft && dto.Status == ShiftStatus.Published && dto.StaffId is null)
+            return Conflict(ApiResponse<ShiftDto>.Fail("Put someone on this shift before publishing it."));
+
         // F6: once a shift has moved past Published (worker has started it), its rostered
         // ServiceDate/StartTime/EndTime/EndsNextDay are locked — the active ShiftCompletion's
         // variance is computed against those values, so editing them out from under an
