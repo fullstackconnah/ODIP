@@ -109,7 +109,7 @@ describe('AgreementsPage bulk actions (real hook)', () => {
     await tickFirst(user)
     await user.click(screen.getByRole('button', { name: 'Renew 1' }))
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Make 1 draft' }))
-    await user.click(await screen.findByRole('button', { name: 'All agreements' }))
+    await user.click(await screen.findByRole('button', { name: 'Back to all agreements' }))
 
     expect(screen.getByTestId('where')).toHaveTextContent('/agreements?show=draft')
     expect(screen.getByRole('radio', { name: 'Draft waiting' })).toBeChecked()

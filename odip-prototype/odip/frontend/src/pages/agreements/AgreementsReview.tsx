@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, TriangleAlert } from 'lucide-react'
+import { TriangleAlert } from 'lucide-react'
 import { useApproveAgreements } from '@/api/hooks'
 import type { AgreementApproveResult, AgreementBulkAction, AgreementBulkResult, AgreementTerm } from '@/api/types'
+import { BackButton } from '@/components/BackButton'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { DataTable, type Column } from '@/components/DataTable'
@@ -142,7 +143,7 @@ export function AgreementsReview({ run, canApprove, onBack }: Props) {
   return (
     <div className="flex flex-col gap-[var(--section-gap)]">
       <div>
-        <Button variant="ghost" size="sm" onClick={onBack}><ArrowLeft className="h-4 w-4" aria-hidden="true" />All agreements</Button>
+        <BackButton onBack={onBack} label="all agreements" variant="link" />
       </div>
 
       <div ref={noticesRef} tabIndex={-1} className="rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] empty:hidden">

@@ -132,9 +132,9 @@ describe('AgreementsReview', () => {
     await waitFor(() => expect(document.activeElement).toHaveClass('focus-visible:ring-2'))
   })
 
-  it('All agreements goes back', async () => {
+  it('Back to all agreements goes back', async () => {
     const { onBack } = show(run())
-    await userEvent.click(screen.getByRole('button', { name: 'All agreements' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Back to all agreements' }))
     expect(onBack).toHaveBeenCalled()
   })
 })

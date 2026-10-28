@@ -35,3 +35,9 @@ The shape brief for PR B is SHAPE.md in the lead's scratchpad (agreements/). Thi
 2. **In-flight copy** (`AgreementActionDialog.tsx`). What: "Making N drafts…" (line and button) uses `makeCount`, matching "Make N drafts"; the progress line counts agreements checked: "Working… n of total agreements checked". Title still counts ticked rows. States: nothing skipped, some skipped, long run (progress line). apple-design: feedback is specific and consistent with the button the person pressed.
 3. **Bar gap** (`AgreementsBulkBar.tsx`). What: drop `mb-3`; parents are already `gap-3`, so the bar sits 12 px above the first row (house card spacing). States: sticky and in-flow bar, unticked and ticked.
 4. **Plural** (`outcomeWords.ts`). "1 needs review", "2 need review". Copy only; the notice and its tones are unchanged.
+
+## CI fix (written before the edit): Back control in the review
+
+What: the review's hand-rolled ghost `Button` with `ArrowLeft` and "All agreements" becomes the house `BackButton` in its in-place form, `<BackButton onBack={onBack} label="all agreements" variant="link" />`. The review is a sub-view switched in place with no route, which is what `onBack` and `link` are for.
+Where: `AgreementsReview.tsx`, the top row above the heading. `ArrowLeft` leaves the import (only `BackButton` may draw a Back arrow: `detailScaffolding.test.ts`).
+States: the visible text is "Back", the accessible name "Back to all agreements", as for every Back; hover, focus ring and tap size come from the `link` variant. Clicking still calls `onBack`. The review's other actions, focus handling and the bulk flow are unchanged.
