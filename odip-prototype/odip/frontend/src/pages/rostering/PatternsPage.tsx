@@ -47,7 +47,7 @@ function PatternRowActions({
   const worker = workerOfPairLabel(pattern)
   const which = `${pattern.participantName}'s ${pattern.dayOfWeek} ${formatShiftRange(pattern.startTime, pattern.endTime, pattern.endsNextDay)} pattern${worker ? ` (${worker})` : ''}`
   return (
-    <div className="flex items-center justify-end gap-1">
+    <div className="flex items-center justify-end gap-1 pointer-coarse:gap-2">
       <Button
         variant="ghost"
         size="sm"
