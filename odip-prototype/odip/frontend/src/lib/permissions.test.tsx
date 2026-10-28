@@ -533,7 +533,7 @@ describe('usePermissions.canCorrectInvoices', () => {
 
   function verdictFor(role: UserRole, viewingTenant?: string) {
     setUserRole(role)
-    if (viewingTenant) localStorage.setItem('odip_viewing_tenant', viewingTenant)
+    if (viewingTenant) sessionStorage.setItem('odip_viewing_tenant', viewingTenant)
     const { unmount } = render(<CorrectProbe />)
     const verdict = screen.getByTestId('can-correct-invoices').textContent
     unmount()

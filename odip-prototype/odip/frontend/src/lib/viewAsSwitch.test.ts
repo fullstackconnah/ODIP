@@ -21,27 +21,29 @@ afterEach(() => {
 describe('switchViewAndReload', () => {
   it('writes the switch and reloads, so the next page reads the new organisation', () => {
     stubReload()
-    localStorage.setItem('odip_viewing_tenant', 'tenant-a')
-    switchViewAndReload(() => localStorage.setItem('odip_viewing_tenant', 'tenant-b'))
+    sessionStorage.setItem('odip_viewing_tenant', 'tenant-a')
+    switchViewAndReload(() => sessionStorage.setItem('odip_viewing_tenant', 'tenant-b'))
     expect(window.location.reload).toHaveBeenCalledTimes(1)
-    expect(localStorage.getItem('odip_viewing_tenant')).toBe('tenant-b')
+    expect(sessionStorage.getItem('odip_viewing_tenant')).toBe('tenant-b')
   })
 
   it('puts the old organisation and user back when the reload was cancelled and the person carries on here', async () => {
     stubReload()
-    localStorage.setItem('odip_viewing_tenant', 'tenant-a')
-    localStorage.setItem('odip_user', '{"id":"sa"}')
+    sessionStorage.setItem('odip_viewing_tenant', 'tenant-a')
+    localStorage.setItem('odip_last_tenant', 'tenant-a')
     switchViewAndReload(() => {
-      localStorage.setItem('odip_viewing_tenant', 'tenant-b')
-      localStorage.setItem('odip_viewing_user', 'user-b')
-      localStorage.setItem('odip_user', '{"id":"user-b"}')
+      sessionStorage.setItem('odip_viewing_tenant', 'tenant-b')
+      sessionStorage.setItem('odip_viewing_user', 'user-b')
+      sessionStorage.setItem('odip_viewing_profile', '{"id":"user-b"}')
+      localStorage.setItem('odip_last_tenant', 'tenant-b')
     })
 
     window.dispatchEvent(new Event('pointerdown'))   // the first press after "Stay", before any button acts on it
 
-    expect(localStorage.getItem('odip_viewing_tenant')).toBe('tenant-a')
-    expect(localStorage.getItem('odip_viewing_user')).toBeNull()
-    expect(localStorage.getItem('odip_user')).toBe('{"id":"sa"}')
+    expect(sessionStorage.getItem('odip_viewing_tenant')).toBe('tenant-a')
+    expect(sessionStorage.getItem('odip_viewing_user')).toBeNull()
+    expect(sessionStorage.getItem('odip_viewing_profile')).toBeNull()
+    expect(localStorage.getItem('odip_last_tenant')).toBe('tenant-a')
     const headers = await nextRequestHeaders()
     expect(headers['X-View-As-Tenant']).toBe('tenant-a')
     expect(headers['X-View-As-User']).toBeUndefined()
@@ -49,25 +51,25 @@ describe('switchViewAndReload', () => {
 
   it('restores on a key press too, and only once', () => {
     stubReload()
-    localStorage.setItem('odip_viewing_tenant', 'tenant-a')
-    switchViewAndReload(() => localStorage.setItem('odip_viewing_tenant', 'tenant-b'))
+    sessionStorage.setItem('odip_viewing_tenant', 'tenant-a')
+    switchViewAndReload(() => sessionStorage.setItem('odip_viewing_tenant', 'tenant-b'))
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
-    expect(localStorage.getItem('odip_viewing_tenant')).toBe('tenant-a')
+    expect(sessionStorage.getItem('odip_viewing_tenant')).toBe('tenant-a')
 
-    localStorage.setItem('odip_viewing_tenant', 'tenant-c')   // a later change of its own
+    sessionStorage.setItem('odip_viewing_tenant', 'tenant-c')   // a later change of its own
     window.dispatchEvent(new Event('pointerdown'))
-    expect(localStorage.getItem('odip_viewing_tenant')).toBe('tenant-c')
+    expect(sessionStorage.getItem('odip_viewing_tenant')).toBe('tenant-c')
   })
 })
 
 describe('switchViewAndReload when the reload goes ahead', () => {
   it('puts nothing back once the page hides, even if a press reaches it while the next page loads', () => {
     stubReload()
-    localStorage.setItem('odip_viewing_tenant', 'tenant-a')
-    switchViewAndReload(() => localStorage.setItem('odip_viewing_tenant', 'tenant-b'))
+    sessionStorage.setItem('odip_viewing_tenant', 'tenant-a')
+    switchViewAndReload(() => sessionStorage.setItem('odip_viewing_tenant', 'tenant-b'))
     window.dispatchEvent(new Event('pagehide'))
     window.dispatchEvent(new Event('pointerdown'))
-    expect(localStorage.getItem('odip_viewing_tenant')).toBe('tenant-b')
+    expect(sessionStorage.getItem('odip_viewing_tenant')).toBe('tenant-b')
   })
 })
 
@@ -75,8 +77,8 @@ describe('switchViewAndReload when the first act after staying is a bare click o
   // A screen reader in browse mode, voice control or a scripted .click() sends a click with no pointerdown or keydown before it.
   it('puts the old organisation back before a bare click on Save sends anything', async () => {
     stubReload()
-    localStorage.setItem('odip_viewing_tenant', 'tenant-a')
-    switchViewAndReload(() => localStorage.setItem('odip_viewing_tenant', 'tenant-b'))
+    sessionStorage.setItem('odip_viewing_tenant', 'tenant-a')
+    switchViewAndReload(() => sessionStorage.setItem('odip_viewing_tenant', 'tenant-b'))
     const save = document.createElement('button')
     let sent: Promise<Record<string, string>> | null = null
     save.addEventListener('click', () => { sent = nextRequestHeaders() })
@@ -90,11 +92,11 @@ describe('switchViewAndReload when the first act after staying is a bare click o
 
   it('puts it back before a form submits', () => {
     stubReload()
-    localStorage.setItem('odip_viewing_tenant', 'tenant-a')
-    switchViewAndReload(() => localStorage.setItem('odip_viewing_tenant', 'tenant-b'))
+    sessionStorage.setItem('odip_viewing_tenant', 'tenant-a')
+    switchViewAndReload(() => sessionStorage.setItem('odip_viewing_tenant', 'tenant-b'))
     const form = document.createElement('form')
     let seen: string | null = null
-    form.addEventListener('submit', e => { e.preventDefault(); seen = localStorage.getItem('odip_viewing_tenant') })
+    form.addEventListener('submit', e => { e.preventDefault(); seen = sessionStorage.getItem('odip_viewing_tenant') })
     document.body.appendChild(form)
 
     form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))

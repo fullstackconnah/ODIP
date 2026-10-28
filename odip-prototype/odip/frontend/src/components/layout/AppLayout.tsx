@@ -32,6 +32,7 @@ import { Wordmark } from '@/components/Wordmark'
 import { useUiPreferences } from '@/hooks/useUiPreferences'
 import { RailFlyout } from '@/components/layout/RailFlyout'
 import { useRailTooltip, type RailTipProps } from '@/components/layout/RailTooltip'
+import { currentProfile, getViewAs, clearViewAs } from '@/lib/viewAs'
 
 /**
  * Mobile bottom-nav cell: icon over label, 42px tall. The cells share the row in equal widths (`flex-1`), so however many pages the
@@ -502,11 +503,10 @@ export default function AppLayout() {
   const barItems = barEntries(resolvedNav, barAudience).map(entry => toBarItem(entry, location.pathname, counts))
   const closeDrawer = () => setSidebarOpen(false)
 
-  const user = JSON.parse(localStorage.getItem('odip_user') || '{}')
-  const isSuperAdmin = permissions.isSuperAdmin || !!localStorage.getItem('odip_superadmin_user')
-  const viewingUserId = localStorage.getItem('odip_viewing_user')
-  const viewingTenantId = localStorage.getItem('odip_viewing_tenant')
-  const savedAdminUser = JSON.parse(localStorage.getItem('odip_superadmin_user') || '{}')
+  const user = currentProfile() as { fullName?: string; role?: string; tenantName?: string }
+  const viewingUserId = getViewAs('odip_viewing_user')
+  const isSuperAdmin = permissions.isSuperAdmin || !!viewingUserId
+  const viewingTenantId = getViewAs('odip_viewing_tenant')
 
   const initial = (user.fullName || 'A').charAt(0).toUpperCase()
 
@@ -707,11 +707,7 @@ export default function AppLayout() {
             </div>
             <button
               onClick={() => {
-                if (savedAdminUser.role) {
-                  localStorage.setItem('odip_user', JSON.stringify(savedAdminUser))
-                  localStorage.removeItem('odip_superadmin_user')
-                }
-                localStorage.removeItem('odip_viewing_user')
+                clearViewAs('odip_viewing_user')
                 window.location.reload()
               }}
               className="text-xs text-[var(--color-on-warning-container)] hover:opacity-80 font-medium underline underline-offset-2"

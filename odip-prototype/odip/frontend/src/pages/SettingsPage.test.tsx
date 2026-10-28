@@ -500,7 +500,7 @@ describe('SettingsPage — the shell from md: the rail, the open section and the
   })
 
   it('shows a SuperAdmin viewing as someone only that person: no sign-in name or organisation of their own', () => {
-    localStorage.setItem('odip_viewing_user', 'user-2')
+    sessionStorage.setItem('odip_viewing_user', 'user-2')
     try {
       renderSettingsPage()
       const profile = screen.getByRole('region', { name: 'Profile' })
@@ -508,7 +508,7 @@ describe('SettingsPage — the shell from md: the rail, the open section and the
       expect(within(profile).queryByText('Signed in as')).not.toBeInTheDocument()
       expect(within(profile).queryByText('Organisation')).not.toBeInTheDocument()
     } finally {
-      localStorage.removeItem('odip_viewing_user')
+      sessionStorage.removeItem('odip_viewing_user')
     }
   })
 

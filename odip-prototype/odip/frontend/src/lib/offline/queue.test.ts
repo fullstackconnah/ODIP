@@ -234,7 +234,7 @@ describe('offline queue', () => {
     await q.replay()
     expect(sent).toEqual([])
     localStorage.setItem('odip_user', JSON.stringify({ id: 'u1' }))
-    localStorage.setItem('odip_viewing_tenant', 'tenant-b')
+    sessionStorage.setItem('odip_viewing_tenant', 'tenant-b')
     expect(q.getSnapshot()).toEqual([])
     await q.replay()
     expect(sent).toEqual([])
