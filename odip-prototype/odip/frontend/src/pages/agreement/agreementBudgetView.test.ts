@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { agreementCheck, agreementPeriod, agreementPool, noBudgetCheck } from '@/test/fixtures/budgets'
+import { agreementCheck, agreementPeriod, agreementPool, noBudgetCheck, otherFundedCheck } from '@/test/fixtures/budgets'
 import { agreementBudgetView, type AgreementCheckState } from './agreementBudgetView'
 
 // The adapter from the agreement check's DTO to the bar's view-model. What these tests hold: it maps the server's figures and verdicts without adding, comparing or ranking anything; "no plan" is its own
@@ -114,6 +114,16 @@ describe('agreementBudgetView', () => {
     const view = agreementBudgetView('p-1', state({ data: noBudgetCheck({ noBudgetReason: 'NotStarted', planStart: '2027-01-01' }), onRecord: vi.fn() }))
 
     expect(view?.noBudgetAction).toEqual({ label: 'Open the Funding tab', to: '/participants/p-1?tab=funding' })
+  })
+
+  it('maps a participant funded another way with no action to record or open, whether or not the page can record a budget', () => {
+    for (const onRecord of [undefined, vi.fn()]) {
+      const view = agreementBudgetView('p-1', state({ data: otherFundedCheck({ planStart: '2027-01-01' }), onRecord }))
+
+      expect(view).toEqual({
+        status: 'none', figures: { visible: true }, pools: [], notInARecordedPool: null, outsideThePlan: null, refreshing: false, noBudgetReason: 'OtherFunded',
+      })
+    }
   })
 
   it('reads an answer with no reason, from an older server, as nothing recorded', () => {

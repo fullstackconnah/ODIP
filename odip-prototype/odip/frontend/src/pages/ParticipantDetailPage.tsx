@@ -20,7 +20,7 @@ import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { PageState } from '@/components/PageState'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { FileEdit, Pencil, Download, Loader2, Link2, Link2Off, FileText, ClipboardCheck } from 'lucide-react'
-import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import AuditHistoryTab from '@/components/AuditHistoryTab'
 import { usePermissions } from '@/lib/permissions'
 import { DirtyEditsContext } from './participant-detail/dirtyEdits'
@@ -128,7 +128,23 @@ export default function ParticipantDetailPage() {
   const holds = useRef(0)
   const dirtyEdits = useMemo(() => ({ hold: () => { holds.current++; let on = true; return () => { if (on) { on = false; holds.current-- } } } }), [])
   const [pendingSwitch, setPendingSwitch] = useState<(() => void) | null>(null)
-  const guarded = (go: () => void) => { if (holds.current > 0) setPendingSwitch(() => go); else go() }
+  // The strip that parked the switch, and (once Discard is pressed) the view it left. When the dialog closes, focus goes to that strip's selected chip:
+  // the current one after Keep editing (Tabs had moved focus to the neighbour or the clicked chip), the chosen one after Discard.
+  const refocus = useRef<{ strip: HTMLElement | null; from: string | null } | null>(null)
+  const guarded = (go: () => void) => {
+    if (holds.current === 0) return go()
+    refocus.current = { strip: document.activeElement?.closest<HTMLElement>('[role="tablist"]') ?? null, from: null }
+    setPendingSwitch(() => go)
+  }
+  const view = `${tab}/${section}`
+  // An effect, not onCancel: the dialog's own focus-return cleanup runs first in the same commit, so this one wins. After Discard the router commits the
+  // new selection later than the dialog closing, so the effect waits for the view to change and then focuses the chip now selected.
+  useEffect(() => {
+    const r = refocus.current
+    if (pendingSwitch !== null || !r || r.from === view) return
+    r.strip?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.focus()
+    refocus.current = null
+  }, [pendingSwitch, view])
   const stripRef = useRef<HTMLDivElement>(null)
   const { data: alertsData } = useParticipantAlerts(id, canViewAlerts)
   // DOC-01 — Documents header buttons. Hooks called unconditionally, ahead of the isLoading/!p
@@ -242,10 +258,10 @@ export default function ParticipantDetailPage() {
           Plan type: {managementLabel(p.planType)}
           <SeeSectionLink tab="about" hash="ndis-plan" section="NDIS plan" canEdit={canWriteParticipantDetails} />
         </p>
-        <FundingTab participantId={id!} planType={p.planType} />
+        <FundingTab participantId={id!} planType={p.planType} otherFunded={p.fundingSource === 'Other'} />
       </>
     ), { wide: true, srHeading: true }),
-    card('claims', 'Claims', true, <ClaimsTab participantId={id!} canWrite={canWrite} />, { wide: true, srHeading: true }),
+    card('claims', 'Claims', true, <ClaimsTab participantId={id!} canWrite={canWrite} otherFunded={p.fundingSource === 'Other'} funder={p.fundingOrganisation} />, { wide: true, srHeading: true }),
   ]
   const recordsCards = [
     card('notes', 'Notes', true, <NotesTab participantId={id} />, { wide: true, srHeading: true }),
@@ -429,7 +445,7 @@ export default function ParticipantDetailPage() {
       <ConfirmDialog
         open={pendingSwitch !== null}
         onCancel={() => setPendingSwitch(null)}
-        onConfirm={() => { pendingSwitch?.(); setPendingSwitch(null) }}
+        onConfirm={() => { if (refocus.current) refocus.current.from = view; pendingSwitch?.(); setPendingSwitch(null) }}
         title="Discard changes?"
         message="You have unsaved changes in this section. Discard them?"
         confirmLabel="Discard"

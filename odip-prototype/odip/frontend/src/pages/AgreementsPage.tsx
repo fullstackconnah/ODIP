@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { CalendarClock, FileText } from 'lucide-react'
 import { useAgreements, useApproveAgreements } from '@/api/hooks'
-import type { AgreementApproveResult, AgreementRow } from '@/api/types'
+import type { AgreementApproveResult, AgreementBulkAction, AgreementRow } from '@/api/types'
 import { DataTable, type Column } from '@/components/DataTable'
 import { EmptyState } from '@/components/EmptyState'
 import { NoticesRegion } from '@/components/NoticesRegion'
@@ -16,6 +16,8 @@ import { formatServiceDate } from '@/lib/planQuote'
 import { plural } from '@/lib/format'
 import { queryPhase } from '@/lib/queryPhase'
 import { formatCurrency } from '@/lib/utils'
+import { AgreementActionDialog, type BulkRun } from './agreements/AgreementActionDialog'
+import { AgreementsReview } from './agreements/AgreementsReview'
 import { AgreementsBulkBar } from './agreements/AgreementsBulkBar'
 import { ApproveAgreementsDialog, type ApprovePhase, type ApproveStopped } from './agreements/ApproveAgreementsDialog'
 import { MAX_SELECTED, approveTargets, filterRows, listOptions, parseShow, statusBadge, termView, type Show } from './agreements/agreementRows'
@@ -126,6 +128,8 @@ export default function AgreementsPage() {
   const [dialog, setDialog] = useState<{ open: boolean; phase: ApprovePhase; progress: number; error: string | null; refused: boolean; results: AgreementApproveResult[]; stopped: ApproveStopped | null }>(
     { open: false, phase: 'confirm', progress: 0, error: null, refused: false, results: [], stopped: null })
   const [count, setCount] = useState(0)
+  const [action, setAction] = useState<AgreementBulkAction | null>(null)
+  const [review, setReview] = useState<BulkRun | null>(null)
   const onProgress = useCallback((done: number) => setDialog(d => ({ ...d, progress: done })), [])
   const approve = useApproveAgreements(onProgress)
 
@@ -151,6 +155,9 @@ export default function AgreementsPage() {
       stopped: run.stopped ? { done: run.results.length, total: sent.length, notSent: run.stopped.notSent, noReply } : null,
     }))
   }
+  const chosen = useMemo(() => shown.filter(r => selected.has(r.participantId)), [shown, selected])
+  // Back from the review: the list again, on the drafts it just made.
+  const showDrafts = () => { setAction(null); setReview(null); setSelected(new Set()); setParam('show', 'draft') }
   const stripRef = useRef<HTMLDivElement>(null)
   // Keep the chosen Show option in view inside the strip (a ?show= link, a tap near the edge), as Tabs does; only the strip scrolls, never the page.
   useEffect(() => {
@@ -177,12 +184,13 @@ export default function AgreementsPage() {
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
-      <PageHeader title="Agreements" subtitle="Every participant's service agreement. Tick the ones with a draft waiting to approve them together." />
+      <PageHeader title="Agreements" subtitle="Every participant's service agreement. Tick agreements to renew, reprice or extend them, or approve the drafts waiting." />
 
       <div ref={noticesRef} tabIndex={-1} className="outline-none empty:hidden">
         <NoticesRegion notices={notices} onDismiss={dismiss} className="empty:hidden" />
       </div>
 
+      {review ? <AgreementsReview run={review} canApprove={canApprove} onBack={showDrafts} /> : <>
       {phase !== 'ready' || rows.length > 0 ? (
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-end gap-3">
@@ -205,29 +213,37 @@ export default function AgreementsPage() {
             <AgreementsBulkBar
               selected={selected.size} approvable={targets.length} canApprove={canApprove} shown={shown.length} allShownSelected={allShownSelected}
               onToggleShown={() => setSelected(allShownSelected ? new Set() : new Set(shown.slice(0, MAX_SELECTED + 1).map(r => r.participantId)))}
-              onClear={() => setSelected(new Set())}
+              onClear={() => setSelected(new Set())} onAction={setAction}
               onApprove={() => setDialog({ open: true, phase: 'confirm', progress: 0, error: null, refused: false, results: [], stopped: null })}
             />
           )}
+          {/* The bar sticks below xl, and a sticky element holds only inside its parent: so the table shares this one. */}
+          {phase === 'ready' && shown.length === 0 ? (
+            <EmptyState icon={CalendarClock} size="inline" title={emptyWords} />
+          ) : (
+            <DataTable
+              data={shown} columns={columns} keyField="participantId" sortable={false}
+              loading={phase === 'loading'}
+              error={phase === 'error'} onRetry={() => query.refetch()}
+              selectable selectedRows={selected} onSelectionChange={setSelected}
+              onRowClick={row => navigate(`/participants/${row.participantId}/agreement-draft`)}
+            />
+          )}
         </div>
-      ) : null}
-
-      {phase === 'ready' && rows.length === 0 ? (
+      ) : (
         <EmptyState
           icon={FileText} title="No agreements yet"
           description="A participant shows here once their first service agreement is saved. Write one from the participant's page."
         />
-      ) : phase === 'ready' && shown.length === 0 ? (
-        <EmptyState icon={CalendarClock} size="inline" title={emptyWords} />
-      ) : (
-        <DataTable
-          data={shown} columns={columns} keyField="participantId" sortable={false}
-          loading={phase === 'loading'}
-          error={phase === 'error'} onRetry={() => query.refetch()}
-          selectable={canApprove} selectedRows={selected} onSelectionChange={setSelected}
-          onRowClick={row => navigate(`/participants/${row.participantId}/agreement-draft`)}
+      )}
+
+      {action && (
+        <AgreementActionDialog
+          key={action} action={action} selected={chosen} onClose={() => setAction(null)} onShowDrafts={showDrafts}
+          onDone={run => { setAction(null); setSelected(new Set()); setReview(run) }}
         />
       )}
+      </>}
 
       <ApproveAgreementsDialog
         open={dialog.open} phase={dialog.phase} count={dialog.phase === 'confirm' ? targets.length : count} skipped={skipped} progress={dialog.progress}

@@ -221,7 +221,7 @@ public class AgreementApproveBatchTests
         var d1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
         var d2 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, participantId: p2);
         var d3 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, participantId: p3);
-        await using var db = NewDb(f.DbName, false, new AdvanceAfterApproval(f.Clock, ServiceAgreementsController.BatchBudget + TimeSpan.FromSeconds(1)));
+        await using var db = NewDb(f.DbName, false, new AdvanceAfterApproval(f.Clock, AgreementBulkService.Budget + TimeSpan.FromSeconds(1)));
         var approval = new ServiceAgreementApprovalService(db, new RosterPlacementGate(), new RosterShiftGenerator(), clock: f.Clock);
 
         var (status, data) = await PostAsync(Controller(db, f, approval: approval), Batch((f.ParticipantId, d1.Id), (p2, d2.Id), (p3, d3.Id)));

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { apiGet, apiPostRaw, apiPutRaw, apiPatchRaw, apiDeleteRaw, apiClient } from '../client'
 import { toTruncatableList } from './pagedList'
+import { refreshBudgetFigures } from './funding-ledger'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { isSectionChanged } from '@/lib/sectionConflict'
 import { SCALAR_GROUP_KEYS, type ScalarGroupKey } from '../types/participant-patch'
@@ -152,6 +153,8 @@ export function useSaveParticipantIntake() {
       qc.invalidateQueries({ queryKey: ['participant-contact-roles', vars.id] })
       qc.invalidateQueries({ queryKey: ['participant-risk-entries', vars.id] })
       qc.invalidateQueries({ queryKey: ['participant-inquiries'] })
+      // The funding source decides whether the NDIS ledger counts this participant.
+      refreshBudgetFigures(qc, [vars.id])
     },
   })
 }
@@ -260,6 +263,8 @@ export function usePatchParticipant() {
       // The checklist's "Profile details" item and the worklist are derived from these fields.
       qc.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
       qc.invalidateQueries({ queryKey: ['onboarding', vars.id] })
+      // The funding source decides whether the NDIS ledger counts this participant.
+      refreshBudgetFigures(qc, [vars.id])
     },
   })
 }

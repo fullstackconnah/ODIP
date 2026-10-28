@@ -32,7 +32,7 @@ export function FixedListFrame<T>({
 
   if (answered.length === 0) {
     if (!canAdd || rows.length === 0) return <p className="text-[13px] text-[var(--color-muted-foreground)]">Not recorded: {title}</p>
-    return <NotRecordedFold summary={title}>{children(rows)}{count}</NotRecordedFold>
+    return <NotRecordedFold summary={title} defaultOpen>{children(rows)}{count}</NotRecordedFold>
   }
 
   function toggle() {

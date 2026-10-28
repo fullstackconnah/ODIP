@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Odip.Api.RateLimiting;
 using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
@@ -30,15 +31,20 @@ public class ServiceAgreementsController : ControllerBase
     private readonly PlanPricingService _pricing;
     private readonly ServiceAgreementApprovalService _approval;
     private readonly ILogger<ServiceAgreementsController>? _logger;
+    private readonly AgreementBulkService _bulk;
+    private readonly PlanQuoteConcurrencyLimiter? _saveLimiter;
 
-    public ServiceAgreementsController(OdipDbContext db, ICurrentTenant tenant, TimeProvider? clock = null, ServiceAgreementApprovalService? approval = null, PlanPricingService? pricing = null, ILogger<ServiceAgreementsController>? logger = null)
+    public ServiceAgreementsController(OdipDbContext db, ICurrentTenant tenant, TimeProvider? clock = null, ServiceAgreementApprovalService? approval = null, PlanPricingService? pricing = null, ILogger<ServiceAgreementsController>? logger = null,
+        AgreementBulkService? bulk = null, PlanQuoteConcurrencyLimiter? saveLimiter = null)
     {
+        _saveLimiter = saveLimiter;
         _db = db;
         _tenant = tenant;
         _clock = clock ?? TimeProvider.System;
         _pricing = pricing ?? new PlanPricingService(db);
         _approval = approval ?? new ServiceAgreementApprovalService(db, new RosterPlacementGate(), pricing: _pricing);
         _logger = logger;
+        _bulk = bulk ?? new AgreementBulkService(db, pricing: _pricing, clock: _clock, log: null);
     }
 
     /// <summary>The agreements ending within 60 days, or ended with no successor approved, of the participants who can receive services (the aggregate alerts' rule), soonest end first: the Participants register's Agreements ending view.</summary>
@@ -126,7 +132,7 @@ public class ServiceAgreementsController : ControllerBase
         var today = await ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct);
 
         var results = new List<AgreementApproveResultDto>();
-        var deadline = _clock.GetUtcNow() + BatchBudget;
+        var deadline = _clock.GetUtcNow() + AgreementBulkService.Budget;
         foreach (var item in items)
         {
             string outcome; List<string> reasons = [];
@@ -157,8 +163,41 @@ public class ServiceAgreementsController : ControllerBase
         return Ok(ApiResponse<List<AgreementApproveResultDto>>.Ok(results));
     }
 
-    /// <summary>Wall time the items of one batch may use before the rest are answered Busy.</summary>
-    internal static readonly TimeSpan BatchBudget = TimeSpan.FromSeconds(40);
+    /// <summary>
+    /// Renews, reprices or extends up to <see cref="MaxItems"/> agreements in series, each as a Draft revision (nothing is approved). One answer per participant, in the order sent. The request holds one of the
+    /// organisation's save permits throughout, as a single save does: a busy organisation gets 429 and nothing is written.
+    /// </summary>
+    [HttpPost("bulk")]
+    [RequestSizeLimit(8_192)]
+    [EnableRateLimiting("api")]
+    public async Task<ActionResult<ApiResponse<List<BulkItem>>>> Bulk(AgreementBulkRequestDto dto, CancellationToken ct)
+    {
+        if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<List<BulkItem>>.Fail("A tenant context is required."));
+        var ids = (dto?.ParticipantIds ?? []).Distinct().ToList();
+        if (ids.Count is 0 or > MaxItems) return BadRequest(ApiResponse<List<BulkItem>>.Fail($"Select between 1 and {MaxItems} agreements."));
+        var action = dto!.Action;
+        if (action is not ("renew" or "reprice" or "extend")) return BadRequest(ApiResponse<List<BulkItem>>.Fail("Choose renew, reprice or extend."));
+        if (action == "extend" && dto.EndDate is null) return BadRequest(ApiResponse<List<BulkItem>>.Fail("Choose the new end date."));
+        PriceListRef? priceList = null;
+        if (action == "reprice")
+        {
+            priceList = (await AgreementPriceLists.ListAsync(_db, ct)).FirstOrDefault(l => l.Version == dto.PriceList);
+            if (priceList is null) return BadRequest(ApiResponse<List<BulkItem>>.Fail("Choose a price list."));
+        }
+        var caller = Caller();
+        if (action == "renew" && !await ServiceAgreementApprovalService.MayApproveAsync(_pricing, tenantId, caller, ct))
+            return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<List<BulkItem>>.Fail("Your role cannot renew agreements in your organisation. An Admin can change who may approve in Settings, Plan pricing."));
+
+        using var lease = _saveLimiter is not null ? _saveLimiter.TryEnter("save:tenant:" + tenantId.ToString("N")) : null;
+        if (lease is { IsAcquired: false })
+        {
+            Response.Headers.RetryAfter = "1";
+            return StatusCode(StatusCodes.Status429TooManyRequests, ApiResponse<List<BulkItem>>.Fail(ServiceAgreementDraftsController.SaveBusyMessage));
+        }
+
+        var actor = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unknown";
+        return Ok(ApiResponse<List<BulkItem>>.Ok(await _bulk.RunAsync(tenantId, action, ids, dto.EndDate, priceList, caller, actor, ct)));
+    }
 
     private const string NotAnApproverWords = "Your role cannot approve agreements in your organisation. An Admin can change who may in Settings, Plan pricing.";
 

@@ -226,10 +226,10 @@ describe('ParticipantAdlAssessmentsSection — fixed list (T9)', () => {
     expect(screen.queryByRole('button', { name: 'Add an assessment' })).not.toBeInTheDocument()
   })
 
-  it('with nothing assessed: an editor gets a closed fold holding the rows, a viewer one plain line', () => {
+  it('with nothing assessed: an editor gets an open fold holding the rows, a viewer one plain line', () => {
     const { unmount } = render(<ParticipantAdlAssessmentsSection participantId="participant-1" />)
     const fold = screen.getByText('Not recorded: Daily living').closest('details')!
-    expect(fold).not.toHaveAttribute('open')
+    expect(fold).toHaveAttribute('open')
     expect(fold).toContainElement(screen.getByText('Dressing'))
     expect(screen.getByText('20 of 20 not assessed')).toBeInTheDocument()
     unmount()

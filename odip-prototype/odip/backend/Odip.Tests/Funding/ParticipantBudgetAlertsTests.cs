@@ -70,6 +70,21 @@ public class ParticipantBudgetAlertsTests
     // ── The status alerts ───────────────────────────────────────────────────
 
     [Fact]
+    public async Task AnOtherFundedParticipantWhoseShiftsWouldBeOverTheirPlan_RaisesNoBudgetAlert()
+    {
+        using var s = Setup.Create();
+        var other = s.Kit.SeedParticipant(first: "Olive", last: "Other");
+        OctoberPlan(s.Kit, other, 8000m);
+        ClaimOf(s.Kit, other, TripClaimStatus.Paid, 9000m, D(2026, 10, 2));
+        other.FundingSource = ParticipantFundingSource.Other;
+        s.Kit.Db.SaveChanges();
+
+        var all = await s.Service.GetAlertsAsync(participantId: null, activeOnly: true);
+
+        Assert.Empty(all.Single(p => p.ParticipantId == other.Id).Alerts);
+    }
+
+    [Fact]
     public async Task Over_ByClaimedMoney_RaisesTheCriticalAlert_AndOnlyForTheParticipantWhoIsOver()
     {
         using var s = Setup.Create();

@@ -99,10 +99,10 @@ describe('AgreementsPage', () => {
     }
   })
 
-  it('gives a role that cannot approve no checkboxes and no Approve', () => {
+  it('gives a role that cannot approve the draft actions but no Approve', () => {
     mockUseAgreements.mockReturnValue(ready(rows, false))
     renderPage()
-    expect(screen.queryAllByRole('checkbox')).toHaveLength(0)
+    expect(screen.queryAllByRole('checkbox').length).toBeGreaterThan(0) // Renew, Reprice and Extend need no approver
     expect(screen.queryByRole('button', { name: /^Approve/ })).not.toBeInTheDocument()
   })
 
@@ -266,9 +266,38 @@ describe('AgreementsBulkBar', () => {
     expect(item).toHaveTextContent('None of the ticked rows has a draft waiting.')
   })
 
+  const RENEW_REASON = "Your role can't renew agreements. An Admin can change who may approve in Settings, Plan pricing."
+  it('turns Renew off with the reason for a role that cannot approve, and leaves Reprice and Extend on', () => {
+    const props = { selected: 2, approvable: 0, shown: 4, allShownSelected: false, onToggleShown: vi.fn(), onClear: vi.fn(), onApprove: vi.fn(), onAction: vi.fn() }
+    const { unmount } = render(<AgreementsBulkBar {...props} canApprove={false} />)
+    expect(screen.getByRole('button', { name: 'Renew 2' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Reprice to…' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Extend to…' })).toBeEnabled()
+    expect(screen.getByText(RENEW_REASON)).toBeInTheDocument()
+    unmount()
+    render(<AgreementsBulkBar {...props} canApprove />)
+    expect(screen.getByRole('button', { name: 'Renew 2' })).toBeEnabled()
+    expect(screen.queryByText(RENEW_REASON)).not.toBeInTheDocument()
+  })
+
+  it('on a phone gives the Renew item the reason when the role cannot approve', async () => {
+    mockNarrow.mockReturnValue(true)
+    render(<AgreementsBulkBar selected={2} approvable={0} canApprove={false} shown={4} allShownSelected={false} onToggleShown={vi.fn()} onClear={vi.fn()} onApprove={vi.fn()} onAction={vi.fn()} />)
+    await userEvent.click(screen.getByRole('button', { name: /Actions/ }))
+    expect(screen.getByRole('option', { name: /Renew 2/ })).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByRole('option', { name: /Renew 2/ })).toHaveTextContent(RENEW_REASON)
+    expect(screen.getByRole('option', { name: /Reprice/ })).not.toHaveAttribute('aria-disabled', 'true')
+  })
+
   const bar = (selected: number) => (
     <AgreementsBulkBar selected={selected} approvable={selected} canApprove shown={200} allShownSelected={false} onToggleShown={vi.fn()} onClear={vi.fn()} onApprove={vi.fn()} />
   )
+  it('sticks under the app header below xl and stays in flow from xl up', () => {
+    render(bar(2))
+    const region = screen.getByRole('region', { name: 'Selection' })
+    expect(region).toHaveClass('max-xl:sticky', 'max-xl:top-[calc(3rem+var(--safe-top))]')
+  })
+
   it('refuses more than 100 ticked rows, in words', () => {
     render(bar(101))
     expect(screen.getByText('Choose 100 or fewer (101 selected).')).toBeInTheDocument()

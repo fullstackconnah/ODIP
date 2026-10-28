@@ -67,6 +67,9 @@ export const ROLLED_OVER_LEGEND = 'A bent arrow beside Available means it includ
 /** What the bar says when the participant has no budget recorded (it links to the Funding tab where one is recorded). */
 export const AGREEMENT_NO_BUDGET = 'No budget recorded for this participant, so there is nothing to compare the agreement against.'
 
+/** What the bar says when the participant is funded another way: no NDIS budget applies, whatever plan is recorded, and there is nothing to record. */
+export const AGREEMENT_OTHER_FUNDED = 'This participant is funded another way, so there is no NDIS budget to compare the agreement against.'
+
 /**
  * The same words when the participant's recorded plan has ended (the Funding tab shows that plan, so the bar must not read as if none were ever recorded): that the plan ended and when, then why
  * there is no current budget to compare. `endedOn` is the plan's last day, already written ("30 Jun 2026").
