@@ -11,13 +11,13 @@ import type { WizardStepDef } from '@/components/wizard/types'
 import { apiErrorCode, apiErrorMessages, apiErrorStatus, finishBlockersFromError, shiftDetailFromError } from '@/lib/shiftPackageErrors'
 import type { ShiftIncidentPrefillState, ShiftNoteIncidentPrefillState } from '@/lib/incidentPrefill'
 import type { ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
-import { breaksSignature, FINISH_STEPS, handoverForward, movedTimes, parseKilometres, stepForCode, timesError, type FinishStepKey, type TimesField, type TimesInput } from './checklist'
+import { breaksSignature, clockLabel, FINISH_STEPS, handoverForward, movedTimes, offlineDueDoses, parseKilometres, stepForCode, timesError, type FinishStepKey, type TimesField, type TimesInput } from './checklist'
 import { clearEndDraft, EMPTY_END_DRAFT, loadEndDraft, saveEndDraft, type EndDraft } from './endDraft'
 import { DosesStep, HandoverStep, ReportStep, SubmitStep, TimesStep, type Refusal } from './finishSteps'
 import { requestGeolocation } from './geolocation'
 import { utcInstantToProviderLocal } from './shiftTime'
 import { ActionBar } from './ui'
-import { plural } from '@/lib/format'
+import { joinList, plural } from '@/lib/format'
 import { useNow } from './useNow'
 import type { DoseTarget } from './DoseSheet'
 import type { PortalShiftDetailDto, ShiftNoteDto } from '@/api/types'
@@ -31,6 +31,12 @@ function openDraft(shift: PortalShiftDetailDto): { draft: EndDraft; breaksChange
   const saved = loadEndDraft(shift.id) ?? EMPTY_END_DRAFT
   const breaksChanged = saved.timesSig !== null && saved.timesSig !== breaksSignature(shift.breaks)
   return { draft: { ...saved, step: breaksChanged ? 'times' : saved.step ?? 'times' }, breaksChanged }
+}
+
+function blockedDoseMessage(doses: ReturnType<typeof offlineDueDoses>): string {
+  const name = (d: (typeof doses)[number]) => `${d.medicationName}${d.strength ? ` ${d.strength}` : ''}`
+  if (doses.length === 1) return `${name(doses[0])} was due at ${clockLabel(doses[0].scheduledAt)} with no outcome recorded, and recording a dose needs a connection. When you're back online, record it, then finish. What you've entered is kept.`
+  return `${doses.length} doses are due with no outcome recorded: ${joinList(doses.map(d => `${name(d)} (${clockLabel(d.scheduledAt)})`))}. Recording a dose needs a connection. When you're back online, record them, then finish. What you've entered is kept.`
 }
 
 /**
@@ -133,7 +139,7 @@ export function FinishFlow({ shift, online, canAct, onRecord, onClose, onEditNot
       })
     }
     if (step === 'doses') {
-      const missing = shift.finishBlockers.filter(b => b.code === 'DOSE_OUTCOME_MISSING').length
+      const missing = !online ? 0 : shift.finishBlockers.filter(b => b.code === 'DOSE_OUTCOME_MISSING').length   // offline the submit step explains it instead
       if (missing) return setError({ message: `Record an outcome for ${plural(missing, 'dose')} before you go on.`, focus: 'dose-blocker-0' })
       return go('report')
     }
@@ -220,6 +226,7 @@ export function FinishFlow({ shift, online, canAct, onRecord, onClose, onEditNot
     : 'Next'
 
   const current = FINISH_STEPS[index(step)]
+  const blockedDoses = online ? [] : offlineDueDoses(shift)
   return (
     <div id="finish" className="space-y-4">
       <div ref={topRef} className="space-y-2">
@@ -258,13 +265,15 @@ export function FinishFlow({ shift, online, canAct, onRecord, onClose, onEditNot
           onUseSubmitTime={() => set({ endOverride: null })} onChangeTimes={() => go('times')}
         />
       )}
-      <ActionBar notice={(error || networkError) && (
+      <ActionBar notice={step === 'submit' && blockedDoses.length > 0 ? (
+        <div id="finish-blocked"><Callout tone="warning" polite title="Finish can't be saved yet">{blockedDoseMessage(blockedDoses)}</Callout></div>
+      ) : (error || networkError) && (
         <p role="alert" className="text-sm text-[var(--color-destructive)]">
           {error ? error.message : "Couldn't submit. Check your connection. Your entries are kept: try again."}
         </p>
       )}>
         <Button size="lg" variant="secondary" onClick={back}>{step === 'times' ? 'Back to shift' : 'Back'}</Button>
-        <Button size="lg" className="flex-1 lg:flex-none" onClick={forward} disabled={submitting || (step === 'submit' && !online)}>{forwardLabel}</Button>
+        <Button size="lg" className="flex-1 lg:flex-none" onClick={forward} disabled={submitting || (step === 'submit' && blockedDoses.length > 0)} aria-describedby={step === 'submit' && blockedDoses.length > 0 ? 'finish-blocked' : undefined}>{forwardLabel}</Button>
       </ActionBar>
     </div>
   )

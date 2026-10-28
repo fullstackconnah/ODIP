@@ -188,6 +188,32 @@ describe('useResendVerification', () => {
 })
 
 describe('storeSession', () => {
+  let replay: ReturnType<typeof vi.spyOn>
+  beforeEach(async () => {
+    const { offlineQueue } = await import('@/lib/offline/queue')
+    replay = vi.spyOn(offlineQueue, 'replay').mockResolvedValue({ sent: 0, notSent: 0, waiting: 0, offline: false })
+  })
+
+  it('signing in sends what this worker left waiting, once the other users are dropped', async () => {
+    const { storeSession } = await import('./auth')
+    storeSession({ token: 't', id: 'u1' } as never)
+    expect(replay).toHaveBeenCalledTimes(1)
+  })
+
+  it('replays only once the view-as tenant is restored, because the queue matches records on it', async () => {
+    const { storeSession } = await import('./auth')
+    localStorage.removeItem('odip_viewing_tenant')
+    let tenantAtReplay: string | null = null
+    replay.mockImplementation(async () => {
+      tenantAtReplay = localStorage.getItem('odip_viewing_tenant')
+      return { sent: 0, notSent: 0, waiting: 0, offline: false }
+    })
+
+    storeSession({ token: 't', id: 'u1', tenantId: 't1' } as never)
+
+    expect(tenantAtReplay).toBe('t1')
+  })
+
   it('leaves no view-as state from an earlier SuperAdmin session behind', async () => {
     const { storeSession } = await import('./auth')
     localStorage.setItem('odip_viewing_user', '{"id":"u1"}')
@@ -198,5 +224,19 @@ describe('storeSession', () => {
     expect(localStorage.getItem('odip_token')).toBe('the-token')
     expect(localStorage.getItem('odip_viewing_user')).toBeNull()
     expect(localStorage.getItem('odip_superadmin_user')).toBeNull()
+  })
+
+  it('a different user signing in drops the earlier users saved shifts and queue; the same user keeps theirs', async () => {
+    const { storeSession } = await import('./auth')
+    localStorage.setItem('odip_offline:u1:queue', '[{"id":"r1"}]')
+    localStorage.setItem('odip_offline:u1:detail:s1', '{}')
+
+    storeSession({ token: 't', id: 'u1' } as never)
+    expect(localStorage.getItem('odip_offline:u1:queue')).toBe('[{"id":"r1"}]')
+    expect(localStorage.getItem('odip_offline:u1:detail:s1')).toBe('{}')
+
+    storeSession({ token: 't2', id: 'u2' } as never)
+    expect(localStorage.getItem('odip_offline:u1:queue')).toBeNull()
+    expect(localStorage.getItem('odip_offline:u1:detail:s1')).toBeNull()
   })
 })

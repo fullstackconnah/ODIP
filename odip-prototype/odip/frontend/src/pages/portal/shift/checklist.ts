@@ -1,6 +1,6 @@
 // The During and End checklists as plain data. Pure and JSX-free; the components only draw what these return.
 import { formatWallClock, toDatetimeInputValue } from '@/lib/wallClock'
-import type { PortalDoseSlotDto, PortalShiftRoutineDto } from '@/api/types'
+import type { PortalDoseSlotDto, PortalShiftDetailDto, PortalShiftRoutineDto } from '@/api/types'
 import { SHIFT_PACKAGE_ERROR_CODES as C } from '@/api/types'
 import { parseApiDate } from '@/lib/utils'
 import { plural } from '@/lib/format'
@@ -243,4 +243,13 @@ export function dosesSummary(doses: PortalDoseSlotDto[], routines: PortalShiftRo
 /** Step 5's Breaks row: "No breaks", "1 break, 0 min", "2 breaks, 15 min". */
 export function breaksLabel(count: number, minutes: number): string {
   return count === 0 ? 'No breaks' : `${plural(count, 'break')}, ${minutes} min`
+}
+
+/** The doses still due with no outcome: recording one needs a connection, so with no signal Finish waits for them (SHAPE 5). */
+export function offlineDueDoses(shift: PortalShiftDetailDto, now: Date = new Date()) {
+  const due = dueDoseKeys(shift.finishBlockers)
+  // The saved blockers were worked out when the detail was saved; a dose that came due since is not in them, so the clock decides too.
+  const nowLocal = utcInstantToProviderLocal(now.toISOString(), shift.timeZoneId)
+  return buildChecklist(shift).groups.flatMap(g => g.items).flatMap(i =>
+    (i.kind === 'dose' && (due.has(i.key) || (shift.canRecordDoses && !i.slot.outcome && toDatetimeInputValue(i.slot.scheduledAt) <= nowLocal)) ? [i.slot] : []))
 }

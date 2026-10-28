@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AxiosError, type InternalAxiosRequestConfig } from 'axios'
+import { AxiosError, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios'
 
 // The shared client turns a 401 into "the session expired": it asks Firebase for a fresh ID token, exchanges it at /auth/exchange and retries the request once,
 // and when that fails it clears the session and sends the person to /login. That is wrong for the exchange ITSELF. A 401 from it is its answer (a refusal and
@@ -108,6 +108,27 @@ describe('a 401 on any other request', () => {
     expect(localStorage.getItem('odip_token')).toBe('the-new-token')
   })
 
+  it('gives both refresh posts a 15 s limit, so a refresh that never answers cannot hold every waiting request', async () => {
+    for (const method of ['firebase', 'microsoft']) {
+      const client = await freshClient()
+      localStorage.setItem('odip_sign_in_method', method)
+      const requests = script(client, [
+        { status: 401, data: {} },
+        { status: 200, data: { success: true, data: { token: 'the-new-token' } } },
+        { status: 200, data: { success: true, data: [] } },
+      ])
+
+      const answer = client.apiClient.defaults.adapter as (c: InternalAxiosRequestConfig) => Promise<AxiosResponse>
+      const timeouts: Array<number | undefined> = []
+      client.apiClient.defaults.adapter = (c: InternalAxiosRequestConfig) => { timeouts.push(c.timeout); return answer(c) }
+
+      await client.apiGet('/participants')
+
+      expect(requests.map(r => r.url)[1]).toBe(method === 'microsoft' ? '/auth/microsoft/refresh' : '/auth/exchange')
+      expect(timeouts[1]).toBe(15_000)
+    }
+  })
+
   it('fails and clears the session when the refresh is refused (a tenant switched off mid-session), instead of waiting on itself', async () => {
     const client = await freshClient()
     // Signing out sets location.href, which jsdom reports as "not implemented: navigation"; that is the redirect to /login, so keep it out of the output.
@@ -156,6 +177,30 @@ describe('endSession', () => {
     expect(signOut).toHaveBeenCalledTimes(1)
     expect(signOut).toHaveBeenCalledWith(firebaseAuth)
     for (const key of KEYS) expect(localStorage.getItem(key), key).toBeNull()
+  })
+
+  it('an explicit end wipes the saved shifts and the unsent queue', async () => {
+    localStorage.setItem('odip_offline:u1:detail:s1', '{}')
+    localStorage.setItem('odip_offline:u1:queue', '[{"id":"r1"}]')
+    await endSessionWith(() => ({ status: 200, data: { success: true } }))
+    expect(localStorage.getItem('odip_offline:u1:detail:s1')).toBeNull()
+    expect(localStorage.getItem('odip_offline:u1:queue')).toBeNull()
+  })
+
+  it('a forced end (refresh refused) wipes the saved shifts but keeps the unsent queue', async () => {
+    const client = await freshClient()
+    const jsdomNoise = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      localStorage.setItem('odip_token', 'the-old-token')
+      localStorage.setItem('odip_offline:u1:detail:s1', '{}')
+      localStorage.setItem('odip_offline:u1:queue', '[{"id":"r1"}]')
+      script(client, url => (url === '/auth/exchange' ? refusal('TenantInactive') : { status: 401, data: {} }))
+      await outcome(client.apiGet('/participants'))
+      expect(localStorage.getItem('odip_offline:u1:detail:s1')).toBeNull()
+      expect(localStorage.getItem('odip_offline:u1:queue')).toBe('[{"id":"r1"}]')
+    } finally {
+      jsdomNoise.mockRestore()
+    }
   })
 
   // The person is signed out of this browser at once; telling the server (the cookie) comes after and is best effort, so a slow or unreachable API cannot leave
