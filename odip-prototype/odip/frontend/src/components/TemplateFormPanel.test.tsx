@@ -1,15 +1,15 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import TemplateFormPanel from './TemplateFormPanel'
 import type { EventTemplateDto } from '@/api/types'
 
-const { mockCreate, mockUpdate } = vi.hoisted(() => ({ mockCreate: vi.fn(), mockUpdate: vi.fn() }))
+const { mockCreate, mockUpdate, mockDeactivate } = vi.hoisted(() => ({ mockCreate: vi.fn(), mockUpdate: vi.fn(), mockDeactivate: vi.fn() }))
 
 vi.mock('@/api/hooks', () => ({
   useCreateEventTemplate: () => ({ mutateAsync: mockCreate, isPending: false }),
   useUpdateEventTemplate: () => ({ mutateAsync: mockUpdate, isPending: false }),
-  useDeactivateEventTemplate: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDeactivateEventTemplate: () => ({ mutateAsync: mockDeactivate, isPending: false }),
   useTrips: () => ({ data: [{ id: 'trip-1', tripName: 'Gold Coast Beach Break', tripCode: 'GC-01', destination: 'Gold Coast', region: 'QLD', durationDays: 5 }] }),
 }))
 
@@ -37,6 +37,29 @@ describe('TemplateFormPanel as a dialog', () => {
     expect(screen.getByRole('dialog', { name: 'New template' })).toHaveAttribute('aria-modal', 'true')
     rerender(<TemplateFormPanel isOpen onClose={() => {}} template={template} />)
     expect(screen.getByRole('dialog', { name: 'Edit template' })).toBeInTheDocument()
+  })
+
+  it('asks before deactivating with the house sm Buttons, and Cancel puts the link back', async () => {
+    const user = userEvent.setup()
+    render(<TemplateFormPanel isOpen onClose={() => {}} template={template} />)
+    await user.click(screen.getByRole('button', { name: 'Deactivate template' }))
+    const ask = within(screen.getByText('Deactivate this template?').parentElement!)
+    for (const name of ['Confirm', 'Cancel']) expect(ask.getByRole('button', { name })).toHaveClass('h-[var(--control-h-sm)]')
+    await user.click(ask.getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByText('Deactivate this template?')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Deactivate template' })).toBeInTheDocument()
+  })
+
+  it('Confirm deactivates the template once, by id', async () => {
+    const user = userEvent.setup()
+    mockDeactivate.mockResolvedValue(undefined)
+    render(<TemplateFormPanel isOpen onClose={() => {}} template={template} />)
+    await user.click(screen.getByRole('button', { name: 'Deactivate template' }))
+    await user.click(within(screen.getByText('Deactivate this template?').parentElement!).getByRole('button', { name: 'Confirm' }))
+
+    expect(mockDeactivate).toHaveBeenCalledTimes(1)
+    expect(mockDeactivate).toHaveBeenCalledWith('tpl-1')
   })
 
   it('an untouched panel closes on Escape without asking', async () => {

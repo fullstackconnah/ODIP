@@ -7,7 +7,9 @@ import { DataTable, RowActions } from '@/components/DataTable'
 import type { TenantSummaryDto, TenantUserDto, ProviderSettingsDto } from '@/api/types'
 import { Button } from '@/components/Button'
 import { StatusBadge } from '@/components/StatusBadge'
+import { PageState, RetryCallout } from '@/components/PageState'
 import { formatInstantDateAu } from '@/lib/format'
+import { retryingAfterError } from '@/lib/queryPhase'
 
 // ---------------------------------------------------------------------------
 // Props
@@ -50,14 +52,18 @@ export default function TenantDetailView({
   openingUserId = null,
   usersNotice,
 }: TenantDetailViewProps) {
-  const { data: usersResponse, isLoading: usersLoading } = useAdminTenantUsers(tenant.id)
+  const usersQuery = useAdminTenantUsers(tenant.id)
+  const { data: usersResponse, isLoading: usersLoading } = usersQuery
   const users: TenantUserDto[] = useMemo(() => usersResponse?.data ?? [], [usersResponse?.data])
-  const { data: providerSettings, isLoading: providerLoading } =
-    useAdminTenantProviderSettings(tenant.id)
+  const providerQuery = useAdminTenantProviderSettings(tenant.id)
+  const { data: providerSettings, isLoading: providerLoading } = providerQuery
 
   const [providerOpen, setProviderOpen] = useState(false)
 
   const activeUsers = useMemo(() => users.filter(u => u.isActive).length, [users])
+  // Same condition as the users table's error callout (DataTable: error && no rows): with no rows to show, a count would be a made-up 0.
+  // Rows already loaded win over a refetch that failed behind them.
+  const usersFailed = users.length === 0 && (usersQuery.isError || retryingAfterError(usersQuery))
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)]">
@@ -100,13 +106,13 @@ export default function TenantDetailView({
       <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
         <SummaryCard
           icon={<Users className="w-5 h-5 text-[var(--color-secondary)]" />}
-          value={users.length}
+          value={usersFailed ? '—' : users.length}
           label="Total Users"
           loading={usersLoading}
         />
         <SummaryCard
           icon={<UserCheck className="w-5 h-5 text-[var(--color-primary)]" />}
-          value={activeUsers}
+          value={usersFailed ? '—' : activeUsers}
           label="Active Users"
           loading={usersLoading}
         />
@@ -127,19 +133,16 @@ export default function TenantDetailView({
           <h4 className="text-sm font-semibold text-[var(--color-foreground)]">Users</h4>
         </div>
 
-        {usersLoading ? (
-          <div className="flex items-center justify-center py-12 text-sm text-[var(--color-muted-foreground)]">
-            Loading users...
-          </div>
-        ) : users.length === 0 ? (
-          <div className="text-center py-12 text-sm text-[var(--color-muted-foreground)]">
-            No users in this tenant yet.
-          </div>
-        ) : (
+        {/* The error callout is inset like the provider-settings one; DataTable renders it flush. */}
+        <div className={usersFailed ? 'p-4' : undefined}>
           <DataTable
             data={users}
             keyField="id"
             className="w-full"
+            loading={usersLoading}
+            error={usersFailed}
+            onRetry={() => usersQuery.refetch()}
+            emptyMessage="No users in this tenant yet."
             columns={[
               { key: 'fullName', header: 'Name', className: 'font-medium' },
               {
@@ -193,7 +196,7 @@ export default function TenantDetailView({
               },
             ]}
           />
-        )}
+        </div>
       </div>
 
       {/* ── Provider Settings (collapsible) ────────────────────── */}
@@ -219,10 +222,10 @@ export default function TenantDetailView({
 
         {providerOpen && (
           <div className="border-t border-[var(--color-border)] px-4 py-4">
-            {providerLoading ? (
-              <p className="text-sm text-[var(--color-muted-foreground)]">
-                Loading provider settings...
-              </p>
+            {(providerQuery.isError || retryingAfterError(providerQuery)) && !providerSettings ? (
+              <RetryCallout onRetry={() => providerQuery.refetch()}>Couldn't load the provider settings. Check your connection and try again.</RetryCallout>
+            ) : providerLoading ? (
+              <PageState kind="loading" noun="provider settings" />
             ) : !providerSettings ? (
               <p className="text-sm text-[var(--color-muted-foreground)]">
                 No provider settings configured for this tenant.

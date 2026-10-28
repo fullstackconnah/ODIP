@@ -1,4 +1,5 @@
-import { labelClass } from '@/components/FormField'
+import { inputClass, labelClass } from '@/components/FormField'
+import { CheckboxField } from '@/components/CheckboxField'
 import { useState, useEffect, useId, useRef } from 'react'
 import {
   useAdminTenantsSummary,
@@ -273,9 +274,6 @@ export default function UserFormPanel({
     }
   }
 
-  const inputClass =
-    'w-full px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-accent)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
-
   if (!isOpen) return null
 
   if (done) {
@@ -478,27 +476,7 @@ export default function UserFormPanel({
 
       {/* Active toggle — edit mode only */}
       {isEdit && (
-        <div className="flex items-center gap-3 pt-2">
-          <button
-            type="button"
-            role="switch"
-            aria-checked={isActive}
-            aria-label="Active"
-            onClick={() => setIsActive(v => !v)}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-              isActive ? 'bg-[var(--color-primary)]' : 'bg-[var(--color-border)]'
-            }`}
-          >
-            <span
-              className={`inline-block h-4 w-4 rounded-full bg-[var(--color-card)] transition-transform ${
-                isActive ? 'translate-x-6' : 'translate-x-1'
-              }`}
-            />
-          </button>
-          <span className="text-sm text-[var(--color-foreground)]">
-            {isActive ? 'Active' : 'Inactive'}
-          </span>
-        </div>
+        <CheckboxField className="pt-2" label="Active" checked={isActive} onChange={e => setIsActive(e.target.checked)} />
       )}
 
       {/* Error message */}

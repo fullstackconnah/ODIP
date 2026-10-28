@@ -106,23 +106,23 @@ export default function ActivityLibraryTab() {
             {editing && (
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 {!editing.isActive ? (
-                  <button type="button" onClick={() => setActive(true)} disabled={busy || dirty} className="text-sm font-medium text-[var(--color-primary)] hover:underline disabled:opacity-50">
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setActive(true)} disabled={busy || dirty}>
                     Reactivate activity
-                  </button>
+                  </Button>
                 ) : confirmingDeactivate ? (
                   <div className="flex items-center gap-2 text-sm">
                     <span className="text-[var(--color-muted-foreground)]">Deactivate this activity?</span>
-                    <button type="button" onClick={() => setActive(false)} disabled={busy || dirty} className="text-[var(--color-destructive)] font-medium hover:underline disabled:opacity-50">
+                    <Button type="button" variant="ghost-danger" size="sm" onClick={() => setActive(false)} disabled={busy || dirty}>
                       {busy ? 'Deactivating…' : 'Confirm'}
-                    </button>
-                    <button type="button" onClick={() => setConfirmingDeactivate(false)} className="text-[var(--color-muted-foreground)] hover:underline">
+                    </Button>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setConfirmingDeactivate(false)}>
                       Cancel
-                    </button>
+                    </Button>
                   </div>
                 ) : (
-                  <button type="button" onClick={() => setConfirmingDeactivate(true)} disabled={dirty} className="text-sm text-[var(--color-destructive)] hover:opacity-80 hover:underline transition-colors disabled:opacity-50">
+                  <Button type="button" variant="ghost-danger" size="sm" onClick={() => setConfirmingDeactivate(true)} disabled={dirty}>
                     Deactivate activity
-                  </button>
+                  </Button>
                 )}
                 {dirty && <p className="text-sm text-[var(--color-muted-foreground)]">Save or discard your changes first</p>}
               </div>

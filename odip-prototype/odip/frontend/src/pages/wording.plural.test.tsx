@@ -38,18 +38,19 @@ describe('hard-coded plurals', () => {
     expect(screen.getByText('2 properties')).toBeInTheDocument()
   })
 
-  it('Users pager: "Showing 1-1 of 1 user"', () => {
+  // The Users list uses the house DataTable pager: counts without a noun, and only when there is more than one page.
+  it('Users pager: two pages read "Showing 1-20 of 21"', () => {
     mockUseAdminUsers.mockReturnValue({
       data: {
         items: [{ id: 'u1', firstName: 'User', lastName: 'One', fullName: 'User One', email: 'u1@example.com.au', username: 'u1', role: 'Coordinator',
           tenantId: 't1', tenantName: 'Sample Support Co', isActive: true, createdAt: '2026-01-01T00:00:00Z', lastLoginAt: null }],
-        totalCount: 1, page: 1, pageSize: 20, totalPages: 1, hasNext: false, hasPrevious: false,
+        totalCount: 21, page: 1, pageSize: 20, totalPages: 2, hasNext: true, hasPrevious: false,
       },
       isLoading: false,
     })
 
     render(<UsersTab onAddUser={vi.fn()} onEditUser={vi.fn()} />)
 
-    expect(screen.getByText('Showing 1-1 of 1 user')).toBeInTheDocument()
+    expect(screen.getByText((_, el) => el?.tagName === 'SPAN' && /^Showing 1[-–]20 of 21$/.test(el.textContent ?? ''))).toBeInTheDocument()
   })
 })

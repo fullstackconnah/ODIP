@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { AxiosError } from 'axios'
 import { Lock } from 'lucide-react'
+import { inputClass } from '@/components/FormField'
 import { useCreatePublicHoliday, useDeletePublicHoliday, usePublicHolidays, useSyncHolidays } from '@/api/hooks'
 import type { PublicHolidayDto } from '@/api/types'
 import { Button } from '@/components/Button'
@@ -41,7 +42,6 @@ export default function PublicHolidaysSection({ canEdit }: { canEdit: boolean })
     }
   }, [])
 
-  const inputClass = 'px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-surface-container-low)] text-sm focus:outline-none focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
 
   function handleAdd() {
     createHoliday.mutate(newForm, {
@@ -109,8 +109,8 @@ export default function PublicHolidaysSection({ canEdit }: { canEdit: boolean })
       {canEdit && adding && (
         <div className="bg-[var(--color-card)] rounded-t-2xl border border-b-0 border-[var(--color-border)] p-3">
           <div className="flex items-center gap-3">
-            <input type="date" value={newForm.date} onChange={e => setNewForm(p => ({ ...p, date: e.target.value }))} className={inputClass + ' w-40'} />
-            <input value={newForm.name} onChange={e => setNewForm(p => ({ ...p, name: e.target.value }))} placeholder="Holiday name" className={inputClass + ' flex-1'} />
+            <div className="w-40"><input type="date" value={newForm.date} onChange={e => setNewForm(p => ({ ...p, date: e.target.value }))} className={inputClass} /></div>
+            <div className="flex-1"><input value={newForm.name} onChange={e => setNewForm(p => ({ ...p, name: e.target.value }))} placeholder="Holiday name" className={inputClass} /></div>
             <Dropdown
               variant="form"
               value={newForm.state}

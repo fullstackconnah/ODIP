@@ -114,14 +114,21 @@ describe('UserFormPanel — edit payload', () => {
   })
 })
 
-// V-D2 follow-up: the Active switch had a role and a state but no name (the "Active" text beside it is a sibling), as TenantFormPanel's twin had.
-describe('UserFormPanel — Active switch', () => {
-  it('is a named switch that reports and flips its state', async () => {
+// V-D2 follow-up: the Active toggle is named by its label (the house CheckboxField), as TenantFormPanel's twin is.
+describe('UserFormPanel — Active toggle', () => {
+  it('is a named checkbox that reports and flips its state', async () => {
     const u = userEvent.setup()
     render(<UserFormPanel isOpen onClose={() => {}} user={user1} />)
-    const toggle = screen.getByRole('switch', { name: 'Active' })
-    expect(toggle).toHaveAttribute('aria-checked', 'true')
+    const toggle = screen.getByRole('checkbox', { name: 'Active' })
+    expect(toggle).toBeChecked()
     await u.click(toggle)
-    expect(toggle).toHaveAttribute('aria-checked', 'false')
+    expect(toggle).not.toBeChecked()
+  })
+})
+
+describe('UserFormPanel inputs', () => {
+  it('use the house Field Grey input surface, not a local fill', () => {
+    render(<UserFormPanel isOpen onClose={() => {}} user={user1} />)
+    expect(screen.getByLabelText(/first name/i).className).toContain('bg-[var(--color-input)]')
   })
 })

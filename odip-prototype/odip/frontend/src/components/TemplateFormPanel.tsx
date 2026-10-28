@@ -1,4 +1,4 @@
-import { labelClass } from '@/components/FormField'
+import { inputClass, labelClass, textareaClass } from '@/components/FormField'
 import { modalGrid, modalSpan } from '@/lib/formGrid'
 import { useState, useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
@@ -182,9 +182,6 @@ export default function TemplateFormPanel({
     }
   }
 
-  const inputClass =
-    'w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-accent)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
-
   const isBusy =
     isSubmitting || createMutation.isPending || updateMutation.isPending || deactivateMutation.isPending
 
@@ -212,30 +209,17 @@ export default function TemplateFormPanel({
                   <span className="text-[var(--color-muted-foreground)]">
                     Deactivate this template?
                   </span>
-                  <button
-                    type="button"
-                    onClick={handleDeactivate}
-                    disabled={deactivateMutation.isPending}
-                    className="text-[var(--color-destructive)] font-medium hover:underline disabled:opacity-50"
-                  >
+                  <Button type="button" variant="ghost-danger" size="sm" onClick={handleDeactivate} disabled={deactivateMutation.isPending}>
                     {deactivateMutation.isPending ? 'Deactivating…' : 'Confirm'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowDeactivateConfirm(false)}
-                    className="text-[var(--color-muted-foreground)] hover:underline"
-                  >
+                  </Button>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setShowDeactivateConfirm(false)}>
                     Cancel
-                  </button>
+                  </Button>
                 </div>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => setShowDeactivateConfirm(true)}
-                  className="text-sm text-[var(--color-destructive)] hover:opacity-80 hover:underline transition-colors"
-                >
+                <Button type="button" variant="ghost-danger" size="sm" onClick={() => setShowDeactivateConfirm(true)}>
                   Deactivate template
-                </button>
+                </Button>
               )}
             </div>
           )}
@@ -352,7 +336,7 @@ export default function TemplateFormPanel({
             id="typicalActivities"
             {...register('typicalActivities')}
             rows={3}
-            className={inputClass}
+            className={`${textareaClass} resize-y`}
             placeholder="Describe typical activities…"
           />
         </div>
@@ -364,7 +348,7 @@ export default function TemplateFormPanel({
             id="accessibilityNotes"
             {...register('accessibilityNotes')}
             rows={3}
-            className={inputClass}
+            className={`${textareaClass} resize-y`}
             placeholder="General accessibility notes…"
           />
         </div>
@@ -392,7 +376,7 @@ export default function TemplateFormPanel({
                   id="fullyModifiedAccommodationNotes"
                   {...register('fullyModifiedAccommodationNotes')}
                   rows={3}
-                  className={inputClass}
+                  className={`${textareaClass} resize-y`}
                 />
               </div>
               <div>
@@ -401,7 +385,7 @@ export default function TemplateFormPanel({
                   id="semiModifiedAccommodationNotes"
                   {...register('semiModifiedAccommodationNotes')}
                   rows={3}
-                  className={inputClass}
+                  className={`${textareaClass} resize-y`}
                 />
               </div>
               <div>
@@ -410,7 +394,7 @@ export default function TemplateFormPanel({
                   id="wheelchairAccessNotes"
                   {...register('wheelchairAccessNotes')}
                   rows={3}
-                  className={inputClass}
+                  className={`${textareaClass} resize-y`}
                 />
               </div>
             </div>

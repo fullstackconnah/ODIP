@@ -1,4 +1,4 @@
-import { labelClass } from '@/components/FormField'
+import { inputClass, labelClass, textareaClass } from '@/components/FormField'
 import { useState, useEffect, useRef } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
@@ -323,12 +323,6 @@ export default function TenantFormPanel({
   ])
   const dirty = current !== initial && !successMessage
 
-  const inputClass =
-    'w-full px-3 h-[var(--control-h)] rounded-[var(--radius-sm)] bg-[var(--color-accent)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-all'
-  // A textarea must not take inputClass's fixed height: an explicit height beats `rows`, collapsing the invoice footer notes to one
-  // line. min-h keeps it level with the 32px / 44px inputs; h-auto lets `rows` set the height; resize-y lets the user grow it.
-  const textareaClass =
-    'w-full px-3 min-h-[var(--control-h)] h-auto py-1.5 rounded-[var(--radius-sm)] bg-[var(--color-accent)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-all resize-y'
 
   if (!isOpen) return null
 
@@ -439,27 +433,7 @@ export default function TenantFormPanel({
         )}
 
         {isEdit && (
-          <div className="flex items-center gap-3">
-            <label id="tenant-active-label" className="text-xs font-medium text-[var(--color-muted-foreground)]">
-              Active
-            </label>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={isActive}
-              aria-labelledby="tenant-active-label"
-              onClick={() => setIsActive(v => !v)}
-              className={`relative w-10 h-5 rounded-full transition-colors ${
-                isActive ? 'bg-[var(--color-primary)]' : 'bg-[var(--color-border)]'
-              }`}
-            >
-              <span
-                className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-[var(--color-card)] shadow transition-transform ${
-                  isActive ? 'translate-x-5' : ''
-                }`}
-              />
-            </button>
-          </div>
+          <CheckboxField label="Active" checked={isActive} onChange={e => setIsActive(e.target.checked)} />
         )}
       </div>
 
@@ -574,7 +548,7 @@ export default function TenantFormPanel({
                   value={invoiceFooterNotes}
                   onChange={e => setInvoiceFooterNotes(e.target.value)}
                   rows={2}
-                  className={textareaClass}
+                  className={`${textareaClass} resize-y`}
                 />
               </div>
             </div>
