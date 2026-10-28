@@ -43,6 +43,7 @@ export function CostByPeriod({ pricing }: Props) {
   const [spoken, setSpoken] = useState('')
   const [answered, setAnswered] = useState(false)
   const [lastNotes, setLastNotes] = useState('')
+  const [retryOf, setRetryOf] = useState<string | null>(null)
 
   const kind: Choice | null = choice === 'custom' ? 'custom' : kinds.includes(choice) ? choice : kinds.includes('month') ? 'month' : kinds[0] ?? null
   // A kind that is no longer offered gives way to the default, from its first period.
@@ -74,12 +75,14 @@ export function CostByPeriod({ pricing }: Props) {
   const current = !!wanted && asked?.from === wanted.from && asked.to === wanted.to && pricing.quoteReady && !pricing.settling && !fromStore
   // The budget failing to refresh leaves no answer to price a period against, so it reads as this section failing; Try again then asks the budget, and the period follows once it answers.
   const budgetFailed = pricing.budgetFailed && !!wanted
-  const retrying = budgetFailed ? pricing.budgetFetching : query.isError && query.isFetching
+  // A refetch of a failed query with no data drops it back to pending, so the retry is held here to keep the failed view (and Try again, with its focus) on screen.
+  const askedKey = asked ? `${asked.from}/${asked.to}` : ''
+  const retrying = budgetFailed ? pricing.budgetFetching : current && retryOf === askedKey
   const data = query.data
   const view: View = !wanted ? 'idle'
     : budgetFailed ? 'failed'
     : !current ? (answered ? 'updating' : 'pricing')
-    : query.isError ? 'failed'
+    : query.isError || retrying ? 'failed'
     : data && !query.isFetching ? (pricedNothing(data) ? 'nothing' : 'ready')
     : query.failureCount > 0 && query.isFetching ? 'busy'
     : answered ? 'updating' : 'pricing'
@@ -169,7 +172,7 @@ export function CostByPeriod({ pricing }: Props) {
             <p className="text-sm text-[var(--color-muted-foreground)]">{retrying ? 'Trying again…' : "Couldn't price this period."}</p>
             <Button
               variant="secondary" size="sm" aria-disabled={retrying || undefined} aria-busy={retrying || undefined} className={`${TAP_AREA} aria-disabled:cursor-not-allowed aria-disabled:opacity-50`}
-              onClick={() => { if (retrying) return; setArmed(true); if (budgetFailed) pricing.retry(); else void query.refetch() }}
+              onClick={() => { if (retrying) return; setArmed(true); if (budgetFailed) pricing.retry(); else { setRetryOf(askedKey); void query.refetch().finally(() => setRetryOf(null)) } }}
             >Try again</Button>
           </>
         )}

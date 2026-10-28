@@ -286,8 +286,39 @@ describe('Cost by period: the service', () => {
 
     await user.click(again)
 
-    await waitFor(() => expect(period()).toHaveTextContent('· pricing…'))
+    expect(await screen.findByText('Trying again…')).toBeInTheDocument()
     expect(screen.getByText(detail)).toHaveClass('invisible')
+  })
+
+  it('keeps Try again mounted, focused, aria-disabled and aria-busy while it retries, ignores a second press, and returns to the failure when the retry fails', async () => {
+    const user = userEvent.setup()
+    post.mockRejectedValueOnce({ response: { status: 500, data: {} } })
+    show(<CostByPeriod pricing={pricing()} />)
+    const again = await screen.findByRole('button', { name: 'Try again' })
+    again.focus()
+    let fail: (reason: unknown) => void = () => undefined
+    post.mockImplementationOnce(() => new Promise((_, reject) => { fail = reject }))
+
+    await user.click(again)
+
+    expect(await screen.findByText('Trying again…')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Try again' })).toBe(again)
+    expect(again).toHaveFocus()
+    expect(again).toHaveAttribute('aria-disabled', 'true')
+    expect(again).toHaveAttribute('aria-busy', 'true')
+    expect(period()).not.toHaveTextContent('updating')
+    expect(screen.queryByText('$1,234.50')).not.toBeInTheDocument()
+    await user.click(again)
+    expect(post).toHaveBeenCalledTimes(2)
+
+    fail({ response: { status: 500, data: {} } })
+
+    expect(await screen.findByText("Couldn't price this period.")).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Try again' })).toBe(again)
+    expect(again).toHaveFocus()
+    expect(again).not.toHaveAttribute('aria-disabled')
+    expect(again).not.toHaveAttribute('aria-busy')
+    expect(region()).toHaveTextContent("Couldn't price month 1.")
   })
 
   it('shows the failed state, not updating, when the budget could not be asked again, and Try again asks the budget', async () => {
