@@ -19,6 +19,7 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/Button'
 import { Modal } from '@/components/Modal'
+import { TAP_AREA } from '@/components/tapArea'
 import { reservationCountsLabel } from './reservationCounts'
 import { RESERVATION_STATUSES } from '@/api/types/enums'
 import type { TripDetailDto } from '@/api/types/trips'
@@ -416,11 +417,12 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
         >
           <div className="space-y-4">
             {/* Property Select or Create */}
-            <div>
-              <div className="flex items-baseline justify-between">
+            {/* pointer-coarse:pt-3: the 44px Create-new pad would otherwise reach into the Close button's pad above (they overlap by ~8px at 390). */}
+            <div className="pointer-coarse:pt-3">
+              <div className="flex items-baseline justify-between pointer-coarse:mb-3">
                 <label id="addAccommPropertyLabel" className={labelClass}>Property</label>
                 <button type="button" onClick={() => { setCreatingNewProperty(!creatingNewProperty); setAccommForm({ ...accommForm, accommodationPropertyId: '' }) }}
-                  className="text-xs text-[var(--color-primary)] hover:underline">
+                  className={`${TAP_AREA} text-xs text-[var(--color-primary)] hover:underline`}>
                   {creatingNewProperty ? 'Select existing' : '+ Create new'}
                 </button>
               </div>
