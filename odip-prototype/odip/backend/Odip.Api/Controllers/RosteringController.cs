@@ -100,16 +100,22 @@ public class RosteringController : ControllerBase
     /// across the week flattens into <see cref="RosterBoardDto.Exceptions"/> either way.
     /// Defaults to the current week when <paramref name="weekStart"/> is omitted; any date
     /// supplied is normalised to that week's Monday.
+    /// <paramref name="staffId"/> (groupBy=staff) or <paramref name="participantId"/> (groupBy=participant) narrows the rows
+    /// to that one person (spec 2026-10-28, the roster week on a profile). The findings are still computed against the whole week.
     /// </summary>
     [HttpGet("board")]
     public async Task<ActionResult<ApiResponse<RosterBoardDto>>> GetBoard(
-        [FromQuery] DateOnly? weekStart, [FromQuery] string? groupBy, CancellationToken ct)
+        [FromQuery] DateOnly? weekStart, [FromQuery] string? groupBy, CancellationToken ct,
+        [FromQuery] Guid? staffId = null, [FromQuery] Guid? participantId = null)
     {
         if (!TryParseGroupBy(groupBy, out var groupByValue))
         {
             return BadRequest(ApiResponse<RosterBoardDto>.Fail(
                 $"Unrecognised groupBy value '{groupBy}'. Expected 'participant' or 'staff'."));
         }
+        if (staffId is not null && participantId is not null) return BadRequest(ApiResponse<RosterBoardDto>.Fail("Pass staffId or participantId, not both."));
+        if (staffId is not null && groupByValue != RosterBoardGroupBy.Staff) return BadRequest(ApiResponse<RosterBoardDto>.Fail("staffId needs groupBy=staff."));
+        if (participantId is not null && groupByValue != RosterBoardGroupBy.Participant) return BadRequest(ApiResponse<RosterBoardDto>.Fail("participantId needs groupBy=participant."));
 
         var start = WeekStart(weekStart ?? await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct));
         var end = start.AddDays(6);
@@ -254,8 +260,11 @@ public class RosteringController : ControllerBase
         // the same dictionary rather than re-running RosterConflictService.Check. ──
         var findingsByShiftId = weekShifts.ToDictionary(s => s.Id, FindingsFor);
 
+        // A person filter narrows only what is emitted; the findings above still see the whole week (overlaps need the other shifts).
+        bool Shown(Shift s) => (staffId is null || s.UserId == staffId) && (participantId is null || s.ParticipantId == participantId);
+
         var exceptions = new List<RosterExceptionDto>();
-        foreach (var shift in weekShifts)
+        foreach (var shift in weekShifts.Where(Shown))
         {
             participantById.TryGetValue(shift.ParticipantId, out var p);
             foreach (var finding in findingsByShiftId[shift.Id])
@@ -312,7 +321,7 @@ public class RosteringController : ControllerBase
             };
 
             var participantRows = new List<RosterParticipantRowDto>();
-            foreach (var participant in displayParticipants)
+            foreach (var participant in displayParticipants.Where(p => participantId is null || p.Id == participantId))
             {
                 var participantShifts = weekShifts.Where(s => s.ParticipantId == participant.Id).ToList();
                 var shiftDtos = participantShifts.Select(s => ToShiftDto(s, findingsByShiftId[s.Id])).ToList();
@@ -357,7 +366,7 @@ public class RosteringController : ControllerBase
         {
             var rows = new List<RosterStaffRowDto>();
 
-            foreach (var staff in activeStaff)
+            foreach (var staff in activeStaff.Where(s => staffId is null || s.Id == staffId))
             {
                 var staffShifts = weekShifts.Where(s => s.UserId == staff.Id).ToList();
                 var shiftDtos = staffShifts.Select(s => ToShiftDto(s, findingsByShiftId[s.Id])).ToList();
@@ -399,10 +408,10 @@ public class RosteringController : ControllerBase
                 });
             }
 
-            var unfilled = weekShifts
-                .Where(s => s.UserId is null)
-                .Select(s => ToShiftDto(s, findingsByShiftId[s.Id]))
-                .ToList();
+            // One staff member's week has no Unfilled lane: an empty list, never null (the client spreads it).
+            var unfilled = staffId is null
+                ? weekShifts.Where(s => s.UserId is null).Select(s => ToShiftDto(s, findingsByShiftId[s.Id])).ToList()
+                : new List<ShiftDto>();
 
             board = new RosterBoardDto
             {
