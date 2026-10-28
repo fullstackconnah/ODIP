@@ -93,7 +93,7 @@ describe('the Publish banner', () => {
     showBoard(board(DRAFTS, { pendingAgreements: [{ participantId: 'p-2', displayName: 'Daniel Osei', draftId: 'd-2', version: 2, canReceiveServices: true }] }))
     renderPage()
 
-    const title = screen.getByText('4 shifts not visible to staff yet')
+    const title = screen.getByText('3 shifts not visible to staff yet')
     expect(title.closest('[role="alert"]')).toBeNull()
     const waiting = screen.getByText(/Shifts from a service agreement appear here/)
     expect(title.compareDocumentPosition(waiting) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
@@ -108,10 +108,10 @@ describe('the Publish banner', () => {
     showBoard(board([...DRAFTS, BLOCKED]))
     const { unmount } = renderPage()
 
-    expect(screen.getByText('5 shifts not visible to staff yet')).toBeInTheDocument()
+    expect(screen.getByText('4 shifts not visible to staff yet')).toBeInTheDocument()
     expect(screen.getByText("1 of them can't be published until the worker changes: a rule that can't be overridden blocks it.")).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Publish week' }))
-    expect(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Publish 4 shifts' })).toBeInTheDocument()
+    expect(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Publish 3 shifts' })).toBeInTheDocument()
     unmount()
 
     showBoard(board([BLOCKED]))
@@ -120,10 +120,17 @@ describe('the Publish banner', () => {
     expect(screen.queryByRole('button', { name: 'Publish week' })).not.toBeInTheDocument()
   })
 
+  it('a week whose only drafts have nobody on them: no banner and no Publish week (they are held until staffed)', () => {
+    showBoard(board([DRAFTS[0]]))
+    renderPage()
+    expect(screen.queryByText(/not visible to staff yet/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Publish week' })).not.toBeInTheDocument()
+  })
+
   it('a reader sees the banner without Publish week', () => {
     asReader()
     renderPage()
-    expect(screen.getByText('4 shifts not visible to staff yet')).toBeInTheDocument()
+    expect(screen.getByText('3 shifts not visible to staff yet')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Publish week' })).not.toBeInTheDocument()
   })
 
@@ -137,12 +144,12 @@ describe('the Publish banner', () => {
 
   it('after publishing, focus is on the week heading, never on body', async () => {
     const user = userEvent.setup()
-    h.publish.mockResolvedValueOnce({ published: 4, notified: 2, unfilled: 1, skipped: 0 })
+    h.publish.mockResolvedValueOnce({ published: 3, notified: 2, unfilled: 1, skipped: 0 })
     renderPage()
 
     await user.click(screen.getByRole('button', { name: 'Publish week' }))
     showBoard(board(published(DRAFTS)))
-    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Publish 4 shifts' }))
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Publish 3 shifts' }))
 
     await waitFor(() => expect(document.getElementById('roster-week-heading')).toHaveFocus())
     expect(screen.queryByText(/not visible to staff yet/)).not.toBeInTheDocument()
@@ -378,7 +385,7 @@ describe('leaving a week with publishable drafts', () => {
 
     await user.click(screen.getByRole('button', { name: 'Next week' }))
     const dialog = screen.getByRole('alertdialog', { name: LEAVE })
-    expect(dialog).toHaveTextContent("4 shifts in 17–23 Aug aren't visible to staff yet. They stay saved as drafts until you publish the week.")
+    expect(dialog).toHaveTextContent("3 shifts in 17–23 Aug aren't visible to staff yet. They stay saved as drafts until you publish the week.")
     const go = within(dialog).getByRole('button', { name: 'Leave without publishing' })
     expect(go).toHaveClass(PRIMARY)
     expect(go).not.toHaveClass('bg-[var(--color-destructive)]')

@@ -131,7 +131,7 @@ public static class WhatsNewSeed
             "A participant who is funded another way no longer counts against an NDIS budget. Their shifts stop showing as pending NDIS money on the Budgets page and on their Funding tab, and their Claims tab now says to invoice their funder directly.",
             Staff, false),
         new Item("2026-10-roster-needs-staff", "Unstaffed shifts say Needs staff",
-            "On the roster, a shift with nobody on it now shows a dashed Needs staff card instead of a yellow draft. It turns yellow once you put someone on it, until you publish.",
+            "On the roster, a shift with nobody on it now shows a dashed Needs staff card instead of a yellow draft, and Publish week leaves it out. Once you put someone on it, it turns yellow and goes out at your next publish.",
             Staff, false),
     };
 

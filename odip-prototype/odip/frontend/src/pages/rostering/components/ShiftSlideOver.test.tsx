@@ -3,7 +3,7 @@ import { act } from 'react'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ShiftSlideOver } from './ShiftSlideOver'
-import { makeShift, makeFinding } from '../test-fixtures'
+import { makeShift, makeUnfilledShift, makeFinding } from '../test-fixtures'
 import { lockedWords } from '../lib/rosterDrag'
 import type { ParticipantRoutineDto, CompatibilityRowDto, ShiftDto, ShiftNoteDto } from '@/api/types'
 
@@ -303,6 +303,15 @@ describe('ShiftSlideOver status (PP-8)', () => {
     expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
     const [call] = mockUpdateMutateAsync.mock.calls[0]
     expect(call.data.status).toBe('Published')
+  })
+
+  it('does not offer Published on a Draft with nobody on it', async () => {
+    const user = userEvent.setup()
+    render(<ShiftSlideOver target={{ mode: 'edit', shift: makeUnfilledShift({ status: 'Draft', findings: [] }) }} onClose={noop} canWrite participantOptions={participantOptions} staffOptions={staffOptions} />)
+
+    await user.click(screen.getByLabelText('Status'))
+    expect(screen.getByRole('option', { name: 'Draft' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Published' })).not.toBeInTheDocument()
   })
 
   it('says a shift stays with its participant on an existing shift, and not on a new one', () => {

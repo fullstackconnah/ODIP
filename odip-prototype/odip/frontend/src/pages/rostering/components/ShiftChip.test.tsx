@@ -1125,6 +1125,18 @@ describe('ShiftChip Draft: tinted, worded, and publishable from its menu (card r
     expect(screen.queryByRole('option', { name: 'Publish' })).not.toBeInTheDocument()
   })
 
+  it('an unstaffed Draft is not offered Publish (Publish week holds it until someone is on it); a staffed Draft is', async () => {
+    const user = userEvent.setup()
+    chipIn(makeUnfilledShift({ status: 'Draft' }))
+    await openMenu(user)
+    expect(screen.queryByRole('option', { name: 'Publish' })).not.toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Edit' })).toBeInTheDocument()
+    cleanup()
+    chipIn(draft)
+    await openMenu(user)
+    expect(screen.getByRole('option', { name: 'Publish' })).toBeInTheDocument()
+  })
+
   it('no Publish where the page offers none (a reader, or outside the board)', async () => {
     const user = userEvent.setup()
     chipIn(draft, { publish: undefined })

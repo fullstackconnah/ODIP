@@ -243,14 +243,13 @@ export function replacePromptLines(carry: DragCarry, shift: ShiftDto, canSwap: b
   ]
 }
 
-/** Publish week's confirm body, counted from the board's Draft shifts: "14 draft shifts go out to staff. The 9 people on them are notified. 3 still need staff and are published as needing staff." */
-export function publishWeekMessage(drafts: ShiftDto[]): string {
+/** Publish week's confirm body, counted from the board's staffed Draft shifts, with the week's unstaffed Drafts (held back) as a number: "14 draft shifts go out to staff. The 9 people on them are notified. 3 still need staff and stay unpublished until someone is on them." */
+export function publishWeekMessage(drafts: ShiftDto[], unfilled: number): string {
   const people = new Set(drafts.flatMap(s => (s.staffId ? [s.staffId] : []))).size
-  const unfilled = drafts.filter(isUnfilledShift).length
   return [
     `${plural(drafts.length, 'draft shift')} ${drafts.length === 1 ? 'goes' : 'go'} out to staff.`,
     people > 0 ? `The ${plural(people, 'person', 'people')} on them ${people === 1 ? 'is' : 'are'} notified.` : null,
-    unfilled > 0 ? `${unfilled} still ${unfilled === 1 ? 'needs' : 'need'} staff and ${unfilled === 1 ? 'is' : 'are'} published as needing staff.` : null,
+    unfilled > 0 ? `${unfilled} still ${unfilled === 1 ? 'needs' : 'need'} staff and ${unfilled === 1 ? 'stays' : 'stay'} unpublished until someone is on ${unfilled === 1 ? 'it' : 'them'}.` : null,
   ].filter(Boolean).join(' ')
 }
 

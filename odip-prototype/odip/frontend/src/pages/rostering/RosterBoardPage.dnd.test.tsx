@@ -362,20 +362,20 @@ describe('RosterBoardPage drag and drop: pending, focus, the strip, and where dr
 })
 
 describe('RosterBoardPage: Publish week', () => {
-  // BOARD's drafts: Needs staff on Tuesday, Sam's Wednesday, Alex's Friday (on leave), Sam's Saturday with Jo. Two people, one unfilled.
+  // BOARD's drafts: Needs staff on Tuesday, Sam's Wednesday, Alex's Friday (on leave), Sam's Saturday with Jo. Two people; the unstaffed one is held back.
   it("counts the drafts, confirms in the brief's words, publishes the week, and says what it did", async () => {
     const user = userEvent.setup()
-    h.publish.mockResolvedValueOnce({ published: 4, notified: 2, unfilled: 1, skipped: 0 })
+    h.publish.mockResolvedValueOnce({ published: 3, notified: 2, unfilled: 1, skipped: 0 })
     renderPage()
 
-    expect(screen.getByText('4 shifts not visible to staff yet')).toBeInTheDocument()
+    expect(screen.getByText('3 shifts not visible to staff yet')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Publish week' }))
     const dialog = screen.getByRole('alertdialog', { name: 'Publish 17–23 Aug?' })
-    expect(within(dialog).getByText('4 draft shifts go out to staff. The 2 people on them are notified. 1 still needs staff and is published as needing staff.')).toBeInTheDocument()
-    await user.click(within(dialog).getByRole('button', { name: 'Publish 4 shifts' }))
+    expect(within(dialog).getByText('3 draft shifts go out to staff. The 2 people on them are notified. 1 still needs staff and stays unpublished until someone is on it.')).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Publish 3 shifts' }))
 
     expect(h.publish).toHaveBeenCalledWith('2026-08-17')
-    expect(await screen.findByText('Published 4 shifts. 2 people notified.')).toBeInTheDocument()
+    expect(await screen.findByText('Published 3 shifts. 2 people notified.')).toBeInTheDocument()
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
   })
 
@@ -385,7 +385,7 @@ describe('RosterBoardPage: Publish week', () => {
     h.publish.mockRejectedValueOnce({ response: { status: 409, data: { success: false, errors: ['Another change to the roster is still running.'] } } })
     renderPage()
     await user.click(screen.getByRole('button', { name: 'Publish week' }))
-    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Publish 4 shifts' }))
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Publish 3 shifts' }))
     expect((await screen.findByText('Another change to the roster is still running.')).closest('[role="alert"]')).not.toBeNull()
   })
 })

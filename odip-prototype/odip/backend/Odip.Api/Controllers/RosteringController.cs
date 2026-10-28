@@ -910,8 +910,9 @@ public class RosteringController : ControllerBase
 
     /// <summary>
     /// Publish week (roster drag and drop, 2026-10-14): every Draft shift of the organisation in the Monday-start week holding <paramref name="weekStart"/>, for every participant the board
-    /// shows, unfilled ones too, becomes Published, and each worker on one from the provider's today on is told (ShiftAssigned). A filled Draft whose worker now has a Blocking finding stays
-    /// Draft and is counted as skipped, as a PUT publishing it alone would be refused. Under the organisation's roster lock: a second publish at the same time waits, finds nothing left, and
+    /// shows, that has someone on it, becomes Published, and each worker on one from the provider's today on is told (ShiftAssigned). A Draft nobody is on stays Draft (counted as unfilled, owner
+    /// 2026-10-28: hold until staffed) and goes out at the first publish after someone is put on it. A staffed Draft whose worker now has a Blocking finding stays Draft and is counted as skipped,
+    /// as a PUT publishing it alone would be refused. Under the organisation's roster lock: a second publish at the same time waits, finds nothing left, and
     /// tells nobody twice.
     /// </summary>
     [HttpPost("weeks/{weekStart}/publish")]
@@ -939,7 +940,7 @@ public class RosteringController : ControllerBase
 
             var published = new List<Shift>();
             var skipped = 0;
-            foreach (var shift in drafts)
+            foreach (var shift in drafts.Where(s => s.UserId.HasValue))
             {
                 // shortcut: only a lapsed screening is re-checked (the one Blocking rule today); check every filled draft again if another Blocking rule is added.
                 var mayBeBlocked = shift.UserId is { } worker && screeningExpiry.GetValueOrDefault(worker) is { } expiry && expiry < shift.ServiceDate;
@@ -976,7 +977,7 @@ public class RosteringController : ControllerBase
             {
                 Published = published.Count,
                 Notified = toTell.Count(g => emails.ContainsKey(g.Key)),
-                Unfilled = published.Count(s => s.UserId is null),
+                Unfilled = drafts.Count(s => s.UserId is null),
                 Skipped = skipped,
             }));
         }

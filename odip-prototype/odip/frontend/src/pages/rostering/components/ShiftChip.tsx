@@ -141,8 +141,8 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
 
   const menuItems = [
     { value: 'edit', label: 'Edit' },
-    // Publish (card roster-draft-publish): a Draft shift, for the writers the menu is already for. It waits while its own write is out.
-    ...(shift.status === 'Draft' && publish ? [{ value: 'publish', label: publishing ? 'Publishing…' : 'Publish', disabled: publishing || dragsOff }] : []),
+    // Publish (card roster-draft-publish): a staffed Draft shift, for the writers the menu is already for (an unstaffed one is held until someone is on it). It waits while its own write is out.
+    ...(isDraft && publish ? [{ value: 'publish', label: publishing ? 'Publishing…' : 'Publish', disabled: publishing || dragsOff }] : []),
     // The owner's words (the brief, section 5): Replace and Remove name the person, which keeps Remove apart from Delete and says who is meant in the Staff view.
     { value: 'assign', label: dashed || !shift.staffId ? 'Assign to…' : `Replace ${firstName(shift.staffName)}…`, disabled: canPick && dragsOff },
     // Swap (the lead's decision 1): an assigned, unlocked chip, wherever the page can open the swap picker. It waits while a write is out, as every drag and plus does.
