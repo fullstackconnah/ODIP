@@ -47,6 +47,16 @@ describe('TenantDetailView: loads that fail say so', () => {
     expect(screen.queryByText('—')).not.toBeInTheDocument()
   })
 
+  it('keeps the counts and rows when a background refetch fails after the users loaded', () => {
+    usersQuery.mockReturnValue({ data: { data: [{ id: 'u-1', fullName: 'Priya Sharma', role: 'Admin', isActive: true }] }, isLoading: false, isError: true, refetch: vi.fn() })
+    renderView()
+
+    expect(screen.getAllByText('1')).toHaveLength(2)
+    expect(screen.queryByText('—')).not.toBeInTheDocument()
+    expect(screen.getByText('Priya Sharma')).toBeInTheDocument()
+    expect(screen.queryByText(/Couldn't load this list/)).not.toBeInTheDocument()
+  })
+
   it('keeps showing the provider settings when a background refetch fails', async () => {
     providerQuery.mockReturnValue({ data: { organisationName: 'Jo Care', registrationNumber: '4050', abn: '51824753556' } as ProviderSettingsDto, isLoading: false, isError: true, refetch: vi.fn() })
     renderView()

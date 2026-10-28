@@ -61,8 +61,9 @@ export default function TenantDetailView({
   const [providerOpen, setProviderOpen] = useState(false)
 
   const activeUsers = useMemo(() => users.filter(u => u.isActive).length, [users])
-  // Same condition as the users table's error callout: with no rows to show, a count would be a made-up 0.
-  const usersFailed = usersQuery.isError || retryingAfterError(usersQuery)
+  // Same condition as the users table's error callout (DataTable: error && no rows): with no rows to show, a count would be a made-up 0.
+  // Rows already loaded win over a refetch that failed behind them.
+  const usersFailed = users.length === 0 && (usersQuery.isError || retryingAfterError(usersQuery))
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)]">
