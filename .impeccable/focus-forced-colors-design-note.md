@@ -10,3 +10,7 @@
 - Forced colours on, mouse click: `:focus-visible` does not match buttons/dropdown triggers, so no outline; text inputs match on click (as per browser heuristics, expected).
 - Script focus on a `tabIndex={-1}` heading in forced colours: outline shows; accepted by owner decision.
 - Ring box-shadow on Dropdown triggers: absent after click, present after Tab.
+
+## FIX1
+Tabs draw the forced-colours focus outline inside (`[role="tab"]:focus-visible { outline-offset: -4px }`, same forced-colours block), because the tab list is `overflow-x-auto` and clips anything outside the tab; -4px keeps all four sides clear of the label and the `border-b-2` indicator, inside the 44px tap box.
+States: forced on + keyboard focus = closed 2px CanvasText outline inside the tab; forced on + mouse = none; forced off = unchanged (the older ring clip is out of scope).

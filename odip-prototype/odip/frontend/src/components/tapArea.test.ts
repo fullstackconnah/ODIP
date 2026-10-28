@@ -162,6 +162,11 @@ describe('forced-colours focus indicator', () => {
     expect(block).toMatch(/outline-offset:\s*2px/)
   })
 
+  // The tab list is overflow-x-auto, which clips anything drawn outside a tab, so tabs draw the outline inside.
+  it('draws the tab outline inside the tab', () => {
+    expect(block).toMatch(/\[role="tab"\]:focus-visible\s*\{[^}]*outline-offset:\s*-4px/)
+  })
+
   it('sits outside @layer base so it beats the outline-none utilities', () => {
     const idx = css.indexOf('@media (forced-colors: active)')
     const layerStart = css.indexOf('@layer base {')
