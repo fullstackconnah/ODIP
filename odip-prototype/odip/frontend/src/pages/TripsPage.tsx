@@ -151,12 +151,10 @@ export default function TripsPage() {
   // Every row is exactly --row-h from 1280 up: cells never wrap (DataTable), so a narrower window
   // costs width, never height. What gives, at the seeded data's widest rows, each column padded 2×12
   // (Manrope measured, see the density verdict report):
-  //   1280 (content 1280 − 232 sidebar − 2×20 gutter = 1008, 1006 inside the table border):
-  //     Trip 233 + Destination 216 + Dates 198 + Status 164 + Pax 95 + edit 48 = 953, spare 53.
-  //     Lead, the trip code and "(4d)" are dropped. 1366 adds the code (+70) and lets the destination
-  //     grow to 13.5rem (+24); 1536 adds Lead (+124).
-  //   1536: 303 + 240 + 198 + 164 + 95 + 124 + 48 = 1172, spare 90. 1792 adds "(4d)" and room for
-  //     the full destination; at 1920 the spare is ~370px and spreads over the columns.
+  //   Lead shows from md up; "(4d)" from 1792; the trip code from 1536 (it is in the name's tooltip). At 1440 the
+  //   table is ~1125 against 1166 of room, so DataTable's opaque pin fill never covers Lead. 1366 lets the
+  //   destination grow to 13.5rem (+24). At 1536: 303 + 240 + 198 + 164 + 95 + 124 + 48 = 1172, spare 90;
+  //   at 1920 the spare is ~370px and spreads over the columns. Below 1440 the table still scrolls sideways.
   // The caps below bound the two cells that can grow without limit.
   // They are ranges that never overlap: Tailwind emits the arbitrary `min-[…px]` variants BEFORE the
   // named breakpoints, so they could not be trusted to override an `md:` / `2xl:` class on one element.
@@ -170,7 +168,7 @@ export default function TripsPage() {
       render: (t) => (
         // One line: name, then the muted code (13px, the floor for secondary table text). A
         // stacked name/code cell is two lines and pushes the row past --row-h. The name is cut at
-        // its cap with the code in its tooltip; below 1366px the code itself gives way first (it is derivable: the full code is in the tooltip).
+        // its cap with the code in its tooltip; below 1536px the code itself gives way first (it is derivable: the full code is in the tooltip).
         <div className="flex min-w-0 items-baseline gap-2">
           <span
             className={`truncate font-semibold text-[var(--color-foreground)] ${NAME_CAP}`}
@@ -178,7 +176,7 @@ export default function TripsPage() {
           >
             {t.tripName}
           </span>
-          {t.tripCode && <span className="shrink-0 font-mono text-[13px] tabular-nums text-[var(--color-muted-foreground)] md:max-[1366px]:hidden">{t.tripCode}</span>}
+          {t.tripCode && <span className="shrink-0 font-mono text-[13px] tabular-nums text-[var(--color-muted-foreground)] md:max-[1535px]:hidden">{t.tripCode}</span>}
         </div>
       ),
     },
