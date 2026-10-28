@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import PlatformFooter from './PlatformFooter'
 import { ACKNOWLEDGEMENT_OF_COUNTRY } from '@/lib/platformFacts'
@@ -33,13 +32,13 @@ describe('PlatformFooter', () => {
   it.each(['shell', 'public'] as const)('%s: renders with every value missing, Accessibility only, as the contentinfo landmark', variant => {
     const footer = renderFooter(variant, NONE)
     expect(footer.tagName).toBe('FOOTER')
-    expect(linkNames(footer)).toEqual(['Accessibility'])
+    expect(linkNames(footer)).toEqual(['Accessibility (opens in a new tab)'])
     expect(within(footer).queryByText(/©|ABN|Build|v\d/)).toBeNull()
   })
 
   it.each(['shell', 'public'] as const)('%s: hides malformed values exactly like missing ones', variant => {
     const footer = renderFooter(variant, MALFORMED)
-    expect(linkNames(footer)).toEqual(['Accessibility'])
+    expect(linkNames(footer)).toEqual(['Accessibility (opens in a new tab)'])
     expect(within(footer).queryByText(/©|ABN|Build|v\d/)).toBeNull()
   })
 
@@ -49,7 +48,7 @@ describe('PlatformFooter', () => {
     expect(facts.textContent).toBe(`© ${new Date().getFullYear()} Odip Pty Ltd · ABN 12 345 678 901 · v1.0.0 · 7be2ef8`)
     // The dots between facts are drawn, never read aloud.
     expect([...facts.querySelectorAll('[aria-hidden="true"]')].map(dot => dot.textContent)).toEqual([' · ', ' · '])
-    expect(linkNames(footer)).toEqual(['Support: help@example.org', 'Privacy', 'Terms', 'Accessibility', 'Status (opens in a new tab)'])
+    expect(linkNames(footer)).toEqual(['Support: help@example.org', 'Privacy (opens in a new tab)', 'Terms (opens in a new tab)', 'Accessibility (opens in a new tab)', 'Status (opens in a new tab)'])
     const ack = within(footer).getByText(ACKNOWLEDGEMENT_OF_COUNTRY)
     const list = within(footer).getByRole('list')
     expect(ack.compareDocumentPosition(facts) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
@@ -71,19 +70,25 @@ describe('PlatformFooter', () => {
     expect(within(status).getByText('(opens in a new tab)')).toHaveClass('sr-only')
   })
 
-  it('links Accessibility through the router, so the unsaved-changes blocker still sees the navigation', async () => {
-    await userEvent.click(within(renderFooter('shell', NONE)).getByRole('link', { name: 'Accessibility' }))
-    expect(screen.getByRole('heading', { name: 'Accessibility statement' })).toBeInTheDocument()
+  it.each(['shell', 'public'] as const)('%s: opens Privacy, Terms and Accessibility in a new tab, says so, and keeps the form on this page', variant => {
+    const footer = renderFooter(variant, FULL)
+    for (const [name, href] of [['Privacy', '/legal/privacy'], ['Terms', '/legal/terms'], ['Accessibility', '/accessibility']]) {
+      const link = within(footer).getByRole('link', { name: `${name} (opens in a new tab)` })
+      expect(link).toHaveAttribute('href', href)
+      expect(link).toHaveAttribute('target', '_blank')
+      expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+      expect(within(link).getByText('(opens in a new tab)')).toHaveClass('sr-only')
+    }
   })
 
   it('links Privacy and Terms to their routes only while the documents are published', () => {
     const footer = renderFooter('public', FULL)
-    expect(within(footer).getByRole('link', { name: 'Privacy' })).toHaveAttribute('href', '/legal/privacy')
-    expect(within(footer).getByRole('link', { name: 'Terms' })).toHaveAttribute('href', '/legal/terms')
+    expect(within(footer).getByRole('link', { name: 'Privacy (opens in a new tab)' })).toHaveAttribute('href', '/legal/privacy')
+    expect(within(footer).getByRole('link', { name: 'Terms (opens in a new tab)' })).toHaveAttribute('href', '/legal/terms')
   })
 
   it('hides Privacy and Terms while legalPublished is false, whatever else is set', () => {
-    expect(linkNames(renderFooter('public', { ...FULL, legalPublished: false }))).toEqual(['Support: help@example.org', 'Accessibility', 'Status (opens in a new tab)'])
+    expect(linkNames(renderFooter('public', { ...FULL, legalPublished: false }))).toEqual(['Support: help@example.org', 'Accessibility (opens in a new tab)', 'Status (opens in a new tab)'])
   })
 
   it('public: carries the acknowledgement at 13px, one step above the small print, at every width', () => {
@@ -104,7 +109,7 @@ describe('PlatformFooter', () => {
   it('hides Support when support is false (the caregiver form), even with an address set', () => {
     const footer = renderFooter('public', FULL, false)
     expect(within(footer).queryByRole('link', { name: /Support/ })).toBeNull()
-    expect(linkNames(footer)).toEqual(['Privacy', 'Terms', 'Accessibility', 'Status (opens in a new tab)'])
+    expect(linkNames(footer)).toEqual(['Privacy (opens in a new tab)', 'Terms (opens in a new tab)', 'Accessibility (opens in a new tab)', 'Status (opens in a new tab)'])
   })
 
   it('shell: carries the bottom-nav clearance below lg, now that main no longer does', () => {
