@@ -17,7 +17,7 @@ const {
   mockUseGenerateCaregiverLink, mockUseRevokeCaregiverLink, mockUseCaregiverSubmissions,
   mockDeleteMutate, mockNotes, mockRisks, realAdl, mockPersonWeek,
 } = vi.hoisted(() => ({
-  mockPersonWeek: vi.fn((..._args: unknown[]) => ({ data: undefined, isLoading: true, isError: false, isPlaceholderData: false, refetch: vi.fn() })),
+  mockPersonWeek: vi.fn(() => ({ data: undefined, isLoading: true, isError: false, isPlaceholderData: false, refetch: vi.fn() })),
   realAdl: { on: false },
   mockUseParticipant: vi.fn(),
   // The page reads the support profile once for Health, Daily and Overview; 404 / empty by default.
