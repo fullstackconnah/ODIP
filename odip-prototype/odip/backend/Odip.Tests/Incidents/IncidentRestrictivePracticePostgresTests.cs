@@ -46,7 +46,7 @@ public class IncidentRestrictivePracticePostgresTests : IClassFixture<PostgresFi
         await db.SaveChangesAsync(Ct);
         var controller = new IncidentsController(db)
         {
-            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Role, "SupportWorker")], "Test")) } },
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Role, "SupportWorker"), new Claim(ClaimTypes.NameIdentifier, reporter.Id.ToString())], "Test")) } },
         };
 
         Assert.IsType<OkObjectResult>((await controller.Create(Dto(reporter.Id, participant.Id) with { RestrictivePracticeId = blankAuthoriser.Id }, Ct)).Result);
