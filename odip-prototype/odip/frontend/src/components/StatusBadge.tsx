@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { QUIET_STATUS, STATUS_TONE, TONE, isTone, statusKey, type Tone } from '@/lib/tone'
 
 export type StatusBadgeSize = 'sm' | 'md'
@@ -9,6 +10,8 @@ type StatusBadgeBaseProps = {
    */
   colorMap?: Record<string, Tone | string>
   pulse?: boolean
+  /** A glyph before the text (a marker's siren or key); the pill is the same size and tone either way. */
+  icon?: ReactNode
   className?: string
   /**
    * `sm` (default) is the 12px pill used in tables and inline. `md` is the 13px semibold, 24px-tall pill that
@@ -52,12 +55,12 @@ function colorFor(key: string, tone: Tone | undefined, colorMap: StatusBadgeBase
   return QUIET_STATUS.has(key) ? `${TONE[own].soft} ${TONE[own].ink}` : TONE[own].solid
 }
 
-export function StatusBadge({ status, label, tone, colorMap, pulse, className, size = 'sm' }: StatusBadgeProps) {
+export function StatusBadge({ status, label, tone, colorMap, pulse, icon, className, size = 'sm' }: StatusBadgeProps) {
   const key = statusKey(status ?? '')
   const color = colorFor(key, tone, colorMap)
   return (
-    <span className={`${SIZE_CLASS[size]} rounded-full ${color} ${pulse ? 'animate-pulse' : ''} ${className ?? ''}`}>
-      {label ?? status}
+    <span className={`${SIZE_CLASS[size]} rounded-full ${color} ${icon ? 'inline-flex items-center gap-1' : ''} ${pulse ? 'animate-pulse' : ''} ${className ?? ''}`}>
+      {icon}{label ?? status}
     </span>
   )
 }
