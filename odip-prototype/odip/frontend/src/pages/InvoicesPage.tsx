@@ -20,6 +20,7 @@ import { usePermissions } from '@/lib/permissions'
 import { retryingAfterError } from '@/lib/queryPhase'
 import { TONE } from '@/lib/tone'
 import { formatCurrency, formatDateAu } from '@/lib/utils'
+import { getViewAs } from '@/lib/viewAs'
 
 // Matches ClaimsController.GetInvoiceRegister's default page size, kept in sync by hand as IncidentsPage does.
 const INVOICES_PAGE_SIZE = 50
@@ -41,7 +42,7 @@ function subtitleFor(total: number, kind: string, allOrganisations: boolean): st
 export default function InvoicesPage() {
   const { isSuperAdmin } = usePermissions()
   // The inverse of canCorrectInvoices's SuperAdmin branch: a SuperAdmin who has not chosen an organisation sees all of them.
-  const showOrganisation = isSuperAdmin && !localStorage.getItem('odip_viewing_tenant')
+  const showOrganisation = isSuperAdmin && !getViewAs('odip_viewing_tenant')
   const [searchParams, setSearchParams] = useSearchParams()
   const param = (key: string) => searchParams.get(key) ?? ''
   const search = param('search')

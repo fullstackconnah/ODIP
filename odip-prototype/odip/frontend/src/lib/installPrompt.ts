@@ -3,6 +3,8 @@
  * `beforeinstallprompt` event. Chromium fires that event at page load, often on /login before AppLayout mounts,
  * so main.tsx starts the capture before render and the prompt component only subscribes.
  */
+import { currentProfile } from '@/lib/viewAs'
+
 export const INSTALL_SNOOZE_MS = 30 * 86_400_000
 
 /** The two landing routes: every other route has a sticky bottom bar or is mid-task. */
@@ -63,7 +65,7 @@ export const markInstalled = (userId: string) => write(userId, { installed: true
 /** The signed-in (or viewed-as) user's id, read the way useUiPreferences reads it. */
 export function currentUserId(): string | null {
   try {
-    const id = (JSON.parse(localStorage.getItem('odip_user') || '{}') as { id?: unknown })?.id
+    const id = currentProfile().id
     return typeof id === 'string' ? id : null
   } catch {
     return null

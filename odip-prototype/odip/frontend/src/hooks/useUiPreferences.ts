@@ -1,4 +1,5 @@
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { currentProfile } from '@/lib/viewAs'
 import { DEFAULT_UI_PREFERENCES, readUiPreferences, writeUiPreferences, type UiPreferences } from '@/lib/uiPreferences'
 
 /**
@@ -10,8 +11,7 @@ import { DEFAULT_UI_PREFERENCES, readUiPreferences, writeUiPreferences, type UiP
  */
 function getCurrentUserId(): string | null {
   try {
-    const user = JSON.parse(localStorage.getItem('odip_user') || '{}') as Record<string, unknown>
-    return (user?.id as string | undefined) ?? null
+    return (currentProfile().id as string | undefined) ?? null
   } catch {
     return null
   }
@@ -26,7 +26,7 @@ const UiPreferencesContext = createContext<UiPreferencesContextValue | null>(nul
 
 /**
  * Mounted once inside the authenticated app shell (see `App.tsx`). Note: both UserSwitcher
- * ("view as user") and TenantSwitcher ("view as tenant") change `odip_user` and then call
+ * ("view as user") and TenantSwitcher ("view as tenant") change the view-as keys and then call
  * `window.location.reload()` — a full reload remounts the whole React tree, so this provider
  * always re-resolves the current user id and re-reads preferences fresh on the next mount. There
  * is no live, same-render user-switch path to handle.

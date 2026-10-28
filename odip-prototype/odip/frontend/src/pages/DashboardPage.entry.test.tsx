@@ -36,7 +36,7 @@ describe('dashboard platform entry', () => {
     const view = renderPage()
     expect(screen.queryByRole('button', { name: 'New' })).not.toBeInTheDocument()
     view.unmount()
-    localStorage.setItem('odip_viewing_tenant', 'synthetic-tenant')
+    sessionStorage.setItem('odip_viewing_tenant', 'synthetic-tenant')
     renderPage()
     expect(screen.getByRole('button', { name: 'New' })).toBeInTheDocument()
   })

@@ -545,7 +545,7 @@ describe('ServiceAgreementDraftPage: renewing an agreement (agreement PR 2)', ()
 
   it('checks as usual for a SuperAdmin viewing an organisation', () => {
     asRole('SuperAdmin')
-    localStorage.setItem('odip_viewing_tenant', 't-1')
+    sessionStorage.setItem('odip_viewing_tenant', 't-1')
     showing(ending)
     renderPage()
 

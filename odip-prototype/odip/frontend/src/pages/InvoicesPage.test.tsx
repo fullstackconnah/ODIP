@@ -104,7 +104,7 @@ describe('InvoicesPage: the list', () => {
     expect(screen.getByText('1 invoice or credit note across all organisations')).toBeInTheDocument()
     cleanup()
 
-    localStorage.setItem('odip_viewing_tenant', 'tenant-1')
+    sessionStorage.setItem('odip_viewing_tenant', 'tenant-1')
     renderPage()
     expect(screen.queryByRole('columnheader', { name: 'Organisation' })).not.toBeInTheDocument()
   })

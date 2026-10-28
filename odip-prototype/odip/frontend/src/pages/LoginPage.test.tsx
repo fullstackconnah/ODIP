@@ -92,7 +92,7 @@ describe('LoginPage', () => {
 
     await waitFor(() => expect(localStorage.getItem('odip_token')).toBe('odip-token'))
     expect(mockLogin).toHaveBeenCalledWith({ email: EMAIL, password: 'a-password' })
-    expect(localStorage.getItem('odip_viewing_tenant')).toBe('tenant-1')
+    expect(sessionStorage.getItem('odip_viewing_tenant')).toBe('tenant-1')
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })

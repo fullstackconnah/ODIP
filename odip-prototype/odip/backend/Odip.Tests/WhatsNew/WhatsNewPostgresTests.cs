@@ -162,7 +162,9 @@ public class WhatsNewPostgresTests : IClassFixture<PostgresFixture>
 
         await using var read = PostgresFixture.NewContext(cs);
         var feed = Feed(await WithCaller(new WhatsNewController(read), userId, "Admin").GetFeed(CancellationToken.None));
-        Assert.Equal(WhatsNewSeed.All.Where(i => (i.Roles & WhatsNewAudience.Admin) != 0).Select(i => i.Title).Reverse(), feed.Entries.Select(e => e.Title)); // the Admin sees every entry whose audience includes Admin; a SupportWorker-only entry is not theirs
+        var adminAll = WhatsNewSeed.All.Where(i => (i.Roles & WhatsNewAudience.Admin) != 0).Select(i => i.Title).Reverse().ToList();
+        Assert.Equal(Math.Min(adminAll.Count, WhatsNewController.FeedCap), feed.Entries.Count);
+        Assert.Equal(adminAll.Take(WhatsNewController.FeedCap), feed.Entries.Select(e => e.Title)); // the Admin sees every entry whose audience includes Admin; a SupportWorker-only entry is not theirs
 
         // A role none of the Admin/Coordinator-only entries targets still gets the entries for everyone, via a bitwise filter; derived from the seed so new All entries do not break it.
         var audience = WhatsNewAudience.SupportWorker;
@@ -172,7 +174,8 @@ public class WhatsNewPostgresTests : IClassFixture<PostgresFixture>
         var expected = WhatsNewSeed.All.Where(i => (i.Roles & audience) != 0).Select(i => i.Title).Reverse().ToList();
         Assert.NotEmpty(expected);
         Assert.True(expected.Count < WhatsNewSeed.All.Count, "the role filter must exclude the Admin-only entries");
-        Assert.Equal(expected, support.Entries.Select(e => e.Title));
+        Assert.Equal(Math.Min(expected.Count, WhatsNewController.FeedCap), support.Entries.Count);
+        Assert.Equal(expected.Take(WhatsNewController.FeedCap), support.Entries.Select(e => e.Title));
     }
 
     [SkippableFact]

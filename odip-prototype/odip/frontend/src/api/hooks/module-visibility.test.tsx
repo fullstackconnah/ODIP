@@ -14,13 +14,13 @@ describe('tenant workspace visibility transport', () => {
   it('never displays another organisation cache while a new tenant is loading or fails', async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     localStorage.setItem('odip_user', JSON.stringify({ role: 'SuperAdmin' }))
-    localStorage.setItem('odip_viewing_tenant', 'tenant-a')
+    sessionStorage.setItem('odip_viewing_tenant', 'tenant-a')
     apiClient.defaults.adapter = async config => ({ data: { data: { hiddenAccommodation: true, hiddenVehicles: true } }, status: 200, statusText: 'OK', headers: {}, config })
     const hook = renderHook(() => { const query = useModuleVisibility(); return { data: query.data, isError: query.isError } }, { wrapper: wrapper(client) })
     await waitFor(() => expect(hook.result.current.data?.hiddenVehicles).toBe(true))
     let reject!: (error: Error) => void
     apiClient.defaults.adapter = () => new Promise((_resolve, refuse) => { reject = refuse })
-    localStorage.setItem('odip_viewing_tenant', 'tenant-b'); hook.rerender()
+    sessionStorage.setItem('odip_viewing_tenant', 'tenant-b'); hook.rerender()
     expect(hook.result.current.data).toBeUndefined()
     await waitFor(() => expect(reject).toBeDefined())
     await act(async () => reject(new Error('offline')))

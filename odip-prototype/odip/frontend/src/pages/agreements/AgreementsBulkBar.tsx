@@ -50,7 +50,7 @@ export function AgreementsBulkBar({ selected, approvable, canApprove, shown, all
       {narrow && (
         // The same box as the table's row boxes (DataTable), so it wears the house accent and a 44 px target.
         <label className="inline-flex min-h-[var(--tap-min)] min-w-[var(--tap-min)] shrink-0 items-center justify-center">
-          <input type="checkbox" className="rounded border-[var(--color-border)] accent-[var(--color-primary)] cursor-pointer" checked={allShownSelected} onChange={onToggleShown} disabled={shown === 0} />
+          <input type="checkbox" className="rounded border-[var(--color-border)] cursor-pointer" checked={allShownSelected} onChange={onToggleShown} disabled={shown === 0} />
           <span className="sr-only">Select shown</span>
         </label>
       )}

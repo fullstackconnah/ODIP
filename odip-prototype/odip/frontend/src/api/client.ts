@@ -1,6 +1,7 @@
 import axios, { type AxiosRequestConfig } from 'axios'
 import type { ApiResponse } from './types'
 import { wipeOffline } from '@/lib/offline/store'
+import { clearViewAs, getViewAs } from '@/lib/viewAs'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 
@@ -31,7 +32,9 @@ export async function endSession(reason?: string, opts?: { keepQueue?: boolean }
   loggingOut = true
   const token = localStorage.getItem('odip_token')
   wipeOffline({ keepQueue: opts?.keepQueue })
-  for (const key of ['odip_token', 'odip_user', 'odip_viewing_tenant', 'odip_viewing_user', 'odip_superadmin_user', 'odip_sign_in_method']) localStorage.removeItem(key)
+  for (const key of ['odip_token', 'odip_user', 'odip_superadmin_user', 'odip_sign_in_method']) localStorage.removeItem(key)
+  clearViewAs('odip_viewing_tenant')
+  clearViewAs('odip_viewing_user')
   try {
     const { auth } = await import('../lib/firebase')
     if (auth) await (await import('firebase/auth')).signOut(auth)
@@ -48,11 +51,11 @@ apiClient.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
-  const viewingTenantId = localStorage.getItem('odip_viewing_tenant')
+  const viewingTenantId = getViewAs('odip_viewing_tenant')
   if (viewingTenantId) {
     config.headers['X-View-As-Tenant'] = viewingTenantId
   }
-  const viewingUserId = localStorage.getItem('odip_viewing_user')
+  const viewingUserId = getViewAs('odip_viewing_user')
   if (viewingUserId) {
     config.headers['X-View-As-User'] = viewingUserId
   }

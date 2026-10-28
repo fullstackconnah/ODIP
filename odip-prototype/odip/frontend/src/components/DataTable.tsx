@@ -486,7 +486,7 @@ export function DataTable<T>({
                       onSelectionChange?.(new Set())
                     }
                   }}
-                  className="rounded border-[var(--color-border)] accent-[var(--color-primary)] cursor-pointer"
+                  className="rounded border-[var(--color-border)] cursor-pointer"
                   aria-label="Select all rows"
                 /></label>
               </th>
@@ -597,7 +597,7 @@ export function DataTable<T>({
                           }
                           onSelectionChange?.(next)
                         }}
-                        className="rounded border-[var(--color-border)] accent-[var(--color-primary)] cursor-pointer"
+                        className="rounded border-[var(--color-border)] cursor-pointer"
                         aria-label={`Select row ${rowKey}`}
                       /></label>
                     </td>

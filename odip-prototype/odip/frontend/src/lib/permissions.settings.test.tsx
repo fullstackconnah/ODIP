@@ -4,7 +4,7 @@ import { usePermissions, type UserRole } from './permissions'
 
 function signIn(role: UserRole, viewingTenant?: string) {
   localStorage.setItem('odip_user', JSON.stringify({ role, fullName: 'Dana Whitlock', username: 'dana.whitlock', tenantName: 'Sunrise Support' }))
-  if (viewingTenant) localStorage.setItem('odip_viewing_tenant', viewingTenant)
+  if (viewingTenant) sessionStorage.setItem('odip_viewing_tenant', viewingTenant)
 }
 
 afterEach(() => localStorage.clear())
