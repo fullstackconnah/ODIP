@@ -257,6 +257,10 @@ const CARD_CLASS: Record<NonNullable<ColumnBase<unknown>['mobile']>, string> = {
   hidden: 'max-md:hidden',
 }
 
+// The actions cell is the card's last line, full width and right-aligned, so the cluster sits in one place whatever the row holds; an empty cell
+// (no actions for this row) leaves the card. Classes, not `data-card`: that attribute switches a row into the title/meta layout (index.css).
+const ACTIONS_CARD = 'max-md:basis-full max-md:text-right max-md:empty:hidden'
+
 /** A number is px, a string is passed through as a CSS length. */
 function cssLength(value: number | string): string {
   return typeof value === 'number' ? `${value}px` : value
@@ -619,7 +623,7 @@ export function DataTable<T>({
                     return (
                       <td
                         key={col.key}
-                        className={`${cellClass} ${col.wrap ? '' : 'md:whitespace-nowrap'} ${alignClass} ${columnClass(col)} ${pinClass(colIndex, false)} ${card ? CARD_CLASS[card] : ''} ${col.className ?? ''} ${TAP_AREA_LINKS}`}
+                        className={`${cellClass} ${col.wrap ? '' : 'md:whitespace-nowrap'} ${alignClass} ${columnClass(col)} ${pinClass(colIndex, false)} ${card ? CARD_CLASS[card] : ''} ${col.key === 'actions' ? ACTIONS_CARD : ''} ${col.className ?? ''} ${TAP_AREA_LINKS}`}
                         style={columnStyle(col)}
                         data-label={typeof col.header === 'string' ? col.header : ''}
                         data-card={card === 'hidden' ? undefined : card}
