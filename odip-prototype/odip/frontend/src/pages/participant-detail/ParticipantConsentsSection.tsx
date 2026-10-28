@@ -140,13 +140,9 @@ export default function ParticipantConsentsSection({ participantId }: { particip
                 <div className="flex items-center gap-2 shrink-0">
                   <StatusBadge status={status} label={label} />
                   {canWriteConsents && (
-                    <button
-                      type="button"
-                      onClick={() => openEdit(consent)}
-                      className="text-xs font-medium text-[var(--color-primary)] hover:underline px-2 py-1.5 min-h-[44px] rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
-                    >
+                    <Button variant="ghost" size="sm" onClick={() => openEdit(consent)}>
                       Edit
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>

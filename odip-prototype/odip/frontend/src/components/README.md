@@ -1019,6 +1019,18 @@ does not stack history entries, it keeps every other query param, and it deletes
 
 ---
 
+## DisclosureToggle
+
+The show/hide row for a collapsed list ("Inactive (2)", "Archived (1)", "Ceased (3)"): a muted text button with a chevron that turns over when open. Use it instead of a hand-rolled `aria-expanded` button.
+
+- Props: `label` (the text, counts included, unchanged), `open`, `onToggle`, and `controls` (the id of the panel it reveals, which becomes `aria-controls`).
+- It carries a `--tap-min` floor, so it is 44px tall under a coarse pointer and the plain row on a mouse. The panel starts closed: the caller owns the `useState(false)`.
+
+```tsx
+<DisclosureToggle label={`Inactive (${inactive.length})`} open={showInactive} onToggle={() => setShowInactive(v => !v)} controls="routines-inactive-list" />
+{showInactive && <div id="routines-inactive-list">…</div>}
+```
+
 ## ActionButtons
 
 `ActionButtons.tsx` — the compact icon-button row for a table row's Edit/Delete/Restore

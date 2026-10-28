@@ -57,6 +57,7 @@ export const SUB_TABS: Record<GroupedTabKey, readonly SubTab[]> = {
   ],
   people: [
     { id: 'contacts', label: 'Contacts', list: true, count: 'people' }, { id: 'roster', label: 'Rostering', list: true, gate: 'rostering' },
+    { id: 'week', label: 'Week', list: true, gate: 'rostering' },
     { id: 'trips', label: 'Bookings', list: true },
   ],
   funding: [{ id: 'plan-budget', label: 'Plan budget', gate: 'planBudget' }, { id: 'claims', label: 'Claims', list: true, gate: 'claims' }],

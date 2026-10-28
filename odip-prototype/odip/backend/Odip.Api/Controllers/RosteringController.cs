@@ -100,16 +100,22 @@ public class RosteringController : ControllerBase
     /// across the week flattens into <see cref="RosterBoardDto.Exceptions"/> either way.
     /// Defaults to the current week when <paramref name="weekStart"/> is omitted; any date
     /// supplied is normalised to that week's Monday.
+    /// <paramref name="staffId"/> (groupBy=staff) or <paramref name="participantId"/> (groupBy=participant) narrows the rows
+    /// to that one person (spec 2026-10-28, the roster week on a profile). The findings are still computed against the whole week.
     /// </summary>
     [HttpGet("board")]
     public async Task<ActionResult<ApiResponse<RosterBoardDto>>> GetBoard(
-        [FromQuery] DateOnly? weekStart, [FromQuery] string? groupBy, CancellationToken ct)
+        [FromQuery] DateOnly? weekStart, [FromQuery] string? groupBy, CancellationToken ct,
+        [FromQuery] Guid? staffId = null, [FromQuery] Guid? participantId = null)
     {
         if (!TryParseGroupBy(groupBy, out var groupByValue))
         {
             return BadRequest(ApiResponse<RosterBoardDto>.Fail(
                 $"Unrecognised groupBy value '{groupBy}'. Expected 'participant' or 'staff'."));
         }
+        if (staffId is not null && participantId is not null) return BadRequest(ApiResponse<RosterBoardDto>.Fail("Pass staffId or participantId, not both."));
+        if (staffId is not null && groupByValue != RosterBoardGroupBy.Staff) return BadRequest(ApiResponse<RosterBoardDto>.Fail("staffId needs groupBy=staff."));
+        if (participantId is not null && groupByValue != RosterBoardGroupBy.Participant) return BadRequest(ApiResponse<RosterBoardDto>.Fail("participantId needs groupBy=participant."));
 
         var start = WeekStart(weekStart ?? await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct));
         var end = start.AddDays(6);
@@ -254,8 +260,11 @@ public class RosteringController : ControllerBase
         // the same dictionary rather than re-running RosterConflictService.Check. ──
         var findingsByShiftId = weekShifts.ToDictionary(s => s.Id, FindingsFor);
 
+        // A person filter narrows only what is emitted; the findings above still see the whole week (overlaps need the other shifts).
+        bool Shown(Shift s) => (staffId is null || s.UserId == staffId) && (participantId is null || s.ParticipantId == participantId);
+
         var exceptions = new List<RosterExceptionDto>();
-        foreach (var shift in weekShifts)
+        foreach (var shift in weekShifts.Where(Shown))
         {
             participantById.TryGetValue(shift.ParticipantId, out var p);
             foreach (var finding in findingsByShiftId[shift.Id])
@@ -312,7 +321,7 @@ public class RosteringController : ControllerBase
             };
 
             var participantRows = new List<RosterParticipantRowDto>();
-            foreach (var participant in displayParticipants)
+            foreach (var participant in displayParticipants.Where(p => participantId is null || p.Id == participantId))
             {
                 var participantShifts = weekShifts.Where(s => s.ParticipantId == participant.Id).ToList();
                 var shiftDtos = participantShifts.Select(s => ToShiftDto(s, findingsByShiftId[s.Id])).ToList();
@@ -357,7 +366,7 @@ public class RosteringController : ControllerBase
         {
             var rows = new List<RosterStaffRowDto>();
 
-            foreach (var staff in activeStaff)
+            foreach (var staff in activeStaff.Where(s => staffId is null || s.Id == staffId))
             {
                 var staffShifts = weekShifts.Where(s => s.UserId == staff.Id).ToList();
                 var shiftDtos = staffShifts.Select(s => ToShiftDto(s, findingsByShiftId[s.Id])).ToList();
@@ -399,10 +408,10 @@ public class RosteringController : ControllerBase
                 });
             }
 
-            var unfilled = weekShifts
-                .Where(s => s.UserId is null)
-                .Select(s => ToShiftDto(s, findingsByShiftId[s.Id]))
-                .ToList();
+            // One staff member's week has no Unfilled lane: an empty list, never null (the client spreads it).
+            var unfilled = staffId is null
+                ? weekShifts.Where(s => s.UserId is null).Select(s => ToShiftDto(s, findingsByShiftId[s.Id])).ToList()
+                : new List<ShiftDto>();
 
             board = new RosterBoardDto
             {
@@ -727,7 +736,7 @@ public class RosteringController : ControllerBase
         if (previousUserId != shift.UserId || shift.Status == ShiftStatus.Cancelled)
             await _obligationTasks.CompleteByShiftAsync(shift.Id, TaskType.LeaveCoverage, ct);
 
-        // The slide-over's Staff field is the menus' way to assign (the brief, section 7), so a PUT tells people exactly as a drop does; becoming Published tells the worker (decision 9).
+        // The slide-over's Staff field is the menus' way to assign (the brief, section 7), so a PUT tells people exactly as a drop does; becoming Published tells the worker, and a Published shift that is cancelled tells the worker it was cancelled (decision 9, reversed for Cancelled on 2026-10-28).
         // shortcut: two coordinators editing ONE shift in the slide-over is still last-write-wins on the worker (the PUT carries no ExpectedStaffId as the board's drops do), though the
         // locks above keep it from writing over a publish or a move; add one if that ever collides.
         await NotifyStaffChangeAsync(shift, previousUserId, wasPublished: previousStatus == ShiftStatus.Published, ct);
@@ -2186,12 +2195,16 @@ public class RosteringController : ControllerBase
     /// Roster drag and drop (2026-10-14), decision 9: a worker hears about a shift only once it is Published. Call it once the shift holds its new worker and status, before the
     /// caller's one save, so the outbox rows commit with the change (a refused write sends nothing). The worker on a Published shift gets ShiftAssigned when it is newly theirs or
     /// has just become Published; whoever came off a shift that was already Published gets ShiftUnassigned, even when the same save takes it off Published (deep review S2). Draft changes, and a
-    /// Published shift going back to Draft or Cancelled with its worker kept, stay silent.
+    /// Published shift going back to Draft with its worker kept, stay silent. A Published shift that is Cancelled (2026-10-28, reverses decision 9 for Cancelled only) tells its previous worker with
+    /// ShiftUnassigned { Cancelled = true } unless its date is before the provider's today; that one notice replaces "taken off", so a worker changed in the same save still hears only "cancelled".
+    /// Do not make a cancel silent again: the worker would learn of it only by opening the app.
     /// </summary>
     private async Task NotifyStaffChangeAsync(Shift shift, Guid? previousUserId, bool wasPublished, CancellationToken ct)
     {
         var assignedTo = shift.Status == ShiftStatus.Published && shift.UserId is { } now && (now != previousUserId || !wasPublished) ? now : (Guid?)null;
-        var takenOff = wasPublished && previousUserId is { } before && before != shift.UserId ? before : (Guid?)null;
+        var cancelled = wasPublished && shift.Status == ShiftStatus.Cancelled && previousUserId is not null
+            && shift.ServiceDate >= await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
+        var takenOff = wasPublished && previousUserId is { } before && (cancelled || before != shift.UserId) ? before : (Guid?)null;
         if (assignedTo is null && takenOff is null) return;
 
         var participantName = await _db.Participants.Where(p => p.Id == shift.ParticipantId)
@@ -2203,7 +2216,7 @@ public class RosteringController : ControllerBase
         if (takenOff is { } t && await _db.Users.FirstOrDefaultAsync(u => u.Id == t, ct) is { } removed)
             await _notificationRaiser.RaiseAsync(
                 Odip.Domain.Notifications.NotificationEventType.ShiftUnassigned, "Shift", shift.Id, new[] { removed.Id },
-                new Odip.Infrastructure.Notifications.Templates.ShiftUnassignedPayload(removed.Email, participantName, shift.ServiceDate, shift.StartTime, shift.EndTime), ct);
+                new Odip.Infrastructure.Notifications.Templates.ShiftUnassignedPayload(removed.Email, participantName, shift.ServiceDate, shift.StartTime, shift.EndTime, cancelled, StillTheirs: shift.UserId == removed.Id), ct);
     }
 
     /// <summary>
