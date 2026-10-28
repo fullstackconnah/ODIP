@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { FixedListFrame } from './FixedListFrame'
 
 type Row = { id: string; done: boolean }
@@ -32,6 +33,15 @@ describe('FixedListFrame — zero rows is the same as zero answered', () => {
     const fold = container.querySelector('details')!
     expect(fold).toHaveTextContent('Not recorded: Daily living')
     expect(fold).toHaveTextContent('a')
+    expect(fold).toHaveAttribute('open')
+    expect(fold).toHaveAttribute('data-fold-static')
+  })
+
+  it('lets the editor close the fold that opened by itself', async () => {
+    const { container } = frame([{ id: 'a', done: false }], true)
+    const fold = container.querySelector('details')!
+    await userEvent.click(screen.getByText('Not recorded: Daily living'))
+    expect(fold).not.toHaveAttribute('open')
   })
 
   it('still shows the answered rows, the count and the reveal button when some are answered', () => {

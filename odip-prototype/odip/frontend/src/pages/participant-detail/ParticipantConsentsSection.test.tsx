@@ -196,10 +196,10 @@ describe('ParticipantConsentsSection — fixed list (T9)', () => {
     expect(screen.queryByRole('button', { name: 'Record a consent' })).not.toBeInTheDocument()
   })
 
-  it('with nothing recorded: an editor gets a closed fold holding the rows, a viewer one plain line', () => {
+  it('with nothing recorded: an editor gets an open fold holding the rows, a viewer one plain line', () => {
     const { unmount } = render(<ParticipantConsentsSection participantId="participant-1" />)
     const fold = screen.getByText('Not recorded: Consents').closest('details')!
-    expect(fold).not.toHaveAttribute('open')
+    expect(fold).toHaveAttribute('open')
     expect(fold).toContainElement(screen.getByText('Terms & Conditions'))
     unmount()
 

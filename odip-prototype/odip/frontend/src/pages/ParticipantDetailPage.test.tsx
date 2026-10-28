@@ -15,8 +15,9 @@ const {
   mockUseDownloadIntakeFormPdf, mockUseDownloadParticipantProfilePdf, mockUseDownloadClientOverviewPdf,
   mockPatchMutateAsync, mockUseStaff,
   mockUseGenerateCaregiverLink, mockUseRevokeCaregiverLink, mockUseCaregiverSubmissions,
-  mockDeleteMutate, mockNotes, mockRisks,
+  mockDeleteMutate, mockNotes, mockRisks, realAdl,
 } = vi.hoisted(() => ({
+  realAdl: { on: false },
   mockUseParticipant: vi.fn(),
   // The page reads the support profile once for Health, Daily and Overview; 404 / empty by default.
   mockUseSupportProfile: vi.fn<() => Record<string, unknown>>(() => ({ data: undefined, isLoading: false, isError: false, error: null, refetch: vi.fn() })),
@@ -70,6 +71,9 @@ vi.mock('@/api/hooks', () => ({
   useParticipantRoutines: () => ({ data: [] }),
   useParticipantContactRoles: () => ({ data: [] }),
   useParticipantNotes: mockNotes,
+  // Only read by the real ADL section (realAdl.on): one unassessed row, as the controller returns for a participant with none answered.
+  useParticipantAdlAssessments: () => ({ data: [{ id: null, participantId: 'participant-1', adlType: 'Dressing', level: null, notes: null, howToHelpNotes: null, createdAt: null, updatedAt: null }], isLoading: false }),
+  useUpsertAdlAssessment: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
 vi.mock('@/components/AuditHistoryTab', () => ({ default: () => <div data-testid="history-tab" /> }))
@@ -91,7 +95,8 @@ vi.mock('./participant-detail', async () => {
     RiskEntriesSection: () => <div data-testid="risk-entries-section" />,
     ParticipantConsentsSection: () => <div data-testid="consents-section" />,
     ParticipantHealthConditionsSection: () => <div data-testid="health-conditions-section" />,
-    ParticipantAdlAssessmentsSection: () => <div data-testid="adl-assessments-section" />,
+    // Real for the one empty-fold case (realAdl.on); every other test keeps the stub.
+    ParticipantAdlAssessmentsSection: (props: { participantId: string }) => realAdl.on ? <actual.ParticipantAdlAssessmentsSection {...props} /> : <div data-testid="adl-assessments-section" />,
     ContactsTab: () => <div data-testid="contacts-tab" />,
     // PD-6 — the Support Profile tab has its own dedicated test file (SupportProfileTab.test.tsx);
     // stubbed here so this page's tests stay about page composition/tab wiring, same "own hooks
@@ -2150,6 +2155,18 @@ describe('ParticipantDetailPage — sub-tabs', () => {
     expect(within(panel).getAllByText(/Not recorded/).length).toBeGreaterThan(0)
     expect(within(panel).getAllByRole('button', { name: /Edit|Add/ }).length).toBeGreaterThan(0)
     expect(panel.querySelector('details')).toBeNull()
+  })
+
+  it('an editor opening an empty Daily living sub-tab sees its rows at once, with no click on a fold', () => {
+    setUserRole('Coordinator')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    realAdl.on = true
+    try {
+      renderAtTab('participant-1', 'daily', 'daily-living')
+      const panel = screen.getByRole('tabpanel')
+      expect(within(panel).getByText('Not recorded: Daily living').closest('details')).toHaveAttribute('open')
+      expect(within(panel).getByText('Dressing')).toBeVisible()
+    } finally { realAdl.on = false }
   })
 
   it('g: a hidden section falls back to the first visible one without an error', () => {
