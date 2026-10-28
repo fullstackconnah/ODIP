@@ -24,7 +24,7 @@ export function SyncRow() {
     text = `${s.stillOffline ? 'Still offline. ' : ''}${plural(s.waiting, 'change')} waiting to send`
     action = <Button variant="secondary" size="md" className="shrink-0 whitespace-nowrap" onClick={send}>Send now</Button>
   } else if (s.state === 'sending') {
-    icon = <Loader2 className="size-4 shrink-0 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+    icon = <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden="true" />
     text = `Sending ${plural(s.waiting, 'change')}…`
     action = <Button variant="secondary" size="md" className="shrink-0 whitespace-nowrap" disabled>Send now</Button>
   } else if (s.state === 'allSent') {

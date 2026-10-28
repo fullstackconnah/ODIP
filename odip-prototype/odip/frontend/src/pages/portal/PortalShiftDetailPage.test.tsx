@@ -422,6 +422,14 @@ describe('PortalShiftDetailPage: During', () => {
     await waitFor(() => expect(checkRoutineMutateAsync).toHaveBeenCalledWith({ id: 'shift-1', routineId: 'r1' }))
   })
 
+  it('the routine tick box fades its fill and its check over 100ms, with no scale', () => {
+    show(inProgress({ shiftRoutines: [{ id: 'r1', title: 'Morning routine', description: '', category: 'PersonalCare', isCritical: false, startTime: null, endTime: null, occursAt: '2026-08-17T09:00:00', afterMidnight: false, isChecked: true, checkedAt: '2026-08-17T09:05:00Z', checkedByName: 'Jack', fromTickSnapshot: false }] as never }))
+    const box = screen.getByRole('checkbox', { name: /morning routine/i }).firstElementChild!
+    expect(box).toHaveClass('transition-colors', 'duration-100', 'ease-out')
+    expect(box.className).not.toMatch(/scale/)
+    expect(box.querySelector('svg')).toHaveClass('tick-in')
+  })
+
   it('shows the competency reason once and no Record buttons when the worker cannot record', () => {
     show(inProgress({ canRecordDoses: false, canRecordDosesReason: 'Medication Competency expired', medicationsDue: [dose()] as never }))
     expect(screen.getByText('Medication Competency expired')).toBeInTheDocument()

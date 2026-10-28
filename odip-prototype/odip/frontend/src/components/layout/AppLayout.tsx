@@ -621,7 +621,7 @@ export default function AppLayout() {
             />
           )}
           {otherWorkspaces.length > 0 && !rail && (
-            <details open={otherWorkspaces.some(leaf => isLeafActive(leaf, location.pathname)) || undefined} className="mt-2">
+            <details open={otherWorkspaces.some(leaf => isLeafActive(leaf, location.pathname)) || undefined} data-fold-static className="mt-2">
               <summary data-glide="other" className={`cursor-pointer rounded-md px-3 py-1.5 min-h-[var(--tap-min)] text-sm ${NAV_IDLE}`}><span data-fold="label">Other workspaces</span></summary>
               {otherWorkspaces.map(leaf => <SidebarLink key={leaf.to} leaf={leaf} pathname={location.pathname} counts={counts} onNavigate={closeDrawer} />)}
             </details>
