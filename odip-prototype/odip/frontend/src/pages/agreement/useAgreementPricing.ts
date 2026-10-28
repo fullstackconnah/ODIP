@@ -56,9 +56,11 @@ export function useAgreementPricing({ participantId, shifts, state, zone, from, 
     onRetry: () => { void check.refetch() },
     onRecord: onRecordBudget,
   })
+  // The one extra quote, for a chosen period, is asked on the same gate as the agreement check, so at most the check and this one are in flight.
+  const quoteReady = canQuote && !budget.isFetching && !budget.isError && dates === null && settled.length > 0
   const issues: PlanIssue[] = answer?.period.issues ?? []
   return {
-    settings, groups, answer, status, fromStore: !canQuote && !!stored, budgetView, issues, refused: refusals(issues), dates, leftOut,
+    settings, groups, answer, status, from, to, settled, settling, quoteReady, fromStore: !canQuote && !!stored, budgetView, issues, refused: refusals(issues), dates, leftOut,
     refreshing: settling || (budget.isFetching && !!answer),
     error: budget.error,
     retry: () => { void budget.refetch() },

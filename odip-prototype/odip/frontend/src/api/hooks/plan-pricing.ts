@@ -52,6 +52,7 @@ export function useUpdatePlanPricingSettings() {
       // Every price on screen was worked out with the old settings.
       queryClient.invalidateQueries({ queryKey: ['plan-budget'] })
       queryClient.invalidateQueries({ queryKey: ['plan-block-quote'] })
+      queryClient.invalidateQueries({ queryKey: ['plan-period-quote'] })
     },
   })
 }
@@ -97,5 +98,21 @@ export function usePlanBlockQuote(block: PlanBlock | null, from: string, to: str
     retry: retryWhenBusy,
     retryDelay: busyDelay,
     queryFn: ({ signal }) => postQuote({ blocks: [block as PlanBlock], periodFrom: from, periodTo: to, includeLines: true }, signal),
+  })
+}
+
+/**
+ * One period of the agreement priced alone, without its lines: "Cost by period" on the Check step. Unlike the budget it keeps no previous answer, so a figure on screen is only ever the answer
+ * for these blocks and these dates. Only the chosen period is asked for.
+ */
+export function usePlanPeriodQuote(blocks: readonly PlanBlock[], from: string, to: string, enabled = true) {
+  const ready = enabled && blocks.length > 0 && periodProblem(from, to) === null
+  return useQuery({
+    queryKey: ['plan-period-quote', JSON.stringify({ blocks, from, to })],
+    enabled: ready,
+    staleTime: 30_000,
+    retry: retryWhenBusy,
+    retryDelay: busyDelay,
+    queryFn: ({ signal }) => postQuote({ blocks: [...blocks], periodFrom: from, periodTo: to, includeLines: false }, signal),
   })
 }

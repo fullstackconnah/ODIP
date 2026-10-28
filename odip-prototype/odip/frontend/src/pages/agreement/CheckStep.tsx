@@ -8,6 +8,7 @@ import { formatHours } from '@/lib/planBlocks'
 import { NO_FIGURE, asSentence, categoryLabel, describeQuoteError, pricedNothing, totalsCaption } from '@/lib/planQuote'
 import { formatCurrency } from '@/lib/utils'
 import { AgreementBudgetBreakdown } from '../budgets/components/AgreementBudgetBreakdown'
+import { CostByPeriod } from './CostByPeriod'
 import { PlanNotices } from './PlanNotices'
 import type { useAgreementPricing } from './useAgreementPricing'
 
@@ -83,6 +84,8 @@ export function CheckStep({ pricing, issues, anySkipped, onFix, onChangeHolidays
             {caption.text && <p className="text-[13px] text-[var(--color-muted-foreground)]">{asSentence(caption.text)}.</p>}
             {leftOut > 0 && <p className="text-[13px] text-[var(--color-muted-foreground)]">{plural(leftOut, 'shift')} left out of these figures until {leftOut === 1 ? 'it is' : 'they are'} complete.</p>}
           </section>
+
+          <CostByPeriod pricing={pricing} />
 
           {holidays.days > 0 && (
             <p className="text-sm">
