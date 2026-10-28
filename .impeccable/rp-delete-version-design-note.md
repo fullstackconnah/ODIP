@@ -8,3 +8,4 @@ States:
 - Other errors, success, loading, empty, focus: unchanged.
 
 apple-design applied: forgiveness and agency (a destructive action never lands on data the user has not seen); feedback is specific and says what to do next; no new motion or chrome (restraint).
+- Tone: a 409 delete refusal shows in the warning tone (Callout `tone="warning"`, as the edit-conflict path in this tab does), because it is not a failure: someone else changed the entry. Every other list error keeps the error tone.
