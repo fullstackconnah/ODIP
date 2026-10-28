@@ -40,7 +40,7 @@ public class RosteringUpdateShiftStatusGateTests
         {
             Id = Guid.NewGuid(), ParticipantId = participantId, ServiceDate = ServiceDate,
             StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne,
-            NightType = SleepoverType.None, Status = status,
+            NightType = SleepoverType.None, Status = status, UserId = Guid.NewGuid(),
         };
         db.Shifts.Add(shift);
         db.SaveChanges();

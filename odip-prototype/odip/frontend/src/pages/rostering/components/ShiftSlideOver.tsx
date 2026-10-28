@@ -278,7 +278,8 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   const statusLocked = !!existing && !isCoordinatorSettable(existing.status)
   const statusItems: DropdownItem[] = statusLocked
     ? [{ value: existing!.status, label: lockedWords(existing!.status), disabled: true }]
-    : COORDINATOR_SETTABLE_SHIFT_STATUSES.map(s => ({ value: s, label: s }))
+    // Published is not offered for a shift nobody is on (Publish week holds it until someone is); a shift already set to Published keeps it.
+    : COORDINATOR_SETTABLE_SHIFT_STATUSES.filter(s => s !== 'Published' || staffId || existing?.status === 'Published').map(s => ({ value: s, label: s }))
 
   const warningFindings = findings.filter(f => f.severity === 'Warning')
   // A Warning finding only forces a reason when the backend marks it requiresReason (e.g.
@@ -494,7 +495,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
           >
             <SearchableSelect
               value={staffId ?? ''}
-              onChange={v => setStaffId(v || null)}
+              onChange={v => { setStaffId(v || null); if (!v && status === 'Published' && existing?.status !== 'Published') setStatus('Draft') }}
               disabled={!canWrite || statusLocked}
               placeholder="Unassigned"
               items={[{ value: '', label: 'Unassigned' }, ...sortedStaffOptions]}
@@ -560,7 +561,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
         {isEdit && (
           <FormField
             label="Status"
-            hint={statusLocked ? 'Set automatically as the worker starts/finishes the shift and a reviewer approves or returns it — it can’t be changed here.' : undefined}
+            hint={statusLocked ? 'Set automatically as the worker starts/finishes the shift and a reviewer approves or returns it — it can’t be changed here.' : !staffId && existing?.status !== 'Published' ? 'Put someone on this shift before publishing it.' : undefined}
           >
             <Dropdown
               variant="form"

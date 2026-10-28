@@ -77,9 +77,10 @@ export async function assignShift(coord: Session, shiftId: string, staffId: stri
   return expectStatus('assign shift', 200, await call(coord, 'POST', `/rostering/shifts/${shiftId}/assign`, { staffId }));
 }
 
-export async function publishShift(coord: Session, shiftId: string, participantId: string, serviceDate: string) {
+// staffId: the PUT body is the whole shift, and a shift nobody is on is not published (409).
+export async function publishShift(coord: Session, shiftId: string, participantId: string, serviceDate: string, staffId: string) {
   return expectStatus('publish shift', 200, await call(coord, 'PUT', `/rostering/shifts/${shiftId}`,
-    shiftBody(participantId, serviceDate, { status: 'Published' })));
+    shiftBody(participantId, serviceDate, { staffId, status: 'Published' })));
 }
 
 /** The claim engine will not price anything without provider settings ("Provider settings are not

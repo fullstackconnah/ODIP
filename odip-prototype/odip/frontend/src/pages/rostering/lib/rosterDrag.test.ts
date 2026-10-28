@@ -241,8 +241,11 @@ describe('sentences', () => {
       "Sam's Mon 17 Aug shift is published, so the change there goes out now.",
     ])
     expect(replacePromptLines(sam, { ...tue, status: 'Draft' }, false)).toEqual(['Mia Chen, Tue 18 Aug, 9am–3pm.', 'Replace: Sam takes it and Alex comes off.'])
-    expect(publishWeekMessage([makeShift({ id: '1', staffId: 'a' }), makeShift({ id: '2', staffId: 'a' }), makeShift({ id: '3', staffId: 'b' }), makeUnfilledShift({ id: '4' })]))
-      .toBe('4 draft shifts go out to staff. The 2 people on them are notified. 1 still needs staff and is published as needing staff.')
+    const staffed = [makeShift({ id: '1', staffId: 'a' }), makeShift({ id: '2', staffId: 'a' }), makeShift({ id: '3', staffId: 'b' })]
+    expect(publishWeekMessage(staffed, 1)).toBe('3 draft shifts go out to staff. The 2 people on them are notified. 1 other shift has nobody on it yet. It stays unpublished until someone is put on it.')
+    expect(publishWeekMessage(staffed, 2)).toBe('3 draft shifts go out to staff. The 2 people on them are notified. 2 other shifts have nobody on them yet. They stay unpublished until someone is put on them.')
+    expect(publishWeekMessage(staffed.slice(2), 0)).toBe('1 draft shift goes out to staff. The 1 person on it is notified.')
+    expect(publishWeekMessage(staffed.slice(2), 1)).toBe('1 draft shift goes out to staff. The 1 person on it is notified. 1 other shift has nobody on it yet. It stays unpublished until someone is put on it.')
   })
 })
 
