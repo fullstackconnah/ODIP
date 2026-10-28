@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useFundingLedger } from '@/api/hooks'
 import type { LedgerBucket, LedgerPeriod, LedgerPool, LedgerRow, ParticipantLedgerDto } from '@/api/types'
@@ -16,6 +16,7 @@ import { chipToneOf, focusPeriodOf, money, paceSentence, poolSentence, quietEsti
 import { formatDateRange, formatDayMonth } from '@/lib/dateRange'
 import { writtenDay, writtenSpan } from '@/lib/fundingPlan'
 import { plural } from '@/lib/format'
+import BudgetTrackCard from './BudgetTrackCard'
 import { NdiaRejectionNote } from './NdiaRejectionNote'
 
 // The budget ledger on the Funding tab (budget feature, phase 2a): for each pool of the current plan, the current period's figures, the one sentence that says what is left and
@@ -61,10 +62,17 @@ export default function FundingLedger({ participantId, enabled = true, nextPlanS
           <div className="mt-2"><Button variant="secondary" size="sm" onClick={() => { void query.refetch() }}>Try again</Button></div>
         </Callout>
       )}
-      <LedgerBody data={data} nextPlanStart={nextPlanStart} otherFunded={otherFunded} />
+      <LedgerBody data={data} nextPlanStart={nextPlanStart} otherFunded={otherFunded} chart={ledgerHasMainBranch(data, nextPlanStart, otherFunded) ? <BudgetTrackCard participantId={participantId} /> : undefined} />
     </div>
   )
 }
+
+/** Between an ended plan and the next one that has not started: the ledger says no plan is running. */
+const betweenPlans = (data: ParticipantLedgerDto, nextPlanStart?: string) => !!data.planId && !data.planIsCurrent && !!nextPlanStart
+const hasNoPlan = (data: ParticipantLedgerDto) => !data.planId || data.pools.length === 0
+
+/** Whether the ledger shows a plan's figures: the only state the budget graph is drawn (and asked for) in. Never for a participant funded another way. */
+export const ledgerHasMainBranch = (data: ParticipantLedgerDto, nextPlanStart?: string, otherFunded = false) => !otherFunded && !betweenPlans(data, nextPlanStart) && !hasNoPlan(data)
 
 /**
  * The whole ledger for a loaded answer, so the sections can be rendered from a fixture with no query behind it.
@@ -73,8 +81,8 @@ export default function FundingLedger({ participantId, enabled = true, nextPlanS
  * STARTED, so between a plan that has ended and the next one the ledger would be the ended plan's under the upcoming plan's card. There it says no plan is running instead of showing the ended plan's
  * figures; everywhere else it names the plan the figures are for.
  */
-export function LedgerBody({ data, nextPlanStart, otherFunded = false }: { data: ParticipantLedgerDto; nextPlanStart?: string; otherFunded?: boolean }) {
-  if (data.planId && !data.planIsCurrent && nextPlanStart) {
+export function LedgerBody({ data, nextPlanStart, otherFunded = false, chart }: { data: ParticipantLedgerDto; nextPlanStart?: string; otherFunded?: boolean; chart?: ReactNode }) {
+  if (betweenPlans(data, nextPlanStart)) {
     return (
       <Card>
         <div className="flex max-w-prose flex-col items-start gap-2">
@@ -87,7 +95,7 @@ export function LedgerBody({ data, nextPlanStart, otherFunded = false }: { data:
     )
   }
 
-  const noPlan = !data.planId || data.pools.length === 0
+  const noPlan = hasNoPlan(data)
   // Money that fits no recorded pool, or is dated outside the plan, is shown and never dropped (the brief's rule): the server sends both buckets, and each shows only when it holds something.
   const buckets = (
     <>
@@ -132,6 +140,7 @@ export function LedgerBody({ data, nextPlanStart, otherFunded = false }: { data:
           Figures for the plan {writtenSpan(data.planStart, data.planEnd)}{data.planIsCurrent ? '' : ', which has ended'}.
         </p>
       )}
+      {ledgerHasMainBranch(data, nextPlanStart, otherFunded) && chart}
       {data.pools.map(pool => <PoolLedger key={pool.id} pool={pool} />)}
       {buckets}
       <p className="text-[13px] text-[var(--color-muted-foreground)]">

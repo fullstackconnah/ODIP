@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import { LedgerBody } from './FundingLedger'
+import FundingLedger, { LedgerBody, ledgerHasMainBranch } from './FundingLedger'
+import { useBudgetSeries, useFundingLedger } from '@/api/hooks'
 import { ClaimBudgetBlock as Block } from '@/components/ClaimBudgetBlock'
 import { budgetRow, claimBudget, ledgerBucket, ledgerPeriod, ledgerPool, ledgerRow, noLedger, participantLedger, q2Rows, quarterLedgers } from '@/test/fixtures/ledger'
 
@@ -12,6 +13,7 @@ import { budgetRow, claimBudget, ledgerBucket, ledgerPeriod, ledgerPool, ledgerR
 
 vi.mock('@/api/hooks', () => ({
   useFundingLedger: vi.fn(),
+  useBudgetSeries: vi.fn(),
 }))
 
 const renderLedger = (data: ReturnType<typeof participantLedger>) => render(<MemoryRouter><LedgerBody data={data} /></MemoryRouter>)
@@ -551,5 +553,54 @@ describe('the claim budget block', () => {
     expect(screen.getByText('Sophie Brown')).toBeInTheDocument()
     expect(screen.getByText('Alex Nguyen')).toBeInTheDocument()
     expect(screen.getByText('$75 is not in a recorded pool, so it uses none of the budget.')).toBeInTheDocument()
+  })
+})
+
+describe('the budget graph slot', () => {
+  const slot = <div data-testid="chart-slot" />
+
+  it('LedgerBody renders the chart slot after "Figures for the plan" and before the first pool card', () => {
+    render(<MemoryRouter><LedgerBody data={participantLedger()} chart={slot} /></MemoryRouter>)
+
+    const figures = screen.getByText(/^Figures for the plan/)
+    const chart = screen.getByTestId('chart-slot')
+    const pool = screen.getByRole('heading', { name: participantLedger().pools[0].name })
+    expect(figures.compareDocumentPosition(chart) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(chart.compareDocumentPosition(pool) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('LedgerBody never renders the slot between plans, with no plan, or when Other-funded', () => {
+    const ended = participantLedger({ planIsCurrent: false, planStart: '2025-10-01', planEnd: '2026-09-30' })
+    const cases = [
+      <LedgerBody key="between" data={ended} nextPlanStart="2026-10-15" chart={slot} />,
+      <LedgerBody key="none" data={noLedger()} chart={slot} />,
+      <LedgerBody key="no-pools" data={participantLedger({ pools: [] })} chart={slot} />,
+      <LedgerBody key="other" data={participantLedger()} otherFunded chart={slot} />,
+    ]
+    for (const body of cases) {
+      const { unmount } = render(<MemoryRouter>{body}</MemoryRouter>)
+      expect(screen.queryByTestId('chart-slot')).toBeNull()
+      unmount()
+    }
+    expect(ledgerHasMainBranch(participantLedger())).toBe(true)
+  })
+
+  it('FundingLedger asks for the series only for a main-branch ledger', () => {
+    const ledger = (data: ReturnType<typeof participantLedger>) => vi.mocked(useFundingLedger).mockReturnValue({ data, isLoading: false, isError: false, refetch: vi.fn() } as never)
+    vi.mocked(useBudgetSeries).mockReturnValue({ data: undefined, isLoading: true, isError: false, refetch: vi.fn() } as never)
+
+    ledger(participantLedger())
+    const main = render(<MemoryRouter><FundingLedger participantId="p-1" /></MemoryRouter>)
+    expect(useBudgetSeries).toHaveBeenCalledWith('p-1')
+    expect(screen.getByRole('heading', { name: 'How the budget is tracking' })).toBeInTheDocument()
+    main.unmount()
+
+    vi.mocked(useBudgetSeries).mockClear()
+    ledger(participantLedger({ planIsCurrent: false, planStart: '2025-10-01', planEnd: '2026-09-30' }))
+    const between = render(<MemoryRouter><FundingLedger participantId="p-1" nextPlanStart="2026-10-15" /></MemoryRouter>)
+    between.unmount()
+    ledger(participantLedger())
+    render(<MemoryRouter><FundingLedger participantId="p-1" otherFunded /></MemoryRouter>)
+    expect(useBudgetSeries).not.toHaveBeenCalled()
   })
 })
