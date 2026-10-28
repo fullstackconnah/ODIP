@@ -301,12 +301,15 @@ public sealed class BudgetLedgerService
     private async Task<List<LineRow>> LoadClaimLinesAsync(List<Guid> participantIds, DateOnly from, DateOnly to, CancellationToken ct) =>
         await ClaimLinesQuery(participantIds, from, to).ToListAsync(ct);
 
+    /// <summary>Whether a claim line still counts: the line is not rejected and its claim is neither rejected nor cancelled. One rule for the ledger and for shift claim generation.</summary>
+    public static readonly System.Linq.Expressions.Expression<Func<ClaimLineItem, bool>> ClaimLineStillCounts = l =>
+        l.Status != ClaimLineItemStatus.Rejected && l.TripClaim.Status != TripClaimStatus.Rejected && l.TripClaim.Status != TripClaimStatus.Cancelled;
+
     /// <summary>The query behind the claim lines: a query of its own so that a test can show it translates to SQL (EF InMemory would evaluate any LINQ in memory).</summary>
     public IQueryable<LineRow> ClaimLinesQuery(IReadOnlyCollection<Guid> participantIds, DateOnly from, DateOnly to) =>
         _db.ClaimLineItems.AsNoTracking()
+            .Where(ClaimLineStillCounts)
             .Where(l => l.SupportsDeliveredFrom >= from && l.SupportsDeliveredFrom <= to
-                && l.Status != ClaimLineItemStatus.Rejected
-                && l.TripClaim.Status != TripClaimStatus.Rejected && l.TripClaim.Status != TripClaimStatus.Cancelled
                 && ((l.Shift != null && participantIds.Contains(l.Shift.ParticipantId)) || (l.ParticipantBooking != null && participantIds.Contains(l.ParticipantBooking.ParticipantId))))
             .Select(l => new LineRow(
                 l.Id, l.TripClaimId, l.TripClaim.ClaimReference, l.TripClaim.Status, l.Status, l.SupportItemCode, l.SupportsDeliveredFrom, l.Hours, l.TotalAmount, l.PaidAmount,
@@ -314,7 +317,7 @@ public sealed class BudgetLedgerService
                 l.Shift != null ? l.Shift.ParticipantId : l.ParticipantBooking!.ParticipantId,
                 l.ParticipantBooking != null ? l.ParticipantBooking.PlanTypeOverride : null));
 
-    /// <summary>The shifts that can still cost something: not cancelled, and a completed one only while no claim line has taken it.</summary>
+    /// <summary>The shifts that can still cost something: not cancelled, and a completed one only while no claim line that counts has taken it.</summary>
     private async Task<List<ShiftRow>> LoadShiftsAsync(Guid tenantId, List<Guid> participantIds, DateOnly from, DateOnly to, CancellationToken ct) =>
         await ShiftsQuery(tenantId, participantIds, from, to).ToListAsync(ct);
 
@@ -322,7 +325,7 @@ public sealed class BudgetLedgerService
         _db.Shifts.AsNoTracking()
             .Where(s => s.TenantId == tenantId && participantIds.Contains(s.ParticipantId) && s.ServiceDate >= from && s.ServiceDate <= to
                 && (s.Status == ShiftStatus.Draft || s.Status == ShiftStatus.Published || s.Status == ShiftStatus.InProgress || s.Status == ShiftStatus.PendingReview
-                    || (s.Status == ShiftStatus.Completed && !_db.ClaimLineItems.Any(l => l.ShiftId == s.Id))))
+                    || (s.Status == ShiftStatus.Completed && !_db.ClaimLineItems.Where(ClaimLineStillCounts).Any(l => l.ShiftId == s.Id))))
             .Select(s => new ShiftRow(s.Id, s.ParticipantId, s.ServiceDate, s.StartTime, s.EndTime, s.EndsNextDay, s.Status, s.Ratio, s.NightType));
 
     /// <summary>
@@ -342,9 +345,7 @@ public sealed class BudgetLedgerService
                 // be counted as booked ahead - the same rule the shift query above follows for a completed shift that has a claim line.
                 // "Already counted" is exactly ClaimLinesQuery's rule: the claim is neither rejected nor cancelled, and the line is not
                 // itself rejected. A claim or line the ledger drops leaves the booking's own estimate standing.
-                && !_db.ClaimLineItems.Any(l => l.ParticipantBookingId == b.Id
-                    && l.Status != ClaimLineItemStatus.Rejected
-                    && l.TripClaim.Status != TripClaimStatus.Rejected && l.TripClaim.Status != TripClaimStatus.Cancelled))
+                && !_db.ClaimLineItems.Where(ClaimLineStillCounts).Any(l => l.ParticipantBookingId == b.Id))
             .Select(b => new BookingRow(
                 b.Id, b.ParticipantId, b.PlanTypeOverride, b.TripInstanceId, b.TripInstance.TripName, b.TripInstance.StartDate, b.TripInstance.DurationDays, b.TripInstance.DepartureTime,
                 b.TripInstance.ReturnTime, b.TripInstance.ActiveHoursPerDay, b.TripInstance.DefaultActivityGroupId));

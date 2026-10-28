@@ -63,12 +63,12 @@ public class BudgetLedgerServiceTests
 
         var q2 = Q2Of(await LedgerOf(kit, person));
 
-        Assert.Equal(300m, q2.Pending);              // draft 100 + ready 200
+        Assert.Equal(1260m, q2.Pending);             // draft 100 + ready 200 + the rejected and cancelled claims' shifts at their own 480 estimate
         Assert.Equal(1400m, q2.Claimed);             // submitted 300 + approved 400 + paid 450 + partly paid 250
-        Assert.Equal(1700m, q2.Used);
+        Assert.Equal(2660m, q2.Used);
         Assert.Equal(0m, q2.BookedAhead);
-        Assert.Equal(6, q2.Items.Count);             // nothing for the rejected or the cancelled claim
-        Assert.Equal(new[] { "Approved", "Draft", "Paid", "PartiallyPaid", "Ready", "Submitted" }, q2.Items.Select(i => i.Status).OrderBy(s => s, StringComparer.Ordinal));
+        Assert.Equal(8, q2.Items.Count);             // the rejected and cancelled claims are not rows; their two shifts are, as unclaimed shifts
+        Assert.Equal(new[] { "Approved", "Completed", "Completed", "Draft", "Paid", "PartiallyPaid", "Ready", "Submitted" }, q2.Items.Select(i => i.Status).OrderBy(s => s, StringComparer.Ordinal));
     }
 
     [Fact]
@@ -102,8 +102,8 @@ public class BudgetLedgerServiceTests
         var q2 = Q2Of(await LedgerOf(kit, person));
 
         Assert.Equal(300m, q2.Claimed);
-        Assert.Equal(100m, q2.Pending);
-        Assert.Equal(2, q2.Items.Count);
+        Assert.Equal(100m + 480m, q2.Pending);   // the rejected line's shift is unclaimed again
+        Assert.Equal(3, q2.Items.Count);
     }
 
     [Fact]
@@ -154,16 +154,32 @@ public class BudgetLedgerServiceTests
         Assert.Equal(LedgerRowKind.ClaimLine, Assert.Single(q2.Items).Kind);
     }
 
-    [Fact]
-    public async Task ARejectedClaimsShiftIsNotCountedAsAnUnclaimedShiftEither_ItStillHasALine()
+    [Theory]
+    [InlineData(TripClaimStatus.Rejected)]
+    [InlineData(TripClaimStatus.Cancelled)]
+    public async Task AShiftOnARejectedOrCancelledClaimIsPendingAgain_ItCanBeClaimedAgain(TripClaimStatus claimStatus)
     {
         var (kit, person, _) = Arrange();
         var shift = kit.SeedShift(person, new DateOnly(2026, 10, 1), ShiftStatus.Completed);
-        kit.SeedShiftClaim(person, TripClaimStatus.Rejected, 480m, shift: shift);
+        kit.SeedShiftClaim(person, claimStatus, 999m, shift: shift);
 
         var q2 = Q2Of(await LedgerOf(kit, person));
 
-        Assert.Empty(q2.Items);   // the money is neither spent nor waiting: the spec counts "completed shifts with no claim line" only
+        Assert.Equal(480m, q2.Pending);   // the shift's own estimate, not the dropped claim's 999
+        Assert.Equal(LedgerRowKind.CompletedShift, Assert.Single(q2.Items).Kind);
+    }
+
+    [Fact]
+    public async Task AShiftWhoseOnlyLineIsRejectedOnALiveClaimIsPendingAgain()
+    {
+        var (kit, person, _) = Arrange();
+        var shift = kit.SeedShift(person, new DateOnly(2026, 10, 1), ShiftStatus.Completed);
+        var claim = kit.SeedShiftClaim(person, TripClaimStatus.Draft, 100m, shift: kit.SeedShift(person, new DateOnly(2026, 10, 2), ShiftStatus.Completed));
+        kit.AddShiftLine(claim, shift, 999m, ClaimLineItemStatus.Rejected);
+
+        var q2 = Q2Of(await LedgerOf(kit, person));
+
+        Assert.Equal(100m + 480m, q2.Pending);
     }
 
     [Fact]
