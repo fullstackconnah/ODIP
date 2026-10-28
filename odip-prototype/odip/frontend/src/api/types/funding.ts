@@ -331,7 +331,7 @@ export interface BudgetExpected {
   endsOn?: string
   /** The first day of each later approved revision inside the plan. */
   revisionChanges: string[]
-  /** Lines of the drawn agreement that today's price list has no price for, so the expected line leaves them out. */
+  /** Lines of the drawn agreement that the NDIS price list for their dates has no price for, so the expected line leaves them out. */
   unpricedLineCount: number
 }
 

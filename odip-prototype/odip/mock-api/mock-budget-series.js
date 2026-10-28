@@ -70,7 +70,7 @@ const FIXTURES = {
   currentNormal: { rates: [1.12, 0.86], bookedRate: 0.9, expectedRate: 0.95 },
   ended: { rates: [0.93], bookedRate: 0, agreement: 'none' },
   noAgreement: { rates: [0.78], bookedRate: 0.7, agreement: 'none' },
-  revision: { rates: [1.3, 0.6], bookedRate: 0.8, expectedRate: 1, agreement: 'revision' },
+  revision: { rates: [1.3, 0.6], bookedRate: 0.55, expectedRate: 1, agreement: 'revision' },
   noSpend: { rates: [1.05, 0], bookedRate: 0.9, expectedRate: 0.95 },
   fourPool: { rates: [1.12, 0.86, 0.5, 0.2], bookedRate: 0.9, expectedRate: 0.95, extraPools: ['Improved Living Arrangements', 'Assistive Technology'] },
 }

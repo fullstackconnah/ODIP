@@ -49,6 +49,9 @@ export interface BudgetTrackFootnote {
   tone: 'muted' | 'warning'
 }
 
+/** The one footnote every drawn expected line carries; the loading card lays it out unseen to hold its height. */
+export const EXPECTED_FOOTNOTE = "Expected re-prices the current agreement on the NDIS price list for each date, so it can differ from the total that was approved."
+
 /** The notes under the chart, in order: the agreement's revisions and edges, why there is no expected line, what is left out, and that the expected line is an estimate. */
 export function budgetTrackFootnotes(series: BudgetSeries, scope: BudgetSeriesScope): BudgetTrackFootnote[] {
   const notes: BudgetTrackFootnote[] = []
@@ -64,9 +67,9 @@ export function budgetTrackFootnotes(series: BudgetSeries, scope: BudgetSeriesSc
   if (expected.status === 'Unavailable') muted("The expected line couldn't be worked out just now. It will show the next time this tab loads.")
   const lines = expected.unpricedLineCount
   if (drawn && lines > 0)
-    muted(`${plural(lines, 'line')} of the agreement ${lines === 1 ? 'has' : 'have'} no price on today's price list, so the expected line leaves ${lines === 1 ? 'it' : 'them'} out.`)
+    muted(`${plural(lines, 'line')} of the agreement ${lines === 1 ? 'has' : 'have'} no price on the NDIS price list for each date, so the expected line leaves ${lines === 1 ? 'it' : 'them'} out.`)
   if (scope.unpricedShiftCount > 0) notes.push({ text: unpricedShiftSentence(scope.unpricedShiftCount, scope.unpricedShiftReasons), tone: 'warning' })
-  if (drawn) muted("Expected re-prices the current agreement on today's price list, so it can differ from the total that was approved.")
+  if (drawn) muted(EXPECTED_FOOTNOTE)
   return notes
 }
 
@@ -75,12 +78,12 @@ const compact = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'A
 /** An axis tick: "$0", "$10K", "$12.5K", "$1.2M". Only ticks are compact; every other figure is money(). */
 export const compactAud = (n: number) => compact.format(n)
 
-/** The y ticks from $0: 5 on a plot 200px tall or more, else 3, stepped by 1, 2, 2.5 or 5 × 10ⁿ so the top tick covers `max`. */
+/** The y ticks from $0: 5 on a plot 200px tall or more, else 3, stepped by 1, 1.5, 2, 2.5, 3, 4, 5, 6, 8 or 10 × 10ⁿ so the top tick covers `max` and stays under 1.5 times it (not 1.25: compact labels would round 3,750 to "$3.8K"). */
 export function yTicks(max: number, plotH: number): number[] {
   const gaps = plotH >= 200 ? 4 : 2
   const raw = Math.max(max, 1) / gaps
   const magnitude = 10 ** Math.floor(Math.log10(raw))
-  const step = [1, 2, 2.5, 5, 10].map(m => m * magnitude).find(s => s >= raw)!
+  const step = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].map(m => m * magnitude).find(s => s >= raw)!
   return Array.from({ length: gaps + 1 }, (_, i) => i * step)
 }
 
@@ -101,10 +104,11 @@ export function xTicks(planStart: string, planEnd: string, plotW: number): Array
     .map(({ y, m }, i) => ({ date: `${y}-${String(m + 1).padStart(2, '0')}-01`, label: m === 0 || i === 0 ? `${MONTHS[m]} ${y}` : MONTHS[m] }))
 }
 
-/** The readout's and the table's heading for a point: "Plan start, 1 Jul 2026", "Today, 4 Oct", or "Week to 12 Jan 2027". */
+/** The readout's and the table's heading for a point: "Plan start, 1 Jul 2026", "Today, 4 Oct", "Plan end, 30 Jun 2027" or "Week to 12 Jan 2027". */
 export function readoutHeader(point: BudgetSeriesPoint, series: BudgetSeries): string {
   if (point.date === series.planStart && point.budget === 0) return `Plan start, ${writtenDay(point.date)}`   // the start-of-day point; a today point on the plan start carries that day's budget
   if (point.date === series.today && series.planIsCurrent) return `Today, ${formatDayMonth(point.date)}`
+  if (point.date === series.planEnd) return `Plan end, ${writtenDay(point.date)}`
   return `Week to ${writtenDay(point.date)}`
 }
 

@@ -90,6 +90,6 @@ public record BudgetExpectedDto
     public DateOnly? EndsOn { get; init; }
     /// <summary>The first day of each later approved revision inside the plan.</summary>
     public List<DateOnly> RevisionChanges { get; init; } = new();
-    /// <summary>Lines of the drawn agreement that today's price list has no price for, so the line leaves them out.</summary>
+    /// <summary>Lines of the drawn agreement that the NDIS price list for their dates has no price for, so the line leaves them out.</summary>
     public int UnpricedLineCount { get; init; }
 }

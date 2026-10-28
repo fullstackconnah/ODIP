@@ -94,6 +94,17 @@ public class BudgetSeriesTests
     }
 
     [Fact]
+    public void OnThePlansLastDay_ThePlanEndPointCountsTheItemsBookedFromToday()
+    {
+        var line = Build(today: End, used: [new(D(2027, 6, 1), 200m)], booked: [new(End, 40m)]);
+        var last = line.Points[^1];
+        Assert.Equal(End, last.Date);
+        Assert.Equal(200m, last.Used);
+        Assert.Equal(240m, last.UsedAndBooked);
+        Assert.Equal(line.Summary.BookedEnd, last.UsedAndBooked);
+    }
+
+    [Fact]
     public void AnEndedPlan_HasNoBookedLine_NoTodayPoint_AndItsLastUsedIsAtPlanEnd()
     {
         var line = Build(today: D(2027, 8, 1), current: false, used: [new(D(2026, 8, 1), 4000m), new(D(2027, 6, 30), 1000m)], booked: [new(D(2027, 6, 1), 70m)]);

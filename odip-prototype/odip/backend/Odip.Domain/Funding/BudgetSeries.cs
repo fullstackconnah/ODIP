@@ -77,7 +77,7 @@ public static class BudgetSeries
         {
             decimal? used = date < asOf ? SumTo(input.Used, date) : date == asOf ? totalUsed : null;
             decimal? usedAndBooked = !current || date < today ? null
-                : date == today ? totalUsed
+                : date == today ? (date == end ? totalUsed + totalBooked : totalUsed)   // the last day has no later point to take what is booked from today
                 : totalUsed + input.Booked.Where(b => b.Date <= date || b.Date <= today).Sum(b => b.Amount);
             decimal? expected = runs.Any(r => r.Start.AddDays(-1) <= date && date <= r.End) ? SumTo(input.Expected, date) : null;
             points.Add(new BudgetSeriesPoint(date, BudgetAt(date), used, usedAndBooked, expected, isEdge));

@@ -47,6 +47,24 @@ export function BudgetTrackLegend({ lines = ['budget', 'used', 'booked', 'expect
   )
 }
 
+/** Whether the segment a to b passes through the box [left, right, top, bottom], sampled every 2px. */
+function segmentInBox(a: number[], b: number[], [left, right, top, bottom]: readonly [number, number, number, number]) {
+  const n = Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 2)
+  for (let i = 0; i <= n; i++) {
+    const px = a[0] + ((b[0] - a[0]) * i) / n
+    const py = a[1] + ((b[1] - a[1]) * i) / n
+    if (px >= left && px <= right && py >= top && py <= bottom) return true
+  }
+  return false
+}
+
+/** The plan / pool switch: a toggle for up to 3 options at card width 480 or more, else a select (full width on its own row below that). The loading card lays it out unseen. */
+export function BudgetTrackSwitch({ options, value, onChange, width, className = '' }: { options: Array<{ key: string; label: string }>; value: string; onChange: (key: string) => void; width: number; className?: string }) {
+  return options.length <= 3 && width >= NARROW
+    ? <ToggleGroup options={options} value={value} onChange={onChange} ariaLabel="Show the budget for" className={className} />
+    : <SelectField label="Show" options={options.map(o => ({ value: o.key, label: o.label }))} value={value} onChange={e => onChange(e.target.value)} className={`${width < NARROW ? 'w-full' : 'min-w-48'} ${className}`} />
+}
+
 function Cell({ value }: { value: number | undefined }) {
   return value === undefined
     ? <td><span aria-hidden="true">—</span><span className="sr-only">none</span></td>
@@ -66,6 +84,8 @@ export function BudgetTrackChart({ series, width }: { series: BudgetSeries; widt
   const [pinned, setPinned] = useState(false)
   const [message, setMessage] = useState('')
   const [readoutW, setReadoutW] = useState(200)
+  const labelRef = useRef<SVGTextElement>(null)
+  const [labelW, setLabelW] = useState(100)
 
   const W = width ?? measured ?? 0
   const scope = series.scopes.find(s => s.scopeKey === key) ?? series.scopes[0]
@@ -125,6 +145,11 @@ export function BudgetTrackChart({ series, width }: { series: BudgetSeries; widt
     expectedRuns[expectedRuns.length - 1].push([p.date, p.expected])
   })
   const labelPoint = current ? points.find(p => p.date === series.today && p.used !== undefined) : points.filter(p => p.used !== undefined).at(-1)
+  // The direct label's own width, so it can stay left of the dot and flip only when it would run off the chart. jsdom has no getComputedTextLength; the 100 stands.
+  useLayoutEffect(() => {
+    const w = labelRef.current?.getComputedTextLength?.()
+    if (w) setLabelW(w)
+  }, [labelPoint?.used, W, key])
   const legend: Line[] = ['budget', 'used', ...(showBooked ? ['booked' as const] : []), ...(showExpected ? ['expected' as const] : [])]
 
   const options = series.scopes.map(s => ({ key: s.scopeKey, label: s.scopeKey === 'plan' ? 'Whole plan' : s.name }))
@@ -179,9 +204,7 @@ export function BudgetTrackChart({ series, width }: { series: BudgetSeries; widt
       <div ref={boxRef}>
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <h3 className="text-sm font-semibold">{BUDGET_TRACK_TITLE}</h3>
-          {series.scopes.length > 2 && (options.length <= 3 && W >= NARROW
-            ? <ToggleGroup options={options} value={scope.scopeKey} onChange={choose} ariaLabel="Show the budget for" />
-            : <SelectField label="Show" options={options.map(o => ({ value: o.key, label: o.label }))} value={scope.scopeKey} onChange={e => choose(e.target.value)} className={W < NARROW ? 'w-full' : 'min-w-48'} />)}
+          {series.scopes.length > 2 && <BudgetTrackSwitch options={options} value={scope.scopeKey} onChange={choose} width={W} />}
         </div>
         <p id={sentenceId} className="mt-2 max-w-prose text-sm text-[var(--color-foreground)]">{budgetTrackSentence(series, scope)}</p>
         <BudgetTrackLegend lines={legend} />
@@ -234,11 +257,27 @@ export function BudgetTrackChart({ series, width }: { series: BudgetSeries; widt
               {labelPoint && (() => {
                 const lx = x(labelPoint.date)
                 const ly = y(labelPoint.used!)
-                const flip = lx - M.left < 120
+                // Above-left of the dot first (it may run into the y-axis gutter), then lifted clear of the budget line when that runs above the dot, then below-right, then above-right: the first that leaves the chart and sits on no tick label or line. An ended plan keeps the first.
+                const budgetY = y(0) + ((y(scope.limit) - y(0)) * (lx - 8 - x(planStart))) / (x(planEnd) - x(planStart))
+                const cands = [
+                  { end: true, x: lx - 8, y: Math.max(ly - 8, M.top + 12) },
+                  { end: true, x: lx - 8, y: Math.max(Math.min(ly - 8, budgetY - 8), M.top + 12) },
+                  { end: false, x: lx + 8, y: Math.min(ly + 16, baseline - 4) },
+                  { end: false, x: lx + 8, y: Math.max(ly - 8, M.top + 12) },
+                ]
+                const lines = [[[x(planStart), y(0)], [x(planEnd), y(scope.limit)]], ...(showBooked ? [booked.map(([d, v]) => [x(d), y(v)])] : []), ...(showExpected ? expectedRuns.map(run => run.map(([d, v]) => [x(d), y(v)])) : [])]
+                const clear = (c: typeof cands[number]) => {
+                  const x0 = c.end ? c.x - labelW : c.x
+                  const box = [x0, x0 + labelW, c.y - 13, c.y + 4] as const
+                  if (x0 < 0 || x0 + labelW > W) return false
+                  if (c.end && x0 < M.left - 4 && ticks.some(v => Math.abs(y(v) - (c.y - 4)) < 12)) return false
+                  return lines.every(pts => pts.every((pt, i) => i === 0 || !segmentInBox(pts[i - 1], pt, box)))
+                }
+                const place = current ? cands.find(clear) ?? cands[0] : cands[0]
                 return (
                   <g>
                     <circle className="bt-dot" data-dot="used" cx={r1(lx)} cy={r1(ly)} r={4} />
-                    <text x={flip ? lx + 8 : lx - 8} y={Math.max(ly - 8, M.top + 12)} textAnchor={flip ? 'start' : 'end'} className="fill-[var(--color-foreground)] stroke-[var(--color-card)] text-xs tabular-nums [paint-order:stroke] [stroke-linejoin:round] [stroke-width:3px]">Used {money(labelPoint.used!)}</text>
+                    <text ref={labelRef} data-used-label x={place.x} y={place.y} textAnchor={place.end ? 'end' : 'start'} className="fill-[var(--color-foreground)] stroke-[var(--color-card)] text-xs tabular-nums [paint-order:stroke] [stroke-linejoin:round] [stroke-width:3px]">Used {money(labelPoint.used!)}</text>
                   </g>
                 )
               })()}

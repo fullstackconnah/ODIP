@@ -96,7 +96,7 @@ describe('BudgetTrackChart', () => {
     fireEvent.keyDown(plot(), { key: 'ArrowLeft' })
     expect(header()).toBe('Plan start, ' + writtenDay('2026-07-01'))
     fireEvent.keyDown(plot(), { key: 'End' })
-    expect(header()).toBe(week('2027-06-30'))
+    expect(header()).toBe('Plan end, ' + writtenDay('2027-06-30'))
     fireEvent.keyDown(plot(), { key: 'Escape' })
     expect(readout()).toBeNull()
     fireEvent.keyDown(plot(), { key: 'ArrowLeft' })
@@ -208,5 +208,24 @@ describe('BudgetTrackChart', () => {
     const top = Math.max(...[...document.querySelectorAll('[data-ytick]')].map(t => Number(t.getAttribute('data-ytick'))))
     expect(top).toBeGreaterThanOrEqual(used)
     expect(path('used')!.getAttribute('class')).toBe('bt-used')
+  })
+  it('the "Used" label stays left of the dot at 390, and goes below-right only when it would leave the chart', () => {
+    const svg = SVGElement.prototype as unknown as { getComputedTextLength?: () => number }
+    try {
+      svg.getComputedTextLength = () => 97   // the label's width at 390: the dot is at x 134, so it ends at 126 and starts at 29
+      const fits = render(<BudgetTrackChart series={series} width={390} />)
+      const label = document.querySelector('[data-used-label]')!
+      const dot = document.querySelector('[data-dot="used"]')!
+      expect(label.getAttribute('text-anchor')).toBe('end')
+      expect(Number(label.getAttribute('x'))).toBeLessThan(Number(dot.getAttribute('cx')))
+      fits.unmount()
+      svg.getComputedTextLength = () => 200   // wider than the room to the left
+      render(<BudgetTrackChart series={series} width={390} />)
+      const moved = document.querySelector('[data-used-label]')!
+      expect(moved.getAttribute('text-anchor')).toBe('start')
+      expect(Number(moved.getAttribute('y'))).toBeGreaterThan(Number(document.querySelector('[data-dot="used"]')!.getAttribute('cy')))
+    } finally {
+      delete svg.getComputedTextLength
+    }
   })
 })

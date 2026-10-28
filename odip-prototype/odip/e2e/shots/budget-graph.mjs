@@ -18,7 +18,7 @@ const FIXTURES = [
   { name: 'current-normal', id: 'p-0002', legend: 4, booked: true },
   { name: 'ended', id: 'p-0003', legend: 2, ended: true },
   { name: 'no-agreement', id: 'p-0004', legend: 3, booked: true },
-  { name: 'no-spend', id: 'p-0002', fixture: 'noSpend', legend: 4, booked: true },
+  { name: 'no-spend', id: 'p-0002', fixture: 'noSpend', pickZero: true },
   { name: 'mid-revision', id: 'p-0005', legend: 4, booked: true },
   { name: 'four-pool', id: 'p-0002', fixture: 'fourPool', legend: 4, booked: true },
 ]
@@ -102,7 +102,16 @@ try {
         const plot = page.locator('[data-plot]')
         await plot.locator('svg').waitFor({ timeout: 30_000 })
         const s = series
-        const scope = s.scopes[0]
+        let scope = s.scopes[0]
+        // The no-spend fixture's point is its zero pool, so that pool is chosen and every check below runs on it.
+        if (f.pickZero) {
+          scope = s.scopes.find((sc) => sc.scopeKey !== 'plan' && sc.summary.used === 0)
+          if (vp.mobile) await card().locator('select').selectOption({ label: scope.name })
+          else await card().getByRole('radio', { name: scope.name }).click()
+          await page.getByText('nothing used yet').first().waitFor({ timeout: 10_000 })
+        }
+        const hasBooked = f.pickZero ? s.planIsCurrent && scope.summary.bookedEnd !== undefined : f.booked
+        const wantLegend = f.pickZero ? 2 + (hasBooked ? 1 : 0) + (s.expected.status === 'Ok' && scope.points.some((p) => p.expected !== undefined) ? 1 : 0) : f.legend
         const stops = scope.points.filter((p) => !p.isEdge)
         const geo = await plot.evaluate((el) => ({ W: el.clientWidth, svgH: el.querySelector('svg').getBoundingClientRect().height }))
         const W = geo.W
@@ -126,7 +135,7 @@ try {
         }, M)
         const maxPlotted = Math.max(scope.limit, ...scope.points.flatMap((p) => [p.budget, p.used ?? 0, p.usedAndBooked ?? 0, p.expected ?? 0]))
         check('3 x tick count and gap', ctx, ticks, ticks.xCount <= Math.floor(plotW / 64) && (ticks.minGap === null || ticks.minGap >= 8))
-        check('3 y ticks', ctx, { ...ticks, maxPlotted }, ticks.yTicks.length === (ticks.plotH < 200 ? 3 : 5) && Math.max(...ticks.yTicks) >= maxPlotted)
+        check('3 y ticks', ctx, { ...ticks, maxPlotted }, ticks.yTicks.length === (ticks.plotH < 200 ? 3 : 5) && Math.max(...ticks.yTicks) >= maxPlotted && Math.max(...ticks.yTicks) < 1.5 * maxPlotted)
         // 4 and 5. Strokes.
         const strokes = await plot.evaluate((el) => {
           let node = el; let bg = 'rgb(255, 255, 255)'
@@ -153,11 +162,34 @@ try {
           const todayX = xOf(s.today)
           check('6 today line at the today point', ctx, { todayX: ends.todayX, want: Math.round(todayX * 10) / 10 }, near(ends.todayX, todayX))
           check('6 used ends at today', ctx, { usedLastX: usedLast[0], todayX: ends.todayX }, near(usedLast[0], ends.todayX))
-          if (f.booked) check('6 booked starts where used ends', ctx, { usedLast, bookedFirst: ends.booked?.[0] }, !!ends.booked && near(ends.booked[0][0], usedLast[0]) && near(ends.booked[0][1], usedLast[1]))
+          if (hasBooked) check('6 booked starts where used ends', ctx, { usedLast, bookedFirst: ends.booked?.[0] }, !!ends.booked && near(ends.booked[0][0], usedLast[0]) && near(ends.booked[0][1], usedLast[1]))
         }
         // 8. Legend.
         const legend = await page.evaluate(() => { const items = [...document.querySelectorAll('[data-legend]')]; return { count: items.length, bottom: Math.max(...items.map((i) => i.getBoundingClientRect().bottom)), plotTop: document.querySelector('[data-plot]').getBoundingClientRect().top } })
-        check('8 legend count and place', ctx, legend, legend.count === f.legend && legend.bottom <= legend.plotTop + 0.5)
+        check('8 legend count and place', ctx, legend, legend.count === wantLegend && legend.bottom <= legend.plotTop + 0.5)
+        // 18. The "Used" label stays clear of the booked, expected and budget lines in its x span.
+        const label = await plot.evaluate((el) => {
+          const t = el.querySelector('[data-used-label]'); if (!t) return null
+          const b = t.getBBox(); const hit = []
+          for (const k of ['booked', 'expected', 'budget']) {
+            const path = el.querySelector('path[data-series=' + k + ']'); if (!path) continue
+            const len = path.getTotalLength()
+            for (let d = 0; d <= len; d += 1) { const q = path.getPointAtLength(d); if (q.x >= b.x && q.x <= b.x + b.width && q.y >= b.y && q.y <= b.y + b.height) { hit.push(k); break } }
+          }
+          return { box: [b.x, b.y, b.width, b.height].map((n) => Math.round(n * 10) / 10), anchor: t.getAttribute('text-anchor'), hit }
+        })
+        if (!f.ended) check('18 Used label overlaps no booked, expected or budget line', ctx, label, label !== null && label.hit.length === 0)
+        if (vp.mobile && (f.name === 'current-normal' || f.name === 'four-pool')) check('18 Used label stays left of the dot at 390', ctx, label, label?.anchor === 'end')
+        if (f.pickZero) {
+          const zero = await plot.evaluate((el) => { const d = el.querySelector('path[data-series=used]')?.getAttribute('d'); return { ys: d ? d.split(/[ML]/).filter(Boolean).map((q) => Number(q.split(',')[1])) : [], sentence: el.parentElement.querySelector('p')?.textContent } })
+          const base = geo.svgH - M.bottom
+          check('0 no-spend: used sits on the baseline, 2px, and the sentence says nothing used yet', ctx, { base, ys: [Math.min(...zero.ys), Math.max(...zero.ys)], width: strokes.paths.used?.width, sentence: zero.sentence }, zero.ys.length > 1 && zero.ys.every((y) => near(y, base)) && strokes.paths.used?.width === '2px' && zero.sentence.includes('nothing used yet'))
+        }
+        if (f.name === 'mid-revision') {
+          const tick = await plot.evaluate((el) => [...el.querySelectorAll('[data-revision]')].map((l) => ({ x: Number(l.getAttribute('x1')), y1: Number(l.getAttribute('y1')), y2: Number(l.getAttribute('y2')) })))
+          const inside = tick.every((t) => t.x >= M.left && t.x <= W - M.right && t.y1 >= M.top && t.y2 <= geo.svgH - M.bottom)
+          check('19 revision tick exists and sits in the plot', ctx, { tick, want: s.expected.revisionChanges.length }, tick.length === s.expected.revisionChanges.length && tick.length > 0 && inside)
+        }
         // 9. Text sizes.
         const small = await card().evaluate((c) => {
           const out = []; const walker = document.createTreeWalker(c, NodeFilter.SHOW_TEXT)
@@ -236,11 +268,14 @@ try {
         await open('p-0002', 'slow')
         const skeleton = page.locator('[data-chart-skeleton]')
         await skeleton.waitFor({ timeout: 30_000 })
-        const skH = (await skeleton.boundingBox()).height
+        const skeletonCard = skeleton.locator('xpath=ancestor::div[contains(@class,"rounded-md")][1]')
+        const skH = (await skeletonCard.boundingBox()).height
+        const parts = (loc) => loc.evaluate((c) => [...c.firstElementChild.children].map((e) => Math.round(e.getBoundingClientRect().height * 10) / 10))
+        const skParts = await parts(skeletonCard)
         if (scheme === 'light' && vp.mobile) await shot('skeleton', skeleton.locator('xpath=ancestor::div[contains(@class,"rounded-md")][1]'))
         await page.locator('[data-plot] svg').waitFor({ timeout: 30_000 })
-        const body = await page.evaluate(() => { const legend = document.querySelector('[data-legend]').parentElement.getBoundingClientRect(); const plot = document.querySelector('[data-plot]').getBoundingClientRect(); return plot.bottom - legend.top })
-        check('13/17 skeleton height = loaded legend and plot height', ctx, { skeleton: skH, loaded: Math.round(body * 10) / 10 }, near(skH, body, 2))
+        const loadedH = (await page.locator('[data-plot]').locator('xpath=ancestor::div[contains(@class,"rounded-md")][1]').boundingBox()).height
+        check('13/17 skeleton card height = loaded card height, so the pool cards below stay put', ctx, { skeleton: Math.round(skH * 10) / 10, loaded: Math.round(loadedH * 10) / 10, skParts, loadedParts: await parts(page.locator('[data-plot]').locator('xpath=ancestor::div[contains(@class,"rounded-md")][1]')) }, near(skH, loadedH, 24))
       }
       // The failure (light, 390): the query retries before it gives up.
       if (scheme === 'light' && vp.mobile) {

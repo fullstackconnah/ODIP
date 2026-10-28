@@ -25,6 +25,15 @@ describe('BudgetTrackCard', () => {
     expect(screen.queryByRole('radiogroup')).toBeNull()
   })
 
+  it('loading with two or more pools lays the switch out unseen, with the sentence and the footnote, and shows no control', () => {
+    useBudgetSeries.mockReturnValue(reply({ isLoading: true, isFetching: true }))
+    const { container } = render(<BudgetTrackCard participantId="p-1" poolCount={3} />)
+    expect(container.querySelector('select, [role="radiogroup"]')?.closest('[aria-hidden="true"]')).not.toBeNull()
+    expect(screen.queryByRole('combobox')).toBeNull()
+    expect(screen.queryByRole('radiogroup')).toBeNull()
+    expect(container.textContent).toContain('so it can differ from the total that was approved')
+  })
+
   it('a failed load shows the warning and Try again; the retry hold says "Trying again…", then "Couldn\'t load it again."', async () => {
     let settle!: (result: unknown) => void
     const refetch = vi.fn(() => new Promise(resolve => { settle = resolve }))

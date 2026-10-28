@@ -62,7 +62,7 @@ export default function FundingLedger({ participantId, enabled = true, nextPlanS
           <div className="mt-2"><Button variant="secondary" size="sm" onClick={() => { void query.refetch() }}>Try again</Button></div>
         </Callout>
       )}
-      <LedgerBody data={data} nextPlanStart={nextPlanStart} otherFunded={otherFunded} chart={ledgerHasMainBranch(data, nextPlanStart, otherFunded) ? <BudgetTrackCard participantId={participantId} /> : undefined} />
+      <LedgerBody data={data} nextPlanStart={nextPlanStart} otherFunded={otherFunded} chart={ledgerHasMainBranch(data, nextPlanStart, otherFunded) ? <BudgetTrackCard participantId={participantId} poolCount={data.pools.length} /> : undefined} />
     </div>
   )
 }

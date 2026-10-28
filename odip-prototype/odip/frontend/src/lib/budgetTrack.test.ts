@@ -73,15 +73,15 @@ describe('budgetTrackFootnotes', () => {
       { text: `The agreement changed on ${writtenDay('2027-03-01')}; the expected line follows each version for its own dates.`, tone: 'muted' },
       { text: `The agreement starts on ${writtenDay('2026-08-03')}, so the expected line starts there.`, tone: 'muted' },
       { text: `The agreement ends on ${writtenDay('2027-05-31')}, so the expected line stops there.`, tone: 'muted' },
-      { text: "2 lines of the agreement have no price on today's price list, so the expected line leaves them out.", tone: 'muted' },
+      { text: "2 lines of the agreement have no price on the NDIS price list for each date, so the expected line leaves them out.", tone: 'muted' },
       { text: unpricedShiftSentence(3, ['no catalogue item']), tone: 'warning' },
-      { text: "Expected re-prices the current agreement on today's price list, so it can differ from the total that was approved.", tone: 'muted' },
+      { text: "Expected re-prices the current agreement on the NDIS price list for each date, so it can differ from the total that was approved.", tone: 'muted' },
     ])
   })
 
   it('says one line in the singular', () => {
     const one = budgetSeries({ expected: expectedOk({ unpricedLineCount: 1 }) })
-    expect(budgetTrackFootnotes(one, one.scopes[0])[0].text).toBe("1 line of the agreement has no price on today's price list, so the expected line leaves it out.")
+    expect(budgetTrackFootnotes(one, one.scopes[0])[0].text).toBe("1 line of the agreement has no price on the NDIS price list for each date, so the expected line leaves it out.")
   })
 
   it('no agreement and unavailable have their own line and no estimate note', () => {
@@ -108,6 +108,19 @@ describe('the chart\'s scales and readout', () => {
     expect(yTicks(0, 312).at(-1)!).toBeGreaterThan(0)
   })
 
+  it("yTicks: the top tick stays under 1.5 times the max, so the lines don't sit in the lower half", () => {
+    for (const max of [1.2, 3100, 12340, 40800, 52000, 24000, 61000, 99999, 1_000_001])
+      for (const h of [172, 312]) {
+        const top = yTicks(max, h).at(-1)!
+        expect(top).toBeGreaterThanOrEqual(max)
+        expect(top).toBeLessThan(1.5 * max)
+      }
+    expect(yTicks(40800, 312).at(-1)).toBe(60000)
+    expect(yTicks(52000, 172).at(-1)).toBe(60000)
+    expect(yTicks(24000, 172).at(-1)).toBe(30000)
+    expect(yTicks(3750, 312).map(compactAud)).toEqual(['$0', '$1K', '$2K', '$3K', '$4K'])
+  })
+
   it('xTicks: an 800-day plan at plotW 900 steps to 2 months, with the year on January and on the first tick', () => {
     const ticks = xTicks('2026-07-01', '2028-09-08', 900)
     expect(ticks.length).toBeLessThanOrEqual(Math.floor(900 / 64))
@@ -121,6 +134,13 @@ describe('the chart\'s scales and readout', () => {
     expect(readoutHeader(first, series)).toBe(`Plan start, ${writtenDay('2026-07-01')}`)
     expect(readoutHeader(plan.points.find(p => p.date === '2026-10-04')!, series)).toBe('Today, 4 Oct')
     expect(readoutHeader(plan.points.find(p => p.date === '2027-01-12')!, series)).toBe(`Week to ${writtenDay('2027-01-12')}`)
+  })
+
+  it('readoutHeader: the plan end reads "Plan end", not "Week to"; today wins when the plan ends today', () => {
+    const end = plan.points.find(p => p.date === '2027-06-30')!
+    expect(readoutHeader(end, series)).toBe(`Plan end, ${writtenDay('2027-06-30')}`)
+    const last = budgetSeries({ today: '2027-06-30' })
+    expect(readoutHeader(last.scopes[0].points.find(p => p.date === '2027-06-30')!, last)).toBe('Today, 30 Jun')
   })
 
   it('readoutRows and liveLine: used up to today, used and booked after, expected or not covered, and the revision week', () => {
