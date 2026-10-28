@@ -56,7 +56,13 @@ for (const touch of [false, true]) {
           }
           await expect(button).toBeFocused();
           expect(await button.evaluate(el => el.matches(':focus-visible'))).toBe(true);
-          expect(await button.evaluate(el => getComputedStyle(el).boxShadow), 'visible keyboard focus ring').not.toBe('none');
+          const ring = await button.evaluate(el => {
+            const { outlineStyle, outlineWidth, outlineOffset } = getComputedStyle(el);
+            return { outlineStyle, outlineWidth, outlineOffset };
+          });
+          expect(ring.outlineStyle, 'visible keyboard focus ring').toBe('solid');
+          expect(ring.outlineWidth, 'visible keyboard focus ring').not.toBe('0px');
+          expect(ring.outlineOffset, 'visible keyboard focus ring').not.toBe('0px');
           await testInfo.attach('keyboard-focus', { body: await row.screenshot(), contentType: 'image/png' });
           await page.keyboard.press('Enter');
         }
