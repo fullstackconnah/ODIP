@@ -134,7 +134,7 @@ export default function StaffAssignModal({ staff, trip, onClose, onAssign, isLoa
             type="checkbox"
             checked={isDriver}
             onChange={e => setIsDriver(e.target.checked)}
-            className="w-4 h-4 rounded accent-[var(--color-primary)]"
+            className="w-4 h-4 rounded"
           />
           <span className="text-sm font-medium">Assigned as driver</span>
           {staff.isDriverEligible
