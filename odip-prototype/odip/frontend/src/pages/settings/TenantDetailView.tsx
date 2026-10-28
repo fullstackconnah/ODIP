@@ -61,6 +61,8 @@ export default function TenantDetailView({
   const [providerOpen, setProviderOpen] = useState(false)
 
   const activeUsers = useMemo(() => users.filter(u => u.isActive).length, [users])
+  // Same condition as the users table's error callout: with no rows to show, a count would be a made-up 0.
+  const usersFailed = usersQuery.isError || retryingAfterError(usersQuery)
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)]">
@@ -103,13 +105,13 @@ export default function TenantDetailView({
       <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
         <SummaryCard
           icon={<Users className="w-5 h-5 text-[var(--color-secondary)]" />}
-          value={users.length}
+          value={usersFailed ? '—' : users.length}
           label="Total Users"
           loading={usersLoading}
         />
         <SummaryCard
           icon={<UserCheck className="w-5 h-5 text-[var(--color-primary)]" />}
-          value={activeUsers}
+          value={usersFailed ? '—' : activeUsers}
           label="Active Users"
           loading={usersLoading}
         />
@@ -130,67 +132,70 @@ export default function TenantDetailView({
           <h4 className="text-sm font-semibold text-[var(--color-foreground)]">Users</h4>
         </div>
 
-        <DataTable
-          data={users}
-          keyField="id"
-          className="w-full"
-          loading={usersLoading}
-          error={usersQuery.isError || retryingAfterError(usersQuery)}
-          onRetry={() => usersQuery.refetch()}
-          emptyMessage="No users in this tenant yet."
-          columns={[
-            { key: 'fullName', header: 'Name', className: 'font-medium' },
-            {
-              key: 'role',
-              header: 'Role',
-              render: (user: TenantUserDto) => (
-                <span
-                  className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    ROLE_COLORS[user.role] ?? 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
-                  }`}
-                >
-                  {user.role}
-                </span>
-              ),
-            },
-            {
-              key: 'isActive',
-              header: 'Status',
-              render: (user: TenantUserDto) => (
-                <span
-                  className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    user.isActive
-                      ? 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]'
-                      : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
-                  }`}
-                >
-                  {user.isActive ? 'Active' : 'Inactive'}
-                </span>
-              ),
-            },
-            {
-              key: 'actions',
-              header: '',
-              align: 'right',
-              render: (user: TenantUserDto) => (
-                <RowActions>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onEditUser(user)}
-                    data-edit-user={user.id}
-                    aria-disabled={openingUserId !== null || undefined}
-                    aria-busy={openingUserId === user.id || undefined}
-                    className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
-                    aria-label={`Edit: ${user.fullName}`}
+        {/* The error callout is inset like the provider-settings one; DataTable renders it flush. */}
+        <div className={usersFailed ? 'p-4' : undefined}>
+          <DataTable
+            data={users}
+            keyField="id"
+            className="w-full"
+            loading={usersLoading}
+            error={usersFailed}
+            onRetry={() => usersQuery.refetch()}
+            emptyMessage="No users in this tenant yet."
+            columns={[
+              { key: 'fullName', header: 'Name', className: 'font-medium' },
+              {
+                key: 'role',
+                header: 'Role',
+                render: (user: TenantUserDto) => (
+                  <span
+                    className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      ROLE_COLORS[user.role] ?? 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
+                    }`}
                   >
-                    Edit
-                  </Button>
-                </RowActions>
-              ),
-            },
-          ]}
-        />
+                    {user.role}
+                  </span>
+                ),
+              },
+              {
+                key: 'isActive',
+                header: 'Status',
+                render: (user: TenantUserDto) => (
+                  <span
+                    className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      user.isActive
+                        ? 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]'
+                        : 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]'
+                    }`}
+                  >
+                    {user.isActive ? 'Active' : 'Inactive'}
+                  </span>
+                ),
+              },
+              {
+                key: 'actions',
+                header: '',
+                align: 'right',
+                render: (user: TenantUserDto) => (
+                  <RowActions>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onEditUser(user)}
+                      data-edit-user={user.id}
+                      aria-disabled={openingUserId !== null || undefined}
+                      aria-busy={openingUserId === user.id || undefined}
+                      className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
+                      aria-label={`Edit: ${user.fullName}`}
+                    >
+                      Edit
+                    </Button>
+                  </RowActions>
+                ),
+              },
+            ]}
+          />
+        </div>
       </div>
 
       {/* ── Provider Settings (collapsible) ────────────────────── */}
@@ -216,7 +221,7 @@ export default function TenantDetailView({
 
         {providerOpen && (
           <div className="border-t border-[var(--color-border)] px-4 py-4">
-            {providerQuery.isError || retryingAfterError(providerQuery) ? (
+            {(providerQuery.isError || retryingAfterError(providerQuery)) && !providerSettings ? (
               <RetryCallout onRetry={() => providerQuery.refetch()}>Couldn't load the provider settings. Check your connection and try again.</RetryCallout>
             ) : providerLoading ? (
               <PageState kind="loading" noun="provider settings" />

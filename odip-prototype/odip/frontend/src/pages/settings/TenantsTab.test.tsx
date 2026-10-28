@@ -7,10 +7,11 @@ import TenantDetailView from './TenantDetailView'
 import type { TenantSummaryDto, TenantUserDto } from '@/api/types'
 
 const tenant = { id: 't-1', name: 'Sample Support Co', emailDomain: 'sample.org', isActive: true, createdAt: '2026-01-01T00:00:00Z', userCount: 1 } as TenantSummaryDto
+const other = { id: 't-2', name: 'Harbour Disability Services', emailDomain: 'harbour.example', isActive: true, createdAt: '2026-01-01T00:00:00Z', userCount: 2 } as TenantSummaryDto
 const user = { id: 'u-1', fullName: 'Priya Sharma', role: 'Admin', isActive: true } as TenantUserDto
 
 vi.mock('@/api/hooks/admin', () => ({
-  useAdminTenantsSummary: () => ({ data: [tenant], isLoading: false, isError: false, refetch: vi.fn() }),
+  useAdminTenantsSummary: () => ({ data: [tenant, other], isLoading: false, isError: false, refetch: vi.fn() }),
   useAdminTenantProviderSettings: () => ({ data: undefined, isLoading: false }),
 }))
 vi.mock('@/api/hooks/settings', () => ({
@@ -34,10 +35,18 @@ describe('Tenant tables: row actions', () => {
     expect(onViewTenantDetail).toHaveBeenCalledWith(tenant)
   })
 
-  it('searches with the house SearchInput', () => {
+  it('filters by name or domain and says so when nothing matches', async () => {
+    const user = userEvent.setup()
     render(<MemoryRouter><TenantsTab onAddTenant={vi.fn()} onEditTenant={vi.fn()} onViewTenantDetail={vi.fn()} /></MemoryRouter>)
+    const search = screen.getByRole('textbox', { name: 'Search by name or domain...' })
 
-    expect(screen.getByRole('textbox', { name: 'Search by name or domain...' })).toHaveClass('bg-[var(--color-input)]')
+    await user.type(search, 'harbour.ex')
+    expect(screen.getByText('Harbour Disability Services')).toBeInTheDocument()
+    expect(screen.queryByText('Sample Support Co')).not.toBeInTheDocument()
+
+    await user.clear(search)
+    await user.type(search, 'zzz')
+    expect(screen.getByText('No tenants match your search.')).toBeInTheDocument()
   })
 
   it('names a tenant user\'s Edit for the user and runs it', async () => {
