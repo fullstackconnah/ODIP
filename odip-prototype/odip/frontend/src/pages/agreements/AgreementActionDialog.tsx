@@ -89,7 +89,7 @@ export function AgreementActionDialog({ action, selected, onClose, onDone, onSho
       open onClose={running ? () => {} : onClose} closeOnBackdrop={false} hideClose={running} stickyFooter size="md"
       title={`${TITLE[action]} ${plural(count, 'agreement')}`}
       footer={running ? (
-        <Button aria-disabled disabled>{`Making ${plural(count, 'draft')}…`}</Button>
+        <Button aria-disabled disabled>{`Making ${plural(makeCount, 'draft')}…`}</Button>
       ) : (
         <>
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
@@ -101,9 +101,9 @@ export function AgreementActionDialog({ action, selected, onClose, onDone, onSho
         <div role="status" className="flex items-start gap-3 text-sm">
           <Loader2 className="mt-0.5 h-5 w-5 shrink-0 animate-spin text-[var(--color-primary)]" aria-hidden="true" />
           <div className="space-y-1">
-            <p className="font-medium">{`Making ${plural(count, 'draft')}…`}</p>
+            <p className="font-medium">{`Making ${plural(makeCount, 'draft')}…`}</p>
             <p className="text-[var(--color-muted-foreground)]">Each agreement is priced and saved in turn, so this can take up to a minute. Keep this page open.</p>
-            {count > CHUNK && <p className="tabular-nums text-[var(--color-muted-foreground)]">{`Making drafts… ${progress} of ${count} done`}</p>}
+            {count > CHUNK && <p className="tabular-nums text-[var(--color-muted-foreground)]">{`Working… ${progress} of ${plural(count, 'agreement')} checked`}</p>}
           </div>
         </div>
       ) : (

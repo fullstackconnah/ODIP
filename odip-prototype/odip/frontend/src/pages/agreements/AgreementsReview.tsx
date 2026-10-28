@@ -113,7 +113,7 @@ export function AgreementsReview({ run, canApprove, onBack }: Props) {
     ({ key, header, mobile: 'meta', render, wrap: !money, ...(money && { align: 'right' as const, className: moneyCell }) })
   // On a phone card the meta values run together on one line, so a date carries its column's label; desktop has the column header.
   const dated = (key: string, header: string, render: (r: AgreementBulkResult) => string) =>
-    col(key, header, r => { const value = render(r); return value ? <><span className="font-medium md:hidden">{header}</span>{' '}{value}</> : '' })
+    col(key, header, r => { const value = render(r); return value ? <span><span className="text-[var(--color-muted-foreground)] md:hidden">{header} </span>{value}</span> : '' })
   const change = col('change', 'Change', r => (r.before && r.after ? changeWords(r.before.total, r.after.total) : ''), true)
   const columns: Column<AgreementBulkResult>[] = action === 'reprice'
     ? [participant, dated('term', 'Term', r => range(r.before)), col('before', 'Before', r => money(r.before?.total), true), col('after', 'After', r => money(r.after?.total), true), change, checkColumn]

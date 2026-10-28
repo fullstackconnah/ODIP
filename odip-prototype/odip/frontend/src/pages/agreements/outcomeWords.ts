@@ -34,7 +34,7 @@ export function summarise(results: readonly AgreementApproveResult[], notSent = 
   const busy = by('Busy')
   const other = results.filter(r => !['Approved', 'AlreadyApproved', 'NeedsReview', 'Busy'].includes(r.outcome))
   const parts = [
-    review.length ? `${review.length} need review: ${names(review)}.` : '',
+    review.length ? `${review.length} ${review.length === 1 ? 'needs' : 'need'} review: ${names(review)}.` : '',
     busy.length ? `${busy.length} ${busy.length === 1 ? 'was' : 'were'} busy: try again.` : '',
     other.length ? `${other.length} could not be approved: ${names(other)}.` : '',
     notSent ? (noReply ? NO_REPLY_LAST(notSent) : `${notSent} ${notSent === 1 ? "wasn't" : "weren't"} started.`) : '',

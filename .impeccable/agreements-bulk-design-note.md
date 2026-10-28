@@ -28,3 +28,10 @@ The shape brief for PR B is SHAPE.md in the lead's scratchpad (agreements/). Thi
 5. **Phone cards label the two dates** (review table). DataTable's caps labels are off for `mobile` columns, so the date cells render their column header as a small medium-weight prefix, `md:hidden`; desktop is unchanged.
 6. **Focus ring on the notices block** (review): `rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]`, the house pattern. Headings with `tabIndex={-1}` stay ring-free. State: focused after a keyboard Approve.
 7. **403 with no server message** (dialog): `Your role can't do this. Nothing was changed.`; 400 keeps `Something went wrong.`; server messages win.
+
+## FIX3 (written before the first FIX3 edit)
+
+1. **Phone card date label** (`AgreementsReview.tsx` `dated`). What: label and value share one wrapper `<span>`; the space sits inside the label (`{header} `), so the card reads "Last term 17 May 2026". Label is muted (`--color-muted-foreground`), not `font-medium`; still `md:hidden`, so desktop is unchanged. House pattern: DataTable meta cell, muted secondary text. States: phone card with and without a date (empty stays empty), desktop. apple-design: hierarchy by tone not weight (value leads, label recedes), proximity of label and value.
+2. **In-flight copy** (`AgreementActionDialog.tsx`). What: "Making N drafts…" (line and button) uses `makeCount`, matching "Make N drafts"; the progress line counts agreements checked: "Working… n of total agreements checked". Title still counts ticked rows. States: nothing skipped, some skipped, long run (progress line). apple-design: feedback is specific and consistent with the button the person pressed.
+3. **Bar gap** (`AgreementsBulkBar.tsx`). What: drop `mb-3`; parents are already `gap-3`, so the bar sits 12 px above the first row (house card spacing). States: sticky and in-flow bar, unticked and ticked.
+4. **Plural** (`outcomeWords.ts`). "1 needs review", "2 need review". Copy only; the notice and its tones are unchanged.

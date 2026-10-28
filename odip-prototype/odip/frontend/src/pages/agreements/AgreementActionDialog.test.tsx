@@ -100,10 +100,13 @@ describe('AgreementActionDialog', () => {
   it('shows progress for a long run and cannot be closed while it runs', async () => {
     let finish!: (v: unknown) => void
     mockBulk.mockReturnValue(new Promise(resolve => { finish = resolve }))
-    const { onClose } = open('renew', Array.from({ length: 30 }, (_, i) => row(`P${i}`)))
-    await userEvent.click(screen.getByRole('button', { name: 'Make 30 drafts' }))
-    expect(screen.getByText('Making drafts… 0 of 30 done')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Making 30 drafts…' })).toBeDisabled()
+    // 34 ticked, 17 of them with a draft waiting: the run makes 17 and checks 34.
+    const { onClose } = open('renew', Array.from({ length: 34 }, (_, i) => row(`P${i}`, '2026-12-31', { hasWaitingDraft: i < 17 })))
+    await userEvent.click(screen.getByRole('button', { name: 'Make 17 drafts' }))
+    expect(screen.getByRole('heading', { name: 'Renew 34 agreements' })).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Making 17 drafts…')
+    expect(screen.getByText('Working… 0 of 34 agreements checked')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Making 17 drafts…' })).toBeDisabled()
     await userEvent.keyboard('{Escape}')
     expect(onClose).not.toHaveBeenCalled()
     finish({ results: [], stopped: null })

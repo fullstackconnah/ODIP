@@ -10,6 +10,9 @@ describe('summarise', () => {
     // A partial run uses the notice tone that renders as the house warning.
     expect(s).toEqual({ tone: 'danger', title: '2 approved.', message: '4 need review: Ana, Bo, Cy and 1 more. 1 was busy: try again.' })
   })
+  it('says "needs" for exactly one that needs review', () => {
+    expect(summarise([r('Approved', 'A'), r('NeedsReview', 'Ben')]).message).toBe('1 needs review: Ben.')
+  })
   it('is a danger notice when nothing was approved, and says what was not started', () => {
     const s = summarise([r('Ended', 'Fay')], 3)
     expect(s.tone).toBe('danger')

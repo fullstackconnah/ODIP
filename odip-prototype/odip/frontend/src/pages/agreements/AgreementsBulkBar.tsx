@@ -46,7 +46,7 @@ export function AgreementsBulkBar({ selected, approvable, canApprove, shown, all
     ...(canApprove ? [{ value: 'approve', label, description: reason ?? approveReason ?? undefined, disabled: approveOff }] : []),
   ]
   return (
-    <div className="mb-3 max-xl:sticky max-xl:top-[calc(3rem+var(--safe-top))] max-xl:z-20 max-xl:shadow-[var(--shadow-hairline)] flex min-h-11 flex-wrap items-center gap-x-4 gap-y-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-1.5 max-md:flex-nowrap max-md:gap-x-3" role="region" aria-label="Selection">
+    <div className="max-xl:sticky max-xl:top-[calc(3rem+var(--safe-top))] max-xl:z-20 max-xl:shadow-[var(--shadow-hairline)] flex min-h-11 flex-wrap items-center gap-x-4 gap-y-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-1.5 max-md:flex-nowrap max-md:gap-x-3" role="region" aria-label="Selection">
       {narrow && (
         // The same box as the table's row boxes (DataTable), so it wears the house accent and a 44 px target.
         <label className="inline-flex min-h-[var(--tap-min)] min-w-[var(--tap-min)] shrink-0 items-center justify-center">

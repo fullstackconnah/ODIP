@@ -113,6 +113,14 @@ describe('AgreementsReview', () => {
     const ana = screen.getByText('Ana Lee').closest('tr')!
     expect(within(ana).getByText('Last term')).toHaveClass('md:hidden')
     expect(within(ana).getByText('New term')).toHaveClass('md:hidden')
+    // The card lays its children out as boxes and drops a bare space, so the space lives inside the label and the pair shares one span.
+    for (const label of ['Last term', 'New term']) {
+      const el = within(ana).getByText(label)
+      expect(el.textContent).toBe(`${label} `)
+      expect(el.parentElement?.tagName).toBe('SPAN')
+      expect(el.parentElement?.textContent).toMatch(new RegExp(`^${label} \\d`))
+      expect(el).not.toHaveClass('font-medium')
+    }
   })
 
   it('gives the notices block a focus ring after a keyboard Approve', async () => {
