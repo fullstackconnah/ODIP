@@ -610,3 +610,15 @@ describe('ClaimDetailPage — No Show and Mark Confirmed belong to a draft claim
     expect(screen.getByRole('alert')).toHaveTextContent("This claim has been submitted, so its lines can't be changed.")
   })
 })
+
+// The claim page had no Back: the house icon Back sits before the title, falling back to the trips list.
+describe('ClaimDetailPage — Back', () => {
+  it('is the icon Back before the title, a real link whose fallback is /trips', () => {
+    mockUseClaim.mockReturnValue({ data: baseClaim([baseLineItem()]), isLoading: false })
+    renderPage()
+
+    const back = screen.getByRole('link', { name: 'Back to trips' })
+    expect(back).toHaveAttribute('href', '/trips')
+    expect(back.compareDocumentPosition(screen.getByRole('heading', { level: 1 })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+})

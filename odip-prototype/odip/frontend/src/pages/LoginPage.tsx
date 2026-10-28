@@ -89,7 +89,7 @@ export default function LoginPage() {
   const applyLoginSuccess = (res: ApiResponse<AuthResponseDto>) => {
     if (res.success && res.data) {
       storeSession(res.data)
-      navigate('/')
+      navigate('/', { replace: true })
       return true
     }
     return false

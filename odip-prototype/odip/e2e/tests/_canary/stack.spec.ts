@@ -62,7 +62,7 @@ test.describe('stack canary', () => {
     expect(shift.status).toBe('Draft');
     const assigned = await assignShift(coord, shift.id, staff.id);
     expect(assigned.data.findings ?? []).toEqual([]);
-    const published = await publishShift(coord, shift.id, participant.id, day);
+    const published = await publishShift(coord, shift.id, participant.id, day, staff.id);
     expect(published.data.status).toBe('Published');
   });
 });

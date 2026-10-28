@@ -683,10 +683,10 @@ their own facts to tones. It stops at the header: the tab strip and every panel 
   of overflowing. Figures are counts, ratios or short amounts: anything longer belongs in a `FactList`. A ratio is always spelled
   "x / y", a space each side of the slash, through the one `formatRatio` formatter (`glanceRatio` is its earlier name), so no two figures drift ("12 / 10" beside "12/14").
 
-- **Back.** `BackButton` is the header's first action: secondary, an arrow and the word "Back", and it names its destination ("Back to staff") in its
+- **Back.** `BackButton` is the header's first action: secondary, an arrow and the word "Back", and it names its destination when it is known ("Back to staff"; otherwise it reads "Go back") in its
   accessible name, so the one word on screen never leaves a screen-reader user guessing. It is always a real link, 44px on touch, and has three shapes: the secondary
-  `button` in the action cluster, a ghost `icon` square beside the title on a form or wizard page, and a `link` for a page with no cluster (the portal). Where it
-  goes is `to`; with `history` on (the default) the previous in-app screen wins and `to` is the fallback for a deep link.
+  `button` in the action cluster, a ghost `icon` square beside the title on a form or wizard page, and a `link` for a page with no cluster (the portal). Back always
+  returns to the previous in-app page; `to` is only the fallback for a deep link or a new tab, and the link's href.
 
 **The Attention Tint Rule.** A glance segment is filled only when its own badge signals attention, and the fill is that badge's own tone family:
 `warning-container` for pending or time-bound (Waitlist), `error-container` for action needed or outstanding (Action Needed, Outstanding). Everything in
@@ -933,7 +933,7 @@ not. Never hand-roll a `fixed right-0` panel: use `SlideOver`.
 - **Do** derive a glance segment's chip and tint from one tone with `glanceState`
 - **Do** colour a status by its tone: add the word to `STATUS_TONE` (or pass a `colorMap` of tones for a domain whose word means something else), never a class string of its own
 - **Do** make nouns agree with counts through `plural()`, spell ratios through `formatRatio()` ("x / y") and relative times through `formatRelative()` (`src/lib/format.ts`), and state a dated deadline through `deadlineState()` and `deadlineLabel()` (`src/lib/deadline.ts`), never by hand
-- **Do** early-return a record that is loading, failed or missing through `PageState`, give a detail page one `BackButton` that names its destination, and keep its active tab in the URL with `useTabParam` (and the open section of a grouped tab in `?section=`, written with `replace`)
+- **Do** early-return a record that is loading, failed or missing through `PageState`, give a detail page one `BackButton` that names its destination when it is known, and keep its active tab in the URL with `useTabParam` (and the open section of a grouped tab in `?section=`, written with `replace`)
 - **Do** put what needs action in the attention band, as a tall tile with its figure, a line saying what it means and a link to where it is fixed, and the everyday counts in the header's meta row, so the loudest thing on the dashboard is the thing to act on; **do** let the all-clear be the Pale Sprout row and field and nothing else
 - **Do** show an en dash, not a `0`, for a figure whose request is still loading (`aria-busy`) or has failed ("Couldn't load"), and never an "All clear" without data
 - **Do** read every date and time by its kind (instant, wall clock, date: "Time on the wire"), take "today" from the provider (server) or the viewer's local date (browser), and call a due day overdue only from the day after it (`deadlineState`, `isPastDue`)

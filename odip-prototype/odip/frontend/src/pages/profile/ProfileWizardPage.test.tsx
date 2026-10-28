@@ -562,8 +562,7 @@ describe('ProfileWizardPage — wizard shell + history-aware back', () => {
   it('returns to the previous in-app screen when the user arrived from one (e.g. onboarding → Edit profile)', async () => {
     const user = userEvent.setup()
     __testHooks.reset()
-    __testHooks.recordCurrentPath('/onboarding/participant-1')
-    __testHooks.recordCurrentPath('/participants/participant-1/profile')
+    __testHooks.seedHistory('/onboarding/participant-1', '/participants/participant-1/profile')
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
     const router = createMemoryRouter(
       [
@@ -573,7 +572,7 @@ describe('ProfileWizardPage — wizard shell + history-aware back', () => {
         },
         { path: '/onboarding/:id', element: <div>Onboarding screen</div> },
       ],
-      { initialEntries: ['/participants/participant-1/profile'] },
+      { initialEntries: ['/onboarding/participant-1', '/participants/participant-1/profile'], initialIndex: 1 },
     )
     render(<RouterProvider router={router} />)
     const back = await screen.findByTestId('profile-header-back')
@@ -583,8 +582,7 @@ describe('ProfileWizardPage — wizard shell + history-aware back', () => {
 
   it('the back destination matches the recorded previous path, not the hardcoded /participants/:id fallback', async () => {
     __testHooks.reset()
-    __testHooks.recordCurrentPath('/onboarding/participant-1')
-    __testHooks.recordCurrentPath('/participants/participant-1/profile')
+    __testHooks.seedHistory('/onboarding/participant-1', '/participants/participant-1/profile')
     // No /participants/:id route. If the back control hardcoded the fallback, the click would
     // land on a "no routes matched" warning — the absence of the /participants/:id detail marker
     // is the proof that the back target was the recorded previous path.
@@ -598,7 +596,7 @@ describe('ProfileWizardPage — wizard shell + history-aware back', () => {
         { path: '/onboarding/:id', element: <div>Onboarding screen</div> },
         { path: '/participants/:id', element: <div>Participant detail</div> },
       ],
-      { initialEntries: ['/participants/participant-1/profile'] },
+      { initialEntries: ['/onboarding/participant-1', '/participants/participant-1/profile'], initialIndex: 1 },
     )
     render(<RouterProvider router={router} />)
     const back = screen.getByTestId('profile-header-back')
@@ -619,15 +617,14 @@ describe('ProfileWizardPage — Save and Cancel return to where Edit was clicked
   }
   function renderFromFunding(participant = makeParticipant()) {
     __testHooks.reset()
-    __testHooks.recordCurrentPath('/participants/participant-1?tab=funding')
-    __testHooks.recordCurrentPath('/participants/participant-1/profile')
+    __testHooks.seedHistory('/participants/participant-1?tab=funding', '/participants/participant-1/profile')
     mockUseParticipant.mockReturnValue({ data: participant, isLoading: false })
     const router = createMemoryRouter(
       [
         { path: '/participants/:id/profile', element: <><Tracker /><ProfileWizardPage /></> },
         { path: '/participants/:id', element: <Detail /> },
       ],
-      { initialEntries: ['/participants/participant-1/profile'] },
+      { initialEntries: ['/participants/participant-1?tab=funding', '/participants/participant-1/profile'], initialIndex: 1 },
     )
     return render(<RouterProvider router={router} />)
   }

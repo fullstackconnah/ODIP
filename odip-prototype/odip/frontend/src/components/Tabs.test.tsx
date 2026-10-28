@@ -549,3 +549,22 @@ describe('Tabs primitive — variant="sub"', () => {
     expect(screen.getByRole('tab', { name: 'Alpha' }).className).toContain('border-b-2')
   })
 })
+
+// The underline strip scrolls (overflow-x:auto clips all four sides), so its focus ring sits inside the button; the sub chips have their own 4px of room.
+describe('Tabs primitive — focus ring is not clipped by the scrolling strip', () => {
+  const subTabs: TabItem[] = [{ id: 'a', label: 'A', content: null }, { id: 'b', label: 'B', content: null }]
+
+  it.each([['wrap' as const], ['scroll' as const]])('draws the underline tab ring inside the button (%s)', overflow => {
+    render(<Harness tabs={demoTabs} initial="one" overflow={overflow} />)
+    for (const tab of screen.getAllByRole('tab')) {
+      expect(tab.className).toContain('focus-visible:ring-2')
+      expect(tab.className).toContain('focus-visible:ring-inset')
+      expect(tab.className).not.toContain('ring-offset')
+    }
+  })
+
+  it('keeps the offset ring on a sub variant chip', () => {
+    render(<Tabs tabs={subTabs} active="a" onChange={() => {}} ariaLabel="Sub tabs" variant="sub" />)
+    expect(screen.getByRole('tab', { name: 'A' }).innerHTML).toContain('ring-offset-2')
+  })
+})

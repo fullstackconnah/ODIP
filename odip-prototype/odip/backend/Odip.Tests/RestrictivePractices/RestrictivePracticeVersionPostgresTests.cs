@@ -182,6 +182,58 @@ public class RestrictivePracticeVersionPostgresTests : IClassFixture<PostgresFix
             Assert.Equal("B", (await check.RestrictivePractices.SingleAsync()).Description);
     }
 
+    [SkippableFact]
+    public async Task A_delete_that_races_an_edit_is_a_409_not_a_500()
+    {
+        Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
+        var (tenantId, practiceId, participantId) = await SeedAsync();
+        DateTime loaded;
+        { var (db, c) = Request(tenantId); await using var _ = db; loaded = await LoadedAsync(c, participantId); }
+
+        // Deleter A has already read the entry at the loaded version, so the controller finds it tracked and the early check passes.
+        var (db2, c2) = Request(tenantId);
+        await using (db2)
+        {
+            await db2.RestrictivePractices.SingleAsync(p => p.Id == practiceId);
+            { var (db, c) = Request(tenantId); await using var _ = db; Assert.IsType<OkObjectResult>((await c.Update(practiceId, Form("B", loaded), CancellationToken.None)).Result); }
+
+            Assert.IsType<ConflictObjectResult>((await c2.Delete(practiceId, CancellationToken.None, new DateTimeOffset(loaded))).Result);
+        }
+
+        var (check, _c) = Request(tenantId);
+        await using (check)
+        {
+            Assert.Equal("B", (await check.RestrictivePractices.SingleAsync()).Description);
+            Assert.True((await check.Participants.SingleAsync()).HasRestrictivePracticeFlag);
+        }
+    }
+
+    [SkippableFact]
+    public async Task A_delete_version_sent_over_the_wire_is_a_409_when_stale_and_removes_the_row_when_current()
+    {
+        Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
+        var (tenantId, practiceId, participantId) = await SeedAsync();
+        DateTime loaded;
+        { var (db, c) = Request(tenantId); await using var _ = db; loaded = await LoadedAsync(c, participantId); }
+        DateTime current;
+        {
+            var (db, c) = Request(tenantId); await using var _ = db;
+            var ok = Assert.IsType<OkObjectResult>((await c.Update(practiceId, Form("Newer", loaded), CancellationToken.None)).Result);
+            current = Assert.IsType<ApiResponse<RestrictivePracticeDto>>(ok.Value).Data!.UpdatedAt;
+        }
+
+        { var (db, c) = Request(tenantId); await using var _ = db; Assert.IsType<ConflictObjectResult>((await c.Delete(practiceId, CancellationToken.None, QueryVersion(loaded))).Result); }
+        { var (db, c) = Request(tenantId); await using var _ = db; Assert.IsType<OkObjectResult>((await c.Delete(practiceId, CancellationToken.None, QueryVersion(current))).Result); }
+
+        var (check, _c) = Request(tenantId);
+        await using (check)
+            Assert.Empty(await check.RestrictivePractices.ToListAsync());
+    }
+
+    /// <summary>The version as MVC binds it from the query string: the browser sends the ISO string from the list, which parses to an offset (no Local-kind DateTime).</summary>
+    private static DateTimeOffset QueryVersion(DateTime version) =>
+        DateTimeOffset.Parse(JsonSerializer.Serialize(version, Wire).Trim('"'), System.Globalization.CultureInfo.InvariantCulture);
+
     private static UpdateRestrictivePracticeDto ToBody(string description, DateTime expected) =>
         JsonSerializer.Deserialize<UpdateRestrictivePracticeDto>(
             JsonSerializer.Serialize(new { description, isActive = true, expectedUpdatedAt = expected }, Wire), Wire)!;
