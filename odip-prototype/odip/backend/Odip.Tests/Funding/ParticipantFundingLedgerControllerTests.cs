@@ -1,13 +1,18 @@
 using System.Reflection;
 using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.AspNetCore.RateLimiting;
 using Moq;
 using Odip.Api.Controllers;
+using Odip.Api.RateLimiting;
+using Odip.Api.Serialization;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
+using Odip.Domain.Billing.Pricing;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Funding;
@@ -28,8 +33,8 @@ public class ParticipantFundingLedgerControllerTests
     private static readonly string[] Staff = ["SuperAdmin", "Admin", "Coordinator"];
     private static readonly CancellationToken Ct = CancellationToken.None;
 
-    private static ParticipantFundingLedgerController ControllerFor(LedgerKit kit, Guid? tenantId) =>
-        new(TenantOf(tenantId), kit.Ledger);
+    private static ParticipantFundingLedgerController ControllerFor(LedgerKit kit, Guid? tenantId, PlanQuoteConcurrencyLimiter? limiter = null) =>
+        new(TenantOf(tenantId), kit.Ledger, kit.NewSeries(), limiter ?? new PlanQuoteConcurrencyLimiter()) { ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() } };
 
     private static ICurrentTenant TenantOf(Guid? tenantId)
     {
@@ -112,6 +117,107 @@ public class ParticipantFundingLedgerControllerTests
         Assert.Equal(ParticipantFundingController.ChooseOrganisation, Assert.Single(Assert.IsType<ApiResponse<ParticipantLedgerDto>>(needsOrganisation.Value).Errors!));
     }
 
+    // ── The budget graph (ledger/series) ────────────────────────────────────
+
+    private static BudgetSeriesDto Series(ActionResult<ApiResponse<BudgetSeriesDto>> result) => Ok(result);
+
+    private static void ApprovedRevision(LedgerKit kit, Participant person)
+    {
+        var block = Odip.Tests.PlanPricing.PlanPricingTestSupport.Block("mon", PlanSupportType.CommunityAccess, DayOfWeek.Monday, new TimeOnly(9, 0), new TimeOnly(13, 0));
+        var draft = new ServiceAgreementDraft
+        {
+            Id = Guid.NewGuid(), TenantId = person.TenantId, ParticipantId = person.Id, Version = 1, PlanStartDate = new DateOnly(2026, 7, 1), PlanEndDate = new DateOnly(2027, 6, 30),
+            AgreementStartDate = new DateOnly(2026, 7, 1), AgreementEndDate = new DateOnly(2027, 6, 30), State = "NSW", ParticipantNameSnapshot = "Sophie Brown",
+        };
+        draft.Blocks.Add(new ServiceAgreementDraftBlock { Id = Guid.NewGuid(), DraftId = draft.Id, Position = 0, BlockKey = block.Id, BlockJson = DraftJson.Write(block) });
+        kit.Db.ServiceAgreementDrafts.Add(draft);
+        kit.Db.ServiceAgreementDraftApprovals.Add(new ServiceAgreementDraftApproval { Id = Guid.NewGuid(), TenantId = person.TenantId, DraftId = draft.Id, ParticipantId = person.Id, DraftVersion = 1, ApprovedByName = "Alex Admin" });
+        kit.Db.SaveChanges();
+    }
+
+    [Fact]
+    public async Task TheSeriesAnswersWithTheWholePlanFirst_ThenEachPool()
+    {
+        using var kit = Arrange(out var person);
+
+        var dto = Series(await ControllerFor(kit, kit.TenantId).Series(person.Id, Ct));
+
+        Assert.Equal(BudgetChartStatus.Ok, dto.Chart);
+        Assert.Equal(new[] { "plan", dto.Scopes[1].ScopeKey }, dto.Scopes.Select(s => s.ScopeKey));
+        Assert.Equal(480m, dto.Scopes[0].Summary.Used);
+        Assert.Equal(BudgetExpectedStatus.NoAgreement, dto.Expected.Status);
+    }
+
+    [Fact]
+    public async Task TheSeriesOfAnotherOrganisationsParticipantIsNotFound_AndASuperAdminWithNoOrganisationChosenIsToldToChooseOne()
+    {
+        var database = Guid.NewGuid().ToString();
+        using var a = LedgerKit.Create(TenantA, database);
+        using var b = LedgerKit.Create(TenantB, database);
+        a.SeedProvider("NSW", TenantA);
+        var theirs = b.SeedParticipant(tenantId: TenantB);
+        b.SeedPlan(theirs, Core(PlanType.PlanManaged, Q(1, 2000m), Q(2, 2000m), Q(3, 2000m), Q(4, 2000m)));
+        var mine = a.SeedParticipant();
+
+        var notFound = Assert.IsType<NotFoundObjectResult>((await ControllerFor(a, TenantA).Series(theirs.Id, Ct)).Result);
+        Assert.Equal(FundingPlanService.ParticipantNotFound, Assert.Single(Assert.IsType<ApiResponse<BudgetSeriesDto>>(notFound.Value).Errors!));
+        var needsOrganisation = Assert.IsType<BadRequestObjectResult>((await ControllerFor(a, null).Series(mine.Id, Ct)).Result);
+        Assert.Equal(ParticipantFundingController.ChooseOrganisation, Assert.Single(Assert.IsType<ApiResponse<BudgetSeriesDto>>(needsOrganisation.Value).Errors!));
+    }
+
+    [Fact]
+    public async Task TheSeriesTravelsWithCamelCaseKeys_EnumsAsWords_AndNoKeyWhereALineDoesNotReach()
+    {
+        using var kit = Arrange(out var person);
+        var dto = Series(await ControllerFor(kit, kit.TenantId).Series(person.Id, Ct));
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        ApiJsonOptions.Configure(options);
+
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(dto, options));
+        var root = json.RootElement;
+        Assert.Equal("Ok", root.GetProperty("chart").GetString());
+        Assert.Equal("2026-10-04", root.GetProperty("today").GetString());
+        Assert.Equal("2026-07-01", root.GetProperty("planStart").GetString());
+        Assert.True(root.GetProperty("planIsCurrent").GetBoolean());
+        Assert.Equal("NoAgreement", root.GetProperty("expected").GetProperty("status").GetString());
+        var plan = root.GetProperty("scopes")[0];
+        Assert.Equal("plan", plan.GetProperty("scopeKey").GetString());
+        Assert.Equal("The whole plan", plan.GetProperty("name").GetString());
+        Assert.Equal(480m, plan.GetProperty("summary").GetProperty("used").GetDecimal());
+        Assert.Equal(0, plan.GetProperty("unpricedShiftCount").GetInt32());
+        var points = plan.GetProperty("points").EnumerateArray().ToList();
+        Assert.Equal(0m, points[0].GetProperty("budget").GetDecimal());
+        Assert.False(points[^1].TryGetProperty("used", out _));                 // the future: no used figure at all
+        Assert.True(points[^1].TryGetProperty("usedAndBooked", out _));
+        Assert.False(points[^1].TryGetProperty("expected", out _));
+        Assert.False(points[0].GetProperty("isEdge").GetBoolean());
+    }
+
+    [Fact]
+    public async Task WhenTheOrganisationsPricingPermitsAreTaken_TheExpectedLineIsUnavailable_UnderThePlanQuotesOwnKey()
+    {
+        using var kit = Arrange(out var person);
+        ApprovedRevision(kit, person);
+        using var limiter = new PlanQuoteConcurrencyLimiter();
+        var key = PlanQuoteConcurrencyFilter.KeyOf(new DefaultHttpContext(), TenantOf(kit.TenantId));
+        Assert.Equal("tenant:" + kit.TenantId.ToString("N"), key);
+        using var one = limiter.TryEnter(key);
+        using var two = limiter.TryEnter(key);
+
+        var dto = Series(await ControllerFor(kit, kit.TenantId, limiter).Series(person.Id, Ct));
+
+        Assert.Equal(BudgetChartStatus.Ok, dto.Chart);
+        Assert.Equal(BudgetExpectedStatus.Unavailable, dto.Expected.Status);
+    }
+
+    [Fact]
+    public void ThePermitKeyIsTheTenant_ElseTheCaller()
+    {
+        var caller = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "u1")], "test")) };
+        Assert.Equal("tenant:" + TenantA.ToString("N"), PlanQuoteConcurrencyFilter.KeyOf(caller, TenantOf(TenantA)));
+        Assert.Equal("user:u1", PlanQuoteConcurrencyFilter.KeyOf(caller, TenantOf(null)));
+    }
+
     // ── The claim detail's budget block ─────────────────────────────────────
 
     private static ClaimsController ClaimsControllerFor(LedgerKit kit, ICurrentTenant tenant) =>
@@ -189,7 +295,7 @@ public class ParticipantFundingLedgerControllerTests
     public void TheControllerHasExactlyTheDocumentedActions_AllReads_SoANewOneFailsHereUntilSomebodyDecidesWhoMayCallIt()
     {
         Assert.Equal(
-            new[] { nameof(ParticipantFundingLedgerController.Ledger) },
+            new[] { nameof(ParticipantFundingLedgerController.Ledger), nameof(ParticipantFundingLedgerController.Series) },
             Actions().Select(m => m.Name).OrderBy(n => n, StringComparer.Ordinal));
         Assert.All(Actions(), action => Assert.NotEmpty(action.GetCustomAttributes<HttpGetAttribute>()));
     }
@@ -212,11 +318,11 @@ public class ParticipantFundingLedgerControllerTests
     /// read off the compiled action and compared with the policy name itself, so a renamed or missing policy fails here rather than silently limiting nothing.
     /// </summary>
     [Fact]
-    public void TheLedgerActionIsRateLimitedOnTheSharedApiPolicy_SoAManyFigureEndpointCannotBeHammered()
+    public void TheLedgerAndSeriesActionsAreRateLimitedOnTheSharedApiPolicy_SoAManyFigureEndpointCannotBeHammered()
     {
         var actions = Actions().ToList();
 
-        Assert.Single(actions);
+        Assert.Equal(2, actions.Count);
         foreach (var action in actions)
         {
             var policy = Assert.Single(action.GetCustomAttributes<EnableRateLimitingAttribute>());
@@ -231,5 +337,6 @@ public class ParticipantFundingLedgerControllerTests
 
         Assert.Equal("api/v1/participants/{participantId:guid}/funding", prefix);
         Assert.Equal("ledger", typeof(ParticipantFundingLedgerController).GetMethod(nameof(ParticipantFundingLedgerController.Ledger))!.GetCustomAttribute<HttpGetAttribute>()!.Template);
+        Assert.Equal("ledger/series", typeof(ParticipantFundingLedgerController).GetMethod(nameof(ParticipantFundingLedgerController.Series))!.GetCustomAttribute<HttpGetAttribute>()!.Template);
     }
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Button } from './Button'
 import { BackButton } from './BackButton'
 import { Callout } from './Callout'
@@ -28,7 +28,8 @@ const upperFirst = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
 const isFailedResult = (result: unknown) => !!result && typeof result === 'object' && ((result as { isError?: unknown }).isError === true || (result as { status?: unknown }).status === 'error')
 
-function RetryError({ noun, onRetry, detail }: Common & { onRetry?: () => unknown; detail?: string }) {
+/** A failure Callout whose "Try again" holds until the retry settles ("Trying again…", then "Couldn't load it again."). PageState's error state, and any section that fails on its own. */
+export function RetryCallout({ tone = 'danger', onRetry, children }: { tone?: 'danger' | 'warning'; onRetry?: () => unknown; children: ReactNode }) {
   const [state, setState] = useState<'idle' | 'pending' | 'failed'>('idle')
   const pending = useRef(false)
   const mounted = useRef(true)
@@ -61,7 +62,7 @@ function RetryError({ noun, onRetry, detail }: Common & { onRetry?: () => unknow
   return (
     <div>
       <Callout
-        tone="danger"
+        tone={tone}
         actions={onRetry ? (
           <>
             <Button variant="secondary" size="sm" onClick={retry} aria-disabled={state === 'pending'} aria-busy={state === 'pending' || undefined} className="min-h-[var(--tap-min)] aria-disabled:opacity-50 aria-disabled:cursor-not-allowed">
@@ -72,11 +73,19 @@ function RetryError({ noun, onRetry, detail }: Common & { onRetry?: () => unknow
           </>
         ) : undefined}
       >
-        Couldn't load this {noun}.{!detail && ' Check your connection and try again.'}
-        {detail && <span className="mt-1 block text-sm text-[var(--color-muted-foreground)] [overflow-wrap:anywhere]">{detail}</span>}
+        {children}
       </Callout>
       <div role={state === 'idle' ? undefined : 'status'} aria-live="polite" aria-atomic="true" className="sr-only">{status}</div>
     </div>
+  )
+}
+
+function RetryError({ noun, onRetry, detail }: Common & { onRetry?: () => unknown; detail?: string }) {
+  return (
+    <RetryCallout onRetry={onRetry}>
+      Couldn't load this {noun}.{!detail && ' Check your connection and try again.'}
+      {detail && <span className="mt-1 block text-sm text-[var(--color-muted-foreground)] [overflow-wrap:anywhere]">{detail}</span>}
+    </RetryCallout>
   )
 }
 
