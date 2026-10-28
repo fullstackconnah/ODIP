@@ -422,6 +422,9 @@
 .bt-cross { stroke: var(--color-foreground); stroke-width: 1px; }
 .bt-tick { stroke: var(--color-chart-expected); stroke-width: 2px; vector-effect: non-scaling-stroke; }
 .bt-dot { stroke: var(--color-card); stroke-width: 2px; }
+.bt-dot[data-dot='budget'] { fill: var(--color-chart-budget); }
+.bt-dot[data-dot='used'], .bt-dot[data-dot='booked'] { fill: var(--color-chart-actual); }
+.bt-dot[data-dot='expected'] { fill: var(--color-chart-expected); }
 .bt-plot { outline: 2px solid transparent; touch-action: pan-y; }
 .bt-plot:focus-visible { outline: 2px solid var(--color-ring); outline-offset: 2px; }
 .bt-readout { animation: railFadeIn 0.1s ease-out; }
@@ -429,7 +432,7 @@
   .bt-budget, .bt-grid, .bt-today { stroke: GrayText; }
   .bt-used, .bt-booked, .bt-expected, .bt-tick { stroke: CanvasText; }
   .bt-cross { stroke: Highlight; }
-  .bt-dot { fill: Highlight; stroke: Canvas; }
+  .bt-dot[data-dot] { fill: Highlight; stroke: Canvas; }
   .bt-readout { background: Canvas; color: CanvasText; border: 1px solid CanvasText; }
 }
 
