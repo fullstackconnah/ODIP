@@ -134,7 +134,7 @@ describe('recording the next plan', () => {
   })
 
   it('starts empty for a participant with no plan yet', () => {
-    expect(nextPlanState(undefined)).toMatchObject({ planStart: '', planEnd: '', periodLengthMonths: 3, evidence: 'PlanCopy', pools: [] })
+    expect(nextPlanState(undefined)).toMatchObject({ planStart: '', planEnd: '', periodLengthMonths: undefined, evidence: 'PlanCopy', pools: [] })
   })
 })
 
@@ -185,6 +185,12 @@ describe('what is wrong, in plain words', () => {
     expect(found.any).toBe(false)
     expect(found.general).toEqual([])
     expect(Object.keys(found.pools)).toEqual([])
+  })
+
+  it('asks a new plan to choose its release period; whole plan (null) and a number are choices', () => {
+    expect(validate({ ...yearPlan(), periodLengthMonths: undefined })).toMatchObject({ periodLength: 'Choose how the funding is released.', any: true })
+    expect(validate({ ...yearPlan(), periodLengthMonths: null }).periodLength).toBeUndefined()
+    expect(validate(yearPlan()).periodLength).toBeUndefined()
   })
 
   it('asks for the plan dates, and says when they are the wrong way round or too far apart', () => {
@@ -517,7 +523,7 @@ describe('why a pool shows no periods', () => {
 
 describe('a first plan starts from the dates the profile already holds', () => {
   it('prefills the plan dates from the profile when it has both, and not otherwise', () => {
-    expect(nextPlanState(undefined, { start: '2026-07-01', end: '2027-06-30' })).toMatchObject({ planStart: '2026-07-01', planEnd: '2027-06-30', periodLengthMonths: 3, pools: [] })
+    expect(nextPlanState(undefined, { start: '2026-07-01', end: '2027-06-30' })).toMatchObject({ planStart: '2026-07-01', planEnd: '2027-06-30', periodLengthMonths: undefined, pools: [] })
     expect(nextPlanState(undefined, { start: '2026-07-01' })).toMatchObject({ planStart: '', planEnd: '' })
     expect(nextPlanState(undefined, { end: '2027-06-30' })).toMatchObject({ planStart: '', planEnd: '' })
     expect(nextPlanState(undefined, {})).toMatchObject({ planStart: '', planEnd: '' })
@@ -528,8 +534,8 @@ describe('a first plan starts from the dates the profile already holds', () => {
     expect(nextPlanState({ planEnd: '2027-06-30', periodLengthMonths: 3 }, { start: '2020-01-01', end: '2020-12-31' })).toMatchObject({ planStart: '2027-07-01', planEnd: '2028-06-30' })
   })
 
-  it('then proposes the periods as soon as a pool is added, with no dates typed', () => {
-    const state = addCorePool(nextPlanState(undefined, { start: '2026-07-01', end: '2027-06-30' }), 'PlanManaged', { totalText: '8000' })
+  it('then proposes the periods as soon as a pool is added and 3-monthly is chosen, with no dates typed', () => {
+    const state = addCorePool({ ...nextPlanState(undefined, { start: '2026-07-01', end: '2027-06-30' }), periodLengthMonths: 3 }, 'PlanManaged', { totalText: '8000' })
 
     expect(state.pools[0].periods).toHaveLength(4)
   })
