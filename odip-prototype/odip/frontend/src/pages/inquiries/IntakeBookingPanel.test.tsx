@@ -472,4 +472,13 @@ describe('IntakeBookingPanel: the booked view', () => {
     expect(screen.queryByRole('button', { name: 'Mark confirmed' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Cancel visit' })).not.toBeInTheDocument()
   })
+
+  it('footer buttons never break a label: the row wraps by whole buttons and the group sits right', () => {
+    panel(bookedRow())
+
+    const close = screen.getByRole('button', { name: 'Close' })
+    const footer = close.parentElement?.parentElement as HTMLElement
+    expect(footer).toHaveClass('flex-wrap', 'justify-between', 'gap-y-2', 'max-sm:gap-x-2', '[&_button]:whitespace-nowrap')
+    expect(close.parentElement).toHaveClass('ml-auto', 'max-sm:gap-2')
+  })
 })
