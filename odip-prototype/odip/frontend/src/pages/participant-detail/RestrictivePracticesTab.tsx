@@ -105,7 +105,7 @@ function PracticeCard({ practice, canWrite, onEdit, onDelete }: {
           )}
         </div>
         {canWrite && (
-          <div className="flex items-center gap-1 shrink-0">
+          <div className="flex items-center gap-1 pointer-coarse:gap-2 shrink-0">
             <Button variant="ghost" size="sm" onClick={onEdit}>
               Edit
             </Button>
