@@ -28,7 +28,7 @@ export default function ShiftsUploadFields({ shape, onShape, from, onFrom, weeks
         <legend className={`${labelClass} mb-1`}>What's in your file?</legend>
         {SHAPES.map(option => (
           <label key={option.value} className="flex min-h-[var(--control-h)] cursor-pointer items-start gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-[var(--card-pad)] text-sm has-[:checked]:border-[var(--color-primary)] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--color-ring)]">
-            <input className="mt-0.5 accent-[var(--color-primary)]" type="radio" name="shape" value={option.value} checked={shape === option.value} onChange={() => onShape(option.value)} />
+            <input className="mt-0.5" type="radio" name="shape" value={option.value} checked={shape === option.value} onChange={() => onShape(option.value)} />
             <span>
               <span className="font-medium">{option.label}</span>
               <span className="block text-[var(--color-muted-foreground)]">{option.hint}</span>

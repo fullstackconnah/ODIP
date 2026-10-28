@@ -414,7 +414,7 @@ export default function ImportWizardPage() {
                     <legend className={`${labelClass} mb-1`}>Where do these participants go?</legend>
                     {LANDINGS.map(option => (
                       <label key={option.value} className="flex cursor-pointer items-start gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] p-[var(--card-pad)] text-sm has-[:checked]:border-[var(--color-primary)]">
-                        <input className="mt-0.5 accent-[var(--color-primary)]" type="radio" name="landing" value={option.value} checked={landing === option.value} onChange={() => setLanding(option.value)} />
+                        <input className="mt-0.5" type="radio" name="landing" value={option.value} checked={landing === option.value} onChange={() => setLanding(option.value)} />
                         <span>
                           <span className="font-medium">{option.label}</span>
                           <span className="block text-[var(--color-muted-foreground)]">{option.hint}</span>

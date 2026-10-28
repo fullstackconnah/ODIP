@@ -369,7 +369,7 @@ export function QuickGroup({ model, state, onRecoveryChange }: { model: GroupMod
   const allBox = tickable.length > 0 && (
     <span className="inline-flex" ref={element => { allRef.current = element?.querySelector('input') ?? null }}>
       <CheckboxField label={ticked.length > 0 || !belowMd ? <span className="sr-only">Select all shown {model.noun}</span> : 'Select shown'}
-        className="[&_input]:m-0 [&_input]:size-4 [&_input]:accent-[var(--color-primary)] pointer-coarse:[&_label]:min-w-11"
+        className="[&_input]:m-0 [&_input]:size-4 pointer-coarse:[&_label]:min-w-11"
         aria-label={`Select all shown ${model.noun}`} checked={ticked.length > 0 && ticked.length === tickable.length}
         aria-disabled={progress || checking ? true : undefined}
         onChange={event => { if (!progress && !checking) setSelected(new Set(event.target.checked ? tickable.map(row => row.id) : [])) }} />
@@ -380,7 +380,7 @@ export function QuickGroup({ model, state, onRecoveryChange }: { model: GroupMod
       minWidth: 'calc(24px + var(--control-h))', render: (row: QuickRow) => {
         const action = tapOf(row)
         return action ? <CheckboxField label={<span className="sr-only">{selectName(action.name)}</span>}
-          className="[&_input]:m-0 [&_input]:size-4 [&_input]:accent-[var(--color-primary)] pointer-coarse:[&_label]:min-w-11"
+          className="[&_input]:m-0 [&_input]:size-4 pointer-coarse:[&_label]:min-w-11"
           checked={selected.has(row.id) && tickable.some(item => item.id === row.id)}
           disabled={!tickable.some(item => item.id === row.id) || !!progress || checking}
           onChange={event => setSelected(previous => { const next = new Set(previous); if (event.target.checked) next.add(row.id); else next.delete(row.id); return next })} /> : null
