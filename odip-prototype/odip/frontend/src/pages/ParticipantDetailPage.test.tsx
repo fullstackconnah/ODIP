@@ -2206,6 +2206,7 @@ describe('ParticipantDetailPage — sub-tabs', () => {
     await user.click(subTab('Identity'))
     await user.click(screen.getByRole('button', { name: 'Discard' }))
     expect(selectedSub()).toEqual(['Identity'])
+    expect(subTab('Identity')).toHaveFocus()
     expect(probe().path).toBe('?tab=about')
     await user.click(subTab('Services'))
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
@@ -2216,6 +2217,7 @@ describe('ParticipantDetailPage — sub-tabs', () => {
     await user.click(subTab('Identity'))
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     expect(selectedSub()).toEqual(['Identity'])
+    expect(subTab('Identity')).toHaveFocus()
   })
 
   it('j: the same ask for a main tab', async () => {
@@ -2223,11 +2225,13 @@ describe('ParticipantDetailPage — sub-tabs', () => {
     await user.type(screen.getByLabelText('Goals'), 'mine')
     await user.click(screen.getByRole('tab', { name: 'Health & safety' }))
     await user.click(screen.getByRole('button', { name: 'Keep editing' }))
+    expect(within(screen.getByRole('tablist', { name: 'Participant sections' })).getByRole('tab', { name: /^About/ })).toHaveFocus()
     expect(selectedTabName()[0]).toMatch(/^About/)
     expect(probe().path).toBe('?tab=about&section=about-me')
     await user.click(screen.getByRole('tab', { name: 'Health & safety' }))
     await user.click(screen.getByRole('button', { name: 'Discard' }))
     expect(selectedTabName()[0]).toMatch(/^Health/)
+    expect(screen.getByRole('tab', { name: 'Health & safety' })).toHaveFocus()
     expect(probe().path).toBe('?tab=health')
   })
 

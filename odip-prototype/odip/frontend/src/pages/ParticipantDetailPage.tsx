@@ -128,19 +128,23 @@ export default function ParticipantDetailPage() {
   const holds = useRef(0)
   const dirtyEdits = useMemo(() => ({ hold: () => { holds.current++; let on = true; return () => { if (on) { on = false; holds.current-- } } } }), [])
   const [pendingSwitch, setPendingSwitch] = useState<(() => void) | null>(null)
-  // The strip that parked the switch: once the dialog closes, focus goes back to its selected chip (Tabs had moved it to the neighbour or the clicked chip).
-  const refocus = useRef<HTMLElement | null>(null)
+  // The strip that parked the switch, and (once Discard is pressed) the view it left. When the dialog closes, focus goes to that strip's selected chip:
+  // the current one after Keep editing (Tabs had moved focus to the neighbour or the clicked chip), the chosen one after Discard.
+  const refocus = useRef<{ strip: HTMLElement | null; from: string | null } | null>(null)
   const guarded = (go: () => void) => {
     if (holds.current === 0) return go()
-    refocus.current = document.activeElement?.closest<HTMLElement>('[role="tablist"]') ?? null
+    refocus.current = { strip: document.activeElement?.closest<HTMLElement>('[role="tablist"]') ?? null, from: null }
     setPendingSwitch(() => go)
   }
-  // An effect, not onCancel: the dialog's own focus-return cleanup runs first in the same commit, so this one wins.
+  const view = `${tab}/${section}`
+  // An effect, not onCancel: the dialog's own focus-return cleanup runs first in the same commit, so this one wins. After Discard the router commits the
+  // new selection later than the dialog closing, so the effect waits for the view to change and then focuses the chip now selected.
   useEffect(() => {
-    if (pendingSwitch !== null || !refocus.current) return
-    refocus.current.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.focus()
+    const r = refocus.current
+    if (pendingSwitch !== null || !r || r.from === view) return
+    r.strip?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.focus()
     refocus.current = null
-  }, [pendingSwitch])
+  }, [pendingSwitch, view])
   const stripRef = useRef<HTMLDivElement>(null)
   const { data: alertsData } = useParticipantAlerts(id, canViewAlerts)
   // DOC-01 — Documents header buttons. Hooks called unconditionally, ahead of the isLoading/!p
@@ -441,7 +445,7 @@ export default function ParticipantDetailPage() {
       <ConfirmDialog
         open={pendingSwitch !== null}
         onCancel={() => setPendingSwitch(null)}
-        onConfirm={() => { pendingSwitch?.(); setPendingSwitch(null) }}
+        onConfirm={() => { if (refocus.current) refocus.current.from = view; pendingSwitch?.(); setPendingSwitch(null) }}
         title="Discard changes?"
         message="You have unsaved changes in this section. Discard them?"
         confirmLabel="Discard"

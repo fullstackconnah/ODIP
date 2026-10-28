@@ -16,3 +16,7 @@ Skills called first: ponytail:ponytail (full), impeccable:impeccable, apple-desi
 - House component: NotRecordedFold (native `<details>`, chevron turns via `group-open`).
 - States: editor with nothing answered (open, can still collapse via summary click, Enter or Space; chevron shows rotated), viewer (plain line, no `<details>`), zero rows (plain line), some answered (no fold, count and reveal button), deep link `#daily-living` etc. (useScrollToHash sets `open`, harmless when already open), mobile 390 (same layout, summary keeps its 44px control height), focus ring on summary unchanged.
 - apple-design: restraint and agency (content first, the fold still collapsible); no copy change, no motion added.
+
+## FIX3
+- Focus after the unsaved-changes dialog: Discard puts focus on the chip the user asked for (the newly selected one), on the main strip and the sub strip, by keyboard and mouse; Keep editing keeps it on the current chip, as before. No visual change: same roving tabindex, same focus ring. The dialog's own focus trap while open, page load and clean switches are untouched.
+- apple-design: agency and familiarity (the thing you chose is the thing that has focus); impeccable: accessibility (focus never lands on a deselected control).
