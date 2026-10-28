@@ -328,3 +328,15 @@ describe('PatternsPage — patterns made by an agreement', () => {
     expect(mockUpdateMutateAsync).toHaveBeenCalledWith({ id: 'pattern-agreement', data: fullPayload(agreement(), false) })
   })
 })
+
+// The row buttons are Button iconOnly, whose 44px touch areas need 8px between neighbours on a coarse pointer (DESIGN.md, Touch hit areas).
+describe('PatternsPage — row actions keep their touch areas apart', () => {
+  it('widens the gap between the row buttons on a coarse pointer, and keeps all three labelled', () => {
+    mockUsePatterns.mockReturnValue({ data: [makePattern()], isLoading: false, isError: false, refetch: vi.fn() })
+    render(<PatternsPage />)
+
+    const actions = screen.getByRole('button', { name: /^Edit / }).parentElement!
+    expect(actions).toHaveClass('gap-1', 'pointer-coarse:gap-2')
+    expect(within(actions).getAllByRole('button')).toHaveLength(3)
+  })
+})

@@ -3,7 +3,7 @@ import { useTrips, usePatchTrip, useTrip } from '@/api/hooks'
 import { TRIP_STATUSES, type TripStatus, type TripListDto } from '@/api/types'
 import { formatDateAu } from '@/lib/utils'
 import { formatRatio, plural } from '@/lib/format'
-import { TONE, TRIP_STATUS_LABELS, statusClass, statusItems } from '@/lib/tone'
+import { TRIP_STATUS_LABELS, statusClass, statusItems } from '@/lib/tone'
 import { Link, useNavigate } from 'react-router-dom'
 import { Plus, Pencil, MapPin } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
@@ -229,7 +229,7 @@ export default function TripsPage() {
         <span className="inline-flex items-center gap-1.5 tabular-nums">
           {formatRatio(t.currentParticipantCount, t.maxParticipants || '—')}
           {t.waitlistCount > 0 && (
-            <span className={`${TONE.warning.solid} rounded-full px-1.5 py-0.5 text-xs`}>{t.waitlistCount} wait</span>
+            <StatusBadge tone="warning" label={`${t.waitlistCount} wait`} />
           )}
         </span>
       ),
@@ -411,7 +411,7 @@ export default function TripsPage() {
                 </div>
                 <div className="flex items-center gap-2 text-sm text-[var(--color-muted-foreground)]">
                   <span className="inline-flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none">person</span> {t.currentParticipantCount}/{t.maxParticipants || '—'}</span>
-                  {t.waitlistCount > 0 && <span className={`${TONE.warning.solid} rounded-full px-2 py-0.5 text-xs`}>{t.waitlistCount} waitlist</span>}
+                  {t.waitlistCount > 0 && <StatusBadge tone="warning" label={`${t.waitlistCount} waitlist`} />}
                   {t.leadCoordinatorName && <span className="text-xs">{t.leadCoordinatorName}</span>}
                 </div>
               </div>

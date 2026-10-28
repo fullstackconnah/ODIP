@@ -4,6 +4,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { Dropdown } from '@/components/Dropdown'
 import { EmptyState, type EmptyStateAction } from '@/components/EmptyState'
 import { StatusBadge } from '@/components/StatusBadge'
+import { statusClass } from '@/lib/tone'
 import { SearchInput } from '@/components/SearchInput'
 import { CHIP_CLASS } from '@/components/ServiceStreamBadges'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -30,11 +31,6 @@ const ACTIVE_STATUS_ITEMS = [
   { value: 'Active', label: 'Active' },
   { value: 'Inactive', label: 'Inactive' },
 ]
-
-const ACTIVE_STATUS_COLORS: Record<string, string> = {
-  Active: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
-  Inactive: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
-}
 
 // What a staff member holds, as chips, and nothing for what they do not: the eight caps-labelled flag columns this replaces made a phone
 // card ten labels long and a desktop row a run of ticks and blanks. An expired worker screening is the one flag shown as a problem.
@@ -144,7 +140,7 @@ export default function StaffPage() {
             variant="pill"
             value={current}
             onChange={val => handleStatusChange(s, val)}
-            colorClass={`${ACTIVE_STATUS_COLORS[current]} h-[var(--control-h-sm)]`}
+            colorClass={`${statusClass(current)} h-[var(--control-h-sm)]`}
             items={ACTIVE_STATUS_ITEMS}
           />
         ) : <StatusBadge status={current} />

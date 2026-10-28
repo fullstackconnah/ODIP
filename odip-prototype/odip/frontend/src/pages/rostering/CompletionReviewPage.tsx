@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { ClipboardCheck, AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ClipboardCheck, AlertTriangle } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
 import { PageHeader } from '@/components/PageHeader'
 import { DataTable, type Column } from '@/components/DataTable'
@@ -270,7 +270,7 @@ export default function CompletionReviewPage() {
               {batchResults.filter(r => r.approved).length} approved
               {batchResults.some(r => !r.approved) && `, ${batchResults.filter(r => !r.approved).length} failed`}.
             </p>
-            <button type="button" onClick={() => setBatchResults(null)} className="text-xs font-medium text-[var(--color-primary)] hover:underline">Dismiss</button>
+            <Button variant="ghost" size="sm" onClick={() => setBatchResults(null)}>Dismiss</Button>
           </div>
           {batchResults.filter(r => !r.approved).map(r => (
             <p key={r.shiftId} className="text-xs text-[var(--color-destructive)]">{r.shiftId}: {r.message ?? r.code ?? 'Could not approve.'}</p>
@@ -324,30 +324,8 @@ export default function CompletionReviewPage() {
             selectable={canReviewCompletions}
             selectedRows={selectedRows}
             onSelectionChange={setSelectedRows}
+            pagination={{ page, pageSize: PAGE_SIZE, totalCount: data?.totalCount ?? rows.length, onPageChange: setPage }}
           />
-          {data && data.totalCount > 0 && (
-            <div className="flex items-center justify-between text-sm text-[var(--color-muted-foreground)]">
-              <span>{plural(data.totalCount, 'shift')} · page {data.page} of {data.totalPages}</span>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  disabled={!data.hasPrevious}
-                  className="min-h-[44px] px-3 rounded-lg border border-[var(--color-border)] disabled:opacity-50 inline-flex items-center gap-1"
-                >
-                  <ChevronLeft className="w-4 h-4" /> Previous
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPage(p => p + 1)}
-                  disabled={!data.hasNext}
-                  className="min-h-[44px] px-3 rounded-lg border border-[var(--color-border)] disabled:opacity-50 inline-flex items-center gap-1"
-                >
-                  Next <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          )}
         </>
       )}
 

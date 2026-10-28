@@ -98,21 +98,17 @@ export function BudgetEmergencyReviewMarker({ details, className }: BudgetEmerge
       className={`flex min-w-0 flex-col gap-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-container-low)] px-3 py-2 ${className ?? ''}`}
     >
       <div className="flex flex-wrap items-center gap-1.5">
-        <span
-          className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
-            isEmergency
-              ? 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]'
-              : 'bg-[var(--color-secondary-container)] text-[var(--color-info)]'
-          }`}
-        >
-          {/* The board chip's own glyphs, so one thing reads as one thing: a siren for an emergency waiting on its review, a tick once it is reviewed, a key for an Admin override. None is the generic override shield. */}
-          {isEmergency ? (
+        {/* The board chip's own glyphs, so one thing reads as one thing: a siren for an emergency waiting on its review, a tick once it is reviewed, a key for an Admin override. None is the generic override shield. */}
+        <StatusBadge
+          tone={isEmergency ? 'warning' : 'info'}
+          label={marker}
+          className="shrink-0"
+          icon={isEmergency ? (
             reviewed ? <Check className="h-3 w-3" aria-hidden="true" /> : <Siren className="h-3 w-3" aria-hidden="true" />
           ) : (
             <KeyRound className="h-3 w-3" aria-hidden="true" />
           )}
-          {marker}
-        </span>
+        />
         {badge && <StatusBadge tone={badge.tone} label={badge.label} />}
       </div>
 
