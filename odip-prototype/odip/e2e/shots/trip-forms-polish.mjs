@@ -70,6 +70,14 @@ try {
   await create.waitFor()
   const padH = await create.evaluate((el) => parseFloat(getComputedStyle(el, '::before').height))
   check('"+ Create new" hit box height (::before)', `${padH}px`, padH >= 44)
+  // The Create-new pad must not reach into the dialog's Close pad above it (it stole taps just under the X).
+  const cb = await page.getByRole('button', { name: 'Close dialog' }).boundingBox()
+  const cbPadBottom = cb.y + cb.height + (44 - cb.height) / 2
+  const hitsClose = await page.evaluate(([x, y]) => !!document.elementFromPoint(x, y)?.closest('button[aria-label="Close dialog"]'), [cb.x + cb.width / 2, cb.y + cb.height + 5])
+  check('tap 5px under the Close button hits Close', String(hitsClose), hitsClose)
+  const createBox = await create.boundingBox()
+  const createPadTop = createBox.y + createBox.height / 2 - padH / 2
+  check('Create-new pad top at or below the Close pad bottom', `${createPadTop.toFixed(1)} >= ${cbPadBottom.toFixed(1)}`, createPadTop >= cbPadBottom)
   await shot(page.getByRole('dialog').first(), 'accommodation-create-new')
 
   // 2. Add Activity: end before start, body scrolled
@@ -111,6 +119,30 @@ try {
   const transform = await heading.evaluate((e) => getComputedStyle(e).textTransform)
   check('Edit trip heading text-transform', transform, transform === 'none')
   await shot(page.getByRole('dialog'), 'edit-trip-headings')
+
+  // 5. Desktop (fine pointer, 1280): crops only, nothing is asserted; the mouse look must not move.
+  const dctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'en-AU', timezoneId: 'Australia/Sydney', reducedMotion: 'reduce' })
+  const dpage = await dctx.newPage()
+  await dpage.route('**/api/v1/auth/dev-users', (r) => r.fulfill({ json: devUsers }))
+  await dpage.route('**/api/v1/auth/dev-login', (r) => r.fulfill({ json: devLogin }))
+  await dpage.route('**/api/v1/trips/*/schedule', (r) => r.fulfill({ json: envelope([day]) }))
+  await dpage.goto(`${BASE_URL}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
+  await dpage.getByRole('button', { name: 'Sign in as selected user' }).click()
+  await dpage.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 })
+  const dshot = async (loc, name) => {
+    const bb = await loc.boundingBox()
+    const x = Math.max(0, bb.x - 24)
+    const y = Math.max(0, bb.y - 24)
+    await dpage.screenshot({ path: path.join(OUT_DIR, name + '.png'), clip: { x, y, width: Math.min(1280 - x, bb.width + 48), height: Math.min(800 - y, bb.height + 48) } })
+  }
+  await dpage.goto(`${BASE_URL}/trips/t-0001?tab=activities`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
+  await dpage.getByRole('button', { name: 'Add Activity' }).first().click()
+  const ddlg = dpage.getByRole('dialog')
+  await ddlg.getByRole('button', { name: 'Add Activity' }).waitFor()
+  await dshot(ddlg.getByRole('button', { name: 'Add Activity' }).locator('xpath=..'), 'desktop-add-activity-footer')
+  await dpage.goto(`${BASE_URL}/trips/t-0001?tab=bookings`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
+  await dpage.getByRole('button', { name: 'Add Participant' }).first().click()
+  await dshot(dpage.getByText('Support Requirements').locator('xpath=..'), 'desktop-add-booking-checkboxes')
 } finally {
   await browser.close()
 }

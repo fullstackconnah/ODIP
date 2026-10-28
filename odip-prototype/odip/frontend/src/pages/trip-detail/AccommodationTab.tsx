@@ -417,7 +417,8 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
         >
           <div className="space-y-4">
             {/* Property Select or Create */}
-            <div>
+            {/* pointer-coarse:pt-3: the 44px Create-new pad would otherwise reach into the Close button's pad above (they overlap by ~8px at 390). */}
+            <div className="pointer-coarse:pt-3">
               <div className="flex items-baseline justify-between pointer-coarse:mb-3">
                 <label id="addAccommPropertyLabel" className={labelClass}>Property</label>
                 <button type="button" onClick={() => { setCreatingNewProperty(!creatingNewProperty); setAccommForm({ ...accommForm, accommodationPropertyId: '' }) }}
