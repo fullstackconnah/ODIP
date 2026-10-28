@@ -60,6 +60,8 @@ public enum BudgetListNoBudgetReason
     PlanEnded = 1,
     /// <summary>A plan is recorded for later and none is running: there is nothing to spend against yet, and the entry says when it starts. It outranks a plan that ended: the next plan is already there.</summary>
     NotStarted = 2,
+    /// <summary>The participant is funded another way, so no NDIS budget applies. Only the agreement check says this.</summary>
+    OtherFunded = 3,
 }
 
 /// <summary>An NDIS-funded participant with no budget in force, kept apart from the rows: there is no figure for them and nothing ever warns about them.</summary>
