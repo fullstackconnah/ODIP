@@ -245,6 +245,8 @@ export interface ShiftCompletionDto {
   kilometres: number | null
   /** "Anything to report?" at Finish: true, false, or null when skipped. */
   anythingToReport: boolean | null
+  /** The worker sent a time recorded offline (a start, finish or break time from their phone). */
+  sentFromOffline: boolean
 }
 
 /**

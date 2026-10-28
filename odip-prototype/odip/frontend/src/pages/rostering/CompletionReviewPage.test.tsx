@@ -165,6 +165,22 @@ describe('CompletionReviewPage', () => {
     expect(screen.getByText(/missed evening medication dose/i)).toBeInTheDocument()
   })
 
+  it('marks a completion sent from offline in the approve dialog, with when it reached Bunya Support; an online one has no marker', async () => {
+    const user = userEvent.setup()
+    mockUseCompletions.mockReturnValue({ data: makePaged([makeQueueItem({ shiftId: 'shift-1' })]), isLoading: false, isError: false, refetch: vi.fn() })
+    mockUseCompletion.mockReturnValue({ data: makeCompletionDetail({ sentFromOffline: true, submittedAt: '2026-09-08T04:41:00Z' }) })
+    const { unmount } = renderPage()
+    await user.click(screen.getByRole('button', { name: /^approve jack o'sullivan with liam okafor on /i }))
+    expect(screen.getByText('Sent from offline')).toBeInTheDocument()
+    expect(screen.getByText('Reached Bunya Support 2:41 pm')).toBeInTheDocument()
+    unmount()
+
+    mockUseCompletion.mockReturnValue({ data: makeCompletionDetail({ sentFromOffline: false }) })
+    renderPage()
+    await user.click(screen.getByRole('button', { name: /^approve jack o'sullivan with liam okafor on /i }))
+    expect(screen.queryByText('Sent from offline')).not.toBeInTheDocument()
+  })
+
   it('requires a reason before confirming a Return, then submits the full request body', async () => {
     const user = userEvent.setup()
     mockUseCompletions.mockReturnValue({ data: makePaged([makeQueueItem({ shiftId: 'shift-1' })]), isLoading: false, isError: false, refetch: vi.fn() })

@@ -587,11 +587,15 @@ describe('AppLayout — the mobile drawer (touch targets and stacking)', () => {
 
   it('puts the scrim between the nav and the drawer, so the nav is dimmed and can not be tapped through it', () => {
     const { container } = renderAt('/trips')
-    expect(container.querySelector('[class*="bg-black"]')).toBeNull()
+    // Mounted while closed so its opacity can fade with the drawer, but invisible, hidden from AT and unable to catch a tap.
+    const scrim = container.querySelector('[class*="bg-black"]') as HTMLElement
+    expect(scrim).toHaveClass('opacity-0', 'pointer-events-none', 'transition-opacity', 'duration-200')
+    expect(scrim).toHaveAttribute('aria-hidden', 'true')
 
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }))
 
-    const scrim = container.querySelector('[class*="bg-black"]') as HTMLElement
+    expect(scrim).toHaveClass('opacity-100')
+    expect(scrim).not.toHaveClass('opacity-0', 'pointer-events-none')
     expect(scrim).toHaveClass('fixed', 'inset-0', 'z-[55]', 'lg:hidden')
     // 50 (nav) < 55 (scrim) < 60 (drawer).
     expect(sidebar()).toHaveClass('z-[60]')

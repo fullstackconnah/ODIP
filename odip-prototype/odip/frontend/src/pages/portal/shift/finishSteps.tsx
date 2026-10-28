@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Flag } from 'lucide-react'
 import { useDeleteBreak, useEditBreak, useEndBreak, useShiftNotes } from '@/api/hooks'
+import { useQueueRecords } from '@/api/hooks/portal'
+import { waitingBreak } from '@/lib/offline/overlay'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { FactList, type FactListItem } from '@/components/FactList'
@@ -12,7 +14,7 @@ import { rosteredInstants } from '../lib/portal'
 import { breaksLabel, clockLabel, FINISH_STEPS, dosesSummary, REASON_MAX, timeBounds, type FinishStepKey, type TimesField } from './checklist'
 import { PrnRow, RoutineRow } from './DuringSection'
 import { minutesBetween, providerLocalToUtcInstant, utcInstantToProviderLocal } from './shiftTime'
-import { Fold } from './ui'
+import { Fold, WaitingToSend } from './ui'
 import { plural } from '@/lib/format'
 import type { DoseTarget } from './DoseSheet'
 import type { EndDraft } from './endDraft'
@@ -30,6 +32,9 @@ export function BreakRow({ shift, brk, online }: { shift: PortalShiftDetailDto; 
   const edit = useEditBreak()
   const del = useDeleteBreak()
   const end = useEndBreak()
+  const waiting = waitingBreak(useQueueRecords(), shift.id, brk.id)
+  // A break still waiting to send is not on the server yet, so it cannot be edited or removed until it is.
+  const locked = !online || !!waiting
   const [editing, setEditing] = useState(false)
   const [start, setStart] = useState('')
   const [stop, setStop] = useState('')
@@ -89,14 +94,15 @@ export function BreakRow({ shift, brk, online }: { shift: PortalShiftDetailDto; 
         </div>
       ) : (
         <div className="flex items-center justify-between gap-2 flex-wrap">
-          <p>{range}, {brk.minutes} min{brk.isRunning ? ' so far' : ''}{brk.editedAt ? ' (edited)' : ''}</p>
+          <p>{range}, {brk.minutes} min{brk.isRunning ? ' so far' : ''}{brk.editedAt ? ' (edited)' : ''}{waiting && <>&nbsp;<WaitingToSend /></>}</p>
           <div className="flex gap-2">
-            {brk.isRunning && <Button id={`brk-end-now-${brk.id}`} size="lg" onClick={endNow} disabled={end.isPending || !online}>End break</Button>}
-            <Button id={`brk-edit-${brk.id}`} size="lg" variant="secondary" onClick={open} disabled={!online}>Edit</Button>
-            <Button size="lg" variant="ghost-danger" onClick={remove} disabled={del.isPending || !online}>Remove</Button>
+            {brk.isRunning && <Button id={`brk-end-now-${brk.id}`} size="lg" onClick={endNow} disabled={end.isPending}>End break</Button>}
+            <Button id={`brk-edit-${brk.id}`} size="lg" variant="secondary" onClick={open} disabled={locked}>Edit</Button>
+            <Button size="lg" variant="ghost-danger" onClick={remove} disabled={del.isPending || locked}>Remove</Button>
           </div>
         </div>
       )}
+      {locked && !editing && <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">Editing a break needs a connection.</p>}
       {error && <p role="alert" className="mt-1 text-sm text-[var(--color-destructive)]">{error}</p>}
     </li>
   )
@@ -243,7 +249,7 @@ export function DosesStep({ shift, online, canAct, onRecord }: {
         <section aria-labelledby="finish-routines" className="space-y-2">
           <h3 id="finish-routines" className="text-sm font-semibold">Routines not ticked</h3>
           <p className="text-sm text-[var(--color-muted-foreground)]">These don't stop you finishing. Tick any you did.</p>
-          <ul className="divide-y divide-[var(--color-border)]">{unticked.map(r => <RoutineRow key={r.id} routine={r} shiftId={shift.id} canAct={canAct} online={online} />)}</ul>
+          <ul className="divide-y divide-[var(--color-border)]">{unticked.map(r => <RoutineRow key={r.id} routine={r} shiftId={shift.id} canAct={canAct} />)}</ul>
         </section>
       )}
       {shift.prn.length > 0 && (

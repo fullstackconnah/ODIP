@@ -7,7 +7,7 @@ import {
 const NOW = 1_800_000_000_000
 const base: InstallPromptEnv = {
   belowMd: true, coarse: true, secure: true, standalone: false, installed: false, dismissedUntil: 0, now: NOW,
-  hasDeferred: true, iosSafari: false, path: '/portal',
+  hasDeferred: true, iosSafari: false, path: '/portal', syncBarVisible: false,
 }
 
 describe('installPromptMode matrix', () => {
@@ -20,6 +20,7 @@ describe('installPromptMode matrix', () => {
     ['installed', { installed: true }, null],
     ['a nested route', { path: '/portal/shifts/x' }, null],
     ['the dashboard route', { path: '/' }, 'android'],
+    ['the sync bar is showing', { syncBarVisible: true }, null],
     ['dismissed until just after now', { dismissedUntil: NOW + 1 }, null],
     ['dismissal just lapsed', { dismissedUntil: NOW - 1 }, 'android'],
     ['deferred wins over an iOS user agent', { iosSafari: true }, 'android'],
