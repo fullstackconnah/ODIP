@@ -1,9 +1,11 @@
 import type { LeaveBarDto } from '@/api/types'
-import { clampedDayIndex } from '../lib/roster'
+import { clampedDayIndex, formatShiftTimeRange } from '../lib/roster'
 
 export type LeaveBarProps = {
   leave: LeaveBarDto
   days: string[]
+  /** A partial-day unavailability as a full-width line labelled in words, for PersonWeek's list; the grid lane keeps the time-proportional sliver. */
+  fullWidth?: boolean
 }
 
 /** Minutes-since-midnight as a 0–100 percentage of the full 24h day. There is no narrower
@@ -39,13 +41,17 @@ function timeOfDayPercent(time: string): number {
  * relative to ApprovedLeave, plus a "(pending)" suffix on its time-window label, since a shift
  * over it only raises the soft, no-reason-required STAFF_RECURRING_PENDING warning.
  */
-export function LeaveBar({ leave, days }: LeaveBarProps) {
+export function LeaveBar({ leave, days, fullWidth }: LeaveBarProps) {
   const startCol = clampedDayIndex(leave.startDate, days) + 1
   const endCol = clampedDayIndex(leave.endDate, days) + 2
 
   const isRecurring = leave.kind === 'RecurringRule' || leave.kind === 'PendingRecurringRule'
   if (isRecurring && leave.startTime && leave.endTime) {
     const pendingRecurring = leave.kind === 'PendingRecurringRule'
+    if (fullWidth) {
+      const words = `Unavailable ${formatShiftTimeRange(leave.startTime, leave.endTime)}${pendingRecurring ? ' (pending)' : ''}`
+      return <FullDayBar leave={leave} startCol={startCol} endCol={endCol} pending={pendingRecurring} label={words} />
+    }
     const rawLeft = timeOfDayPercent(leave.startTime)
     // Floors the visible width so a very short window (e.g. 30 minutes, ~2% of a day) still
     // renders as a clickable/legible sliver instead of collapsing to near-nothing, then clamps
@@ -75,6 +81,10 @@ export function LeaveBar({ leave, days }: LeaveBarProps) {
   const baseLabel = leave.kind === 'Legacy' ? (leave.availabilityType ?? 'Unavailable') : 'Leave'
   const label = pending ? `${baseLabel} (pending)` : baseLabel
 
+  return <FullDayBar leave={leave} startCol={startCol} endCol={endCol} pending={pending} label={label} />
+}
+
+function FullDayBar({ leave, startCol, endCol, pending, label }: { leave: LeaveBarDto; startCol: number; endCol: number; pending: boolean; label: string }) {
   return (
     <div
       style={{ gridColumn: `${startCol} / ${endCol}` }}

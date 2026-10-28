@@ -54,6 +54,7 @@ import {
 } from './participant-detail/participantTabs'
 import { plural, formatRelative } from '@/lib/format'
 import { Card } from '@/components/Card'
+import { PersonWeek } from './rostering/components/PersonWeek'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { retryingAfterError } from '@/lib/queryPhase'
 
@@ -249,6 +250,7 @@ export default function ParticipantDetailPage() {
   const peopleCards = [
     card('contacts', 'Contacts', true, <ContactsTab participantId={id} participant={p} />, { wide: true, srHeading: true }),
     card('roster', 'Rostering', true, <RosteringTab participantId={id!} />, { wide: true, srHeading: true }),
+    card('week', 'Roster week', true, <PersonWeek kind="participant" personId={id!} name={p.fullName} headingLevel={4} />, { wide: true, srHeading: true }),
     card('trips', 'Bookings', true, <BookingsTab participantId={id} />, { wide: true, srHeading: true }),
   ]
   const fundingCards = [
