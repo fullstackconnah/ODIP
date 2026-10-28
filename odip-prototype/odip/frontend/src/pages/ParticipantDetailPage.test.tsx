@@ -15,8 +15,9 @@ const {
   mockUseDownloadIntakeFormPdf, mockUseDownloadParticipantProfilePdf, mockUseDownloadClientOverviewPdf,
   mockPatchMutateAsync, mockUseStaff,
   mockUseGenerateCaregiverLink, mockUseRevokeCaregiverLink, mockUseCaregiverSubmissions,
-  mockDeleteMutate, mockNotes, mockRisks, realAdl,
+  mockDeleteMutate, mockNotes, mockRisks, realAdl, mockPersonWeek,
 } = vi.hoisted(() => ({
+  mockPersonWeek: vi.fn((..._args: unknown[]) => ({ data: undefined, isLoading: true, isError: false, isPlaceholderData: false, refetch: vi.fn() })),
   realAdl: { on: false },
   mockUseParticipant: vi.fn(),
   // The page reads the support profile once for Health, Daily and Overview; 404 / empty by default.
@@ -74,6 +75,7 @@ vi.mock('@/api/hooks', () => ({
   // Only read by the real ADL section (realAdl.on): one unassessed row, as the controller returns for a participant with none answered.
   useParticipantAdlAssessments: () => ({ data: [{ id: null, participantId: 'participant-1', adlType: 'Dressing', level: null, notes: null, howToHelpNotes: null, createdAt: null, updatedAt: null }], isLoading: false }),
   useUpsertAdlAssessment: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useRosterPersonWeek: mockPersonWeek,
 }))
 
 vi.mock('@/components/AuditHistoryTab', () => ({ default: () => <div data-testid="history-tab" /> }))
@@ -883,7 +885,7 @@ describe('ParticipantDetailPage — Rostering section', () => {
     setUserRole('Coordinator')
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
     const { unmount } = renderAtTab('participant-1', 'people')
-    expect(subLabels()).toEqual(['Contacts', 'Rostering', 'Bookings'])
+    expect(subLabels()).toEqual(['Contacts', 'Rostering', 'Week', 'Bookings'])
     unmount()
     renderAtTab('participant-1', 'people', 'roster')
 
@@ -899,6 +901,34 @@ describe('ParticipantDetailPage — Rostering section', () => {
     expect(selectedSub()).toEqual(['Contacts'])
     expect(screen.queryByTestId('rostering-tab')).not.toBeInTheDocument()
     expect(document.getElementById('roster')).toBeNull()
+  })
+})
+
+describe('ParticipantDetailPage — Week section', () => {
+  beforeEach(() => mockPersonWeek.mockClear())
+
+  it('shows the participant roster week on People & roster for a Coordinator, at the week in the URL', () => {
+    setUserRole('Coordinator')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    render(
+      <MemoryRouter initialEntries={['/participants/participant-1?tab=people&section=week&week=2026-11-04']}>
+        <Routes><Route path="/participants/:id" element={<PageWithClient />} /></Routes>
+      </MemoryRouter>,
+    )
+
+    expect(selectedSub()).toEqual(['Week'])
+    expect(screen.getByRole('heading', { level: 3, name: 'Roster week' })).toBeInTheDocument()
+    expect(mockPersonWeek).toHaveBeenCalledWith('participant', 'participant-1', '2026-11-02')
+  })
+
+  it('has no Week section for ReadOnly: section=week reads as Contacts and the board is never asked', () => {
+    setUserRole('ReadOnly')
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    renderAtTab('participant-1', 'people', 'week')
+
+    expect(subLabels()).not.toContain('Week')
+    expect(selectedSub()).toEqual(['Contacts'])
+    expect(mockPersonWeek).not.toHaveBeenCalled()
   })
 })
 
@@ -1647,7 +1677,7 @@ describe('ParticipantDetailPage — seven tabs (slice 1)', () => {
       about: ['identity', 'home-and-living', 'ndis-plan', 'services', 'key-identifiers', 'culture-and-rights', 'about-me'],
       health: ['emergency', 'medical', 'health-conditions', 'medications', 'behaviour-and-communication', 'behaviour-support', 'risks', 'restrictive-practices'],
       daily: ['support-needs', 'mobility-and-personal-care', 'equipment-and-overnight', 'daily-living', 'routines', 'meals', 'typical-day', 'transport-and-travel'],
-      people: ['contacts', 'roster', 'trips'],
+      people: ['contacts', 'roster', 'week', 'trips'],
       funding: ['plan-budget', 'claims'],
       records: ['notes', 'consents', 'history'],
     }
