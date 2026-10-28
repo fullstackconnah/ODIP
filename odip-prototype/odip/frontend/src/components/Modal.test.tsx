@@ -245,6 +245,10 @@ describe('Modal enter motion', () => {
     expect(panel.parentElement).toHaveClass('modal-scrim')
   })
 
+  it("the panel keyframe scales only: the scrim's fade carries it", () => {
+    expect(css).toMatch(/@keyframes modalIn\s*\{\s*from\s*\{\s*transform:\s*scale\(0\.97\);\s*\}\s*\}/)
+  })
+
   it('is declared only for users who have NOT asked for reduced motion', () => {
     const withoutNoPreference = css.replace(/@media \(prefers-reduced-motion: no-preference\)\s*\{(?:[^{}]|\{[^{}]*\})*\}/g, '')
     expect(css).toMatch(/@media \(prefers-reduced-motion: no-preference\)\s*\{[^@]*\.modal-panel\s*\{\s*animation:\s*modalIn/)

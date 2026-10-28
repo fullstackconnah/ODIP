@@ -4,9 +4,9 @@ Skills loaded first: ponytail (full), impeccable, apple-design. Mode: Operate. H
 apple-design rules applied: enter and exit mirror the same clock (scrim 200 ms = drawer 200 ms); interruptible (transition, not keyframe, for the menu scrim so open-then-close mid-flight retargets from the live opacity); critically damped feel (no overshoot, 0.97 to 1 only); restraint (occasional use, so small values); reduced motion degrades to instant.
 
 ## Modal (enter only, like SlideOver)
-- `.modal-scrim` on the overlay div: `scrimIn` 150 ms ease-out. `.modal-panel` on the dialog div: new `modalIn` keyframe, opacity 0 and `transform: scale(0.97)` to rest, 160 ms cubic-bezier(0.2,0,0,1), origin centre. Same `transform` style as SlideOver's slideOverIn; only `from` is declared so the end state is the element's own (no lingering transform, so no containing block for fixed children after the animation).
+- `.modal-scrim` on the overlay div: `scrimIn` 150 ms ease-out. `.modal-panel` on the dialog div: new `modalIn` keyframe, `transform: scale(0.97)` to rest (scale only, no opacity), 160 ms cubic-bezier(0.2,0,0,1), origin centre. Same `transform` style as SlideOver's slideOverIn; only `from` is declared so the end state is the element's own (no lingering transform, so no containing block for fixed children after the animation).
 - Both rules sit in the existing `prefers-reduced-motion: no-preference` block next to SlideOver. With reduce set, no animation is declared at all (and the global rule zeroes any).
-- Known effect: the panel is a child of the scrim, so it also inherits the scrim's 150 ms opacity; with its own 160 ms fade the panel settles by 160 ms. Accepted: one clock, no extra markup.
+- Known effect: the panel inherits the scrim's 150 ms ease-out fade; a second fade on the child would multiply into an ease-in start.
 - States: open (animates once on mount); opened while another closes (new mount, own animation); ConfirmDialog over a SlideOver (ConfirmDialog is a Modal, the SlideOver is already settled, only the dialog animates); close (unmount, instant, as today); focus (useDialogBehavior focuses on mount, animation does not delay it); backdrop click, Escape, sizes, footer, sticky footer unchanged. No layout shift: only opacity and transform.
 
 ## Mobile menu scrim (AppLayout)
