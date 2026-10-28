@@ -366,6 +366,19 @@
 }
 
 /*
+ * Folds (native <details>): the opened content fades in over 150ms, opacity only (no height animation, so nothing below jumps); close is instant.
+ * One rule for every fold; one that is open at page load fades once on mount. The routine tick's check (portal DuringSection) fades in over 100ms.
+ */
+@keyframes foldIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  details[open] > :not(summary) { animation: foldIn 150ms ease-out; }
+}
+.tick-in { animation: foldIn 100ms ease-out; }
+
+/*
  * The icon rail (AppLayout): its tooltip fades in over 100ms with no movement; its group flyout grows out of the rail over 150ms
  * (opacity and a 4px slide from the left). Close is instant. Reduced motion keeps opacity only, at 100ms.
  */
@@ -414,6 +427,13 @@ aside[data-folding] [data-fold="word"] { transform: translateX(-12px); }
     transition-duration: 0.01ms !important;
     transition-delay: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+/* A spinner is a loading signal, so it keeps turning under reduced motion (decorative animate-pulse skeletons stay frozen). Class beats the star rule. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-spin {
+    animation-duration: 1s !important;
+    animation-iteration-count: infinite !important;
   }
 }
 
