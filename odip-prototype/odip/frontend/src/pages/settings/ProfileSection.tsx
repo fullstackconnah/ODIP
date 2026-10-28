@@ -11,6 +11,7 @@ import { usePermissions } from '@/lib/permissions'
 import { describeMicrosoftOutcome } from '@/lib/signInRefusal'
 import { MicrosoftLinkAction } from './MicrosoftLinkAction'
 import { SettingsGroup } from './SettingsSection'
+import { getViewAs } from '@/lib/viewAs'
 
 /**
  * My account › Profile, PR 1: who you're signed in as, from the sign-in response (odip_user), with no endpoint. The username is the
@@ -21,7 +22,7 @@ export default function ProfileSection() {
   const config = useAuthConfig()
   // A SuperAdmin viewing as someone: UserSwitcher swaps in only that person's id, name and role, so the sign-in name and organisation
   // in odip_user are still the SuperAdmin's own. Show only what is true of the person being viewed.
-  const viewingAs = localStorage.getItem('odip_viewing_user') !== null
+  const viewingAs = getViewAs('odip_viewing_user') !== null
   const startUrl = config.data?.microsoft ? config.data.microsoftStartUrl : null
   return (
     <>

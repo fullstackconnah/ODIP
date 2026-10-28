@@ -160,7 +160,7 @@ describe('endSession', () => {
     const client = await freshClient()
     const jsdomNoise = vi.spyOn(console, 'error').mockImplementation(() => {})
     try {
-      for (const key of KEYS) localStorage.setItem(key, 'x')
+      for (const key of KEYS) (key.startsWith('odip_viewing_') ? sessionStorage : localStorage).setItem(key, 'x')
       localStorage.setItem('odip_token', 'a-session')
       const requests = script(client, answers)
       await client.endSession()
@@ -176,7 +176,7 @@ describe('endSession', () => {
     expect(requests).toEqual([{ url: '/auth/logout', authorization: 'Bearer a-session' }])
     expect(signOut).toHaveBeenCalledTimes(1)
     expect(signOut).toHaveBeenCalledWith(firebaseAuth)
-    for (const key of KEYS) expect(localStorage.getItem(key), key).toBeNull()
+    for (const key of KEYS) expect(localStorage.getItem(key) ?? sessionStorage.getItem(key), key).toBeNull()
   })
 
   it('an explicit end wipes the saved shifts and the unsent queue', async () => {
@@ -213,7 +213,7 @@ describe('endSession', () => {
     await import('firebase/auth')
     vi.useFakeTimers()
     try {
-      for (const key of KEYS) localStorage.setItem(key, 'x')
+      for (const key of KEYS) (key.startsWith('odip_viewing_') ? sessionStorage : localStorage).setItem(key, 'x')
       localStorage.setItem('odip_token', 'a-session')
       const requests: Array<{ url: string; authorization?: string }> = []
       client.apiClient.defaults.adapter = (config: InternalAxiosRequestConfig) =>
@@ -225,7 +225,7 @@ describe('endSession', () => {
       void client.endSession().then(() => { left = true })
 
       await vi.advanceTimersByTimeAsync(0)
-      for (const key of KEYS) expect(localStorage.getItem(key), key).toBeNull()
+      for (const key of KEYS) expect(localStorage.getItem(key) ?? sessionStorage.getItem(key), key).toBeNull()
       expect(signOut).toHaveBeenCalledTimes(1)
       expect(requests).toEqual([{ url: '/auth/logout', authorization: 'Bearer a-session' }])
       expect(left).toBe(false)
@@ -244,7 +244,7 @@ describe('endSession', () => {
     await endSessionWith(() => ({ status: 500, data: {} }))
 
     expect(signOut).toHaveBeenCalledTimes(1)
-    for (const key of KEYS) expect(localStorage.getItem(key), key).toBeNull()
+    for (const key of KEYS) expect(localStorage.getItem(key) ?? sessionStorage.getItem(key), key).toBeNull()
   })
 
   it('still clears the keys when Firebase refuses to sign out', async () => {
@@ -252,7 +252,7 @@ describe('endSession', () => {
 
     await endSessionWith(() => ({ status: 200, data: { success: true } }))
 
-    for (const key of KEYS) expect(localStorage.getItem(key), key).toBeNull()
+    for (const key of KEYS) expect(localStorage.getItem(key) ?? sessionStorage.getItem(key), key).toBeNull()
   })
 
   it('is what an expired session ends with: a refused refresh also posts the logout and signs out of Firebase', async () => {
@@ -268,6 +268,44 @@ describe('endSession', () => {
       expect(signOut).toHaveBeenCalledTimes(1)
     } finally {
       jsdomNoise.mockRestore()
+    }
+  })
+})
+
+describe('view-as is per tab', () => {
+  async function sentHeaders() {
+    const client = await freshClient()
+    let sent: Record<string, unknown> = {}
+    client.apiClient.defaults.adapter = (config: InternalAxiosRequestConfig) => {
+      sent = { ...config.headers } as Record<string, unknown>
+      return Promise.resolve({ data: {}, status: 200, statusText: 'OK', headers: {}, config })
+    }
+    await client.apiClient.get('/x')
+    return { client, sent: () => sent }
+  }
+
+  afterEach(() => { sessionStorage.clear(); localStorage.clear() })
+
+  it('sends X-View-As-* from this tab, not from a value another tab wrote to localStorage later', async () => {
+    sessionStorage.setItem('odip_viewing_tenant', 'org-tab')
+    sessionStorage.setItem('odip_viewing_user', 'user-tab')
+    const { sent } = await sentHeaders()
+    expect(sent()['X-View-As-Tenant']).toBe('org-tab')
+    expect(sent()['X-View-As-User']).toBe('user-tab')
+  })
+
+  it('sign-out clears the view-as keys from both stores', async () => {
+    const client = await freshClient()
+    const jsdomNoise = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      sessionStorage.setItem('odip_viewing_tenant', 'a'); sessionStorage.setItem('odip_viewing_user', 'b')
+      localStorage.setItem('odip_viewing_tenant', 'c')
+      script(client, () => ({ status: 200, data: { success: true } }))
+      await client.endSession()
+    } finally { jsdomNoise.mockRestore() }
+    for (const k of ['odip_viewing_tenant', 'odip_viewing_user']) {
+      expect(sessionStorage.getItem(k)).toBeNull()
+      expect(localStorage.getItem(k)).toBeNull()
     }
   })
 })

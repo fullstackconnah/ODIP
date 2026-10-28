@@ -30,18 +30,21 @@ const wallNow = (now: Date, tz: string | undefined) => utcInstantToProviderLocal
 const wallEnd = (s: PortalShiftSummaryDto) =>
   `${s.endsNextDay ? format(addDays(parseISO(s.serviceDate), 1), 'yyyy-MM-dd') : s.serviceDate}T${s.endTime.slice(0, 5)}`
 
-/** Over and done with: submitted, approved or cancelled, or a Rostered shift whose end has passed. A shift in progress never is. */
 /** `tz` undefined (a response without the provider zone) reads the device zone. */
+const pastEnd = (s: PortalShiftSummaryDto, now: Date, tz: string | undefined) => wallEnd(s) <= wallNow(now, tz)
+
+/** Over and done with: submitted, approved or cancelled, or a Rostered shift whose end has passed. A shift in progress or sent back never is. */
 export function hasEnded(s: PortalShiftSummaryDto, now: Date, tz: string | undefined): boolean {
   if (s.status === 'InProgress') return false
-  return s.status !== 'Published' || wallEnd(s) <= wallNow(now, tz)
+  if (s.status === 'Published' && s.returnCount > 0) return false   // the coordinator sent it back and the worker has to act on it, so it stays up top
+  return s.status !== 'Published' || pastEnd(s, now, tz)
 }
 
 /** The list's current-shift card (SHAPE §2): any shift in progress, else today's Rostered shift that has not ended, soonest first. */
 export function pickCurrentShift(shifts: PortalShiftSummaryDto[], now: Date, tz: string | undefined): PortalShiftSummaryDto | null {
   const today = wallNow(now, tz).slice(0, 10)
   return shifts.find(s => s.status === 'InProgress')
-    ?? shifts.filter(s => s.status === 'Published' && s.serviceDate === today && !hasEnded(s, now, tz))
+    ?? shifts.filter(s => s.status === 'Published' && s.serviceDate === today && !pastEnd(s, now, tz))
       .sort((a, b) => a.startTime.localeCompare(b.startTime))[0]
     ?? null
 }

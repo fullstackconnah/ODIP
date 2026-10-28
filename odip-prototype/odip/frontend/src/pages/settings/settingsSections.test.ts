@@ -6,9 +6,9 @@ import { LEGACY_TAB, notSavedText, requestedSection, shownSection, visibleSectio
 
 /** The real usePermissions() for a role signed in the way the app does it (odip_user; odip_viewing_tenant while a SuperAdmin views an organisation). */
 function permsOf(role: UserRole, viewingTenant?: string) {
-  localStorage.clear()
+  localStorage.clear(); sessionStorage.clear()
   localStorage.setItem('odip_user', JSON.stringify({ role }))
-  if (viewingTenant) localStorage.setItem('odip_viewing_tenant', viewingTenant)
+  if (viewingTenant) sessionStorage.setItem('odip_viewing_tenant', viewingTenant)
   return { ...renderHook(() => usePermissions()).result.current, microsoftSignIn: false, viewingAs: false }
 }
 
