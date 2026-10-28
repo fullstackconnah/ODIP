@@ -4,7 +4,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import type { PortalShiftDetailDto } from '../types'
 
-const { mockApiGet, mockApiPost, mockApiPut, mockApiPostRaw, mockApiDeleteRaw } = vi.hoisted(() => ({
+const { mockApiGet, mockApiPost, mockApiPut, mockApiPostRaw, mockApiDeleteRaw, mockRequest } = vi.hoisted(() => ({
+  mockRequest: vi.fn(async (): Promise<unknown> => ({ data: { data: {} } })),
   mockApiGet: vi.fn(async (): Promise<unknown> => ({})),
   mockApiPost: vi.fn(async (): Promise<unknown> => ({})),
   mockApiPut: vi.fn(async (): Promise<unknown> => ({})),
@@ -13,6 +14,7 @@ const { mockApiGet, mockApiPost, mockApiPut, mockApiPostRaw, mockApiDeleteRaw } 
 }))
 
 vi.mock('../client', () => ({
+  apiClient: { request: mockRequest, get: vi.fn() },
   apiGet: mockApiGet,
   apiPost: mockApiPost,
   apiPut: mockApiPut,
@@ -40,10 +42,12 @@ beforeEach(() => {
   mockApiPost.mockClear().mockResolvedValue(detail)
   mockApiPut.mockClear().mockResolvedValue(detail)
   mockApiDeleteRaw.mockClear().mockResolvedValue({ success: true, data: detail })
+  mockRequest.mockClear().mockResolvedValue({ data: { data: detail } })
+  localStorage.clear()
 })
 
 describe('shift package hooks — breaks', () => {
-  it('useStartBreak posts to /portal/shifts/{id}/breaks/start with no body, and replaces the cached shift detail', async () => {
+  it('useStartBreak posts the break id to /portal/shifts/{id}/breaks/start (live: no client time), and replaces the cached shift detail', async () => {
     const qc = new QueryClient()
     qc.setQueryData(['portal-shift-detail', 'shift-1'], { id: 'shift-1', status: 'InProgress', breaks: [] })
     const spy = vi.spyOn(qc, 'invalidateQueries')
@@ -51,7 +55,10 @@ describe('shift package hooks — breaks', () => {
 
     await result.current.mutateAsync({ id: 'shift-1' })
 
-    expect(mockApiPost).toHaveBeenCalledWith('/portal/shifts/shift-1/breaks/start')
+    expect(mockRequest).toHaveBeenCalledTimes(1)
+    const sent = (mockRequest.mock.calls[0] as unknown[])[0] as { url: string; method: string; timeout: number; data: { breakId: string } }
+    expect(sent).toEqual({ url: '/portal/shifts/shift-1/breaks/start', method: 'POST', timeout: 15_000, data: { breakId: expect.any(String) } })
+    expect(sent.data.breakId.length).toBeGreaterThan(10)
     // The cached shift is replaced by the response (structural sharing means equal, not necessarily identical).
     expect(qc.getQueryData(['portal-shift-detail', 'shift-1'])).toEqual(detail)
     expect(spy).toHaveBeenCalledWith({ queryKey: ['portal-shift-detail', 'shift-1'] })
@@ -63,7 +70,7 @@ describe('shift package hooks — breaks', () => {
 
     await result.current.mutateAsync({ id: 'shift-1', breakId: 'brk-1' })
 
-    expect(mockApiPost).toHaveBeenCalledWith('/portal/shifts/shift-1/breaks/brk-1/end')
+    expect(mockRequest).toHaveBeenCalledWith({ url: '/portal/shifts/shift-1/breaks/brk-1/end', method: 'POST', data: undefined, timeout: 15_000 })
     expect(qc.getQueryData(['portal-shift-detail', 'shift-1'])).toBe(detail)
   })
 
@@ -99,7 +106,7 @@ describe('shift package hooks — breaks', () => {
     const qc = new QueryClient()
     const cached = { id: 'shift-1', breaks: [] }
     qc.setQueryData(['portal-shift-detail', 'shift-1'], cached)
-    mockApiPost.mockRejectedValueOnce({ response: { status: 409, data: { success: false, code: 'SHIFT_BREAK_ALREADY_RUNNING' } } })
+    mockRequest.mockRejectedValueOnce({ response: { status: 409, data: { success: false, code: 'SHIFT_BREAK_ALREADY_RUNNING' } } })
     const { result } = renderHook(() => useStartBreak(), { wrapper: wrapper(qc) })
 
     await expect(result.current.mutateAsync({ id: 'shift-1' })).rejects.toMatchObject({ response: { status: 409 } })
@@ -117,7 +124,7 @@ describe('shift package hooks — routine ticks', () => {
 
     await result.current.mutateAsync({ id: 'shift-1', routineId: 'rt-1' })
 
-    expect(mockApiPost).toHaveBeenCalledWith('/portal/shifts/shift-1/routines/rt-1/check')
+    expect(mockRequest).toHaveBeenCalledWith({ url: '/portal/shifts/shift-1/routines/rt-1/check', method: 'POST', data: undefined, timeout: 15_000 })
     expect(qc.getQueryData(['portal-shift-detail', 'shift-1'])).toEqual(detail)
     expect(spy).toHaveBeenCalledWith({ queryKey: ['portal-shift-detail', 'shift-1'] })
   })
@@ -128,7 +135,7 @@ describe('shift package hooks — routine ticks', () => {
 
     await result.current.mutateAsync({ id: 'shift-1', routineId: 'rt-1' })
 
-    expect(mockApiDeleteRaw).toHaveBeenCalledWith('/portal/shifts/shift-1/routines/rt-1/check')
+    expect(mockRequest).toHaveBeenCalledWith({ url: '/portal/shifts/shift-1/routines/rt-1/check', method: 'DELETE', data: undefined, timeout: 15_000 })
     expect(qc.getQueryData(['portal-shift-detail', 'shift-1'])).toBe(detail)
   })
 
@@ -136,7 +143,7 @@ describe('shift package hooks — routine ticks', () => {
     const qc = new QueryClient()
     const cached = { id: 'shift-1', shiftRoutines: [] }
     qc.setQueryData(['portal-shift-detail', 'shift-1'], cached)
-    mockApiPost.mockRejectedValueOnce({ response: { status: 404, data: { success: false, code: 'SHIFT_ROUTINE_NOT_FOUND' } } })
+    mockRequest.mockRejectedValueOnce({ response: { status: 404, data: { success: false, code: 'SHIFT_ROUTINE_NOT_FOUND' } } })
     const { result } = renderHook(() => useCheckRoutine(), { wrapper: wrapper(qc) })
 
     await expect(result.current.mutateAsync({ id: 'shift-1', routineId: 'rt-9' })).rejects.toMatchObject({ response: { status: 404 } })
@@ -152,7 +159,7 @@ describe('shift package hooks — handover', () => {
 
     await result.current.mutateAsync({ id: 'shift-1', data: { completionId: 'sc-prev-1' } })
 
-    expect(mockApiPost).toHaveBeenCalledWith('/portal/shifts/shift-1/handover/ack', { completionId: 'sc-prev-1' })
+    expect(mockRequest).toHaveBeenCalledWith({ url: '/portal/shifts/shift-1/handover/ack', method: 'POST', data: { completionId: 'sc-prev-1' }, timeout: 15_000 })
     expect(qc.getQueryData(['portal-shift-detail', 'shift-1'])).toBe(detail)
   })
 
@@ -162,7 +169,7 @@ describe('shift package hooks — handover', () => {
 
     await result.current.mutateAsync({ id: 'shift-1' })
 
-    expect(mockApiPost).toHaveBeenCalledWith('/portal/shifts/shift-1/handover/ack', {})
+    expect(mockRequest).toHaveBeenCalledWith({ url: '/portal/shifts/shift-1/handover/ack', method: 'POST', data: {}, timeout: 15_000 })
   })
 })
 
@@ -233,7 +240,7 @@ describe('shift package hooks — Finish carries the handover and the confirmati
     const data = { geolocationDeclined: false, handoverText: 'Check the left heel.', nothingToHandOver: false, nothingToNote: true }
     await result.current.mutateAsync({ id: 'shift-1', data })
 
-    expect(mockApiPost).toHaveBeenCalledWith('/portal/shifts/shift-1/finish', data)
+    expect(mockRequest).toHaveBeenCalledWith({ url: '/portal/shifts/shift-1/finish', method: 'POST', data, timeout: 45_000 })
   })
 })
 

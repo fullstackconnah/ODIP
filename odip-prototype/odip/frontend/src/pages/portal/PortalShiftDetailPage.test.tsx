@@ -821,13 +821,14 @@ describe('PortalShiftDetailPage: other states', () => {
     expect(screen.getByText(/\+12 min start/)).toBeInTheDocument()
   })
 
-  it('shows an offline banner and switches the actions off', () => {
+  it('offline: says so politely, keeps the worker actions on, and names when the details were saved', () => {
     Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false })
     try {
       show(makeDetail({ status: 'InProgress', completion: makeCompletion() }))
-      expect(screen.getByRole('alert')).toHaveTextContent(/you're offline/i)
-      expect(screen.getByRole('alert')).toHaveAttribute('aria-live', 'assertive')
-      expect(screen.getByRole('button', { name: 'Start break' })).toBeDisabled()
+      expect(screen.getByText("You're offline")).toBeInTheDocument()
+      expect(screen.getByText(/What you record is saved on this phone and sent when you're back online. Doses need a connection/)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Start break' })).toBeEnabled()
+      expect(screen.getByRole('button', { name: 'End shift' })).toBeEnabled()
     } finally {
       Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true })
     }
@@ -1163,5 +1164,79 @@ describe('PortalShiftDetailPage: submitted (SHAPE §4)', () => {
     expect(screen.getByText('Finish changed from')).toBeInTheDocument()
     expect(screen.getByText('Left early.')).toBeInTheDocument()
     expect(screen.getByText('12.5 km')).toBeInTheDocument()
+  })
+})
+
+describe('PortalShiftDetailPage: offline (SHAPE 3, 5)', () => {
+  const inProgress = (over: Partial<PortalShiftDetailDto> = {}) => makeDetail({ status: 'InProgress', completion: makeCompletion(), ...over })
+  const missing = (name: string, id: string, at: string) => ({ code: 'DOSE_OUTCOME_MISSING', message: 'x', medicationId: id, medicationName: name, scheduledAt: at })
+  const bar = () => within(screen.getByRole('toolbar', { name: 'Shift actions' }))
+  const goOffline = () => Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false })
+  afterEach(() => {
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true })
+    localStorage.removeItem('odip_offline:u1:queue')
+    localStorage.removeItem('odip_offline:u1:already:shift-1')
+  })
+
+  /** End shift, then the forward button of each step until the last (a due dose adds a Doses step to the path). */
+  function toSubmit() {
+    fireEvent.click(screen.getByRole('button', { name: 'End shift' }))
+    for (let n = 0; n < 8 && !bar().queryByRole('button', { name: /Submit shift|Try again/ }); n++) {
+      fireEvent.click(bar().getAllByRole('button').at(-1)!)
+    }
+    if (!bar().queryByRole('button', { name: /Submit shift|Try again/ })) throw new Error(`never reached the submit step: ${bar().getAllByRole('button').map(b => b.textContent).join(' | ')} / ${[...document.querySelectorAll('h2')].map(h => h.textContent).join(' | ')}`)
+  }
+
+  it('Finish with one dose due and no signal is blocked, names the dose and points the button at the reason', () => {
+    goOffline()
+    show(inProgress({ medicationsDue: [dose()] as never, finishBlockers: [missing('Paracetamol', 'med-1', '2026-08-17T12:00:00')] as never }))
+    toSubmit()
+    const notice = screen.getByText("Finish can't be saved yet").closest('#finish-blocked') as HTMLElement
+    expect(notice).toHaveTextContent(/Paracetamol 500mg was due at 12:00 pm with no outcome recorded, and recording a dose needs a connection\. When you're back online, record it, then finish\./)
+    const submit = bar().getByRole('button', { name: 'Submit shift' })
+    expect(submit).toBeDisabled()
+    expect(submit).toHaveAttribute('aria-describedby', 'finish-blocked')
+  })
+
+  it('Finish with two doses due lists both, joined with "and"', () => {
+    goOffline()
+    const second = dose({ medicationId: 'med-2', medicationName: 'Movicol', strength: null, scheduledAt: '2026-08-17T13:00:00', scheduledTime: '13:00' })
+    show(inProgress({
+      medicationsDue: [dose(), second] as never,
+      finishBlockers: [missing('Paracetamol', 'med-1', '2026-08-17T12:00:00'), missing('Movicol', 'med-2', '2026-08-17T13:00:00')] as never,
+    }))
+    toSubmit()
+    expect(document.getElementById('finish-blocked')).toHaveTextContent(
+      /2 doses are due with no outcome recorded: Paracetamol 500mg \(12:00 pm\) and Movicol \(1:00 pm\)\. Recording a dose needs a connection\. When you're back online, record them, then finish\./,
+    )
+  })
+
+  it('offline with nothing due, Finish is not blocked', () => {
+    goOffline()
+    show(inProgress())
+    toSubmit()
+    expect(document.getElementById('finish-blocked')).toBeNull()
+    expect(bar().getByRole('button', { name: 'Submit shift' })).toBeEnabled()
+  })
+
+  it('a Finish waiting on this phone reads as finished (also after a reload) and the action bar steps aside', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ id: 'u1' }))
+    localStorage.setItem('odip_offline:u1:queue', JSON.stringify([{
+      id: 'f1', userId: 'u1', viewAsTenant: null, viewAsUser: null, shiftId: 'shift-1', kind: 'finish', path: '/portal/shifts/shift-1/finish', method: 'POST',
+      body: { anythingToReport: false }, clientTimeField: 'finishedAt', clientTime: '2026-08-17T17:00:00Z', createdAt: '2026-08-17T17:00:00Z', status: 'waiting',
+      label: { participant: 'Mia Chen', serviceDate: '2026-08-17', rostered: '9:00 am – 5:00 pm' },
+    }]))
+    show(inProgress())
+    expect(screen.getByText('Shift finished on this phone')).toBeInTheDocument()
+    expect(screen.getAllByText(/sent to your coordinator when you.re back online/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Waiting to send').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: 'End shift' })).not.toBeInTheDocument()
+  })
+
+  it('tells the worker when this phone\'s Finish reached a shift already submitted elsewhere', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ id: 'u1' }))
+    localStorage.setItem('odip_offline:u1:already:shift-1', JSON.stringify({ savedAt: Date.now(), data: true }))
+    show(makeDetail({ status: 'PendingReview', completion: makeCompletion() }))
+    expect(screen.getByText(/already submitted before this phone sent its Finish, so the details entered here \(times, kilometres, handover\) weren.t added/)).toBeInTheDocument()
   })
 })
