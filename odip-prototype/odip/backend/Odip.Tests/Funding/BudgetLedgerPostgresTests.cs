@@ -80,6 +80,22 @@ public class BudgetLedgerPostgresTests : IClassFixture<PostgresFixture>
     }
 
     [SkippableFact]
+    public async Task AShiftWhoseOnlyLineIsOnARejectedClaim_IsPendingAgain_AndItsLineIsLeftOut()
+    {
+        RequirePostgres();
+        var (kit, _) = await SetUpAsync();
+        using var _k = kit;
+        var person = kit.SeedParticipant();
+        kit.SeedPlan(person, CoreQuarters(100000m));
+        kit.SeedShiftClaim(person, TripClaimStatus.Rejected, 480m, kit.SeedShift(person, new DateOnly(2026, 10, 1), ShiftStatus.Completed));
+
+        var q2 = Q2Of((await kit.Ledger.ComputeAsync(kit.TenantId, new[] { person.Id }, Ct))[person.Id].Ledger!);
+
+        Assert.Equal(480m, q2.Pending);
+        Assert.Equal(0m, q2.Claimed);
+    }
+
+    [SkippableFact]
     public async Task ShiftsAndBookingsThatAreNotClaimedYetArePricedAndPlacedAsInMemory_CompletedUnclaimedFutureAndTripBookings()
     {
         RequirePostgres();

@@ -309,6 +309,8 @@ public class ClaimsController : ControllerBase
             var otherFunded = participants.Where(Odip.Domain.Billing.ClaimFunding.IsOtherFunded).Select(p => p.FullName).Distinct().ToList();
             if (otherFunded.Count > 0)
                 return Conflict(ApiResponse<bool>.Fail($"{string.Join(", ", otherFunded)} {(otherFunded.Count == 1 ? "is" : "are")} funded another way, so this claim can't be submitted to the NDIS. Remove their lines or reject the claim."));
+            if (await ClaimHoldingTheSameAsync(c.Id, _db.ClaimLineItems.Where(l => l.TripClaimId == c.Id), ct) is { } holder)
+                return Conflict(ApiResponse<bool>.Fail($"This claim includes a shift that is already on claim {holder}. Remove it from this claim before submitting."));
             try { await _invoiceService.IssueForSubmitAsync(c.Id, now, User, ct); }
             catch (InvoiceRefusedException ex) { return Conflict(ApiResponse<bool>.Fail(ex.Message)); }
         }
@@ -337,6 +339,12 @@ public class ClaimsController : ControllerBase
         (TripClaimStatus.Rejected, TripClaimStatus.Submitted) => true,
         _ => false,
     };
+
+    /// <summary>The reference of ANOTHER claim holding a line that still counts (the ledger's rule) for a shift or booking that <paramref name="lines"/> also hold; null when there is none. A rejected line or claim frees its shift, so it can be claimed again, and must not be billed twice.</summary>
+    private async Task<string?> ClaimHoldingTheSameAsync(Guid claimId, IQueryable<ClaimLineItem> lines, CancellationToken ct) =>
+        await _db.ClaimLineItems.Where(BudgetLedgerService.ClaimLineStillCounts)
+            .Where(o => o.TripClaimId != claimId && lines.Any(l => (l.ShiftId != null && l.ShiftId == o.ShiftId) || (l.ParticipantBookingId != null && l.ParticipantBookingId == o.ParticipantBookingId)))
+            .Select(o => o.TripClaim.ClaimReference).FirstOrDefaultAsync(ct);
 
     /// <summary>A status in plain words for a message: "partially paid", not "partiallypaid".</summary>
     private static string Words(TripClaimStatus status) => System.Text.RegularExpressions.Regex.Replace(status.ToString(), "(?<=[a-z])(?=[A-Z])", " ").ToLowerInvariant();
@@ -403,6 +411,11 @@ public class ClaimsController : ControllerBase
         if ((dto.Hours.HasValue || dto.UnitPrice.HasValue || dto.SupportItemCode != null || dto.ClaimType.HasValue || dto.CancellationReason != null)
             && claim.Status is not (TripClaimStatus.Draft or TripClaimStatus.Ready))
             return Conflict(ApiResponse<bool>.Fail("This claim has been submitted, so its lines can't be changed."));
+
+        // A rejected line gave its shift back, and another claim may hold it now: taking the line back would bill the shift twice.
+        if (item.Status == ClaimLineItemStatus.Rejected && dto.Status.HasValue && dto.Status != ClaimLineItemStatus.Rejected
+            && await ClaimHoldingTheSameAsync(claimId, _db.ClaimLineItems.Where(l => l.Id == id), ct) is { } holder)
+            return Conflict(ApiResponse<bool>.Fail($"This line's shift is already on claim {holder}, so the line can't be taken back."));
 
         if (dto.Hours.HasValue) { item.Hours = dto.Hours.Value; item.TotalAmount = item.Hours * item.UnitPrice; }
         if (dto.UnitPrice.HasValue) { item.UnitPrice = dto.UnitPrice.Value; item.TotalAmount = item.Hours * item.UnitPrice; }

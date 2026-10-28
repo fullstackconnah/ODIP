@@ -188,6 +188,11 @@
     font-family: var(--font-display);
   }
 
+  /* Ticks and radio dots use the brand green (the dark block swaps the token); forced-colors ignores it and uses system colours. */
+  input[type="checkbox"], input[type="radio"] {
+    accent-color: var(--color-primary);
+  }
+
   /* Prevent iOS zoom on input focus */
   @media screen and (width < 48rem) {
     input, select, textarea {
