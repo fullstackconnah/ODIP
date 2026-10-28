@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using Odip.Domain.Entities;
 using Odip.Infrastructure.Data;
@@ -58,8 +57,15 @@ public class WhatsNewSeedTests
         Assert.All(important, i => Assert.Equal(WhatsNewAudience.All, i.Roles));
     }
 
-    private static string ItemsFolder([CallerFilePath] string here = "") =>
-        Path.Combine(Path.GetDirectoryName(here)!, "..", "..", "Odip.Infrastructure", "Data", "WhatsNewItems");
+    // Walk up to Odip.sln, not [CallerFilePath], which a path-mapped CI build rewrites.
+    private static string ItemsFolder()
+    {
+        var dir = AppContext.BaseDirectory;
+        while (dir is not null && !File.Exists(Path.Combine(dir, "Odip.sln")))
+            dir = Path.GetDirectoryName(dir.TrimEnd(Path.DirectorySeparatorChar));
+        if (dir is null) throw new InvalidOperationException($"Could not locate Odip.sln above {AppContext.BaseDirectory}");
+        return Path.Combine(dir, "Odip.Infrastructure", "Data", "WhatsNewItems");
+    }
 
     [Fact]
     public void EveryItemLivesInItsOwnFile_AndAllIsInTheDecidedOrder()
