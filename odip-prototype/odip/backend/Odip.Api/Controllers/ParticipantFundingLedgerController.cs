@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Odip.Api.RateLimiting;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Interfaces;
@@ -21,13 +22,18 @@ public class ParticipantFundingLedgerController : ControllerBase
 {
     private readonly ICurrentTenant _tenant;
     private readonly BudgetLedgerService _ledger;
+    private readonly BudgetSeriesService _series;
+    private readonly PlanQuoteConcurrencyLimiter _limiter;
     private readonly NdiaRejectionReader? _ndia;
 
+    /// <param name="limiter">The plan builder's pricing permits: the budget graph prices the agreement on a cache miss, so it shares the organisation's permits.</param>
     /// <param name="ndia">Reads the NDIA's "funds ran out" word for the pools (phase 2b). Left out, the pools carry no note.</param>
-    public ParticipantFundingLedgerController(ICurrentTenant tenant, BudgetLedgerService ledger, NdiaRejectionReader? ndia = null)
+    public ParticipantFundingLedgerController(ICurrentTenant tenant, BudgetLedgerService ledger, BudgetSeriesService series, PlanQuoteConcurrencyLimiter limiter, NdiaRejectionReader? ndia = null)
     {
         _tenant = tenant;
         _ledger = ledger;
+        _series = series;
+        _limiter = limiter;
         _ndia = ndia;
     }
 
@@ -59,5 +65,29 @@ public class ParticipantFundingLedgerController : ControllerBase
         }
 
         return Ok(ApiResponse<ParticipantLedgerDto>.Ok(ledger));
+    }
+
+    /// <summary>
+    /// The budget graph of the participant's current plan: weekly cumulative points for the whole plan and each pool (budget spread evenly, used, used and booked, and what the approved
+    /// agreement expects). Read beside the ledger, from the same items. When the organisation's pricing permits are all taken the expected line is "unavailable" and the rest still answers.
+    /// </summary>
+    [EnableRateLimiting("api")]
+    [HttpGet("ledger/series")]
+    public async Task<ActionResult<ApiResponse<BudgetSeriesDto>>> Series(Guid participantId, CancellationToken ct)
+    {
+        if (_tenant.TenantId is not { } tenantId) return BadRequest(ApiResponse<BudgetSeriesDto>.Fail(ParticipantFundingController.ChooseOrganisation));
+
+        var series = await _series.GetAsync(tenantId, participantId, EnterPricing, ct);
+        if (series is null) return NotFound(ApiResponse<BudgetSeriesDto>.Fail(FundingPlanService.ParticipantNotFound));
+        return Ok(ApiResponse<BudgetSeriesDto>.Ok(series));
+    }
+
+    /// <summary>One of the organisation's pricing permits, keyed as the plan quote keys them; null when none is free.</summary>
+    private IDisposable? EnterPricing()
+    {
+        var lease = _limiter.TryEnter(PlanQuoteConcurrencyFilter.KeyOf(HttpContext, _tenant));
+        if (lease.IsAcquired) return lease;
+        lease.Dispose();
+        return null;
     }
 }

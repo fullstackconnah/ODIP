@@ -1,6 +1,6 @@
 import { useQuery, type QueryClient } from '@tanstack/react-query'
 import { apiGet } from '../client'
-import type { ParticipantLedgerDto } from '../types'
+import type { BudgetSeries, ParticipantLedgerDto } from '../types'
 import { AGREEMENT_CHECK_KEY, BUDGET_LIST_KEY } from './funding-warnings'
 
 // The budget ledger (budget feature, phase 2a). The server works every figure out on each read; this only asks for it, under the same ['participant-funding', participantId] prefix the plan
@@ -8,6 +8,8 @@ import { AGREEMENT_CHECK_KEY, BUDGET_LIST_KEY } from './funding-warnings'
 
 const LEDGER_KEY = 'ledger' as const
 export const ledgerKey = (participantId: string | undefined) => ['participant-funding', participantId, LEDGER_KEY] as const
+/** Under the ledger's key, so every refresh of the ledger refreshes the budget graph with it. */
+export const budgetSeriesKey = (participantId: string | undefined) => [...ledgerKey(participantId), 'series'] as const
 
 // ══════════════════════════════════════════════════════════════
 // REFRESHING THE LEDGER AFTER A WRITE
@@ -25,6 +27,7 @@ export function cachedLedgerParticipants(queryClient: QueryClient): string[] {
     .filter((query) => query.queryKey[0] === 'participant-funding' && query.queryKey[2] === LEDGER_KEY)
     .map((query) => query.queryKey[1])
     .filter((id): id is string => typeof id === 'string')
+    .filter((id, i, ids) => ids.indexOf(id) === i)   // the budget graph's series sits under the ledger's key too
 }
 
 /**
@@ -73,6 +76,15 @@ export function useFundingLedger(participantId: string | undefined, enabled = tr
   return useQuery({
     queryKey: ledgerKey(participantId),
     queryFn: () => apiGet<ParticipantLedgerDto>(`/participants/${participantId}/funding/ledger`),
+    enabled: !!participantId && enabled,
+  })
+}
+
+/** The budget graph's weekly points for the current plan, the whole plan and each pool (Funding tab). Same roles as the ledger: pass `enabled: false` for any role that must not see money. */
+export function useBudgetSeries(participantId: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: budgetSeriesKey(participantId),
+    queryFn: () => apiGet<BudgetSeries>(`/participants/${participantId}/funding/ledger/series`),
     enabled: !!participantId && enabled,
   })
 }

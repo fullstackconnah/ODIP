@@ -1,49 +1,14 @@
 import { useAuditHistory, type AuditEntry, type AuditChange } from '../api/hooks';
-import { parseApiDate } from '@/lib/utils';
-import { plural } from '@/lib/format'
+import { StatusBadge } from '@/components/StatusBadge'
+import { formatDateTimeAu, formatRelative, plural } from '@/lib/format'
 
 interface Props {
   entityType: string;
   entityId: string;
 }
 
-/**
- * Semantic action badge colors aligned with standard UX conventions.
- * These provide clear visual feedback on the type of change.
- */
-const ACTION_STYLES: Record<string, string> = {
-  Created: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',  // Green
-  Updated: 'bg-[var(--color-secondary-container)] text-[var(--color-secondary)]',  // Blue-grey
-  Deleted: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',  // Red
-};
-
-/**
- * Formats an ISO timestamp into both relative (e.g., "2m ago") and absolute (e.g., "27 Mar 2026, 13:45") forms.
- */
-function formatRelative(iso: string): { relative: string; absolute: string } {
-  const date = parseApiDate(iso);
-  const diffMs = Date.now() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60_000);
-  const diffHours = Math.floor(diffMins / 60);
-  const diffDays = Math.floor(diffHours / 24);
-
-  let relative: string;
-  if (diffMins < 1) relative = 'Just now';
-  else if (diffMins < 60) relative = `${diffMins}m ago`;
-  else if (diffHours < 24) relative = `${diffHours}h ago`;
-  else if (diffDays === 1) relative = 'Yesterday';
-  else relative = `${diffDays}d ago`;
-
-  const absolute = date.toLocaleString('en-AU', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-
-  return { relative, absolute };
-}
+/** An audit action's tone: a create is good news, a delete is the one to notice, an update is neutral information. */
+const ACTION_TONES = { created: 'success', updated: 'info', deleted: 'danger' } as const
 
 /**
  * FieldDiff: Displays a single field change with old → new values.
@@ -71,7 +36,6 @@ function FieldDiff({ field, old: oldVal, new: newVal }: AuditChange) {
  * Includes action badge, timestamp with tooltip, user info, and field changes.
  */
 function AuditEntryRow({ entry }: { entry: AuditEntry }) {
-  const { relative, absolute } = formatRelative(entry.changedAt);
 
   return (
     <div className="flex gap-3 py-2 border-b border-[var(--color-border)] last:border-0 tabular-nums">
@@ -81,21 +45,15 @@ function AuditEntryRow({ entry }: { entry: AuditEntry }) {
       <div className="flex-1 min-w-0">
         {/* Header: action badge, user, timestamp */}
         <div className="flex items-center gap-2 flex-wrap mb-1">
-          <span
-            className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-              ACTION_STYLES[entry.action] ?? 'bg-[var(--color-surface-container)] text-[var(--color-muted-foreground)]'
-            }`}
-          >
-            {entry.action}
-          </span>
+          <StatusBadge status={entry.action} colorMap={ACTION_TONES} />
           <span className="text-xs text-[var(--color-muted-foreground)]">
             by {entry.changedByName ?? 'System'}
           </span>
           <span
             className="text-xs text-[var(--color-muted-foreground)] cursor-help transition-colors hover:text-[var(--color-foreground)]"
-            title={absolute}
+            title={formatDateTimeAu(entry.changedAt)}
           >
-            {relative}
+            {formatRelative(entry.changedAt, { style: 'compact' })}
           </span>
         </div>
 

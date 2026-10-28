@@ -3,6 +3,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import StaffPage from './StaffPage'
+import { TONE } from '@/lib/tone'
 import type { StaffListDto } from '@/api/types/staff'
 
 const { mockUseStaff, mockDeleteMutate, mockUpdateMutate, providerSettings } = vi.hoisted(() => ({
@@ -495,5 +496,20 @@ describe('StaffPage — the empty state points at Import', () => {
     await userEvent.setup().click(screen.getByRole('radio', { name: 'Archived' }))
     expect(screen.queryByRole('link', { name: 'Import staff' })).toBeNull()
     expect(screen.queryByText(/Import your staff list/)).toBeNull()
+  })
+})
+
+describe('StaffPage — status tones', () => {
+  it('reads Active as success and Inactive as danger on the status pill', () => {
+    mockUseStaff.mockReturnValue({
+      data: [makeStaff({ id: 's1', fullName: 'Alex Rivera' }), makeStaff({ id: 's3', fullName: 'Jamie Fox', isActive: false })],
+      isLoading: false,
+    })
+    renderPage()
+
+    const active = within(screen.getByText('Alex Rivera').closest('tr') as HTMLElement).getByRole('button', { name: /^active$/i })
+    const inactive = within(screen.getByText('Jamie Fox').closest('tr') as HTMLElement).getByRole('button', { name: /^inactive$/i })
+    expect(active).toHaveClass(...TONE.success.solid.split(' '))
+    expect(inactive).toHaveClass(...TONE.danger.solid.split(' '))
   })
 })

@@ -66,7 +66,7 @@ describe('light palette unchanged (dark-mode-2026-10)', () => {
   const themeBlock = css.slice(themeStart, css.indexOf('}', themeStart))
   const parsed = Object.fromEntries([...themeBlock.matchAll(/--color-([a-z0-9-]+):\s*([^;]+);/g)].map(m => [m[1], m[2].trim()]))
 
-  // origin/main's 42 light values, verbatim, plus the three tokens dark mode adds with light values equal to today's pixels.
+  // origin/main's 42 light values, verbatim, plus the three tokens dark mode adds with light values equal to today's pixels, plus the four chart tokens (budget-graph-2026-10).
   const LIGHT = {
     'background': '#fbf9f5',
     'foreground': '#1b1c1a',
@@ -113,9 +113,13 @@ describe('light palette unchanged (dark-mode-2026-10)', () => {
     'warning-foreground': '#1b1c1a',
     'hover-wash': 'rgba(0,0,0,0.05)',
     'focus-ring-soft': 'rgba(57,98,0,0.18)',
+    'chart-budget': '#7a8070',
+    'chart-actual': 'var(--color-primary)',
+    'chart-expected': '#2f6db5',
+    'chart-grid': 'var(--color-border)',
   }
 
-  it('keeps every light value, and adds only the three new tokens', () => {
+  it('keeps every light value, and adds the three dark-mode tokens and the four chart tokens (budget-graph-2026-10)', () => {
     expect(parsed).toEqual(LIGHT)
   })
 

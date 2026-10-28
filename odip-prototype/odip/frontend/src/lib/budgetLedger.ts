@@ -1,4 +1,4 @@
-import type { BudgetStatus, ClaimBudgetRowDto, LedgerGroup, LedgerPeriod, LedgerPool, LedgerRow } from '@/api/types'
+import type { BudgetStatus, ClaimBudgetRowDto, LedgerGroup, LedgerPeriod, LedgerPool, LedgerRow, ParticipantLedgerDto } from '@/api/types'
 import { formatDateRange, formatDayMonth } from './dateRange'
 import { joinList, plural } from './format'
 import { writtenDay } from './fundingPlan'
@@ -111,3 +111,10 @@ export function claimBudgetLine(row: ClaimBudgetRowDto): { text: string; over: b
   const rest = left < 0 ? `${money(-left)} over after` : `${money(left)} left after`
   return { text: `Uses ${money(row.thisClaim)} of ${row.poolName} (${period}); ${rest}.`, over: left < 0 }
 }
+
+/** Between an ended plan and the next one that has not started: the ledger says no plan is running. */
+export const betweenPlans = (data: ParticipantLedgerDto, nextPlanStart?: string) => !!data.planId && !data.planIsCurrent && !!nextPlanStart
+export const hasNoPlan = (data: ParticipantLedgerDto) => !data.planId || data.pools.length === 0
+
+/** Whether the ledger shows a plan's figures: the only state the budget graph is drawn (and asked for) in. Never for a participant funded another way. */
+export const ledgerHasMainBranch = (data: ParticipantLedgerDto, nextPlanStart?: string, otherFunded = false) => !otherFunded && !betweenPlans(data, nextPlanStart) && !hasNoPlan(data)
