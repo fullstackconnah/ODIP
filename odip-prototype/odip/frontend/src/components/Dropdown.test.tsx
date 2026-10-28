@@ -278,3 +278,12 @@ describe('Dropdown — disabled item with a description', () => {
     expect(await screen.findByRole('option')).not.toHaveClass('opacity-40')
   })
 })
+
+describe('Dropdown — keyboard-only focus ring on the value triggers', () => {
+  it.each(['pill', 'form'] as const)('%s trigger rings on focus-visible, not on every focus', (variant) => {
+    render(<Dropdown variant={variant} value="a" onChange={() => {}} label="Pick" items={ITEMS} />)
+    const trigger = screen.getByRole('button')
+    expect(trigger).toHaveClass('focus-visible:ring-2', 'focus-visible:ring-[var(--color-ring)]')
+    expect(trigger).not.toHaveClass('focus:ring-2')
+  })
+})

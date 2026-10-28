@@ -438,6 +438,13 @@ aside[data-folding] [data-fold="word"] { transform: translateX(-12px); }
   .install-card[data-leaving] { animation: installFadeOut 150ms linear forwards !important; }
 }
 
+/* Windows High Contrast removes box-shadows (every Tailwind ring) and many controls are outline-none: give keyboard focus a real outline. Unlayered, so it beats the outline-none utility. */
+@media (forced-colors: active) {
+  :focus-visible { outline: 2px solid CanvasText; outline-offset: 2px; }
+  /* The tab list is overflow-x-auto and clips anything outside a tab, so tabs draw the outline inside. */
+  [role="tab"]:focus-visible { outline-offset: -4px; }
+}
+
 :root { --wordmark-dot: var(--color-primary-fixed); }
 
 /* Dark theme (dark-mode-2026-10): the same tokens re-pointed; set by public/theme.js. Values: DESIGN.md "Dark theme". */
