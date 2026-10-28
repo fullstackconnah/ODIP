@@ -1,10 +1,11 @@
 import { useMemo, useRef, useState } from 'react'
 import { useShowAll } from '@/components/ShowAllButton'
 import { Link, useNavigate } from 'react-router-dom'
-import { ChevronDown, Plus, Info, Pill } from 'lucide-react'
+import { Plus, Info, Pill } from 'lucide-react'
 import { useParticipantMedications, useParticipantAdministrations } from '@/api/hooks'
 import { Card } from '@/components/Card'
 import { Button } from '@/components/Button'
+import { DisclosureToggle } from '@/components/DisclosureToggle'
 import { EmptyState } from '@/components/EmptyState'
 import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -36,23 +37,12 @@ function IncidentLinkOrAction({ administration, canFile }: { administration: Adm
   if (!isIncidentTriggerOutcome(administration.status)) return null
   if (administration.incidentId) {
     return (
-      <Link
-        to={`/incidents/${administration.incidentId}`}
-        className="text-xs text-[var(--color-primary)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded whitespace-nowrap"
-      >
-        Incident filed
-      </Link>
+      <Button variant="ghost" size="sm" to={`/incidents/${administration.incidentId}`}>Incident filed</Button>
     )
   }
   if (!canFile) return null
   return (
-    <button
-      type="button"
-      onClick={() => navigate('/incidents/new', { state: buildMarIncidentPrefill(administration) })}
-      className="text-xs text-[var(--color-primary)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded whitespace-nowrap"
-    >
-      File incident
-    </button>
+    <Button variant="ghost" size="sm" onClick={() => navigate('/incidents/new', { state: buildMarIncidentPrefill(administration) })}>File incident</Button>
   )
 }
 
@@ -159,17 +149,9 @@ export default function MedicationsTab({ participantId }: { participantId: strin
 
       {inactiveMeds.length > 0 && (
         <div>
-          <button
-            type="button"
-            onClick={() => setShowInactive(v => !v)}
-            className="flex items-center gap-2 text-sm font-medium text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded transition-colors"
-            aria-expanded={showInactive}
-          >
-            <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showInactive ? 'rotate-180' : ''}`} />
-            Ceased ({inactiveMeds.length})
-          </button>
+          <DisclosureToggle label={`Ceased (${inactiveMeds.length})`} open={showInactive} onToggle={() => setShowInactive(v => !v)} controls="medications-ceased-list" />
           {showInactive && (
-            <div className="grid sm:grid-cols-2 gap-3 mt-3">
+            <div id="medications-ceased-list" className="grid sm:grid-cols-2 gap-3 mt-3">
               {inactiveMeds.map(m => <MedicationCard key={m.id} medication={m} canOpen={canManageMedications || isReadOnly} />)}
             </div>
           )}

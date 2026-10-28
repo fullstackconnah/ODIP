@@ -26,6 +26,17 @@ export function addDays(iso: string, days: number): string {
   return day === null ? iso : formatDayNumber(day + days)
 }
 
+/** `iso` plus whole months, a missing day clamped to the month's last ("31 Jan" + 1 month is "28 Feb"): the date-fns and .NET `AddMonths` rule, so the screen and the server agree. */
+export function addMonths(iso: string, months: number): string {
+  const day = parseDateOnly(iso)
+  if (day === null) return iso
+  const start = new Date(day * 86_400_000)
+  const index = start.getUTCFullYear() * 12 + start.getUTCMonth() + months
+  const year = Math.floor(index / 12), month = index % 12
+  const last = new Date(Date.UTC(year, month + 1, 0)).getUTCDate()
+  return formatDayNumber(Date.UTC(year, month, Math.min(start.getUTCDate(), last)) / 86_400_000)
+}
+
 /** The years the pricing engine answers for. */
 export const PRICING_FIRST_YEAR = 2000
 export const PRICING_LAST_YEAR = 2100

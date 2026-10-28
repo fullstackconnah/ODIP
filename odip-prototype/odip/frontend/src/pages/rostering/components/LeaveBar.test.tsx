@@ -54,6 +54,15 @@ describe('LeaveBar kind handling', () => {
     expect(block.parentElement).not.toHaveClass('bg-muted/40')
   })
 
+  it('fullWidth draws a recurring rule as a full-width line in words, solid unless pending', () => {
+    const leave = makeLeaveBar({ kind: 'RecurringRule', startDate: '2026-09-08', endDate: '2026-09-08', startTime: '06:00:00', endTime: '08:00:00' })
+    render(<LeaveBar leave={leave} days={DAYS} fullWidth />)
+    const line = screen.getByText('Unavailable 6am–8am').parentElement!
+    expect(line).toHaveClass('bg-muted')
+    expect(line).not.toHaveClass('border-dashed')
+    expect(line.getAttribute('style') ?? '').not.toContain('left')
+  })
+
   it('recurring-rule block spans exactly its one occurrence day, not the whole visible week', () => {
     const leave = makeLeaveBar({
       kind: 'RecurringRule', startDate: '2026-09-09', endDate: '2026-09-09', startTime: '13:00:00', endTime: '17:00:00',

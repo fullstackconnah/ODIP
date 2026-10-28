@@ -5,7 +5,7 @@ import { AlertOctagon, AlertTriangle, Asterisk, CalendarOff, Check, FileCheck, G
 import type { RosterFindingDto, ShiftDto } from '@/api/types'
 import { Dropdown } from '@/components/Dropdown'
 import { TAP_AREA } from '@/components/tapArea'
-import { formatShiftTimeRange, isUnfilledShift, RATIO_LABELS, shiftSource } from '../lib/roster'
+import { formatShiftTimeRange, isUnfilledShift, participantWeekHref, RATIO_LABELS, shiftSource, staffWeekHref, weekStartFromDateParam } from '../lib/roster'
 import { plural } from '@/lib/format'
 import { ON_TINT, TONE } from '@/lib/tone'
 import { OVER_BUDGET_MARKER, markerForAcknowledgedCodes } from './parallel-budget-override'
@@ -52,8 +52,9 @@ export type ShiftChipProps = {
   onSetRegular?: (shift: ShiftDto) => void
 }
 
+// pointer-coarse: a 44px line that covers only the name (flex-initial, not flex-1), so a tap on the rest of the box still opens the shift; not a TAP_AREA pad, which would reach over the chip's own open target.
 const LABEL_LINK =
-  'min-w-0 flex-1 truncate rounded-sm text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring'
+  'min-w-0 flex-1 pointer-coarse:flex-initial truncate rounded-sm pointer-coarse:leading-[var(--tap-min)] text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring'
 
 /**
  * The one chip type rendered in staff rows, participant rows and the Unfilled lane. Colour is
@@ -207,10 +208,10 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
       <span className="hidden truncate @[11rem]:inline">Regular away</span>
     </span>
   )
-  const hasLead = canPick || (canWrite && draggable)
+  const hasLead = canPick || (canWrite && draggable) || (!canWrite && locked)
   const hasMenu = canWrite && !busy && !carrying
 
-  // A link to the person's own page, or plain "Needs staff" text in a participant row when nobody covers
+  // A link to the person's roster week on their profile (the week this shift is in), or plain "Needs staff" text in a participant row when nobody covers
   // the shift (a staff-row chip is never unfilled: it exists because that staff member holds it).
   // stopPropagation keeps a name click from also bubbling up to the open-shift div.
   const label = busy
@@ -219,7 +220,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
     ? isFilled
       ? (
         <Link
-          to={`/staff/${shift.staffId}`}
+          to={staffWeekHref(shift.staffId!, weekStartFromDateParam(shift.serviceDate))}
           onClick={e => e.stopPropagation()}
           className={LABEL_LINK}
           title={shift.staffName ?? undefined}
@@ -231,7 +232,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
       : shift.regularAwayReason ? awayFlag : spanPlus ? null : <span className="min-w-0 flex-1 truncate italic text-muted-foreground">Needs staff</span>
     : (
       <Link
-        to={`/participants/${shift.participantId}`}
+        to={participantWeekHref(shift.participantId, weekStartFromDateParam(shift.serviceDate))}
         onClick={e => e.stopPropagation()}
         className={LABEL_LINK}
         title={subjectLabel}
@@ -283,7 +284,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
         >
           <UserPlus className={spanPlus ? 'h-4 w-4 pointer-coarse:h-6 pointer-coarse:w-6' : 'h-3.5 w-3.5'} aria-hidden="true" />
         </button>
-      ) : canWrite && draggable && (
+      ) : hasLead && (
         canLift ? (
           <button
             type="button"
@@ -297,7 +298,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
             <GripVertical className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         ) : locked ? (
-          <span className="relative z-[1] col-start-1 row-start-2 ml-0.5 flex w-[18px] shrink-0 items-center justify-center text-muted-foreground pointer-coarse:mx-[13px]" title={lockTitle}>
+          <span className={`relative z-[1] col-start-1 row-start-2 ml-0.5 flex w-[18px] shrink-0 items-center justify-center text-muted-foreground ${canWrite ? 'pointer-coarse:mx-[13px]' : ''}`} title={lockTitle}>
             <Lock className="h-3 w-3" aria-hidden="true" />
           </span>
         ) : (
@@ -355,7 +356,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
             overKind === 'assign' || overKind === 'move' || overKind === 'prompt' || picking ? 'ring-2 ring-ring' : ''
           }`}
         >
-          <span className={`col-start-2 flex min-w-0 items-center overflow-hidden ${hasLead ? 'pl-0.5' : 'pl-1.5'} ${hasMenu ? '' : 'pr-1.5'}`}>
+          <span className={`col-start-2 flex min-w-0 items-center overflow-hidden pointer-coarse:[&>a+span]:ml-auto ${hasLead ? 'pl-0.5' : 'pl-1.5'} ${hasMenu ? '' : 'pr-1.5'}`}>
             {label}
             {/*
               Priority on a chip, narrowest-first: time > name > ratio > everything else. Time is what a

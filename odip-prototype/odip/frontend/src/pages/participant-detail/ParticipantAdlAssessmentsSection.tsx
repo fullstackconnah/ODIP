@@ -130,13 +130,9 @@ export default function ParticipantAdlAssessmentsSection({ participantId }: { pa
       {
         key: 'edit', header: '', align: 'right', width: 72,
         render: (row) => canWriteAdlAssessments && (
-          <button
-            type="button"
-            onClick={() => openEdit(row)}
-            className="text-xs font-medium text-[var(--color-primary)] hover:underline px-2 py-1.5 min-h-[44px] rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
-          >
+          <Button variant="ghost" size="sm" onClick={() => openEdit(row)}>
             Edit
-          </button>
+          </Button>
         ),
       },
     ]
