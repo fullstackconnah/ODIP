@@ -751,11 +751,14 @@ const ROW_ACTIONS_OVERLAY = [
  *
  * `overlay` takes the cluster out of the flow on a mouse (see ROW_ACTIONS_OVERLAY): use it for a
  * cluster wide enough to matter, in a `relative` cell (`className: 'relative'` on the column) that
- * holds only what must stay visible, such as the chevron. It renders nothing when it has no children,
- * so an empty cluster never leaves a blank patch over its neighbours on hover.
+ * holds only what must stay visible, such as the chevron.
+ *
+ * In both modes it renders nothing when it has no children: an empty overlay never leaves a blank patch
+ * over its neighbours on hover, and an empty cluster never leaves a `<div>` that stops the phone card's
+ * actions cell matching `:empty` (a blank strip at the card's foot).
  */
 export function RowActions({ children, overlay = false }: { children: ReactNode; overlay?: boolean }) {
-  if (overlay && Children.toArray(children).length === 0) return null
+  if (Children.toArray(children).length === 0) return null
   return (
     <div className={`flex items-center justify-end gap-1.5 pointer-coarse:gap-2 ${ROW_ACTIONS_REVEAL} ${ROW_ACTIONS_LEGACY_ICONS} ${ROW_ACTIONS_CARD} ${overlay ? ROW_ACTIONS_OVERLAY : ''}`}>
       {children}

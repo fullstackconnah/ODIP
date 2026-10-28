@@ -140,6 +140,14 @@ describe('DataTable phone card: the actions cell', () => {
     expect(cell).toHaveClass('max-md:empty:hidden')
   })
 
+  it('leaves no strip on a row whose actions are all false: the cluster renders nothing, so the cell stays empty and hidden', () => {
+    const { container } = render(<DataTable data={aRows} columns={[columns[0], { key: 'actions', header: '', render: () => <RowActions>{false}</RowActions> }]} keyField="id" />)
+
+    const cell = container.querySelector('tbody td:last-child') as HTMLElement
+    expect(cell).toBeEmptyDOMElement()
+    expect(cell).toHaveClass('max-md:empty:hidden')
+  })
+
   it('does not touch other columns', () => {
     render(<DataTable data={aRows} columns={columns} keyField="id" />)
 
