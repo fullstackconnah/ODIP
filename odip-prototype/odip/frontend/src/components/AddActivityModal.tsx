@@ -136,6 +136,7 @@ export default function AddActivityModal({ tripDayId, editingActivity, eventTemp
 
   return (
     <Modal
+      stickyFooter
       open
       onClose={onClose}
       title={editingActivity ? 'Edit Activity' : 'Add Activity'}
@@ -179,7 +180,7 @@ export default function AddActivityModal({ tripDayId, editingActivity, eventTemp
 
           <div className="contents">
             <FormField label="Start Time" className={modalSpan.half}><input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} /></FormField>
-            <FormField label="End Time" className={modalSpan.half}><input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} /></FormField>
+            <FormField label="End Time" error={timeError} className={modalSpan.half}><input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} /></FormField>
           </div>
 
           <FormField label="Location" className={modalSpan.full}><input value={location} onChange={e => setLocation(e.target.value)} placeholder="Location" maxLength={200} /></FormField>
@@ -221,7 +222,6 @@ export default function AddActivityModal({ tripDayId, editingActivity, eventTemp
           </details>
         </div>
 
-        {timeError && <p className="mt-3 text-sm text-[var(--color-destructive)]">{timeError}</p>}
         {(createActivity.isError || updateActivity.isError) && (
           <p className="mt-3 text-sm text-[var(--color-destructive)]">Failed to save activity. Please try again.</p>
         )}

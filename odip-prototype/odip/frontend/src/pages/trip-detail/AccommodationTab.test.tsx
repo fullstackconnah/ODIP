@@ -22,6 +22,7 @@ vi.mock('@/api/hooks', () => ({
 }))
 
 import AccommodationTab from './AccommodationTab'
+import { TAP_AREA } from '@/components/tapArea'
 
 const property = (over: Partial<AccommodationListDto> = {}): AccommodationListDto => ({
   id: 'ap1', propertyName: 'Sunshine Beach Retreat', location: 'Noosa', region: null, address: null, suburb: null, state: null, postcode: null,
@@ -198,5 +199,13 @@ describe('AccommodationTab — form labels and cost', () => {
     properties.push(property())
     renderTab([reservation({ cost: 1250 })])
     expect(screen.getAllByText('$1,250.00 ($312.50/night)').length).toBeGreaterThan(0)
+  })
+
+  it('gives the "+ Create new" toggle the TAP_AREA pad so a touch lands within 44px', async () => {
+    const user = userEvent.setup()
+    properties.length = 0
+    renderTab([])
+    await user.click(screen.getByRole('button', { name: 'Add Accommodation' }))
+    expect(screen.getByRole('button', { name: '+ Create new' })).toHaveClass(...TAP_AREA.split(' '))
   })
 })
