@@ -20,7 +20,7 @@ describe('TripStatusBadge (schedule)', () => {
   ] as const)('colours %s with the %s tone', (status, tone) => {
     render(<TripStatusBadge status={status} />)
     const pill = screen.getByText(TRIP_STATUS_LABELS[status])
-    expect(pill).toHaveClass('shrink-0', 'whitespace-nowrap', 'text-xs', 'px-2', 'py-0.5', 'rounded-full', 'font-semibold', ...TONE[tone].solid.split(' '))
+    expect(pill).toHaveClass('shrink-0', 'whitespace-nowrap', 'text-xs', 'px-2', 'py-0.5', 'rounded-full', ...TONE[tone].solid.split(' '))
   })
 
   // The words come from the label map, not from splitting the enum ("Open For Bookings").

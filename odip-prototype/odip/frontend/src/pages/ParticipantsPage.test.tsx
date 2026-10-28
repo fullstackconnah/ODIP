@@ -4,6 +4,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route, RouterProvider, createMemoryRouter, useLocation } from 'react-router-dom'
 import { ParticipantsTable } from './ParticipantsPage'
+import { TONE } from '@/lib/tone'
 import { participantActivatedState } from './profile/participantActivated'
 
 const { mockUseParticipants, mockDeleteMutate, mockUpdateMutate, mockStatusMutate, mockRestoreMutate, mockUseParticipantAlertsAggregate } = vi.hoisted(() => ({
@@ -297,6 +298,24 @@ describe('ParticipantsPage — status change safety', () => {
     expect(within(jamieRow).queryByRole('button', { name: /^active$/i })).not.toBeInTheDocument()
     // The pill itself must not be a button.
     expect(within(jamieRow).queryByRole('button', { name: /status: active/i })).not.toBeInTheDocument()
+  })
+
+  it('reads Active as success and Inactive as danger, at the shared 12px badge size', () => {
+    mockUseParticipants.mockReturnValue({
+      data: [
+        baseParticipant({ id: 'p1', fullName: 'Jamie Smith', isActive: true }),
+        baseParticipant({ id: 'p2', fullName: 'Alex Rivera', isActive: false }),
+      ],
+      isLoading: false,
+    })
+    renderPage()
+
+    const rowOf = (name: string) => screen.getAllByRole('row').find(r => r.textContent?.includes(name))!
+    const active = within(rowOf('Jamie Smith')).getByText('Active')
+    const inactive = within(rowOf('Alex Rivera')).getByText('Inactive')
+    expect(active).toHaveClass('text-xs', ...TONE.success.solid.split(' '))
+    expect(inactive).toHaveClass('text-xs', ...TONE.danger.solid.split(' '))
+    expect(within(rowOf('Alex Rivera')).getByLabelText('Status: Inactive')).toBeInTheDocument()
   })
 
   it('opens a confirmation dialog that names the participant and the target status, and mutates only on confirm', async () => {
