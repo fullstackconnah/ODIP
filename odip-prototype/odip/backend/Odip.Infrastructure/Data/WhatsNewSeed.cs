@@ -127,6 +127,9 @@ public static class WhatsNewSeed
         new Item("2026-10-offline-review-marker", "See which shifts were sent from offline",
             "On Completions, a shift a support worker finished without signal shows \"Sent from offline\" and when it reached Bunya Support. Its times are the ones the worker recorded on their phone.",
             Staff, false),
+        new Item("2026-10-back-goes-back", "Back takes you where you came from",
+            "The back arrow on every page now returns to the page you were on before. If you opened a page from a link or a new tab, it goes to that page's list.",
+            Staff, false),
     };
 
     /// <summary>Inserts the keys the table lacks, one save each, so a key another instance inserted first costs only that row.</summary>

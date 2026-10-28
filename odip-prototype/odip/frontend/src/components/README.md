@@ -893,7 +893,7 @@ The trip detail page opts in with a status-led meta row, and the dashboard opts 
 `BackButton.tsx` is the one Back control: the first action in a detail header, secondary, and it names its destination.
 
 **Props**: `to` (a real route) **or** `onBack` (the in-page form, below), `label` (lower-case noun for where it goes: `label="staff"` names it "Back to staff"), `variant?: 'button' | 'icon' | 'link'`
-(default `button`), `history?: boolean` (default `true`), `className?` (spacing only: `mt-1`, `py-3`), `data-testid?`.
+(default `button`), `className?` (spacing only: `mt-1`, `py-3`), `data-testid?`.
 
 | Variant | Look | Use it for |
 |---|---|---|
@@ -904,17 +904,21 @@ The trip detail page opts in with a status-led meta row, and the dashboard opts 
 **Accessibility**: always a real `<a href>` (open in a new tab and copy-link work); it is never a `<button>` that navigates. The visible text is "Back" and the accessible name is "Back to {label}" (it contains
 the visible text). 44px under a coarse pointer in every variant, visible focus ring, first in the tab order of its header.
 
-**History.** With `history` on, the hook `useBackTarget(to)` runs inside the component: when the user arrived from another in-app screen, Back returns there and `to` is only the fallback for a deep link or a
-reload; the name then says where it really goes ("Back to Dashboard", or "Go back" for a screen with no known name). Because the hook lives in the component, a page can render a BackButton after an early return
-without a hook below it (the class of bug #155 fixed on the onboarding page). `history={false}` pins Back to `to`: use it on a record page reached from many places where "up to the list" is the meaning, and
-wherever the previous screen can be a form the user has just saved. A change of query on the same path (a tab or a filter written with `replace`) is the same screen, never a predecessor.
+**History.** Back always goes to the page the user visited before (`navigate(-1)`). `to` is only the fallback, used when nothing earlier exists in this tab (a deep link, a new tab, a pasted URL): then Back
+pushes `to`. The element stays a real link whose `href` is `to`; a plain left click is handled, a modified or middle click uses the href. The hook `useBackTarget(to)` runs inside the component, so a page can
+render a BackButton after an early return without a hook below it (the class of bug #155 fixed on the onboarding page). The accessible name says where Back really goes ("Back to Dashboard") when that screen is
+known, and "Back to {label}" otherwise (after a reload, or when the previous screen is the fallback itself). A change of query on the same path (a tab or a filter written with `replace`) is the same screen,
+never a predecessor. There is no opt-out: a Cancel that should follow Back uses `useBackTarget` too (`WizardNavFooter` does).
+
+**Saves replace.** A page that finishes a form must not leave the form in history: navigate away with `{ replace: true }`, or call `back.leave()` (back when there is history, otherwise a replace to the fallback)
+from a form opened from the page it returns to. Then Back from the saved record lands on the list, never on the finished form.
 
 **In-page back.** `onBack` (and no `to`) renders a real `<button>` for a view that is switched in place and has no route to link to (the tenant detail pane inside Settings). Prefer giving the view a URL.
 
 ```tsx
-<BackButton to="/staff" label="staff" history={false} />                             {/* header action cluster */}
+<BackButton to="/staff" label="staff" />                                             {/* header action cluster; /staff is the fallback */}
 <BackButton to={`/participants/${id}`} label="participant" variant="icon" className="mt-1" />   {/* beside a title */}
-<BackButton to="/portal" label="my shifts" variant="link" history={false} />
+<BackButton to="/portal" label="my shifts" variant="link" />
 ```
 
 ---
