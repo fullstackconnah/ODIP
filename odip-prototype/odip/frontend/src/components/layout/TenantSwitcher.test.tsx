@@ -18,7 +18,7 @@ const TENANTS = [
 
 beforeEach(() => {
   localStorage.clear()
-  localStorage.setItem('odip_viewing_tenant', 'tenant-1')
+  sessionStorage.setItem('odip_viewing_tenant', 'tenant-1')
   mockUseAdminTenantsSummary.mockReturnValue({ data: TENANTS })
 })
 
@@ -75,7 +75,7 @@ describe('TenantSwitcher — touch target and small-screen trigger', () => {
 
   it('names the trigger while the tenant list is still loading, with no tooltip until there is a name', () => {
     mockUseAdminTenantsSummary.mockReturnValue({ data: [] })
-    localStorage.setItem('odip_viewing_tenant', 'missing')
+    sessionStorage.setItem('odip_viewing_tenant', 'missing')
     render(<TenantSwitcher />)
 
     const trigger = screen.getByRole('button', { name: 'SA Loading…' })
@@ -102,11 +102,11 @@ describe('TenantSwitcher — a switch whose reload was cancelled', () => {
     await user.click(screen.getByRole('button', { name: /Acme/ }))
     await user.click(screen.getByRole('button', { name: 'Switch tenant' }))
     expect(window.location.reload).toHaveBeenCalledTimes(1)
-    expect(localStorage.getItem('odip_viewing_tenant')).toBe('tenant-2')   // what the reloaded page reads
+    expect(sessionStorage.getItem('odip_viewing_tenant')).toBe('tenant-2')   // what the reloaded page reads
 
     window.dispatchEvent(new Event('pointerdown'))   // "Stay" on a dirty form's prompt, then a press on this page
 
-    expect(localStorage.getItem('odip_viewing_tenant')).toBe('tenant-1')
+    expect(sessionStorage.getItem('odip_viewing_tenant')).toBe('tenant-1')
   })
 })
 
@@ -114,7 +114,7 @@ describe("TenantSwitcher dismissal", () => {
   it.each(["Cancel", "Escape", "Close dialog"])("dismisses via %s once", async (dismiss) => {
     const user = userEvent.setup();
     const originalOverflow = document.body.style.overflow;
-    const originalViewing = localStorage.getItem("odip_viewing_tenant");
+    const originalViewing = sessionStorage.getItem("odip_viewing_tenant");
 
     render(
       <header style={{ backdropFilter: "blur(24px)" }}>
@@ -148,7 +148,7 @@ describe("TenantSwitcher dismissal", () => {
     expect(screen.queryByRole("alertdialog", { name: "Switch tenant?" })).toBeNull();
     expect(document.activeElement).toBe(trigger);
     expect(document.body.style.overflow).toBe(originalOverflow);
-    expect(localStorage.getItem("odip_viewing_tenant")).toBe(originalViewing);
+    expect(sessionStorage.getItem("odip_viewing_tenant")).toBe(originalViewing);
   });
 });
 

@@ -69,7 +69,7 @@ describe('Profile: Microsoft account', () => {
 
   it('is hidden when viewing as someone', async () => {
     account(true, false)
-    localStorage.setItem('odip_viewing_user', 'u2')
+    sessionStorage.setItem('odip_viewing_user', 'u2')
     renderProfile()
     expect(await screen.findByText('Jane Smith')).toBeInTheDocument()
     expect(screen.queryByText('Microsoft account')).not.toBeInTheDocument()

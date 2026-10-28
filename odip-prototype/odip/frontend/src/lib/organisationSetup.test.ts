@@ -41,7 +41,7 @@ describe('setupCard', () => {
 describe('the hide flag', () => {
   it('is kept per organisation, a viewing SuperAdmin taking precedence over the signed-in user', () => {
     localStorage.setItem('odip_user', JSON.stringify({ tenantId: 'own-org' }))
-    localStorage.setItem('odip_viewing_tenant', 'viewed-org')
+    sessionStorage.setItem('odip_viewing_tenant', 'viewed-org')
     setSetupHidden(true)
     expect(localStorage.getItem('bunya-setup-hidden:viewed-org')).toBe('1')
     expect(isSetupHidden()).toBe(true)

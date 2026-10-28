@@ -4,13 +4,14 @@ import { useAdminTenantsSummary } from '@/api/hooks'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { switchViewAndReload } from '@/lib/viewAsSwitch'
 import { TONE } from '@/lib/tone'
+import { getViewAs, setViewAs, clearViewAs } from '@/lib/viewAs'
 
 export default function TenantSwitcher() {
   const [open, setOpen] = useState(false)
   const [pendingTenant, setPendingTenant] = useState<{ id: string; name: string } | null>(null)
   const ref = useRef<HTMLDivElement>(null)
   const { data: tenants = [] } = useAdminTenantsSummary()
-  const viewingId = localStorage.getItem('odip_viewing_tenant')
+  const viewingId = getViewAs('odip_viewing_tenant')
   const current = tenants.find(t => t.id === viewingId)
   const user = JSON.parse(localStorage.getItem('odip_user') || '{}')
   const ownTenantId = user.tenantId as string | undefined
@@ -28,7 +29,7 @@ export default function TenantSwitcher() {
     // Try to restore last-used tenant
     const lastTenant = localStorage.getItem('odip_last_tenant')
     if (lastTenant && tenants.some(t => t.id === lastTenant)) {
-      localStorage.setItem('odip_viewing_tenant', lastTenant)
+      setViewAs('odip_viewing_tenant', lastTenant)
       window.location.reload()
       return
     }
@@ -36,7 +37,7 @@ export default function TenantSwitcher() {
     // Fall back to "Demo" tenant
     const demo = tenants.find(t => t.name.toLowerCase() === 'demo')
     if (demo) {
-      localStorage.setItem('odip_viewing_tenant', demo.id)
+      setViewAs('odip_viewing_tenant', demo.id)
       localStorage.setItem('odip_last_tenant', demo.id)
       window.location.reload()
       return
@@ -45,7 +46,7 @@ export default function TenantSwitcher() {
     // Last resort: first active tenant
     const firstActive = tenants.find(t => t.isActive)
     if (firstActive) {
-      localStorage.setItem('odip_viewing_tenant', firstActive.id)
+      setViewAs('odip_viewing_tenant', firstActive.id)
       localStorage.setItem('odip_last_tenant', firstActive.id)
       window.location.reload()
     }
@@ -75,8 +76,8 @@ export default function TenantSwitcher() {
       localStorage.setItem('odip_user', savedAdmin)
       localStorage.removeItem('odip_superadmin_user')
     }
-    localStorage.removeItem('odip_viewing_user')
-    localStorage.setItem('odip_viewing_tenant', tenantId)
+    clearViewAs('odip_viewing_user')
+    setViewAs('odip_viewing_tenant', tenantId)
     localStorage.setItem('odip_last_tenant', tenantId)
   })
 

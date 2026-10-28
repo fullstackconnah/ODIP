@@ -20,7 +20,7 @@ const SUPERADMIN_USER = { id: 'superadmin-1', fullName: 'Sam SuperAdmin', role: 
 
 function setSuperAdminSignedIn() {
   localStorage.setItem('odip_user', JSON.stringify(SUPERADMIN_USER))
-  localStorage.setItem('odip_viewing_tenant', 'tenant-1')
+  sessionStorage.setItem('odip_viewing_tenant', 'tenant-1')
 }
 
 beforeEach(() => {
@@ -56,7 +56,7 @@ describe('UserSwitcher — RIDER: id-based self-exclusion under view-as', () => 
     expect(storedUser.fullName).toBe('Jamie Support')
     expect(storedUser.role).toBe('SupportWorker')
 
-    expect(localStorage.getItem('odip_viewing_user')).toBe('user-support-1')
+    expect(sessionStorage.getItem('odip_viewing_user')).toBe('user-support-1')
     expect(window.location.reload).toHaveBeenCalledTimes(1)
 
     // Original SuperAdmin identity (id included) preserved for restore-on-switch-back.
@@ -123,7 +123,7 @@ describe('UserSwitcher — RIDER: id-based self-exclusion under view-as', () => 
     expect(restoredUser.id).toBe('superadmin-1')
     expect(restoredUser.role).toBe('SuperAdmin')
     expect(localStorage.getItem('odip_superadmin_user')).toBeNull()
-    expect(localStorage.getItem('odip_viewing_user')).toBeNull()
+    expect(sessionStorage.getItem('odip_viewing_user')).toBeNull()
     // Once for the earlier switch-user confirm, once for the exit-view confirm.
     expect(window.location.reload).toHaveBeenCalledTimes(2)
   })
@@ -143,7 +143,7 @@ describe('UserSwitcher — RIDER: id-based self-exclusion under view-as', () => 
     await user.click(screen.getByRole('button', { name: /^cancel$/i }))
 
     expect(JSON.parse(localStorage.getItem('odip_user') || '{}').id).toBe('user-support-1')
-    expect(localStorage.getItem('odip_viewing_user')).toBe('user-support-1')
+    expect(sessionStorage.getItem('odip_viewing_user')).toBe('user-support-1')
     expect(window.location.reload).toHaveBeenCalledTimes(1) // only from the earlier switch, not from exit
   })
 })
@@ -162,7 +162,7 @@ describe('UserSwitcher — touch target and small-screen trigger', () => {
 
   it('hides the name below sm but keeps it in the accessible name and tooltip when a user is being viewed', () => {
     setSuperAdminSignedIn()
-    localStorage.setItem('odip_viewing_user', 'user-support-1')
+    sessionStorage.setItem('odip_viewing_user', 'user-support-1')
     render(<UserSwitcher />)
 
     const trigger = screen.getByRole('button', { name: 'USR Jamie Support' })
@@ -182,7 +182,7 @@ describe('UserSwitcher — touch target and small-screen trigger', () => {
 
   it('floors the menu rows at --tap-min, including "Exit view"', async () => {
     setSuperAdminSignedIn()
-    localStorage.setItem('odip_viewing_user', 'user-support-1')
+    sessionStorage.setItem('odip_viewing_user', 'user-support-1')
     const user = userEvent.setup()
     render(<UserSwitcher />)
 
@@ -206,11 +206,11 @@ describe('UserSwitcher — a switch whose reload was cancelled', () => {
     await user.click(screen.getByRole('button', { name: /view as user/i }))
     await user.click(screen.getByRole('button', { name: /jamie support/i }))
     await user.click(screen.getByRole('button', { name: /^switch user$/i }))
-    expect(localStorage.getItem('odip_viewing_user')).toBe('user-support-1')
+    expect(sessionStorage.getItem('odip_viewing_user')).toBe('user-support-1')
 
     window.dispatchEvent(new Event('pointerdown'))
 
-    expect(localStorage.getItem('odip_viewing_user')).toBeNull()
+    expect(sessionStorage.getItem('odip_viewing_user')).toBeNull()
     expect(JSON.parse(localStorage.getItem('odip_user') || '{}')).toEqual(SUPERADMIN_USER)
     expect(localStorage.getItem('odip_superadmin_user')).toBeNull()
   })
@@ -229,14 +229,14 @@ describe("UserSwitcher dismissal", () => {
     setSuperAdminSignedIn();
     if (flow === "exit") {
       localStorage.setItem('odip_superadmin_user', localStorage.getItem('odip_user')!);
-      localStorage.setItem("odip_viewing_user", "user-support-1");
+      sessionStorage.setItem("odip_viewing_user", "user-support-1");
     }
 
     const originalOverflow = document.body.style.overflow;
     const originalUser = localStorage.getItem("odip_user");
-    const originalViewingUser = localStorage.getItem("odip_viewing_user");
+    const originalViewingUser = sessionStorage.getItem("odip_viewing_user");
     const originalSuperAdmin = localStorage.getItem("odip_superadmin_user");
-    const originalViewingTenant = localStorage.getItem("odip_viewing_tenant");
+    const originalViewingTenant = sessionStorage.getItem("odip_viewing_tenant");
 
     render(
       <header style={{ backdropFilter: "blur(24px)" }}>
@@ -278,9 +278,9 @@ describe("UserSwitcher dismissal", () => {
     expect(document.activeElement).toBe(trigger);
     expect(document.body.style.overflow).toBe(originalOverflow);
     expect(localStorage.getItem("odip_user")).toBe(originalUser);
-    expect(localStorage.getItem("odip_viewing_user")).toBe(originalViewingUser);
+    expect(sessionStorage.getItem("odip_viewing_user")).toBe(originalViewingUser);
     expect(localStorage.getItem("odip_superadmin_user")).toBe(originalSuperAdmin);
-    expect(localStorage.getItem("odip_viewing_tenant")).toBe(originalViewingTenant);
+    expect(sessionStorage.getItem("odip_viewing_tenant")).toBe(originalViewingTenant);
   });
 });
 
@@ -305,7 +305,7 @@ describe('UserSwitcher: focus ring', () => {
 
   it('gives the exit-view row and every user row the keyboard focus ring', async () => {
     setSuperAdminSignedIn()
-    localStorage.setItem('odip_viewing_user', 'user-support-1')
+    sessionStorage.setItem('odip_viewing_user', 'user-support-1')
     const user = userEvent.setup()
     render(<UserSwitcher />)
 

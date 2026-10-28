@@ -15,7 +15,7 @@ describe('canManageIntegrations (Settings → Integrations)', () => {
   ] as const)('%s viewing %s: %s', (role: UserRole, tenant: string | undefined, expected: boolean) => {
     localStorage.setItem('odip_token', 't')
     localStorage.setItem('odip_user', JSON.stringify({ role }))
-    if (tenant) localStorage.setItem('odip_viewing_tenant', tenant)
+    if (tenant) sessionStorage.setItem('odip_viewing_tenant', tenant)
     expect(renderHook(() => usePermissions()).result.current.canManageIntegrations).toBe(expected)
   })
 })

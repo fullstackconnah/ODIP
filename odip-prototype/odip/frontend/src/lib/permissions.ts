@@ -1,3 +1,4 @@
+import { getViewAs } from '@/lib/viewAs'
 export type UserRole = 'SuperAdmin' | 'Admin' | 'Coordinator' | 'SupportWorker' | 'ReadOnly';
 
 export type PageKey =
@@ -277,25 +278,25 @@ export function usePermissions() {
      * Settings → Import data and the Import buttons. ImportsController admits Admin and SuperAdmin, and the import refuses a SuperAdmin who is
      * not viewing an organisation (an import belongs to one), so: an Admin, or a SuperAdmin viewing as an organisation.
      */
-    canImportData: isAdmin || (isSuperAdmin && !!localStorage.getItem('odip_viewing_tenant')),
+    canImportData: isAdmin || (isSuperAdmin && !!getViewAs('odip_viewing_tenant')),
 
     /**
      * Settings → Integrations (Employment Hero). EmploymentHeroController admits Admin and SuperAdmin and refuses a SuperAdmin who is not viewing an
      * organisation (an integration belongs to one), as the import does.
      */
-    canManageIntegrations: isAdmin || (isSuperAdmin && !!localStorage.getItem('odip_viewing_tenant')),
+    canManageIntegrations: isAdmin || (isSuperAdmin && !!getViewAs('odip_viewing_tenant')),
 
     /**
      * Void an invoice or issue a credit note. Those routes admit Admin and SuperAdmin; an invoice belongs to one organisation, so a SuperAdmin
      * gets the actions only while viewing one, as Integrations does.
      */
-    canCorrectInvoices: isAdmin || (isSuperAdmin && !!localStorage.getItem('odip_viewing_tenant')),
+    canCorrectInvoices: isAdmin || (isSuperAdmin && !!getViewAs('odip_viewing_tenant')),
 
     /**
      * Whether an organisation's settings are in scope: an Admin or a Coordinator always has one, a SuperAdmin only while viewing one
      * (the tenant switcher's odip_viewing_tenant). Settings shows its Organisation, Pricing and budgets, Content and Data groups only then.
      */
-    hasOrganisation: isAdmin || isCoordinator || (isSuperAdmin && !!localStorage.getItem('odip_viewing_tenant')),
+    hasOrganisation: isAdmin || isCoordinator || (isSuperAdmin && !!getViewAs('odip_viewing_tenant')),
 
     /**
      * A participant's plan budget (the Funding tab, and the budget card on Intake and the Profile wizard). It is money, and money is never visible to SupportWorker or ReadOnly:

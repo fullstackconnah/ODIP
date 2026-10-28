@@ -5,6 +5,7 @@ import type { TenantUserDto, ApiResponse } from '@/api/types'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { switchViewAndReload } from '@/lib/viewAsSwitch'
 import { TONE } from '@/lib/tone'
+import { getViewAs, setViewAs, clearViewAs } from '@/lib/viewAs'
 
 export default function UserSwitcher() {
   const [open, setOpen] = useState(false)
@@ -12,8 +13,8 @@ export default function UserSwitcher() {
   const [confirmingExit, setConfirmingExit] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
-  const viewingTenantId = localStorage.getItem('odip_viewing_tenant')
-  const viewingUserId = localStorage.getItem('odip_viewing_user')
+  const viewingTenantId = getViewAs('odip_viewing_tenant')
+  const viewingUserId = getViewAs('odip_viewing_user')
 
   const { data } = useAdminTenantUsers(viewingTenantId)
   const users: TenantUserDto[] = (data as ApiResponse<TenantUserDto[]>)?.data ?? []
@@ -52,7 +53,7 @@ export default function UserSwitcher() {
     const currentUser = JSON.parse(localStorage.getItem('odip_user') || '{}')
     const overriddenUser = { ...currentUser, id: user.id, fullName: user.fullName, role: user.role }
     localStorage.setItem('odip_user', JSON.stringify(overriddenUser))
-    localStorage.setItem('odip_viewing_user', user.id)
+    setViewAs('odip_viewing_user', user.id)
 
     setOpen(false)
   })
@@ -63,7 +64,7 @@ export default function UserSwitcher() {
       localStorage.setItem('odip_user', savedAdmin)
       localStorage.removeItem('odip_superadmin_user')
     }
-    localStorage.removeItem('odip_viewing_user')
+    clearViewAs('odip_viewing_user')
   })
 
   return (

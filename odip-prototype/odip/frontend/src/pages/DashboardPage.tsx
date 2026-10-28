@@ -30,6 +30,7 @@ import { platformNavigation } from '@/components/layout/platformDirectoryModel'
 import { BUDGET_OVER_ALERT, budgetsAtRisk } from '@/lib/budgetRisk'
 import { budgetsAtRiskItem } from './budgets/budgetBand'
 import { Link } from 'react-router-dom'
+import { getViewAs } from '@/lib/viewAs'
 import {
   Map, ChevronRight, ShieldAlert
 } from 'lucide-react'
@@ -95,7 +96,7 @@ export default function DashboardPage() {
   const warningDays = settings?.qualificationWarningDays ?? 30
 
   // The groups this viewer decides here, by the server's own gates (SHAPE §3). A SuperAdmin decides only inside an organisation: the key canImportData reads.
-  const gates = decisionGates(permissions, !!localStorage.getItem('odip_viewing_tenant'))
+  const gates = decisionGates(permissions, !!getViewAs('odip_viewing_tenant'))
   const groups = useDecisionGroups(gates, { viewerId: id, today, warningDays, mayCloseBudgetReview: isAdmin || isSuperAdmin, staff })
   const decision = useDecisionState()
   const [hasRecovery, setHasRecovery] = useState(false)
