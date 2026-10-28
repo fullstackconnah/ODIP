@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import MedicationFormPage from './MedicationFormPage'
@@ -249,31 +249,44 @@ describe('MedicationFormPage — Back, Cancel and Save return to where the form 
     localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
     mockUseMedication.mockReturnValue({ data: medication, isLoading: false })
     if (previous) {
-      __testHooks.recordCurrentPath(previous)
-      __testHooks.recordCurrentPath('/medications/med-1/edit')
+      __testHooks.seedHistory(previous, '/medications/med-1/edit')
     }
     const router = createMemoryRouter(
       [{ path: '/medications/:id/edit', element: <MedicationFormPage /> }, { path: '*', element: <p>elsewhere</p> }],
-      { initialEntries: ['/medications/med-1/edit'] },
+      previous
+        ? { initialEntries: [previous, '/medications/med-1/edit'], initialIndex: 1 }
+        : { initialEntries: ['/medications/med-1/edit'] },
     )
     render(<RouterProvider router={router} />)
     return router
   }
   afterEach(() => { __testHooks.reset(); localStorage.clear() })
 
-  it('from the register: Back and Cancel go to the register, and so does Save', async () => {
+  it('from the register: Back, Cancel and Save each return to the register', async () => {
     mockUpdateMutateAsync.mockResolvedValue({ success: true })
-    const router = renderFrom('/medications')
-    expect(screen.getByRole('link', { name: /^Back to / })).toHaveAttribute('href', '/medications')
-    expect(screen.getByRole('link', { name: 'Cancel' })).toHaveAttribute('href', '/medications')
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Save' }))
-    await vi.waitFor(() => expect(router.state.location.pathname).toBe('/medications'))
+    const user = userEvent.setup()
+    const back = renderFrom('/medications')
+    expect(screen.getByRole('link', { name: 'Back to Medications' })).toHaveAttribute('href', '/participants/participant-1?tab=medications')
+    await user.click(screen.getByRole('link', { name: 'Back to Medications' }))
+    await vi.waitFor(() => expect(back.state.location.pathname).toBe('/medications'))
+    cleanup()
+    const cancel = renderFrom('/medications')
+    await user.click(screen.getByRole('link', { name: 'Cancel' }))
+    await vi.waitFor(() => expect(cancel.state.location.pathname).toBe('/medications'))
+    cleanup()
+    const save = renderFrom('/medications')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await vi.waitFor(() => expect(save.state.location.pathname).toBe('/medications'))
   })
 
-  it('with no history (a deep link): the participant Medications tab stays the fallback', () => {
-    renderFrom(null)
-    expect(screen.getByRole('link', { name: 'Cancel' })).toHaveAttribute('href', '/participants/participant-1?tab=medications')
+  it('with no history (a deep link): the participant Medications tab stays the fallback', async () => {
+    mockUpdateMutateAsync.mockResolvedValue({ success: true })
+    const router = renderFrom(null)
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Save' }))
+    await vi.waitFor(() => expect(router.state.location.pathname).toBe('/participants/participant-1'))
+    expect(router.state.location.search).toBe('?tab=medications')
   })
+
 })
 
 // C25: a failed or missing record must never open an empty form that a save would write over the real one.

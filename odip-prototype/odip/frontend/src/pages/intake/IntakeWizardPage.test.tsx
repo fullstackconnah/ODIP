@@ -355,8 +355,7 @@ describe('IntakeWizardPage', () => {
     mockParticipant.mockReturnValue({ data: draft(), isLoading: false })
     mockSave.mockResolvedValue({ success: true, data: { id: 'draft-1', fullName: 'Jamie Rivers' } })
     __testHooks.reset()
-    __testHooks.recordCurrentPath('/onboarding/draft-1')
-    __testHooks.recordCurrentPath('/participants/draft-1/intake')
+    __testHooks.seedHistory('/onboarding/draft-1', '/participants/draft-1/intake')
     function Checklist() {
       const { pathname, state } = useLocation()
       return <div>Checklist<span data-testid="checklist-at">{pathname}</span><span data-testid="checklist-state">{JSON.stringify(state)}</span></div>
@@ -365,7 +364,7 @@ describe('IntakeWizardPage', () => {
       { path: '/participants/:id/intake', element: <><Tracker /><IntakeWizardPage /></> },
       { path: '/onboarding/:id', element: <Checklist /> },
       { path: '/participants', element: <ParticipantsArrival /> },
-    ], { initialEntries: ['/participants/draft-1/intake'] })
+    ], { initialEntries: ['/onboarding/draft-1', '/participants/draft-1/intake'], initialIndex: 1 })
     render(<RouterProvider router={router} />)
     for (let i = 0; i < 8; i++) await user.click(screen.getByRole('button', { name: /^next$/i }))
     await expectStep(/review/i)
@@ -517,14 +516,13 @@ describe('IntakeWizardPage — wizard shell + history-aware back', () => {
     const user = userEvent.setup()
     // Seed module state to mimic two real route changes: /onboarding/draft-1 → /participants/draft-1/intake.
     __testHooks.reset()
-    __testHooks.recordCurrentPath('/onboarding/draft-1')
-    __testHooks.recordCurrentPath('/participants/draft-1/intake')
+    __testHooks.seedHistory('/onboarding/draft-1', '/participants/draft-1/intake')
     mockParticipant.mockReturnValue({ data: draft(), isLoading: false })
     const router = createMemoryRouter([
       { path: '/participants/draft-1/intake', element: <><Tracker /><IntakeWizardPage /></> },
       { path: '/participants', element: <div>Participants list</div> },
       { path: '/onboarding/draft-1', element: <div>Onboarding screen</div> },
-    ], { initialEntries: ['/participants/draft-1/intake'] })
+    ], { initialEntries: ['/onboarding/draft-1', '/participants/draft-1/intake'], initialIndex: 1 })
     render(<RouterProvider router={router} />)
     const back = await screen.findByTestId('intake-header-back')
     await user.click(back)
@@ -536,8 +534,7 @@ describe('IntakeWizardPage — wizard shell + history-aware back', () => {
 
   it('the back destination matches the recorded previous path, not the hardcoded fallback', async () => {
     __testHooks.reset()
-    __testHooks.recordCurrentPath('/onboarding/draft-1')
-    __testHooks.recordCurrentPath('/participants/draft-1/intake')
+    __testHooks.seedHistory('/onboarding/draft-1', '/participants/draft-1/intake')
     mockParticipant.mockReturnValue({ data: draft(), isLoading: false })
     // Render without an /onboarding/:id route so we can prove the back target was NOT the
     // fallback. If we hardcoded the fallback, this would still find the /participants list.
@@ -548,7 +545,7 @@ describe('IntakeWizardPage — wizard shell + history-aware back', () => {
       { path: '/participants/draft-1/intake', element: <><Tracker /><IntakeWizardPage /></> },
       { path: '/onboarding/draft-1', element: <div>Onboarding screen</div> },
       { path: '/participants', element: <div>Participants list</div> },
-    ], { initialEntries: ['/participants/draft-1/intake'] })
+    ], { initialEntries: ['/onboarding/draft-1', '/participants/draft-1/intake'], initialIndex: 1 })
     render(<RouterProvider router={router} />)
     const back = screen.getByTestId('intake-header-back')
     expect(back).toBeInTheDocument()

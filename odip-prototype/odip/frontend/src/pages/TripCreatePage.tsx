@@ -10,7 +10,7 @@ import { Card } from '@/components/Card'
 import { Button } from '@/components/Button'
 import { PageHeader } from '@/components/PageHeader'
 import { TRIP_STATUS_LABELS, statusItems } from '@/lib/tone'
-import { BackButton } from '@/components/BackButton'
+import { BackButton, BackActionButton } from '@/components/BackButton'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { extractErrorMessage } from '@/pages/intake/intakeFormat'
 import { formGrid, span } from '@/lib/formGrid'
@@ -73,7 +73,7 @@ export default function TripCreatePage() {
       const res = await createTrip.mutateAsync(payload)
       if (res.success && res.data?.id) {
         flushSync(() => reset(data))
-        navigate(`/trips/${res.data.id}`)
+        navigate(`/trips/${res.data.id}`, { replace: true })
       }
     } catch {
       // error handled by mutation state
@@ -86,7 +86,7 @@ export default function TripCreatePage() {
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       {unsavedChangesDialog}
       <div className="flex items-start gap-2">
-        <BackButton to="/trips" label="trips" variant="icon" history={false} />
+        <BackButton to="/trips" label="trips" variant="icon" />
         <div className="flex-1 min-w-0"><PageHeader title="New trip" /></div>
       </div>
 
@@ -220,7 +220,7 @@ export default function TripCreatePage() {
 
         {/* Submit */}
         <div className="flex justify-end gap-3">
-          <Button variant="secondary" to="/trips">Cancel</Button>
+          <BackActionButton to="/trips" />
           <Button type="submit" disabled={createTrip.isPending}>
             {createTrip.isPending ? 'Creating…' : 'Create trip'}
           </Button>
