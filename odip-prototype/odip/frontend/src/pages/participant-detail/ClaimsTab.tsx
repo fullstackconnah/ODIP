@@ -51,7 +51,7 @@ function lastFullFortnight(today = new Date()): { from: string; to: string } {
 }
 
 
-export default function ClaimsTab({ participantId, canWrite }: { participantId: string; canWrite: boolean }) {
+export default function ClaimsTab({ participantId, canWrite, otherFunded = false, funder }: { participantId: string; canWrite: boolean; otherFunded?: boolean; funder?: string | null }) {
   const claimsQuery = useParticipantClaims(participantId)
   const claims = claimsQuery.data ?? []
   // A failed or paused request is not an empty list: "No claims yet" is only for one that succeeded and came back empty.
@@ -64,7 +64,7 @@ export default function ClaimsTab({ participantId, canWrite }: { participantId: 
     <Card
       title="NDIS Claims"
       action={
-        canWrite ? (
+        canWrite && !otherFunded ? (
           <Button onClick={() => setShowGenerateModal(true)}>
             Generate from shifts
           </Button>
@@ -78,8 +78,10 @@ export default function ClaimsTab({ participantId, canWrite }: { participantId: 
       ) : claims.length === 0 ? (
         <EmptyState
           icon={FileText}
-          title="No claims yet"
-          description="Generate a claim once this participant has completed, unclaimed shifts — or from a trip's own Claims tab."
+          title={otherFunded ? 'Not claimed to the NDIS' : 'No claims yet'}
+          description={otherFunded
+            ? `This participant is funded another way, so Bunya Support leaves them out of NDIS claims. Invoice ${funder?.trim() || 'their funder'} directly.`
+            : "Generate a claim once this participant has completed, unclaimed shifts — or from a trip's own Claims tab."}
         />
       ) : (
         <div ref={tableRef}>

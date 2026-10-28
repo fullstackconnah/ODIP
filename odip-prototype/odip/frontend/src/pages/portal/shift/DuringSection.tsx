@@ -96,8 +96,8 @@ export function RoutineRow({ routine, shiftId, canAct }: { routine: PortalShiftR
         aria-describedby={waiting ? subId : undefined}
         className={`${TAP_AREA} w-full flex items-start gap-3 text-left min-h-[44px] disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded-sm`}
       >
-        <span className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded border ${routine.isChecked ? 'bg-[var(--color-primary)] border-[var(--color-primary)] text-[var(--color-primary-foreground)]' : 'border-[var(--color-border)]'}`}>
-          {routine.isChecked && <Check className="w-4 h-4" aria-hidden="true" />}
+        <span className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded border transition-colors duration-100 ease-out ${routine.isChecked ? 'bg-[var(--color-primary)] border-[var(--color-primary)] text-[var(--color-primary-foreground)]' : 'border-[var(--color-border)]'}`}>
+          {routine.isChecked && <Check className="tick-in w-4 h-4" aria-hidden="true" />}
         </span>
         <span className="min-w-0">
           <span className="font-medium">{routine.title}</span>

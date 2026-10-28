@@ -36,7 +36,7 @@ export function EmptyState({ icon: Icon, title, description, action, secondaryAc
       <Icon className="w-10 h-10 text-[var(--color-foreground)] opacity-20" />
       <p className="text-lg font-semibold text-[var(--color-muted-foreground)]">{title}</p>
       {description && (
-        <p className="max-w-sm text-sm text-[var(--color-muted-foreground)] opacity-80">{description}</p>
+        <p className="max-w-sm text-sm text-balance text-[var(--color-muted-foreground)] opacity-80">{description}</p>
       )}
       {(action || secondaryAction) && (
         <div className="mt-2 flex flex-wrap justify-center gap-x-4">

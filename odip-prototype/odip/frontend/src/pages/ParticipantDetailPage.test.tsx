@@ -103,7 +103,7 @@ vi.mock('./participant-detail', async () => {
     // have their own test file" approach as every other nested-CRUD section above.
     // Shift-completion design spec §4 — Claims tab has its own dedicated test file
     // (ClaimsTab.test.tsx); stubbed here for the same reason as every nested-CRUD tab above.
-    ClaimsTab: () => <div data-testid="claims-tab" />,
+    ClaimsTab: ({ otherFunded, funder }: { otherFunded?: boolean; funder?: string | null }) => <div data-testid="claims-tab" data-other-funded={String(!!otherFunded)} data-funder={funder ?? ''} />,
     // Connection map item 12 — Rostering tab has its own dedicated test file
     // (RosteringTab.test.tsx); stubbed here for the same reason as every nested-CRUD tab above.
     RosteringTab: () => <div data-testid="rostering-tab" />,
@@ -319,6 +319,18 @@ describe('ParticipantDetailPage — Details tab groups (PDETAIL-01)', () => {
 
     expect(screen.getByText('Local Council')).toBeInTheDocument()
     expect(screen.queryByText('NDIS Number')).not.toBeInTheDocument()
+  })
+
+  it('passes the funding source and funder to the Claims tab', () => {
+    setUserRole('Coordinator')
+    mockUseParticipant.mockReturnValue({
+      data: makeParticipant({ fundingSource: 'Other', fundingOrganisation: 'Local Council' }),
+      isLoading: false,
+    })
+    renderAtTab('participant-1', 'funding', 'claims')
+
+    expect(screen.getByTestId('claims-tab')).toHaveAttribute('data-other-funded', 'true')
+    expect(screen.getByTestId('claims-tab')).toHaveAttribute('data-funder', 'Local Council')
   })
 
   it('PD-6: no longer shows a "Support Needs & Mobility" card — those fields moved to the Support Profile tab', () => {

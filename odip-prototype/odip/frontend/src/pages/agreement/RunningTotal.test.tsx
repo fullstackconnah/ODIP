@@ -35,6 +35,9 @@ describe('RunningTotal', () => {
   it('says there is no budget recorded rather than within budget, and names a check that could not be made', () => {
     const { rerender } = render(<RunningTotal {...base} budgetView={{ ...ready([]), status: 'none' } as AgreementBudgetBreakdownView} />)
     expect(screen.getByRole('status')).toHaveTextContent('no budget recorded')
+    rerender(<RunningTotal {...base} budgetView={{ ...ready([]), status: 'none', noBudgetReason: 'OtherFunded' } as AgreementBudgetBreakdownView} />)
+    expect(screen.getByRole('status')).toHaveTextContent('no NDIS budget')
+    expect(screen.getByRole('status')).not.toHaveTextContent('no budget recorded')
     rerender(<RunningTotal {...base} budgetView={{ ...ready([]), status: 'failed' } as AgreementBudgetBreakdownView} />)
     expect(screen.getByRole('status')).toHaveTextContent('budget not checked')
   })
