@@ -5,6 +5,7 @@ import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { FactList } from '@/components/FactList'
 import { FormField } from '@/components/FormField'
+import { useStickyOpen } from '@/hooks/useStickyOpen'
 import { formGrid, span } from '@/lib/formGrid'
 import { writtenDay, writtenSpan } from '@/lib/fundingPlan'
 import { STATES, ZONES, withoutControlCharacters, type Details } from '@/lib/agreementDetails'
@@ -34,6 +35,7 @@ type AgreementStepProps = {
 
 /** Step 1: when the agreement runs and where it is delivered. The NDIS plan dates come from the participant's funding plan and are only asked for when there is none or they differ. */
 export function AgreementStep({ details, onEdit, recorded, plan, errors, readOnly, fundingTab, recordBudget, endedOn, planLineRef }: AgreementStepProps) {
+  const planFold = useStickyOpen(!!details.planOverride)
   if (readOnly) {
     return (
       <FactList items={[
@@ -78,7 +80,7 @@ export function AgreementStep({ details, onEdit, recorded, plan, errors, readOnl
               : <Button variant="secondary" size="sm" to={fundingTab}>Record the plan</Button>}
           </p>
         )}
-        <details className="group rounded-[var(--radius-md)] border border-[var(--color-border)]" open={!!details.planOverride}>
+        <details className="group rounded-[var(--radius-md)] border border-[var(--color-border)]" open={planFold.open} onToggle={planFold.onToggle}>
           <summary className="flex min-h-[var(--control-h)] cursor-pointer select-none items-center justify-between px-3 font-medium">Different NDIS plan dates?<ChevronDown className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" aria-hidden="true" /></summary>
           <div className="flex flex-col gap-[var(--section-gap)] border-t border-[var(--color-border)] p-3">
             <div className={formGrid}>
