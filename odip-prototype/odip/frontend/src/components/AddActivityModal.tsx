@@ -34,6 +34,7 @@ export default function AddActivityModal({ tripDayId, editingActivity, eventTemp
   const [providerWebsite, setProviderWebsite] = useState('')
   const [accessibilityNotes, setAccessibilityNotes] = useState('')
   const [notes, setNotes] = useState('')
+  const [notesOpenAtMount] = useState(() => !!(editingActivity?.accessibilityNotes || editingActivity?.notes))
   const [timeError, setTimeError] = useState('')
 
   const { data: activities = [] } = useActivities()
@@ -207,7 +208,7 @@ export default function AddActivityModal({ tripDayId, editingActivity, eventTemp
             </div>
           </details>
 
-          <details className="group sm:col-span-2" open={!!(accessibilityNotes || notes)}>
+          <details className="group sm:col-span-2" open={!!(accessibilityNotes || notes)} data-fold-static={notesOpenAtMount || undefined}>
             <summary className="text-sm font-medium cursor-pointer text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]">
               Notes
             </summary>

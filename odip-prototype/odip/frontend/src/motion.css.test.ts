@@ -18,7 +18,10 @@ function mediaBlock(query: string, needle: string) {
 
 describe('motion polish CSS contract', () => {
   it('fades an opened fold in over 150ms, only for users without a reduced-motion preference', () => {
-    expect(mediaBlock('prefers-reduced-motion: no-preference', 'details[open] > :not(summary)')).toMatch(/details\[open\] > :not\(summary\) \{ animation: foldIn 150ms ease-out; \}/)
+    const fold = mediaBlock('prefers-reduced-motion: no-preference', 'details[open]')
+    expect(fold).toMatch(/details\[open\]:not\(\[data-fold-static\]\) > :not\(summary\) \{ animation: foldIn 150ms ease-out; \}/)
+    // a fold open when it mounts (data-fold-static) appears at once; only a fold the user opens fades
+    expect(fold).not.toMatch(/details\[open\] > :not\(summary\)/)
     expect(css).toMatch(/@keyframes foldIn \{\s*from \{ opacity: 0; \}/)
   })
 

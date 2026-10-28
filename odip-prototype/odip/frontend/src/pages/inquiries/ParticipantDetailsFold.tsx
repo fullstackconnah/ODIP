@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { AU_STATES, type PlanType } from '@/api/types/enums'
 import { Card } from '@/components/Card'
@@ -31,9 +32,10 @@ export function ParticipantDetailsFold({ form, errors, open, today, onToggle, on
   onChange: (field: Field, value: string) => void
 }) {
   const text = (field: Field) => ({ value: form[field], autoComplete: 'off', error: errors[field as keyof InquiryErrors], onChange: (e: React.ChangeEvent<HTMLInputElement>) => onChange(field, e.target.value) })
+  const [openAtMount] = useState(open)
   return (
     <Card>
-      <details open={open} onToggle={e => onToggle(e.currentTarget.open)} className="group">
+      <details open={open} data-fold-static={openAtMount || undefined} onToggle={e => onToggle(e.currentTarget.open)} className="group">
         {/* A summary holds phrasing and heading content only, so the h3 and the status are its own children: below md the status takes the second
             row under the title, and the chevron stays on the first line. */}
         <summary className="grid min-h-[var(--control-h)] cursor-pointer select-none list-none grid-cols-[auto_1fr] items-baseline gap-x-2 gap-y-0.5 py-1.5 md:grid-cols-[auto_auto_1fr] [&::-webkit-details-marker]:hidden">
