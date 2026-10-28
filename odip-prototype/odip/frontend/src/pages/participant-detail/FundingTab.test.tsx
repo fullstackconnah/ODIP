@@ -87,11 +87,11 @@ describe('Funding tab: a recorded plan', () => {
     expect(within(facts).getByText('Confirmed 20 Sep 2026 by Priya Coordinator')).toBeInTheDocument()
   })
 
-  it('says "No funding periods" for a plan that has none', () => {
+  it('says "Whole plan" for a plan that has none', () => {
     useFundingPlans.mockReturnValue(plansReply([plan({ periodLengthMonths: undefined, pools: [pool({ periods: [{ id: 'whole', position: 0, periodStart: '2026-07-01', periodEnd: '2027-06-30', planAmount: 8000 }] })] })]))
     renderTab()
 
-    expect(screen.getByText('No funding periods')).toBeInTheDocument()
+    expect(screen.getByText('Whole plan')).toBeInTheDocument()
   })
 
   const poolCard = (name: string) => screen.getByRole('heading', { name }).closest('li')!

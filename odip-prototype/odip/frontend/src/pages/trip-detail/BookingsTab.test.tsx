@@ -392,3 +392,18 @@ describe('BookingsTab — Add Booking field labels', () => {
     expect(picker).toHaveAttribute('aria-required', 'true')
   })
 })
+
+describe('BookingsTab — Add Booking: support requirements are house checkbox rows', () => {
+  it('renders each requirement as a CheckboxField row (one label, control-height floor) that toggles', async () => {
+    const user = userEvent.setup()
+    renderTab([], [readyParticipant])
+    await openModalAndPick(user)
+    for (const name of ['Wheelchair', 'High Support', 'Night Support', 'Restrictive Practice']) {
+      const box = screen.getByLabelText(name)
+      expect(box.closest('label')).toHaveClass('min-h-[var(--control-h)]')
+      expect(box).not.toBeChecked()
+      await user.click(box)
+      expect(box).toBeChecked()
+    }
+  })
+})
