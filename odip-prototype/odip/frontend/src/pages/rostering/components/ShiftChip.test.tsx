@@ -709,6 +709,16 @@ describe('ShiftChip in the Participant view with drag and drop (draggable)', () 
     },
   )
 
+  it('shows the lock to a read-only viewer on a locked shift, and nothing on an unlocked one', () => {
+    // The open control's title carries the lock words too, so look for the glyph itself.
+    const lock = 'span[title*="be changed here"] svg.lucide-lock'
+    const locked = chip(makeShift({ status: 'InProgress' }), { canWrite: false })
+    expect(locked.container.querySelector(lock)?.parentElement).toHaveAttribute('title', "In progress: can't be changed here")
+    locked.unmount()
+    const open = chip(makeShift({ status: 'Published' }), { canWrite: false })
+    expect(open.container.querySelector(lock)).toBeNull()
+  })
+
   it("strikes through a cancelled shift's time", () => {
     chip(makeShift({ status: 'Cancelled' }))
     expect(screen.getByText('9am–5pm')).toHaveClass('line-through')

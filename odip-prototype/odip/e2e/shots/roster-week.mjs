@@ -189,6 +189,18 @@ try {
           check(`${name} contrast ${k} >=${min}`, v, v !== null && v >= min)
         }
       }
+      // Fix round 4: the week tab is read-only, so every locked chip (s4 InProgress, s5 Completed, s6 Cancelled) shows exactly one Lock inside its open control, and no other chip does.
+      if (st.name === 'staff-full' && (tag === '1280' || tag === '390')) {
+        const lk = await sec.evaluate((el) => {
+          const opens = [...el.querySelectorAll('[data-shift-open]')]
+          const words = (o) => `${o.getAttribute('aria-label') ?? ''} ${o.getAttribute('title') ?? ''}`
+          const locked = opens.filter((o) => /can't be changed here/.test(words(o)))
+          const locks = [...el.querySelectorAll('svg.lucide-lock')]
+          const inside = locks.filter((k) => { const kr = k.getBoundingClientRect(); return locked.some((o) => { const r = o.getBoundingClientRect(); return kr.width > 0 && kr.left >= r.left - 1 && kr.right <= r.right + 1 && kr.top >= r.top - 1 && kr.bottom <= r.bottom + 1 }) })
+          return { locked: locked.length, locks: locks.length, inside: inside.length }
+        })
+        check(`${name} locked chips each show one Lock inside the chip, unlocked show none`, lk, lk.locked === 3 && lk.locks === 3 && lk.inside === 3)
+      }
       // Fix round 1 (touch chip tap, partial-day unavailability, today heading): the changed 390 list states, as numbers.
       if (st.name === 'staff-full' && tag === '390') {
         const unav = await sec.getByText('Unavailable 6am–8am (pending)').first().isVisible()

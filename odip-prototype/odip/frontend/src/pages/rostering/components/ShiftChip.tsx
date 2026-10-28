@@ -208,7 +208,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
       <span className="hidden truncate @[11rem]:inline">Regular away</span>
     </span>
   )
-  const hasLead = canPick || (canWrite && draggable)
+  const hasLead = canPick || (canWrite && draggable) || (!canWrite && locked)
   const hasMenu = canWrite && !busy && !carrying
 
   // A link to the person's roster week on their profile (the week this shift is in), or plain "Needs staff" text in a participant row when nobody covers
@@ -284,7 +284,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
         >
           <UserPlus className={spanPlus ? 'h-4 w-4 pointer-coarse:h-6 pointer-coarse:w-6' : 'h-3.5 w-3.5'} aria-hidden="true" />
         </button>
-      ) : canWrite && draggable && (
+      ) : hasLead && (
         canLift ? (
           <button
             type="button"
