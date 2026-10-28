@@ -25,6 +25,16 @@ describe('BudgetTrackCard', () => {
     expect(screen.queryByRole('radiogroup')).toBeNull()
   })
 
+  it('loading pulses as one block that holds the plot placeholder, which does not pulse on its own', () => {
+    useBudgetSeries.mockReturnValue(reply({ isLoading: true, isFetching: true }))
+    render(<BudgetTrackCard participantId="p-1" />)
+    const blocks = document.querySelectorAll('[data-chart-skeleton]')
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0]).toHaveClass('animate-pulse')
+    expect(blocks[0].querySelector('[data-chart-plot-skeleton]')).not.toBeNull()
+    expect(blocks[0].querySelector('[data-chart-plot-skeleton]')).not.toHaveClass('animate-pulse')
+  })
+
   it('loading with two or more pools lays the switch out unseen, with the sentence and the footnote, and shows no control', () => {
     useBudgetSeries.mockReturnValue(reply({ isLoading: true, isFetching: true }))
     const { container } = render(<BudgetTrackCard participantId="p-1" poolCount={3} />)

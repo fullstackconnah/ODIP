@@ -24,7 +24,7 @@ export default function BudgetTrackCard({ participantId, poolCount = 0 }: { part
     return (
       <div aria-busy="true">
         <Card>
-          {/* Everything the loaded card has but the plot is laid out unseen, so the pool cards below don't move when the chart arrives; the pulse is the plot. */}
+          {/* Everything the loaded card has but the plot is laid out unseen, so the pool cards below don't move when the chart arrives; the pulse is the whole chart body, title row aside. */}
           <div ref={boxRef}>
             <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
               <h3 className="text-sm font-semibold">{BUDGET_TRACK_TITLE}</h3>
@@ -34,10 +34,12 @@ export default function BudgetTrackCard({ participantId, poolCount = 0 }: { part
                 </div>
               )}
             </div>
-            <p aria-hidden="true" className="invisible mt-2 max-w-prose text-sm">{SENTENCE_SAMPLE}</p>
-            <BudgetTrackLegend className="invisible" />
-            <div data-chart-skeleton aria-hidden="true" className="mt-2 animate-pulse rounded-[var(--radius-md)] bg-[var(--color-surface-container)]" style={{ height: chartHeight(width ?? 0) }} />
-            <p aria-hidden="true" className="invisible mt-3 text-[13px]">{EXPECTED_FOOTNOTE}</p>
+            <div data-chart-skeleton aria-hidden="true" className="animate-pulse rounded-[var(--radius-md)] bg-[var(--color-surface-container)]">
+              <p className="invisible mt-2 max-w-prose text-sm">{SENTENCE_SAMPLE}</p>
+              <BudgetTrackLegend className="invisible" />
+              <div data-chart-plot-skeleton className="mt-2" style={{ height: chartHeight(width ?? 0) }} />
+              <p className="invisible mt-3 text-[13px]">{EXPECTED_FOOTNOTE}</p>
+            </div>
           </div>
           <p role="status" className="sr-only">Loading the budget chart…</p>
         </Card>

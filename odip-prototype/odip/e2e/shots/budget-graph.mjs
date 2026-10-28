@@ -272,7 +272,7 @@ try {
         const skH = (await skeletonCard.boundingBox()).height
         const parts = (loc) => loc.evaluate((c) => [...c.firstElementChild.children].map((e) => Math.round(e.getBoundingClientRect().height * 10) / 10))
         const skParts = await parts(skeletonCard)
-        if (scheme === 'light' && vp.mobile) await shot('skeleton', skeleton.locator('xpath=ancestor::div[contains(@class,"rounded-md")][1]'))
+        if (scheme === 'light') await shot('skeleton', skeleton.locator('xpath=ancestor::div[contains(@class,"rounded-md")][1]'))
         await page.locator('[data-plot] svg').waitFor({ timeout: 30_000 })
         const loadedH = (await page.locator('[data-plot]').locator('xpath=ancestor::div[contains(@class,"rounded-md")][1]').boundingBox()).height
         check('13/17 skeleton card height = loaded card height, so the pool cards below stay put', ctx, { skeleton: Math.round(skH * 10) / 10, loaded: Math.round(loadedH * 10) / 10, skParts, loadedParts: await parts(page.locator('[data-plot]').locator('xpath=ancestor::div[contains(@class,"rounded-md")][1]')) }, near(skH, loadedH, 24))
