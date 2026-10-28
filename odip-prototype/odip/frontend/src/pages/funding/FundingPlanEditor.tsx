@@ -37,7 +37,9 @@ export type FundingPlanEditorProps = {
   onSaved?: (plan: FundingPlanDto) => void
 }
 
-const PERIOD_LENGTH_OPTIONS = [null, 1, 3, 6, 12].map(months => ({ value: months === null ? '' : String(months), label: periodLengthLabel(months) }))
+// Whole plan is a real choice (null), so its value is not the placeholder's empty one.
+const WHOLE_PLAN = 'whole'
+const PERIOD_LENGTH_OPTIONS = [null, 1, 3, 6, 12].map(months => ({ value: months === null ? WHOLE_PLAN : String(months), label: periodLengthLabel(months) }))
 const EVIDENCE_OPTIONS = BUDGET_EVIDENCE_SOURCES.map(source => ({ value: source, label: BUDGET_EVIDENCE_LABELS[source] }))
 const MANAGEMENT_OPTIONS = PLAN_TYPES.map(type => ({ value: type, label: PLAN_TYPE_LABELS[type] }))
 
@@ -139,7 +141,7 @@ function EditorBody({ onClose, participantId, plan, previousPlan, defaultManagem
   const periodsReason = useMemo(() => noPeriodsReason(state), [state])
   // "Some fields need attention. Each has a message beside it." is said only while that is true: a pool nobody has started on has a problem but no message yet.
   const problemsShown = attempted && Boolean(
-    problems.planStart || problems.planEnd || problems.confirmedByName || problems.notes || problems.general.length > 0 || state.pools.some(pool => revealed.has(pool.key) && problems.pools[pool.key]),
+    problems.periodLength || problems.planStart || problems.planEnd || problems.confirmedByName || problems.notes || problems.general.length > 0 || state.pools.some(pool => revealed.has(pool.key) && problems.pools[pool.key]),
   )
 
   // A refused save puts its reason where the person is looking: the failure is scrolled into view and takes focus (the Save button is at the bottom of a long form, and it is disabled while saving).
@@ -319,9 +321,12 @@ function PlanFields({ state, problems, onChange }: { state: EditorState; problem
       <TextField label="Reassessment date" type="date" value={state.reassessmentDate} onChange={event => onChange({ reassessmentDate: event.target.value })} />
       <SelectField
         label="Funding periods"
-        value={state.periodLengthMonths === null ? '' : String(state.periodLengthMonths)}
-        onChange={event => onChange({ periodLengthMonths: event.target.value === '' ? null : Number(event.target.value) })}
+        required
+        value={state.periodLengthMonths === undefined ? '' : state.periodLengthMonths === null ? WHOLE_PLAN : String(state.periodLengthMonths)}
+        onChange={event => onChange({ periodLengthMonths: event.target.value === WHOLE_PLAN ? null : Number(event.target.value) })}
+        placeholder="Choose…"
         options={PERIOD_LENGTH_OPTIONS}
+        error={problems?.periodLength}
       />
       <SelectField label="Where the figures came from" value={state.evidence} onChange={event => onChange({ evidence: event.target.value as BudgetEvidenceSource })} options={EVIDENCE_OPTIONS} />
       <TextField label="Confirmed on" type="date" value={state.confirmedOn} onChange={event => onChange({ confirmedOn: event.target.value })} />
@@ -344,7 +349,7 @@ function PoolCard(
   const shownName = pool.name.trim() || defaultName
   const label = `${shownName}, ${managementLabel(pool.managementType)}`
   const sums = poolSums(pool)
-  const periodic = state.periodLengthMonths !== null
+  const periodic = typeof state.periodLengthMonths === 'number'
   const note = periodic && pool.periods.length > 0 ? periodsNote(pool) : null
   // "Split again" rewrites the periods from the typed totals, so it is offered when there is something to undo: an amount was changed in this session, or the periods and the boxes disagree.
   // (A set-aside that no period carries is only ever so after an amount was cleared by hand, so the pool is touched and the button, which is how that line says it is applied, is there.)
@@ -417,7 +422,7 @@ function PoolCard(
           </div>
         </>
       ) : (
-        <p className="text-[13px] text-[var(--color-muted-foreground)]">The whole plan is one period: {writtenSpan(state.planStart, state.planEnd)}.</p>
+        <p className="text-[13px] text-[var(--color-muted-foreground)]">{state.periodLengthMonths === undefined ? 'Choose how the funding is released to see its periods.' : `The whole plan is one period: ${writtenSpan(state.planStart, state.planEnd)}.`}</p>
       )}
     </section>
   )
