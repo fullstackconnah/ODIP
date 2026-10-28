@@ -11,6 +11,8 @@ import {
   formatWeekSpan,
   rosterDayColumnsTemplate,
   shiftSource,
+  staffWeekHref,
+  participantWeekHref,
 } from './roster'
 
 describe('countPatternOccurrences', () => {
@@ -170,5 +172,15 @@ describe('shiftSource (spec 2026-10-15, decision B)', () => {
 
   it('is Ad hoc with no pattern, which covers hand-made one-offs and the demo shifts too', () => {
     expect(shiftSource({ shiftPatternId: null })).toEqual({ kind: 'adhoc', word: 'Ad hoc', title: 'Ad hoc: not from an agreement or a pattern' })
+  })
+})
+
+describe('person week hrefs (spec 2026-10-28)', () => {
+  it('builds the staff profile Week tab link', () => {
+    expect(staffWeekHref('s1', '2026-11-02')).toBe('/staff/s1?tab=week&week=2026-11-02')
+  })
+
+  it('builds the participant People & roster Week section link', () => {
+    expect(participantWeekHref('p1', '2026-11-02')).toBe('/participants/p1?tab=people&section=week&week=2026-11-02')
   })
 })
