@@ -140,9 +140,7 @@ public static class WhatsNewSeed
             "On the roster, a shift with nobody on it now shows as a dashed card that needs staff, not a yellow draft, and Publish week leaves it out. Once you put someone on it, it turns yellow and goes out with your next Publish week.",
             Staff, false),
         new Item("2026-10-list-badges-tidy", "Tidier status labels and page controls in lists",
-            "Status labels now look the same everywhere. On Staff and Participants, Active is green and Inactive is red. On Trips, waitlist counts use the same label style as the trip status.
-
-On Completion review, the page controls now sit under the table in the same place as other lists, and the shifts you tick stay ticked when you move to another page.",
+            "Status labels now look the same everywhere. On Staff and Participants, Active is green and Inactive is red. On Trips, waitlist counts use the same label style as the trip status.\n\nOn Completion review, the page controls now sit under the table in the same place as other lists, and the shifts you tick stay ticked when you move to another page.",
             WhatsNewAudience.All, false),
     };
 
