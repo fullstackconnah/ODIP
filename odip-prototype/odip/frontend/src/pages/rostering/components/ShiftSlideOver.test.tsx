@@ -3,7 +3,7 @@ import { act } from 'react'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ShiftSlideOver } from './ShiftSlideOver'
-import { makeShift, makeFinding } from '../test-fixtures'
+import { makeShift, makeUnfilledShift, makeFinding } from '../test-fixtures'
 import { lockedWords } from '../lib/rosterDrag'
 import type { ParticipantRoutineDto, CompatibilityRowDto, ShiftDto, ShiftNoteDto } from '@/api/types'
 
@@ -303,6 +303,45 @@ describe('ShiftSlideOver status (PP-8)', () => {
     expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
     const [call] = mockUpdateMutateAsync.mock.calls[0]
     expect(call.data.status).toBe('Published')
+  })
+
+  it('does not offer Published on a Draft with nobody on it', async () => {
+    const user = userEvent.setup()
+    render(<ShiftSlideOver target={{ mode: 'edit', shift: makeUnfilledShift({ status: 'Draft', findings: [] }) }} onClose={noop} canWrite participantOptions={participantOptions} staffOptions={staffOptions} />)
+
+    await user.click(screen.getByLabelText('Status'))
+    expect(screen.getByRole('option', { name: 'Draft' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Published' })).not.toBeInTheDocument()
+  })
+
+  it('lets a Published shift with nobody on it be switched to Draft and back to Published', async () => {
+    const user = userEvent.setup()
+    render(<ShiftSlideOver target={{ mode: 'edit', shift: makeUnfilledShift({ status: 'Published', findings: [] }) }} onClose={noop} canWrite participantOptions={participantOptions} staffOptions={staffOptions} />)
+
+    await user.click(screen.getByLabelText('Status'))
+    await user.click(screen.getByRole('option', { name: 'Draft' }))
+    await user.click(screen.getByLabelText('Status'))
+    expect(screen.getByRole('option', { name: 'Published' })).toBeInTheDocument()
+    expect(screen.queryByText('Put someone on this shift before publishing it.')).not.toBeInTheDocument()
+  })
+
+  it('stops offering Published, and does not save it, when the staff are cleared from a Draft that was set to Published', async () => {
+    const user = userEvent.setup()
+    render(<ShiftSlideOver target={{ mode: 'edit', shift: makeShift({ status: 'Draft', findings: [] }) }} onClose={noop} canWrite participantOptions={participantOptions} staffOptions={staffOptions} />)
+
+    await user.click(screen.getByLabelText('Status'))
+    await user.click(screen.getByRole('option', { name: 'Published' }))
+    expect(screen.queryByText('Put someone on this shift before publishing it.')).not.toBeInTheDocument()
+    await user.click(screen.getByLabelText('Staff'))
+    await user.click(screen.getByRole('option', { name: 'Unassigned' }))
+    expect(screen.getByText('Put someone on this shift before publishing it.')).toBeInTheDocument()
+    await user.click(screen.getByLabelText('Status'))
+    expect(screen.queryByRole('option', { name: 'Published' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('option', { name: 'Draft' }))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    const [call] = mockUpdateMutateAsync.mock.calls[0]
+    expect(call.data.status).toBe('Draft')
   })
 
   it('says a shift stays with its participant on an existing shift, and not on a new one', () => {
