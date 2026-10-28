@@ -21,7 +21,7 @@ namespace Odip.Api.Controllers;
 [Route("api/v1/whats-new")]
 public class WhatsNewController : ControllerBase
 {
-    private const int FeedCap = 50;
+    public const int FeedCap = 50;
     private readonly OdipDbContext _db;
 
     public WhatsNewController(OdipDbContext db) => _db = db;
