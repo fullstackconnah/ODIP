@@ -187,3 +187,15 @@ describe('BookingsTab — editing a booking keeps the details the list row does 
     expect(puts).toHaveLength(0)
   })
 })
+
+describe('BookingsTab — Edit Booking: support requirements are house checkbox rows', () => {
+  it('renders each requirement as a CheckboxField row (one label, control-height floor)', async () => {
+    const user = userEvent.setup()
+    renderTab()
+    await user.click(screen.getByTitle('Edit booking'))
+    await screen.findByPlaceholderText('Optional notes...')
+    for (const name of ['Wheelchair', 'High Support', 'Night Support', 'Restrictive Practice']) {
+      expect(screen.getByLabelText(name).closest('label')).toHaveClass('min-h-[var(--control-h)]')
+    }
+  })
+})

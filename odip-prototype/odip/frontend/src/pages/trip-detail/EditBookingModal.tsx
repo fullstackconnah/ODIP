@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useBooking, useUpdateBooking } from '@/api/hooks'
 import { Dropdown } from '@/components/Dropdown'
 import { Modal } from '@/components/Modal'
+import { CheckboxField } from '@/components/CheckboxField'
 import { Button } from '@/components/Button'
 import { PageState } from '@/components/PageState'
 import { bookingBudgetNotice } from '@/lib/bookingBudget'
@@ -135,26 +136,10 @@ export function EditBookingModal({ booking, onClose, onSaved }: { booking: Booki
           <div>
             <label className="block text-sm font-medium mb-2">Support Requirements</label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={editForm.wheelchairRequired} onChange={e => setEditForm({ ...editForm, wheelchairRequired: e.target.checked })}
-                  className="rounded border-[var(--color-border)]" />
-                Wheelchair
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={editForm.highSupportRequired} onChange={e => setEditForm({ ...editForm, highSupportRequired: e.target.checked })}
-                  className="rounded border-[var(--color-border)]" />
-                High Support
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={editForm.nightSupportRequired} onChange={e => setEditForm({ ...editForm, nightSupportRequired: e.target.checked })}
-                  className="rounded border-[var(--color-border)]" />
-                Night Support
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={editForm.hasRestrictivePracticeFlag} onChange={e => setEditForm({ ...editForm, hasRestrictivePracticeFlag: e.target.checked })}
-                  className="rounded border-[var(--color-border)]" />
-                Restrictive Practice
-              </label>
+              <CheckboxField label="Wheelchair" checked={editForm.wheelchairRequired} onChange={e => setEditForm({ ...editForm, wheelchairRequired: e.target.checked })} />
+              <CheckboxField label="High Support" checked={editForm.highSupportRequired} onChange={e => setEditForm({ ...editForm, highSupportRequired: e.target.checked })} />
+              <CheckboxField label="Night Support" checked={editForm.nightSupportRequired} onChange={e => setEditForm({ ...editForm, nightSupportRequired: e.target.checked })} />
+              <CheckboxField label="Restrictive Practice" checked={editForm.hasRestrictivePracticeFlag} onChange={e => setEditForm({ ...editForm, hasRestrictivePracticeFlag: e.target.checked })} />
             </div>
           </div>
 

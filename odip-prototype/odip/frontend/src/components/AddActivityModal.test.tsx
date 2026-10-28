@@ -64,3 +64,24 @@ describe('AddActivityModal — Notes fold stays open once it has opened', () => 
     expect(notesFold().open).toBe(false)
   })
 })
+
+describe('AddActivityModal — footer and end-time error', () => {
+  it('pins the footer so the buttons stay in view while the body scrolls', () => {
+    render(<AddActivityModal tripDayId="d1" onClose={() => {}} />)
+    expect(screen.getByRole('button', { name: 'Cancel' }).parentElement).toHaveClass('sticky', 'bottom-0')
+  })
+
+  it('shows the end-before-start error inside the End Time field, and still blocks the save', async () => {
+    const user = userEvent.setup()
+    render(<AddActivityModal tripDayId="d1" onClose={() => {}} />)
+    await user.type(screen.getByLabelText(/^Title/), 'Zoo')
+    await user.type(screen.getByLabelText('Start Time'), '10:00')
+    await user.type(screen.getByLabelText('End Time'), '09:00')
+    await user.click(screen.getByRole('button', { name: 'Add Activity' }))
+    const end = screen.getByLabelText('End Time')
+    const alert = screen.getByText('End time must be after start time')
+    expect(end.parentElement).toContainElement(alert)
+    expect(end).toHaveAttribute('aria-invalid', 'true')
+    expect(end).toHaveAccessibleDescription('End time must be after start time')
+  })
+})
