@@ -131,6 +131,16 @@ describe('PersonWeek: the week', () => {
     expect(screen.getByRole('heading', { name: /^Wednesday 4 November, today$/ }).tagName).toBe('H3')
   })
 
+  it('only a day with shifts lets its heading hug its text at narrow widths', async () => {
+    mockApiGet.mockResolvedValue(staffWeek({ shifts: [shiftOn({})] }))
+    renderWeek('staff')
+    await screen.findByRole('link', { name: 'Mia Chen' })
+
+    // On an empty day the heading shares a baseline row with "No shifts"; self-start would lift it off that baseline.
+    expect(screen.getByRole('heading', { name: /^Tuesday 3 November/ })).toHaveClass('@max-[58rem]:self-start')
+    expect(screen.getByRole('heading', { name: /^Monday 2 November/ })).not.toHaveClass('@max-[58rem]:self-start')
+  })
+
   it('bars render in the lane, once per bar', async () => {
     const trip = { tripInstanceId: 't1', tripCode: 'T-1', tripName: 'Coast trip', startDate: '2026-11-03', endDate: '2026-11-05', isDriver: false }
     mockApiGet.mockResolvedValue(staffWeek({ shifts: [shiftOn({})], tripBars: [trip] }))

@@ -203,6 +203,18 @@ try {
         })
         check(`${name} coarse chip: name link covers only the name (link width vs box width)`, c, !!c && c.linkW < c.boxW - 16 && c.linkH >= 43.5 && !c.pastNameHitsLink)
         if (c?.todayHasShifts) check(`${name} today heading hugs its text on a day with shifts`, c, c.headW < c.dayW - 40)
+        // Fix round 2: on an empty day the heading's weekday and "No shifts" share one text baseline (a zero-size inline-block probe sits on its line's baseline).
+        const base = await sec.evaluate((el) => {
+          const p = [...el.querySelectorAll('li > p')].find((n) => n.textContent === 'No shifts')
+          const li = p?.closest('li'); const wd = li?.querySelector('h2, h3, h4, h5, h6')?.querySelector('span')
+          if (!p || !wd) return null
+          const probe = () => Object.assign(document.createElement('span'), { style: 'display:inline-block;width:0;height:0' })
+          const a = probe(); const b = probe(); wd.appendChild(a); p.appendChild(b)
+          const r = { heading: a.getBoundingClientRect().bottom, noShifts: b.getBoundingClientRect().bottom }
+          a.remove(); b.remove()
+          return r
+        })
+        check(`${name} empty day: heading and "No shifts" share a baseline (+-1px)`, base, !!base && Math.abs(base.heading - base.noShifts) <= 1)
       }
       if (st.name === 'participant' && (tag === '1280' || tag === '1280-dark')) check(`${name} contrast No shifts >=4.5`, m.contrast.noShifts, m.contrast.noShifts !== null && m.contrast.noShifts >= 4.5)
 

@@ -101,7 +101,7 @@ export function PersonWeek({ kind, personId, name, headingLevel }: PersonWeekPro
             const dayBars = bars.filter(b => barOverlapsWeek(b.start, b.end, [day]))
             return (
               <li key={day} aria-current={today ? 'date' : undefined} className={`flex min-w-0 flex-col ${dayShifts.length === 0 ? `@max-[58rem]:flex-row @max-[58rem]:flex-wrap @max-[58rem]:items-baseline` : ''}`}>
-                <DayHeading className={`flex items-baseline gap-1.5 rounded-sm px-2 py-1 @max-[58rem]:self-start @[58rem]:rounded-none @[58rem]:border-b @[58rem]:border-border @[58rem]:px-3 @[58rem]:py-1.5 ${today ? HEADER_BG_TODAY : `@[58rem]:bg-surface-container-low`}`}>
+                <DayHeading className={`flex items-baseline gap-1.5 rounded-sm px-2 py-1 ${dayShifts.length > 0 ? '@max-[58rem]:self-start' : ''} @[58rem]:rounded-none @[58rem]:border-b @[58rem]:border-border @[58rem]:px-3 @[58rem]:py-1.5 ${today ? HEADER_BG_TODAY : `@[58rem]:bg-surface-container-low`}`}>
                   <span aria-hidden="true" className="text-sm font-semibold leading-5 text-foreground">{weekday}</span>
                   <span aria-hidden="true" className="text-[13px] tabular-nums text-muted-foreground">{dayNum}</span>
                   <span className="sr-only">{formatDayAccessibleName(day)}{today ? ', today' : ''}</span>
