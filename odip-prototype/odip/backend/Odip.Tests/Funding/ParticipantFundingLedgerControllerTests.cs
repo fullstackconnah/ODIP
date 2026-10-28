@@ -85,6 +85,19 @@ public class ParticipantFundingLedgerControllerTests
     }
 
     [Fact]
+    public async Task AnOtherFundedParticipant_GetsTheNoPlanAnswer()
+    {
+        using var kit = Arrange(out var person);
+        person.FundingSource = ParticipantFundingSource.Other;
+        kit.Db.SaveChanges();
+
+        var dto = Ok(await ControllerFor(kit, kit.TenantId).Ledger(person.Id, Ct));
+
+        Assert.Null(dto.PlanId);
+        Assert.Empty(dto.Pools);
+    }
+
+    [Fact]
     public async Task AnotherOrganisationsParticipantIsNotFound_AndASuperAdminWithNoOrganisationChosenIsToldToChooseOne()
     {
         var database = Guid.NewGuid().ToString();

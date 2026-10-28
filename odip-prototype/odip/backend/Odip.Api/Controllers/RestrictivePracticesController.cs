@@ -158,6 +158,8 @@ public class RestrictivePracticesController : ControllerBase
         return hasWho ? "Add the date it was authorised." : "Add who authorised it.";
     }
 
+    private const string ChangedByOther = "Someone else just changed this entry, so your changes weren't saved. Close it and open it again to see theirs.";
+
     [HttpPut("participants/restrictive-practices/{id:guid}")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<RestrictivePracticeDto>>> Update(
@@ -165,6 +167,11 @@ public class RestrictivePracticesController : ControllerBase
     {
         var practice = await _db.RestrictivePractices.FirstOrDefaultAsync(rp => rp.Id == id, ct);
         if (practice == null) return NotFound(ApiResponse<RestrictivePracticeDto>.Fail("Restrictive practice entry not found"));
+
+        // A form from an older tab sends no version and saves as before. A stale one is refused before any other check;
+        // the token below (the UPDATE's WHERE) stays as the backstop for a save that races this read.
+        if (dto.ExpectedUpdatedAt is DateTime expected && expected != practice.UpdatedAt)
+            return Conflict(ApiResponse<RestrictivePracticeDto>.Fail(ChangedByOther));
 
         if (dto.RelatedMedicationId.HasValue)
         {
@@ -203,7 +210,14 @@ public class RestrictivePracticesController : ControllerBase
             await _safetyNoteSync.SyncRestrictivePracticeNoteAsync(participant, ct);
         }
 
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Conflict(ApiResponse<RestrictivePracticeDto>.Fail(ChangedByOther));
+        }
 
         return Ok(ApiResponse<RestrictivePracticeDto>.Ok(await ToDtoWithMedicationNameAsync(practice, ct)));
     }

@@ -242,10 +242,10 @@ export default function ParticipantDetailPage() {
           Plan type: {managementLabel(p.planType)}
           <SeeSectionLink tab="about" hash="ndis-plan" section="NDIS plan" canEdit={canWriteParticipantDetails} />
         </p>
-        <FundingTab participantId={id!} planType={p.planType} />
+        <FundingTab participantId={id!} planType={p.planType} otherFunded={p.fundingSource === 'Other'} />
       </>
     ), { wide: true, srHeading: true }),
-    card('claims', 'Claims', true, <ClaimsTab participantId={id!} canWrite={canWrite} />, { wide: true, srHeading: true }),
+    card('claims', 'Claims', true, <ClaimsTab participantId={id!} canWrite={canWrite} otherFunded={p.fundingSource === 'Other'} funder={p.fundingOrganisation} />, { wide: true, srHeading: true }),
   ]
   const recordsCards = [
     card('notes', 'Notes', true, <NotesTab participantId={id} />, { wide: true, srHeading: true }),
