@@ -235,6 +235,20 @@ describe('PortalShiftsPage: the current shift leads (SHAPE §2)', () => {
     expect(within(earlier).getByText('Submitted')).toBeInTheDocument()
     expect(within(earlier).getByText('Approved')).toBeInTheDocument()
   })
+
+  it('lists a returned shift whose end has passed under Coming up, oldest first, and leaves a plain past shift in Earlier', () => {
+    answer([
+      row({ id: 'r', serviceDate: '2026-08-18', returnCount: 1, participantName: 'Rae Returned' }),
+      row({ id: 'p', serviceDate: '2026-08-18', startTime: '10:00:00', participantName: 'Pat Plain' }),
+      row({ id: 'f', serviceDate: '2026-08-21', participantName: 'Fay Future' }),
+    ], [])
+    renderPage()
+
+    const coming = screen.getByRole('region', { name: 'Coming up' })
+    expect(within(coming).getAllByRole('link').map(a => a.textContent)).toEqual([expect.stringContaining('Rae Returned'), expect.stringContaining('Fay Future')])
+    expect(within(coming).getByText('Returned')).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Earlier' })).getByText('Pat Plain')).toBeInTheDocument()
+  })
 })
 
 describe('PortalShiftsPage: a response with no provider zone (review deep nit)', () => {

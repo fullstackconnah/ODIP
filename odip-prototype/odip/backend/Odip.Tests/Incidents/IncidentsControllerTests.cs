@@ -752,7 +752,7 @@ public class IncidentsControllerTests
         using var db = CreateDb(Guid.NewGuid().ToString());
         var reporter = SeedUser(db);
         var participant = SeedParticipant(db);
-        var worker = AsRole(new IncidentsController(db), "SupportWorker");
+        var worker = AsRole(new IncidentsController(db), "SupportWorker", reporter.Id);
         await worker.Create(NoneOfTheseDto(reporter.Id, participant.Id), CancellationToken.None);
         var incident = await db.IncidentReports.SingleAsync();
         Assert.Equal(TaskItemStatus.NotStarted, (await db.BookingTasks.SingleAsync(t => t.TaskType == TaskType.RestrictivePracticeRegisterAddition)).Status);
@@ -2081,13 +2081,100 @@ public class IncidentsControllerTests
 
     // ── "None of these" from a support worker: a coordinator task to add it to the register ──
 
-    private static IncidentsController AsRole(IncidentsController controller, string role)
+    private static IncidentsController AsRole(IncidentsController controller, string role, Guid? userId = null)
     {
+        var claims = new List<Claim> { new(ClaimTypes.Role, role) };
+        if (userId is { } id) claims.Add(new Claim(ClaimTypes.NameIdentifier, id.ToString()));
         controller.ControllerContext = new ControllerContext
         {
-            HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Role, role)], "Test")) },
+            HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity(claims, "Test")) },
         };
         return controller;
+    }
+
+    // ── A support worker can only file an incident as themselves ──
+
+    private static CreateIncidentDto PropertyDamageDto(Guid reporterId) =>
+        CreateDto(reporterId, incidentType: IncidentType.PropertyDamage, rpType: null);
+
+    [Fact]
+    public async Task Create_SupportWorkerNamingAColleague_StoresTheCallerAsReporter_AndTheNotificationNamesTheCaller()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var tenantId = Guid.NewGuid();
+        var worker = SeedUser(db, tenantId, "Sam", "Support"); worker.Role = UserRole.SupportWorker;
+        var colleague = SeedUser(db, tenantId, "Cora", "Colleague");
+        db.SaveChanges();
+        var controller = AsRole(new IncidentsController(db), "SupportWorker", worker.Id);
+
+        var result = await controller.Create(PropertyDamageDto(colleague.Id), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(worker.Id, (await db.IncidentReports.SingleAsync()).ReportedByUserId);
+        var payloads = (await db.NotificationOutbox.ToListAsync()).Select(r => r.PayloadJson).ToList();
+        Assert.NotEmpty(payloads);
+        Assert.All(payloads, p => { Assert.Contains("Sam Support", p); Assert.DoesNotContain("Cora", p); });
+    }
+
+    [Fact]
+    public async Task Create_SupportWorkerNamingAUserOfAnotherOrganisation_TakesTheCallersTenant()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var worker = SeedUser(db); worker.Role = UserRole.SupportWorker;
+        var outsider = SeedUser(db, firstName: "Olga", lastName: "Outsider");
+        db.SaveChanges();
+        Assert.NotEqual(worker.TenantId, outsider.TenantId);
+        var controller = AsRole(new IncidentsController(db), "SupportWorker", worker.Id);
+
+        await controller.Create(PropertyDamageDto(outsider.Id), CancellationToken.None);
+
+        Assert.Equal(worker.TenantId, (await db.IncidentReports.SingleAsync()).TenantId);
+    }
+
+    [Fact]
+    public async Task Create_CoordinatorNamingAColleague_StoresTheColleagueAsSent()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var coordinator = SeedUser(db, firstName: "Cara", lastName: "Coord"); coordinator.Role = UserRole.Coordinator;
+        var colleague = SeedUser(db, firstName: "Cora", lastName: "Colleague");
+        db.SaveChanges();
+        var controller = AsRole(new IncidentsController(db), "Coordinator", coordinator.Id);
+
+        await controller.Create(PropertyDamageDto(colleague.Id), CancellationToken.None);
+
+        Assert.Equal(colleague.Id, (await db.IncidentReports.SingleAsync()).ReportedByUserId);
+    }
+
+    [Fact]
+    public async Task Create_SupportWorkerNamingThemselvesAsWitness_IsRejected_WhateverReporterWasSent()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var worker = SeedUser(db, firstName: "Sam", lastName: "Support"); worker.Role = UserRole.SupportWorker;
+        var colleague = SeedUser(db, firstName: "Cora", lastName: "Colleague");
+        db.SaveChanges();
+        var controller = AsRole(new IncidentsController(db), "SupportWorker", worker.Id);
+        var dto = PropertyDamageDto(colleague.Id) with
+        {
+            Witnesses = new List<CreateIncidentWitnessDto> { new() { WitnessUserId = worker.Id, WitnessName = "Sam Support" } },
+        };
+
+        var result = await controller.Create(dto, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Contains("cannot witness their own", Assert.IsType<ApiResponse<IncidentListDto>>(bad.Value).Errors!.Single());
+    }
+
+    [Fact]
+    public async Task Create_SupportWorkerWithNoUserIdClaim_ReturnsBadRequest()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var colleague = SeedUser(db);
+        var controller = AsRole(new IncidentsController(db), "SupportWorker");
+
+        var result = await controller.Create(PropertyDamageDto(colleague.Id), CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Empty(await db.IncidentReports.ToListAsync());
     }
 
     private static CreateIncidentDto NoneOfTheseDto(Guid reporterId, Guid? participantId) =>
@@ -2102,7 +2189,7 @@ public class IncidentsControllerTests
         using var db = CreateDb(Guid.NewGuid().ToString());
         var reporter = SeedUser(db);
         var participant = SeedParticipant(db, firstName: "Sophie", lastName: "Brown");
-        var controller = AsRole(new IncidentsController(db), "SupportWorker");
+        var controller = AsRole(new IncidentsController(db), "SupportWorker", reporter.Id);
 
         var result = await controller.Create(NoneOfTheseDto(reporter.Id, participant.Id), CancellationToken.None);
 
@@ -2140,7 +2227,7 @@ public class IncidentsControllerTests
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var reporter = SeedUser(db);
-        var controller = AsRole(new IncidentsController(db), "SupportWorker");
+        var controller = AsRole(new IncidentsController(db), "SupportWorker", reporter.Id);
 
         await controller.Create(NoneOfTheseDto(reporter.Id, participantId: null), CancellationToken.None);
 
@@ -2154,7 +2241,7 @@ public class IncidentsControllerTests
         var reporter = SeedUser(db);
         var participant = SeedParticipant(db);
         var practice = SeedPractice(db, participant.Id, type: RestrictivePracticeType.PhysicalRestraint, authorised: false);
-        var controller = AsRole(new IncidentsController(db), "SupportWorker");
+        var controller = AsRole(new IncidentsController(db), "SupportWorker", reporter.Id);
 
         await controller.Create(CreateDto(reporter.Id, rpType: RestrictivePracticeType.PhysicalRestraint, involvedParticipantId: participant.Id, restrictivePracticeId: practice.Id), CancellationToken.None);
 

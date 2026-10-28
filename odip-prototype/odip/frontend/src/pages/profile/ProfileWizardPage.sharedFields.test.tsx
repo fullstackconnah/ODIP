@@ -176,7 +176,7 @@ describe('Profile wizard: fields captured at Intake are editable and prefilled',
     await expectStep(/mobility/i)
     expect(document.getElementById('overnightRatio')).toBeNull()
     await user.click(document.getElementById('overnightSupport') as HTMLElement)
-    await user.click(screen.getByRole('option', { name: 'Sleepover Support' }))
+    await user.click(screen.getByRole('option', { name: 'Overnight Sleepover' }))
     expect(document.getElementById('overnightRatio')).not.toBeNull()
   })
 })

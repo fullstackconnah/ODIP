@@ -21,7 +21,8 @@ import { CheckboxField } from '@/components/CheckboxField'
 import { useParticipantContactRoles } from '@/api/hooks'
 import { planTypeComplianceWarning } from '@/api/types/contacts'
 import type { PlanType, SupportRatio } from '@/api/types/enums'
-import { OVERNIGHT_RATIO_LABELS } from '@/api/types/participants'
+import { OVERNIGHT_RATIO_LABELS, OVERNIGHT_SUPPORT_LABELS } from '@/api/types/participants'
+import type { OvernightSupportType } from '@/api/types/enums'
 import type { ParticipantFormData } from '@/lib/participantSchema'
 import { span } from '@/lib/formGrid'
 import { PlanTypeComplianceBanner, YesNoToggleField } from '../intake/intakeHelpers'
@@ -212,7 +213,7 @@ export function SupportNeedsFields({ control, register, errors }: { control: Ctl
           control={control}
           name="overnightSupport"
           render={({ field }) => (
-            <Dropdown id="overnightSupport" variant="form" value={field.value ?? ''} onChange={field.onChange} onBlur={field.onBlur} items={OVERNIGHT_SUPPORT_ITEMS} />
+            <Dropdown id="overnightSupport" variant="form" value={field.value ?? ''} onChange={field.onChange} onBlur={field.onBlur} items={itemsIncludingCurrent(OVERNIGHT_SUPPORT_ITEMS, overnightSupport, (value) => OVERNIGHT_SUPPORT_LABELS[value as OvernightSupportType])} />
           )}
         />
       </FormField>
