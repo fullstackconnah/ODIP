@@ -9,7 +9,7 @@ function mediaBlock(query: string, needle: string) {
   const re = new RegExp(String.raw`@media \(${query}\) \{`, 'g')
   for (let m = re.exec(css); m; m = re.exec(css)) {
     let depth = 1, i = re.lastIndex
-    while (depth && i < css.length) depth += css[i] === '{' ? 1 : css[i] === '}' ? -1 : 0, i++
+    for (; depth && i < css.length; i++) depth += css[i] === '{' ? 1 : css[i] === '}' ? -1 : 0
     const body = css.slice(re.lastIndex, i - 1)
     if (body.includes(needle)) return body
   }
