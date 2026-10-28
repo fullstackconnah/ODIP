@@ -169,8 +169,7 @@ export default function SettingsPage() {
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       {tidySearch !== params.toString() && <Navigate replace to={{ pathname: '/settings', search: tidySearch ? `?${tidySearch}` : '' }} />}
-      {/* history={false}: useBackTarget tracks pathnames only, so a history-aware Back would skip the list. */}
-      {sectionScreen && <BackButton variant="link" label="settings" to="/settings" history={false} className="self-start" />}
+      {sectionScreen && <BackButton variant="link" label="settings" to="/settings" className="self-start" />}
       <div className={sectionScreen ? 'sr-only' : undefined}>
         <PageHeader title="Settings" documentTitle={current ? `${current.label} · Settings` : 'Settings'} />
       </div>

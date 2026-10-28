@@ -311,14 +311,14 @@ export default function IntakeWizardPage() {
         if (res.success) {
           flushSync(() => reset(data))
           // Completing Intake puts the participant on the onboarding worklist: show them there.
-          navigate(fromChecklist ? `/onboarding/${id}` : ONBOARDING_TABLE_PATH, { state: intakeCompleteState(id, res.data?.fullName || typedName) })
+          navigate(fromChecklist ? `/onboarding/${id}` : ONBOARDING_TABLE_PATH, { state: intakeCompleteState(id, res.data?.fullName || typedName), replace: true })
         }
         return
       }
       const res = await createParticipant.mutateAsync(payload as never)
       if (res.success && res.data?.id) {
         flushSync(() => reset(data))
-        navigate(ONBOARDING_TABLE_PATH, { state: intakeCompleteState(res.data.id, res.data.fullName || typedName) })
+        navigate(ONBOARDING_TABLE_PATH, { state: intakeCompleteState(res.data.id, res.data.fullName || typedName), replace: true })
       }
     } catch {
       // error handled by mutation state
@@ -338,14 +338,14 @@ export default function IntakeWizardPage() {
         const res = await saveIntake.mutateAsync({ id, data: payload as never })
         if (res.success) {
           flushSync(() => reset(data))
-          navigate(ENQUIRIES_TABLE_PATH)
+          navigate(ENQUIRIES_TABLE_PATH, { replace: true })
         }
         return
       }
       const res = await createParticipant.mutateAsync(payload as never)
       if (res.success && res.data?.id) {
         flushSync(() => reset(data))
-        navigate(ENQUIRIES_TABLE_PATH)
+        navigate(ENQUIRIES_TABLE_PATH, { replace: true })
       }
     } catch (err) {
       setDraftError(extractErrorMessage(err, 'Failed to save draft. Please try again.'))

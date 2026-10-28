@@ -679,8 +679,8 @@ their own facts to tones. It stops at the header: the tab strip and every panel 
 
 - **Back.** `BackButton` is the header's first action: secondary, an arrow and the word "Back", and it names its destination ("Back to staff") in its
   accessible name, so the one word on screen never leaves a screen-reader user guessing. It is always a real link, 44px on touch, and has three shapes: the secondary
-  `button` in the action cluster, a ghost `icon` square beside the title on a form or wizard page, and a `link` for a page with no cluster (the portal). Where it
-  goes is `to`; with `history` on (the default) the previous in-app screen wins and `to` is the fallback for a deep link.
+  `button` in the action cluster, a ghost `icon` square beside the title on a form or wizard page, and a `link` for a page with no cluster (the portal). Back always
+  returns to the previous in-app page; `to` is only the fallback for a deep link or a new tab, and the link's href.
 
 **The Attention Tint Rule.** A glance segment is filled only when its own badge signals attention, and the fill is that badge's own tone family:
 `warning-container` for pending or time-bound (Waitlist), `error-container` for action needed or outstanding (Action Needed, Outstanding). Everything in

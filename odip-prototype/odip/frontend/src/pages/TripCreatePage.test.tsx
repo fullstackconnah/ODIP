@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import TripCreatePage from './TripCreatePage'
@@ -88,6 +88,29 @@ describe('TripCreatePage — PP-65 create-failure error message', () => {
 
     expect(mockCreateMutateAsync).toHaveBeenCalledTimes(1)
     expect(await screen.findByText('Trip detail')).toBeInTheDocument()
+  })
+})
+
+// Saving replaces the form's history entry, so Back from the new trip lands on the list the form was opened from.
+describe('TripCreatePage — save leaves no form behind', () => {
+  it('Back from the saved trip goes to the trips list, not to the finished form', async () => {
+    const user = userEvent.setup()
+    mockCreateMutateAsync.mockResolvedValue({ success: true, data: { id: 'trip-99' } })
+    const router = createMemoryRouter(
+      [
+        { path: '/trips/new', element: <TripCreatePage /> },
+        { path: '/trips', element: <div>Trips list</div> },
+        { path: '/trips/:id', element: <div>Trip detail</div> },
+      ],
+      { initialEntries: ['/trips', '/trips/new'], initialIndex: 1 },
+    )
+    render(<RouterProvider router={router} />)
+    await user.type(screen.getByLabelText('Trip Name *'), 'Beach Getaway 2026')
+    await user.type(screen.getByLabelText('Start Date *'), '2026-10-01')
+    await user.click(screen.getByRole('button', { name: /create trip/i }))
+    expect(await screen.findByText('Trip detail')).toBeInTheDocument()
+    await act(() => router.navigate(-1))
+    expect(router.state.location.pathname).toBe('/trips')
   })
 })
 

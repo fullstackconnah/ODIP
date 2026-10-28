@@ -146,7 +146,7 @@ export default function PortalWitnessApprovalsPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-start gap-2">
-        <BackButton to="/portal" label="my shifts" variant="icon" history={false} />
+        <BackButton to="/portal" label="my shifts" variant="icon" />
         <div className="flex-1 min-w-0">
           <PageHeader title="Witness approvals" />
         </div>

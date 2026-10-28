@@ -135,9 +135,32 @@ test.describe('participant workflow navigation', () => {
     await expect(row).toHaveCount(1);
     await row.getByRole('cell').first().click();
     await expect(page).toHaveURL(new RegExp(`/medications/${medication.id}/edit$`));
-    await expect(back(page)).toHaveAttribute('href', '/medications?tab=register');
+    await expect(back(page)).toHaveAccessibleName('Back to Medications');
     await page.getByRole('link', { name: 'Cancel' }).click();
     await expect(page).toHaveURL((url) => url.pathname === '/medications' && url.searchParams.get('tab') === 'register');
     await expect(page.getByRole('tab', { name: /Register/ })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  // Back goes to the page visited before (owner, 2026-10-28); a deep link falls back to the list, and a save leaves no form in history.
+  test('Back returns to the list the record was opened from, and a saved form is not a place to go back to', async ({ page }) => {
+    await page.goto('/participants');
+    await (await hubRow(page, ACTIVE_SEARCH, active.token)).getByRole('cell').nth(1).click();
+    await expect(page).toHaveURL(new RegExp(`/participants/${active.id}$`));
+    await back(page).click();
+    await expect(page).toHaveURL((url) => url.pathname === '/participants');
+
+    await page.goto(`/participants/${active.id}`);
+    await back(page).click();
+    await expect(page).toHaveURL((url) => url.pathname === '/participants');
+
+    await page.goto('/trips');
+    await page.getByRole('link', { name: 'New trip' }).click();
+    await expect(page).toHaveURL(/\/trips\/new$/);
+    await page.getByLabel('Trip Name *').fill(`Back nav ${uniqueToken()}`);
+    await page.getByLabel('Start Date *').fill(sydneyToday());
+    await page.getByRole('button', { name: /create trip/i }).click();
+    await expect(page).toHaveURL(/\/trips\/(?!new)[^/]+$/);
+    await back(page).click();
+    await expect(page).toHaveURL((url) => url.pathname === '/trips');
   });
 });

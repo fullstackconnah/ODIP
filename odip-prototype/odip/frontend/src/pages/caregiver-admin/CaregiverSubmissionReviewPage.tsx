@@ -69,7 +69,7 @@ export default function CaregiverSubmissionReviewPage() {
     }
     setConfirmAccept(false)
     setShowReject(false)
-    navigate('/caregiver-submissions')
+    navigate('/caregiver-submissions', { replace: true })
   }
 
   return (
