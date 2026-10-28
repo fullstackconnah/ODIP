@@ -15,12 +15,9 @@ export type WizardNavFooterProps = {
    * ("Save as draft" and PF-1's "Save changes" are exact complements), but the shell doesn't
    * enforce that; it just maps over whatever it's given. */
   secondaryActions: WizardSecondaryAction[]
-  /** Where "Cancel" goes (the Review step's, and the first step's, where Back would be) when there is no in-app history. */
+  /** Where "Cancel" goes (the Review step's, and the first step's, where Back would be) when there is no earlier in-app page. Otherwise Cancel goes back, like the page's header Back. */
   cancelTo: string
-  /**
-   * Default `true`, like `BackButton`: Cancel returns to the previous in-app screen, the same place as the page's header Back, and
-   * `cancelTo` is the fallback. `false` pins Cancel to `cancelTo`, for a wizard whose header Back is pinned.
-   */
+  /** Default `true`. `false` pins Cancel to `cancelTo`: only for the public caregiver wizard, which is outside the app shell (no in-app history to go back to). */
   history?: boolean
   submitLabel: string
   /** The longest of the submit button's labels, for a caller whose label changes while submitting: the button holds that width, so Cancel does not slide under a second click. */
@@ -57,8 +54,8 @@ export function WizardNavFooter({
   reviewActionsRight = false,
 }: WizardNavFooterProps) {
   const back = useBackTarget(cancelTo)
-  // A router link either way, so the unsaved-changes blocker still asks before leaving.
-  const cancelHref = history ? back.to : cancelTo
+  const onCancelClick = history ? back.onLinkClick : undefined
+  // A router link (href = cancelTo), so the unsaved-changes blocker still asks before leaving.
   const groupRight = isReviewStep && reviewActionsRight
   // Below sm, on a non-review step, the secondary drops to its own full-width row so Back and Next stay together on row 1.
   const stackSecondary = !isReviewStep && secondaryActions.length > 0
@@ -82,7 +79,7 @@ export function WizardNavFooter({
         {showBack ? (
           <Button type="button" variant="secondary" onClick={onBack}>Back</Button>
         ) : !isReviewStep && (
-          <Button variant="secondary" to={cancelHref}>Cancel</Button>
+          <Button variant="secondary" to={cancelTo} onClick={onCancelClick}>Cancel</Button>
         )}
         {!groupRight && secondary}
       </div>
@@ -95,7 +92,7 @@ export function WizardNavFooter({
         {isReviewStep && (
           <>
             {groupRight && secondary}
-            <Button variant="secondary" to={cancelHref}>Cancel</Button>
+            <Button variant="secondary" to={cancelTo} onClick={onCancelClick}>Cancel</Button>
             <Button type="submit" aria-disabled={isSubmitting || undefined} onClick={(e) => { if (isSubmitting) e.preventDefault() }} className={`${BUSY_LOOK}${groupRight ? " max-sm:ml-auto" : ""}`}>
               {submitReserve ? (
                 // The longest label sits invisible in the same grid cell as the live one (drawn from an attribute, so it is not in the name or findable by text).
