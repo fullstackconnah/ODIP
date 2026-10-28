@@ -157,7 +157,7 @@ describe('the helpers', () => {
   })
 
   it('names the period length as the plan prints it', () => {
-    expect(periodLengthLabel(null)).toBe('No funding periods')
+    expect(periodLengthLabel(null)).toBe('Whole plan')
     expect(periodLengthLabel(1)).toBe('Monthly')
     expect(periodLengthLabel(3)).toBe('3-monthly')
     expect(periodLengthLabel(6)).toBe('6-monthly')

@@ -30,10 +30,11 @@ function renderEditor(props: Partial<FundingPlanEditorProps> = {}) {
 
 const day = (label: string, value: string) => fireEvent.change(screen.getByLabelText(new RegExp('^' + label)), { target: { value } })
 
-/** Plan start and end typed for 1 Jul 2026 to 30 Jun 2027. */
+/** Plan start and end typed for 1 Jul 2026 to 30 Jun 2027, with 3-monthly funding chosen (a new plan starts with no choice, and cannot be saved without one). */
 function typeYear() {
   day('Plan start', '2026-07-01')
   day('Plan end', '2027-06-30')
+  fireEvent.change(screen.getByLabelText(/^Funding periods/), { target: { value: '3' } })
 }
 
 const coreCard = () => screen.getByRole('region', { name: /^Core \(flexible\), Plan Managed/ })
@@ -45,20 +46,20 @@ beforeEach(() => {
 })
 
 describe('editor: a new plan', () => {
-  it('opens as a dialog with the plan fields, starting 3-monthly from a copy of the plan', () => {
+  it('opens as a dialog with the plan fields, funding periods not chosen yet, from a copy of the plan', () => {
     renderEditor()
 
     const dialog = screen.getByRole('dialog', { name: 'Record plan budget' })
     expect(within(dialog).getByLabelText(/^Plan start/)).toHaveValue('')
     expect(within(dialog).getByLabelText(/^Plan end/)).toHaveValue('')
     expect(within(dialog).getByLabelText('Reassessment date')).toBeInTheDocument()
-    expect(within(dialog).getByLabelText('Funding periods')).toHaveValue('3')
+    expect(within(dialog).getByLabelText(/^Funding periods/)).toHaveValue('')
     expect(within(dialog).getByLabelText('Where the figures came from')).toHaveValue('PlanCopy')
     expect(within(dialog).getByLabelText('Confirmed on')).toBeInTheDocument()
     expect(within(dialog).getByLabelText('Confirmed by')).toBeInTheDocument()
     expect(within(dialog).getByLabelText('Notes')).toBeInTheDocument()
-    const lengths = within(within(dialog).getByLabelText('Funding periods')).getAllByRole('option').map(o => o.textContent)
-    expect(lengths).toEqual(['No funding periods', 'Monthly', '3-monthly', '6-monthly', '12-monthly'])
+    const lengths = within(within(dialog).getByLabelText(/^Funding periods/)).getAllByRole('option', { hidden: true }).map(o => o.textContent)
+    expect(lengths).toEqual(['Choose…', 'Whole plan', 'Monthly', '3-monthly', '6-monthly', '12-monthly'])
   })
 
   it('starts the next plan the day after the last one ended, a year long, with the same funding periods', () => {
@@ -66,7 +67,7 @@ describe('editor: a new plan', () => {
 
     expect(screen.getByLabelText(/^Plan start/)).toHaveValue('2027-07-01')
     expect(screen.getByLabelText(/^Plan end/)).toHaveValue('2028-06-30')
-    expect(screen.getByLabelText('Funding periods')).toHaveValue('6')
+    expect(screen.getByLabelText(/^Funding periods/)).toHaveValue('6')
   })
 
   it('adds a Core (flexible) pool under the management type chosen, and the participant’s plan type is the default', async () => {
@@ -138,7 +139,7 @@ describe('editor: the periods are proposed, and stay editable', () => {
     await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
     await user.type(within(coreCard()).getByLabelText('Plan amount for the whole plan'), '8000')
 
-    await user.selectOptions(screen.getByLabelText('Funding periods'), '6')
+    await user.selectOptions(screen.getByLabelText(/^Funding periods/), '6')
 
     const card = coreCard()
     expect(within(card).getAllByLabelText(/^Plan amount, /)).toHaveLength(2)
@@ -148,7 +149,7 @@ describe('editor: the periods are proposed, and stay editable', () => {
   it('shows no periods for a plan with no funding periods: the whole plan is one period', async () => {
     const { user } = renderEditor()
     typeYear()
-    await user.selectOptions(screen.getByLabelText('Funding periods'), '')
+    await user.selectOptions(screen.getByLabelText(/^Funding periods/), 'whole')
     await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
 
     expect(within(coreCard()).queryByLabelText(/^Plan amount, /)).not.toBeInTheDocument()
@@ -210,6 +211,58 @@ describe('editor: the periods are proposed, and stay editable', () => {
     day('Plan end', '2027-03-31')
 
     expect(screen.getByText('The periods were worked out again from the new dates, so amounts you had edited were replaced.')).toBeInTheDocument()
+  })
+})
+
+describe('editor: the release period must be chosen', () => {
+  it('refuses a new plan with no choice, says why beside the field, focuses it and sends nothing', async () => {
+    const { user } = renderEditor()
+    day('Plan start', '2026-07-01')
+    day('Plan end', '2027-06-30')
+    await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
+    await user.type(within(coreCard()).getByLabelText('Plan amount for the whole plan'), '8000')
+    expect(within(coreCard()).getByText('Choose how the funding is released to see its periods.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Save plan budget' }))
+
+    const select = screen.getByLabelText(/^Funding periods/)
+    expect(create).not.toHaveBeenCalled()
+    expect(screen.getByText('Choose how the funding is released.')).toBeInTheDocument()
+    expect(select).toHaveAttribute('aria-invalid', 'true')
+    expect(select).toHaveFocus()
+  })
+
+  it('saves "Whole plan" with no periodLengthMonths, and the error goes once it is chosen', async () => {
+    const { user } = renderEditor()
+    day('Plan start', '2026-07-01')
+    day('Plan end', '2027-06-30')
+    await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
+    await user.type(within(coreCard()).getByLabelText('Plan amount for the whole plan'), '8000')
+    await user.click(screen.getByRole('button', { name: 'Save plan budget' }))
+    await user.selectOptions(screen.getByLabelText(/^Funding periods/), 'whole')
+
+    expect(screen.queryByText('Choose how the funding is released.')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save plan budget' }))
+
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(create.mock.calls[0][0]).not.toHaveProperty('periodLengthMonths')
+  })
+
+  it('opens a stored plan with no periods on "Whole plan", not blank', () => {
+    renderEditor({ plan: plan({ periodLengthMonths: undefined }) })
+
+    expect(screen.getByLabelText(/^Funding periods/)).toHaveValue('whole')
+  })
+
+  it('saves a next plan that carries the previous choice forward without a new choice', async () => {
+    const { user } = renderEditor({ previousPlan: plan({ planEnd: '2027-06-30', periodLengthMonths: 6 }) })
+    await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
+    await user.type(within(coreCard()).getByLabelText('Plan amount for the whole plan'), '8000')
+
+    await user.click(screen.getByRole('button', { name: 'Save plan budget' }))
+
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(create.mock.calls[0][0]).toMatchObject({ periodLengthMonths: 6 })
   })
 })
 
@@ -633,6 +686,7 @@ describe('editor: a plan over 800 days has no periods, and says why', () => {
     const { user } = renderEditor()
     day('Plan start', '2026-07-01')
     day('Plan end', '2027-06-30')
+    await user.selectOptions(screen.getByLabelText(/^Funding periods/), '3')
     await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
     await user.type(within(coreCard()).getByLabelText('Plan amount for the whole plan'), '8000')
 
@@ -647,6 +701,7 @@ describe('editor: a plan over 800 days has no periods, and says why', () => {
 
   it('asks for the dates when they are missing, and says so when the plan ends before it starts', async () => {
     const { user } = renderEditor()
+    await user.selectOptions(screen.getByLabelText(/^Funding periods/), '3')
     await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
     expect(within(coreCard()).getByText('Give the plan’s dates to see its periods.')).toBeInTheDocument()
 
@@ -738,6 +793,7 @@ describe('editor: a first plan starts from the dates the profile already holds',
 
     expect(screen.getByLabelText(/^Plan start/)).toHaveValue('2026-07-01')
     expect(screen.getByLabelText(/^Plan end/)).toHaveValue('2027-06-30')
+    await user.selectOptions(screen.getByLabelText(/^Funding periods/), '3')
     await user.click(screen.getByRole('button', { name: 'Add Core (flexible)' }))
     await user.type(within(coreCard()).getByLabelText('Plan amount for the whole plan'), '8000')
     expect(within(coreCard()).getAllByLabelText(/^Plan amount, /)).toHaveLength(4)
