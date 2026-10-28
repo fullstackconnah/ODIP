@@ -68,7 +68,7 @@ public class WhatsNewSeedTests
         Assert.True(Directory.Exists(folder), folder);
         Assert.Equal(Directory.GetFiles(folder, "*.cs").Length, WhatsNewSeed.All.Count);
 
-        // the 43 shipped items keep their shipped order (it fixes their published times); later items follow, sorted by key
+        // the 44 shipped items keep their shipped order (it fixes their published times); later items follow, sorted by key
         string[] shipped =
         {
             "2026-10-invoices-page",
@@ -114,6 +114,7 @@ public class WhatsNewSeedTests
             "2026-10-roster-needs-staff",
             "2026-10-release-period-required",
             "2026-10-list-badges-tidy",
+            "2026-10-budget-graph",
         };
         var keys = WhatsNewSeed.All.Select(i => i.Key).ToList();
         Assert.Equal(shipped, keys.Take(shipped.Length));

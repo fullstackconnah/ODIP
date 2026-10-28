@@ -15,7 +15,7 @@ public static partial class WhatsNewSeed
 
     private const WhatsNewAudience Staff = WhatsNewAudience.Admin | WhatsNewAudience.Coordinator;
 
-    /// <summary>An item and where it sits in the list. The shipped items have 1..43; a new item leaves Order out and goes after them, by key.</summary>
+    /// <summary>An item and where it sits in the list. The shipped items have 1..44; a new item leaves Order out and goes after them, by key.</summary>
     private sealed record Entry(int Order, Item Item)
     {
         public Entry(Item item) : this(Later, item) { }
