@@ -19,6 +19,7 @@ import { Button } from '@/components/Button'
 import { Modal } from '@/components/Modal'
 import { EditBookingModal } from './EditBookingModal'
 import { Callout } from '@/components/Callout'
+import { CheckboxField } from '@/components/CheckboxField'
 import { FormField } from '@/components/FormField'
 import { modalGrid } from '@/lib/formGrid'
 
@@ -237,26 +238,10 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
             <div>
               <p className="block text-sm font-medium mb-2">Support Requirements</p>
               <div className={modalGrid}>
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={wheelchairRequired} onChange={e => setWheelchairRequired(e.target.checked)}
-                    className="rounded border-[var(--color-border)]" />
-                  Wheelchair
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={highSupportRequired} onChange={e => setHighSupportRequired(e.target.checked)}
-                    className="rounded border-[var(--color-border)]" />
-                  High Support
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={nightSupportRequired} onChange={e => setNightSupportRequired(e.target.checked)}
-                    className="rounded border-[var(--color-border)]" />
-                  Night Support
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={hasRestrictivePracticeFlag} onChange={e => setHasRestrictivePracticeFlag(e.target.checked)}
-                    className="rounded border-[var(--color-border)]" />
-                  Restrictive Practice
-                </label>
+                <CheckboxField label="Wheelchair" checked={wheelchairRequired} onChange={e => setWheelchairRequired(e.target.checked)} />
+                <CheckboxField label="High Support" checked={highSupportRequired} onChange={e => setHighSupportRequired(e.target.checked)} />
+                <CheckboxField label="Night Support" checked={nightSupportRequired} onChange={e => setNightSupportRequired(e.target.checked)} />
+                <CheckboxField label="Restrictive Practice" checked={hasRestrictivePracticeFlag} onChange={e => setHasRestrictivePracticeFlag(e.target.checked)} />
               </div>
             </div>
 

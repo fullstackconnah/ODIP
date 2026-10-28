@@ -257,6 +257,10 @@ const CARD_CLASS: Record<NonNullable<ColumnBase<unknown>['mobile']>, string> = {
   hidden: 'max-md:hidden',
 }
 
+// The actions cell is the card's last line, full width and right-aligned, so the cluster sits in one place whatever the row holds; an empty cell
+// (no actions for this row) leaves the card. Classes, not `data-card`: that attribute switches a row into the title/meta layout (index.css).
+const ACTIONS_CARD = 'max-md:basis-full max-md:text-right max-md:empty:hidden'
+
 /** A number is px, a string is passed through as a CSS length. */
 function cssLength(value: number | string): string {
   return typeof value === 'number' ? `${value}px` : value
@@ -619,7 +623,7 @@ export function DataTable<T>({
                     return (
                       <td
                         key={col.key}
-                        className={`${cellClass} ${col.wrap ? '' : 'md:whitespace-nowrap'} ${alignClass} ${columnClass(col)} ${pinClass(colIndex, false)} ${card ? CARD_CLASS[card] : ''} ${col.className ?? ''} ${TAP_AREA_LINKS}`}
+                        className={`${cellClass} ${col.wrap ? '' : 'md:whitespace-nowrap'} ${alignClass} ${columnClass(col)} ${pinClass(colIndex, false)} ${card ? CARD_CLASS[card] : ''} ${col.key === 'actions' ? ACTIONS_CARD : ''} ${col.className ?? ''} ${TAP_AREA_LINKS}`}
                         style={columnStyle(col)}
                         data-label={typeof col.header === 'string' ? col.header : ''}
                         data-card={card === 'hidden' ? undefined : card}
@@ -747,11 +751,14 @@ const ROW_ACTIONS_OVERLAY = [
  *
  * `overlay` takes the cluster out of the flow on a mouse (see ROW_ACTIONS_OVERLAY): use it for a
  * cluster wide enough to matter, in a `relative` cell (`className: 'relative'` on the column) that
- * holds only what must stay visible, such as the chevron. It renders nothing when it has no children,
- * so an empty cluster never leaves a blank patch over its neighbours on hover.
+ * holds only what must stay visible, such as the chevron.
+ *
+ * In both modes it renders nothing when it has no children: an empty overlay never leaves a blank patch
+ * over its neighbours on hover, and an empty cluster never leaves a `<div>` that stops the phone card's
+ * actions cell matching `:empty` (a blank strip at the card's foot).
  */
 export function RowActions({ children, overlay = false }: { children: ReactNode; overlay?: boolean }) {
-  if (overlay && Children.toArray(children).length === 0) return null
+  if (Children.toArray(children).length === 0) return null
   return (
     <div className={`flex items-center justify-end gap-1.5 pointer-coarse:gap-2 ${ROW_ACTIONS_REVEAL} ${ROW_ACTIONS_LEGACY_ICONS} ${ROW_ACTIONS_CARD} ${overlay ? ROW_ACTIONS_OVERLAY : ''}`}>
       {children}

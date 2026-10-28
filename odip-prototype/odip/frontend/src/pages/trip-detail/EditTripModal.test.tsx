@@ -115,3 +115,16 @@ describe('EditTripModal — field labels', () => {
     }
   })
 })
+
+describe('EditTripModal — section headings', () => {
+  it('uses one sentence-case label style, no caps, and keeps the Notes label wiring', async () => {
+    await setup()
+    for (const text of ['Basic info', 'Dates & status', 'Capacity & requirements', 'Notes']) {
+      const h = screen.getByText(text, { selector: 'p' })
+      expect(h).not.toHaveClass('uppercase')
+      expect(h).not.toHaveClass('tracking-wider')
+      expect(h).toHaveClass('text-sm', 'font-medium')
+    }
+    expect(screen.getByLabelText('Notes')).toHaveAttribute('aria-labelledby', 'editTripNotesLabel')
+  })
+})
