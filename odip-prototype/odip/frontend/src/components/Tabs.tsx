@@ -255,7 +255,7 @@ export function Tabs({ tabs, active, onChange, ariaLabel = 'Tabs', idPrefix, cla
                 onChange(tab.id)
               }}
               onKeyDown={e => onKeyDown(e, tab.id)}
-              className={sub ? `group flex shrink-0 min-h-[var(--tap-min)] min-w-[var(--tap-min)] items-center focus-visible:outline-none ${tab.disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}` : `flex shrink-0 min-h-[var(--tap-min)] items-center gap-2 px-3 py-2 text-sm font-medium border-b-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-1 whitespace-nowrap ${
+              className={sub ? `group flex shrink-0 min-h-[var(--tap-min)] min-w-[var(--tap-min)] items-center focus-visible:outline-none ${tab.disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}` : `flex shrink-0 min-h-[var(--tap-min)] items-center gap-2 px-3 py-2 text-sm font-medium border-b-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-inset whitespace-nowrap ${
                 isActive
                   ? 'border-[var(--color-primary)] text-[var(--color-primary)]'
                   : 'border-transparent text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]'
