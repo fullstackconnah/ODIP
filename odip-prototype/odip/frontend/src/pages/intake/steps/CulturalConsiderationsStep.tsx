@@ -14,9 +14,12 @@ export function CulturalConsiderationsStep({ control }: { control: Control<Parti
     <div className="flex flex-col gap-[var(--section-gap)]">
       <Card title="Cultural Background" className="space-y-[var(--field-gap-y)]">
         <YesNoToggleField control={control} name="isCald" label="Culturally and Linguistically Diverse (CALD)" />
+        <YesNoToggleField control={control} name="isAboriginalOrTorresStraitIslander" label="Aboriginal and/or Torres Strait Islander" />
+      </Card>
+
+      <Card title="Support considerations" className="space-y-[var(--field-gap-y)]">
         <YesNoToggleField control={control} name="isLgbtqi" label="LGBTIQA+" />
         <YesNoToggleField control={control} name="isFamilyCommunity" label="Family / Community" />
-        <YesNoToggleField control={control} name="isAboriginalOrTorresStraitIslander" label="Aboriginal and/or Torres Strait Islander" />
       </Card>
 
       <Card title="Information Received" className="space-y-[var(--field-gap-y)]">

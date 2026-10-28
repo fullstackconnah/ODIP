@@ -512,7 +512,7 @@ describe('AppLayout — 44px coarse-pointer hit areas', () => {
       expect(screen.getAllByRole('contentinfo'), role).toHaveLength(1)
       const footer = screen.getByRole('contentinfo')
       expect(footer.closest('main, article, aside, nav, section'), role).toBeNull()
-      expect(within(footer).getByRole('link', { name: 'Accessibility' }), role).toHaveAttribute('href', '/accessibility')
+      expect(within(footer).getByRole('link', { name: 'Accessibility (opens in a new tab)' }), role).toHaveAttribute('href', '/accessibility')
       unmount()
       localStorage.clear()
     }

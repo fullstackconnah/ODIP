@@ -26,6 +26,15 @@ describe('the list rules', () => {
     expect(hasEnded(shift({ status: 'InProgress' }), at('2026-08-20T00:00:00'), TZ)).toBe(false)
     expect(hasEnded(shift({ status: 'PendingReview' }), at('2026-08-17T10:00:00'), TZ)).toBe(true)
   })
+  it('keeps a returned Published shift open after its end, since the worker has to act on it; a plain past one still ends', () => {
+    const past = at('2026-08-18T09:00:00')
+    expect(hasEnded(shift({ returnCount: 1 }), past, TZ)).toBe(false)
+    expect(hasEnded(shift({ returnCount: 0 }), past, TZ)).toBe(true)
+    expect(hasEnded(shift({ status: 'PendingReview', returnCount: 1 }), past, TZ)).toBe(true)
+    expect(hasEnded(shift({ status: 'InProgress', returnCount: 1 }), past, TZ)).toBe(false)
+    // the current-shift card is still about the clock: a returned shift that ended earlier today is not "on now"
+    expect(pickCurrentShift([shift({ returnCount: 1 })], at('2026-08-17T18:00:00'), TZ)).toBeNull()
+  })
   it('picks a shift in progress first, else the soonest of today that has not ended, else none', () => {
     const late = shift({ id: 'late', startTime: '15:00:00', endTime: '20:00:00' })
     const early = shift({ id: 'early', startTime: '06:00:00', endTime: '08:00:00' })

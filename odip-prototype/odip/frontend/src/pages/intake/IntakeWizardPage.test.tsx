@@ -465,6 +465,36 @@ describe('IntakeWizardPage', () => {
     expect(document.getElementById('overnightRatio')).not.toBeNull()
   })
 
+  it('groups LGBTIQA+ and Family / Community under Support considerations, apart from Cultural Background', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await fillNameAndAdvance(user)
+    await user.click(screen.getByRole('button', { name: /^next$/i }))
+    await user.click(screen.getByRole('button', { name: /^next$/i }))
+    await expectStep(/cultural considerations/i)
+    const card = (title: string) => screen.getByRole('heading', { level: 3, name: title }).parentElement!.parentElement as HTMLElement
+    const support = card('Support considerations')
+    expect(within(support).getByText('LGBTIQA+')).toBeInTheDocument()
+    expect(within(support).getByText('Family / Community')).toBeInTheDocument()
+    const background = card('Cultural Background')
+    expect(within(background).getByText('Culturally and Linguistically Diverse (CALD)')).toBeInTheDocument()
+    expect(within(background).queryByText('LGBTIQA+')).toBeNull()
+    expect(within(background).queryByText('Family / Community')).toBeNull()
+  })
+
+  it('offers Overnight Sleepover but not Sleepover Support for a new entry', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await fillNameAndAdvance(user)
+    await user.click(screen.getByRole('button', { name: /^next$/i }))
+    await user.click(screen.getByRole('button', { name: /^next$/i }))
+    await user.click(screen.getByRole('button', { name: /^next$/i }))
+    await expectStep(/support needs/i)
+    await user.click(document.getElementById('overnightSupport') as HTMLElement)
+    expect(screen.getByRole('option', { name: 'Overnight Sleepover' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Sleepover Support' })).toBeNull()
+  })
+
   it('routes an inquiry-converted resume to the wizard rail rather than the legacy complete-intake form', () => {
     mockParticipant.mockReturnValue({ data: draft(), isLoading: false })
     renderPage('/participants/draft-1/intake')

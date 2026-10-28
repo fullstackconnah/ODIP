@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -427,6 +428,18 @@ public class IncidentsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SupportWorker,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<IncidentListDto>>> Create([FromBody] CreateIncidentDto dto, CancellationToken ct)
     {
+        // A support worker can only report as themselves: the reporter also decides the incident's tenant and the
+        // self-witness rule, so it is fixed to the caller before anything reads it. Coordinators and admins file on others' behalf.
+        // A null User is the controller-unit-test path and keeps the dto as sent.
+        if (User?.IsInRole("SupportWorker") == true
+            && !User.IsInRole("Admin") && !User.IsInRole("Coordinator") && !User.IsInRole("SuperAdmin"))
+        {
+            if (!Guid.TryParse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var callerId)
+                || !await _db.Users.AnyAsync(u => u.Id == callerId, ct))
+                return BadRequest(ApiResponse<IncidentListDto>.Fail("Your user account could not be found."));
+            dto = dto with { ReportedByStaffId = callerId };
+        }
+
         var crossFieldError = ValidateServiceTypeAndIncidentType(dto);
         if (crossFieldError != null)
             return BadRequest(ApiResponse<IncidentListDto>.Fail(crossFieldError));

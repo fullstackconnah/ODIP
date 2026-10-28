@@ -33,7 +33,8 @@ export const SUPPORT_RATIO_ITEMS: DropdownItem[] = [
   { value: 'Other', label: 'Other' },
 ]
 
-export const OVERNIGHT_SUPPORT_ITEMS: DropdownItem[] = OVERNIGHT_SUPPORT_TYPES.map((type) => ({ value: type, label: OVERNIGHT_SUPPORT_LABELS[type] }))
+/** SleepoverSupport is retired for new entries (owner, 2026-10-23); callers add a record's stored value back with {@link itemsIncludingCurrent}. */
+export const OVERNIGHT_SUPPORT_ITEMS: DropdownItem[] = OVERNIGHT_SUPPORT_TYPES.filter((type) => type !== 'SleepoverSupport').map((type) => ({ value: type, label: OVERNIGHT_SUPPORT_LABELS[type] }))
 
 export const OVERNIGHT_RATIO_ITEMS: DropdownItem[] = SUPPORT_RATIOS.map((ratio) => ({ value: ratio, label: OVERNIGHT_RATIO_LABELS[ratio as SupportRatio] }))
 
