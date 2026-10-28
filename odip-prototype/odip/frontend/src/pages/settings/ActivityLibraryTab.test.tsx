@@ -87,6 +87,20 @@ describe('ActivityLibraryTab', () => {
     expect(update).toHaveBeenCalledWith({ id: 'a1', data: expect.objectContaining({ activityName: 'Beach walk', isActive: false }) })
   })
 
+  it('asks with the house sm Buttons, and Cancel leaves the activity as it was', async () => {
+    const user = userEvent.setup()
+    render(<ActivityLibraryTab />)
+    await user.click(screen.getByRole('button', { name: 'Edit Beach walk' }))
+    await user.click(screen.getByRole('button', { name: 'Deactivate activity' }))
+    const ask = within(screen.getByText('Deactivate this activity?').parentElement!)
+    for (const name of ['Confirm', 'Cancel']) expect(ask.getByRole('button', { name })).toHaveClass('h-[var(--control-h-sm)]')
+    await user.click(ask.getByRole('button', { name: 'Cancel' }))
+
+    expect(update).not.toHaveBeenCalled()
+    expect(screen.queryByText('Deactivate this activity?')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Deactivate activity' })).toBeInTheDocument()
+  })
+
   it('marks an inactive activity in the list and in its edit form, and reactivates it', async () => {
     const user = userEvent.setup()
     render(<ActivityLibraryTab />)

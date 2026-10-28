@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import TemplateFormPanel from './TemplateFormPanel'
 import type { EventTemplateDto } from '@/api/types'
@@ -37,6 +37,18 @@ describe('TemplateFormPanel as a dialog', () => {
     expect(screen.getByRole('dialog', { name: 'New template' })).toHaveAttribute('aria-modal', 'true')
     rerender(<TemplateFormPanel isOpen onClose={() => {}} template={template} />)
     expect(screen.getByRole('dialog', { name: 'Edit template' })).toBeInTheDocument()
+  })
+
+  it('asks before deactivating with the house sm Buttons, and Cancel puts the link back', async () => {
+    const user = userEvent.setup()
+    render(<TemplateFormPanel isOpen onClose={() => {}} template={template} />)
+    await user.click(screen.getByRole('button', { name: 'Deactivate template' }))
+    const ask = within(screen.getByText('Deactivate this template?').parentElement!)
+    for (const name of ['Confirm', 'Cancel']) expect(ask.getByRole('button', { name })).toHaveClass('h-[var(--control-h-sm)]')
+    await user.click(ask.getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByText('Deactivate this template?')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Deactivate template' })).toBeInTheDocument()
   })
 
   it('an untouched panel closes on Escape without asking', async () => {

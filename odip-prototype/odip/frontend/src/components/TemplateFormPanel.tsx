@@ -209,30 +209,17 @@ export default function TemplateFormPanel({
                   <span className="text-[var(--color-muted-foreground)]">
                     Deactivate this template?
                   </span>
-                  <button
-                    type="button"
-                    onClick={handleDeactivate}
-                    disabled={deactivateMutation.isPending}
-                    className="text-[var(--color-destructive)] font-medium hover:underline disabled:opacity-50"
-                  >
+                  <Button type="button" variant="ghost-danger" size="sm" onClick={handleDeactivate} disabled={deactivateMutation.isPending}>
                     {deactivateMutation.isPending ? 'Deactivating…' : 'Confirm'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowDeactivateConfirm(false)}
-                    className="text-[var(--color-muted-foreground)] hover:underline"
-                  >
+                  </Button>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setShowDeactivateConfirm(false)}>
                     Cancel
-                  </button>
+                  </Button>
                 </div>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => setShowDeactivateConfirm(true)}
-                  className="text-sm text-[var(--color-destructive)] hover:opacity-80 hover:underline transition-colors"
-                >
+                <Button type="button" variant="ghost-danger" size="sm" onClick={() => setShowDeactivateConfirm(true)}>
                   Deactivate template
-                </button>
+                </Button>
               )}
             </div>
           )}
