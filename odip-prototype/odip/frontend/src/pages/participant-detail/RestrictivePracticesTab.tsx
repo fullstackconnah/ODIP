@@ -162,7 +162,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
     errorRef.current?.scrollIntoView({ block: 'start' })
   }, [refusals])
   const [deletingPractice, setDeletingPractice] = useState<RestrictivePracticeDto | null>(null)
-  const [listError, setListError] = useState<string | null>(null)
+  const [listError, setListError] = useState<{ message: string; stale: boolean } | null>(null)
   const [showInactive, setShowInactive] = useState(false)
 
   const [adding, setAdding] = useState(false)
@@ -231,11 +231,13 @@ export default function RestrictivePracticesTab({ participantId }: { participant
     if (!deletingPractice || !participantId) return
     setListError(null)
     try {
-      await deletePractice.mutateAsync({ id: deletingPractice.id, participantId })
+      await deletePractice.mutateAsync({ id: deletingPractice.id, participantId, expectedUpdatedAt: deletingPractice.updatedAt })
       setDeletingPractice(null)
     } catch (err) {
       setDeletingPractice(null)
-      setListError(extractErrorMessage(err, 'Failed to delete restrictive practice entry.'))
+      // So the list shows the change that stopped the delete.
+      if (apiErrorStatus(err) === 409) void practicesQuery.refetch()
+      setListError({ message: extractErrorMessage(err, 'Failed to delete restrictive practice entry.'), stale: apiErrorStatus(err) === 409 })
     }
   }
 
@@ -255,9 +257,9 @@ export default function RestrictivePracticesTab({ participantId }: { participant
       </div>
 
       {listError && (
-        <Callout tone="error"
+        <Callout tone={listError.stale ? 'warning' : 'error'}
           actions={<Button variant="ghost" size="sm" onClick={() => setListError(null)}>Dismiss</Button>}>
-          {listError}
+          {listError.message}
         </Callout>
       )}
 

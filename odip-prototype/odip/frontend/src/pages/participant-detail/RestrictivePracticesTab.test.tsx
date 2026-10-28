@@ -214,7 +214,42 @@ describe('RestrictivePracticesTab', () => {
     const dialog = screen.getByRole('alertdialog')
     await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
 
-    expect(mockDeleteMutateAsync).toHaveBeenCalledWith({ id: 'rp-1', participantId: 'participant-1' })
+    expect(mockDeleteMutateAsync).toHaveBeenCalledWith({ id: 'rp-1', participantId: 'participant-1', expectedUpdatedAt: makePractice().updatedAt })
+  })
+
+  it('shows the delete refusal in the list error and refetches the list when someone else changed the entry', async () => {
+    const user = userEvent.setup()
+    const refetch = vi.fn()
+    const message = "Someone else just changed this entry, so it wasn't deleted. Check their change, then delete it again if you still want to."
+    mockUseRestrictivePractices.mockReturnValue({ data: [makePractice()], isLoading: false, refetch } as never)
+    mockDeleteMutateAsync.mockRejectedValueOnce({ response: { status: 409, data: { success: false, errors: [message] } } })
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' }))
+
+    expect(await screen.findByText(message)).toBeInTheDocument()
+    // A stale delete is not a failure: it is a warning, not the error tone.
+    const alert = screen.getByRole('alert')
+    expect(alert.className).toContain('--color-warning-container')
+    expect(alert.className).not.toContain('--color-destructive')
+    expect(refetch).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  })
+
+  it('keeps the error tone when a delete fails for another reason', async () => {
+    const user = userEvent.setup()
+    mockUseRestrictivePractices.mockReturnValue({ data: [makePractice()], isLoading: false, refetch: vi.fn() } as never)
+    mockDeleteMutateAsync.mockRejectedValueOnce({ response: { status: 500, data: { success: false, errors: ['Server exploded.'] } } })
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Server exploded.')
+    expect(alert.className).toContain('--color-destructive')
+    expect(alert.className).not.toContain('--color-warning-container')
   })
 
   const EXPLANATIONS = ['No authorisation date on file', 'No authoriser on file', 'No authorisation recorded']

@@ -51,8 +51,9 @@ export function useUpdateRestrictivePractice() {
 export function useDeleteRestrictivePractice() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id }: { id: string; participantId: string }) =>
-      apiDeleteRaw<boolean>(`/participants/restrictive-practices/${id}`),
+    // The version the user saw: the server refuses the delete (409) if someone changed the entry since.
+    mutationFn: ({ id, expectedUpdatedAt }: { id: string; participantId: string; expectedUpdatedAt?: string }) =>
+      apiDeleteRaw<boolean>(`/participants/restrictive-practices/${id}${expectedUpdatedAt ? `?expectedUpdatedAt=${encodeURIComponent(expectedUpdatedAt)}` : ''}`),
     onSuccess: (_res, variables) => {
       qc.invalidateQueries({ queryKey: ['restrictive-practices', variables.participantId] })
       qc.invalidateQueries({ queryKey: ['participant', variables.participantId] })

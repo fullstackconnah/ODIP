@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import AddActivityModal from './AddActivityModal'
 import type { ScheduledActivityDto } from '@/api/types/activities'
 
@@ -34,5 +35,32 @@ describe('AddActivityModal — Notes fold motion', () => {
   it('still fades when a new activity gets its Notes fold opened', () => {
     render(<AddActivityModal tripDayId="d1" onClose={() => {}} />)
     expect(notesFold()).not.toHaveAttribute('data-fold-static')
+  })
+})
+
+describe('AddActivityModal — Notes fold stays open once it has opened', () => {
+  const notesFold = () => screen.getByText('Notes').closest('details') as HTMLDetailsElement
+  const editing = { id: 'a1', tripDayId: 'd1', title: 'Zoo', accessibilityNotes: 'Ramp', notes: 'Bring water' } as unknown as ScheduledActivityDto
+
+  it('opens when a note is typed and does not snap shut when the note is cleared', async () => {
+    render(<AddActivityModal tripDayId="d1" onClose={() => {}} />)
+    expect(notesFold().open).toBe(false)
+    await userEvent.type(screen.getByLabelText('General Notes'), 'x')
+    expect(notesFold().open).toBe(true)
+    await userEvent.clear(screen.getByLabelText('General Notes'))
+    expect(notesFold().open).toBe(true)
+  })
+
+  it('is open when editing an activity with notes and stays open when both are cleared', async () => {
+    render(<AddActivityModal tripDayId="d1" editingActivity={editing} onClose={() => {}} />)
+    expect(notesFold().open).toBe(true)
+    await userEvent.clear(screen.getByLabelText('Accessibility Notes'))
+    await userEvent.clear(screen.getByLabelText('General Notes'))
+    expect(notesFold().open).toBe(true)
+  })
+
+  it('starts closed on a blank add', () => {
+    render(<AddActivityModal tripDayId="d1" onClose={() => {}} />)
+    expect(notesFold().open).toBe(false)
   })
 })
