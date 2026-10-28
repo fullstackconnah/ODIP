@@ -396,7 +396,7 @@ public class RosterBoardDragDropPostgresTests : IClassFixture<PostgresFixture>
         var results = await Task.WhenAll(Controller(one, tenantId).PublishWeek(Monday, default), Controller(two, tenantId).PublishWeek(Monday.AddDays(3), default));
 
         var counts = results.Select(r => Assert.IsType<ApiResponse<PublishWeekResultDto>>(Assert.IsType<OkObjectResult>(r.Result).Value).Data!).ToList();
-        Assert.Equal(3, counts.Sum(c => c.Published));        // one call published all three, the other found none left
+        Assert.Equal(2, counts.Sum(c => c.Published));        // one call published both staffed drafts (the unstaffed one is held), the other found none left
         Assert.Contains(counts, c => c.Published == 0 && c.Notified == 0);
         await using var check = Open(tenantId);
         Assert.Equal(2, await check.NotificationOutbox.CountAsync(o => o.EventType == NotificationEventType.ShiftAssigned));

@@ -523,7 +523,7 @@ export interface StartWeekResultDto {
   budgetWarnings?: StartWeekParticipantDto[]
 }
 
-/** What Publish week did: Draft shifts now Published (unfilled ones too), how many different workers were told, how many went out needing staff, and how many stayed Draft because their worker now has a blocking problem. */
+/** What Publish week did: staffed Draft shifts now Published, how many different workers were told, how many unstaffed Drafts were held as Draft until someone is on them, and how many stayed Draft because their worker now has a blocking problem. */
 export interface PublishWeekResultDto {
   published: number
   notified: number

@@ -272,6 +272,45 @@ public class RosterBoardDragDropTests
     }
 
     [Fact]
+    public async Task UpdateShift_UnstaffedDraftToPublished_IsRefused_AndStaysDraft()
+    {
+        using var db = TestDb.Create();
+        var shift = SeedShift(db, SeedParticipant(db).Id, null, ShiftStatus.Draft);
+
+        var result = await Controller(db).UpdateShift(shift.Id, Put(shift, null, ShiftStatus.Published), default);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal(new[] { "Put someone on this shift before publishing it." }, Assert.IsType<ApiResponse<ShiftDto>>(conflict.Value).Errors);
+        Assert.Equal(ShiftStatus.Draft, (await db.Shifts.AsNoTracking().SingleAsync(s => s.Id == shift.Id)).Status);
+        Assert.Empty(await Notices(db));
+    }
+
+    [Fact]
+    public async Task UpdateShift_UnstaffedCancelledToPublished_IsRefused()
+    {
+        using var db = TestDb.Create();
+        var shift = SeedShift(db, SeedParticipant(db).Id, null, ShiftStatus.Cancelled);
+
+        var result = await Controller(db).UpdateShift(shift.Id, Put(shift, null, ShiftStatus.Published), default);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal(new[] { "Put someone on this shift before publishing it." }, Assert.IsType<ApiResponse<ShiftDto>>(conflict.Value).Errors);
+        Assert.Equal(ShiftStatus.Cancelled, (await db.Shifts.AsNoTracking().SingleAsync(s => s.Id == shift.Id)).Status);
+        Assert.Empty(await Notices(db));
+    }
+
+    [Fact]
+    public async Task UpdateShift_AlreadyPublishedUnstaffedShift_SavedAsPublished_StillSucceeds()
+    {
+        using var db = TestDb.Create();
+        var shift = SeedShift(db, SeedParticipant(db).Id, null, ShiftStatus.Published);
+
+        Body(await Controller(db).UpdateShift(shift.Id, Put(shift, null, ShiftStatus.Published), default));
+
+        Assert.Equal(ShiftStatus.Published, (await db.Shifts.AsNoTracking().SingleAsync(s => s.Id == shift.Id)).Status);
+    }
+
+    [Fact]
     public async Task UpdateShift_ChangingTheWorkerOnAPublishedShift_TellsBothPeople()
     {
         using var db = TestDb.Create();
@@ -832,7 +871,7 @@ public class RosterBoardDragDropTests
     // ── Publish week ──
 
     [Fact]
-    public async Task PublishWeek_PublishesEveryDraftOfTheWeek_UnfilledToo_AndTellsEachWorker()
+    public async Task PublishWeek_PublishesEveryStaffedDraftOfTheWeek_HoldsUnstaffedOnes_AndTellsEachWorker()
     {
         var dbName = Guid.NewGuid().ToString();
         var tenant = Guid.NewGuid();
@@ -851,11 +890,12 @@ public class RosterBoardDragDropTests
         // Any day of the week names the week: here, its Wednesday.
         var result = Body(await Controller(db, tenant).PublishWeek(Monday.AddDays(2), default));
 
-        Assert.Equal(3, result.Published);
+        Assert.Equal(2, result.Published);       // the unstaffed Tuesday is held, not counted
         Assert.Equal(1, result.Notified);        // Sam, on two shifts
-        Assert.Equal(1, result.Unfilled);
+        Assert.Equal(1, result.Unfilled);        // held: Draft until someone is on it
         Assert.Equal(0, result.Skipped);
-        foreach (var id in new[] { monday.Id, tuesday.Id, sunday.Id }) Assert.Equal(ShiftStatus.Published, (await Reload(db, id)).Status);
+        foreach (var id in new[] { monday.Id, sunday.Id }) Assert.Equal(ShiftStatus.Published, (await Reload(db, id)).Status);
+        Assert.Equal(ShiftStatus.Draft, (await Reload(db, tuesday.Id)).Status);
         Assert.Equal(ShiftStatus.Cancelled, (await Reload(db, cancelled.Id)).Status);
         Assert.Equal(ShiftStatus.Draft, (await Reload(db, nextWeek.Id)).Status);
         // One email for Sam, not one per shift (fix round 1), naming Monday and Sunday.
@@ -865,6 +905,35 @@ public class RosterBoardDragDropTests
         Assert.Contains("2026-08-30", payload);
         Assert.Contains("16:00", payload);
         _ = alreadyOut;   // already Published: nobody is told again
+    }
+
+    [Fact]
+    public async Task PublishWeek_LeavesAnUnstaffedDraftAsDraft_RaisesNoNotice_AndPublishesItOnceStaffed()   // owner 2026-10-28: hold until staffed
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var tenant = Guid.NewGuid();
+        using var db = TestDb.ForTenant(dbName, tenant);
+        var sam = SeedStaff(db);
+        var mia = SeedParticipant(db);
+        var open = SeedShift(db, mia.Id, null, ShiftStatus.Draft, day: Monday.AddDays(1));
+
+        var first = Body(await Controller(db, tenant).PublishWeek(Monday, default));
+
+        Assert.Equal(0, first.Published);
+        Assert.Equal(0, first.Notified);
+        Assert.Equal(1, first.Unfilled);
+        Assert.Equal(ShiftStatus.Draft, (await Reload(db, open.Id)).Status);
+        Assert.Empty(await Notices(db));
+
+        // Someone is put on it (a Draft stays a Draft): the next publish sends it out and tells that worker.
+        open.UserId = sam.Id;
+        await db.SaveChangesAsync();
+        var second = Body(await Controller(db, tenant).PublishWeek(Monday, default));
+
+        Assert.Equal(1, second.Published);
+        Assert.Equal(0, second.Unfilled);
+        Assert.Equal(ShiftStatus.Published, (await Reload(db, open.Id)).Status);
+        Assert.Equal(new[] { (NotificationEventType.ShiftAssigned, sam.Id) }, await Notices(db));
     }
 
     [Fact]

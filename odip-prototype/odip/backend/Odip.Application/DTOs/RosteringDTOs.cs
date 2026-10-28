@@ -408,11 +408,11 @@ public record MoveStaffDto
 /// <summary>What <c>POST /weeks/{weekStart}/publish</c> did (roster drag and drop, 2026-10-14).</summary>
 public record PublishWeekResultDto
 {
-    /// <summary>Draft shifts now Published, unfilled ones included.</summary>
+    /// <summary>Staffed Draft shifts now Published. Drafts nobody is on are held back (see <see cref="Unfilled"/>).</summary>
     public int Published { get; init; }
     /// <summary>How many different workers were told about their shifts.</summary>
     public int Notified { get; init; }
-    /// <summary>Of the published shifts, those nobody works yet: published as needing staff.</summary>
+    /// <summary>Drafts left as Draft because nobody is on them yet; they go out at the first publish after someone is.</summary>
     public int Unfilled { get; init; }
     /// <summary>Drafts left as Draft because their worker now has a Blocking finding (a PUT publishing one of them alone is refused too).</summary>
     public int Skipped { get; init; }

@@ -136,6 +136,9 @@ public static class WhatsNewSeed
         new Item("2026-10-back-goes-back", "Back takes you where you came from",
             "Back now returns to the page you were on before. If you opened a page from a link or in a new tab, it goes to that page's main list instead.",
             Staff, false),
+        new Item("2026-10-roster-needs-staff", "Shifts with nobody on them are no longer drafts",
+            "On the roster, a shift with nobody on it now shows as a dashed card that needs staff, not a yellow draft, and Publish week leaves it out. Once you put someone on it, it turns yellow and goes out with your next Publish week.",
+            Staff, false),
     };
 
     /// <summary>Inserts the keys the table lacks, one save each, so a key another instance inserted first costs only that row.</summary>

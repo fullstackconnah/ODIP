@@ -274,6 +274,24 @@ describe('the path map survives a reload (sessionStorage)', () => {
   })
 })
 
+describe('a corrupt stored path list (sessionStorage)', () => {
+  it.each(['{}', '"x"', '[1]', '[[1, 2]]'])('%s does not throw at import and falls back to an unknown entry', async (stored) => {
+    sessionStorage.setItem('odip.backPaths', stored)
+    vi.resetModules()
+    const fresh = await import('./useBackNavigation')
+    fresh.__testHooks.setIdx(1)
+    expect(fresh.__testHooks.getPrevSnapshot()).toBeNull()
+  })
+
+  it('a valid stored list is still read', async () => {
+    sessionStorage.setItem('odip.backPaths', JSON.stringify([[0, '/trips']]))
+    vi.resetModules()
+    const fresh = await import('./useBackNavigation')
+    fresh.__testHooks.setIdx(1)
+    expect(fresh.__testHooks.getPrevSnapshot()).toBe('/trips')
+  })
+})
+
 describe('usePreviousAppPath', () => {
   it('is null when nothing earlier is recorded', () => {
     const { result } = renderHook(() => usePreviousAppPath(), {
