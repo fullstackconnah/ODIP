@@ -428,13 +428,6 @@
 .bt-plot { outline: 2px solid transparent; touch-action: pan-y; }
 .bt-plot:focus-visible { outline: 2px solid var(--color-ring); outline-offset: 2px; }
 .bt-readout { animation: railFadeIn 0.1s ease-out; }
-@media (forced-colors: active) {
-  .bt-budget, .bt-grid, .bt-today { stroke: GrayText; }
-  .bt-used, .bt-booked, .bt-expected, .bt-tick { stroke: CanvasText; }
-  .bt-cross { stroke: Highlight; }
-  .bt-dot[data-dot] { fill: Highlight; stroke: Canvas; }
-  .bt-readout { background: Canvas; color: CanvasText; border: 1px solid CanvasText; }
-}
 
 /*
  * The sidebar folding (AppLayout `data-folding`, set from the click until the nav swaps to the rail 80ms later): the words and nested rows
@@ -496,6 +489,12 @@ aside[data-folding] [data-fold="word"] { transform: translateX(-12px); }
   :focus-visible { outline: 2px solid CanvasText; outline-offset: 2px; }
   /* The tab list is overflow-x-auto and clips anything outside a tab, so tabs draw the outline inside. */
   [role="tab"]:focus-visible { outline-offset: -4px; }
+  /* The budget graph (Funding tab): series drawn in system colours; the dash patterns carry the difference. */
+  .bt-budget, .bt-grid, .bt-today { stroke: GrayText; }
+  .bt-used, .bt-booked, .bt-expected, .bt-tick { stroke: CanvasText; }
+  .bt-cross { stroke: Highlight; }
+  .bt-dot[data-dot] { fill: Highlight; stroke: Canvas; }
+  .bt-readout { background: Canvas; color: CanvasText; border: 1px solid CanvasText; }
 }
 
 :root { --wordmark-dot: var(--color-primary-fixed); }
@@ -529,7 +528,9 @@ aside[data-folding] [data-fold="word"] { transform: translateX(-12px); }
   --color-input: #2b2f28;
   --color-ring: #a6d66b;
   --color-chart-budget: #8a9180;
+  --color-chart-actual: var(--color-primary);
   --color-chart-expected: #5f95e0;
+  --color-chart-grid: var(--color-border);
   --ms-button-bg: #2f2f2f;
   --ms-button-fg: #ffffff;
   --ms-button-border: #8c8c8c;
