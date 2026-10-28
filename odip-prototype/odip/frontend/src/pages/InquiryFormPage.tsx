@@ -154,7 +154,7 @@ export default function InquiryFormPage() {
         focus={focus}
         onCreated={id => { setCreatedHere(id); setSearchParams({ id }, { replace: true }) }}
         onReopened={() => setReopenedHere(true)}
-        onDone={enquiryNotice => navigate('/participants?tab=enquiries', { state: { enquiryNotice } })}
+        onDone={enquiryNotice => navigate('/participants?tab=enquiries', { state: { enquiryNotice }, replace: true })}
       />
     )
   }

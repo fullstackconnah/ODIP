@@ -26,3 +26,12 @@ Caregiver public wizard (outside the app shell, tracker not mounted); portal "Ba
 
 ## apple-design rules applied
 Familiarity/consistency (same control, same slot, same behaviour everywhere); agency (modifier-click and copy-link keep working); forgiveness (blocker on dirty forms); spatial consistency (Back returns along the path you came in on); no new animation.
+
+## FIX1 (names and behaviour only; layout, size, placement, touch targets unchanged)
+Accessible name of the Back control, by state (visible text stays "Back" / arrow icon):
+- Previous page known (recorded this session, or restored from sessionStorage after a reload) and not the fallback: "Back to <screen>" ("Back to Invoices", "Back to trip", "Back to Enquiries").
+- Previous page unknown but history exists (idx > 0: a reload that lost the map, a page nobody labelled): "Go back". It never claims a destination it cannot name, and never names the caller's fallback when the click goes elsewhere.
+- Deep link / new tab (idx 0): "Back to <label>" (the caller's label), because the click goes to the fallback.
+- Previous page is the fallback itself: "Back to <label>" (the name and the destination agree).
+Also: a saved enquiry replaces the form entry (replace: true) so Back never reopens a finished form. The path map persists in sessionStorage (`odip.backPaths`) so a reload keeps naming the previous page.
+apple-design rules applied: familiarity and consistency (one control, same behaviour), agency/forgiveness (finished form not reopened), honest feedback (the name never lies), no new motion.

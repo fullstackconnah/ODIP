@@ -7,7 +7,8 @@
  * fallback. `navigate(-1)` is a router navigation, so the unsaved-changes blocker still asks first.
  *
  * The tracker (mounted once in AppLayout) remembers the pathname + search of each entry by idx, only to NAME the control
- * ("Back to Trips"). After a reload the map is empty and the name falls back to the page's own label.
+ * ("Back to Trips"). The map is kept in sessionStorage so a reload still names the page; when an entry is still unknown the
+ * name is "Go back", never the page's own label (the click does not go there).
  */
 import { useCallback, useEffect, useSyncExternalStore } from 'react'
 import type { MouseEvent } from 'react'
@@ -17,8 +18,24 @@ import { useLocation, useNavigate } from 'react-router-dom'
 
 type Listener = () => void
 const listeners = new Set<Listener>()
-/** pathname + search of the entry at each history idx, written on every location change. */
-const pathByIdx = new Map<number, string>()
+const STORE_KEY = 'odip.backPaths'
+/** pathname + search of the entry at each history idx, written on every location change; restored from sessionStorage after a reload. */
+const pathByIdx = new Map<number, string>(
+  (() => {
+    try {
+      return JSON.parse(sessionStorage.getItem(STORE_KEY) ?? '[]') as [number, string][]
+    } catch {
+      return []
+    }
+  })(),
+)
+function persist() {
+  try {
+    sessionStorage.setItem(STORE_KEY, JSON.stringify([...pathByIdx]))
+  } catch {
+    // storage full or blocked: the name just falls back to "Go back" after a reload
+  }
+}
 /** Test seam: MemoryRouter writes no `history.state.idx`. */
 let idxOverride: number | null = null
 
@@ -70,6 +87,11 @@ export const __testHooks = {
   },
   reset: () => {
     pathByIdx.clear()
+    try {
+      sessionStorage.removeItem(STORE_KEY)
+    } catch {
+      // nothing to clear
+    }
     idxOverride = null
     notify()
   },
@@ -83,6 +105,7 @@ export function usePreviousAppPathTracker(): null {
   useEffect(() => {
     // pathname + search, not pathname alone: the Participants hub keeps its tab in `?tab=`, and Back must name it.
     pathByIdx.set(currentIdx(), location.pathname + location.search)
+    persist()
     notify()
   }, [location.key, location.pathname, location.search])
   return null
@@ -101,6 +124,8 @@ export function usePreviousAppPath(): string | null {
 export function useBackTarget(fallbackTo: string): {
   to: string
   previousPath: string | null
+  /** An earlier in-app entry exists, so a click runs navigate(-1) even when the tracker could not name it. */
+  goesBack: boolean
   onBack: () => void
   onLinkClick: (e: MouseEvent) => void
   leave: () => void
@@ -127,7 +152,7 @@ export function useBackTarget(fallbackTo: string): {
     [onBack],
   )
   const known = previousPath && previousPath !== here ? previousPath : null
-  return { to: fallbackTo, previousPath: known, onBack, onLinkClick, leave, ariaLabel: buildAriaLabel(known ?? '', here) }
+  return { to: fallbackTo, previousPath: known, goesBack: currentIdx() > 0, onBack, onLinkClick, leave, ariaLabel: buildAriaLabel(known ?? '', here) }
 }
 
 // --- aria-label helpers --------------------------------------------------------------------
@@ -142,6 +167,7 @@ const KNOWN_SCREEN_LABELS: Record<string, string> = {
   '/': 'Dashboard',
   '/participants': 'Participants',
   '/trips': 'Trips',
+  '/invoices': 'Invoices',
   '/medications': 'Medications',
 }
 
@@ -171,6 +197,7 @@ function buildAriaLabel(targetPath: string, currentPath: string): string {
   // Detail page patterns like /participants/5 or /onboarding/5 — we don't try to fetch the
   // record name from a hook here (that would couple this primitive to every page's data
   // fetching), so fall back to the resource noun.
+  if (/^\/trips\/[^/?]+/.exec(targetPath)) return 'Back to trip'
   const participantsMatch = /^\/participants\/[^/]+$/.exec(targetPath)
   if (participantsMatch) return 'Back to participant'
   const onboardingMatch = /^\/onboarding\/[^/]+$/.exec(targetPath)

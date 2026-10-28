@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
+import { MemoryRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query'
 import InquiryFormPage from './InquiryFormPage'
 
@@ -48,13 +48,14 @@ const NO_DETAILS = {
 /** The Enquiries tab, as far as the form can see: where it went, and the summary it carried there as router state. */
 function TabProbe() {
   const state = useLocation().state as { enquiryNotice?: { title: string; message: string } } | null
-  return <><p>Enquiries tab destination</p><p data-testid="notice">{state?.enquiryNotice ? `${state.enquiryNotice.title}: ${state.enquiryNotice.message}` : ''}</p></>
+  const navigate = useNavigate()
+  return <><p>Enquiries tab destination</p><p data-testid="notice">{state?.enquiryNotice ? `${state.enquiryNotice.title}: ${state.enquiryNotice.message}` : ''}</p><button type="button" onClick={() => navigate(-1)}>probe history back</button></>
 }
 
-function renderForm(path = '/participants/new-inquiry', queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })) {
+function renderForm(path = '/participants/new-inquiry', queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } }), entries = [path]) {
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[path]}>
+      <MemoryRouter initialEntries={entries} initialIndex={entries.length - 1}>
         <Routes>
           <Route path="/participants/new-inquiry" element={<InquiryFormPage />} />
           <Route path="/participants" element={<TabProbe />} />
@@ -93,6 +94,19 @@ describe('InquiryFormPage (wire) — capturing an enquiry', () => {
     // Kept from the old InquiryFormPage.test.tsx (plan check S6): a plain success goes back to the Enquiries tab, with its summary.
     expect(await screen.findByText('Enquiries tab destination')).toBeInTheDocument()
     expect(screen.getByTestId('notice')).toHaveTextContent('Enquiry captured: Rowan Blake is on the Enquiries list.')
+  })
+
+  it('a saved enquiry replaces the form in history: browser Back from the tab does not reopen the finished form', async () => {
+    const user = userEvent.setup()
+    renderForm('/participants/new-inquiry', undefined, ['/participants', '/participants/new-inquiry'])
+    await user.type(firstName(), 'Ava')
+    await user.type(lastName(), 'Ng')
+    await user.click(screen.getByRole('button', { name: 'Capture enquiry' }))
+    expect(await screen.findByText('Enquiries tab destination')).toBeInTheDocument()
+    expect(screen.getByTestId('notice')).toHaveTextContent('Enquiry captured')
+    await user.click(screen.getByRole('button', { name: 'probe history back' }))
+    expect(screen.queryByRole('button', { name: 'Capture enquiry' })).not.toBeInTheDocument()
+    expect(screen.getByText('Enquiries tab destination')).toBeInTheDocument()
   })
 
   it('has a provenance / referral notes field, and sends what is typed in it, trimmed', async () => {

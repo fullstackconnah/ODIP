@@ -907,7 +907,7 @@ the visible text). 44px under a coarse pointer in every variant, visible focus r
 **History.** Back always goes to the page the user visited before (`navigate(-1)`). `to` is only the fallback, used when nothing earlier exists in this tab (a deep link, a new tab, a pasted URL): then Back
 pushes `to`. The element stays a real link whose `href` is `to`; a plain left click is handled, a modified or middle click uses the href. The hook `useBackTarget(to)` runs inside the component, so a page can
 render a BackButton after an early return without a hook below it (the class of bug #155 fixed on the onboarding page). The accessible name says where Back really goes ("Back to Dashboard") when that screen is
-known, and "Back to {label}" otherwise (after a reload, or when the previous screen is the fallback itself). A change of query on the same path (a tab or a filter written with `replace`) is the same screen,
+known, "Go back" when history exists but the previous page is unknown, and "Back to {label}" on a deep link or when the previous screen is the fallback itself. The page paths are kept in sessionStorage, so a reload still names the previous page. A change of query on the same path (a tab or a filter written with `replace`) is the same screen,
 never a predecessor. There is no opt-out: a Cancel that should follow Back uses `useBackTarget` too (`WizardNavFooter` does).
 
 **Saves replace.** A page that finishes a form must not leave the form in history: navigate away with `{ replace: true }`, or call `back.leave()` (back when there is history, otherwise a replace to the fallback)

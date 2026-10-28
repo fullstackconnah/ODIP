@@ -112,8 +112,9 @@ function RoutedBack({ to, label, variant = 'button', className, 'data-testid': t
   // The hook is called unconditionally and INSIDE this component, so a page can render a BackButton after an early return without
   // putting a hook below it (the class of bug #155 fixed on the onboarding page).
   const target = useBackTarget(to)
-  // The name says where a click goes: the previous screen when it is known, else the caller's label (after a reload, say).
-  const name = target.previousPath && target.previousPath !== to ? target.ariaLabel : `Back to ${label}`
+  // The name says where a click goes: the previous screen when it is known, "Go back" when history exists but the page is unknown
+  // (a click still runs navigate(-1)), else the caller's label (a deep link goes to the fallback).
+  const name = target.previousPath && target.previousPath !== to ? target.ariaLabel : target.goesBack && target.previousPath !== to ? 'Go back' : `Back to ${label}`
   return <LinkControl variant={variant} name={name} className={className} testId={testId} href={to} onClick={target.onLinkClick} />
 }
 

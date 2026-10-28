@@ -139,7 +139,7 @@ describe('BackButton: history', () => {
     expect(screen.getByRole('link', { name: 'Back to staff' })).toBeInTheDocument()
   })
 
-  it('uses the caller label when history exists but the page before is unknown (after a reload)', () => {
+  it('says "Go back", not the caller label, when history exists but the page before is unknown (after a reload)', () => {
     __testHooks.setIdx(2)
     render(
       <MemoryRouter initialEntries={['/staff/s-1']}>
@@ -147,7 +147,18 @@ describe('BackButton: history', () => {
         <BackButton to="/staff" label="staff" />
       </MemoryRouter>,
     )
-    expect(screen.getByRole('link', { name: 'Back to staff' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Go back' })).toBeInTheDocument()
+  })
+
+  it('idx 3 with an empty map is "Go back" (a click runs navigate(-1), so the name cannot claim the fallback)', () => {
+    __testHooks.setIdx(3)
+    render(
+      <MemoryRouter initialEntries={['/trips/t-1']}>
+        <Tracker />
+        <BackButton to="/trips" label="trips" />
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('link', { name: 'Go back' })).toBeInTheDocument()
   })
 
   it('a ctrl-click is left to the browser: the link opens its href (the fallback) and Back does not run', () => {

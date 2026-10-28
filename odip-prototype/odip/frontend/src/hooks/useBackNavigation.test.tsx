@@ -250,6 +250,28 @@ describe('useBackTarget: the accessible name', () => {
     withPrevious('/participants?tab=onboarding', '/onboarding/5', <Name />)
     expect(screen.getByTestId('aria').textContent).toBe('Back to Onboarding')
   })
+
+  it('names the Invoices register', () => {
+    withPrevious('/invoices', '/claims/c-1', <Name />)
+    expect(screen.getByTestId('aria').textContent).toBe('Back to Invoices')
+  })
+
+  it('names a trip detail page', () => {
+    withPrevious('/trips/t-9', '/claims/c-1', <Name />)
+    expect(screen.getByTestId('aria').textContent).toBe('Back to trip')
+  })
+})
+
+describe('the path map survives a reload (sessionStorage)', () => {
+  it('a path recorded before a reload still names the previous page afterwards', async () => {
+    __testHooks.setIdx(1)
+    render(<MemoryRouter initialEntries={['/trips']}><Tracker /></MemoryRouter>)
+    // The next entry is idx 2; the tracker has just written idx 1 = /trips.
+    vi.resetModules()
+    const fresh = await import('./useBackNavigation')
+    fresh.__testHooks.setIdx(2)
+    expect(fresh.__testHooks.getPrevSnapshot()).toBe('/trips')
+  })
 })
 
 describe('usePreviousAppPath', () => {
