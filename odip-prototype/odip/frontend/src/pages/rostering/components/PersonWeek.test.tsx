@@ -212,6 +212,23 @@ describe('PersonWeek: the week', () => {
 })
 
 describe('PersonWeek: extras', () => {
+  // Roster week shots (SHAPE §8.5): a trip bar is a control-height link under a coarse pointer (44px), and stays 24px on a mouse.
+  it('trip bars grow to the control height under a coarse pointer', async () => {
+    const trip = { tripInstanceId: 't1', tripCode: 'T-1', tripName: 'Coast trip', startDate: '2026-11-03', endDate: '2026-11-05', isDriver: false }
+    mockApiGet.mockResolvedValue(staffWeek({ shifts: [shiftOn({})], tripBars: [trip] }))
+    renderWeek('staff')
+    const lane = await screen.findByRole('list', { name: 'Leave and trips' })
+    expect(within(lane).getByRole('link', { name: /Coast trip/ })).toHaveClass('h-[var(--control-h-sm)]', 'pointer-coarse:h-[var(--control-h)]')
+  })
+
+  // The over-target fill is the "Over target" ink, which clears 3:1 on the input track in both themes; the plain warning amber was 1.66:1 in light.
+  it('over target fills the meter with the warning ink', async () => {
+    mockApiGet.mockResolvedValue(staffWeek({ shifts: [shiftOn({})], rosteredHours: 40, targetHours: 38 }))
+    renderWeek('staff')
+    await screen.findByText('Over target')
+    expect(document.querySelector('[aria-hidden="true"].bg-input > div')).toHaveClass('bg-[var(--color-on-warning-container)]')
+  })
+
   it('staff hours: meter, over target and no target', async () => {
     mockApiGet.mockResolvedValue(staffWeek({ shifts: [shiftOn({})], rosteredHours: 18, targetHours: 38 }))
     const { unmount } = renderWeek('staff')

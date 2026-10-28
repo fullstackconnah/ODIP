@@ -223,6 +223,12 @@ describe('ShiftChip cross-domain links', () => {
     expect(screen.getByRole('link', { name: 'Alex Rivera' })).toHaveAttribute('href', '/staff/staff-9?tab=week&week=2026-08-17')
   })
 
+  // Roster week shots (SHAPE §8.5): a 20px name link is 44px tall under a coarse pointer, as a block line so it still truncates.
+  it('gives both name links a 44px line under a coarse pointer', () => {
+    renderChip(<ShiftChip shift={makeShift()} canWrite onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+    expect(screen.getByRole('link', { name: 'Mia Chen' })).toHaveClass('truncate', 'pointer-coarse:leading-[var(--tap-min)]')
+  })
+
   it('renders no staff link for an unfilled (dashed) chip', () => {
     const shift = makeShift({ staffId: null, staffName: null })
     renderChip(<ShiftChip shift={shift} canWrite dashed onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)

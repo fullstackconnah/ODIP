@@ -52,8 +52,9 @@ export type ShiftChipProps = {
   onSetRegular?: (shift: ShiftDto) => void
 }
 
+// pointer-coarse: a 44px line, not a TAP_AREA pad, which would reach over the chip's own open target.
 const LABEL_LINK =
-  'min-w-0 flex-1 truncate rounded-sm text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring'
+  'min-w-0 flex-1 truncate rounded-sm pointer-coarse:leading-[var(--tap-min)] text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring'
 
 /**
  * The one chip type rendered in staff rows, participant rows and the Unfilled lane. Colour is

@@ -187,7 +187,7 @@ function HoursLine({ rostered, target }: { rostered: number; target: number }) {
       </p>
       {target > 0 && (
         <div className="h-0.5 w-full max-w-[16rem] bg-input" aria-hidden="true">
-          <div className={`h-full ${over ? 'bg-[var(--color-warning)]' : 'bg-primary'}`} style={{ width: `${Math.min(100, (rostered / target) * 100)}%` }} />
+          <div className={`h-full ${over ? 'bg-[var(--color-on-warning-container)]' : 'bg-primary'}`} style={{ width: `${Math.min(100, (rostered / target) * 100)}%` }} />
         </div>
       )}
     </div>

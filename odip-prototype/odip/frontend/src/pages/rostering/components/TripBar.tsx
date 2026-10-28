@@ -23,7 +23,7 @@ export function TripBar({ tripBar, days }: TripBarProps) {
     <Link
       to={`/trips/${tripBar.tripInstanceId}`}
       style={{ gridColumn: `${startCol} / ${endCol}` }}
-      className="flex h-[var(--control-h-sm)] items-center gap-1.5 rounded-sm bg-secondary-container px-2 text-[13px] text-foreground transition-colors duration-150 hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="flex h-[var(--control-h-sm)] pointer-coarse:h-[var(--control-h)] items-center gap-1.5 rounded-sm bg-secondary-container px-2 text-[13px] text-foreground transition-colors duration-150 hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       title={`${tripBar.tripName} (${tripBar.tripCode})`}
     >
       <Map className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
