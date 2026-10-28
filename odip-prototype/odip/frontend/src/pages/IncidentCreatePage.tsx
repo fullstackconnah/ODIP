@@ -444,7 +444,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
         const res = await updateIncident.mutateAsync({ id, data: updateData })
         if (res.success) {
           flushSync(() => reset(data))
-          navigate('/incidents')
+          navigate('/incidents', { replace: true })
         }
       } else {
         const res = await createIncident.mutateAsync(base)
@@ -457,7 +457,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
             })
           }
           flushSync(() => reset(data))
-          navigate(incidentReturnPath(location.state))
+          navigate(incidentReturnPath(location.state), { replace: true })
         }
       }
     } catch {
@@ -558,7 +558,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       {unsavedChangesDialog}
       <div className="flex items-start gap-2">
-        <BackButton to="/incidents" label="incidents" variant="icon" history={false} />
+        <BackButton to="/incidents" label="incidents" variant="icon" />
         <div className="flex-1 min-w-0"><PageHeader title={isEdit ? 'Edit incident report' : 'Report incident'} /></div>
       </div>
 
@@ -720,7 +720,6 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
           isReviewStep={isReviewStep}
           secondaryActions={[]}
           cancelTo="/incidents"
-          history={false}
           submitReserve={isEdit ? 'Saving…' : 'Submit incident report'}
           submitLabel={mutation.isPending ? (isEdit ? 'Saving…' : 'Submitting…') : (isEdit ? 'Save' : 'Submit incident report')}
           isSubmitting={mutation.isPending}

@@ -1501,12 +1501,12 @@ describe('ParticipantDetailPage — Back returns to where the user came from, el
     expect(back()).toHaveAttribute('href', '/participants')
   })
 
-  it('returns to the previous in-app screen when there is one', () => {
-    __testHooks.recordCurrentPath('/onboarding/participant-1')
-    __testHooks.recordCurrentPath('/participants/participant-1')
+  it('names the previous in-app screen when there is one (the href stays the list fallback)', () => {
+    __testHooks.seedHistory('/onboarding/participant-1', '/participants/participant-1')
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
     renderAt('participant-1')
-    expect(back()).toHaveAttribute('href', '/onboarding/participant-1')
+    expect(back()).toHaveAccessibleName('Back to onboarding')
+    expect(back()).toHaveAttribute('href', '/participants')
   })
 })
 

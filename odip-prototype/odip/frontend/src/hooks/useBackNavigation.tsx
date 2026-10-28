@@ -1,34 +1,43 @@
 /**
- * CORE-02 history-aware back-navigation.
+ * History-aware Back.
  *
- * Why this exists: the page-header back control on the Intake/Profile wizards used to be a
- * hardcoded `<Link>` pointing at `/participants` or `/participants/:id` — so if the user
- * arrived at the wizard from the onboarding detail screen (or any other entry point) and
- * then hit "Back", they were teleported somewhere unrelated to where they came from.
+ * Back goes to the page the user was on before this one. React-router's browser history numbers every entry
+ * (`window.history.state.idx`, 0 = the first entry of the tab), so "there is an earlier in-app page" is `idx > 0`. That
+ * survives a reload. When there is one, Back runs `navigate(-1)`; otherwise (a deep link, a new tab) it goes to the page's
+ * fallback. `navigate(-1)` is a router navigation, so the unsaved-changes blocker still asks first.
  *
- * The fix is a tiny piece of in-app state — the LAST in-app pathname the user was on — that
- * lives in this module (re-initialised on every fresh full page load, so deep-linking still
- * falls back to the supplied fallback exactly once per session).
- *
- * The tracker is mounted exactly once at the authenticated shell (`src/components/layout/
- * AppLayout.tsx`) and writes the latest pathname on every route change. The hook
- * `useBackTarget(fallbackTo)` reads that state and returns the destination the back control
- * should go to, the click handler that performs the navigation (so the unsaved-changes
- * blocker still trips for dirty forms — we never use `window.history.back()` here, that
- * bypasses the blocker), and an accessible name derived from the previous screen.
+ * The tracker (mounted once in AppLayout) remembers the pathname + search of each entry by idx, only to NAME the control
+ * ("Back to Trips"). The map is kept in sessionStorage so a reload still names the page; when an entry is still unknown the
+ * name is "Go back", never the page's own label (the click does not go there).
  */
 import { useCallback, useEffect, useSyncExternalStore } from 'react'
-import { useLocation, useNavigate, useNavigationType } from 'react-router-dom'
+import type { MouseEvent } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 
 // --- module state (re-initialised on every fresh full page load) ---------------------------
 
 type Listener = () => void
 const listeners = new Set<Listener>()
-/** Previous in-app pathname the user was on. `null` until at least one route change has
- *  happened, or until we land somewhere without a recorded predecessor. */
-let prevPath: string | null = null
-/** Pathname the tracker most recently wrote. Used to compute the next prevPath. */
-let curPath = ''
+const STORE_KEY = 'odip.backPaths'
+/** pathname + search of the entry at each history idx, written on every location change; restored from sessionStorage after a reload. */
+const pathByIdx = new Map<number, string>(
+  (() => {
+    try {
+      return JSON.parse(sessionStorage.getItem(STORE_KEY) ?? '[]') as [number, string][]
+    } catch {
+      return []
+    }
+  })(),
+)
+function persist() {
+  try {
+    sessionStorage.setItem(STORE_KEY, JSON.stringify([...pathByIdx]))
+  } catch {
+    // storage full or blocked: the name just falls back to "Go back" after a reload
+  }
+}
+/** Test seam: MemoryRouter writes no `history.state.idx`. */
+let idxOverride: number | null = null
 
 function subscribe(listener: Listener): () => void {
   listeners.add(listener)
@@ -37,101 +46,113 @@ function subscribe(listener: Listener): () => void {
   }
 }
 
-/** Snapshot of the previous-path store. Stable identity is critical — useSyncExternalStore
- *  re-reads it on every render, and a fresh object each call would force a re-render loop. */
-function getPrevSnapshot(): string | null {
-  return prevPath
-}
-
-/** Server snapshot for SSR — irrelevant here (this app is CSR-only), but required by the
- *  useSyncExternalStore type signature so the hook stays portable. */
-function getServerSnapshot(): string | null {
-  return null
-}
-
-const pathnameOf = (path: string): string => path.split('?')[0]
-
-/** Records a new current pathname and rolls the previous one forward. Module-state mutation
- *  only — no React state — so the react-hooks/set-state-in-effect rule doesn't apply. */
-function recordCurrentPath(nextPath: string, replaced = false): void {
-  if (nextPath === curPath) return
-  // A replace (a <Navigate replace> redirect such as /participants/:id/edit) took the screen it replaced out of the history, so it
-  // is not somewhere the user came FROM: recording it made Back go to the redirect, which bounced straight back here.
-  if (replaced && curPath !== '') {
-    curPath = nextPath
-    for (const listener of listeners) listener()
-    return
-  }
-  // First navigation after a fresh page load: there is no meaningful "previous" path, so the
-  // first thing we observe becomes curPath with prevPath still null. After that, the path we
-  // were just on becomes prevPath.
-  if (curPath === '') {
-    curPath = nextPath
-  } else if (pathnameOf(nextPath) === pathnameOf(curPath)) {
-    // Same screen, new query: a tab (`?tab=`) or a filter written with `replace`. It is not somewhere the
-    // user came FROM, so it must not become the Back target: without this, a detail page whose tab lives in
-    // the URL would, after one tab switch, offer "Back" to itself on its default tab.
-    curPath = nextPath
-  } else {
-    prevPath = curPath
-    curPath = nextPath
-  }
+const notify = () => {
   for (const listener of listeners) listener()
 }
 
-/** Exported so tests can reset module state between cases without smuggling globals out via
- *  vi.stubGlobal. */
+/** idx of the current history entry; 0 when the router has not numbered it (first load, MemoryRouter). */
+function currentIdx(): number {
+  if (idxOverride !== null) return idxOverride
+  const idx = (window.history.state as { idx?: unknown } | null)?.idx
+  return typeof idx === 'number' ? idx : 0
+}
+
+/** The entry before this one, when the tracker saw it. */
+function getPrevSnapshot(): string | null {
+  const idx = currentIdx()
+  return idx > 0 ? (pathByIdx.get(idx - 1) ?? null) : null
+}
+
+const getServerSnapshot = (): string | null => null
+
+const pathnameOf = (path: string): string => path.split('?')[0]
+
+/** Exported so tests can reset module state and stand in for `history.state.idx`. */
 export const __testHooks = {
   subscribe,
   getPrevSnapshot,
-  recordCurrentPath,
+  recordAt: (idx: number, path: string) => {
+    pathByIdx.set(idx, path)
+    notify()
+  },
+  /** The user visited these pages in order and is on the last one. */
+  seedHistory: (...paths: string[]) => {
+    paths.forEach((p, i) => pathByIdx.set(i, p))
+    idxOverride = paths.length - 1
+    notify()
+  },
+  setIdx: (idx: number | null) => {
+    idxOverride = idx
+    notify()
+  },
   reset: () => {
-    prevPath = null
-    curPath = ''
-    for (const listener of listeners) listener()
+    pathByIdx.clear()
+    try {
+      sessionStorage.removeItem(STORE_KEY)
+    } catch {
+      // nothing to clear
+    }
+    idxOverride = null
+    notify()
   },
 }
 
 // --- public hooks --------------------------------------------------------------------------
 
-/** Track the previous in-app pathname. Must be mounted ONCE in the authenticated shell
- *  (AppLayout). Calling this more than once is harmless — both trackers would write the
- *  same value — but only one instance is the convention. */
+/** Remember where each history entry points. Mount ONCE in the authenticated shell (AppLayout). */
 export function usePreviousAppPathTracker(): null {
   const location = useLocation()
-  const navigationType = useNavigationType()
   useEffect(() => {
-    // Record pathname + search, NOT pathname alone: the Participants hub keeps its active
-    // lifecycle tab in `?tab=…`, so a pathname-only record made "Back to Participants" drop the
-    // user on the default (Active participants) tab instead of the Onboarding tab they left.
-    recordCurrentPath(location.pathname + location.search, navigationType === 'REPLACE')
-  }, [location.pathname, location.search, navigationType])
+    // pathname + search, not pathname alone: the Participants hub keeps its tab in `?tab=`, and Back must name it.
+    pathByIdx.set(currentIdx(), location.pathname + location.search)
+    persist()
+    notify()
+  }, [location.key, location.pathname, location.search])
   return null
 }
 
-/** Read the previous in-app pathname (or `null` if there isn't one yet). Re-renders the
- *  caller whenever the tracker records a new pathname. */
+/** The page one history entry back (or `null` if there is none or it was not seen). */
 export function usePreviousAppPath(): string | null {
   return useSyncExternalStore(subscribe, getPrevSnapshot, getServerSnapshot)
 }
 
-/** Returns the destination for a page-header back control, preferring real in-app history
- *  over the supplied fallback. */
+/**
+ * Back for a page. `to` is the fallback (the link's href); `onBack` goes back when there is an earlier entry, else to the
+ * fallback; `onLinkClick` is the click handler for a real link (a plain left click goes back, a modified click opens the href);
+ * `leave` is the same after a save (the fallback replaces the finished form).
+ */
 export function useBackTarget(fallbackTo: string): {
   to: string
+  previousPath: string | null
+  /** An earlier in-app entry exists, so a click runs navigate(-1) even when the tracker could not name it. */
+  goesBack: boolean
   onBack: () => void
+  onLinkClick: (e: MouseEvent) => void
+  leave: () => void
   ariaLabel: string
 } {
   const previousPath = usePreviousAppPath()
   const navigate = useNavigate()
   const location = useLocation()
   const here = location.pathname + location.search
-  const to = previousPath && previousPath !== here ? previousPath : fallbackTo
   const onBack = useCallback(() => {
-    navigate(to)
-  }, [navigate, to])
-  const ariaLabel = buildAriaLabel(to, here)
-  return { to, onBack, ariaLabel }
+    if (currentIdx() > 0) navigate(-1)
+    else navigate(fallbackTo)
+  }, [navigate, fallbackTo])
+  const leave = useCallback(() => {
+    if (currentIdx() > 0) navigate(-1)
+    else navigate(fallbackTo, { replace: true })
+  }, [navigate, fallbackTo])
+  const onLinkClick = useCallback(
+    (e: MouseEvent) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+      e.preventDefault()
+      onBack()
+    },
+    [onBack],
+  )
+  const known = previousPath && previousPath !== here ? previousPath : null
+  return { to: fallbackTo, previousPath: known, goesBack: currentIdx() > 0, onBack, onLinkClick, leave, ariaLabel: buildAriaLabel(known ?? '', here) }
 }
 
 // --- aria-label helpers --------------------------------------------------------------------
@@ -146,6 +167,7 @@ const KNOWN_SCREEN_LABELS: Record<string, string> = {
   '/': 'Dashboard',
   '/participants': 'Participants',
   '/trips': 'Trips',
+  '/invoices': 'Invoices',
   '/medications': 'Medications',
 }
 
@@ -175,6 +197,7 @@ function buildAriaLabel(targetPath: string, currentPath: string): string {
   // Detail page patterns like /participants/5 or /onboarding/5 — we don't try to fetch the
   // record name from a hook here (that would couple this primitive to every page's data
   // fetching), so fall back to the resource noun.
+  if (/^\/trips\/[^/?]+/.exec(targetPath)) return 'Back to trip'
   const participantsMatch = /^\/participants\/[^/]+$/.exec(targetPath)
   if (participantsMatch) return 'Back to participant'
   const onboardingMatch = /^\/onboarding\/[^/]+$/.exec(targetPath)

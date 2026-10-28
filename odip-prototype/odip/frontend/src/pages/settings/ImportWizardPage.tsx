@@ -1,7 +1,7 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { format } from 'date-fns'
 import { Navigate, useParams } from 'react-router-dom'
-import { BackButton } from '@/components/BackButton'
+import { BackButton, BackActionButton } from '@/components/BackButton'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { CheckboxField } from '@/components/CheckboxField'
@@ -237,7 +237,7 @@ export default function ImportWizardPage() {
 
   const header = (
     <div className="flex items-start gap-2">
-      <BackButton to={BACK_TO} label="import data" variant="icon" history={false} />
+      <BackButton to={BACK_TO} label="import data" variant="icon" />
       <div className="flex-1 min-w-0"><PageHeader title={title} /></div>
     </div>
   )
@@ -296,7 +296,7 @@ export default function ImportWizardPage() {
             <RowsTable rows={failed} />
           </section>
         )}
-        <div><Button to={BACK_TO} variant="secondary">Back to import data</Button></div>
+        <div><BackActionButton to={BACK_TO}>Back to import data</BackActionButton></div>
         <ConfirmDialog
           open={confirmUndo}
           title="Undo this import?"
@@ -466,7 +466,6 @@ export default function ImportWizardPage() {
               isReviewStep={step === 'review'}
               secondaryActions={[]}
               cancelTo={BACK_TO}
-              history={false}
               submitLabel={`Import ${plural(data?.createCount ?? 0, noun)}`}
               isSubmitting={commit.isPending}
               summary={commit.isPending ? <p className="text-sm text-[var(--color-muted-foreground)]">Large files can take up to a minute.</p>

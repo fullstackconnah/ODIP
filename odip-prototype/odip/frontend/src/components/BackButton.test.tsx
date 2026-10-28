@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
-import { BackButton } from './BackButton'
+import { BackActionButton, BackButton } from './BackButton'
 import { __testHooks, usePreviousAppPathTracker } from '@/hooks/useBackNavigation'
 
 beforeEach(() => {
@@ -92,43 +92,89 @@ describe('BackButton: the routed forms', () => {
 })
 
 describe('BackButton: history', () => {
-  it('uses `to` as the fallback when the user did not come from another in-app screen (a deep link or a reload)', () => {
+  // MemoryRouter writes no history.state.idx, so the test seam stands in for it: entries /dash, /staff/s-1 with the second current.
+  function renderWithHistory(ui: React.ReactNode, entries = ['/', '/staff/s-1']) {
+    entries.slice(0, -1).forEach((p, i) => __testHooks.recordAt(i, p))
+    __testHooks.setIdx(entries.length - 1)
+    return render(
+      <MemoryRouter initialEntries={entries} initialIndex={entries.length - 1}>
+        <Tracker />
+        <Routes>
+          <Route path="*" element={<>{ui}<Where /></>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+  }
+
+  it('keeps href = the fallback and the caller label when nothing is before this page (a deep link)', () => {
     renderAt(<BackButton to="/staff" label="staff" />)
     expect(screen.getByRole('link', { name: 'Back to staff' })).toHaveAttribute('href', '/staff')
   })
 
-  it('returns to the previous in-app screen when there is one (history is on by default), and its name says so', () => {
-    __testHooks.recordCurrentPath('/')
-    __testHooks.recordCurrentPath('/staff/s-1')
-    renderAt(<BackButton to="/staff" label="staff" />)
-    const back = screen.getByRole('link', { name: 'Back to Dashboard' })
-    expect(back).toHaveAttribute('href', '/')
-  })
-
-  it('keeps the caller\'s label when the previous screen IS the fallback', () => {
-    __testHooks.recordCurrentPath('/staff')
-    __testHooks.recordCurrentPath('/staff/s-1')
-    renderAt(<BackButton to="/staff" label="staff" />)
-    expect(screen.getByRole('link', { name: 'Back to staff' })).toHaveAttribute('href', '/staff')
-  })
-
-  it('history={false} pins Back to `to` whatever the previous screen was', () => {
-    __testHooks.recordCurrentPath('/')
-    __testHooks.recordCurrentPath('/staff/s-1')
-    renderAt(<BackButton to="/staff" label="staff" history={false} />)
-    expect(screen.getByRole('link', { name: 'Back to staff' })).toHaveAttribute('href', '/staff')
-  })
-
-  it('returns to the previous screen with its query (a hub tab) when that is where the user came from', async () => {
+  it('a click with nothing before this page goes to the fallback', async () => {
     const user = userEvent.setup()
-    __testHooks.recordCurrentPath('/participants?tab=onboarding')
-    __testHooks.recordCurrentPath('/staff/s-1')
-    renderAt(<BackButton to="/participants" label="participants" />)
+    renderAt(<BackButton to="/staff" label="staff" />)
+    await user.click(screen.getByRole('link', { name: 'Back to staff' }))
+    expect(screen.getByTestId('where')).toHaveTextContent('/staff')
+  })
+
+  it('with a page before this one, a plain click goes back there, the name says so, and the href stays the fallback', async () => {
+    const user = userEvent.setup()
+    renderWithHistory(<BackButton to="/staff" label="staff" />)
+    const back = screen.getByRole('link', { name: 'Back to Dashboard' })
+    expect(back).toHaveAttribute('href', '/staff')
+    await user.click(back)
+    expect(screen.getByTestId('where')).toHaveTextContent(/^\/$/)
+  })
+
+  it('goes back to the previous page even when it is not the fallback (a hub tab keeps its query)', async () => {
+    const user = userEvent.setup()
+    renderWithHistory(<BackButton to="/participants" label="participants" />, ['/participants?tab=onboarding', '/staff/s-1'])
     await user.click(screen.getByRole('link', { name: 'Back to Onboarding' }))
     expect(screen.getByTestId('where')).toHaveTextContent('/participants?tab=onboarding')
   })
 
-  it('can be rendered after an early return without changing the page\'s hook order (the #155 class of bug)', async () => {
+  it('keeps the caller label when the previous page IS the fallback', () => {
+    renderWithHistory(<BackButton to="/staff" label="staff" />, ['/staff', '/staff/s-1'])
+    expect(screen.getByRole('link', { name: 'Back to staff' })).toBeInTheDocument()
+  })
+
+  it('says "Go back", not the caller label, when history exists but the page before is unknown (after a reload)', () => {
+    __testHooks.setIdx(2)
+    render(
+      <MemoryRouter initialEntries={['/staff/s-1']}>
+        <Tracker />
+        <BackButton to="/staff" label="staff" />
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('link', { name: 'Go back' })).toBeInTheDocument()
+  })
+
+  it('idx 3 with an empty map is "Go back" (a click runs navigate(-1), so the name cannot claim the fallback)', () => {
+    __testHooks.setIdx(3)
+    render(
+      <MemoryRouter initialEntries={['/trips/t-1']}>
+        <Tracker />
+        <BackButton to="/trips" label="trips" />
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('link', { name: 'Go back' })).toBeInTheDocument()
+  })
+
+  it('a ctrl-click is left to the browser: the link opens its href (the fallback) and Back does not run', () => {
+    renderWithHistory(<BackButton to="/staff" label="staff" />)
+    const back = screen.getByRole('link', { name: 'Back to Dashboard' })
+    let prevented: boolean | null = null
+    const spy = (e: Event) => { prevented = e.defaultPrevented; e.preventDefault() }
+    document.addEventListener('click', spy)
+    back.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, ctrlKey: true, button: 0 }))
+    document.removeEventListener('click', spy)
+    // A modified click is left to the browser (the router's own Link does the same).
+    expect(prevented).toBe(false)
+    expect(screen.getByTestId('where')).toHaveTextContent('/staff/s-1')
+  })
+
+  it('can be rendered after an early return without changing the page hook order (the #155 class of bug)', async () => {
     const user = userEvent.setup()
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
     function Page() {
@@ -166,5 +212,30 @@ describe('BackButton: in-page back (no route to link to)', () => {
     )
     expect(screen.getByRole('button', { name: 'Back to a' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Back to b' })).toHaveAttribute('title', 'Back to b')
+  })
+})
+
+describe('BackActionButton: a Cancel that follows Back', () => {
+  it('is a link whose href is the fallback, and a plain click goes back when there is history', async () => {
+    const user = userEvent.setup()
+    __testHooks.seedHistory('/trips', '/trips/new')
+    render(
+      <MemoryRouter initialEntries={['/trips', '/trips/new']} initialIndex={1}>
+        <Routes>
+          <Route path="*" element={<><BackActionButton to="/dashboard" /><Where /></>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    const cancel = screen.getByRole('link', { name: 'Cancel' })
+    expect(cancel).toHaveAttribute('href', '/dashboard')
+    await user.click(cancel)
+    expect(screen.getByTestId('where')).toHaveTextContent('/trips')
+  })
+
+  it('goes to the fallback when nothing precedes the page', async () => {
+    const user = userEvent.setup()
+    renderAt(<BackActionButton to="/dashboard" />, '/trips/new')
+    await user.click(screen.getByRole('link', { name: 'Cancel' }))
+    expect(screen.getByTestId('where')).toHaveTextContent('/dashboard')
   })
 })

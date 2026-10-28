@@ -7,6 +7,7 @@ import type { ActivityDto, ScheduledActivityDto, CreateScheduledActivityDto, Upd
 import type { ScheduledActivityStatus } from '@/api/types/enums'
 import { Button } from '@/components/Button'
 import { FormField } from '@/components/FormField'
+import { useStickyOpen } from '@/hooks/useStickyOpen'
 
 interface AddActivityModalProps {
   tripDayId: string
@@ -35,6 +36,7 @@ export default function AddActivityModal({ tripDayId, editingActivity, eventTemp
   const [accessibilityNotes, setAccessibilityNotes] = useState('')
   const [notes, setNotes] = useState('')
   const [notesOpenAtMount] = useState(() => !!(editingActivity?.accessibilityNotes || editingActivity?.notes))
+  const notesFold = useStickyOpen(!!(accessibilityNotes || notes))
   const [timeError, setTimeError] = useState('')
 
   const { data: activities = [] } = useActivities()
@@ -208,7 +210,7 @@ export default function AddActivityModal({ tripDayId, editingActivity, eventTemp
             </div>
           </details>
 
-          <details className="group sm:col-span-2" open={!!(accessibilityNotes || notes)} data-fold-static={notesOpenAtMount || undefined}>
+          <details className="group sm:col-span-2" open={notesFold.open} onToggle={notesFold.onToggle} data-fold-static={notesOpenAtMount || undefined}>
             <summary className="text-sm font-medium cursor-pointer text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]">
               Notes
             </summary>

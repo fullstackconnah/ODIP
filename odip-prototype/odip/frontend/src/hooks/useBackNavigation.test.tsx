@@ -1,308 +1,293 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import type { ReactElement } from 'react'
-import { act, render, renderHook, screen } from '@testing-library/react'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import type { ReactNode } from 'react'
+import { render, renderHook, screen, act, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Navigate, Route, Routes, useNavigate, useLocation } from 'react-router-dom'
+import {
+  MemoryRouter,
+  Outlet,
+  RouterProvider,
+  Route,
+  Routes,
+  createBrowserRouter,
+  createMemoryRouter,
+  useLocation,
+  useNavigate,
+} from 'react-router-dom'
 import {
   __testHooks,
   useBackTarget,
   usePreviousAppPath,
   usePreviousAppPathTracker,
 } from './useBackNavigation'
+import { useUnsavedChangesWarning } from './useUnsavedChangesWarning'
 
-function TrackerHarness() {
-  // Mount the tracker exactly once at the shell level so every subsequent hook instance in
-  // the same MemoryRouter tree sees the same recorded path.
+function Tracker() {
   usePreviousAppPathTracker()
   return null
 }
 
-function DisplayPreviousPath() {
-  const value = usePreviousAppPath()
-  return <span data-testid="prev">{value ?? ''}</span>
-}
-
 beforeEach(() => {
   __testHooks.reset()
+  // A fresh document: no router state, so react-router starts this entry at idx 0.
+  window.history.replaceState(null, '', '/')
 })
 
-describe('useBackNavigation — tracker', () => {
-  it('starts with no previous path on a fresh mount', () => {
-    render(
-      <MemoryRouter initialEntries={['/somewhere']}>
-        <TrackerHarness />
-        <DisplayPreviousPath />
-      </MemoryRouter>,
-    )
-    expect(screen.getByTestId('prev').textContent).toBe('')
-  })
+/** A page with Back (the hook's own handler) and buttons that push the next screens. */
+function Page({ fallback = '/home' }: { fallback?: string }) {
+  const back = useBackTarget(fallback)
+  const navigate = useNavigate()
+  const location = useLocation()
+  return (
+    <>
+      <span data-testid="here">{location.pathname + location.search}</span>
+      <button type="button" onClick={back.onBack} aria-label={back.ariaLabel}>
+        back
+      </button>
+      <span data-testid="prev">{back.previousPath ?? ''}</span>
+      <button type="button" onClick={() => navigate('/b')}>to b</button>
+      <button type="button" onClick={() => navigate('/c')}>to c</button>
+    </>
+  )
+}
 
-  it('records the previous path after a route change', () => {
-    function Harness() {
-      const navigate = useNavigate()
-      return (
+function mountBrowser(start: string, page: ReactNode = <Page />) {
+  window.history.replaceState(window.history.state, '', start)
+  const router = createBrowserRouter([
+    {
+      element: (
         <>
-          <TrackerHarness />
-          <button type="button" onClick={() => navigate('/participants/7')}>
-            go
-          </button>
-          <DisplayPreviousPath />
+          <Tracker />
+          <Outlet />
         </>
-      )
-    }
-    render(
-      <MemoryRouter initialEntries={['/participants']}>
-        <Routes>
-          <Route path="*" element={<Harness />} />
-        </Routes>
-      </MemoryRouter>,
-    )
-    expect(screen.getByTestId('prev').textContent).toBe('')
-    act(() => {
-      screen.getByRole('button', { name: /go/ }).click()
-    })
-    expect(screen.getByTestId('prev').textContent).toBe('/participants')
+      ),
+      children: [{ path: '*', element: page }],
+    },
+  ])
+  render(<RouterProvider router={router} />)
+  return router
+}
+
+describe('history.state.idx', () => {
+  it('react-router writes idx into window.history.state: 0 on load, +1 per push, unchanged by replace', async () => {
+    const router = mountBrowser('/a')
+    expect(window.history.state.idx).toBe(0)
+    await act(() => router.navigate('/b'))
+    expect(window.history.state.idx).toBe(1)
+    await act(() => router.navigate('/c'))
+    expect(window.history.state.idx).toBe(2)
+    await act(() => router.navigate('/d', { replace: true }))
+    expect(window.history.state.idx).toBe(2)
   })
 })
 
-describe('useBackNavigation — useBackTarget', () => {
-  function withRouter(initialEntries: string[], ui: () => React.ReactElement) {
+describe('useBackTarget: Back returns to the previous page visited', () => {
+  it('A to B to C: Back lands on B, then on A (no ping-pong between B and C)', async () => {
+    const user = userEvent.setup()
+    mountBrowser('/a')
+    await user.click(screen.getByRole('button', { name: 'to b' }))
+    await user.click(screen.getByRole('button', { name: 'to c' }))
+    expect(screen.getByTestId('here')).toHaveTextContent('/c')
+    await user.click(screen.getByRole('button', { name: /back/i }))
+    await waitFor(() => expect(screen.getByTestId('here')).toHaveTextContent('/b'))
+    await user.click(screen.getByRole('button', { name: /back/i }))
+    await waitFor(() => expect(screen.getByTestId('here')).toHaveTextContent('/a'))
+  })
+
+  it('names the previous screen once it is known', async () => {
+    const user = userEvent.setup()
+    mountBrowser('/trips')
+    await user.click(screen.getByRole('button', { name: 'to b' }))
+    expect(screen.getByRole('button', { name: 'Back to Trips' })).toBeInTheDocument()
+    expect(screen.getByTestId('prev')).toHaveTextContent('/trips')
+  })
+
+  it('a deep link (nothing before this page) goes to the fallback, as a push', async () => {
+    const user = userEvent.setup()
+    mountBrowser('/c')
+    expect(screen.getByTestId('prev')).toHaveTextContent('')
+    await user.click(screen.getByRole('button', { name: /back/i }))
+    await waitFor(() => expect(screen.getByTestId('here')).toHaveTextContent('/home'))
+    expect(window.history.state.idx).toBe(1)
+  })
+
+  it('after a reload the history survives: Back still runs navigate(-1), but the name falls back (the path map is gone)', async () => {
+    const user = userEvent.setup()
+    window.history.replaceState({ usr: null, key: 'k', idx: 3 }, '', '/c')
+    const router = mountBrowser('/c')
+    const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(undefined)
+    expect(screen.getByTestId('prev')).toHaveTextContent('')
+    await user.click(screen.getByRole('button', { name: /back/i }))
+    expect(navigate).toHaveBeenCalledWith(-1)
+  })
+
+  it('a replaced entry is not a place to come back to', async () => {
+    const user = userEvent.setup()
+    const router = mountBrowser('/a')
+    await user.click(screen.getByRole('button', { name: 'to b' }))
+    await act(() => router.navigate('/c', { replace: true }))
+    await user.click(screen.getByRole('button', { name: /back/i }))
+    await waitFor(() => expect(screen.getByTestId('here')).toHaveTextContent('/a'))
+  })
+
+  it('leave() goes back when there is history, otherwise replaces with the fallback', async () => {
+    const user = userEvent.setup()
+    function Leaver() {
+      const back = useBackTarget('/home')
+      return <button type="button" onClick={back.leave}>leave</button>
+    }
+    const router = mountBrowser('/a', <><Leaver /><Page /></>)
+    await user.click(screen.getAllByRole('button', { name: 'to b' })[0])
+    await user.click(screen.getByRole('button', { name: 'leave' }))
+    await waitFor(() => expect(screen.getByTestId('here')).toHaveTextContent('/a'))
+    // At idx 0 now: leave replaces with the fallback.
+    await user.click(screen.getByRole('button', { name: 'leave' }))
+    await waitFor(() => expect(screen.getByTestId('here')).toHaveTextContent('/home'))
+    expect(window.history.state.idx).toBe(0)
+    expect(router.state.location.pathname).toBe('/home')
+  })
+
+  it('still trips the unsaved-changes blocker on a dirty form', async () => {
+    const user = userEvent.setup()
+    function DirtyForm() {
+      const { dialog } = useUnsavedChangesWarning(true)
+      return <>{dialog}<Page /></>
+    }
+    // A memory router: its blocked POP is deterministic. The seam stands in for history.state.idx.
+    __testHooks.seedHistory('/a', '/b')
+    const router = createMemoryRouter([{ path: '*', element: <DirtyForm /> }], { initialEntries: ['/a', '/b'], initialIndex: 1 })
+    render(<RouterProvider router={router} />)
+    await user.click(screen.getByRole('button', { name: /back/i }))
+    expect(await screen.findByRole('alertdialog')).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/b')
+    await user.click(screen.getByRole('button', { name: 'Keep editing' }))
+    expect(router.state.location.pathname).toBe('/b')
+    await user.click(screen.getByRole('button', { name: /back/i }))
+    await user.click(await screen.findByRole('button', { name: 'Leave page' }))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/a'))
+  })
+})
+
+describe('useBackTarget: onLinkClick', () => {
+  function Anchor() {
+    const back = useBackTarget('/home')
+    return <a href="/home" onClick={back.onLinkClick}>link</a>
+  }
+  function renderAnchor() {
+    __testHooks.setIdx(1)
     return render(
-      <MemoryRouter initialEntries={initialEntries}>
-        <TrackerHarness />
+      <MemoryRouter initialEntries={['/a', '/b']} initialIndex={1}>
         <Routes>
-          <Route path="*" element={ui()} />
+          <Route path="*" element={<><Anchor /><Where /></>} />
         </Routes>
       </MemoryRouter>,
     )
   }
+  function Where() {
+    return <span data-testid="at">{useLocation().pathname}</span>
+  }
 
-  it('returns the fallback when there is no recorded previous path (deep link)', () => {
-    function Page() {
-      const back = useBackTarget('/participants/5')
-      return (
-        <>
-          <button type="button" onClick={back.onBack} aria-label={back.ariaLabel}>
-            back
-          </button>
-          <span data-testid="to">{back.to}</span>
-        </>
-      )
-    }
-    withRouter(['/participants/5/profile'], () => <Page />)
-    expect(screen.getByTestId('to').textContent).toBe('/participants/5')
-    expect(screen.getByRole('button', { name: /back to participant/i })).toBeInTheDocument()
-  })
-
-  it('returns the previous path when there is one, and navigates there when clicked', async () => {
-    function Page(): ReactElement {
-      const back = useBackTarget('/participants/5')
-      const location = useLocation()
-      return (
-        <>
-          <button type="button" onClick={back.onBack} aria-label={back.ariaLabel}>
-            back
-          </button>
-          <span data-testid="to">{back.to}</span>
-          <span data-testid="here">{location.pathname}</span>
-        </>
-      )
-    }
-    // Seed module state the same way two real route changes would: first /onboarding/5 then
-    // /participants/5/profile. The MemoryRouter can only land us on one entry at a time, so
-    // this is the simplest way to simulate the user arriving from another screen.
-    __testHooks.recordCurrentPath('/onboarding/5')
-    __testHooks.recordCurrentPath('/participants/5/profile')
+  it('a plain left click is handled (default prevented) and goes back', async () => {
     const user = userEvent.setup()
-    render(
-      <MemoryRouter initialEntries={['/participants/5/profile']}>
-        <TrackerHarness />
-        <Routes>
-          <Route path="/participants/:id/profile" element={<Page />} />
-        </Routes>
-      </MemoryRouter>,
-    )
-    expect(screen.getByTestId('to').textContent).toBe('/onboarding/5')
-    expect(screen.getByRole('button', { name: /back to onboarding/i })).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /back to onboarding/i }))
-    // The MemoryRouter routed to /onboarding/5 — /participants/:id/profile no longer matches, so
-    // the Page component unmounts.
-    expect(screen.queryByTestId('to')).not.toBeInTheDocument()
+    renderAnchor()
+    await user.click(screen.getByRole('link', { name: 'link' }))
+    expect(screen.getByTestId('at')).toHaveTextContent('/a')
   })
 
-  it('falls back to the supplied fallback when the previous path equals the current path', () => {
-    function Page() {
-      const back = useBackTarget('/participants')
-      return <span data-testid="to">{back.to}</span>
-    }
-    // Force the recorded previous to equal the current pathname via the test hook.
-    __testHooks.recordCurrentPath('/participants/new')
-    __testHooks.recordCurrentPath('/participants/new')
-    withRouter(['/participants/new'], () => <Page />)
-    expect(screen.getByTestId('to').textContent).toBe('/participants')
-  })
-
-  it('falls back to "Go back" ariaLabel when the target has no known screen name', () => {
-    function Page() {
-      const back = useBackTarget('/mystery')
-      return <span data-testid="aria">{back.ariaLabel}</span>
-    }
-    __testHooks.recordCurrentPath('/foo')
-    __testHooks.recordCurrentPath('/bar')
-    withRouter(['/bar'], () => <Page />)
-    expect(screen.getByTestId('aria').textContent).toBe('Go back')
-  })
-
-  it('builds a screen-name ariaLabel for known index screens', () => {
-    function Page() {
-      const back = useBackTarget('/participants')
-      return <span data-testid="aria">{back.ariaLabel}</span>
-    }
-    __testHooks.recordCurrentPath('/participants')
-    __testHooks.recordCurrentPath('/participants/new')
-    withRouter(['/participants/new'], () => <Page />)
-    expect(screen.getByTestId('aria').textContent).toBe('Back to Participants')
-  })
-
-  it('names a known screen on one of its tabs (?tab=) too', () => {
-    function Page() {
-      const back = useBackTarget('/participants')
-      return <span data-testid="aria">{back.ariaLabel}</span>
-    }
-    __testHooks.recordCurrentPath('/medications?tab=register')
-    __testHooks.recordCurrentPath('/medications/m-1/edit')
-    withRouter(['/medications/m-1/edit'], () => <Page />)
-    expect(screen.getByTestId('aria').textContent).toBe('Back to Medications')
+  it.each([
+    ['ctrl', { ctrlKey: true }],
+    ['meta', { metaKey: true }],
+    ['shift', { shiftKey: true }],
+    ['alt', { altKey: true }],
+    ['middle button', { button: 1 }],
+  ])('a %s click is left to the browser (the href is used)', (_name, init) => {
+    renderAnchor()
+    const link = screen.getByRole('link', { name: 'link' })
+    let prevented: boolean | null = null
+    const spy = (e: Event) => { prevented = e.defaultPrevented; e.preventDefault() }
+    document.addEventListener('click', spy)
+    link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, ...init }))
+    document.removeEventListener('click', spy)
+    expect(prevented).toBe(false)
+    expect(screen.getByTestId('at')).toHaveTextContent('/b')
   })
 })
 
-describe('usePreviousAppPath — renderHook', () => {
-  it('returns null when the tracker has not recorded anything', () => {
+describe('useBackTarget: the accessible name', () => {
+  // MemoryRouter writes no idx, so the seam stands in for the browser's history.state.idx.
+  function withPrevious(prev: string, here: string, ui: ReactNode) {
+    __testHooks.recordAt(0, prev)
+    __testHooks.setIdx(1)
+    return render(
+      <MemoryRouter initialEntries={[prev, here]} initialIndex={1}>
+        <Tracker />
+        <Routes>
+          <Route path="*" element={ui} />
+        </Routes>
+      </MemoryRouter>,
+    )
+  }
+  function Name({ fallback = '/participants' }: { fallback?: string }) {
+    const back = useBackTarget(fallback)
+    return <span data-testid="aria">{back.ariaLabel}</span>
+  }
+
+  it('is "Go back" when the previous screen has no known name', () => {
+    withPrevious('/foo', '/bar', <Name />)
+    expect(screen.getByTestId('aria').textContent).toBe('Go back')
+  })
+
+  it('names a known index screen', () => {
+    withPrevious('/participants', '/participants/new', <Name />)
+    expect(screen.getByTestId('aria').textContent).toBe('Back to Participants')
+  })
+
+  it('names a known screen on one of its tabs too', () => {
+    withPrevious('/medications?tab=register', '/medications/m-1/edit', <Name />)
+    expect(screen.getByTestId('aria').textContent).toBe('Back to Medications')
+  })
+
+  it('names a hub lifecycle tab by its stage', () => {
+    withPrevious('/participants?tab=onboarding', '/onboarding/5', <Name />)
+    expect(screen.getByTestId('aria').textContent).toBe('Back to Onboarding')
+  })
+
+  it('names the Invoices register', () => {
+    withPrevious('/invoices', '/claims/c-1', <Name />)
+    expect(screen.getByTestId('aria').textContent).toBe('Back to Invoices')
+  })
+
+  it('names a trip detail page', () => {
+    withPrevious('/trips/t-9', '/claims/c-1', <Name />)
+    expect(screen.getByTestId('aria').textContent).toBe('Back to trip')
+  })
+})
+
+describe('the path map survives a reload (sessionStorage)', () => {
+  it('a path recorded before a reload still names the previous page afterwards', async () => {
+    __testHooks.setIdx(1)
+    render(<MemoryRouter initialEntries={['/trips']}><Tracker /></MemoryRouter>)
+    // The next entry is idx 2; the tracker has just written idx 1 = /trips.
+    vi.resetModules()
+    const fresh = await import('./useBackNavigation')
+    fresh.__testHooks.setIdx(2)
+    expect(fresh.__testHooks.getPrevSnapshot()).toBe('/trips')
+  })
+})
+
+describe('usePreviousAppPath', () => {
+  it('is null when nothing earlier is recorded', () => {
     const { result } = renderHook(() => usePreviousAppPath(), {
       wrapper: ({ children }) => <MemoryRouter initialEntries={['/x']}>{children}</MemoryRouter>,
     })
     expect(result.current).toBeNull()
   })
 
-  it('returns the recorded previous path after a recordCurrentPath call', () => {
+  it('reads the path recorded one entry earlier', () => {
+    __testHooks.recordAt(0, '/first')
+    __testHooks.setIdx(1)
     const { result } = renderHook(() => usePreviousAppPath(), {
       wrapper: ({ children }) => <MemoryRouter initialEntries={['/y']}>{children}</MemoryRouter>,
     })
-    act(() => {
-      __testHooks.recordCurrentPath('/first')
-      __testHooks.recordCurrentPath('/second')
-    })
     expect(result.current).toBe('/first')
-  })
-})
-
-function LocationProbe() {
-  const location = useLocation()
-  return <span data-testid="at">{location.pathname + location.search}</span>
-}
-
-function HubTabLink() {
-  const navigate = useNavigate()
-  return (
-    <button type="button" onClick={() => navigate('/onboarding/5')}>
-      View checklist
-    </button>
-  )
-}
-
-function BackProbe() {
-  const { onBack, ariaLabel } = useBackTarget('/participants?tab=onboarding')
-  return (
-    <button type="button" onClick={onBack} aria-label={ariaLabel}>
-      back
-    </button>
-  )
-}
-
-describe('useBackNavigation — query-string preservation', () => {
-  it('Back from a detail page returns to the hub tab it was opened from, not the default tab', async () => {
-    const user = userEvent.setup()
-    render(
-      <MemoryRouter initialEntries={['/participants?tab=onboarding']}>
-        <TrackerHarness />
-        <Routes>
-          <Route path="/participants" element={<><HubTabLink /><LocationProbe /></>} />
-          <Route path="/onboarding/:id" element={<><BackProbe /><LocationProbe /></>} />
-        </Routes>
-      </MemoryRouter>,
-    )
-    // Start on the hub's Onboarding tab, then open a checklist row.
-    await user.click(screen.getByRole('button', { name: /view checklist/i }))
-    expect(screen.getByTestId('at')).toHaveTextContent('/onboarding/5')
-    await user.click(screen.getByRole('button', { name: /back to onboarding/i }))
-    // Regression guard: this used to land on /participants with no ?tab=, i.e. the default
-    // "Active participants" tab, because the tracker stored pathname without search.
-    expect(screen.getByTestId('at')).toHaveTextContent('/participants?tab=onboarding')
-  })
-})
-
-describe('useBackNavigation — a query change on the same screen is not a predecessor', () => {
-  it('switching tabs on a detail page (written with replace) leaves the screen it came from as the Back target', () => {
-    __testHooks.recordCurrentPath('/')
-    __testHooks.recordCurrentPath('/trips/t-1')
-    __testHooks.recordCurrentPath('/trips/t-1?tab=bookings')
-    __testHooks.recordCurrentPath('/trips/t-1?tab=staff')
-    expect(__testHooks.getPrevSnapshot()).toBe('/')
-  })
-
-  it('leaving after a tab switch records the screen as it was left, tab included', () => {
-    __testHooks.recordCurrentPath('/participants?tab=onboarding')
-    __testHooks.recordCurrentPath('/participants?tab=enquiries')
-    __testHooks.recordCurrentPath('/inquiries/5')
-    expect(__testHooks.getPrevSnapshot()).toBe('/participants?tab=enquiries')
-  })
-
-  it('a different pathname is still a new screen', () => {
-    __testHooks.recordCurrentPath('/trips/t-1')
-    __testHooks.recordCurrentPath('/trips/t-2')
-    expect(__testHooks.getPrevSnapshot()).toBe('/trips/t-1')
-  })
-
-  it('does not offer Back to the same page on its default tab after a tab switch', () => {
-    __testHooks.recordCurrentPath('/schedule')
-    __testHooks.recordCurrentPath('/staff/s-1')
-    __testHooks.recordCurrentPath('/staff/s-1?tab=credentials')
-    function Probe() {
-      const { to } = useBackTarget('/staff')
-      return <span data-testid="to">{to}</span>
-    }
-    render(
-      <MemoryRouter initialEntries={['/staff/s-1?tab=credentials']}>
-        <Probe />
-      </MemoryRouter>,
-    )
-    expect(screen.getByTestId('to').textContent).toBe('/schedule')
-  })
-})
-
-describe('useBackNavigation — a redirect is not a predecessor', () => {
-  it('a <Navigate replace> hop (the old /participants/:id/edit link) leaves the screen the user clicked from as the Back target', async () => {
-    const user = userEvent.setup()
-    function EditLink() {
-      const navigate = useNavigate()
-      return <button type="button" onClick={() => navigate('/participants/7/edit')}>Edit</button>
-    }
-    function Target() {
-      const { to } = useBackTarget('/participants/7')
-      return <span data-testid="to">{to}</span>
-    }
-    render(
-      <MemoryRouter initialEntries={['/participants/7?tab=funding']}>
-        <TrackerHarness />
-        <Routes>
-          <Route path="/participants/:id" element={<EditLink />} />
-          <Route path="/participants/:id/edit" element={<Navigate to="/participants/7/profile" replace />} />
-          <Route path="/participants/:id/profile" element={<Target />} />
-        </Routes>
-      </MemoryRouter>,
-    )
-    await user.click(screen.getByRole('button', { name: 'Edit' }))
-    // Recording the redirect's own URL made Back (and Cancel) go to /edit, which redirected straight back to the form.
-    expect(await screen.findByTestId('to')).toHaveTextContent(/^\/participants\/7\?tab=funding$/)
   })
 })

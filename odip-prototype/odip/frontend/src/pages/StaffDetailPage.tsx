@@ -112,7 +112,7 @@ export default function StaffDetailPage() {
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <div className="flex items-start gap-2">
-        <BackButton to="/staff" label="staff" variant="icon" history={false} className="mt-1" />
+        <BackButton to="/staff" label="staff" variant="icon" className="mt-1" />
         <div className="flex-1 min-w-0">
           <PageHeader
             title={staff.fullName}

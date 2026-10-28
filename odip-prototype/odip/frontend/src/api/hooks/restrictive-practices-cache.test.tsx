@@ -4,7 +4,7 @@ import { renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { apiClient } from '@/api/client'
-import { useUpdateRestrictivePractice } from '@/api/hooks/restrictive-practices'
+import { useDeleteRestrictivePractice, useUpdateRestrictivePractice } from '@/api/hooks/restrictive-practices'
 import type { RestrictivePracticeDto } from '@/api/types'
 
 // A reopen right after a save must send the version the server just wrote, so the saved row goes into the cached list before any refetch.
@@ -37,3 +37,19 @@ describe('a restrictive practice save updates the cached list', () => {
   })
 })
 
+describe('a restrictive practice delete', () => {
+  it('sends the version the user saw, encoded, in the query string', async () => {
+    const urls: (string | undefined)[] = []
+    apiClient.defaults.adapter = (async (config): Promise<AxiosResponse> => {
+      urls.push(config.url)
+      return { data: { success: true, data: true }, status: 200, statusText: 'OK', headers: {}, config }
+    }) as AxiosAdapter
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={new QueryClient()}>{children}</QueryClientProvider>
+    const { result } = renderHook(() => useDeleteRestrictivePractice(), { wrapper })
+
+    result.current.mutate({ id: 'rp-1', participantId: 'p1', expectedUpdatedAt: '2026-02-02T00:00:00.123456+00:00' })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(urls).toEqual(['/participants/restrictive-practices/rp-1?expectedUpdatedAt=2026-02-02T00%3A00%3A00.123456%2B00%3A00'])
+  })
+})
