@@ -211,7 +211,9 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
   const { data: trips = [] } = useTrips()
   const { data: staff = [] } = useStaff()
   const { data: participants = [] } = useParticipants()
-  const { id: currentUserId } = usePermissions()
+  const { id: currentUserId, isSupportWorker } = usePermissions()
+  // The server files a support worker's incident under their own name, so the form shows that instead of a picker a prefill could seed with a colleague.
+  const lockedReporterId = !isEdit && isSupportWorker ? currentUserId : null
 
   // INC-03: router-state prefill dropped in by RecordAdministrationModal after a
   // refused/withheld/missed/wrong-medication outcome is recorded. Purely informational client
@@ -299,7 +301,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
       title: buildIncidentTitleSkeleton(marPrefill),
       description: buildIncidentDescriptionSkeleton(marPrefill),
       involvedParticipantId: marPrefill.participantId,
-      reportedByStaffId: marPrefill.recordedByUserId ?? '',
+      reportedByStaffId: lockedReporterId ?? marPrefill.recordedByUserId ?? '',
       incidentDateTime: buildIncidentDateTime(marPrefill),
       status: 'Draft',
       qscReportingStatus: 'NotRequired',
@@ -309,7 +311,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
       injuries: [],
       witnesses: [],
     })
-  }, [marPrefill, reset])
+  }, [marPrefill, reset, lockedReporterId])
 
   // NOTES-02: same "apply once, on mount" guard as the MAR effect above — reportedByStaffId is
   // deliberately left blank (unlike the MAR hand-off, the portal doesn't know which staff account
@@ -324,7 +326,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
       title: buildShiftNoteIncidentTitleSkeleton(shiftNotePrefill),
       description: buildShiftNoteIncidentDescriptionSkeleton(shiftNotePrefill),
       involvedParticipantId: shiftNotePrefill.participantId,
-      reportedByStaffId: shiftNotePrefill.reportedByUserId ?? '',
+      reportedByStaffId: lockedReporterId ?? shiftNotePrefill.reportedByUserId ?? '',
       incidentDateTime: buildShiftNoteIncidentDateTime(shiftNotePrefill),
       status: 'Draft',
       qscReportingStatus: 'NotRequired',
@@ -334,7 +336,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
       injuries: [],
       witnesses: [],
     })
-  }, [shiftNotePrefill, reset])
+  }, [shiftNotePrefill, reset, lockedReporterId])
 
   useEffect(() => {
     if (!shiftPrefill || appliedShiftPrefillRef.current) return
@@ -344,10 +346,10 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
       title: buildShiftIncidentTitleSkeleton(shiftPrefill),
       description: buildShiftIncidentDescriptionSkeleton(shiftPrefill),
       involvedParticipantId: shiftPrefill.participantId,
-      reportedByStaffId: shiftPrefill.reportedByUserId ?? currentUserId ?? '',
+      reportedByStaffId: lockedReporterId ?? shiftPrefill.reportedByUserId ?? currentUserId ?? '',
       incidentDateTime: shiftPrefill.incidentAt ?? `${shiftPrefill.serviceDate}T${shiftPrefill.startTime.slice(0, 5)}`,
     })
-  }, [shiftPrefill, reset, currentUserId])
+  }, [shiftPrefill, reset, currentUserId, lockedReporterId])
 
   // IN-1: the computed, not fixed, step list — wrapped in useMemo so its identity is stable
   // across renders that don't actually change incidentType/isEdit (useWizard's reshuffle
@@ -640,6 +642,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
             tripInstanceId={tripInstanceId}
             involvedParticipantId={involvedParticipantId}
             reportedByStaffId={reportedByStaffId}
+            reporterName={lockedReporterId ? staffName(currentUserId) : undefined}
             involvedStaffId={involvedStaffId}
             trips={trips}
             staff={staff}

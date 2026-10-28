@@ -4,6 +4,7 @@ import { Card } from '@/components/Card'
 import { Dropdown } from '@/components/Dropdown'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { ParticipantPicker } from '@/components/ParticipantPicker'
+import { ReadOnlyField } from '@/pages/profile/profileHelpers'
 import { INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS, INCIDENT_TYPES, INCIDENT_SEVERITIES } from '@/api/types/enums'
 import { SERVICE_STREAM_LABELS } from '@/api/types/participants'
 import type { TripListDto, StaffListDto } from '@/api/types'
@@ -20,6 +21,8 @@ export type BasicsStepProps = {
   tripInstanceId: string | undefined
   involvedParticipantId: string | undefined
   reportedByStaffId: string | undefined
+  /** Set when the reporter is fixed (a support worker): shown as read-only text instead of the picker. */
+  reporterName?: string
   involvedStaffId: string | undefined
   trips: TripListDto[]
   staff: StaffListDto[]
@@ -40,7 +43,7 @@ export type BasicsStepProps = {
  */
 export function BasicsStep({
   register, errors, setValue,
-  serviceType, incidentType, severity, tripInstanceId, involvedParticipantId, reportedByStaffId, involvedStaffId,
+  serviceType, incidentType, severity, tripInstanceId, involvedParticipantId, reportedByStaffId, reporterName, involvedStaffId,
   trips, staff, incidentServiceTypes,
 }: BasicsStepProps) {
   return (
@@ -65,6 +68,9 @@ export function BasicsStep({
             <input {...register('title')} placeholder="Brief incident summary" autoFocus />
           </FormField>
 
+          {reporterName !== undefined ? (
+            <ReadOnlyField field="reportedByStaffId" label="Reported By" value={reporterName} hint="Reports you file are saved under your name." className={span.medium} />
+          ) : (
           <FormField label="Reported By" required error={errors.reportedByStaffId?.message} className={span.medium}>
             <SearchableSelect
               value={reportedByStaffId ?? ''}
@@ -73,6 +79,7 @@ export function BasicsStep({
               items={staff.map((s: StaffListDto) => ({ value: s.id, label: s.fullName }))}
             />
           </FormField>
+          )}
 
           <FormField label="Involved Staff Member" className={span.medium}>
             <SearchableSelect

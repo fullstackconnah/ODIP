@@ -38,6 +38,7 @@ vi.mock('@/api/hooks', () => ({
   useStaff: () => ({ data: [
     { id: 'staff-1', fullName: 'Alex Rivera' },
     { id: 'staff-3', fullName: 'Alex Rivera' },
+    { id: 'staff-2', fullName: 'Cora Lane' },
   ] }),
   useParticipants: () => ({ data: [{ id: 'participant-1', firstName: 'Sophie', lastName: 'Brown', fullName: 'Sophie Brown' }] }),
   // INC-04/INC-05/IN-4
@@ -118,7 +119,8 @@ async function fillBasicsMinimallyAndNext(
   if (!incidentTypeOption || incidentTypeOption === 'Other' || (incidentTypeOption instanceof RegExp && incidentTypeOption.test('Other'))) {
     await user.type(screen.getByPlaceholderText('Describe the incident type'), otherTypeSpecify ?? 'Lost property')
   }
-  await selectReportedByFirstAlexRivera(user)
+  // A support worker is the reporter already: no picker to fill.
+  if (screen.queryByLabelText('Reported By *')) await selectReportedByFirstAlexRivera(user)
   await clickNext(user)
 }
 
@@ -1717,5 +1719,54 @@ describe('IncidentCreatePage: the shift prefill from "Anything to report?"', () 
 
     await screen.findByText('Shift page')
     expect(mockCreateMutateAsync.mock.calls[0][0]).toMatchObject({ incidentDateTime: '2026-08-17T09:05' })
+  })
+})
+
+// Bunya Support: the server files a support worker's incident under their own name (#462), so the wizard
+// shows them as the reporter instead of a picker that a prefill could seed with a colleague.
+describe('IncidentCreatePage — a support worker is the reporter', () => {
+  const colleagueNote: ShiftNoteIncidentPrefillState = {
+    source: 'shift-note', shiftNoteId: 'note-7', categories: ['Falls'], participantId: 'participant-1',
+    participantName: 'Sophie Brown', noteBody: 'Slipped.', serviceDate: '2026-08-20', startTime: '08:00:00',
+    endTime: '16:00:00', endsNextDay: false, reportedByUserId: 'staff-1', shiftId: 'shift-7',
+  }
+  const signInAs = (role: string) => localStorage.setItem('odip_user', JSON.stringify({ id: 'staff-2', role, fullName: 'Cora Lane' }))
+
+  it('shows the worker as fixed text, not a picker, and submits their id despite a colleague-authored prefill', async () => {
+    signInAs('SupportWorker')
+    const user = userEvent.setup()
+    renderCreatePage({ pathname: '/incidents/new', state: colleagueNote })
+
+    expect(screen.getByLabelText('Reported By')).toHaveValue('Cora Lane')
+    expect(screen.getByLabelText('Reported By')).toHaveAttribute('readonly')
+    expect(screen.queryByLabelText('Reported By *')).not.toBeInTheDocument()
+
+    await clickNext(user) // Basics -> Incident Details
+    await addMinimalInjury(user)
+    await clickNext(user) // -> Witnesses
+    await clickNext(user) // -> Review
+    expect(reviewValueFor('Reported By')).toBe('Cora Lane')
+    await user.click(screen.getByRole('button', { name: /submit incident report/i }))
+    expect(mockCreateMutateAsync.mock.calls[0][0]).toMatchObject({ reportedByStaffId: 'staff-2' })
+  })
+
+  it('refuses the worker as their own witness: they are not in the staff witness picker', async () => {
+    signInAs('SupportWorker')
+    const user = userEvent.setup()
+    renderCreatePage({ pathname: '/incidents/new', state: colleagueNote })
+    await clickNext(user)
+    await addMinimalInjury(user)
+    await clickNext(user) // -> Witnesses
+
+    await user.click(screen.getByLabelText('Staff member'))
+    expect(screen.queryByRole('option', { name: 'Cora Lane' })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('option', { name: 'Alex Rivera' })).toHaveLength(2)
+  })
+
+  it('leaves a coordinator the picker, seeded with the prefill reporter', () => {
+    signInAs('Coordinator')
+    renderCreatePage({ pathname: '/incidents/new', state: colleagueNote })
+
+    expect(screen.getByLabelText('Reported By *')).toHaveValue('Alex Rivera')
   })
 })
