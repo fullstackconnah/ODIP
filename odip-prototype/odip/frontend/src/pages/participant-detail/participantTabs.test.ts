@@ -39,7 +39,7 @@ const ids = (tab: Parameters<typeof visibleSubTabs>[0], g: Partial<Record<Sectio
 describe('visibleSubTabs', () => {
   it('hides a row whose gate is off and keeps the table order', () => {
     expect(ids('people')).toEqual(['contacts', 'trips'])
-    expect(ids('people', { rostering: true })).toEqual(['contacts', 'roster', 'trips'])
+    expect(ids('people', { rostering: true })).toEqual(['contacts', 'roster', 'week', 'trips'])
     expect(ids('records')).toEqual(['notes', 'consents'])
     expect(ids('records', { history: true })).toEqual(['notes', 'consents', 'history'])
     expect(ids('funding')).toEqual([])

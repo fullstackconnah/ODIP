@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiGetWithDefault, apiPutRaw, apiClient } from '../client'
 import type { AppSettingsDto, UpdateAppSettingsDto, ApiResponse, TenantUserDto, ModuleVisibilityDto } from '../types'
+import { getViewAs } from '@/lib/viewAs'
 
 export function useSettings() {
   return useQuery({
@@ -40,7 +41,7 @@ const VISIBLE_WORKSPACES = { hiddenAccommodation: false, hiddenVehicles: false }
 export function currentTenantId(): string | null {
   try {
     const user = JSON.parse(localStorage.getItem('odip_user') || '{}')
-    return localStorage.getItem('odip_viewing_tenant') ?? user.tenantId ?? null
+    return getViewAs('odip_viewing_tenant') ?? user.tenantId ?? null
   } catch { return null }
 }
 

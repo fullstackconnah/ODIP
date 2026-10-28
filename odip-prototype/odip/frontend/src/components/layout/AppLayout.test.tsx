@@ -440,7 +440,7 @@ describe('AppLayout — 44px coarse-pointer hit areas', () => {
     expect(screen.getByRole('button', { name: 'Find a page' })).toHaveClass('md:w-72')
     unmount()
     localStorage.setItem('odip_user', JSON.stringify({ role: 'SuperAdmin', firstName: 'Sam' }))
-    localStorage.setItem('odip_viewing_tenant', 'tenant-0001')
+    sessionStorage.setItem('odip_viewing_tenant', 'tenant-0001')
     renderAt('/trips')
     expect(screen.getByRole('button', { name: 'Find a page' })).toHaveClass('xl:w-72', 'max-xl:px-2')
     expect(screen.getByRole('button', { name: 'Find a page' })).toHaveAttribute('title', 'Find a page')
@@ -512,7 +512,7 @@ describe('AppLayout — 44px coarse-pointer hit areas', () => {
       expect(screen.getAllByRole('contentinfo'), role).toHaveLength(1)
       const footer = screen.getByRole('contentinfo')
       expect(footer.closest('main, article, aside, nav, section'), role).toBeNull()
-      expect(within(footer).getByRole('link', { name: 'Accessibility' }), role).toHaveAttribute('href', '/accessibility')
+      expect(within(footer).getByRole('link', { name: 'Accessibility (opens in a new tab)' }), role).toHaveAttribute('href', '/accessibility')
       unmount()
       localStorage.clear()
     }

@@ -4,7 +4,7 @@ import type { PendingAgreementDto, RosterParticipantRowDto, ShiftDto } from '@/a
 import { ReadinessNote } from '@/components/ReadinessNote'
 import { RosterDayCell } from './RosterDayCell'
 import { TripBar } from './TripBar'
-import { barOverlapsWeek, formatDayAccessibleName, isUnfilledShift, RATIO_LABELS, rosterDayColumnsTemplate } from '../lib/roster'
+import { barOverlapsWeek, formatDayAccessibleName, isUnfilledShift, participantWeekHref, RATIO_LABELS, rosterDayColumnsTemplate } from '../lib/roster'
 import { plural } from '@/lib/format'
 
 export type ParticipantRowProps = {
@@ -71,7 +71,7 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
       <div className="sticky left-0 z-10 flex min-h-[var(--row-h)] items-center gap-2 border-b border-r border-border bg-card px-2">
         <div className="flex min-w-0 items-center gap-1">
           <Link
-            to={`/participants/${row.participantId}`}
+            to={participantWeekHref(row.participantId, days[0])}
             className="block min-w-0 truncate rounded-sm font-display text-sm font-semibold leading-5 text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             title={row.fullName}
           >

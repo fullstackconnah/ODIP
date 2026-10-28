@@ -208,7 +208,7 @@ describe('TripsPage — narrow-desktop table', () => {
     renderPage()
 
     const code = screen.getByText('BW-2610')
-    expect(code).toHaveClass('md:max-[1366px]:hidden')
+    expect(code).toHaveClass('md:max-[1535px]:hidden')
     // Hidden only on the desktop table; the mobile card view keeps it.
     expect(code.className).not.toMatch(/(^|\s)hidden(\s|$)/)
   })

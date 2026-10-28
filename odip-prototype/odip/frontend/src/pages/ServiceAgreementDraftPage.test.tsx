@@ -24,6 +24,7 @@ vi.mock('@/api/hooks', () => ({
   useServiceAgreementDraft: () => oldDraft(),
   useAgreementsEnding: (enabled?: boolean) => endingRows(enabled),
   usePlanBudget: () => budget(),
+  usePlanPeriodQuote: () => ({ data: undefined, isError: false, isFetching: false, failureCount: 0 }),
   useAgreementCheck: () => check(),
 }))
 
@@ -544,7 +545,7 @@ describe('ServiceAgreementDraftPage: renewing an agreement (agreement PR 2)', ()
 
   it('checks as usual for a SuperAdmin viewing an organisation', () => {
     asRole('SuperAdmin')
-    localStorage.setItem('odip_viewing_tenant', 't-1')
+    sessionStorage.setItem('odip_viewing_tenant', 't-1')
     showing(ending)
     renderPage()
 

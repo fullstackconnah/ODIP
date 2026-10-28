@@ -61,8 +61,8 @@ describe('offline store', () => {
   it('the session is the effective user: the viewed user when set, else the signed-in one', () => {
     localStorage.setItem('odip_user', JSON.stringify({ id: 'me' }))
     expect(readSession()).toEqual({ userId: 'me', viewAsTenant: null, viewAsUser: null })
-    localStorage.setItem('odip_viewing_user', 'them')
-    localStorage.setItem('odip_viewing_tenant', 't9')
+    sessionStorage.setItem('odip_viewing_user', 'them')
+    sessionStorage.setItem('odip_viewing_tenant', 't9')
     expect(readSession()).toEqual({ userId: 'them', viewAsTenant: 't9', viewAsUser: 'them' })
   })
 

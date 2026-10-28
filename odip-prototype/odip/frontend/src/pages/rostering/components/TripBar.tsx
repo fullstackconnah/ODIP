@@ -12,8 +12,8 @@ export type TripBarProps = {
  * Trip staffing rendered read-only on the roster board — visibly a different material from a
  * shift chip (filled secondary surface, no border, a map glyph) so a coordinator never mistakes
  * it for something editable here. Not draggable, no menu; the only interaction is navigating to
- * the trip itself. Sits in the row's second lane at --control-h-sm (24px), not chip height: it's a
- * span marker, not a target.
+ * the trip itself. Sits in the row's second lane at --control-h-sm (24px) with a mouse; under a coarse
+ * pointer it is a link, so it takes --control-h (44px), the touch target.
  */
 export function TripBar({ tripBar, days }: TripBarProps) {
   const startCol = clampedDayIndex(tripBar.startDate, days) + 1
@@ -23,7 +23,7 @@ export function TripBar({ tripBar, days }: TripBarProps) {
     <Link
       to={`/trips/${tripBar.tripInstanceId}`}
       style={{ gridColumn: `${startCol} / ${endCol}` }}
-      className="flex h-[var(--control-h-sm)] items-center gap-1.5 rounded-sm bg-secondary-container px-2 text-[13px] text-foreground transition-colors duration-150 hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="flex h-[var(--control-h-sm)] pointer-coarse:h-[var(--control-h)] items-center gap-1.5 rounded-sm bg-secondary-container px-2 text-[13px] text-foreground transition-colors duration-150 hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       title={`${tripBar.tripName} (${tripBar.tripCode})`}
     >
       <Map className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />

@@ -23,8 +23,9 @@ import { staffCredentials, type StaffCredential } from '@/lib/credentials'
 import { DEADLINE_TONE, deadlineLabel } from '@/lib/deadline'
 import { formatShiftTimeRange, formatVarianceMinutes } from '@/pages/rostering/lib/roster'
 import AvailabilityList from '@/pages/schedule/AvailabilityList'
+import { PersonWeek } from '@/pages/rostering/components/PersonWeek'
 import {
-  Pencil, CalendarOff, CalendarClock, ShieldCheck, ClipboardList, AlertTriangle, ClipboardCheck, Mail,
+  Pencil, CalendarOff, CalendarClock, CalendarDays, ShieldCheck, ClipboardList, AlertTriangle, ClipboardCheck, Mail,
 } from 'lucide-react'
 import type { StaffOverviewUpcomingShiftDto, StaffOverviewTripAssignmentDto } from '@/api/types/staff'
 import type { IncidentListDto } from '@/api/types/incidents'
@@ -32,9 +33,11 @@ import type { CompletionQueueItemDto } from '@/api/types/rostering'
 import { POSITION_LABELS } from '@/api/types/enums'
 import { retryingAfterError } from '@/lib/queryPhase'
 
-type Tab = 'availability' | 'credentials' | 'upcoming' | 'incidents' | 'completions'
+type Tab = 'availability' | 'credentials' | 'week' | 'upcoming' | 'incidents' | 'completions'
 
 const TAB_KEYS: Tab[] = ['availability', 'credentials', 'upcoming', 'incidents', 'completions']
+// The Week tab (spec 2026-10-28) is for the roles that roster; two module consts keep useTabParam's keys stable between renders.
+const TAB_KEYS_WITH_WEEK: Tab[] = ['availability', 'credentials', 'week', 'upcoming', 'incidents', 'completions']
 
 /** A table-cell link is the row's tap target: no height change on a mouse (--tap-min is 0 there), a
  * 44px floor under a coarse pointer (fits the 48px coarse row). */
@@ -58,7 +61,8 @@ export default function StaffDetailPage() {
   const { notices, notify, dismiss } = useNotices()
   const [sending, setSending] = useState(false)
 
-  const [tab, setTab] = useTabParam(TAB_KEYS, 'availability')
+  const canAccessRostering = canAccessPage('rostering')
+  const [tab, setTab] = useTabParam(canAccessRostering ? TAB_KEYS_WITH_WEEK : TAB_KEYS, 'availability')
 
   const pageQuery = useStaffOverview(id)
   const { data: overview, isLoading, isError, error, refetch } = pageQuery
@@ -156,6 +160,7 @@ export default function StaffDetailPage() {
         tabs={[
           { id: 'availability', label: 'Availability', icon: CalendarClock },
           { id: 'credentials', label: 'Credentials', icon: ShieldCheck },
+          ...(canAccessRostering ? [{ id: 'week' as const, label: 'Week', icon: CalendarDays }] : []),
           { id: 'upcoming', label: 'Upcoming', icon: ClipboardList },
           { id: 'incidents', label: 'Incidents', icon: AlertTriangle },
           { id: 'completions', label: 'Completions', icon: ClipboardCheck },
@@ -213,6 +218,12 @@ export default function StaffDetailPage() {
               ))}
             </ul>
           )}
+        </Card>
+      )}
+
+      {tab === 'week' && id && (
+        <Card>
+          <PersonWeek kind="staff" personId={id} name={staff.fullName} headingLevel={2} />
         </Card>
       )}
 

@@ -43,6 +43,19 @@ export function useRosterBoard(weekStart: string | undefined, groupBy: 'particip
   })
 }
 
+/** One person's roster week (spec 2026-10-28): the board, narrowed server-side to one staff or participant row. Shares the 'roster-board' prefix, so every board write refreshes it. */
+export function useRosterPersonWeek(kind: 'staff' | 'participant', personId: string | undefined, weekStart: string) {
+  return useQuery({
+    queryKey: ['roster-board', weekStart, kind, personId],
+    queryFn: () => apiGet<RosterBoardDto>('/rostering/board', kind === 'staff'
+      ? { weekStart, groupBy: 'staff', staffId: personId }
+      : { weekStart, groupBy: 'participant', participantId: personId }),
+    enabled: !!personId,
+    // The last week stays on screen (dimmed) while the next loads, but never another person's: a chip link from one profile to the next reuses the page.
+    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey[3] === personId ? prev : undefined),
+  })
+}
+
 /**
  * Dry-run findings for a candidate shift — a POST that writes nothing. Used to preview
  * findings before a create/edit/assign is submitted, e.g. while the coordinator is still

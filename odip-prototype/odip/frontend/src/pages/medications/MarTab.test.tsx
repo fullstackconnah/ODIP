@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import MarTab from './MarTab'
@@ -83,6 +83,64 @@ function renderTab() {
     </MemoryRouter>,
   )
 }
+
+describe('MarTab — day navigation', () => {
+  it('sizes the day buttons and the date field off the same control height', () => {
+    mockUseMar.mockReturnValue({ data: { entries: [], prnMedications: [] }, isLoading: false })
+    mockUseParticipants.mockReturnValue({ data: [] })
+    mockUseRecordPrnOutcome.mockReturnValue({ mutateAsync: vi.fn() })
+
+    renderTab()
+
+    const controls = [
+      screen.getByRole('button', { name: 'Previous day' }),
+      screen.getByRole('button', { name: 'Today' }),
+      screen.getByRole('button', { name: 'Next day' }),
+      screen.getByLabelText('Select date'),
+    ]
+    for (const c of controls) expect(c.className).toContain('h-[var(--control-h)]')
+  })
+
+  describe('moving the shown day', () => {
+    beforeEach(() => {
+      // Only Date is faked so userEvent's timers still run; noon local keeps the day stable in any zone.
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date(2026, 9, 15, 12))
+      mockUseMar.mockReturnValue({ data: { entries: [], prnMedications: [] }, isLoading: false })
+      mockUseParticipants.mockReturnValue({ data: [] })
+      mockUseRecordPrnOutcome.mockReturnValue({ mutateAsync: vi.fn() })
+    })
+    afterEach(() => vi.useRealTimers())
+
+    it('Next day shows the following day', async () => {
+      renderTab()
+      await userEvent.click(screen.getByRole('button', { name: 'Next day' }))
+      expect(screen.getByLabelText('Select date')).toHaveValue('2026-10-16')
+      expect(mockUseMar).toHaveBeenLastCalledWith('2026-10-16', undefined)
+    })
+
+    it('Previous day shows the day before', async () => {
+      renderTab()
+      await userEvent.click(screen.getByRole('button', { name: 'Previous day' }))
+      expect(screen.getByLabelText('Select date')).toHaveValue('2026-10-14')
+      expect(mockUseMar).toHaveBeenLastCalledWith('2026-10-14', undefined)
+    })
+
+    it('Today returns to today', async () => {
+      renderTab()
+      await userEvent.click(screen.getByRole('button', { name: 'Previous day' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Today' }))
+      expect(screen.getByLabelText('Select date')).toHaveValue('2026-10-15')
+    })
+
+    it('a typed date shows that day', () => {
+      renderTab()
+      fireEvent.change(screen.getByLabelText('Select date'), { target: { value: '2026-09-01' } })
+      expect(screen.getByLabelText('Select date')).toHaveValue('2026-09-01')
+      expect(mockUseMar).toHaveBeenLastCalledWith('2026-09-01', undefined)
+    })
+  })
+})
 
 describe('MarTab — cross-domain links', () => {
   it('links a scheduled entry\'s participant name to their Medications tab', () => {

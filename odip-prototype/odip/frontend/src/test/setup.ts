@@ -1,3 +1,4 @@
+import { afterEach } from 'vitest'
 import '@testing-library/jest-dom/vitest'
 import { configure } from '@testing-library/react'
 
@@ -7,3 +8,6 @@ configure({ asyncUtilTimeout: 3000 })
 // jsdom has no scrollIntoView; code that scrolls a refused section into view needs a no-op.
 // Node-environment test files have no Element at all.
 if (typeof Element !== 'undefined') Element.prototype.scrollIntoView ??= () => {}
+
+// The view-as keys live in sessionStorage (one tab), and most files only clear localStorage between tests.
+if (typeof sessionStorage !== 'undefined') afterEach(() => sessionStorage.clear())

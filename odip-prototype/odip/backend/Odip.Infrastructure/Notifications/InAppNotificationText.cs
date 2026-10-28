@@ -27,6 +27,13 @@ public static class InAppNotificationText
                 ($"Your {Leave(p.LeaveType)} for {Range(p.StartDate, p.EndDate)} was {(p.Approved ? "approved" : "declined")}.", "/portal/leave"),
             (NotificationEventType.ShiftAssigned, ShiftAssignedPayload p) =>
                 ($"You're rostered with {Whom(p.ParticipantName)} on {Day(p.ServiceDate)} at {Clock(p.StartTime)}.", $"/portal/shifts/{entityId}"),
+            // A cancelled shift the worker still holds opens in the portal; one that is no longer theirs (taken off, or cancelled and handed to someone else) links to My shifts.
+            (NotificationEventType.ShiftUnassigned, ShiftUnassignedPayload { Cancelled: true, StillTheirs: true } p) =>
+                ($"Your shift with {Whom(p.ParticipantName)} on {Day(p.ServiceDate)} at {Clock(p.StartTime)} was cancelled.", $"/portal/shifts/{entityId}"),
+            (NotificationEventType.ShiftUnassigned, ShiftUnassignedPayload { Cancelled: true } p) =>
+                ($"Your shift with {Whom(p.ParticipantName)} on {Day(p.ServiceDate)} at {Clock(p.StartTime)} was cancelled.", "/portal"),
+            (NotificationEventType.ShiftUnassigned, ShiftUnassignedPayload p) =>
+                ($"You've been taken off {Whom(p.ParticipantName)} on {Day(p.ServiceDate)} at {Clock(p.StartTime)}.", "/portal"),
             (NotificationEventType.ShiftCompletionPendingReview, ShiftCompletionPendingReviewPayload p) =>
                 ($"{Who(p.WorkerName)}'s shift with {Whom(p.ParticipantName)} on {Day(p.ServiceDate)} is ready for review.", "/rostering/completions"),
             // The entity is the completion, not the shift, so this links to the portal, as the email does.

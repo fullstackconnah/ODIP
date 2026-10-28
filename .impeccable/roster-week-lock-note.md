@@ -1,0 +1,5 @@
+# Roster week: the Lock on locked chips for read-only viewers (design note)
+
+What/where: `ShiftChip.tsx` lead cell. A locked chip (InProgress, PendingReview, Completed, Cancelled) shows the existing house `Lock` glyph (title "<words>: can't be changed here") to a viewer who cannot write too, as SHAPE §3 promises; writers' chips are unchanged. States: locked + read-only = Lock; unlocked + read-only = no lead column; writers keep grip / plus / Lock as before; touch keeps the existing 13px coarse margin. apple-design applied: restraint (no new element, same glyph), honest state (the lock words stay in title and accessible name), and no motion.
+
+Fix 5: the touch margin (`pointer-coarse:mx-[13px]`) moves to writers only. It clears a grip tap pad, and a read-only Lock has none, so a reader keeps the desktop 18px indent on phones.

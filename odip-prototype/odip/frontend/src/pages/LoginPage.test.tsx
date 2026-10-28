@@ -92,7 +92,7 @@ describe('LoginPage', () => {
 
     await waitFor(() => expect(localStorage.getItem('odip_token')).toBe('odip-token'))
     expect(mockLogin).toHaveBeenCalledWith({ email: EMAIL, password: 'a-password' })
-    expect(localStorage.getItem('odip_viewing_tenant')).toBe('tenant-1')
+    expect(sessionStorage.getItem('odip_viewing_tenant')).toBe('tenant-1')
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })
@@ -563,6 +563,6 @@ describe('LoginPage: landmarks and the platform footer', () => {
     expect(footer.closest('main')).toBeNull()
     expect(main.nextElementSibling).toBe(footer)
     expect(within(footer).getByText(ACKNOWLEDGEMENT_OF_COUNTRY)).toBeInTheDocument()
-    expect(within(footer).getByRole('link', { name: 'Accessibility' })).toHaveAttribute('href', '/accessibility')
+    expect(within(footer).getByRole('link', { name: 'Accessibility (opens in a new tab)' })).toHaveAttribute('href', '/accessibility')
   })
 })

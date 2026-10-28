@@ -229,6 +229,23 @@ describe('NotesTab', () => {
     expect(call.data.description).toBe('Dim the lights from 8pm.')
   })
 
+  it('row actions work: Edit opens the edit form, Archive only asks until confirmed', async () => {
+    const user = userEvent.setup()
+    mockUseParticipantNotes.mockReturnValue({ data: [makeNote()], isLoading: false })
+
+    render(<NotesTab participantId="participant-1" />)
+
+    await user.click(screen.getByRole('button', { name: 'Archive' }))
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+    expect(mockUpdateMutateAsync).not.toHaveBeenCalled()
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    expect(screen.getByRole('dialog', { name: 'Edit note' })).toBeInTheDocument()
+    expect(screen.getByLabelText(/title/i)).toHaveValue('Haircut preference')
+  })
+
   it('hides write actions for a ReadOnly user', () => {
     setUserRole('ReadOnly')
     mockUseParticipantNotes.mockReturnValue({ data: [makeNote()], isLoading: false })
