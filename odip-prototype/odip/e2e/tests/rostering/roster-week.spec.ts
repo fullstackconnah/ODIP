@@ -1,14 +1,15 @@
 import { test, expect } from '../../support/fixtures';
 import { ensureProviderSettings, makeParticipant, makeShift, makeStaff, publishShift, startWeek } from '../../support/data';
-import { mondayOf, nextWednesday } from '../../support/dates';
+import { addDays, mondayOf, nextWednesday } from '../../support/dates';
 
 // Roster week per person (PLAN 2026-10-28 §4.4), on the real API and PostgreSQL: a name on the board opens that person's week on their
 // profile, a name on a chip there opens the other person's week, and a shift opens its editor back on the board; Back returns to the week.
-test('a name on the board opens their week, and a shift there opens its editor on the board', async ({ page, session }) => {
+test('a name on the board opens their week, and a shift there opens its editor on the board', async ({ page, session }, testInfo) => {
   await ensureProviderSettings(session);
   const participant = await makeParticipant(session);
   const staff = await makeStaff(session);
-  const wednesday = nextWednesday();
+  // A week no other spec uses (roster-start-week takes +77 days): the board's leave guard counts every participant's drafts in view, and the full suite leaves some in nextWednesday()'s week.
+  const wednesday = addDays(nextWednesday(), 154 + 7 * testInfo.retry);
   const mon = mondayOf(wednesday);
   const shift = await makeShift(session, participant.id, wednesday);
   // Published, so the board's leave guard (drafts not visible to staff yet) does not ask when the name is clicked.
