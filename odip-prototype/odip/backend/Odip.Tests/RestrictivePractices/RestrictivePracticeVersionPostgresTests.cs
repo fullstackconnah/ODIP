@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using Odip.Api.Controllers;
+using Odip.Api.Serialization;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -48,6 +49,16 @@ public class RestrictivePracticeVersionPostgresTests : IClassFixture<PostgresFix
         }
     }
 
+    /// <summary>MVC's web defaults plus the API's own policy: the options the response formatter and the body binder really use (as ParticipantHubFlowTests).</summary>
+    private static readonly JsonSerializerOptions Wire = ProductionOptions();
+
+    private static JsonSerializerOptions ProductionOptions()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        ApiJsonOptions.Configure(options);
+        return options;
+    }
+
     private static UpdateRestrictivePracticeDto Form(string description, DateTime? expected, bool active = true) =>
         new() { Description = description, IsActive = active, ExpectedUpdatedAt = expected };
 
@@ -56,8 +67,8 @@ public class RestrictivePracticeVersionPostgresTests : IClassFixture<PostgresFix
     {
         var list = Assert.IsType<ApiResponse<List<RestrictivePracticeDto>>>(
             Assert.IsType<OkObjectResult>((await c.GetForParticipant(participantId, true, CancellationToken.None)).Result).Value);
-        var json = JsonSerializer.Serialize(list.Data!.Single());
-        return JsonSerializer.Deserialize<RestrictivePracticeDto>(json)!.UpdatedAt;
+        var json = JsonSerializer.Serialize(list.Data!.Single(), Wire);
+        return JsonSerializer.Deserialize<RestrictivePracticeDto>(json, Wire)!.UpdatedAt;
     }
 
     [SkippableFact]
@@ -125,11 +136,30 @@ public class RestrictivePracticeVersionPostgresTests : IClassFixture<PostgresFix
         { var (db, c) = Request(tenantId); await using var _ = db; loaded = await LoadedAsync(c, participantId); }
 
         // The form body as the browser sends it: the version is a string, bound back to a DateTime.
-        var body = JsonSerializer.Deserialize<UpdateRestrictivePracticeDto>(
-            JsonSerializer.Serialize(new { description = "Via JSON", isActive = true, expectedUpdatedAt = loaded }))!;
+        var body = ToBody("Via JSON", loaded);
+        Assert.Equal(DateTimeKind.Utc, body.ExpectedUpdatedAt!.Value.Kind);
+        Assert.Equal(loaded, body.ExpectedUpdatedAt);
 
         var (db2, c2) = Request(tenantId);
         await using (db2)
             Assert.IsType<OkObjectResult>((await c2.Update(practiceId, body, CancellationToken.None)).Result);
     }
+
+    [SkippableFact]
+    public async Task A_stale_version_sent_over_the_wire_is_a_409()
+    {
+        Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
+        var (tenantId, practiceId, participantId) = await SeedAsync();
+        DateTime loaded;
+        { var (db, c) = Request(tenantId); await using var _ = db; loaded = await LoadedAsync(c, participantId); }
+        { var (db, c) = Request(tenantId); await using var _ = db; Assert.IsType<OkObjectResult>((await c.Update(practiceId, Form("Newer", loaded), CancellationToken.None)).Result); }
+
+        var (db2, c2) = Request(tenantId);
+        await using (db2)
+            Assert.IsType<ConflictObjectResult>((await c2.Update(practiceId, ToBody("Stale", loaded), CancellationToken.None)).Result);
+    }
+
+    private static UpdateRestrictivePracticeDto ToBody(string description, DateTime expected) =>
+        JsonSerializer.Deserialize<UpdateRestrictivePracticeDto>(
+            JsonSerializer.Serialize(new { description, isActive = true, expectedUpdatedAt = expected }, Wire), Wire)!;
 }

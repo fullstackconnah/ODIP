@@ -158,7 +158,7 @@ public class RestrictivePracticesController : ControllerBase
         return hasWho ? "Add the date it was authorised." : "Add who authorised it.";
     }
 
-    private const string ChangedByOther = "Someone else just changed this entry. Close it and open it again to see their changes.";
+    private const string ChangedByOther = "Someone else just changed this entry, so your changes weren't saved. Close it and open it again to see theirs.";
 
     [HttpPut("participants/restrictive-practices/{id:guid}")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
@@ -168,11 +168,13 @@ public class RestrictivePracticesController : ControllerBase
         var practice = await _db.RestrictivePractices.FirstOrDefaultAsync(rp => rp.Id == id, ct);
         if (practice == null) return NotFound(ApiResponse<RestrictivePracticeDto>.Fail("Restrictive practice entry not found"));
 
-        // The UPDATE's WHERE carries the version the form loaded; a form from an older tab sends none and saves as before.
-        if (dto.ExpectedUpdatedAt is DateTime expected) _db.Entry(practice).Property(rp => rp.UpdatedAt).OriginalValue = expected;
-
-        if (dto.AuthorisedBy is { Length: > 200 })
-            return BadRequest(ApiResponse<RestrictivePracticeDto>.Fail("Authorised by must be 200 characters or fewer"));
+        // A form from an older tab sends no version and saves as before. A stale one is refused before any other check;
+        // the token below (the UPDATE's WHERE) stays as the backstop for a save that races this read.
+        if (dto.ExpectedUpdatedAt is DateTime expected)
+        {
+            if (expected != practice.UpdatedAt) return Conflict(ApiResponse<RestrictivePracticeDto>.Fail(ChangedByOther));
+            _db.Entry(practice).Property(rp => rp.UpdatedAt).OriginalValue = expected;
+        }
 
         if (dto.RelatedMedicationId.HasValue)
         {

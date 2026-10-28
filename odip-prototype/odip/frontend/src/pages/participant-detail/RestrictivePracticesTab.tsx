@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useShowAll } from '@/components/ShowAllButton'
 import { ShieldAlert, AlertTriangle, ChevronDown, Plus, Pill } from 'lucide-react'
 import {
@@ -152,7 +152,15 @@ export default function RestrictivePracticesTab({ participantId }: { participant
   const [editingPractice, setEditingPractice] = useState<RestrictivePracticeDto | null>(null)
   const [form, setForm] = useState<PracticeFormState>(EMPTY_FORM)
   const [errors, setErrors] = useState<{ description?: string; authorisedBy?: string; authorisationDate?: string }>({})
-  const [modalError, setModalError] = useState<string | null>(null)
+  // A 409 means the entry changed under the editor, not that they did something wrong: it gets the warning tone.
+  const [modalError, setModalError] = useState<{ message: string; stale: boolean } | null>(null)
+  const [refusals, setRefusals] = useState(0)
+  const errorRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (refusals === 0) return
+    errorRef.current?.focus({ preventScroll: true })
+    errorRef.current?.scrollIntoView({ block: 'start' })
+  }, [refusals])
   const [deletingPractice, setDeletingPractice] = useState<RestrictivePracticeDto | null>(null)
   const [listError, setListError] = useState<string | null>(null)
   const [showInactive, setShowInactive] = useState(false)
@@ -214,7 +222,8 @@ export default function RestrictivePracticesTab({ participantId }: { participant
     } catch (err) {
       // So closing and reopening the entry carries the version someone else just saved.
       if (apiErrorStatus(err) === 409) void practicesQuery.refetch()
-      setModalError(extractErrorMessage(err, 'Failed to save restrictive practice entry.'))
+      setModalError({ message: extractErrorMessage(err, 'Failed to save restrictive practice entry.'), stale: apiErrorStatus(err) === 409 })
+      setRefusals((n) => n + 1)
     }
   }
 
@@ -316,7 +325,10 @@ export default function RestrictivePracticesTab({ participantId }: { participant
       >
         <div className="space-y-4">
           {modalError && (
-            <Callout tone="error">{modalError}</Callout>
+            // The key re-mounts it on each refusal, so a repeat Save is announced and scrolled to again.
+            <div key={refusals} ref={errorRef} tabIndex={-1} className="scroll-mt-4 rounded-lg focus:outline-none">
+              <Callout tone={modalError.stale ? 'warning' : 'error'}>{modalError.message}</Callout>
+            </div>
           )}
           <FormField label="Type">
             <Dropdown

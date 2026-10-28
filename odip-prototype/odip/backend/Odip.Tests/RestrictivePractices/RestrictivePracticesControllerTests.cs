@@ -1085,7 +1085,7 @@ public class RestrictivePracticesControllerTests
             CancellationToken.None);
 
         var body = Assert.IsType<ApiResponse<RestrictivePracticeDto>>(Assert.IsType<ConflictObjectResult>(result.Result).Value);
-        Assert.Contains("Someone else just changed this entry", body.Errors![0]);
+        Assert.Equal("Someone else just changed this entry, so your changes weren't saved. Close it and open it again to see theirs.", body.Errors![0]);
         Assert.Equal("Original", (await db.RestrictivePractices.AsNoTracking().SingleAsync()).Description);
     }
 
@@ -1129,19 +1129,18 @@ public class RestrictivePracticesControllerTests
     }
 
     [Fact]
-    public async Task Update_AuthorisedByOver200Characters_ReturnsBadRequest()
+    public async Task Update_StaleExpectedUpdatedAt_IsRefusedBeforeTheAuthorisationPairCheck()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
-        var practice = SeedPractice(db);
+        var practice = SeedPractice(db, by: "Dr Lee", date: new DateOnly(2026, 3, 1));
         var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
 
+        // A's form still shows the legacy half-filled entry (who, no date); B has since added the date.
         var result = await controller.Update(practice.Id,
-            new UpdateRestrictivePracticeDto
-            {
-                Description = "Original", AuthorisedBy = new string('x', 201), AuthorisationDate = new DateOnly(2026, 2, 1), IsActive = true,
-            }, CancellationToken.None);
+            new UpdateRestrictivePracticeDto { Description = "Original", AuthorisedBy = "Dr Lee", IsActive = true, ExpectedUpdatedAt = practice.UpdatedAt.AddMinutes(-1) },
+            CancellationToken.None);
 
-        var body = Assert.IsType<ApiResponse<RestrictivePracticeDto>>(Assert.IsType<BadRequestObjectResult>(result.Result).Value);
-        Assert.Equal("Authorised by must be 200 characters or fewer", body.Errors![0]);
+        Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal(new DateOnly(2026, 3, 1), (await db.RestrictivePractices.AsNoTracking().SingleAsync()).AuthorisationDate);
     }
 }
