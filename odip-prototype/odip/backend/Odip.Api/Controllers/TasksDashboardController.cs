@@ -135,15 +135,16 @@ public class TasksController : ControllerBase
         var t = await _db.BookingTasks.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (t == null) return NotFound(ApiResponse<TaskDto>.Fail("Task not found"));
         if (t.TaskType == TaskType.BudgetEmergencyReview && !BudgetReviewAudience.MayAct(User)) return Forbid();
-        if (dto.Status == TaskItemStatus.Completed && dto.CompletedDate == null)
+        if (dto.Status is not { } status) return BadRequest(ApiResponse<TaskDto>.Fail("A status is required."));
+        if (status == TaskItemStatus.Completed && dto.CompletedDate == null)
             return BadRequest(ApiResponse<TaskDto>.Fail("A completed task needs the date it was completed."));
 
         // Whoever completes the review owns it (as Update does when the request names no owner).
-        if (t.TaskType == TaskType.BudgetEmergencyReview && t.OwnerId == null && dto.Status == TaskItemStatus.Completed && t.Status != TaskItemStatus.Completed
+        if (t.TaskType == TaskType.BudgetEmergencyReview && t.OwnerId == null && status == TaskItemStatus.Completed && t.Status != TaskItemStatus.Completed
             && Guid.TryParse(User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var reviewer))
             t.OwnerId = reviewer;
-        t.Status = dto.Status;
-        t.CompletedDate = dto.Status == TaskItemStatus.Completed ? dto.CompletedDate : null;
+        t.Status = status;
+        t.CompletedDate = status == TaskItemStatus.Completed ? dto.CompletedDate : null;
         t.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync(ct);

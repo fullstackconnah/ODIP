@@ -1741,7 +1741,8 @@ public record CompleteTaskDto
 /// <summary>A status change from the Tasks page or a trip's Tasks tab: the new status and, for Completed, the day; every other field of the task stays as the server has it.</summary>
 public record SetTaskStatusDto
 {
-    public TaskItemStatus Status { get; init; }
+    /// <summary>Null when the body names none: the server answers 400 rather than reading it as NotStarted and reopening the task.</summary>
+    public TaskItemStatus? Status { get; init; }
     public DateOnly? CompletedDate { get; init; }
 }
 

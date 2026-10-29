@@ -50,6 +50,19 @@ describe('a status change sends the status only, never the whole task', () => {
     expect(mockPut).not.toHaveBeenCalled()
   })
 
+  it('Tasks page Restore on an archived task posts NotStarted alone, not the whole row', async () => {
+    const user = userEvent.setup()
+    mockGet.mockResolvedValue([{ ...task, status: 'Cancelled' }])
+    renderWithClient(<TasksPage />)
+    await user.click(await screen.findByRole('radio', { name: 'Archived' }))
+    await user.click((await screen.findAllByRole('button', { name: 'Restore' }))[0])
+    // The row's Restore opens a confirmation whose own button is also named Restore (the last in the DOM).
+    await user.click(screen.getAllByRole('button', { name: 'Restore' }).at(-1)!)
+
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/tasks/t1/status', { status: 'NotStarted' }))
+    expect(mockPut).not.toHaveBeenCalled()
+  })
+
   it('trip Tasks tab status pill posts the new status alone', async () => {
     const user = userEvent.setup()
     renderWithClient(<TasksTab tripId="trip-1" tasks={[task]} canWrite />)

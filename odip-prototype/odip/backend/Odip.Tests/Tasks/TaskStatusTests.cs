@@ -41,6 +41,18 @@ public class TaskStatusTests
     }
 
     [Fact]
+    public async System.Threading.Tasks.Task SetStatus_WithNoStatusInTheBody_IsRejectedAndTheTaskIsUnchanged()
+    {
+        using var db = Db(Guid.NewGuid().ToString());
+        var task = Seed(db, status: TaskItemStatus.Cancelled);
+
+        var result = await As(db, "Coordinator").SetStatus(task.Id, new SetTaskStatusDto(), CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Equal(TaskItemStatus.Cancelled, db.BookingTasks.Single(x => x.Id == task.Id).Status);
+    }
+
+    [Fact]
     public async System.Threading.Tasks.Task SetStatus_ChangesOnlyStatusAndCompletedDate()
     {
         using var db = Db(Guid.NewGuid().ToString());

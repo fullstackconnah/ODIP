@@ -1,4 +1,4 @@
-import { useTasks, useUpdateTask, useSetTaskStatus, useDeleteTask } from '@/api/hooks'
+import { useTasks, useSetTaskStatus, useDeleteTask } from '@/api/hooks'
 import { TASK_TYPE_LABELS, type TaskItemStatus } from '@/api/types'
 import { DataTable, RowActions, type Column } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
@@ -39,18 +39,17 @@ export default function TasksPage() {
     return TASK_STATUS_ITEMS.some(item => item.value === fromAddress) ? fromAddress! : ''
   })
   const [failedRowId, setFailedRowId] = useState<string | null>(null)
-  const updateTask = useUpdateTask()
   const setStatus = useSetTaskStatus()
   const deleteTask = useDeleteTask()
 
   const { showArchived, params, toggleButtons, confirmDialog, errorNotice, actionButtons } = useArchiveRestore<any>({
     deleteMutation: deleteTask,
-    restoreMutation: updateTask,
+    // Restore posts the status alone, so it cannot revert an edit made since the list loaded (an update rewrites the whole row).
+    restoreMutation: { mutate: ({ id }, options) => setStatus.mutate({ id, status: 'NotStarted' }, options), isPending: setStatus.isPending },
     entityName: (t) => t.title,
     entityId: (t) => t.id,
     archiveVia: 'status',
     archiveStatus: 'Cancelled',
-    restoreData: (t) => ({ ...t, status: 'NotStarted' }),
     editPath: (t) => `/tasks/${t.id}/edit`,
   })
 
