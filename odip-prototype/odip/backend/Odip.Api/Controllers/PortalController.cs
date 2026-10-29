@@ -1167,8 +1167,12 @@ public class PortalController : ControllerBase
     }
 
     /// <summary>The caller's own note, unless its shift is a Draft: a Draft is invisible to the worker (L1), so an open edit of an older note stops there too. Missing, not-yours and Draft are one 404.</summary>
-    private Task<ShiftNote?> FindOwnNoteAsync(Guid noteId, Guid staffId, CancellationToken ct) =>
-        _db.ShiftNotes.FirstOrDefaultAsync(n => n.Id == noteId && n.AuthorUserId == staffId && _db.Shifts.Where(Shift.VisibleToWorker).Any(s => s.Id == n.ShiftId), ct);
+    private Task<ShiftNote?> FindOwnNoteAsync(Guid noteId, Guid staffId, CancellationToken ct)
+    {
+        // Hoisted out of the predicate: a static Expression inside a nested subquery is unproven on Npgsql.
+        var visible = _db.Shifts.Where(Shift.VisibleToWorker);
+        return _db.ShiftNotes.FirstOrDefaultAsync(n => n.Id == noteId && n.AuthorUserId == staffId && visible.Any(s => s.Id == n.ShiftId), ct);
+    }
 
     /// <summary>
     /// NOTES-02: dismisses the "consider filing an incident report?" prompt for one of the
