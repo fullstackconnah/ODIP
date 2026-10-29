@@ -109,6 +109,74 @@ public class OnboardingImportCommitTests
     }
 
     [Fact]
+    public async Task The_same_key_with_changed_choices_is_refused_and_writes_nothing()
+    {
+        var (db, tenantId) = Organisation();
+        using var _ = db;
+        var file = Csv(Header, "Ava,Stone,,430000001,,");
+        var first = await Commit(db, tenantId, file, ImportLanding.Active);
+
+        var landing = await Assert.ThrowsAsync<ImportException>(() => Commit(db, tenantId, file, ImportLanding.Onboarding));
+        var mapping = await Assert.ThrowsAsync<ImportException>(() => Commit(db, tenantId, file, ImportLanding.Active, mapping: ["firstName", "lastName", null, "ndisNumber", null, null]));
+
+        Assert.Equal((409, 409), (landing.StatusCode, mapping.StatusCode));
+        Assert.Equal(OnboardingImportService.ChoicesChanged, landing.Message);
+        Assert.Equal(first.BatchId, (await db.ImportBatches.SingleAsync()).Id);
+        Assert.Equal(1, await db.Participants.CountAsync());
+    }
+
+    [Fact]
+    public async Task The_same_key_with_other_shift_options_is_refused_and_keeps_one_batch()
+    {
+        var (db, tenantId) = Organisation();
+        using var _ = db;
+        var file = Csv("NDIS number,Weekday,Start time,End time,Staff email", "430000099,Monday,9:00 am,3:00 pm,nobody@example.com");
+        var today = await ProviderTimeZoneResolver.TodayAsync(db, TimeProvider.System, CancellationToken.None);
+        Task<ImportResultDto> Pattern(DateOnly from, int weeks) => Service(db, tenantId).CommitAsync(ImportKind.UpcomingShifts, file, "shifts.csv", null, null, "key-shifts",
+            Admin(), CancellationToken.None, new ImportShiftOptions(ImportShiftShape.Pattern, from, weeks));
+        await Pattern(today.AddDays(2), 2);
+
+        var from = await Assert.ThrowsAsync<ImportException>(() => Pattern(today.AddDays(3), 2));
+        var weeks = await Assert.ThrowsAsync<ImportException>(() => Pattern(today.AddDays(2), 3));
+
+        Assert.Equal((409, 409), (from.StatusCode, weeks.StatusCode));
+        Assert.Equal(1, await db.ImportBatches.CountAsync());
+    }
+
+    [Fact]
+    public async Task A_key_used_in_another_organisation_neither_replays_nor_is_refused_for_a_SuperAdmin_context()
+    {
+        var store = Guid.NewGuid().ToString();
+        var (orgA, orgB) = (Guid.NewGuid(), Guid.NewGuid());
+        var file = Csv(Header, "Ava,Stone,,430000001,,");
+        using var dbA = TestDb.ForTenant(store, orgA);
+        var first = await Commit(dbA, orgA, file);
+        // The SuperAdmin context has no tenant query filter, so only the explicit tenant check keeps organisation A's batch out of B's retry.
+        using var dbB = TestDb.Create(store, viewingAs: orgB);
+
+        var second = await Commit(dbB, orgB, file);
+
+        Assert.False(second.Replayed);
+        Assert.NotEqual(first.BatchId, second.BatchId);
+        Assert.Equal(orgB, (await dbB.ImportBatches.SingleAsync(b => b.Id == second.BatchId)).TenantId);
+    }
+
+    [Fact]
+    public async Task A_batch_from_before_the_fingerprint_still_replays_whatever_the_choices()
+    {
+        var (db, tenantId) = Organisation();
+        using var _ = db;
+        var file = Csv(Header, "Ava,Stone,,430000001,,");
+        var first = await Commit(db, tenantId, file, ImportLanding.Active);
+        (await db.ImportBatches.SingleAsync()).ChoicesFingerprint = null;
+        await db.SaveChangesAsync();
+
+        var again = await Commit(db, tenantId, file, ImportLanding.Onboarding);
+
+        Assert.Equal((first.BatchId, true), (again.BatchId, again.Replayed));
+    }
+
+    [Fact]
     public async Task A_row_that_became_a_duplicate_after_the_preview_is_skipped_at_commit()
     {
         var (db, tenantId) = Organisation();

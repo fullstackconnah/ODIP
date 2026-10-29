@@ -116,7 +116,8 @@ public class PortalController : ControllerBase
         // L1 (2026-10-16): a Draft is invisible to its worker until it is published.
         var shifts = await _db.Shifts
             .Include(s => s.Participant)
-            .Where(s => s.UserId == staffId.Value && s.Status != ShiftStatus.Draft && s.ServiceDate >= start && s.ServiceDate <= end && s.Participant != null)
+            .Where(Shift.VisibleToWorker)
+            .Where(s => s.UserId == staffId.Value && s.ServiceDate >= start && s.ServiceDate <= end && s.Participant != null)
             .OrderBy(s => s.ServiceDate).ThenBy(s => s.StartTime)
             .ToListAsync(ct);
         var shiftDtos = shifts.Where(s => Participant.ServicesBegun(s.Participant!)).Select(ToSummaryDto).ToList();
@@ -280,7 +281,8 @@ public class PortalController : ControllerBase
         var shift = await _db.Shifts
             .Include(s => s.Participant)
             // L1 (2026-10-16): a Draft is invisible to its worker until it is published, on every path, and answers as "not yours" does.
-            .FirstOrDefaultAsync(s => s.Id == id && s.UserId == staffId.Value && s.Status != ShiftStatus.Draft, ct);
+            .Where(Shift.VisibleToWorker)
+            .FirstOrDefaultAsync(s => s.Id == id && s.UserId == staffId.Value, ct);
         if (shift?.Participant is null || !Participant.ServicesBegun(shift.Participant))
             return (null, NotFound(ApiResponse<PortalShiftDetailDto>.Fail("Shift not found.")));
 
@@ -673,7 +675,8 @@ public class PortalController : ControllerBase
             return NotFound(ApiResponse<AdministrationDto>.Fail("Shift not found."));
 
         var shift = await _db.Shifts.Include(s => s.Participant)
-            .FirstOrDefaultAsync(s => s.Id == id && s.UserId == staffId.Value && s.Status != ShiftStatus.Draft, ct);   // L1: a Draft is invisible
+            .Where(Shift.VisibleToWorker)
+            .FirstOrDefaultAsync(s => s.Id == id && s.UserId == staffId.Value, ct);
         if (shift?.Participant is null || !Participant.ServicesBegun(shift.Participant))
             return NotFound(ApiResponse<AdministrationDto>.Fail("Shift not found."));
 
@@ -1038,7 +1041,7 @@ public class PortalController : ControllerBase
         if (staffId is null)
             return NotFound(ApiResponse<List<ShiftNoteDto>>.Fail("Shift not found."));
 
-        var ownsShift = await _db.Shifts.AnyAsync(s => s.Id == id && s.UserId == staffId.Value && s.Status != ShiftStatus.Draft, ct);   // L1: a Draft is invisible
+        var ownsShift = await _db.Shifts.Where(Shift.VisibleToWorker).AnyAsync(s => s.Id == id && s.UserId == staffId.Value, ct);
         if (!ownsShift)
             return NotFound(ApiResponse<List<ShiftNoteDto>>.Fail("Shift not found."));
 
@@ -1061,7 +1064,7 @@ public class PortalController : ControllerBase
         if (staffId is null)
             return NotFound(ApiResponse<ShiftNoteDto>.Fail("Shift not found."));
 
-        var shiftTenantId = await _db.Shifts.Where(s => s.Id == id && s.UserId == staffId.Value && s.Status != ShiftStatus.Draft)   // L1: a Draft is invisible
+        var shiftTenantId = await _db.Shifts.Where(Shift.VisibleToWorker).Where(s => s.Id == id && s.UserId == staffId.Value)
             .Select(s => (Guid?)s.TenantId).FirstOrDefaultAsync(ct);
         if (shiftTenantId is null)
             return NotFound(ApiResponse<ShiftNoteDto>.Fail("Shift not found."));
@@ -1164,8 +1167,12 @@ public class PortalController : ControllerBase
     }
 
     /// <summary>The caller's own note, unless its shift is a Draft: a Draft is invisible to the worker (L1), so an open edit of an older note stops there too. Missing, not-yours and Draft are one 404.</summary>
-    private Task<ShiftNote?> FindOwnNoteAsync(Guid noteId, Guid staffId, CancellationToken ct) =>
-        _db.ShiftNotes.FirstOrDefaultAsync(n => n.Id == noteId && n.AuthorUserId == staffId && _db.Shifts.Any(s => s.Id == n.ShiftId && s.Status != ShiftStatus.Draft), ct);
+    private Task<ShiftNote?> FindOwnNoteAsync(Guid noteId, Guid staffId, CancellationToken ct)
+    {
+        // Hoisted out of the predicate: a static Expression inside a nested subquery is unproven on Npgsql.
+        var visible = _db.Shifts.Where(Shift.VisibleToWorker);
+        return _db.ShiftNotes.FirstOrDefaultAsync(n => n.Id == noteId && n.AuthorUserId == staffId && visible.Any(s => s.Id == n.ShiftId), ct);
+    }
 
     /// <summary>
     /// NOTES-02: dismisses the "consider filing an incident report?" prompt for one of the
