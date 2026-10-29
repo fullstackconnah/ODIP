@@ -118,9 +118,9 @@ try {
       const active = () => dialog.getByRole('checkbox', { name: /^active/i })
       const above = async (state) => {
         await settled(page)
-        const c = await dialog.locator('.scroll-mb-24').boundingBox()
+        const c = await dialog.locator('.pb-4 > *').first().boundingBox()
         const f = await dialog.locator('div.sticky.bottom-0').boundingBox()
-        check(`phone ${state} Callout bottom ${c.y + c.height} <= footer top ${f.y}`, { callout: c.y + c.height, footer: f.y }, c.y + c.height <= f.y + 0.5)
+        check(`phone ${state} gap footer top ${f.y} - Callout bottom ${c.y + c.height} >= 12`, +(f.y - c.y - c.height).toFixed(2), f.y - c.y - c.height >= 12)
         await shoot(dialog, `phone-modal-${state}`)
       }
       await card(ENTRIES[0].description).getByRole('button', { name: 'Edit' }).click()
@@ -142,6 +142,17 @@ try {
       const locked = await active().isDisabled()
       check('phone ceased entry: Active is locked', locked, locked)
       await shoot(dialog, 'phone-modal-ceased-locked')
+
+      // Delete on an inactive linked entry: kept as the record, one Close button, no Open entry.
+      await openRegister()
+      await page.getByRole('button', { name: /^Inactive/ }).click()
+      await card(ENTRIES[2].description).getByRole('button', { name: 'Delete' }).click()
+      const refused = page.getByRole('alertdialog')
+      await refused.waitFor()
+      const btns = await refused.getByRole('button').allInnerTexts()
+      check('phone inactive linked delete: only Close', btns.filter((t) => /^(Close|Open entry)$/.test(t.trim())), btns.filter((t) => /^(Close|Open entry)$/.test(t.trim())).join() === 'Close')
+      check('phone inactive linked delete: record copy', await refused.innerText(), /kept as the record of that restraint/.test(await refused.innerText()))
+      await shoot(refused, 'phone-delete-refused-inactive')
     }
     await context.close()
   }

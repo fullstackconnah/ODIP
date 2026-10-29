@@ -447,7 +447,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
             />
           </FormField>
           {(deactivating || reactivating) && (
-            <div ref={consequenceRef} className="scroll-mb-24">
+            <div ref={consequenceRef} className="pb-4 scroll-mb-24">
               {deactivating && (
                 <Callout tone="warning">Deactivating this entry also unticks Chemical restraint on {linkedMedLabel}. Its history is kept.</Callout>
               )}
@@ -475,9 +475,11 @@ export default function RestrictivePracticesTab({ participantId }: { participant
         onCancel={() => setDeleteBlocked(null)}
         onConfirm={() => { const p = deleteBlocked; setDeleteBlocked(null); if (p) openEdit(p) }}
         title="This entry can't be deleted"
-        message={`This entry is linked to ${deleteBlocked?.relatedMedicationName ?? 'a medicine'}. Deactivate it instead.`}
+        message={`This entry is linked to ${deleteBlocked?.relatedMedicationName ?? 'a medicine'}${deleteBlocked?.isActive === false ? ", so it's kept as the record of that restraint." : '. Deactivate it instead.'}`}
         confirmLabel="Open entry"
         cancelLabel="Close"
+        // An inactive entry has nothing to open: it only needs the Close button.
+        footer={deleteBlocked?.isActive === false ? <Button variant="secondary" onClick={() => setDeleteBlocked(null)}>Close</Button> : undefined}
       />
 
       <AddRestrictivePracticeDialog

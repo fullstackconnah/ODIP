@@ -300,7 +300,9 @@ public class RestrictivePracticesController : ControllerBase
         {
             var linked = await _db.ParticipantMedications.FirstOrDefaultAsync(m => m.Id == linkedId, ct);
             if (linked != null)
-                return BadRequest(ApiResponse<bool>.Fail($"This entry is linked to {RestraintRegisterSync.MedicineLabel(linked)}. Deactivate it instead."));
+                return BadRequest(ApiResponse<bool>.Fail(practice.IsActive
+                    ? $"This entry is linked to {RestraintRegisterSync.MedicineLabel(linked)}. Deactivate it instead."
+                    : $"This entry is linked to {RestraintRegisterSync.MedicineLabel(linked)}, so it's kept as the record of that restraint."));
         }
 
         _db.RestrictivePractices.Remove(practice);

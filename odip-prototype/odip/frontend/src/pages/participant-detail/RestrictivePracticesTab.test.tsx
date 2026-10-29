@@ -880,7 +880,7 @@ describe('RestrictivePracticesTab — medicine-linked entries', () => {
     await user.click(screen.getByRole('button', { name: 'Edit' }))
     scrollIntoView.mockClear()
     await user.click(screen.getByRole('checkbox', { name: /^active/i }))
-    const wrapper = screen.getByText(/Deactivating this entry also unticks/).closest('.scroll-mb-24')
+    const wrapper = screen.getByText(/Deactivating this entry also unticks/).closest('.pb-4.scroll-mb-24')
     expect(wrapper).not.toBeNull()
     expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' })
     expect(scrollIntoView.mock.contexts).toContain(wrapper)
@@ -905,6 +905,22 @@ describe('RestrictivePracticesTab — medicine-linked entries', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Open entry' }))
     expect(mockDeleteMutateAsync).not.toHaveBeenCalled()
     expect(screen.getByText('Edit restrictive practice entry')).toBeInTheDocument()
+  })
+
+  it('says an inactive linked entry is kept as the record, with only Close', async () => {
+    const user = userEvent.setup()
+    mockUseRestrictivePractices.mockReturnValue({ data: [linked({ isActive: false })], isLoading: false })
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+    await user.click(screen.getByRole('button', { name: /^Inactive/ }))
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    const dialog = screen.getByRole('alertdialog')
+    expect(within(dialog).getByText("This entry is linked to Risperidone 1mg, so it's kept as the record of that restraint.")).toBeInTheDocument()
+    expect(within(dialog).queryByRole('button', { name: 'Open entry' })).not.toBeInTheDocument()
+    // The header X plus the single footer Close.
+    expect(within(dialog).getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent)).toEqual(['Close dialog', 'Close'])
+    await user.click(within(dialog).getByRole('button', { name: 'Close' }))
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(mockDeleteMutateAsync).not.toHaveBeenCalled()
   })
 
   it('shows the stale-entry copy on a 409', async () => {

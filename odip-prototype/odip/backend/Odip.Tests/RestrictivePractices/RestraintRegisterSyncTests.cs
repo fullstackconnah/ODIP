@@ -578,7 +578,7 @@ public class RestraintRegisterSyncTests
 
         await UpdateOkAsync(meds, med.Id, AsUpdate(RestraintDto(), MedicationStatus.Ceased));
         var refusedCeased = await Register(db).Delete(entry.Id, CancellationToken.None);
-        Assert.Equal("This entry is linked to Risperidone 1 mg. Deactivate it instead.", RegisterError(refusedCeased, 400));
+        Assert.Equal("This entry is linked to Risperidone 1 mg, so it's kept as the record of that restraint.", RegisterError(refusedCeased, 400));
         Assert.Single(db.RestrictivePractices);
     }
 
