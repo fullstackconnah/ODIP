@@ -29,14 +29,17 @@ public class EmploymentHeroSyncBackgroundServiceTests
             Lines.Add($"{formatter(state, exception)} {exception}");
     }
 
-    private static EmploymentHeroSyncBackgroundService Build(string dbName, StubHttpHandler eh, Dictionary<string, string?>? config = null, ILogger<EmploymentHeroSyncBackgroundService>? logger = null)
+    private static EmploymentHeroSyncBackgroundService Build(string dbName, StubHttpHandler eh, Dictionary<string, string?>? config = null, ILogger<EmploymentHeroSyncBackgroundService>? logger = null, TimeSpan? limit = null)
     {
         var services = new ServiceCollection();
         services.AddDbContext<OdipDbContext>(o => o.UseInMemoryDatabase(dbName).AddInterceptors(new AuditInterceptor(new HttpContextAccessor())));
         services.AddScoped(_ => Sync(eh));
         var provider = services.BuildServiceProvider();
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(config ?? new Dictionary<string, string?>()).Build();
-        return new EmploymentHeroSyncBackgroundService(provider.GetRequiredService<IServiceScopeFactory>(), configuration, logger ?? NullLogger<EmploymentHeroSyncBackgroundService>.Instance);
+        return new EmploymentHeroSyncBackgroundService(provider.GetRequiredService<IServiceScopeFactory>(), configuration, logger ?? NullLogger<EmploymentHeroSyncBackgroundService>.Instance)
+        {
+            PerOrganisationLimit = limit ?? TimeSpan.FromMinutes(5),
+        };
     }
 
     [Fact]
@@ -87,5 +90,38 @@ public class EmploymentHeroSyncBackgroundServiceTests
         Assert.True(service.ExecuteTask.IsCompleted);
         Assert.Empty(eh.Requests);
         await service.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task One_organisation_that_hangs_is_stopped_and_the_others_still_sync()
+    {
+        var name = Guid.NewGuid().ToString();
+        Guid hung = Guid.NewGuid(), good = Guid.NewGuid();
+        // The hung organisation's business is 888, which EH never answers; the other is business 777, as ever.
+        await using (var setup = Db(name, hung)) { var conn = await ConnectAsync(setup, hung); conn.BusinessId = "888"; await setup.SaveChangesAsync(); }
+        await using (var setup = Db(name, good)) await ConnectAsync(setup, good);
+        var eh = Eh(Employee(101, "Ana", "Ruiz", "ana@gmail.com")).OnHang(EmployeesPage("888"));
+        var logger = new ExceptionLogger();
+
+        // The timeout only makes a red run fail cleanly: on main nothing stops the hung request.
+        var tick = await Build(name, eh, logger: logger, limit: TimeSpan.FromSeconds(2)).RunTickAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(new EmploymentHeroSyncTick(2, 1), tick);
+        Assert.Contains(logger.Lines, l => l.Contains(hung.ToString()) && l.Contains("took longer than"));
+        await using var check = TestDb.Create(name);
+        Assert.True(await check.Users.AnyAsync(u => u.TenantId == good && u.ExternalPayrollId == "101"));
+    }
+
+    [Fact]
+    public async Task Cancelling_the_whole_tick_still_stops_it()
+    {
+        var name = Guid.NewGuid().ToString();
+        var tenant = Guid.NewGuid();
+        await using (var setup = Db(name, tenant)) await ConnectAsync(setup, tenant);
+        using var outer = new CancellationTokenSource();
+        var eh = Eh().OnHang(EmployeesPage(Business));
+        eh.BeforeAnswer = _ => outer.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Build(name, eh).RunTickAsync(outer.Token).WaitAsync(TimeSpan.FromSeconds(10)));
     }
 }

@@ -24,6 +24,9 @@ public sealed class EmploymentHeroSyncBackgroundService : BackgroundService
     private static readonly TimeSpan FirstRunDelay = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan Interval = TimeSpan.FromMinutes(30);
 
+    /// <summary>How long one organisation may take before it is stopped, so that a slow one cannot hold up the others.</summary>
+    internal TimeSpan PerOrganisationLimit { get; init; } = TimeSpan.FromMinutes(5);
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IConfiguration _config;
     private readonly ILogger<EmploymentHeroSyncBackgroundService> _logger;
@@ -80,9 +83,16 @@ public sealed class EmploymentHeroSyncBackgroundService : BackgroundService
         {
             try
             {
+                using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                limit.CancelAfter(PerOrganisationLimit);
                 await using var db = new OdipDbContext(dbOptions, new ScopedTenantOverride { TenantId = tenantId });
-                var result = await sync.RunAsync(db, tenantId, ct);
+                var result = await sync.RunAsync(db, tenantId, limit.Token);
                 if (result.Outcome == EmploymentHeroSyncOutcome.Failed) failures++;
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                failures++;
+                _logger.LogWarning("Employment Hero sync for organisation {TenantId} took longer than {Minutes} minutes and was stopped; the others carry on and it is tried again in 30 minutes", tenantId, PerOrganisationLimit.TotalMinutes);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
