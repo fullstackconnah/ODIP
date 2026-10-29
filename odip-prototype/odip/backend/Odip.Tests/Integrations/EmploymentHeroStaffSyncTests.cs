@@ -613,10 +613,13 @@ public class EmploymentHeroStaffSyncTests
         var (db, tenant) = await OrganisationAsync(t => EhFixture.Staff(t, "Gus", "One", "gus@gmail.com"), t => EhFixture.Staff(t, "Gus", "Two", "GUS@gmail.com "));
         await using var _ = db;
 
+        // The sync reads staff in the database's order (InMemory orders by key, not insertion), so the first of the two there is the one it must link.
+        var inListOrder = await db.Users.Where(u => u.TenantId == tenant && u.Email.Contains("gus", StringComparison.OrdinalIgnoreCase)).ToListAsync();
+
         var result = await RunAsync(db, tenant, Eh(Employee(601, "Gus", "One", "gus@gmail.com")));
 
-        Assert.Equal("601", (await db.Users.SingleAsync(u => u.LastName == "One")).ExternalPayrollId);
-        Assert.Null((await db.Users.SingleAsync(u => u.LastName == "Two")).ExternalPayrollId);
+        Assert.Equal("601", (await db.Users.SingleAsync(u => u.Id == inListOrder[0].Id)).ExternalPayrollId);
+        Assert.Null((await db.Users.SingleAsync(u => u.Id == inListOrder[1].Id)).ExternalPayrollId);
         Assert.Equal(1, result.Log!.Linked);
     }
 
