@@ -99,6 +99,44 @@ describe('ImportWizardPage', () => {
     expect(await screen.findByText(sentence)).toBeInTheDocument()
   })
 
+  describe('the commit key', () => {
+    async function failFirstCommit() {
+      commit.mockRejectedValueOnce(new Error('network')).mockResolvedValue({ batchId: 'b1', createdCount: 1, skippedCount: 0, failedCount: 1, rows: [], replayed: false })
+      renderWizard()
+      await upload()
+      await screen.findByRole('heading', { name: 'Match columns' })
+      await userEvent.click(screen.getByRole('button', { name: 'Next' }))
+      await screen.findByRole('heading', { name: 'Preview' })
+      await userEvent.click(screen.getByLabelText(/Already receiving services/))
+      await userEvent.click(screen.getByRole('button', { name: 'Next' }))
+      await importNow()
+      await screen.findByText('The import failed, so nothing was imported.')
+    }
+    const importNow = async () => {
+      await userEvent.click(await screen.findByRole('button', { name: 'Import 1 participant' }))
+      await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Import' }))
+    }
+
+    it('stays the same on a plain retry', async () => {
+      await failFirstCommit()
+      await importNow()
+      await screen.findByText(/Imported 1 participant/)
+      expect(commit.mock.calls[0][0].idempotencyKey).toBe(commit.mock.calls[1][0].idempotencyKey)
+    })
+
+    it('changes when the landing is changed after a failed commit', async () => {
+      await failFirstCommit()
+      await userEvent.click(screen.getByRole('button', { name: 'Back' }))
+      await userEvent.click(screen.getByLabelText(/New onboarding/))
+      await userEvent.click(screen.getByRole('button', { name: 'Next' }))
+      await importNow()
+      await screen.findByText(/Imported 1 participant/)
+      const [first, second] = commit.mock.calls.map(c => c[0])
+      expect([first.landing, second.landing]).toEqual(['Active', 'Onboarding'])
+      expect(second.idempotencyKey).not.toBe(first.idempotencyKey)
+    })
+  })
+
   it('blocks Next on Match columns while a required field is unmatched', async () => {
     preview.mockResolvedValue(previewOf(['firstName', null]))
     renderWizard()
