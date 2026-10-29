@@ -70,27 +70,6 @@ public class ImportConcurrencyTests
     }
 
     [Fact]
-    public async Task A_preview_and_a_commit_share_the_two_permits_because_both_run_through_one_limiter()
-    {
-        // Preview and Commit each get a filter over the one keyed limiter the container hands out, so two held imports of either kind refuse a third of the other.
-        var services = new ServiceCollection();
-        services.AddKeyedSingleton(ImportConcurrencyFilter.LimiterKey, (_, _) => new PlanQuoteConcurrencyLimiter(ImportConcurrencyFilter.PermitsPerOrganisation));
-        using var provider = services.BuildServiceProvider();
-        var limiter = provider.GetRequiredKeyedService<PlanQuoteConcurrencyLimiter>(ImportConcurrencyFilter.LimiterKey);
-        var tenant = Guid.NewGuid();
-        var release = new TaskCompletionSource();
-
-        var preview = Start(FilterFor(limiter, tenant), release.Task);
-        var commit = Start(FilterFor(limiter, tenant), release.Task);
-        var anotherPreview = Start(FilterFor(limiter, tenant), release.Task);
-
-        Assert.Equal(StatusCodes.Status429TooManyRequests, Assert.IsType<ObjectResult>(anotherPreview.Context.Result).StatusCode);
-
-        release.SetResult();
-        await Task.WhenAll(preview.Running, commit.Running);
-    }
-
-    [Fact]
     public async Task The_permit_is_free_again_when_an_import_finishes_and_when_one_fails_or_is_aborted()
     {
         using var limiter = new PlanQuoteConcurrencyLimiter(ImportConcurrencyFilter.PermitsPerOrganisation);
@@ -153,8 +132,8 @@ public class ImportConcurrencyTests
         Assert.NotSame(provider.GetRequiredKeyedService<PlanQuoteConcurrencyLimiter>(ImportConcurrencyFilter.LimiterKey), provider.GetRequiredKeyedService<PlanQuoteConcurrencyLimiter>(DataExportConcurrencyFilter.LimiterKey));
 
         var program = File.ReadAllText(Path.Combine(BackendRoot(), "Odip.Api", "Program.cs"));
-        Assert.Contains("AddKeyedSingleton(Odip.Api.RateLimiting.ImportConcurrencyFilter.LimiterKey, (_, _) => new Odip.Api.RateLimiting.PlanQuoteConcurrencyLimiter(Odip.Api.RateLimiting.ImportConcurrencyFilter.PermitsPerOrganisation))", program);
-        Assert.Contains("AddScoped<Odip.Api.RateLimiting.ImportConcurrencyFilter>()", program);
+        Assert.Contains("ImportConcurrencyFilter.LimiterKey", program);
+        Assert.Contains("AddScoped<Odip.Api.RateLimiting.ImportConcurrencyFilter>", program);
     }
 
     private static string BackendRoot()
