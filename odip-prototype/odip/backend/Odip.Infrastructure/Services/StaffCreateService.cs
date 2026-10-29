@@ -57,7 +57,11 @@ public sealed class StaffCreateService
             return new(null, AddressConfirmation.Message(emailLower, tenantDomain), AddressConfirmation.Code);
 
         // Collision-safe username handling: reuses the migration's own algorithm (StaffUserUnificationMapping.ResolveUsername).
-        var existingUsernamesList = await _db.Users.IgnoreQueryFilters([TenantFilter.Name]).Select(u => u.Username.ToLower()).ToListAsync(ct);
+        // Only names that could collide are loaded: the base itself or "<base>-N" (global across tenants, so IgnoreQueryFilters stays).
+        var baseUsername = StaffUserUnificationMapping.BaseUsername(dto.FirstName, dto.LastName);
+        var suffixPrefix = baseUsername + "-";
+        var existingUsernamesList = await _db.Users.IgnoreQueryFilters([TenantFilter.Name]).Select(u => u.Username.ToLower())
+            .Where(n => n == baseUsername || n.StartsWith(suffixPrefix)).ToListAsync(ct);
         var username = StaffUserUnificationMapping.ResolveUsername(dto.FirstName, dto.LastName, existingUsernamesList.ToHashSet());
 
         var s = new User
