@@ -516,6 +516,31 @@ public class ClaimGenerationServiceTests
         Assert.Equal(6m, eveningLine!.Hours);
     }
 
+    [Fact]
+    public async Task EveningTripLinesWithHalfCentProducts_AreRoundedPerLine_SoPreviewClaimAndLinesAgree()
+    {
+        using var db = CreateDb();
+        var group = SeedActivityGroup(db);
+        SeedProviderSettings(db);
+        SeedCatalogueItem(db, group.Id, ClaimDayType.Weekday, false, vicPrice: 10.10m);
+        SeedCatalogueItem(db, group.Id, ClaimDayType.WeekdayEvening, false, vicPrice: 10.10m);
+        var participant = CreateParticipant();
+        db.Participants.Add(participant);
+        // Depart 19:45 with 8 active hours: 0.25 daytime hours (2.525) and 7.75 evening hours (78.275), neither a whole cent.
+        var trip = SeedCompletedTrip(db, new DateOnly(2026, 1, 5), 1, participant, activityGroupId: group.Id, activeHoursPerDay: 8m, departureTime: new TimeOnly(19, 45));
+        await db.SaveChangesAsync();
+        var service = new ClaimGenerationService(db);
+
+        var preview = await service.PreviewClaimAsync(trip.Id, null);
+        var claim = await service.GenerateDraftClaimAsync(trip.Id);
+
+        var lines = await db.ClaimLineItems.Where(l => l.TripClaimId == claim.Id).ToListAsync();
+        Assert.Equal(new[] { 2.53m, 78.28m }, lines.Select(l => l.TotalAmount).OrderBy(a => a));
+        Assert.Equal(80.81m, preview.TotalAmount);   // rounding the sum would give 80.80
+        Assert.Equal(preview.TotalAmount, claim.TotalAmount);
+        Assert.Equal(lines.Sum(l => l.TotalAmount), claim.TotalAmount);
+    }
+
     // ── GenerateDraftClaimAsync Tests ─────────────────────────────
 
     [Fact]
