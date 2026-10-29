@@ -31,7 +31,7 @@ public static class ImportFileReader
     {
         if (content.Length == 0) throw new ImportException("The file is empty.");
         if (content.Length > MaxBytes) throw new ImportException("The file is over 5 MB. Split it into smaller files and import each one.");
-        var lines = Path.GetExtension(fileName).ToLowerInvariant() switch
+        var (lines, nonBlank) = Path.GetExtension(fileName).ToLowerInvariant() switch
         {
             ".csv" => ImportCsvReader.Read(content),
             ".xlsx" => ReadXlsx(content),
@@ -42,13 +42,13 @@ public static class ImportFileReader
             throw new ImportException("The file has no header row. Put the column names in the first row.");
         if (lines[0].Count > MaxColumns) throw new ImportException(TooManyColumns);
         var headers = lines[0].Select((h, i) => string.IsNullOrWhiteSpace(h) ? $"Column {i + 1}" : h.Trim()).ToList();
+        // nonBlank counts the header too (it is non-blank here), and the reader stops storing rows past the limit, so the count decides.
+        if (nonBlank == 1) throw new ImportException("The file has a header row but no data rows.");
+        if (nonBlank - 1 > MaxRows) throw TooManyRows(nonBlank - 1);
         var rows = new List<ImportRow>();
         for (var i = 1; i < lines.Count; i++)
             if (!lines[i].All(string.IsNullOrWhiteSpace))
                 rows.Add(new ImportRow(i + 1, lines[i].Select(c => c.Trim()).ToList()));
-
-        if (rows.Count == 0) throw new ImportException("The file has a header row but no data rows.");
-        if (rows.Count > MaxRows) throw TooManyRows(rows.Count);
         return new ImportTable(headers, rows);
     }
 
@@ -56,7 +56,7 @@ public static class ImportFileReader
         "The file has {0:N0} rows. Import at most {1:N0} at a time: split the file and import each part.", count, MaxRows));
 
     /// <summary>The first visible sheet, from A1 to its last used cell.</summary>
-    private static List<List<string>> ReadXlsx(byte[] content)
+    private static (List<IReadOnlyList<string>> Records, int NonBlankRecords) ReadXlsx(byte[] content)
     {
         // A small file can unpack to gigabytes, and ClosedXML loads the whole package, so its unpacked size is checked first.
         long unpacked;
@@ -78,21 +78,22 @@ public static class ImportFileReader
         using (workbook)
         {
             var sheet = workbook.Worksheets.FirstOrDefault(s => s.Visibility == XLWorksheetVisibility.Visible);
-            return ReadWorksheet(sheet);
+            var lines = ReadWorksheet(sheet);
+            return (lines, lines.Count(l => !l.All(string.IsNullOrWhiteSpace)));
         }
     }
 
-    internal static List<List<string>> ReadWorksheet(IXLWorksheet? sheet)
+    internal static List<IReadOnlyList<string>> ReadWorksheet(IXLWorksheet? sheet)
     {
         // Contents only: the template formats whole columns as text, and formatting must not stretch the range to the sheet's last row.
         var used = sheet?.RangeUsed(XLCellsUsedOptions.Contents);
-        if (sheet is null || used is null) return new List<List<string>>();
+        if (sheet is null || used is null) return new List<IReadOnlyList<string>>();
         var lastRow = used.LastRow().RowNumber();
         var lastColumn = used.LastColumn().ColumnNumber();
         // Checked before reading cells: one value far down or far right would otherwise make the loop below read billions of cells.
         if (lastRow - 1 > MaxRows) throw TooManyRows(lastRow - 1);
         if (lastColumn > MaxColumns) throw new ImportException(TooManyColumns);
-        var lines = new List<List<string>>(lastRow);
+        var lines = new List<IReadOnlyList<string>>(lastRow);
         for (var r = 1; r <= lastRow; r++)
         {
             var cells = new List<string>(lastColumn);

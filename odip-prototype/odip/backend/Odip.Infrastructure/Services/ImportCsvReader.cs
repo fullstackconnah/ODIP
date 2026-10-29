@@ -10,20 +10,31 @@ namespace Odip.Infrastructure.Services;
 public static class ImportCsvReader
 {
     private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+    private static readonly IReadOnlyList<string> NoCells = Array.Empty<string>();
 
-    public static List<List<string>> Read(byte[] content)
+    // Blank records share NoCells, and non-blank ones past the row limit are counted, not stored: a 5 MB file of newlines is millions of records.
+    public static (List<IReadOnlyList<string>> Records, int NonBlankRecords) Read(byte[] content)
     {
         string text;
         try { text = StrictUtf8.GetString(content); }
         catch (DecoderFallbackException) { throw new ImportException("The file isn't UTF-8 text. In Excel, save it as \"CSV UTF-8\", or upload the .xlsx file."); }
         if (text.Length > 0 && text[0] == '\uFEFF') text = text[1..];
 
-        var records = new List<List<string>>();
+        var records = new List<IReadOnlyList<string>>();
         var record = new List<string>();
         var field = new StringBuilder();
         var inQuotes = false;
         var line = 1;
         var recordLine = 1;
+        var nonBlank = 0;
+        void EndRecord()
+        {
+            record.Add(field.ToString());
+            field.Clear();
+            if (record.All(string.IsNullOrWhiteSpace)) records.Add(NoCells);
+            else if (++nonBlank <= 1 + ImportFileReader.MaxRows) { records.Add(record); record = new List<string>(); }
+            record.Clear();
+        }
         for (var i = 0; i < text.Length; i++)
         {
             var c = text[i];
@@ -39,17 +50,14 @@ public static class ImportCsvReader
             if (c is '\r' or '\n')
             {
                 if (c == '\r' && i + 1 < text.Length && text[i + 1] == '\n') i++;
-                record.Add(field.ToString());
-                field.Clear();
-                records.Add(record);
-                record = new List<string>();
+                EndRecord();
                 recordLine = ++line;
                 continue;
             }
             field.Append(c);
         }
         if (inQuotes) throw new ImportException($"Line {recordLine} has an opening quote with no closing quote.");
-        if (field.Length > 0 || record.Count > 0) { record.Add(field.ToString()); records.Add(record); }
-        return records;
+        if (field.Length > 0 || record.Count > 0) EndRecord();
+        return (records, nonBlank);
     }
 }

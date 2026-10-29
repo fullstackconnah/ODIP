@@ -166,4 +166,63 @@ public class NotificationsControllerTests
         var row = body.Data!.Rows.Single(r => r.EventType == NotificationEventType.LeaveRequestSubmitted && r.Channel == NotificationChannelKind.Email);
         Assert.True(row.Enabled);
     }
+
+    /// <summary>The same key twice in one request must leave one row, and the last value wins.</summary>
+    [Fact]
+    public async Task PutPreferences_RepeatedKeyInOneRequest_LeavesOneRow_LastValueWins()
+    {
+        var tenantId = Guid.NewGuid();
+        var (db, _) = CreateDb(tenantId);
+        var user = SeedUser(db, tenantId);
+        var controller = MakeController(db, user.Id);
+
+        await controller.UpdatePreferences(
+            new List<UpdateNotificationPreferenceDto>
+            {
+                new() { EventType = nameof(NotificationEventType.LeaveRequestSubmitted), Channel = nameof(NotificationChannelKind.Email), Enabled = true },
+                new() { EventType = nameof(NotificationEventType.LeaveRequestSubmitted), Channel = nameof(NotificationChannelKind.Email), Enabled = false },
+            },
+            CancellationToken.None);
+
+        var row = Assert.Single(await db.NotificationPreferences.Where(p => p.UserId == user.Id).ToListAsync());
+        Assert.Equal(NotificationEventType.LeaveRequestSubmitted, row.EventType);
+        Assert.False(row.Enabled);
+    }
+
+    /// <summary>One save updates the caller's existing row, adds a new one, and leaves another user's row with the same key untouched.</summary>
+    [Fact]
+    public async Task PutPreferences_UpdatesExisting_AddsNew_AndLeavesOtherUsersRowAlone()
+    {
+        var tenantId = Guid.NewGuid();
+        var (db, _) = CreateDb(tenantId);
+        var user = SeedUser(db, tenantId);
+        var other = SeedUser(db, tenantId);
+        db.NotificationPreferences.AddRange(
+            new NotificationPreference
+            {
+                Id = Guid.NewGuid(), TenantId = tenantId, UserId = user.Id,
+                EventType = NotificationEventType.LeaveRequestSubmitted, Channel = NotificationChannelKind.Email, Enabled = true,
+            },
+            new NotificationPreference
+            {
+                Id = Guid.NewGuid(), TenantId = tenantId, UserId = other.Id,
+                EventType = NotificationEventType.LeaveRequestSubmitted, Channel = NotificationChannelKind.Email, Enabled = true,
+            });
+        await db.SaveChangesAsync();
+        var controller = MakeController(db, user.Id);
+
+        await controller.UpdatePreferences(
+            new List<UpdateNotificationPreferenceDto>
+            {
+                new() { EventType = nameof(NotificationEventType.LeaveRequestSubmitted), Channel = nameof(NotificationChannelKind.Email), Enabled = false },
+                new() { EventType = nameof(NotificationEventType.ShiftAssigned), Channel = nameof(NotificationChannelKind.Sms), Enabled = false },
+            },
+            CancellationToken.None);
+
+        var userRows = await db.NotificationPreferences.Where(p => p.UserId == user.Id).ToListAsync();
+        Assert.Equal(2, userRows.Count);
+        Assert.All(userRows, r => Assert.False(r.Enabled));
+        var otherRow = await db.NotificationPreferences.SingleAsync(p => p.UserId == other.Id);
+        Assert.True(otherRow.Enabled);
+    }
 }
