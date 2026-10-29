@@ -19,7 +19,7 @@ public static class ShiftUnassignedTemplate
             ? ($"Shift cancelled: {p.ParticipantName} on {Html.Date(p.ServiceDate)}",
                $"Your shift with {p.ParticipantName}, {when} has been cancelled.",
                $"Your shift with {Html.E(p.ParticipantName)}, {when} has been cancelled.")
-            : ($"Shift change: {p.ParticipantName} on {Html.Date(p.ServiceDate)}",
+            : ($"Taken off a shift: {p.ParticipantName} on {Html.Date(p.ServiceDate)}",
                $"You've been taken off {p.ParticipantName}, {when}.",
                $"You've been taken off {Html.E(p.ParticipantName)}, {when}.");
         return new(

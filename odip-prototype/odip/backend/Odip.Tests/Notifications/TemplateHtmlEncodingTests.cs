@@ -169,6 +169,16 @@ public class TemplateHtmlEncodingTests
     }
 
     [Fact]
+    public void ShiftChangedTemplate_EncodesBothParticipantNames()
+    {
+        var payload = new ShiftChangedPayload("worker@example.com", Payload, new DateOnly(2026, 9, 15), new DateOnly(2026, 9, 15), new TimeOnly(9, 0), new TimeOnly(15, 0), Payload);
+        var message = ShiftChangedTemplate.Render(payload, BaseUrl);
+
+        Assert.DoesNotContain("<script>", message.HtmlBody);
+        Assert.Equal(2, message.HtmlBody.Split(Encoded).Length - 1);
+    }
+
+    [Fact]
     public void ShiftUnassignedTemplate_EncodesParticipantName()
     {
         var payload = new ShiftUnassignedPayload("worker@example.com", Payload, new DateOnly(2026, 9, 15), new TimeOnly(9, 0), new TimeOnly(15, 0));

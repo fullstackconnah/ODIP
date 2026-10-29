@@ -2122,7 +2122,7 @@ const NOTIFICATION_EVENT_TYPES = [
   'LeaveRequestSubmitted', 'LeaveRequestDecided', 'ShiftAssigned',
   'ShiftCompletionPendingReview', 'ShiftCompletionReturned', 'WitnessRequested',
   'CaregiverSubmissionReceived', 'IncidentReported', 'ServiceAgreementSent',
-  'ServiceAgreementSigned', 'IntegrationDegraded', 'ShiftUnassigned', 'IntakeBooked',
+  'ServiceAgreementSigned', 'IntegrationDegraded', 'ShiftUnassigned', 'IntakeBooked', 'ShiftChanged',
 ]
 
 // GET/PUT notifications/preferences fixture — every event x channel, Email defaulting ON per
