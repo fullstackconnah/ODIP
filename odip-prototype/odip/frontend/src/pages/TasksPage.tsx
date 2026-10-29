@@ -1,5 +1,5 @@
-import { useTasks, useUpdateTask, useDeleteTask } from '@/api/hooks'
-import { TASK_TYPE_LABELS } from '@/api/types'
+import { useTasks, useUpdateTask, useSetTaskStatus, useDeleteTask } from '@/api/hooks'
+import { TASK_TYPE_LABELS, type TaskItemStatus } from '@/api/types'
 import { DataTable, RowActions, type Column } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -40,6 +40,7 @@ export default function TasksPage() {
   })
   const [failedRowId, setFailedRowId] = useState<string | null>(null)
   const updateTask = useUpdateTask()
+  const setStatus = useSetTaskStatus()
   const deleteTask = useDeleteTask()
 
   const { showArchived, params, toggleButtons, confirmDialog, errorNotice, actionButtons } = useArchiveRestore<any>({
@@ -61,7 +62,7 @@ export default function TasksPage() {
   const { data: tasks = [], isLoading, isError, refetch } = pageQuery
   const markComplete = (e: React.MouseEvent, task: any) => {
     e.stopPropagation()
-    updateTask.mutate({ id: task.id, data: { ...task, status: 'Completed', completedDate: localIsoDate() } }, {
+    setStatus.mutate({ id: task.id, status: 'Completed', completedDate: localIsoDate() }, {
       onError: () => setFailedRowId(task.id),
       onSuccess: () => setFailedRowId(prev => prev === task.id ? null : prev),
     })
@@ -147,13 +148,10 @@ export default function TasksPage() {
             value={t.status}
             onChange={val => {
               setFailedRowId(null)
-              updateTask.mutate({
+              setStatus.mutate({
                 id: t.id,
-                data: {
-                  ...t,
-                  status: val,
-                  ...(val === 'Completed' ? { completedDate: localIsoDate() } : {}),
-                },
+                status: val as TaskItemStatus,
+                ...(val === 'Completed' ? { completedDate: localIsoDate() } : {}),
               }, {
                 onError: () => setFailedRowId(t.id),
                 onSuccess: () => setFailedRowId(prev => prev === t.id ? null : prev),
