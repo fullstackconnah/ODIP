@@ -40,10 +40,6 @@ beforeEach(() => {
       upcomingTripCount: 0, activeParticipantCount: 0, outstandingTaskCount: 2, overdueTaskCount: 2, conflictCount: 0,
       tripsMissingAccommodation: 0, tripsMissingVehicles: 0, tripsMissingStaff: 0, openIncidentCount: 0, qscOverdueCount: 0,
       upcomingTrips: [],
-      overdueTasks: [
-        { id: 'task-1', title: 'Chase invoice', priority: 'High', dueDate: '2026-10-02', tripName: 'Beach Trip', ownerName: 'Sam Owner' },
-        { id: 'task-2', title: 'Find leave cover', priority: 'High', dueDate: '2026-10-01', ownerName: 'Sam Owner' },
-      ],
     },
     isLoading: false,
     isError: false,

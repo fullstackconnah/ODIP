@@ -1758,7 +1758,6 @@ const dashboardSummary = {
   openIncidentCount: 2,
   qscOverdueCount: 1,
   upcomingTrips: trips.filter((t) => t.status !== 'Completed'),
-  overdueTasks: tasks.filter((t) => t.status === 'Overdue'),
 }
 
 // Staff assignments per trip (StaffAssignmentDto)

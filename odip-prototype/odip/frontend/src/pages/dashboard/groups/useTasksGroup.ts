@@ -12,7 +12,7 @@ const dueDay = (t: TaskDto) => t.dueDate?.slice(0, 10) ?? ''
 /** The Tasks due group (SHAPE §5, call 11): overdue, then due today, ticked with TasksPage's own PUT of the stored row. */
 export function useTasksGroup(enabled: boolean, { today, mayCloseBudgetReview }: { today: string; mayCloseBudgetReview: boolean }): GroupModel {
   // Overdue is the server's own rule (the dashboard's Overdue figure); due today is the server's too (dueToday, on the provider's day, never the browser's). Both are full rows with their
-  // notes, so Done never wipes them (the summary's overdueTasks leave Notes out).
+  // notes, so Done never wipes them (the summary no longer carries task rows).
   const overdue = useTasks({ status: 'Overdue' }, { enabled })
   const dueOnToday = useTasks({ dueToday: 'true' }, { enabled })
   const updateTask = useUpdateTask()

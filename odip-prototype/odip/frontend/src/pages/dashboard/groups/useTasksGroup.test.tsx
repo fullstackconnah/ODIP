@@ -67,7 +67,7 @@ describe('Tasks due group — Done', () => {
 
     // The WHOLE body: the PUT rewrites every field (TasksDashboardController.Update), so it must be the stored row exactly, with only status and completedDate changed.
     await waitFor(() => expect(apiPutRaw).toHaveBeenCalledWith('/tasks/t1', { ...task(), status: 'Completed', completedDate: TODAY }))
-    // And the trap by name: the notes the summary's overdueTasks would have dropped are sent.
+    // And the trap by name: the notes a summary task row would have dropped are sent.
     expect(apiPutRaw.mock.calls[0][1].notes).toBe('Plan manager emailed 24 Jul.')
     await waitFor(() => expect(announcement()).toHaveTextContent('Marked done: Chase travel insurance certificate.'))
   })
