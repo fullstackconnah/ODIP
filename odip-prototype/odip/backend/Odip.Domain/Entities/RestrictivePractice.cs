@@ -31,6 +31,8 @@ public class RestrictivePractice : ITenantEntity
     public string? AuthorisedBy { get; set; }
     public DateOnly? AuthorisationDate { get; set; }
     public DateOnly? ReviewDate { get; set; }
+    /// <summary>Whether this restraint needs reporting to the NDIS Commission; null until answered.</summary>
+    public bool? RequiresReporting { get; set; }
 
     /// <summary>
     /// Only meaningful when <see cref="Type"/> is <see cref="RestrictivePracticeType.ChemicalRestraint"/> —
