@@ -55,7 +55,17 @@ public sealed class HolidayCalendar
     }
 }
 
-/// <summary>What a rostered shift is priced at: the catalogue row, the day type, the hours and the price. <see cref="TotalAmount"/> is hours x unit price, unrounded, as the claim line carries it.</summary>
+/// <summary>Claim-line rounding (owner rule, 2026-10-29): hours to 2 dp, then the amount to the cent, both half away from zero, once per line; a claim total is the sum of its rounded lines.</summary>
+public static class ClaimPricing
+{
+    /// <summary>Hours as the line carries them: 2 dp half away from zero, because the NDIA recomputes the amount from the BPR CSV hours (owner rule, 2026-10-29).</summary>
+    public static decimal LineHours(decimal hours) => decimal.Round(hours, 2, MidpointRounding.AwayFromZero);
+
+    /// <summary>A line's amount: its rounded hours x unit price, to the cent half away from zero (owner rule, 2026-10-29).</summary>
+    public static decimal LineAmount(decimal hours, decimal unitPrice) => decimal.Round(LineHours(hours) * unitPrice, 2, MidpointRounding.AwayFromZero);
+}
+
+/// <summary>What a rostered shift is priced at: the catalogue row, the day type, the hours and the price. <see cref="TotalAmount"/> is the rounded hours x unit price to the cent, as the claim line carries it.</summary>
 public sealed record ShiftPrice(SupportCatalogueItem CatalogueItem, ClaimDayType DayType, decimal Hours, decimal UnitPrice, decimal TotalAmount);
 
 /// <summary>
@@ -157,7 +167,7 @@ public static class ShiftPriceEstimator
 
         var unitPrice = CatalogueStatePrice.For(item, state);
         return new ShiftPriceOutcome(
-            new ShiftPrice(item, dayType, durationHours, unitPrice, durationHours * unitPrice), null, nightType == SleepoverType.ActiveNight ? ActiveNightCaveat : null);
+            new ShiftPrice(item, dayType, ClaimPricing.LineHours(durationHours), unitPrice, ClaimPricing.LineAmount(durationHours, unitPrice)), null, nightType == SleepoverType.ActiveNight ? ActiveNightCaveat : null);
     }
 }
 
@@ -261,7 +271,7 @@ public sealed class TripPriceEstimator
 
                 var hours = group.DayCount * activeHoursPerDay;
                 var unitPrice = CatalogueStatePrice.For(catItem, _state);
-                lines.Add(new PricedTripLine(catItem, group.DayType, group.From, group.To, hours, unitPrice, hours * unitPrice));
+                lines.Add(new PricedTripLine(catItem, group.DayType, group.From, group.To, ClaimPricing.LineHours(hours), unitPrice, ClaimPricing.LineAmount(hours, unitPrice)));
             }
             else
             {
@@ -315,7 +325,7 @@ public sealed class TripPriceEstimator
                     if (catItem != null)
                     {
                         var unitPrice = CatalogueStatePrice.For(catItem, _state);
-                        lines.Add(new PricedTripLine(catItem, ClaimDayType.Weekday, group.From, group.To, totalDaytimeHours, unitPrice, totalDaytimeHours * unitPrice));
+                        lines.Add(new PricedTripLine(catItem, ClaimDayType.Weekday, group.From, group.To, ClaimPricing.LineHours(totalDaytimeHours), unitPrice, ClaimPricing.LineAmount(totalDaytimeHours, unitPrice)));
                     }
                     else MarkUnpriced(ClaimDayType.Weekday, group.From, group.To, group.DayCount, totalDaytimeHours);
                 }
@@ -327,7 +337,7 @@ public sealed class TripPriceEstimator
                     if (catItem != null)
                     {
                         var unitPrice = CatalogueStatePrice.For(catItem, _state);
-                        lines.Add(new PricedTripLine(catItem, ClaimDayType.WeekdayEvening, group.From, group.To, totalEveningHours, unitPrice, totalEveningHours * unitPrice));
+                        lines.Add(new PricedTripLine(catItem, ClaimDayType.WeekdayEvening, group.From, group.To, ClaimPricing.LineHours(totalEveningHours), unitPrice, ClaimPricing.LineAmount(totalEveningHours, unitPrice)));
                     }
                     else
                     {

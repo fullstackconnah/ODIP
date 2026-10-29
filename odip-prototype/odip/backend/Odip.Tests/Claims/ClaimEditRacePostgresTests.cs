@@ -60,6 +60,36 @@ public class ClaimEditRacePostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal(stored.Sum(l => l.TotalAmount), (await check.TripClaims.AsNoTracking().SingleAsync(c => c.Id == claim.Id)).TotalAmount);
     }
 
+    [SkippableFact(DisplayName = "Postgres: a half-cent line edit round-trips as the rounded cent and the claim total is the sum of the stored lines")]
+    public async Task AHalfCentLineEdit_RoundTripsRounded_AndTheTotalIsTheSumOfTheStoredLines()
+    {
+        Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
+        var (db, tenantId) = await _pg.NewTenantContextAsync(_pg.ConnectionString);
+        using var kit = LedgerKit.Wrap(db, tenantId);
+        kit.SeedProvider("NSW");
+        kit.EnsureCommunityAccessCatalogue();
+        Assert.Equal("Npgsql.EntityFrameworkCore.PostgreSQL", kit.Db.Database.ProviderName);
+        var person = kit.SeedParticipant();
+        var claim = kit.SeedShiftClaim(person, TripClaimStatus.Draft, 80m, kit.SeedShift(person, new DateOnly(2026, 10, 1), ShiftStatus.Completed));
+        kit.AddShiftLine(claim, kit.SeedShift(person, new DateOnly(2026, 10, 2), ShiftStatus.Completed), 80m);
+        var ids = await kit.Db.ClaimLineItems.Where(l => l.TripClaimId == claim.Id).Select(l => l.Id).ToListAsync();
+
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns(tenantId);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(false);
+        foreach (var id in ids)
+        {
+            await using var own = PostgresFixture.NewContext(_pg.ConnectionString!, tenant.Object);
+            var controller = new ClaimsController(own, new ClaimGenerationService(own), new ShiftClaimGenerationService(own), new BprCsvService(own), new InvoiceService(own), new BudgetLedgerService(own, TimeProvider.System), tenant.Object);
+            Assert.IsType<OkObjectResult>((await controller.UpdateLineItem(claim.Id, id, new UpdateClaimLineItemDto { Hours = 0.25m, UnitPrice = 10.10m }, CancellationToken.None)).Result);
+        }
+
+        await using var check = PostgresFixture.NewContext(_pg.ConnectionString!, tenant.Object);
+        var stored = await check.ClaimLineItems.AsNoTracking().Where(l => l.TripClaimId == claim.Id).ToListAsync();
+        Assert.All(stored, l => Assert.Equal(2.53m, l.TotalAmount));
+        Assert.Equal(5.06m, (await check.TripClaims.AsNoTracking().SingleAsync(c => c.Id == claim.Id)).TotalAmount);
+    }
+
     // A status change and a delete take the same per-claim lock as a line edit, so neither can cross a line edit or each other. The lock is held here by another connection: they must wait for it.
     [SkippableTheory(DisplayName = "Postgres: a status change and a delete wait for the claim-edit lock")]
     [InlineData("status")]
