@@ -296,10 +296,11 @@ public sealed class EmploymentHeroStaffSync
 
         // 3. New people, unless an unlinked ODIP staff member has the same name: then the Admin decides (Link, or Leave unlinked).
         var unlinked = users.Where(u => u.IsActive && u.ExternalPayrollId is null && !dismissed.Contains(u.Id)).ToList();
+        var byName = unlinked.ToLookup(u => NameKey(u.FirstName, u.LastName));
         var held = new Dictionary<Guid, EhEmployee>();
         foreach (var e in pending.Where(e => !IsLeaver(e, today)))
         {
-            var namesake = unlinked.FirstOrDefault(u => !held.ContainsKey(u.Id) && NameKey(u.FirstName, u.LastName) == NameKey(e.FirstName, e.Surname));
+            var namesake = byName[NameKey(e.FirstName, e.Surname)].FirstOrDefault(u => !held.ContainsKey(u.Id));
             if (namesake is not null) { held[namesake.Id] = e; continue; }
             var email = EmailOf(e);
             if (email is null) { problems.Add(FixInEh(e, "They have no email in Employment Hero, and we need one to add them.")); continue; }
