@@ -1,5 +1,6 @@
 using System.Net;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Integrations;
@@ -604,5 +605,56 @@ public class EmploymentHeroStaffSyncTests
 
         var cleared = await RunAsync(db, tenant, Eh(Employee(501, "Fay", "Dunn", "fay@gmail.com", null, null, null)));
         Assert.Equal((1, (DateOnly?)null), (cleared.Log!.Updated, (await db.Users.SingleAsync(u => u.ExternalPayrollId == "501")).EmploymentStartDate));
+    }
+
+    [Fact]
+    public async Task Two_ODIP_users_with_the_same_normalised_email_link_the_first_in_list_order()
+    {
+        var (db, tenant) = await OrganisationAsync(t => EhFixture.Staff(t, "Gus", "One", "gus@gmail.com"), t => EhFixture.Staff(t, "Gus", "Two", "GUS@gmail.com "));
+        await using var _ = db;
+
+        var result = await RunAsync(db, tenant, Eh(Employee(601, "Gus", "One", "gus@gmail.com")));
+
+        Assert.Equal("601", (await db.Users.SingleAsync(u => u.LastName == "One")).ExternalPayrollId);
+        Assert.Null((await db.Users.SingleAsync(u => u.LastName == "Two")).ExternalPayrollId);
+        Assert.Equal(1, result.Log!.Linked);
+    }
+
+    [Fact]
+    public async Task A_current_EH_employee_sharing_the_email_of_an_already_linked_user_is_shown_not_linked()
+    {
+        var (db, tenant) = await OrganisationAsync(t => EhFixture.Staff(t, "Hal", "Roe", "hal@gmail.com", "701"));
+        await using var _ = db;
+
+        var result = await RunAsync(db, tenant, Eh(Employee(701, "Hal", "Roe", "hal@gmail.com"), Employee(702, "Hal", "Roe", "hal@gmail.com")));
+
+        Assert.Equal("701", (await db.Users.SingleAsync(u => u.FirstName == "Hal")).ExternalPayrollId);
+        Assert.Equal(0, result.Log!.Linked);
+        Assert.Contains(db.EmploymentHeroAttentions, a => a.ExternalEmployeeId == "702");
+    }
+
+    private sealed class RefusingLink : SaveChangesInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default) =>
+            eventData.Context!.ChangeTracker.Entries<User>().Any(e => e.State == EntityState.Modified && e.Entity.ExternalPayrollId == "801")
+                ? throw new DbUpdateException("collision")
+                : base.SavingChangesAsync(eventData, result, cancellationToken);
+    }
+
+    [Fact]
+    public async Task A_link_that_fails_to_save_is_shown_and_the_next_employee_still_links()
+    {
+        var (name, tenant) = (Guid.NewGuid().ToString(), Guid.NewGuid());
+        await using var db = Db(name, tenant, new RefusingLink());
+        await ConnectAsync(db, tenant);
+        db.Users.AddRange(EhFixture.Staff(tenant, "Ivy", "Ng", "ivy@gmail.com"), EhFixture.Staff(tenant, "Jo", "Kim", "jo@gmail.com"));
+        await db.SaveChangesAsync();
+
+        var result = await RunAsync(db, tenant, Eh(Employee(801, "Ivy", "Ng", "ivy@gmail.com"), Employee(802, "Jo", "Kim", "jo@gmail.com")));
+
+        Assert.Null((await db.Users.SingleAsync(u => u.FirstName == "Ivy")).ExternalPayrollId);
+        Assert.Equal("802", (await db.Users.SingleAsync(u => u.FirstName == "Jo")).ExternalPayrollId);
+        Assert.Equal(1, result.Log!.Linked);
+        Assert.Contains(db.EmploymentHeroAttentions, a => a.ExternalEmployeeId == "801" && a.Kind == EmploymentHeroAttentionKind.FixInEmploymentHero);
     }
 }
