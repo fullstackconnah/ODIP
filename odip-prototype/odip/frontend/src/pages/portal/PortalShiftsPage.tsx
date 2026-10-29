@@ -7,10 +7,11 @@ import { Callout } from '@/components/Callout'
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
 import { StatusBadge } from '@/components/StatusBadge'
-import { weekStartOf, shiftWeek, daysOfWeek, formatWeekRange, formatDayAccessibleName, isToday, formatShiftTimeRange, formatEffectiveRange } from '@/pages/rostering/lib/roster'
-import { addDays, format, subDays } from 'date-fns'
+import { weekStartOf, shiftWeek, daysOfWeek, formatWeekRange, formatDayAccessibleName, formatShiftTimeRange, formatEffectiveRange } from '@/pages/rostering/lib/roster'
+import { addDays, format, parseISO, subDays } from 'date-fns'
 import { RATIO_LABELS, hasEnded, pickCurrentShift, portalStatusLabel } from './lib/portal'
 import { useNow } from './shift/useNow'
+import { utcInstantToProviderLocal } from './shift/shiftTime'
 import { useOnline } from './shift/useOnline'
 import { SyncBar } from './sync/SyncBar'
 import { savedAtFor } from '@/api/hooks/portal'
@@ -103,7 +104,7 @@ function ShiftLink({ shift }: { shift: PortalShiftSummaryDto }) {
 }
 
 /** A titled run of day groups (Coming up, Earlier) holding shifts and intake visits; not drawn when empty. The day headings sit under it as h3. */
-function ShiftSection({ id, title, shifts, visits, newestFirst }: { id: string; title: string; shifts: PortalShiftSummaryDto[]; visits: IntakeVisitDto[]; newestFirst?: boolean }) {
+function ShiftSection({ id, title, today, shifts, visits, newestFirst }: { id: string; title: string; today: string; shifts: PortalShiftSummaryDto[]; visits: IntakeVisitDto[]; newestFirst?: boolean }) {
   if (shifts.length === 0 && visits.length === 0) return null
   const byDay = groupByDay(shifts)
   const visitDays = visitsByDay(visits)
@@ -116,7 +117,7 @@ function ShiftSection({ id, title, shifts, visits, newestFirst }: { id: string; 
         <div key={day}>
           <h3 className="text-sm font-semibold text-[var(--color-muted-foreground)] mb-2">
             {formatDayAccessibleName(day)}
-            {isToday(day) && <span className="ml-2 text-xs font-medium text-[var(--color-primary)]">Today</span>}
+            {day === today && <span className="ml-2 text-xs font-medium text-[var(--color-primary)]">Today</span>}
           </h3>
           <div className="space-y-2">
             {withVisits(byDay.get(day) ?? [], visitDays.get(day) ?? []).map(entry => entry.kind === 'visit'
@@ -133,25 +134,33 @@ export default function PortalShiftsPage() {
   const [weekStart, setWeekStart] = useState(() => weekStartOf(new Date()))
   const weekEnd = useMemo(() => daysOfWeek(weekStart)[6], [weekStart])
 
-  const { data, isLoading, isError, refetch } = useMyShifts(weekStart, weekEnd)
-  const shifts = useMemo(() => data?.shifts ?? [], [data])
-  const tripAssignments = data?.tripAssignments ?? []
+  const [now] = useNow(60_000)
+  // One request feeds both the list and the current-shift card: a week that touches yesterday..tomorrow also reaches them (a Sunday overnight still
+  // running on Monday morning; tomorrow so a phone clock a day behind the provider's still finds a shift in progress, plan check S2).
+  const yesterday = format(subDays(now, 1), 'yyyy-MM-dd')
+  const tomorrow = format(addDays(now, 1), 'yyyy-MM-dd')
+  const touchesNow = weekStart <= tomorrow && weekEnd >= yesterday
+  const from = touchesNow && yesterday < weekStart ? yesterday : weekStart
+  const to = touchesNow && tomorrow > weekEnd ? tomorrow : weekEnd
+  const { data, isLoading, isError, refetch } = useMyShifts(from, to)
+  const inWeek = (day: string) => day >= weekStart && day <= weekEnd
+  const shifts = useMemo(() => (data?.shifts ?? []).filter(s => inWeek(s.serviceDate.slice(0, 10))), [data, weekStart, weekEnd])   // eslint-disable-line react-hooks/exhaustive-deps
+  const tripAssignments = (data?.tripAssignments ?? []).filter(a => a.assignmentStart.slice(0, 10) <= weekEnd && a.assignmentEnd.slice(0, 10) >= weekStart)
   // Intake visits you are going to, in the browsed week: their own query beside the shifts (a non-shift entry, not billable work).
   const { id: myId } = usePermissions()
   const visitsQuery = useIntakeVisits({ from: weekStart, to: weekEnd, staffUserId: myId ?? undefined }, !!myId)
   const visits = useMemo(() => visitsQuery.data ?? [], [visitsQuery.data])
   const { data: witnessRequests } = usePendingWitnessRequests()
   const pendingWitnessCount = witnessRequests?.length ?? 0
-  const [now] = useNow(60_000)
   const online = useOnline()
-  const weekSavedAt = online ? null : savedAtFor(`shifts:${weekStart}:${weekEnd}`)
-  const isThisWeek = weekStart === weekStartOf(now)
-  // The card's own query, independent of the browsed week: it catches a Sunday overnight still running on Monday morning (SHAPE §2),
-  // and runs to tomorrow so a browser clock a day behind the provider's still finds a shift in progress (plan check S2).
-  const { data: recent } = useMyShifts(format(subDays(now, 1), 'yyyy-MM-dd'), format(addDays(now, 1), 'yyyy-MM-dd'))
-  const current = isThisWeek && recent ? pickCurrentShift(recent.shifts, now, recent.timeZoneId) : null
-  const rest = shifts.filter(s => s.id !== current?.id)
   const tz = data?.timeZoneId   // undefined reads the device zone; '' would throw a RangeError
+  // Today and this week are the provider's, not the phone's (the shifts' dates are wall clock there).
+  const today = utcInstantToProviderLocal(now.toISOString(), tz || undefined).slice(0, 10)
+  const thisWeek = weekStartOf(parseISO(today))
+  const weekSavedAt = online ? null : savedAtFor(`shifts:${from}:${to}`)
+  const isThisWeek = weekStart === thisWeek
+  const current = isThisWeek && data ? pickCurrentShift(data.shifts, now, data.timeZoneId) : null
+  const rest = shifts.filter(s => s.id !== current?.id)
   const comingUp = rest.filter(s => !hasEnded(s, now, tz))
   const earlier = rest.filter(s => hasEnded(s, now, tz))
     .sort((a, b) => b.serviceDate.localeCompare(a.serviceDate) || a.startTime.localeCompare(b.startTime))   // newest day first, each day in time order
@@ -190,7 +199,7 @@ export default function PortalShiftsPage() {
           <Button variant="secondary" size="md" onClick={() => setWeekStart(w => shiftWeek(w, 1))} aria-label="Next week" className="w-[var(--control-h)] px-0!">
             <ChevronRight className="w-4 h-4" />
           </Button>
-          <Button variant="secondary" size="md" onClick={() => setWeekStart(weekStartOf(new Date()))} className="ml-1">
+          <Button variant="secondary" size="md" onClick={() => setWeekStart(thisWeek)} className="ml-1">
             This week
           </Button>
         </div>
@@ -206,7 +215,7 @@ export default function PortalShiftsPage() {
       {isLoading || visitsQuery.isLoading ? (
         <ShiftsSkeleton withCurrent={isThisWeek && !current} />
       ) : isError && !online && !data ? (
-        <EmptyState icon={WifiOff} title="This week isn't saved on this phone." action={{ label: 'Back to this week', onClick: () => setWeekStart(weekStartOf(new Date())) }} />
+        <EmptyState icon={WifiOff} title="This week isn't saved on this phone." action={{ label: 'Back to this week', onClick: () => setWeekStart(thisWeek) }} />
       ) : isError ? (
         <Callout tone="danger" actions={<Button variant="secondary" size="sm" onClick={() => refetch()}>Try again</Button>}>
           Couldn't load your shifts. Check your connection and try again.
@@ -224,8 +233,8 @@ export default function PortalShiftsPage() {
               Couldn't load your intake visits.
             </Callout>
           )}
-          <ShiftSection id="coming-up" title="Coming up" shifts={comingUp} visits={visitsComingUp} />
-          <ShiftSection id="earlier" title="Earlier" shifts={earlier} visits={visitsEarlier} newestFirst />
+          <ShiftSection id="coming-up" title="Coming up" today={today} shifts={comingUp} visits={visitsComingUp} />
+          <ShiftSection id="earlier" title="Earlier" today={today} shifts={earlier} visits={visitsEarlier} newestFirst />
 
           {tripAssignments.length > 0 && (
             <section>
