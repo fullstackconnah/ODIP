@@ -434,6 +434,8 @@ export type RosterBoardDto =
       exceptions: RosterExceptionDto[]
       /** False until someone starts rostering this week (2026-10-16). The server always sends it; old fixtures leave it out, which reads as started. */
       weekStarted?: boolean
+      /** True while Start would still add agreement shifts here (no row, no agreement shift). A hand-made week is started yet can start; absent reads as false. */
+      canStart?: boolean
     }
   | {
       groupBy: 'Staff'
@@ -444,6 +446,8 @@ export type RosterBoardDto =
       exceptions: RosterExceptionDto[]
       /** False until someone starts rostering this week (2026-10-16). The server always sends it; old fixtures leave it out, which reads as started. */
       weekStarted?: boolean
+      /** True while Start would still add agreement shifts here (no row, no agreement shift). A hand-made week is started yet can start; absent reads as false. */
+      canStart?: boolean
     }
 
 // ── Write bodies ──────────────────────────────────────────

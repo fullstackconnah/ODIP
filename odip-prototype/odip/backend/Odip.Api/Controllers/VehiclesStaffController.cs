@@ -401,6 +401,7 @@ public class StaffController : ControllerBase
         MedicationCompetencyExpiryDate = s.MedicationCompetencyExpiryDate,
         WorkerScreeningNumber = s.WorkerScreeningNumber,
         WorkerScreeningExpiryDate = s.WorkerScreeningExpiryDate,
+        EmploymentStartDate = s.EmploymentStartDate,
         HasExpiredQualifications = s.HasExpiredQualificationsOn(today)
     };
 
@@ -452,6 +453,7 @@ public class StaffController : ControllerBase
                 MedicationCompetencyExpiryDate = s.MedicationCompetencyExpiryDate,
                 WorkerScreeningNumber = s.WorkerScreeningNumber,
                 WorkerScreeningExpiryDate = s.WorkerScreeningExpiryDate,
+                EmploymentStartDate = s.EmploymentStartDate,
                 Notes = s.Notes,
                 HasExpiredQualifications =
                     (s.IsFirstAidQualified && s.FirstAidExpiryDate != null && s.FirstAidExpiryDate < today)
@@ -485,6 +487,7 @@ public class StaffController : ControllerBase
             MedicationCompetencyExpiryDate = s.MedicationCompetencyExpiryDate,
             WorkerScreeningNumber = s.WorkerScreeningNumber,
             WorkerScreeningExpiryDate = s.WorkerScreeningExpiryDate,
+            EmploymentStartDate = s.EmploymentStartDate,
             HasExpiredQualifications = s.HasExpiredQualificationsOn(today)
         }));
     }
@@ -518,6 +521,7 @@ public class StaffController : ControllerBase
             MedicationCompetencyExpiryDate = s.MedicationCompetencyExpiryDate,
             WorkerScreeningNumber = s.WorkerScreeningNumber,
             WorkerScreeningExpiryDate = s.WorkerScreeningExpiryDate,
+            EmploymentStartDate = s.EmploymentStartDate,
             HasExpiredQualifications = s.HasExpiredQualificationsOn(today)
         }));
     }
@@ -606,6 +610,7 @@ public class StaffController : ControllerBase
             MedicationCompetencyExpiryDate = s.MedicationCompetencyExpiryDate,
             WorkerScreeningNumber = s.WorkerScreeningNumber,
             WorkerScreeningExpiryDate = s.WorkerScreeningExpiryDate,
+            EmploymentStartDate = s.EmploymentStartDate,
             HasExpiredQualifications = s.HasExpiredQualificationsOn(today)
         }));
     }

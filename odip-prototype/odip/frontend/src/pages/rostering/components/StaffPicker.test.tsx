@@ -204,3 +204,13 @@ describe('pickerPlacement', () => {
     expect(pickerPlacement(chip(2, 200, 100), { width: 330, height: 900 }).left).toBe(8)
   })
 })
+
+describe('StaffPicker: Employment Hero start date', () => {
+  it("lists someone who starts after the shift date under Hasn't started yet, with the reason, and not as free", () => {
+    renderPicker({ staff: [person('kim', 'Kim Lee'), { ...person('new', 'Nia Starter'), employmentStartDate: '2026-08-19' } as StaffListDto] })
+    expect(groupLabels()).toEqual(['Free at this time', "Hasn't started yet"])
+    const [, notStarted] = screen.getAllByRole('group')
+    expect(optionNames(notStarted)).toEqual(["Nia Starter, 0 of 38 hours this week, hasn't started yet"])
+    expect(within(within(notStarted).getByRole('option')).getByText("Hasn't started yet")).toBeInTheDocument()
+  })
+})

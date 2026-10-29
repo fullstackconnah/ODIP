@@ -120,6 +120,7 @@ export default function StaffDetailPage() {
               <div className="flex flex-wrap items-center gap-3">
                 <StatusBadge status={staff.isActive ? 'Active' : 'Inactive'} />
                 <span>{positionAndRegion}</span>
+                {staff.employmentStartDate && <span>Start date {formatDateAu(staff.employmentStartDate)} · From Employment Hero</span>}
               </div>
             }
             action={

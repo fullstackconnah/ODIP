@@ -77,7 +77,7 @@ public sealed record VehicleCheckContext(
 
 /// <summary>
 /// Pure domain rule engine for rostering a candidate <see cref="Shift"/>. Every finding is
-/// Warning except <see cref="WscExpired"/>, the one regulatory hard stop — a worker screening
+/// Warning except <see cref="StaffNotStarted"/> and <see cref="WscExpired"/>, the hard stops: a start date still ahead, or a worker screening
 /// verified to have lapsed against the shift's <see cref="Shift.ServiceDate"/>. A screening that
 /// simply hasn't been recorded yet (<see cref="WscMissing"/>) is a records gap, not a verdict on
 /// the worker, and is only a Warning like everything else the coordinator may override by
@@ -107,6 +107,7 @@ public sealed class RosterConflictService
     public const string VehicleOverSeats = "VEHICLE_OVER_SEATS";
     public const string VehicleOverWheelchair = "VEHICLE_OVER_WHEELCHAIR";
     public const string PublicHoliday = "PUBLIC_HOLIDAY";
+    public const string StaffNotStarted = "STAFF_NOT_STARTED";
 
     /// <summary>Runs every rule against <paramref name="candidate"/> and returns every finding that fires.</summary>
     public IReadOnlyList<RosterFinding> Check(Shift candidate, RosterCheckContext ctx)
@@ -116,6 +117,7 @@ public sealed class RosterConflictService
 
         var findings = new List<RosterFinding>();
 
+        CheckEmploymentStart(candidate.ServiceDate, ctx, findings);
         CheckWorkerScreening(candidate, ctx, findings);
         CheckDoubleBookedShift(candidate, ctx, findings);
         CheckDoubleBookedTrip(candidate, ctx, findings);
@@ -152,6 +154,7 @@ public sealed class RosterConflictService
         var findings = new List<RosterFinding>();
         var window = (Start: assignmentStart.ToDateTime(TimeOnly.MinValue), End: assignmentEnd.AddDays(1).ToDateTime(TimeOnly.MinValue));
 
+        CheckEmploymentStart(assignmentStart, ctx, findings);
         CheckWorkerScreeningForDate(assignmentStart, ctx, findings);
         CheckDoubleBookedShiftForWindow(window, Guid.Empty, ctx, findings);
         CheckDoubleBookedTripForRange(assignmentStart, assignmentEnd, excludeAssignmentId, ctx, findings);
@@ -235,6 +238,14 @@ public sealed class RosterConflictService
             findings.Add(new RosterFinding(WscExpired, RosterFindingSeverity.Blocking,
                 $"{ctx.Staff.FullName}'s worker screening expired {Fmt(expiry.Value)} — cannot roster."));
         }
+    }
+
+    /// <summary>A person Employment Hero says has not started yet cannot be rostered before their start date. Null means no limit.</summary>
+    private static void CheckEmploymentStart(DateOnly referenceDate, RosterCheckContext ctx, List<RosterFinding> findings)
+    {
+        if (ctx.Staff.EmploymentStartDate is { } start && referenceDate < start)
+            findings.Add(new RosterFinding(StaffNotStarted, RosterFindingSeverity.Blocking,
+                $"{ctx.Staff.FullName} starts on {Fmt(start)} – can't be rostered before then."));
     }
 
     private static void CheckDoubleBookedShift(Shift candidate, RosterCheckContext ctx, List<RosterFinding> findings)

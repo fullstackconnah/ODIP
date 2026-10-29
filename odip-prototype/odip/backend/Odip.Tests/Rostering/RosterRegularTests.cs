@@ -497,12 +497,13 @@ public class RosterRegularTests
     }
 
     [Theory]
-    [InlineData("nothing", false)]
-    [InlineData("one-off", false)]
-    [InlineData("cancelled-pattern-shift", false)]
-    [InlineData("draft-pattern-shift", true)]
-    [InlineData("row", true)]
-    public async Task TheBoard_WeekStarted_IsARowOrALivePatternShift(string holds, bool started)
+    [InlineData("nothing", false, true)]
+    [InlineData("one-off", false, true)]
+    [InlineData("cancelled-pattern-shift", false, true)]
+    [InlineData("hand-made-pattern-shift", true, true)]
+    [InlineData("draft-pattern-shift", true, false)]
+    [InlineData("row", true, false)]
+    public async Task TheBoard_WeekStarted_IsARowOrAnyLivePatternShift_AndCanStart_IsNoRowAndNoAgreementShift(string holds, bool started, bool canStart)
     {
         var dbName = NewDatabase(db =>
         {
@@ -510,14 +511,17 @@ public class RosterRegularTests
             switch (holds)
             {
                 case "one-off": ShiftOf(db, mia.Id, null, Monday, status: ShiftStatus.Published); break;
-                case "cancelled-pattern-shift": ShiftOf(db, mia.Id, null, Monday, Guid.NewGuid(), ShiftStatus.Cancelled); break;
-                case "draft-pattern-shift": ShiftOf(db, mia.Id, null, Monday, Guid.NewGuid()); break;
+                case "cancelled-pattern-shift": ShiftOf(db, mia.Id, null, Monday, Pattern(db, mia.Id, DayOfWeek.Monday).Id, ShiftStatus.Cancelled); break;
+                case "hand-made-pattern-shift": ShiftOf(db, mia.Id, null, Monday, Pattern(db, mia.Id, DayOfWeek.Monday, fromAgreement: false).Id); break;
+                case "draft-pattern-shift": ShiftOf(db, mia.Id, null, Monday, Pattern(db, mia.Id, DayOfWeek.Monday).Id); break;
                 case "row": db.RosterWeeks.Add(new RosterWeek { Id = Guid.NewGuid(), TenantId = TenantA, WeekStart = Monday }); break;
             }
         });
 
         Assert.Equal(started, (await BoardAsync(dbName)).WeekStarted);
+        Assert.Equal(canStart, (await BoardAsync(dbName)).CanStart);
         Assert.Equal(started, (await BoardAsync(dbName, "staff")).WeekStarted);
+        Assert.Equal(canStart, (await BoardAsync(dbName, "staff")).CanStart);
     }
 
     [Fact]

@@ -564,3 +564,52 @@ describe('Make or Stop the regular', () => {
     expect(screen.queryByText(/is now the regular/)).not.toBeInTheDocument()
   })
 })
+
+// A hand-made week is started (the board stays usable) yet Start would still add agreement shifts: the toolbar offers it (fix round 1, 2026-10-29).
+describe('Add agreement shifts', () => {
+  const ADD = 'Add agreement shifts'
+  const handMade = () => showBoard(board(published(DRAFTS), { canStart: true }))
+
+  it('shows beside New shift for a writer on a started week that can start, secondary, and posts the week', async () => {
+    const user = userEvent.setup()
+    const answer = deferred<typeof RESULT>()
+    h.start.mockReturnValueOnce(answer.promise)
+    handMade()
+    renderPage()
+    const add = screen.getByRole('button', { name: ADD })
+    expect(add).not.toHaveClass(PRIMARY)
+    expect(screen.queryByRole('region', { name: CARD })).not.toBeInTheDocument()
+
+    await user.click(add)
+    expect(h.start).toHaveBeenCalledWith('2026-08-17')
+    const busy = screen.getByRole('button', { name: 'Adding…' })
+    expect(busy).toHaveAttribute('aria-disabled', 'true')
+    await user.click(busy)
+    expect(h.start).toHaveBeenCalledTimes(1)
+
+    showBoard(STARTED)
+    await act(async () => { answer.resolve(RESULT) })
+    expect(await screen.findByText('Started 17–23 Aug: 5 shifts added')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: ADD })).not.toBeInTheDocument()
+  })
+
+  it('says so when someone else started the week first', async () => {
+    const user = userEvent.setup()
+    h.start.mockRejectedValueOnce({ response: { status: 409, data: { success: false, errors: ['This week has already been started.'], code: 'roster-week-started' } } })
+    handMade()
+    renderPage()
+    await user.click(screen.getByRole('button', { name: ADD }))
+    expect(await screen.findByText('This week was already started')).toBeInTheDocument()
+  })
+
+  it.each([
+    ['a reader', () => { asReader(); handMade() }],
+    ['canStart false', () => showBoard(board(published(DRAFTS), { canStart: false }))],
+    ['no canStart at all', () => showBoard(STARTED)],
+    ['an unstarted week (the card has Start)', () => showBoard({ ...UNSTARTED, canStart: true } as RosterBoardDto)],
+  ])('is hidden for %s', (_name, arrange) => {
+    arrange()
+    renderPage()
+    expect(screen.queryByRole('button', { name: ADD })).not.toBeInTheDocument()
+  })
+})
