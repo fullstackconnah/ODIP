@@ -26,6 +26,7 @@ public enum NotificationEventType
     ShiftUnassigned = 11,               // roster drag and drop (2026-10-14): someone taken off a Published shift
     IntakeBooked = 12,                  // the assigned staff member of an intake visit: booked, changed or cancelled (payload Kind), intake booking spec 2026-10-14
     StaffJoinedViaMicrosoft = 13,       // ms-sso spec 2026-10-26: each active Admin, when someone first signs in through the linked Microsoft directory
+    ShiftChanged = 14,                  // shift-change-notice (2026-10-29): the worker of a Published shift whose time, day or participant a coordinator changed
 }
 
 public enum NotificationChannelKind { Email = 0, Sms = 1 }

@@ -1212,4 +1212,171 @@ public class RosterBoardDragDropTests
         Assert.Equal(ShiftStatus.Published, (await Reload(db, monday.Id)).Status);
         Assert.Equal(thursday.Id, (await db.NotificationOutbox.SingleAsync()).EntityId);
     }
+
+    // ── Changing a Published shift's time, day or participant tells its worker (shift-change-notice, 2026-10-29) ──
+
+    private const string Dash = "\u00A0\u2013\u2060\u00A0";
+
+    private static (Shift Shift, User Alex) PublishedWithAlex(OdipDbContext db)
+    {
+        var alex = SeedStaff(db, "Alex", "Ng");
+        return (SeedShift(db, SeedParticipant(db).Id, alex.Id, ShiftStatus.Published), alex);
+    }
+
+    [Fact]
+    public async Task UpdateShift_ChangingTheTimeOfAPublishedShift_TellsTheWorkerOnce()
+    {
+        using var db = TestDb.Create();
+        var (shift, alex) = PublishedWithAlex(db);
+
+        Body(await Controller(db).UpdateShift(shift.Id, Put(shift, alex.Id, ShiftStatus.Published) with { StartTime = new TimeOnly(10, 0) }, default));
+
+        Assert.Equal(new[] { (NotificationEventType.ShiftChanged, alex.Id) }, await Notices(db));
+        var bell = await db.InAppNotifications.AsNoTracking().SingleAsync();
+        Assert.Equal($"Your shift with Mia Chen on Mon 24 Aug has changed: now 10:00 am{Dash}3:00 pm.", bell.Title);
+        Assert.Equal($"/portal/shifts/{shift.Id}", bell.LinkTo);
+    }
+
+    [Fact]
+    public async Task UpdateShift_MovingTheDateOfAPublishedShift_NamesTheOldAndTheNewDay()
+    {
+        using var db = TestDb.Create();
+        var (shift, alex) = PublishedWithAlex(db);
+
+        Body(await Controller(db).UpdateShift(shift.Id, Put(shift, alex.Id, ShiftStatus.Published) with { ServiceDate = new DateOnly(2026, 8, 25) }, default));
+
+        Assert.Equal(new[] { (NotificationEventType.ShiftChanged, alex.Id) }, await Notices(db));
+        Assert.Equal($"Your shift with Mia Chen on Mon 24 Aug has changed: now Tue 25 Aug, 9:00 am{Dash}3:00 pm.", (await db.InAppNotifications.AsNoTracking().SingleAsync()).Title);
+    }
+
+    [Fact]
+    public async Task UpdateShift_ChangingTheParticipantOfAPublishedShift_NamesTheNewParticipantAndNoTime()
+    {
+        using var db = TestDb.Create();
+        var (shift, alex) = PublishedWithAlex(db);
+        var ben = SeedParticipant(db, "Ben", "Ruiz");
+
+        Body(await Controller(db).UpdateShift(shift.Id, Put(shift, alex.Id, ShiftStatus.Published) with { ParticipantId = ben.Id }, default));
+
+        Assert.Equal(new[] { (NotificationEventType.ShiftChanged, alex.Id) }, await Notices(db));
+        Assert.Equal("Your shift with Mia Chen on Mon 24 Aug has changed: now with Ben Ruiz.", (await db.InAppNotifications.AsNoTracking().SingleAsync()).Title);
+    }
+
+    [Fact]
+    public async Task UpdateShift_ChangingTheParticipantAndTheTime_SendsOneNotice()
+    {
+        using var db = TestDb.Create();
+        var (shift, alex) = PublishedWithAlex(db);
+        var ben = SeedParticipant(db, "Ben", "Ruiz");
+
+        Body(await Controller(db).UpdateShift(shift.Id, Put(shift, alex.Id, ShiftStatus.Published) with { ParticipantId = ben.Id, EndTime = new TimeOnly(16, 0) }, default));
+
+        Assert.Equal(new[] { (NotificationEventType.ShiftChanged, alex.Id) }, await Notices(db));
+        Assert.Equal($"Your shift with Mia Chen on Mon 24 Aug has changed: now with Ben Ruiz, 9:00 am{Dash}4:00 pm.", (await db.InAppNotifications.AsNoTracking().SingleAsync()).Title);
+    }
+
+    [Fact]
+    public async Task UpdateShift_ADraftOrUnstaffedOrUnchangedShift_SendsNoChangeNotice()
+    {
+        using var db = TestDb.Create();
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var participant = SeedParticipant(db);
+        var draft = SeedShift(db, participant.Id, alex.Id, ShiftStatus.Draft);
+        var unstaffed = SeedShift(db, participant.Id, null, ShiftStatus.Published, day: new DateOnly(2026, 8, 26));
+        var unchanged = SeedShift(db, participant.Id, alex.Id, ShiftStatus.Published, day: new DateOnly(2026, 8, 27));
+
+        Body(await Controller(db).UpdateShift(draft.Id, Put(draft, alex.Id, ShiftStatus.Draft) with { StartTime = new TimeOnly(10, 0) }, default));
+        Body(await Controller(db).UpdateShift(unstaffed.Id, Put(unstaffed, null, ShiftStatus.Published) with { StartTime = new TimeOnly(10, 0) }, default));
+        Body(await Controller(db).UpdateShift(unchanged.Id, Put(unchanged, alex.Id, ShiftStatus.Published), default));   // the chip's Publish PUTs the shift as it is
+
+        Assert.Empty(await Notices(db));
+    }
+
+    [Fact]
+    public async Task UpdateShift_ChangingTheWorkerAndTheTime_GivesAssignedAndTakenOffButNoChangeNotice()
+    {
+        using var db = TestDb.Create();
+        var (shift, _) = PublishedWithAlex(db);
+        var sam = SeedStaff(db);
+
+        Body(await Controller(db).UpdateShift(shift.Id, Put(shift, sam.Id, ShiftStatus.Published) with { StartTime = new TimeOnly(10, 0) }, default));
+
+        var notices = await Notices(db);
+        Assert.DoesNotContain(notices, n => n.Type == NotificationEventType.ShiftChanged);
+        Assert.Equal(2, notices.Count);
+    }
+
+    [Fact]
+    public async Task UpdateShift_CancellingWithATimeChange_SendsOnlyTheCancel()
+    {
+        using var db = TestDb.Create();
+        var (shift, alex) = PublishedWithAlex(db);
+
+        Body(await Controller(db).UpdateShift(shift.Id, Put(shift, alex.Id, ShiftStatus.Cancelled) with { StartTime = new TimeOnly(10, 0) }, default));
+
+        Assert.Equal(new[] { (NotificationEventType.ShiftUnassigned, alex.Id) }, await Notices(db));
+    }
+
+    [Fact]
+    public async Task UpdateShift_ChangingAShiftWhoseOldAndNewDatesAreBeforeToday_SendsNothing()
+    {
+        using var db = TestDb.Create();
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var shift = SeedShift(db, SeedParticipant(db).Id, alex.Id, ShiftStatus.Published, day: new DateOnly(2026, 8, 18));   // the provider's today is 2026-08-20
+
+        Body(await Controller(db).UpdateShift(shift.Id, Put(shift, alex.Id, ShiftStatus.Published) with { ServiceDate = new DateOnly(2026, 8, 19), StartTime = new TimeOnly(10, 0) }, default));
+
+        Assert.Empty(await Notices(db));
+    }
+
+    [Fact]
+    public async Task UpdateShift_MovingAPastShiftToTheFuture_TellsTheWorker()
+    {
+        using var db = TestDb.Create();
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var shift = SeedShift(db, SeedParticipant(db).Id, alex.Id, ShiftStatus.Published, day: new DateOnly(2026, 8, 18));
+
+        Body(await Controller(db).UpdateShift(shift.Id, Put(shift, alex.Id, ShiftStatus.Published) with { ServiceDate = new DateOnly(2026, 8, 25) }, default));
+
+        Assert.Equal(new[] { (NotificationEventType.ShiftChanged, alex.Id) }, await Notices(db));
+    }
+
+    [Fact]
+    public async Task UpdateShift_MovingAPastShiftOntoTodayItself_TellsTheWorker()
+    {
+        using var db = TestDb.Create();
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var shift = SeedShift(db, SeedParticipant(db).Id, alex.Id, ShiftStatus.Published, day: new DateOnly(2026, 8, 19));   // the provider's today is 2026-08-20
+
+        Body(await Controller(db).UpdateShift(shift.Id, Put(shift, alex.Id, ShiftStatus.Published) with { ServiceDate = new DateOnly(2026, 8, 20) }, default));
+
+        Assert.Equal(new[] { (NotificationEventType.ShiftChanged, alex.Id) }, await Notices(db));
+    }
+
+    [Fact]
+    public async Task UpdateShift_ARefusedTimeChange_SendsNoChangeNotice()
+    {
+        using var db = TestDb.Create();
+        var (shift, alex) = PublishedWithAlex(db);
+
+        // 9:00 am start, 8:00 am end, not overnight: refused by the end-before-start rule, before anything is saved or told
+        var result = await Controller(db).UpdateShift(shift.Id, Put(shift, alex.Id, ShiftStatus.Published) with { EndTime = new TimeOnly(8, 0) }, default);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Equal(shift.EndTime, (await Reload(db, shift.Id)).EndTime);
+        Assert.Empty(await Notices(db));
+    }
+
+    [Fact]
+    public async Task UpdateShift_TwoEditsInsideFiveMinutes_SendTwoNotices()
+    {
+        using var db = TestDb.Create();
+        var (shift, alex) = PublishedWithAlex(db);
+        var first = Put(shift, alex.Id, ShiftStatus.Published) with { StartTime = new TimeOnly(10, 0) };
+
+        Body(await Controller(db).UpdateShift(shift.Id, first, default));
+        Body(await Controller(db).UpdateShift(shift.Id, first with { StartTime = new TimeOnly(11, 0) }, default));
+
+        Assert.Equal(2, (await Notices(db)).Count(n => n.Type == NotificationEventType.ShiftChanged));
+    }
 }
