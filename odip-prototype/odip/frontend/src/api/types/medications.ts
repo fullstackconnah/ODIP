@@ -11,13 +11,15 @@ import type {
   Weekday,
   WitnessStatus,
 } from './enums'
+import type { RestrictivePracticeDto } from './restrictive-practices'
 
 // ── Compliance flags ─────────────────────────────────────
-export const MEDICATION_COMPLIANCE_FLAGS = ['ChemicalRestraintUnauthorised', 'ReviewOverdue', 'ConsentMissing'] as const
+export const MEDICATION_COMPLIANCE_FLAGS = ['ChemicalRestraintUnauthorised', 'ChemicalRestraintReportable', 'ReviewOverdue', 'ConsentMissing'] as const
 export type MedicationComplianceFlag = typeof MEDICATION_COMPLIANCE_FLAGS[number]
 
 export const COMPLIANCE_FLAG_LABELS: Record<MedicationComplianceFlag, string> = {
   ChemicalRestraintUnauthorised: 'Restraint not authorised',
+  ChemicalRestraintReportable: 'Report to NDIS Commission',
   ReviewOverdue: 'Review overdue',
   ConsentMissing: 'Consent missing',
 }
@@ -176,6 +178,8 @@ export interface MedicationDetailDto extends MedicationListDto {
   prnDosesInLast24h: number
   createdAt: string
   updatedAt: string
+  /** The register entry linked to this medicine, if any (its authorisation lives there). */
+  linkedRestrictivePractice?: RestrictivePracticeDto | null
 }
 
 export interface CreateMedicationDto {
@@ -219,10 +223,18 @@ export interface CreateMedicationDto {
   /** A calendar DATE held in a DateTime ("2026-10-03T00:00:00"): read the day with lib/dateOnly, never as an instant. */
   nextReviewDue?: string
   notes?: string
+  /** Sent when isChemicalRestraint is ticked; written to the linked register entry. */
+  restraintAuthorised?: boolean
+  restraintAuthorisedBy?: string | null
+  /** "YYYY-MM-DD". */
+  restraintAuthorisationDate?: string | null
+  restraintRequiresReporting?: boolean | null
 }
 
 export interface UpdateMedicationDto extends CreateMedicationDto {
   status: MedicationStatus
+  /** The linked entry's updatedAt as loaded: the server answers 409 if it changed since. */
+  expectedRestrictivePracticeUpdatedAt?: string
 }
 
 export interface AdministrationDto {

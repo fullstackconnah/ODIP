@@ -1,4 +1,4 @@
-import { useParams, useSearchParams } from 'react-router-dom'
+import { useParams, useSearchParams, Link } from 'react-router-dom'
 import { flushSync } from 'react-dom'
 import { useForm, useWatch, Controller, type Resolver, type FieldErrors } from 'react-hook-form'
 import { z } from 'zod'
@@ -9,6 +9,7 @@ import { Dropdown } from '@/components/Dropdown'
 import { FormField, labelClass } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { ToggleGroup } from '@/components/ToggleGroup'
+import { CheckboxField } from '@/components/CheckboxField'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { MEDICATION_FORMS, MEDICATION_ROUTES, DRUG_SCHEDULES, MEDICATION_SUPPORT_LEVELS, MEDICATION_STATUSES, PACKAGING_TYPES, MEDICATION_FREQUENCIES, WEEKDAYS } from '@/api/types/enums'
 import type { MedicationForm, MedicationRoute, Weekday } from '@/api/types/enums'
@@ -27,6 +28,7 @@ import { Callout } from '@/components/Callout'
 import { PageState } from '@/components/PageState'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { retryingAfterError } from '@/lib/queryPhase'
+import { httpStatusOf } from '@/lib/httpStatus'
 
 // Which medication forms make clinical sense for a given administration route. Used only to
 // surface a soft warning when the two fields disagree — the currently selected form is never
@@ -66,6 +68,10 @@ const medicationSchema = z.object({
   isHighRisk: z.boolean().optional(),
   isPsychotropic: z.boolean().optional(),
   isChemicalRestraint: z.boolean().optional(),
+  restraintAuthorised: z.boolean().optional(),
+  restraintAuthorisedBy: z.string().optional(),
+  restraintAuthorisationDate: z.string().optional(),
+  restraintRequiresReporting: z.boolean().nullable().optional(),
   bspInPlace: z.boolean().optional(),
   restrictivePracticeAuthorisationRef: z.string().optional(),
   isHighIntensitySupport: z.boolean().optional(),
@@ -84,6 +90,21 @@ const medicationSchema = z.object({
   notes: z.string().optional(),
   status: z.string().optional(),
 }).superRefine((data, ctx) => {
+  if (data.isChemicalRestraint) {
+    if (!data.purpose?.trim()) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['purpose'], message: 'Required for a chemical restraint' })
+    }
+    if (data.restraintAuthorised) {
+      if (!data.restraintAuthorisedBy?.trim()) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['restraintAuthorisedBy'], message: 'Add who authorised it' })
+      }
+      if (!data.restraintAuthorisationDate) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['restraintAuthorisationDate'], message: 'Add the date it was authorised' })
+      }
+    } else if (data.status !== 'Ceased' && data.restraintRequiresReporting == null) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['restraintRequiresReporting'], message: 'Choose Yes or No' })
+    }
+  }
   if (data.type === 'Prn' && (!data.prnIndication || !data.prnIndication.trim())) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['prnIndication'], message: 'Required for PRN medications' })
   }
@@ -126,6 +147,9 @@ const medicationResolver: Resolver<MedicationFormData> = (values) => {
 }
 
 function extractMedicationErrorMessage(err: unknown, isEdit: boolean): string {
+  if (httpStatusOf(err) === 409) {
+    return "This medicine's register entry was changed while you were editing. Reload the page to see the latest authorisation, then save again."
+  }
   return extractErrorMessage(err, `Failed to ${isEdit ? 'update' : 'create'} medication. Please check your input and try again.`)
 }
 
@@ -166,6 +190,10 @@ export default function MedicationFormPage() {
       isPsychotropic: false,
       isChemicalRestraint: false,
       bspInPlace: false,
+      restraintAuthorised: false,
+      restraintAuthorisedBy: '',
+      restraintAuthorisationDate: '',
+      restraintRequiresReporting: null,
       isHighIntensitySupport: false,
       consentObtained: false,
       status: 'Active',
@@ -178,8 +206,10 @@ export default function MedicationFormPage() {
   const anchorDateValue = useWatch({ control, name: 'anchorDate' })
   const routeValue = useWatch({ control, name: 'route' })
   const formValue = useWatch({ control, name: 'form' })
-  const isPsychotropic = useWatch({ control, name: 'isPsychotropic' })
   const isChemicalRestraint = useWatch({ control, name: 'isChemicalRestraint' })
+  const restraintAuthorised = useWatch({ control, name: 'restraintAuthorised' })
+  const statusValue = useWatch({ control, name: 'status' })
+  const linkedEntry = existing?.linkedRestrictivePractice ?? null
   const consentObtained = useWatch({ control, name: 'consentObtained' })
 
   const compatibleForms = ROUTE_FORM_MAP[routeValue as MedicationRoute] ?? [...MEDICATION_FORMS]
@@ -208,6 +238,10 @@ export default function MedicationFormPage() {
       isHighRisk: record.isHighRisk ?? false,
       isPsychotropic: record.isPsychotropic ?? false,
       isChemicalRestraint: record.isChemicalRestraint ?? false,
+      restraintAuthorised: !!(record.linkedRestrictivePractice?.authorisedBy || record.linkedRestrictivePractice?.authorisationDate),
+      restraintAuthorisedBy: record.linkedRestrictivePractice?.authorisedBy ?? '',
+      restraintAuthorisationDate: record.linkedRestrictivePractice?.authorisationDate ? record.linkedRestrictivePractice.authorisationDate.split('T')[0] : '',
+      restraintRequiresReporting: record.linkedRestrictivePractice?.requiresReporting ?? null,
       bspInPlace: record.bspInPlace ?? false,
       restrictivePracticeAuthorisationRef: record.restrictivePracticeAuthorisationRef ?? '',
       isHighIntensitySupport: record.isHighIntensitySupport ?? false,
@@ -227,6 +261,17 @@ export default function MedicationFormPage() {
       status: record.status ?? 'Active',
     })
   }, !isDirty)
+
+  // The reporting radiogroup is a custom control, so RHF cannot focus it itself.
+  const onInvalid = () => {
+    // Wait a tick: aria-invalid is only on the DOM after the errors render.
+    setTimeout(() => {
+      const first = document.querySelector<HTMLElement>('form [aria-invalid="true"]')
+      if (first?.getAttribute('role') !== 'radiogroup') return
+      first.scrollIntoView({ block: 'center' })
+      first.querySelector<HTMLElement>('[role=radio]')?.focus()
+    }, 0)
+  }
 
   const onSubmit = async (data: MedicationFormData) => {
     const payload: CreateMedicationDto = {
@@ -266,11 +311,22 @@ export default function MedicationFormPage() {
       endDate: data.endDate || undefined,
       nextReviewDue: data.nextReviewDue || undefined,
       notes: data.notes || undefined,
+      ...(data.isChemicalRestraint ? {
+        restraintAuthorised: data.restraintAuthorised ?? false,
+        restraintAuthorisedBy: data.restraintAuthorised ? (data.restraintAuthorisedBy?.trim() || null) : null,
+        restraintAuthorisationDate: data.restraintAuthorised ? (data.restraintAuthorisationDate || null) : null,
+        // Kept when the question is hidden (authorised): the stored answer is never wiped by an authorisation.
+        restraintRequiresReporting: data.restraintRequiresReporting ?? null,
+      } : {}),
     }
 
     try {
       if (isEdit) {
-        const updatePayload: UpdateMedicationDto = { ...payload, status: (data.status || 'Active') as UpdateMedicationDto['status'] }
+        const updatePayload: UpdateMedicationDto = {
+          ...payload,
+          status: (data.status || 'Active') as UpdateMedicationDto['status'],
+          expectedRestrictivePracticeUpdatedAt: linkedEntry?.updatedAt,
+        }
         const res = await updateMedication.mutateAsync({ id: id!, data: updatePayload })
         if (res.success) {
           flushSync(() => reset(data))
@@ -310,10 +366,10 @@ export default function MedicationFormPage() {
       </div>
 
       {mutation.isError && (
-        <Callout tone="error">{extractMedicationErrorMessage(mutation.error, isEdit)}</Callout>
+        <Callout tone={httpStatusOf(mutation.error) === 409 ? 'warning' : 'error'}>{extractMedicationErrorMessage(mutation.error, isEdit)}</Callout>
       )}
 
-      <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-[var(--section-gap)]">
+      <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="flex flex-col gap-[var(--section-gap)]">
         <fieldset disabled={viewOnly} className="flex flex-col gap-[var(--section-gap)] min-w-0">
         {/* Medication */}
         <Card title="Medication">
@@ -533,7 +589,7 @@ export default function MedicationFormPage() {
         {/* Clinical & compliance */}
         <Card title="Clinical & compliance">
           <div className={formGrid}>
-          <FormField label="Purpose" className={span.long}>
+          <FormField label="Purpose" required={isChemicalRestraint} error={errors.purpose?.message} className={span.long}>
             <textarea {...register('purpose')} rows={3} placeholder="What this medication is for" />
           </FormField>
 
@@ -549,25 +605,76 @@ export default function MedicationFormPage() {
             <input type="checkbox" {...register('isPsychotropic')} className="w-4 h-4 rounded border-[var(--color-border)]" />
           </FormField>
 
-          {isPsychotropic && (
-            <div className={`${span.long} rounded-[var(--radius-md)] border border-[var(--color-warning-container)] bg-[var(--color-warning-container)]/40 px-3 py-2 space-y-3`}>
-              <FormField label="Chemical Restraint" layout="checkbox">
-                <input type="checkbox" {...register('isChemicalRestraint')} className="w-4 h-4 rounded border-[var(--color-border)]" />
-              </FormField>
+          <FormField label="Chemical restraint" layout="checkbox" hint="Used mainly to influence behaviour" className={span.medium}>
+            <input type="checkbox" {...register('isChemicalRestraint')} className="w-4 h-4 rounded border-[var(--color-border)]" />
+          </FormField>
 
-              {isChemicalRestraint && (
-                <div className="space-y-3">
-                  <p className="text-xs text-[var(--color-on-warning-container)]">
-                    A medication used primarily to influence behaviour is a regulated restrictive practice — it must be in a current
-                    behaviour support plan and authorised in your state or territory. Unauthorised use is a reportable incident.
-                  </p>
-                  <FormField label="Behaviour Support Plan in place" layout="checkbox">
-                    <input type="checkbox" {...register('bspInPlace')} className="w-4 h-4 rounded border-[var(--color-border)]" />
+          {!isChemicalRestraint && linkedEntry?.isActive && (
+            <div className={span.long}>
+              <Callout tone="warning">
+                Saving will deactivate this medicine's entry on the restrictive practices register. Its history is kept, and ticking Chemical restraint again brings the same entry back.
+              </Callout>
+            </div>
+          )}
+
+          {isChemicalRestraint && (
+            <div className={`${span.long} rounded-[var(--radius-md)] border border-[var(--color-warning-container)] bg-[var(--color-warning-container)]/40 px-3 py-3 space-y-3`}>
+              <p className="text-xs text-[var(--color-on-warning-container)]">
+                A medicine used mainly to influence behaviour is a regulated restrictive practice. Saving adds it to this
+                participant's restrictive practices register. Record below whether it is authorised.
+              </p>
+              <CheckboxField
+                label="This restrictive practice is authorised"
+                hint="If ticked, add who authorised it and the date."
+                className="[&_input]:size-4 [&_input]:rounded"
+                {...register('restraintAuthorised')}
+              />
+              {restraintAuthorised ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <FormField label="Authorised by" required error={errors.restraintAuthorisedBy?.message}>
+                    <input {...register('restraintAuthorisedBy')} placeholder="e.g. Dr. Chen / NDIS Commission" />
                   </FormField>
-                  <FormField label="Restrictive Practice Authorisation Reference">
-                    <input {...register('restrictivePracticeAuthorisationRef')} placeholder="Authorisation reference #" />
+                  <FormField label="Authorisation date" required error={errors.restraintAuthorisationDate?.message}>
+                    <input type="date" {...register('restraintAuthorisationDate')} />
                   </FormField>
                 </div>
+              ) : (
+                <FormField
+                  label="Does this need to be reported to the NDIS Commission?"
+                  required={statusValue !== 'Ceased'}
+                  error={errors.restraintRequiresReporting?.message}
+                  hint="Saved on the register entry. You can change it there later."
+                >
+                  <Controller
+                    control={control}
+                    name="restraintRequiresReporting"
+                    render={({ field }) => (
+                      <ToggleGroup
+                        ariaLabel="Does this need to be reported to the NDIS Commission?"
+                        aria-invalid={!!errors.restraintRequiresReporting}
+                        disabled={viewOnly}
+                        options={[{ key: 'true', label: 'Yes' }, { key: 'false', label: 'No' }]}
+                        value={field.value == null ? '' : String(field.value)}
+                        onChange={key => field.onChange(key === 'true')}
+                      />
+                    )}
+                  />
+                </FormField>
+              )}
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-[var(--color-muted-foreground)]">Optional notes</p>
+                <FormField label="Behaviour support plan in place" layout="checkbox">
+                  <input type="checkbox" {...register('bspInPlace')} className="w-4 h-4 rounded border-[var(--color-border)]" />
+                </FormField>
+                <FormField label="Authorisation reference">
+                  <input {...register('restrictivePracticeAuthorisationRef')} placeholder="Reference number" />
+                </FormField>
+                <p className="text-xs text-[var(--color-muted-foreground)]">For your records only. These don't decide whether it's authorised.</p>
+              </div>
+              {linkedEntry && participantId && (
+                <Link to={`/participants/${participantId}?tab=restrictive-practices`} className="inline-flex min-h-[var(--control-h)] items-center text-sm text-[var(--color-primary)] hover:underline">
+                  View on the register
+                </Link>
               )}
             </div>
           )}
@@ -625,6 +732,13 @@ export default function MedicationFormPage() {
                 )}
               />
             </FormField>
+          )}
+          {isEdit && statusValue === 'Ceased' && isChemicalRestraint && (
+            <div className={span.long}>
+              <Callout tone="info">
+                Ceasing this medicine deactivates its register entry. If it is restarted, the same entry comes back.
+              </Callout>
+            </div>
           )}
         </div>
         </Card>

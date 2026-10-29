@@ -265,8 +265,9 @@ public class MedicationsControllerTests
 
     // ── Compliance flags ─────────────────────────────────────────────────
 
-    [Fact]
-    public async Task GetById_ChemicalRestraintWithoutBsp_FlagsChemicalRestraintUnauthorised()
+    /// <summary>A restraint medicine on Active, with the register entry (if any) as given. Authorisation lives on the entry only.</summary>
+    private static async Task<MedicationDetailDto> RestraintFlagsAsync(
+        MedicationStatus status, Action<RestrictivePractice>? shapeEntry, bool bspAndRef = false, bool withEntry = true)
     {
         var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
         var participant = SeedParticipant(db);
@@ -274,43 +275,61 @@ public class MedicationsControllerTests
         {
             Id = Guid.NewGuid(), ParticipantId = participant.Id, Name = "Risperidone", DoseDescription = "1 tablet",
             Type = MedicationType.Prn, PrnIndication = "Behavioural escalation", PrnMaxDosesPer24h = 2,
-            IsChemicalRestraint = true, BspInPlace = false, RestrictivePracticeAuthorisationRef = null,
-            Purpose = "Manage behaviour", Status = MedicationStatus.Active, StartDate = new DateTime(2026, 1, 1),
-            ConsentObtained = true,
+            IsChemicalRestraint = true, BspInPlace = bspAndRef, RestrictivePracticeAuthorisationRef = bspAndRef ? "QLD-RP-001" : null,
+            Purpose = "Manage behaviour", Status = status, StartDate = new DateTime(2026, 1, 1), ConsentObtained = true,
         };
         db.ParticipantMedications.Add(med);
+        if (withEntry)
+        {
+            var entry = new RestrictivePractice
+            {
+                Id = Guid.NewGuid(), ParticipantId = participant.Id, Type = RestrictivePracticeType.ChemicalRestraint,
+                Description = "Risperidone", RelatedMedicationId = med.Id, IsActive = true,
+            };
+            shapeEntry?.Invoke(entry);
+            db.RestrictivePractices.Add(entry);
+        }
         db.SaveChanges();
 
-        var controller = new MedicationsController(db, tenant);
-        var result = await controller.GetById(med.Id, CancellationToken.None);
-
+        var result = await new MedicationsController(db, tenant).GetById(med.Id, CancellationToken.None);
         var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var body = Assert.IsType<ApiResponse<MedicationDetailDto>>(ok.Value);
-        Assert.Contains("ChemicalRestraintUnauthorised", body.Data!.ComplianceFlags);
+        return Assert.IsType<ApiResponse<MedicationDetailDto>>(ok.Value).Data!;
     }
 
     [Fact]
-    public async Task GetById_ChemicalRestraintWithBspAndAuth_NoUnauthorisedFlag()
+    public async Task Flag_NoEntry_Unauthorised()
     {
-        var (db, tenant) = CreateDb(Guid.NewGuid().ToString());
-        var participant = SeedParticipant(db);
-        var med = new ParticipantMedication
-        {
-            Id = Guid.NewGuid(), ParticipantId = participant.Id, Name = "Risperidone", DoseDescription = "1 tablet",
-            Type = MedicationType.Prn, PrnIndication = "Behavioural escalation", PrnMaxDosesPer24h = 2,
-            IsChemicalRestraint = true, BspInPlace = true, RestrictivePracticeAuthorisationRef = "QLD-RP-001",
-            Purpose = "Manage behaviour", Status = MedicationStatus.Active, StartDate = new DateTime(2026, 1, 1),
-            ConsentObtained = true,
-        };
-        db.ParticipantMedications.Add(med);
-        db.SaveChanges();
+        var dto = await RestraintFlagsAsync(MedicationStatus.Active, null, withEntry: false);
+        Assert.Contains("ChemicalRestraintUnauthorised", dto.ComplianceFlags);
+    }
 
-        var controller = new MedicationsController(db, tenant);
-        var result = await controller.GetById(med.Id, CancellationToken.None);
+    [Fact]
+    public async Task Flag_EntryAuthorisedFutureDate_NoFlag()
+    {
+        var dto = await RestraintFlagsAsync(MedicationStatus.Active, e => { e.AuthorisedBy = "Dr Chen"; e.AuthorisationDate = new DateOnly(2099, 1, 1); });
+        Assert.DoesNotContain("ChemicalRestraintUnauthorised", dto.ComplianceFlags);
+    }
 
-        var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var body = Assert.IsType<ApiResponse<MedicationDetailDto>>(ok.Value);
-        Assert.DoesNotContain("ChemicalRestraintUnauthorised", body.Data!.ComplianceFlags);
+    [Fact]
+    public async Task Flag_EntryAuthorisedButInactive_Unauthorised()
+    {
+        var dto = await RestraintFlagsAsync(MedicationStatus.Active, e => { e.AuthorisedBy = "Dr Chen"; e.AuthorisationDate = new DateOnly(2026, 1, 1); e.IsActive = false; });
+        Assert.Contains("ChemicalRestraintUnauthorised", dto.ComplianceFlags);
+    }
+
+    /// <summary>The announced flip: BSP in place plus a reference used to clear the flag; now only the entry does.</summary>
+    [Fact]
+    public async Task Flag_BspAndRefButEntryUnauthorised_Unauthorised()
+    {
+        var dto = await RestraintFlagsAsync(MedicationStatus.Active, null, bspAndRef: true);
+        Assert.Contains("ChemicalRestraintUnauthorised", dto.ComplianceFlags);
+    }
+
+    [Fact]
+    public async Task Flag_CeasedRestraint_NoRestraintFlags()
+    {
+        var dto = await RestraintFlagsAsync(MedicationStatus.Ceased, e => { e.IsActive = false; e.RequiresReporting = true; });
+        Assert.DoesNotContain(dto.ComplianceFlags, f => f.StartsWith("ChemicalRestraint"));
     }
 
     [Fact]

@@ -1,3 +1,5 @@
+import type { MedicationStatus } from './enums'
+
 export const RESTRICTIVE_PRACTICE_TYPES = [
   'Seclusion',
   'ChemicalRestraint',
@@ -40,6 +42,10 @@ export interface RestrictivePracticeDto {
   /** Only meaningful when type === 'ChemicalRestraint'. */
   relatedMedicationId: string | null
   relatedMedicationName: string | null
+  /** Status of the linked medicine (a ceased one cannot be re-activated from here). */
+  relatedMedicationStatus?: MedicationStatus | null
+  /** Whether this needs reporting to the NDIS Commission; null until someone answers. */
+  requiresReporting?: boolean | null
   isActive: boolean
   createdAt: string
   updatedAt: string
@@ -52,6 +58,8 @@ export interface UpdateRestrictivePracticeDto {
   authorisationDate?: string | null
   reviewDate?: string | null
   relatedMedicationId?: string | null
+  /** null or absent leaves the stored answer as it is. */
+  requiresReporting?: boolean | null
   isActive: boolean
   /** The version the form loaded: the server answers 409 if the entry changed since. */
   expectedUpdatedAt?: string

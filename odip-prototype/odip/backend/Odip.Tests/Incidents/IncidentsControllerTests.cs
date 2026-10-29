@@ -239,6 +239,47 @@ public class IncidentsControllerTests
         Assert.True(saved.IsRestrictivePracticeAuthorised);
     }
 
+    /// <summary>M16: a restraint medicine and a new incident for its participant read the same register entry, in both directions (linked or not).</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ChemicalRestraintIncident_AgreesWithTheMedicineFlag_BothWays(bool linkIncidentToEntry)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var med = new ParticipantMedication
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, TenantId = participant.TenantId, Name = "Risperidone", DoseDescription = "1 tablet",
+            Type = MedicationType.Prn, IsChemicalRestraint = true, Purpose = "Manage behaviour", Status = MedicationStatus.Active,
+            StartDate = new DateTime(2026, 1, 1), ConsentObtained = true,
+        };
+        db.ParticipantMedications.Add(med);
+        var entry = SeedPractice(db, participant.Id, participant.TenantId, RestrictivePracticeType.ChemicalRestraint, authorised: false);
+        entry.RelatedMedicationId = med.Id;
+        db.SaveChanges();
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
+
+        async Task<(bool MedicineFlagged, bool? IncidentAuthorised)> ReadBothAsync()
+        {
+            var medResult = Assert.IsType<OkObjectResult>((await new MedicationsController(db, tenant.Object).GetById(med.Id, CancellationToken.None)).Result);
+            var flagged = Assert.IsType<ApiResponse<MedicationDetailDto>>(medResult.Value).Data!.ComplianceFlags.Contains("ChemicalRestraintUnauthorised");
+            var dto = CreateDto(reporter.Id, rpType: RestrictivePracticeType.ChemicalRestraint, involvedParticipantId: participant.Id,
+                restrictivePracticeId: linkIncidentToEntry ? entry.Id : null);
+            var seen = db.IncidentReports.Select(i => i.Id).ToList();
+            Assert.IsType<OkObjectResult>((await new IncidentsController(db).Create(dto, CancellationToken.None)).Result);
+            return (flagged, (await db.IncidentReports.Where(i => !seen.Contains(i.Id)).SingleAsync()).IsRestrictivePracticeAuthorised);
+        }
+
+        Assert.Equal((true, (bool?)false), await ReadBothAsync());
+
+        entry.AuthorisedBy = "Dr Chen";
+        entry.AuthorisationDate = new DateOnly(2026, 9, 1);
+        db.SaveChanges();
+        Assert.Equal((false, (bool?)true), await ReadBothAsync());
+    }
+
     /// <summary>Owner decision 2026-10-14: an active entry is not enough — with no AuthorisedBy and no AuthorisationDate it reads Not authorised, and so does the incident.</summary>
     [Fact]
     public async Task Create_ActiveMatchingPracticeWithoutAuthorisationDetails_DeterminesUnauthorised()

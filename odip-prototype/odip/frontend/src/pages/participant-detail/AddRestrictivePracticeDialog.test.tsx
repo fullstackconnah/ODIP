@@ -7,6 +7,7 @@ import type { RestrictivePracticeDto } from '@/api/types/restrictive-practices'
 const { mockBulkCreateMutateAsync } = vi.hoisted(() => ({ mockBulkCreateMutateAsync: vi.fn() }))
 
 vi.mock('@/api/hooks', () => ({
+  useRestrictivePractices: () => ({ data: [], isLoading: false }),
   useParticipantMedications: () => ({ data: [], isLoading: false }),
   useBulkCreateRestrictivePractices: () => ({ mutateAsync: mockBulkCreateMutateAsync, isPending: false }),
 }))

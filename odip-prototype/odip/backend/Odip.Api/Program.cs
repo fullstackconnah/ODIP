@@ -224,6 +224,7 @@ builder.Services.AddScoped<Odip.Infrastructure.Services.ParticipantAlertsService
 // ── Participant preferred-staff <-> rostering compatibility matrix link (task 6d) ──
 builder.Services.AddScoped<Odip.Infrastructure.Services.StaffCompatibilityLinkService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.SafetyNoteSyncService>();
+builder.Services.AddScoped<Odip.Infrastructure.Services.RestraintRegisterSync>();
 // Settings → Import data. ParticipantsController builds its own ParticipantCreateService (its tests construct it directly); the importer gets one from DI.
 builder.Services.AddScoped<Odip.Infrastructure.Services.ParticipantIntakeSnapshotService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.ParticipantCreateService>();
@@ -568,6 +569,9 @@ for (var attempt = 1; attempt <= maxRetries; attempt++)
         await DbSeeder.SeedParticipantNotesAsync(db);
         await DbSeeder.SeedParticipantRoutinesAsync(db);
         await DbSeeder.SeedRestrictivePracticesAsync(db);
+        // M16: one entry per chemical-restraint medicine, tenant by tenant; a failing tenant is logged and retried next start.
+        await RestrictivePracticeBackfill.RunRestraintMedicinesForAllTenantsAsync(
+            scope.ServiceProvider.GetRequiredService<DbContextOptions<OdipDbContext>>(), app.Logger);
         await DbSeeder.SeedParticipantRiskEntriesAsync(db);
         await DbSeeder.SeedParticipantConsentsAsync(db);
         await DbSeeder.SeedParticipantHealthConditionsAsync(db);

@@ -26,6 +26,8 @@ export function useBulkCreateRestrictivePractices() {
       qc.invalidateQueries({ queryKey: ['restrictive-practices', variables.participantId] })
       qc.invalidateQueries({ queryKey: ['participant', variables.participantId] })
       qc.invalidateQueries({ queryKey: ['participants'] })
+      qc.invalidateQueries({ queryKey: ['medications'] })
+      qc.invalidateQueries({ queryKey: ['medication'] })
     },
   })
 }
@@ -43,6 +45,8 @@ export function useUpdateRestrictivePractice() {
         qc.invalidateQueries({ queryKey: ['restrictive-practices', res.data.participantId] })
         qc.invalidateQueries({ queryKey: ['participant', res.data.participantId] })
         qc.invalidateQueries({ queryKey: ['participants'] })
+        qc.invalidateQueries({ queryKey: ['medications'] })
+        qc.invalidateQueries({ queryKey: ['medication'] })
       }
     },
   })
@@ -58,6 +62,8 @@ export function useDeleteRestrictivePractice() {
       qc.invalidateQueries({ queryKey: ['restrictive-practices', variables.participantId] })
       qc.invalidateQueries({ queryKey: ['participant', variables.participantId] })
       qc.invalidateQueries({ queryKey: ['participants'] })
+      qc.invalidateQueries({ queryKey: ['medications'] })
+      qc.invalidateQueries({ queryKey: ['medication'] })
     },
   })
 }

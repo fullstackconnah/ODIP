@@ -18,6 +18,8 @@ public record RestrictivePracticeDto
     public DateOnly? ReviewDate { get; init; }
     public Guid? RelatedMedicationId { get; init; }
     public string? RelatedMedicationName { get; init; }
+    public MedicationStatus? RelatedMedicationStatus { get; init; }
+    public bool? RequiresReporting { get; init; }
     public bool IsActive { get; init; }
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
@@ -36,6 +38,9 @@ public record UpdateRestrictivePracticeDto
     public DateOnly? ReviewDate { get; init; }
     public Guid? RelatedMedicationId { get; init; }
     public bool IsActive { get; init; }
+
+    /// <summary>Whether this needs reporting to the NDIS Commission; null = leave the stored answer as it is.</summary>
+    public bool? RequiresReporting { get; init; }
 
     /// <summary>The version the form loaded (RestrictivePracticeDto.UpdatedAt): the server answers 409 if the entry changed since. Absent from older open tabs, which save as before.</summary>
     public DateTime? ExpectedUpdatedAt { get; init; }

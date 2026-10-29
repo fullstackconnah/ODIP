@@ -1874,7 +1874,8 @@ public class OdipDbContext : DbContext
                 .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasIndex(e => e.ParticipantId);
-            entity.HasIndex(e => e.RelatedMedicationId);
+            // One register entry per medicine; unlinked (null) entries are unlimited.
+            entity.HasIndex(e => e.RelatedMedicationId).IsUnique().HasFilter("\"RelatedMedicationId\" IS NOT NULL");
         });
 
         // ── What's new ──────────────────────────────────────────────────────────────
