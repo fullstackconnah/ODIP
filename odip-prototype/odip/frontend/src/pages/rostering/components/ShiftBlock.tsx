@@ -136,7 +136,7 @@ export function ShiftBlock({ seg, context, style, heightPx, laneWidthPx, onOpen 
       onClick={() => onOpen(shift)}
       onKeyDown={onKeyDown}
       style={{ ...style, ...(hole ? { borderColor: DASHED } : null) }}
-      className={`absolute box-border cursor-pointer overflow-hidden rounded-sm border px-1.5 pt-1 text-left text-xs leading-4 transition-[box-shadow] duration-100 ease-out ${tint} ${hole ? 'border-dashed' : 'border-border'} ${cut} hover:shadow-[inset_0_0_0_999px_color-mix(in_srgb,var(--color-foreground)_4%,transparent)] active:shadow-[inset_0_0_0_999px_color-mix(in_srgb,var(--color-foreground)_8%,transparent)] focus:outline-none focus-visible:z-20 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-card`}
+      className={`absolute box-border cursor-pointer overflow-hidden rounded-sm border px-1.5 pt-1 text-left text-xs leading-4 transition-[box-shadow] duration-100 ease-out ${tint} ${hole ? 'border-dashed' : 'border-border'} ${cut} hover:shadow-[inset_0_0_0_999px_color-mix(in_srgb,var(--color-primary)_6%,transparent)] active:shadow-[inset_0_0_0_999px_color-mix(in_srgb,var(--color-primary)_12%,transparent)] focus:outline-none focus-visible:z-20 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-card`}
     >
       {iconCount > 0 && (
         <span className="absolute right-1 top-1 flex gap-0.5" aria-hidden="true">
