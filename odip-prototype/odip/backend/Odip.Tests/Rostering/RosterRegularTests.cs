@@ -500,9 +500,10 @@ public class RosterRegularTests
     [InlineData("nothing", false)]
     [InlineData("one-off", false)]
     [InlineData("cancelled-pattern-shift", false)]
+    [InlineData("hand-made-pattern-shift", false)]
     [InlineData("draft-pattern-shift", true)]
     [InlineData("row", true)]
-    public async Task TheBoard_WeekStarted_IsARowOrALivePatternShift(string holds, bool started)
+    public async Task TheBoard_WeekStarted_IsARowOrALiveAgreementPatternShift(string holds, bool started)
     {
         var dbName = NewDatabase(db =>
         {
@@ -511,7 +512,8 @@ public class RosterRegularTests
             {
                 case "one-off": ShiftOf(db, mia.Id, null, Monday, status: ShiftStatus.Published); break;
                 case "cancelled-pattern-shift": ShiftOf(db, mia.Id, null, Monday, Guid.NewGuid(), ShiftStatus.Cancelled); break;
-                case "draft-pattern-shift": ShiftOf(db, mia.Id, null, Monday, Guid.NewGuid()); break;
+                case "hand-made-pattern-shift": ShiftOf(db, mia.Id, null, Monday, Pattern(db, mia.Id, DayOfWeek.Monday, fromAgreement: false).Id); break;
+                case "draft-pattern-shift": ShiftOf(db, mia.Id, null, Monday, Pattern(db, mia.Id, DayOfWeek.Monday).Id); break;
                 case "row": db.RosterWeeks.Add(new RosterWeek { Id = Guid.NewGuid(), TenantId = TenantA, WeekStart = Monday }); break;
             }
         });

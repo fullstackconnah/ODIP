@@ -1681,7 +1681,7 @@ public class RosteringController : ControllerBase
                 generated = await _generator.GenerateAsync(_db, pattern.ParticipantId, new[] { pattern.Id }, from, to, ct, onlyWhenContiguous: true, providerToday: today, availability: _availability);
                 await held.CommitAsync(ct);
             }
-            await MarkWeeksStartedAsync(pattern.TenantId, generated.MadeShifts, ct);
+            if (pattern.SourceDraftId != null) await MarkWeeksStartedAsync(pattern.TenantId, generated.MadeShifts, ct);
             var warnings = await BudgetWarningsAsync(pattern.ParticipantId, generated.MadeShifts, ct);
             return Ok(ApiResponse<GeneratePatternResultDto>.Ok(new GeneratePatternResultDto { Created = generated.Created, Skipped = generated.Skipped, BudgetWarnings = warnings }));
         }
@@ -1692,7 +1692,7 @@ public class RosteringController : ControllerBase
     }
 
     /// <summary>
-    /// L10: a Generate that made shifts in a week nobody has started starts it, so the board no longer offers Start there. Saved after the generation's own commit, one week at a time:
+    /// L10: a Generate from an agreement pattern that made shifts in a week nobody has started starts it (a hand-made pattern's marks nothing), so the board no longer offers Start there. Saved after the generation's own commit, one week at a time:
     /// a Start that wins the unique row for a week makes it started anyway.
     /// </summary>
     private async Task MarkWeeksStartedAsync(Guid tenantId, IReadOnlyList<Shift> made, CancellationToken ct)

@@ -103,7 +103,7 @@ public class RosterStartWeekTests
         return db.RosterWeeks.AsNoTracking().ToList();
     }
 
-    private static void AssertWeekStarted409(ActionResult<ApiResponse<StartWeekResultDto>> result) =>
+    internal static void AssertWeekStarted409(ActionResult<ApiResponse<StartWeekResultDto>> result) =>
         Assert.Equal(RosteringController.RosterWeekStartedCode, Assert.IsType<ApiResponse<StartWeekResultDto>>(Assert.IsType<ConflictObjectResult>(result.Result).Value).Code);
 
     [Fact]
