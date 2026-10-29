@@ -11,7 +11,7 @@ using static Odip.Tests.Rostering.ApprovalTestSupport;
 namespace Odip.Tests.Rostering;
 
 /// <summary>
-/// Start rostering (2026-10-16, L6): an approval makes its shifts only in the weeks already started on the roster (a RosterWeek row, or a live pattern shift: StartedWeeks), held to the
+/// Start rostering (2026-10-16, L6): an approval makes its shifts only in the weeks already started on the roster (a RosterWeek row, or a live agreement-pattern shift: StartedWeeks), held to the
 /// agreement's dates, with the regular-away pass (R2). The approval fixture without its started weeks: Saturday 10 October 2026, the agreement 2026-10-12 to 2026-12-20, Monday to Friday.
 /// </summary>
 public class ApprovalIntoStartedWeeksTests
@@ -115,22 +115,41 @@ public class ApprovalIntoStartedWeeksTests
         Assert.All(made.Skip(1), s => Assert.Equal(ben.Id, s.UserId));
     }
 
-    [Fact]
-    public async Task AWeekStartedOnlyByAPatternShift_IsFilledToo()
+    private static async Task AddPatternShiftAsync(Fixture f, bool fromAgreement)
     {
-        await using var f = await SetUpAsync(weeksStarted: false);
+        var pattern = RosterStartWeekTests.Pattern(f.Db, Guid.NewGuid(), DayOfWeek.Tuesday, fromAgreement: fromAgreement);
         f.Db.Shifts.Add(new Shift
         {
-            Id = Guid.NewGuid(), TenantId = TenantA, ParticipantId = Guid.NewGuid(), ShiftPatternId = Guid.NewGuid(), ServiceDate = new DateOnly(2026, 10, 20),
+            Id = Guid.NewGuid(), TenantId = TenantA, ParticipantId = Guid.NewGuid(), ShiftPatternId = pattern.Id, ServiceDate = new DateOnly(2026, 10, 20),
             StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(13, 0), Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, Status = ShiftStatus.Draft,
         });
         await f.Db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task AWeekStartedOnlyByAnAgreementPatternShift_IsFilledToo()
+    {
+        await using var f = await SetUpAsync(weeksStarted: false);
+        await AddPatternShiftAsync(f, fromAgreement: true);
         var draft = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
 
         var (preview, outcome) = await PreviewThenApproveAsync(f, draft);
 
         Assert.Equal(Weekdays(new DateOnly(2026, 10, 19)), await ShiftDaysAsync(f));
         Assert.Equal((5, 5), (outcome.Approval!.ShiftsCreated, preview.ShiftsToCreate));
+    }
+
+    [Fact]
+    public async Task AWeekHoldingOnlyAHandMadePatternShift_IsNotFilled()
+    {
+        await using var f = await SetUpAsync(weeksStarted: false);
+        await AddPatternShiftAsync(f, fromAgreement: false);
+        var draft = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
+
+        var (preview, outcome) = await PreviewThenApproveAsync(f, draft);
+
+        Assert.Empty(await ShiftDaysAsync(f));
+        Assert.Equal((0, 0), (outcome.Approval!.ShiftsCreated, preview.ShiftsToCreate));
     }
 
     [Fact]

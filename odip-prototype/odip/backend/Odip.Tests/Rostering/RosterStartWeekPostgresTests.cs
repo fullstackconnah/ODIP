@@ -153,8 +153,10 @@ public class RosterStartWeekPostgresTests : IClassFixture<PostgresFixture>
         await using (var seed = Open(tenantId))
         {
             var mia = seed.Participants.Add(new Participant { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Mia", LastName = "Test", IsActive = true }).Entity;
+            var draft = seed.ServiceAgreementDrafts.Add(new ServiceAgreementDraft { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = mia.Id, ParticipantNameSnapshot = "Mia Test" }).Entity;
             patternId = seed.ShiftPatterns.Add(new ShiftPattern
             {
+                SourceDraftId = draft.Id,
                 Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = mia.Id, DayOfWeek = DayOfWeek.Monday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(13, 0),
                 Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, EffectiveFrom = new DateOnly(2026, 10, 1), IsActive = true,
             }).Entity.Id;

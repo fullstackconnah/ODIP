@@ -232,6 +232,7 @@ public class RosteringController : ControllerBase
         var budgetReviews = await BudgetReviewsAsync(weekShifts, ct);
         var regulars = await RegularsAsync(weekShifts.Select(s => s.ShiftPatternId), ct);
         var weekStarted = await WeekStartedAsync(_tenant?.TenantId, start, ct);
+        var canStart = (await StartedWeeks.MondaysAsync(_db, _tenant?.TenantId, start, start, ct)).Count == 0;
 
         ShiftDto ToShiftDto(Shift shift, List<RosterFinding> findings)
         {
@@ -347,7 +348,7 @@ public class RosteringController : ControllerBase
 
             board = new RosterBoardDto
             {
-                WeekStart = start, WeekStarted = weekStarted, Days = days, GroupBy = RosterBoardGroupBy.Participant,
+                WeekStart = start, WeekStarted = weekStarted, CanStart = canStart, Days = days, GroupBy = RosterBoardGroupBy.Participant,
                 ParticipantRows = participantRows, Exceptions = exceptions,
                 PendingAgreements = await PendingAgreementsAsync(ct),
                 // The leave the findings already loaded (weekWindows): leave requests only; recurring and legacy unavailability stay findings of the assign.
@@ -415,7 +416,7 @@ public class RosteringController : ControllerBase
 
             board = new RosterBoardDto
             {
-                WeekStart = start, WeekStarted = weekStarted, Days = days, GroupBy = RosterBoardGroupBy.Staff,
+                WeekStart = start, WeekStarted = weekStarted, CanStart = canStart, Days = days, GroupBy = RosterBoardGroupBy.Staff,
                 StaffRows = rows, Unfilled = unfilled, Exceptions = exceptions
             };
         }
@@ -1681,7 +1682,7 @@ public class RosteringController : ControllerBase
                 generated = await _generator.GenerateAsync(_db, pattern.ParticipantId, new[] { pattern.Id }, from, to, ct, onlyWhenContiguous: true, providerToday: today, availability: _availability);
                 await held.CommitAsync(ct);
             }
-            await MarkWeeksStartedAsync(pattern.TenantId, generated.MadeShifts, ct);
+            if (pattern.SourceDraftId != null) await MarkWeeksStartedAsync(pattern.TenantId, generated.MadeShifts, ct);
             var warnings = await BudgetWarningsAsync(pattern.ParticipantId, generated.MadeShifts, ct);
             return Ok(ApiResponse<GeneratePatternResultDto>.Ok(new GeneratePatternResultDto { Created = generated.Created, Skipped = generated.Skipped, BudgetWarnings = warnings }));
         }
@@ -1692,7 +1693,7 @@ public class RosteringController : ControllerBase
     }
 
     /// <summary>
-    /// L10: a Generate that made shifts in a week nobody has started starts it, so the board no longer offers Start there. Saved after the generation's own commit, one week at a time:
+    /// L10: a Generate from an agreement pattern that made shifts in a week nobody has started starts it (a hand-made pattern's marks nothing), so the board no longer offers Start there. Saved after the generation's own commit, one week at a time:
     /// a Start that wins the unique row for a week makes it started anyway.
     /// </summary>
     private async Task MarkWeeksStartedAsync(Guid tenantId, IReadOnlyList<Shift> made, CancellationToken ct)
@@ -2271,8 +2272,8 @@ public class RosteringController : ControllerBase
 
     private ConflictObjectResult WeekAlreadyStarted() => Conflict(ApiResponse<StartWeekResultDto>.Fail("This week has already been started.", RosterWeekStartedCode));
 
-    /// <summary>Whether the week from <paramref name="monday"/> is started, by the one rule (<see cref="StartedWeeks"/>).</summary>
-    private async Task<bool> WeekStartedAsync(Guid? tenantId, DateOnly monday, CancellationToken ct) => (await StartedWeeks.MondaysAsync(_db, tenantId, monday, monday, ct)).Count > 0;
+    /// <summary>Whether the week from <paramref name="monday"/> is rostered (the board's WeekStarted: a row or any pattern's shift, <see cref="StartedWeeks.RosteredMondaysAsync"/>); Start's own rule is the agreement-only <see cref="StartedWeeks.MondaysAsync"/>.</summary>
+    private async Task<bool> WeekStartedAsync(Guid? tenantId, DateOnly monday, CancellationToken ct) => (await StartedWeeks.RosteredMondaysAsync(_db, tenantId, monday, monday, ct)).Count > 0;
 
     /// <summary>Start's answer, after its commit: the names of the participants it skipped, and the budget warnings of what it made (never a failure: BudgetWarningsAsync logs and drops one).</summary>
     private async Task<StartWeekResultDto> StartWeekResultAsync(DateOnly start, List<Shift> made, List<Guid> skipped, int away, CancellationToken ct)
