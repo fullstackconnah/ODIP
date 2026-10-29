@@ -2085,6 +2085,7 @@ public static class DbSeeder
                     Id = Guid.Parse("75000000-0000-0000-0000-000000000003"), TenantId = demoTenantId, ParticipantId = charlotteId,
                     Type = RestrictivePracticeType.ChemicalRestraint, RelatedMedicationId = risperidoneId,
                     Description = "Risperidone",
+                    AuthorisedBy = "QLD Senior Practitioner", AuthorisationDate = DateOnly.FromDateTime(now.AddMonths(-2)),
                     IsActive = true, CreatedAt = now.AddMonths(-2), UpdatedAt = now.AddMonths(-2),
                 });
             }

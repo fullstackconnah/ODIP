@@ -569,6 +569,9 @@ for (var attempt = 1; attempt <= maxRetries; attempt++)
         await DbSeeder.SeedParticipantNotesAsync(db);
         await DbSeeder.SeedParticipantRoutinesAsync(db);
         await DbSeeder.SeedRestrictivePracticesAsync(db);
+        // M16: one entry per chemical-restraint medicine, tenant by tenant; a failing tenant is logged and retried next start.
+        await RestrictivePracticeBackfill.RunRestraintMedicinesForAllTenantsAsync(
+            scope.ServiceProvider.GetRequiredService<DbContextOptions<OdipDbContext>>(), app.Logger);
         await DbSeeder.SeedParticipantRiskEntriesAsync(db);
         await DbSeeder.SeedParticipantConsentsAsync(db);
         await DbSeeder.SeedParticipantHealthConditionsAsync(db);

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Moq;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Incidents;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
@@ -122,6 +123,8 @@ public class DbSeederExpansionTests
             .SingleAsync(rp => rp.Type == RestrictivePracticeType.ChemicalRestraint);
 
         Assert.NotNull(chemicalRestraint.RelatedMedicationId);
+        // The demo restraint is authorised on its entry, so the medicine reads as authorised (M16).
+        Assert.True(RestrictivePracticeAuthorisation.IsAuthorised(chemicalRestraint));
         var linkedMedication = await db.ParticipantMedications.IgnoreQueryFilters()
             .SingleAsync(m => m.Id == chemicalRestraint.RelatedMedicationId);
         Assert.True(linkedMedication.IsChemicalRestraint);
