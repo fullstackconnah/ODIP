@@ -1871,9 +1871,9 @@ describe('ShiftSlideOver create from a time-grid slot', () => {
     expect(screen.getByLabelText(/^End time/)).toHaveValue('23:59')
   })
 
-  it("create without a startTime keeps today's empty Start and End", () => {
+  it("create without a startTime keeps today's 09:00 and 10:00", () => {
     open(undefined)
-    expect(screen.getByLabelText(/^Start time/)).toHaveValue('')
-    expect(screen.getByLabelText(/^End time/)).toHaveValue('')
+    expect(screen.getByLabelText(/^Start time/)).toHaveValue('09:00')
+    expect(screen.getByLabelText(/^End time/)).toHaveValue('10:00')
   })
 })
