@@ -24,7 +24,7 @@ function practice(reviewDate: string): RestrictivePracticeDto {
   return {
     id: 'rp-1', participantId: 'participant-1', type: 'Unclassified', description: 'Locked doors overnight for safety.',
     authorisedBy: null, authorisationDate: null, reviewDate, relatedMedicationId: null, relatedMedicationName: null,
-    isActive: true, createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
+    isActive: true, isAuthorised: false, createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
   } as RestrictivePracticeDto
 }
 

@@ -21,6 +21,8 @@ public record RestrictivePracticeDto
     public MedicationStatus? RelatedMedicationStatus { get; init; }
     public bool? RequiresReporting { get; init; }
     public bool IsActive { get; init; }
+    /// <summary>The one "Authorised" rule (RestrictivePracticeAuthorisation), judged on the organisation's calendar date. The browser shows this and never recomputes it.</summary>
+    public bool IsAuthorised { get; init; }
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
 }

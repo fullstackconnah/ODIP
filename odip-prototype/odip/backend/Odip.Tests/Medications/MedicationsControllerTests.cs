@@ -304,10 +304,11 @@ public class MedicationsControllerTests
     }
 
     [Fact]
-    public async Task Flag_EntryAuthorisedFutureDate_NoFlag()
+    // Audit M14: an authorisation dated after the provider's today is not yet in force.
+    public async Task Flag_EntryAuthorisedFutureDate_Unauthorised()
     {
         var dto = await RestraintFlagsAsync(MedicationStatus.Active, e => { e.AuthorisedBy = "Dr Chen"; e.AuthorisationDate = new DateOnly(2099, 1, 1); });
-        Assert.DoesNotContain("ChemicalRestraintUnauthorised", dto.ComplianceFlags);
+        Assert.Contains("ChemicalRestraintUnauthorised", dto.ComplianceFlags);
     }
 
     [Fact]

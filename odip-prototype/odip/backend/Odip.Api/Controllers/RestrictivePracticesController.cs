@@ -6,6 +6,8 @@ using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Incidents;
+using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
 
@@ -28,11 +30,17 @@ public class RestrictivePracticesController : ControllerBase
 {
     private readonly OdipDbContext _db;
     private readonly SafetyNoteSyncService _safetyNoteSync;
-    public RestrictivePracticesController(OdipDbContext db, SafetyNoteSyncService safetyNoteSync)
+    private readonly TimeProvider _clock;
+    public RestrictivePracticesController(OdipDbContext db, SafetyNoteSyncService safetyNoteSync, TimeProvider? clock = null)
     {
         _db = db;
         _safetyNoteSync = safetyNoteSync;
+        _clock = clock ?? TimeProvider.System;
     }
+
+    /// <summary>The organisation's calendar date now: an authorisation dated tomorrow there is not yet in force, whatever the UTC date says.</summary>
+    private async Task<DateOnly> ProviderTodayAsync(Guid tenantId, CancellationToken ct) =>
+        ProviderLocalTime.TodayIn(_clock.GetUtcNow().UtcDateTime, (await ProviderTimeZoneResolver.ResolveAsync(_db, tenantId, ct)).Zone);
 
     [HttpGet("participants/{participantId:guid}/restrictive-practices")]
     public async Task<ActionResult<ApiResponse<List<RestrictivePracticeDto>>>> GetForParticipant(
@@ -49,7 +57,8 @@ public class RestrictivePracticesController : ControllerBase
             .ThenBy(rp => rp.Type)
             .ToListAsync(ct);
 
-        return Ok(ApiResponse<List<RestrictivePracticeDto>>.Ok(items.Select(ToDto).ToList()));
+        var today = items.Count == 0 ? default : await ProviderTodayAsync(items[0].TenantId, ct);
+        return Ok(ApiResponse<List<RestrictivePracticeDto>>.Ok(items.Select(rp => ToDto(rp, today)).ToList()));
     }
 
     /// <summary>
@@ -170,7 +179,8 @@ public class RestrictivePracticesController : ControllerBase
             return Conflict(ApiResponse<List<RestrictivePracticeDto>>.Fail(AlreadyLinkedCopy));
         }
 
-        return Ok(ApiResponse<List<RestrictivePracticeDto>>.Ok(practices.Select(ToDto).ToList()));
+        var today = await ProviderTodayAsync(participant.TenantId, ct);
+        return Ok(ApiResponse<List<RestrictivePracticeDto>>.Ok(practices.Select(rp => ToDto(rp, today)).ToList()));
     }
 
     /// <summary>The authoriser and the authorisation date are given together, or not at all (same wording as the client).</summary>
@@ -352,7 +362,7 @@ public class RestrictivePracticesController : ControllerBase
         return null;
     }
 
-    internal static RestrictivePracticeDto ToDto(RestrictivePractice rp) => new()
+    internal static RestrictivePracticeDto ToDto(RestrictivePractice rp, DateOnly today) => new()
     {
         Id = rp.Id,
         ParticipantId = rp.ParticipantId,
@@ -366,19 +376,21 @@ public class RestrictivePracticesController : ControllerBase
         RelatedMedicationStatus = rp.RelatedMedication?.Status,
         RequiresReporting = rp.RequiresReporting,
         IsActive = rp.IsActive,
+        IsAuthorised = RestrictivePracticeAuthorisation.IsAuthorised(rp, today),
         CreatedAt = rp.CreatedAt,
         UpdatedAt = rp.UpdatedAt,
     };
 
     private async Task<RestrictivePracticeDto> ToDtoWithMedicationNameAsync(RestrictivePractice rp, CancellationToken ct)
     {
-        if (!rp.RelatedMedicationId.HasValue) return ToDto(rp);
+        var today = await ProviderTodayAsync(rp.TenantId, ct);
+        if (!rp.RelatedMedicationId.HasValue) return ToDto(rp, today);
 
         var medication = await _db.ParticipantMedications
             .Where(m => m.Id == rp.RelatedMedicationId.Value)
             .Select(m => new { m.Name, m.Status })
             .FirstOrDefaultAsync(ct);
 
-        return ToDto(rp) with { RelatedMedicationName = medication?.Name, RelatedMedicationStatus = medication?.Status };
+        return ToDto(rp, today) with { RelatedMedicationName = medication?.Name, RelatedMedicationStatus = medication?.Status };
     }
 }
