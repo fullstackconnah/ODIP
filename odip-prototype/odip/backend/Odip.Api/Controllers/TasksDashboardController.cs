@@ -124,19 +124,46 @@ public class TasksController : ControllerBase
             .FirstOrDefaultAsync(x => x.Id == id, ct);
         if (t == null || (t.TaskType == TaskType.BudgetEmergencyReview && !BudgetReviewAudience.MaySee(User))) return NotFound(ApiResponse<TaskDto>.Fail("Task not found"));
 
-        return Ok(ApiResponse<TaskDto>.Ok(new TaskDto
-        {
-            Id = t.Id, TripInstanceId = t.TripInstanceId, TripName = t.TripInstance?.TripName,
-            ParticipantBookingId = t.ParticipantBookingId, AccommodationReservationId = t.AccommodationReservationId,
-            VehicleAssignmentId = t.VehicleAssignmentId, StaffAssignmentId = t.StaffAssignmentId,
-            LinkTo = t.LinkTo, SourceKey = t.SourceKey, ShiftId = t.ShiftId, IncidentReportId = t.IncidentReportId,
-            MedicationAdministrationId = t.MedicationAdministrationId, ShiftNoteId = t.ShiftNoteId, LeaveRequestId = t.LeaveRequestId,
-            TaskType = t.TaskType, Title = t.Title, OwnerId = t.OwnerId,
-            OwnerName = t.Owner != null ? (t.Owner.FirstName + " " + t.Owner.LastName).Trim() : null,
-            Priority = t.Priority, DueDate = t.DueDate, Status = t.Status,
-            CompletedDate = t.CompletedDate, Notes = t.Notes
-        }));
+        return Ok(ApiResponse<TaskDto>.Ok(ToDto(t)));
     }
+
+    /// <summary>The status change from the Tasks page and a trip's Tasks tab: writes status and completion date only (Update rewrites every field, so it reverts what someone changed after the caller read the row). Allows the same transitions Update does.</summary>
+    [HttpPost("{id:guid}/status")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<TaskDto>>> SetStatus(Guid id, [FromBody] SetTaskStatusDto dto, CancellationToken ct)
+    {
+        var t = await _db.BookingTasks.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (t == null) return NotFound(ApiResponse<TaskDto>.Fail("Task not found"));
+        if (t.TaskType == TaskType.BudgetEmergencyReview && !BudgetReviewAudience.MayAct(User)) return Forbid();
+        if (dto.Status == TaskItemStatus.Completed && dto.CompletedDate == null)
+            return BadRequest(ApiResponse<TaskDto>.Fail("A completed task needs the date it was completed."));
+
+        // Whoever completes the review owns it (as Update does when the request names no owner).
+        if (t.TaskType == TaskType.BudgetEmergencyReview && t.OwnerId == null && dto.Status == TaskItemStatus.Completed && t.Status != TaskItemStatus.Completed
+            && Guid.TryParse(User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var reviewer))
+            t.OwnerId = reviewer;
+        t.Status = dto.Status;
+        t.CompletedDate = dto.Status == TaskItemStatus.Completed ? dto.CompletedDate : null;
+        t.UpdatedAt = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync(ct);
+        await _db.Entry(t).Reference(x => x.TripInstance).LoadAsync(ct);
+        if (t.OwnerId.HasValue) await _db.Entry(t).Reference(x => x.Owner).LoadAsync(ct);
+        return Ok(ApiResponse<TaskDto>.Ok(ToDto(t)));
+    }
+
+    private static TaskDto ToDto(BookingTask t) => new()
+    {
+        Id = t.Id, TripInstanceId = t.TripInstanceId, TripName = t.TripInstance?.TripName,
+        ParticipantBookingId = t.ParticipantBookingId, AccommodationReservationId = t.AccommodationReservationId,
+        VehicleAssignmentId = t.VehicleAssignmentId, StaffAssignmentId = t.StaffAssignmentId,
+        LinkTo = t.LinkTo, SourceKey = t.SourceKey, ShiftId = t.ShiftId, IncidentReportId = t.IncidentReportId,
+        MedicationAdministrationId = t.MedicationAdministrationId, ShiftNoteId = t.ShiftNoteId, LeaveRequestId = t.LeaveRequestId,
+        TaskType = t.TaskType, Title = t.Title, OwnerId = t.OwnerId,
+        OwnerName = t.Owner != null ? (t.Owner.FirstName + " " + t.Owner.LastName).Trim() : null,
+        Priority = t.Priority, DueDate = t.DueDate, Status = t.Status,
+        CompletedDate = t.CompletedDate, Notes = t.Notes
+    };
 
     [HttpPost]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
@@ -212,18 +239,7 @@ public class TasksController : ControllerBase
         await _db.SaveChangesAsync(ct);
         await _db.Entry(t).Reference(x => x.TripInstance).LoadAsync(ct);
         if (t.OwnerId.HasValue) await _db.Entry(t).Reference(x => x.Owner).LoadAsync(ct);
-        return Ok(ApiResponse<TaskDto>.Ok(new TaskDto
-        {
-            Id = t.Id, TripInstanceId = t.TripInstanceId, TripName = t.TripInstance?.TripName,
-            ParticipantBookingId = t.ParticipantBookingId, AccommodationReservationId = t.AccommodationReservationId,
-            VehicleAssignmentId = t.VehicleAssignmentId, StaffAssignmentId = t.StaffAssignmentId,
-            LinkTo = t.LinkTo, SourceKey = t.SourceKey, ShiftId = t.ShiftId, IncidentReportId = t.IncidentReportId,
-            MedicationAdministrationId = t.MedicationAdministrationId, ShiftNoteId = t.ShiftNoteId, LeaveRequestId = t.LeaveRequestId,
-            TaskType = t.TaskType, Title = t.Title, OwnerId = t.OwnerId,
-            OwnerName = t.Owner != null ? (t.Owner.FirstName + " " + t.Owner.LastName).Trim() : null,
-            Priority = t.Priority, DueDate = t.DueDate, Status = t.Status,
-            CompletedDate = t.CompletedDate, Notes = t.Notes
-        }));
+        return Ok(ApiResponse<TaskDto>.Ok(ToDto(t)));
     }
 
     /// <summary>
