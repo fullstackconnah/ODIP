@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { apiGet } from '@/api/client'
-import { useTasks, useUpdateTask } from '@/api/hooks'
-import { TASK_TYPE_LABELS, type TaskDto, type UpdateTaskDto } from '@/api/types'
+import { useCompleteTask, useTasks } from '@/api/hooks'
+import { TASK_TYPE_LABELS, type TaskDto } from '@/api/types'
 import { formatDayMonth } from '@/lib/dateRange'
 import { groupPhase, type GroupModel, type QuickRow, type RowAction } from '../quickGroupModel'
 
@@ -9,13 +9,13 @@ const PRIORITY_RANK: Record<string, number> = { Urgent: 0, High: 1, Medium: 2, L
 const isOpen = (t: TaskDto) => t.status !== 'Completed' && t.status !== 'Cancelled'
 const dueDay = (t: TaskDto) => t.dueDate?.slice(0, 10) ?? ''
 
-/** The Tasks due group (SHAPE §5, call 11): overdue, then due today, ticked with TasksPage's own PUT of the stored row. */
+/** The Tasks due group (SHAPE §5, call 11): overdue, then due today, ticked with the server's own Done, which writes the completion only. */
 export function useTasksGroup(enabled: boolean, { today, mayCloseBudgetReview }: { today: string; mayCloseBudgetReview: boolean }): GroupModel {
   // Overdue is the server's own rule (the dashboard's Overdue figure); due today is the server's too (dueToday, on the provider's day, never the browser's). Both are full rows with their
   // notes, so Done never wipes them (the summary no longer carries task rows).
   const overdue = useTasks({ status: 'Overdue' }, { enabled })
   const dueOnToday = useTasks({ dueToday: 'true' }, { enabled })
-  const updateTask = useUpdateTask()
+  const completeTask = useCompleteTask()
   const qc = useQueryClient()
 
   const late = [...(overdue.data ?? [])].sort((a, b) => dueDay(a).localeCompare(dueDay(b)))
@@ -30,8 +30,7 @@ export function useTasksGroup(enabled: boolean, { today, mayCloseBudgetReview }:
     const done: RowAction = {
       kind: 'tap', label: 'Done', busyLabel: 'Saving…', name: `Done: ${t.title}`, failText: "Couldn't mark it done. Try again.",
       run: async () => {
-        // TasksPage's tick on the stored row as it is NOW (the PUT rewrites every field and the server checks no version, so a list row hours old would
-        // undo a note or a date, or complete a cancelled task: deep S2).
+        // Read the task as it is NOW to say why a row is skipped; the write (POST /tasks/{id}/complete) sets status and date only, so nothing changed since the list loaded is undone.
         const fresh = await apiGet<TaskDto>(`/tasks/${t.id}`)
         if (!isOpen(fresh)) {
           void overdue.refetch(); void dueOnToday.refetch()
@@ -41,7 +40,7 @@ export function useTasksGroup(enabled: boolean, { today, mayCloseBudgetReview }:
           void overdue.refetch(); void dueOnToday.refetch()
           return { announce: 'Task changed. Open the full task workflow before marking it done.', stale: true, keep: true }
         }
-        await updateTask.mutateAsync({ id: t.id, data: { ...fresh, status: 'Completed', completedDate: today } as UpdateTaskDto })
+        await completeTask.mutateAsync({ id: t.id, completedDate: today })
         return { announce: `Marked done: ${t.title}.` }
       },
     }
@@ -77,7 +76,7 @@ export function useTasksGroup(enabled: boolean, { today, mayCloseBudgetReview }:
         const [o, d] = await Promise.all([overdue.refetch({ throwOnError: true }), dueOnToday.refetch({ throwOnError: true })])
         return [...(o.data ?? []), ...(d.data ?? []).filter(isOpen)].map((t) => t.id)
       } finally {
-        // A Done with no reply never ran its onSuccess, and may have committed: refresh what it would have (useUpdateTask).
+        // A Done with no reply never ran its onSuccess, and may have committed: refresh what it would have (useCompleteTask).
         void qc.invalidateQueries({ queryKey: ['tasks'] })
         void qc.invalidateQueries({ queryKey: ['trip-tasks'] })
         void qc.invalidateQueries({ queryKey: ['dashboard'] })

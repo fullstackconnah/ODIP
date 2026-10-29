@@ -1732,6 +1732,12 @@ public record UpdateTaskDto : CreateTaskDto
     public DateOnly? CompletedDate { get; init; }
 }
 
+/// <summary>The one-tap Done: only the day it was completed; every other field of the task stays as the server has it.</summary>
+public record CompleteTaskDto
+{
+    public DateOnly? CompletedDate { get; init; }
+}
+
 // ══════════════════════════════════════════════════════════════
 // ACTIVITY DTOs
 // ══════════════════════════════════════════════════════════════
