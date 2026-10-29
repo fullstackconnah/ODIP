@@ -261,14 +261,14 @@ public class RosterStartWeekTests
         {
             var mia = Person(db, "Mia");
             Pattern(db, mia.Id, DayOfWeek.Monday);
-            Pattern(db, mia.Id, DayOfWeek.Tuesday);
+            var tuesday = Pattern(db, mia.Id, DayOfWeek.Tuesday);
             Shift Make(Guid? patternId, ShiftStatus status, DateOnly day, int from) => db.Shifts.Add(new Shift
             {
                 Id = Guid.NewGuid(), TenantId = TenantA, ParticipantId = mia.Id, ShiftPatternId = patternId, ServiceDate = day, StartTime = new TimeOnly(from, 0), EndTime = new TimeOnly(from + 1, 0),
                 Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, Status = status,
             }).Entity;
             Make(null, ShiftStatus.Published, Monday.AddDays(3), 15);
-            Make(Guid.NewGuid(), ShiftStatus.Cancelled, Monday.AddDays(2), 9);   // an older pattern's, cancelled
+            Make(tuesday.Id, ShiftStatus.Cancelled, Monday.AddDays(2), 9);   // an agreement pattern's shift, cancelled
         });
 
         Assert.Equal(2, Ok(await StartAsync(dbName, Monday)).Created);

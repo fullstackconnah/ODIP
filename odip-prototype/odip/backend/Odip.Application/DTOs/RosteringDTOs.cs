@@ -308,8 +308,10 @@ public enum RosterBoardGroupBy
 public record RosterBoardDto
 {
     public DateOnly WeekStart { get; init; }
-    /// <summary>Start rostering (L3, R1 as amended): a RosterWeek row, or a live pattern shift in the week. An unstarted week shows the Start overlay.</summary>
+    /// <summary>Start rostering (L3): a RosterWeek row, or a live shift from any pattern in the week. An unstarted week shows the Start overlay.</summary>
     public bool WeekStarted { get; init; }
+    /// <summary>Whether Start would add agreement shifts here: no RosterWeek row and no live agreement-pattern shift (owner, 2026-10-29). True for a hand-made week, which the board keeps usable.</summary>
+    public bool CanStart { get; init; }
     public List<DateOnly> Days { get; init; } = new();
     public RosterBoardGroupBy GroupBy { get; init; }
     public List<RosterParticipantRowDto>? ParticipantRows { get; init; }

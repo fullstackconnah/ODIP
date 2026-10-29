@@ -652,6 +652,8 @@ export default function RosterBoardPage() {
           allPublished={!!board && !unstarted && !weekHasNoShifts && drafts.length === 0}
           heldBack={heldDrafts > 0}
           newShiftSecondary={unstarted || publishable.length > 0}
+          onAddAgreementShifts={!unstarted && board?.canStart === true ? () => void handleStartWeek() : undefined}
+          addingAgreementShifts={starting}
         />
       </div>
 
