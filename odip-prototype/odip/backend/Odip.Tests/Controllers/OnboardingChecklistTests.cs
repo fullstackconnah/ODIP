@@ -223,6 +223,45 @@ public class OnboardingChecklistTests
     }
 
     [Fact]
+    public async Task Worklist_RowsEqualTheSingleParticipantChecklist_AndAnotherTenantsPlanDoesNotLeak()
+    {
+        using var db = Db();
+        var current = InOnboarding(db);
+        var ended = InOnboarding(db);
+        var noPlan = InOnboarding(db);
+        var other = InOnboarding(db, x => { x.FundingSource = ParticipantFundingSource.Other; x.NdisNumber = null; });
+        ValidDraft(db, current);
+        ValidDraft(db, ended);
+        ValidDraft(db, other);
+        db.FundingPlans.Add(new FundingPlan { Id = Guid.NewGuid(), TenantId = Tenant, ParticipantId = current.Id, PlanStart = new DateOnly(2026, 7, 1), PlanEnd = new DateOnly(2027, 6, 30) });
+        db.FundingPlans.Add(new FundingPlan { Id = Guid.NewGuid(), TenantId = Tenant, ParticipantId = ended.Id, PlanStart = new DateOnly(2025, 7, 1), PlanEnd = new DateOnly(2026, 6, 30) });
+        // Another tenant's participant with a current plan, and a plan of theirs pointing at our no-plan participant: neither may reach our facts.
+        var stranger = InOnboarding(db, x => x.TenantId = Guid.NewGuid());
+        var otherTenant = Guid.NewGuid();
+        db.FundingPlans.Add(new FundingPlan { Id = Guid.NewGuid(), TenantId = otherTenant, ParticipantId = stranger.Id, PlanStart = new DateOnly(2026, 7, 1), PlanEnd = new DateOnly(2027, 6, 30) });
+        db.FundingPlans.Add(new FundingPlan { Id = Guid.NewGuid(), TenantId = otherTenant, ParticipantId = noPlan.Id, PlanStart = new DateOnly(2026, 7, 1), PlanEnd = new DateOnly(2027, 6, 30) });
+        db.SaveChanges();
+
+        var rows = Ok(await Controller(db).GetOnboardingWorklist(CancellationToken.None));
+
+        Assert.Equal(4, rows.Count);
+        Assert.DoesNotContain(rows, r => r.ParticipantId == stranger.Id);
+        foreach (var p in new[] { current, ended, noPlan, other })
+        {
+            var row = rows.Single(r => r.ParticipantId == p.Id);
+            var detail = await Checklist(db, p);
+            Assert.Equal((detail.Items.Count(i => i.Done), detail.Items.Count, detail.Items.FirstOrDefault(i => !i.Done)?.Label),
+                (row.CompletedSteps, row.TotalSteps, row.FirstMissing));
+        }
+        // Absolute: profile and service needs done, the agreement not signed, the ended plan not counting as funding (a swap of the two fact sets would show here).
+        var endedRow = rows.Single(r => r.ParticipantId == ended.Id);
+        Assert.Equal((2, 4, "Signed agreement"), (endedRow.CompletedSteps, endedRow.TotalSteps, endedRow.FirstMissing));
+        Assert.Equal("The plan budget has ended: record the new plan.", (await Checklist(db, ended)).Items.Single(i => i.Key == "funding").Missing);
+        Assert.Equal("No plan budget recorded.", (await Checklist(db, noPlan)).Items.Single(i => i.Key == "funding").Missing);
+        Assert.True((await Checklist(db, current)).Items.Single(i => i.Key == "funding").Done);
+    }
+
+    [Fact]
     public async Task RosterIssues_FollowTheDerivedChecks_NotTheOldStoredFlags()
     {
         using var db = Db();
