@@ -155,11 +155,12 @@ export function suggestedIncidentSeverity(outcome: MedicationAdministrationStatu
 // ── INC-04 / INC-05: restrictive-practice incident helpers ──────────────────
 
 /**
- * The one "Authorised" rule for a register entry (owner decision 2026-10-14): active, AND who authorised it, AND when. Anything else reads
- * "Not authorised". The frontend twin of the backend's RestrictivePracticeAuthorisation.IsAuthorised, used by the badges and the banner below.
+ * The one "Authorised" verdict for a register entry (owner decision 2026-10-14): active, AND who authorised it, AND when, dated on or before the
+ * organisation's today. The server decides it (RestrictivePracticeAuthorisation.IsAuthorised) and sends it as `isAuthorised`, so the browser clock
+ * never does; the badges and the banner below just read it.
  */
-export function isRpAuthorised(p: Pick<RestrictivePracticeDto, 'isActive' | 'authorisedBy' | 'authorisationDate'>): boolean {
-  return p.isActive && !!p.authorisedBy?.trim() && !!p.authorisationDate
+export function isRpAuthorised(p: Pick<RestrictivePracticeDto, 'isAuthorised'>): boolean {
+  return p.isAuthorised
 }
 
 /**
@@ -175,7 +176,7 @@ export type RpAuthorisationPreview = 'authorised' | 'unauthorised' | 'unknown'
 export function previewRpAuthorisation(
   involvedParticipantId: string | undefined | null,
   restrictivePracticeType: string | undefined | null,
-  participantPractices: Pick<RestrictivePracticeDto, 'id' | 'type' | 'isActive' | 'authorisedBy' | 'authorisationDate'>[],
+  participantPractices: Pick<RestrictivePracticeDto, 'id' | 'type' | 'isActive' | 'isAuthorised'>[],
   selection: { restrictivePracticeId?: string; unapproved?: boolean; usedWithoutAuthorisation?: boolean } = {},
 ): RpAuthorisationPreview {
   if (!involvedParticipantId || !restrictivePracticeType) return 'unknown'

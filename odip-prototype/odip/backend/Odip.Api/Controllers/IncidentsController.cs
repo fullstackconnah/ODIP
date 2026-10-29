@@ -10,6 +10,7 @@ using Odip.Domain.Enums;
 using Odip.Domain.Incidents;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 
 namespace Odip.Api.Controllers;
 
@@ -21,16 +22,27 @@ public class IncidentsController : ControllerBase
     private readonly OdipDbContext _db;
     private readonly Odip.Application.Interfaces.INotificationRaiser _notificationRaiser;
     private readonly Odip.Application.Interfaces.IObligationTaskService _obligationTasks;
+    private readonly TimeProvider _clock;
 
     public IncidentsController(
         OdipDbContext db,
         Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null,
-        Odip.Application.Interfaces.IObligationTaskService? obligationTasks = null)
+        Odip.Application.Interfaces.IObligationTaskService? obligationTasks = null,
+        TimeProvider? clock = null)
     {
+        _clock = clock ?? TimeProvider.System;
         _db = db;
         _notificationRaiser = notificationRaiser ?? new Odip.Infrastructure.Notifications.NotificationRaiser(db);
         _obligationTasks = obligationTasks ?? new Odip.Infrastructure.Tasks.ObligationTaskService(db);
     }
+
+    /// <summary>The organisation's calendar date now: an authorisation dated tomorrow there is not yet in force, whatever the UTC date says.</summary>
+    private async Task<DateOnly> ProviderTodayAsync(Guid tenantId, CancellationToken ct) =>
+        ProviderLocalTime.TodayIn(_clock.GetUtcNow().UtcDateTime, (await ProviderTimeZoneResolver.ResolveAsync(_db, tenantId, ct)).Zone);
+
+    /// <summary>The register entry judged by the shared rule on its own organisation's today.</summary>
+    private async Task<bool> IsAuthorisedTodayAsync(RestrictivePractice rp, CancellationToken ct) =>
+        RestrictivePracticeAuthorisation.IsAuthorised(rp, await ProviderTodayAsync(rp.TenantId, ct));
 
     /// <summary>The saved incident as the list shows it — Create and Update return this, so it can never differ from <see cref="GetAll"/>'s item.</summary>
     private Task<IncidentListDto> ListItemAsync(Guid id, CancellationToken ct) =>
@@ -230,7 +242,9 @@ public class IncidentsController : ControllerBase
             .Where(rp => rp.ParticipantId == dto.InvolvedParticipantId.Value && rp.Type == dto.RestrictivePracticeType.Value
                 && (dto.RestrictivePracticeId == null || rp.Id == dto.RestrictivePracticeId))
             .ToListAsync(ct);
-        return entries.Any(RestrictivePracticeAuthorisation.IsAuthorised);
+        foreach (var entry in entries)
+            if (await IsAuthorisedTodayAsync(entry, ct)) return true;
+        return false;
     }
 
     [HttpGet]
@@ -658,7 +672,7 @@ public class IncidentsController : ControllerBase
         if (dto.IncidentType == IncidentType.RestrictivePracticeUse && (dto.UsedWithoutAuthorisation
             || (string.IsNullOrWhiteSpace(i.UnapprovedRestrictivePracticeDetails) && !string.IsNullOrWhiteSpace(dto.UnapprovedRestrictivePracticeDetails))
             || (dto.RestrictivePracticeId.HasValue && dto.RestrictivePracticeId != i.RestrictivePracticeId
-                && !RestrictivePracticeAuthorisation.IsAuthorised(await _db.RestrictivePractices.SingleAsync(rp => rp.Id == dto.RestrictivePracticeId.Value, ct)))))
+                && !await IsAuthorisedTodayAsync(await _db.RestrictivePractices.SingleAsync(rp => rp.Id == dto.RestrictivePracticeId.Value, ct), ct))))
             i.IsRestrictivePracticeAuthorised = false;
         // Linked to a register entry now, so the coordinator's "add it to the register" task is done (a no-op when there is none).
         if (dto.RestrictivePracticeId.HasValue)

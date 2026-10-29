@@ -15,7 +15,7 @@ vi.mock('@/api/hooks', () => ({
 const created: RestrictivePracticeDto = {
   id: 'rp-new', participantId: 'participant-1', type: 'PhysicalRestraint', description: 'Held both arms at the kerb.',
   authorisedBy: null, authorisationDate: null, reviewDate: null, relatedMedicationId: null, relatedMedicationName: null,
-  isActive: true, createdAt: '2026-10-14T00:00:00Z', updatedAt: '2026-10-14T00:00:00Z',
+  isActive: true, isAuthorised: false, createdAt: '2026-10-14T00:00:00Z', updatedAt: '2026-10-14T00:00:00Z',
 }
 
 beforeEach(() => {
