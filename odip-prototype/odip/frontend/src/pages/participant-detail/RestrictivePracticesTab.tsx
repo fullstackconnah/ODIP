@@ -71,7 +71,7 @@ function PracticeCard({ practice, canWrite, onEdit, onDelete }: {
   const unauthorised = practice.isActive && !isRpAuthorised(practice)
   // Both on file yet the server says not authorised: the date is still ahead, so it is not yet in force.
   const whyUnauthorised = practice.authorisedBy?.trim() && practice.authorisationDate
-    ? `Authorised from ${formatDateAu(practice.authorisationDate)}`
+    ? 'Not yet in force'
     : !practice.authorisedBy?.trim()
       ? (practice.authorisationDate ? 'No authoriser on file' : 'No authorisation recorded')
       : 'No authorisation date on file'
@@ -117,10 +117,10 @@ function PracticeCard({ practice, canWrite, onEdit, onDelete }: {
         </div>
         {canWrite && (
           <div className="flex items-center gap-1 pointer-coarse:gap-2 shrink-0">
-            <Button variant="ghost" size="sm" onClick={onEdit}>
+            <Button variant="ghost" size="sm" className="pointer-coarse:min-h-11" onClick={onEdit}>
               Edit
             </Button>
-            <Button variant="ghost-danger" size="sm" onClick={onDelete}>
+            <Button variant="ghost-danger" size="sm" className="pointer-coarse:min-h-11" onClick={onDelete}>
               Delete
             </Button>
           </div>

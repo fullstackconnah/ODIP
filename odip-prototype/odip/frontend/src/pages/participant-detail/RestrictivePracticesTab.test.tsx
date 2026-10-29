@@ -274,7 +274,7 @@ describe('RestrictivePracticesTab', () => {
     }
   })
 
-  it('says "Authorised from <date>" for an entry with both fields set that is not yet in force', () => {
+  it('says "Not yet in force" for an entry with both fields set whose date is still ahead', () => {
     mockUseRestrictivePractices.mockReturnValue({
       data: [makePractice({ authorisedBy: 'Dr Chen', authorisationDate: '2026-10-31', isAuthorised: false })],
       isLoading: false,
@@ -283,7 +283,9 @@ describe('RestrictivePracticesTab', () => {
     render(<RestrictivePracticesTab participantId="participant-1" />)
 
     expect(screen.getByText('Not authorised')).toBeInTheDocument()
-    expect(screen.getByText('Authorised from 31/10/2026')).toBeInTheDocument()
+    expect(screen.getByText('Not yet in force')).toBeInTheDocument()
+    expect(screen.getByText('Authorised 31/10/2026')).toBeInTheDocument()
+    expect(screen.queryByText(/Authorised from/)).toBeNull()
     for (const line of EXPLANATIONS) expect(screen.queryByText(line)).not.toBeInTheDocument()
   })
 
