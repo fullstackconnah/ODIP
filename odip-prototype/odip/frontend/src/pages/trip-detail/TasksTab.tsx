@@ -1,7 +1,7 @@
 import { Button } from '@/components/Button'
 import { Plus } from 'lucide-react'
-import { useUpdateTask } from '@/api/hooks'
-import type { TaskDto, UpdateTaskDto } from '@/api/types'
+import { useSetTaskStatus } from '@/api/hooks'
+import type { TaskDto } from '@/api/types'
 import type { TaskItemStatus } from '@/api/types/enums'
 import { DataTable, type Column } from '@/components/DataTable'
 import { Dropdown } from '@/components/Dropdown'
@@ -17,33 +17,8 @@ const TASK_STATUS_ITEMS = [
   { value: 'Cancelled', label: 'Cancelled' },
 ]
 
-/** Builds the full UpdateTaskDto payload the PUT endpoint expects from an existing task plus a
- *  new status — the API takes the whole task, not a partial patch. `task.tripInstanceId` is
- *  optional as of item 9 (an obligation-engine task needn't have a trip) — every task rendered by
- *  this tab was already fetched scoped to `tripId`, so that's the correct fallback for the rare
- *  trip-less task that ends up here rather than sending an empty string. */
-function toUpdateTaskPayload(task: TaskDto, status: TaskItemStatus, tripId: string): UpdateTaskDto {
-  return {
-    tripInstanceId: task.tripInstanceId ?? tripId,
-    participantBookingId: task.participantBookingId ?? undefined,
-    accommodationReservationId: task.accommodationReservationId ?? undefined,
-    vehicleAssignmentId: task.vehicleAssignmentId ?? undefined,
-    staffAssignmentId: task.staffAssignmentId ?? undefined,
-    taskType: task.taskType,
-    title: task.title,
-    ownerId: task.ownerId ?? undefined,
-    priority: task.priority,
-    dueDate: task.dueDate ?? undefined,
-    notes: task.notes ?? undefined,
-    status,
-    completedDate: status === 'Completed'
-      ? localIsoDate()
-      : (task.completedDate ?? undefined),
-  }
-}
-
 export default function TasksTab({ tripId, tasks, canWrite }: { tripId: string; tasks: TaskDto[]; canWrite: boolean }) {
-  const updateTask = useUpdateTask()
+  const setStatus = useSetTaskStatus()
 
   const columns: Column<TaskDto>[] = [
     // Column budget (density §4), the same as the Tasks page: the text columns are capped (ellipsis, full text in the tooltip) and Type
@@ -94,9 +69,10 @@ export default function TasksTab({ tripId, tasks, canWrite }: { tripId: string; 
           <Dropdown
             variant="pill"
             value={t.status}
-            onChange={(val: string) => updateTask.mutate({
+            onChange={(val: string) => setStatus.mutate({
               id: t.id,
-              data: toUpdateTaskPayload(t, val as TaskItemStatus, tripId),
+              status: val as TaskItemStatus,
+              ...(val === 'Completed' ? { completedDate: localIsoDate() } : {}),
             })}
             colorClass={getStatusColor(t.status)}
             items={TASK_STATUS_ITEMS}
