@@ -412,6 +412,10 @@ public class ClaimsController : ControllerBase
             && claim.Status is not (TripClaimStatus.Draft or TripClaimStatus.Ready))
             return Conflict(ApiResponse<bool>.Fail("This claim has been submitted, so its lines can't be changed."));
 
+        // The NDIA has not seen a Draft or Ready claim, so none of its lines can be rejected yet.
+        if (dto.Status == ClaimLineItemStatus.Rejected && claim.Status is (TripClaimStatus.Draft or TripClaimStatus.Ready))
+            return Conflict(ApiResponse<bool>.Fail($"{claim.ClaimReference} hasn't been submitted to the NDIA yet, so its lines can't be marked as rejected."));
+
         // A rejected line gave its shift back, and another claim may hold it now: taking the line back would bill the shift twice.
         if (item.Status == ClaimLineItemStatus.Rejected && dto.Status.HasValue && dto.Status != ClaimLineItemStatus.Rejected
             && await ClaimHoldingTheSameAsync(claimId, _db.ClaimLineItems.Where(l => l.Id == id), ct) is { } holder)
