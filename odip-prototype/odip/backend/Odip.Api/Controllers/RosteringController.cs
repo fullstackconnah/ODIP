@@ -717,6 +717,7 @@ public class RosteringController : ControllerBase
 
         var previousUserId = shift.UserId;
         var previousStatus = shift.Status;
+        var was = new ShiftWas(shift.ServiceDate, shift.StartTime, shift.EndTime, shift.EndsNextDay, shift.ParticipantId);
         // What the shift holds now, for the budget rules: a save that does not decide the budget again keeps the over-budget acknowledgement it already has.
         var previousReason = shift.OverrideReason;
         var previousCodes = shift.AcknowledgedFindingCodes;
@@ -740,7 +741,7 @@ public class RosteringController : ControllerBase
         // The slide-over's Staff field is the menus' way to assign (the brief, section 7), so a PUT tells people exactly as a drop does; becoming Published tells the worker, and a Published shift that is cancelled tells the worker it was cancelled (decision 9, reversed for Cancelled on 2026-10-28).
         // shortcut: two coordinators editing ONE shift in the slide-over is still last-write-wins on the worker (the PUT carries no ExpectedStaffId as the board's drops do), though the
         // locks above keep it from writing over a publish or a move; add one if that ever collides.
-        await NotifyStaffChangeAsync(shift, previousUserId, wasPublished: previousStatus == ShiftStatus.Published, ct);
+        await NotifyStaffChangeAsync(shift, previousUserId, wasPublished: previousStatus == ShiftStatus.Published, ct, was);
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<ShiftDto>.Ok(await ToShiftDtoAsync(shift, findings, ct)));
     }
@@ -2192,6 +2193,9 @@ public class RosteringController : ControllerBase
         ApplyOverride(shift, findings, ShiftBudgetGate.Decision.NoEmergency(findings), overrideReason, acknowledgedCodes, previousReason, previousCodes);
     }
 
+    /// <summary>What a shift held before a PUT changed it: the one input <see cref="NotifyStaffChangeAsync"/> needs to tell the worker what moved.</summary>
+    private readonly record struct ShiftWas(DateOnly Date, TimeOnly Start, TimeOnly End, bool EndsNextDay, Guid ParticipantId);
+
     /// <summary>
     /// Roster drag and drop (2026-10-14), decision 9: a worker hears about a shift only once it is Published. Call it once the shift holds its new worker and status, before the
     /// caller's one save, so the outbox rows commit with the change (a refused write sends nothing). The worker on a Published shift gets ShiftAssigned when it is newly theirs or
@@ -2200,16 +2204,31 @@ public class RosteringController : ControllerBase
     /// ShiftUnassigned { Cancelled = true } unless its date is before the provider's today; that one notice replaces "taken off", so a worker changed in the same save still hears only "cancelled".
     /// Do not make a cancel silent again: the worker would learn of it only by opening the app.
     /// </summary>
-    private async Task NotifyStaffChangeAsync(Shift shift, Guid? previousUserId, bool wasPublished, CancellationToken ct)
+    private async Task NotifyStaffChangeAsync(Shift shift, Guid? previousUserId, bool wasPublished, CancellationToken ct, ShiftWas? was = null)
     {
         var assignedTo = shift.Status == ShiftStatus.Published && shift.UserId is { } now && (now != previousUserId || !wasPublished) ? now : (Guid?)null;
         var cancelled = wasPublished && shift.Status == ShiftStatus.Cancelled && previousUserId is not null
             && shift.ServiceDate >= await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
         var takenOff = wasPublished && previousUserId is { } before && (cancelled || before != shift.UserId) ? before : (Guid?)null;
-        if (assignedTo is null && takenOff is null) return;
+        // shift-change-notice (2026-10-29): the worker who stays on a Published shift hears when its time, day or participant changed, unless the shift is wholly in the past. Only the PUT passes `was`.
+        var changed = was is { } w && wasPublished && shift.Status == ShiftStatus.Published && shift.UserId is not null && shift.UserId == previousUserId
+            && (w.Date != shift.ServiceDate || w.Start != shift.StartTime || w.End != shift.EndTime || w.EndsNextDay != shift.EndsNextDay || w.ParticipantId != shift.ParticipantId)
+            && (w.Date > shift.ServiceDate ? w.Date : shift.ServiceDate) >= await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
+        if (assignedTo is null && takenOff is null && !changed) return;
 
-        var participantName = await _db.Participants.Where(p => p.Id == shift.ParticipantId)
-            .Select(p => (p.FirstName + " " + p.LastName).Trim()).FirstOrDefaultAsync(ct) ?? "a participant";
+        async Task<string?> NameOf(Guid id) => await _db.Participants.Where(p => p.Id == id)
+            .Select(p => (p.FirstName + " " + p.LastName).Trim()).FirstOrDefaultAsync(ct);
+        var participantName = await NameOf(shift.ParticipantId) ?? "a participant";
+        if (changed && was is { } before2 && await _db.Users.FirstOrDefaultAsync(u => u.Id == shift.UserId, ct) is { } staying)
+        {
+            var participantMoved = before2.ParticipantId != shift.ParticipantId;
+            await _notificationRaiser.RaiseAsync(
+                Odip.Domain.Notifications.NotificationEventType.ShiftChanged, "Shift", shift.Id, new[] { staying.Id },
+                new Odip.Infrastructure.Notifications.Templates.ShiftChangedPayload(staying.Email, participantMoved ? await NameOf(before2.ParticipantId) ?? "a participant" : participantName,
+                    before2.Date, shift.ServiceDate, shift.StartTime, shift.EndTime, participantMoved ? participantName : null,
+                    TimeChanged: !participantMoved || before2.Start != shift.StartTime || before2.End != shift.EndTime || before2.EndsNextDay != shift.EndsNextDay),
+                ct, dedupe: false);   // each edit says its own change: a second edit inside five minutes must not be dropped
+        }
         if (assignedTo is { } a && await _db.Users.FirstOrDefaultAsync(u => u.Id == a, ct) is { } assigned)
             await _notificationRaiser.RaiseAsync(
                 Odip.Domain.Notifications.NotificationEventType.ShiftAssigned, "Shift", shift.Id, new[] { assigned.Id },

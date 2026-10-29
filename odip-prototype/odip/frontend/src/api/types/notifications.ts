@@ -25,6 +25,7 @@ export const NOTIFICATION_EVENT_TYPES = [
   'ShiftUnassigned',
   'IntakeBooked',
   'StaffJoinedViaMicrosoft',
+  'ShiftChanged',
 ] as const
 export type NotificationEventType = typeof NOTIFICATION_EVENT_TYPES[number]
 
@@ -44,6 +45,7 @@ export const NOTIFICATION_EVENT_TYPE_LABELS: Record<NotificationEventType, strin
   ShiftUnassigned: 'Taken off a shift',
   IntakeBooked: 'Intake visits',
   StaffJoinedViaMicrosoft: 'Someone joined through Microsoft',
+  ShiftChanged: 'Shift changed',
 }
 
 /**
@@ -58,7 +60,7 @@ export const NOTIFICATION_EVENT_TYPE_LABELS: Record<NotificationEventType, strin
  */
 export const NOTIFICATION_EVENT_TYPE_GROUPS: { label: string; eventTypes: NotificationEventType[] }[] = [
   { label: 'Leave', eventTypes: ['LeaveRequestSubmitted', 'LeaveRequestDecided'] },
-  { label: 'Rostering', eventTypes: ['ShiftAssigned', 'ShiftUnassigned', 'ShiftCompletionPendingReview', 'ShiftCompletionReturned'] },
+  { label: 'Rostering', eventTypes: ['ShiftAssigned', 'ShiftUnassigned', 'ShiftChanged', 'ShiftCompletionPendingReview', 'ShiftCompletionReturned'] },
   { label: 'Medications', eventTypes: ['WitnessRequested'] },
   { label: 'Caregiver', eventTypes: ['CaregiverSubmissionReceived'] },
   { label: 'Incidents', eventTypes: ['IncidentReported'] },

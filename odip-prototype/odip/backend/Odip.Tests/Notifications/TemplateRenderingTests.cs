@@ -198,6 +198,19 @@ public class TemplateRenderingTests
     }
 
     [Fact]
+    public void ShiftChangedTemplate_RendersExactSubjectAndBody()
+    {
+        var payload = new ShiftChangedPayload("worker@example.com", "Alice Participant", new DateOnly(2026, 9, 15), new DateOnly(2026, 9, 15), new TimeOnly(10, 0), new TimeOnly(15, 0));
+        var message = ShiftChangedTemplate.Render(payload, BaseUrl);
+
+        Assert.Equal("Shift changed: Alice Participant on 15 Sep 2026", message.Subject);
+        Assert.Equal(
+            "Your shift with Alice Participant on 15 Sep 2026 has changed: now 10:00 AM\u00A0\u2013\u2060\u00A03:00 PM.\n\nView your shifts: https://odip.test/portal",
+            message.PlainTextBody);
+        Assert.Contains("has changed: now with Bo Jones.", ShiftChangedTemplate.Render(payload with { NewParticipantName = "Bo Jones", TimeChanged = false }, BaseUrl).HtmlBody);
+    }
+
+    [Fact]
     public void ShiftUnassignedPayload_FromAnOldOutboxRow_DefaultsToNotCancelled()
     {
         const string oldRow = "{\"RecipientEmail\":\"w@example.com\",\"ParticipantName\":\"Alice Participant\",\"ServiceDate\":\"2026-09-15\",\"StartTime\":\"09:00:00\",\"EndTime\":\"15:00:00\"}";
