@@ -363,4 +363,217 @@ public class RestraintRegisterSyncTests
         Assert.True(dto.RequiresReporting);
         Assert.Equal(MedicationStatus.Ceased, dto.RelatedMedicationStatus);
     }
+
+    // ── Register to medicine ─────────────────────────────────────────
+
+    private static string RegisterError<T>(ActionResult<ApiResponse<T>> result, int status)
+    {
+        var obj = Assert.IsAssignableFrom<ObjectResult>(result.Result);
+        Assert.Equal(status, obj.StatusCode);
+        return Assert.IsType<ApiResponse<T>>(obj.Value).Errors!.First();
+    }
+
+    private static UpdateRestrictivePracticeDto AsForm(RestrictivePractice e) => new()
+    {
+        Type = e.Type, Description = e.Description, AuthorisedBy = e.AuthorisedBy, AuthorisationDate = e.AuthorisationDate, ReviewDate = e.ReviewDate,
+        RelatedMedicationId = e.RelatedMedicationId, IsActive = e.IsActive, ExpectedUpdatedAt = e.UpdatedAt,
+    };
+
+    private static RestrictivePracticesController Register(OdipDbContext db) => new(db, new SafetyNoteSyncService(db));
+
+    private static async Task<(OdipDbContext Db, ICurrentTenant Tenant, Participant P, MedicationDetailDto Med, MedicationsController Meds)> LinkedAsync(bool authorised = false)
+    {
+        var (db, tenant) = CreateDb();
+        var p = SeedParticipant(db);
+        var meds = new MedicationsController(db, tenant);
+        var med = await CreateOkAsync(meds, p.Id, authorised ? RestraintDto(true, "Dr Chen", AuthDate) : RestraintDto(false, report: false));
+        return (db, tenant, p, med, meds);
+    }
+
+    [Fact]
+    public async Task UpdateEntry_DeactivateLinked_UntickesMedicine_ThenMedicineSaveLeavesEntryAlone()
+    {
+        var (db, _, _, med, meds) = await LinkedAsync();
+        var entry = await db.RestrictivePractices.AsNoTracking().SingleAsync();
+
+        var ok = Assert.IsType<OkObjectResult>((await Register(db).Update(entry.Id, AsForm(entry) with { IsActive = false, Description = "Edited" }, CancellationToken.None)).Result);
+        var dto = Assert.IsType<ApiResponse<RestrictivePracticeDto>>(ok.Value).Data!;
+
+        Assert.False(dto.IsActive);
+        Assert.Equal("Edited", dto.Description);
+        Assert.Equal(MedicationStatus.Active, dto.RelatedMedicationStatus);
+        Assert.False((await db.ParticipantMedications.AsNoTracking().SingleAsync()).IsChemicalRestraint);
+
+        var after = await db.RestrictivePractices.AsNoTracking().SingleAsync();
+        await UpdateOkAsync(meds, med.Id, AsUpdate(RestraintDto() with { IsChemicalRestraint = false }));
+        Assert.Equal(after.UpdatedAt, (await db.RestrictivePractices.AsNoTracking().SingleAsync()).UpdatedAt);
+    }
+
+    [Fact]
+    public async Task UpdateEntry_ReactivateLinked_TicksMedicine()
+    {
+        var (db, _, _, med, meds) = await LinkedAsync();
+        await UpdateOkAsync(meds, med.Id, AsUpdate(RestraintDto() with { IsChemicalRestraint = false }));
+        var entry = await db.RestrictivePractices.AsNoTracking().SingleAsync();
+
+        Assert.IsType<OkObjectResult>((await Register(db).Update(entry.Id, AsForm(entry) with { IsActive = true }, CancellationToken.None)).Result);
+
+        Assert.True((await db.ParticipantMedications.AsNoTracking().SingleAsync()).IsChemicalRestraint);
+    }
+
+    [Fact]
+    public async Task UpdateEntry_ReactivateWithCeasedMedicine_400_NothingChanged()
+    {
+        var (db, _, _, med, meds) = await LinkedAsync();
+        await UpdateOkAsync(meds, med.Id, AsUpdate(RestraintDto(), MedicationStatus.Ceased));
+        var entry = await db.RestrictivePractices.AsNoTracking().SingleAsync();
+
+        var result = await Register(db).Update(entry.Id, AsForm(entry) with { IsActive = true }, CancellationToken.None);
+
+        Assert.Equal("Risperidone 1 mg is ceased. Restart the medicine to reactivate this entry.", RegisterError(result, 400));
+        Assert.False((await db.RestrictivePractices.AsNoTracking().SingleAsync()).IsActive);
+    }
+
+    [Fact]
+    public async Task UpdateEntry_TypeChangeOnLinked_400()
+    {
+        var (db, _, _, _, _) = await LinkedAsync();
+        var entry = await db.RestrictivePractices.AsNoTracking().SingleAsync();
+
+        var result = await Register(db).Update(entry.Id, AsForm(entry) with { Type = RestrictivePracticeType.Seclusion, RelatedMedicationId = null }, CancellationToken.None);
+
+        Assert.Equal("This entry is linked to Risperidone 1 mg, so it stays a chemical restraint.", RegisterError(result, 400));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task UpdateEntry_RepointOrUnlinkLinked_400(bool unlink)
+    {
+        var (db, _, p, _, meds) = await LinkedAsync();
+        var other = await CreateOkAsync(meds, p.Id, RestraintDto(false, report: false) with { Name = "Olanzapine", Strength = null });
+        var entry = await db.RestrictivePractices.AsNoTracking().SingleAsync(e => e.RelatedMedicationId != other.Id);
+
+        var result = await Register(db).Update(entry.Id, AsForm(entry) with { RelatedMedicationId = unlink ? null : other.Id }, CancellationToken.None);
+
+        Assert.Equal("This entry is linked to Risperidone 1 mg. To stop this restraint, untick Chemical restraint on the medicine or deactivate this entry.", RegisterError(result, 400));
+    }
+
+    [Fact]
+    public async Task UpdateEntry_LinkMedicineThatHasEntry_400()
+    {
+        var (db, _, p, med, _) = await LinkedAsync();
+        var loose = new RestrictivePractice { Id = Guid.NewGuid(), ParticipantId = p.Id, Type = RestrictivePracticeType.ChemicalRestraint, Description = "Hand made", IsActive = true };
+        db.RestrictivePractices.Add(loose);
+        db.SaveChanges();
+
+        var result = await Register(db).Update(loose.Id, AsForm(loose) with { RelatedMedicationId = med.Id }, CancellationToken.None);
+
+        Assert.Equal("Risperidone 1 mg already has its own register entry.", RegisterError(result, 400));
+    }
+
+    [Fact]
+    public async Task UpdateEntry_LinkFreeMedicine_TicksIt()
+    {
+        var (db, tenant) = CreateDb();
+        var p = SeedParticipant(db);
+        var medId = Guid.NewGuid();
+        db.ParticipantMedications.Add(new ParticipantMedication
+        {
+            Id = medId, ParticipantId = p.Id, Name = "Risperidone", Strength = "1 mg", DoseDescription = "1 tablet", Type = MedicationType.Regular,
+            Purpose = "Manage behaviour", StartDate = new DateTime(2026, 1, 1), ConsentObtained = true,
+        });
+        var loose = new RestrictivePractice { Id = Guid.NewGuid(), ParticipantId = p.Id, Type = RestrictivePracticeType.ChemicalRestraint, Description = "Hand made", IsActive = true };
+        db.RestrictivePractices.Add(loose);
+        db.SaveChanges();
+
+        Assert.IsType<OkObjectResult>((await Register(db).Update(loose.Id, AsForm(loose) with { RelatedMedicationId = medId }, CancellationToken.None)).Result);
+
+        Assert.True((await db.ParticipantMedications.AsNoTracking().SingleAsync()).IsChemicalRestraint);
+    }
+
+    [Fact]
+    public async Task UpdateEntry_RequiresReporting_NullKeepsStoredAnswer_FalseSaves_AndEditsDoNotFlowBack()
+    {
+        var (db, _, _, med, _) = await LinkedAsync();
+        var medBefore = await db.ParticipantMedications.AsNoTracking().SingleAsync();
+        var seeded = await db.RestrictivePractices.SingleAsync();
+        seeded.RequiresReporting = true;
+        db.SaveChanges();
+        var entry = await db.RestrictivePractices.AsNoTracking().SingleAsync();
+
+        await Register(db).Update(entry.Id, AsForm(entry) with { RequiresReporting = null, Description = "New words", ReviewDate = new DateOnly(2027, 1, 1) }, CancellationToken.None);
+        var kept = await db.RestrictivePractices.AsNoTracking().SingleAsync();
+        Assert.True(kept.RequiresReporting);
+        // Description and review date edits never touch the medicine.
+        var medAfter = await db.ParticipantMedications.AsNoTracking().SingleAsync();
+        Assert.Equal(medBefore.UpdatedAt, medAfter.UpdatedAt);
+        Assert.Equal(medBefore.IsChemicalRestraint, medAfter.IsChemicalRestraint);
+
+        await Register(db).Update(kept.Id, AsForm(kept) with { RequiresReporting = false }, CancellationToken.None);
+        Assert.False((await db.RestrictivePractices.AsNoTracking().SingleAsync()).RequiresReporting);
+    }
+
+    [Fact]
+    public async Task BulkCreate_TwoRowsSameMedicine_MedicineAlreadyLinked_AndActiveRowTicks()
+    {
+        var (db, tenant) = CreateDb();
+        var p = SeedParticipant(db);
+        var medId = Guid.NewGuid();
+        db.ParticipantMedications.Add(new ParticipantMedication
+        {
+            Id = medId, ParticipantId = p.Id, Name = "Risperidone", Strength = "1 mg", DoseDescription = "1 tablet", Type = MedicationType.Regular,
+            Purpose = "Manage behaviour", StartDate = new DateTime(2026, 1, 1), ConsentObtained = true,
+        });
+        db.SaveChanges();
+        BulkCreateRestrictivePracticeRowDto Row() => new() { Type = RestrictivePracticeType.ChemicalRestraint, Description = "Row", RelatedMedicationId = medId, IsActive = true };
+        var register = Register(db);
+
+        var twice = await register.CreateBulk(p.Id, new BulkCreateRestrictivePracticeDto { Items = { Row(), Row() } }, CancellationToken.None);
+        Assert.Contains("Risperidone 1 mg already has its own register entry.", Assert.IsType<ApiResponse<List<RestrictivePracticeDto>>>(Assert.IsAssignableFrom<ObjectResult>(twice.Result).Value).Errors!.First());
+        Assert.Empty(db.RestrictivePractices);
+
+        Assert.IsType<OkObjectResult>((await register.CreateBulk(p.Id, new BulkCreateRestrictivePracticeDto { Items = { Row() } }, CancellationToken.None)).Result);
+        Assert.True((await db.ParticipantMedications.AsNoTracking().SingleAsync()).IsChemicalRestraint);
+
+        var again = await register.CreateBulk(p.Id, new BulkCreateRestrictivePracticeDto { Items = { Row() } }, CancellationToken.None);
+        Assert.Contains("already has its own register entry", Assert.IsType<ApiResponse<List<RestrictivePracticeDto>>>(Assert.IsAssignableFrom<ObjectResult>(again.Result).Value).Errors!.First());
+        Assert.Single(db.RestrictivePractices);
+    }
+
+    [Fact]
+    public async Task BulkCreate_ActiveRowForCeasedMedicine_400()
+    {
+        var (db, tenant) = CreateDb();
+        var p = SeedParticipant(db);
+        var medId = Guid.NewGuid();
+        db.ParticipantMedications.Add(new ParticipantMedication
+        {
+            Id = medId, ParticipantId = p.Id, Name = "Risperidone", Strength = "1 mg", DoseDescription = "1 tablet", Type = MedicationType.Regular,
+            Purpose = "Manage behaviour", Status = MedicationStatus.Ceased, StartDate = new DateTime(2026, 1, 1), ConsentObtained = true,
+        });
+        db.SaveChanges();
+
+        var result = await Register(db).CreateBulk(p.Id, new BulkCreateRestrictivePracticeDto
+        {
+            Items = { new() { Type = RestrictivePracticeType.ChemicalRestraint, Description = "Row", RelatedMedicationId = medId, IsActive = true } },
+        }, CancellationToken.None);
+
+        Assert.Contains("Risperidone 1 mg is ceased. Restart the medicine to reactivate this entry.", Assert.IsType<ApiResponse<List<RestrictivePracticeDto>>>(Assert.IsAssignableFrom<ObjectResult>(result.Result).Value).Errors!.First());
+    }
+
+    [Fact]
+    public async Task Delete_LinkedActiveMedicine_400_EntryKept_CeasedMedicineDeletes()
+    {
+        var (db, _, _, med, meds) = await LinkedAsync();
+        var entry = await db.RestrictivePractices.AsNoTracking().SingleAsync();
+
+        var refused = await Register(db).Delete(entry.Id, CancellationToken.None);
+        Assert.Equal("This entry is linked to Risperidone 1 mg. Deactivate it instead.", RegisterError(refused, 400));
+        Assert.Single(db.RestrictivePractices);
+
+        await UpdateOkAsync(meds, med.Id, AsUpdate(RestraintDto(), MedicationStatus.Ceased));
+        Assert.IsType<OkObjectResult>((await Register(db).Delete(entry.Id, CancellationToken.None)).Result);
+        Assert.Empty(db.RestrictivePractices);
+    }
 }
