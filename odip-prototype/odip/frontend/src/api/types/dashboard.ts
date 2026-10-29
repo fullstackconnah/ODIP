@@ -1,5 +1,4 @@
 import type { TripListDto } from './trips'
-import type { TaskDto } from './tasks'
 
 export interface DashboardSummaryDto {
   upcomingTripCount: number
@@ -13,7 +12,6 @@ export interface DashboardSummaryDto {
   openIncidentCount: number
   qscOverdueCount: number
   upcomingTrips: TripListDto[]
-  overdueTasks: TaskDto[]
 }
 
 

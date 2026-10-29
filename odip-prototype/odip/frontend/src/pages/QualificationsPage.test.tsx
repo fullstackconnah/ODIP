@@ -32,7 +32,7 @@ vi.mock('@/api/hooks', () => ({
     data: {
       upcomingTripCount: 0, activeParticipantCount: 0, outstandingTaskCount: 0, overdueTaskCount: 0, conflictCount: 0,
       tripsMissingAccommodation: 0, tripsMissingVehicles: 0, tripsMissingStaff: 0, openIncidentCount: 0, qscOverdueCount: 0,
-      upcomingTrips: [], overdueTasks: [],
+      upcomingTrips: [],
     },
     isPending: false, isLoading: false, isError: false,
   }),
