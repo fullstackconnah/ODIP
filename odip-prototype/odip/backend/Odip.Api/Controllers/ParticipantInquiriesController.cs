@@ -95,10 +95,11 @@ public class ParticipantInquiriesController : ControllerBase
         var rowsByParticipant = stored.GroupBy(o => o.ParticipantId).ToDictionary(g => g.Key, g => g.First());
         var result = new List<ParticipantOnboardingWorklistDto>();
         var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
+        var facts = await LoadFactsAsync(ids, tenantId, today, ct);
         foreach (var p in participants)
         {
             // Everyone in onboarding stays listed, every item done or not: only "Make active" moves them on. The page counts the same "n of N".
-            var detail = await BuildDetail(p, rowsByParticipant.GetValueOrDefault(p.Id) ?? BlankOnboarding(p), ct, today);
+            var detail = BuildDetail(p, rowsByParticipant.GetValueOrDefault(p.Id) ?? BlankOnboarding(p), facts);
             result.Add(new ParticipantOnboardingWorklistDto
             {
                 ParticipantId = p.Id, FullName = p.FullName, ServicesStartedAt = p.ServicesStartedAt,
@@ -271,7 +272,7 @@ public class ParticipantInquiriesController : ControllerBase
     {
         var (participant, onboarding) = await FindOwnedAsync(id, storeMissingRow: false, ct);
         if (onboarding == null || participant == null) return NotFound(ApiResponse<ParticipantOnboardingDto>.Fail("Onboarding not found"));
-        return Ok(ApiResponse<ParticipantOnboardingDto>.Ok(await BuildDetail(participant, onboarding, ct)));
+        return Ok(ApiResponse<ParticipantOnboardingDto>.Ok(await BuildDetailAlone(participant, onboarding, ct)));
     }
 
     /// <summary>
@@ -295,7 +296,7 @@ public class ParticipantInquiriesController : ControllerBase
         else if (reason?.Length > 500) errors["noAgreementReason"] = ["Keep the reason to 500 characters or fewer."];
         if (errors.Count > 0) return ValidationProblem(new ValidationProblemDetails(errors));
         var saved = await RecordAndSaveAsync(participant, onboarding, row => row.RecordAgreement(dto.SignedOn, reason, Actor(), DateTime.UtcNow), ct);
-        return Ok(ApiResponse<ParticipantOnboardingDto>.Ok(await BuildDetail(participant, saved, ct)));
+        return Ok(ApiResponse<ParticipantOnboardingDto>.Ok(await BuildDetailAlone(participant, saved, ct)));
     }
 
     /// <summary>
@@ -352,10 +353,21 @@ public class ParticipantInquiriesController : ControllerBase
     /// The derived checks are <see cref="ParticipantReadinessGate.ProfileDetailsRule"/> and <see cref="ParticipantReadinessGate.ServiceNeedsParticipants"/>,
     /// the same ones the roster issues and the strict gate read.
     /// </summary>
-    private async Task<ParticipantOnboardingDto> BuildDetail(Participant participant, ParticipantOnboarding onboarding, CancellationToken ct, DateOnly? today = null)
+    private sealed record OnboardingFacts(HashSet<Guid> ServiceNeedsDone, HashSet<Guid> FundingRecorded, HashSet<Guid> AnyPlan);
+
+    /// <summary>The checklist's three queried facts for a set of participants of one tenant, one query each, so the worklist costs three queries however many are listed.</summary>
+    private async Task<OnboardingFacts> LoadFactsAsync(List<Guid> ids, Guid tenantId, DateOnly today, CancellationToken ct) => new(
+        (await ParticipantReadinessGate.ServiceNeedsParticipants(_db).Where(p => ids.Contains(p.Id)).Select(p => p.Id).ToListAsync(ct)).ToHashSet(),
+        (await ParticipantReadinessGate.FundingRecordedParticipants(_db, today).Where(p => ids.Contains(p.Id)).Select(p => p.Id).ToListAsync(ct)).ToHashSet(),
+        (await _db.FundingPlans.Where(f => ids.Contains(f.ParticipantId) && f.TenantId == tenantId).Select(f => f.ParticipantId).Distinct().ToListAsync(ct)).ToHashSet());
+
+    private async Task<ParticipantOnboardingDto> BuildDetailAlone(Participant participant, ParticipantOnboarding onboarding, CancellationToken ct) =>
+        BuildDetail(participant, onboarding, await LoadFactsAsync([participant.Id], participant.TenantId, await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct), ct));
+
+    private static ParticipantOnboardingDto BuildDetail(Participant participant, ParticipantOnboarding onboarding, OnboardingFacts facts)
     {
         var profileMissing = ProfileMissing(participant);
-        var serviceNeedsDone = await ParticipantReadinessGate.ServiceNeedsParticipants(_db).AnyAsync(p => p.Id == participant.Id, ct);
+        var serviceNeedsDone = facts.ServiceNeedsDone.Contains(participant.Id);
         var agreementDone = onboarding.AgreementSignedOn != null || onboarding.NoAgreementReason != null;
         var items = new List<OnboardingChecklistItemDto>
         {
@@ -365,9 +377,9 @@ public class ParticipantInquiriesController : ControllerBase
         };
         if (participant.FundingSource == ParticipantFundingSource.Ndis)
         {
-            var fundingDone = await ParticipantReadinessGate.HasFundingRecordedAsync(_db, participant.Id, today ?? await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct), ct);
+            var fundingDone = facts.FundingRecorded.Contains(participant.Id);
             // Say which it is: nothing was ever recorded, or the plans there are have all ended (the Funding tab shows that plan as Ended).
-            var missing = !fundingDone && await _db.FundingPlans.AnyAsync(f => f.ParticipantId == participant.Id && f.TenantId == participant.TenantId, ct)
+            var missing = !fundingDone && facts.AnyPlan.Contains(participant.Id)
                 ? "The plan budget has ended: record the new plan."
                 : "No plan budget recorded.";
             items.Add(Item("funding", "Funding", fundingDone, missing));
