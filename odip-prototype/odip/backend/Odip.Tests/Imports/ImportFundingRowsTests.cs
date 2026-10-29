@@ -357,16 +357,16 @@ public class ImportFundingRowsTests
     public void A_row_that_cannot_be_imported_links_to_the_one_participant_with_its_name()
     {
         var cal = Guid.NewGuid();
-        Assert.Equal(cal, LinkedTo("", "cal", " WU", "", People[0], new(cal, null, "Cal", "Wu", new DateOnly(1980, 1, 1)), People[1]));
+        Assert.Equal(cal, LinkedTo("N/A", "cal", " WU", "", People[0], new(cal, null, "Cal", "Wu", new DateOnly(1980, 1, 1)), People[1]));
     }
 
     [Fact]
     public void Two_participants_with_one_name_link_to_nobody() =>
-        Assert.Equal(Guid.Empty, LinkedTo("", "Jo", "Ng", "", new(Guid.NewGuid(), null, "Jo", "Ng", null), new(Guid.NewGuid(), null, "JO", "NG", null)));
+        Assert.Equal(Guid.Empty, LinkedTo("N/A", "Jo", "Ng", "", new(Guid.NewGuid(), null, "Jo", "Ng", null), new(Guid.NewGuid(), null, "JO", "NG", null)));
 
     [Fact]
     public void A_name_with_another_date_of_birth_links_to_nobody() =>
-        Assert.Equal(Guid.Empty, LinkedTo("", "Ava", "Stone", "04/04/1990", People));
+        Assert.Equal(Guid.Empty, LinkedTo("N/A", "Ava", "Stone", "04/04/1990", People));
 
     [Fact]
     public void An_unreadable_NDIS_number_one_character_off_links_to_that_participant() =>
