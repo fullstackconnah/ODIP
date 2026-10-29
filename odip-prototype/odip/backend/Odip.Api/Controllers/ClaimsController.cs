@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
+using Odip.Domain.Billing.Services;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Funding;
@@ -417,8 +418,8 @@ public class ClaimsController : ControllerBase
             && await ClaimHoldingTheSameAsync(claimId, _db.ClaimLineItems.Where(l => l.Id == id), ct) is { } holder)
             return Conflict(ApiResponse<bool>.Fail($"This line's shift is already on claim {holder}, so the line can't be taken back."));
 
-        if (dto.Hours.HasValue) { item.Hours = dto.Hours.Value; item.TotalAmount = item.Hours * item.UnitPrice; }
-        if (dto.UnitPrice.HasValue) { item.UnitPrice = dto.UnitPrice.Value; item.TotalAmount = item.Hours * item.UnitPrice; }
+        if (dto.Hours.HasValue) { item.Hours = dto.Hours.Value; item.TotalAmount = ClaimPricing.LineAmount(item.Hours, item.UnitPrice); }
+        if (dto.UnitPrice.HasValue) { item.UnitPrice = dto.UnitPrice.Value; item.TotalAmount = ClaimPricing.LineAmount(item.Hours, item.UnitPrice); }
         if (dto.SupportItemCode != null) item.SupportItemCode = dto.SupportItemCode;
         if (dto.ClaimType.HasValue)
         {

@@ -54,6 +54,38 @@ public class ClaimEditGuardsTests
 
     private static string RefusalOf(ActionResult<ApiResponse<bool>> result) => Assert.Single(Assert.IsType<ApiResponse<bool>>(Assert.IsAssignableFrom<ObjectResult>(result.Result).Value).Errors!);
 
+    // ── A line's amount is rounded to the cent, half away from zero, and the claim total is the sum of the rounded lines (owner, 2026-10-29) ──
+
+    [Theory]
+    [InlineData(0.25, 10.10, 2.53)]
+    [InlineData(1.25, 10.10, 12.63)]
+    public async Task AnEditedLine_IsRoundedToTheCent_HalfAwayFromZero(double hours, double price, double expected)
+    {
+        var (db, controller) = Create();
+        var (claim, line, _) = Seed(db, TripClaimStatus.Draft);
+
+        await controller.UpdateLineItem(claim.Id, line.Id, new UpdateClaimLineItemDto { Hours = (decimal)hours, UnitPrice = (decimal)price }, Ct);
+
+        db.ChangeTracker.Clear();
+        Assert.Equal((decimal)expected, (await db.ClaimLineItems.AsNoTracking().SingleAsync(l => l.Id == line.Id)).TotalAmount);
+    }
+
+    [Fact]
+    public async Task TheClaimTotalAfterEdits_IsTheSumOfItsRoundedLines_NotTheRoundedSum()
+    {
+        var (db, controller) = Create();
+        var (claim, first, second) = Seed(db, TripClaimStatus.Draft);
+        var dto = new UpdateClaimLineItemDto { Hours = 0.25m, UnitPrice = 10.10m };
+
+        await controller.UpdateLineItem(claim.Id, first.Id, dto, Ct);
+        await controller.UpdateLineItem(claim.Id, second.Id, dto, Ct);
+
+        db.ChangeTracker.Clear();
+        var lines = await db.ClaimLineItems.AsNoTracking().Where(l => l.TripClaimId == claim.Id).ToListAsync();
+        Assert.All(lines, l => Assert.Equal(2.53m, l.TotalAmount));
+        Assert.Equal(5.06m, (await db.TripClaims.AsNoTracking().SingleAsync(c => c.Id == claim.Id)).TotalAmount);
+    }
+
     // ── A claim with a participant funded another way is not submitted to the NDIS ────────────────
 
     /// <summary>A trip-kind Draft of organisation A with one line per participant (each on their own booking).</summary>
