@@ -27,12 +27,12 @@ public class ParticipantInquiriesController : ControllerBase
     public ParticipantInquiriesController(OdipDbContext db, ICurrentTenant tenant, TimeProvider? clock = null) { _db = db; _tenant = tenant; _clock = clock ?? TimeProvider.System; }
     private string Actor() => User?.FindFirstValue(ClaimTypes.NameIdentifier) ?? User?.FindFirstValue("sub") ?? "unknown";
 
-    /// <summary>The Closed view: the latest <see cref="ClosedListCap"/> closed enquiries, newest close first, with the full count so the screen can say the list is cut.</summary>
+    /// <summary>The Closed view: the latest <see cref="ClosedListCap"/> closed enquiries, newest close first (the id breaks a tie, so the cut is the same on every load), with the full count so the screen can say the list is cut.</summary>
     [HttpGet("closed")]
     public async Task<ActionResult<ApiResponse<PagedResult<ParticipantInquiryDto>>>> GetClosed(CancellationToken ct)
     {
         var query = _db.ParticipantInquiries.Where(x => _tenant.TenantId == null || x.TenantId == _tenant.TenantId).Where(x => x.ClosedAt != null);
-        var inquiries = await query.OrderByDescending(x => x.ClosedAt).Take(ClosedListCap).ToListAsync(ct);
+        var inquiries = await query.OrderByDescending(x => x.ClosedAt).ThenByDescending(x => x.Id).Take(ClosedListCap).ToListAsync(ct);
         var (rows, _) = await ToRows(inquiries, ct);
         return Ok(ApiResponse<PagedResult<ParticipantInquiryDto>>.Ok(new PagedResult<ParticipantInquiryDto> { Items = rows, TotalCount = await query.CountAsync(ct), Page = 1, PageSize = ClosedListCap }));
     }

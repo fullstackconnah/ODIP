@@ -86,6 +86,25 @@ public class InquiryCloseTests
     }
 
     [Fact]
+    public async Task Rows_closed_in_the_same_instant_straddling_the_cut_keep_the_larger_ids()
+    {
+        var f = new Fixture();
+        SeedClosed(f, 150, f.TenantId);
+        foreach (var r in f.Db.ParticipantInquiries.Where(x => x.ClosedAt != null).ToList()) r.ClosedAt = r.ClosedAt!.Value.AddHours(1); // all newer than the tie
+        // 100 rows closed in the same instant, 50 of which fit under the cap: a missing tie-break lets the database keep any 50.
+        for (var i = 100; i >= 1; i--)
+            f.Db.ParticipantInquiries.Add(new ParticipantInquiry { Id = new Guid(i, 0, 0, new byte[8]), TenantId = f.TenantId, FirstName = $"T{i}", LastName = "Closed", Source = "Phone", ClosedAt = Now, CloseOutcome = InquiryCloseOutcome.Other });
+        f.Db.SaveChanges();
+
+        var page = Ok<PagedResult<ParticipantInquiryDto>>((await Inquiries(f).GetClosed(CancellationToken.None)).Result!);
+
+        Assert.Equal((200, 250), (page.Items.Count, page.TotalCount));
+        Assert.Equal(page.Items.OrderByDescending(r => r.ClosedAt).ThenByDescending(r => r.Id).Select(r => r.Id), page.Items.Select(r => r.Id));
+        var keptTies = page.Items.Where(r => r.ClosedAt == Now).Select(r => r.Id).OrderBy(id => id).ToList();
+        Assert.Equal(Enumerable.Range(51, 50).Select(i => new Guid(i, 0, 0, new byte[8])), keptTies);
+    }
+
+    [Fact]
     public async Task A_short_closed_list_is_returned_whole_and_not_truncated()
     {
         var f = new Fixture();

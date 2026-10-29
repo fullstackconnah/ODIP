@@ -122,15 +122,30 @@ describe('closing an enquiry from the table', () => {
 describe('the closed list bound', () => {
   const cut = Object.assign(Array.from({ length: 200 }, (_, i) => ({ ...closed[0], id: `gone-${i}` })), { totalCount: 205, isTruncated: true })
 
-  it('says so when the server cut the closed list', async () => {
+  const HINT = "Showing the latest 200 of 205 closed enquiries. Search looks through these only."
+
+  it('says so, above the list, when the server cut the closed list', async () => {
     mocks.inquiries.mockImplementation((view = 'open') => ({ data: view === 'closed' ? cut : open, isLoading: false, isError: false, refetch: vi.fn() }))
     const user = userEvent.setup()
     page()
 
-    expect(screen.queryByText("Showing the latest 200 closed enquiries.")).not.toBeInTheDocument()
+    expect(screen.queryByText(HINT)).not.toBeInTheDocument()
     await user.click(screen.getByRole('radio', { name: 'Closed' }))
 
-    expect(screen.getByText("Showing the latest 200 closed enquiries.")).toBeInTheDocument()
+    const hint = screen.getByText(HINT)
+    expect(hint.compareDocumentPosition(screen.getAllByRole('row')[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('a search with no match says it only looked through the cut list', async () => {
+    mocks.inquiries.mockImplementation((view = 'open') => ({ data: view === 'closed' ? cut : open, isLoading: false, isError: false, refetch: vi.fn() }))
+    const user = userEvent.setup()
+    page()
+
+    await user.click(screen.getByRole('radio', { name: 'Closed' }))
+    await user.type(screen.getByPlaceholderText(/Search enquiries/), 'nobody matches this')
+
+    expect(screen.getByText('Try a different search term, or clear the search. Search looks through the latest 200 closed enquiries only.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Clear search' })).toBeInTheDocument()
   })
 
   it('shows no hint when the closed list is whole', async () => {
