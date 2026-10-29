@@ -25,6 +25,8 @@ public class ImportBatch : ITenantEntity
     public string FileSha256 { get; set; } = string.Empty;
     /// <summary>The browser's key for one Import click: a second request with the same key answers with this batch instead of importing again.</summary>
     public string IdempotencyKey { get; set; } = string.Empty;
+    /// <summary>SHA-256 of the choices that made this batch (file, mapping, landing, shift options). A retry with this key and other choices is refused; null on batches from before it existed, which replay by key alone.</summary>
+    public string? ChoicesFingerprint { get; set; }
     public int RowCount { get; set; }
     public int CreatedCount { get; set; }
     public int SkippedCount { get; set; }

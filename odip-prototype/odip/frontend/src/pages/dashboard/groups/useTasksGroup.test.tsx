@@ -4,8 +4,8 @@ import { renderGroup, announcement, facts, headers, rowOf, subjects } from './gr
 import { useTasksGroup } from './useTasksGroup'
 
 vi.mock('@/lib/firebase', () => ({ auth: null, devAuthEnabled: true }))
-const { apiGet, apiPutRaw } = vi.hoisted(() => ({ apiGet: vi.fn(), apiPutRaw: vi.fn() }))
-vi.mock('@/api/client', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/api/client')>()), apiGet, apiPutRaw }))
+const { apiGet, apiPostRaw } = vi.hoisted(() => ({ apiGet: vi.fn(), apiPostRaw: vi.fn() }))
+vi.mock('@/api/client', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/api/client')>()), apiGet, apiPostRaw }))
 
 const TODAY = '2026-10-14'
 const task = (o: Record<string, unknown> = {}) => ({
@@ -17,7 +17,7 @@ const task = (o: Record<string, unknown> = {}) => ({
 const answer = (overdue: Array<{ id: unknown }>, week: Array<{ id: unknown }> = [], fresh: Record<string, unknown> = {}) =>
   apiGet.mockImplementation((url: string, params?: Record<string, string>) => {
     if (url !== '/tasks') {
-      const id = url.slice('/tasks/'.length)
+      const id = url.split('/')[2]
       return Promise.resolve(fresh[id] ?? [...overdue, ...week].find((t) => t.id === id))
     }
     return Promise.resolve(params?.status === 'Overdue' ? overdue : week)
@@ -26,7 +26,7 @@ const render = (mayCloseBudgetReview = true) => renderGroup(() => useTasksGroup(
 
 beforeEach(() => {
   apiGet.mockReset()
-  apiPutRaw.mockReset()
+  apiPostRaw.mockReset()
 })
 
 describe('Tasks due group — what it lists', () => {
@@ -58,17 +58,16 @@ describe('Tasks due group — what it lists', () => {
 })
 
 describe('Tasks due group — Done', () => {
-  it("PUTs the stored row with its notes, as TasksPage's tick does, then takes the row away and announces it", async () => {
+  it("POSTs the completion only, then takes the row away and announces it", async () => {
     answer([task()])
-    apiPutRaw.mockResolvedValue({ success: true, data: task({ status: 'Completed' }) })
+    apiPostRaw.mockResolvedValue({ success: true, data: task({ status: 'Completed' }) })
     render()
 
     fireEvent.click(await screen.findByRole('button', { name: 'Done: Chase travel insurance certificate' }))
 
-    // The WHOLE body: the PUT rewrites every field (TasksDashboardController.Update), so it must be the stored row exactly, with only status and completedDate changed.
-    await waitFor(() => expect(apiPutRaw).toHaveBeenCalledWith('/tasks/t1', { ...task(), status: 'Completed', completedDate: TODAY }))
-    // And the trap by name: the notes a summary task row would have dropped are sent.
-    expect(apiPutRaw.mock.calls[0][1].notes).toBe('Plan manager emailed 24 Jul.')
+    // The WHOLE body: only the day. A whole-row PUT would write back every field the list read, undoing anything changed since.
+    await waitFor(() => expect(apiPostRaw).toHaveBeenCalledWith('/tasks/t1/complete', { completedDate: TODAY }))
+    expect(apiPostRaw.mock.calls[0][0]).toBe('/tasks/t1/complete')
     await waitFor(() => expect(announcement()).toHaveTextContent('Marked done: Chase travel insurance certificate.'))
   })
 
@@ -122,7 +121,7 @@ describe('Tasks due group — the review of an emergency over budget', () => {
 describe('Tasks due group — a refused Done', () => {
   it("keeps the row and says the server's words", async () => {
     answer([task()])
-    apiPutRaw.mockRejectedValue({ response: { data: { message: 'Task not found' } } })
+    apiPostRaw.mockRejectedValue({ response: { data: { message: 'Task not found' } } })
     render()
 
     fireEvent.click(await screen.findByRole('button', { name: 'Done: Chase travel insurance certificate' }))
@@ -133,17 +132,18 @@ describe('Tasks due group — a refused Done', () => {
 })
 
 describe('Tasks due group — Done reads the task fresh (deep S2)', () => {
-  it('PUTs the task as it is NOW, so a note or a date changed since the list loaded is kept', async () => {
+  it('sends no field but the day, so a title, note or date changed on the server since the list loaded is left as it is', async () => {
     const now = task({ notes: 'Insurer called back 14 Oct.', dueDate: '2026-10-12' })
     answer([task()], [], { t1: now })
-    apiPutRaw.mockResolvedValue({ success: true, data: { ...now, status: 'Completed' } })
+    apiPostRaw.mockResolvedValue({ success: true, data: { ...now, status: 'Completed' } })
     render()
 
     fireEvent.click(await screen.findByRole('button', { name: 'Done: Chase travel insurance certificate' }))
 
-    await waitFor(() => expect(apiPutRaw).toHaveBeenCalledWith('/tasks/t1', { ...now, status: 'Completed', completedDate: TODAY }))
+    await waitFor(() => expect(apiPostRaw).toHaveBeenCalledWith('/tasks/t1/complete', { completedDate: TODAY }))
+    expect(Object.keys(apiPostRaw.mock.calls[0][1])).toEqual(['completedDate'])
     const getCall = apiGet.mock.calls.findIndex(([url]) => url === '/tasks/t1')
-    expect(apiGet.mock.invocationCallOrder[getCall]).toBeLessThan(apiPutRaw.mock.invocationCallOrder[0])
+    expect(apiGet.mock.invocationCallOrder[getCall]).toBeLessThan(apiPostRaw.mock.invocationCallOrder[0])
   })
 
   it.each(['Completed', 'Cancelled'])('sends nothing for a task already %s elsewhere: it stays so, the row leaves, the group refetches and says so', async (status) => {
@@ -159,7 +159,7 @@ describe('Tasks due group — Done reads the task fresh (deep S2)', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Done: Chase travel insurance certificate' }))
 
     await waitFor(() => expect(announcement()).toHaveTextContent(`Already ${status.toLowerCase()} by someone else.`))
-    expect(apiPutRaw).not.toHaveBeenCalled()
+    expect(apiPostRaw).not.toHaveBeenCalled()
     expect(screen.queryByText('Chase travel insurance certificate')).not.toBeInTheDocument()
     // The two lists asked again: once on load, once after the stale Done.
     expect(apiGet.mock.calls.filter(([url, params]) => url === '/tasks' && params?.status === 'Overdue').length).toBeGreaterThan(1)
@@ -178,7 +178,7 @@ describe(`Tasks due group — "due today" is the provider's day (deep N4)`, () =
 })
 
 describe('Tasks due group — Mark all done (decision-bulk)', () => {
-  it('reads each task fresh and PUTs it in row order, skips one already closed as stale, and never ticks a cover task', async () => {
+  it('reads each task fresh and completes it in row order, skips one already closed as stale, and never ticks a cover task', async () => {
     const open2 = task({ id: 't2', title: 'Book the bus', dueDate: '2026-10-11' })
     // Done tasks, and the one closed meanwhile, leave the server's overdue list.
     const overdue = [task(), open2, task({ id: 't3', title: 'Closed meanwhile', dueDate: '2026-10-12' }), task({ id: 't4', title: 'Cover the shift', taskType: 'LeaveCoverage', dueDate: '2026-10-13' })]
@@ -188,8 +188,8 @@ describe('Tasks due group — Mark all done (decision-bulk)', () => {
       if (url === '/tasks/t3') overdue.splice(overdue.findIndex((t) => t.id === 't3'), 1)   // found closed: the server's overdue list drops it
       return read(url, params)
     })
-    apiPutRaw.mockImplementation(async (url: string, body: Record<string, unknown>) => {
-      overdue.splice(overdue.findIndex((t) => t.id === url.slice('/tasks/'.length)), 1)
+    apiPostRaw.mockImplementation(async (url: string, body: Record<string, unknown>) => {
+      overdue.splice(overdue.findIndex((t) => t.id === url.split('/')[2]), 1)
       return { success: true, data: body }
     })
     render()
@@ -200,15 +200,15 @@ describe('Tasks due group — Mark all done (decision-bulk)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Mark 3 done' }))
 
     await waitFor(() => expect(screen.getByText('Marked 2 tasks done')).toBeInTheDocument())
-    expect(apiPutRaw.mock.calls.map(([url]) => url)).toEqual(['/tasks/t1', '/tasks/t2'])
-    expect(apiPutRaw).toHaveBeenCalledWith('/tasks/t2', { ...open2, status: 'Completed', completedDate: TODAY })
+    expect(apiPostRaw.mock.calls.map(([url]) => url)).toEqual(['/tasks/t1/complete', '/tasks/t2/complete'])
+    expect(apiPostRaw).toHaveBeenCalledWith('/tasks/t2/complete', { completedDate: TODAY })
     expect(screen.getByText('1 was already closed.')).toBeInTheDocument()
     expect(subjects()).toEqual(['Cover the shift'])
   })
 
   it('refreshes the caches a Done would, when a row gets no answer and its re-read runs (review #266 fix round)', async () => {
     answer([task()])
-    apiPutRaw.mockRejectedValue(Object.assign(new Error('Network Error'), { code: 'ERR_NETWORK', request: {} }))
+    apiPostRaw.mockRejectedValue(Object.assign(new Error('Network Error'), { code: 'ERR_NETWORK', request: {} }))
     const { client } = render()
     const spy = vi.spyOn(client, 'invalidateQueries')
 
@@ -223,12 +223,12 @@ describe('Tasks due group — Mark all done (decision-bulk)', () => {
 })
 
 describe('Tasks due group — fresh task eligibility', () => {
-  it.each(['LeaveCoverage', 'BudgetEmergencyReview'])('does not PUT when the fresh task becomes %s outside this viewer\'s quick-action authority', async taskType => {
+  it.each(['LeaveCoverage', 'BudgetEmergencyReview'])('does not POST when the fresh task becomes %s outside this viewer\'s quick-action authority', async taskType => {
     answer([task()], [], { t1: task({ taskType, notes: 'Changed since the list loaded.' }) })
     render(false)
     fireEvent.click(await screen.findByRole('button', { name: 'Done: Chase travel insurance certificate' }))
     await waitFor(() => expect(apiGet).toHaveBeenCalledWith('/tasks/t1'))
-    expect(apiPutRaw).not.toHaveBeenCalled()
+    expect(apiPostRaw).not.toHaveBeenCalled()
   })
 })
 
@@ -249,7 +249,7 @@ describe('Tasks due group - truthful changed eligibility bulk outcome', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Mark 1 selected task done' }))
     fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Mark 1 done' }))
     await screen.findByText("1 can't be marked done here and stays.")
-    expect(apiPutRaw).not.toHaveBeenCalled()
+    expect(apiPostRaw).not.toHaveBeenCalled()
     expect(subjects()).toEqual(['Chase travel insurance certificate'])
     expect(screen.queryByText(/already closed/)).not.toBeInTheDocument()
     const name = taskType === 'LeaveCoverage' ? 'Open roster for: Chase travel insurance certificate' : 'Open task: Chase travel insurance certificate'

@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
@@ -46,6 +47,9 @@ public enum RosterFindingSeverity
 /// </summary>
 public class Shift : ITenantEntity
 {
+    /// <summary>Every worker-facing read of a shift filters on this: a Draft is invisible to its worker until it is published (L1). An expression, so EF still translates it.</summary>
+    public static readonly Expression<Func<Shift, bool>> VisibleToWorker = s => s.Status != ShiftStatus.Draft;
+
     public Guid Id { get; set; }
     public Guid TenantId { get; set; }
 

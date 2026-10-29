@@ -39,7 +39,7 @@ public static class StaffUserUnificationMapping
     {
         ArgumentNullException.ThrowIfNull(existingUsernamesLowercase);
 
-        var baseUsername = $"{StripToLettersAndDigits(firstName)}.{StripToLettersAndDigits(lastName)}".ToLowerInvariant();
+        var baseUsername = BaseUsername(firstName, lastName);
         var candidate = baseUsername;
         var suffix = 1;
         while (existingUsernamesLowercase.Contains(candidate))
@@ -50,6 +50,10 @@ public static class StaffUserUnificationMapping
 
         return candidate;
     }
+
+    /// <summary>The first candidate, before any "-N" suffix. Letters, digits and one dot only, so it carries no LIKE wildcard.</summary>
+    public static string BaseUsername(string firstName, string lastName) =>
+        $"{StripToLettersAndDigits(firstName)}.{StripToLettersAndDigits(lastName)}".ToLowerInvariant();
 
     private static string StripToLettersAndDigits(string value)
     {

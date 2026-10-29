@@ -43,6 +43,30 @@ public class StaffCreateServiceTests
         Assert.Equal(1, await db.Users.IgnoreQueryFilters().CountAsync());
     }
 
+    private static async Task<string> UsernameForJoNgAsync(params string[] taken)
+    {
+        var (db, tenantId) = TwoOrganisations();
+        using var _ = db;
+        var other = db.Tenants.IgnoreQueryFilters().Single(t => t.Name == "Other").Id;
+        foreach (var name in taken)
+            db.Users.Add(new User { Id = Guid.NewGuid(), TenantId = other, FirstName = "X", LastName = "Y", Username = name, Email = name + "@gmail.com", Role = UserRole.SupportWorker });
+        await db.SaveChangesAsync();
+        var result = await new StaffCreateService(db, null).StageAsync(Staff("jo.ng@own.example.com"), As("Admin"), tenantId, CancellationToken.None);
+        return result.User!.Username;
+    }
+
+    [Fact]
+    public async Task Username_taken_in_another_organisation_gets_the_next_suffix() => Assert.Equal("jo.ng-2", await UsernameForJoNgAsync("jo.ng"));
+
+    [Fact]
+    public async Task Username_with_suffixes_2_and_3_taken_gets_4() => Assert.Equal("jo.ng-4", await UsernameForJoNgAsync("jo.ng", "jo.ng-2", "jo.ng-3"));
+
+    [Fact]
+    public async Task Username_taken_in_another_case_still_blocks_the_base() => Assert.Equal("jo.ng-2", await UsernameForJoNgAsync("Jo.NG"));
+
+    [Fact]
+    public async Task Username_of_an_unrelated_name_does_not_count() => Assert.Equal("jo.ng", await UsernameForJoNgAsync("joxng", "jo.ngo", "jo.ng2"));
+
     [Fact]
     public async Task Stage_answers_conflict_for_an_email_used_in_another_organisation()
     {
