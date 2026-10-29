@@ -98,6 +98,7 @@ public sealed class RosterAvailability(OdipDbContext db, IStaffUnavailabilityQue
         // L5 and L-b: what makes a regular "away", as the short reason the chip shows. Pending leave is not away; an expired screening (R3) is.
         private static readonly Dictionary<string, string> AwayReasons = new()
         {
+            [RosterConflictService.StaffNotStarted] = "hasn't started yet",
             [RosterConflictService.WscExpired] = "screening expired",
             [RosterConflictService.StaffOnLeave] = "on approved leave",
             [RosterConflictService.StaffUnavailable] = "unavailable",

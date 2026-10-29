@@ -95,6 +95,30 @@ public class StaffControllerTests
     }
 
     [Fact]
+    public async Task Update_LeavesTheEmploymentHeroStartDateAlone_AndEveryStaffResponseShowsIt()
+    {
+        var tenantId = Guid.NewGuid();
+        using var db = CreateDb(Guid.NewGuid().ToString(), tenantId);
+        var start = new DateOnly(2027, 2, 1);
+        var staff = new User
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId, Username = "new.starter", Email = "new.starter@example.com",
+            FirstName = "New", LastName = "Starter", Position = Position.SupportWorker, IsActive = true, EmploymentStartDate = start,
+        };
+        db.Users.Add(staff);
+        await db.SaveChangesAsync();
+        var controller = new StaffController(db);
+
+        var updated = Assert.IsType<ApiResponse<StaffDetailDto>>(Assert.IsType<OkObjectResult>(
+            (await controller.Update(staff.Id, new UpdateStaffDto { FirstName = "New", LastName = "Starter", Email = "new.starter@example.com", Position = Position.SupportWorker, IsActive = true, Notes = "edited" }, CancellationToken.None)).Result).Value);
+        var listed = Assert.IsType<ApiResponse<List<StaffListDto>>>(Assert.IsType<OkObjectResult>((await controller.GetAll(null, CancellationToken.None)).Result).Value);
+
+        Assert.Equal(start, (await db.Users.SingleAsync(s => s.Id == staff.Id)).EmploymentStartDate);
+        Assert.Equal(start, updated.Data!.EmploymentStartDate);
+        Assert.Equal(start, Assert.Single(listed.Data!, s => s.LastName == "Starter").EmploymentStartDate);
+    }
+
+    [Fact]
     public async Task GetAll_FlagsHasExpiredQualifications_WhenOnlyWorkerScreeningHasExpired()
     {
         var tenantId = Guid.NewGuid();

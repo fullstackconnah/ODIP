@@ -308,6 +308,7 @@ public sealed class EmploymentHeroStaffSync
             if (staged.User is not { } created) { problems.Add(FixInEh(e, CreateRefusal(staged))); continue; }
             created.TenantId = tenantId;
             created.ExternalPayrollId = Id(e);
+            created.EmploymentStartDate = StartOf(e);
             if (await SaveOneAsync(db, users, null, ct)) { users.Add(created); log.Created++; }
             else problems.Add(FixInEh(e, CouldNotSave));
         }
@@ -345,6 +346,8 @@ public sealed class EmploymentHeroStaffSync
             // An empty EH mobile never blanks the one ODIP has.
             var (first, last, mobile) = (e.FirstName!.Trim(), e.Surname!.Trim(), MobileOf(e) ?? u.Mobile);
             if (u.FirstName != first || u.LastName != last || u.Mobile != mobile) { u.FirstName = first; u.LastName = last; u.Mobile = mobile; changed = true; }
+            // EH owns the start date: it follows EH, and clears when EH has none (null means no limit).
+            if (u.EmploymentStartDate != StartOf(e)) { u.EmploymentStartDate = StartOf(e); changed = true; }
             if (email is not null && email != EmailIdentity.Normalise(u.Email))
             {
                 // A sign-in address is the person's identity. The sync re-points it only for a support worker who has never signed in: StaffController.Update
@@ -447,6 +450,7 @@ public sealed class EmploymentHeroStaffSync
     private static string Id(EhEmployee e) => e.Id.ToString(CultureInfo.InvariantCulture);
     /// <summary>A leaver's end date has passed in the organisation's own today: their last day is still a working day.</summary>
     public static bool IsLeaver(EhEmployee e, DateOnly today) => e.EndDate is { } end && DateOnly.FromDateTime(end) < today;
+    private static DateOnly? StartOf(EhEmployee e) => e.StartDate is { } start ? DateOnly.FromDateTime(start) : null;
     private static string NameKey(string? first, string? last) => $"{first?.Trim()} {last?.Trim()}".ToLowerInvariant();
     private static string Display(EhEmployee e) => $"{e.FirstName?.Trim()} {e.Surname?.Trim()}".Trim() is { Length: > 0 } name ? name : $"Employee {Id(e)}";
     private static string? EmailOf(EhEmployee e) => string.IsNullOrWhiteSpace(e.EmailAddress) ? null : EmailIdentity.Normalise(e.EmailAddress);

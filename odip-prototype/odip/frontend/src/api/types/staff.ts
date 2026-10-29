@@ -30,6 +30,8 @@ export interface StaffListDto {
   medicationCompetencyExpiryDate: string | null
   workerScreeningNumber: string | null
   workerScreeningExpiryDate: string | null
+  /** The first day this person can be rostered. Set only by the Employment Hero sync, so read-only here; null means no limit. */
+  employmentStartDate?: string | null
   hasExpiredQualifications: boolean
   notes: string | null
 }

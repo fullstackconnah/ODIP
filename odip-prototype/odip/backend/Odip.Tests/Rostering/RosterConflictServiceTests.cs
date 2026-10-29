@@ -164,13 +164,60 @@ public class RosterConflictServiceTests
         Assert.False(HasCode(expiredFindings, RosterConflictService.WscMissing));
     }
 
+    // ── STAFF_NOT_STARTED ─────────────────────────────────────
+
     [Fact]
-    public void Worker_screening_expired_is_the_only_blocking_finding_the_engine_can_ever_emit()
+    public void A_shift_before_the_employment_start_date_is_blocked_and_on_or_after_it_is_not()
+    {
+        var staff = CompliantStaff();
+        staff.EmploymentStartDate = ServiceDate.AddDays(1);
+        var participant = CompliantParticipant();
+
+        var before = new RosterConflictService().Check(CandidateShift(staff, participant), CompliantContext(staff, participant));
+        var onTheDay = new RosterConflictService().Check(CandidateShift(staff, participant, ServiceDate.AddDays(1)), CompliantContext(staff, participant));
+        var after = new RosterConflictService().Check(CandidateShift(staff, participant, ServiceDate.AddDays(2)), CompliantContext(staff, participant));
+
+        var finding = Assert.Single(before, f => f.Code == RosterConflictService.StaffNotStarted);
+        Assert.Equal(RosterFindingSeverity.Blocking, finding.Severity);
+        Assert.Equal("Ben Turner starts on 25 Aug 2026 – can't be rostered before then.", finding.Message);
+        Assert.False(HasCode(onTheDay, RosterConflictService.StaffNotStarted));
+        Assert.False(HasCode(after, RosterConflictService.StaffNotStarted));
+    }
+
+    [Fact]
+    public void No_employment_start_date_means_no_limit()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+
+        var findings = new RosterConflictService().Check(CandidateShift(staff, participant, new DateOnly(1999, 1, 4)), CompliantContext(staff, participant));
+
+        Assert.False(HasCode(findings, RosterConflictService.StaffNotStarted));
+    }
+
+    [Fact]
+    public void A_trip_assignment_starting_before_the_employment_start_date_is_blocked()
+    {
+        var staff = CompliantStaff();
+        staff.EmploymentStartDate = ServiceDate;
+        var ctx = CompliantContext(staff, null);
+        var service = new RosterConflictService();
+
+        var blocked = service.CheckStaffAssignment(ServiceDate.AddDays(-1), ServiceDate.AddDays(3), Guid.Empty, ctx);
+        var allowed = service.CheckStaffAssignment(ServiceDate, ServiceDate.AddDays(3), Guid.Empty, ctx);
+
+        Assert.Equal(RosterFindingSeverity.Blocking, Assert.Single(blocked, f => f.Code == RosterConflictService.StaffNotStarted).Severity);
+        Assert.False(HasCode(allowed, RosterConflictService.StaffNotStarted));
+    }
+
+    [Fact]
+    public void Worker_screening_expired_and_staff_not_started_are_the_only_blocking_findings_the_engine_can_emit()
     {
         // Trigger every other rule at once: missing WSC would only add a Warning, so use a
         // staff/participant/context combination that also fires WSC_EXPIRED plus every
-        // remaining Warning-producing rule, and assert no finding other than WSC_EXPIRED is
-        // ever Blocking - this guards the invariant against future drift.
+        // remaining Warning-producing rule, and assert no finding other than WSC_EXPIRED
+        // (or STAFF_NOT_STARTED, a start date still ahead) is ever Blocking - this guards
+        // the invariant against future drift.
         var staff = CompliantStaff();
         staff.WorkerScreeningExpiryDate = new DateOnly(2026, 2, 12); // expired -> WSC_EXPIRED
         staff.DriverLicenceExpiryDate = ServiceDate.AddDays(-1); // -> CREDENTIAL_EXPIRED (IsFirstAidQualified below already forces COMPETENCY_MISSING, so an expired first aid date wouldn't fire this rule)
