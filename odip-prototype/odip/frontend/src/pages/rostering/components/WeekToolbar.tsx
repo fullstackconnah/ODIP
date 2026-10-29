@@ -32,6 +32,9 @@ export type WeekToolbarProps = {
   heldBack?: boolean
   /** The page's one primary is elsewhere (Start, or the banner's Publish week), so New shift steps back. */
   newShiftSecondary?: boolean
+  /** A started week Start would still add agreement shifts to (a hand-made week): the secondary button. Absent hides it. */
+  onAddAgreementShifts?: () => void
+  addingAgreementShifts?: boolean
 }
 
 /** The week heading's id: the page moves focus here when the button it came from goes (after a publish). */
@@ -59,6 +62,8 @@ export function WeekToolbar({
   allPublished,
   heldBack,
   newShiftSecondary,
+  onAddAgreementShifts,
+  addingAgreementShifts,
 }: WeekToolbarProps) {
   // Every control here is a --control-h row: Button md / ToggleGroup / Dropdown form are all 32px at a
   // fine pointer and 44px under `pointer: coarse`, so the toolbar is one 32px line.
@@ -133,6 +138,22 @@ export function WeekToolbar({
           <Button variant="secondary" size="md" onClick={onOpenExceptions}>
             <AlertTriangle className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
             {plural(exceptionsCount, 'exception')}
+          </Button>
+        )}
+        {canWrite && onAddAgreementShifts && (
+          // aria-disabled, not disabled, while it runs: a disabled button drops focus to body, and a failure must leave focus here (as the Start card).
+          <Button
+            variant="secondary"
+            size="md"
+            className="whitespace-nowrap aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+            aria-disabled={addingAgreementShifts || undefined}
+            onClick={() => { if (!addingAgreementShifts) onAddAgreementShifts() }}
+          >
+            {/* The idle label sits invisible in the same grid cell, so the button keeps its width while it reads "Adding…" (as WizardNavFooter). */}
+            <span className="grid">
+              <span aria-hidden="true" data-reserve="Add agreement shifts" className="invisible col-start-1 row-start-1 before:content-[attr(data-reserve)]" />
+              <span className="col-start-1 row-start-1">{addingAgreementShifts ? 'Adding…' : 'Add agreement shifts'}</span>
+            </span>
           </Button>
         )}
         {canWrite && (
