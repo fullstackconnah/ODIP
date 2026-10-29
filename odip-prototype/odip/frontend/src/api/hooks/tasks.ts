@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiPostRaw, apiPutRaw, apiDeleteRaw } from '../client'
-import type { TaskDto, CreateTaskDto, UpdateTaskDto } from '../types'
+import type { TaskDto, CreateTaskDto, UpdateTaskDto, TaskItemStatus } from '../types'
 
 export function useTasks(params?: Record<string, string>, options?: { enabled?: boolean }) {
   return useQuery({
@@ -58,6 +58,21 @@ export function useCompleteTask() {
   return useMutation({
     mutationFn: ({ id, completedDate }: { id: string; completedDate: string }) =>
       apiPostRaw<boolean>(`/tasks/${id}/complete`, { completedDate }),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['tasks'] })
+      qc.invalidateQueries({ queryKey: ['task', vars.id] })
+      qc.invalidateQueries({ queryKey: ['trip-tasks'] })
+      qc.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}
+
+/** A status change from the Tasks page or a trip's Tasks tab: the server writes status and completion date on the stored row and nothing else, so an edit made since the list loaded is never reverted (useUpdateTask rewrites the whole row). */
+export function useSetTaskStatus() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, status, completedDate }: { id: string; status: TaskItemStatus; completedDate?: string }) =>
+      apiPostRaw<TaskDto>(`/tasks/${id}/status`, { status, completedDate }),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['tasks'] })
       qc.invalidateQueries({ queryKey: ['task', vars.id] })

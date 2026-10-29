@@ -1,12 +1,14 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { apiDeleteRaw, apiGet, apiPost, apiPut } from '../client'
+import { fetchPagedList } from './pagedList'
 import type { CancelIntakeBookingResultDto, CloseInquiryDto, CloseInquiryResultDto, CreateParticipantInquiryDto, IntakeVisitDto, OnboardingWorklistRow, ParticipantInquiryDetailDto, ParticipantInquiryDto, ParticipantOnboardingDto, RecordOnboardingAgreementDto, SetIntakeBookingDto, UpdateParticipantInquiryDto } from '../types/inquiries'
 
 /** The Enquiries tab's rows: the open view (today's key and URL, so every existing caller is unchanged) or the closed one. */
 export function useParticipantInquiries(view: 'open' | 'closed' = 'open') {
   return useQuery({
     queryKey: view === 'open' ? ['participant-inquiries'] : ['participant-inquiries', 'closed'],
-    queryFn: () => (view === 'open' ? apiGet<ParticipantInquiryDto[]>('/inquiries') : apiGet<ParticipantInquiryDto[]>('/inquiries', { view: 'closed' })),
+    // The closed list is the latest 200 (a PagedResult), so the screen can say when it is cut.
+    queryFn: () => (view === 'open' ? apiGet<ParticipantInquiryDto[]>('/inquiries') : fetchPagedList<ParticipantInquiryDto>('/inquiries/closed')),
   })
 }
 

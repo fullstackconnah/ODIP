@@ -130,32 +130,23 @@ describe('buildMarIncidentPrefill', () => {
   })
 })
 
-// The one "Authorised" rule (owner decision 2026-10-14), the frontend twin of the backend's RestrictivePracticeAuthorisation.IsAuthorised:
-// active, with who authorised it and when.
+// The server decides "Authorised" (RestrictivePracticeAuthorisation.IsAuthorised: active, who and when, dated on or before the organisation's today)
+// and sends it as `isAuthorised`. The browser reads it, so even a fully filled-in entry reads Not authorised when the server says so.
 describe('isRpAuthorised', () => {
-  const entry = { isActive: true, authorisedBy: 'Dr Chen', authorisationDate: '2026-09-01' }
-
-  it('is true for an active entry with who authorised it and when', () => {
-    expect(isRpAuthorised(entry)).toBe(true)
+  it.each([true, false])('returns the server verdict %j, whatever the dates say', (isAuthorised) => {
+    expect(isRpAuthorised({ isAuthorised })).toBe(isAuthorised)
   })
 
-  it('is false for an inactive entry', () => {
-    expect(isRpAuthorised({ ...entry, isActive: false })).toBe(false)
-  })
-
-  it.each([null, '', '   '])('is false when "Authorised by" is %j', (authorisedBy) => {
-    expect(isRpAuthorised({ ...entry, authorisedBy })).toBe(false)
-  })
-
-  it('is false with no authorisation date', () => {
-    expect(isRpAuthorised({ ...entry, authorisationDate: null })).toBe(false)
+  it('does not recompute from the dates: a filled-in, future-dated entry the server calls Not authorised stays so', () => {
+    const entry = { isActive: true, authorisedBy: 'Dr Chen', authorisationDate: '2099-01-01', isAuthorised: false }
+    expect(isRpAuthorised(entry)).toBe(false)
   })
 })
 
 // INC-04: mirrors IncidentsController.DetermineRestrictivePracticeAuthorisationAsync step for step, so the banner shows what the server will store.
 describe('previewRpAuthorisation', () => {
-  const authorised = { id: 'rp-a', type: 'Seclusion' as const, isActive: true, authorisedBy: 'Dr Chen', authorisationDate: '2026-09-01' }
-  const notAuthorised = { id: 'rp-n', type: 'Seclusion' as const, isActive: true, authorisedBy: null, authorisationDate: null }
+  const authorised = { id: 'rp-a', type: 'Seclusion' as const, isActive: true, isAuthorised: true }
+  const notAuthorised = { id: 'rp-n', type: 'Seclusion' as const, isActive: true, isAuthorised: false }
   const otherType = { ...authorised, id: 'rp-o', type: 'PhysicalRestraint' as const }
 
   it('is "unknown" when no participant is selected', () => {

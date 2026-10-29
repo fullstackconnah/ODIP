@@ -163,11 +163,15 @@ describe('WhatsNewPopup', () => {
   it('V-P8: when the first answer has no popup entries, a later refetch with one opens nothing', async () => {
     server = feedOf([])
     renderPage()
-    await waitFor(() => expect(mockApiGet).toHaveBeenCalled())
-    await act(async () => {})
+    // Wait for the first answer itself, not just the request: an answer that reaches the component only after the refetch would be its first.
+    await waitFor(() => expect(qc.getQueryData(['whats-new'])).toEqual(feedOf([])))
+    // A macrotask tick: React Query tells the component about an answer from a timer, so the component has now decided on it.
+    await act(async () => { await new Promise(r => setTimeout(r)) })
 
     server = feedOf([important(1)])
     await act(async () => { await qc.invalidateQueries({ queryKey: ['whats-new'] }) })
+    expect(qc.getQueryData(['whats-new'])).toEqual(feedOf([important(1)]))
+    await act(async () => { await new Promise(r => setTimeout(r)) })
     expect(popupDialog()).toBeNull()
   })
 
