@@ -148,14 +148,13 @@ describe('PortalShiftsPage — the week controls', () => {
 describe('PortalShiftsPage: the current shift leads (SHAPE §2)', () => {
   const today = '2026-08-19'
   const row = (over: Partial<PortalShiftSummaryDto>): PortalShiftSummaryDto => ({ ...makeShiftsResponse().shifts[0], ...over })
-  /** The week's query and the card's own query (yesterday to today) answer differently. */
-  function answer(week: PortalShiftSummaryDto[], recent: PortalShiftSummaryDto[]) {
-    mockUseMyShifts.mockImplementation((from: string) => ({ data: { shifts: from === '2026-08-18' ? recent : week, tripAssignments: [], timeZoneId: 'Australia/Brisbane' }, isLoading: false }))
+  function answer(week: PortalShiftSummaryDto[]) {
+    mockUseMyShifts.mockReturnValue({ data: { shifts: week, tripAssignments: [], timeZoneId: 'Australia/Brisbane' }, isLoading: false })
   }
 
   it('leads with the shift in progress, with one Continue shift link, and does not list it again', () => {
     const now = row({ id: 'shift-2', serviceDate: today, status: 'InProgress', participantName: 'Sienna Whitfield' })
-    answer([now], [now])
+    answer([now])
     renderPage()
 
     // No eyebrow (finish review fix 5): the name is the card's heading and the state line says it.
@@ -167,7 +166,7 @@ describe('PortalShiftsPage: the current shift leads (SHAPE §2)', () => {
 
   it('shows its state once the detail loads: when it started, overdue doses and a handover to read', () => {
     const now = row({ id: 'shift-2', serviceDate: today, status: 'InProgress' })
-    answer([now], [now])
+    answer([now])
     mockUsePortalShiftDetail.mockReturnValue({
       data: {
         timeZoneId: 'Australia/Brisbane', breaks: [], completion: { actualStart: '2026-08-18T23:02:00Z' },
@@ -185,7 +184,7 @@ describe('PortalShiftsPage: the current shift leads (SHAPE §2)', () => {
 
   it('says "1 dose overdue" for a single overdue dose', () => {
     const now = row({ id: 'shift-2', serviceDate: today, status: 'InProgress' })
-    answer([now], [now])
+    answer([now])
     mockUsePortalShiftDetail.mockReturnValue({
       data: { timeZoneId: 'Australia/Brisbane', breaks: [], completion: { actualStart: '2026-08-18T23:02:00Z' }, medicationsDue: [{ state: 'Overdue', outcome: null }, { state: 'Due', outcome: null }], handover: { requiresAcknowledgement: false, isRead: true } } as never,
     })
@@ -195,14 +194,14 @@ describe('PortalShiftsPage: the current shift leads (SHAPE §2)', () => {
 
   it("shows today's Rostered shift as Today with Open shift, and Continue finishing once a finish is under way", () => {
     const later = row({ id: 'shift-3', serviceDate: today, startTime: '15:00:00', endTime: '20:00:00' })
-    answer([later], [later])
+    answer([later])
     const { unmount } = renderPage()
     expect(screen.getByText(/^Today/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Open shift' })).toHaveAttribute('href', '/portal/shifts/shift-3')
     unmount()
 
     const now = row({ id: 'shift-2', serviceDate: today, status: 'InProgress' })
-    answer([now], [now])
+    answer([now])
     sessionStorage.setItem('odip-shift-end-draft:shift-2', JSON.stringify({ step: 'times' }))
     renderPage()
     expect(screen.getByRole('link', { name: 'Continue finishing' })).toBeInTheDocument()
@@ -210,7 +209,7 @@ describe('PortalShiftsPage: the current shift leads (SHAPE §2)', () => {
 
   it('shows no card on another week', () => {
     const now = row({ id: 'shift-2', serviceDate: today, status: 'InProgress' })
-    answer([now], [now])
+    answer([now])
     renderPage()
     fireEvent.click(screen.getByRole('button', { name: 'Next week' }))
 
@@ -223,7 +222,7 @@ describe('PortalShiftsPage: the current shift leads (SHAPE §2)', () => {
       row({ id: 'b', serviceDate: '2026-08-18', status: 'PendingReview', participantName: 'Ben Sent' }),
       row({ id: 'c', serviceDate: '2026-08-20', returnCount: 1, participantName: 'Cara Back' }),
       row({ id: 'd', serviceDate: '2026-08-21', participantName: 'Dan Later' }),
-    ], [])
+    ])
     renderPage()
 
     const coming = screen.getByRole('region', { name: 'Coming up' })
@@ -241,7 +240,7 @@ describe('PortalShiftsPage: the current shift leads (SHAPE §2)', () => {
       row({ id: 'r', serviceDate: '2026-08-18', returnCount: 1, participantName: 'Rae Returned' }),
       row({ id: 'p', serviceDate: '2026-08-18', startTime: '10:00:00', participantName: 'Pat Plain' }),
       row({ id: 'f', serviceDate: '2026-08-21', participantName: 'Fay Future' }),
-    ], [])
+    ])
     renderPage()
 
     const coming = screen.getByRole('region', { name: 'Coming up' })
@@ -274,7 +273,7 @@ describe('PortalShiftsPage offline (SHAPE 3b)', () => {
   })
 
   it('shows the saved week with a notice; a card with no saved detail is not a link and says why', () => {
-    saved('shifts:2026-08-17:2026-08-23')
+    saved('shifts:2026-08-16:2026-08-24')
     mockUseMyShifts.mockReturnValue({ data: makeShiftsResponse(), isLoading: false, isError: false, refetch: vi.fn() })
     renderPage()
 
@@ -285,7 +284,7 @@ describe('PortalShiftsPage offline (SHAPE 3b)', () => {
   })
 
   it('a card whose detail is saved on the phone still opens', () => {
-    saved('shifts:2026-08-17:2026-08-23')
+    saved('shifts:2026-08-16:2026-08-24')
     saved('detail:shift-1')
     mockUseMyShifts.mockReturnValue({ data: makeShiftsResponse(), isLoading: false, isError: false, refetch: vi.fn() })
     renderPage()

@@ -59,7 +59,8 @@ describe('PortalShiftsPage requests', () => {
     await waitFor(() => expect(shiftCalls()).toHaveLength(1))
     fireEvent.click(screen.getByRole('button', { name: 'Previous week' }))
     await screen.findByText('Mia Chen')
-    expect(shiftCalls()).toEqual([{ from: '2026-08-17', to: '2026-08-23' }, { from: '2026-08-10', to: '2026-08-16' }])
+    // Each range reaches a day past both ends of its week, so it depends on the browsed week alone.
+    expect(shiftCalls()).toEqual([{ from: '2026-08-16', to: '2026-08-24' }, { from: '2026-08-09', to: '2026-08-17' }])
   })
 })
 
@@ -69,10 +70,53 @@ describe('PortalShiftsPage provider clock', () => {
     vi.setSystemTime(new Date('2026-08-23T20:00:00Z'))
     shifts = [shift('s1', '2026-08-24', { status: 'Completed' })]
     renderPage()
-    await waitFor(() => expect(shiftCalls().length).toBeGreaterThan(0))
-    await new Promise(done => setTimeout(done, 50))   // let the first answer in: it carries the provider zone
-    fireEvent.click(screen.getByRole('button', { name: 'This week' }))
     const day = await screen.findByRole('heading', { level: 3 })
     expect(day).toHaveTextContent('Today')
+  })
+})
+
+describe('PortalShiftsPage the saved week offline', () => {
+  const setOnline = (value: boolean) => Object.defineProperty(window.navigator, 'onLine', { configurable: true, value })
+  afterEach(() => setOnline(true))
+
+  it.each([['Monday', '2026-08-17T12:00:00+10:00'], ['Sunday', '2026-08-23T12:00:00+10:00']])('opens the week saved on Saturday when offline on its %s', async (_day, at) => {
+    localStorage.setItem('odip_user', JSON.stringify({ id: 'u1' }))
+    vi.setSystemTime(new Date('2026-08-22T10:00:00+10:00'))   // a saved copy is good for 48 hours
+    shifts = [shift('s1', '2026-08-19')]
+    const online = renderPage()
+    await screen.findByText('Mia Chen')   // online: the week is saved on this phone
+    online.unmount()
+    expect(shiftCalls()).toHaveLength(1)
+
+    setOnline(false)
+    apiGet.mockRejectedValue(new Error('Network Error'))
+    vi.setSystemTime(new Date(at))
+    renderPage()
+    expect(await screen.findByText('Mia Chen')).toBeInTheDocument()
+    expect(screen.queryByText("This week isn't saved on this phone.")).not.toBeInTheDocument()
+  })
+})
+
+describe('PortalShiftsPage landing week', () => {
+  // Sunday 17:00 UTC is Monday 03:00 in Sydney: a UTC or Perth phone is still in last week, the provider is in the next.
+  const sundayOvernight = () => shift('s1', '2026-08-23', { status: 'InProgress', endsNextDay: true, startTime: '22:00:00', endTime: '07:00:00' })
+
+  it('settles on the provider week once the first answer names its zone, so the card shows', async () => {
+    vi.setSystemTime(new Date('2026-08-23T17:00:00Z'))
+    shifts = [sundayOvernight()]
+    renderPage()
+    expect(await screen.findByText('On shift now')).toBeInTheDocument()
+    expect(shiftCalls().at(-1)).toEqual({ from: '2026-08-23', to: '2026-08-31' })
+  })
+
+  it('does not move a user who paged before the answer arrived', async () => {
+    vi.setSystemTime(new Date('2026-08-23T17:00:00Z'))
+    shifts = [sundayOvernight()]
+    renderPage()
+    fireEvent.click(screen.getByRole('button', { name: 'Previous week' }))
+    const week = screen.getByRole('group', { name: 'Week' }).textContent
+    await waitFor(() => expect(shiftCalls().length).toBeGreaterThan(0))
+    await new Promise(done => setTimeout(done, 50))   // let the answer in and any snap happen
+    expect(screen.getByRole('group', { name: 'Week' }).textContent).toBe(week)
   })
 })
