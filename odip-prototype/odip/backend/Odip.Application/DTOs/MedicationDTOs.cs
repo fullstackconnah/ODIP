@@ -61,6 +61,9 @@ public record MedicationDetailDto : MedicationListDto
     public string? StorageRequirements { get; init; }
     public string? Notes { get; init; }
     public int PrnDosesInLast24h { get; init; }
+
+    /// <summary>The register entry this restraint medicine is linked to; null for other medicines.</summary>
+    public RestrictivePracticeDto? LinkedRestrictivePractice { get; init; }
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
 }
@@ -111,6 +114,14 @@ public record CreateMedicationDto
 
     [StringLength(200)]
     public string? RestrictivePracticeAuthorisationRef { get; init; }
+
+    // The register entry's answers, written to the linked entry while IsChemicalRestraint is set; null = leave the entry's value as it is.
+    public bool? RestraintAuthorised { get; init; }
+
+    [StringLength(200)]
+    public string? RestraintAuthorisedBy { get; init; }
+    public DateOnly? RestraintAuthorisationDate { get; init; }
+    public bool? RestraintRequiresReporting { get; init; }
     public bool IsHighRisk { get; init; }
     public bool IsHighIntensitySupport { get; init; }
     public DrugSchedule DrugSchedule { get; init; }
@@ -150,6 +161,9 @@ public record CreateMedicationDto
 public record UpdateMedicationDto : CreateMedicationDto
 {
     public MedicationStatus Status { get; init; } = MedicationStatus.Active;
+
+    /// <summary>The linked register entry's UpdatedAt the form loaded: the server answers 409 if the entry changed since. Absent from older open tabs, which save as before.</summary>
+    public DateTime? ExpectedRestrictivePracticeUpdatedAt { get; init; }
 }
 
 public record AdministrationDto

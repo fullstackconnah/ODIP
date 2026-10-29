@@ -283,7 +283,7 @@ public class RestrictivePracticesController : ControllerBase
         return null;
     }
 
-    private static RestrictivePracticeDto ToDto(RestrictivePractice rp) => new()
+    internal static RestrictivePracticeDto ToDto(RestrictivePractice rp) => new()
     {
         Id = rp.Id,
         ParticipantId = rp.ParticipantId,
@@ -294,6 +294,8 @@ public class RestrictivePracticesController : ControllerBase
         ReviewDate = rp.ReviewDate,
         RelatedMedicationId = rp.RelatedMedicationId,
         RelatedMedicationName = rp.RelatedMedication?.Name,
+        RelatedMedicationStatus = rp.RelatedMedication?.Status,
+        RequiresReporting = rp.RequiresReporting,
         IsActive = rp.IsActive,
         CreatedAt = rp.CreatedAt,
         UpdatedAt = rp.UpdatedAt,

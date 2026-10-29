@@ -224,6 +224,7 @@ builder.Services.AddScoped<Odip.Infrastructure.Services.ParticipantAlertsService
 // ── Participant preferred-staff <-> rostering compatibility matrix link (task 6d) ──
 builder.Services.AddScoped<Odip.Infrastructure.Services.StaffCompatibilityLinkService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.SafetyNoteSyncService>();
+builder.Services.AddScoped<Odip.Infrastructure.Services.RestraintRegisterSync>();
 // Settings → Import data. ParticipantsController builds its own ParticipantCreateService (its tests construct it directly); the importer gets one from DI.
 builder.Services.AddScoped<Odip.Infrastructure.Services.ParticipantIntakeSnapshotService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.ParticipantCreateService>();
