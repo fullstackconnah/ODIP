@@ -31,7 +31,7 @@ const GROUPS = [
   { key: 'free', label: 'Free at this time' },
   { key: 'move', label: 'On another shift at this time' },
   { key: 'leave', label: 'On leave that day' },
-  { key: 'notStarted', label: 'Not started yet' },
+  { key: 'notStarted', label: "Hasn't started yet" },
 ] as const
 
 /**

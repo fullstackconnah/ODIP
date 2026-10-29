@@ -707,6 +707,9 @@ public class RosteringController : ControllerBase
         // Like the length rule above: rows saved before the double-booking block may already clash, and cancelling one, or editing only its notes, must still work. Only an edit that sets the worker or the times can clash.
         if (ClashIsInherited(shift, dto.Status, dto.StaffId, dto.ServiceDate, dto.StartTime, dto.EndTime, dto.EndsNextDay))
             findings.RemoveAll(f => f.Code == RosterConflictService.DoubleBookedShift);
+        // A start date that moved later must not trap the shift: cancelling it always works. Only Cancelled is exempt, so a publish or a notes edit of it is still refused.
+        if (dto.Status == ShiftStatus.Cancelled)
+            findings.RemoveAll(f => f.Code == RosterConflictService.StaffNotStarted);
         findings.AddRange((await CheckBudgetAsync(candidate, shift.Id, dto.Status, ct)).Findings);
 
         var budgetGate = ShiftBudgetGate.Resolve(findings, dto.Emergency, dto.OverrideReason);

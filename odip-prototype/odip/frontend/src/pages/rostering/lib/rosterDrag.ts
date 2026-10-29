@@ -294,7 +294,7 @@ export function pickerGroups(target: ShiftDto, staff: StaffListDto[], shifts: Sh
   const isPair = (s: ShiftDto) => s.participantId === target.participantId && s.serviceDate === target.serviceDate && shiftsOverlap(s, target)
   for (const person of staff) {
     if (!person.isActive) continue
-    // Employment Hero start date: the server refuses a shift before it, so say so here rather than offer a row that would be refused.
+    // Employment Hero start date: the server refuses a shift before it, so these people get their own group; the row stays pickable, as leave rows do, and the server's finding answers a pick.
     if (person.employmentStartDate && person.employmentStartDate > target.serviceDate) {
       groups.notStarted.push({ key: person.id, person, hours: hours.get(person.id) ?? 0, leave: null, notStarted: true })
       continue

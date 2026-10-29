@@ -211,12 +211,13 @@ public class RosterConflictServiceTests
     }
 
     [Fact]
-    public void Worker_screening_expired_is_the_only_blocking_finding_the_engine_can_ever_emit()
+    public void Worker_screening_expired_and_staff_not_started_are_the_only_blocking_findings_the_engine_can_emit()
     {
         // Trigger every other rule at once: missing WSC would only add a Warning, so use a
         // staff/participant/context combination that also fires WSC_EXPIRED plus every
-        // remaining Warning-producing rule, and assert no finding other than WSC_EXPIRED is
-        // ever Blocking - this guards the invariant against future drift.
+        // remaining Warning-producing rule, and assert no finding other than WSC_EXPIRED
+        // (or STAFF_NOT_STARTED, a start date still ahead) is ever Blocking - this guards
+        // the invariant against future drift.
         var staff = CompliantStaff();
         staff.WorkerScreeningExpiryDate = new DateOnly(2026, 2, 12); // expired -> WSC_EXPIRED
         staff.DriverLicenceExpiryDate = ServiceDate.AddDays(-1); // -> CREDENTIAL_EXPIRED (IsFirstAidQualified below already forces COMPETENCY_MISSING, so an expired first aid date wouldn't fire this rule)
