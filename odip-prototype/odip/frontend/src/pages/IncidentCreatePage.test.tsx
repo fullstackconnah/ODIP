@@ -164,7 +164,7 @@ function reviewValueFor(label: string) {
 }
 
 /** Who authorised a register entry and when: with both, an active entry reads Authorised (isRpAuthorised). */
-const AUTHORISED = { authorisedBy: 'Dr Chen', authorisationDate: '2026-09-01' }
+const AUTHORISED = { authorisedBy: 'Dr Chen', authorisationDate: '2026-09-01', isAuthorised: true }
 
 beforeEach(() => {
   mockUseIncident.mockReturnValue({ data: undefined })
@@ -918,7 +918,7 @@ describe('IncidentCreatePage — INC-04 determination frozen on edit', () => {
     mockUseIncident.mockReturnValue({ data: existingRpIncident })
     // The entry now reads Not authorised; the incident keeps what it was stored with, so nothing is forced.
     mockUseRestrictivePractices.mockReturnValue({ data: [
-      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room, acute crisis.', reviewDate: '2026-12-01', isActive: true, authorisedBy: null, authorisationDate: null },
+      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room, acute crisis.', reviewDate: '2026-12-01', isActive: true, authorisedBy: null, authorisationDate: null, isAuthorised: false },
     ] })
     const user = userEvent.setup()
     renderCreatePage({ pathname: '/incidents/incident-1/edit' })
@@ -1481,7 +1481,7 @@ describe('IncidentCreatePage — the current step is marked', () => {
 // incident down the same path as "None of these"; and "None of these" can be added to the register by a coordinator from here.
 describe('IncidentCreatePage — restrictive practice authorisation', () => {
   const authorisedEntry = { id: 'rp-a', participantId: 'participant-1', type: 'PhysicalRestraint', description: 'Two-person hold during transfers.', reviewDate: null, isActive: true, ...AUTHORISED }
-  const notAuthorisedEntry = { id: 'rp-n', participantId: 'participant-1', type: 'PhysicalRestraint', description: 'Hand-over-hand guidance.', reviewDate: null, isActive: true, authorisedBy: null, authorisationDate: null }
+  const notAuthorisedEntry = { id: 'rp-n', participantId: 'participant-1', type: 'PhysicalRestraint', description: 'Hand-over-hand guidance.', reviewDate: null, isActive: true, authorisedBy: null, authorisationDate: null, isAuthorised: false }
 
   async function toPhysicalRestraintStep(user: ReturnType<typeof userEvent.setup>) {
     await fillBasicsMinimallyAndNext(user, { title: 'RP incident', incidentTypeOption: /Restrictive Practice Use/i, selectParticipant: true })

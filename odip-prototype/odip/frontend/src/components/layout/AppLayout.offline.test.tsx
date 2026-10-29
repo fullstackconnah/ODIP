@@ -96,7 +96,7 @@ describe('Cold offline start', () => {
     vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false)
     localStorage.setItem('odip_token', 'tok')
     const week = { shifts: [{ id: 's1', participantName: 'Jordan Smith', serviceDate: '2026-10-28', startTime: '09:00:00', endTime: '13:00:00', status: 'Published' }], tripAssignments: [], timeZoneId: 'Australia/Sydney' }
-    writeSaved('u1', 'shifts:2026-10-26:2026-11-01', week)
+    writeSaved('u1', 'shifts:2026-10-25:2026-11-02', week)
     const path = window.location.pathname
 
     render(

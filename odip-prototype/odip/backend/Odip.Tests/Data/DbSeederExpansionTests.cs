@@ -124,7 +124,7 @@ public class DbSeederExpansionTests
 
         Assert.NotNull(chemicalRestraint.RelatedMedicationId);
         // The demo restraint is authorised on its entry, so the medicine reads as authorised (M16).
-        Assert.True(RestrictivePracticeAuthorisation.IsAuthorised(chemicalRestraint));
+        Assert.True(RestrictivePracticeAuthorisation.IsAuthorised(chemicalRestraint, new DateOnly(2100, 1, 1)));
         var linkedMedication = await db.ParticipantMedications.IgnoreQueryFilters()
             .SingleAsync(m => m.Id == chemicalRestraint.RelatedMedicationId);
         Assert.True(linkedMedication.IsChemicalRestraint);
