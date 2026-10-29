@@ -45,8 +45,8 @@ export function useUpdateRestrictivePractice() {
         qc.invalidateQueries({ queryKey: ['restrictive-practices', res.data.participantId] })
         qc.invalidateQueries({ queryKey: ['participant', res.data.participantId] })
         qc.invalidateQueries({ queryKey: ['participants'] })
-      qc.invalidateQueries({ queryKey: ['medications'] })
-      qc.invalidateQueries({ queryKey: ['medication'] })
+        qc.invalidateQueries({ queryKey: ['medications'] })
+        qc.invalidateQueries({ queryKey: ['medication'] })
       }
     },
   })

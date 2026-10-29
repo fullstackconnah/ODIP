@@ -226,6 +226,24 @@ describe('MedicationFormPage — view mode for ReadOnly', () => {
     expect(mockUpdateMutateAsync).not.toHaveBeenCalled()
     localStorage.clear()
   })
+
+  it('shows a stored reporting answer to a view-only user, disabled', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'ReadOnly' }))
+    mockUseMedication.mockReturnValue({
+      data: {
+        ...med, isChemicalRestraint: true, purpose: 'Agitation',
+        linkedRestrictivePractice: { id: 'rp-1', isActive: true, requiresReporting: true, authorisedBy: null, authorisationDate: null },
+      },
+      isLoading: false,
+    })
+    renderEditPage('med-1')
+
+    const yes = screen.getByRole('radio', { name: 'Yes' })
+    expect(yes).toBeDisabled()
+    expect(yes).toBeChecked()
+    expect(screen.getByRole('radio', { name: 'No' })).toBeDisabled()
+    localStorage.clear()
+  })
 })
 
 // NAV F7: the form is opened from the /medications register as well as from the participant's Medications tab.

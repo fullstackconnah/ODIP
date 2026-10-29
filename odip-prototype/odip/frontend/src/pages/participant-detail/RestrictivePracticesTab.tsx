@@ -87,8 +87,8 @@ function PracticeCard({ practice, canWrite, onEdit, onDelete }: {
           </span>
           {practice.isActive && <RpAuthorisationBadge authorised={!unauthorised} />}
           {unauthorised && practice.requiresReporting === true && (
-            <span className="text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap bg-[var(--color-error-container)] text-[var(--color-on-error-container)]">
-              Report to NDIS Commission
+            <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap bg-[var(--color-error-container)] text-[var(--color-on-error-container)]">
+              <AlertTriangle className="w-3 h-3" /> Report to NDIS Commission
             </span>
           )}
           {practice.type === 'Unclassified' && (
@@ -274,6 +274,10 @@ export default function RestrictivePracticesTab({ participantId }: { participant
   const newlyLinking = !isLinked && !!form.relatedMedicationId && form.isActive
   const deactivating = isLinked && !!editingPractice?.isActive && !form.isActive
   const reactivating = isLinked && !editingPractice?.isActive && form.isActive
+  const consequenceRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (deactivating || reactivating) consequenceRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [deactivating, reactivating])
 
   return (
     <div className="space-y-6">
@@ -356,7 +360,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
               <Callout tone={modalError.stale ? 'warning' : 'error'}>{modalError.message}</Callout>
             </div>
           )}
-          <FormField label="Type" hint={isLinked ? `This entry is linked to ${linkedMedLabel}, so it stays a chemical restraint.` : undefined}>
+          <FormField label="Type" hint={isLinked ? 'Set by the linked medicine, so it stays a chemical restraint.' : undefined}>
             <Dropdown
               variant="form"
               disabled={isLinked}
@@ -379,7 +383,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
               label="Linked medication"
               hint={
                 isLinked
-                  ? `This entry is linked to ${linkedMedLabel}. To stop this restraint, untick Chemical restraint on the medicine or deactivate this entry.`
+                  ? 'To stop this restraint, untick Chemical restraint on the medicine or deactivate this entry.'
                   : medicationItems.length === 1
                     ? 'This participant has no active medications on record without an entry — add one on the Medications tab first, or leave this unlinked for now.'
                     : 'The prescribed medication this chemical restraint is based on'
@@ -421,7 +425,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
             </>
           )}
           {!form.authorised && (
-            <FormField label="Does this need to be reported to the NDIS Commission?" hint="Saved on the register entry.">
+            <FormField label="Does this need to be reported to the NDIS Commission?">
               <ToggleGroup
                 ariaLabel="Does this need to be reported to the NDIS Commission?"
                 options={[{ key: 'true', label: 'Yes' }, { key: 'false', label: 'No' }]}
@@ -442,11 +446,15 @@ export default function RestrictivePracticesTab({ participantId }: { participant
               className="w-4 h-4 rounded border-[var(--color-border)]"
             />
           </FormField>
-          {deactivating && (
-            <Callout tone="warning">Deactivating this entry also unticks Chemical restraint on {linkedMedLabel}. Its history is kept.</Callout>
-          )}
-          {reactivating && (
-            <Callout tone="info">Reactivating this entry also ticks Chemical restraint on {linkedMedLabel}.</Callout>
+          {(deactivating || reactivating) && (
+            <div ref={consequenceRef} className="scroll-mb-24">
+              {deactivating && (
+                <Callout tone="warning">Deactivating this entry also unticks Chemical restraint on {linkedMedLabel}. Its history is kept.</Callout>
+              )}
+              {reactivating && (
+                <Callout tone="info">Reactivating this entry also ticks Chemical restraint on {linkedMedLabel}.</Callout>
+              )}
+            </div>
           )}
         </div>
       </Modal>

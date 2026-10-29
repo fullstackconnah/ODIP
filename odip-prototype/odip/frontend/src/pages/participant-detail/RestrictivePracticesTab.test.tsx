@@ -844,6 +844,7 @@ describe('RestrictivePracticesTab — medicine-linked entries', () => {
     })
     render(<RestrictivePracticesTab participantId="participant-1" />)
     expect(screen.getByText('Report to NDIS Commission')).toBeInTheDocument()
+    expect(screen.getByText('Report to NDIS Commission').querySelector('svg')).not.toBeNull()
     expect(screen.getByText('No report needed')).toBeInTheDocument()
     expect(screen.getByText(/Linked to Risperidone 1mg \(ceased\)/)).toBeInTheDocument()
   })
@@ -863,11 +864,35 @@ describe('RestrictivePracticesTab — medicine-linked entries', () => {
     mockUseRestrictivePractices.mockReturnValue({ data: [linked()], isLoading: false })
     render(<RestrictivePracticesTab participantId="participant-1" />)
     await user.click(screen.getByRole('button', { name: 'Edit' }))
-    expect(screen.getByText('This entry is linked to Risperidone 1mg, so it stays a chemical restraint.')).toBeInTheDocument()
+    expect(screen.getByText('Set by the linked medicine, so it stays a chemical restraint.')).toBeInTheDocument()
+    expect(screen.getByText('To stop this restraint, untick Chemical restraint on the medicine or deactivate this entry.')).toBeInTheDocument()
 
     await user.click(screen.getByRole('checkbox', { name: /^active/i }))
     expect(screen.getByText('Deactivating this entry also unticks Chemical restraint on Risperidone 1mg. Its history is kept.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save and untick medicine' })).toBeInTheDocument()
+  })
+
+  it('scrolls the deactivating and reactivating callouts into view above the sticky footer', async () => {
+    const user = userEvent.setup()
+    const scrollIntoView = vi.spyOn(Element.prototype, 'scrollIntoView')
+    mockUseRestrictivePractices.mockReturnValue({ data: [linked()], isLoading: false })
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    scrollIntoView.mockClear()
+    await user.click(screen.getByRole('checkbox', { name: /^active/i }))
+    const wrapper = screen.getByText(/Deactivating this entry also unticks/).closest('.scroll-mb-24')
+    expect(wrapper).not.toBeNull()
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' })
+    expect(scrollIntoView.mock.contexts).toContain(wrapper)
+    scrollIntoView.mockRestore()
+  })
+
+  it('does not show the removed reporting hint', async () => {
+    const user = userEvent.setup()
+    mockUseRestrictivePractices.mockReturnValue({ data: [makePractice()], isLoading: false })
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    expect(screen.queryByText('Saved on the register entry.')).not.toBeInTheDocument()
   })
 
   it('explains why a linked entry cannot be deleted and offers to open it', async () => {
