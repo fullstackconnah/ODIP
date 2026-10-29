@@ -52,6 +52,21 @@ export function useUpdateTask() {
   })
 }
 
+/** The one-tap Done: the server sets status and completion date on the stored row and nothing else, so no other field the caller read can be written back stale. */
+export function useCompleteTask() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, completedDate }: { id: string; completedDate: string }) =>
+      apiPostRaw<boolean>(`/tasks/${id}/complete`, { completedDate }),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['tasks'] })
+      qc.invalidateQueries({ queryKey: ['task', vars.id] })
+      qc.invalidateQueries({ queryKey: ['trip-tasks'] })
+      qc.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}
+
 export function useDeleteTask() {
   const qc = useQueryClient()
   return useMutation({
