@@ -55,21 +55,24 @@ public class NotificationsController : ControllerBase
             parsed.Add((eventType, channel, dto.Enabled));
         }
 
+        // One query for the caller's rows. SuperAdmin sees every tenant, so a key can repeat: keep the first, as FirstOrDefault did.
+        var existing = (await _db.NotificationPreferences.Where(p => p.UserId == callerId.Value).ToListAsync(ct))
+            .GroupBy(p => (p.EventType, p.Channel))
+            .ToDictionary(g => g.Key, g => g.First());
         foreach (var (eventType, channel, enabled) in parsed)
         {
-            var row = await _db.NotificationPreferences.FirstOrDefaultAsync(
-                p => p.UserId == callerId.Value && p.EventType == eventType && p.Channel == channel, ct);
-            if (row is null)
-            {
-                _db.NotificationPreferences.Add(new NotificationPreference
-                {
-                    Id = Guid.NewGuid(), UserId = callerId.Value, EventType = eventType, Channel = channel, Enabled = enabled,
-                });
-            }
-            else
+            if (existing.TryGetValue((eventType, channel), out var row))
             {
                 row.Enabled = enabled;
+                continue;
             }
+            // Also tracked here, so a repeated key in this request updates the row just added (last value wins).
+            row = new NotificationPreference
+            {
+                Id = Guid.NewGuid(), UserId = callerId.Value, EventType = eventType, Channel = channel, Enabled = enabled,
+            };
+            _db.NotificationPreferences.Add(row);
+            existing[(eventType, channel)] = row;
         }
 
         await _db.SaveChangesAsync(ct);
