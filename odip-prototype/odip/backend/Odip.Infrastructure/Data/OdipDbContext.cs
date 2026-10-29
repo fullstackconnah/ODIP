@@ -1945,6 +1945,7 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.FileName).HasMaxLength(260).IsRequired();
             entity.Property(e => e.FileSha256).HasMaxLength(64).IsRequired();
             entity.Property(e => e.IdempotencyKey).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.ChoicesFingerprint).HasMaxLength(64);
             entity.Property(e => e.CreatedByName).HasMaxLength(200).IsRequired();
             entity.Property(e => e.UndoneByName).HasMaxLength(200);
             // A double-submitted import finds the first batch by this key (OnboardingImportService); the index is the backstop when two arrive together.

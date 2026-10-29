@@ -740,7 +740,7 @@ public class MedicationsController : ControllerBase
     {
         var flags = new List<string>();
         // Authorisation lives on the register entry only (BspInPlace and the reference are notes now). A ceased medicine raises neither flag.
-        if (m.IsChemicalRestraint && m.Status != MedicationStatus.Ceased && !(entry != null && RestrictivePracticeAuthorisation.IsAuthorised(entry)))
+        if (m.IsChemicalRestraint && m.Status != MedicationStatus.Ceased && !(entry != null && RestrictivePracticeAuthorisation.IsAuthorised(entry, providerToday)))
         {
             flags.Add("ChemicalRestraintUnauthorised");
             if (entry?.RequiresReporting == true) flags.Add("ChemicalRestraintReportable");
@@ -828,7 +828,7 @@ public class MedicationsController : ControllerBase
             StorageRequirements = m.StorageRequirements,
             Notes = m.Notes,
             PrnDosesInLast24h = prnDosesInLast24h,
-            LinkedRestrictivePractice = entry == null ? null : RestrictivePracticesController.ToDto(entry) with { RelatedMedicationName = m.Name, RelatedMedicationStatus = m.Status },
+            LinkedRestrictivePractice = entry == null ? null : RestrictivePracticesController.ToDto(entry, providerToday) with { RelatedMedicationName = m.Name, RelatedMedicationStatus = m.Status },
             CreatedAt = m.CreatedAt,
             UpdatedAt = m.UpdatedAt,
         };

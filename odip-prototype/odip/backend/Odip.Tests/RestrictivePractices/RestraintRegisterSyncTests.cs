@@ -116,7 +116,7 @@ public class RestraintRegisterSyncTests
         var entry = await db.RestrictivePractices.SingleAsync();
         Assert.Equal("Dr Chen", entry.AuthorisedBy);
         Assert.Equal(AuthDate, entry.AuthorisationDate);
-        Assert.True(RestrictivePracticeAuthorisation.IsAuthorised(entry));
+        Assert.True(RestrictivePracticeAuthorisation.IsAuthorised(entry, new DateOnly(2100, 1, 1)));
         Assert.DoesNotContain("ChemicalRestraintUnauthorised", med.ComplianceFlags);
         Assert.DoesNotContain("ChemicalRestraintReportable", med.ComplianceFlags);
         Assert.NotNull(med.LinkedRestrictivePractice);
@@ -287,7 +287,7 @@ public class RestraintRegisterSyncTests
 
         await UpdateOkAsync(c, med.Id, AsUpdate(RestraintDto(true, "Dr Chen", AuthDate), expectedEntryUpdatedAt: entry.UpdatedAt));
 
-        Assert.True(RestrictivePracticeAuthorisation.IsAuthorised(await db.RestrictivePractices.AsNoTracking().SingleAsync()));
+        Assert.True(RestrictivePracticeAuthorisation.IsAuthorised(await db.RestrictivePractices.AsNoTracking().SingleAsync(), new DateOnly(2100, 1, 1)));
     }
 
     [Fact]

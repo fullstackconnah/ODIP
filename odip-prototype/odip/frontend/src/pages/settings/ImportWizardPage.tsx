@@ -151,7 +151,9 @@ export default function ImportWizardPage() {
   const [inviting, setInviting] = useState(false)
   const [blockers, setBlockers] = useState<ImportUndoBlockerDto[]>([])
   // One key per file: a retry after a lost response sends the same key and gets the same batch back, never a second import.
+  // It is renewed when a choice that changes what the commit writes changes (runImport), so the server never sees one key with two sets of choices.
   const idempotencyKey = useRef(newCompletionRequestId())
+  const keyedChoices = useRef<string | null>(null)
 
   if (!kind || (kind === 'staff' && staffFromPayroll)) return <Navigate to={BACK_TO} replace />
   const { noun, title, listNoun, listTo, undone: undoneWord, undoRule, undoNote } = KIND[kind]
@@ -214,6 +216,9 @@ export default function ImportWizardPage() {
     setConfirming(false)
     setProblem(null)
     if (!file || !kind) return
+    const choices = JSON.stringify([kind, file.name, file.size, file.lastModified, mapping, landing, extra])
+    if (keyedChoices.current !== null && keyedChoices.current !== choices) idempotencyKey.current = newCompletionRequestId()
+    keyedChoices.current = choices
     try {
       setResult(await commit.mutateAsync({ kind, file, mapping, landing: landing ?? undefined, idempotencyKey: idempotencyKey.current, extra }))
     } catch (err) {

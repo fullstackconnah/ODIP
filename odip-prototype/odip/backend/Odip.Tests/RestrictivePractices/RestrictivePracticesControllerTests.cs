@@ -12,6 +12,7 @@ using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
 using Xunit;
 using Odip.Tests.Support;
+using Odip.Tests.Medications;
 
 namespace Odip.Tests.RestrictivePractices;
 
@@ -186,6 +187,28 @@ public class RestrictivePracticesControllerTests
     }
 
     // ── List / filtering ─────────────────────────────────────────────────
+
+    // The register read carries the one authorised verdict, judged on the organisation's date (audit M14): 14:30 UTC on 29 Oct is already 30 Oct in Sydney.
+    [Theory]
+    [InlineData("2026-10-30", true)]
+    [InlineData("2026-10-31", false)]
+    public async Task GetForParticipant_IsAuthorised_FollowsTheOrganisationsToday(string authorisationDate, bool expected)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        db.RestrictivePractices.Add(new RestrictivePractice
+        {
+            Id = Guid.NewGuid(), TenantId = participant.TenantId, ParticipantId = participant.Id, Type = RestrictivePracticeType.Seclusion,
+            Description = "Seclusion room", IsActive = true, AuthorisedBy = "Dr Chen", AuthorisationDate = DateOnly.Parse(authorisationDate),
+        });
+        db.SaveChanges();
+        var controller = new RestrictivePracticesController(db, new Odip.Infrastructure.Services.SafetyNoteSyncService(db), FakeClock.AtUtc(2026, 10, 29, 14, 30));
+
+        var result = await controller.GetForParticipant(participant.Id, includeInactive: false, CancellationToken.None);
+
+        var items = Assert.IsType<ApiResponse<List<RestrictivePracticeDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
+        Assert.Equal(expected, items.Single().IsAuthorised);
+    }
 
     [Fact]
     public async Task GetForParticipant_DefaultExcludesInactive()

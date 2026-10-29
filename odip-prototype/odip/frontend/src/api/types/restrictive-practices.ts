@@ -47,6 +47,8 @@ export interface RestrictivePracticeDto {
   /** Whether this needs reporting to the NDIS Commission; null until someone answers. */
   requiresReporting?: boolean | null
   isActive: boolean
+  /** The server's one "Authorised" verdict (active, who and when recorded, dated on or before the organisation's today). Show it; never recompute it. */
+  isAuthorised: boolean
   createdAt: string
   updatedAt: string
 }

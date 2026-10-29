@@ -226,6 +226,29 @@ public class TasksController : ControllerBase
         }));
     }
 
+    /// <summary>
+    /// The dashboard's Done: sets status and completion date on the stored row and nothing else, so a title, owner or note changed since the caller read the task is never overwritten (Update rewrites every field).
+    /// Same audience as Update; an already closed task is a 409, as is a leave cover task, which closes itself when the shift is reassigned.
+    /// </summary>
+    [HttpPost("{id:guid}/complete")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<bool>>> Complete(Guid id, [FromBody] CompleteTaskDto dto, CancellationToken ct)
+    {
+        var t = await _db.BookingTasks.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (t == null) return NotFound(ApiResponse<bool>.Fail("Task not found"));
+        if (t.TaskType == TaskType.BudgetEmergencyReview && !BudgetReviewAudience.MayAct(User)) return Forbid();
+        if (t.Status is TaskItemStatus.Completed or TaskItemStatus.Cancelled || t.TaskType == TaskType.LeaveCoverage)
+            return Conflict(ApiResponse<bool>.Fail("Task is already closed or cannot be marked done here."));
+
+        // Whoever completes the review owns it (as Update does when the request names no owner).
+        if (t.TaskType == TaskType.BudgetEmergencyReview && t.OwnerId == null
+            && Guid.TryParse(User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var reviewer))
+            t.OwnerId = reviewer;
+        t.Status = TaskItemStatus.Completed; t.CompletedDate = dto.CompletedDate; t.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+        return Ok(ApiResponse<bool>.Ok(true));
+    }
+
     [HttpDelete("{id:guid}")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<bool>>> Delete(Guid id, CancellationToken ct)
