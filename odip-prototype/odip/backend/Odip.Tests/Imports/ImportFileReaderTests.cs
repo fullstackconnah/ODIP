@@ -40,6 +40,18 @@ public class ImportFileReaderTests
     }
 
     [Fact]
+    public void Accepts_exactly_2000_data_rows_among_blank_lines_and_keeps_the_last_one()
+    {
+        var lines = Enumerable.Range(0, 2000).Select(i => $"A{i},B{i}").ToList();
+        lines.Insert(1000, "");
+        lines.Insert(10, "");
+        var table = ImportFileReader.Read(Utf8("First name,Last name\n" + string.Join("\n", lines) + "\n"), "people.csv");
+        Assert.Equal(2000, table.Rows.Count);
+        Assert.Equal("A1999", table.Cell(table.Rows[^1], 0));
+        Assert.Equal(2003, table.Rows[^1].RowNumber); // header + 2,000 rows + 2 blank lines
+    }
+
+    [Fact]
     public void Refuses_a_csv_far_over_the_row_limit_with_its_true_row_count()
     {
         var csv = "First name,Last name\n" + string.Concat(Enumerable.Range(0, 50_000).Select(i => $"A{i},B{i}\n"));
