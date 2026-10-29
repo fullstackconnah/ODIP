@@ -125,7 +125,7 @@ public class EmploymentHeroStaffSyncTests
     }
 
     [Fact]
-    public async Task Of_two_same_name_EH_employees_the_first_is_held_for_the_ODIP_namesake_and_the_second_is_created
+    public async Task Of_two_same_name_EH_employees_the_first_is_held_for_the_ODIP_namesake_and_the_second_is_created()
     {
         var (db, tenant) = await OrganisationAsync(t => EhFixture.Staff(t, "Jane", "Smith", "jane@gmail.com"));
         await using var _ = db;
