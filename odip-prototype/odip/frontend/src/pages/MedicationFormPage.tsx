@@ -264,11 +264,13 @@ export default function MedicationFormPage() {
 
   // The reporting radiogroup is a custom control, so RHF cannot focus it itself.
   const onInvalid = () => {
-    const first = document.querySelector<HTMLElement>('form [aria-invalid="true"]')
-    if (first?.getAttribute('role') === 'radiogroup') {
+    // Wait a tick: aria-invalid is only on the DOM after the errors render.
+    setTimeout(() => {
+      const first = document.querySelector<HTMLElement>('form [aria-invalid="true"]')
+      if (first?.getAttribute('role') !== 'radiogroup') return
       first.scrollIntoView({ block: 'center' })
       first.querySelector<HTMLElement>('[role=radio]')?.focus()
-    }
+    }, 0)
   }
 
   const onSubmit = async (data: MedicationFormData) => {
@@ -670,7 +672,7 @@ export default function MedicationFormPage() {
                 <p className="text-xs text-[var(--color-muted-foreground)]">For your records only. These don't decide whether it's authorised.</p>
               </div>
               {linkedEntry && participantId && (
-                <Link to={`/participants/${participantId}?tab=restrictive-practices`} className="inline-block text-sm text-[var(--color-primary)] hover:underline">
+                <Link to={`/participants/${participantId}?tab=restrictive-practices`} className="inline-flex min-h-[var(--control-h)] items-center text-sm text-[var(--color-primary)] hover:underline">
                   View on the register
                 </Link>
               )}
