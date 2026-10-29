@@ -62,6 +62,7 @@ public static class ImportFundingRows
     public static void Match(List<ImportRowPlan> plans, IReadOnlyList<ImportParticipantMatch> participants)
     {
         var lookup = new ImportParticipantLookup(participants);
+        var byName = participants.ToLookup(p => NameKey($"{p.FirstName} {p.LastName}".Trim()));
         foreach (var plan in plans.Where(p => p.Funding != null && p.Status != ImportRowStatus.Skipped))
         {
             var line = plan.Funding!;
@@ -70,13 +71,13 @@ public static class ImportFundingRows
             {
                 // A row that can't be imported still says whose plan it belongs to, so Check can keep the rest of that plan out.
                 if (found.Count == 1) plan.Name = (found[0].FirstName + " " + found[0].LastName).Trim();
-                if ((found.Count == 1 ? found[0] : Likely(line, participants)) is { } owner) plan.Funding = line with { ParticipantId = owner.Id };
+                if ((found.Count == 1 ? found[0] : Likely(line, participants, byName)) is { } owner) plan.Funding = line with { ParticipantId = owner.Id };
                 continue;
             }
             if (found.Count == 0)
             {
                 plan.Refuse($"No participant in Bunya Support has {(line.NdisKey is null ? "this name and date of birth" : "this NDIS number")}. Import or add them first.");
-                if (Likely(line, participants) is { } owner) plan.Funding = line with { ParticipantId = owner.Id };
+                if (Likely(line, participants, byName) is { } owner) plan.Funding = line with { ParticipantId = owner.Id };
             }
             else if (found.Count > 1)
                 plan.Refuse(line.NdisKey is null
@@ -103,12 +104,14 @@ public static class ImportFundingRows
     /// ("43000O001"), or whose name (and date of birth, when the row gives one) is the row's. A valid number nobody holds links to nobody: it is most
     /// likely someone not imported yet, and numbers run close together. Null unless exactly one fits. It only keeps that participant's plan out.
     /// </summary>
-    private static ImportParticipantMatch? Likely(ImportFundingLine line, IReadOnlyList<ImportParticipantMatch> participants)
+    private static ImportParticipantMatch? Likely(ImportFundingLine line, IReadOnlyList<ImportParticipantMatch> participants, ILookup<string, ImportParticipantMatch> byName)
     {
-        var fits = participants.Where(p =>
-                (line.UnreadNdis != null && p.NdisNumber != null && OneOff(line.UnreadNdis, ImportParticipantRows.NdisKey(p.NdisNumber)))
-                || (line.FullName.Contains(' ') && NameKey($"{p.FirstName} {p.LastName}".Trim()) == NameKey(line.FullName) && (line.DateOfBirth is null || line.DateOfBirth == p.DateOfBirth)))
-            .Take(2).ToList();
+        var fits = line.FullName.Contains(' ')
+            ? byName[NameKey(line.FullName)].Where(p => line.DateOfBirth is null || line.DateOfBirth == p.DateOfBirth).Take(2).ToList()
+            : [];
+        // shortcut: unread numbers are rare, so this scan is linear only for them; index the numbers if that stops being true.
+        if (line.UnreadNdis != null)
+            fits.AddRange(participants.Where(p => p.NdisNumber != null && OneOff(line.UnreadNdis, ImportParticipantRows.NdisKey(p.NdisNumber)) && !fits.Any(f => ReferenceEquals(f, p))).Take(2).ToList());
         return fits.Count == 1 ? fits[0] : null;
     }
 
