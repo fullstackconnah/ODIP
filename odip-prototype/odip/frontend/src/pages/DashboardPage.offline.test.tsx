@@ -17,7 +17,7 @@ vi.mock('@/api/client', async (importOriginal) => ({ ...(await importOriginal<ty
 const ZERO_SUMMARY = {
   upcomingTripCount: 0, activeParticipantCount: 0, outstandingTaskCount: 0, overdueTaskCount: 0, conflictCount: 0,
   tripsMissingAccommodation: 0, tripsMissingVehicles: 0, tripsMissingStaff: 0, openIncidentCount: 0, qscOverdueCount: 0,
-  upcomingTrips: [], overdueTasks: [],
+  upcomingTrips: [],
 }
 const EMPTY_PAGE = { items: [], totalCount: 0, page: 1, pageSize: 1, totalPages: 0, hasNext: false, hasPrevious: false }
 

@@ -14,8 +14,8 @@ using Odip.Tests.Support;
 namespace Odip.Tests.Tasks;
 
 /// <summary>
-/// Item 9 of the connection map: DashboardController.GetSummary's OverdueTaskCount/OverdueTasks
-/// must count and list a generic obligation task (no TripInstanceId) exactly like a trip-linked
+/// Item 9 of the connection map: DashboardController.GetSummary's OverdueTaskCount
+/// must count a generic obligation task (no TripInstanceId) exactly like a trip-linked
 /// one — same EF InMemory + Moq&lt;ICurrentTenant&gt; pattern as TasksControllerTests.
 /// </summary>
 public class DashboardControllerTests
@@ -23,7 +23,7 @@ public class DashboardControllerTests
     private static OdipDbContext CreateDb(string dbName) => TestDb.Create(dbName);
 
     [Fact]
-    public async Task GetSummary_OverdueTripLessGenericTask_IsCountedAndListedWithNullTripName()
+    public async Task GetSummary_OverdueTripLessGenericTask_IsCounted()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -39,10 +39,6 @@ public class DashboardControllerTests
 
         var body = Assert.IsType<ApiResponse<DashboardSummaryDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
         Assert.Equal(1, body.Data!.OverdueTaskCount);
-        var task = Assert.Single(body.Data.OverdueTasks);
-        Assert.Null(task.TripInstanceId);
-        Assert.Null(task.TripName);
-        Assert.Equal("incident-qsc:overdue", task.SourceKey);
     }
 
     [Fact]
@@ -62,7 +58,6 @@ public class DashboardControllerTests
 
         var body = Assert.IsType<ApiResponse<DashboardSummaryDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
         Assert.Equal(0, body.Data!.OverdueTaskCount);
-        Assert.Empty(body.Data.OverdueTasks);
         // OutstandingTaskCount is not date-gated — every non-Completed/Cancelled task counts.
         Assert.Equal(1, body.Data.OutstandingTaskCount);
     }
