@@ -1,18 +1,22 @@
-import { useId, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowUpRight, CalendarDays, CalendarOff, ChevronLeft, ChevronRight } from 'lucide-react'
-import type { LeaveBarDto, RosterBoardDto, ShiftDto, TripBarDto } from '@/api/types'
+import { useId, useRef, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { ArrowUpRight, CalendarOff, ChevronLeft, ChevronRight, Plus } from 'lucide-react'
+import type { RosterBoardDto } from '@/api/types'
 import { useRosterPersonWeek } from '@/api/hooks'
 import { Button } from '@/components/Button'
 import { EmptyState } from '@/components/EmptyState'
 import { PageState } from '@/components/PageState'
 import { TAP_FLOOR } from '@/components/tapArea'
+import { useMeasuredWidth } from '@/hooks/useMeasuredWidth'
+import { usePermissions } from '@/lib/permissions'
 import { retryingAfterError } from '@/lib/queryPhase'
-import { ShiftChip } from './ShiftChip'
+import { PersonWeekGrid, DAY_VIEW_BELOW, type Bar } from './PersonWeekGrid'
+import { PersonWeekPanel } from './PersonWeekPanel'
+import type { ShiftSlideOverTarget } from './ShiftSlideOver'
 import { TripBar } from './TripBar'
 import { LeaveBar } from './LeaveBar'
-import { barOverlapsWeek, daysOfWeek, formatDayAccessibleName, formatDayHeader, formatHoursMeter, formatWeekRange, isToday, shiftWeek, weekStartFromDateParam } from '../lib/roster'
-import { firstName } from '../lib/rosterDrag'
+import { barOverlapsWeek, daysOfWeek, formatHoursMeter, formatWeekRange, isToday, shiftWeek, weekStartFromDateParam } from '../lib/roster'
+import { weekSegments } from '../lib/weekGrid'
 
 export type PersonWeekProps = {
   kind: 'staff' | 'participant'
@@ -22,28 +26,29 @@ export type PersonWeekProps = {
   headingLevel: 2 | 3 | 4
 }
 
-// The board's header tints (RosterGrid.tsx:73), copied rather than shared so the board's grid stays untouched.
-const HEADER_BG_TODAY = 'bg-[color-mix(in_srgb,var(--color-primary)_6%,var(--color-surface-container-low))]'
-const noop = () => {}
-
-type Bar = { key: string; trip?: TripBarDto; leave?: LeaveBarDto; start: string; end: string }
-
 /** The row the person-filtered board returned for this person, or undefined when they aren't on the roster. */
 function rowOf(data: RosterBoardDto, personId: string) {
   return data.groupBy === 'Staff' ? data.staffRows.find(r => r.staffId === personId) : data.participantRows.find(r => r.participantId === personId)
 }
 
 /**
- * One person's roster week (spec 2026-10-28), read-only: the board's own chips and bars for one staff member or participant, by day.
- * Every change happens on the board; a chip opens it on that week with the shift's editor open.
+ * One person's roster week as a time grid (spec 2026-10-29): hours down, days across, a shift drawn at its true length. A block opens the board's
+ * shift panel in place and an empty slot starts a new shift at that time. Under 672px the grid is one day at a time, picked from a strip.
  */
-// The week is a grid of seven columns once its box (@container) is 58rem wide, 129px a column over the board's 127px floor; below that, a list of days.
-export function PersonWeek({ kind, personId, name, headingLevel }: PersonWeekProps) {
-  const navigate = useNavigate()
+export function PersonWeek({ kind, personId, headingLevel }: PersonWeekProps) {
+  const sectionRef = useRef<HTMLElement>(null)
+  const width = useMeasuredWidth(sectionRef)
+  const { canWrite } = usePermissions()
+  const [panelTarget, setPanelTarget] = useState<ShiftSlideOverTarget | null>(null)
+  // The panel mounts on the first open and stays, so it keeps its exit motion and focus return.
+  const [panelUsed, setPanelUsed] = useState(false)
   const [params, setParams] = useSearchParams()
   const week = weekStartFromDateParam(params.get('week'))
   const query = useRosterPersonWeek(kind, personId, week)
   const { data, isPlaceholderData, isLoading, isError, refetch } = query
+  // The previous week's Sunday overnight carries onto Monday. Never blocks: placeholder or failed, there is simply no tail.
+  const prev = useRosterPersonWeek(kind, personId, shiftWeek(week, -1))
+  const prevWeekShifts = (prev.data && !prev.isPlaceholderData ? rowOf(prev.data, personId) : undefined)?.shifts ?? []
   const [announcement, setAnnouncement] = useState('')
   const spanId = useId()
   const Heading = `h${headingLevel}` as 'h2' | 'h3' | 'h4'
@@ -51,6 +56,19 @@ export function PersonWeek({ kind, personId, name, headingLevel }: PersonWeekPro
 
   // The span answers the click at once, from the address; the days below come from the data they belong to.
   const span = formatWeekRange(daysOfWeek(week))
+  const open = (t: ShiftSlideOverTarget) => {
+    setPanelTarget(t)
+    setPanelUsed(true)
+  }
+  const createAt = (serviceDate: string, minute?: number) => {
+    const startTime = minute === undefined ? undefined : `${pad(Math.floor(minute / 60))}:${pad(minute % 60)}`
+    open(
+      kind === 'staff'
+        ? { mode: 'create', staffId: personId, serviceDate, startTime, focusField: 'participant' }
+        : { mode: 'create', participantId: personId, staffId: null, serviceDate, startTime, focusField: 'staff' },
+    )
+  }
+  const weekDays = daysOfWeek(week)
   const boardHref = kind === 'staff' ? `/rostering?date=${week}` : `/rostering?date=${week}&participant=${personId}`
 
   function goTo(target: string | null) {
@@ -69,7 +87,7 @@ export function PersonWeek({ kind, personId, name, headingLevel }: PersonWeekPro
   const failed = !data && (isError || retryingAfterError(query))
 
   let body: React.ReactNode
-  if (loading) body = <WeekSkeleton />
+  if (loading) body = <WeekSkeleton dayView={width !== undefined && width > 0 && width < DAY_VIEW_BELOW} />
   else if (failed) body = <PageState kind="error" noun="roster week" onRetry={() => refetch()} />
   else if (data && !row && !isPlaceholderData) {
     body = <EmptyState icon={CalendarOff} size="inline" title="Not on the roster" description={kind === 'staff' ? 'Only active staff appear on the roster.' : 'Only active participants appear on the roster.'} />
@@ -79,76 +97,33 @@ export function PersonWeek({ kind, personId, name, headingLevel }: PersonWeekPro
       ...('leave' in row ? row.leave.map((l, i) => ({ key: `leave-${l.startDate}-${i}`, leave: l, start: l.startDate, end: l.endDate })) : []),
       ...row.tripBars.map(t => ({ key: `trip-${t.tripInstanceId}`, trip: t, start: t.startDate, end: t.endDate })),
     ].filter(b => barOverlapsWeek(b.start, b.end, days))
-    const label = (s: ShiftDto) => (kind === 'staff' ? s.participantName : s.staffName ?? '')
-    const shifts = [...row.shifts].sort((a, b) => a.startTime.localeCompare(b.startTime) || label(a).localeCompare(label(b)))
     const renderBar = (b: Bar, barDays: string[], fullWidth?: boolean) => (b.trip ? <TripBar tripBar={b.trip} days={barDays} /> : <LeaveBar leave={b.leave!} days={barDays} fullWidth={fullWidth} />)
 
-    body = shifts.length === 0 && bars.length === 0 ? (
-      <EmptyState
-        icon={CalendarDays}
-        size="inline"
-        title="Nothing rostered this week"
-        description={`${firstName(name)} has no shifts this week. Shifts added on the roster board show here.`}
-        action={{ label: 'Open in roster', to: boardHref }}
-      />
-    ) : (
+    body = (
       <div className={isPlaceholderData ? 'opacity-60' : undefined}>
-        <ol className="flex flex-col gap-3 @[58rem]:grid @[58rem]:grid-cols-7 @[58rem]:gap-0 @[58rem]:divide-x @[58rem]:divide-border @[58rem]:overflow-hidden @[58rem]:rounded-md @[58rem]:border @[58rem]:border-border">
-          {days.map(day => {
-            const { weekday, day: dayNum } = formatDayHeader(day)
-            const today = isToday(day)
-            const dayShifts = shifts.filter(s => s.serviceDate === day)
-            const dayBars = bars.filter(b => barOverlapsWeek(b.start, b.end, [day]))
-            return (
-              <li key={day} aria-current={today ? 'date' : undefined} className={`flex min-w-0 flex-col ${dayShifts.length === 0 ? `@max-[58rem]:flex-row @max-[58rem]:flex-wrap @max-[58rem]:items-baseline` : ''}`}>
-                <DayHeading className={`flex items-baseline gap-1.5 rounded-sm px-2 py-1 ${dayShifts.length > 0 ? '@max-[58rem]:self-start' : ''} @[58rem]:rounded-none @[58rem]:border-b @[58rem]:border-border @[58rem]:px-3 @[58rem]:py-1.5 ${today ? HEADER_BG_TODAY : `@[58rem]:bg-surface-container-low`}`}>
-                  <span aria-hidden="true" className="text-sm font-semibold leading-5 text-foreground">{weekday}</span>
-                  <span aria-hidden="true" className="text-[13px] tabular-nums text-muted-foreground">{dayNum}</span>
-                  <span className="sr-only">{formatDayAccessibleName(day)}{today ? ', today' : ''}</span>
-                </DayHeading>
-                {dayShifts.length === 0 ? (
-                  <p className="text-xs text-muted-foreground before:mr-1.5 before:content-['·'] @[58rem]:px-3 @[58rem]:py-2 @[58rem]:before:content-none">No shifts</p>
-                ) : (
-                  <ul className="flex flex-col gap-y-1 px-1 py-1 @[58rem]:gap-y-0.5">
-                    {dayShifts.map(s => (
-                      <li key={s.id}>
-                        <ShiftChip
-                          shift={s}
-                          canWrite={false}
-                          draggable={false}
-                          dashed={!s.staffId}
-                          context={kind}
-                          onOpen={sh => navigate(`/rostering?date=${data.weekStart}&shift=${sh.id}`)}
-                          onAssignTo={noop}
-                          onUnassign={noop}
-                          onDelete={noop}
-                        />
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {/* On the list, a day's leave and trips follow its shifts, one line a day; the grid draws them once, spanning, in the lane below. */}
-                {dayBars.length > 0 && (
-                  <div className="grid w-full grid-cols-1 gap-y-0.5 px-1 @[58rem]:hidden">
-                    {dayBars.map(b => <div key={b.key} className="contents">{renderBar(b, [day], true)}</div>)}
-                  </div>
-                )}
-              </li>
-            )
-          })}
-        </ol>
-        {bars.length > 0 && (
-          <ul aria-label="Leave and trips" className="hidden grid-cols-7 gap-y-0.5 py-1 @[58rem]:grid">
-            {/* `contents`, so each bar is the grid item and places itself across its days, as on the board (StaffRow). */}
-            {bars.map(b => <li key={b.key} className="contents">{renderBar(b, days)}</li>)}
-          </ul>
-        )}
+        {weekSegments(row.shifts, prevWeekShifts, days).length === 0 && <p className="mb-2 text-[13px] text-muted-foreground">Nothing rostered this week. Choose a time on the grid to add a shift.</p>}
+        <PersonWeekGrid
+          kind={kind}
+          personId={personId}
+          weekStart={data.weekStart}
+          days={days}
+          shifts={row.shifts}
+          prevWeekShifts={prevWeekShifts}
+          bars={bars}
+          renderBar={renderBar}
+          width={width}
+          ready={!isPlaceholderData}
+          canWrite={canWrite}
+          DayHeading={DayHeading}
+          onOpen={s => open({ mode: 'edit', shift: s })}
+          onAddAt={createAt}
+        />
       </div>
     )
   }
 
   return (
-    <section aria-labelledby={spanId} aria-busy={loading || isPlaceholderData || undefined} className="@container flex flex-col gap-3">
+    <section ref={sectionRef} aria-labelledby={spanId} aria-busy={loading || isPlaceholderData || undefined} className="@container flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex min-w-0 flex-wrap items-center gap-1">
           <Button variant="secondary" size="md" onClick={() => goTo(shiftWeek(week, -1))} aria-label="Previous week" className="w-[var(--control-h)] px-0!">
@@ -162,17 +137,28 @@ export function PersonWeek({ kind, personId, name, headingLevel }: PersonWeekPro
           </Button>
         </div>
         <Heading id={spanId} className="whitespace-nowrap font-display text-sm font-semibold tabular-nums text-foreground">{span}</Heading>
-        <Link to={boardHref} className={`${TAP_FLOOR} ml-auto inline-flex items-center gap-1 rounded-sm text-sm font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring`}>
-          Open in roster
-          <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
-        </Link>
+        <div className="ml-auto flex items-center gap-3">
+          {canWrite && (
+            <Button variant="secondary" size="md" onClick={() => createAt(weekDays.find(isToday) ?? weekDays[0])}>
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              Add shift
+            </Button>
+          )}
+          <Link to={boardHref} className={`${TAP_FLOOR} inline-flex items-center gap-1 rounded-sm text-sm font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring`}>
+            Open in roster
+            <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
+          </Link>
+        </div>
         <p role="status" aria-live="polite" className="sr-only">{announcement}</p>
       </div>
       {staffRow && <HoursLine rostered={staffRow.rosteredHours} target={staffRow.targetHours} />}
       {body}
+      {panelUsed && <PersonWeekPanel kind={kind} target={panelTarget} onClose={() => setPanelTarget(null)} />}
     </section>
   )
 }
+
+const pad = (n: number) => String(n).padStart(2, '0')
 
 /** Hours against target, the board's staff-row meter (StaffRow) on its own line. Over target says so in words, so colour is never the only cue. */
 function HoursLine({ rostered, target }: { rostered: number; target: number }) {
@@ -194,27 +180,39 @@ function HoursLine({ rostered, target }: { rostered: number; target: number }) {
   )
 }
 
-/** First load, in the week's real shape: the grid's seven headers with a few chip blocks, or three day blocks on the list. */
-function WeekSkeleton() {
-  const block = 'rounded-sm bg-muted motion-safe:animate-pulse'
+/** First load, in the grid's real shape (SHAPE §7): a header row with a few pulse blocks over hour lines, or the day strip and one column on a phone. */
+function WeekSkeleton({ dayView }: { dayView: boolean }) {
+  const block = 'absolute inset-x-0.5 rounded-sm bg-muted motion-safe:animate-pulse'
+  const body = (cols: number, blocks: { col: number; top: number; height: number }[]) => (
+    <div className={`grid ${cols === 1 ? 'grid-cols-[3rem_minmax(0,1fr)]' : 'grid-cols-[3rem_repeat(7,minmax(0,1fr))]'}`} style={{ height: 'min(70dvh, 40rem)', minHeight: '20rem' }}>
+      <div />
+      {Array.from({ length: cols }, (_, c) => (
+        <div key={c} className="relative border-l border-border">
+          {blocks.filter(b => b.col === c).map(b => <div key={b.top} className={block} style={{ top: b.top, height: b.height }} />)}
+        </div>
+      ))}
+    </div>
+  )
   return (
     <div>
       <span className="sr-only">Loading roster week…</span>
-      <div aria-hidden="true" className="hidden grid-cols-7 divide-x divide-border overflow-hidden rounded-md border border-border @[58rem]:grid">
-        {Array.from({ length: 7 }, (_, i) => (
-          <div key={i} className="flex flex-col">
-            <div className="h-8 border-b border-border bg-surface-container-low" />
-            {i < 5 && <div className="flex flex-col gap-0.5 p-1"><div className={`h-14 ${block}`} /><div className={`h-14 ${block}`} /></div>}
+      <div aria-hidden="true">
+        {dayView ? (
+          <>
+            <div className="mb-2 grid grid-cols-7">
+              {Array.from({ length: 7 }, (_, i) => <div key={i} className="m-0.5 h-[52px] rounded-md bg-muted motion-safe:animate-pulse" />)}
+            </div>
+            <div className="overflow-hidden rounded-md border border-border">{body(1, [{ col: 0, top: 48, height: 144 }, { col: 0, top: 240, height: 96 }])}</div>
+          </>
+        ) : (
+          <div className="overflow-hidden rounded-md border border-border">
+            <div className="grid grid-cols-[3rem_repeat(7,minmax(0,1fr))] border-b border-border">
+              <div className="h-8 bg-surface-container-low" />
+              {Array.from({ length: 7 }, (_, i) => <div key={i} className="h-8 border-l border-border bg-surface-container-low" />)}
+            </div>
+            {body(7, [0, 1, 3, 4].map(col => ({ col, top: 48, height: 144 })).concat({ col: 2, top: 240, height: 96 }))}
           </div>
-        ))}
-      </div>
-      <div aria-hidden="true" className="flex flex-col gap-3 @[58rem]:hidden">
-        {Array.from({ length: 3 }, (_, i) => (
-          <div key={i} className="flex flex-col gap-1">
-            <div className={`h-5 w-24 ${block}`} />
-            <div className={`h-14 ${block}`} />
-          </div>
-        ))}
+        )}
       </div>
     </div>
   )

@@ -16,7 +16,7 @@ import { DropStateContext, canDeleteShift, dropOutcome, firstName, isLockedShift
  * a screen-reader user gets the same information the icon/colour distinction conveys visually.
  * Mirrors the Blocking-vs-Warning language used in FindingsList and ExceptionsDrawer.
  */
-function findingsSeverityLabel(findings: RosterFindingDto[]): string {
+export function findingsSeverityLabel(findings: RosterFindingDto[]): string {
   const blockingCount = findings.filter(f => f.severity === 'Blocking').length
   const warningCount = findings.filter(f => f.severity === 'Warning').length
   const parts: string[] = []

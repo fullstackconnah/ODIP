@@ -1855,3 +1855,25 @@ describe('ShiftSlideOver: the regular (2026-10-16)', () => {
     expect(screen.getByText('Regular away: unavailable')).toBeInTheDocument()
   })
 })
+
+describe('ShiftSlideOver create from a time-grid slot', () => {
+  const open = (startTime?: string) =>
+    render(<ShiftSlideOver target={{ mode: 'create', staffId: 'staff-1', serviceDate: '2026-11-04', startTime, focusField: 'participant' }} onClose={noop} canWrite participantOptions={participantOptions} staffOptions={staffOptions} />)
+
+  it('create with a startTime prefills Start time and an hour later in End time', () => {
+    open('09:30')
+    expect(screen.getByLabelText(/^Start time/)).toHaveValue('09:30')
+    expect(screen.getByLabelText(/^End time/)).toHaveValue('10:30')
+  })
+
+  it('a 23:00 start ends at 23:59', () => {
+    open('23:00')
+    expect(screen.getByLabelText(/^End time/)).toHaveValue('23:59')
+  })
+
+  it("create without a startTime keeps today's 09:00 and 10:00", () => {
+    open(undefined)
+    expect(screen.getByLabelText(/^Start time/)).toHaveValue('09:00')
+    expect(screen.getByLabelText(/^End time/)).toHaveValue('10:00')
+  })
+})
