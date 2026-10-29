@@ -638,7 +638,7 @@ describe('RestrictivePracticesTab — edit form authorised checkbox', () => {
     await user.click(screen.getByRole('button', { name: /save entry/i }))
 
     const [call] = mockUpdateMutateAsync.mock.calls[0]
-    expect(call).toEqual({ id: 'rp-1', data: { type: 'Unclassified', description: 'Locked doors overnight for safety.', reviewDate: null, relatedMedicationId: null, authorisedBy: null, authorisationDate: null, isActive: true, expectedUpdatedAt: '2026-01-01T00:00:00Z' } })
+    expect(call).toEqual({ id: 'rp-1', data: { type: 'Unclassified', description: 'Locked doors overnight for safety.', reviewDate: null, relatedMedicationId: null, authorisedBy: null, authorisationDate: null, isActive: true, requiresReporting: null, expectedUpdatedAt: '2026-01-01T00:00:00Z' } })
   })
 
   it('ticked with a field emptied shows the field error and does not save', async () => {
@@ -666,7 +666,7 @@ describe('RestrictivePracticesTab — edit form authorised checkbox', () => {
     await user.click(screen.getByRole('button', { name: /save entry/i }))
 
     const [call] = mockUpdateMutateAsync.mock.calls[0]
-    expect(call).toEqual({ id: 'rp-1', data: { type: 'Unclassified', description: 'Locked doors overnight for safety.', reviewDate: null, relatedMedicationId: null, authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01', isActive: true, expectedUpdatedAt: '2026-01-01T00:00:00Z' } })
+    expect(call).toEqual({ id: 'rp-1', data: { type: 'Unclassified', description: 'Locked doors overnight for safety.', reviewDate: null, relatedMedicationId: null, authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01', isActive: true, requiresReporting: null, expectedUpdatedAt: '2026-01-01T00:00:00Z' } })
   })
 
   it('opens ticked for an inactive record and a description-only edit posts both values unchanged', async () => {
@@ -681,7 +681,7 @@ describe('RestrictivePracticesTab — edit form authorised checkbox', () => {
     await user.click(screen.getByRole('button', { name: /save entry/i }))
 
     const [call] = mockUpdateMutateAsync.mock.calls[0]
-    expect(call).toEqual({ id: 'rp-1', data: { type: 'Unclassified', description: 'Locked doors overnight for safety. Reviewed.', reviewDate: null, relatedMedicationId: null, authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01', isActive: false, expectedUpdatedAt: '2026-01-01T00:00:00Z' } })
+    expect(call).toEqual({ id: 'rp-1', data: { type: 'Unclassified', description: 'Locked doors overnight for safety. Reviewed.', reviewDate: null, relatedMedicationId: null, authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01', isActive: false, requiresReporting: null, expectedUpdatedAt: '2026-01-01T00:00:00Z' } })
   })
 
   it('opens ticked for a date-only record, shows the date, and blocks the save asking who', async () => {
@@ -825,5 +825,70 @@ describe('RestrictivePracticesTab — edit form authorised checkbox', () => {
 
       await waitFor(() => expect(screen.getByRole('alert').parentElement).toHaveFocus())
     })
+  })
+})
+
+describe('RestrictivePracticesTab — medicine-linked entries', () => {
+  const linked = (o: Partial<RestrictivePracticeDto> = {}) => makePractice({
+    type: 'ChemicalRestraint', relatedMedicationId: 'med-1', relatedMedicationName: 'Risperidone 1mg',
+    relatedMedicationStatus: 'Active', ...o,
+  })
+
+  it('shows the report chip, the no-report text and the ceased marker on cards', () => {
+    mockUseRestrictivePractices.mockReturnValue({
+      data: [
+        linked({ id: 'a', requiresReporting: true, relatedMedicationStatus: 'Ceased' }),
+        linked({ id: 'b', requiresReporting: false }),
+      ],
+      isLoading: false,
+    })
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+    expect(screen.getByText('Report to NDIS Commission')).toBeInTheDocument()
+    expect(screen.getByText('No report needed')).toBeInTheDocument()
+    expect(screen.getByText(/Linked to Risperidone 1mg \(ceased\)/)).toBeInTheDocument()
+  })
+
+  it('sends the reporting answer when an unauthorised entry is saved', async () => {
+    const user = userEvent.setup()
+    mockUseRestrictivePractices.mockReturnValue({ data: [makePractice()], isLoading: false })
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.click(screen.getByRole('radio', { name: 'Yes' }))
+    await user.click(screen.getByRole('button', { name: /save entry/i }))
+    expect(mockUpdateMutateAsync.mock.calls[0][0].data).toEqual(expect.objectContaining({ requiresReporting: true }))
+  })
+
+  it('locks type and medicine on a linked entry and warns before deactivating it', async () => {
+    const user = userEvent.setup()
+    mockUseRestrictivePractices.mockReturnValue({ data: [linked()], isLoading: false })
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    expect(screen.getByText('This entry is linked to Risperidone 1mg, so it stays a chemical restraint.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('checkbox', { name: /^active/i }))
+    expect(screen.getByText('Deactivating this entry also unticks Chemical restraint on Risperidone 1mg. Its history is kept.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save and untick medicine' })).toBeInTheDocument()
+  })
+
+  it('explains why a linked entry cannot be deleted and offers to open it', async () => {
+    const user = userEvent.setup()
+    mockUseRestrictivePractices.mockReturnValue({ data: [linked()], isLoading: false })
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    const dialog = screen.getByRole('alertdialog')
+    expect(within(dialog).getByText("This entry can't be deleted")).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Open entry' }))
+    expect(mockDeleteMutateAsync).not.toHaveBeenCalled()
+    expect(screen.getByText('Edit restrictive practice entry')).toBeInTheDocument()
+  })
+
+  it('shows the stale-entry copy on a 409', async () => {
+    const user = userEvent.setup()
+    mockUseRestrictivePractices.mockReturnValue({ data: [linked()], isLoading: false, refetch: vi.fn() } as never)
+    mockUpdateMutateAsync.mockRejectedValueOnce({ response: { status: 409, data: {} } })
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.click(screen.getByRole('button', { name: /save entry/i }))
+    expect(await screen.findByText(/This entry was changed while you had it open/)).toBeInTheDocument()
   })
 })
