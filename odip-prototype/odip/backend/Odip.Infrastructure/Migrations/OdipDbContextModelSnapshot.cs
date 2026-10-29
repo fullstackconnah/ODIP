@@ -3847,6 +3847,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<Guid?>("RelatedMedicationId")
                         .HasColumnType("uuid");
 
+                    b.Property<bool?>("RequiresReporting")
+                        .HasColumnType("boolean");
+
                     b.Property<DateOnly?>("ReviewDate")
                         .HasColumnType("date");
 
@@ -3864,7 +3867,9 @@ namespace Odip.Infrastructure.Migrations
 
                     b.HasIndex("ParticipantId");
 
-                    b.HasIndex("RelatedMedicationId");
+                    b.HasIndex("RelatedMedicationId")
+                        .IsUnique()
+                        .HasFilter("\"RelatedMedicationId\" IS NOT NULL");
 
                     b.HasIndex("TenantId");
 

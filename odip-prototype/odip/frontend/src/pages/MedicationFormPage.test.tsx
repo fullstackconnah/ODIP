@@ -226,6 +226,24 @@ describe('MedicationFormPage — view mode for ReadOnly', () => {
     expect(mockUpdateMutateAsync).not.toHaveBeenCalled()
     localStorage.clear()
   })
+
+  it('shows a stored reporting answer to a view-only user, disabled', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'ReadOnly' }))
+    mockUseMedication.mockReturnValue({
+      data: {
+        ...med, isChemicalRestraint: true, purpose: 'Agitation',
+        linkedRestrictivePractice: { id: 'rp-1', isActive: true, requiresReporting: true, authorisedBy: null, authorisationDate: null },
+      },
+      isLoading: false,
+    })
+    renderEditPage('med-1')
+
+    const yes = screen.getByRole('radio', { name: 'Yes' })
+    expect(yes).toBeDisabled()
+    expect(yes).toBeChecked()
+    expect(screen.getByRole('radio', { name: 'No' })).toBeDisabled()
+    localStorage.clear()
+  })
 })
 
 // NAV F7: the form is opened from the /medications register as well as from the participant's Medications tab.
@@ -314,5 +332,60 @@ describe('MedicationFormPage — editing a record that has not loaded', () => {
     expect(screen.getByText('Medication not found')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Back to medications' })).toHaveAttribute('href', '/medications')
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
+  })
+})
+
+describe('MedicationFormPage — chemical restraint register panel', () => {
+  async function fillBasics(user: ReturnType<typeof userEvent.setup>) {
+    await user.type(screen.getByPlaceholderText('e.g. Paracetamol'), 'Risperidone')
+    await user.type(screen.getByPlaceholderText('e.g. 1 tablet'), '1 tablet')
+    await user.type(screen.getByPlaceholderText('What this medication is for'), 'Agitation')
+  }
+
+  it('asks the reporting question, requires an answer, and saves the restraint fields', async () => {
+    const user = userEvent.setup()
+    mockCreateMutateAsync.mockResolvedValue({ success: true, data: { id: 'new-med', participantId: 'participant-1' } })
+    renderCreatePage()
+    await fillBasics(user)
+    await user.click(screen.getByLabelText('Chemical restraint'))
+
+    await user.click(screen.getByRole('button', { name: /create medication/i }))
+    expect(await screen.findByText('Choose Yes or No')).toBeInTheDocument()
+    expect(mockCreateMutateAsync).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('radio', { name: 'Yes' }))
+    await user.click(screen.getByRole('button', { name: /create medication/i }))
+    expect(mockCreateMutateAsync).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        isChemicalRestraint: true,
+        restraintAuthorised: false,
+        restraintAuthorisedBy: null,
+        restraintAuthorisationDate: null,
+        restraintRequiresReporting: true,
+      }),
+    }))
+  })
+
+  it('swaps the reporting question for authoriser and date when authorised', async () => {
+    const user = userEvent.setup()
+    mockCreateMutateAsync.mockResolvedValue({ success: true, data: { id: 'new-med', participantId: 'participant-1' } })
+    renderCreatePage()
+    await fillBasics(user)
+    await user.click(screen.getByLabelText('Chemical restraint'))
+    await user.click(screen.getByLabelText('This restrictive practice is authorised'))
+
+    expect(screen.queryByText('Does this need to be reported to the NDIS Commission?')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /create medication/i }))
+    expect(await screen.findByText('Add who authorised it')).toBeInTheDocument()
+    expect(screen.getByText('Add the date it was authorised')).toBeInTheDocument()
+  })
+
+  it('shows a warning banner with the reload copy on a 409', () => {
+    mockUseCreateMedication.mockReturnValue({
+      mutateAsync: mockCreateMutateAsync, isPending: false, isError: true,
+      error: { response: { status: 409, data: {} } },
+    })
+    renderCreatePage()
+    expect(screen.getByRole('alert')).toHaveTextContent("This medicine's register entry was changed while you were editing. Reload the page")
   })
 })

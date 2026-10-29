@@ -227,3 +227,19 @@ describe('participant-detail/MedicationsTab — one call to action', () => {
     expect(screen.queryByRole('link', { name: /new medication/i })).not.toBeInTheDocument()
   })
 })
+
+describe('participant-detail/MedicationsTab — restraint flags', () => {
+  it('shows "Report to NDIS Commission" as a chip right after "Restraint not authorised"', () => {
+    mockUseParticipantAdministrations.mockReturnValue({ data: [] })
+    mockUseParticipantMedications.mockReturnValue({
+      data: [makeMedication({ complianceFlags: ['ChemicalRestraintUnauthorised', 'ChemicalRestraintReportable'] })],
+      isLoading: false,
+    })
+    renderTab()
+
+    const unauthorised = screen.getByText('Restraint not authorised')
+    const reportable = screen.getByText('Report to NDIS Commission')
+    expect(unauthorised.compareDocumentPosition(reportable) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(reportable.closest('span')?.className).toContain('--color-error-container')
+  })
+})

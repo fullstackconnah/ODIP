@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -88,6 +89,7 @@ public class RestrictivePracticesController : ControllerBase
             return BadRequest(ApiResponse<List<RestrictivePracticeDto>>.Fail("A maximum of 50 rows can be added at once."));
 
         var errors = new List<string>();
+        var linkedInBatch = new HashSet<Guid>();
         for (var i = 0; i < dto.Items.Count; i++)
         {
             var row = dto.Items[i];
@@ -113,6 +115,14 @@ public class RestrictivePracticesController : ControllerBase
             {
                 var medicationError = await ValidateRelatedMedicationAsync(row.Type, row.RelatedMedicationId.Value, participantId, ct);
                 if (medicationError != null) errors.Add($"{label}: {medicationError}");
+                else
+                {
+                    var medicine = await _db.ParticipantMedications.FirstAsync(m => m.Id == row.RelatedMedicationId.Value, ct);
+                    if (!linkedInBatch.Add(medicine.Id) || await _db.RestrictivePractices.AnyAsync(rp => rp.RelatedMedicationId == medicine.Id, ct))
+                        errors.Add($"{label}: {RestraintRegisterSync.MedicineLabel(medicine)} already has its own register entry.");
+                    else if (row.IsActive && medicine.Status == MedicationStatus.Ceased)
+                        errors.Add($"{label}: {RestraintRegisterSync.MedicineLabel(medicine)} is ceased. Restart the medicine to reactivate this entry.");
+                }
             }
         }
 
@@ -134,6 +144,11 @@ public class RestrictivePracticesController : ControllerBase
 
         _db.RestrictivePractices.AddRange(practices);
 
+        // Register to medicine: each active linked row ticks its medicine.
+        foreach (var linked in practices.Where(p => p.IsActive && p.RelatedMedicationId.HasValue))
+            RestraintRegisterSync.ApplyEntryToMedication(linked,
+                await _db.ParticipantMedications.FirstAsync(m => m.Id == linked.RelatedMedicationId!.Value, ct));
+
         // Sync-write: recompute the participant's derived flag once for the whole
         // batch. The query only sees already-committed rows (none of `practices` is saved yet),
         // so whether any new row is active is OR'd in explicitly, same as Update/Delete.
@@ -145,7 +160,15 @@ public class RestrictivePracticesController : ControllerBase
         // PD-5: keeps the restrictive-practices auto-note in sync alongside the flag above.
         await _safetyNoteSync.SyncRestrictivePracticeNoteAsync(participant, ct);
 
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            // Another request linked one of these medicines between our check and our save.
+            return Conflict(ApiResponse<List<RestrictivePracticeDto>>.Fail(AlreadyLinkedCopy));
+        }
 
         return Ok(ApiResponse<List<RestrictivePracticeDto>>.Ok(practices.Select(ToDto).ToList()));
     }
@@ -157,6 +180,8 @@ public class RestrictivePracticesController : ControllerBase
         if (hasWho == authorisationDate.HasValue) return null;
         return hasWho ? "Add the date it was authorised." : "Add who authorised it.";
     }
+
+    private const string AlreadyLinkedCopy = "This medicine already has its own register entry.";
 
     private const string ChangedByOther = "Someone else just changed this entry, so your changes weren't saved. Close it and open it again to see theirs.";
 
@@ -175,11 +200,34 @@ public class RestrictivePracticesController : ControllerBase
         if (dto.ExpectedUpdatedAt is DateTime expected && expected != practice.UpdatedAt)
             return Conflict(ApiResponse<RestrictivePracticeDto>.Fail(ChangedByOther));
 
+        // A linked entry is the medicine's other half (M16): its type and link are fixed, and it ends only by deactivating it or unticking the medicine.
+        var med = practice.RelatedMedicationId is Guid linkedId
+            ? await _db.ParticipantMedications.FirstOrDefaultAsync(m => m.Id == linkedId, ct)
+            : null;
+        if (med != null)
+        {
+            if (dto.Type != RestrictivePracticeType.ChemicalRestraint)
+                return BadRequest(ApiResponse<RestrictivePracticeDto>.Fail($"This entry is linked to {RestraintRegisterSync.MedicineLabel(med)}, so it stays a chemical restraint."));
+            if (dto.RelatedMedicationId != practice.RelatedMedicationId)
+                return BadRequest(ApiResponse<RestrictivePracticeDto>.Fail($"This entry is linked to {RestraintRegisterSync.MedicineLabel(med)}. To stop this restraint, untick Chemical restraint on the medicine or deactivate this entry."));
+        }
+
+        var newlyLinking = practice.RelatedMedicationId == null && dto.RelatedMedicationId.HasValue;
         if (dto.RelatedMedicationId.HasValue)
         {
             var medicationError = await ValidateRelatedMedicationAsync(dto.Type, dto.RelatedMedicationId.Value, practice.ParticipantId, ct);
             if (medicationError != null) return BadRequest(ApiResponse<RestrictivePracticeDto>.Fail(medicationError));
+
+            if (newlyLinking)
+            {
+                med = await _db.ParticipantMedications.FirstAsync(m => m.Id == dto.RelatedMedicationId.Value, ct);
+                if (await _db.RestrictivePractices.AnyAsync(rp => rp.Id != practice.Id && rp.RelatedMedicationId == med.Id, ct))
+                    return BadRequest(ApiResponse<RestrictivePracticeDto>.Fail($"{RestraintRegisterSync.MedicineLabel(med)} already has its own register entry."));
+            }
         }
+
+        if (med != null && dto.IsActive && (!practice.IsActive || newlyLinking) && med.Status == MedicationStatus.Ceased)
+            return BadRequest(ApiResponse<RestrictivePracticeDto>.Fail($"{RestraintRegisterSync.MedicineLabel(med)} is ceased. Restart the medicine to reactivate this entry."));
 
         // Legacy half-filled rows stay editable: only check when an authorisation field changes.
         if (dto.AuthorisedBy != practice.AuthorisedBy || dto.AuthorisationDate != practice.AuthorisationDate)
@@ -188,6 +236,7 @@ public class RestrictivePracticesController : ControllerBase
             if (pairError != null) return BadRequest(ApiResponse<RestrictivePracticeDto>.Fail(pairError));
         }
 
+        var wasActive = practice.IsActive;
         practice.Type = dto.Type;
         practice.Description = dto.Description;
         practice.AuthorisedBy = dto.AuthorisedBy;
@@ -195,7 +244,13 @@ public class RestrictivePracticesController : ControllerBase
         practice.ReviewDate = dto.ReviewDate;
         practice.RelatedMedicationId = dto.RelatedMedicationId;
         practice.IsActive = dto.IsActive;
+        if (dto.RequiresReporting is bool reporting) practice.RequiresReporting = reporting;
         practice.UpdatedAt = DateTime.UtcNow;
+
+        // Register to medicine, only on a change of active state (or a fresh link), so a description or review-date edit never touches the medicine.
+        // Linking an inactive entry to a ticked medicine unticks it: it cannot stay ticked behind an inactive entry.
+        if (med != null && (wasActive != dto.IsActive || newlyLinking))
+            RestraintRegisterSync.ApplyEntryToMedication(practice, med);
 
         // Sync-write (see CreateBulk): recompute the participant's derived flag in the same
         // SaveChangesAsync call. The query below still reflects this row's pre-update committed
@@ -220,6 +275,10 @@ public class RestrictivePracticesController : ControllerBase
         {
             return Conflict(ApiResponse<RestrictivePracticeDto>.Fail(ChangedByOther));
         }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            return Conflict(ApiResponse<RestrictivePracticeDto>.Fail(AlreadyLinkedCopy));
+        }
 
         return Ok(ApiResponse<RestrictivePracticeDto>.Ok(await ToDtoWithMedicationNameAsync(practice, ct)));
     }
@@ -235,6 +294,16 @@ public class RestrictivePracticesController : ControllerBase
         // As Update: no version (an older tab) deletes as before; a stale one is refused. A DateTimeOffset binds without a Local-kind shift.
         if (expectedUpdatedAt is DateTimeOffset expected && expected.UtcDateTime != practice.UpdatedAt)
             return Conflict(ApiResponse<bool>.Fail(DeleteChangedByOther));
+
+        // A linked entry goes with its medicine, whatever the medicine's status: deleting it would lose the authorisation record.
+        if (practice.RelatedMedicationId is Guid linkedId)
+        {
+            var linked = await _db.ParticipantMedications.FirstOrDefaultAsync(m => m.Id == linkedId, ct);
+            if (linked != null)
+                return BadRequest(ApiResponse<bool>.Fail(practice.IsActive
+                    ? $"This entry is linked to {RestraintRegisterSync.MedicineLabel(linked)}. Deactivate it instead."
+                    : $"This entry is linked to {RestraintRegisterSync.MedicineLabel(linked)}, so it's kept as the record of that restraint."));
+        }
 
         _db.RestrictivePractices.Remove(practice);
 
@@ -283,7 +352,7 @@ public class RestrictivePracticesController : ControllerBase
         return null;
     }
 
-    private static RestrictivePracticeDto ToDto(RestrictivePractice rp) => new()
+    internal static RestrictivePracticeDto ToDto(RestrictivePractice rp) => new()
     {
         Id = rp.Id,
         ParticipantId = rp.ParticipantId,
@@ -294,6 +363,8 @@ public class RestrictivePracticesController : ControllerBase
         ReviewDate = rp.ReviewDate,
         RelatedMedicationId = rp.RelatedMedicationId,
         RelatedMedicationName = rp.RelatedMedication?.Name,
+        RelatedMedicationStatus = rp.RelatedMedication?.Status,
+        RequiresReporting = rp.RequiresReporting,
         IsActive = rp.IsActive,
         CreatedAt = rp.CreatedAt,
         UpdatedAt = rp.UpdatedAt,
@@ -301,15 +372,13 @@ public class RestrictivePracticesController : ControllerBase
 
     private async Task<RestrictivePracticeDto> ToDtoWithMedicationNameAsync(RestrictivePractice rp, CancellationToken ct)
     {
-        string? medicationName = null;
-        if (rp.RelatedMedicationId.HasValue)
-        {
-            medicationName = await _db.ParticipantMedications
-                .Where(m => m.Id == rp.RelatedMedicationId.Value)
-                .Select(m => m.Name)
-                .FirstOrDefaultAsync(ct);
-        }
+        if (!rp.RelatedMedicationId.HasValue) return ToDto(rp);
 
-        return ToDto(rp) with { RelatedMedicationName = medicationName };
+        var medication = await _db.ParticipantMedications
+            .Where(m => m.Id == rp.RelatedMedicationId.Value)
+            .Select(m => new { m.Name, m.Status })
+            .FirstOrDefaultAsync(ct);
+
+        return ToDto(rp) with { RelatedMedicationName = medication?.Name, RelatedMedicationStatus = medication?.Status };
     }
 }

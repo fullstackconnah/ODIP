@@ -10,6 +10,7 @@ using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Incidents;
 using Odip.Domain.Interfaces;
 using Odip.Domain.Medications;
 using Odip.Domain.Rostering;
@@ -36,13 +37,15 @@ public class MedicationsController : ControllerBase
 
     private readonly MedicationSlotService _slots;
     private readonly MedicationAdministrationRecorder _recorder;
+    private readonly RestraintRegisterSync _restraintSync;
 
     public MedicationsController(
         OdipDbContext db, ICurrentTenant currentTenant,
         Odip.Application.Interfaces.INotificationRaiser? notificationRaiser = null,
         Odip.Application.Interfaces.IObligationTaskService? obligationTasks = null,
         MedicationSlotService? slots = null,
-        MedicationAdministrationRecorder? recorder = null)
+        MedicationAdministrationRecorder? recorder = null,
+        RestraintRegisterSync? restraintSync = null)
     {
         _db = db;
         _currentTenant = currentTenant;
@@ -50,6 +53,7 @@ public class MedicationsController : ControllerBase
         _obligationTasks = obligationTasks ?? new Odip.Infrastructure.Tasks.ObligationTaskService(db);
         _slots = slots ?? new MedicationSlotService(db);
         _recorder = recorder ?? new MedicationAdministrationRecorder(db, _notificationRaiser, _obligationTasks);
+        _restraintSync = restraintSync ?? new RestraintRegisterSync(db, new SafetyNoteSyncService(db));
     }
 
     // ── Participant medication list / create ─────────────────────────
@@ -66,7 +70,8 @@ public class MedicationsController : ControllerBase
 
         var items = await query.OrderBy(m => m.Name).ToListAsync(ct);
         var todays = await ProviderTodaysAsync(items.Select(m => m.TenantId), ct);
-        var result = items.Select(m => ToListDto(m, FullName(m.Participant), todays[m.TenantId])).ToList();
+        var entries = await LinkedEntriesAsync(items.Select(m => m.Id), ct);
+        var result = items.Select(m => ToListDto(m, FullName(m.Participant), todays[m.TenantId], entries.GetValueOrDefault(m.Id))).ToList();
         return Ok(ApiResponse<List<MedicationListDto>>.Ok(result));
     }
 
@@ -91,11 +96,15 @@ public class MedicationsController : ControllerBase
             ParticipantId = participantId,
             Status = MedicationStatus.Active,
         };
+        var answerError = RestraintAnswerError(dto, MedicationStatus.Active, null);
+        if (answerError != null) return BadRequest(ApiResponse<MedicationDetailDto>.Fail(answerError));
+
         Apply(med, dto);
         _db.ParticipantMedications.Add(med);
+        var entry = await _restraintSync.SyncFromMedicationAsync(med, participant, Answers(dto), ct);
         await _db.SaveChangesAsync(ct);
 
-        return Ok(ApiResponse<MedicationDetailDto>.Ok(ToDetailDto(med, FullName(participant), 0, await ProviderTodayAsync(participant.TenantId, ct))));
+        return Ok(ApiResponse<MedicationDetailDto>.Ok(ToDetailDto(med, FullName(participant), 0, await ProviderTodayAsync(participant.TenantId, ct), entry)));
     }
 
     // ── Single medication ──────────────────────────────────────────
@@ -107,7 +116,8 @@ public class MedicationsController : ControllerBase
         if (med == null) return NotFound(ApiResponse<MedicationDetailDto>.Fail("Medication not found"));
 
         var prnCount = await GetPrnDosesInLast24hAsync(med.Id, ct);
-        return Ok(ApiResponse<MedicationDetailDto>.Ok(ToDetailDto(med, FullName(med.Participant), prnCount, await ProviderTodayAsync(med.TenantId, ct))));
+        var linked = await _restraintSync.FindLinkedAsync(med.Id, ct);
+        return Ok(ApiResponse<MedicationDetailDto>.Ok(ToDetailDto(med, FullName(med.Participant), prnCount, await ProviderTodayAsync(med.TenantId, ct), linked)));
     }
 
     [HttpPut("medications/{id:guid}")]
@@ -122,14 +132,29 @@ public class MedicationsController : ControllerBase
             dto.Frequency, dto.DaysOfWeek, dto.IntervalDays, dto.AnchorDate);
         if (validationError != null) return BadRequest(ApiResponse<MedicationDetailDto>.Fail(validationError));
 
+        var existing = await _restraintSync.FindLinkedAsync(med.Id, ct);
+        if (dto.ExpectedRestrictivePracticeUpdatedAt is { } expected && existing != null && expected != existing.UpdatedAt)
+            return Conflict(ApiResponse<MedicationDetailDto>.Fail(RegisterChangedCopy));
+        var answerError = RestraintAnswerError(dto, dto.Status, existing);
+        if (answerError != null) return BadRequest(ApiResponse<MedicationDetailDto>.Fail(answerError));
+
         Apply(med, dto);
         med.Status = dto.Status;
         med.UpdatedAt = DateTime.UtcNow;
+        var entry = await _restraintSync.SyncFromMedicationAsync(med, med.Participant!, Answers(dto), ct);
 
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex) when (ex is DbUpdateConcurrencyException || ex is DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } })
+        {
+            // Someone changed the entry between our read and our save, or another request just linked one to this medicine.
+            return Conflict(ApiResponse<MedicationDetailDto>.Fail(RegisterChangedCopy));
+        }
 
         var prnCount = await GetPrnDosesInLast24hAsync(med.Id, ct);
-        return Ok(ApiResponse<MedicationDetailDto>.Ok(ToDetailDto(med, FullName(med.Participant), prnCount, await ProviderTodayAsync(med.TenantId, ct))));
+        return Ok(ApiResponse<MedicationDetailDto>.Ok(ToDetailDto(med, FullName(med.Participant), prnCount, await ProviderTodayAsync(med.TenantId, ct), entry)));
     }
 
     // ── Register (across participants) ─────────────────────────────
@@ -168,10 +193,11 @@ public class MedicationsController : ControllerBase
         var totalCount = await ordered.CountAsync(ct);
         var pageItems = await ordered.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
         var todays = await ProviderTodaysAsync(pageItems.Select(m => m.TenantId), ct);
+        var entries = await LinkedEntriesAsync(pageItems.Select(m => m.Id), ct);
 
         var result = new PagedResult<MedicationListDto>
         {
-            Items = pageItems.Select(m => ToListDto(m, FullName(m.Participant), todays[m.TenantId])).ToList(),
+            Items = pageItems.Select(m => ToListDto(m, FullName(m.Participant), todays[m.TenantId], entries.GetValueOrDefault(m.Id))).ToList(),
             TotalCount = totalCount,
             Page = page,
             PageSize = pageSize,
@@ -686,11 +712,39 @@ public class MedicationsController : ControllerBase
         return tenantId is { } t ? await ProviderTimeZoneResolver.ResolveAsync(_db, t, ct) : await ProviderTimeZoneResolver.ResolveAsync(_db, ct);
     }
 
-    private static MedicationListDto ToListDto(ParticipantMedication m, string participantName, DateOnly providerToday)
+    private const string RegisterChangedCopy = "This medicine's register entry was changed while you were editing. Reload the page to see the latest authorisation, then save again.";
+
+    private static RestraintRegisterSync.RestraintAnswers Answers(CreateMedicationDto dto) =>
+        new(dto.RestraintAuthorised, dto.RestraintAuthorisedBy, dto.RestraintAuthorisationDate, dto.RestraintRequiresReporting);
+
+    /// <summary>The 400 copy for a restraint medicine's register answers, or null. A ceased medicine needs no reporting answer.</summary>
+    private static string? RestraintAnswerError(CreateMedicationDto dto, MedicationStatus status, RestrictivePractice? entry)
+    {
+        if (!dto.IsChemicalRestraint) return null;
+        if (dto.RestraintAuthorised == true && (string.IsNullOrWhiteSpace(dto.RestraintAuthorisedBy) || dto.RestraintAuthorisationDate == null))
+            return "Add who authorised it and the date it was authorised.";
+        if (dto.RestraintAuthorised == false && status != MedicationStatus.Ceased && dto.RestraintRequiresReporting == null && entry?.RequiresReporting == null)
+            return "Choose whether this needs to be reported to the NDIS Commission.";
+        return null;
+    }
+
+    /// <summary>The register entry linked to each medicine, in one query for the whole page.</summary>
+    private async Task<Dictionary<Guid, RestrictivePractice>> LinkedEntriesAsync(IEnumerable<Guid> medicationIds, CancellationToken ct)
+    {
+        var ids = medicationIds.ToList();
+        var rows = await _db.RestrictivePractices.Where(rp => rp.RelatedMedicationId != null && ids.Contains(rp.RelatedMedicationId.Value)).ToListAsync(ct);
+        return rows.ToDictionary(rp => rp.RelatedMedicationId!.Value);
+    }
+
+    private static MedicationListDto ToListDto(ParticipantMedication m, string participantName, DateOnly providerToday, RestrictivePractice? entry)
     {
         var flags = new List<string>();
-        if (m.IsChemicalRestraint && (!m.BspInPlace || string.IsNullOrEmpty(m.RestrictivePracticeAuthorisationRef)))
+        // Authorisation lives on the register entry only (BspInPlace and the reference are notes now). A ceased medicine raises neither flag.
+        if (m.IsChemicalRestraint && m.Status != MedicationStatus.Ceased && !(entry != null && RestrictivePracticeAuthorisation.IsAuthorised(entry)))
+        {
             flags.Add("ChemicalRestraintUnauthorised");
+            if (entry?.RequiresReporting == true) flags.Add("ChemicalRestraintReportable");
+        }
         // NextReviewDue is a DateTime? that holds a DATE (a due day, midnight), so it is compared by calendar day.
         if (m.NextReviewDue.HasValue && DateOnly.FromDateTime(m.NextReviewDue.Value) < providerToday && m.Status == MedicationStatus.Active)
             flags.Add("ReviewOverdue");
@@ -727,9 +781,9 @@ public class MedicationsController : ControllerBase
         };
     }
 
-    private static MedicationDetailDto ToDetailDto(ParticipantMedication m, string participantName, int prnDosesInLast24h, DateOnly providerToday)
+    private static MedicationDetailDto ToDetailDto(ParticipantMedication m, string participantName, int prnDosesInLast24h, DateOnly providerToday, RestrictivePractice? entry)
     {
-        var list = ToListDto(m, participantName, providerToday);
+        var list = ToListDto(m, participantName, providerToday, entry);
         return new MedicationDetailDto
         {
             Id = list.Id,
@@ -774,6 +828,7 @@ public class MedicationsController : ControllerBase
             StorageRequirements = m.StorageRequirements,
             Notes = m.Notes,
             PrnDosesInLast24h = prnDosesInLast24h,
+            LinkedRestrictivePractice = entry == null ? null : RestrictivePracticesController.ToDto(entry) with { RelatedMedicationName = m.Name, RelatedMedicationStatus = m.Status },
             CreatedAt = m.CreatedAt,
             UpdatedAt = m.UpdatedAt,
         };

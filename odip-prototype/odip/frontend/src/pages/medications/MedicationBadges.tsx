@@ -63,6 +63,7 @@ export function MedicationBadges({ medication, className }: { medication: Medica
 
 const FLAG_STYLES: Record<MedicationComplianceFlag, string> = {
   ChemicalRestraintUnauthorised: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
+  ChemicalRestraintReportable: 'bg-[var(--color-error-container)] text-[var(--color-on-error-container)]',
   ReviewOverdue: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
   ConsentMissing: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
 }

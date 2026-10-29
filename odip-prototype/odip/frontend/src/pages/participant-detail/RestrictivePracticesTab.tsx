@@ -11,6 +11,7 @@ import { FormField } from '@/components/FormField'
 import { CheckboxField } from '@/components/CheckboxField'
 import { EmptyState } from '@/components/EmptyState'
 import { Dropdown } from '@/components/Dropdown'
+import { ToggleGroup } from '@/components/ToggleGroup'
 import { usePermissions } from '@/lib/permissions'
 import { PageState } from '@/components/PageState'
 import { queryPhase } from '@/lib/queryPhase'
@@ -48,13 +49,15 @@ type PracticeFormState = {
   reviewDate: string
   relatedMedicationId: string
   isActive: boolean
+  /** Only asked while unauthorised; null until answered. */
+  requiresReporting: boolean | null
   /** Ticked: who authorised it and when are shown and required. Unticked: both are saved as null. */
   authorised: boolean
 }
 
 const EMPTY_FORM: PracticeFormState = {
   type: 'Unclassified', description: '', authorisedBy: '', authorisationDate: '', reviewDate: '',
-  relatedMedicationId: '', isActive: true, authorised: false,
+  relatedMedicationId: '', isActive: true, requiresReporting: null, authorised: false,
 }
 
 function PracticeCard({ practice, canWrite, onEdit, onDelete }: {
@@ -83,6 +86,11 @@ function PracticeCard({ practice, canWrite, onEdit, onDelete }: {
             {RESTRICTIVE_PRACTICE_TYPE_LABELS[practice.type]}
           </span>
           {practice.isActive && <RpAuthorisationBadge authorised={!unauthorised} />}
+          {unauthorised && practice.requiresReporting === true && (
+            <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap bg-[var(--color-error-container)] text-[var(--color-on-error-container)]">
+              <AlertTriangle className="w-3 h-3" /> Report to NDIS Commission
+            </span>
+          )}
           {practice.type === 'Unclassified' && (
             <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]">
               <AlertTriangle className="w-3 h-3" /> Needs classification
@@ -120,9 +128,10 @@ function PracticeCard({ practice, canWrite, onEdit, onDelete }: {
         {practice.authorisedBy && <span>Authorised by {practice.authorisedBy}</span>}
         {practice.authorisationDate && <span>Authorised {formatDateAu(practice.authorisationDate)}</span>}
         {unauthorised && <span>{whyUnauthorised}</span>}
+        {unauthorised && practice.requiresReporting === false && <span>No report needed</span>}
         {practice.type === 'ChemicalRestraint' && practice.relatedMedicationName && (
           <span className="inline-flex items-center gap-1">
-            <Pill className="w-3 h-3" /> Linked to {practice.relatedMedicationName}
+            <Pill className="w-3 h-3" /> Linked to {practice.relatedMedicationName}{practice.relatedMedicationStatus === 'Ceased' ? ' (ceased)' : ''}
           </span>
         )}
       </div>
@@ -159,6 +168,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
   const [showInactive, setShowInactive] = useState(false)
 
   const [adding, setAdding] = useState(false)
+  const [deleteBlocked, setDeleteBlocked] = useState<RestrictivePracticeDto | null>(null)
 
   const activePractices = useMemo(() => practices.filter(p => p.isActive), [practices])
   const inactivePractices = useMemo(() => practices.filter(p => !p.isActive), [practices])
@@ -174,6 +184,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
       reviewDate: practice.reviewDate ? practice.reviewDate.split('T')[0] : '',
       relatedMedicationId: practice.relatedMedicationId ?? '',
       isActive: practice.isActive,
+      requiresReporting: practice.requiresReporting ?? null,
       authorised: !!practice.authorisedBy?.trim() || !!practice.authorisationDate,
     })
     setErrors({})
@@ -207,6 +218,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
       reviewDate: form.reviewDate || null,
       relatedMedicationId: form.type === 'ChemicalRestraint' ? (form.relatedMedicationId || null) : null,
       isActive: form.isActive,
+      requiresReporting: form.authorised ? null : form.requiresReporting,
       expectedUpdatedAt: editingPractice.updatedAt,
     }
     try {
@@ -215,9 +227,20 @@ export default function RestrictivePracticesTab({ participantId }: { participant
     } catch (err) {
       // So closing and reopening the entry carries the version someone else just saved.
       if (apiErrorStatus(err) === 409) void practicesQuery.refetch()
-      setModalError({ message: extractErrorMessage(err, 'Failed to save restrictive practice entry.'), stale: apiErrorStatus(err) === 409 })
+      setModalError({
+        message: apiErrorStatus(err) === 409 && editingPractice.relatedMedicationId
+          ? 'This entry was changed while you had it open, possibly by a change to its linked medicine. Close it and open it again to see the latest version.'
+          : extractErrorMessage(err, 'Failed to save restrictive practice entry.'),
+        stale: apiErrorStatus(err) === 409,
+      })
       setRefusals((n) => n + 1)
     }
+  }
+
+  // A linked entry can't be deleted; send the user to deactivate it instead.
+  function requestDelete(p: RestrictivePracticeDto) {
+    if (p.relatedMedicationId) setDeleteBlocked(p)
+    else setDeletingPractice(p)
   }
 
   async function confirmDelete() {
@@ -235,6 +258,26 @@ export default function RestrictivePracticesTab({ participantId }: { participant
   }
 
   const isSaving = updatePractice.isPending
+
+  // A linked entry is owned by its medicine: its type and medicine are locked, and Active follows the medicine.
+  const linkedMedLabel = editingPractice?.relatedMedicationName ?? 'the linked medicine'
+  const isLinked = !!editingPractice?.relatedMedicationId
+  const linkedCeased = isLinked && editingPractice?.relatedMedicationStatus === 'Ceased'
+  const takenByOthers = new Set(practices.filter(p => p.id !== editingPractice?.id && p.relatedMedicationId).map(p => p.relatedMedicationId))
+  const medicationItems = [
+    { value: '', label: 'None' },
+    ...medications
+      .filter(m => !takenByOthers.has(m.id))
+      .map(m => ({ value: m.id, label: m.strength ? `${m.name} ${m.strength}` : m.name })),
+  ]
+  const pickedMed = medications.find(m => m.id === form.relatedMedicationId)
+  const newlyLinking = !isLinked && !!form.relatedMedicationId && form.isActive
+  const deactivating = isLinked && !!editingPractice?.isActive && !form.isActive
+  const reactivating = isLinked && !editingPractice?.isActive && form.isActive
+  const consequenceRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (deactivating || reactivating) consequenceRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [deactivating, reactivating])
 
   return (
     <div className="space-y-6">
@@ -272,7 +315,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
         <div ref={activeRef} className="space-y-3">
           {activePractices.slice(0, showAll.limit).map(p => (
             <div key={p.id} tabIndex={-1} data-show-row className="rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]">
-            <PracticeCard practice={p} canWrite={canWriteRestrictivePractices} onEdit={() => openEdit(p)} onDelete={() => setDeletingPractice(p)} />
+            <PracticeCard practice={p} canWrite={canWriteRestrictivePractices} onEdit={() => openEdit(p)} onDelete={() => requestDelete(p)} />
             </div>
           ))}
         </div>
@@ -286,7 +329,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
           {showInactive && (
             <div id="practices-inactive-list" className="space-y-3 mt-3">
               {inactivePractices.map(p => (
-                <PracticeCard key={p.id} practice={p} canWrite={canWriteRestrictivePractices} onEdit={() => openEdit(p)} onDelete={() => setDeletingPractice(p)} />
+                <PracticeCard key={p.id} practice={p} canWrite={canWriteRestrictivePractices} onEdit={() => openEdit(p)} onDelete={() => requestDelete(p)} />
               ))}
             </div>
           )}
@@ -305,7 +348,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
               Cancel
             </Button>
             <Button onClick={handleSave} disabled={isSaving}>
-              {isSaving ? 'Saving...' : 'Save entry'}
+              {isSaving ? 'Saving...' : deactivating ? 'Save and untick medicine' : 'Save entry'}
             </Button>
           </>
         }
@@ -317,9 +360,10 @@ export default function RestrictivePracticesTab({ participantId }: { participant
               <Callout tone={modalError.stale ? 'warning' : 'error'}>{modalError.message}</Callout>
             </div>
           )}
-          <FormField label="Type">
+          <FormField label="Type" hint={isLinked ? 'Set by the linked medicine, so it stays a chemical restraint.' : undefined}>
             <Dropdown
               variant="form"
+              disabled={isLinked}
               value={form.type}
               onChange={v => setForm(f => ({ ...f, type: v as RestrictivePracticeType, relatedMedicationId: v === 'ChemicalRestraint' ? f.relatedMedicationId : '' }))}
               items={RESTRICTIVE_PRACTICE_TYPES.map(t => ({ value: t, label: RESTRICTIVE_PRACTICE_TYPE_LABELS[t], description: RESTRICTIVE_PRACTICE_TYPE_DESCRIPTIONS[t] }))}
@@ -338,21 +382,26 @@ export default function RestrictivePracticesTab({ participantId }: { participant
             <FormField
               label="Linked medication"
               hint={
-                medications.length === 0
-                  ? 'This participant has no active medications on record — add one on the Medications tab first, or leave this unlinked for now.'
-                  : 'The prescribed medication this chemical restraint is based on'
+                isLinked
+                  ? 'To stop this restraint, untick Chemical restraint on the medicine or deactivate this entry.'
+                  : medicationItems.length === 1
+                    ? 'This participant has no active medications on record without an entry — add one on the Medications tab first, or leave this unlinked for now.'
+                    : 'The prescribed medication this chemical restraint is based on'
               }
             >
               <Dropdown
                 variant="form"
+                disabled={isLinked}
                 value={form.relatedMedicationId}
                 onChange={v => setForm(f => ({ ...f, relatedMedicationId: v }))}
-                items={[
-                  { value: '', label: 'None' },
-                  ...medications.map(m => ({ value: m.id, label: m.strength ? `${m.name} ${m.strength}` : m.name })),
-                ]}
+                items={isLinked
+                  ? [{ value: form.relatedMedicationId, label: `${linkedMedLabel}${linkedCeased ? ' (ceased)' : ''}` }]
+                  : medicationItems}
               />
             </FormField>
+          )}
+          {newlyLinking && (
+            <Callout tone="info">Linking also ticks Chemical restraint on {pickedMed?.name ?? 'the medicine'}.</Callout>
           )}
           <CheckboxField
             label="This restrictive practice is authorised"
@@ -375,17 +424,38 @@ export default function RestrictivePracticesTab({ participantId }: { participant
               </FormField>
             </>
           )}
+          {!form.authorised && (
+            <FormField label="Does this need to be reported to the NDIS Commission?">
+              <ToggleGroup
+                ariaLabel="Does this need to be reported to the NDIS Commission?"
+                options={[{ key: 'true', label: 'Yes' }, { key: 'false', label: 'No' }]}
+                value={form.requiresReporting == null ? '' : String(form.requiresReporting)}
+                onChange={k => setForm(f => ({ ...f, requiresReporting: k === 'true' }))}
+              />
+            </FormField>
+          )}
           <FormField label="Review date">
             <input type="date" value={form.reviewDate} onChange={e => setForm(f => ({ ...f, reviewDate: e.target.value }))} />
           </FormField>
-          <FormField label="Active" layout="checkbox" hint="Inactive entries are hidden from the default list but not deleted">
+          <FormField label="Active" layout="checkbox" hint={linkedCeased ? `${linkedMedLabel} is ceased. Restart the medicine to reactivate this entry.` : 'Inactive entries are hidden from the default list but not deleted'}>
             <input
               type="checkbox"
               checked={form.isActive}
+              disabled={linkedCeased}
               onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))}
               className="w-4 h-4 rounded border-[var(--color-border)]"
             />
           </FormField>
+          {(deactivating || reactivating) && (
+            <div ref={consequenceRef} className="pb-4 scroll-mb-24">
+              {deactivating && (
+                <Callout tone="warning">Deactivating this entry also unticks Chemical restraint on {linkedMedLabel}. Its history is kept.</Callout>
+              )}
+              {reactivating && (
+                <Callout tone="info">Reactivating this entry also ticks Chemical restraint on {linkedMedLabel}.</Callout>
+              )}
+            </div>
+          )}
         </div>
       </Modal>
 
@@ -398,6 +468,18 @@ export default function RestrictivePracticesTab({ participantId }: { participant
         confirmLabel="Delete"
         variant="danger"
         loading={deletePractice.isPending}
+      />
+
+      <ConfirmDialog
+        open={!!deleteBlocked}
+        onCancel={() => setDeleteBlocked(null)}
+        onConfirm={() => { const p = deleteBlocked; setDeleteBlocked(null); if (p) openEdit(p) }}
+        title="This entry can't be deleted"
+        message={`This entry is linked to ${deleteBlocked?.relatedMedicationName ?? 'a medicine'}${deleteBlocked?.isActive === false ? ", so it's kept as the record of that restraint." : '. Deactivate it instead.'}`}
+        confirmLabel="Open entry"
+        cancelLabel="Close"
+        // An inactive entry has nothing to open: it only needs the Close button.
+        footer={deleteBlocked?.isActive === false ? <Button variant="secondary" onClick={() => setDeleteBlocked(null)}>Close</Button> : undefined}
       />
 
       <AddRestrictivePracticeDialog

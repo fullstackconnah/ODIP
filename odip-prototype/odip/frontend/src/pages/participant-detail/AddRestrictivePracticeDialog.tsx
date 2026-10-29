@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import type { AxiosError } from 'axios'
-import { useBulkCreateRestrictivePractices, useParticipantMedications } from '@/api/hooks'
+import { useBulkCreateRestrictivePractices, useParticipantMedications, useRestrictivePractices } from '@/api/hooks'
 import { Modal } from '@/components/Modal'
 import { FormField } from '@/components/FormField'
 import { Dropdown } from '@/components/Dropdown'
@@ -90,6 +90,9 @@ export function AddRestrictivePracticeDialog(props: AddRestrictivePracticeDialog
 function AddRestrictivePracticeDialogBody({ participantId, onClose, onSaved, defaultType, defaultDescription }: AddRestrictivePracticeDialogProps) {
   const single = defaultType !== undefined
   const { data: medications = [] } = useParticipantMedications(participantId, false)
+  const { data: existing = [] } = useRestrictivePractices(participantId, true)
+  // A medicine can have only one register entry, so ones already linked are not offered.
+  const unlinkedMedications = medications.filter(m => !existing.some(p => p.relatedMedicationId === m.id))
   const bulkCreatePractices = useBulkCreateRestrictivePractices()
 
   // 'setup' picks a type + row count; 'rows' is the editable table. Defaults to a single row, so a one-off entry takes the same number of
@@ -239,7 +242,7 @@ function AddRestrictivePracticeDialogBody({ participantId, onClose, onSaved, def
               onChange={onChange}
               items={[
                 { value: '', label: 'None' },
-                ...medications.map(m => ({ value: m.id, label: m.strength ? `${m.name} ${m.strength}` : m.name })),
+                ...unlinkedMedications.map(m => ({ value: m.id, label: m.strength ? `${m.name} ${m.strength}` : m.name })),
               ]}
             />
           </div>
@@ -357,7 +360,7 @@ function AddRestrictivePracticeDialogBody({ participantId, onClose, onSaved, def
         {bulkGeneralError && (
           <Callout tone="error">{bulkGeneralError}</Callout>
         )}
-        {bulkType === 'ChemicalRestraint' && medications.length === 0 && (
+        {bulkType === 'ChemicalRestraint' && unlinkedMedications.length === 0 && (
           <p className="text-xs text-[var(--color-muted-foreground)]">
             This participant has no active medications on record — add one on the Medications tab first, or leave these rows unlinked for now.
           </p>
