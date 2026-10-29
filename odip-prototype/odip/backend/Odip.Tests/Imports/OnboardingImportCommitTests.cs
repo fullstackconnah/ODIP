@@ -109,6 +109,38 @@ public class OnboardingImportCommitTests
     }
 
     [Fact]
+    public async Task The_same_key_with_changed_choices_is_refused_and_writes_nothing()
+    {
+        var (db, tenantId) = Organisation();
+        using var _ = db;
+        var file = Csv(Header, "Ava,Stone,,430000001,,");
+        var first = await Commit(db, tenantId, file, ImportLanding.Active);
+
+        var landing = await Assert.ThrowsAsync<ImportException>(() => Commit(db, tenantId, file, ImportLanding.Onboarding));
+        var mapping = await Assert.ThrowsAsync<ImportException>(() => Commit(db, tenantId, file, ImportLanding.Active, mapping: ["firstName", "lastName", null, "ndisNumber", null, null]));
+
+        Assert.Equal((409, 409), (landing.StatusCode, mapping.StatusCode));
+        Assert.Equal(OnboardingImportService.ChoicesChanged, landing.Message);
+        Assert.Equal(first.BatchId, (await db.ImportBatches.SingleAsync()).Id);
+        Assert.Equal(1, await db.Participants.CountAsync());
+    }
+
+    [Fact]
+    public async Task A_batch_from_before_the_fingerprint_still_replays_whatever_the_choices()
+    {
+        var (db, tenantId) = Organisation();
+        using var _ = db;
+        var file = Csv(Header, "Ava,Stone,,430000001,,");
+        var first = await Commit(db, tenantId, file, ImportLanding.Active);
+        (await db.ImportBatches.SingleAsync()).ChoicesFingerprint = null;
+        await db.SaveChangesAsync();
+
+        var again = await Commit(db, tenantId, file, ImportLanding.Onboarding);
+
+        Assert.Equal((first.BatchId, true), (again.BatchId, again.Replayed));
+    }
+
+    [Fact]
     public async Task A_row_that_became_a_duplicate_after_the_preview_is_skipped_at_commit()
     {
         var (db, tenantId) = Organisation();

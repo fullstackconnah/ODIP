@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Security.Claims;
 using System.Security.Cryptography;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Odip.Application.Common;
@@ -30,6 +31,7 @@ public sealed partial class OnboardingImportService
     public const string LockBusy = "Another import is running for this organisation; try again when it finishes.";
     /// <summary>A commit's 409 can be its own twin still finishing (a retry that waited past the lock timeout), so it points at the history.</summary>
     public const string CommitLockBusy = LockBusy + " If you just pressed Import, check Import history in a minute.";
+    public const string ChoicesChanged = "Your import choices changed since the first try. Start the import again to use the new choices.";
     public const string ChooseLanding = "Choose whether these participants are already receiving services or are new onboarding.";
     public const string StaffRace = "Someone else added a staff member with the same name or email at the same moment. Nothing was imported; import again.";
     public const string RecordRace = "Someone else added a record with the same details at the same moment. Nothing was imported; import again.";
@@ -234,18 +236,20 @@ public sealed partial class OnboardingImportService
         if (string.IsNullOrWhiteSpace(idempotencyKey) || idempotencyKey.Length > 100)
             throw new ImportException("The import request has no key. Reload the page and try again.");
         if (kind == ImportKind.Participants && landing is null) throw new ImportException(ChooseLanding);
-        var shape = RequireShape(kind, shifts)?.Shape;
+        var shiftOptions = RequireShape(kind, shifts);
+        var shape = shiftOptions?.Shape;
         var table = ImportFileReader.Read(content, fileName);
         var columns = mapping ?? ImportFields.AutoMatch(kind, table.Headers, shape);
         if (ImportFields.MappingError(kind, columns, table.Headers.Count, requireAll: true, shape) is { } mappingError) throw new ImportException(mappingError);
-        if (await ReplayAsync(idempotencyKey, ct) is { } earlier) return earlier;
+        var fingerprint = Fingerprint(kind, content, columns, landing, shiftOptions);
+        if (await ReplayAsync(idempotencyKey, fingerprint, ct) is { } earlier) return earlier;
 
         await using var importLock = await AcquireLockAsync(tenantId, CommitLockBusy, ct);
         // Once the lock is held the import runs to the end: a client or proxy that drops the request must not roll back a nearly finished
         // import. A retry with the same key replays the batch.
         ct = CancellationToken.None;
         // A request that waited behind its own twin finds the batch the twin made.
-        if (await ReplayAsync(idempotencyKey, ct) is { } twin) return twin;
+        if (await ReplayAsync(idempotencyKey, fingerprint, ct) is { } twin) return twin;
 
         // The board lock comes after the import lock and is held to the end, so no roster change lands between the checks and the inserts.
         await using var board = kind == ImportKind.UpcomingShifts ? await AcquireBoardLockAsync(tenantId, ct) : null;
@@ -255,7 +259,7 @@ public sealed partial class OnboardingImportService
         var batch = new ImportBatch
         {
             Id = Guid.NewGuid(), TenantId = tenantId, Kind = kind, FileName = name.Length <= 260 ? name : name[..(char.IsHighSurrogate(name[259]) ? 259 : 260)], FileSha256 = Sha256(content),
-            IdempotencyKey = idempotencyKey, RowCount = plans.Count, CreatedById = ActorId(caller), CreatedByName = ActorName(caller),
+            IdempotencyKey = idempotencyKey, ChoicesFingerprint = fingerprint, RowCount = plans.Count, CreatedById = ActorId(caller), CreatedByName = ActorName(caller),
         };
         var items = new List<ImportBatchItem>();
         var rowNumber = 0;
@@ -325,12 +329,18 @@ public sealed partial class OnboardingImportService
         catch (InvalidOperationException ex) when (ex.Message == busy) { throw new ImportException(busy, 409); }
     }
 
-    private async Task<ImportResultDto?> ReplayAsync(string idempotencyKey, CancellationToken ct)
+    /// <summary>Everything the user chose that changes what a commit writes: the file, the column mapping, the landing and the shift options.</summary>
+    private static string Fingerprint(ImportKind kind, byte[] content, IReadOnlyList<string?> columns, ImportLanding? landing, ImportShiftOptions? shifts) =>
+        Sha256(Encoding.UTF8.GetBytes(string.Join("|", kind, Sha256(content), landing, shifts?.Shape, shifts?.From?.ToString("O"), shifts?.Weeks, string.Join("", columns.Select(c => c ?? " ")))));
+
+    /// <summary>The batch an earlier request with this key made. The same key with other choices is a 409: the first try wrote the old choices, and answering with it would hide the new ones.</summary>
+    private async Task<ImportResultDto?> ReplayAsync(string idempotencyKey, string fingerprint, CancellationToken ct)
     {
         var earlier = await _db.ImportBatches.Where(b => b.IdempotencyKey == idempotencyKey)
-            .Select(b => new { b.Id, b.Kind, b.CreatedCount, b.SkippedCount, b.FailedCount })
+            .Select(b => new { b.Id, b.Kind, b.CreatedCount, b.SkippedCount, b.FailedCount, b.ChoicesFingerprint })
             .FirstOrDefaultAsync(ct);
         if (earlier is null) return null;
+        if (earlier.ChoicesFingerprint is not null && earlier.ChoicesFingerprint != fingerprint) throw new ImportException(ChoicesChanged, 409);
         if (earlier.Kind != ImportKind.UpcomingShifts) return new ImportResultDto(earlier.Id, earlier.CreatedCount, earlier.SkippedCount, earlier.FailedCount, [], Replayed: true);
         // The shifts still on the roster say which weeks the batch started.
         var batchShifts = _db.ImportBatchItems.Where(i => i.BatchId == earlier.Id).Select(i => i.EntityId);
