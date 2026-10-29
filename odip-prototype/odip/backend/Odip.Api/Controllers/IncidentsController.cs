@@ -242,9 +242,10 @@ public class IncidentsController : ControllerBase
             .Where(rp => rp.ParticipantId == dto.InvolvedParticipantId.Value && rp.Type == dto.RestrictivePracticeType.Value
                 && (dto.RestrictivePracticeId == null || rp.Id == dto.RestrictivePracticeId))
             .ToListAsync(ct);
-        foreach (var entry in entries)
-            if (await IsAuthorisedTodayAsync(entry, ct)) return true;
-        return false;
+        if (entries.Count == 0) return false;
+        // Every entry belongs to the participant's tenant, so one today serves them all.
+        var today = await ProviderTodayAsync(entries[0].TenantId, ct);
+        return entries.Any(entry => RestrictivePracticeAuthorisation.IsAuthorised(entry, today));
     }
 
     [HttpGet]

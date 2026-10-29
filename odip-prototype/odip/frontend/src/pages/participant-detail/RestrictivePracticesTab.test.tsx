@@ -274,6 +274,19 @@ describe('RestrictivePracticesTab', () => {
     }
   })
 
+  it('says "Authorised from <date>" for an entry with both fields set that is not yet in force', () => {
+    mockUseRestrictivePractices.mockReturnValue({
+      data: [makePractice({ authorisedBy: 'Dr Chen', authorisationDate: '2026-10-31', isAuthorised: false })],
+      isLoading: false,
+    })
+
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    expect(screen.getByText('Not authorised')).toBeInTheDocument()
+    expect(screen.getByText('Authorised from 31/10/2026')).toBeInTheDocument()
+    for (const line of EXPLANATIONS) expect(screen.queryByText(line)).not.toBeInTheDocument()
+  })
+
   it('shows no authorisation badge or explanation on an inactive entry (the Inactive pill carries its state, as in the wizard)', async () => {
     const user = userEvent.setup()
     mockUseRestrictivePractices.mockReturnValue({
