@@ -551,20 +551,12 @@ public class DashboardController : ControllerBase
                 LeadCoordinatorName = t.LeadCoordinator != null ? (t.LeadCoordinator.FirstName + " " + t.LeadCoordinator.LastName).Trim() : null
             }).ToListAsync(ct);
 
-        // The Admin's review of an emergency over budget is left out for a role that may not see budget standing, in the list and in the counts (the phase 3 review, C7).
+        // The Admin's review of an emergency over budget is left out for a role that may not see budget standing, in the counts (the phase 3 review, C7).
         var mayReview = BudgetReviewAudience.MaySee(User);
-        var overdueTasks = await _db.BookingTasks.Include(t => t.TripInstance).Include(t => t.Owner)
+        var overdueTaskCount = await _db.BookingTasks
             .Where(TaskOverdue.IsOverdueExpr(today))
             .Where(t => mayReview || t.TaskType != TaskType.BudgetEmergencyReview)
-            .Select(t => new TaskDto
-            {
-                Id = t.Id, TripInstanceId = t.TripInstanceId, TripName = t.TripInstance != null ? t.TripInstance.TripName : null,
-                LinkTo = t.LinkTo, SourceKey = t.SourceKey, ShiftId = t.ShiftId, IncidentReportId = t.IncidentReportId,
-                MedicationAdministrationId = t.MedicationAdministrationId, ShiftNoteId = t.ShiftNoteId, LeaveRequestId = t.LeaveRequestId,
-                TaskType = t.TaskType, Title = t.Title, OwnerId = t.OwnerId,
-                OwnerName = t.Owner != null ? (t.Owner.FirstName + " " + t.Owner.LastName).Trim() : null,
-                Priority = t.Priority, DueDate = t.DueDate, Status = t.Status
-            }).ToListAsync(ct);
+            .CountAsync(ct);
 
         var upcomingTripIds = upcomingTrips.Select(t => t.Id).ToList();
 
@@ -596,15 +588,14 @@ public class DashboardController : ControllerBase
             // The Active tab's rule: a draft is not counted, even one marked active (Participant.IsActive defaults to true) or whose services have begun.
             ActiveParticipantCount = await _db.Participants.CountAsync(p => p.IsActive && !p.IsDraft, ct),
             OutstandingTaskCount = await _db.BookingTasks.CountAsync(t => (mayReview || t.TaskType != TaskType.BudgetEmergencyReview) && t.Status != TaskItemStatus.Completed && t.Status != TaskItemStatus.Cancelled, ct),
-            OverdueTaskCount = overdueTasks.Count,
+            OverdueTaskCount = overdueTaskCount,
             ConflictCount = conflictCount,
             TripsMissingAccommodation = upcomingTripIds.Count - tripsWithAccommodation.Count,
             TripsMissingVehicles = upcomingTripIds.Count - tripsWithVehicles.Count,
             TripsMissingStaff = upcomingTripIds.Count - tripsWithStaff.Count,
             OpenIncidentCount = openIncidentCount,
             QscOverdueCount = qscOverdueCount,
-            UpcomingTrips = upcomingTrips,
-            OverdueTasks = overdueTasks
+            UpcomingTrips = upcomingTrips
         }));
     }
 }

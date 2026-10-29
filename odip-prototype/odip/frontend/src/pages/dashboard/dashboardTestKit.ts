@@ -59,7 +59,7 @@ export const summaryData = (overrides: Record<string, unknown> = {}) => ({
     upcomingTripCount: 0, activeParticipantCount: 0, outstandingTaskCount: 0,
     overdueTaskCount: 0, conflictCount: 0, tripsMissingAccommodation: 0,
     tripsMissingVehicles: 0, tripsMissingStaff: 0, openIncidentCount: 0,
-    qscOverdueCount: 0, upcomingTrips: [], overdueTasks: [],
+    qscOverdueCount: 0, upcomingTrips: [],
     ...overrides,
   },
   isPending: false, isLoading: false, isError: false,

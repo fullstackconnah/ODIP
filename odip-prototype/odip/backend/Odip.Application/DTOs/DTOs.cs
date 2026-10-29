@@ -1821,7 +1821,6 @@ public record DashboardSummaryDto
     public int OpenIncidentCount { get; init; }
     public int QscOverdueCount { get; init; }
     public List<TripListDto> UpcomingTrips { get; init; } = new();
-    public List<TaskDto> OverdueTasks { get; init; } = new();
 }
 
 // ══════════════════════════════════════════════════════════════

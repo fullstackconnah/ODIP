@@ -79,7 +79,7 @@ for role **RO** globally regardless of what's listed below.
 - POST `/import/confirm` — SA — apply the previewed rows (history-safe: rows a newer catalogue replaces or drops are end-dated, never deleted)
 
 ## TasksController — `api/v1/tasks` — class: `[Authorize]`
-- GET `` (filters: tripId, status, dueThisWeek, ownerId) — Authenticated — list booking tasks. The Admin's review of an emergency booking over budget (`BudgetEmergencyReview`) is listed for SA, A and C only: a SupportWorker or ReadOnly user does not get it (nor by id: 404), and the dashboard's overdue list and count leave it out for them too
+- GET `` (filters: tripId, status, dueThisWeek, ownerId) — Authenticated — list booking tasks. The Admin's review of an emergency booking over budget (`BudgetEmergencyReview`) is listed for SA, A and C only: a SupportWorker or ReadOnly user does not get it (nor by id: 404), and the dashboard's overdue count leaves it out for them too
 - POST `` — A, C, SA — create a task. A `BudgetEmergencyReview` task is created only by the shift save that raises it: a request that asks for the type is 403 for a Coordinator
 - PUT `/{id:guid}` — A, C, SA — update a task. Only an Admin or SuperAdmin may complete, cancel or retype a `BudgetEmergencyReview` task, or make another task one (403 otherwise: the stored type and the type in the request are both checked); an Admin who completes it without naming an owner becomes its owner, which is how the shift says who reviewed it
 - DELETE `/{id:guid}` — A, C, SA — delete a task (a `BudgetEmergencyReview` task: A and SA only, 403 otherwise)
