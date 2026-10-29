@@ -149,7 +149,11 @@ export function WeekToolbar({
             aria-disabled={addingAgreementShifts || undefined}
             onClick={() => { if (!addingAgreementShifts) onAddAgreementShifts() }}
           >
-            {addingAgreementShifts ? 'Adding…' : 'Add agreement shifts'}
+            {/* The idle label sits invisible in the same grid cell, so the button keeps its width while it reads "Adding…" (as WizardNavFooter). */}
+            <span className="grid">
+              <span aria-hidden="true" data-reserve="Add agreement shifts" className="invisible col-start-1 row-start-1 before:content-[attr(data-reserve)]" />
+              <span className="col-start-1 row-start-1">{addingAgreementShifts ? 'Adding…' : 'Add agreement shifts'}</span>
+            </span>
           </Button>
         )}
         {canWrite && (

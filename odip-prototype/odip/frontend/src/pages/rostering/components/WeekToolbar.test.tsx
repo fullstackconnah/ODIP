@@ -160,6 +160,14 @@ describe('WeekToolbar: All published and the one primary (Start rostering, 2026-
     expect(screen.getByRole('button', { name: /New shift/ })).not.toHaveClass('bg-[var(--color-primary)]')
   })
 
+  it('keeps the Add agreement shifts width while it reads Adding…', () => {
+    const { container } = renderToolbar({ onAddAgreementShifts: vi.fn(), addingAgreementShifts: true })
+    expect(screen.getByRole('button', { name: 'Adding…' })).toHaveAttribute('aria-disabled', 'true')
+    const reserve = container.querySelector('[data-reserve]')
+    expect(reserve).toHaveAttribute('data-reserve', 'Add agreement shifts')
+    expect(reserve).toHaveAttribute('aria-hidden', 'true')
+  })
+
   it('the week heading can take focus from the page', () => {
     renderToolbar()
     const heading = screen.getByRole('heading', { name: /Aug/ })
