@@ -336,7 +336,8 @@ public sealed partial class OnboardingImportService
     /// <summary>The batch an earlier request with this key made. The same key with other choices is a 409: the first try wrote the old choices, and answering with it would hide the new ones.</summary>
     private async Task<ImportResultDto?> ReplayAsync(string idempotencyKey, string fingerprint, CancellationToken ct)
     {
-        var earlier = await _db.ImportBatches.Where(b => b.IdempotencyKey == idempotencyKey)
+        var tenantId = TenantId(); // explicit: a SuperAdmin context has no query filter, and another organisation's batch must never replay or 409
+        var earlier = await _db.ImportBatches.Where(b => b.IdempotencyKey == idempotencyKey && b.TenantId == tenantId)
             .Select(b => new { b.Id, b.Kind, b.CreatedCount, b.SkippedCount, b.FailedCount, b.ChoicesFingerprint })
             .FirstOrDefaultAsync(ct);
         if (earlier is null) return null;
