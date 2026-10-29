@@ -46,6 +46,8 @@ export type ShiftSlideOverTarget =
       focusField?: 'participant' | 'staff' | 'start'
       /** Roster drag and drop: the shift the prefilled person was carried off. Saved with the new shift as one move, while the Staff field still names that person. */
       moveFromShiftId?: string
+      /** "HH:mm" from a time-grid slot; the end follows from oneHourAfter. */
+      startTime?: string
     }
   | { mode: 'edit'; shift: ShiftDto }
 
@@ -116,9 +118,10 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   const [participantId, setParticipantId] = useState(existing?.participantId ?? (target?.mode === 'create' ? target.participantId ?? '' : ''))
   const [staffId, setStaffId] = useState<string | null>(existing?.staffId ?? (target?.mode === 'create' ? target.staffId ?? null : null))
   const [serviceDate, setServiceDate] = useState(existing?.serviceDate ?? (target?.mode === 'create' ? target.serviceDate ?? '' : ''))
-  const [startTime, setStartTime] = useState(toTimeInputValue(existing?.startTime))
+  const initialStart = toTimeInputValue(existing?.startTime ?? (target?.mode === 'create' ? target.startTime : undefined))
+  const [startTime, setStartTime] = useState(initialStart)
   // A new shift opens with an end an hour after the start, so it opens with a length (09:00 gives 10:00) and the live check has something to say about it; an existing shift keeps its own.
-  const [endTime, setEndTime] = useState(existing?.endTime ? toTimeInputValue(existing.endTime) : oneHourAfter(toTimeInputValue(existing?.startTime)))
+  const [endTime, setEndTime] = useState(existing?.endTime ? toTimeInputValue(existing.endTime) : oneHourAfter(initialStart))
   const [endsNextDay, setEndsNextDay] = useState(existing?.endsNextDay ?? false)
   const [ratio, setRatio] = useState<SupportRatio>(existing?.ratio ?? 'OneToOne')
   const [nightType, setNightType] = useState<SleepoverType>(existing?.nightType ?? 'None')
