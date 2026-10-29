@@ -61,6 +61,41 @@ public class InquiryCloseTests
         db.SaveChanges();
     }
 
+    private static void SeedClosed(Fixture f, int count, Guid tenantId)
+    {
+        for (var i = 0; i < count; i++)
+            f.Db.ParticipantInquiries.Add(new ParticipantInquiry { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = $"C{i}", LastName = "Closed", Source = "Phone",
+                ClosedAt = Now.AddMinutes(i), CloseOutcome = InquiryCloseOutcome.Other });
+        f.Db.SaveChanges();
+    }
+
+    [Fact]
+    public async Task The_closed_list_is_the_latest_200_newest_close_first_and_counts_the_rest()
+    {
+        var f = new Fixture();
+        SeedClosed(f, 205, f.TenantId);
+        SeedClosed(f, 7, Guid.NewGuid());
+
+        var page = Ok<PagedResult<ParticipantInquiryDto>>((await Inquiries(f).GetClosed(CancellationToken.None)).Result!);
+
+        Assert.Equal(200, page.Items.Count);
+        Assert.Equal(205, page.TotalCount);
+        Assert.Equal(page.Items.OrderByDescending(r => r.ClosedAt).Select(r => r.Id), page.Items.Select(r => r.Id));
+        Assert.Equal(Now.AddMinutes(204), page.Items[0].ClosedAt);
+        Assert.Equal(Now.AddMinutes(5), page.Items[^1].ClosedAt);
+    }
+
+    [Fact]
+    public async Task A_short_closed_list_is_returned_whole_and_not_truncated()
+    {
+        var f = new Fixture();
+        SeedClosed(f, 50, f.TenantId);
+
+        var page = Ok<PagedResult<ParticipantInquiryDto>>((await Inquiries(f).GetClosed(CancellationToken.None)).Result!);
+
+        Assert.Equal((50, 50), (page.Items.Count, page.TotalCount));
+    }
+
     [Fact]
     public async Task Closing_cancels_an_upcoming_visit_deletes_the_contacts_and_records_why()
     {
@@ -200,11 +235,11 @@ public class InquiryCloseTests
 
         var open = Ok<List<ParticipantInquiryDto>>((await Inquiries(f).GetAll(CancellationToken.None)).Result!);
         Assert.Equal([other.Id], open.Select(r => r.Id));
-        var closed = Assert.Single(Ok<List<ParticipantInquiryDto>>((await Inquiries(f).GetAll(CancellationToken.None, "closed")).Result!));
+        var closed = Assert.Single(Ok<PagedResult<ParticipantInquiryDto>>((await Inquiries(f).GetClosed(CancellationToken.None)).Result!).Items);
         Assert.Equal((f.Noah.Id, InquiryCloseOutcome.NotGoingAhead, "Chose another provider"), (closed.Id, closed.CloseOutcome!.Value, closed.CloseNote));
         Assert.NotNull(closed.ClosedAt);
 
-        var asWorker = Assert.Single(Ok<List<ParticipantInquiryDto>>((await Inquiries(f, "SupportWorker").GetAll(CancellationToken.None, "closed")).Result!));
+        var asWorker = Assert.Single(Ok<PagedResult<ParticipantInquiryDto>>((await Inquiries(f, "SupportWorker").GetClosed(CancellationToken.None)).Result!).Items);
         Assert.Equal(InquiryCloseOutcome.NotGoingAhead, asWorker.CloseOutcome);
         Assert.Null(asWorker.CloseNote);
     }

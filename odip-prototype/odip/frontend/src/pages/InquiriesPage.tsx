@@ -14,6 +14,7 @@ import { ROW_ACTIONS_CARD } from '@/components/tapArea'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { useNotices } from '@/hooks/useNotices'
 import { useIsBelowMd } from '@/hooks/useIsBelowMd'
+import type { TruncatableList } from '@/api/hooks/pagedList'
 import { useConfirmIntakeBooking, useConvertParticipantInquiry, useParticipantInquiries } from '@/api/hooks'
 import type { CancelIntakeBookingResultDto, ParticipantInquiryDto } from '@/api/types/inquiries'
 import { usePermissions } from '@/lib/permissions'
@@ -372,6 +373,9 @@ function useInquiriesScreen() {
         : showTable && (view === 'closed'
           ? <DataTable data={filtered} columns={closedColumns} keyField="id" loading={isLoading} sortable emptyMessage="No closed enquiries." onRowClick={canManageParticipantLifecycle ? editExisting : undefined} />
           : <DataTable data={filtered} columns={columns} keyField="id" loading={isLoading} sortable emptyMessage="No open enquiries." onRowClick={canManageParticipantLifecycle ? openRow : undefined} />)}
+      {view === 'closed' && (inquiries as Partial<TruncatableList<ParticipantInquiryDto>>).isTruncated && (
+        <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">Showing the latest {inquiries.length} closed enquiries.</p>
+      )}
       <IntakeBookingPanel row={bookingRow} focusDate={booking?.focusDate} onClose={closeBooking} onRequestCancel={setCancelling} />
       <IntakeCancelDialog row={cancelling && (inquiries.find(r => r.id === cancelling.id) ?? cancelling)} onCancel={() => setCancelling(null)} onDone={onCancelled} />
       {closing && <CloseInquiryDialog row={closing} onCancel={() => setClosing(null)} onDone={onClosed} />}

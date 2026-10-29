@@ -27,17 +27,20 @@ public class ParticipantInquiriesController : ControllerBase
     public ParticipantInquiriesController(OdipDbContext db, ICurrentTenant tenant, TimeProvider? clock = null) { _db = db; _tenant = tenant; _clock = clock ?? TimeProvider.System; }
     private string Actor() => User?.FindFirstValue(ClaimTypes.NameIdentifier) ?? User?.FindFirstValue("sub") ?? "unknown";
 
-    /// <summary>
-    /// The Enquiries tab's feed: every enquiry, plus every intake in progress that no enquiry started (see
-    /// <see cref="ParticipantInquiryDto.IsDirectIntake"/>). The tab itself shows only the open ones.
-    /// </summary>
-    [HttpGet]
-    public async Task<ActionResult<ApiResponse<List<ParticipantInquiryDto>>>> GetAll(CancellationToken ct, [FromQuery] string? view = null)
+    /// <summary>The Closed view: the latest <see cref="ClosedListCap"/> closed enquiries, newest close first, with the full count so the screen can say the list is cut.</summary>
+    [HttpGet("closed")]
+    public async Task<ActionResult<ApiResponse<PagedResult<ParticipantInquiryDto>>>> GetClosed(CancellationToken ct)
     {
-        // view=closed lists the closed enquiries only; anything else is the open ones plus the direct intakes (spec addendum E4).
-        var closed = view == "closed";
-        var inquiries = await _db.ParticipantInquiries.Where(x => _tenant.TenantId == null || x.TenantId == _tenant.TenantId)
-            .Where(x => closed ? x.ClosedAt != null : x.ClosedAt == null).OrderByDescending(x => x.CreatedAt).ToListAsync(ct);
+        var query = _db.ParticipantInquiries.Where(x => _tenant.TenantId == null || x.TenantId == _tenant.TenantId).Where(x => x.ClosedAt != null);
+        var inquiries = await query.OrderByDescending(x => x.ClosedAt).Take(ClosedListCap).ToListAsync(ct);
+        var (rows, _) = await ToRows(inquiries, ct);
+        return Ok(ApiResponse<PagedResult<ParticipantInquiryDto>>.Ok(new PagedResult<ParticipantInquiryDto> { Items = rows, TotalCount = await query.CountAsync(ct), Page = 1, PageSize = ClosedListCap }));
+    }
+
+    private const int ClosedListCap = 200;
+
+    private async Task<(List<ParticipantInquiryDto> Rows, string ZoneId)> ToRows(List<ParticipantInquiry> inquiries, CancellationToken ct)
+    {
         // Where each converted enquiry has got to, so the Enquiries tab can say "Draft intake" or "Intake complete" instead of offering
         // "Resume intake" for ever. One query for the page; the participants' own tenant filter applies.
         var participantIds = inquiries.Where(x => x.ParticipantId != null).Select(x => x.ParticipantId!.Value).Distinct().ToList();
@@ -62,7 +65,19 @@ public class ParticipantInquiriesController : ControllerBase
         {
             IntakeLocation = null, IntakeNotes = null, IntakeStaffName = null, CloseNote = null, ContactFirstName = null, ContactLastName = null, ContactRelationship = null,
         }).ToList();
-        if (closed) return Ok(ApiResponse<List<ParticipantInquiryDto>>.Ok(rows));
+        return (rows, zoneId);
+    }
+
+    /// <summary>
+    /// The Enquiries tab's feed: every enquiry, plus every intake in progress that no enquiry started (see
+    /// <see cref="ParticipantInquiryDto.IsDirectIntake"/>). The tab itself shows only the open ones.
+    /// </summary>
+    [HttpGet]
+    public async Task<ActionResult<ApiResponse<List<ParticipantInquiryDto>>>> GetAll(CancellationToken ct)
+    {
+        var inquiries = await _db.ParticipantInquiries.Where(x => _tenant.TenantId == null || x.TenantId == _tenant.TenantId)
+            .Where(x => x.ClosedAt == null).OrderByDescending(x => x.CreatedAt).ToListAsync(ct);
+        var (rows, zoneId) = await ToRows(inquiries, ct);
 
         // A draft intake started in the Intake wizard (/participants/new) has no enquiry. It used to be reachable only through the register's
         // Drafts view; with that view gone it rides here so it is not lost. A draft an enquiry already links is that enquiry's row, never a second one.

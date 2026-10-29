@@ -119,6 +119,31 @@ describe('closing an enquiry from the table', () => {
   })
 })
 
+describe('the closed list bound', () => {
+  const cut = Object.assign(Array.from({ length: 200 }, (_, i) => ({ ...closed[0], id: `gone-${i}` })), { totalCount: 205, isTruncated: true })
+
+  it('says so when the server cut the closed list', async () => {
+    mocks.inquiries.mockImplementation((view = 'open') => ({ data: view === 'closed' ? cut : open, isLoading: false, isError: false, refetch: vi.fn() }))
+    const user = userEvent.setup()
+    page()
+
+    expect(screen.queryByText("Showing the latest 200 closed enquiries.")).not.toBeInTheDocument()
+    await user.click(screen.getByRole('radio', { name: 'Closed' }))
+
+    expect(screen.getByText("Showing the latest 200 closed enquiries.")).toBeInTheDocument()
+  })
+
+  it('shows no hint when the closed list is whole', async () => {
+    const user = userEvent.setup()
+    page()
+
+    await user.click(screen.getByRole('radio', { name: 'Closed' }))
+
+    expect(screen.getByRole('row', { name: /Ivy Park/ })).toBeInTheDocument()
+    expect(screen.queryByText(/Showing the latest/)).not.toBeInTheDocument()
+  })
+})
+
 describe('the Open and Closed views', () => {
   it('Open | Closed lives in the URL, and the Closed view shows outcome, note and date', async () => {
     const user = userEvent.setup()
