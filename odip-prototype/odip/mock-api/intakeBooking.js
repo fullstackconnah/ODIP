@@ -237,10 +237,11 @@ function create({ respond, failEnvelope, enquiryFeed }) {
 
   const detail = [['inquiries/:id', (id) => { const row = find(id); return row ? { ...withBooking(row), contacts: contacts[id] ?? [] } : notFound() }]]
 
-  // view=closed: the closed ones only; otherwise the open ones, as the API lists them.
-  const feed = (params) => rows().filter((r) => (params?.get('view') === 'closed') === !!closed[r.id]).map(listRow)
+  // The open ones, as the API lists them; the closed ones are their own list (inquiries/closed).
+  const feed = () => rows().filter((r) => !closed[r.id]).map(listRow)
+  const closedFeed = () => rows().filter((r) => closed[r.id]).map(listRow)
 
-  return { feed, get, put, post, delete: del, detail }
+  return { feed, closedFeed, get, put, post, delete: del, detail }
 }
 
 module.exports = { create }
