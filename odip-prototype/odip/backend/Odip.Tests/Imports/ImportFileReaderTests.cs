@@ -40,6 +40,32 @@ public class ImportFileReaderTests
     }
 
     [Fact]
+    public void Accepts_exactly_2000_data_rows_among_blank_lines_and_keeps_the_last_one()
+    {
+        var lines = Enumerable.Range(0, 2000).Select(i => $"A{i},B{i}").ToList();
+        lines.Insert(1000, "");
+        lines.Insert(10, "");
+        var table = ImportFileReader.Read(Utf8("First name,Last name\n" + string.Join("\n", lines) + "\n"), "people.csv");
+        Assert.Equal(2000, table.Rows.Count);
+        Assert.Equal("A1999", table.Cell(table.Rows[^1], 0));
+        Assert.Equal(2003, table.Rows[^1].RowNumber); // header + 2,000 rows + 2 blank lines
+    }
+
+    [Fact]
+    public void Refuses_a_csv_far_over_the_row_limit_with_its_true_row_count()
+    {
+        var csv = "First name,Last name\n" + string.Concat(Enumerable.Range(0, 50_000).Select(i => $"A{i},B{i}\n"));
+        Assert.Equal("The file has 50,000 rows. Import at most 2,000 at a time: split the file and import each part.", Refusal(Utf8(csv), "people.csv"));
+    }
+
+    [Fact]
+    public void Five_megabytes_of_newlines_is_refused_as_having_no_header()
+    {
+        var newlines = Enumerable.Repeat((byte)'\n', ImportFileReader.MaxBytes).ToArray();
+        Assert.Equal("The file has no header row. Put the column names in the first row.", Refusal(newlines, "people.csv"));
+    }
+
+    [Fact]
     public void Trims_cells_drops_blank_rows_and_numbers_rows_as_the_spreadsheet_does()
     {
         var table = ImportFileReader.Read(Utf8(" First name ,Last name\n  Ava , Stone \n,\nBen\n"), "people.csv");
