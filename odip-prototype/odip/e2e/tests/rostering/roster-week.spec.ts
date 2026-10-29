@@ -3,8 +3,8 @@ import { ensureProviderSettings, makeParticipant, makeShift, makeStaff, publishS
 import { addDays, mondayOf, nextWednesday } from '../../support/dates';
 
 // Roster week per person (PLAN 2026-10-28 §4.4), on the real API and PostgreSQL: a name on the board opens that person's week on their
-// profile, a name on a chip there opens the other person's week, and a shift opens its editor back on the board; Back returns to the week.
-test('a name on the board opens their week, and a shift there opens its editor on the board', async ({ page, session }, testInfo) => {
+// profile, a name on a chip there opens the other person's week, and a shift opens its editor in place on the grid.
+test('a name on the board opens their week, and a shift there opens its editor in place', async ({ page, session }, testInfo) => {
   await ensureProviderSettings(session);
   const participant = await makeParticipant(session);
   const staff = await makeStaff(session);
@@ -30,16 +30,25 @@ test('a name on the board opens their week, and a shift there opens its editor o
   await expect(page.getByRole('tab', { name: 'Week' })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('link', { name: `Pw ${participant.token}`, exact: true })).toBeVisible();
 
-  // 3. The chip opens the shift's editor on the board; the board drops shift= from the URL.
-  // Top-left corner: the chip's centre is the other person's name link, which navigates on its own.
-  await page.locator(`[data-shift-open="${shift.id}"]`).click({ position: { x: 6, y: 6 } });
+  // 3. A block on the grid opens the shift's editor in place; the URL stays on the Week tab.
+  // Top-left corner: the block's centre is the other person's name link, which navigates on its own.
+  const block = page.locator('[data-shift-open="' + shift.id + '"]');
+  await block.click({ position: { x: 6, y: 6 } });
   const editor = page.getByRole('dialog', { name: 'Shift details' });
   await expect(editor).toBeVisible();
-  await expect(page).toHaveURL(new RegExp(`/rostering\\?date=${mon}$`));
+  await expect(page).toHaveURL(new RegExp(`/staff/${staff.id}\\?tab=week&week=${mon}$`));
 
-  // 4. Close it, and Back returns to the worker's week.
+  // 4. Escape closes it and focus returns to the block.
   await page.keyboard.press('Escape');
   await expect(editor).toHaveCount(0);
-  await page.goBack();
-  await expect(page).toHaveURL(new RegExp(`/staff/${staff.id}\\?tab=week&week=${mon}$`));
+  await expect(block).toBeFocused();
+
+  // 5. An empty slot starts a new shift at that time (10:30 on the Thursday, one hour long).
+  await page.locator('[data-day="' + addDays(mon, 3) + '"] [data-minute="630"]').click();
+  const creator = page.getByRole('dialog', { name: 'New shift' });
+  await expect(creator).toBeVisible();
+  await expect(creator.getByLabel(/^Start time/)).toHaveValue('10:30');
+  await expect(creator.getByLabel(/^End time/)).toHaveValue('11:30');
+  await page.keyboard.press('Escape');
+  await expect(creator).toHaveCount(0);
 });
