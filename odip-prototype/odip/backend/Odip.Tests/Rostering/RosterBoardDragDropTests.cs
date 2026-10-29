@@ -1165,7 +1165,7 @@ public class RosterBoardDragDropTests
 
     // ── Changing a Published shift's time, day or participant tells its worker (shift-change-notice, 2026-10-29) ──
 
-    private const string Dash = " –⁠ ";
+    private const string Dash = "\u00A0\u2013\u2060\u00A0";
 
     private static (Shift Shift, User Alex) PublishedWithAlex(OdipDbContext db)
     {
@@ -1289,6 +1289,32 @@ public class RosterBoardDragDropTests
         Body(await Controller(db).UpdateShift(shift.Id, Put(shift, alex.Id, ShiftStatus.Published) with { ServiceDate = new DateOnly(2026, 8, 25) }, default));
 
         Assert.Equal(new[] { (NotificationEventType.ShiftChanged, alex.Id) }, await Notices(db));
+    }
+
+    [Fact]
+    public async Task UpdateShift_MovingAPastShiftOntoTodayItself_TellsTheWorker()
+    {
+        using var db = TestDb.Create();
+        var alex = SeedStaff(db, "Alex", "Ng");
+        var shift = SeedShift(db, SeedParticipant(db).Id, alex.Id, ShiftStatus.Published, day: new DateOnly(2026, 8, 19));   // the provider's today is 2026-08-20
+
+        Body(await Controller(db).UpdateShift(shift.Id, Put(shift, alex.Id, ShiftStatus.Published) with { ServiceDate = new DateOnly(2026, 8, 20) }, default));
+
+        Assert.Equal(new[] { (NotificationEventType.ShiftChanged, alex.Id) }, await Notices(db));
+    }
+
+    [Fact]
+    public async Task UpdateShift_ARefusedTimeChange_SendsNoChangeNotice()
+    {
+        using var db = TestDb.Create();
+        var (shift, alex) = PublishedWithAlex(db);
+
+        // 9:00 am start, 8:00 am end, not overnight: refused by the end-before-start rule, before anything is saved or told
+        var result = await Controller(db).UpdateShift(shift.Id, Put(shift, alex.Id, ShiftStatus.Published) with { EndTime = new TimeOnly(8, 0) }, default);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Equal(shift.EndTime, (await Reload(db, shift.Id)).EndTime);
+        Assert.Empty(await Notices(db));
     }
 
     [Fact]

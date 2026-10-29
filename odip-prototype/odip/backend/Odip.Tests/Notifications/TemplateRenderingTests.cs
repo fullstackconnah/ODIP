@@ -176,7 +176,7 @@ public class TemplateRenderingTests
         var message = ShiftUnassignedTemplate.Render(payload, BaseUrl);
 
         Assert.Equal("worker@example.com", message.RecipientAddress);
-        Assert.Equal("Shift change: Alice Participant on 15 Sep 2026", message.Subject);
+        Assert.Equal("Taken off a shift: Alice Participant on 15 Sep 2026", message.Subject);
         Assert.Equal(
             "You've been taken off Alice Participant, 15 Sep 2026 9:00 AM to 3:00 PM.\n\nView your shifts: https://odip.test/portal",
             message.PlainTextBody);
@@ -217,6 +217,6 @@ public class TemplateRenderingTests
         var payload = System.Text.Json.JsonSerializer.Deserialize<ShiftUnassignedPayload>(oldRow)!;
 
         Assert.False(payload.Cancelled);
-        Assert.Equal("Shift change: Alice Participant on 15 Sep 2026", ShiftUnassignedTemplate.Render(payload, BaseUrl).Subject);
+        Assert.Equal("Taken off a shift: Alice Participant on 15 Sep 2026", ShiftUnassignedTemplate.Render(payload, BaseUrl).Subject);
     }
 }
