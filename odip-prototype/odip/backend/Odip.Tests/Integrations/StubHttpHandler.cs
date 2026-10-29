@@ -59,6 +59,15 @@ internal sealed class StubHttpHandler : HttpMessageHandler
         return this;
     }
 
+    /// <summary>Never answers this path: the request waits until its cancellation token fires.</summary>
+    public StubHttpHandler OnHang(string pathAndQuery)
+    {
+        _hangs.Add(pathAndQuery);
+        return this;
+    }
+
+    private readonly HashSet<string> _hangs = new();
+
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
     {
         var body = request.Content is null ? null : await request.Content.ReadAsStringAsync(ct);
@@ -69,6 +78,7 @@ internal sealed class StubHttpHandler : HttpMessageHandler
         }
         BeforeAnswer?.Invoke(request);
         var key = Uri.UnescapeDataString(request.RequestUri!.PathAndQuery);
+        if (_hangs.Contains(key)) await Task.Delay(Timeout.Infinite, ct);
         if (_methodRoutes.TryGetValue($"{request.Method.Method} {key}", out var byMethod)) return byMethod();
         if (_anyQuery.Contains(request.RequestUri.AbsolutePath)) key = request.RequestUri.AbsolutePath;
         return _routes.TryGetValue(key, out var answer) ? answer() : new HttpResponseMessage(HttpStatusCode.NotFound);
