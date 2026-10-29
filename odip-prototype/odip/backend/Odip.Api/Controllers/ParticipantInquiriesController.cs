@@ -95,7 +95,7 @@ public class ParticipantInquiriesController : ControllerBase
         var rowsByParticipant = stored.GroupBy(o => o.ParticipantId).ToDictionary(g => g.Key, g => g.First());
         var result = new List<ParticipantOnboardingWorklistDto>();
         var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
-        var facts = await LoadFactsAsync(ids, tenantId, today, ct);
+        var facts = await LoadFactsAsync(ids, tenantId, today, false, ct);
         foreach (var p in participants)
         {
             // Everyone in onboarding stays listed, every item done or not: only "Make active" moves them on. The page counts the same "n of N".
@@ -355,14 +355,21 @@ public class ParticipantInquiriesController : ControllerBase
     /// </summary>
     private sealed record OnboardingFacts(HashSet<Guid> ServiceNeedsDone, HashSet<Guid> FundingRecorded, HashSet<Guid> AnyPlan);
 
-    /// <summary>The checklist's three queried facts for a set of participants of one tenant, one query each, so the worklist costs three queries however many are listed.</summary>
-    private async Task<OnboardingFacts> LoadFactsAsync(List<Guid> ids, Guid tenantId, DateOnly today, CancellationToken ct) => new(
-        (await ParticipantReadinessGate.ServiceNeedsParticipants(_db).Where(p => ids.Contains(p.Id)).Select(p => p.Id).ToListAsync(ct)).ToHashSet(),
-        (await ParticipantReadinessGate.FundingRecordedParticipants(_db, today).Where(p => ids.Contains(p.Id)).Select(p => p.Id).ToListAsync(ct)).ToHashSet(),
-        (await _db.FundingPlans.Where(f => ids.Contains(f.ParticipantId) && f.TenantId == tenantId).Select(f => f.ParticipantId).Distinct().ToListAsync(ct)).ToHashSet());
+    /// <summary>The checklist's three queried facts for a set of participants of one tenant, one query each (the plan history only when asked), so the worklist costs two queries however many are listed.</summary>
+    private async Task<OnboardingFacts> LoadFactsAsync(List<Guid> ids, Guid tenantId, DateOnly today, bool withPlanHistory, CancellationToken ct)
+    {
+        if (ids.Count == 0) return new(new(), new(), new());
+        var serviceNeeds = (await ParticipantReadinessGate.ServiceNeedsParticipants(_db).Where(p => ids.Contains(p.Id)).Select(p => p.Id).ToListAsync(ct)).ToHashSet();
+        var funding = (await ParticipantReadinessGate.FundingRecordedParticipants(_db, today).Where(p => ids.Contains(p.Id)).Select(p => p.Id).ToListAsync(ct)).ToHashSet();
+        // The worklist shows only Done, the counts and the label, so it doesn't need the plan history behind the funding "Missing" wording.
+        var anyPlan = withPlanHistory
+            ? (await _db.FundingPlans.Where(f => ids.Contains(f.ParticipantId) && f.TenantId == tenantId).Select(f => f.ParticipantId).Distinct().ToListAsync(ct)).ToHashSet()
+            : new HashSet<Guid>();
+        return new(serviceNeeds, funding, anyPlan);
+    }
 
     private async Task<ParticipantOnboardingDto> BuildDetailAlone(Participant participant, ParticipantOnboarding onboarding, CancellationToken ct) =>
-        BuildDetail(participant, onboarding, await LoadFactsAsync([participant.Id], participant.TenantId, await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct), ct));
+        BuildDetail(participant, onboarding, await LoadFactsAsync([participant.Id], participant.TenantId, await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct), true, ct));
 
     private static ParticipantOnboardingDto BuildDetail(Participant participant, ParticipantOnboarding onboarding, OnboardingFacts facts)
     {
