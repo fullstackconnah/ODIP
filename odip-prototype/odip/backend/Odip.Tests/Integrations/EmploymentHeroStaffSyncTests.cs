@@ -125,6 +125,23 @@ public class EmploymentHeroStaffSyncTests
     }
 
     [Fact]
+    public async Task Of_two_same_name_EH_employees_the_first_is_held_for_the_ODIP_namesake_and_the_second_is_created
+    {
+        var (db, tenant) = await OrganisationAsync(t => EhFixture.Staff(t, "Jane", "Smith", "jane@gmail.com"));
+        await using var _ = db;
+        var jane = await db.Users.SingleAsync(u => u.FirstName == "Jane");
+
+        await RunAsync(db, tenant, Eh(Employee(311, "Jane", "Smith", "jane.smith@acme.org.au"), Employee(312, "Jane", "Smith", "j.smith@acme.org.au")));
+
+        var held = await db.EmploymentHeroAttentions.SingleAsync();
+        Assert.Equal((EmploymentHeroAttentionKind.NotLinked, (Guid?)jane.Id, "311"), (held.Kind, held.UserId, held.ExternalEmployeeId));
+        Assert.Null((await db.Users.SingleAsync(u => u.Id == jane.Id)).ExternalPayrollId);
+        Assert.False(await db.Users.AnyAsync(u => u.ExternalPayrollId == "311"));
+        Assert.True(await db.Users.AnyAsync(u => u.ExternalPayrollId == "312" && u.Email == "j.smith@acme.org.au"));
+        Assert.Equal(3, await db.Users.CountAsync());   // Ada, the one Jane and the created second Jane
+    }
+
+    [Fact]
     public async Task Leavers_are_not_created_a_rehire_links_to_the_current_record_and_the_last_day_is_still_active()
     {
         var (db, tenant) = await OrganisationAsync(t => EhFixture.Staff(t, "Bo", "Chan", "bo@gmail.com"), t => EhFixture.Staff(t, "Ed", "Fox", "ed@gmail.com", "405"));
@@ -634,6 +651,7 @@ public class EmploymentHeroStaffSyncTests
         Assert.Equal("701", (await db.Users.SingleAsync(u => u.FirstName == "Hal")).ExternalPayrollId);
         Assert.Equal(0, result.Log!.Linked);
         Assert.Contains(db.EmploymentHeroAttentions, a => a.ExternalEmployeeId == "702");
+        Assert.DoesNotContain(db.EmploymentHeroAttentions, a => a.ExternalEmployeeId == "701");
     }
 
     private sealed class RefusingLink : SaveChangesInterceptor
