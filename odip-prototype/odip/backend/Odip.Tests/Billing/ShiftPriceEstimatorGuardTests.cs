@@ -26,6 +26,15 @@ public class ShiftPriceEstimatorGuardTests
     private static ShiftPriceOutcome PriceOf(SupportRatio ratio, SleepoverType night, IReadOnlyList<SupportCatalogueItem>? items = null, DateOnly? date = null) =>
         ShiftPriceEstimator.Price(items ?? Catalogue(), date ?? Wednesday, 8m, ratio, night, isIntensive: false, "NSW", new HashSet<DateOnly>());
 
+    [Fact]
+    public void AShiftOf20Minutes_CarriesHoursRoundedTo2dp_AndTheAmountOfThoseHours()
+    {
+        var price = ShiftPriceEstimator.Price(Catalogue(), Wednesday, 1m / 3m, SupportRatio.OneToOne, SleepoverType.None, isIntensive: false, "NSW", new HashSet<DateOnly>()).Price!;
+
+        Assert.Equal(0.33m, price.Hours);
+        Assert.Equal(19.80m, price.TotalAmount);   // 0.33 h x $60; the unrounded 0.3333 h would give $20.00
+    }
+
     [Theory]
     [InlineData(SupportRatio.OneToOne)]
     [InlineData(SupportRatio.TwoToOne)]

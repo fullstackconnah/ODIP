@@ -169,6 +169,24 @@ public class ShiftClaimGenerationServiceTests
     }
 
     [Fact]
+    public async Task GenerateDraftClaimAsync_A20MinuteShift_StoresHoursTo2dp_AndTheAmountOfThoseHours()
+    {
+        using var db = CreateDb();
+        SeedProviderSettings(db);
+        var participant = SeedParticipant(db);
+        SeedCatalogueItem(db, ClaimDayType.Weekday, false, vicPrice: 60m);
+        SeedShift(db, participant.Id, new DateOnly(2026, 9, 7), start: new TimeOnly(9, 0), end: new TimeOnly(9, 20));
+        await db.SaveChangesAsync();
+
+        var claim = await new ShiftClaimGenerationService(db).GenerateDraftClaimAsync(participant.Id, new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 7));
+
+        var line = await db.ClaimLineItems.SingleAsync(l => l.TripClaimId == claim.Id);
+        Assert.Equal(0.33m, line.Hours);
+        Assert.Equal(19.80m, line.TotalAmount);   // the NDIA's 0.33 x 60; unrounded hours would give 20.00
+        Assert.Equal(19.80m, claim.TotalAmount);
+    }
+
+    [Fact]
     public async Task GenerateDraftClaimAsync_UsesRosteredHours_NotClockedTimes()
     {
         // Billing is against rostered hours (Shift.DurationHours), not ShiftCompletion's actual

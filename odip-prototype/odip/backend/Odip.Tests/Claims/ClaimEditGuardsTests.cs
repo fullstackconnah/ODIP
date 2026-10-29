@@ -54,6 +54,38 @@ public class ClaimEditGuardsTests
 
     private static string RefusalOf(ActionResult<ApiResponse<bool>> result) => Assert.Single(Assert.IsType<ApiResponse<bool>>(Assert.IsAssignableFrom<ObjectResult>(result.Result).Value).Errors!);
 
+    // ── A line's amount is rounded to the cent, half away from zero, and the claim total is the sum of the rounded lines (owner, 2026-10-29) ──
+
+    [Theory]
+    [InlineData(0.25, 10.10, 2.53)]
+    [InlineData(1.25, 10.10, 12.63)]
+    public async Task AnEditedLine_IsRoundedToTheCent_HalfAwayFromZero(double hours, double price, double expected)
+    {
+        var (db, controller) = Create();
+        var (claim, line, _) = Seed(db, TripClaimStatus.Draft);
+
+        await controller.UpdateLineItem(claim.Id, line.Id, new UpdateClaimLineItemDto { Hours = (decimal)hours, UnitPrice = (decimal)price }, Ct);
+
+        db.ChangeTracker.Clear();
+        Assert.Equal((decimal)expected, (await db.ClaimLineItems.AsNoTracking().SingleAsync(l => l.Id == line.Id)).TotalAmount);
+    }
+
+    [Fact]
+    public async Task TheClaimTotalAfterEdits_IsTheSumOfItsRoundedLines_NotTheRoundedSum()
+    {
+        var (db, controller) = Create();
+        var (claim, first, second) = Seed(db, TripClaimStatus.Draft);
+        var dto = new UpdateClaimLineItemDto { Hours = 0.25m, UnitPrice = 10.10m };
+
+        await controller.UpdateLineItem(claim.Id, first.Id, dto, Ct);
+        await controller.UpdateLineItem(claim.Id, second.Id, dto, Ct);
+
+        db.ChangeTracker.Clear();
+        var lines = await db.ClaimLineItems.AsNoTracking().Where(l => l.TripClaimId == claim.Id).ToListAsync();
+        Assert.All(lines, l => Assert.Equal(2.53m, l.TotalAmount));
+        Assert.Equal(5.06m, (await db.TripClaims.AsNoTracking().SingleAsync(c => c.Id == claim.Id)).TotalAmount);
+    }
+
     // ── A claim with a participant funded another way is not submitted to the NDIS ────────────────
 
     /// <summary>A trip-kind Draft of organisation A with one line per participant (each on their own booking).</summary>
@@ -503,5 +535,42 @@ public class ClaimEditGuardsTests
         Assert.Equal(409, StatusOf(result));
         db.ChangeTracker.Clear();
         Assert.Equal(ClaimLineItemStatus.Rejected, (await db.ClaimLineItems.AsNoTracking().SingleAsync(l => l.Id == first.Id)).Status);
+    }
+
+    // ── A line can't be rejected until its claim has gone to the NDIA ──────────────────────────────
+
+    [Theory]
+    [InlineData(TripClaimStatus.Draft)]
+    [InlineData(TripClaimStatus.Ready)]
+    public async Task ALineCannotBeRejected_WhileItsClaimIsNotYetSubmitted_AndNothingIsWritten(TripClaimStatus status)
+    {
+        var (db, controller) = Create();
+        var (claim, line, _) = Seed(db, status);
+        var lineStatus = line.Status;
+
+        var result = await controller.UpdateLineItem(claim.Id, line.Id, new UpdateClaimLineItemDto { Status = ClaimLineItemStatus.Rejected, RejectionReason = "Not funded" }, Ct);
+
+        Assert.Equal(409, StatusOf(result));
+        Assert.Equal($"{claim.ClaimReference} hasn't been submitted to the NDIA yet, so its lines can't be marked as rejected.", RefusalOf(result));
+        db.ChangeTracker.Clear();
+        var stored = await db.ClaimLineItems.AsNoTracking().SingleAsync(l => l.Id == line.Id);
+        Assert.Equal((lineStatus, (string?)null), (stored.Status, stored.RejectionReason));
+        Assert.Equal(status, (await db.TripClaims.AsNoTracking().SingleAsync(c => c.Id == claim.Id)).Status);
+    }
+
+    [Fact]
+    public async Task TheOnlyLineOfADraftClaim_CannotBeRejected()
+    {
+        var (db, controller) = Create();
+        var (claim, only, other) = Seed(db, TripClaimStatus.Draft);
+        var lineStatus = only.Status;
+        db.ClaimLineItems.Remove(other);
+        await db.SaveChangesAsync();
+
+        var result = await controller.UpdateLineItem(claim.Id, only.Id, new UpdateClaimLineItemDto { Status = ClaimLineItemStatus.Rejected }, Ct);
+
+        Assert.Equal(409, StatusOf(result));
+        db.ChangeTracker.Clear();
+        Assert.Equal((TripClaimStatus.Draft, lineStatus), ((await db.TripClaims.AsNoTracking().SingleAsync(c => c.Id == claim.Id)).Status, (await db.ClaimLineItems.AsNoTracking().SingleAsync(l => l.Id == only.Id)).Status));
     }
 }
