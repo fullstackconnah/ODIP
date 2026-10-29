@@ -49,6 +49,13 @@ public sealed class SmtpEmailChannel : INotificationChannel
             return new ChannelSendResult(ChannelSendOutcome.Skipped, null, "SMTP is not configured");
         }
 
+        // A malformed address can never succeed: fail it now rather than as a transient error the outbox retries.
+        if (!MailAddress.TryCreate(message.RecipientAddress, out _))
+        {
+            _logger.LogWarning("Recipient address {Recipient} is not a valid email address — not sent", message.RecipientAddress);
+            return new ChannelSendResult(ChannelSendOutcome.PermanentFailure, null, $"{message.RecipientAddress} isn't a valid email address");
+        }
+
         var port = _config.GetValue("Notifications:Smtp:Port", 587);
         var user = _config.GetValue<string>("Notifications:Smtp:User");
         var password = _config.GetValue<string>("Notifications:Smtp:Password");
