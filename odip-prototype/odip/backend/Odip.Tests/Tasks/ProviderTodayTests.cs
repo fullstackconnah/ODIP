@@ -61,7 +61,7 @@ public class ProviderTodayTests
     }
 
     [Fact]
-    public async Task TasksList_OverdueFilter_ReturnsAsManyTasksAsTheDashboardCountsAsOverdue()
+    public async Task TasksList_OverdueFilter_ReturnsExactlyTheTasksTheDashboardCountsAsOverdue()
     {
         using var db = CreateDb();
         db.BookingTasks.AddRange(
@@ -80,7 +80,7 @@ public class ProviderTodayTests
             (await new TasksController(db, clock).GetAll(null, TaskItemStatus.Overdue, null, null, CancellationToken.None)).Result).Value).Data!;
 
         Assert.Equal(2, dashboard.OverdueTaskCount);
-        Assert.Equal(dashboard.OverdueTaskCount, list.Count);
+        Assert.Equal(["late-by-date", "stored-overdue"], list.Select(t => t.SourceKey).Order());
     }
 
     [Fact]
