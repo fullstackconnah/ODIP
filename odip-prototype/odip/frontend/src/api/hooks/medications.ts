@@ -24,6 +24,14 @@ function invalidateMedicationCaches(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ['participant-administrations'] })
 }
 
+// A save can create, (de)activate or tick the register entry too, so the register and the participant's flag refetch with it.
+function invalidateRestraintCaches(qc: ReturnType<typeof useQueryClient>, participantId: string | undefined) {
+  invalidateMedicationCaches(qc)
+  qc.invalidateQueries({ queryKey: participantId ? ['restrictive-practices', participantId] : ['restrictive-practices'] })
+  qc.invalidateQueries({ queryKey: participantId ? ['participant', participantId] : ['participant'] })
+  qc.invalidateQueries({ queryKey: ['participants'] })
+}
+
 export function useParticipantMedications(participantId: string | undefined, includeInactive?: boolean) {
   return useQuery({
     queryKey: ['medications', 'participant', participantId, includeInactive ?? false],
@@ -92,7 +100,7 @@ export function useCreateMedication() {
   return useMutation({
     mutationFn: ({ participantId, data }: { participantId: string; data: CreateMedicationDto }) =>
       apiPostRaw<MedicationDetailDto>(`/participants/${participantId}/medications`, data),
-    onSuccess: () => invalidateMedicationCaches(qc),
+    onSuccess: (res, variables) => invalidateRestraintCaches(qc, res.data?.participantId ?? variables.participantId),
   })
 }
 
@@ -101,7 +109,7 @@ export function useUpdateMedication() {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: UpdateMedicationDto }) =>
       apiPutRaw<MedicationDetailDto>(`/medications/${id}`, data),
-    onSuccess: () => invalidateMedicationCaches(qc),
+    onSuccess: (res) => invalidateRestraintCaches(qc, res.data?.participantId),
   })
 }
 

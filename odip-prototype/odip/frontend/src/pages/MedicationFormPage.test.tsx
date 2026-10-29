@@ -316,3 +316,58 @@ describe('MedicationFormPage — editing a record that has not loaded', () => {
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
   })
 })
+
+describe('MedicationFormPage — chemical restraint register panel', () => {
+  async function fillBasics(user: ReturnType<typeof userEvent.setup>) {
+    await user.type(screen.getByPlaceholderText('e.g. Paracetamol'), 'Risperidone')
+    await user.type(screen.getByPlaceholderText('e.g. 1 tablet'), '1 tablet')
+    await user.type(screen.getByPlaceholderText('What this medication is for'), 'Agitation')
+  }
+
+  it('asks the reporting question, requires an answer, and saves the restraint fields', async () => {
+    const user = userEvent.setup()
+    mockCreateMutateAsync.mockResolvedValue({ success: true, data: { id: 'new-med', participantId: 'participant-1' } })
+    renderCreatePage()
+    await fillBasics(user)
+    await user.click(screen.getByLabelText('Chemical restraint'))
+
+    await user.click(screen.getByRole('button', { name: /create medication/i }))
+    expect(await screen.findByText('Choose Yes or No')).toBeInTheDocument()
+    expect(mockCreateMutateAsync).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('radio', { name: 'Yes' }))
+    await user.click(screen.getByRole('button', { name: /create medication/i }))
+    expect(mockCreateMutateAsync).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        isChemicalRestraint: true,
+        restraintAuthorised: false,
+        restraintAuthorisedBy: null,
+        restraintAuthorisationDate: null,
+        restraintRequiresReporting: true,
+      }),
+    }))
+  })
+
+  it('swaps the reporting question for authoriser and date when authorised', async () => {
+    const user = userEvent.setup()
+    mockCreateMutateAsync.mockResolvedValue({ success: true, data: { id: 'new-med', participantId: 'participant-1' } })
+    renderCreatePage()
+    await fillBasics(user)
+    await user.click(screen.getByLabelText('Chemical restraint'))
+    await user.click(screen.getByLabelText('This restrictive practice is authorised'))
+
+    expect(screen.queryByText('Does this need to be reported to the NDIS Commission?')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /create medication/i }))
+    expect(await screen.findByText('Add who authorised it')).toBeInTheDocument()
+    expect(screen.getByText('Add the date it was authorised')).toBeInTheDocument()
+  })
+
+  it('shows a warning banner with the reload copy on a 409', () => {
+    mockUseCreateMedication.mockReturnValue({
+      mutateAsync: mockCreateMutateAsync, isPending: false, isError: true,
+      error: { response: { status: 409, data: {} } },
+    })
+    renderCreatePage()
+    expect(screen.getByRole('alert')).toHaveTextContent("This medicine's register entry was changed while you were editing. Reload the page")
+  })
+})
