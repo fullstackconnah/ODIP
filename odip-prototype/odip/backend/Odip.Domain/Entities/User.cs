@@ -36,6 +36,8 @@ public class User : ITenantEntity
     public DateOnly? MedicationCompetencyExpiryDate { get; set; }
     public string? WorkerScreeningNumber { get; set; }
     public DateOnly? WorkerScreeningExpiryDate { get; set; }
+    /// <summary>The first day this person can be rostered, from Employment Hero (set only by the payroll sync). Null means no limit.</summary>
+    public DateOnly? EmploymentStartDate { get; set; }
     public string? Notes { get; set; }
 
     /// <summary>

@@ -31,6 +31,7 @@ const GROUPS = [
   { key: 'free', label: 'Free at this time' },
   { key: 'move', label: 'On another shift at this time' },
   { key: 'leave', label: 'On leave that day' },
+  { key: 'notStarted', label: "Hasn't started yet" },
 ] as const
 
 /**
@@ -317,9 +318,10 @@ function PickOption({ id, row, active, onPick, onHover }: { id: string; row: Pic
         <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground" title={person.fullName}>{person.fullName}</span>
         <span className={`shrink-0 text-xs tabular-nums ${over ? TONE.warning.ink : 'text-muted-foreground'}`}>{formatHoursMeter(row.hours, weeklyHours)}</span>
       </span>
-      {(row.leave || source) && (
+      {(row.leave || row.notStarted || source) && (
         <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
           {row.leave && <StatusBadge tone={row.leave === 'Approved' ? 'neutral' : 'warning'} label={row.leave === 'Approved' ? 'On leave' : 'Leave pending'} />}
+          {row.notStarted && <StatusBadge tone="neutral" label="Hasn't started yet" />}
           {source && <span className="min-w-0 truncate">{moveLine(source)}</span>}
         </span>
       )}

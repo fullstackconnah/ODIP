@@ -581,3 +581,17 @@ describe('StaffDetailPage — Week tab', () => {
     expect(mockPersonWeek).not.toHaveBeenCalled()
   })
 })
+
+describe('StaffDetailPage — Employment Hero start date', () => {
+  it('shows the start date and its source only when one is set', () => {
+    mockUseStaffOverview.mockReturnValue({ data: makeOverview({ staff: makeStaff({ employmentStartDate: '2026-11-03' }) }), isLoading: false, isError: false })
+    renderAt('staff-1')
+    expect(screen.getByText('Start date 03/11/2026 · From Employment Hero')).toHaveTextContent('From Employment Hero')
+  })
+
+  it('shows nothing when there is no start date', () => {
+    mockUseStaffOverview.mockReturnValue({ data: makeOverview({ staff: makeStaff({ employmentStartDate: null }) }), isLoading: false, isError: false })
+    renderAt('staff-1')
+    expect(screen.queryByText(/Start date/)).toBeNull()
+  })
+})

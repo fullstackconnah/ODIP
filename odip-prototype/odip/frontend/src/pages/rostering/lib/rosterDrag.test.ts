@@ -383,3 +383,15 @@ describe('swapCandidates', () => {
     expect(swapOptionName(on('t', '2026-08-18', 'staff-3', 'Sam Wilson'))).toBe('Sam Wilson, Tuesday 9am to 3pm, for Mia')
   })
 })
+
+describe('pickerGroups — Employment Hero start date', () => {
+  const target = makeUnfilledShift({ id: 'open', participantId: 'p-1', participantName: 'Mia Chen', serviceDate: '2026-08-18', startTime: '09:00:00', endTime: '15:00:00', status: 'Draft' })
+  const person = (id: string, extra: Partial<StaffListDto> = {}) => ({ id, fullName: id, isActive: true, hasExpiredQualifications: false, ...extra }) as StaffListDto
+
+  it('puts someone who starts after the shift date in their own group, and not on the day or before', () => {
+    const staff = [person('later', { employmentStartDate: '2026-08-19' }), person('same', { employmentStartDate: '2026-08-18' }), person('none')]
+    const groups = pickerGroups(target, staff, [], [], new Map())
+    expect(groups.notStarted.map(r => r.key)).toEqual(['later'])
+    expect(groups.free.map(r => r.key)).toEqual(['same', 'none'])
+  })
+})

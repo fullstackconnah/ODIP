@@ -256,8 +256,8 @@ export function publishWeekMessage(drafts: ShiftDto[], unfilled: number): string
 // ── The staff picker (spec 2026-10-15, decision C; the brief, section 4). Nothing here checks a rule: the server judges the pick. ──
 
 /** One row of the picker: a person, and on a Move row the shift they would come off. `key` is unique in the list: the person's id, or `{person id}:{source shift id}`. */
-export type PickRow = { key: string; person: StaffListDto; hours: number; leave: 'Approved' | 'Pending' | null; source?: ShiftDto }
-export type PickGroups = { free: PickRow[]; move: PickRow[]; leave: PickRow[] }
+export type PickRow = { key: string; person: StaffListDto; hours: number; leave: 'Approved' | 'Pending' | null; source?: ShiftDto; notStarted?: boolean }
+export type PickGroups = { free: PickRow[]; move: PickRow[]; leave: PickRow[]; notStarted: PickRow[] }
 
 /** A shift's start and end in minutes on the wall clock with no zone. A day is always 1440 minutes, so a clock change never moves an overlap (Review Focus 1). */
 function shiftMinutes(s: Pick<ShiftDto, 'serviceDate' | 'startTime' | 'endTime' | 'endsNextDay'>): [number, number] {
@@ -290,10 +290,15 @@ function leaveOn(leave: StaffLeaveDto[], staffId: string, shift: Pick<ShiftDto, 
  */
 // shortcut: only sees the shifts on the board's week, so a night shift crossing the week edge reads as Free here; the server's double-booking check (assign, move) covers it.
 export function pickerGroups(target: ShiftDto, staff: StaffListDto[], shifts: ShiftDto[], leave: StaffLeaveDto[], hours: Map<string, number>): PickGroups {
-  const groups: PickGroups = { free: [], move: [], leave: [] }
+  const groups: PickGroups = { free: [], move: [], leave: [], notStarted: [] }
   const isPair = (s: ShiftDto) => s.participantId === target.participantId && s.serviceDate === target.serviceDate && shiftsOverlap(s, target)
   for (const person of staff) {
     if (!person.isActive) continue
+    // Employment Hero start date: the server refuses a shift before it, so these people get their own group; the row stays pickable, as leave rows do, and the server's finding answers a pick.
+    if (person.employmentStartDate && person.employmentStartDate > target.serviceDate) {
+      groups.notStarted.push({ key: person.id, person, hours: hours.get(person.id) ?? 0, leave: null, notStarted: true })
+      continue
+    }
     const row = { person, hours: hours.get(person.id) ?? 0, leave: leaveOn(leave, person.id, target) }
     const overlapping = shifts
       .filter(s => s.staffId === person.id && s.id !== target.id && s.status !== 'Cancelled' && shiftsOverlap(s, target))
@@ -321,6 +326,7 @@ export function pickOptionName(row: PickRow, weeklyHours: number): string {
   return [
     `${person.fullName}, ${hoursText(row.hours)} of ${weeklyHours} hours this week`,
     person.hasExpiredQualifications ? 'qualifications expired' : null,
+    row.notStarted ? "hasn't started yet" : null,
     row.leave === 'Approved' ? 'on leave' : row.leave === 'Pending' ? 'leave pending' : null,
     source ? `move from ${format(parseISO(source.serviceDate), 'EEEE')} ${spokenRange(source)} with ${firstName(source.participantName)}` : null,
     source?.status === 'Published' ? `published: tells ${firstName(person.fullName)}` : null,

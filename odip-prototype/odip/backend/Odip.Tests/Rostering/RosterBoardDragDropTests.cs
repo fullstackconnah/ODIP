@@ -1018,6 +1018,56 @@ public class RosterBoardDragDropTests
     }
 
     [Fact]
+    public async Task PublishWeek_RefusesADraftPlacedBeforeAStartDateThatMovedLater_AndPublishesTheRest()
+    {
+        var tenant = Guid.NewGuid();
+        using var db = TestDb.ForTenant(Guid.NewGuid().ToString(), tenant);
+        var sam = SeedStaff(db);
+        var mia = SeedParticipant(db);
+        var early = SeedShift(db, mia.Id, sam.Id, ShiftStatus.Draft, day: Monday);
+        var late = SeedShift(db, mia.Id, sam.Id, ShiftStatus.Draft, day: Monday.AddDays(2));
+        sam.EmploymentStartDate = Monday.AddDays(1);   // EH moved the date after the draft was placed
+        await db.SaveChangesAsync();
+
+        var result = Body(await Controller(db, tenant).PublishWeek(Monday, default));
+
+        Assert.Equal((1, 1), (result.Published, result.Skipped));
+        Assert.Equal(ShiftStatus.Draft, (await Reload(db, early.Id)).Status);
+        Assert.Equal(ShiftStatus.Published, (await Reload(db, late.Id)).Status);
+    }
+
+    [Fact]
+    public async Task UpdateShift_CancellingAShiftPlacedBeforeAStartDateThatMovedLater_Succeeds()
+    {
+        using var db = TestDb.Create();
+        var sam = SeedStaff(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, sam.Id, ShiftStatus.Published, day: Monday);
+        sam.EmploymentStartDate = Monday.AddDays(1);   // EH moved the date after the shift was placed
+        await db.SaveChangesAsync();
+
+        var result = await Controller(db).UpdateShift(shift.Id, Put(shift, sam.Id, ShiftStatus.Cancelled), default);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(ShiftStatus.Cancelled, (await Reload(db, shift.Id)).Status);
+    }
+
+    [Fact]
+    public async Task UpdateShift_PublishingAShiftPlacedBeforeAStartDateThatMovedLater_StaysRefused()
+    {
+        using var db = TestDb.Create();
+        var sam = SeedStaff(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, sam.Id, ShiftStatus.Draft, day: Monday);
+        sam.EmploymentStartDate = Monday.AddDays(1);
+        await db.SaveChangesAsync();
+
+        var result = await Controller(db).UpdateShift(shift.Id, Put(shift, sam.Id, ShiftStatus.Published), default);
+
+        var refused = Assert.IsType<ApiResponse<List<RosterFindingDto>>>(Assert.IsType<UnprocessableEntityObjectResult>(result.Result).Value);
+        Assert.Contains(refused.Data!, f => f.Code == RosterConflictService.StaffNotStarted);
+        Assert.Equal(ShiftStatus.Draft, (await Reload(db, shift.Id)).Status);
+    }
+
+    [Fact]
     public async Task PublishWeek_LeavesAnUnstaffedDraftAsDraft_RaisesNoNotice_AndPublishesItOnceStaffed()   // owner 2026-10-28: hold until staffed
     {
         var dbName = Guid.NewGuid().ToString();
