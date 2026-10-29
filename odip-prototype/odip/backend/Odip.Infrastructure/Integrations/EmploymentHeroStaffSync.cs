@@ -236,11 +236,15 @@ public sealed class EmploymentHeroStaffSync
 
         // 1. Links. An unlinked EH employee takes the ODIP user with its email; current records go first, so a rehire wins over the old record.
         var pending = new List<EhEmployee>();
-        var unlinkedInEh = byId.Values.Where(e => users.All(u => u.ExternalPayrollId != Id(e))).OrderBy(e => IsLeaver(e, today)).ToList();
+        // Looked up once, not scanned per employee. Linking only sets ExternalPayrollId (never an email), so the email map stays right through the loop; duplicates keep the first user, as FirstOrDefault did.
+        var linkedIds = users.Where(u => u.ExternalPayrollId is not null).Select(u => u.ExternalPayrollId!).ToHashSet();
+        var byEmail = new Dictionary<string, User>();
+        foreach (var u in users) byEmail.TryAdd(EmailIdentity.Normalise(u.Email), u);
+        var unlinkedInEh = byId.Values.Where(e => !linkedIds.Contains(Id(e))).OrderBy(e => IsLeaver(e, today)).ToList();
         foreach (var e in unlinkedInEh)
         {
             var email = EmailOf(e);
-            var match = email is null ? null : users.FirstOrDefault(u => EmailIdentity.Normalise(u.Email) == email);
+            var match = email is null ? null : byEmail.GetValueOrDefault(email);
             if (match is null) { pending.Add(e); continue; }
             var linkedTo = match.ExternalPayrollId is { } linkedId ? byId.GetValueOrDefault(linkedId) : null;
             if (match.ExternalPayrollId is null || (linkedTo is not null && IsLeaver(linkedTo, today) && !IsLeaver(e, today)))
