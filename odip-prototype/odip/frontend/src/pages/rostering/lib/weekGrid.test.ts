@@ -83,7 +83,8 @@ describe('packDay', () => {
     const capped = packDay(three, 24, 2)
     expect(capped.blocks).toHaveLength(1)
     expect(capped.more).toHaveLength(1)
-    expect(capped.more[0]).toMatchObject({ lane: 1, lanes: 2 })
+    // The tile is a fixed column on the right, so the kept block's lane takes the rest of the width.
+    expect(capped.blocks[0]).toMatchObject({ lane: 0, lanes: 1, tile: true })
     expect(capped.more[0].hidden).toHaveLength(2)
     expect(capped.more[0].top).toBeCloseTo(9.5 * 48, 3)
     const wide = packDay(three, 24, 3)
@@ -93,8 +94,8 @@ describe('packDay', () => {
 })
 
 describe('laneCap', () => {
-  it('follows the column width with a floor of 2', () => {
-    expect([89, 94, 136, 270, 40].map(laneCap)).toEqual([2, 2, 3, 6, 2])
+  it('keeps lanes about 56 px wide, with a floor of 2', () => {
+    expect([89, 94, 136, 178, 270, 40].map(laneCap)).toEqual([2, 2, 2, 3, 4, 2])
   })
 })
 

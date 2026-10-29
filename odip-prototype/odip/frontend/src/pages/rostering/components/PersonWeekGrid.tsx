@@ -4,7 +4,7 @@ import { Dropdown } from '@/components/Dropdown'
 import { useMeasuredWidth } from '@/hooks/useMeasuredWidth'
 import { formatShiftTime } from '@/lib/utils'
 import { barOverlapsWeek, formatDayAccessibleName, formatDayHeader, formatShiftTimeRange, isToday } from '../lib/roster'
-import { DAY_PX, PX_PER_MIN, laneCap, openingScrollTop, packDay, weekSegments, type Segment } from '../lib/weekGrid'
+import { DAY_PX, PX_PER_MIN, TILE_PX, TILE_RESERVE_PX, laneCap, openingScrollTop, packDay, weekSegments, type Segment } from '../lib/weekGrid'
 import { ShiftBlock } from './ShiftBlock'
 
 export type Bar = { key: string; trip?: TripBarDto; leave?: LeaveBarDto; start: string; end: string }
@@ -53,9 +53,10 @@ function useCoarsePointer(): boolean {
   return coarse
 }
 
-/** The block's lane in CSS: 2 px in from the left, 4 px from the right, 2 px between lanes. */
-function laneStyle(lane: number, lanes: number, top: number, height: number) {
-  return { top, height, left: `calc(2px + (100% - 4px) * ${lane} / ${lanes})`, width: `calc((100% - 4px) / ${lanes} - 2px)` }
+/** The block's lane in CSS: 2 px in from the left, 4 px from the right (plus the "+n" tile's column when there is one), 2 px between lanes. */
+function laneStyle(lane: number, lanes: number, top: number, height: number, reservePx = 0) {
+  const room = `(100% - ${4 + reservePx}px)`
+  return { top, height, left: `calc(2px + ${room} * ${lane} / ${lanes})`, width: `calc(${room} / ${lanes} - 2px)` }
 }
 
 export function PersonWeekGrid({ kind, personId, weekStart, days, shifts, prevWeekShifts, bars, renderBar, width, ready, canWrite, DayHeading, onOpen, onAddAt }: PersonWeekGridProps) {
@@ -64,6 +65,8 @@ export function PersonWeekGrid({ kind, personId, weekStart, days, shifts, prevWe
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([])
   const coarse = useCoarsePointer()
   const inner = useMeasuredWidth(scrollerRef)
+  const headRef = useRef<HTMLDivElement>(null)
+  const [headH, setHeadH] = useState(0)
   const dayView = width !== undefined && width > 0 && width < DAY_VIEW_BELOW
   const [picked, setPicked] = useState<{ week: string; day: string } | null>(null)
   const day = picked?.week === weekStart ? picked.day : (days.find(isToday) ?? days[0])
@@ -74,6 +77,18 @@ export function PersonWeekGrid({ kind, personId, weekStart, days, shifts, prevWe
   // The scroller's own clientWidth, borders and a classic scrollbar already out; the section's width stands in until it is measured.
   const bodyWidth = inner || (dayView ? (width ?? 390) - 2 : (width || 1000) - 2)
   const colWidth = dayView ? bodyWidth - GUTTER_PX : (bodyWidth - GUTTER_PX) / 7
+
+  // The sticky header grows with each bars row; a Tab-focused block scrolls in below it, not under it.
+  useLayoutEffect(() => {
+    const el = headRef.current
+    if (!el) return setHeadH(0)
+    const measure = () => setHeadH(el.offsetHeight)
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [dayView])
 
   const scrolledFor = useRef<string | null>(null)
   useLayoutEffect(() => {
@@ -140,9 +155,9 @@ export function PersonWeekGrid({ kind, personId, weekStart, days, shifts, prevWe
             key={`${b.seg.shift.id}:${b.seg.part}`}
             seg={b.seg}
             context={kind}
-            style={{ ...laneStyle(b.lane, b.lanes, b.top, b.height), zIndex: 10 }}
+            style={{ ...laneStyle(b.lane, b.lanes, b.top, b.height, b.tile ? TILE_RESERVE_PX : 0), zIndex: 10 }}
             heightPx={b.height}
-            laneWidthPx={(colWidth - 4) / b.lanes - 2}
+            laneWidthPx={(colWidth - 4 - (b.tile ? TILE_RESERVE_PX : 0)) / b.lanes - 2}
             onOpen={onOpen}
           />
         ))}
@@ -150,7 +165,7 @@ export function PersonWeekGrid({ kind, personId, weekStart, days, shifts, prevWe
           const first = t.hidden[0]
           const keyOf = (g: Segment) => `${g.shift.id}:${g.part}`
           return (
-            <div key={`more-${t.top}`} className="absolute z-10 flex [&>div]:flex-1" style={laneStyle(t.lane, t.lanes, t.top, t.height)}>
+            <div key={`more-${t.top}`} className="absolute z-10 flex [&>div]:flex-1" style={{ top: t.top, height: floorPx, right: 4, width: TILE_PX }}>
               <Dropdown
                 variant="icon"
                 icon={<span>+{t.hidden.length}</span>}
@@ -219,11 +234,11 @@ export function PersonWeekGrid({ kind, personId, weekStart, days, shifts, prevWe
           role="region"
           aria-label={dayView ? `Shifts on ${formatDayAccessibleName(day)}` : 'Shifts by hour'}
           tabIndex={0}
-          className="scroll-pt-12 overflow-y-auto bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-          style={{ height: 'min(70dvh, 40rem)', minHeight: '20rem' }}
+          className="overflow-y-auto bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+          style={{ height: 'min(70dvh, 40rem)', minHeight: '20rem', scrollPaddingTop: headH }}
         >
           {!dayView && (
-            <div className="sticky top-0 z-30 border-b border-border bg-surface-container-low">
+            <div ref={headRef} className="sticky top-0 z-30 border-b border-border bg-surface-container-low">
               <div className={`grid ${template}`}>
                 <div />
                 {days.map(d => {

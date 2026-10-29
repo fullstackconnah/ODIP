@@ -16,6 +16,7 @@ import type { ShiftSlideOverTarget } from './ShiftSlideOver'
 import { TripBar } from './TripBar'
 import { LeaveBar } from './LeaveBar'
 import { barOverlapsWeek, daysOfWeek, formatHoursMeter, formatWeekRange, isToday, shiftWeek, weekStartFromDateParam } from '../lib/roster'
+import { weekSegments } from '../lib/weekGrid'
 
 export type PersonWeekProps = {
   kind: 'staff' | 'participant'
@@ -100,7 +101,7 @@ export function PersonWeek({ kind, personId, headingLevel }: PersonWeekProps) {
 
     body = (
       <div className={isPlaceholderData ? 'opacity-60' : undefined}>
-        {row.shifts.length === 0 && <p className="mb-2 text-[13px] text-muted-foreground">Nothing rostered this week. Choose a time on the grid to add a shift.</p>}
+        {weekSegments(row.shifts, prevWeekShifts, days).length === 0 && <p className="mb-2 text-[13px] text-muted-foreground">Nothing rostered this week. Choose a time on the grid to add a shift.</p>}
         <PersonWeekGrid
           kind={kind}
           personId={personId}

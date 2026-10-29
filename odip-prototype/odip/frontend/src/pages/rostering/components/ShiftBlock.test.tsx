@@ -56,6 +56,32 @@ describe('ShiftBlock', () => {
     expect(onOpen).toHaveBeenCalledTimes(2)
   })
 
+  it('Enter on the name link follows the link and does not open', async () => {
+    const { onOpen } = draw(makeShift(base))
+    screen.getByRole('link', { name: 'Mia Chen' }).focus()
+    await userEvent.keyboard('{Enter}')
+    expect(onOpen).not.toHaveBeenCalled()
+  })
+
+  it('a wide lane shows the full range with no gap before the end ("9am–5pm")', () => {
+    draw(makeShift(base))
+    expect(screen.getByText('9am').parentElement).toHaveClass('gap-x-0')
+    expect(screen.getByText('–5pm')).toBeInTheDocument()
+  })
+
+  it('under 56 px the time line is the start alone, without am/pm; the accessible name keeps the range', () => {
+    draw(makeShift({ ...base, startTime: '10:30:00', endTime: '17:00:00' }), { w: 40 })
+    expect(screen.getByText('10:30')).toBeInTheDocument()
+    expect(screen.queryByText(/pm/)).toBeNull()
+    expect(screen.getByRole('button').getAttribute('aria-label')).toContain('10:30am–5pm')
+  })
+
+  it('a narrow lane moves the icons down to the name line', () => {
+    draw(makeShift({ ...base, isRegular: true, findings: [{ code: 'X', severity: 'Warning', message: 'm' }] as ShiftDto['findings'] }), { w: 40, h: 48 })
+    expect(document.querySelector('.top-5')).not.toBeNull()
+    expect(document.querySelector('.top-1')).toBeNull()
+  })
+
   it('a click opens', async () => {
     const { onOpen } = draw(makeShift(base))
     await userEvent.click(screen.getByRole('button'))

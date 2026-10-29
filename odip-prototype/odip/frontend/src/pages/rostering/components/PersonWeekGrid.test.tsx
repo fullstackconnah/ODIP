@@ -66,9 +66,19 @@ describe('PersonWeekGrid', () => {
     const tile = screen.getByRole('button', { name: '2 more shifts from 9:30am' })
     expect(tile).toHaveTextContent('+2')
     expect(tile.className).toContain('flex-1')
+    // The tile is a fixed 28 px column, 24 px tall; jsdom has no layout, so read the sizes the wrapper is given.
+    const box = tile.closest<HTMLElement>('[style*="height"]')!
+    expect([box.style.width, box.style.height]).toEqual(['28px', '24px'])
     await userEvent.click(tile)
     await userEvent.click(await screen.findByText(/10am–11am, Zed Last/))
     expect(props.onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: 'c' }))
+  })
+
+  it('the coarse pointer floors the +n tile at 44px', () => {
+    vi.stubGlobal('matchMedia', (q: string) => ({ matches: q === '(pointer: coarse)', addEventListener: () => {}, removeEventListener: () => {} }))
+    setup({ shifts: [at('a', '09:00', '11:00'), at('b', '09:30', '11:00'), at('c', '10:00', '11:00')], width: 672 })
+    expect(screen.getByRole('button', { name: /more shifts/ }).closest<HTMLElement>('[style*="height"]')!.style.height).toBe('44px')
+    vi.unstubAllGlobals()
   })
 
   it("the +n tile resolves a previous Sunday's tail among the hidden", async () => {

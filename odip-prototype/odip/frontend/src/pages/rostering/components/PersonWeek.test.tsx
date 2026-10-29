@@ -162,6 +162,14 @@ describe('PersonWeek: the time grid', () => {
     expect(monday.querySelector('[data-shift-open="tail"]')).not.toBeNull()
   })
 
+  it('a week with only a previous-week tail shows no empty line', async () => {
+    const tail = shiftOn({ id: 'tail', serviceDate: '2026-11-01', startTime: '22:00:00', endTime: '06:00:00', endsNextDay: true })
+    mockApiGet.mockImplementation(serve({ [NOV[0]]: staffWeek(), '2026-10-26': staffWeek({ shifts: [tail] }) }))
+    renderWeek('staff')
+    expect(await screen.findByText('from Sun')).toBeInTheDocument()
+    expect(screen.queryByText(EMPTY_LINE)).toBeNull()
+  })
+
   it('a tail from placeholder data is ignored', async () => {
     const user = userEvent.setup()
     // The week before is on screen as the "previous" read; going back one more week, that read is placeholder data and must not draw a tail.

@@ -7,8 +7,12 @@ export const PX_PER_MIN = 0.8
 export const DAY_PX = 1440 * PX_PER_MIN
 
 export type Segment = { shift: ShiftDto; date: string; fromMin: number; toMin: number; part: 'whole' | 'first' | 'second' }
-export type PlacedBlock = { seg: Segment; top: number; height: number; lane: number; lanes: number }
-export type MoreTile = { top: number; height: number; lane: number; lanes: number; hidden: Segment[] }
+/** The "+n" tile is a fixed column on the day's right edge; the lanes beside it take the rest, minus a 2 px gap. */
+export const TILE_PX = 28
+export const TILE_RESERVE_PX = TILE_PX + 2
+/** `tile`: a "+n" tile sits at the right edge of this block's cluster, so its lanes share the width left of it. */
+export type PlacedBlock = { seg: Segment; top: number; height: number; lane: number; lanes: number; tile: boolean }
+export type MoreTile = { top: number; hidden: Segment[] }
 
 /** A date-only string moved by whole days (parseISO, never `new Date('YYYY-MM-DD')`, so a DST week cannot shift it). */
 export function nextDate(iso: string, delta = 1): string {
@@ -42,9 +46,9 @@ export function drawnBox(seg: Segment, floorPx: number): { top: number; height: 
   return top + height > DAY_PX ? { top: DAY_PX - height, height } : { top, height }
 }
 
-/** How many side-by-side lanes a day column of this width keeps (a lane stays at least 40 px). */
+/** How many side-by-side lanes a day column of this width keeps: lanes aim for 56 px; max(2) keeps a drawn lane beside the +n tile even when narrower. */
 export function laneCap(colWidthPx: number): number {
-  return Math.max(2, Math.floor((colWidthPx - 6 + 2) / 42))
+  return Math.max(2, Math.floor((colWidthPx - 4) / 58))
 }
 
 /** Standard calendar packing on the DRAWN boxes. A cluster wider than `cap` lanes keeps cap - 1 and puts the rest behind one "+n" tile. */
@@ -58,12 +62,12 @@ export function packDay(segs: Segment[], floorPx: number, cap: number): { blocks
   const flush = () => {
     const lanes = laneEnds.length
     if (lanes <= cap) {
-      cluster.forEach(b => blocks.push({ ...b, lanes }))
+      cluster.forEach(b => blocks.push({ ...b, lanes, tile: false }))
       return
     }
-    cluster.filter(b => b.lane < cap - 1).forEach(b => blocks.push({ ...b, lanes: cap }))
+    cluster.filter(b => b.lane < cap - 1).forEach(b => blocks.push({ ...b, lanes: cap - 1, tile: true }))
     const hidden = cluster.filter(b => b.lane >= cap - 1)
-    more.push({ top: Math.min(hidden[0].top, DAY_PX - floorPx), height: floorPx, lane: cap - 1, lanes: cap, hidden: hidden.map(b => b.seg) })
+    more.push({ top: Math.min(hidden[0].top, DAY_PX - floorPx), hidden: hidden.map(b => b.seg) })
   }
   for (const b of boxes) {
     if (b.top >= clusterEnd) {

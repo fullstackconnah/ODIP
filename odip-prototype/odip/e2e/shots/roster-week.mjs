@@ -127,7 +127,9 @@ const gridMeasure = (sec, EXP) => {
   const blocks = [...sc.querySelectorAll('[data-shift-open]')].map((el) => {
     const texts = [...el.querySelectorAll('*')].filter((n) => n.children.length === 0 && n.textContent.trim() && vis(n))
     const contrast = texts.map((n) => ratio(parse(getComputedStyle(n).color), bgOf(n)))
-    const clipped = texts.filter((n) => !n.classList.contains('truncate') && n.offsetTop < 16 && n.scrollWidth > n.clientWidth + 1).map((n) => `${n.textContent.trim().slice(0, 20)} ${n.scrollWidth}>${n.clientWidth}`)
+    // A line-1 item passes only when it ends inside its line's content box (a flex item that overflows is as wide as its text, so scrollWidth cannot see it). Name-line `truncate` spans ellipsise by design.
+    const pastLine = (n) => { const line = n.parentElement; return n.getBoundingClientRect().right > line.getBoundingClientRect().right - parseFloat(getComputedStyle(line).paddingRight) + 0.5 }
+    const clipped = texts.filter((n) => !n.classList.contains('truncate') && n.offsetTop < 16 && pastLine(n)).map((n) => `${n.textContent.trim().slice(0, 20)} right ${Math.round(n.getBoundingClientRect().right)} > line ${Math.round(n.parentElement.getBoundingClientRect().right)}`)
     const icons = [...el.querySelectorAll('svg')].filter(vis).map((n) => ratio(parse(getComputedStyle(n).color), bgOf(n)))
     const cs = getComputedStyle(el)
     const outline = cs.borderTopStyle === 'dashed' || cs.borderLeftStyle === 'dashed' ? ratio(parse(cs.borderLeftColor), bgOf(el.parentElement)) : null
@@ -168,8 +170,9 @@ function gridChecks(name, m, { full }) {
     for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) if (overlap(items[i], items[j])) hits.push(`${c.date} ${items[i].id ?? items[i].text}/${items[j].id ?? items[j].text}`)
   }
   check(`${name} 3 no two blocks or tiles overlap in a column`, hits, hits.length === 0)
-  const narrow = [...m.blocks, ...m.tiles].filter((b) => b.w < 39.5).map((b) => `${b.id ?? b.text} ${b.w.toFixed(1)}`)
-  check(`${name} 4 every drawn lane >= 40px wide`, narrow, narrow.length === 0)
+  // The "+n" tile is a fixed 28 px column by design; every block lane is >= 40 px.
+  const narrow = [...m.blocks.filter((b) => b.w < 39.5).map((b) => `${b.id} ${b.w.toFixed(1)}`), ...m.tiles.filter((t) => Math.abs(t.w - 28) > 0.5).map((t) => `${t.text} ${t.w.toFixed(1)}`)]
+  check(`${name} 4 every block lane >= 40px wide and every "+n" tile 28px`, { narrowestLane: +Math.min(...m.blocks.map((b) => b.w)).toFixed(1), bad: narrow }, narrow.length === 0)
   const colW = m.cols.length ? m.cols[0].w : 0
   check(`${name} 9 columns: ${full ? 'seven' : 'one'}, each >= 88`, { n: m.cols.length, colW: Math.round(colW), secW: m.secW }, m.cols.length === (full ? 7 : 1) && (!full || m.cols.every((c) => c.w >= 88)))
   if (m.labels.length) {
@@ -280,7 +283,12 @@ try {
         if (st.name === 'staff-week' && !vp.mobile && !vp.dark) {
           // 14: keyboard. Tab from the scroller past the bars row's links to the first block; it is Monday's, clear of the sticky header.
           const region = sec.locator('[role="region"][aria-label^="Shifts"]')
+          // Scroll past Monday's first block so Tab has to bring it in from under the sticky header.
+          await region.evaluate((el) => { el.scrollTop = 300 })
           await region.focus()
+          await page.waitForTimeout(150)
+          const pre = await sec.evaluate(gridMeasure, EXP)
+          const wasUnder = !!pre.blocks[0] && !!pre.head && pre.blocks[0].top < pre.head.bottom - 0.5
           let landed = null
           for (let i = 0; i < 12 && !landed; i++) {
             await page.keyboard.press('Tab')
@@ -289,7 +297,7 @@ try {
           check(`${name} 14 first focusable block in the grid body is Monday's`, landed, !!landed && landed.date === THIS_MON)
           const k = await sec.evaluate(gridMeasure, EXP)
           const cur = k.blocks.find((b) => b.id === landed?.id && b.date === landed?.date)
-          check(`${name} 14 the focused block sits at or below the header bottom`, { top: cur && Math.round(cur.top), head: k.head && Math.round(k.head.bottom) }, !!cur && !!k.head && cur.top >= k.head.bottom - 0.5)
+          check(`${name} 14 a block scrolled under the header by Tab lands at or below the header bottom`, { wasUnder, top: cur && Math.round(cur.top), head: k.head && Math.round(k.head.bottom) }, wasUnder && !!cur && !!k.head && cur.top >= k.head.bottom - 0.5)
           await page.keyboard.press('Enter')
           const dlg = page.getByRole('dialog', { name: 'Shift details' })
           await dlg.waitFor({ timeout: 10_000 }).catch(() => {})

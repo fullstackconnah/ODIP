@@ -87,6 +87,8 @@ export function ShiftBlock({ seg, context, style, heightPx, laneWidthPx, onOpen 
   const showName = rows >= 2
   const showLink = showName && laneWidthPx >= 60
   const showTags = rows >= 3
+  // Under 56 px the time line is the start alone (no am/pm, no end) so it is never cut; the icons drop to the name line.
+  const narrow = laneWidthPx < 56
   const cancelled = shift.status === 'Cancelled'
   const night = nightWord(shift.nightType)
 
@@ -106,6 +108,8 @@ export function ShiftBlock({ seg, context, style, heightPx, laneWidthPx, onOpen 
   ].filter(Boolean).join('\n')
 
   function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+    // Enter on the name link follows the link; only the block itself opens the panel.
+    if (e.target !== e.currentTarget) return
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault()
       onOpen(shift)
@@ -136,10 +140,11 @@ export function ShiftBlock({ seg, context, style, heightPx, laneWidthPx, onOpen 
       onClick={() => onOpen(shift)}
       onKeyDown={onKeyDown}
       style={{ ...style, ...(hole ? { borderColor: DASHED } : null) }}
-      className={`absolute box-border cursor-pointer overflow-hidden rounded-sm border px-1.5 pt-1 text-left text-xs leading-4 transition-[box-shadow] duration-100 ease-out ${tint} ${hole ? 'border-dashed' : 'border-border'} ${cut} hover:shadow-[inset_0_0_0_999px_color-mix(in_srgb,var(--color-primary)_6%,transparent)] active:shadow-[inset_0_0_0_999px_color-mix(in_srgb,var(--color-primary)_12%,transparent)] focus:outline-none focus-visible:z-20 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-card`}
+      className={`absolute box-border cursor-pointer overflow-hidden rounded-sm border ${narrow ? 'px-1' : 'px-1.5'} pt-1 text-left text-xs leading-4 transition-[box-shadow] duration-100 ease-out ${tint} ${hole ? 'border-dashed' : 'border-border'} ${cut} hover:shadow-[inset_0_0_0_999px_color-mix(in_srgb,var(--color-primary)_6%,transparent)] active:shadow-[inset_0_0_0_999px_color-mix(in_srgb,var(--color-primary)_12%,transparent)] focus:outline-none focus-visible:z-20 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-card`}
     >
-      {iconCount > 0 && (
-        <span className="absolute right-1 top-1 flex gap-0.5" aria-hidden="true">
+      {/* shortcut: a narrow block too short for a name line draws no icons (they stay in the accessible name and title), upgrade if short narrow findings matter. */}
+      {iconCount > 0 && (!narrow || showName) && (
+        <span className={`absolute right-1 ${narrow ? 'top-5' : 'top-1'} flex gap-0.5`} aria-hidden="true">
           {hasFindings && (
             <span className={isDraft ? `flex h-4 w-4 items-center justify-center rounded-full ${hasBlocking ? ON_TINT.danger : ON_TINT.warning}` : 'flex h-3 w-3'} role="img" aria-label={findingsSeverityLabel(shift.findings)}>
               {hasBlocking ? <AlertOctagon className={isDraft ? 'h-3 w-3' : 'h-3 w-3 text-destructive'} /> : <AlertTriangle className={isDraft ? 'h-3 w-3' : 'h-3 w-3 text-[var(--color-on-warning-container)]'} />}
@@ -150,12 +155,12 @@ export function ShiftBlock({ seg, context, style, heightPx, laneWidthPx, onOpen 
         </span>
       )}
       {/* One clipped 16px line that wraps: an item that does not fit moves whole onto the hidden second line, never clipped mid-glyph. */}
-      <div className="flex h-4 flex-wrap gap-x-1 overflow-hidden" style={iconCount ? { paddingRight: iconCount * 14 } : undefined}>
-        <span className={`font-medium tabular-nums ${cancelled ? 'text-muted-foreground line-through' : 'text-foreground'}`}>{formatShiftTime(shift.startTime)}</span>
-        <span className={`tabular-nums ${cancelled ? 'text-muted-foreground line-through' : 'text-foreground'}`}>–{formatShiftTime(shift.endTime)}</span>
-        {cue && <span className="text-muted-foreground">{cue}</span>}
+      <div className="flex h-4 flex-wrap gap-x-0 overflow-hidden" style={iconCount && !narrow ? { paddingRight: iconCount * 14 } : undefined}>
+        <span className={`font-medium tabular-nums ${cancelled ? 'text-muted-foreground line-through' : 'text-foreground'}`}>{narrow ? formatShiftTime(shift.startTime).replace(/[ap]m$/, '') : formatShiftTime(shift.startTime)}</span>
+        {!narrow && <span className={`tabular-nums ${cancelled ? 'text-muted-foreground line-through' : 'text-foreground'}`}>–{formatShiftTime(shift.endTime)}</span>}
+        {!narrow && cue && <span className="pl-1 text-muted-foreground">{cue}</span>}
       </div>
-      {showName && <div className="flex h-4 min-w-0 items-center">{nameLine}</div>}
+      {showName && <div className="flex h-4 min-w-0 items-center" style={narrow && iconCount ? { paddingRight: iconCount * 14 } : undefined}>{nameLine}</div>}
       {showTags && (
         <div className="flex h-4 flex-wrap gap-x-1.5 overflow-hidden text-muted-foreground">
           {isDraft && <span className={`font-semibold ${TONE.warning.ink}`}>Draft</span>}
