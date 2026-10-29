@@ -263,6 +263,9 @@ try {
           const tabs = m.tabs
           check(`${name} 10 seven day tabs, all inside the viewport, each >= 44x52`, tabs.map((t) => [Math.round(t.w), Math.round(t.h)]), tabs.length === 7 && tabs.every((t) => t.left >= -0.5 && t.right <= m.vw + 0.5 && t.w >= 43.5 && t.h >= 51.5))
         }
+        // Captured at the opening scroll, before the checks below move the scroller.
+        await shoot(sec, st.name)
+        if (st.name === 'staff-week') await page.screenshot({ path: path.join(OUT_DIR, `full-${tag}.png`), ...(vp.mobile ? {} : { fullPage: true }) })
         if (st.name === 'staff-week' && full) {
           // 7: sticky header after a 300px scroll, columns lined up with the header and the bars row.
           await sec.locator('[role="region"][aria-label^="Shifts"]').evaluate((el) => { el.scrollTop = 300 })
@@ -273,8 +276,6 @@ try {
           check(`${name} 7 header cells line up with their columns (and the bars row spans them)`, { drift, bars: s.barsRect && [Math.round(s.barsRect.left - s.cols[0].left), Math.round(s.barsRect.right - s.cols[6].right)] }, drift.every((d) => d <= 1) && !!s.barsRect && s.barsRect.right <= s.cols[6].right + 1 && s.barsRect.left >= s.dayHeads[0].left - 1)
           await sec.locator('[role="region"][aria-label^="Shifts"]').evaluate((el) => { el.scrollTop = 0 })
         }
-        await shoot(sec, st.name)
-        if (st.name === 'staff-week') await page.screenshot({ path: path.join(OUT_DIR, `full-${tag}.png`), ...(vp.mobile ? {} : { fullPage: true }) })
 
         if (st.name === 'staff-week' && !vp.mobile && !vp.dark) {
           // 14: keyboard. Tab from the scroller past the bars row's links to the first block; it is Monday's, clear of the sticky header.
