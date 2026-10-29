@@ -135,11 +135,18 @@ public static class RestrictivePracticeBackfill
         Func<OdipDbContext, CancellationToken, Task<int>>? runTenant = null)
     {
         List<Guid> tenants;
-        await using (var all = new OdipDbContext(options, new ScopedTenantOverride { IsSuperAdmin = true }))
+        try
         {
+            await using var all = new OdipDbContext(options, new ScopedTenantOverride { IsSuperAdmin = true });
             tenants = await all.ParticipantMedications.IgnoreQueryFilters([TenantFilter.Name]).Where(m => m.IsChemicalRestraint).Select(m => m.TenantId)
                 .Union(all.RestrictivePractices.IgnoreQueryFilters([TenantFilter.Name]).Where(rp => rp.RelatedMedicationId != null).Select(rp => rp.TenantId))
                 .ToListAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            // Listing the tenants failed: skip the whole backfill rather than fail startup; the next start tries again.
+            logger?.LogWarning("Restraint register backfill could not list tenants: {ExceptionType}", ex.GetType().Name);
+            return (0, 0);
         }
 
         int changed = 0, failed = 0;

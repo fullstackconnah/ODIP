@@ -24,8 +24,8 @@ SET ""IsActive"" = false, ""RelatedMedicationId"" = NULL, ""UpdatedAt"" = NOW()
 FROM (
     SELECT ""Id"", ROW_NUMBER() OVER (
         PARTITION BY ""RelatedMedicationId""
-        ORDER BY (""AuthorisedBy"" IS NOT NULL AND ""AuthorisationDate"" IS NOT NULL) DESC,
-                 CASE WHEN ""AuthorisedBy"" IS NOT NULL AND ""AuthorisationDate"" IS NOT NULL THEN ""AuthorisationDate"" END DESC NULLS LAST,
+        ORDER BY (""IsActive"" AND btrim(coalesce(""AuthorisedBy"",'')) <> '' AND ""AuthorisationDate"" IS NOT NULL) DESC,
+                 CASE WHEN ""IsActive"" AND btrim(coalesce(""AuthorisedBy"",'')) <> '' AND ""AuthorisationDate"" IS NOT NULL THEN ""AuthorisationDate"" END DESC NULLS LAST,
                  ""IsActive"" DESC, ""CreatedAt"" ASC, ""Id"" ASC) AS rn
     FROM ""RestrictivePractices""
     WHERE ""RelatedMedicationId"" IS NOT NULL

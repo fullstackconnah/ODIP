@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -159,7 +160,15 @@ public class RestrictivePracticesController : ControllerBase
         // PD-5: keeps the restrictive-practices auto-note in sync alongside the flag above.
         await _safetyNoteSync.SyncRestrictivePracticeNoteAsync(participant, ct);
 
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            // Another request linked one of these medicines between our check and our save.
+            return Conflict(ApiResponse<List<RestrictivePracticeDto>>.Fail(AlreadyLinkedCopy));
+        }
 
         return Ok(ApiResponse<List<RestrictivePracticeDto>>.Ok(practices.Select(ToDto).ToList()));
     }
@@ -171,6 +180,8 @@ public class RestrictivePracticesController : ControllerBase
         if (hasWho == authorisationDate.HasValue) return null;
         return hasWho ? "Add the date it was authorised." : "Add who authorised it.";
     }
+
+    private const string AlreadyLinkedCopy = "This medicine already has its own register entry.";
 
     private const string ChangedByOther = "Someone else just changed this entry, so your changes weren't saved. Close it and open it again to see theirs.";
 
@@ -237,7 +248,7 @@ public class RestrictivePracticesController : ControllerBase
         practice.UpdatedAt = DateTime.UtcNow;
 
         // Register to medicine, only on a change of active state (or a fresh link), so a description or review-date edit never touches the medicine.
-        // An inactive, unlinked entry linked to a ticked medicine unticks it here, and shows "Restraint not authorised" until the next medicine save.
+        // Linking an inactive entry to a ticked medicine unticks it: it cannot stay ticked behind an inactive entry.
         if (med != null && (wasActive != dto.IsActive || newlyLinking))
             RestraintRegisterSync.ApplyEntryToMedication(practice, med);
 
@@ -264,6 +275,10 @@ public class RestrictivePracticesController : ControllerBase
         {
             return Conflict(ApiResponse<RestrictivePracticeDto>.Fail(ChangedByOther));
         }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            return Conflict(ApiResponse<RestrictivePracticeDto>.Fail(AlreadyLinkedCopy));
+        }
 
         return Ok(ApiResponse<RestrictivePracticeDto>.Ok(await ToDtoWithMedicationNameAsync(practice, ct)));
     }
@@ -280,11 +295,11 @@ public class RestrictivePracticesController : ControllerBase
         if (expectedUpdatedAt is DateTimeOffset expected && expected.UtcDateTime != practice.UpdatedAt)
             return Conflict(ApiResponse<bool>.Fail(DeleteChangedByOther));
 
-        // A linked entry goes with its medicine (a ceased one deletes freely); otherwise the medicine would keep a restraint tick with no entry.
+        // A linked entry goes with its medicine, whatever the medicine's status: deleting it would lose the authorisation record.
         if (practice.RelatedMedicationId is Guid linkedId)
         {
             var linked = await _db.ParticipantMedications.FirstOrDefaultAsync(m => m.Id == linkedId, ct);
-            if (linked != null && linked.Status != MedicationStatus.Ceased)
+            if (linked != null)
                 return BadRequest(ApiResponse<bool>.Fail($"This entry is linked to {RestraintRegisterSync.MedicineLabel(linked)}. Deactivate it instead."));
         }
 

@@ -59,8 +59,8 @@ public class RestraintRegisterPostgresTests : IClassFixture<PostgresFixture>
         await migrator.MigrateAsync(BeforeMigration);
 
         var t0 = new DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Unspecified);
-        var (a1, a2, b1, b2, c1, c2) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
-        Guid medA, medB, medC;
+        var (a1, a2, b1, b2, c1, c2, d1, d2) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        Guid medA, medB, medC, medD;
         await using (var conn = new NpgsqlConnection(cs))
         {
             await conn.OpenAsync();
@@ -68,6 +68,7 @@ public class RestraintRegisterPostgresTests : IClassFixture<PostgresFixture>
             medA = await InsertMedicationAsync(conn, tenant, participant);
             medB = await InsertMedicationAsync(conn, tenant, participant);
             medC = await InsertMedicationAsync(conn, tenant, participant);
+            medD = await InsertMedicationAsync(conn, tenant, participant);
             // (a) two authorised rows: the later authorisation date wins, even though it is the newer row.
             await InsertEntryAsync(conn, tenant, participant, medA, true, t0, "Dr Chen", new DateOnly(2026, 1, 1), a1);
             await InsertEntryAsync(conn, tenant, participant, medA, true, t0.AddDays(1), "Dr Chen", new DateOnly(2026, 6, 1), a2);
@@ -77,6 +78,9 @@ public class RestraintRegisterPostgresTests : IClassFixture<PostgresFixture>
             // (c) both unauthorised and active: the oldest wins.
             await InsertEntryAsync(conn, tenant, participant, medC, true, t0, id: c1);
             await InsertEntryAsync(conn, tenant, participant, medC, true, t0.AddDays(1), id: c2);
+            // (d) an inactive authorised row loses to an active unauthorised one: the keeper must stay active.
+            await InsertEntryAsync(conn, tenant, participant, medD, false, t0, "Dr Chen", new DateOnly(2026, 1, 1), d1);
+            await InsertEntryAsync(conn, tenant, participant, medD, true, t0.AddDays(1), id: d2);
         }
 
         await migrator.MigrateAsync();
@@ -89,8 +93,10 @@ public class RestraintRegisterPostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal((false, (Guid?)null), await ReadAsync(after, b1));
         Assert.Equal((true, (Guid?)medC), await ReadAsync(after, c1));
         Assert.Equal((false, (Guid?)null), await ReadAsync(after, c2));
+        Assert.Equal((true, (Guid?)medD), await ReadAsync(after, d2));
+        Assert.Equal((false, (Guid?)null), await ReadAsync(after, d1));
         await using var count = new NpgsqlCommand("SELECT count(*) FROM \"RestrictivePractices\"", after);
-        Assert.Equal(6L, await count.ExecuteScalarAsync());
+        Assert.Equal(8L, await count.ExecuteScalarAsync());
     }
 
     [SkippableFact]

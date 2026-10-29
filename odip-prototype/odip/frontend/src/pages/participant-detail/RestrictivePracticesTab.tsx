@@ -237,9 +237,9 @@ export default function RestrictivePracticesTab({ participantId }: { participant
     }
   }
 
-  // A linked entry can't be deleted while its medicine is in use; send the user to deactivate it instead.
+  // A linked entry can't be deleted; send the user to deactivate it instead.
   function requestDelete(p: RestrictivePracticeDto) {
-    if (p.relatedMedicationId && p.relatedMedicationStatus !== 'Ceased') setDeleteBlocked(p)
+    if (p.relatedMedicationId) setDeleteBlocked(p)
     else setDeletingPractice(p)
   }
 

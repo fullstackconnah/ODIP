@@ -13,7 +13,7 @@ using Odip.Infrastructure.Data;
 namespace Odip.Infrastructure.Migrations
 {
     [DbContext(typeof(OdipDbContext))]
-    [Migration("20261029100000_LinkRestraintMedicinesToRegister")]
+    [Migration("20261029201731_LinkRestraintMedicinesToRegister")]
     partial class LinkRestraintMedicinesToRegister
     {
         /// <inheritdoc />
@@ -3863,6 +3863,7 @@ namespace Odip.Infrastructure.Migrations
                         .HasColumnType("integer");
 
                     b.Property<DateTime>("UpdatedAt")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamp without time zone");
 
                     b.HasKey("Id");
@@ -4860,6 +4861,9 @@ namespace Odip.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<DateOnly?>("EmploymentStartDate")
+                        .HasColumnType("date");
 
                     b.Property<string>("ExternalPayrollId")
                         .HasMaxLength(50)

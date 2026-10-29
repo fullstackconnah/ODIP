@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Moq;
+using Npgsql;
 using Odip.Api.Controllers;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
@@ -25,12 +27,14 @@ public class RestraintRegisterSyncTests
     private const string ReportingCopy = "Choose whether this needs to be reported to the NDIS Commission.";
     private const string StaleCopy = "This medicine's register entry was changed while you were editing. Reload the page to see the latest authorisation, then save again.";
 
-    private static (OdipDbContext Db, ICurrentTenant Tenant) CreateDb()
+    private static (OdipDbContext Db, ICurrentTenant Tenant) CreateDb(SaveChangesInterceptor? interceptor = null)
     {
         var tenant = new Mock<ICurrentTenant>();
         tenant.Setup(t => t.TenantId).Returns((Guid?)null);
         tenant.Setup(t => t.IsSuperAdmin).Returns(true);
-        var options = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+        var builder = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString());
+        if (interceptor != null) builder.AddInterceptors(interceptor);
+        var options = builder.Options;
         var db = new OdipDbContext(options, tenant.Object);
         tenant.Setup(t => t.ViewAsUserId).Returns(MedicationTestIdentities.SeedCompetentUser(db).Id);
         return (db, tenant.Object);
@@ -563,7 +567,7 @@ public class RestraintRegisterSyncTests
     }
 
     [Fact]
-    public async Task Delete_LinkedActiveMedicine_400_EntryKept_CeasedMedicineDeletes()
+    public async Task Delete_LinkedEntry_400_EntryKept_EvenWhenTheMedicineIsCeased()
     {
         var (db, _, _, med, meds) = await LinkedAsync();
         var entry = await db.RestrictivePractices.AsNoTracking().SingleAsync();
@@ -573,7 +577,48 @@ public class RestraintRegisterSyncTests
         Assert.Single(db.RestrictivePractices);
 
         await UpdateOkAsync(meds, med.Id, AsUpdate(RestraintDto(), MedicationStatus.Ceased));
-        Assert.IsType<OkObjectResult>((await Register(db).Delete(entry.Id, CancellationToken.None)).Result);
-        Assert.Empty(db.RestrictivePractices);
+        var refusedCeased = await Register(db).Delete(entry.Id, CancellationToken.None);
+        Assert.Equal("This entry is linked to Risperidone 1 mg. Deactivate it instead.", RegisterError(refusedCeased, 400));
+        Assert.Single(db.RestrictivePractices);
+    }
+
+    [Fact]
+    public async Task MedicineSave_UniqueViolationOnTheLink_409WithTheChangedCopy()
+    {
+        var interceptor = new UniqueViolationInterceptor();
+        var (db, tenant) = CreateDb(interceptor);
+        var p = SeedParticipant(db);
+        var meds = new MedicationsController(db, tenant);
+        var med = await CreateOkAsync(meds, p.Id, RestraintDto(false, report: false));
+        interceptor.Armed = true;
+
+        var result = await meds.Update(med.Id, AsUpdate(RestraintDto(false, report: false)), CancellationToken.None);
+
+        Assert.Equal(StaleCopy, ErrorOf(result.Result, 409));
+    }
+
+    [Fact]
+    public async Task UpdateEntry_UniqueViolationOnSave_409WithTheAlreadyLinkedCopy()
+    {
+        var interceptor = new UniqueViolationInterceptor();
+        var (db, tenant) = CreateDb(interceptor);
+        var p = SeedParticipant(db);
+        await CreateOkAsync(new MedicationsController(db, tenant), p.Id, RestraintDto(false, report: false));
+        var entry = await db.RestrictivePractices.AsNoTracking().SingleAsync();
+        interceptor.Armed = true;
+
+        var result = await Register(db).Update(entry.Id, AsForm(entry) with { Description = "Edited" }, CancellationToken.None);
+
+        Assert.Equal("This medicine already has its own register entry.", RegisterError(result, 409));
+    }
+
+    /// <summary>Throws the error Npgsql raises when the unique index on the medicine link refuses a save, once armed.</summary>
+    private sealed class UniqueViolationInterceptor : SaveChangesInterceptor
+    {
+        public bool Armed { get; set; }
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default) =>
+            Armed ? throw new DbUpdateException("x", new PostgresException("dup", "ERROR", "ERROR", "23505")) : ValueTask.FromResult(result);
     }
 }
