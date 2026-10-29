@@ -1376,6 +1376,8 @@ public record StaffListDto
     public DateOnly? MedicationCompetencyExpiryDate { get; init; }
     public string? WorkerScreeningNumber { get; init; }
     public DateOnly? WorkerScreeningExpiryDate { get; init; }
+    /// <summary>Employment Hero's start date for this person: read-only here, set only by the payroll sync. Null means no limit.</summary>
+    public DateOnly? EmploymentStartDate { get; init; }
     public bool HasExpiredQualifications { get; init; }
     public string? Notes { get; init; }
 }

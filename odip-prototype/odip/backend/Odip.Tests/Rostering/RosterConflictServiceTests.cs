@@ -164,6 +164,52 @@ public class RosterConflictServiceTests
         Assert.False(HasCode(expiredFindings, RosterConflictService.WscMissing));
     }
 
+    // ── STAFF_NOT_STARTED ─────────────────────────────────────
+
+    [Fact]
+    public void A_shift_before_the_employment_start_date_is_blocked_and_on_or_after_it_is_not()
+    {
+        var staff = CompliantStaff();
+        staff.EmploymentStartDate = ServiceDate.AddDays(1);
+        var participant = CompliantParticipant();
+
+        var before = new RosterConflictService().Check(CandidateShift(staff, participant), CompliantContext(staff, participant));
+        var onTheDay = new RosterConflictService().Check(CandidateShift(staff, participant, ServiceDate.AddDays(1)), CompliantContext(staff, participant));
+        var after = new RosterConflictService().Check(CandidateShift(staff, participant, ServiceDate.AddDays(2)), CompliantContext(staff, participant));
+
+        var finding = Assert.Single(before, f => f.Code == RosterConflictService.StaffNotStarted);
+        Assert.Equal(RosterFindingSeverity.Blocking, finding.Severity);
+        Assert.Equal("Ben Turner starts on 25 Aug 2026 – can't be rostered before then.", finding.Message);
+        Assert.False(HasCode(onTheDay, RosterConflictService.StaffNotStarted));
+        Assert.False(HasCode(after, RosterConflictService.StaffNotStarted));
+    }
+
+    [Fact]
+    public void No_employment_start_date_means_no_limit()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+
+        var findings = new RosterConflictService().Check(CandidateShift(staff, participant, new DateOnly(1999, 1, 4)), CompliantContext(staff, participant));
+
+        Assert.False(HasCode(findings, RosterConflictService.StaffNotStarted));
+    }
+
+    [Fact]
+    public void A_trip_assignment_starting_before_the_employment_start_date_is_blocked()
+    {
+        var staff = CompliantStaff();
+        staff.EmploymentStartDate = ServiceDate;
+        var ctx = CompliantContext(staff, null);
+        var service = new RosterConflictService();
+
+        var blocked = service.CheckStaffAssignment(ServiceDate.AddDays(-1), ServiceDate.AddDays(3), Guid.Empty, ctx);
+        var allowed = service.CheckStaffAssignment(ServiceDate, ServiceDate.AddDays(3), Guid.Empty, ctx);
+
+        Assert.Equal(RosterFindingSeverity.Blocking, Assert.Single(blocked, f => f.Code == RosterConflictService.StaffNotStarted).Severity);
+        Assert.False(HasCode(allowed, RosterConflictService.StaffNotStarted));
+    }
+
     [Fact]
     public void Worker_screening_expired_is_the_only_blocking_finding_the_engine_can_ever_emit()
     {

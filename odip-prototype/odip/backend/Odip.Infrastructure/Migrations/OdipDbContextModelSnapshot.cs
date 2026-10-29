@@ -4854,6 +4854,9 @@ namespace Odip.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<DateOnly?>("EmploymentStartDate")
+                        .HasColumnType("date");
+
                     b.Property<string>("ExternalPayrollId")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");

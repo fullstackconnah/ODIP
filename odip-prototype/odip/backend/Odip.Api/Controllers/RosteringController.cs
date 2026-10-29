@@ -947,16 +947,16 @@ public class RosteringController : ControllerBase
                 .Where(s => s.TenantId == tenantId && s.Status == ShiftStatus.Draft && s.ServiceDate >= start && s.ServiceDate <= end && shown.Contains(s.ParticipantId))
                 .ToListAsync(ct);
             var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
-            // WSC_EXPIRED is the engine's only Blocking finding, so only a draft whose worker's screening has lapsed by its day needs the full roster check: one query for every worker.
+            // Only a draft whose worker's screening has lapsed, or who has not started by its day, can hit a Blocking finding, so only those need the full roster check: one query for every worker.
             var workerIds = drafts.Where(s => s.UserId.HasValue).Select(s => s.UserId!.Value).Distinct().ToList();
-            var screeningExpiry = await _db.Users.Where(u => workerIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.WorkerScreeningExpiryDate, ct);
+            var gates = await _db.Users.Where(u => workerIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => (Expiry: u.WorkerScreeningExpiryDate, Start: u.EmploymentStartDate), ct);
 
             var published = new List<Shift>();
             var skipped = 0;
             foreach (var shift in drafts.Where(s => s.UserId.HasValue))
             {
-                // shortcut: only a lapsed screening is re-checked (the one Blocking rule today); check every filled draft again if another Blocking rule is added.
-                var mayBeBlocked = shift.UserId is { } worker && screeningExpiry.GetValueOrDefault(worker) is { } expiry && expiry < shift.ServiceDate;
+                // shortcut: only a lapsed screening or a start date ahead is re-checked (the Blocking rules today); check every filled draft again if another Blocking rule is added.
+                var mayBeBlocked = shift.UserId is { } worker && gates.TryGetValue(worker, out var g) && (g.Expiry < shift.ServiceDate || g.Start > shift.ServiceDate);
                 if (mayBeBlocked && (await CheckAsync(shift, shift.Id, ct)).Any(f => f.Severity == RosterFindingSeverity.Blocking)) { skipped++; continue; }
                 shift.Status = ShiftStatus.Published;
                 shift.UpdatedAt = DateTime.UtcNow;

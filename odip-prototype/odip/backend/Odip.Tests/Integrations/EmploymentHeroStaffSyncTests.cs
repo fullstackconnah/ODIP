@@ -70,7 +70,7 @@ public class EmploymentHeroStaffSyncTests
         Assert.Equal(("Samuel", "samuel@acme.org.au", "0411 222 333"), (sam.FirstName, sam.Email, sam.Mobile));
         Assert.False((await db.Users.SingleAsync(u => u.ExternalPayrollId == "102")).IsActive);
         Assert.True((await db.Users.SingleAsync(u => u.ExternalPayrollId == "103")).IsActive);
-        Assert.Equal((1, 1), (result.Log!.Updated, result.Log.Archived));
+        Assert.Equal((4, 1), (result.Log!.Updated, result.Log.Archived));   // all four: Sam by name, the rest by their first-seen EH start date
         var update = await db.AuditLogs.SingleAsync(a => a.EntityId == sam.Id && a.Action == AuditAction.Updated);
         Assert.Equal(("Employment Hero sync", (Guid?)null), (update.ChangedByName, update.ChangedById));
     }
@@ -583,5 +583,26 @@ public class EmploymentHeroStaffSyncTests
         Assert.Equal(1, result.Log!.Archived);
         Assert.False((await db.Users.SingleAsync(u => u.FirstName == "Ada")).IsActive);
         Assert.True((await db.Users.SingleAsync(u => u.FirstName == "Cal")).IsActive);
+    }
+
+    [Fact]
+    public async Task A_future_hire_is_created_active_with_their_start_date_and_the_date_follows_EH_on_update_and_clears_when_EH_has_none()
+    {
+        var (db, tenant) = await OrganisationAsync();
+        await using var _ = db;
+
+        await RunAsync(db, tenant, Eh(Employee(501, "Fay", "Dunn", "fay@gmail.com", null, null, "2027-02-01T00:00:00")));
+        var fay = await db.Users.SingleAsync(u => u.ExternalPayrollId == "501");
+        Assert.True(fay.IsActive);
+        Assert.Equal(new DateOnly(2027, 2, 1), fay.EmploymentStartDate);
+
+        var moved = await RunAsync(db, tenant, Eh(Employee(501, "Fay", "Dunn", "fay@gmail.com", null, null, "2027-03-01T00:00:00")));
+        Assert.Equal((1, new DateOnly(2027, 3, 1)), (moved.Log!.Updated, (await db.Users.SingleAsync(u => u.ExternalPayrollId == "501")).EmploymentStartDate));
+
+        var same = await RunAsync(db, tenant, Eh(Employee(501, "Fay", "Dunn", "fay@gmail.com", null, null, "2027-03-01T00:00:00")));
+        Assert.Equal(0, same.Log!.Updated);
+
+        var cleared = await RunAsync(db, tenant, Eh(Employee(501, "Fay", "Dunn", "fay@gmail.com", null, null, null)));
+        Assert.Equal((1, (DateOnly?)null), (cleared.Log!.Updated, (await db.Users.SingleAsync(u => u.ExternalPayrollId == "501")).EmploymentStartDate));
     }
 }
