@@ -55,8 +55,8 @@ test('a coordinator captures an enquiry with a contact and a visit in one save, 
     await dialog.getByRole('button', { name: 'Close enquiry' }).click();
     await expect(page.getByText(`Mia ${last}'s enquiry is closed: Not going ahead.`)).toBeVisible();
     closed = true;
-    const after = await expectStatus('closed list', 200, await call(session, 'GET', '/inquiries?view=closed'));
-    const gone = after.data.find((r: { id: string }) => r.id === id);
+    const after = await expectStatus('closed list', 200, await call(session, 'GET', '/inquiries/closed'));
+    const gone = after.data.items.find((r: { id: string }) => r.id === id);
     expect(gone.closeOutcome).toBe('NotGoingAhead');
     expect(gone.intakeStartsAt ?? null).toBeNull(); // the visit was cancelled with it
     await page.getByRole('radio', { name: 'Closed' }).click();

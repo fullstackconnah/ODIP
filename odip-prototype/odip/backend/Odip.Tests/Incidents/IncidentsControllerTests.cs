@@ -14,6 +14,7 @@ using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
 using Xunit;
 using Odip.Tests.Support;
+using Odip.Tests.Medications;
 
 namespace Odip.Tests.Incidents;
 
@@ -53,14 +54,14 @@ public class IncidentsControllerTests
     private static RestrictivePractice SeedPractice(
         OdipDbContext db, Guid participantId, Guid? tenantId = null,
         RestrictivePracticeType type = RestrictivePracticeType.Seclusion, bool isActive = true, string description = "Seclusion room, acute crisis only.",
-        bool authorised = true)
+        bool authorised = true, DateOnly? authorisationDate = null)
     {
         // authorised: who and when are recorded, so an active entry reads Authorised under RestrictivePracticeAuthorisation.
         var practice = new RestrictivePractice
         {
             Id = Guid.NewGuid(), TenantId = tenantId ?? Guid.NewGuid(), ParticipantId = participantId,
             Type = type, Description = description, IsActive = isActive,
-            AuthorisedBy = authorised ? "Dr Chen" : null, AuthorisationDate = authorised ? new DateOnly(2026, 9, 1) : null,
+            AuthorisedBy = authorised ? "Dr Chen" : null, AuthorisationDate = authorised ? authorisationDate ?? new DateOnly(2026, 9, 1) : null,
         };
         db.RestrictivePractices.Add(practice);
         db.SaveChanges();
@@ -717,6 +718,47 @@ public class IncidentsControllerTests
         var saved = await db.IncidentReports.SingleAsync();
         Assert.Equal(added.Id, saved.RestrictivePracticeId);
         Assert.False(saved.IsRestrictivePracticeAuthorised);
+    }
+
+    // ── Authorised from its own day, on the organisation's calendar (audit M14) ──
+
+    // 14:30 UTC on 29 Oct 2026 is 01:30 on 30 Oct in Sydney (AEDT): "today" there is a day ahead of UTC.
+    private static readonly DateOnly SydneyToday = new(2026, 10, 30);
+    private static FakeClock SydneyNearMidnight() => FakeClock.AtUtc(2026, 10, 29, 14, 30);
+
+    [Theory]
+    [InlineData(-1, true)]
+    [InlineData(0, true)]
+    [InlineData(1, false)]
+    public async Task Create_JudgesTheEntryOnTheOrganisationsToday_NotUtc(int daysFromSydneyToday, bool expected)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        SeedPractice(db, participant.Id, authorisationDate: SydneyToday.AddDays(daysFromSydneyToday));
+        var controller = new IncidentsController(db, clock: SydneyNearMidnight());
+
+        await controller.Create(CreateDto(reporter.Id, involvedParticipantId: participant.Id), CancellationToken.None);
+
+        Assert.Equal(expected, (await db.IncidentReports.SingleAsync()).IsRestrictivePracticeAuthorised);
+    }
+
+    [Fact]
+    public async Task Update_RelinkToAnEntryAuthorisedFromTomorrow_LowersToUnauthorised()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var participant = SeedParticipant(db);
+        var inForce = SeedPractice(db, participant.Id, authorisationDate: SydneyToday);
+        var controller = new IncidentsController(db, clock: SydneyNearMidnight());
+        await controller.Create(CreateDto(reporter.Id, involvedParticipantId: participant.Id, restrictivePracticeId: inForce.Id), CancellationToken.None);
+        var incident = await db.IncidentReports.SingleAsync();
+        Assert.True(incident.IsRestrictivePracticeAuthorised);
+        var notYet = SeedPractice(db, participant.Id, description: "Starts tomorrow", authorisationDate: SydneyToday.AddDays(1));
+
+        await controller.Update(incident.Id, RpUpdateDto(reporter.Id, participant.Id, notYet.Id, usedWithoutAuthorisation: false), CancellationToken.None);
+
+        Assert.False((await db.IncidentReports.SingleAsync()).IsRestrictivePracticeAuthorised);
     }
 
     /// <summary>No migration of past data: an incident reported under the old rule keeps its flag when edited, even if its entry now reads Not authorised.</summary>

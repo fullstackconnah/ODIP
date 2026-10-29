@@ -7,7 +7,7 @@ import type { TaskDto } from '@/api/types'
 import { restoreZone, setZone } from '@/test/timeZone'
 
 const { mockUpdateMutate } = vi.hoisted(() => ({ mockUpdateMutate: vi.fn() }))
-vi.mock('@/api/hooks', () => ({ useUpdateTask: () => ({ mutate: mockUpdateMutate, isPending: false }) }))
+vi.mock('@/api/hooks', () => ({ useSetTaskStatus: () => ({ mutate: mockUpdateMutate, isPending: false }) }))
 
 afterEach(() => {
   vi.useRealTimers()
@@ -36,8 +36,6 @@ describe('trip TasksTab completing a task before 10:00 Sydney time', () => {
     await user.click(screen.getByRole('button', { name: /not started/i }))
     await user.click(await screen.findByText('Completed'))
 
-    expect(mockUpdateMutate).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ status: 'Completed', completedDate: expectedDate }),
-    }))
+    expect(mockUpdateMutate).toHaveBeenCalledWith({ id: task.id, status: 'Completed', completedDate: expectedDate })
   })
 })

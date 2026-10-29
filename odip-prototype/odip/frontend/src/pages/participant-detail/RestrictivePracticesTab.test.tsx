@@ -39,6 +39,7 @@ function makePractice(overrides: Partial<RestrictivePracticeDto> = {}): Restrict
     relatedMedicationId: null,
     relatedMedicationName: null,
     isActive: true,
+    isAuthorised: false,
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
     ...overrides,
@@ -255,7 +256,7 @@ describe('RestrictivePracticesTab', () => {
   const EXPLANATIONS = ['No authorisation date on file', 'No authoriser on file', 'No authorisation recorded']
 
   it.each([
-    ['active with name and date', { authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01' }, 'Authorised', null],
+    ['active with name and date', { authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01', isAuthorised: true }, 'Authorised', null],
     ['active with a name but no date', { authorisedBy: 'Dr Lee' }, 'Not authorised', 'No authorisation date on file'],
     ['active with a date but no name', { authorisationDate: '2026-03-01' }, 'Not authorised', 'No authoriser on file'],
     ['active with neither', {}, 'Not authorised', 'No authorisation recorded'],
@@ -271,6 +272,21 @@ describe('RestrictivePracticesTab', () => {
       if (line === explanation) expect(screen.getByText(line)).toBeInTheDocument()
       else expect(screen.queryByText(line)).not.toBeInTheDocument()
     }
+  })
+
+  it('says "Not yet in force" for an entry with both fields set whose date is still ahead', () => {
+    mockUseRestrictivePractices.mockReturnValue({
+      data: [makePractice({ authorisedBy: 'Dr Chen', authorisationDate: '2026-10-31', isAuthorised: false })],
+      isLoading: false,
+    })
+
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    expect(screen.getByText('Not authorised')).toBeInTheDocument()
+    expect(screen.getByText('Not yet in force')).toBeInTheDocument()
+    expect(screen.getByText('Authorised 31/10/2026')).toBeInTheDocument()
+    expect(screen.queryByText(/Authorised from/)).toBeNull()
+    for (const line of EXPLANATIONS) expect(screen.queryByText(line)).not.toBeInTheDocument()
   })
 
   it('shows no authorisation badge or explanation on an inactive entry (the Inactive pill carries its state, as in the wizard)', async () => {
