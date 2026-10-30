@@ -61,16 +61,13 @@ public class BprCsvServiceTests
         });
         await db.SaveChangesAsync();
 
-        var service = new BprCsvService(db);
-
-        var (bytes, fileName) = await service.GenerateBprCsvAsync(claim.Id, CancellationToken.None);
+        var bytes = await BprFile.OfClaimAsync(db, TenantId, claim.Id);
 
         var csv = Encoding.UTF8.GetString(bytes);
         var lines = csv.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         Assert.Equal(2, lines.Length); // the header and the shift line: shift claims are lodged like trip claims
         Assert.StartsWith("RegistrationNumber,NDISNumber,", lines[0]);
         Assert.Equal("8:00", lines[1].Split(',')[7]);
-        Assert.Contains(claim.ClaimReference, fileName);
     }
 
     [Fact]
@@ -106,7 +103,7 @@ public class BprCsvServiceTests
         });
         await db.SaveChangesAsync();
 
-        var (bytes, _) = await new BprCsvService(db).GenerateBprCsvAsync(claim.Id, CancellationToken.None);
+        var bytes = await BprFile.OfClaimAsync(db, TenantId, claim.Id);
 
         var lines = Encoding.UTF8.GetString(bytes).Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var header = lines[0].Split(',');

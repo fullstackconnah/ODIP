@@ -455,21 +455,19 @@ public class ClaimsController : ControllerBase
         return Ok(ApiResponse<bool>.Ok(true));
     }
 
-    // GET /api/v1/claims/{claimId}/bpr-csv
+    // GET /api/v1/claims/{claimId}/bpr-csv — a one-claim NDIA file, built through the same batch the Claims page uses (or the file already built for exactly this claim).
     [HttpGet("claims/{claimId:guid}/bpr-csv")]
-    public async Task<IActionResult> DownloadBprCsv(Guid claimId, CancellationToken ct)
+    public async Task<IActionResult> DownloadBprCsv(Guid claimId, [FromServices] ClaimBatchService batches, CancellationToken ct)
     {
-        if (!await TenantClaims().AnyAsync(x => x.Id == claimId, ct)) return NotFound(ApiResponse<bool>.Fail("Claim not found"));
-
-        try
+        if (_tenant.TenantId is not { } tenantId) return BadRequest(ApiResponse<bool>.Fail("Choose an organisation first."));
+        var result = await batches.DownloadForClaimAsync(tenantId, User, claimId, ct);
+        if (!result.Ok)
         {
-            var (bytes, fileName) = await _bprService.GenerateBprCsvAsync(claimId, ct);
-            return File(bytes, "text/csv", fileName);
+            var body = new ApiResponse<object> { Success = false, Errors = result.Errors ?? [], Data = result.Data };
+            return result.Status == 404 ? NotFound(body) : StatusCode(result.Status, body);
         }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(ApiResponse<bool>.Fail(ex.Message));
-        }
+        Response.Headers["X-Claim-Batch-Id"] = result.Value!.BatchId.ToString();
+        return File(result.Value.Content, "text/csv", result.Value.FileName);
     }
 
     // GET /api/v1/claims/{claimId}/invoices/{groupId} — groupId is the booking (trip claim) or the participant (shift claim).

@@ -63,18 +63,6 @@ public class BprCsvService(OdipDbContext db)
         }).ToList();
     }
 
-    // shortcut: temporary, until the batch service builds the file (step 5 removes it).
-    public async Task<(byte[] Content, string FileName)> GenerateBprCsvAsync(Guid claimId, CancellationToken ct = default)
-    {
-        var claim = await db.TripClaims.Include(c => c.TripInstance).Include(c => c.Participant).FirstOrDefaultAsync(c => c.Id == claimId, ct)
-            ?? throw new KeyNotFoundException($"Claim {claimId} not found");
-        var tenantId = claim.TripInstance?.TenantId ?? claim.Participant?.TenantId ?? throw new KeyNotFoundException($"Claim {claimId} not found");
-        ProviderSettingsGuard.Require(await db.ProviderSettings.FirstOrDefaultAsync(s => s.TenantId == tenantId, ct));
-        var ids = await db.ClaimLineItems.Where(l => l.TripClaimId == claimId).Select(l => l.Id).ToListAsync(ct);
-        var rows = (await LoadRowsAsync(tenantId, ids, ct)).Where(r => r.PlanType == PlanType.AgencyManaged);
-        return (Write(rows.Select(r => ToOut(r, 1))), $"BPR-{claim.ClaimReference}-{DateTime.UtcNow:yyyyMMdd}.csv");
-    }
-
     /// <summary>The catalogue row valid on a date for a code; the newest version when more than one is valid.</summary>
     private static SupportCatalogueItem? RowFor(List<SupportCatalogueItem> catalogue, string code, DateOnly on)
     {
