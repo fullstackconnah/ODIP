@@ -344,4 +344,42 @@ public class ImportFundingRowsTests
         Assert.Null(plans[2].Detail);
         Assert.Equal(plans[0].Detail, plans[0].ToDto().Detail);
     }
+
+    // Likely: who a row that matched nobody was most likely meant for. An unreadable amount makes the row not Ready, but it still names its participant.
+    private static Guid LinkedTo(string ndis, string first, string last, string dob, params ImportParticipantMatch[] participants)
+    {
+        var plans = Read(Line(ndis, "Core", "Self managed", "lots", first: first, last: last, dob: dob));
+        ImportFundingRows.Match(plans, participants);
+        return plans.Single().Funding!.ParticipantId;
+    }
+
+    [Fact]
+    public void A_row_that_cannot_be_imported_links_to_the_one_participant_with_its_name()
+    {
+        var cal = Guid.NewGuid();
+        Assert.Equal(cal, LinkedTo("N/A", "cal", " WU", "", People[0], new(cal, null, "Cal", "Wu", new DateOnly(1980, 1, 1)), People[1]));
+    }
+
+    [Fact]
+    public void Two_participants_with_one_name_link_to_nobody() =>
+        Assert.Equal(Guid.Empty, LinkedTo("N/A", "Jo", "Ng", "", new(Guid.NewGuid(), null, "Jo", "Ng", null), new(Guid.NewGuid(), null, "JO", "NG", null)));
+
+    [Fact]
+    public void A_name_with_another_date_of_birth_links_to_nobody() =>
+        Assert.Equal(Guid.Empty, LinkedTo("N/A", "Ava", "Stone", "04/04/1990", People));
+
+    [Fact]
+    public void An_unreadable_NDIS_number_one_character_off_links_to_that_participant() =>
+        Assert.Equal(Ava, LinkedTo("43000O001", "", "", "", People));
+
+    [Fact]
+    public void One_participant_fitting_by_name_and_by_number_counts_once() =>
+        Assert.Equal(Ava, LinkedTo("43000O001", "Ava", "Stone", "", People));
+
+    [Fact]
+    public void A_number_for_one_participant_and_a_name_for_another_link_to_nobody()
+    {
+        var cal = Guid.NewGuid();
+        Assert.Equal(Guid.Empty, LinkedTo("43000O001", "Cal", "Wu", "", People[0], new(cal, null, "Cal", "Wu", null)));
+    }
 }

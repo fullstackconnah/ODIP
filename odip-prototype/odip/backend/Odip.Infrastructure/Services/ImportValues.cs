@@ -23,6 +23,20 @@ public static class ImportValues
         return m.Success && Part(m, 1) <= 12 && Part(m, 2) > 12;
     }
 
+    /// <summary>The column index of each mapped key; a later duplicate wins.</summary>
+    public static Dictionary<string, int> Columns(IReadOnlyList<string?> mapping)
+    {
+        var column = new Dictionary<string, int>();
+        for (var i = 0; i < mapping.Count; i++)
+            if (mapping[i] is { } key) column[key] = i;
+        return column;
+    }
+
+    /// <summary>For each date key, whether its mapped column holds a month-first value (see <see cref="LooksMonthFirst"/>).</summary>
+    public static Dictionary<string, bool> MonthFirst(ImportTable table, Dictionary<string, int> column, IEnumerable<string> dateKeys) =>
+        dateKeys.ToDictionary(key => key,
+            key => column.TryGetValue(key, out var c) && table.Rows.Any(r => LooksMonthFirst(table.Cell(r, c))));
+
     /// <summary>
     /// A month-first column (any value in it <see cref="LooksMonthFirst"/>) makes every d/m value in it ambiguous, so they are all refused rather
     /// than half of them guessed.

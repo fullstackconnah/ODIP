@@ -79,4 +79,28 @@ public class ImportValuesTests
         Assert.Equal(((PlanType?)null, (string?)null), ImportValues.PlanManagement("", "Plan type"));
         Assert.Equal("Managed by must be Self managed, Plan managed or NDIA managed.", ImportValues.PlanManagement("Family", "Managed by").Error);
     }
+
+    [Fact]
+    public void Columns_maps_each_key_to_its_index_skips_blanks_and_lets_a_later_duplicate_win()
+    {
+        var column = ImportValues.Columns(new string?[] { "firstName", null, "dateOfBirth", "dateOfBirth" });
+        Assert.Equal(2, column.Count);
+        Assert.Equal(0, column["firstName"]);
+        Assert.Equal(3, column["dateOfBirth"]);
+    }
+
+    [Fact]
+    public void MonthFirst_is_true_only_for_a_date_key_whose_column_holds_a_month_first_value()
+    {
+        var table = new ImportTable(new[] { "dob", "start" }, new[]
+        {
+            new ImportRow(2, new[] { "04/23/1990", "03/04/1990" }),
+            new ImportRow(3, new[] { "03/04/1990", "03/04/1990" }),
+        });
+        var column = new Dictionary<string, int> { ["dateOfBirth"] = 0, ["planStart"] = 1 };
+        var monthFirst = ImportValues.MonthFirst(table, column, new[] { "dateOfBirth", "planStart", "planEnd" });
+        Assert.True(monthFirst["dateOfBirth"]);
+        Assert.False(monthFirst["planStart"]);
+        Assert.False(monthFirst["planEnd"]);
+    }
 }
