@@ -24,6 +24,7 @@ vi.mock('@/api/hooks', () => ({
   useUpdateStaff: mockUseUpdateStaff,
   useStaffDetail: mockUseStaffDetail,
   useEnsureStaffSignInAccount: () => ({ mutateAsync: vi.fn() }),
+  useRecordInvitesSent: () => ({ mutate: vi.fn() }),
 }))
 
 vi.mock('@/lib/permissions', () => ({

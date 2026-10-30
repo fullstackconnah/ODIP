@@ -388,6 +388,8 @@ public class StaffController : ControllerBase
 
     private static StaffDetailDto ToStaffDetailDto(User s, DateOnly today) => new()
     {
+        SignInInviteSentAt = s.SignInInviteSentAt,
+        HasSignedIn = s.LastLoginAt != null,
         Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
         FullName = (s.FirstName + " " + s.LastName).Trim(), Username = s.Username,
         Role = s.Role, Position = s.Position ?? Position.SupportWorker, Email = s.Email,
@@ -649,6 +651,28 @@ public class StaffController : ControllerBase
         if (outcome.Account is { } account) return Ok(ApiResponse<SignInAccountDto>.Ok(account));
         if (outcome.BadGateway) return StatusCode(StatusCodes.Status502BadGateway, ApiResponse<SignInAccountDto>.Fail(outcome.Error!));
         return BadRequest(ApiResponse<SignInAccountDto>.Fail(outcome.Error!));
+    }
+
+    /// <summary>
+    /// Records that the browser sent these people a sign-in invite email, so the next bulk invite skips them and the Staff page can say when. Only
+    /// people the caller could invite are stamped (active, never signed in, and a SuperAdmin row only by a SuperAdmin); any other id is skipped
+    /// silently. A tracked save, not a bulk update: Users are audited, so each person gets one Updated row with the caller as the actor. The Users
+    /// query filter keeps it to the caller's own organisation (a SuperAdmin's to the one being viewed, or all when none is).
+    /// </summary>
+    [HttpPost("/api/v1/users/invites-sent")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    [RequestSizeLimit(8_192)]
+    public async Task<ActionResult<ApiResponse<int>>> InvitesSent([FromBody] InvitesSentRequest? body, CancellationToken ct)
+    {
+        var ids = body?.UserIds?.Distinct().ToList() ?? [];
+        if (ids.Count is 0 or > 100) return BadRequest(ApiResponse<int>.Fail("Send between 1 and 100 people at a time."));
+
+        var isSuperAdmin = User.IsInRole("SuperAdmin");
+        var people = await _db.Users.Where(u => ids.Contains(u.Id) && u.IsActive && u.LastLoginAt == null && (isSuperAdmin || u.Role != UserRole.SuperAdmin)).ToListAsync(ct);
+        var now = _clock.GetUtcNow().UtcDateTime;
+        foreach (var person in people) person.SignInInviteSentAt = now;
+        await _db.SaveChangesAsync(ct);
+        return Ok(ApiResponse<int>.Ok(people.Count));
     }
 
     /// <summary>

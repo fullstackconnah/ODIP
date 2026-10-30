@@ -9,7 +9,23 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 const LONG_NAME = 'Bartholomew-Alexander Montgomery-Featherstonehaugh III'
 
 function create({ respond, failEnvelope, rosterShifts, startedWeeks, today, addDays, weekday }) {
-  const batches = []
+  const staffBatch = (n, fileName, rowCount) => ({
+    id: `import-staff-${n}`, kind: 'Staff', fileName, createdByName: 'Demo Admin', createdAt: `2026-10-${20 + n}T01:00:00Z`, rowCount,
+    createdCount: rowCount, skippedCount: 0, failedCount: 0, undoneAt: null, undoneByName: null, keptCount: null,
+  })
+  const batches = [
+    staffBatch(1, 'staff-new-starters.csv', 6), staffBatch(2, 'staff-reminders.csv', 5), staffBatch(3, 'staff-all-done.csv', 4), staffBatch(4, 'staff-count-fails.csv', 3),
+    staffBatch(5, 'staff-big-intake.csv', 150),
+  ]
+  // Invite counts per Staff batch and who is in each group; the invite routes move people from toInvite to invitedBefore, as the real record call does.
+  const people = (prefix, n) => Array.from({ length: n }, (_, i) => ({ staffId: `${prefix}-${i + 1}`, name: `${['Ava', 'Ben', 'Cleo'][i % 3]} ${prefix.toUpperCase()}${i + 1}`, email: `${prefix}${i + 1}@example.com` }))
+  const groups = {
+    'import-staff-1': { toInvite: people('new', 3), invitedBefore: people('old', 2), signedIn: 1, cannotInvite: 0 },
+    'import-staff-2': { toInvite: [], invitedBefore: people('rem', 2), signedIn: 3, cannotInvite: 0 },
+    'import-staff-3': { toInvite: [], invitedBefore: [], signedIn: 4, cannotInvite: 0 },
+    'import-staff-5': { toInvite: people('big', 150), invitedBefore: [], signedIn: 0, cannotInvite: 0 },
+  }
+  const countOf = (g) => ({ toInvite: g.toInvite.length, invitedBefore: g.invitedBefore.length, signedIn: g.signedIn, cannotInvite: g.cannotInvite })
   let counter = 0
 
   const sayDay = (iso) => { const d = new Date(`${iso}T00:00:00Z`); return `${DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}` }
@@ -79,14 +95,40 @@ function create({ respond, failEnvelope, rosterShifts, startedWeeks, today, addD
     return batch
   }
 
+  function inviteCount(id) {
+    const g = groups[id]
+    return g ? countOf(g) : respond(500, failEnvelope(null, ['The invite count could not be worked out.']))
+  }
+
+  function invite(id, _body, query) {
+    const g = groups[id]
+    if (!g) return respond(404, failEnvelope(null, ['Staff import not found.']))
+    const again = query && query.get('includeInvitedBefore') === 'true'
+    const who = again ? [...g.toInvite, ...g.invitedBefore] : g.toInvite
+    return { invites: who.map((p) => ({ ...p, firebaseAccount: 'Existing', error: null })), left: 0, next: null }
+  }
+
+  function recordSent(body) {
+    const ids = new Set((body && body.userIds) || [])
+    for (const g of Object.values(groups)) {
+      const moved = g.toInvite.filter((p) => ids.has(p.staffId))
+      g.toInvite = g.toInvite.filter((p) => !ids.has(p.staffId))
+      g.invitedBefore.push(...moved)
+    }
+    return ids.size
+  }
+
   return {
     get: [
       ['imports', () => batches],
+      ['imports/:id/invites/count', (id) => inviteCount(id)],
       ['imports/upcoming-shifts/template', () => ({ template: 'upcoming-shifts' })],
     ],
     post: [
       ['imports/upcoming-shifts/preview', (body) => preview(body)],
       ['imports/upcoming-shifts/commit', (body) => commit(body)],
+      ['imports/:id/invites', (id, body, query) => invite(id, body, query)],
+      ['users/invites-sent', (body) => recordSent(body)],
       ['imports/:id/undo', (id) => undo(id)],
     ],
   }

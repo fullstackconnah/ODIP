@@ -179,6 +179,8 @@ function create({ respond, failEnvelope, claims, lineItemsByClaimId }) {
     const result = { claims: [], invoiceCount: 0 }
     for (const id of ids) {
       const claim = claims.find((c) => c.id === id)
+      // A claim in a claim file (hub-claim-*) has no invoices to issue: the hub's batches are not in this claim book.
+      if (!claim && String(id).startsWith('hub-claim-')) continue
       if (!claim) return fail(404, 'Claim not found')
       const entry = book[id] ?? { groups: [], invoices: [], missingSettings: false }
       const toIssue = submittable(claim) ? due(entry) : []

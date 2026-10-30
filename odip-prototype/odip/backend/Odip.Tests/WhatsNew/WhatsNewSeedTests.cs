@@ -50,10 +50,11 @@ public class WhatsNewSeedTests
     }
 
     [Fact]
-    public void ImportantEntries_AreTheFourFlaggedOnes()
+    public void ImportantEntries_AreTheFiveFlaggedOnes()
     {
         var important = WhatsNewSeed.All.Where(i => i.Important).ToList();
-        Assert.Equal(new[] { "2026-10-dark-mode", "2026-10-participant-tabs", "2026-10-restraint-medicines-register", "2026-10-screening-missing-counts" }, important.Select(i => i.Key));
+        Assert.Equal(new[] { "2026-10-dark-mode", "2026-10-ndia-claims-hub", "2026-10-participant-tabs", "2026-10-restraint-medicines-register", "2026-10-screening-missing-counts" }, important.Select(i => i.Key).Order(StringComparer.Ordinal));
+        // The other three are staff-only, so they do not reach support workers.
         Assert.All(important.Where(i => i.Key is "2026-10-dark-mode" or "2026-10-participant-tabs"), i => Assert.Equal(WhatsNewAudience.All, i.Roles));
     }
 

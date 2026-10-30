@@ -1385,7 +1385,13 @@ public record StaffListDto
     public string? Notes { get; init; }
 }
 
-public record StaffDetailDto : StaffListDto { }
+public record StaffDetailDto : StaffListDto
+{
+    /// <summary>When a sign-in invite email was last sent (UTC); null: never invited. Set on the overview only.</summary>
+    public DateTime? SignInInviteSentAt { get; init; }
+    /// <summary>True once the person has signed in at all; the invite line is only for those who have not. Set on the overview only.</summary>
+    public bool HasSignedIn { get; init; }
+}
 
 /// <summary>Connection map item 12 — one row of GET /staff/{id}/overview's upcomingShifts (today → +14 days).</summary>
 public record StaffOverviewUpcomingShiftDto

@@ -71,7 +71,8 @@ export default function NotificationPreferencesTab(frame: SectionFrame) {
       ) : (
         // One column of ticks per area; the areas flow in two columns from xl.
         <div className="gap-x-[var(--section-gap)] xl:columns-2">
-          {NOTIFICATION_EVENT_TYPE_GROUPS.map(group => (
+          {/* Agreements is hidden: no code raises those events yet (reserved, NotificationEntities.cs:23). */}
+          {NOTIFICATION_EVENT_TYPE_GROUPS.filter(group => group.label !== 'Agreements').map(group => (
             <div key={group.label} className="mb-[var(--section-gap)] break-inside-avoid">
               <SettingsGroup title={group.label}>
                 {group.eventTypes.map(eventType => (
