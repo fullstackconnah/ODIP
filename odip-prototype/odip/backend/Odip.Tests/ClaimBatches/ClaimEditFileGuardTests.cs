@@ -125,6 +125,18 @@ public class ClaimEditFileGuardTests
     }
 
     [Fact]
+    public async Task A_claim_in_an_uploaded_file_can_still_be_marked_paid_by_hand()
+    {
+        using var f = new BatchFixture();
+        var (claim, lines, _) = f.AddClaim();
+        var built = await f.BuildAsync(lines[0].Id);
+        await f.Service.ConfirmUploadedAsync(f.TenantId, f.User, built.Value!.Id, default);
+
+        Assert.Equal(200, Status(await Put(f, claim, TripClaimStatus.Paid)));
+        Assert.Equal(TripClaimStatus.Paid, (await f.Db.TripClaims.FindAsync(claim.Id))!.Status);
+    }
+
+    [Fact]
     public async Task A_hand_rejection_is_refused_while_the_file_is_built_and_the_confirm_then_works_on_the_untouched_claim()
     {
         using var f = new BatchFixture();

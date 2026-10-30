@@ -285,13 +285,14 @@ public class ClaimsController : ControllerBase
         if (dto.Status is { } wanted && !ClaimStatusRules.CanMove(c.Status, wanted))
             return Conflict(ApiResponse<bool>.Fail($"{c.ClaimReference} is {Words(c.Status)}, so it can't be marked as {Words(wanted)}."));
 
-        // A claim whose lines wait in a live NDIA file is frozen like its lines (PATCH, DELETE): a status moved by hand would leave the file's confirm to resubmit, or never send, what it holds.
+        // A claim whose lines wait in a Built NDIA file is frozen: a status moved by hand would leave the file's confirm to resubmit, or never send, what it holds. Once the file is Uploaded the
+        // claim's own Paid / Rejected stay open, because importing results is optional.
         if (dto.Status is { } moving && moving != c.Status)
         {
             var lineIds = await _db.ClaimLineItems.AsNoTracking().Where(l => l.TripClaimId == claimId).Select(l => l.Id).ToListAsync(ct);
             var inFile = await _db.ClaimBatchLines.AsNoTracking()
                 .Where(b => b.ClaimLineItemId != null && lineIds.Contains(b.ClaimLineItemId.Value) && b.Outcome == ClaimBatchLineOutcome.Pending
-                    && (b.Batch.Status == ClaimBatchStatus.Built || b.Batch.Status == ClaimBatchStatus.Uploaded))
+                    && b.Batch.Status == ClaimBatchStatus.Built)
                 .Select(b => b.Batch.FileName).FirstOrDefaultAsync(ct);
             if (inFile != null) return Conflict(ApiResponse<bool>.Fail($"This claim is in {inFile}. Discard that file first."));
         }
