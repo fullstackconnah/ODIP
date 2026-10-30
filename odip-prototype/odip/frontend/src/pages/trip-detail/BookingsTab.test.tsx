@@ -140,7 +140,7 @@ describe('BookingsTab — touch targets in the row actions', () => {
 // a 400 "Participant is not ready for booking or rostering." The modal shows the first as a quiet line under the picker (it never
 // disables Add Booking) and the second as the real message, never the generic line, with everything the user entered kept.
 const NOT_READY_MESSAGE = 'Participant is not ready for booking or rostering.'
-const GENERIC_BOOKING_ERROR = 'Failed to create booking. Please try again.'
+const GENERIC_BOOKING_ERROR = "Couldn't create this booking. Check your connection and try again."
 const ISSUES = ['Intake not complete', 'No signed service agreement']
 const WARNING = 'Not ready: Intake not complete · No signed service agreement'
 

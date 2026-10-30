@@ -198,7 +198,7 @@ function GenerateShiftClaimModal({ participantId, onClose }: { participantId: st
           navigate(`/claims/${claim.id}`)
         },
         onError: (err: unknown) => {
-          setError(extractErrorMessage(err, 'Failed to generate this claim. Please try again.'))
+          setError(extractErrorMessage(err, "Couldn't generate this claim. Check your connection and try again."))
         },
       },
     )

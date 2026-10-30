@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react'
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import PortalShiftDetailPage from './PortalShiftDetailPage'
@@ -303,6 +303,35 @@ describe('PortalShiftDetailPage', () => {
     show(makeDetail())
     fireEvent.click(screen.getByRole('button', { name: /start shift/i }))
     await waitFor(() => expect(startMutateAsync).toHaveBeenCalledWith({ id: 'shift-1', data: { geolocationDeclined: true } }))
+  })
+
+  it('fires Start once when tapped twice while the location is still being asked for', async () => {
+    const answers: Array<(pos: unknown) => void> = []
+    Object.defineProperty(global.navigator, 'geolocation', { configurable: true, value: { getCurrentPosition: (success: (pos: unknown) => void) => { answers.push(success) } } })
+    show(makeDetail())
+    const start = screen.getByRole('button', { name: /start shift/i })
+    fireEvent.click(start)
+    fireEvent.click(start)
+    expect(screen.getByRole('button', { name: /starting/i })).toBeDisabled()
+    // Answer every prompt that was raised: without the guard there would be two, and two Start calls.
+    answers.forEach(answer => answer({ coords: { latitude: -27.5, longitude: 153.02 } }))
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+    expect(startMutateAsync).toHaveBeenCalledTimes(1)
+  })
+
+  it('starts the shift as declined after 10 s when the browser never answers the location prompt', async () => {
+    vi.useFakeTimers()
+    try {
+      Object.defineProperty(global.navigator, 'geolocation', { configurable: true, value: { getCurrentPosition: () => {} } })
+      show(makeDetail())
+      fireEvent.click(screen.getByRole('button', { name: /start shift/i }))
+      expect(screen.getByRole('button', { name: /starting/i })).toBeDisabled()
+      await act(async () => { await vi.advanceTimersByTimeAsync(10_000) })
+      expect(startMutateAsync).toHaveBeenCalledWith({ id: 'shift-1', data: { geolocationDeclined: true } })
+      expect(screen.queryByRole('button', { name: /starting/i })).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('hides Start for a ReadOnly user and says why', () => {

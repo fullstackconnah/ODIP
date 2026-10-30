@@ -1,10 +1,13 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import AddActivityModal from './AddActivityModal'
 import type { ScheduledActivityDto } from '@/api/types/activities'
 
-const { mutation } = vi.hoisted(() => ({ mutation: () => ({ mutate: () => undefined, isPending: false, isError: false }) }))
+const { mutation, failure } = vi.hoisted(() => {
+  const failure = { error: null as unknown }
+  return { failure, mutation: () => ({ mutate: () => undefined, isPending: false, isError: failure.error !== null, error: failure.error }) }
+})
 
 vi.mock('@/api/hooks', () => ({
   useActivities: () => ({ data: [] }),
@@ -62,6 +65,23 @@ describe('AddActivityModal — Notes fold stays open once it has opened', () => 
   it('starts closed on a blank add', () => {
     render(<AddActivityModal tripDayId="d1" onClose={() => {}} />)
     expect(notesFold().open).toBe(false)
+  })
+})
+
+describe('AddActivityModal — save failure copy', () => {
+  afterEach(() => { failure.error = null })
+
+  it('says the house line when the failure carries no server message', () => {
+    failure.error = new Error('Network Error')
+    render(<AddActivityModal tripDayId="d1" onClose={() => {}} />)
+    expect(screen.getByText("Couldn't save this activity. Check your connection and try again.")).toBeInTheDocument()
+  })
+
+  it('shows the server message instead of blaming the connection', () => {
+    failure.error = { response: { data: { message: 'An activity needs a title.' } } }
+    render(<AddActivityModal tripDayId="d1" onClose={() => {}} />)
+    expect(screen.getByText('An activity needs a title.')).toBeInTheDocument()
+    expect(screen.queryByText(/check your connection/i)).not.toBeInTheDocument()
   })
 })
 
