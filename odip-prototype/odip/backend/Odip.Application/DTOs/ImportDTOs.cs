@@ -45,3 +45,6 @@ public record ImportInvitesDto(List<ImportInviteDto> Invites, int Left, Guid? Ne
 /// or who cannot be invited (archived, no email, or an address the app invented).
 /// </summary>
 public record ImportInviteCountDto(int ToInvite, int InvitedBefore, int SignedIn, int CannotInvite);
+
+/// <summary>The people a browser just sent a sign-in invite email to (Firebase accepted each send).</summary>
+public record InvitesSentRequest(List<Guid>? UserIds);

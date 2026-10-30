@@ -164,6 +164,22 @@ public class StaffOverviewControllerTests
     }
 
     [Fact]
+    public async Task GetOverview_returns_when_the_sign_in_invite_was_sent()
+    {
+        var tenantId = Guid.NewGuid();
+        using var db = CreateDb(tenantId, isSuperAdmin: false);
+        var staff = SeedStaff(db, tenantId);
+        var sent = new DateTime(2026, 10, 30, 14, 30, 0, DateTimeKind.Utc);
+        staff.SignInInviteSentAt = sent;
+        await db.SaveChangesAsync();
+
+        var result = await new StaffController(db, new StaffAvailabilityItemsQuery(db), clock: Clock).GetOverview(staff.Id, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<StaffOverviewDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(sent, body.Data!.Staff.SignInInviteSentAt);
+    }
+
+    [Fact]
     public async Task GetOverview_UpcomingShifts_ExcludesShiftsOutsideTheFourteenDayWindow()
     {
         var tenantId = Guid.NewGuid();
