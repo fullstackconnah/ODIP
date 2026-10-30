@@ -94,6 +94,12 @@ describe('navConfig — who sees what', () => {
     expect(isLeafVisible(caregiverForms, { ...everything, canWrite: false })).toBe(false)
   })
 
+  it('shows Reports to the roles that open Rostering and hides it from a SupportWorker and ReadOnly', () => {
+    const reports = navLeaves.find(candidate => candidate.to === '/reports')!
+    for (const role of ['SuperAdmin', 'Admin', 'Coordinator']) expect(isLeafVisible(reports, accessFor(role)), role).toBe(true)
+    for (const role of ['SupportWorker', 'ReadOnly']) expect(isLeafVisible(reports, accessFor(role)), role).toBe(false)
+  })
+
   it('gives a SupportWorker only their pages, no Dashboard, and no group that has lost every child', () => {
     expect(shape(resolveNav(navItems, accessFor('SupportWorker')))).toEqual([
       'My shifts', 'Trips: Trips | Schedule', 'Participants: Participants | Medications', 'Tasks', 'Incidents',
@@ -134,7 +140,7 @@ describe('navConfig — who sees what', () => {
       'My shifts',
       'Trips: Trips | Schedule | Bookings | Accommodation | Vehicles',
       'Participants: Participants | Agreements | Medications | Caregiver forms',
-      'Staff & roster: Roster board | Shift patterns | Compatibility | Leave | Completions | Staff | Qualifications',
+      'Staff & roster: Roster board | Shift patterns | Compatibility | Leave | Completions | Reports | Staff | Qualifications',
       'Tasks',
       'Budgets',
       'Invoices',

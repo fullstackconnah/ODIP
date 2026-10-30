@@ -726,7 +726,7 @@ describe('AppLayout — no New Trip shortcut in the sidebar, the drawer or the b
       '/', '/portal',
       '/trips', '/schedule', '/bookings', '/accommodation', '/vehicles',
       '/participants', '/agreements', '/medications', '/caregiver-submissions',
-      '/rostering', '/rostering/patterns', '/rostering/compatibility', '/rostering/leave', '/rostering/completions', '/staff', '/qualifications',
+      '/rostering', '/rostering/patterns', '/rostering/compatibility', '/rostering/leave', '/rostering/completions', '/reports', '/staff', '/qualifications',
       '/tasks', '/budgets', '/invoices',
       '/incidents', '/settings',
     ])
@@ -784,7 +784,7 @@ describe('AppLayout — the menu each role sees is generated from navConfig', ()
     'My shifts',
     'Trips: Trips | Schedule | Bookings | Accommodation | Vehicles',
     'Participants: Participants | Agreements | Medications | Caregiver forms',
-    'Staff & roster: Roster board | Shift patterns | Compatibility | Leave | Completions | Staff | Qualifications',
+    'Staff & roster: Roster board | Shift patterns | Compatibility | Leave | Completions | Reports | Staff | Qualifications',
     'Tasks',
     'Budgets',
     'Invoices',

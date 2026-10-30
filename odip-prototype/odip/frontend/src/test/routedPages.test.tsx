@@ -99,6 +99,7 @@ const ROUTES: Route[] = [
   { path: '/rostering/leave', url: '/rostering/leave', load: () => import('@/pages/rostering/LeaveApprovalsPage') },
   { path: '/rostering/completions', url: '/rostering/completions', load: () => import('@/pages/rostering/CompletionReviewPage') },
   { path: '/rostering/payroll', url: '/rostering/payroll', load: () => import('@/pages/rostering/PayrollPage') },
+  { path: '/reports', url: '/reports', load: () => import('@/pages/reports/ReportsPage') },
   { path: '/medications', url: '/medications', load: () => import('@/pages/MedicationsPage') },
   { path: '/medications/new', url: `/medications/new?participantId=${ID}`, load: () => import('@/pages/MedicationFormPage') },
   { path: '/medications/:id/edit', url: `/medications/${ID}/edit`, load: () => import('@/pages/MedicationFormPage') },
@@ -129,7 +130,7 @@ const ALLOWED: Record<string, string> = {
 // These titles were renamed (or their nav label was) so the two match; this keeps them there.
 const RENAMED_TO_NAV_LABEL = [
   '/incidents', '/schedule', '/qualifications', '/rostering', '/portal', '/portal/payslips',
-  '/trips', '/rostering/patterns', '/rostering/compatibility', '/rostering/leave', '/rostering/completions', '/rostering/payroll',
+  '/trips', '/rostering/patterns', '/rostering/compatibility', '/rostering/leave', '/rostering/completions', '/rostering/payroll', '/reports',
 ]
 
 let previousAdapter: typeof apiClient.defaults.adapter

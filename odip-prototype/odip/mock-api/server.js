@@ -14,6 +14,7 @@ const fundingModule = require('./funding')
 const intakeBookingModule = require('./intakeBooking')
 const rosterBudgetModule = require('./rosterBudget')
 const invoicesModule = require('./invoices')
+const reportsModule = require('./reports')
 const importsModule = require('./imports')
 
 const PORT = Number(process.env.MOCK_PORT) || 5062
@@ -2059,6 +2060,7 @@ const claimLineItemsByClaimId = {
 
 // Xero PR1: the invoice fixtures (claim-inv-f1 ... f10) join the claims above; invoices.js holds their invoices and routes.
 const invoiceMock = invoicesModule.create({ respond, failEnvelope, claims, lineItemsByClaimId: claimLineItemsByClaimId })
+const reportsMock = reportsModule.create({ respond, failEnvelope })
 
 /** GET/PUT provider-settings: the organisation's billing details, with the invoice numbering invoices.js keeps. */
 const providerSettingsRow = {
@@ -2565,6 +2567,7 @@ const routes = [
   ...funding.get,
   ...intake.get,
   ...invoiceMock.get,
+  ...reportsMock.get,
   ['provider-settings', () => invoiceMock.settingsDto(providerSettingsRow)],
   ['dashboard/summary', () => dashboardSummary],
   ['dashboard/setup', () => dashboardSetup],
@@ -2854,6 +2857,7 @@ const postRoutes = [
   ...funding.post,
   ...intake.post,
   ...invoiceMock.post,
+  ...reportsMock.post,
   ['plan-pricing/quote', (body) => {
     if (!Array.isArray(body.blocks)) return respond(400, failEnvelope(null, ['The request needs a list of blocks.']))
     if (!body.periodFrom || !body.periodTo || body.periodFrom > body.periodTo) return respond(400, failEnvelope(null, ['The agreement period ends before it starts.']))

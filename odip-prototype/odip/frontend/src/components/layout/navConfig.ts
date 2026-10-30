@@ -150,6 +150,8 @@ export const navItems: NavEntry[] = [
       },
       // Same 'rostering' key as Completions; hidden until Employment Hero is connected.
       { to: '/rostering/payroll', label: 'Payroll', msIcon: 'payments', page: 'rostering', requiresEmploymentHero: true },
+      // Same 'rostering' key as Completions, so SupportWorker and ReadOnly never see it.
+      { to: '/reports', label: 'Reports', msIcon: 'summarize', page: 'rostering' },
       { to: '/staff', label: 'Staff', msIcon: 'manage_accounts', page: 'staff' },
       { to: '/qualifications', label: 'Qualifications', msIcon: 'health_and_safety', page: 'qualifications' },
     ],
