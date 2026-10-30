@@ -3,6 +3,7 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import type { BatchDetailDto, BatchDto, HubLineDto, HubLinesDto, RejectedLineDto, ResultsImportDto } from '@/api/types'
+import { ClaimFileError } from '@/api/hooks/claimHub'
 import ClaimsHubPage from './ClaimsHubPage'
 
 // The NDIA claims hub page. The API layer is mocked at the hook; fetchClaimFile (the build and download) is mocked as the server's answer.
@@ -16,7 +17,7 @@ vi.mock('@/api/hooks/claimHub', async () => {
   const mutation = (fn: ReturnType<typeof vi.fn>) => () => ({ mutate: fn, isPending: false, isError: false, error: null, reset: vi.fn() })
   return {
     ClaimFileError: actual.ClaimFileError,
-    useHubLines: m.lines, useClaimBatches: m.batches, useClaimBatch: m.batch, fetchClaimFile: m.fetchClaimFile,
+    useHubLines: m.lines, useClaimBatches: m.batches, useClaimBatch: m.batch, fetchClaimFile: m.fetchClaimFile, useBuildClaimFile: () => m.fetchClaimFile,
     useMarkBatchUploaded: mutation(m.uploaded), useDiscardBatch: mutation(m.discard), useImportResults: mutation(m.importResults),
     useMarkBatchPaid: mutation(m.paid), useDismissBatchLine: mutation(m.dismiss),
   }
@@ -208,6 +209,102 @@ describe('ClaimsHubPage: Needs action', () => {
     expect(m.fetchClaimFile).not.toHaveBeenCalled()
     await user.click(screen.getByRole('button', { name: 'Send again' }))
     expect(m.fetchClaimFile).toHaveBeenCalledWith('post', '/claim-batches', { lineIds: ['x2'], confirmedLineIds: ['x2'] }, expect.any(String), expect.any(String))
+  })
+})
+
+describe('ClaimsHubPage: decisions and errors', () => {
+  it('takes a decision from the server per line, even for a code the page has no title for', async () => {
+    const user = userEvent.setup()
+    m.lines.mockReturnValue(query(hub({ rejected: [
+      rejected({ batchLineId: 'u1', lineId: 'x9', rejectCode: 'Z99', needsDecision: true }),
+      rejected({ batchLineId: 'u2', lineId: 'x8', rejectCode: 'Y11', needsDecision: false }),
+    ] })))
+    m.fetchClaimFile.mockResolvedValue({ batchId: 'b-7', fileName: 'BPR261030007.csv' })
+    renderPage('/claims?tab=action')
+
+    const panel = within(screen.getByTestId('claims-panel-action'))
+    expect(panel.getAllByRole('heading', { level: 3 }).map(h => h.textContent)).toEqual(['Other codes', 'Other codes'])
+    expect(panel.getAllByRole('button', { name: /^Don't claim: / })).toHaveLength(1)
+    expect(panel.getAllByRole('link', { name: /^Fix: / })).toHaveLength(1)
+    await user.click(panel.getByText('Send again…'))
+    expect(m.fetchClaimFile).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Send again' }))
+    expect(m.fetchClaimFile).toHaveBeenCalledWith('post', '/claim-batches', { lineIds: ['x9'], confirmedLineIds: ['x9'] }, expect.any(String), expect.any(String))
+  })
+
+  it("shows a refused Send again inside the open dialog, with the first failed line's message", async () => {
+    const user = userEvent.setup()
+    m.lines.mockReturnValue(query(hub({ rejected: [rejected({ lineId: 'x2' })] })))
+    m.fetchClaimFile.mockRejectedValue(new ClaimFileError('1 line did not pass the checks.', 409, [{ lineId: 'x2', claimReference: 'TC-1', rule: 'Funding', message: 'Over the funding left' }]))
+    renderPage('/claims?tab=action')
+
+    await user.click(screen.getAllByRole('button', { name: /^Send again: / })[0])
+    await user.click(screen.getByRole('button', { name: 'Send again' }))
+    expect(await within(screen.getByRole('alertdialog')).findByText(/1 line did not pass the checks\. Over the funding left/)).toBeInTheDocument()
+  })
+})
+
+describe('ClaimsHubPage: file panel', () => {
+  const resultsIn = (over: Partial<BatchDetailDto> = {}) => detail({
+    status: 'ResultsImported', successful: 1, rejected: 1, pending: 0, paid: 0,
+    lines: [
+      { batchLineId: 'bl-1', claimId: 'c-1', participantName: 'Alex Park', supportNumber: 'x', from: '2026-08-01', to: '2026-08-01', amount: 175, attempt: 1, rowReference: 'R1', outcome: 'Successful', resultAmount: 175 },
+      { batchLineId: 'bl-2', claimId: 'c-1', participantName: 'Alex Park', supportNumber: 'y', from: '2026-08-02', to: '2026-08-02', amount: 175, attempt: 1, rowReference: 'R2', outcome: 'Rejected', rejectCode: 'V17' },
+    ], ...over,
+  })
+
+  it('Review rejected lines closes the file and opens Needs action filtered to it', async () => {
+    const user = userEvent.setup()
+    m.batch.mockReturnValue(query(resultsIn()))
+    m.lines.mockReturnValue(query(hub({ rejected: [rejected()] })))
+    renderPage('/claims?tab=files&file=b-1')
+
+    await user.click(screen.getByRole('button', { name: /1 line rejected/ }))
+    expect(screen.getByTestId('where').textContent).not.toContain('file=')
+    expect(screen.getByTestId('where')).toHaveTextContent('tab=action')
+    expect(await screen.findByText(/Showing rejected lines from/)).toBeInTheDocument()
+  })
+
+  it('will not mark a line paid with a cleared amount, and says so', async () => {
+    const user = userEvent.setup()
+    m.batch.mockReturnValue(query(resultsIn({ rejected: 0 })))
+    renderPage('/claims?file=b-1')
+
+    await user.click(screen.getByRole('button', { name: 'Mark 1 line as paid' }))
+    await user.clear(screen.getByLabelText('Paid for Alex Park'))
+    await user.click(screen.getByRole('button', { name: 'Mark as paid' }))
+    expect(m.paid).not.toHaveBeenCalled()
+    expect(screen.getByText('Enter the amount paid.')).toBeInTheDocument()
+  })
+
+  it('counts a file with no successful lines as finished: no badge, no strip, no Mark paid', () => {
+    m.batches.mockReturnValue(query([batch({ status: 'ResultsImported', successful: 0, rejected: 2, pending: 0, paid: 0 })]))
+    m.batch.mockReturnValue(query(resultsIn({ successful: 0, rejected: 2 })))
+    renderPage('/claims?tab=files')
+
+    expect(screen.getByRole('tab', { name: /^Files/ })).not.toHaveTextContent(/\d/)
+    expect(screen.queryByTestId('claims-strip')).toBeNull()
+    expect(screen.getByText('Results in')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Mark paid/ })).toBeNull()
+
+    cleanup()
+    renderPage('/claims?file=b-1')
+    expect(screen.queryByRole('button', { name: /Mark 0 lines as paid/ })).toBeNull()
+  })
+
+  it('holds the upload confirm and offers Try again when the invoice check fails', async () => {
+    const user = userEvent.setup()
+    const refetch = vi.fn()
+    m.batch.mockReturnValue(query(detail()))
+    m.preview.mockReturnValue({ data: undefined, isLoading: false, isError: true, refetch })
+    renderPage('/claims?file=b-1')
+
+    await user.click(screen.getByTestId('file-next-action'))
+    const dialog = within(screen.getByRole('alertdialog'))
+    expect(dialog.getByText("Couldn't check which invoices this issues.")).toBeInTheDocument()
+    expect(dialog.getByRole('button', { name: "I've uploaded it" })).toBeDisabled()
+    await user.click(dialog.getByRole('button', { name: 'Try again' }))
+    expect(refetch).toHaveBeenCalledOnce()
   })
 })
 

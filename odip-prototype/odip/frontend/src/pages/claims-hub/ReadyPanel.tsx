@@ -11,7 +11,7 @@ import { SearchInput } from '@/components/SearchInput'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { TAP_TRUNCATED_LINK } from '@/components/tapArea'
 import { useIsBelowMd } from '@/hooks/useIsBelowMd'
-import { ClaimFileError, fetchClaimFile } from '@/api/hooks/claimHub'
+import { ClaimFileError, useBuildClaimFile } from '@/api/hooks/claimHub'
 import type { HubLineDto } from '@/api/types'
 import { plural } from '@/lib/format'
 import { TONE } from '@/lib/tone'
@@ -51,6 +51,7 @@ const SORTS: Record<string, (l: HubLineDto) => string | number> = {
 }
 
 export function ReadyPanel({ lines, loading, failed, onRetry, registrationProblem, canEditSettings, onBuilt }: Props) {
+  const buildFile = useBuildClaimFile()
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -111,7 +112,7 @@ export function ReadyPanel({ lines, loading, failed, onRetry, registrationProble
     setBuilding(true)
     setRefusal(null)
     try {
-      const { batchId, fileName } = await fetchClaimFile('post', '/claim-batches', { lineIds: picked.map(l => l.lineId) }, 'claims.csv', "Couldn't build the file. Check your connection and try again.")
+      const { batchId, fileName } = await buildFile('post', '/claim-batches', { lineIds: picked.map(l => l.lineId) }, 'claims.csv', "Couldn't build the file. Check your connection and try again.")
       setSelected(new Set())
       onBuilt(batchId, fileName, picked.length)
     } catch (err) {

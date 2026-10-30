@@ -182,8 +182,13 @@ function UploadStep({ batch, announce }: { batch: BatchDetailDto; announce: (m: 
       <ConfirmDialog
         open={confirming}
         title={`Confirm the upload of ${batch.fileName}`}
-        message={<><p>{`Only confirm once the portal has accepted the file. This marks ${plural(claimIds.length, 'claim')} as submitted${invoices > 0 ? ` and issues ${plural(invoices, 'invoice')} for plan- and self-managed participants on those claims.` : '.'}`}</p>{uploaded.isError && <ErrorLine error={uploaded.error} fallback="Couldn't mark the file as uploaded. Try again." />}</>}
-        confirmDisabled={preview.isLoading}
+        message={<><p>{`Only confirm once the portal has accepted the file. This marks ${plural(claimIds.length, 'claim')} as submitted${invoices > 0 ? ` and issues ${plural(invoices, 'invoice')} for plan- and self-managed participants on those claims.` : '.'}`}</p>{preview.isError && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span>Couldn't check which invoices this issues.</span>
+            <Button variant="secondary" size="sm" onClick={() => preview.refetch()}>Try again</Button>
+          </div>
+        )}{uploaded.isError && <ErrorLine error={uploaded.error} fallback="Couldn't mark the file as uploaded. Try again." />}</>}
+        confirmDisabled={preview.isLoading || preview.isError}
         confirmLabel="I've uploaded it"
         cancelLabel="Not yet"
         loading={uploaded.isPending}
@@ -282,17 +287,20 @@ function ImportSummary({ summary, fileName, onReviewRejected }: { summary: Resul
 function PaidStep({ batch, announce, onReviewRejected }: { batch: BatchDetailDto; announce: (m: string) => void; onReviewRejected: () => void }) {
   const [open, setOpen] = useState(false)
   const unpaid = batch.lines.filter(l => l.outcome === 'Successful' && l.paidAmount == null)
+  const nothingToPay = batch.successful === 0
   return (
-    <Card title="Record the payment">
-      <p className="text-sm">The NDIA pays successful lines in its next payment run. When the money is in, record it here.</p>
+    <Card title={nothingToPay ? 'Nothing to pay' : 'Record the payment'}>
+      <p className="text-sm">{nothingToPay ? 'The NDIA rejected every line, so there is no money to record.' : 'The NDIA pays successful lines in its next payment run. When the money is in, record it here.'}</p>
       {batch.rejected > 0 && (
         <button type="button" className={`${TAP_AREA} mt-1 text-sm text-[var(--color-muted-foreground)] hover:underline`} onClick={onReviewRejected}>{plural(batch.rejected, 'line')} rejected</button>
       )}
-      <div className="mt-3">
-        <Button data-testid="file-next-action" variant="secondary" size="md" className="max-md:w-full" onClick={() => setOpen(true)} disabled={unpaid.length === 0}>
-          Mark {plural(unpaid.length, 'line')} as paid
-        </Button>
-      </div>
+      {!nothingToPay && (
+        <div className="mt-3">
+          <Button data-testid="file-next-action" variant="secondary" size="md" className="max-md:w-full" onClick={() => setOpen(true)} disabled={unpaid.length === 0}>
+            Mark {plural(unpaid.length, 'line')} as paid
+          </Button>
+        </div>
+      )}
       {open && <MarkPaidModal batch={batch} lines={unpaid} onClose={() => setOpen(false)} announce={announce} />}
     </Card>
   )
@@ -303,9 +311,10 @@ function MarkPaidModal({ batch, lines, onClose, announce }: { batch: BatchDetail
   const [serverError, setServerError] = useState<string | null>(null)
   const paid = useMarkBatchPaid()
   const overBy = (l: BatchLineDto) => (amounts[l.batchLineId] ?? 0) > (l.resultAmount ?? l.amount)
-  const invalid = lines.some(overBy)
+  const missing = (l: BatchLineDto) => { const v = amounts[l.batchLineId]; return Number.isNaN(v) || v <= 0 }
+  const invalid = lines.some(l => overBy(l) || missing(l))
   const submit = () => {
-    if (invalid) return
+    if (invalid || paid.isPending) return
     setServerError(null)
     paid.mutate({ batchId: batch.id, lines: lines.map(l => ({ batchLineId: l.batchLineId, amount: amounts[l.batchLineId] })) }, {
       onSuccess: () => { announce(`${plural(lines.length, 'line')} marked as paid.`); onClose() },
@@ -321,7 +330,7 @@ function MarkPaidModal({ batch, lines, onClose, announce }: { batch: BatchDetail
       render: l => (
         <NumberField label={`Paid for ${l.participantName ?? l.rowReference}`} className="[&_label]:sr-only" inputMode="decimal" step="0.01" min={0} max={l.resultAmount ?? l.amount}
           value={amounts[l.batchLineId] ?? 0} onChange={v => setAmounts(a => ({ ...a, [l.batchLineId]: Math.round(v * 100) / 100 }))}
-          error={overBy(l) ? "Can't be more than the amount claimed." : undefined} />
+          error={overBy(l) ? "Can't be more than the amount claimed." : missing(l) ? 'Enter the amount paid.' : undefined} />
       ),
     },
   ]

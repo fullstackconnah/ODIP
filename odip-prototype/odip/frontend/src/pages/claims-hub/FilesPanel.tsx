@@ -15,7 +15,7 @@ const FILE_NAME = 'whitespace-nowrap text-sm font-semibold'
 /** Every step's one next action opens the file's panel at that step, so the strip, the Files row and the panel all act the same. */
 function NextActionButton({ batch, onOpen, full }: { batch: BatchDto; onOpen: (id: string) => void; full?: boolean }) {
   const next = NEXT_ACTION[stepOf(batch)]
-  if (!next) return null
+  if (!next || !isUnfinished(batch)) return null
   return (
     <Button variant={next.primary ? 'primary' : 'secondary'} size="sm" className={full ? 'max-md:min-h-11 max-md:w-full' : undefined}
       aria-label={`${next.label}: ${batch.fileName}`} onClick={e => { e.stopPropagation(); onOpen(batch.id) }}>
@@ -77,7 +77,7 @@ export function FilesPanel({ batches, loading, failed, onRetry, onOpen, onGoToRe
     { key: 'step', header: 'Step', mobile: 'status', render: b => (
       <span className="inline-flex items-center gap-2 whitespace-nowrap">
         <StepBadge batch={b} />
-        {b.status !== 'Discarded' && <span className="text-[13px] text-[var(--color-muted-foreground)] max-md:hidden">Next: {NEXT_TEXT[stepOf(b)]}</span>}
+        {b.status !== 'Discarded' && <span className="text-[13px] text-[var(--color-muted-foreground)] max-md:hidden">Next: {NEXT_TEXT[isUnfinished(b) ? stepOf(b) : 'Paid']}</span>}
       </span>
     ) },
     { key: 'built', header: 'Built', mobile: 'meta', render: b => <span className="whitespace-nowrap">Built {formatInstantDateAu(b.createdAt)}<span className="max-md:hidden"> by {b.createdByName}</span></span> },

@@ -29,7 +29,7 @@ vi.mock('@/api/hooks', () => ({
 }))
 
 // The claim's own NDIA file (G9): the hub's download helper, mocked as the server's answer.
-vi.mock('@/api/hooks/claimHub', () => ({ fetchClaimFile: mockFetchClaimFile }))
+vi.mock('@/api/hooks/claimHub', () => ({ fetchClaimFile: mockFetchClaimFile, useBuildClaimFile: () => mockFetchClaimFile }))
 
 beforeEach(() => {
   const noInvoices = { invoiceState: 'preview', invoices: [], groups: [], agencyCount: 0 }

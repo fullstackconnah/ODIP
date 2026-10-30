@@ -18,11 +18,14 @@ export function useClaimBatch(batchId: string | undefined) {
   return useQuery({ queryKey: ['claim-batches', batchId], queryFn: () => apiGet<BatchDetailDto>(`/claim-batches/${batchId}`), enabled: !!batchId })
 }
 
-/** Every write here moves lines between the hub's lists and changes a file's counts, and a claim's own page shows the lines' status. */
+/** Every write here moves lines between the hub's lists and changes a file's counts, a claim's own page shows the lines' status, and marking a file uploaded issues invoices. */
 export function refreshClaimHub(qc: QueryClient) {
   qc.invalidateQueries({ queryKey: ['claim-hub'] })
   qc.invalidateQueries({ queryKey: ['claim-batches'] })
   qc.invalidateQueries({ queryKey: ['claim'] })
+  qc.invalidateQueries({ queryKey: ['claim-invoices'] })
+  qc.invalidateQueries({ queryKey: ['claims'] })
+  qc.invalidateQueries({ queryKey: ['invoice-register'] })
 }
 
 function useBatchWrite<TVars, TOut>(write: (vars: TVars) => Promise<TOut>) {
@@ -81,4 +84,10 @@ export async function fetchClaimFile(method: 'get' | 'post', url: string, body: 
   URL.revokeObjectURL(link.href)
   const batchId = res.headers['x-claim-batch-id']
   return { batchId: batchId ? String(batchId) : undefined, fileName }
+}
+
+/** fetchClaimFile for a request that builds a file: win or refuse (a 400 or 409 still moved lines), the hub's lists are stale afterwards. */
+export function useBuildClaimFile() {
+  const qc = useQueryClient()
+  return (...args: Parameters<typeof fetchClaimFile>) => fetchClaimFile(...args).finally(() => refreshClaimHub(qc))
 }

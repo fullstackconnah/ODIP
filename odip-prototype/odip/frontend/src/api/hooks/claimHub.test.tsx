@@ -4,7 +4,7 @@ import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
 import { apiClient } from '@/api/client'
-import { ClaimFileError, fetchClaimFile, useDismissBatchLine, useImportResults, useMarkBatchPaid, useMarkBatchUploaded } from '@/api/hooks/claimHub'
+import { ClaimFileError, fetchClaimFile, useBuildClaimFile, useDismissBatchLine, useImportResults, useMarkBatchPaid, useMarkBatchUploaded } from '@/api/hooks/claimHub'
 
 // The claims hub hooks, through the real apiClient with only its axios adapter replaced.
 
@@ -96,5 +96,37 @@ describe('batch mutations', () => {
     expect(calls[0].url).toBe('/claim-batches/b1/results')
     expect((calls[0].body as FormData).get('file')).toBe(file)
     expect(out).toEqual({ successful: 1 })
+  })
+})
+
+describe('cache refresh', () => {
+  const KEYS = [['claim-hub', 'lines'], ['claim-batches'], ['claim', 'c1'], ['claim-invoices', 'c1'], ['claims'], ['invoice-register', {}]]
+  function seeded() {
+    const qc = new QueryClient({ defaultOptions: { mutations: { retry: false } } })
+    KEYS.forEach(k => qc.setQueryData(k, 1))
+    const w = ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    const stale = (k: readonly unknown[]) => qc.getQueryState(k)?.isInvalidated
+    return { qc, w, stale }
+  }
+
+  it.each([
+    ['a built file', () => response(new Blob(['a']), 200, { 'x-claim-batch-id': 'b1' })],
+    ['a refused build (400)', () => refuse(400, new Blob([JSON.stringify({ data: { problems: [] } })]))],
+    ['a build refused as already done (409)', () => refuse(409, new Blob([JSON.stringify({ errors: ['x'] })]))],
+  ])('refreshes the hub after %s', async (_name, answer) => {
+    reply = answer
+    const { w, stale } = seeded()
+    const { result } = renderHook(() => useBuildClaimFile(), { wrapper: w })
+    await act(() => result.current('post', '/claim-batches', { lineIds: ['l1'] }, 'f.csv').catch(() => {}))
+    expect(stale(['claim-hub', 'lines'])).toBe(true)
+    expect(stale(['claim-batches'])).toBe(true)
+  })
+
+  it('marking a file uploaded also refreshes the claim invoices, the claims list and the invoices register', async () => {
+    reply = () => response({ success: true, data: { id: 'b1' } })
+    const { w, stale } = seeded()
+    const { result } = renderHook(() => useMarkBatchUploaded(), { wrapper: w })
+    await act(() => result.current.mutateAsync('b1'))
+    for (const k of KEYS) expect(stale(k), JSON.stringify(k)).toBe(true)
   })
 })

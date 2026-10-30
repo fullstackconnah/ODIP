@@ -111,7 +111,11 @@ export default function ClaimsHubPage() {
         batchId={openFile}
         onClose={() => setFile(null)}
         announce={setMessage}
-        onReviewRejected={id => { setFileFilter(id); setFile(null); setTab('action') }}
+        onReviewRejected={id => {
+          setFileFilter(id)
+          // One update: separate setFile and setTab calls each start from the same stale params, so the later one undoes the earlier.
+          setParams(p => { const next = new URLSearchParams(p); next.delete('file'); next.set('tab', 'action'); return next }, { replace: true })
+        }}
       />
       {howModal}
     </div>

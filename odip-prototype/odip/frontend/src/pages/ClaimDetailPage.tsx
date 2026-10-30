@@ -24,7 +24,7 @@ import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { ClaimBudgetBlock } from '@/components/ClaimBudgetBlock'
 import { retryingAfterError } from '@/lib/queryPhase'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
-import { fetchClaimFile } from '@/api/hooks/claimHub'
+import { useBuildClaimFile } from '@/api/hooks/claimHub'
 import { InvoicesSection } from './claim-detail/InvoicesSection'
 import { FormField } from '@/components/FormField'
 
@@ -42,6 +42,7 @@ function refusalOf(err: unknown): string {
 export default function ClaimDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const buildFile = useBuildClaimFile()
   const pageQuery = useClaim(id)
   const { data: claim, isLoading, isError, error, refetch } = pageQuery
   const updateClaim = useUpdateClaim()
@@ -190,7 +191,7 @@ export default function ClaimDetailPage() {
                     size="md"
                     onClick={() => {
                       setStatusError(null)
-                      fetchClaimFile('get', `/claims/${id}/bpr-csv`, undefined, `${claim.claimReference}.csv`, "Couldn't build the NDIA file. Try again.")
+                      buildFile('get', `/claims/${id}/bpr-csv`, undefined, `${claim.claimReference}.csv`, "Couldn't build the NDIA file. Try again.")
                         .then(({ batchId }) => navigate(batchId ? `/claims?tab=files&file=${batchId}` : '/claims?tab=files'))
                         .catch((err: Error) => setStatusError(err.message))
                     }}

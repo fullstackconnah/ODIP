@@ -10,7 +10,7 @@ import { CellText, DataTable, type Column } from '@/components/DataTable'
 import { EmptyState } from '@/components/EmptyState'
 import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
-import { fetchClaimFile, useDismissBatchLine } from '@/api/hooks/claimHub'
+import { useBuildClaimFile, useDismissBatchLine, type ClaimFileError } from '@/api/hooks/claimHub'
 import type { RejectedLineDto } from '@/api/types'
 import { plural } from '@/lib/format'
 import { formatCurrency } from '@/lib/utils'
@@ -18,7 +18,7 @@ import { TAP_AREA } from '@/components/tapArea'
 import { AgeCell } from './claimHubParts'
 import { deliveredText } from './claimHubSteps'
 
-// The NDIA's reject codes in plain English (SHAPE §6). The hint and the kind come from the server; this only names the group.
+// The NDIA's reject codes in plain English (SHAPE §6). The hint and whether a line needs a decision come from the server; this only names the group.
 const CODE_TITLES: Record<string, string> = {
   C16: 'Item not valid on that date', C27: 'Date in the future', C38: 'Price over the limit', V31: 'Price over the limit',
   C30: 'Cancellation reason missing', V26: 'Line crosses two plans', V04: 'Already claimed', P04: 'Already claimed',
@@ -27,14 +27,15 @@ const CODE_TITLES: Record<string, string> = {
 }
 const OTHER_HINT = "The NDIA's message says what went wrong. Fix the line, then send it again, or decide not to claim it."
 
-interface Group { code: string; title: string; hint: string; decision: boolean; lines: RejectedLineDto[] }
+interface Group { code: string; known: boolean; title: string; hint: string; decision: boolean; lines: RejectedLineDto[] }
 
 function groupsOf(lines: RejectedLineDto[]): Group[] {
   const map = new Map<string, Group>()
   for (const l of lines) {
     const known = l.rejectCode in CODE_TITLES
-    const code = known ? l.rejectCode : 'Other'
-    const g = map.get(code) ?? map.set(code, { code, title: known ? CODE_TITLES[code] : 'Other codes', hint: known ? l.hint : OTHER_HINT, decision: known && l.needsDecision, lines: [] }).get(code)!
+    // An unknown code still splits by the server's own per-line answer.
+    const code = known ? l.rejectCode : l.needsDecision ? 'Other-decision' : 'Other'
+    const g = map.get(code) ?? map.set(code, { code, known, title: known ? CODE_TITLES[code] : 'Other codes', hint: known ? l.hint : OTHER_HINT, decision: l.needsDecision, lines: [] }).get(code)!
     g.lines.push(l)
   }
   // Decisions first, then the fixable groups; the biggest group first in each.
@@ -65,6 +66,7 @@ export function NeedsActionPanel({ lines, loading, failed, onRetry, fileFilter, 
   const [confirmSend, setConfirmSend] = useState<RejectedLineDto | null>(null)
   const [confirmDrop, setConfirmDrop] = useState<RejectedLineDto | null>(null)
   const dismiss = useDismissBatchLine()
+  const buildFile = useBuildClaimFile()
 
   // shortcut: sending again builds a file at once (G15) rather than parking the line back in Ready to send with a chip.
   const sendAgain = async (key: string, picked: RejectedLineDto[], confirmed: boolean) => {
@@ -72,11 +74,12 @@ export function NeedsActionPanel({ lines, loading, failed, onRetry, fileFilter, 
     setError(null)
     try {
       const ids = picked.map(l => l.lineId)
-      const { batchId, fileName } = await fetchClaimFile('post', '/claim-batches', { lineIds: ids, ...(confirmed ? { confirmedLineIds: ids } : {}) }, 'claims.csv', "Couldn't build the file. Check your connection and try again.")
+      const { batchId, fileName } = await buildFile('post', '/claim-batches', { lineIds: ids, ...(confirmed ? { confirmedLineIds: ids } : {}) }, 'claims.csv', "Couldn't build the file. Check your connection and try again.")
       setConfirmSend(null)
       onBuilt(batchId, fileName, picked.length)
     } catch (err) {
-      setError((err as Error).message)
+      const e = err as ClaimFileError
+      setError([e.message, e.problems?.[0]?.message].filter(Boolean).join(' '))
     } finally {
       setSending(null)
     }
@@ -94,7 +97,7 @@ export function NeedsActionPanel({ lines, loading, failed, onRetry, fileFilter, 
           <Button variant="ghost" size="sm" onClick={onClearFilter}>Show all</Button>
         </p>
       )}
-      {error && <Callout tone="danger">{error}</Callout>}
+      {error && !confirmSend && <Callout tone="danger">{error}</Callout>}
       {groups.length === 0 && <EmptyState icon={CircleCheck} title="Nothing rejected" description="When the NDIA rejects a line, it shows here with what to do next." />}
       {groups.map(g => {
         const columns: Column<RejectedLineDto>[] = [
@@ -130,7 +133,7 @@ export function NeedsActionPanel({ lines, loading, failed, onRetry, fileFilter, 
         return (
           <Card
             key={g.code}
-            title={g.code === 'Other' ? g.title : `${g.code} ${g.title}`}
+            title={g.known ? `${g.code} ${g.title}` : g.title}
             action={(
               <span className="inline-flex flex-wrap items-center justify-end gap-2">
                 <span className="text-[13px] text-[var(--color-muted-foreground)]">{plural(g.lines.length, 'line')}</span>
@@ -151,10 +154,10 @@ export function NeedsActionPanel({ lines, loading, failed, onRetry, fileFilter, 
       <ConfirmDialog
         open={!!confirmSend}
         title="Send this line again?"
-        message={confirmSend && <p>The NDIA rejected it as {confirmSend.rejectCode}: {confirmSend.rejectMessage ?? CODE_TITLES[confirmSend.rejectCode] ?? 'no message'}. {confirmSend.hint} Your decision is recorded in the audit log.</p>}
+        message={confirmSend && <><p>The NDIA rejected it as {confirmSend.rejectCode}: {confirmSend.rejectMessage ?? CODE_TITLES[confirmSend.rejectCode] ?? 'no message'}. {confirmSend.hint} Your decision is recorded in the audit log.</p>{error && <Callout tone="danger">{error}</Callout>}</>}
         confirmLabel="Send again"
         loading={!!sending}
-        onCancel={() => setConfirmSend(null)}
+        onCancel={() => { setConfirmSend(null); setError(null) }}
         onConfirm={() => confirmSend && sendAgain(confirmSend.batchLineId, [confirmSend], true)}
       />
       <ConfirmDialog
