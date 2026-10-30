@@ -727,7 +727,7 @@ describe('AppLayout — no New Trip shortcut in the sidebar, the drawer or the b
       '/trips', '/schedule', '/bookings', '/accommodation', '/vehicles',
       '/participants', '/agreements', '/medications', '/caregiver-submissions',
       '/rostering', '/rostering/patterns', '/rostering/compatibility', '/rostering/leave', '/rostering/completions', '/staff', '/qualifications',
-      '/tasks', '/budgets', '/invoices',
+      '/tasks', '/budgets', '/claims', '/invoices',
       '/incidents', '/settings',
     ])
   })
@@ -787,6 +787,7 @@ describe('AppLayout — the menu each role sees is generated from navConfig', ()
     'Staff & roster: Roster board | Shift patterns | Compatibility | Leave | Completions | Staff | Qualifications',
     'Tasks',
     'Budgets',
+    'Claims',
     'Invoices',
     'Incidents',
     'Settings',
@@ -936,12 +937,12 @@ describe('AppLayout — open groups are remembered (U1)', () => {
     localStorage.setItem(KEY, JSON.stringify(['gone-group', 42, 'trips']))
     const { unmount } = renderAt('/')
     expect(expanded(/Trips$/)).toBe('true')
-    expect(navShape()).toHaveLength(10)
+    expect(navShape()).toHaveLength(11)
     unmount()
 
     localStorage.setItem(KEY, '{not json')
     renderAt('/')
-    expect(navShape()).toHaveLength(10)
+    expect(navShape()).toHaveLength(11)
     expect(expanded(/Trips$/)).toBe('false')
   })
 

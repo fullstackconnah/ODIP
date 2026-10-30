@@ -1,0 +1,221 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
+import type { BatchDetailDto, BatchDto, HubLineDto, HubLinesDto, RejectedLineDto, ResultsImportDto } from '@/api/types'
+import ClaimsHubPage from './ClaimsHubPage'
+
+// The NDIA claims hub page. The API layer is mocked at the hook; fetchClaimFile (the build and download) is mocked as the server's answer.
+
+const m = vi.hoisted(() => ({
+  lines: vi.fn(), batches: vi.fn(), batch: vi.fn(), fetchClaimFile: vi.fn(), preview: vi.fn(),
+  uploaded: vi.fn(), discard: vi.fn(), importResults: vi.fn(), paid: vi.fn(), dismiss: vi.fn(),
+}))
+vi.mock('@/api/hooks/claimHub', async () => {
+  const actual = await vi.importActual<typeof import('@/api/hooks/claimHub')>('@/api/hooks/claimHub')
+  const mutation = (fn: ReturnType<typeof vi.fn>) => () => ({ mutate: fn, isPending: false, isError: false, error: null, reset: vi.fn() })
+  return {
+    ClaimFileError: actual.ClaimFileError,
+    useHubLines: m.lines, useClaimBatches: m.batches, useClaimBatch: m.batch, fetchClaimFile: m.fetchClaimFile,
+    useMarkBatchUploaded: mutation(m.uploaded), useDiscardBatch: mutation(m.discard), useImportResults: mutation(m.importResults),
+    useMarkBatchPaid: mutation(m.paid), useDismissBatchLine: mutation(m.dismiss),
+  }
+})
+vi.mock('@/api/hooks/claims', () => ({ useSubmitPreview: m.preview }))
+
+const query = <T,>(data: T) => ({ data, isLoading: false, isError: false, error: null, refetch: vi.fn() })
+
+function line(over: Partial<HubLineDto> = {}): HubLineDto {
+  return {
+    lineId: 'l-1', claimId: 'c-1', claimReference: 'TC-1', claimKind: 'shift', participantId: 'p-1', participantName: 'Alex Park',
+    supportNumber: '01_011_0107_1_1', from: '2026-08-01', to: '2026-08-01', hours: 2.5, unitPrice: 70, totalAmount: 175, gstCode: 'P2',
+    claimType: '', fundingType: 'agency', ageDays: 20, ageBand: 'none', nextAttempt: 1, problems: [], ...over,
+  }
+}
+function rejected(over: Partial<RejectedLineDto> = {}): RejectedLineDto {
+  return { ...line(), batchLineId: 'bl-1', batchId: 'b-1', fileName: 'BPR261020001.csv', rejectCode: 'V17', rejectMessage: 'Insufficient funds', needsDecision: true,
+    hint: "Their budget doesn't cover this line.", rejectedAt: '2026-10-21T00:00:00Z', ...over }
+}
+function batch(over: Partial<BatchDto> = {}): BatchDto {
+  return { id: 'b-1', fileName: 'BPR261030001.csv', status: 'Built', createdAt: '2026-10-30T01:00:00Z', createdByName: 'Sam Lee', lineCount: 2, totalAmount: 350,
+    pending: 2, successful: 0, rejected: 0, withdrawn: 0, paid: 0, paidAmount: 0, ...over }
+}
+const detail = (over: Partial<BatchDetailDto> = {}): BatchDetailDto => ({
+  ...batch(), lines: [
+    { batchLineId: 'bl-1', claimId: 'c-1', participantName: 'Alex Park', supportNumber: 'x', from: '2026-08-01', to: '2026-08-01', amount: 175, attempt: 1, rowReference: 'R1', outcome: 'Pending' },
+    { batchLineId: 'bl-2', claimId: 'c-1', participantName: 'Alex Park', supportNumber: 'y', from: '2026-08-02', to: '2026-08-02', amount: 175, attempt: 1, rowReference: 'R2', outcome: 'Pending' },
+  ], ...over,
+})
+const hub = (over: Partial<HubLinesDto> = {}): HubLinesDto => ({ ready: [], rejected: [], managed: [], ...over })
+
+function Where() {
+  return <output data-testid="where">{useLocation().search}</output>
+}
+function renderPage(entry = '/claims') {
+  return render(
+    <MemoryRouter initialEntries={[entry]}>
+      <Routes><Route path="/claims" element={<><ClaimsHubPage /><Where /></>} /></Routes>
+    </MemoryRouter>,
+  )
+}
+
+beforeEach(() => {
+  localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
+  m.lines.mockReturnValue(query(hub()))
+  m.batches.mockReturnValue(query([]))
+  m.batch.mockReturnValue({ ...query(undefined), isLoading: false })
+  m.preview.mockReturnValue({ data: { claims: [], invoiceCount: 2 }, isLoading: false })
+})
+afterEach(() => {
+  cleanup()
+  localStorage.clear()
+  vi.clearAllMocks()
+})
+
+describe('ClaimsHubPage: Ready to send', () => {
+  it('badges the tabs with their counts and marks ages at 59, 60, 80 and 91 days by band', () => {
+    m.lines.mockReturnValue(query(hub({ ready: [
+      line({ lineId: 'a', ageDays: 59, ageBand: 'none' }), line({ lineId: 'b', ageDays: 60, ageBand: 'amber' }),
+      line({ lineId: 'c', ageDays: 80, ageBand: 'red' }), line({ lineId: 'd', ageDays: 91, ageBand: 'over90' }),
+    ], rejected: [rejected()] })))
+    renderPage()
+
+    expect(screen.getByRole('tab', { name: /Ready to send/ })).toHaveTextContent('4')
+    expect(screen.getByRole('tab', { name: /Needs action/ })).toHaveTextContent('1')
+    expect(screen.getByText('59 days').closest('[data-tone]')).toHaveAttribute('data-tone', 'none')
+    expect(screen.getByText('60 days').closest('[data-tone]')).toHaveAttribute('data-tone', 'warning')
+    expect(screen.getByText('80 days').closest('[data-tone]')).toHaveAttribute('data-tone', 'danger')
+    expect(screen.getByText('Over 90 days').closest('[data-tone]')).toHaveAttribute('data-tone', 'danger')
+  })
+
+  it("won't tick a blocked line, and says why", () => {
+    m.lines.mockReturnValue(query(hub({ ready: [line({ lineId: 'bad', problems: [{ rule: 'PriceLimit', severity: 'block', message: 'The price is over the limit' }] })] })))
+    renderPage()
+
+    const box = within(screen.getByTestId('claims-panel-ready')).getAllByRole('checkbox').find(b => b.getAttribute('aria-describedby'))!
+    expect(box).toBeDisabled()
+    expect(document.getElementById(box.getAttribute('aria-describedby')!)).toHaveTextContent('The price is over the limit')
+  })
+
+  it('builds a file from the ticked lines, announces it and opens its panel', async () => {
+    const user = userEvent.setup()
+    m.lines.mockReturnValue(query(hub({ ready: [line({ lineId: 'l-1' }), line({ lineId: 'l-2', claimId: 'c-2' })] })))
+    m.fetchClaimFile.mockResolvedValue({ batchId: 'b-9', fileName: 'BPR261030009.csv' })
+    renderPage()
+
+    const boxes = within(screen.getByTestId('claims-panel-ready')).getAllByRole('checkbox')
+    await user.click(boxes[boxes.length - 1])
+    await user.click(screen.getByTestId('claims-build'))
+
+    expect(m.fetchClaimFile).toHaveBeenCalledWith('post', '/claim-batches', { lineIds: ['l-2'] }, expect.any(String), expect.any(String))
+    await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent('file=b-9'))
+    expect(screen.getByText("BPR261030009.csv built with 1 line. It's downloading.")).toBeInTheDocument()
+  })
+
+  it("shows the server's refusal and names the lines that failed", async () => {
+    const user = userEvent.setup()
+    const { ClaimFileError } = await import('@/api/hooks/claimHub')
+    m.lines.mockReturnValue(query(hub({ ready: [line()] })))
+    m.fetchClaimFile.mockRejectedValue(new ClaimFileError('Some lines failed.', 400, [{ lineId: 'l-1', claimReference: 'TC-1', rule: 'PriceLimit', message: 'Price over the limit' }]))
+    renderPage()
+
+    await user.click(within(screen.getByTestId('claims-panel-ready')).getAllByRole('checkbox').at(-1)!)
+    await user.click(screen.getByTestId('claims-build'))
+
+    expect(await screen.findByText("The file wasn't built")).toBeInTheDocument()
+    expect(screen.getByText(/Price over the limit/)).toBeInTheDocument()
+  })
+})
+
+describe('ClaimsHubPage: files', () => {
+  it('shows at most 3 unfinished files in the strip, and none when every file is done', () => {
+    m.batches.mockReturnValue(query([
+      batch({ id: '1', fileName: 'F1.csv' }), batch({ id: '2', fileName: 'F2.csv', status: 'Uploaded' }), batch({ id: '3', fileName: 'F3.csv' }),
+      batch({ id: '4', fileName: 'F4.csv' }), batch({ id: '5', fileName: 'F5.csv', status: 'Discarded' }),
+    ]))
+    renderPage()
+    expect(within(screen.getByTestId('claims-strip')).getAllByTestId('strip-file-name')).toHaveLength(3)
+    expect(screen.getByRole('button', { name: 'See all 4 in Files' })).toBeInTheDocument()
+
+    cleanup()
+    m.batches.mockReturnValue(query([batch({ status: 'Discarded' })]))
+    renderPage()
+    expect(screen.queryByTestId('claims-strip')).toBeNull()
+  })
+
+  it('confirms the upload with the claim and invoice counts, then marks the file uploaded', async () => {
+    const user = userEvent.setup()
+    m.batch.mockReturnValue(query(detail()))
+    renderPage('/claims?file=b-1')
+
+    await user.click(within(screen.getByTestId('file-panel')).getByTestId('file-next-action'))
+    expect(screen.getByText(/This marks 1 claim as submitted and issues 2 invoices/)).toBeInTheDocument()
+    expect(m.preview).toHaveBeenLastCalledWith(['c-1'], true)
+    // The step card and the dialog both say it; the dialog is the last one open.
+    await user.click(screen.getAllByRole('button', { name: "I've uploaded it" }).at(-1)!)
+    expect(m.uploaded).toHaveBeenCalledWith('b-1', expect.anything())
+  })
+
+  it('holds Import results until a file is chosen, then shows what was left alone and what was not in the file', async () => {
+    const user = userEvent.setup()
+    m.batch.mockReturnValue(query(detail({ status: 'Uploaded' })))
+    const summary: ResultsImportDto = { successful: 3, rejected: 1, unchanged: 0, leftAlone: 2, conflicts: [], unknownReferences: ['X1'], unreadRows: [], batch: batch() }
+    m.importResults.mockImplementation((_v, o) => o.onSuccess(summary))
+    renderPage('/claims?file=b-1')
+
+    const run = screen.getByTestId('file-next-action')
+    expect(run).toHaveAttribute('aria-disabled', 'true')
+    await user.click(run)
+    expect(m.importResults).not.toHaveBeenCalled()
+
+    const file = new File(['a'], 'results.csv', { type: 'text/csv' })
+    await user.upload(screen.getByLabelText('Results file (.csv)'), file)
+    await user.click(screen.getByTestId('file-next-action'))
+
+    expect(m.importResults).toHaveBeenCalledWith({ batchId: 'b-1', file }, expect.anything())
+    expect(await screen.findByText('Results imported')).toBeInTheDocument()
+    expect(screen.getByText('2 lines already had a result and were left alone.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /1 line in the file weren't in BPR261030001/ })).toBeInTheDocument()
+  })
+
+  it("says the results belong to another file when none of the lines match", async () => {
+    const user = userEvent.setup()
+    m.batch.mockReturnValue(query(detail({ status: 'Uploaded' })))
+    m.importResults.mockImplementation((_v, o) => o.onSuccess({ successful: 0, rejected: 0, unchanged: 0, leftAlone: 0, conflicts: [], unknownReferences: ['X1'], unreadRows: [], batch: batch() }))
+    renderPage('/claims?file=b-1')
+
+    await user.upload(screen.getByLabelText('Results file (.csv)'), new File(['a'], 'r.csv'))
+    await user.click(screen.getByTestId('file-next-action'))
+    expect(await screen.findByText(/None of the lines in this file belong to BPR261030001/)).toBeInTheDocument()
+  })
+})
+
+describe('ClaimsHubPage: Needs action', () => {
+  it('puts decisions first, and sends a decided line again with its confirmation', async () => {
+    const user = userEvent.setup()
+    m.lines.mockReturnValue(query(hub({ rejected: [
+      rejected({ batchLineId: 'f1', lineId: 'x1', rejectCode: 'C38', needsDecision: false, hint: 'Lower the price.' }),
+      rejected({ batchLineId: 'd1', lineId: 'x2', rejectCode: 'V17' }),
+    ] })))
+    m.fetchClaimFile.mockResolvedValue({ batchId: 'b-7', fileName: 'BPR261030007.csv' })
+    renderPage('/claims?tab=action')
+
+    const titles = within(screen.getByTestId('claims-panel-action')).getAllByRole('heading', { level: 3 }).map(h => h.textContent)
+    expect(titles).toEqual(['V17 Not enough funding left', 'C38 Price over the limit'])
+
+    // The V17 group comes first, so its "Send again…" is the first row button of that name.
+    await user.click(screen.getAllByRole('button', { name: /^Send again: / })[0])
+    expect(m.fetchClaimFile).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Send again' }))
+    expect(m.fetchClaimFile).toHaveBeenCalledWith('post', '/claim-batches', { lineIds: ['x2'], confirmedLineIds: ['x2'] }, expect.any(String), expect.any(String))
+  })
+})
+
+describe('ClaimsHubPage: no organisation', () => {
+  it('asks a SuperAdmin to choose one in place of the tabs', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'SuperAdmin' }))
+    renderPage()
+    expect(screen.getByText('Choose an organisation to see its claims.')).toBeInTheDocument()
+    expect(screen.queryByRole('tablist')).toBeNull()
+  })
+})
