@@ -38,8 +38,6 @@ public class MicrosoftLinkCallbackTests
         Assert.Equal("/settings?section=microsoft&microsoft=linked", o.Location);
         Assert.Null(o.Cookie("odip_jwt"));
         Assert.Null(o.Cookie(MicrosoftAuthController.RefreshCookie));
-        Assert.Empty(rig.Tracker.Failures);
-        Assert.Empty(rig.Tracker.Successes);
     }
 
     [Theory]
@@ -86,7 +84,6 @@ public class MicrosoftLinkCallbackTests
         var (rig, org, admin) = AdminRig();
         var start = await rig.StartAsync(MicrosoftIntent.LinkTenant, role, Signed(admin.Id, org.Id, UserRole.Admin));
         Assert.Equal(MicrosoftRefusal.InvalidToken, start.Code);
-        Assert.Single(rig.Tracker.Failures);
         Assert.Null(start.Cookie(MicrosoftAuthController.CorrelationCookie));
     }
 

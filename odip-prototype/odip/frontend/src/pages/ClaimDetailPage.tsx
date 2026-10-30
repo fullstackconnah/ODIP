@@ -301,6 +301,7 @@ export default function ClaimDetailPage() {
         <DataTable
           data={claim.lineItems ?? []}
           keyField="id"
+          emptyMessage="No line items on this claim yet."
           sortable
           columns={[
             {

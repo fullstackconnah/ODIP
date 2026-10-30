@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { render, within } from '@testing-library/react'
-import { Fold, Section } from './ui'
+import { Fold, Section, WaitingToSend } from './ui'
 
 // jsdom applies no CSS, so the open-state swap is pinned as the classes that do it.
 const labels = (root: HTMLElement) => ({ show: within(root).getByText('Show'), hide: within(root).getByText('Hide') })
@@ -32,5 +32,16 @@ describe('Section collapse — the label follows the open state', () => {
     expect(fold).toHaveClass('group/fold')
     expect(fold).not.toHaveClass('group/section')
     expect(fold.querySelector('summary')!.innerHTML).not.toContain('group-open/section')
+  })
+})
+
+describe('WaitingToSend', () => {
+  it('reads Waiting to send, or Still trying when stuck, with the same icon', () => {
+    const a = render(<WaitingToSend />)
+    expect(a.container).toHaveTextContent('Waiting to send')
+    expect(a.container).not.toHaveTextContent('Still trying')
+    const b = render(<WaitingToSend stuck />)
+    expect(b.container).toHaveTextContent('Still trying')
+    expect(b.container.querySelector('svg')).toBeTruthy()
   })
 })

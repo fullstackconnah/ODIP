@@ -51,6 +51,19 @@ describe('SyncRow', () => {
     expect(replay).toHaveBeenCalledTimes(1)
   })
 
+  it('waiting: counts the ones still trying, only from the fifth failed try', () => {
+    seed(record('r1', 'waiting', { attempts: 5 }), record('r2', 'waiting', { attempts: 4 }))
+    view()
+    expect(screen.getByRole('status')).toHaveTextContent('2 changes waiting to send · 1 still trying')
+    expect(screen.getByRole('button', { name: 'Send now' })).toBeTruthy()
+  })
+
+  it('no still-trying count at 4 tries', () => {
+    seed(record('r1', 'waiting', { attempts: 4 }))
+    view()
+    expect(screen.getByRole('status')).toHaveTextContent(/^1 change waiting to send$/)
+  })
+
   it('one waiting change is singular', () => {
     seed(record('r1'))
     view()

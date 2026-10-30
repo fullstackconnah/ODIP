@@ -3500,8 +3500,8 @@ const server = http.createServer((req, res) => {
 
     // Special-case auth exchange so login flows get a plausible AuthResponseDto
     if (req.method === 'POST' && rel === 'auth/exchange') {
-      // A REFUSAL, as the real exchange gives one (Odip.Api/Services/ExchangeRefusal.cs): a 401 whose body's `code` says why, or a 429 with Retry-After for a
-      // locked-out client. The mock has no Firebase, so a script posts a magic token to see the shape: { "idToken": "refuse:EmailNotVerified" }.
+      // A REFUSAL, as the real exchange gives one (Odip.Api/Services/ExchangeRefusal.cs): a 401 whose body's `code` says why, or a 429 with Retry-After, as the
+      // flood limiter gives one (more than 60 sign-in requests in 5 minutes from one address). The mock has no Firebase, so a script posts a magic token to see the shape: { "idToken": "refuse:EmailNotVerified" }.
       // `body` is whatever JSON was posted, and the literal `null` is JSON: reading idToken off it would throw and take the mock down.
       const idToken = body?.idToken
       const refusedCode = typeof idToken === 'string' && idToken.startsWith('refuse:') ? idToken.slice('refuse:'.length) : null

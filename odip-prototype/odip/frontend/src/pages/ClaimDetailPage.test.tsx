@@ -285,6 +285,13 @@ describe('ClaimDetailPage — Kind === Shift claim', () => {
     expect(screen.queryByRole('link', { name: /^trip$/i })).not.toBeInTheDocument()
   })
 
+  it('says a claim with no line items has none yet, not "No data"', () => {
+    mockUseClaim.mockReturnValue({ data: baseClaim([]), isLoading: false })
+    renderPage()
+    expect(screen.getByText('No line items on this claim yet.')).toBeInTheDocument()
+    expect(screen.queryByText('No data')).not.toBeInTheDocument()
+  })
+
   it('shows the service date (not a from–to range) and "Shift" in place of the booking-derived actions for a shift-kind line', () => {
     mockUseClaim.mockReturnValue({ data: shiftClaim([shiftLineItem()]), isLoading: false })
     renderPage('/claims/claim-2')

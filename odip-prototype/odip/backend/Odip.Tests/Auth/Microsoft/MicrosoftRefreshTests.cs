@@ -167,18 +167,6 @@ public class MicrosoftRefreshTests
     }
 
     [Fact]
-    public async Task F11_Failures_NotCounted()
-    {
-        var (rig, _, person, cookie) = await SignedInAsync();
-        await RefreshAsync(rig, null);
-        await RefreshAsync(rig, cookie[..^4] + "AAAA");
-        person.IsActive = false;
-        await rig.Db.SaveChangesAsync();
-        await RefreshAsync(rig, cookie);
-        Assert.Empty(rig.Tracker.Failures);
-    }
-
-    [Fact]
     public async Task F12_OrgInactive_401_Cleared()
     {
         var (rig, org, _, cookie) = await SignedInAsync();

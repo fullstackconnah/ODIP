@@ -23,6 +23,7 @@ import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react
 import { Users, ChevronRight, Pill, Check } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { usePermissions } from '@/lib/permissions'
+import { houseEndingMessage } from '@/lib/agreementEnding'
 import { queryPhase } from '@/lib/queryPhase'
 import { readParticipantActivatedNotice } from './profile/participantActivated'
 
@@ -287,7 +288,7 @@ function useParticipantsScreen() {
         const total = entry ? entry.criticalCount + entry.warningCount + entry.infoCount : 0
         if (total === 0) return <span className="text-[var(--color-muted-foreground)]">—</span>
         return (
-          <span className="inline-flex items-center gap-1" title={entry!.alerts.map((a) => a.message).join('; ')}>
+          <span className="inline-flex items-center gap-1" title={entry!.alerts.map((a) => (a.type === 'agreement-ended' ? houseEndingMessage(a.message) : a.message)).join('; ')}>
             {entry!.criticalCount > 0 && (
               <span className={`inline-flex items-center gap-0.5 text-xs font-bold px-1.5 py-0.5 rounded-full ${ALERT_SEVERITY_STYLES.Critical.bg} ${ALERT_SEVERITY_STYLES.Critical.text}`}>
                 <ALERT_SEVERITY_STYLES.Critical.icon className="w-3 h-3" /> {entry!.criticalCount}

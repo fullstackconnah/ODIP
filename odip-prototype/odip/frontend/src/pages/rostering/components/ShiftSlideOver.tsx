@@ -588,7 +588,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
           </FormField>
         )}
 
-        <FormField label="Notes">
+        <FormField label="Notes" hint="The support worker sees this on their shift.">
           <textarea rows={3} value={notes} disabled={!canWrite} onChange={e => setNotes(e.target.value)} placeholder="Optional notes for this shift" />
         </FormField>
 

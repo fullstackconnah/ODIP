@@ -80,7 +80,7 @@ function renderCreatePage(initialEntry: string | { pathname: string; state?: unk
 
 // ── IN-1/IN-3/IN-4/IN-6 wizard navigation helpers ──────────────────────────────────────────
 // The form's fields are now split across wizard steps (Basics / Restrictive Practice
-// [conditional] / Incident Details / Review & Compliance [edit-only] / Review), and three of
+// [conditional] / Incident Details / Compliance [edit-only] / Review), and three of
 // Basics' native <select>s became Dropdown ('form' variant, GEN-1) — opened by clicking the
 // labelled trigger, then picking a `role="option"` by its visible label text, exactly like the
 // pre-existing restrictivePracticeType Dropdown already did on the old single-page form.
@@ -141,12 +141,12 @@ async function fillUnapprovedRpAndNext(user: ReturnType<typeof userEvent.setup>,
 
 /** Fills Incident Details' two required fields (description, date/time) and clicks Next twice —
  * once off Incident Details onto the (always-optional, so immediately-passable) Witnesses step,
- * once more off Witnesses — landing on Review (create mode) or Review & Compliance (edit mode). */
+ * once more off Witnesses — landing on Review (create mode) or Compliance (edit mode). */
 async function fillDetailsMinimallyAndNext(user: ReturnType<typeof userEvent.setup>, description = 'Details here') {
   await user.type(screen.getByPlaceholderText('Detailed description of the incident...'), description)
   await user.type(screen.getByLabelText(/Date & Time/i), '2026-09-01T10:00')
   await clickNext(user) // Incident Details -> Witnesses
-  await clickNext(user) // Witnesses -> Review (or Review & Compliance)
+  await clickNext(user) // Witnesses -> Review (or Compliance)
 }
 
 /** IN-5: adds one injury row via BodyDiagram's always-available button list — required before
@@ -1065,7 +1065,8 @@ describe('IncidentCreatePage — UX-01 SearchableSelect keyboard support', () =>
     renderCreatePage({ pathname: '/incidents/incident-1/edit' })
 
     // Edit mode's 'all' initialVisited means every step's rail button is clickable immediately.
-    await user.click(await screen.findByRole('button', { name: /Review & compliance/ }))
+    await user.click(await screen.findByRole('button', { name: /Compliance/ }))
+    expect(screen.queryByText(/Review & compliance/)).not.toBeInTheDocument()
 
     const reviewedBy = await screen.findByLabelText('Reviewed By')
     await user.click(reviewedBy)

@@ -38,6 +38,9 @@ export interface QueueRecord {
   code?: string
   /** For a refused Finish: the blocker codes the server listed. */
   blockers?: string[]
+  /** Replays the server answered 5xx, at least a minute apart. The record is kept whatever the count ("Still trying"). */
+  attempts?: number
+  lastFailedAt?: number
   label: { participant: string; serviceDate: string; rostered: string; routine?: string }
 }
 
@@ -45,7 +48,7 @@ export type NewRecord = Pick<QueueRecord, 'shiftId' | 'kind' | 'path' | 'method'
 
 export type SendResult =
   | { kind: 'ok'; data: unknown }
-  | { kind: 'offline' }
+  | { kind: 'offline'; status?: number }
   | { kind: 'refused'; status: number; code?: string; blockers?: string[]; error: unknown }
 
 export type SendOrQueueResult = { queued: false; data: unknown } | { queued: true; record: QueueRecord }
@@ -62,6 +65,12 @@ export const FINISH_TIMEOUT_MS = 45_000
 export const LEASE_MS = 75_000
 /** After a live send fails with a server blip, one more try this long after. */
 export const RETRY_AFTER_MS = 30_000
+/** Failed tries (server 5xx, a minute apart) before the worker sees "Still trying". */
+export const STILL_TRYING_AFTER = 5
+/** Replays come from many triggers, so a fault counts as one try per this long. */
+const TRY_SPACING_MS = 60_000
+
+export const isStillTrying = (r: QueueRecord) => r.status === 'waiting' && (r.attempts ?? 0) >= STILL_TRYING_AFTER
 
 /** No response, a server blip, throttling, or a 401 that survived the refresh: the record stays Waiting. */
 const isTransient = (status: number | undefined) => status === undefined || status >= 500 || status === 408 || status === 429 || status === 401
@@ -76,13 +85,13 @@ export async function apiSend(rec: QueueRecord, asReplay: boolean): Promise<Send
     return { kind: 'ok', data: (res.data as { data?: unknown } | undefined)?.data }
   } catch (error) {
     const status = apiErrorStatus(error)
-    if (isTransient(status)) return { kind: 'offline' }
+    if (isTransient(status)) return { kind: 'offline', status }
     const blockers = apiErrorData<{ finishBlockers?: { code: string }[] }>(error)?.finishBlockers?.map((b) => b.code)
     return { kind: 'refused', status: status as number, code: apiErrorCode(error), blockers, error }
   }
 }
 
-export type DetailLookup = { kind: 'ok'; status: string } | { kind: 'offline' } | { kind: 'refused'; status: number }
+export type DetailLookup = { kind: 'ok'; status: string } | { kind: 'offline'; status?: number } | { kind: 'refused'; status: number }
 
 export async function apiShiftStatus(shiftId: string): Promise<DetailLookup> {
   try {
@@ -90,7 +99,7 @@ export async function apiShiftStatus(shiftId: string): Promise<DetailLookup> {
     return { kind: 'ok', status: res.data.data.status }
   } catch (error) {
     const status = apiErrorStatus(error)
-    return isTransient(status) ? { kind: 'offline' } : { kind: 'refused', status: status as number }
+    return isTransient(status) ? { kind: 'offline', status } : { kind: 'refused', status: status as number }
   }
 }
 
@@ -270,7 +279,12 @@ export function createQueue(overrides: Partial<QueueDeps> = {}) {
             if (stored(r)?.status !== 'waiting') continue
             if (r.kind === 'finish') {
               const look = await deps.shiftStatus(shiftId)
-              if (look.kind === 'offline') { result.offline = true; break outer }
+              if (look.kind === 'offline') {
+                // Same rules as the send, but this lookup never counts a try.
+                if (look.status === undefined) { result.offline = true; break outer }
+                if (look.status < 500) break outer
+                break
+              }
               if (stored(r)?.status !== 'waiting') continue
               if (look.kind === 'refused' && look.status === 404) { patch(r, { status: 'notSent', httpStatus: 404, code: undefined }); result.notSent++; break }
               if (look.kind === 'ok' && (look.status === 'PendingReview' || look.status === 'Completed')) {
@@ -281,13 +295,21 @@ export function createQueue(overrides: Partial<QueueDeps> = {}) {
               }
             }
             const out = await deps.send(r, true)
-            if (out.kind === 'offline') { result.offline = true; break outer }
+            if (out.kind === 'offline') {
+              if (out.status === undefined) { result.offline = true; break outer }
+              // 401, 408 and 429: signed out or throttled, so stop the whole replay without reading as offline; never a try.
+              if (out.status < 500) break outer
+              // A 5xx: the server is reachable, so skip only this shift, and count a try.
+              const cur = stored(r)
+              if (cur && (cur.lastFailedAt === undefined || deps.now() - cur.lastFailedAt >= TRY_SPACING_MS)) patch(r, { attempts: (cur.attempts ?? 0) + 1, lastFailedAt: deps.now() })
+              break
+            }
             if (out.kind === 'ok') {
               const now = stored(r)
               if (now && JSON.stringify(now.body) !== JSON.stringify(r.body)) {
                 // The worker edited this note while its POST was in flight: keep the edit as a PUT of the new text.
                 const text = (now.body as { body?: string }).body
-                patch(r, { path: `/portal/notes/${r.id}`, method: 'PUT', body: { body: text } })
+                patch(r, { path: `/portal/notes/${r.id}`, method: 'PUT', body: { body: text }, attempts: undefined, lastFailedAt: undefined })
                 again = true
               } else remove(r)
               result.sent++
@@ -315,7 +337,7 @@ export function createQueue(overrides: Partial<QueueDeps> = {}) {
   async function retry(id: string) {
     const rec = mine().find((r) => r.id === id)
     if (!rec || rec.status !== 'notSent') return
-    patch(rec, { status: 'waiting', httpStatus: undefined, code: undefined, blockers: undefined })
+    patch(rec, { status: 'waiting', attempts: undefined, lastFailedAt: undefined, httpStatus: undefined, code: undefined, blockers: undefined })
     await replay()
   }
 
