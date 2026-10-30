@@ -14,12 +14,12 @@ import { SlideOver } from '@/components/SlideOver'
 import { StatusBadge } from '@/components/StatusBadge'
 import { TAP_AREA, TAP_ICON_SQUARE } from '@/components/tapArea'
 import { fetchClaimFile, useClaimBatch, useDiscardBatch, useImportResults, useMarkBatchPaid, useMarkBatchUploaded } from '@/api/hooks/claimHub'
-import { useSubmitPreview } from '@/api/hooks/claims'
+import { useSubmitPreviewChunks } from '@/api/hooks/claims'
 import { serverSentence } from '@/api/hooks/data-export'
 import type { BatchDetailDto, BatchLineDto, ResultsImportDto } from '@/api/types'
 import { plural } from '@/lib/format'
 import { formatCurrency } from '@/lib/utils'
-import { NEXT_ACTION, ROWS_PER_PAGE, STEP_NUMBER, deliveredText, instantDay, stepOf, type FileStep } from './claimHubSteps'
+import { NEXT_ACTION, ROWS_PER_PAGE, STEP_NUMBER, awaitsResults, deliveredText, instantDay, stepOf, type FileStep } from './claimHubSteps'
 
 interface Props {
   batchId: string | null
@@ -140,6 +140,7 @@ function StepCard({ batch, step, announce, onReviewRejected }: { batch: BatchDet
   const summaryBlock = summary && <ImportSummary summary={summary} fileName={batch.fileName} onReviewRejected={onReviewRejected} />
   if (step === 'Built') return <UploadStep batch={batch} announce={announce} />
   if (step === 'Uploaded') return <>{summaryBlock}<ImportStep batch={batch} announce={announce} onImported={setSummary} /></>
+  if (step === 'Results in' && awaitsResults(batch)) return <>{summaryBlock}<ImportStep batch={batch} announce={announce} onImported={setSummary} onReviewRejected={onReviewRejected} /></>
   if (step === 'Results in') return <>{summaryBlock}<PaidStep batch={batch} announce={announce} onReviewRejected={onReviewRejected} /></>
   if (step === 'Paid') {
     return <>{summaryBlock}<Card title="Paid"><p className="text-sm">{plural(batch.paid, 'line')} paid · {formatCurrency(batch.paidAmount)}</p></Card></>
@@ -155,8 +156,8 @@ function UploadStep({ batch, announce }: { batch: BatchDetailDto; announce: (m: 
   const [confirming, setConfirming] = useState(false)
   const uploaded = useMarkBatchUploaded()
   const claimIds = useMemo(() => [...new Set(batch.lines.map(l => l.claimId).filter((id): id is string => !!id))], [batch.lines])
-  const preview = useSubmitPreview(claimIds, confirming)
-  const invoices = preview.data?.invoiceCount ?? 0
+  const preview = useSubmitPreviewChunks(claimIds, confirming)
+  const invoices = preview.invoiceCount
   const [copied, setCopied] = useState(false)
   return (
     <Card title="Upload it in the NDIA portal">
@@ -201,11 +202,12 @@ function UploadStep({ batch, announce }: { batch: BatchDetailDto; announce: (m: 
   )
 }
 
-function ImportStep({ batch, announce, onImported }: { batch: BatchDetailDto; announce: (m: string) => void; onImported: (s: ResultsImportDto) => void }) {
+function ImportStep({ batch, announce, onImported, onReviewRejected }: { batch: BatchDetailDto; announce: (m: string) => void; onImported: (s: ResultsImportDto) => void; onReviewRejected?: () => void }) {
   const [file, setFile] = useState<File | null>(null)
   const [refusal, setRefusal] = useState<{ title?: string; body: string } | null>(null)
   const importer = useImportResults()
   const inputId = useId()
+  const waiting = batch.status === 'ResultsImported' // results are already in; the lines still pending need the next file
   const stem = batch.fileName.replace(/\.csv$/i, '')
   const run = () => {
     if (!file || importer.isPending) return
@@ -239,6 +241,10 @@ function ImportStep({ batch, announce, onImported }: { batch: BatchDetailDto; an
         <p className="text-sm">
           When the NDIA has processed the file, go to <strong>Payment Request &gt; View Payment Requests</strong>, search for <strong>{stem}</strong>, and download the results file. This can take a business day or more.
         </p>
+        {waiting && <p className="mt-1 text-sm">{plural(batch.pending, 'line')} haven't come back from the NDIA yet. Import the next results file when it arrives.</p>}
+        {waiting && batch.rejected > 0 && onReviewRejected && (
+          <button type="button" className={`${TAP_AREA} mt-1 text-sm font-medium text-[var(--color-primary)] hover:underline`} onClick={onReviewRejected}>Review {plural(batch.rejected, 'rejected line')}</button>
+        )}
         {refusal && <Callout tone="danger" title={refusal.title} className="mt-3">{refusal.body}</Callout>}
         <div className="mt-3 flex flex-col gap-1.5">
           <label htmlFor={inputId} className="text-sm font-medium">Results file (.csv)</label>

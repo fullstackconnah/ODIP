@@ -141,6 +141,8 @@ export type DataTableProps<T> = {
    */
   compact?: boolean
   selectable?: boolean
+  /** Extra classes for the tick box cell, e.g. to reorder it in the phone card. */
+  selectCellClassName?: string
   selectedRows?: Set<string>
   onSelectionChange?: (ids: Set<string>) => void
   /** A row that can't be ticked: returns the id of the element that says why, which its disabled box is described by. The header box skips it. */
@@ -324,6 +326,7 @@ export function DataTable<T>({
   className,
   compact = false,
   selectable = false,
+  selectCellClassName = '',
   selectedRows,
   onSelectionChange,
   selectBlockedBy,
@@ -593,7 +596,7 @@ export function DataTable<T>({
                 >
                   {selectable && (
                     <td
-                      className={`${cellClass} w-10 max-md:-order-3`}
+                      className={`${cellClass} w-10 ${selectCellClassName}`}
                       onClick={e => e.stopPropagation()}
                     >
                       <label className="inline-flex min-h-[var(--tap-min)] min-w-[var(--tap-min)] items-center justify-center"><input

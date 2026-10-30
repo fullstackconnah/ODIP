@@ -36,6 +36,12 @@ export function stepOf(b: BatchDto): FileStep {
 /** Finished: discarded, or results in with every successful line paid and none still pending. A file with no successful lines has nothing to pay (0 of 0), so it is finished at Results in, unless lines are still waiting on the NDIA. */
 export const isUnfinished = (b: BatchDto) => b.status !== 'Discarded' && !(b.status === 'ResultsImported' && b.paid >= b.successful && b.pending === 0)
 
+/** Results are in, nothing is left to pay, and lines are still waiting on the NDIA: the next thing to do is import their results (the server takes a second results file). */
+export const awaitsResults = (b: BatchDto) => b.status === 'ResultsImported' && b.successful - b.paid <= 0 && b.pending > 0
+
+/** The step whose next action and wording this file shows: a file awaiting more results acts like an Uploaded one. */
+export const actionStepOf = (b: BatchDto): FileStep => (awaitsResults(b) ? 'Uploaded' : stepOf(b))
+
 export const NEXT_TEXT: Record<FileStep, string> = {
   Built: 'Upload it in the portal',
   Uploaded: 'Import the results',

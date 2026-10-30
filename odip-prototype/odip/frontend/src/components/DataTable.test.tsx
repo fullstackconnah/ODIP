@@ -588,6 +588,14 @@ describe('DataTable — density row geometry (spec §1/§4)', () => {
     }
   })
 
+  it('leaves the tick box cell in place unless a table passes selectCellClassName', () => {
+    const { rerender } = render(<DataTable data={rows} columns={columns} keyField="id" selectable selectedRows={new Set()} onSelectionChange={vi.fn()} />)
+    expect(screen.getByLabelText('Select row 1').closest('td')).not.toHaveClass('max-md:-order-3')
+
+    rerender(<DataTable data={rows} columns={columns} keyField="id" selectable selectCellClassName="max-md:-order-3" selectedRows={new Set()} onSelectionChange={vi.fn()} />)
+    expect(screen.getByLabelText('Select row 1').closest('td')).toHaveClass('max-md:-order-3')
+  })
+
   it('no longer carries the fixed pixel padding that built rows out of padding', () => {
     const { container } = render(
       <DataTable data={rows} columns={columns} keyField="id" selectable selectedRows={new Set()} onSelectionChange={vi.fn()} />,

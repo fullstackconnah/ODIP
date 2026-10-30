@@ -230,6 +230,7 @@ export function ReadyPanel({ lines, loading, failed, onRetry, registrationProble
           loading={loading}
           emptyMessage="No lines match. Clear the search or show all lines."
           selectable
+          selectCellClassName="max-md:-order-3"
           selectedRows={selected}
           onSelectionChange={changeSelection}
           selectBlockedBy={l => (tickable(l) ? undefined : reasonId(l))}

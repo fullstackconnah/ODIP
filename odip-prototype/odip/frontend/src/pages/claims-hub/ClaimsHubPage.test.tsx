@@ -22,7 +22,7 @@ vi.mock('@/api/hooks/claimHub', async () => {
     useMarkBatchPaid: mutation(m.paid), useDismissBatchLine: mutation(m.dismiss),
   }
 })
-vi.mock('@/api/hooks/claims', () => ({ useSubmitPreview: m.preview }))
+vi.mock('@/api/hooks/claims', () => ({ useSubmitPreviewChunks: m.preview }))
 
 const query = <T,>(data: T) => ({ data, isLoading: false, isError: false, error: null, refetch: vi.fn() })
 
@@ -65,7 +65,7 @@ beforeEach(() => {
   m.lines.mockReturnValue(query(hub()))
   m.batches.mockReturnValue(query([]))
   m.batch.mockReturnValue({ ...query(undefined), isLoading: false })
-  m.preview.mockReturnValue({ data: { claims: [], invoiceCount: 2 }, isLoading: false })
+  m.preview.mockReturnValue({ invoiceCount: 2, isLoading: false, isError: false, refetch: vi.fn() })
 })
 afterEach(() => {
   cleanup()
@@ -376,25 +376,50 @@ describe('ClaimsHubPage: file panel', () => {
     expect(screen.queryByRole('button', { name: /Mark 0 lines as paid/ })).toBeNull()
   })
 
-  it('keeps a file with pending lines unfinished and says Record the payment, not Nothing to pay', () => {
+  it('asks for the next results file when nothing is left to pay but lines are still pending', async () => {
+    const user = userEvent.setup()
     m.batches.mockReturnValue(query([batch({ status: 'ResultsImported', successful: 0, rejected: 2, pending: 3, paid: 0 })]))
     m.batch.mockReturnValue(query(resultsIn({ successful: 0, rejected: 2, pending: 3 })))
     renderPage('/claims?tab=files')
 
     expect(screen.getByRole('tab', { name: /^Files/ })).toHaveTextContent(/\d/)
-    expect(screen.getByTestId('claims-strip')).toBeInTheDocument()
+    expect(within(screen.getByTestId('claims-strip')).getByRole('button', { name: 'Import results: BPR261030001.csv' })).toBeInTheDocument()
+    expect(within(screen.getByTestId('claims-strip')).getByText(/Step 3 of 4 · Import the results/)).toBeInTheDocument()
+    expect(screen.getByText('0 successful · 2 rejected · 3 waiting')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Mark paid/ })).toBeNull()
+
+    cleanup()
+    renderPage('/claims?file=b-1')
+    const panel = within(screen.getByTestId('file-panel'))
+    expect(panel.getByText("3 lines haven't come back from the NDIA yet. Import the next results file when it arrives.")).toBeInTheDocument()
+    expect(panel.getByTestId('file-next-action')).toHaveTextContent('Import results')
+    expect(screen.queryByText('Record the payment')).toBeNull()
+    expect(screen.queryByText('Nothing to pay')).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Mark / })).toBeNull()
+    await user.click(panel.getByRole('button', { name: 'Review 2 rejected lines' }))
+    expect(screen.getByTestId('where')).toHaveTextContent('tab=action')
+  })
+
+  it('keeps Mark paid as the one action when successful lines are unpaid, and only adds the waiting count', () => {
+    m.batches.mockReturnValue(query([batch({ status: 'ResultsImported', successful: 1, rejected: 1, pending: 2, paid: 0 })]))
+    m.batch.mockReturnValue(query(resultsIn({ pending: 2 })))
+    renderPage('/claims?tab=files')
+
+    expect(within(screen.getByTestId('claims-strip')).getByRole('button', { name: 'Mark paid: BPR261030001.csv' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Import results/ })).toBeNull()
+    expect(screen.getByText('1 successful · 1 rejected · 2 waiting')).toBeInTheDocument()
 
     cleanup()
     renderPage('/claims?file=b-1')
     expect(screen.getByText('Record the payment')).toBeInTheDocument()
-    expect(screen.queryByText('Nothing to pay')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Mark 1 line as paid' })).toBeInTheDocument()
   })
 
   it('holds the upload confirm and offers Try again when the invoice check fails', async () => {
     const user = userEvent.setup()
     const refetch = vi.fn()
     m.batch.mockReturnValue(query(detail()))
-    m.preview.mockReturnValue({ data: undefined, isLoading: false, isError: true, refetch })
+    m.preview.mockReturnValue({ invoiceCount: 0, isLoading: false, isError: true, refetch })
     renderPage('/claims?file=b-1')
 
     await user.click(screen.getByTestId('file-next-action'))

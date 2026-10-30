@@ -1,4 +1,5 @@
-import { keepPreviousData, useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
+import { useMemo } from 'react'
+import { keepPreviousData, useQueries, useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { apiGet, apiPost, apiPutRaw, apiPatchRaw, apiDeleteRaw } from '../client'
 import { fetchPagedList } from './pagedList'
 import { refreshBudgetWarnings, refreshLedgers } from './funding-ledger'
@@ -172,6 +173,26 @@ export function useSubmitPreview(claimIds: string[], enabled: boolean) {
     staleTime: 0,
     retry: false,
   })
+}
+
+const PREVIEW_CHUNK = 100 // the server refuses more claims than this in one submit-preview
+
+/** submit-preview for any number of claims: one request per 100, invoice counts summed. refetch retries only the chunks that failed. */
+export function useSubmitPreviewChunks(claimIds: string[], enabled: boolean) {
+  const chunks = useMemo(() => Array.from({ length: Math.ceil(claimIds.length / PREVIEW_CHUNK) }, (_, i) => claimIds.slice(i * PREVIEW_CHUNK, (i + 1) * PREVIEW_CHUNK)), [claimIds])
+  const results = useQueries({
+    queries: chunks.map(chunk => ({
+      queryKey: ['submit-preview', ...chunk],
+      queryFn: () => apiPost<SubmitPreviewDto>('/claims/submit-preview', { claimIds: chunk }),
+      enabled, gcTime: 0, staleTime: 0, retry: false,
+    })),
+  })
+  return {
+    invoiceCount: results.reduce((n, r) => n + (r.data?.invoiceCount ?? 0), 0),
+    isLoading: results.some(r => r.isLoading),
+    isError: results.some(r => r.isError),
+    refetch: () => results.forEach(r => { if (r.isError) void r.refetch() }),
+  }
 }
 
 type InvoiceCorrection = { invoiceId: string; claimId: string; reason: string }

@@ -8,13 +8,13 @@ import type { BatchDto } from '@/api/types'
 import { formatRelative, plural } from '@/lib/format'
 import { formatCurrency } from '@/lib/utils'
 import { StepBadge } from './claimHubParts'
-import { NEXT_ACTION, NEXT_TEXT, ROWS_PER_PAGE, STEP_NUMBER, instantDay, isUnfinished, stepOf } from './claimHubSteps'
+import { NEXT_ACTION, NEXT_TEXT, ROWS_PER_PAGE, STEP_NUMBER, actionStepOf, instantDay, isUnfinished, stepOf } from './claimHubSteps'
 
 const FILE_NAME = 'whitespace-nowrap text-sm font-semibold'
 
 /** Every step's one next action opens the file's panel at that step, so the strip, the Files row and the panel all act the same. */
 function NextActionButton({ batch, onOpen, full }: { batch: BatchDto; onOpen: (id: string) => void; full?: boolean }) {
-  const next = NEXT_ACTION[stepOf(batch)]
+  const next = NEXT_ACTION[actionStepOf(batch)]
   if (!next || !isUnfinished(batch)) return null
   return (
     <Button variant={next.primary ? 'primary' : 'secondary'} size="sm" className={full ? 'max-md:min-h-11 max-md:w-full' : undefined}
@@ -24,7 +24,7 @@ function NextActionButton({ batch, onOpen, full }: { batch: BatchDto; onOpen: (i
   )
 }
 
-const resultsText = (b: BatchDto) => b.status === 'ResultsImported' ? `${b.successful} successful · ${b.rejected} rejected` : '—'
+const resultsText = (b: BatchDto) => b.status === 'ResultsImported' ? `${b.successful} successful · ${b.rejected} rejected${b.pending > 0 ? ` · ${b.pending} waiting` : ''}` : '—'
 
 /** Oldest step first: a Built file waits on a person sooner than one waiting on the NDIA. */
 const byStep = (a: BatchDto, b: BatchDto) => STEP_NUMBER[stepOf(a)] - STEP_NUMBER[stepOf(b)] || a.createdAt.localeCompare(b.createdAt)
@@ -53,7 +53,7 @@ export function FilesStrip({ batches, loading, failed, onRetry, onOpen, onShowAl
             <li key={b.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2 md:min-h-[var(--row-h)] md:flex-nowrap md:py-0.5">
               <button type="button" className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-4 gap-y-0.5 text-left max-md:min-h-11" onClick={() => onOpen(b.id)}>
                 <span data-testid="strip-file-name" className={FILE_NAME}>{b.fileName}</span>
-                <span className="text-sm">Step {STEP_NUMBER[step]} of 4 · {NEXT_TEXT[step]}</span>
+                <span className="text-sm">Step {STEP_NUMBER[step]} of 4 · {NEXT_TEXT[actionStepOf(b)]}</span>
                 <span className="text-[13px] text-[var(--color-muted-foreground)] max-md:basis-full">Built {formatRelative(b.createdAt, { style: 'long' })} by {b.createdByName}</span>
               </button>
               <span className="max-md:basis-full"><NextActionButton batch={b} onOpen={onOpen} full /></span>
