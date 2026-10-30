@@ -70,6 +70,8 @@ export const incidentBaseSchema = z.object({
   awareAt: z.string().optional(),
   reportableClass: z.string().optional(),
   reportableClassReason: z.string().optional(),
+  // The stored flag, read-only here: the server defaults the class from it too, so the reason rule must see it.
+  isRestrictivePracticeAuthorised: z.boolean().nullable().optional(),
   commissionDetailedReportedAt: z.string().optional(),
   commissionFinalReportRequested: z.boolean().optional(),
   commissionFinalReportedAt: z.string().optional(),
@@ -181,8 +183,8 @@ function detailsRefine(data: Pick<IncidentFormData, 'incidentType' | 'injuries' 
 }
 
 /** The server judges an override against the default of the EDITED severity and type, so this does too. Only fires once a class is present (an edit). */
-function reportableClassRefine(data: Pick<IncidentFormData, 'severity' | 'incidentType' | 'reportableClass' | 'reportableClassReason'>, ctx: z.RefinementCtx) {
-  if (data.reportableClass && data.reportableClass !== defaultReportableClass(data.severity, data.incidentType) && !data.reportableClassReason?.trim()) {
+function reportableClassRefine(data: Pick<IncidentFormData, 'severity' | 'incidentType' | 'reportableClass' | 'reportableClassReason' | 'isRestrictivePracticeAuthorised'>, ctx: z.RefinementCtx) {
+  if (data.reportableClass && data.reportableClass !== defaultReportableClass(data.severity, data.incidentType, data.isRestrictivePracticeAuthorised) && !data.reportableClassReason?.trim()) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['reportableClassReason'], message: 'Give a reason for changing the reporting deadline.' })
   }
 }

@@ -18,6 +18,8 @@ export type ComplianceStepProps = {
   awareAtMax: string
   severity: string | undefined
   incidentType: string | undefined
+  /** The stored flag: the default deadline depends on it. */
+  isRestrictivePracticeAuthorised: boolean | null | undefined
   reportableClass: string | undefined
   commissionFinalReportRequested: boolean | undefined
   reviewedByStaffId: string | undefined
@@ -35,7 +37,7 @@ export type ComplianceStepProps = {
  */
 export function ComplianceStep({
   register, setValue,
-  status, errors, awareAtMax, severity, incidentType, reportableClass, commissionFinalReportRequested, reviewedByStaffId, familyNotified, supportCoordinatorNotified,
+  status, errors, awareAtMax, severity, incidentType, isRestrictivePracticeAuthorised, reportableClass, commissionFinalReportRequested, reviewedByStaffId, familyNotified, supportCoordinatorNotified,
   staff,
 }: ComplianceStepProps) {
   return (
@@ -63,7 +65,7 @@ export function ComplianceStep({
           />
         </FormField>
 
-        {reportableClass && reportableClass !== defaultReportableClass(severity, incidentType) && (
+        {reportableClass && reportableClass !== defaultReportableClass(severity, incidentType, isRestrictivePracticeAuthorised) && (
           <FormField label="Reason for the change" className={span.long} error={errors.reportableClassReason?.message}>
             <textarea {...register('reportableClassReason')} rows={2} maxLength={500} placeholder="Why this incident has a different reporting deadline..." />
           </FormField>

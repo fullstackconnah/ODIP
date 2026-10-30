@@ -141,6 +141,7 @@ function buildDefaultValues(isEdit: boolean, existingIncident: IncidentDetailDto
       awareAt: i.awareAt ? toDatetimeLocalValue(i.awareAt, i.timeZoneId) : '',
       reportableClass: i.reportableClass ?? 'None',
       reportableClassReason: i.reportableClassReason ?? '',
+      isRestrictivePracticeAuthorised: i.isRestrictivePracticeAuthorised ?? null,
       commissionDetailedReportedAt: i.commissionDetailedReportedAt ? i.commissionDetailedReportedAt.slice(0, 16) : '',
       commissionFinalReportRequested: i.commissionFinalReportRequested ?? false,
       commissionFinalReportedAt: i.commissionFinalReportedAt ? i.commissionFinalReportedAt.slice(0, 16) : '',
@@ -277,12 +278,12 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
   const awareAtMax = toDatetimeLocalValue(new Date().toISOString(), existingIncident?.timeZoneId)
 
   // The class follows the default for the form's severity and type until someone moves it: when it still equals the previous default, it moves to the new one.
-  const previousDefaultRef = useRef(defaultReportableClass(severity, incidentType))
+  const previousDefaultRef = useRef(defaultReportableClass(severity, incidentType, existingIncident?.isRestrictivePracticeAuthorised))
   useEffect(() => {
-    const next = defaultReportableClass(severity, incidentType)
+    const next = defaultReportableClass(severity, incidentType, existingIncident?.isRestrictivePracticeAuthorised)
     if (isEdit && getValues('reportableClass') === previousDefaultRef.current) setValue('reportableClass', next, { shouldDirty: true })
     previousDefaultRef.current = next
-  }, [severity, incidentType, isEdit, getValues, setValue])
+  }, [severity, incidentType, isEdit, existingIncident?.isRestrictivePracticeAuthorised, getValues, setValue])
 
   // IN-4/IN-5: switching incidentType away from the type that owns a conditional step's fields
   // clears them, so a later switch back starts clean (rather than resurrecting stale data from a
@@ -722,6 +723,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
             awareAtMax={awareAtMax}
             severity={severity}
             incidentType={incidentType}
+            isRestrictivePracticeAuthorised={existingIncident?.isRestrictivePracticeAuthorised}
             reportableClass={reportableClass}
             commissionFinalReportRequested={commissionFinalReportRequested}
             reviewedByStaffId={reviewedByStaffId}

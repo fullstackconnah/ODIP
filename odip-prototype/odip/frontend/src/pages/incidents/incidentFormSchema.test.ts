@@ -64,3 +64,24 @@ describe('reporting deadline reason', () => {
     expect(reasonErrors({ ...edit, severity: 'Critical', reportableClass: 'Within24h' })).toEqual([])
   })
 })
+
+// N1 incident clock: the server defaults the class from the stored authorisation flag too, so the reason rule must see it.
+describe('reportable class reason (edit)', () => {
+  const injury = {
+    title: 'Fell at the kerb', reportedByStaffId: 'staff-1', incidentType: 'Injury', severity: 'Medium', description: 'Tripped.',
+    incidentDateTime: '2026-10-13T10:00', injuries: [{ region: 'Head', injuryType: 'Bruise', description: 'Bump' }], witnesses: [],
+    involvedParticipantId: 'participant-1',
+  }
+  const reasonIssues = (values: object) => {
+    const result = incidentSchema.safeParse(values)
+    return result.success ? [] : result.error.issues.filter((i) => i.path[0] === 'reportableClassReason')
+  }
+
+  it('needs no reason for Within24h when the stored flag is unauthorised', () => {
+    expect(reasonIssues({ ...injury, isRestrictivePracticeAuthorised: false, reportableClass: 'Within24h' })).toEqual([])
+  })
+
+  it('still asks for a reason once the flag leaves the default at None', () => {
+    expect(reasonIssues({ ...injury, isRestrictivePracticeAuthorised: true, reportableClass: 'Within24h' })).toHaveLength(1)
+  })
+})
