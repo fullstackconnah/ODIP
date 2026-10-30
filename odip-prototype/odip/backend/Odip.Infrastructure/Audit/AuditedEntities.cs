@@ -15,6 +15,8 @@ public static class AuditedEntities
         typeof(ParticipantOnboarding),
         typeof(ParticipantBooking),
         typeof(IncidentReport),
+        // Its Summary, actions and outcome are edited over weeks, so who changed what, and when, must be recoverable (read only by Admin through AuditController).
+        typeof(Complaint),
         typeof(User),
         typeof(StaffAssignment),
         typeof(VehicleAssignment),

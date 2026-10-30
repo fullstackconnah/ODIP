@@ -178,6 +178,7 @@ public static class ExportTables
         Own<ParticipantChecklistItem>("participant-checklist-items.csv", "Participant checklist answers."),
         Own<ParticipantCommunityAccessRiskItem>("participant-community-access-risks.csv", "Community access risk ratings."),
         Own<RestrictivePractice>("restrictive-practices.csv", "Restrictive practices and their authorisations."),
+        Own<Complaint>("complaints.csv", "Complaints received, how they were handled and their outcome."),
         Own<CaregiverProfileSubmission>("caregiver-submissions.csv", "Profile changes sent in by families and carers, and their review.") with
         {
             Omit = new Dictionary<string, string> { [nameof(CaregiverProfileSubmission.TokenHash)] = "the secret behind the family's form link, which nobody needs to read" },
