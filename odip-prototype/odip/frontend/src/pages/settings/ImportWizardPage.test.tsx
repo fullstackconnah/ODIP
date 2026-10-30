@@ -304,6 +304,55 @@ describe('ImportWizardPage', () => {
     render(<RouterProvider router={router} />)
     expect(screen.getByText('Settings')).toBeInTheDocument()
   })
+
+  describe('a long preview', () => {
+    const manyRows = (n: number) => Array.from({ length: n }, (_, i) => ({
+      rowNumber: i + 2, name: `Person ${i + 2}`, status: i % 2 ? 'Invalid' : 'Ready', reasons: [], warnings: [], notes: [], skipReason: null, detail: null,
+    }))
+    async function toPreview(n: number) {
+      preview.mockResolvedValue({ ...previewOf(['firstName', 'lastName']), rows: manyRows(n), readyCount: Math.ceil(n / 2), invalidCount: Math.floor(n / 2) })
+      renderWizard()
+      await upload()
+      await screen.findByRole('heading', { name: 'Match columns' })
+      await userEvent.click(screen.getByRole('button', { name: 'Next' }))
+      await screen.findByRole('heading', { name: 'Preview' })
+    }
+
+    it('shows 50 rows a page, and a filter switch returns to page 1', async () => {
+      await toPreview(120)
+      expect(screen.getByText(/Showing 1-50 of 120/)).toBeInTheDocument()
+      expect(screen.getByText('Person 2')).toBeInTheDocument()
+      expect(screen.queryByText('Person 52')).not.toBeInTheDocument()
+      await userEvent.click(screen.getByRole('button', { name: 'Next page' }))
+      expect(screen.getByText(/Showing 51-100 of 120/)).toBeInTheDocument()
+      // The table sits inside the wizard's form: a pager button that submits it would open the import confirmation.
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+      expect(screen.getByText('Person 52')).toBeInTheDocument()
+      expect(screen.queryByText('Person 2')).not.toBeInTheDocument()
+      await userEvent.click(screen.getByRole('radio', { name: /Ready \(60\)/ }))
+      expect(screen.getByText(/Showing 1-50 of 60/)).toBeInTheDocument()
+    })
+
+    it('scrolls the table into view on a page change, not on first render', async () => {
+      const scrollIntoView = vi.fn()
+      Element.prototype.scrollIntoView = scrollIntoView
+      try {
+        await toPreview(120)
+        expect(scrollIntoView).not.toHaveBeenCalled()
+        await userEvent.click(screen.getByRole('button', { name: 'Next page' }))
+        expect(scrollIntoView).toHaveBeenCalledTimes(1)
+        expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start' })
+      } finally {
+        delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView
+      }
+    })
+
+    it('shows no pager for 50 rows or fewer', async () => {
+      await toPreview(10)
+      expect(screen.queryByRole('button', { name: 'Next page' })).not.toBeInTheDocument()
+      expect(screen.queryByText(/Showing/)).not.toBeInTheDocument()
+    })
+  })
 })
 
 describe('ImportWizardPage: where an unknown kind goes', () => {

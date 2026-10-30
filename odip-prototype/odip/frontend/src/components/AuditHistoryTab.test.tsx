@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import AuditHistoryTab from './AuditHistoryTab'
 import { TONE } from '@/lib/tone'
 
@@ -34,5 +34,14 @@ describe('AuditHistoryTab', () => {
     const when = screen.getByText('1d ago')
     expect(when).toHaveAttribute('title', expect.stringMatching(/^\d{2}\/\d{2}\/2026, \d{2}:\d{2}/))
     expect(screen.queryByText('Yesterday')).not.toBeInTheDocument()
+  })
+
+  it('says the history could not load, in the house voice, and retries', () => {
+    const refetch = vi.fn()
+    mockUseAuditHistory.mockReturnValue({ data: undefined, isLoading: false, isError: true, refetch })
+    render(<AuditHistoryTab entityType="Trip" entityId="t1" />)
+    expect(screen.getByText(/Couldn't load this history. Check your connection and try again./)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /try again/i }))
+    expect(refetch).toHaveBeenCalled()
   })
 })

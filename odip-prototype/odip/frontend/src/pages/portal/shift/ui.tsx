@@ -81,11 +81,12 @@ export function Fold({ summary, children }: { summary: ReactNode; children: Reac
 }
 
 /** The marker on anything recorded on this phone that Bunya Support has not received yet (SHAPE 3d). */
-export function WaitingToSend({ id, className = '' }: { id?: string; className?: string }) {
+/** `stuck`: the server has refused to take it five times running; it is kept and keeps being retried. */
+export function WaitingToSend({ id, className = '', stuck = false }: { id?: string; className?: string; stuck?: boolean }) {
   return (
     <span id={id} className={`inline-flex items-center gap-1 whitespace-nowrap text-xs text-[var(--color-muted-foreground)] ${className}`}>
       <CloudUpload className="size-3.5" aria-hidden="true" />
-      Waiting to send
+      {stuck ? 'Still trying' : 'Waiting to send'}
     </span>
   )
 }

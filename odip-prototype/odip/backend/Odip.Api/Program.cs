@@ -139,6 +139,8 @@ if (string.IsNullOrEmpty(firebaseServiceAccount))
 var devAuthEnabled = string.Equals(
     Environment.GetEnvironmentVariable("DEV_AUTH_ENABLED"), "true", StringComparison.OrdinalIgnoreCase);
 
+Odip.Api.Health.DevAuthGuard.EnsureAllowed(builder.Configuration, builder.Environment);
+
 if (devAuthEnabled)
 {
     Console.WriteLine("***********************************************************************");
@@ -260,9 +262,6 @@ builder.Services.AddScoped<Odip.Infrastructure.Services.ShiftPackageService>();
 builder.Services.AddHttpClient<Odip.Infrastructure.Services.NagerHolidayProvider>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.IHolidayProvider, Odip.Infrastructure.Services.NagerHolidayProvider>();
 builder.Services.AddScoped<Odip.Application.Interfaces.IPublicHolidaySyncService, Odip.Infrastructure.Services.PublicHolidaySyncService>();
-// Singleton: the failure counts are in-process state and must outlive a request. See
-// LoginAttemptTracker's note about scaling out — a second replica gets its own counts.
-builder.Services.AddSingleton<Odip.Application.Interfaces.ILoginAttemptTracker, Odip.Infrastructure.Services.LoginAttemptTracker>();
 builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.HolidaySyncBackgroundService>();
 
 // ── Notifications (transactional outbox + dispatcher) ──────────
@@ -357,10 +356,9 @@ builder.Services.AddRateLimiter(options =>
                 RecordLimiterPartitionKey(context, "exempt:" + RateLimitPartitionKey(context)));
         }
 
-        // Deliberately generous, and no longer the brute-force defence. This is a flood
-        // guard only; repeated FAILED sign-ins are handled by ILoginAttemptTracker, which
-        // can tell a failure from a success where this middleware cannot — it runs before
-        // the endpoint and spends a permit either way.
+        // Deliberately generous: a flood guard only. A wrong guess is a forged Firebase token,
+        // which the SDK rejects by signature, so there is no brute-force defence to build here. It runs
+        // before the endpoint and spends a permit whether the sign-in succeeds or fails.
         //
         // The old 5-per-5-minutes budget was the brute-force defence, and it counted
         // successful logins too. Behind shared egress (several devices leaving one NAT
@@ -635,29 +633,6 @@ app.Use(async (context, next) =>
 app.UseMiddleware<Odip.Api.Middleware.RequestTimingMiddleware>();
 
 app.UseMiddleware<Odip.Api.Middleware.ExceptionHandlingMiddleware>();
-
-// ── Loud warning: the per-client sign-in budget cannot partition ──
-// The failed-sign-in lockout (AuthController.Exchange -> ClientIp) can only give
-// each caller their own budget when the request carries a real client address.
-// Behind a published Docker port served by the userspace `docker-proxy`, it does
-// not: the proxy accepts the client's TCP connection and originates a new one to
-// nginx, so nginx's $remote_addr is the Docker bridge gateway for EVERY caller and
-// the genuine address never reaches this process.
-//
-// Consequences, stated plainly rather than left to be discovered in production:
-// the address-keyed rate limiter collapses to one shared bucket, and the sign-in
-// failure budget is not counted at all (ClientIp.LoginAttemptKey returns null),
-// because counting it would be counting against that shared key.
-//
-// Detected by a real request, not by guessing: if a request cannot be attributed to
-// one client, say so once and loudly.
-//
-// The guard is ClientIp.SignInBudgetCannotBePartitioned — the SAME predicate that
-// decides whether a key exists — and it is NOT negated. An inline lambda here was
-// harder to test than the behaviour was worth, and the untested version shipped with
-// its guard inverted: it stayed silent on the deployed proxy shape that needs the
-// warning and fired on every healthy client instead.
-app.UseMiddleware<Odip.Api.Middleware.SignInBudgetPartitionWarningMiddleware>();
 
 app.UseRateLimiter();
 app.UseCors();

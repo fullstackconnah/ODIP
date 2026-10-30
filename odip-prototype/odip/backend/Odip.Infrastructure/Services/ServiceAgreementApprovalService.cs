@@ -691,11 +691,7 @@ public sealed class ServiceAgreementApprovalService
         return weeks.Order().Select(w => (From: w < from ? from : w, To: Earlier(w.AddDays(6), agreementEnd))).Where(x => x.From <= x.To).ToList();
     }
 
-    private async Task<DateOnly> ProviderTodayAsync(Guid tenantId, CancellationToken ct)
-    {
-        var provider = ProviderTimeZoneResolver.FromState(await _db.ProviderSettings.Where(p => p.TenantId == tenantId).Select(p => p.State).FirstOrDefaultAsync(ct));
-        return ProviderLocalTime.TodayIn(_clock.GetUtcNow().UtcDateTime, provider.Zone);
-    }
+    private Task<DateOnly> ProviderTodayAsync(Guid tenantId, CancellationToken ct) => ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct);
 
     /// <summary>Fills only approved agreement patterns into roster weeks that are already started after a participant becomes service-eligible.</summary>
     public async Task PopulateStartedWeeksAsync(Guid tenantId, Guid participantId, CancellationToken ct)

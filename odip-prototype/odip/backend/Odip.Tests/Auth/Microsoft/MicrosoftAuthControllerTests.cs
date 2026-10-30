@@ -39,7 +39,6 @@ public class MicrosoftAuthControllerTests
         var rig = new MicrosoftAuthRig();
         rig.Settings[key] = value;
         Assert.IsType<NotFoundResult>(rig.Controller(rig.Http()).Start("signin", null));
-        Assert.Empty(rig.Tracker.Failures);
     }
 
     [Fact]
@@ -67,17 +66,15 @@ public class MicrosoftAuthControllerTests
         var plain = rig.Dp.CreateProtector("Odip.MicrosoftSignIn.Correlation.v1").Unprotect(Uri.UnescapeDataString(cookie.Value.Value!));
         var verifier = System.Text.Json.JsonDocument.Parse(plain).RootElement.GetProperty("CodeVerifier").GetString()!;
         Assert.Equal(WebEncoders.Base64UrlEncode(SHA256.HashData(Encoding.ASCII.GetBytes(verifier))), q["code_challenge"]);
-        Assert.Empty(rig.Tracker.Failures);
     }
 
     [Fact]
-    public async Task S3_LinkTenant_Anonymous_SignInRequired_Counted()
+    public async Task S3_LinkTenant_Anonymous_SignInRequired()
     {
         var rig = new MicrosoftAuthRig();
         var start = await rig.StartAsync(MicrosoftIntent.LinkTenant);
         Assert.Equal(MicrosoftRefusal.SignInRequired, start.Code);
         Assert.StartsWith(MicrosoftSignInPaths.LinkTenant, start.Location);
-        Assert.Single(rig.Tracker.Failures);
         Assert.Null(start.Cookie(MicrosoftAuthController.CorrelationCookie));
     }
 
@@ -86,13 +83,12 @@ public class MicrosoftAuthControllerTests
     [InlineData(UserRole.SupportWorker)]
     [InlineData(UserRole.ReadOnly)]
     [InlineData(UserRole.SuperAdmin)]
-    public async Task S4_LinkTenant_NonAdmin_MicrosoftAdminOnly_Counted(UserRole role)
+    public async Task S4_LinkTenant_NonAdmin_MicrosoftAdminOnly(UserRole role)
     {
         var rig = new MicrosoftAuthRig();
         var org = rig.Org();
         var start = await rig.StartAsync(MicrosoftIntent.LinkTenant, user: Signed(Guid.NewGuid(), org.Id, role));
         Assert.Equal(MicrosoftRefusal.MicrosoftAdminOnly, start.Code);
-        Assert.Single(rig.Tracker.Failures);
     }
 
     [Fact]
@@ -103,7 +99,6 @@ public class MicrosoftAuthControllerTests
         rig.Link(org.Id, Guid.NewGuid());
         var start = await rig.StartAsync(MicrosoftIntent.LinkTenant, user: Signed(Guid.NewGuid(), org.Id, UserRole.Admin));
         Assert.Equal(MicrosoftRefusal.MicrosoftOrgAlreadyLinked, start.Code);
-        Assert.Single(rig.Tracker.Failures);
     }
 
     [Fact]
@@ -115,7 +110,6 @@ public class MicrosoftAuthControllerTests
         var start = await rig.StartAsync(MicrosoftIntent.LinkAccount, user: Signed(me.Id, org.Id, UserRole.Coordinator));
         Assert.Equal(MicrosoftRefusal.MicrosoftNotLinked, start.Code);
         Assert.StartsWith(MicrosoftSignInPaths.LinkAccount, start.Location);
-        Assert.Single(rig.Tracker.Failures);
     }
 
     [Theory]
@@ -126,7 +120,6 @@ public class MicrosoftAuthControllerTests
         var rig = new MicrosoftAuthRig();
         var start = await rig.StartAsync(intent);
         Assert.Equal(MicrosoftRefusal.InvalidToken, start.Code);
-        Assert.Single(rig.Tracker.Failures);
     }
 
     [Fact]
@@ -136,7 +129,6 @@ public class MicrosoftAuthControllerTests
         var start = await rig.StartAsync();
         Assert.StartsWith(PublicBase + "/api/v1/auth/microsoft/start", start.Location);
         Assert.Null(start.Cookie(MicrosoftAuthController.CorrelationCookie));
-        Assert.Empty(rig.Tracker.Failures);
     }
 
     [Fact]
@@ -170,12 +162,11 @@ public class MicrosoftAuthControllerTests
     }
 
     [Fact]
-    public async Task C2_NoCorrelationCookie_InvalidToken_Counted()
+    public async Task C2_NoCorrelationCookie_InvalidToken()
     {
         var rig = new MicrosoftAuthRig();
         var o = await rig.CallbackAsync(null, "state");
         Assert.Equal(MicrosoftRefusal.InvalidToken, o.Code);
-        Assert.Single(rig.Tracker.Failures);
     }
 
     [Fact]
@@ -252,18 +243,16 @@ public class MicrosoftAuthControllerTests
         var o = await rig.RunAsync(_ => null);
         Assert.Equal(MicrosoftRefusal.InvalidToken, o.Code);
         Assert.Single(rig.Redeemer.Calls);
-        Assert.Single(rig.Tracker.Failures);
     }
 
     [Fact]
-    public async Task C9_EntraError_MicrosoftCancelled_NotCounted()
+    public async Task C9_EntraError_MicrosoftCancelled()
     {
         var rig = new MicrosoftAuthRig();
         var start = await rig.StartAsync();
         var o = await rig.CallbackAsync(CookieHeader(start, MicrosoftAuthController.CorrelationCookie), StateOf(start), code: null, error: "access_denied");
         Assert.Equal(MicrosoftRefusal.MicrosoftCancelled, o.Code);
         Assert.Empty(rig.Redeemer.Calls);
-        Assert.Empty(rig.Tracker.Failures);
     }
 
     [Theory]
@@ -289,24 +278,6 @@ public class MicrosoftAuthControllerTests
         Assert.StartsWith("/login", o.Location);
         Assert.Null(o.Cookie("odip_jwt"));
         Assert.Equal(0, await rig.Db.Users.IgnoreQueryFilters([TenantFilter.Name]).CountAsync());
-    }
-
-    [Fact]
-    public async Task C11_TenRefusals_ThenLockedOut_ButValidSignInStillWins()
-    {
-        var rig = new MicrosoftAuthRig();
-        var org = rig.Org();
-        rig.Person(org.Id, "pat@acme.test", UserRole.Coordinator, tid: Tid, oid: PersonOid);
-        // No link yet, so each valid-looking token is a counted MicrosoftNotLinked.
-        for (var i = 0; i < LoginAttemptTracker.MaxFailures; i++)
-            Assert.Equal(MicrosoftRefusal.MicrosoftNotLinked, (await rig.RunAsync(Token())).Code);
-
-        Assert.Equal(MicrosoftRefusal.LockedOut, (await rig.RunAsync(Token())).Code);
-
-        rig.Link(org.Id);
-        var signedIn = await rig.RunAsync(Token());
-        Assert.Equal(MicrosoftSignInPaths.SignInSuccess, signedIn.Location);
-        Assert.NotNull(signedIn.Cookie("odip_jwt"));
     }
 
     // ── I: sign-in branch ────────────────────────────────────────────────
@@ -547,7 +518,5 @@ public class MicrosoftAuthControllerTests
         var rig = new MicrosoftAuthRig();
         rig.Link(rig.Org().Id);
         await rig.RunAsync(Token());
-        Assert.Single(rig.Tracker.Successes);
-        Assert.Empty(rig.Tracker.Failures);
     }
 }

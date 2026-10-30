@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react'
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import PortalShiftDetailPage from './PortalShiftDetailPage'
@@ -259,6 +259,18 @@ describe('PortalShiftDetailPage', () => {
     expect(screen.getByText(/high support/i)).toBeInTheDocument()
   })
 
+  it('shows the office notes read-only under "From the office"', () => {
+    show(makeDetail({ notes: 'Bring the red bag.' }))
+    expect(screen.getByText('From the office')).toBeInTheDocument()
+    expect(screen.getByText('Bring the red bag.')).toBeInTheDocument()
+    expect(screen.queryByText('From the roster')).not.toBeInTheDocument()
+  })
+
+  it('hides the "From the office" block when the shift has no notes', () => {
+    show(makeDetail({ notes: null }))
+    expect(screen.queryByText('From the office')).not.toBeInTheDocument()
+  })
+
   it('shows a not-found message when the shift is a 404', () => {
     mockUsePortalShiftDetail.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: { response: { status: 404 } } })
     renderAt('shift-1')
@@ -291,6 +303,35 @@ describe('PortalShiftDetailPage', () => {
     show(makeDetail())
     fireEvent.click(screen.getByRole('button', { name: /start shift/i }))
     await waitFor(() => expect(startMutateAsync).toHaveBeenCalledWith({ id: 'shift-1', data: { geolocationDeclined: true } }))
+  })
+
+  it('fires Start once when tapped twice while the location is still being asked for', async () => {
+    const answers: Array<(pos: unknown) => void> = []
+    Object.defineProperty(global.navigator, 'geolocation', { configurable: true, value: { getCurrentPosition: (success: (pos: unknown) => void) => { answers.push(success) } } })
+    show(makeDetail())
+    const start = screen.getByRole('button', { name: /start shift/i })
+    fireEvent.click(start)
+    fireEvent.click(start)
+    expect(screen.getByRole('button', { name: /starting/i })).toBeDisabled()
+    // Answer every prompt that was raised: without the guard there would be two, and two Start calls.
+    answers.forEach(answer => answer({ coords: { latitude: -27.5, longitude: 153.02 } }))
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+    expect(startMutateAsync).toHaveBeenCalledTimes(1)
+  })
+
+  it('starts the shift as declined after 10 s when the browser never answers the location prompt', async () => {
+    vi.useFakeTimers()
+    try {
+      Object.defineProperty(global.navigator, 'geolocation', { configurable: true, value: { getCurrentPosition: () => {} } })
+      show(makeDetail())
+      fireEvent.click(screen.getByRole('button', { name: /start shift/i }))
+      expect(screen.getByRole('button', { name: /starting/i })).toBeDisabled()
+      await act(async () => { await vi.advanceTimersByTimeAsync(10_000) })
+      expect(startMutateAsync).toHaveBeenCalledWith({ id: 'shift-1', data: { geolocationDeclined: true } })
+      expect(screen.queryByRole('button', { name: /starting/i })).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('hides Start for a ReadOnly user and says why', () => {
@@ -1237,8 +1278,31 @@ describe('PortalShiftDetailPage: offline (SHAPE 3, 5)', () => {
     show(inProgress())
     expect(screen.getByText('Shift finished on this phone')).toBeInTheDocument()
     expect(screen.getAllByText(/sent to your coordinator when you.re back online/i).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/as soon as it goes through/i)).not.toBeInTheDocument()
     expect(screen.getAllByText('Waiting to send').length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: 'End shift' })).not.toBeInTheDocument()
+  })
+
+  const queued = (id: string, kind: string, extra: object) => ({
+    id, userId: 'u1', viewAsTenant: null, viewAsUser: null, shiftId: 'shift-1', kind, path: `/portal/shifts/shift-1/${kind}`, method: 'POST', body: {},
+    clientTime: '2026-08-17T17:00:00Z', createdAt: 1, status: 'waiting', label: { participant: 'Mia Chen', serviceDate: '2026-08-17', rostered: '9:00 am – 5:00 pm' }, ...extra,
+  })
+
+  it('a Finish that is still trying says it goes through as soon as it can, not when back online', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ id: 'u1' }))
+    localStorage.setItem('odip_offline:u1:queue', JSON.stringify([queued('f1', 'finish', { attempts: 5 })]))
+    show(inProgress())
+    expect(screen.getAllByText(/sent to your coordinator as soon as it goes through/i).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/when you.re back online/i)).not.toBeInTheDocument()
+    expect(screen.getAllByText('Still trying').length).toBeGreaterThan(0)
+  })
+
+  it('a routine reads Still trying when its earlier tick is stuck, even if a later untick is not', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ id: 'u1' }))
+    localStorage.setItem('odip_offline:u1:queue', JSON.stringify([queued('t1', 'tick', { target: 'r1', createdAt: 1, attempts: 5 }), queued('t2', 'untick', { target: 'r1', createdAt: 2 })]))
+    show(inProgress({ shiftRoutines: [{ id: 'r1', title: 'Morning routine', description: '', category: 'PersonalCare', isCritical: false, startTime: null, endTime: null, occursAt: '2026-08-17T09:00:00', afterMidnight: false, isChecked: false, checkedAt: null, checkedByName: null, fromTickSnapshot: false }] as never }))
+    expect(screen.getAllByText('Still trying').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Waiting to send')).not.toBeInTheDocument()
   })
 
   it('tells the worker when this phone\'s Finish reached a shift already submitted elsewhere', () => {

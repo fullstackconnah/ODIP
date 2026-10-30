@@ -179,6 +179,7 @@ public class DataExportWriterTests
         Assert.Contains("caregiver-submissions.csv leaves out TokenHash", readme);
         Assert.Contains("trip-documents.csv leaves out FilePath", readme);
         Assert.Contains("starts with =, +, -, @, a tab or a carriage return has a ' added in front", readme); // what CsvCell.Text guards, no more
+        Assert.Contains("A value that is only a + then digits and spaces, such as the phone number +61 412 345 678, has no ' added.", readme);
         Assert.Contains("  medication-administrations.csv: ScheduledAt", readme);
         Assert.Contains("  incidents.csv: IncidentDateTime", readme);
         Assert.DoesNotContain("  medication-administrations.csv: AdministeredAt", readme);

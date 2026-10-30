@@ -14,6 +14,14 @@ const detail = {
   handover: { isRead: false, readAt: null }, finishBlockers: [{ code: 'BREAK_RUNNING' }],
 } as unknown as PortalShiftDetailDto
 
+describe('applyQueuedNotes stuck', () => {
+  const note = (extra: Partial<QueueRecord>) => rec({ kind: 'note', body: { id: 'r1', body: 'hi' }, ...extra })
+  it('flags a queued note stuck from the fifth try', () => {
+    expect(applyQueuedNotes([], [note({ attempts: 5 })], 's1')[0]).toMatchObject({ waiting: true, stuck: true })
+    expect(applyQueuedNotes([], [note({ attempts: 4 })], 's1')[0]).toMatchObject({ waiting: true, stuck: false })
+  })
+})
+
 describe('applyQueued', () => {
   it('a queued start shows In progress with the tapped time as the start', () => {
     const out = applyQueued(detail, [rec({ body: { geolocationDeclined: true } })])

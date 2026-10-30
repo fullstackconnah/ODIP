@@ -7,6 +7,7 @@ import { formatRatio, plural } from '@/lib/format'
 import { credentialIssueCount, staffCredentials } from '@/lib/credentials'
 import { awaitsData, retryingAfterError } from '@/lib/queryPhase'
 import { localIsoDate } from '@/lib/dateOnly'
+import { houseEndingMessage } from '@/lib/agreementEnding'
 import { formatToday, greetingFor } from '@/lib/greeting'
 import { usePermissions } from '@/lib/permissions'
 import { isSetupHidden, setupCard } from '@/lib/organisationSetup'
@@ -384,7 +385,7 @@ export default function DashboardPage() {
                             {typeLabel && (
                               <p className="mb-0.5 text-xs font-semibold text-[var(--color-muted-foreground)]">{typeLabel}</p>
                             )}
-                            <p className="text-xs text-[var(--color-muted-foreground)]">{alert.message}</p>
+                            <p className="text-xs text-[var(--color-muted-foreground)]">{alert.type === 'agreement-ended' ? houseEndingMessage(alert.message) : alert.message}</p>
                             </div>
                             <span className="flex shrink-0 items-center gap-1 text-xs font-bold text-[var(--color-primary)]">
                                 View <ChevronRight className="h-3.5 w-3.5" />

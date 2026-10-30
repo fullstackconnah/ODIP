@@ -2,8 +2,8 @@ namespace Odip.Api.Services;
 
 /// <summary>
 /// Why <c>AuthController.Exchange</c> refused a sign-in, as a machine-readable code on the response (<c>ApiResponse.Code</c>), so the sign-in page can
-/// tell the person what to do instead of "login failed". The status never changes (401, or 429 for a locked-out client) and every refusal still
-/// spends from the failure budget; only the body says more.
+/// tell the person what to do instead of "login failed". The status never changes (a refusal is always 401; the 429 the sign-in page words as
+/// <see cref="LockedOut"/> is the "login" flood limiter's); only the body says more.
 ///
 /// Why each code is safe to say. The exchange decides in a fixed order, and that order is what keeps this from being an account-enumeration channel:
 /// <list type="number">
@@ -16,7 +16,7 @@ namespace Odip.Api.Services;
 /// <item>Only then does the exchange look at ODIP's own rows: <see cref="NoOdipAccount"/>, <see cref="Ambiguous"/>, <see cref="TenantInactive"/>.
 /// A token that got this far proves control of the mailbox, so these are shown only to the owner of the address, and only about their own address.</item>
 /// </list>
-/// <see cref="LockedOut"/> is per client address, not per account.
+/// <see cref="LockedOut"/> is no longer sent by the exchange (the failure counter was removed); the sign-in page still words it for any 429, which is now only the flood limiter.
 /// </summary>
 public static class ExchangeRefusal
 {
@@ -41,7 +41,7 @@ public static class ExchangeRefusal
     /// <summary>The user's organisation is inactive (or missing).</summary>
     public const string TenantInactive = "TenantInactive";
 
-    /// <summary>Too many failed attempts from this client (a 429 with a Retry-After header).</summary>
+    /// <summary>Too many sign-in requests from this client: the "login" flood limiter, 60 per 5 minutes (a 429 with a Retry-After header).</summary>
     public const string LockedOut = "LockedOut";
 
     /// <summary>The plain sentence that goes in <c>errors[0]</c>. The sign-in page words its own, from the code.</summary>

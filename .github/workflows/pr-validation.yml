@@ -208,6 +208,7 @@ jobs:
           JWT_SECRET: e2e-only-signing-key-0123456789-abcdefghij
           DEV_AUTH_ENABLED: 'true'
           ASPNETCORE_ENVIRONMENT: Production
+          DEV_AUTH_ALLOW_IN_PRODUCTION: 'true' # the API refuses DEV_AUTH_ENABLED in Production without this; this throwaway E2E host is the one exception
           ASPNETCORE_URLS: http://0.0.0.0:5000
           HolidaySync__FromYear: '2100'
         run: |

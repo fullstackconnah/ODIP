@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { BookOpen, HeartPulse, Phone } from 'lucide-react'
 import { useAcknowledgeHandover } from '@/api/hooks'
 import { useQueueRecords } from '@/api/hooks/portal'
+import { isStillTrying } from '@/lib/offline/queue'
 import { waitingKind } from '@/lib/offline/overlay'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
@@ -19,7 +20,7 @@ const hidpaFlags = (g: PortalAtAGlanceDto) => [g.hidpa.epilepsy && 'Epilepsy', g
 
 function Handover({ shift, canAct }: { shift: PortalShiftDetailDto; canAct: boolean }) {
   const ack = useAcknowledgeHandover()
-  const ackWaiting = !!waitingKind(useQueueRecords(), shift.id, 'ack')
+  const ackRec = waitingKind(useQueueRecords(), shift.id, 'ack')
   const qc = useQueryClient()
   const [error, setError] = useState<string | null>(null)
   const { handover, handoverTrail } = shift
@@ -59,7 +60,7 @@ function Handover({ shift, canAct }: { shift: PortalShiftDetailDto; canAct: bool
       {handover.requiresAcknowledgement && (handover.isRead ? (
         <p className="text-sm font-medium">
           Read{handover.readAt ? ` ${formatWithTimeZone(handover.readAt, shift.timeZoneId, { dateStyle: 'medium', timeStyle: 'short' })}` : ''}
-          {ackWaiting && <span className="whitespace-nowrap">&nbsp;&middot;&nbsp;<WaitingToSend /></span>}
+          {ackRec && <span className="whitespace-nowrap">&nbsp;&middot;&nbsp;<WaitingToSend stuck={isStillTrying(ackRec)} /></span>}
         </p>
       ) : canAct && (
         <Button variant="secondary" size="lg" onClick={markRead} disabled={ack.isPending}>

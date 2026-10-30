@@ -16,7 +16,7 @@ namespace Odip.Tests.Auth.Microsoft;
 public class LogoutTests
 {
     private static AuthController Controller(HttpContext http) => new(
-        null!, new ConfigurationBuilder().Build(), new Mock<ILogger<AuthController>>().Object, new Mock<ILoginAttemptTracker>().Object,
+        null!, new ConfigurationBuilder().Build(), new Mock<ILogger<AuthController>>().Object,
         new Mock<Odip.Domain.Interfaces.ICurrentTenant>().Object, new Mock<IFirebaseTokenVerifier>().Object)
     { ControllerContext = new ControllerContext { HttpContext = http } };
 

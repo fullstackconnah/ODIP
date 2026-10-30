@@ -290,7 +290,7 @@ export default function BookingsTab({ tripId, trip, bookings, participants, canW
               // The server's own words when it sent any (e.g. Enforce mode's "Participant is not ready for booking or rostering."),
               // the generic line only when it did not. The form above stays as the user left it.
               <p role="alert" className="text-sm text-[var(--color-destructive)]">
-                {extractErrorMessage(createBooking.error, 'Failed to create booking. Please try again.')}
+                {extractErrorMessage(createBooking.error, "Couldn't create this booking. Check your connection and try again.")}
               </p>
             )}
           </div>
