@@ -5,7 +5,7 @@ import { AlertTriangle, Armchair, Clock, ScrollText, WifiOff } from 'lucide-reac
 import { usePortalShiftDetail, useShiftNotes, useStartShift, useStartBreak, useEndBreak } from '@/api/hooks'
 import { useQueueRecords, savedAtFor } from '@/api/hooks/portal'
 import { waitingBreak, waitingKind } from '@/lib/offline/overlay'
-import { offlineQueue } from '@/lib/offline/queue'
+import { isStillTrying, offlineQueue } from '@/lib/offline/queue'
 import { savedLine } from '@/lib/offline/reasons'
 import { usePermissions } from '@/lib/permissions'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -228,9 +228,12 @@ export default function PortalShiftDetailPage() {
   const inProgress = shift.status === 'InProgress'
   const showBefore = shift.status === 'Published' || inProgress
   const running = shift.breaks.find(b => b.isRunning)
+  const runningRec = running ? waitingBreak(queued, shift.id, running.id) : undefined
   const startedWaiting = waitingKind(queued, shift.id, 'start')
   // A Finish saved on this phone: the shift reads as finished, and the bar steps aside until it is sent (SHAPE 3d).
-  const finishWaiting = !!waitingKind(queued, shift.id, 'finish')
+  const finishRec = waitingKind(queued, shift.id, 'finish')
+  const finishWaiting = !!finishRec
+  const finishStuck = !!finishRec && isStillTrying(finishRec)
   const alreadySubmitted = offlineQueue.wasAlreadySubmitted(shift.id)
   const savedAt = online ? null : savedAtFor(`detail:${shift.id}`)
   const h = shift.handover
@@ -252,7 +255,7 @@ export default function PortalShiftDetailPage() {
     <>
       {finishWaiting && (
         <Callout tone="info" polite title="Shift finished on this phone" actions={<Button to="/portal" variant="secondary" size="lg">Back to my shifts</Button>}>
-          It&rsquo;s sent to your coordinator when you&rsquo;re back online.&nbsp;<WaitingToSend />
+          {finishStuck ? <>It&rsquo;s sent to your coordinator as soon as it goes through.</> : <>It&rsquo;s sent to your coordinator when you&rsquo;re back online.</>}&nbsp;<WaitingToSend stuck={finishStuck} />
         </Callout>
       )}
       {alreadySubmitted && (
@@ -391,7 +394,7 @@ export default function PortalShiftDetailPage() {
   // No bottom padding on a phone: the sticky bar, then the bottom nav's own padding, end the page.
   return (
     <div className="space-y-3 lg:space-y-4 animate-fade-in lg:pb-4">
-      <AnnouncementRegion message={finishWaiting ? "Shift finished on this phone. It's sent to your coordinator when you're back online." : submitted ? 'Shift submitted. A coordinator will review it.' : ''} />
+      <AnnouncementRegion message={finishWaiting ? `Shift finished on this phone. It's sent to your coordinator ${finishStuck ? 'as soon as it goes through' : "when you're back online"}.` : submitted ? 'Shift submitted. A coordinator will review it.' : ''} />
       <BackButton to="/portal" label="my shifts" variant="link" className="py-3" />
       <PageHeader
         variant="detail"
@@ -403,8 +406,8 @@ export default function PortalShiftDetailPage() {
             {`${formatShiftTimeRange(shift.startTime, shift.endTime)}${shift.endsNextDay ? ' (+1 day)' : ''}`}
             {shift.ratio !== 'OneToOne' && (RATIO_LABELS[shift.ratio] ?? shift.ratio)}
             {shift.nightType !== 'None' && `Overnight: ${shift.nightType}`}
-            {startedWaiting && <>Started {clock(startedWaiting.clientTime, tz)}&nbsp;<WaitingToSend /></>}
-            {running && <>{`On a break since ${clock(running.startedAt, tz)}`}{waitingBreak(queued, shift.id, running.id) && <>&nbsp;<WaitingToSend /></>}</>}
+            {startedWaiting && <>Started {clock(startedWaiting.clientTime, tz)}&nbsp;<WaitingToSend stuck={isStillTrying(startedWaiting)} /></>}
+            {running && <>{`On a break since ${clock(running.startedAt, tz)}`}{runningRec && <>&nbsp;<WaitingToSend stuck={isStillTrying(runningRec)} /></>}</>}
           </PageHeaderMeta>
         }
       />

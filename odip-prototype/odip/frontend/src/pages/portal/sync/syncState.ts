@@ -1,13 +1,13 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { useQueueRecords } from '@/api/hooks/portal'
-import { offlineQueue } from '@/lib/offline/queue'
+import { isStillTrying, offlineQueue } from '@/lib/offline/queue'
 
 /** How long "All sent" stays before the row leaves (SHAPE 4b). */
 const ALL_SENT_MS = 4000
 
 export type SyncSummary =
   | { state: 'idle' }
-  | { state: 'waiting'; waiting: number; stillOffline: boolean }
+  | { state: 'waiting'; waiting: number; stillOffline: boolean; stuck: number }
   | { state: 'sending'; waiting: number }
   | { state: 'allSent'; at: number }
   | { state: 'notSent'; notSent: number; waiting: number }
@@ -29,7 +29,7 @@ export function useSyncSummary(): SyncSummary {
   }, [sync.allSentAt])
   if (sync.sending) return { state: 'sending', waiting }
   if (notSent > 0) return { state: 'notSent', notSent, waiting }
-  if (waiting > 0) return { state: 'waiting', waiting, stillOffline: sync.stillOffline }
+  if (waiting > 0) return { state: 'waiting', waiting, stillOffline: sync.stillOffline, stuck: records.filter(isStillTrying).length }
   if (showAllSent && sync.allSentAt !== null) return { state: 'allSent', at: sync.allSentAt }
   return { state: 'idle' }
 }

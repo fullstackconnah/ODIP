@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Flag } from 'lucide-react'
 import { useDeleteBreak, useEditBreak, useEndBreak, useShiftNotes } from '@/api/hooks'
 import { useQueueRecords } from '@/api/hooks/portal'
+import { isStillTrying } from '@/lib/offline/queue'
 import { waitingBreak } from '@/lib/offline/overlay'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
@@ -94,7 +95,7 @@ export function BreakRow({ shift, brk, online }: { shift: PortalShiftDetailDto; 
         </div>
       ) : (
         <div className="flex items-center justify-between gap-2 flex-wrap">
-          <p>{range}, {brk.minutes} min{brk.isRunning ? ' so far' : ''}{brk.editedAt ? ' (edited)' : ''}{waiting && <>&nbsp;<WaitingToSend /></>}</p>
+          <p>{range}, {brk.minutes} min{brk.isRunning ? ' so far' : ''}{brk.editedAt ? ' (edited)' : ''}{waiting && <>&nbsp;<WaitingToSend stuck={isStillTrying(waiting)} /></>}</p>
           <div className="flex gap-2">
             {brk.isRunning && <Button id={`brk-end-now-${brk.id}`} size="lg" onClick={endNow} disabled={end.isPending}>End break</Button>}
             <Button id={`brk-edit-${brk.id}`} size="lg" variant="secondary" onClick={open} disabled={locked}>Edit</Button>

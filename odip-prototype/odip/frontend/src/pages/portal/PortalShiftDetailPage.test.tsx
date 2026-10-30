@@ -1249,8 +1249,31 @@ describe('PortalShiftDetailPage: offline (SHAPE 3, 5)', () => {
     show(inProgress())
     expect(screen.getByText('Shift finished on this phone')).toBeInTheDocument()
     expect(screen.getAllByText(/sent to your coordinator when you.re back online/i).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/as soon as it goes through/i)).not.toBeInTheDocument()
     expect(screen.getAllByText('Waiting to send').length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: 'End shift' })).not.toBeInTheDocument()
+  })
+
+  const queued = (id: string, kind: string, extra: object) => ({
+    id, userId: 'u1', viewAsTenant: null, viewAsUser: null, shiftId: 'shift-1', kind, path: `/portal/shifts/shift-1/${kind}`, method: 'POST', body: {},
+    clientTime: '2026-08-17T17:00:00Z', createdAt: 1, status: 'waiting', label: { participant: 'Mia Chen', serviceDate: '2026-08-17', rostered: '9:00 am – 5:00 pm' }, ...extra,
+  })
+
+  it('a Finish that is still trying says it goes through as soon as it can, not when back online', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ id: 'u1' }))
+    localStorage.setItem('odip_offline:u1:queue', JSON.stringify([queued('f1', 'finish', { attempts: 5 })]))
+    show(inProgress())
+    expect(screen.getAllByText(/sent to your coordinator as soon as it goes through/i).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/when you.re back online/i)).not.toBeInTheDocument()
+    expect(screen.getAllByText('Still trying').length).toBeGreaterThan(0)
+  })
+
+  it('a routine reads Still trying when its earlier tick is stuck, even if a later untick is not', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ id: 'u1' }))
+    localStorage.setItem('odip_offline:u1:queue', JSON.stringify([queued('t1', 'tick', { target: 'r1', createdAt: 1, attempts: 5 }), queued('t2', 'untick', { target: 'r1', createdAt: 2 })]))
+    show(inProgress({ shiftRoutines: [{ id: 'r1', title: 'Morning routine', description: '', category: 'PersonalCare', isCritical: false, startTime: null, endTime: null, occursAt: '2026-08-17T09:00:00', afterMidnight: false, isChecked: false, checkedAt: null, checkedByName: null, fromTickSnapshot: false }] as never }))
+    expect(screen.getAllByText('Still trying').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Waiting to send')).not.toBeInTheDocument()
   })
 
   it('tells the worker when this phone\'s Finish reached a shift already submitted elsewhere', () => {
