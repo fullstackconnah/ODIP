@@ -86,6 +86,7 @@ function create({ respond, failEnvelope, FILE }) {
       batchRow('b-built', 'BPR261030001.csv', 'Built', 0),
       batchRow('b-uploaded', 'BPR261028001.csv', 'Uploaded', 2, { uploadedAt: daysAgoInstant(2), uploadedByName: 'Sam Lee' }),
       batchRow('b-results', 'BPR261020001.csv', 'ResultsImported', 10, { uploadedAt: daysAgoInstant(10), uploadedByName: 'Jo Carter', resultsImportedAt: daysAgoInstant(8) }),
+      batchRow('b-partial', 'BPR261015001.csv', 'ResultsImported', 15, { uploadedAt: daysAgoInstant(15), uploadedByName: 'Jo Carter', resultsImportedAt: daysAgoInstant(13) }),
       batchRow('b-paid', 'BPR261001001.csv', 'ResultsImported', 29, { uploadedAt: daysAgoInstant(29), uploadedByName: 'Jo Carter', resultsImportedAt: daysAgoInstant(27) }),
       batchRow('b-discarded', 'BPR260930001.csv', 'Discarded', 30, { discardedAt: daysAgoInstant(30) }),
     ]
@@ -93,6 +94,7 @@ function create({ respond, failEnvelope, FILE }) {
       'b-built': batchLines('b-built', 4, () => 'Pending'),
       'b-uploaded': batchLines('b-uploaded', 120, () => 'Pending'),
       'b-results': batchLines('b-results', 12, (i) => (i >= 6 ? 'Rejected' : 'Successful')),
+      'b-partial': batchLines('b-partial', 5, (i) => (i < 2 ? 'Rejected' : 'Pending')),
       'b-paid': batchLines('b-paid', 3, () => 'Successful'),
       'b-discarded': batchLines('b-discarded', 2, () => 'Withdrawn'),
     }
@@ -100,7 +102,7 @@ function create({ respond, failEnvelope, FILE }) {
     // The server sends the SHAPE §6 hint by code; a code it does not know sends none.
     const hints = { V17: "Their budget doesn't cover this line. Check their plan with them or their plan manager.", C38: "Lower the unit price to the price guide limit for that date." }
     const codes = [['V17', true, 'Not enough funding left in the budget.'], ['V17', true, 'Not enough funding left in the budget.'], ['V17', true, 'Not enough funding left.'],
-      ['C38', false, 'Unit price exceeds the price limit.'], ['C38', false, 'Unit price exceeds the price limit.'], ['X99', false, 'Unexpected error.']]
+      ['C38', false, 'Unit price exceeds the price limit.'], ['C38', false, 'Unit price exceeds the price limit.'], ['X99', true, 'Unexpected error.']]
     rejected = lines['b-results'].slice(6).map((bl, i) => {
       const [code, needsDecision, message] = codes[i]
       Object.assign(bl, { rejectCode: code, rejectMessage: message, needsDecision })

@@ -33,8 +33,8 @@ export function stepOf(b: BatchDto): FileStep {
   return b.successful > 0 && b.paid >= b.successful ? 'Paid' : 'Results in'
 }
 
-/** Finished: discarded, or results in with every successful line paid. A file with no successful lines has nothing to pay (0 of 0), so it is finished at Results in. */
-export const isUnfinished = (b: BatchDto) => b.status !== 'Discarded' && !(b.status === 'ResultsImported' && b.paid >= b.successful)
+/** Finished: discarded, or results in with every successful line paid and none still pending. A file with no successful lines has nothing to pay (0 of 0), so it is finished at Results in, unless lines are still waiting on the NDIA. */
+export const isUnfinished = (b: BatchDto) => b.status !== 'Discarded' && !(b.status === 'ResultsImported' && b.paid >= b.successful && b.pending === 0)
 
 export const NEXT_TEXT: Record<FileStep, string> = {
   Built: 'Upload it in the portal',

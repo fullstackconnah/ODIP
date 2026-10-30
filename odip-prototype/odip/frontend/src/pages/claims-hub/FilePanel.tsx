@@ -287,7 +287,7 @@ function ImportSummary({ summary, fileName, onReviewRejected }: { summary: Resul
 function PaidStep({ batch, announce, onReviewRejected }: { batch: BatchDetailDto; announce: (m: string) => void; onReviewRejected: () => void }) {
   const [open, setOpen] = useState(false)
   const unpaid = batch.lines.filter(l => l.outcome === 'Successful' && l.paidAmount == null)
-  const nothingToPay = batch.successful === 0
+  const nothingToPay = batch.successful === 0 && batch.pending === 0
   return (
     <Card title={nothingToPay ? 'Nothing to pay' : 'Record the payment'}>
       <p className="text-sm">{nothingToPay ? 'The NDIA rejected every line, so there is no money to record.' : 'The NDIA pays successful lines in its next payment run. When the money is in, record it here.'}</p>
@@ -311,6 +311,7 @@ function MarkPaidModal({ batch, lines, onClose, announce }: { batch: BatchDetail
   const [serverError, setServerError] = useState<string | null>(null)
   const paid = useMarkBatchPaid()
   const overBy = (l: BatchLineDto) => (amounts[l.batchLineId] ?? 0) > (l.resultAmount ?? l.amount)
+  // A paid line needs a real amount: a blank or $0 entry is more likely a slip than a payment.
   const missing = (l: BatchLineDto) => { const v = amounts[l.batchLineId]; return Number.isNaN(v) || v <= 0 }
   const invalid = lines.some(l => overBy(l) || missing(l))
   const submit = () => {

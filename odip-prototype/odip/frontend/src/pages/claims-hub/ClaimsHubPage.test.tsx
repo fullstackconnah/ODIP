@@ -271,13 +271,28 @@ describe('ClaimsHubPage: decisions and errors', () => {
     renderPage('/claims?tab=action')
 
     const panel = within(screen.getByTestId('claims-panel-action'))
-    expect(panel.getAllByRole('heading', { level: 3 }).map(h => h.textContent)).toEqual(['Other codes', 'Other codes'])
+    expect(panel.getAllByRole('heading', { level: 3 }).map(h => h.textContent)).toEqual(['Other codes: needs a decision', 'Other codes'])
     expect(panel.getAllByRole('button', { name: /^Don't claim: / })).toHaveLength(1)
     expect(panel.getAllByRole('link', { name: /^Fix: / })).toHaveLength(1)
     await user.click(panel.getByText('Send again…'))
     expect(m.fetchClaimFile).not.toHaveBeenCalled()
     await user.click(screen.getByRole('button', { name: 'Send again' }))
     expect(m.fetchClaimFile).toHaveBeenCalledWith('post', '/claim-batches', { lineIds: ['x9'], confirmedLineIds: ['x9'] }, expect.any(String), expect.any(String))
+  })
+
+  it("does not show an earlier line's refused send inside a newly opened decision dialog", async () => {
+    const user = userEvent.setup()
+    m.lines.mockReturnValue(query(hub({ rejected: [
+      rejected({ batchLineId: 'f1', lineId: 'x1', rejectCode: 'C38', needsDecision: false, participantName: 'Fix Fran', claimReference: 'TC-F' }),
+      rejected({ batchLineId: 'd1', lineId: 'x2', participantName: 'Dec Dan', claimReference: 'TC-D' }),
+    ] })))
+    m.fetchClaimFile.mockRejectedValue(new ClaimFileError('Fran line refused.', 409, []))
+    renderPage('/claims?tab=action')
+
+    await user.click(screen.getByRole('button', { name: 'Send again: Fix Fran, TC-F' }))
+    expect(await screen.findByText('Fran line refused.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Send again: Dec Dan, TC-D' }))
+    expect(within(screen.getByRole('alertdialog')).queryByText(/Fran line refused/)).toBeNull()
   })
 
   it("shows a refused Send again inside the open dialog, with the first failed line's message", async () => {
@@ -359,6 +374,20 @@ describe('ClaimsHubPage: file panel', () => {
     cleanup()
     renderPage('/claims?file=b-1')
     expect(screen.queryByRole('button', { name: /Mark 0 lines as paid/ })).toBeNull()
+  })
+
+  it('keeps a file with pending lines unfinished and says Record the payment, not Nothing to pay', () => {
+    m.batches.mockReturnValue(query([batch({ status: 'ResultsImported', successful: 0, rejected: 2, pending: 3, paid: 0 })]))
+    m.batch.mockReturnValue(query(resultsIn({ successful: 0, rejected: 2, pending: 3 })))
+    renderPage('/claims?tab=files')
+
+    expect(screen.getByRole('tab', { name: /^Files/ })).toHaveTextContent(/\d/)
+    expect(screen.getByTestId('claims-strip')).toBeInTheDocument()
+
+    cleanup()
+    renderPage('/claims?file=b-1')
+    expect(screen.getByText('Record the payment')).toBeInTheDocument()
+    expect(screen.queryByText('Nothing to pay')).toBeNull()
   })
 
   it('holds the upload confirm and offers Try again when the invoice check fails', async () => {

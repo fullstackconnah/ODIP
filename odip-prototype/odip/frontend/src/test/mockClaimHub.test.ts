@@ -38,7 +38,7 @@ describe.skipIf(!existsSync(MODULE))('mock claims hub', () => {
     expect(byAge).toMatchObject({ 59: 'none', 60: 'amber', 80: 'red', 90: 'red', 91: 'over90' })
     expect(lines.ready.some(l => l.problems.length === 2)).toBe(true)
     expect(new Set(lines.rejected.map(l => l.needsDecision))).toEqual(new Set([true, false]))
-    expect((get('claim-batches')() as BatchDto[]).map(b => b.status)).toEqual(['Built', 'Uploaded', 'ResultsImported', 'ResultsImported', 'Discarded'])
+    expect((get('claim-batches')() as BatchDto[]).map(b => b.status)).toEqual(['Built', 'Uploaded', 'ResultsImported', 'ResultsImported', 'ResultsImported', 'Discarded'])
   })
 
   it('builds a file from clean lines as a CSV naming itself and its batch, and refuses a blocked line with its problem', () => {

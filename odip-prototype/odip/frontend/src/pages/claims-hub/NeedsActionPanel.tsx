@@ -35,7 +35,7 @@ function groupsOf(lines: RejectedLineDto[]): Group[] {
     const known = l.rejectCode in CODE_TITLES
     // An unknown code still splits by the server's own per-line answer.
     const code = known ? l.rejectCode : l.needsDecision ? 'Other-decision' : 'Other'
-    const g = map.get(code) ?? map.set(code, { code, known, title: known ? CODE_TITLES[code] : 'Other codes', hint: known ? l.hint : OTHER_HINT, decision: l.needsDecision, lines: [] }).get(code)!
+    const g = map.get(code) ?? map.set(code, { code, known, title: known ? CODE_TITLES[code] : l.needsDecision ? 'Other codes: needs a decision' : 'Other codes', hint: known ? l.hint : OTHER_HINT, decision: l.needsDecision, lines: [] }).get(code)!
     g.lines.push(l)
   }
   // Decisions first, then the fixable groups; the biggest group first in each.
@@ -115,7 +115,7 @@ export function NeedsActionPanel({ lines, loading, failed, onRetry, fileFilter, 
               <span className="inline-flex gap-2 whitespace-nowrap max-md:w-full max-md:[&>*]:min-h-11 max-md:[&>*]:flex-1">
                 {g.decision ? (
                   <>
-                    <Button variant="secondary" size="sm" aria-label={`Send again: ${l.participantName}, ${l.claimReference}`} onClick={() => setConfirmSend(l)}>Send again…</Button>
+                    <Button variant="secondary" size="sm" aria-label={`Send again: ${l.participantName}, ${l.claimReference}`} onClick={() => { setError(null); setConfirmSend(l) }}>Send again…</Button>
                     <Button variant="ghost-danger" size="sm" aria-label={`Don't claim: ${l.participantName}, ${l.claimReference}`} onClick={() => { dismiss.reset(); setConfirmDrop(l) }}>Don't claim</Button>
                   </>
                 ) : (
