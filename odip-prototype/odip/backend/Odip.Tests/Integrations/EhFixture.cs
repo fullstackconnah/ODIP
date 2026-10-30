@@ -1,6 +1,7 @@
 using System.Net;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Odip.Domain.Entities;
@@ -25,8 +26,8 @@ internal static class EhFixture
     public static FakeClock Clock() => FakeClock.AtUtc(2026, 10, 14, 1, 0);
 
     /// <summary>A context scoped to the organisation on the named InMemory database, with the audit interceptor and no HttpContext, as in a background run.</summary>
-    public static OdipDbContext Db(string name, Guid tenantId) =>
-        new(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(name).AddInterceptors(new AuditInterceptor(new HttpContextAccessor())).Options,
+    public static OdipDbContext Db(string name, Guid tenantId, params IInterceptor[] extra) =>
+        new(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(name).AddInterceptors(new AuditInterceptor(new HttpContextAccessor())).AddInterceptors(extra).Options,
             ImportTestSupport.Tenant(tenantId));
 
     public static User Staff(Guid tenantId, string first, string last, string email, string? payrollId = null, UserRole role = UserRole.SupportWorker, DateTime? lastLogin = null) => new()

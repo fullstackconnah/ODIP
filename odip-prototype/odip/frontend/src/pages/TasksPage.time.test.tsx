@@ -14,7 +14,8 @@ const { mockUpdateMutate, mockUseTasks } = vi.hoisted(() => ({
 
 vi.mock('@/api/hooks', () => ({
   useTasks: mockUseTasks,
-  useUpdateTask: () => ({ mutate: mockUpdateMutate }),
+  useUpdateTask: () => ({ mutate: vi.fn() }),
+  useSetTaskStatus: () => ({ mutate: mockUpdateMutate }),
   useDeleteTask: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
 }))
 
@@ -50,7 +51,7 @@ describe.each([
     await user.click(screen.getByRole('button', { name: 'Mark complete' }))
 
     expect(mockUpdateMutate).toHaveBeenCalledWith(
-      { id: 't1', data: expect.objectContaining({ status: 'Completed', completedDate: expectedDate }) },
+      { id: 't1', status: 'Completed', completedDate: expectedDate },
       expect.anything(),
     )
   })
@@ -66,7 +67,7 @@ describe.each([
     await user.click(await screen.findByText('Completed'))
 
     expect(mockUpdateMutate).toHaveBeenCalledWith(
-      { id: 't1', data: expect.objectContaining({ status: 'Completed', completedDate: expectedDate }) },
+      { id: 't1', status: 'Completed', completedDate: expectedDate },
       expect.anything(),
     )
   })
