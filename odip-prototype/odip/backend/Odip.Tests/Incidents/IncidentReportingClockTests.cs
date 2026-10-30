@@ -98,6 +98,7 @@ public class IncidentReportingClockTests
         var tasks = await db.BookingTasks.ToListAsync();
         Assert.Equal(new DateOnly(2026, 11, 3), Assert.Single(tasks, t => t.TaskType == TaskType.IncidentQscReport).DueDate);
         Assert.Equal(new DateOnly(2026, 11, 9), Assert.Single(tasks, t => t.TaskType == TaskType.IncidentCommissionDetailedReport).DueDate);
+        Assert.All(tasks, t => Assert.Equal(reporter.TenantId, t.TenantId));
     }
 
     private static UpdateIncidentDto UpdateDto(IncidentReport i) => new()
@@ -255,5 +256,85 @@ public class IncidentReportingClockTests
         Assert.Equal(Odip.Infrastructure.Services.ProviderTimeZoneResolver.FromState("WA").Id, detail.TimeZoneId);
         Assert.Equal(created.NotifyDueAt, detail.NotifyDueAt);
         Assert.Equal(ReportableClass.Within24h, detail.ReportableClass);
+    }
+
+    [Fact]
+    public async Task Update_ReportedAt_DerivesOnTimeOrLate_InTheProviderZone()
+    {
+        var (db, controller, reporter) = Arrange();
+        using var _d = db;
+        var created = await CreateCriticalAsync(db, controller, reporter.Id);
+        // Aware Friday 30 Oct 09:00 in Sydney, so the 24-hour notify is due Saturday 31 Oct 09:00 in Sydney (22:00 UTC on the 30th).
+        var aware = new DateTime(2026, 10, 30, 9, 0, 0);
+
+        await controller.Update(created.Id, UpdateDto(created) with { AwareAtLocal = aware, QscReportedAt = new DateTime(2026, 10, 31, 8, 30, 0) }, CancellationToken.None);
+        Assert.Equal(QscReportingStatus.ReportedWithin24h, (await db.IncidentReports.SingleAsync()).QscReportingStatus);
+
+        await controller.Update(created.Id, UpdateDto(created) with { AwareAtLocal = aware, QscReportedAt = new DateTime(2026, 10, 31, 9, 30, 0) }, CancellationToken.None);
+        Assert.Equal(QscReportingStatus.ReportedLate, (await db.IncidentReports.SingleAsync()).QscReportingStatus);
+    }
+
+    [Theory]
+    [InlineData(ReportableClass.None, true, true, 0, QscReportingStatus.NotRequired)]
+    [InlineData(ReportableClass.Within24h, false, true, 0, QscReportingStatus.Required)]
+    [InlineData(ReportableClass.Within24h, true, true, 0, QscReportingStatus.ReportedWithin24h)]
+    [InlineData(ReportableClass.Within24h, true, true, 1, QscReportingStatus.ReportedLate)]
+    [InlineData(ReportableClass.Within24h, true, false, 0, QscReportingStatus.ReportedLate)]
+    public void DeriveStatus_FollowsClassAndReportDate(ReportableClass reportableClass, bool reported, bool hasDue, long ticksAfterDue, QscReportingStatus expected)
+    {
+        var due = new DateTime(2026, 10, 30, 22, 0, 0, DateTimeKind.Utc);
+        Assert.Equal(expected, QscReporting.DeriveStatus(reportableClass, reported ? due.AddTicks(ticksAfterDue) : null, hasDue ? due : null));
+    }
+
+    private static async Task<IncidentReport> AddLegacyReportableAsync(OdipDbContext db, User reporter, IncidentStatus status, DateTime? detailedDue)
+    {
+        var row = new IncidentReport
+        {
+            Id = Guid.NewGuid(), TenantId = reporter.TenantId, ReportedByUserId = reporter.Id, IncidentType = IncidentType.Abuse, Severity = IncidentSeverity.High,
+            Status = status, Title = "Legacy", Description = "What happened.", IncidentDateTime = Now.UtcDateTime.AddDays(-2),
+            CreatedAt = Now.UtcDateTime.AddDays(-2), QscReportingStatus = QscReportingStatus.ReportedWithin24h, IsActive = true,
+            DetailedReportDueAt = detailedDue,
+        };
+        db.IncidentReports.Add(row);
+        await db.SaveChangesAsync();
+        return row;
+    }
+
+    [Fact]
+    public async Task Update_LegacyRowWithoutADetailedDue_RaisesNoFiveDayTask_ButFillsTheDue()
+    {
+        var (db, controller, reporter) = Arrange();
+        using var _d = db;
+        var legacy = await AddLegacyReportableAsync(db, reporter, IncidentStatus.Submitted, null);
+
+        await controller.Update(legacy.Id, UpdateDto(legacy) with { ReviewNotes = "Looked at it." }, CancellationToken.None);
+
+        Assert.NotNull((await db.IncidentReports.SingleAsync()).DetailedReportDueAt);
+        Assert.DoesNotContain(await db.BookingTasks.ToListAsync(), t => t.TaskType == TaskType.IncidentCommissionDetailedReport);
+    }
+
+    [Fact]
+    public async Task Update_ClosedIncident_RaisesNoFiveDayTask()
+    {
+        var (db, controller, reporter) = Arrange();
+        using var _d = db;
+        var closed = await AddLegacyReportableAsync(db, reporter, IncidentStatus.Closed, Now.UtcDateTime.AddDays(-1));
+
+        await controller.Update(closed.Id, UpdateDto(closed) with { Status = IncidentStatus.Closed }, CancellationToken.None);
+
+        Assert.DoesNotContain(await db.BookingTasks.ToListAsync(), t => t.TaskType == TaskType.IncidentCommissionDetailedReport);
+    }
+
+    [Fact]
+    public async Task Update_ClassChangedToWithin24h_RaisesTheFiveDayTask()
+    {
+        var (db, controller, reporter) = Arrange();
+        using var _d = db;
+        await controller.Create(Dto(reporter.Id, IncidentSeverity.Medium), CancellationToken.None);
+        var created = await db.IncidentReports.SingleAsync();
+
+        await controller.Update(created.Id, UpdateDto(created) with { ReportableClass = ReportableClass.Within24h, ReportableClassReason = "Reportable after review." }, CancellationToken.None);
+
+        Assert.Single(await db.BookingTasks.ToListAsync(), t => t.TaskType == TaskType.IncidentCommissionDetailedReport);
     }
 }
