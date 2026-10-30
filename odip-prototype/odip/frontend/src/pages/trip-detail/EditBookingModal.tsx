@@ -227,7 +227,7 @@ export function EditBookingModal({ booking, onClose, onSaved }: { booking: Booki
 
           {/* Error */}
           {updateBooking.isError && (
-            <p className="text-sm text-[var(--color-destructive)]">Failed to update booking. Please try again.</p>
+            <p className="text-sm text-[var(--color-destructive)]">Couldn't update this booking. Check your connection and try again.</p>
           )}
         </div>
       )}

@@ -157,7 +157,7 @@ export default function StaffTab({ tripId, trip, staff, canWrite }: StaffTabProp
           setAddFindings(serverFindings)
           if (getRosterGate(serverFindings).needsReason && !addOverrideReason.trim()) setAddReasonRequired(true)
         } else {
-          setAddError('Failed to add staff. Please try again.')
+          setAddError("Couldn't add this staff member. Check your connection and try again.")
         }
       },
     })
@@ -237,7 +237,7 @@ export default function StaffTab({ tripId, trip, staff, canWrite }: StaffTabProp
           setEditFindings(serverFindings)
           if (getRosterGate(serverFindings).needsReason && !editOverrideReason.trim()) setEditReasonRequired(true)
         } else {
-          setEditError('Failed to update assignment. Please try again.')
+          setEditError("Couldn't update this assignment. Check your connection and try again.")
         }
       },
     })

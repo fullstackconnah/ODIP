@@ -482,7 +482,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
 
             {/* Error */}
             {(createReservation.isError || createAccommodation.isError) && (
-              <p className="text-sm text-[var(--color-destructive)]">Failed to add reservation. Please try again.</p>
+              <p className="text-sm text-[var(--color-destructive)]">Couldn't add this reservation. Check your connection and try again.</p>
             )}
           </div>
         </Modal>
@@ -557,7 +557,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
 
             {/* Error */}
             {updateReservation.isError && (
-              <p className="text-sm text-[var(--color-destructive)]">Failed to update reservation. Please try again.</p>
+              <p className="text-sm text-[var(--color-destructive)]">Couldn't update this reservation. Check your connection and try again.</p>
             )}
           </div>
         </Modal>

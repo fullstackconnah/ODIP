@@ -102,7 +102,7 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
             setFindings(serverFindings)
             if (getRosterGate(serverFindings).needsReason && !overrideReason.trim()) setReasonRequired(true)
           } else {
-            setAssignError('Failed to assign vehicle. Please try again.')
+            setAssignError("Couldn't assign this vehicle. Check your connection and try again.")
           }
         },
       }
@@ -305,7 +305,7 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
             </div>
 
             {createVehicle.isError && (
-              <p className={`text-sm text-[var(--color-destructive)] ${modalSpan.full}`}>Failed to create vehicle. Please try again.</p>
+              <p className={`text-sm text-[var(--color-destructive)] ${modalSpan.full}`}>Couldn't create this vehicle. Check your connection and try again.</p>
             )}
             {newVehicleId && !createAssignment.isPending && (
               <p className={`text-sm text-[var(--color-destructive)] ${modalSpan.full}`}>Vehicle created. Assigning it to the trip failed: try again.</p>

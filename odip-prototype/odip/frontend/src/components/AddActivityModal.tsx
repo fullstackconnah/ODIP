@@ -223,7 +223,7 @@ export default function AddActivityModal({ tripDayId, editingActivity, eventTemp
         </div>
 
         {(createActivity.isError || updateActivity.isError) && (
-          <p className="mt-3 text-sm text-[var(--color-destructive)]">Failed to save activity. Please try again.</p>
+          <p className="mt-3 text-sm text-[var(--color-destructive)]">Couldn't save this activity. Check your connection and try again.</p>
         )}
 
     </Modal>

@@ -124,7 +124,7 @@ describe('AddVehicleModal — Select Existing live conflict gate (trip-side pari
     await user.click(screen.getByRole('button', { name: /assign vehicle/i }))
 
     expect(await screen.findByText('Seat overflow (server)')).toBeInTheDocument()
-    expect(screen.queryByText(/Failed to assign vehicle\. Please try again\./)).toBeNull()
+    expect(screen.queryByText(/Couldn't assign this vehicle/)).toBeNull()
   })
 
   it('renders no reason field and an enabled submit button when no findings are present', async () => {
