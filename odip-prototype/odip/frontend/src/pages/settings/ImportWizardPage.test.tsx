@@ -333,6 +333,20 @@ describe('ImportWizardPage', () => {
       expect(screen.getByText(/Showing 1-50 of 60/)).toBeInTheDocument()
     })
 
+    it('scrolls the table into view on a page change, not on first render', async () => {
+      const scrollIntoView = vi.fn()
+      Element.prototype.scrollIntoView = scrollIntoView
+      try {
+        await toPreview(120)
+        expect(scrollIntoView).not.toHaveBeenCalled()
+        await userEvent.click(screen.getByRole('button', { name: 'Next page' }))
+        expect(scrollIntoView).toHaveBeenCalledTimes(1)
+        expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start' })
+      } finally {
+        delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView
+      }
+    })
+
     it('shows no pager for 50 rows or fewer', async () => {
       await toPreview(10)
       expect(screen.queryByRole('button', { name: 'Next page' })).not.toBeInTheDocument()

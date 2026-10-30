@@ -75,6 +75,7 @@ const ROWS_PER_PAGE = 50
 /** The rows of a preview or a result: what each will do, and why. Paged client-side (a file can hold 2,000 rows); callers key it on the filter so a switch starts at page 1. */
 function RowsTable({ rows }: { rows: ImportRowDto[] }) {
   const [page, setPage] = useState(1)
+  const top = useRef<HTMLDivElement>(null)
   const columns: Column<ImportRowDto>[] = [
     // Name first, so it pins and a sideways-scrolled row is never anonymous; the row number finds it in the spreadsheet.
     { key: 'name', header: 'Name', mobile: 'primary' },
@@ -97,11 +98,14 @@ function RowsTable({ rows }: { rows: ImportRowDto[] }) {
     },
   ]
   return (
-    <DataTable
-      data={rows.slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE)} columns={columns} keyField="rowNumber" emptyMessage="No rows with this status."
-      // DataTable draws no pager for one page of rows.
-      pagination={{ page, pageSize: ROWS_PER_PAGE, totalCount: rows.length, onPageChange: setPage }}
-    />
+    // scroll-mt-20 clears the fixed header; the scroll is instant so reduced motion holds. Without it a phone user stays at the pager, thousands of px below the new page's first row.
+    <div ref={top} className="scroll-mt-20">
+      <DataTable
+        data={rows.slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE)} columns={columns} keyField="rowNumber" emptyMessage="No rows with this status."
+        // DataTable draws no pager for one page of rows.
+        pagination={{ page, pageSize: ROWS_PER_PAGE, totalCount: rows.length, onPageChange: p => { setPage(p); top.current?.scrollIntoView?.({ block: 'start' }) } }}
+      />
+    </div>
   )
 }
 
