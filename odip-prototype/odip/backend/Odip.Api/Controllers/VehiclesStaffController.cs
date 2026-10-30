@@ -462,7 +462,7 @@ public class StaffController : ControllerBase
                     || (s.IsMedicationCompetent && s.MedicationCompetencyExpiryDate != null && s.MedicationCompetencyExpiryDate < today)
                     || (s.WorkerScreeningExpiryDate != null && s.WorkerScreeningExpiryDate < today)
             }).ToListAsync(ct);
-        return Ok(ApiResponse<List<StaffListDto>>.Ok(items));
+        return Ok(ApiResponse<List<StaffListDto>>.Ok(items.Select(i => StaffScreeningMask.Apply(i, User)).ToList()));
     }
 
     [HttpGet("{id:guid}")]
@@ -472,7 +472,7 @@ public class StaffController : ControllerBase
         if (s == null) return NotFound(ApiResponse<StaffDetailDto>.Fail("Staff not found"));
 
         var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
-        return Ok(ApiResponse<StaffDetailDto>.Ok(new StaffDetailDto
+        return Ok(ApiResponse<StaffDetailDto>.Ok(StaffScreeningMask.Apply(new StaffDetailDto
         {
             Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
             FullName = (s.FirstName + " " + s.LastName).Trim(), Username = s.Username,
@@ -489,7 +489,7 @@ public class StaffController : ControllerBase
             WorkerScreeningExpiryDate = s.WorkerScreeningExpiryDate,
             EmploymentStartDate = s.EmploymentStartDate,
             HasExpiredQualifications = s.HasExpiredQualificationsOn(today)
-        }));
+        }, User)));
     }
 
     [HttpPost]
@@ -506,7 +506,7 @@ public class StaffController : ControllerBase
         var s = staged.User!;
         await _db.SaveChangesAsync(ct);
         var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
-        return CreatedAtAction(nameof(GetById), new { id = s.Id }, ApiResponse<StaffDetailDto>.Ok(new StaffDetailDto
+        return CreatedAtAction(nameof(GetById), new { id = s.Id }, ApiResponse<StaffDetailDto>.Ok(StaffScreeningMask.Apply(new StaffDetailDto
         {
             Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
             FullName = s.FullName, Username = s.Username,
@@ -523,7 +523,7 @@ public class StaffController : ControllerBase
             WorkerScreeningExpiryDate = s.WorkerScreeningExpiryDate,
             EmploymentStartDate = s.EmploymentStartDate,
             HasExpiredQualifications = s.HasExpiredQualificationsOn(today)
-        }));
+        }, User)));
     }
 
     [HttpPut("{id:guid}")]
@@ -586,7 +586,8 @@ public class StaffController : ControllerBase
         s.DriverLicenceExpiryDate = dto.DriverLicenceExpiryDate;
         s.ManualHandlingExpiryDate = dto.ManualHandlingExpiryDate;
         s.MedicationCompetencyExpiryDate = dto.MedicationCompetencyExpiryDate;
-        s.WorkerScreeningNumber = dto.WorkerScreeningNumber;
+        // A caller who cannot see the number sends none: keep what is stored rather than wipe it.
+        if (StaffScreeningMask.CanSee(User, s.Id)) s.WorkerScreeningNumber = dto.WorkerScreeningNumber;
         s.WorkerScreeningExpiryDate = dto.WorkerScreeningExpiryDate;
         s.UpdatedAt = DateTime.UtcNow;
 
@@ -595,7 +596,7 @@ public class StaffController : ControllerBase
         if (addressChanged)
             _logger?.LogInformation("The sign-in address of staff member {TargetUserId} was changed by {ActorUserId}", s.Id, User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "unknown");
         var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
-        return Ok(ApiResponse<StaffDetailDto>.Ok(new StaffDetailDto
+        return Ok(ApiResponse<StaffDetailDto>.Ok(StaffScreeningMask.Apply(new StaffDetailDto
         {
             Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
             FullName = s.FullName, Username = s.Username,
@@ -612,7 +613,7 @@ public class StaffController : ControllerBase
             WorkerScreeningExpiryDate = s.WorkerScreeningExpiryDate,
             EmploymentStartDate = s.EmploymentStartDate,
             HasExpiredQualifications = s.HasExpiredQualificationsOn(today)
-        }));
+        }, User)));
     }
 
     /// <summary>Archive (soft-delete) a staff member.</summary>
@@ -729,7 +730,7 @@ public class StaffController : ControllerBase
 
         return Ok(ApiResponse<StaffOverviewDto>.Ok(new StaffOverviewDto
         {
-            Staff = ToStaffDetailDto(s, today),
+            Staff = StaffScreeningMask.Apply(ToStaffDetailDto(s, today), User),
             Availability = availability,
             UpcomingShifts = upcomingShifts,
             UpcomingTripAssignments = upcomingTripAssignments,
