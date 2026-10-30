@@ -39,7 +39,7 @@ public sealed record EarlyAccessRateLimits(
 ///
 /// It is installed as the app's <c>GlobalLimiter</c>, but does nothing for any request that is not routed to an
 /// <see cref="EarlyAccessRateLimitAttribute"/> action (those get <see cref="RateLimitPartition.GetNoLimiter{TKey}"/>),
-/// so every other endpoint keeps exactly its own named policy. Counts are in-process: like LoginAttemptTracker, a
+/// so every other endpoint keeps exactly its own named policy. Counts are in-process: a
 /// second API replica would get its own counts.
 /// </summary>
 public static class EarlyAccessRateLimiting

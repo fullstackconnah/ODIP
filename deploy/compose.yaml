@@ -104,7 +104,7 @@ services:
     # Public access: the homelab Cloudflare tunnel (remotely managed) maps https://bunya.connah.com.au -> http://192.168.4.70:8475.
     # nginx trusts CF-Connecting-IP only from hops inside the Docker range (nginx/default.conf): cloudflared and other containers on
     # this host arrive from the bridge gateway, LAN devices keep their own 192.168.x address and are not trusted. So the API rate
-    # limiter and sign-in lockout see each visitor, not the gateway.
+    # limiter and the "login" flood limiter (60 per 5 minutes) see each visitor, not the gateway.
     ports:
       - "8475:80"
     depends_on:
