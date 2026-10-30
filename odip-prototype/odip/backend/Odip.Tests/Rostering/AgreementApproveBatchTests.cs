@@ -333,7 +333,7 @@ public class AgreementApproveBatchTests
         var (_, data) = await PostAsync(Controller(db, f, approval: approval), Batch((p1, d1.Id), (p2, d2.Id)));
 
         Assert.Equal(new[] { "Approved", "Busy" }, data!.Select(r => r.Outcome));
-        Assert.Equal((ActivationResults.NotActivated, "the batch ran out of time; use Make active on their page"), (data[0].Activation!.Result, data[0].Activation!.Reason));
+        Assert.Equal((ActivationResults.NotActivated, "the batch ran out of time; use Make active on their onboarding checklist"), (data[0].Activation!.Result, data[0].Activation!.Reason));
         Assert.Null(data[1].Activation);
         Assert.True(await IsDraftAsync(f, p1));
     }

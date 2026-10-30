@@ -302,7 +302,7 @@ describe('ApprovalDialog: approving', () => {
   })
 
   it('says approving also moves them to Active only when the page says it will', () => {
-    const line = 'Approving will also move Amy to Active if their intake is finished.'
+    const line = "Approving will also move Amy to Active if they're ready."
     setUp({ activatesName: 'Amy' })
     expect(screen.getByText(line)).toBeInTheDocument()
   })

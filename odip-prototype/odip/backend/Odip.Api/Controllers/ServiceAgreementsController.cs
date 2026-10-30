@@ -174,7 +174,7 @@ public class ServiceAgreementsController : ControllerBase
         return Ok(ApiResponse<List<AgreementApproveResultDto>>.Ok(results));
     }
 
-    private const string OutOfTimeToActivateWords = "the batch ran out of time; use Make active on their page";
+    private const string OutOfTimeToActivateWords = "the batch ran out of time; use Make active on their onboarding checklist";
 
     private Task<ApprovalActivationDto> ActivateAsync(Guid tenantId, Guid participantId, CancellationToken ct)
     {

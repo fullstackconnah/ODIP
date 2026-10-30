@@ -65,10 +65,10 @@ describe('moving to Active on approval', () => {
   const moved = (name: string) => ({ ...r('Approved', name), activation: { result: 'Activated' as const } })
   const notMoved = (name: string, reason = 'intake not finished') => ({ ...r('Approved', name), activation: { result: 'NotActivated' as const, reason } })
 
-  it('puts the moved and not-moved counts first in the notice, and only a not-moved one asks for attention', () => {
-    expect(summarise([moved('A'), moved('B'), notMoved('C')])).toEqual({ tone: 'danger', title: '3 approved.', message: '2 moved to Active. 1 not moved: see each row.' })
+  it('puts the failures first, then who was not moved, then the moved count, and only a not-moved one asks for attention', () => {
+    expect(summarise([moved('A'), moved('B'), notMoved('C')])).toEqual({ tone: 'danger', title: '3 approved.', message: '1 not moved to Active: C. 2 moved to Active.' })
     expect(summarise([moved('A'), moved('B')])).toEqual({ tone: 'success', title: '2 approved.', message: '2 moved to Active.' })
-    expect(summarise([moved('A'), notMoved('B'), r('Busy', 'Ed')]).message).toBe('1 moved to Active. 1 not moved: see each row. 1 was busy: try again.')
+    expect(summarise([moved('A'), notMoved('B'), r('Busy', 'Ed')]).message).toBe('1 was busy: try again. 1 not moved to Active: B. 1 moved to Active.')
   })
 
   it('says nothing about Active when the setting is off', () => {
@@ -81,10 +81,11 @@ describe('moving to Active on approval', () => {
   })
 
   it('adds the not-moved line to the heading, also when everything was approved', () => {
-    expect(resultHeading([moved('A'), notMoved('B'), notMoved('C')], 3)).toEqual({ title: '3 agreements approved', line: '2 not moved to Active. Each row says why.', danger: false })
-    expect(resultHeading([moved('A'), notMoved('B')], 2).line).toBe('1 not moved to Active. The row says why.')
+    expect(resultHeading([moved('A'), notMoved('B'), notMoved('C')], 3)).toEqual({ title: '3 agreements approved', line: "2 weren't moved to Active. Each row says why.", danger: false })
+    expect(resultHeading([moved('A'), notMoved('B')], 2).line).toBe("1 wasn't moved to Active. The row says why.")
+    expect(resultHeading([moved('A'), notMoved('B'), r('AlreadyApproved', 'C')], 3).line).toBe("1 wasn't moved to Active. Each row says why.")
     expect(resultHeading([moved('A'), moved('B')], 2).line).toBeNull()
-    expect(resultHeading([moved('A'), notMoved('B'), r('Busy', 'C')], 3)).toEqual({ title: '2 of 3 approved', line: "1 wasn't approved, and 1 not moved to Active. Each row says why.", danger: false })
+    expect(resultHeading([moved('A'), notMoved('B'), r('Busy', 'C')], 3)).toEqual({ title: '2 of 3 approved', line: "1 wasn't approved, and 1 wasn't moved to Active. Each row says why.", danger: false })
   })
 
   it('makes one full stop out of a reason that ends in one', () => {

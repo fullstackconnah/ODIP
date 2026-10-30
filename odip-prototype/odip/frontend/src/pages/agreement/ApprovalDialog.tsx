@@ -183,7 +183,7 @@ function WhatItDoes({ participantId, draft, preview, activatesName, acknowledged
   return (
     <>
       <p className="text-[var(--color-muted-foreground)]">Puts this agreement&apos;s weekly patterns on the roster. It is separate from signing: nothing is signed or sent.</p>
-      {activatesName && <p className="text-[var(--color-muted-foreground)]">Approving will also move {activatesName} to Active if their intake is finished.</p>}
+      {activatesName && <p className="text-[var(--color-muted-foreground)]">Approving will also move {activatesName} to Active if they&apos;re ready.</p>}
       {/* What it does, a short line for each fact: the patterns, the shifts, what ends. */}
       <div className="flex flex-col gap-1 font-medium">
         <p>{`Creates ${patterns}, ${range}.`}</p>

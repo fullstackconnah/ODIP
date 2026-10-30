@@ -698,11 +698,12 @@ describe('Approving can move the participant to Active', () => {
     return { user, unmount: view.unmount }
   }
 
-  it('says Moved to Active after an approval that moved them, and the notice can be closed', async () => {
+  it('says Approved. Marcus is now Active. after an approval that moved them, and the notice can be closed', async () => {
+    participant.mockReturnValue(onboarding)
     const { user } = await approveWith({ result: 'Activated' })
-    expect(screen.getByText('Moved to Active.')).toBeInTheDocument()
+    expect(screen.getByText('Approved. Marcus is now Active.')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Close this message' }))
-    expect(screen.queryByText('Moved to Active.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Approved. Marcus is now Active.')).not.toBeInTheDocument()
   })
 
   it('says Approved. Not moved to Active: <reason>. when it did not, with one full stop', async () => {
@@ -727,7 +728,7 @@ describe('Approving can move the participant to Active', () => {
     renderPage()
     await user.click(stepButton('Save'))
     await user.click(screen.getByRole('button', { name: 'Mark approved for rostering' }))
-    expect(screen.getByText('Approving will also move Marcus to Active if their intake is finished.')).toBeInTheDocument()
+    expect(screen.getByText("Approving will also move Marcus to Active if they're ready.")).toBeInTheDocument()
   })
 
   it('does not say it in the dialog for someone already active', async () => {
@@ -746,6 +747,6 @@ describe('Approving can move the participant to Active', () => {
     pricingSettings.mockReturnValue(makeSettings({ approvalActivatesParticipant: true }))
     drafts.mockReturnValue({ data: [draft()], isLoading: false, isError: false, refetch: refetchDrafts })
     renderPage()
-    expect(screen.getByText(/Draft only:/).closest('p')).toHaveTextContent("Draft only: not approved for signing or use. It can't invoice or claim. Approving a revision for rostering is separate: it only makes that revision's weekly patterns and unfilled shifts. Approving also moves them to Active if their intake is finished.")
+    expect(screen.getByText(/Draft only:/).closest('p')).toHaveTextContent("Draft only: not approved for signing or use. It can't invoice or claim. Approving a revision for rostering is separate: it only makes that revision's weekly patterns and unfilled shifts. Approving also moves them to Active if they're ready.")
   })
 })

@@ -131,7 +131,7 @@ describe('Plan pricing settings', () => {
 
     const box = screen.getByRole('checkbox', { name: 'Move the participant to Active when their agreement is approved' })
     expect(box).not.toBeChecked()
-    expect(screen.getByText('Only people still onboarding with intake finished. Nobody is moved back if an agreement ends.')).toBeInTheDocument()
+    expect(screen.getByText('Only people still onboarding who are ready to be made active. Nobody is moved back if an agreement ends.')).toBeInTheDocument()
     await user.click(box)
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
 

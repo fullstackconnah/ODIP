@@ -344,7 +344,7 @@ public class ServiceAgreementApprovalControllerTests
 
         var dto = await ApproveAsync(f, draft);
 
-        Assert.Equal((ActivationResults.NotActivated, ParticipantReadiness.ActivationEvidenceRequired), (dto.Activation!.Result, dto.Activation.Reason));
+        Assert.Equal((ActivationResults.NotActivated, "their signed agreement isn't recorded yet"), (dto.Activation!.Result, dto.Activation.Reason));
         Assert.True(await f.Db.ServiceAgreementDraftApprovals.AnyAsync(a => a.DraftId == draft.Id));
         Assert.True((await StoredAsync(f)).IsDraft);
     }
@@ -376,7 +376,7 @@ public class ServiceAgreementApprovalControllerTests
 
         var dto = await ApproveAsync(f, draft);
 
-        Assert.Equal((ActivationResults.NotActivated, "archived"), (dto.Activation!.Result, dto.Activation.Reason));
+        Assert.Equal((ActivationResults.NotActivated, "they're archived"), (dto.Activation!.Result, dto.Activation.Reason));
         var stored = await StoredAsync(f);
         Assert.False(stored.IsActive || stored.IsDraft);
     }

@@ -85,7 +85,7 @@ describe('AgreementsPage approve (real hook)', () => {
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Approve 2' }))
 
     const dialog = within(await screen.findByRole('dialog', { name: '2 agreements approved' }))
-    expect(dialog.getByText('1 not moved to Active. The row says why.')).toBeInTheDocument()
+    expect(dialog.getByText("1 wasn't moved to Active. The row says why.")).toBeInTheDocument()
     const items = dialog.getAllByRole('listitem')
     expect(items).toHaveLength(1)
     expect(within(items[0]).getByText('Ben Ng')).toBeInTheDocument()

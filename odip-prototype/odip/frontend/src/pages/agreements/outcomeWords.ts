@@ -17,7 +17,7 @@ export const OUTCOME_BADGE: Record<AgreementApproveOutcome, { tone: Tone; label:
 
 /** The reason an approval did not move someone to Active, as one sentence (the server's refusal words already end with a full stop). */
 export const notMovedWords = (reason: string | null | undefined) => `Not moved to Active: ${(reason ?? '').trim().replace(/\.$/, '')}.`
-export const MOVED_WORDS = 'Moved to Active.'
+export const movedWords = (firstName: string) => `Approved. ${firstName} is now Active.`
 const movedToActive = (r: AgreementApproveResult) => r.outcome === 'Approved' && r.activation?.result === 'Activated'
 /** Approved, but the organisation's setting could not move them to Active: listed with the reason. */
 export const notMovedToActive = (r: AgreementApproveResult) => r.outcome === 'Approved' && r.activation?.result === 'NotActivated'
@@ -41,14 +41,14 @@ export function summarise(results: readonly AgreementApproveResult[], notSent = 
   const busy = by('Busy')
   const other = results.filter(r => !['Approved', 'AlreadyApproved', 'NeedsReview', 'Busy'].includes(r.outcome))
   const moved = results.filter(movedToActive).length
-  const notMoved = results.filter(notMovedToActive).length
+  const notMovedList = results.filter(notMovedToActive)
   // What needs the person: a moved count is only news, so it never turns the notice from success.
   const attention = [
-    notMoved ? `${notMoved} not moved: see each row.` : '',
     review.length ? `${review.length} ${review.length === 1 ? 'needs' : 'need'} review: ${names(review)}.` : '',
     busy.length ? `${busy.length} ${busy.length === 1 ? 'was' : 'were'} busy: try again.` : '',
     other.length ? `${other.length} could not be approved: ${names(other)}.` : '',
     notSent ? (noReply ? NO_REPLY_LAST(notSent) : `${notSent} ${notSent === 1 ? "wasn't" : "weren't"} started.`) : '',
+    notMovedList.length ? `${notMovedList.length} not moved to Active: ${names(notMovedList)}.` : '',
   ].filter(Boolean)
   if (approved === 0 && results.length > 0 && results.every(r => r.outcome === 'AlreadyApproved') && !notSent) {
     return { tone: 'info', title: ALREADY_APPROVED, message: '' }
@@ -56,7 +56,7 @@ export function summarise(results: readonly AgreementApproveResult[], notSent = 
   return {
     tone: approved > 0 && !attention.length ? 'success' : 'danger',
     title: approved > 0 ? `${approved} approved.` : 'Nothing was approved.',
-    message: [moved ? `${moved} moved to Active.` : '', ...attention].filter(Boolean).join(' '),
+    message: [...attention, moved ? `${moved} moved to Active.` : ''].filter(Boolean).join(' '),
   }
 }
 
@@ -66,11 +66,11 @@ export function resultHeading(results: readonly AgreementApproveResult[], total:
   const already = results.filter(r => r.outcome === 'AlreadyApproved').length
   const failed = results.filter(r => r.outcome !== 'Approved' && r.outcome !== 'AlreadyApproved').length
   const notMoved = results.filter(notMovedToActive).length
-  const notMovedPart = notMoved && `${notMoved} not moved to Active`
+  const notMovedPart = notMoved && `${notMoved} ${notMoved === 1 ? "wasn't" : "weren't"} moved to Active`
   const why = (rows: number, already = 0) => `${rows === 1 && !already ? 'The row says' : 'Each row says'} why.`
   if (failed === 0 && results.length === total) {
     if (approved === 0) return { title: ALREADY_APPROVED, line: null, danger: false }
-    return { title: `${plural(approved, 'agreement')} approved`, line: notMoved ? `${notMovedPart}. ${why(notMoved)}` : null, danger: false }
+    return { title: `${plural(approved, 'agreement')} approved`, line: notMoved ? `${notMovedPart}. ${why(notMoved, already)}` : null, danger: false }
   }
   if (approved === 0) return { title: 'Nothing was approved.', line: failed ? 'Each row says why.' : null, danger: true }
   const parts = [failed && `${failed} ${failed === 1 ? "wasn't" : "weren't"} approved`, notMovedPart, already && `${already} ${already === 1 ? 'was' : 'were'} already approved`].filter(Boolean)

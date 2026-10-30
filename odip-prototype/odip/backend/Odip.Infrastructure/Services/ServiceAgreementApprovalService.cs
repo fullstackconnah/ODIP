@@ -728,10 +728,10 @@ public sealed class ServiceAgreementApprovalService
         {
             if (!PlanPricingPolicy.From(await _pricing.FindSettingsAsync(tenantId, ct)).ApprovalActivatesParticipant) return new() { Result = ActivationResults.Off };
             var p = await _db.Participants.FirstOrDefaultAsync(x => x.Id == participantId && x.TenantId == tenantId, ct);
-            if (p is null) return NotMoved("not found");
-            if (!p.IsDraft) return p.IsActive ? new() { Result = ActivationResults.AlreadyActive, Reason = "already active" } : NotMoved("archived");   // never restored
+            if (p is null) return NotMoved("they're no longer on the participant list");
+            if (!p.IsDraft) return p.IsActive ? new() { Result = ActivationResults.AlreadyActive, Reason = "already active" } : NotMoved("they're archived");   // never restored
             if (!p.IntakeCompletedAt.HasValue) return NotMoved("intake not finished");
-            return await MakeActiveAsync(p, ct, ActivationLockWait) is { } refused ? NotMoved(refused) : new() { Result = ActivationResults.Activated };
+            return await MakeActiveAsync(p, ct, ActivationLockWait) is { } refused ? NotMoved(ReasonWords(refused)) : new() { Result = ActivationResults.Activated };
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -739,6 +739,10 @@ public sealed class ServiceAgreementApprovalService
             _logger?.LogWarning(ex, "Activating participant {ParticipantId} after an approval failed", participantId);
             return NotMoved(ex is RosterBusyException ? ActivationBusyReason : ActivationFailedReason);
         }
+        // The refusal reads after "Not moved to Active: ". ParticipantReadiness's own words stay as they are: Make active's 409 uses them.
+        static string ReasonWords(string refusal) => refusal == ParticipantReadiness.ActivationEvidenceRequired ? "their signed agreement isn't recorded yet"
+            : refusal == ParticipantReadiness.ActivationFundingRequired ? "their plan budget isn't on the Funding tab yet"
+            : char.ToLowerInvariant(refusal[0]) + refusal[1..];
         static ApprovalActivationDto NotMoved(string why) => new() { Result = ActivationResults.NotActivated, Reason = why };
     }
 

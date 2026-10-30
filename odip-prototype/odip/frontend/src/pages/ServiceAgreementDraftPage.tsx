@@ -25,7 +25,7 @@ import { usePermissions } from '@/lib/permissions'
 import { SUPPORT_LABEL, normaliseBlock, stampLocation } from '@/lib/planBlocks'
 import { PRICING_FIRST_YEAR, PRICING_LAST_YEAR, addDays, conflictVersionOf, describeRenewError, describeSaveError, friendlyMessage, isPricingDate, planNeededMessageOf, type SaveFailure } from '@/lib/planQuote'
 import { ApprovalDialog } from './agreement/ApprovalDialog'
-import { MOVED_WORDS, notMovedWords } from './agreements/outcomeWords'
+import { movedWords, notMovedWords } from './agreements/outcomeWords'
 import { STATES, planDatesOf, type Details } from '@/lib/agreementDetails'
 import { AgreementStep } from './agreement/AgreementStep'
 import { CheckStep } from './agreement/CheckStep'
@@ -413,7 +413,7 @@ function DraftPage() {
       </Callout>
     )}
     {activationNotice?.draftId === onScreen?.id && activationNotice?.activation.result === 'Activated' && (
-      <Callout tone="success" className="max-w-prose" actions={closeButton(() => setActivationNotice(null))}>{MOVED_WORDS}</Callout>
+      <Callout tone="success" className="max-w-prose" actions={closeButton(() => setActivationNotice(null))}>{movedWords(participant.data.firstName)}</Callout>
     )}
     {activationNotice?.draftId === onScreen?.id && activationNotice?.activation.result === 'NotActivated' && (
       <Callout tone="warning" className="max-w-prose" actions={closeButton(() => setActivationNotice(null))}>Approved. {notMovedWords(activationNotice.activation.reason)}</Callout>
@@ -454,7 +454,7 @@ function DraftPage() {
               <Callout tone="info" announce={false} className="max-w-prose">
                 {/* With the organisation's setting on, approving may move them to Active, so the notice no longer says it cannot. */}
                 {pricing.settings?.approvalActivatesParticipant
-                  ? <p><strong>Draft only:</strong> not approved for signing or use. It can&apos;t invoice or claim. Approving a revision for rostering is separate: it only makes that revision&apos;s weekly patterns and unfilled shifts. Approving also moves them to Active if their intake is finished.</p>
+                  ? <p><strong>Draft only:</strong> not approved for signing or use. It can&apos;t invoice or claim. Approving a revision for rostering is separate: it only makes that revision&apos;s weekly patterns and unfilled shifts. Approving also moves them to Active if they&apos;re ready.</p>
                   : <p><strong>Draft only:</strong> not approved for signing or use. It can&apos;t activate the participant, invoice or claim. Approving a revision for rostering is separate: it only makes that revision&apos;s weekly patterns and unfilled shifts.</p>}
                 <p className="mt-2"><strong>Participant identifiers come from the participant record.</strong> NDIS number: {canonicalIdentifiers.ndis}; date of birth: {canonicalIdentifiers.dob}. <Link className="underline font-medium" to={`/participants/${participantId}/profile`}>View or edit participant details</Link>. A snapshot of both is stored with this draft and printed on its PDF, which Admins and Coordinators can open; a later change to the record does not change an existing draft.</p>
               </Callout>
