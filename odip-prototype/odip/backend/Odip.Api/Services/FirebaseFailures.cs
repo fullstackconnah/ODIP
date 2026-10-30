@@ -24,7 +24,7 @@ public static class FirebaseFailures
 /// Whether a failure is the Admin SDK failing to PARSE the token string at all, rather than refusing a token it understood. The
 /// distinction matters because the two need opposite handling at the exchange: a parsed-but-refused token arrives as
 /// <see cref="FirebaseAuthException"/> and is caught by name, while a parse failure is whatever the SDK's own decoders throw and used to
-/// escape the controller entirely, bypassing the login-attempt failure budget.
+/// escape the controller entirely.
 /// <para>
 /// Measured against FirebaseAdmin 3.5.0 across malformed shapes (every one of these reached the SDK through
 /// <see cref="FirebaseIdTokenShape"/>): "aaa.bbb.ccc" and other three-segment tokens parse-fail as
