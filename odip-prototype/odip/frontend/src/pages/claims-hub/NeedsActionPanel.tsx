@@ -14,6 +14,7 @@ import { fetchClaimFile, useDismissBatchLine } from '@/api/hooks/claimHub'
 import type { RejectedLineDto } from '@/api/types'
 import { plural } from '@/lib/format'
 import { formatCurrency } from '@/lib/utils'
+import { TAP_AREA } from '@/components/tapArea'
 import { AgeCell } from './claimHubParts'
 import { deliveredText } from './claimHubSteps'
 
@@ -102,7 +103,7 @@ export function NeedsActionPanel({ lines, loading, failed, onRetry, fileFilter, 
           { key: 'item', header: 'Support item', mobile: 'meta', render: l => <CellText title={l.supportName}>{l.supportNumber}</CellText> },
           { key: 'delivered', header: 'Delivered', mobile: 'meta', render: l => <span className="whitespace-nowrap">{deliveredText(l.from, l.to)}</span> },
           { key: 'amount', header: 'Amount', align: 'right', mobile: 'meta', render: l => formatCurrency(l.totalAmount) },
-          { key: 'file', header: 'File', mobile: 'meta', render: l => <button type="button" className="whitespace-nowrap text-[var(--color-primary)] hover:underline" onClick={() => onOpenFile(l.batchId)}>{l.fileName}</button> },
+          { key: 'file', header: 'File', mobile: 'meta', render: l => <button type="button" className={`${TAP_AREA} whitespace-nowrap text-[var(--color-primary)] hover:underline`} onClick={() => onOpenFile(l.batchId)}>{l.fileName}</button> },
           { key: 'message', header: 'NDIA message', mobile: 'meta', render: l => <CellText title={l.rejectMessage}>{l.rejectMessage ?? l.rejectCode}</CellText> },
           { key: 'age', header: 'Age', mobile: 'status', render: l => <AgeCell days={l.ageDays} band={l.ageBand} /> },
           {

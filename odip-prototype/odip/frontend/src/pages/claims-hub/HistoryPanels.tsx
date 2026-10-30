@@ -7,6 +7,7 @@ import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { EmptyState } from '@/components/EmptyState'
 import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
+import { TAP_AREA } from '@/components/tapArea'
 import type { BatchDto, ManagedClaimDto } from '@/api/types'
 import { formatInstantDateAu, plural } from '@/lib/format'
 import { TONE } from '@/lib/tone'
@@ -61,7 +62,7 @@ export function OtherPanel({ claims, loading, failed, onRetry }: { claims: Manag
     { key: 'status', header: 'Claim status', mobile: 'status', render: c => <StatusBadge status={c.claimStatus} /> },
   ]
   const callout = (
-    <Callout tone="info" polite actions={<Link to="/invoices" className="font-medium text-[var(--color-primary)] hover:underline">All invoices</Link>}>
+    <Callout tone="info" polite actions={<Link to="/invoices" className={`${TAP_AREA} font-medium text-[var(--color-primary)] hover:underline`}>All invoices</Link>}>
       Plan- and self-managed supports aren't claimed from the NDIA. Bunya Support issues an invoice when the claim is submitted: to the plan manager, or to the participant.
     </Callout>
   )

@@ -12,7 +12,7 @@ import { NumberField } from '@/components/NumberField'
 import { PageState } from '@/components/PageState'
 import { SlideOver } from '@/components/SlideOver'
 import { StatusBadge } from '@/components/StatusBadge'
-import { TAP_ICON_SQUARE } from '@/components/tapArea'
+import { TAP_AREA, TAP_ICON_SQUARE } from '@/components/tapArea'
 import { fetchClaimFile, useClaimBatch, useDiscardBatch, useImportResults, useMarkBatchPaid, useMarkBatchUploaded } from '@/api/hooks/claimHub'
 import { useSubmitPreview } from '@/api/hooks/claims'
 import { serverSentence } from '@/api/hooks/data-export'
@@ -237,7 +237,7 @@ function ImportStep({ batch, announce, onImported }: { batch: BatchDetailDto; an
         {refusal && <Callout tone="danger" title={refusal.title} className="mt-3">{refusal.body}</Callout>}
         <div className="mt-3 flex flex-col gap-1.5">
           <label htmlFor={inputId} className="text-sm font-medium">Results file (.csv)</label>
-          <input id={inputId} type="file" accept=".csv" onChange={e => { setFile(e.target.files?.[0] ?? null); setRefusal(null) }} className="block w-full text-sm file:mr-3 file:min-h-[var(--control-h-sm)] file:rounded-[var(--radius-sm)] file:border file:border-[var(--color-border)] file:bg-[var(--color-card)] file:px-3 file:text-sm" />
+          <input id={inputId} type="file" accept=".csv" onChange={e => { setFile(e.target.files?.[0] ?? null); setRefusal(null) }} className="block w-full text-sm file:mr-3 file:min-h-[var(--control-h-sm)] pointer-coarse:file:min-h-11 file:rounded-[var(--radius-sm)] file:border file:border-[var(--color-border)] file:bg-[var(--color-card)] file:px-3 file:text-sm" />
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <Button data-testid="file-next-action" variant="primary" size="md" className="max-md:w-full aria-disabled:opacity-60" aria-disabled={!file || importer.isPending} aria-describedby={file ? undefined : `${inputId}-hint`} onClick={run}>
@@ -262,7 +262,7 @@ function ImportSummary({ summary, fileName, onReviewRejected }: { summary: Resul
       {summary.conflicts.length > 0 && <p>{plural(summary.conflicts.length, 'line')} already had a different result, so {summary.conflicts.length === 1 ? 'it wasn’t' : 'they weren’t'} changed: {summary.conflicts.map(c => c.rowReference).join(', ')}.</p>}
       {summary.unreadRows.length > 0 && <p>{plural(summary.unreadRows.length, 'row')} couldn't be read: {summary.unreadRows.map(r => `row ${r.row} (${r.note})`).join(', ')}.</p>}
       {summary.rejected > 0 && (
-        <button type="button" className="mt-1 font-medium text-[var(--color-primary)] hover:underline" onClick={onReviewRejected}>Review {plural(summary.rejected, 'rejected line')}</button>
+        <button type="button" className={`${TAP_AREA} mt-1 font-medium text-[var(--color-primary)] hover:underline`} onClick={onReviewRejected}>Review {plural(summary.rejected, 'rejected line')}</button>
       )}
       {summary.unknownReferences.length > 0 && (
         <div className="mt-1">
@@ -286,7 +286,7 @@ function PaidStep({ batch, announce, onReviewRejected }: { batch: BatchDetailDto
     <Card title="Record the payment">
       <p className="text-sm">The NDIA pays successful lines in its next payment run. When the money is in, record it here.</p>
       {batch.rejected > 0 && (
-        <button type="button" className="mt-1 text-sm text-[var(--color-muted-foreground)] hover:underline" onClick={onReviewRejected}>{plural(batch.rejected, 'line')} rejected</button>
+        <button type="button" className={`${TAP_AREA} mt-1 text-sm text-[var(--color-muted-foreground)] hover:underline`} onClick={onReviewRejected}>{plural(batch.rejected, 'line')} rejected</button>
       )}
       <div className="mt-3">
         <Button data-testid="file-next-action" variant="secondary" size="md" className="max-md:w-full" onClick={() => setOpen(true)} disabled={unpaid.length === 0}>
