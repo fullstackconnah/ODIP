@@ -106,7 +106,7 @@ export async function isWholeZip(blob: Blob): Promise<boolean> {
 }
 
 /** FileReader, not Blob.text(): jsdom, which the tests run in, has no Blob.text(). */
-function readText(blob: Blob): Promise<string> {
+export function readText(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(String(reader.result))

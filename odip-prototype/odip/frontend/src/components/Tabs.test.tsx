@@ -356,6 +356,18 @@ describe('Tabs primitive — the active tab scrolls into view inside the strip',
     expect(scrollTo).toHaveBeenLastCalledWith({ left: 0 })
   })
 
+  it('scrolls again when badges arrive after load and push the active tab off the strip', () => {
+    const scrollTo = vi.fn()
+    const view = render(<Tabs tabs={manyTabs} active="e" onChange={() => {}} ariaLabel="Many" />)
+    const strip = screen.getByRole('tablist', { name: 'Many' })
+    strip.scrollTo = scrollTo as unknown as typeof strip.scrollTo
+    mockGeometry(strip, { boxes: { E: { left: 500, width: 100 } } })
+
+    view.rerender(<Tabs tabs={manyTabs.map(t => ({ ...t, badge: 3 }))} active="e" onChange={() => {}} ariaLabel="Many" />)
+
+    expect(scrollTo).toHaveBeenCalledWith({ left: 400 })
+  })
+
   it('leaves the strip alone when the active tab is already fully visible', () => {
     const { strip, scrollTo, select } = setup('a')
     mockGeometry(strip, { boxes: { B: { left: 100, width: 100 } } })

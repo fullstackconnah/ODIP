@@ -143,6 +143,7 @@ describe('navConfig — who sees what', () => {
       'Staff & roster: Roster board | Shift patterns | Compatibility | Leave | Completions | Reports | Staff | Qualifications',
       'Tasks',
       'Budgets',
+      'Claims',
       'Invoices',
       'Incidents',
       'Settings',

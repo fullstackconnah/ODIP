@@ -746,7 +746,7 @@ public class ClaimGenerationServiceTests
         await db.SaveChangesAsync();
 
         var claim = await new ClaimGenerationService(db).GenerateDraftClaimAsync(trip.Id);
-        var (bytes, _) = await new BprCsvService(db).GenerateBprCsvAsync(claim.Id);
+        var bytes = await BprFile.OfClaimAsync(db, TenantId, claim.Id);
 
         var rows = System.Text.Encoding.UTF8.GetString(bytes).Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Skip(1).ToList();
         Assert.NotEmpty(rows);

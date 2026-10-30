@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { cleanup, render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import ClaimsTab from './ClaimsTab'
@@ -361,4 +361,12 @@ describe('ClaimsTab — long list (T10)', () => {
     expect(rows).toHaveLength(23)
     expect(rows[5]).toHaveFocus()
   })
+})
+
+it('points to the Claims page for NDIA-managed claims, but not for a participant funded another way', async () => {
+  renderTab()
+  expect(await screen.findByRole('link', { name: 'Go to Claims' })).toHaveAttribute('href', '/claims')
+  cleanup()
+  renderTab(true, { otherFunded: true })
+  expect(screen.queryByRole('link', { name: 'Go to Claims' })).toBeNull()
 })

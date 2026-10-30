@@ -89,6 +89,7 @@ const ROUTES: Route[] = [
   { path: '/settings', url: '/settings', load: () => import('@/pages/SettingsPage') },
   { path: '/settings/import/:kind', url: '/settings/import/participants', load: () => import('@/pages/settings/ImportWizardPage') },
   { path: '/qualifications', url: '/qualifications', load: () => import('@/pages/QualificationsPage') },
+  { path: '/claims', url: '/claims', load: () => import('@/pages/claims-hub/ClaimsHubPage') },
   { path: '/claims/:id', url: `/claims/${ID}`, load: () => import('@/pages/ClaimDetailPage') },
   { path: '/agreements', url: '/agreements', load: () => import('@/pages/AgreementsPage') },
   { path: '/budgets', url: '/budgets', load: () => import('@/pages/BudgetsPage') },

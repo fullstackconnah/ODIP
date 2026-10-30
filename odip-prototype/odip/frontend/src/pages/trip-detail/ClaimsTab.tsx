@@ -16,6 +16,7 @@ import type { TripDetailDto } from '@/api/types/trips'
 import { extractErrorMessage, getStatusColor } from '@/lib/utils'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
+import { TAP_FLOOR } from '@/components/tapArea'
 
 const CLAIM_STATUS_ITEMS = [
   { value: 'Draft', label: 'Draft' },
@@ -140,6 +141,7 @@ export default function ClaimsTab({ tripId, claims, trip, canWrite }: { tripId: 
           </Button>
         )}
       </div>
+      <p className="text-[13px] text-[var(--color-muted-foreground)]">NDIA-managed claims are sent from Claims. <Link to="/claims" className={`${TAP_FLOOR} font-medium text-[var(--color-primary)] hover:underline`}>Go to Claims</Link></p>
 
       {error && (
         <Callout tone="error">{error}</Callout>

@@ -1,4 +1,4 @@
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useClaim, useUpdateClaim, useUpdateClaimLineItem } from '@/api/hooks'
 import type { TripClaimStatus, ClaimLineItemDto } from '@/api/types'
 import { PLAN_TYPE_LABELS, type PlanType } from '@/api/types/enums'
@@ -24,7 +24,7 @@ import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
 import { ClaimBudgetBlock } from '@/components/ClaimBudgetBlock'
 import { retryingAfterError } from '@/lib/queryPhase'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
-import { downloadFile } from '@/lib/downloadFile'
+import { useBuildClaimFile } from '@/api/hooks/claimHub'
 import { InvoicesSection } from './claim-detail/InvoicesSection'
 import { FormField } from '@/components/FormField'
 
@@ -41,6 +41,8 @@ function refusalOf(err: unknown): string {
 
 export default function ClaimDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
+  const buildFile = useBuildClaimFile()
   const pageQuery = useClaim(id)
   const { data: claim, isLoading, isError, error, refetch } = pageQuery
   const updateClaim = useUpdateClaim()
@@ -182,14 +184,22 @@ export default function ClaimDetailPage() {
             }
             action={
               <div className="flex shrink-0 flex-wrap items-center gap-2">
-                <Button
-                  variant="secondary"
-                  size="md"
-                  onClick={() => downloadFile(`/claims/${id}/bpr-csv`, `${claim.claimReference}-bpr.csv`, "Couldn't download the BPR CSV. Try again.").catch((err: Error) => setStatusError(err.message))}
-                >
-                  <Download className="w-4 h-4" />
-                  BPR CSV
-                </Button>
+                {/* The claim's own NDIA file (G9): built, or re-downloaded when its lines are already alone in a Built file; the server's 409 says where they went otherwise. */}
+                {(claim.lineItems ?? []).some(l => l.planType === 'AgencyManaged') && (
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    onClick={() => {
+                      setStatusError(null)
+                      buildFile('get', `/claims/${id}/bpr-csv`, undefined, `${claim.claimReference}.csv`, "Couldn't build the NDIA file. Try again.")
+                        .then(({ batchId }) => navigate(batchId ? `/claims?tab=files&file=${batchId}` : '/claims?tab=files'))
+                        .catch((err: Error) => setStatusError(err.message))
+                    }}
+                  >
+                    <Download className="w-4 h-4" />
+                    Build NDIA file
+                  </Button>
+                )}
                 {/* The moves CanMove allows; from Rejected it is the reissue path, and a shift claim has no other way back. */}
                 {(claim.status === 'Draft' || claim.status === 'Ready' || claim.status === 'Rejected') && (
                   <Button
@@ -291,6 +301,7 @@ export default function ClaimDetailPage() {
         <DataTable
           data={claim.lineItems ?? []}
           keyField="id"
+          emptyMessage="No line items on this claim yet."
           sortable
           columns={[
             {

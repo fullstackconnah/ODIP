@@ -1,4 +1,5 @@
 import { useAuditHistory, type AuditEntry, type AuditChange } from '../api/hooks';
+import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { formatDateTimeAu, formatRelative, plural } from '@/lib/format'
 
@@ -82,7 +83,7 @@ function AuditEntryRow({ entry }: { entry: AuditEntry }) {
  * - Chronological listing (newest first, implicit from API)
  */
 export default function AuditHistoryTab({ entityType, entityId }: Props) {
-  const { data, isLoading, isError } = useAuditHistory(entityType, entityId);
+  const { data, isLoading, isError, refetch } = useAuditHistory(entityType, entityId);
 
   if (isLoading) {
     return (
@@ -97,13 +98,7 @@ export default function AuditHistoryTab({ entityType, entityId }: Props) {
     );
   }
 
-  if (isError) {
-    return (
-      <div className="py-6 text-center text-sm text-[var(--color-destructive)]">
-        Failed to load history. Please try again.
-      </div>
-    );
-  }
+  if (isError) return <PageState kind="error" noun="history" onRetry={() => refetch()} />;
 
   if (!data || data.entries.length === 0) {
     return (

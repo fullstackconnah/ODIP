@@ -120,7 +120,8 @@ public class UnscopedSuperAdminSettingsTests
             SupportsDeliveredFrom = new DateOnly(2026, 9, 7), SupportsDeliveredTo = new DateOnly(2026, 9, 7), Hours = 1m, UnitPrice = 40m, TotalAmount = 40m,
         });
         db.SaveChanges();
-        await Assert.ThrowsAsync<KeyNotFoundException>(() => new BprCsvService(db).GenerateBprCsvAsync(claim.Id));
+        var result = await new ClaimBatchService(db, new BprCsvService(db), new InvoiceService(db), TimeProvider.System).DownloadForClaimAsync(A, new System.Security.Claims.ClaimsPrincipal(), claim.Id, default);
+        Assert.Equal(404, result.Status);
     }
 
     [Fact]

@@ -45,6 +45,7 @@ export const MATERIAL_SYMBOLS: readonly string[] = [
   'person',
   'pill',
   'receipt_long',
+  'request_quote',
   'schedule',
   'settings',
   'summarize',
