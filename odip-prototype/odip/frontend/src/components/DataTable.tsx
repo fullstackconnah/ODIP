@@ -675,6 +675,7 @@ export function DataTable<T>({
               Page {pagination.page} of {Math.max(1, Math.ceil(pagination.totalCount / pagination.pageSize))}
             </span>
             <button
+              type="button" // a pager inside a form must not submit it
               onClick={() => pagination.onPageChange(pagination.page - 1)}
               disabled={pagination.page <= 1}
               aria-label="Previous page"
@@ -683,6 +684,7 @@ export function DataTable<T>({
               Previous
             </button>
             <button
+              type="button" // a pager inside a form must not submit it
               onClick={() => pagination.onPageChange(pagination.page + 1)}
               disabled={pagination.page >= Math.ceil(pagination.totalCount / pagination.pageSize)}
               aria-label="Next page"
