@@ -8,7 +8,7 @@ const row: StaffListDto = {
   id: 's1', firstName: 'Alex', lastName: 'Rivera', fullName: 'Alex Rivera', username: 'arivera', role: 'SupportWorker', position: 'SupportWorker',
   email: 'alex@example.com', mobile: null, region: 'North', isDriverEligible: true, isFirstAidQualified: true, isMedicationCompetent: false,
   isManualHandlingCompetent: true, isOvernightEligible: false, isActive: true, firstAidExpiryDate: '2027-01-31', driverLicenceExpiryDate: null,
-  manualHandlingExpiryDate: '2027-02-28', medicationCompetencyExpiryDate: null, workerScreeningNumber: 'WS-1', workerScreeningExpiryDate: '2028-03-01',
+  manualHandlingExpiryDate: '2027-02-28', medicationCompetencyExpiryDate: null, workerScreeningNumber: 'WS-1', workerScreeningRecorded: true, workerScreeningExpiryDate: '2028-03-01',
   hasExpiredQualifications: false, notes: null,
 }
 

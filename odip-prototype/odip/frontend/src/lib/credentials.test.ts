@@ -21,13 +21,17 @@ describe('staffCredentials: which credentials apply', () => {
     expect(keys({ isFirstAidQualified: false, firstAidExpiryDate: '2020-01-01', driverLicenceExpiryDate: '2020-01-01' })).toEqual([])
   })
 
-  // The one worker-screening rule (the Qualifications list's): it applies only once an expiry date exists.
+  // The one worker-screening rule: it applies once an expiry date exists, and to every active person even without one (a missing screening is an issue).
   it.each<[string, CredentialSource & { workerScreeningNumber?: string | null }, boolean]>([
     ['a date only', { workerScreeningExpiryDate: '2027-01-01' }, true],
     ['a number and a date', { workerScreeningNumber: 'WWC-1', workerScreeningExpiryDate: '2027-01-01' }, true],
     ['a past date', { workerScreeningExpiryDate: '2020-01-01' }, true],
     ['a number and no date', { workerScreeningNumber: 'WWC-1', workerScreeningExpiryDate: null }, false],
     ['a number and an empty date', { workerScreeningNumber: 'WWC-1', workerScreeningExpiryDate: '' }, false],
+    ['neither, active', { isActive: true }, true],
+    ['a number and no date, active', { isActive: true, workerScreeningNumber: 'WWC-1' }, true],
+    ['neither, archived', { isActive: false }, false],
+    ['a date, archived', { isActive: false, workerScreeningExpiryDate: '2027-01-01' }, true],
     ['neither', {}, false],
   ])('worker screening with %s: applies = %s', (_name, staff, applies) => {
     expect(keys(staff).includes('workerScreening')).toBe(applies)
@@ -100,5 +104,13 @@ describe('credentialIssueCount', () => {
     const perPerson = people.map(p => credentialIssueCount(staffCredentials(p, OPTS)))
     expect(perPerson).toEqual([2, 1, 0])
     expect(perPerson.reduce((a, b) => a + b, 0)).toBe(3)
+  })
+})
+
+describe('a missing worker screening', () => {
+  it('is an undated issue for an active person, so the Dashboard and Qualifications counts include it', () => {
+    const c = staffCredentials({ isActive: true }, { warnDays: 30, today: '2026-10-31' })
+    expect(c.map(x => x.key)).toEqual(['workerScreening'])
+    expect(credentialIssueCount(c)).toBe(1)
   })
 })

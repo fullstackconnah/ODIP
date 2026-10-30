@@ -50,10 +50,10 @@ function pinToday() {
 const person = (id: string, fullName: string, o: Record<string, unknown> = {}) => ({
   id, fullName, isActive: true, isFirstAidQualified: false, isDriverEligible: false, isManualHandlingCompetent: false, isMedicationCompetent: false,
   firstAidExpiryDate: null, driverLicenceExpiryDate: null, manualHandlingExpiryDate: null, medicationCompetencyExpiryDate: null,
-  workerScreeningNumber: null, workerScreeningExpiryDate: null, ...o,
+  workerScreeningNumber: null, workerScreeningExpiryDate: '2099-01-01', ...o, // current by default: a missing screening is its own issue
 })
 
-// 12 issues in all: Dana 5, Eli 4, Gus 2 (his worker screening number has no date, so it is not a credential), Ivy 1. Flo is fine.
+// 13 issues in all: Dana 5, Eli 4, Gus 3 (his worker screening has a number but no date, so it is missing), Ivy 1. Flo is fine.
 const STAFF = [
   person('s1', 'Dana Expired', {
     isFirstAidQualified: true, firstAidExpiryDate: '2026-08-22', // expired
@@ -70,7 +70,7 @@ const STAFF = [
     workerScreeningNumber: 'WWC-2', workerScreeningExpiryDate: '2026-11-01', // 31 days: current
   }),
   person('s3', 'Flo Fine', { isFirstAidQualified: true, firstAidExpiryDate: '2028-01-01' }),
-  person('s4', 'Gus NoDate', { isFirstAidQualified: true, isMedicationCompetent: true, workerScreeningNumber: 'WWC-9' }),
+  person('s4', 'Gus NoDate', { isFirstAidQualified: true, isMedicationCompetent: true, workerScreeningNumber: 'WWC-9', workerScreeningExpiryDate: null }),
   person('s5', 'Ivy OneIssue', { isMedicationCompetent: true }),
 ]
 
@@ -102,7 +102,7 @@ describe('QualificationsPage: the list', () => {
     renderList()
 
     const badges = screen.getAllByText(/^\d+ issues?$/).map(el => el.textContent)
-    expect(badges).toEqual(['5 issues', '4 issues', '2 issues', '1 issue'])
+    expect(badges).toEqual(['5 issues', '4 issues', '3 issues', '1 issue'])
     expect(screen.queryByText('Flo Fine')).not.toBeInTheDocument()
   })
 
@@ -119,8 +119,8 @@ describe('QualificationsPage: the list', () => {
       expect(screen.getAllByText(text)).toHaveLength(1)
     }
     expect(screen.queryByText(/^Expires in/)).not.toBeInTheDocument()
-    expect(screen.getAllByText('Current')).toHaveLength(1)
-    expect(screen.getAllByText('No date set')).toHaveLength(3)
+    expect(screen.getAllByText('Current')).toHaveLength(2) // Eli's 1 Nov screening and Ivy's default current one
+    expect(screen.getAllByText('No date set')).toHaveLength(4)
   })
 
   it('counts a credential due today under Expiring within 30 days, and the last day of the window as soon', () => {
@@ -144,14 +144,14 @@ describe('QualificationsPage: the list', () => {
     expect(screen.queryByText('Gus NoDate')).not.toBeInTheDocument()
   })
 
-  it('does not treat a worker screening number with no expiry date as a credential', () => {
+  it('counts an active person with a screening number but no expiry date as missing a screening', () => {
     renderList()
     expandAll()
 
     const gus = screen.getByText('Gus NoDate').closest('div.overflow-hidden') as HTMLElement
     expect(within(gus).getByText('First Aid')).toBeInTheDocument()
     expect(within(gus).getByText('Medication Competency')).toBeInTheDocument()
-    expect(within(gus).queryByText('Worker Screening')).not.toBeInTheDocument()
+    expect(within(gus).getByText('Worker Screening')).toBeInTheDocument()
   })
 
   it('reads "10 days" for a date 10 days away, even when the clocks go forward in between (Sydney, 4 Oct)', () => {
@@ -163,7 +163,7 @@ describe('QualificationsPage: the list', () => {
 
     expect(screen.getByText('10 days')).toBeInTheDocument()
     expect(screen.getByText('30 days')).toBeInTheDocument() // 31 Oct
-    expect(screen.getByText('Current')).toBeInTheDocument() // 1 Nov, 31 days: it was "30 days" when the day count lost an hour
+    expect(screen.getAllByText('Current').length).toBeGreaterThan(0) // 1 Nov, 31 days: it was "30 days" when the day count lost an hour
   })
 })
 
@@ -176,10 +176,10 @@ describe('QualificationsPage and the Dashboard agree', () => {
     // A Coordinator now updates these in the Staff compliance group (the same sum); the tile is a SuperAdmin's with no organisation (SHAPE call 6).
     localStorage.setItem('odip_user', JSON.stringify({ role: 'SuperAdmin' }))
     render(<MemoryRouter><DashboardPage /></MemoryRouter>)
-    // With issues, Qualification issues is a tall tile: a named group ("Qualification issues 12") whose figure is the count.
+    // With issues, Qualification issues is a tall tile: a named group ("Qualification issues 13") whose figure is the count.
     const tile = within(screen.getByRole('region', { name: 'Alerts' })).getByRole('group', { name: /^Qualification issues \d+$/ })
 
-    expect(listTotal).toBe(12)
+    expect(listTotal).toBe(13)
     expect(tile.querySelector('.text-display')!.textContent).toBe(String(listTotal))
   })
 })
@@ -191,7 +191,7 @@ describe('QualificationsPage: controls by role', () => {
     renderList()
     expandAll()
 
-    expect(screen.getByText('12 issues across 4 active staff')).toBeInTheDocument()
+    expect(screen.getByText('13 issues across 4 active staff')).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Warning window/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /^Edit / })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^edit/i })).not.toBeInTheDocument()
@@ -215,7 +215,7 @@ describe('QualificationsPage: the inline save keeps the active flag it does not 
   const openIvyEdit = () => {
     renderList()
     expandAll()
-    fireEvent.click(screen.getByRole('button', { name: /^Edit: .+, Ivy OneIssue$/ }))
+    fireEvent.click(screen.getByRole('button', { name: /^Edit: Medication Competency, Ivy OneIssue$/ }))
     fireEvent.change(screen.getByLabelText('Expiry date'), { target: { value: '2027-01-02' } })
   }
   beforeEach(() => { mockMutate.mockReset(); mockApiGet.mockReset(); mockPending.current = false })
