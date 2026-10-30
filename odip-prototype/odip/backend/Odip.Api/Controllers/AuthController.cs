@@ -1,4 +1,3 @@
-using System.Globalization;
 using FirebaseAdmin.Auth;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -25,7 +24,6 @@ public class AuthController : ControllerBase
     private readonly OdipDbContext _db;
     private readonly IConfiguration _config;
     private readonly ILogger<AuthController> _logger;
-    private readonly ILoginAttemptTracker _loginAttempts;
     private readonly IFirebaseTokenVerifier _tokenVerifier;
 
     // IFirebaseTokenVerifier is intentionally NOT registered in Program.cs, for the same reason as IFirebaseUserService on
@@ -35,19 +33,17 @@ public class AuthController : ControllerBase
         OdipDbContext db,
         IConfiguration config,
         ILogger<AuthController> logger,
-        ILoginAttemptTracker loginAttempts,
         ICurrentTenant currentTenant,
         IFirebaseTokenVerifier? tokenVerifier = null)
     {
         _db = db;
         _config = config;
         _logger = logger;
-        _loginAttempts = loginAttempts;
         _tokenVerifier = tokenVerifier ?? new FirebaseTokenVerifier();
         // currentTenant is intentionally unused: AuthResponseDto.StaffId (the only thing that
         // ever needed ICurrentTenant.ViewAsUserId here) was dropped per the staff/user
         // unification design spec §4.3. The parameter is kept so DI resolution and existing test
-        // call sites that construct this controller with five arguments don't need to change.
+        // call sites that construct this controller with four arguments don't need to change.
     }
 
     /// <summary>
@@ -58,61 +54,13 @@ public class AuthController : ControllerBase
     public async Task<ActionResult<ApiResponse<AuthResponseDto>>> Exchange(
         [FromBody] ExchangeTokenDto dto, CancellationToken ct)
     {
-        // Every rejection below funnels through Rejected() so the failure is always
-        // counted. A path that returns Unauthorized directly would be a free retry and
-        // would make the lockout bypassable by aiming at that specific case.
-        //
-        // A null key means the client address cannot be told apart from the proxy, so
-        // the caller is UNKNOWN and there is no budget that is theirs alone to spend.
-        // Counting anyway would be counting against a key every client on the internet
-        // shares — the denial of service this is here to prevent. See ClientIp.
-        var attemptKey = LoginAttemptKey();
-
-        // The lockout is checked up front so a locked-out client's failures answer
-        // 429 straight away, but it is NOT the whole defence and it is not final.
-        //
-        // It keys on an ADDRESS, and an address is not always one person: behind
-        // shared egress (a NAT, and in this deployment the proxy hop itself) several
-        // people legitimately share one. Refusing at this point would lock out a
-        // genuine holder of a valid credential because of a stranger's failures —
-        // and the address cannot be relied on to tell them apart.
-        //
-        // So this only RECORDS the state. The token is still verified below, and a
-        // real, valid credential always wins: it returns 200 whatever the counter
-        // says. Brute-force protection is not weakened, because a token that does
-        // not verify cannot pass — the Firebase verification is the cost of a guess,
-        // and an unverified caller reaches no ODIP data on any path.
-        var isLockedOut = false;
-        var lockedOutRetryAfter = TimeSpan.Zero;
-        if (attemptKey is not null)
-            isLockedOut = _loginAttempts.IsLockedOut(attemptKey, out lockedOutRetryAfter);
-
-        if (isLockedOut)
-        {
-            _logger.LogWarning("Exchange attempt from a locked-out client, verifying the token anyway: {Key}", attemptKey);
-        }
-
+        // Every rejection below funnels through Rejected(), so there is one refusal path. There is no failure counter: a wrong guess is a forged
+        // Firebase token, which the SDK rejects by signature, so a counter could only turn a 401 into a 429. The "login" rate limiter is the flood guard.
         ActionResult<ApiResponse<AuthResponseDto>> Rejected(string code, string logMessage, params object?[] logArgs)
         {
-            if (attemptKey is not null)
-                _loginAttempts.RecordFailure(attemptKey);
             _logger.LogWarning(logMessage, logArgs);
 
-            // A locked-out client is told so — that is the whole point of the counter —
-            // but only once the token has failed, so the 429 means "your token was no
-            // good AND this address is over its budget", never "your token was not
-            // even looked at".
-            if (isLockedOut)
-            {
-                // Only a refusal carries it: a valid token that wins during a lockout must not.
-                Response.Headers.RetryAfter = ((int)Math.Ceiling(lockedOutRetryAfter.TotalSeconds))
-                    .ToString(CultureInfo.InvariantCulture);
-                return StatusCode(
-                    StatusCodes.Status429TooManyRequests,
-                    ApiResponse<AuthResponseDto>.Fail(ExchangeRefusal.MessageFor(ExchangeRefusal.LockedOut), ExchangeRefusal.LockedOut));
-            }
-
-            // Still a 401, and still counted. The code says why, so the sign-in page can tell the person what to do. That is safe because of the order
+            // Always a 401. The code says why, so the sign-in page can tell the person what to do. That is safe because of the order
             // the checks run in (see ExchangeRefusal): everything that depends on ODIP's own rows is decided only after the token's email is verified and
             // its provider allowed, i.e. only for someone who controls the mailbox, and about their own address; an unverified token (which anyone can
             // get for any address) gets the same answer whether or not ODIP knows the address. InvalidToken stays generic.
@@ -122,8 +70,7 @@ public class AuthController : ControllerBase
         // The token must at least HAVE the shape of one before the SDK is asked to parse it. A token that is not three
         // base64url segments cannot be a Firebase token, and the SDK's parse of one is not a defined failure: an all-dots
         // token such as ".." makes it throw NullReferenceException (see FirebaseIdTokenShape). Refusing it here keeps that
-        // SDK defect out of the request path AND spends the failure budget like every other refusal, which is the point:
-        // without the spend this one shape would be a free retry.
+        // SDK defect out of the request path AND answers 401 like every other refusal.
         if (!FirebaseIdTokenShape.LooksLikeAnIdToken(dto.IdToken))
             return Rejected(ExchangeRefusal.InvalidToken, "Exchange failed — the token is not shaped like a Firebase ID token");
 
@@ -142,9 +89,7 @@ public class AuthController : ControllerBase
             // The SDK could not DECODE the token, as distinct from refusing one it read (FirebaseAuthException, above).
             // Malformed input reaches the decoders: "aaa.bbb.ccc" is three legal base64url segments that are not a JWT, so
             // parsing gets as far as the payload and fails as JsonReaderException, which derives from JsonException and is
-            // therefore not an ArgumentException. Letting that escape returned HTTP 500 and, because it never returned
-            // through Rejected(), did not spend the failure budget either — which is what made the lockout bypassable by aiming
-            // at this one shape. Measured against FirebaseAdmin 3.5.0; see FirebaseTokenParseFailures.
+            // therefore not an ArgumentException. Letting that escape returned HTTP 500. Measured against FirebaseAdmin 3.5.0; see FirebaseTokenParseFailures.
             // The response stays the generic InvalidToken, which is what the shape deserves: nothing about it is actionable, and a
             // fault in the SDK must not pose as one of the more specific codes. Only these types are caught (never by message and
             // never a catch-all), so a genuine fault elsewhere still surfaces as a 500 rather than being laundered into a 401.
@@ -217,8 +162,6 @@ public class AuthController : ControllerBase
 
             var superAdminToken = GenerateSuperAdminJwtToken(superAdmin);
             SetJwtCookie(superAdminToken);
-            if (attemptKey is not null)
-                _loginAttempts.RecordSuccess(attemptKey);
 
             return Ok(ApiResponse<AuthResponseDto>.Ok(new AuthResponseDto
             {
@@ -274,8 +217,6 @@ public class AuthController : ControllerBase
 
         var tenantToken = GenerateJwtToken(user, tenant.Id);
         SetJwtCookie(tenantToken);
-        if (attemptKey is not null)
-            _loginAttempts.RecordSuccess(attemptKey);
 
         return Ok(ApiResponse<AuthResponseDto>.Ok(new AuthResponseDto
         {
@@ -435,24 +376,8 @@ public class AuthController : ControllerBase
             // disagree, trust limiterPartitionKey.
             controllerTimeIp = connection.RemoteIpAddress?.ToString(),
 
-            // Whether this address can actually tell clients apart, and so whether
-            // the sign-in failure budget is per-client at all. True here is the
-            // docker-proxy shape: nginx's $remote_addr was already rewritten to the
-            // bridge gateway, so one key is shared by every caller and sign-in
-            // failures are deliberately not counted (ClientIp.LoginAttemptKey).
-            clientIndistinguishableFromProxy = ClientIp.IsIndistinguishableFromProxy(HttpContext),
-            // Null exactly when the address is the proxy's — see above.
-            loginAttemptKey = ClientIp.LoginAttemptKey(HttpContext)
-
         }));
     }
-
-    // Which client's failure budget this attempt spends from. Returns null when
-    // the caller cannot be told apart from the proxy (ClientIp.LoginAttemptKey),
-    // which is the deployed shape: counting then would be counting against a key
-    // EVERY client shares, so one noisy caller locks out everyone. A null key
-    // means the attempt is not counted and is not locked out.
-    private string? LoginAttemptKey() => ClientIp.LoginAttemptKey(HttpContext);
 
     private static bool IsDevAuthEnabled()
         => string.Equals(Environment.GetEnvironmentVariable("DEV_AUTH_ENABLED"), "true", StringComparison.OrdinalIgnoreCase);

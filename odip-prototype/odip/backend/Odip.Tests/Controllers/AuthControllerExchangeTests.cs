@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Net;
 using FirebaseAdmin.Auth;
 using Microsoft.AspNetCore.Http;
@@ -109,13 +108,11 @@ public class AuthControllerExchangeTests
         foreach (var (key, value) in settings ?? [])
             configured[key] = value;
         var config = new ConfigurationBuilder().AddInMemoryCollection(configured).Build();
-        // The lockout is per client address. Each controller has its own tracker, so a test that wants every attempt to spend from one budget
-        // reuses one controller.
         var http = new DefaultHttpContext();
         http.Connection.RemoteIpAddress = ClientAddress;
 
         return new AuthController(
-            db, config, logger ?? new Mock<ILogger<AuthController>>().Object, new LoginAttemptTracker(TimeProvider.System),
+            db, config, logger ?? new Mock<ILogger<AuthController>>().Object,
             new Mock<ICurrentTenant>().Object, verifier)
         {
             ControllerContext = new ControllerContext { HttpContext = http },
@@ -383,45 +380,42 @@ public class AuthControllerExchangeTests
         Assert.Null(body.TenantId);
     }
 
-    // ── The lockout and LastLoginAt ─────────────────────────────────────
-    // Every refusal goes through Rejected(), which spends from the client's failure budget: a refusal that returned Unauthorized directly would be a
-    // free retry, and the lockout could be dodged by aiming at that one case. A refusal never stamps LastLoginAt either, the record of when someone
-    // last got in, because nobody did.
+    // ── Refusals stay 401, and LastLoginAt ──────────────────────────────
+    // There is no failure counter: a wrong guess is a forged Firebase token, so however often a refused request is repeated it is a 401, never a 429.
+    // (The "login" flood limiter is the only thing that answers 429.) A refusal never stamps LastLoginAt either, the record of when someone last got in,
+    // because nobody did.
+    private const int RepeatedAttempts = 25;
 
-    private static Task AssertRefusalsSpendTheFailureBudget(OdipDbContext db, string tokenEmail, bool emailVerified = true, string? signInProvider = "password") =>
-        AssertRefusalsSpendTheFailureBudget(CreateController(db, tokenEmail, emailVerified, signInProvider: signInProvider));
+    private static Task AssertRefusalsStayUnauthorized(OdipDbContext db, string tokenEmail, bool emailVerified = true, string? signInProvider = "password") =>
+        AssertRefusalsStayUnauthorized(CreateController(db, tokenEmail, emailVerified, signInProvider: signInProvider));
 
-    // One controller, so one client address and one budget for every attempt.
-    private static async Task AssertRefusalsSpendTheFailureBudget(AuthController controller)
+    // One controller, so every attempt comes from one client address.
+    private static async Task AssertRefusalsStayUnauthorized(AuthController controller)
     {
-        for (var attempt = 0; attempt < LoginAttemptTracker.MaxFailures; attempt++)
+        for (var attempt = 0; attempt < RepeatedAttempts; attempt++)
             Assert.IsType<UnauthorizedObjectResult>((await Exchange(controller)).Result);
-
-        var lockedOut = Assert.IsType<ObjectResult>((await Exchange(controller)).Result);
-        Assert.Equal(StatusCodes.Status429TooManyRequests, lockedOut.StatusCode);
+        Assert.False(controller.Response.Headers.ContainsKey("Retry-After"));
     }
 
     // The same, for the cases where the TOKEN is what is under test, so every attempt presents the same malformed shape.
-    private static async Task AssertRefusalsSpendTheFailureBudget(AuthController controller, string idToken)
+    private static async Task AssertRefusalsStayUnauthorized(AuthController controller, string idToken)
     {
-        for (var attempt = 0; attempt < LoginAttemptTracker.MaxFailures; attempt++)
+        for (var attempt = 0; attempt < RepeatedAttempts; attempt++)
             Assert.IsType<UnauthorizedObjectResult>((await ExchangeWith(controller, idToken)).Result);
-
-        var lockedOut = Assert.IsType<ObjectResult>((await ExchangeWith(controller, idToken)).Result);
-        Assert.Equal(StatusCodes.Status429TooManyRequests, lockedOut.StatusCode);
+        Assert.False(controller.Response.Headers.ContainsKey("Retry-After"));
     }
 
     [Fact]
-    public async Task An_address_no_active_user_has_spends_from_the_failure_budget()
+    public async Task An_address_no_active_user_has_is_a_401_however_often_it_is_repeated()
     {
         using var db = CreateDb();
         SeedUser(db, SeedTenant(db).Id, "someone.else@gmail.com");
 
-        await AssertRefusalsSpendTheFailureBudget(db, "jane.smith@gmail.com");
+        await AssertRefusalsStayUnauthorized(db, "jane.smith@gmail.com");
     }
 
     [Fact]
-    public async Task An_address_on_two_active_rows_spends_from_the_failure_budget()
+    public async Task An_address_on_two_active_rows_is_a_401_however_often_it_is_repeated()
     {
         using var db = CreateDb();
         var acme = SeedTenant(db);
@@ -429,61 +423,61 @@ public class AuthControllerExchangeTests
         SeedUser(db, acme.Id, "jane.smith@gmail.com");
         SeedUser(db, other.Id, "jane.smith@gmail.com");
 
-        await AssertRefusalsSpendTheFailureBudget(db, "jane.smith@gmail.com");
+        await AssertRefusalsStayUnauthorized(db, "jane.smith@gmail.com");
     }
 
     [Fact]
-    public async Task A_user_whose_tenant_is_inactive_spends_from_the_failure_budget()
+    public async Task A_user_whose_tenant_is_inactive_is_a_401_however_often_it_is_repeated()
     {
         using var db = CreateDb();
         SeedUser(db, SeedTenant(db, isActive: false).Id, "jane.smith@gmail.com");
 
-        await AssertRefusalsSpendTheFailureBudget(db, "jane.smith@gmail.com");
+        await AssertRefusalsStayUnauthorized(db, "jane.smith@gmail.com");
     }
 
     [Fact]
-    public async Task An_unverified_email_spends_from_the_failure_budget()
+    public async Task An_unverified_email_is_a_401_however_often_it_is_repeated()
     {
         using var db = CreateDb();
         SeedUser(db, SeedTenant(db).Id, "jane.smith@gmail.com");
 
-        await AssertRefusalsSpendTheFailureBudget(db, "jane.smith@gmail.com", emailVerified: false);
+        await AssertRefusalsStayUnauthorized(db, "jane.smith@gmail.com", emailVerified: false);
     }
 
     [Fact]
-    public async Task A_SuperAdmin_address_with_no_active_row_spends_from_the_failure_budget()
+    public async Task A_SuperAdmin_address_with_no_active_row_is_a_401_however_often_it_is_repeated()
     {
         using var db = CreateDb();
         SeedUser(db, SeedTenant(db).Id, "platform.admin@platform.example.com", UserRole.SuperAdmin, isActive: false);
 
-        await AssertRefusalsSpendTheFailureBudget(db, "platform.admin@platform.example.com");
+        await AssertRefusalsStayUnauthorized(db, "platform.admin@platform.example.com");
     }
 
     // The generic InvalidToken has three ways in, and each is a way to guess at the exchange: a token Firebase will not vouch for, one with no email, and one
     // whose provider cannot be read. All three go through Rejected() like the rest, so none is a free retry.
     [Fact]
-    public async Task A_token_Firebase_will_not_vouch_for_spends_from_the_failure_budget()
+    public async Task A_token_Firebase_will_not_vouch_for_is_a_401_however_often_it_is_repeated()
     {
         using var db = CreateDb();
 
-        await AssertRefusalsSpendTheFailureBudget(CreateController(db, new RefusingVerifier(FirebaseTestExceptions.WithCode(AuthErrorCode.InvalidIdToken))));
+        await AssertRefusalsStayUnauthorized(CreateController(db, new RefusingVerifier(FirebaseTestExceptions.WithCode(AuthErrorCode.InvalidIdToken))));
     }
 
     [Theory]
     [InlineData("""{"email_verified":true,"firebase":{"sign_in_provider":"password"}}""")]                    // no email in it
     [InlineData("""{"email":"jane.smith@gmail.com","email_verified":true}""")]                                 // no provider it can read
-    public async Task A_token_that_is_missing_what_the_exchange_needs_spends_from_the_failure_budget(string payload)
+    public async Task A_token_that_is_missing_what_the_exchange_needs_is_a_401_however_often_it_is_repeated(string payload)
     {
         using var db = CreateDb();
         SeedUser(db, SeedTenant(db).Id, "jane.smith@gmail.com");
 
-        await AssertRefusalsSpendTheFailureBudget(CreateController(db, FirebaseTestClaims.FromPayload(payload)));
+        await AssertRefusalsStayUnauthorized(CreateController(db, FirebaseTestClaims.FromPayload(payload)));
     }
 
     // ── A malformed token is a refusal like any other, not an unhandled 500 ────────────────────
     // The exchange used to let the SDK's PARSE failures escape: JsonReaderException (from a three-segment token that is not a JWT)
     // matches no arm of ExceptionHandlingMiddleware's switch, so it became HTTP 500 — and because it never returned through
-    // Rejected(), it did not spend the failure budget either, so the per-key lockout could be dodged by aiming at that shape.
+    // Rejected(), it was a 500 rather than a refusal.
     // Measured against FirebaseAdmin 3.5.0, which class escapes depends on the shape, hence the theories below.
 
     /// <summary>The card's case: three segments that are not a JWT, which is what the SDK fails to parse.</summary>
@@ -516,28 +510,27 @@ public class AuthControllerExchangeTests
         AssertRefusal(result, "InvalidToken", "Invalid or expired token");
     }
 
-    // Every one of these spends from the failure budget, which is the half of the defect a status-code-only fix would have missed:
-    // a 500 that still skipped RecordFailure left the lockout bypassable however the status read.
+    // Every one of these is a 401, repeated, never a 500 and never a 429.
     [Theory]
     [InlineData("aaa.bbb.ccc")]                                     // three segments, not a JWT -> JsonReaderException
     [InlineData("aaa.###.ccc")]                                    // payload outside the base64url alphabet
     [InlineData("aaaa.bbbb.cccc")]                                 // legal base64url, junk content
     [InlineData("aaa.e30.ccc")]                                    // payload decodes to {} — valid JSON, not a JWT
-    public async Task A_token_the_SDK_cannot_decode_spends_from_the_failure_budget(string idToken)
+    public async Task A_token_the_SDK_cannot_decode_is_a_401_however_often_it_is_repeated(string idToken)
     {
         using var db = CreateDb();
 
-        await AssertRefusalsSpendTheFailureBudget(
+        await AssertRefusalsStayUnauthorized(
             CreateController(db, new ParseFailingVerifier(new Newtonsoft.Json.JsonReaderException("parse failed"))),
             idToken);
     }
 
     [Fact]
-    public async Task A_token_whose_segments_cannot_be_base64_decoded_spends_from_the_failure_budget_too()
+    public async Task A_token_whose_segments_cannot_be_base64_decoded_is_a_401_however_often_it_is_repeated_too()
     {
         using var db = CreateDb();
 
-        await AssertRefusalsSpendTheFailureBudget(
+        await AssertRefusalsStayUnauthorized(
             CreateController(db, new ParseFailingVerifier(new FormatException("not base-64"))), "a.b.c");
     }
 
@@ -596,11 +589,11 @@ public class AuthControllerExchangeTests
     [InlineData("a.b.c.d")]
     [InlineData("..")]
     [InlineData("a..b")]
-    public async Task A_token_that_is_not_shaped_like_an_ID_token_spends_from_the_failure_budget(string idToken)
+    public async Task A_token_that_is_not_shaped_like_an_ID_token_is_a_401_however_often_it_is_repeated(string idToken)
     {
         using var db = CreateDb();
 
-        await AssertRefusalsSpendTheFailureBudget(
+        await AssertRefusalsStayUnauthorized(
             CreateController(db, new ParseFailingVerifier(new InvalidOperationException("unreachable"))), idToken);
     }
 
@@ -633,7 +626,7 @@ public class AuthControllerExchangeTests
     }
 
     [Fact]
-    public async Task The_reported_token_through_the_real_Firebase_verifier_returns_401_and_spends_the_failure_budget()
+    public async Task The_reported_token_through_the_real_Firebase_verifier_returns_401_every_time()
     {
         using var db = CreateDb();
         var controller = CreateController(db, new FirebaseTokenVerifier());
@@ -642,16 +635,13 @@ public class AuthControllerExchangeTests
         // inline first. GoogleCredential parses the real PKCS#8 key; the SDK's payload parser then throws JsonReaderException.
         EnsureFirebaseAppForLocalParse();
 
-        for (var attempt = 0; attempt < LoginAttemptTracker.MaxFailures; attempt++)
+        for (var attempt = 0; attempt < RepeatedAttempts; attempt++)
         {
             var refused = await ExchangeWith(controller, "aaa.bbb.ccc");
             var unauthorized = Assert.IsType<UnauthorizedObjectResult>(refused.Result);
             var body = Assert.IsType<ApiResponse<AuthResponseDto>>(unauthorized.Value);
             Assert.Equal("InvalidToken", body.Code);
         }
-
-        var locked = Assert.IsType<ObjectResult>((await ExchangeWith(controller, "aaa.bbb.ccc")).Result);
-        Assert.Equal(StatusCodes.Status429TooManyRequests, locked.StatusCode);
     }
 
     private static void EnsureFirebaseAppForLocalParse()
@@ -810,12 +800,12 @@ public class AuthControllerExchangeTests
     }
 
     [Fact]
-    public async Task A_provider_that_is_not_listed_spends_from_the_failure_budget()
+    public async Task A_provider_that_is_not_listed_is_a_401_however_often_it_is_repeated()
     {
         using var db = CreateDb();
         SeedUser(db, SeedTenant(db).Id, "jane.smith@gmail.com");
 
-        await AssertRefusalsSpendTheFailureBudget(db, "jane.smith@gmail.com", signInProvider: "google.com");
+        await AssertRefusalsStayUnauthorized(db, "jane.smith@gmail.com", signInProvider: "google.com");
     }
 
     [Fact]
@@ -843,7 +833,7 @@ public class AuthControllerExchangeTests
     }
 
     // ── Why a refusal was a refusal ─────────────────────────────────────
-    // Every refusal is still a 401 and still spends from the failure budget, but it now says WHY in ApiResponse.Code, so the sign-in page can tell the
+    // Every refusal is a 401, and it says WHY in ApiResponse.Code, so the sign-in page can tell the
     // person what to do instead of "login failed" (an account Firebase re-created arrives unverified, and nobody could tell). Safe to say, because of
     // the ORDER the exchange decides in: the codes that depend on ODIP's own data (NoOdipAccount, TenantInactive, Ambiguous) come only after the email
     // is verified and the provider allowed, so only someone who controls the mailbox ever sees one, and only about their own address. Firebase lets
@@ -982,21 +972,16 @@ public class AuthControllerExchangeTests
     }
 
     [Fact]
-    public async Task A_client_over_the_failure_budget_gets_a_429_LockedOut_and_is_told_how_long_to_wait_in_seconds()
+    public async Task A_wrong_token_sent_over_and_over_is_a_401_every_time_and_never_a_429()
     {
         using var db = CreateDb();
-        var controller = CreateController(db, "nobody@gmail.com");   // no such row: every attempt is a refusal, one client address, one budget
-        for (var attempt = 0; attempt < LoginAttemptTracker.MaxFailures; attempt++)
-            await Exchange(controller);
+        var controller = CreateController(db, "nobody@gmail.com");   // no such row: every attempt is a refusal from one client address
+        for (var attempt = 0; attempt < RepeatedAttempts; attempt++)
+        {
+            var refused = Assert.IsType<UnauthorizedObjectResult>((await Exchange(controller)).Result);
+            Assert.Equal("NoOdipAccount", Assert.IsType<ApiResponse<AuthResponseDto>>(refused.Value).Code);
+        }
 
-        var locked = Assert.IsType<ObjectResult>((await Exchange(controller)).Result);
-
-        Assert.Equal(StatusCodes.Status429TooManyRequests, locked.StatusCode);
-        var body = Assert.IsType<ApiResponse<AuthResponseDto>>(locked.Value);
-        Assert.False(body.Success);
-        Assert.Equal("LockedOut", body.Code);
-        Assert.Equal("Too many failed sign-in attempts. Try again shortly.", Assert.Single(body.Errors!));
-        var retryAfterSeconds = int.Parse(controller.Response.Headers.RetryAfter.ToString(), CultureInfo.InvariantCulture);
-        Assert.InRange(retryAfterSeconds, 1, (int)LoginAttemptTracker.FailureWindow.TotalSeconds);
+        Assert.False(controller.Response.Headers.ContainsKey("Retry-After"));
     }
 }

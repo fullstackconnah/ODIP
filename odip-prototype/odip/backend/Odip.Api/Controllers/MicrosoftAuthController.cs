@@ -46,7 +46,6 @@ public class MicrosoftAuthController : ControllerBase
     private readonly OdipDbContext _db;
     private readonly IConfiguration _config;
     private readonly ILogger<MicrosoftAuthController> _logger;
-    private readonly ILoginAttemptTracker _attempts;
     private readonly IMicrosoftCodeRedeemer _redeemer;
     private readonly IMicrosoftIdTokenValidator _validator;
     private readonly IDataProtector _correlation;
@@ -57,19 +56,15 @@ public class MicrosoftAuthController : ControllerBase
     private readonly INotificationRaiser _raiser;
     private readonly IFirebaseUserService _firebase;
 
-    private string? _attemptKey;
-    private bool _lockedOut;
-
     // IFirebaseUserService is optional for the same reason as on AdminUsersController: production needs no DI entry, a test injects a fake.
     public MicrosoftAuthController(
-        OdipDbContext db, IConfiguration config, ILogger<MicrosoftAuthController> logger, ILoginAttemptTracker attempts,
+        OdipDbContext db, IConfiguration config, ILogger<MicrosoftAuthController> logger,
         IMicrosoftCodeRedeemer redeemer, IMicrosoftIdTokenValidator validator, IDataProtectionProvider dataProtection,
         IMemoryCache cache, TimeProvider clock, StaffCreateService staff, INotificationRaiser raiser, IFirebaseUserService? firebase = null)
     {
         _db = db;
         _config = config;
         _logger = logger;
-        _attempts = attempts;
         _redeemer = redeemer;
         _validator = validator;
         _correlation = dataProtection.CreateProtector("Odip.MicrosoftSignIn.Correlation.v1");
@@ -101,7 +96,6 @@ public class MicrosoftAuthController : ControllerBase
             && !string.Equals(Request.Host.Host, publicUri.Host, StringComparison.OrdinalIgnoreCase))
             return Redirect(cfg.StartUrl(Uri.EscapeDataString(intent ?? "")));
 
-        BeginAttempt();
         var path = MicrosoftSignInPaths.For(intent ?? "");
 
         Guid? userId = null, orgId = null;
@@ -171,7 +165,6 @@ public class MicrosoftAuthController : ControllerBase
     {
         var cfg = MicrosoftSignInConfig.From(_config);
         if (cfg is null) return NotFound();
-        BeginAttempt();
 
         // The cookie is single-use whatever happens next.
         var cookie = Request.Cookies[CorrelationCookie];
@@ -189,7 +182,7 @@ public class MicrosoftAuthController : ControllerBase
         _cache.Set("ms-state:" + state, true, CorrelationLife);
 
         // The person pressed Cancel at Microsoft. No guess is involved, so it does not spend the failure budget.
-        if (!string.IsNullOrEmpty(error)) return RefuseUncounted(MicrosoftRefusal.MicrosoftCancelled, path, "Microsoft callback - Entra sent error {Error}", error);
+        if (!string.IsNullOrEmpty(error)) return Refuse(MicrosoftRefusal.MicrosoftCancelled, path, "Microsoft callback - Entra sent error {Error}", error);
         if (string.IsNullOrEmpty(code)) return Refuse(MicrosoftRefusal.InvalidToken, path, "Microsoft callback - no code");
 
         var idToken = await _redeemer.RedeemAsync(code, corr.CodeVerifier, cfg.RedirectUri, ct);
@@ -202,9 +195,9 @@ public class MicrosoftAuthController : ControllerBase
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // Entra's metadata could not be fetched: a fault of ours, not a guess, so it is not counted.
+            // Entra's metadata could not be fetched: a fault of ours, not a guess.
             _logger.LogError(ex, "Microsoft callback - the ID token could not be validated");
-            return RefuseUncounted(MicrosoftRefusal.InvalidToken, path, "Microsoft callback - validation failed");
+            return Refuse(MicrosoftRefusal.InvalidToken, path, "Microsoft callback - validation failed");
         }
         if (validated.Identity is not { } identity)
             return Refuse(validated.Refusal ?? MicrosoftRefusal.InvalidToken, path, "Microsoft callback - the ID token was refused ({Code})", validated.Refusal);
@@ -308,7 +301,6 @@ public class MicrosoftAuthController : ControllerBase
         {
             HttpOnly = true, Secure = true, SameSite = SameSiteMode.Strict, Path = CookiePath, Expires = issued + RefreshLife,
         });
-        if (_attemptKey is not null) _attempts.RecordSuccess(_attemptKey);
         return LocalRedirect(MicrosoftSignInPaths.SignInSuccess);
     }
 
@@ -408,7 +400,7 @@ public class MicrosoftAuthController : ControllerBase
     /// <summary>
     /// Mints a fresh 30-minute session while the 12-hour absolute refresh cookie holds. It never re-issues that cookie, so sign-in stays bounded to 12 hours.
     /// Everything the cookie vouched for is re-checked now, so removing the link, deactivating the person or unlinking their account ends it within one cycle.
-    /// Failures are not counted: the cookie is sealed by Data Protection, so there is nothing to guess.
+    /// The cookie is sealed by Data Protection, so there is nothing to guess.
     /// </summary>
     [HttpPost("refresh")]
     [AllowAnonymous]
@@ -574,27 +566,12 @@ public class MicrosoftAuthController : ControllerBase
     }
 
     /// <summary>
-    /// Every refusal goes through here, so it is always counted (the same discipline as the exchange): a path that redirected directly would be a free retry.
-    /// A locked-out address is told so, but a valid sign-in still wins (StartSession), exactly as in the exchange.
+    /// Every refusal goes through here, so there is one refusal path.
     /// </summary>
     private IActionResult Refuse(string code, string path, string logMessage, params object?[] logArgs)
     {
-        if (_attemptKey is not null) _attempts.RecordFailure(_attemptKey);
-        _logger.LogWarning(logMessage, logArgs);
-        return LocalRedirect(MicrosoftSignInPaths.WithOutcome(path, _lockedOut ? MicrosoftRefusal.LockedOut : code));
-    }
-
-    /// <summary>For a refusal no guess can produce (the person pressed Cancel; Entra's keys could not be fetched): shown, not counted.</summary>
-    private IActionResult RefuseUncounted(string code, string path, string logMessage, params object?[] logArgs)
-    {
         _logger.LogWarning(logMessage, logArgs);
         return LocalRedirect(MicrosoftSignInPaths.WithOutcome(path, code));
-    }
-
-    private void BeginAttempt()
-    {
-        _attemptKey = ClientIp.LoginAttemptKey(HttpContext);
-        if (_attemptKey is not null) _lockedOut = _attempts.IsLockedOut(_attemptKey, out _);
     }
 }
 

@@ -24,17 +24,6 @@ using Xunit;
 
 namespace Odip.Tests.Auth.Microsoft;
 
-/// <summary>Counts what the controller tells the lockout; delegates to the real tracker so a lockout really happens.</summary>
-public sealed class RecordingTracker : ILoginAttemptTracker
-{
-    private readonly LoginAttemptTracker _inner = new();
-    public List<string> Failures { get; } = new();
-    public List<string> Successes { get; } = new();
-    public bool IsLockedOut(string key, out TimeSpan retryAfter) => _inner.IsLockedOut(key, out retryAfter);
-    public void RecordFailure(string key) { Failures.Add(key); _inner.RecordFailure(key); }
-    public void RecordSuccess(string key) { Successes.Add(key); _inner.RecordSuccess(key); }
-}
-
 public sealed class FakeRedeemer : IMicrosoftCodeRedeemer
 {
     public List<(string Code, string Verifier, string RedirectUri)> Calls { get; } = new();
@@ -71,7 +60,6 @@ public sealed class MicrosoftAuthRig
     public static readonly IPAddress Client = IPAddress.Parse("203.0.113.7");
 
     public OdipDbContext Db { get; }
-    public RecordingTracker Tracker { get; } = new();
     public FakeRedeemer Redeemer { get; } = new();
     public TestClock Clock { get; } = new();
     public IDataProtectionProvider Dp { get; } = new EphemeralDataProtectionProvider();
@@ -112,7 +100,7 @@ public sealed class MicrosoftAuthRig
         var config = new ConfigurationBuilder().AddInMemoryCollection(Settings).Build();
         Accessor.HttpContext = http;
         return new MicrosoftAuthController(
-            Db, config, new Mock<ILogger<MicrosoftAuthController>>().Object, Tracker, Redeemer, MicrosoftTestTokens.Validator(), Dp, Cache, Clock,
+            Db, config, new Mock<ILogger<MicrosoftAuthController>>().Object, Redeemer, MicrosoftTestTokens.Validator(), Dp, Cache, Clock,
             new StaffCreateService(Db, config), Raiser ?? new NotificationRaiser(Db), firebase)
         {
             ControllerContext = new ControllerContext { HttpContext = http },

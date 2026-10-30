@@ -16,7 +16,7 @@ namespace Odip.Api.Services;
 /// <item>Only then does the exchange look at ODIP's own rows: <see cref="NoOdipAccount"/>, <see cref="Ambiguous"/>, <see cref="TenantInactive"/>.
 /// A token that got this far proves control of the mailbox, so these are shown only to the owner of the address, and only about their own address.</item>
 /// </list>
-/// <see cref="LockedOut"/> is per client address, not per account.
+/// <see cref="LockedOut"/> is no longer sent by the exchange (the failure counter was removed); the sign-in page still words it for any 429, which is now only the flood limiter.
 /// </summary>
 public static class ExchangeRefusal
 {
