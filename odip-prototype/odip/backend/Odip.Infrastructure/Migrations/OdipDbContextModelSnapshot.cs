@@ -1108,6 +1108,18 @@ namespace Odip.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime?>("AwareAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("CommissionDetailedReportedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<bool>("CommissionFinalReportRequested")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("CommissionFinalReportedAt")
+                        .HasColumnType("timestamp without time zone");
+
                     b.Property<string>("CorrectiveActions")
                         .HasColumnType("text");
 
@@ -1117,6 +1129,12 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("DetailedReportDueAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<bool>("DueCountedWithoutHolidays")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("EmergencyServicesDetails")
                         .HasColumnType("text");
@@ -1154,6 +1172,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<Guid?>("MedicationAdministrationId")
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime?>("NotifyDueAt")
+                        .HasColumnType("timestamp without time zone");
+
                     b.Property<string>("OtherTypeSpecify")
                         .HasColumnType("text");
 
@@ -1168,6 +1189,13 @@ namespace Odip.Infrastructure.Migrations
 
                     b.Property<int>("QscReportingStatus")
                         .HasColumnType("integer");
+
+                    b.Property<int>("ReportableClass")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ReportableClassReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<Guid>("ReportedByUserId")
                         .HasColumnType("uuid");
