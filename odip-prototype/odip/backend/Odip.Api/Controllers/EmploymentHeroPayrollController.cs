@@ -163,9 +163,7 @@ public class EmploymentHeroPayrollController : ControllerBase
             var shiftBreaks = breaks[c.Id].ToList();
             var built = EmploymentHeroTimesheets.Build(shift, c, shiftBreaks, payrollId, map, zone);
             var (status, reason, sendable) = EmploymentHeroTimesheets.StatusOf(row, payrollId is not null, built.WaitReason, zone);
-            var rostered = (int)(shift.EndTime.ToTimeSpan() - shift.StartTime.ToTimeSpan()).TotalMinutes + (shift.EndsNextDay ? 1440 : 0);
-            var (_, breakMinutes, net) = ShiftBreakRules.NetWorked(c.ActualStart, c.ActualEnd, now, shiftBreaks);
-            var paid = shift.NightType == SleepoverType.Sleepover ? rostered : net;   // a sleepover is paid its rostered hours
+            var (rostered, breakMinutes, paid) = ShiftBreakRules.PaidMinutes(shift, c, now, shiftBreaks);
             items.Add(new Item(c.Id, row, sendable));
             if (!byWorker.TryGetValue(c.SubmittedByUserId, out var list)) byWorker[c.SubmittedByUserId] = list = [];
             list.Add(new PayrollShiftDto(shift.Id, shift.ServiceDate, participants.GetValueOrDefault(shift.ParticipantId, ""), shift.StartTime, shift.EndTime, shift.EndsNextDay,

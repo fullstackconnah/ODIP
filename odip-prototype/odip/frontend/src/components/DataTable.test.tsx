@@ -588,6 +588,14 @@ describe('DataTable — density row geometry (spec §1/§4)', () => {
     }
   })
 
+  it('leaves the tick box cell in place unless a table passes selectCellClassName', () => {
+    const { rerender } = render(<DataTable data={rows} columns={columns} keyField="id" selectable selectedRows={new Set()} onSelectionChange={vi.fn()} />)
+    expect(screen.getByLabelText('Select row 1').closest('td')).not.toHaveClass('max-md:-order-3')
+
+    rerender(<DataTable data={rows} columns={columns} keyField="id" selectable selectCellClassName="max-md:-order-3" selectedRows={new Set()} onSelectionChange={vi.fn()} />)
+    expect(screen.getByLabelText('Select row 1').closest('td')).toHaveClass('max-md:-order-3')
+  })
+
   it('no longer carries the fixed pixel padding that built rows out of padding', () => {
     const { container } = render(
       <DataTable data={rows} columns={columns} keyField="id" selectable selectedRows={new Set()} onSelectionChange={vi.fn()} />,
@@ -1126,5 +1134,31 @@ describe('DataTable — width', () => {
     const th = screen.getByRole('columnheader', { name: 'Status' })
     expect(th).toHaveClass('md:w-[var(--col-w)]')
     expect(th.getAttribute('style')).toContain('--col-w: 22%')
+  })
+})
+
+describe('DataTable — rows that cannot be ticked', () => {
+  it("disables a blocked row's box, describes it by the reason, and leaves it out of select all", async () => {
+    const onSelectionChange = vi.fn()
+    render(
+      <>
+        <p id="why-2">Price is over the limit</p>
+        <DataTable data={rows} columns={columns} keyField="id" selectable selectedRows={new Set()} onSelectionChange={onSelectionChange}
+          selectBlockedBy={row => (row.id === '2' ? 'why-2' : undefined)} />
+      </>,
+    )
+    const blocked = screen.getByLabelText('Select row 2')
+    expect(blocked).toBeDisabled()
+    expect(blocked).toHaveAccessibleDescription('Price is over the limit')
+    await userEvent.click(screen.getByLabelText('Select all rows'))
+    expect(onSelectionChange).toHaveBeenCalledWith(new Set(['1']))
+  })
+
+  it("lets the caller own the header box's state and action", async () => {
+    const onChange = vi.fn()
+    render(<DataTable data={rows} columns={columns} keyField="id" selectable selectedRows={new Set()} onSelectionChange={vi.fn()}
+      selectAll={{ checked: false, indeterminate: false, label: 'Select all ready', onChange }} />)
+    await userEvent.click(screen.getByLabelText('Select all ready'))
+    expect(onChange).toHaveBeenCalledWith(true)
   })
 })

@@ -141,8 +141,14 @@ export type DataTableProps<T> = {
    */
   compact?: boolean
   selectable?: boolean
+  /** Extra classes for the tick box cell, e.g. to reorder it in the phone card. */
+  selectCellClassName?: string
   selectedRows?: Set<string>
   onSelectionChange?: (ids: Set<string>) => void
+  /** A row that can't be ticked: returns the id of the element that says why, which its disabled box is described by. The header box skips it. */
+  selectBlockedBy?: (row: T) => string | undefined
+  /** The header box's own state and action, for a selection wider than this page (e.g. every passing line across pages). */
+  selectAll?: { checked: boolean; indeterminate: boolean; label: string; onChange: (checked: boolean) => void }
   /**
    * Signals that `data` is one server-paged slice of `totalCount`, not the full result set.
    * Its presence is the sole switch: when provided, `DataTable` renders "Showing X-Y of Z" +
@@ -320,8 +326,11 @@ export function DataTable<T>({
   className,
   compact = false,
   selectable = false,
+  selectCellClassName = '',
   selectedRows,
   onSelectionChange,
+  selectBlockedBy,
+  selectAll,
   pagination,
 }: DataTableProps<T>) {
   const { prefs } = useUiPreferences()
@@ -356,12 +365,15 @@ export function DataTable<T>({
   const selectAllRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (!selectAllRef.current || !selectable || !sortedData.length) return
+    if (!selectAllRef.current || !selectable) return
+    if (selectAll) { selectAllRef.current.indeterminate = selectAll.indeterminate; return }
+    if (!sortedData.length) return
     const selectedCount = sortedData.filter(row =>
       selectedRows?.has(String((row as any)[keyField]))
     ).length
     selectAllRef.current.indeterminate = selectedCount > 0 && selectedCount < sortedData.length
-  }, [selectedRows, sortedData, keyField, selectable])
+  }, [selectedRows, sortedData, keyField, selectable, selectAll])
+  const tickable = selectBlockedBy ? sortedData.filter(row => !selectBlockedBy(row)) : sortedData
 
   // Which edge of the scroll box has content scrolled under its pinned column: the start edge once scrolled right, the end edge while there
   // is more to the right. jsdom measures nothing (all zeros), so both stay false there and a pinned cell is only filled in a real browser.
@@ -471,23 +483,25 @@ export function DataTable<T>({
                 <label className="inline-flex min-h-[var(--tap-min)] min-w-[var(--tap-min)] items-center justify-center"><input
                   ref={selectAllRef}
                   type="checkbox"
-                  checked={
-                    sortedData.length > 0 &&
-                    sortedData.every(row =>
+                  checked={selectAll ? selectAll.checked :
+                    tickable.length > 0 &&
+                    tickable.every(row =>
                       selectedRows?.has(String((row as any)[keyField]))
                     )
                   }
                   onChange={e => {
-                    if (e.target.checked) {
+                    if (selectAll) {
+                      selectAll.onChange(e.target.checked)
+                    } else if (e.target.checked) {
                       onSelectionChange?.(
-                        new Set(sortedData.map(row => String((row as any)[keyField])))
+                        new Set(tickable.map(row => String(row[keyField])))
                       )
                     } else {
                       onSelectionChange?.(new Set())
                     }
                   }}
                   className="rounded border-[var(--color-border)] cursor-pointer"
-                  aria-label="Select all rows"
+                  aria-label={selectAll?.label ?? 'Select all rows'}
                 /></label>
               </th>
             )}
@@ -582,12 +596,14 @@ export function DataTable<T>({
                 >
                   {selectable && (
                     <td
-                      className={`${cellClass} w-10`}
+                      className={`${cellClass} w-10 ${selectCellClassName}`}
                       onClick={e => e.stopPropagation()}
                     >
                       <label className="inline-flex min-h-[var(--tap-min)] min-w-[var(--tap-min)] items-center justify-center"><input
                         type="checkbox"
                         checked={selectedRows?.has(rowKey) ?? false}
+                        disabled={!!selectBlockedBy?.(row)}
+                        aria-describedby={selectBlockedBy?.(row)}
                         onChange={e => {
                           const next = new Set(selectedRows ?? [])
                           if (e.target.checked) {

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { extractErrorMessage } from '@/lib/utils'
 import { SearchInput } from '@/components/SearchInput'
 import {
   useVehicles, useCreateVehicleAssignment, useCreateVehicle,
@@ -102,7 +103,7 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
             setFindings(serverFindings)
             if (getRosterGate(serverFindings).needsReason && !overrideReason.trim()) setReasonRequired(true)
           } else {
-            setAssignError('Failed to assign vehicle. Please try again.')
+            setAssignError(extractErrorMessage(err, "Couldn't assign this vehicle. Check your connection and try again."))
           }
         },
       }
@@ -305,10 +306,10 @@ export default function AddVehicleModal({ tripInstanceId, assignedVehicleIds, on
             </div>
 
             {createVehicle.isError && (
-              <p className={`text-sm text-[var(--color-destructive)] ${modalSpan.full}`}>Failed to create vehicle. Please try again.</p>
+              <p className={`text-sm text-[var(--color-destructive)] ${modalSpan.full}`}>{extractErrorMessage(createVehicle.error, "Couldn't create this vehicle. Check your connection and try again.")}</p>
             )}
             {newVehicleId && !createAssignment.isPending && (
-              <p className={`text-sm text-[var(--color-destructive)] ${modalSpan.full}`}>Vehicle created. Assigning it to the trip failed: try again.</p>
+              <p className={`text-sm text-[var(--color-destructive)] ${modalSpan.full}`}>Vehicle created, but couldn't assign it to this trip. Check your connection and try again.</p>
             )}
             {(createAssignment.isError || noIdReturned) && !createVehicle.isError && !newVehicleId && (
               <p className={`text-sm text-[var(--color-destructive)] ${modalSpan.full}`}>

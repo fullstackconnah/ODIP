@@ -525,6 +525,151 @@ namespace Odip.Infrastructure.Migrations
                     b.ToTable("CaregiverProfileSubmissions");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Entities.ClaimBatch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<byte[]>("Content")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedByName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("DiscardedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid?>("DiscardedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("LineCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("ResultsImportedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("TotalAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime?>("UploadedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UploadedByName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("UploadedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "FileName")
+                        .IsUnique()
+                        .HasDatabaseName("UX_ClaimBatches_TenantId_FileName");
+
+                    b.HasIndex("TenantId", "Status", "CreatedAt");
+
+                    b.ToTable("ClaimBatches");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.ClaimBatchLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("Attempt")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("BatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ClaimLineItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("DismissedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid?>("DismissedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("NdisNumber")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("Outcome")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RejectCode")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("RejectMessage")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<decimal?>("ResultAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("RowReference")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("SupportNumber")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<DateOnly>("SupportsDeliveredFrom")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("SupportsDeliveredTo")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClaimLineItemId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_ClaimBatchLines_OnePendingPerLine")
+                        .HasFilter("\"Outcome\" = 0");
+
+                    b.HasIndex("BatchId", "RowReference")
+                        .IsUnique();
+
+                    b.ToTable("ClaimBatchLines");
+                });
+
             modelBuilder.Entity("Odip.Domain.Entities.ClaimLineItem", b =>
                 {
                     b.Property<Guid>("Id")
@@ -6653,6 +6798,24 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("Tenant");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Entities.ClaimBatchLine", b =>
+                {
+                    b.HasOne("Odip.Domain.Entities.ClaimBatch", "Batch")
+                        .WithMany("Lines")
+                        .HasForeignKey("BatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Odip.Domain.Entities.ClaimLineItem", "ClaimLineItem")
+                        .WithMany()
+                        .HasForeignKey("ClaimLineItemId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Batch");
+
+                    b.Navigation("ClaimLineItem");
+                });
+
             modelBuilder.Entity("Odip.Domain.Entities.ClaimLineItem", b =>
                 {
                     b.HasOne("Odip.Domain.Entities.ParticipantBooking", "ParticipantBooking")
@@ -7837,6 +8000,11 @@ namespace Odip.Infrastructure.Migrations
             modelBuilder.Entity("Odip.Domain.Entities.Activity", b =>
                 {
                     b.Navigation("ScheduledActivities");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.ClaimBatch", b =>
+                {
+                    b.Navigation("Lines");
                 });
 
             modelBuilder.Entity("Odip.Domain.Entities.Contact", b =>
