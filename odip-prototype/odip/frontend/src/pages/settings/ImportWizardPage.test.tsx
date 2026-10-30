@@ -325,6 +325,8 @@ describe('ImportWizardPage', () => {
       expect(screen.queryByText('Person 52')).not.toBeInTheDocument()
       await userEvent.click(screen.getByRole('button', { name: 'Next page' }))
       expect(screen.getByText(/Showing 51-100 of 120/)).toBeInTheDocument()
+      // The table sits inside the wizard's form: a pager button that submits it would open the import confirmation.
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
       expect(screen.getByText('Person 52')).toBeInTheDocument()
       expect(screen.queryByText('Person 2')).not.toBeInTheDocument()
       await userEvent.click(screen.getByRole('radio', { name: /Ready \(60\)/ }))
