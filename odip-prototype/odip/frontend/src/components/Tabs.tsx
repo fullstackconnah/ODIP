@@ -115,7 +115,8 @@ export function Tabs({ tabs, active, onChange, ariaLabel = 'Tabs', idPrefix, cla
   // is the wrong side effect on load. A tab that is already fully visible is left alone, and from md up
   // (a wrapping strip that never overflows) this does nothing. `scroll-smooth` on the strip animates
   // the move, and the global reduced-motion rule turns that off. jsdom has no `scrollTo` on elements,
-  // hence the `scrollLeft` fallback.
+  // hence the `scrollLeft` fallback. Badges that arrive after load widen the tabs, so they re-run it too.
+  const badges = tabs.map(t => t.badge ?? '').join()
   useEffect(() => {
     const list = listRef.current
     const tab = tabRefs.current[active]
@@ -127,7 +128,7 @@ export function Tabs({ tabs, active, onChange, ariaLabel = 'Tabs', idPrefix, cla
     const left = Math.max(0, Math.min(centred, list.scrollWidth - list.clientWidth))
     if (typeof list.scrollTo === 'function') list.scrollTo({ left })
     else list.scrollLeft = left
-  }, [active])
+  }, [active, badges])
 
   // Resolve the initial focus target before seeding state: if the parent passes an
   // `active` id that doesn't correspond to a tab at all, or that corresponds to a disabled

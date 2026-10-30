@@ -3,10 +3,11 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import UsersTab from './UsersTab'
 
-const { mockUseAdminUsers, mockEnsure, sendPasswordResetEmail, firebase } = vi.hoisted(() => ({
+const { mockUseAdminUsers, mockEnsure, mockRecord, sendPasswordResetEmail, firebase } = vi.hoisted(() => ({
   mockUseAdminUsers: vi.fn(),
   // POST /admin/users/{id}/sign-in-account: makes sure the Firebase account exists and says whether it made it.
   mockEnsure: vi.fn(),
+  mockRecord: vi.fn(),
   sendPasswordResetEmail: vi.fn(),
   // `auth` is null where Firebase is not configured (local dev auth). A getter, so each test can change it.
   firebase: { auth: null as object | null },
@@ -16,6 +17,7 @@ vi.mock('@/api/hooks', () => ({
   useAdminUsers: mockUseAdminUsers,
   useAdminTenantsSummary: () => ({ data: [] }),
   useEnsureUserSignInAccount: () => ({ mutateAsync: mockEnsure }),
+  useRecordInvitesSent: () => ({ mutate: mockRecord }),
 }))
 vi.mock('firebase/auth', () => ({ sendPasswordResetEmail }))
 vi.mock('@/lib/firebase', () => ({
@@ -65,6 +67,7 @@ beforeEach(() => {
   firebase.auth = authStub
   mockEnsure.mockReset().mockResolvedValue({ firebaseAccount: 'created' })
   sendPasswordResetEmail.mockReset().mockResolvedValue(undefined)
+  mockRecord.mockReset()
 })
 
 describe('UsersTab: Send set-password email', () => {
@@ -79,6 +82,17 @@ describe('UsersTab: Send set-password email', () => {
     expect(mockEnsure).toHaveBeenCalledWith('u2')
     expect(sendPasswordResetEmail).toHaveBeenCalledTimes(1)
     expect(sendPasswordResetEmail).toHaveBeenCalledWith(authStub, 'u2@example.com.au')
+    expect(mockRecord).toHaveBeenCalledWith(['u2'])
+  })
+
+  it('records nothing when Firebase refused the link', async () => {
+    sendPasswordResetEmail.mockRejectedValueOnce(firebaseError('auth/network-request-failed'))
+    const u = renderTab([user(1)])
+
+    await u.click(sendIn('User Number1'))
+
+    await within(region()).findByText(/No link was sent to u1@example.com.au/)
+    expect(mockRecord).not.toHaveBeenCalled()
   })
 
   it('has its notices region from the first render, empty until something is said', () => {

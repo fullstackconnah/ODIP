@@ -250,6 +250,8 @@ public static class ExportTables
             (db, t) => { var claims = Claims(db, t); return db.ClaimLineItems.Where(l => claims.Any(c => c.Id == l.TripClaimId)); }),
         Own<Invoice>("invoices.csv", "Numbered invoices and credit notes as issued: payer, seller and bank details, totals, and voids, including those whose claim was deleted."),
         Own<InvoiceLine>("invoice-lines.csv", "The lines of each invoice and credit note, as issued."),
+        Own<ClaimBatch>("claim-batches.csv", "NDIA claim files: name, status, who built and uploaded them, and when. The file itself is downloaded again from Claims."),
+        Own<ClaimBatchLine>("claim-batch-lines.csv", "Each claim line sent in a claim file, its row reference and what the NDIA answered."),
 
         // Tasks and imports
         Own<BookingTask>("tasks.csv", "Tasks: what, for whom, when due, and their status."),

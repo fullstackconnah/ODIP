@@ -1,6 +1,6 @@
 import { useParams, Link } from 'react-router-dom'
 import { useMemo, useState } from 'react'
-import { useStaffOverview, useSettings, useEnsureStaffSignInAccount, useModuleVisibility, useStaffLeaveBalances } from '@/api/hooks'
+import { useStaffOverview, useSettings, useEnsureStaffSignInAccount, useRecordInvitesSent, useModuleVisibility, useStaffLeaveBalances } from '@/api/hooks'
 import { Tabs } from '@/components/Tabs'
 import { LeaveBalances } from '@/components/LeaveBalances'
 import { Card } from '@/components/Card'
@@ -57,6 +57,7 @@ export default function StaffDetailPage() {
   // Firebase sends the email, so without Firebase (local dev auth) the action is not offered rather than offered and broken.
   const canManageSignIn = (isSuperAdmin || isAdmin || isCoordinator) && canSendSetPasswordEmail()
   const ensureAccount = useEnsureStaffSignInAccount()
+  const recordInvite = useRecordInvitesSent()
   // What became of each "Send set-password email", kept at the top of the page until dismissed.
   const { notices, notify, dismiss } = useNotices()
   const [sending, setSending] = useState(false)
@@ -89,6 +90,7 @@ export default function StaffDetailPage() {
     setSending(true)
     const outcome = await ensureAndSendSetPasswordEmail(email, () => ensureAccount.mutateAsync(overview.staff.id))
     setSending(false)
+    if (outcome.ok) recordInvite.mutate([overview.staff.id])
     const { tone, message } = describeEmailOutcome(outcome, 'use Send set-password email on this page')
     // The staff id is the notice's subject, so a later send that works replaces this person's earlier failure.
     notify(tone, overview.staff.fullName, message, overview.staff.id)
@@ -131,6 +133,7 @@ export default function StaffDetailPage() {
                   </Button>
                 )}
                 {canManageSignIn && staff.isActive && !!staff.email && (
+                  <>
                   <Button
                     variant="secondary"
                     size="md"
@@ -142,6 +145,8 @@ export default function StaffDetailPage() {
                   >
                     <Mail className="w-4 h-4" /> Send set-password email
                   </Button>
+                  {staff.signInInviteSentAt && !staff.hasSignedIn && <span className="text-[13px] text-[var(--color-muted-foreground)]">{`Invite sent ${formatDateAu(staff.signInInviteSentAt)}`}</span>}
+                  </>
                 )}
                 {canWrite && (
                   <Button to={`/staff/${id}/edit`} variant="primary" size="md">

@@ -164,6 +164,40 @@ public class StaffOverviewControllerTests
     }
 
     [Fact]
+    public async Task GetOverview_returns_when_the_sign_in_invite_was_sent()
+    {
+        var tenantId = Guid.NewGuid();
+        using var db = CreateDb(tenantId, isSuperAdmin: false);
+        var staff = SeedStaff(db, tenantId);
+        var sent = new DateTime(2026, 10, 30, 14, 30, 0, DateTimeKind.Utc);
+        staff.SignInInviteSentAt = sent;
+        await db.SaveChangesAsync();
+
+        var result = await new StaffController(db, new StaffAvailabilityItemsQuery(db), clock: Clock).GetOverview(staff.Id, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<StaffOverviewDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(sent, body.Data!.Staff.SignInInviteSentAt);
+    }
+
+    [Fact]
+    public async Task GetOverview_says_whether_the_person_has_ever_signed_in_without_sending_when()
+    {
+        var tenantId = Guid.NewGuid();
+        using var db = CreateDb(tenantId, isSuperAdmin: false);
+        var never = SeedStaff(db, tenantId);
+        var signedIn = SeedStaff(db, tenantId, "Ana", "Lee");
+        signedIn.LastLoginAt = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+        await db.SaveChangesAsync();
+        var controller = new StaffController(db, new StaffAvailabilityItemsQuery(db), clock: Clock);
+
+        var neverBody = Assert.IsType<ApiResponse<StaffOverviewDto>>(Assert.IsType<OkObjectResult>((await controller.GetOverview(never.Id, CancellationToken.None)).Result).Value);
+        var signedInBody = Assert.IsType<ApiResponse<StaffOverviewDto>>(Assert.IsType<OkObjectResult>((await controller.GetOverview(signedIn.Id, CancellationToken.None)).Result).Value);
+
+        Assert.False(neverBody.Data!.Staff.HasSignedIn);
+        Assert.True(signedInBody.Data!.Staff.HasSignedIn);
+    }
+
+    [Fact]
     public async Task GetOverview_UpcomingShifts_ExcludesShiftsOutsideTheFourteenDayWindow()
     {
         var tenantId = Guid.NewGuid();

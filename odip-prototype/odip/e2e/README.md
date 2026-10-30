@@ -48,6 +48,7 @@ You need .NET 10 SDK, Node 20+, and a PostgreSQL 16 server (a portable zip is en
    JWT_SECRET=e2e-only-signing-key-0123456789-abcdefghij
    DEV_AUTH_ENABLED=true
    ASPNETCORE_ENVIRONMENT=Production
+   DEV_AUTH_ALLOW_IN_PRODUCTION=true   # the API refuses DEV_AUTH_ENABLED in Production without it
    ASPNETCORE_URLS=http://127.0.0.1:5000
    HolidaySync__FromYear=2100
    ```

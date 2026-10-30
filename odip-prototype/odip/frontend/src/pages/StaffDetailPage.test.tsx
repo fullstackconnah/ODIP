@@ -20,6 +20,7 @@ vi.mock('@/api/hooks', () => ({
   useModuleVisibility: mockVisibility,
   useStaffLeaveBalances: mockBalances,
   useEnsureStaffSignInAccount: () => ({ mutateAsync: vi.fn() }),
+  useRecordInvitesSent: () => ({ mutate: vi.fn() }),
   useRosterPersonWeek: mockPersonWeek,
 }))
 

@@ -23,17 +23,7 @@ namespace Odip.Tests.DemoData;
 /// </summary>
 public class DemoRunbookTests
 {
-    private static string? RepositoryRoot()
-    {
-        var dir = AppContext.BaseDirectory;
-        while (dir is not null && !File.Exists(Path.Combine(dir, "Odip.sln")))
-        {
-            var parent = Path.GetDirectoryName(dir.TrimEnd(Path.DirectorySeparatorChar));
-            if (parent == dir) return null;
-            dir = parent;
-        }
-        return dir is null ? null : Path.GetFullPath(Path.Combine(dir, "..", "..", ".."));        // backend, odip, odip-prototype, the repository
-    }
+    private static string? RepositoryRoot() => Odip.Tests.TestSupport.RepositoryPaths.RepositoryRoot();
 
     private static string ReadOrSkip(params string[] relative)
     {

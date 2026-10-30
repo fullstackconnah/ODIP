@@ -294,6 +294,7 @@ export default function CompletionReviewPage() {
             onChange={setStaffFilter}
             items={[{ value: '', label: 'All staff' }, ...staffOptions]}
             placeholder="All staff"
+            aria-label="Filter by staff"
           />
         </div>
         <div className="flex items-center gap-1.5">

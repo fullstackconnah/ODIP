@@ -268,7 +268,7 @@ describe('StaffTab — edit modal live conflict gate (trip-side parity)', () => 
     await user.click(screen.getByRole('button', { name: /^save$/i }))
 
     expect(await screen.findByText('Leave overlap (server)')).toBeInTheDocument()
-    expect(screen.queryByText(/Failed to update assignment/)).toBeNull()
+    expect(screen.queryByText(/Couldn't update this assignment/)).toBeNull()
   })
 })
 
@@ -362,7 +362,7 @@ describe('StaffTab — add modal live conflict gate (trip-side parity)', () => {
     await user.click(lastAddStaffButton())
 
     expect(await screen.findByText('Leave overlap (server)')).toBeInTheDocument()
-    expect(screen.queryByText(/Failed to add staff/)).toBeNull()
+    expect(screen.queryByText(/Couldn't add this staff member/)).toBeNull()
   })
 })
 

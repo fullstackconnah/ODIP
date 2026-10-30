@@ -24,6 +24,7 @@ vi.mock('@/api/hooks', () => ({
   useUpdateStaff: () => ({ mutateAsync: mockUpdate, isPending: false, isError: false, error: null }),
   useStaffDetail: mockUseStaffDetail,
   useEnsureStaffSignInAccount: () => ({ mutateAsync: mockEnsure }),
+  useRecordInvitesSent: () => ({ mutate: vi.fn() }),
 }))
 vi.mock('@/lib/permissions', () => ({ usePermissions: () => ({ isCoordinator: false }) }))
 vi.mock('firebase/auth', () => ({ sendPasswordResetEmail }))

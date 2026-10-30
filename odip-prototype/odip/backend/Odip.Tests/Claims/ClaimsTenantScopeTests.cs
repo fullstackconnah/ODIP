@@ -204,7 +204,7 @@ public class ClaimsTenantScopeTests
         AddProviderSettings(db);
         var b = Seed(db, TenantB);
 
-        Assert.IsType<NotFoundObjectResult>(await controller.DownloadBprCsv(b.TripClaim.Id, CancellationToken.None));
+        Assert.IsType<NotFoundObjectResult>(await controller.DownloadBprCsv(b.TripClaim.Id, new ClaimBatchService(db, new BprCsvService(db), new InvoiceService(db), TimeProvider.System), CancellationToken.None));
     }
 
     [Fact]

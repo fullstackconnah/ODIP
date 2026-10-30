@@ -139,6 +139,8 @@ if (string.IsNullOrEmpty(firebaseServiceAccount))
 var devAuthEnabled = string.Equals(
     Environment.GetEnvironmentVariable("DEV_AUTH_ENABLED"), "true", StringComparison.OrdinalIgnoreCase);
 
+Odip.Api.Health.DevAuthGuard.EnsureAllowed(builder.Configuration, builder.Environment);
+
 if (devAuthEnabled)
 {
     Console.WriteLine("***********************************************************************");
@@ -178,6 +180,7 @@ else
 builder.Services.AddScoped<Odip.Infrastructure.Services.ClaimGenerationService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.ShiftClaimGenerationService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.BprCsvService>();
+builder.Services.AddScoped<Odip.Infrastructure.Services.ClaimBatchService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.InvoiceService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.CatalogueImportService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.PlanPricingService>();

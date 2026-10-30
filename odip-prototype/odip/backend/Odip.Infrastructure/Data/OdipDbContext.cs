@@ -86,6 +86,8 @@ public class OdipDbContext : DbContext
     public DbSet<AppSettings> AppSettings => Set<AppSettings>();
     public DbSet<TripClaim> TripClaims => Set<TripClaim>();
     public DbSet<ClaimLineItem> ClaimLineItems => Set<ClaimLineItem>();
+    public DbSet<ClaimBatch> ClaimBatches => Set<ClaimBatch>();
+    public DbSet<ClaimBatchLine> ClaimBatchLines => Set<ClaimBatchLine>();
     public DbSet<SupportActivityGroup> SupportActivityGroups => Set<SupportActivityGroup>();
     public DbSet<SupportCatalogueItem> SupportCatalogueItems => Set<SupportCatalogueItem>();
     public DbSet<ProviderSettings> ProviderSettings => Set<ProviderSettings>();
@@ -2011,6 +2013,32 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => e.ClaimLineItemId);
             entity.HasOne<ClaimLineItem>().WithMany().HasForeignKey(e => e.ClaimLineItemId).OnDelete(DeleteBehavior.SetNull);
         });
+        modelBuilder.Entity<ClaimBatch>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.FileName).HasMaxLength(20).IsRequired();
+            entity.Property(e => e.CreatedByName).HasMaxLength(200);
+            entity.Property(e => e.UploadedByName).HasMaxLength(200);
+            entity.Property(e => e.TotalAmount).HasPrecision(18, 2);
+            entity.HasIndex(e => new { e.TenantId, e.FileName }).IsUnique().HasDatabaseName("UX_ClaimBatches_TenantId_FileName");
+            entity.HasIndex(e => new { e.TenantId, e.Status, e.CreatedAt });
+            entity.HasMany(e => e.Lines).WithOne(l => l.Batch).HasForeignKey(l => l.BatchId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<ClaimBatchLine>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.RowReference).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.RejectCode).HasMaxLength(20);
+            entity.Property(e => e.RejectMessage).HasMaxLength(1000);
+            entity.Property(e => e.NdisNumber).HasMaxLength(20);
+            entity.Property(e => e.SupportNumber).HasMaxLength(60);
+            entity.Property(e => e.Amount).HasPrecision(18, 2);
+            entity.Property(e => e.ResultAmount).HasPrecision(18, 2);
+            entity.HasIndex(e => new { e.BatchId, e.RowReference }).IsUnique();
+            // One Pending batch per claim line, even if a path skips the claim-batch lock (Pending = 0).
+            entity.HasIndex(e => e.ClaimLineItemId).IsUnique().HasFilter("\"Outcome\" = 0").HasDatabaseName("UX_ClaimBatchLines_OnePendingPerLine");
+            entity.HasOne(e => e.ClaimLineItem).WithMany().HasForeignKey(e => e.ClaimLineItemId).OnDelete(DeleteBehavior.SetNull);
+        });
         modelBuilder.Entity<InvoiceNumberCounter>(entity =>
         {
             entity.HasKey(e => new { e.TenantId, e.Kind });
@@ -2071,6 +2099,11 @@ public class OdipDbContext : DbContext
             .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<User>()
             .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<ClaimBatch>()
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<ClaimBatchLine>()
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
 
         modelBuilder.Entity<Participant>()
             .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);

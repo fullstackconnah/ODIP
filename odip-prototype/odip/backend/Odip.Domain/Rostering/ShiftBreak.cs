@@ -1,3 +1,4 @@
+using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 
 namespace Odip.Domain.Rostering;
@@ -134,5 +135,17 @@ public static class ShiftBreakRules
         var gross = (int)Math.Round((end - actualStartUtc).TotalMinutes, MidpointRounding.AwayFromZero);
         var breakMinutes = (int)Math.Round(breakSpan.TotalMinutes, MidpointRounding.AwayFromZero);
         return (gross, breakMinutes, Math.Max(0, gross - breakMinutes));
+    }
+
+    /// <summary>
+    /// The minutes a completed shift is paid, shared by Payroll and Reports so the two pages never disagree: rostered minutes,
+    /// the break minutes, and the paid minutes (a sleepover is paid its rostered hours, otherwise net worked time).
+    /// </summary>
+    public static (int RosteredMinutes, int BreakMinutes, int PaidMinutes) PaidMinutes(
+        Shift shift, ShiftCompletion completion, DateTime nowUtc, IEnumerable<ShiftBreak> breaks)
+    {
+        var rostered = (int)(shift.EndTime.ToTimeSpan() - shift.StartTime.ToTimeSpan()).TotalMinutes + (shift.EndsNextDay ? 1440 : 0);
+        var (_, breakMinutes, net) = NetWorked(completion.ActualStart, completion.ActualEnd, nowUtc, breaks);
+        return (rostered, breakMinutes, shift.NightType == SleepoverType.Sleepover ? rostered : net);
     }
 }
