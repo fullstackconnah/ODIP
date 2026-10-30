@@ -224,7 +224,7 @@ export default function StaffPage() {
         />
       )}
 
-      {!isLoading && !isError && staff.length === 0 && !missingOnly ? (
+      {!isLoading && !isError && staff.length === 0 && !(missingOnly && searched.length > 0) ? (
         search ? (
           <EmptyState
             icon={UserCog}

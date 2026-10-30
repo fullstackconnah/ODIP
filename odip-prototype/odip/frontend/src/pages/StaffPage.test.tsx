@@ -569,4 +569,22 @@ describe('StaffPage — a missing worker screening', () => {
     expect(screen.queryByRole('tablist', { name: 'Staff filters' })).not.toBeInTheDocument()
     expect(screen.getByText('Casey Archer')).toBeInTheDocument()
   })
+
+  it('keeps the no-match message for a search that matches nobody on the missing tab', async () => {
+    mockUseStaff.mockReturnValue({ data: rows(), isLoading: false })
+    renderPage('/?tab=missing')
+
+    await userEvent.type(screen.getByPlaceholderText('Search staff...'), 'zzz')
+
+    expect(screen.getByText('No staff match your search')).toBeInTheDocument()
+    expect(screen.queryByText('Everyone here has a screening date')).not.toBeInTheDocument()
+  })
+
+  it('keeps the no-staff empty state for an organisation with nobody, on a shared ?tab=missing link', () => {
+    mockUseStaff.mockReturnValue({ data: [], isLoading: false })
+    renderPage('/?tab=missing')
+
+    expect(screen.getByText('No staff members yet')).toBeInTheDocument()
+    expect(screen.queryByText('Everyone here has a screening date')).not.toBeInTheDocument()
+  })
 })
