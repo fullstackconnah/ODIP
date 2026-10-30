@@ -129,6 +129,17 @@ public class ImportsController : ControllerBase
         return Ok(ApiResponse<ImportInvitesDto>.Ok(new ImportInvitesDto(invites, rest.Count - page.Count, page.Count > 0 ? page[^1].Id : after)));
     }
 
+    /// <summary>How many of a staff import's people a sign-in invite would reach, and how many it would skip and why.</summary>
+    [HttpGet("{batchId:guid}/invites/count")]
+    public async Task<ActionResult<ApiResponse<ImportInviteCountDto>>> InviteCount(Guid batchId, CancellationToken ct)
+    {
+        ImportInviteCountDto? count;
+        try { count = await _imports.InviteCountAsync(batchId, ct); }
+        catch (ImportException ex) { return StatusCode(ex.StatusCode, ApiResponse<ImportInviteCountDto>.Fail(ex.Message)); }
+        if (count is null) return NotFound(ApiResponse<ImportInviteCountDto>.Fail("Staff import not found."));
+        return Ok(ApiResponse<ImportInviteCountDto>.Ok(count));
+    }
+
     /// <summary>Runs an import call; a refusal the Admin can act on answers with its own status and message.</summary>
     private async Task<ActionResult<ApiResponse<T>>> Run<T>(Func<Task<T>> call)
     {

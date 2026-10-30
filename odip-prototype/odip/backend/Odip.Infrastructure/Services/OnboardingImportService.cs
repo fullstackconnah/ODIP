@@ -519,6 +519,23 @@ public sealed partial class OnboardingImportService
             .Where(u => u.IsActive && u.LastLoginAt == null && (includeInvitedBefore || u.SignInInviteSentAt == null))
             .OrderBy(u => u.Id).ToList();
 
+    /// <summary>
+    /// How many of a staff batch a sign-in invite would reach, each member in the first bucket that fits: cannot be invited (archived, no email, an
+    /// invented address), signed in, invited before, to invite. Null: no such batch. People the invites still list as per-person failures (a
+    /// SuperAdmin row, the reserved domain) stay in "to invite".
+    /// </summary>
+    public async Task<ImportInviteCountDto?> InviteCountAsync(Guid batchId, CancellationToken ct)
+    {
+        var staff = await BatchStaffAsync(batchId, ct);
+        if (staff is null) return null;
+        bool CannotInvite(User u) => !u.IsActive || string.IsNullOrWhiteSpace(u.Email) || PlaceholderEmail.Covers(EmailIdentity.Normalise(u.Email));
+        var cannot = staff.Count(CannotInvite);
+        var rest = staff.Where(u => !CannotInvite(u)).ToList();
+        var signedIn = rest.Count(u => u.LastLoginAt != null);
+        var invited = rest.Count(u => u.LastLoginAt == null && u.SignInInviteSentAt != null);
+        return new ImportInviteCountDto(rest.Count - signedIn - invited, invited, signedIn, cannot);
+    }
+
     /// <summary>Every member of this organisation's staff batch, not undone. Null: no such batch.</summary>
     private async Task<List<User>?> BatchStaffAsync(Guid batchId, CancellationToken ct)
     {

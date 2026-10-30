@@ -103,6 +103,46 @@ public class ImportInvitesTests
     }
 
     [Fact]
+    public async Task Invite_count_puts_each_member_in_one_bucket_and_the_invites_still_list_the_uninvitable_with_a_reason()
+    {
+        var tenantId = Guid.NewGuid();
+        using var db = TestDb.ForTenant(Guid.NewGuid().ToString(), tenantId);
+        var batch = await Service(db, tenantId).CommitAsync(ImportKind.Staff, Csv("First name,Last name,Email", "New,One,new@example.com", "Inv,Two,inv@example.com", "Sig,Three,sig@example.com",
+            "Arc,Four,arc@example.com", "Plc,Five,plc@example.com"), "staff.csv", null, null, "key-1", Admin(), CancellationToken.None);
+        async Task<User> Member(string email) => await db.Users.SingleAsync(u => u.Email == email);
+        (await Member("inv@example.com")).SignInInviteSentAt = DateTime.UtcNow;
+        (await Member("sig@example.com")).LastLoginAt = DateTime.UtcNow;
+        var archived = await Member("arc@example.com");
+        archived.IsActive = false;
+        archived.LastLoginAt = DateTime.UtcNow; // archived and signed in counts once, as cannot-invite
+        (await Member("plc@example.com")).Email = "plc.five@placeholder.local";
+        await db.SaveChangesAsync();
+        var firebase = new Mock<IFirebaseUserService>();
+        var controller = Controller(db, tenantId, firebase.Object);
+
+        var answer = Assert.IsType<OkObjectResult>((await controller.InviteCount(batch.BatchId, CancellationToken.None)).Result);
+
+        Assert.Equal(new ImportInviteCountDto(1, 1, 1, 2), Assert.IsType<ApiResponse<ImportInviteCountDto>>(answer.Value).Data);
+        // The placeholder person is not in the count's "to invite" but is still listed by Invites, as a per-person failure.
+        var invites = Assert.IsType<ApiResponse<ImportInvitesDto>>(Assert.IsType<OkObjectResult>((await controller.Invites(batch.BatchId, null, CancellationToken.None)).Result).Value).Data!.Invites;
+        Assert.Contains(invites, i => i.Email == "plc.five@placeholder.local" && i.Error is not null);
+        Assert.DoesNotContain(invites, i => i.Email == "arc@example.com");
+    }
+
+    [Fact]
+    public async Task Invite_count_of_another_tenants_batch_is_not_found()
+    {
+        var shared = Guid.NewGuid().ToString();
+        var (db, _, firebase, batchId, _) = await StaffImportedAsync(shared);
+        using var _ = db;
+        var otherTenant = Guid.NewGuid();
+        using var otherDb = TestDb.ForTenant(shared, otherTenant);
+
+        Assert.IsType<NotFoundObjectResult>((await Controller(otherDb, otherTenant, firebase.Object).InviteCount(batchId, CancellationToken.None)).Result);
+        Assert.IsType<NotFoundObjectResult>((await Controller(db, otherTenant, firebase.Object).InviteCount(Guid.NewGuid(), CancellationToken.None)).Result);
+    }
+
+    [Fact]
     public async Task Invites_for_a_batch_that_is_not_a_staff_import_here_are_not_found()
     {
         var (db, controller, firebase, batchId, tenantId) = await StaffImportedAsync();

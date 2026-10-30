@@ -39,3 +39,9 @@ public record ImportInviteDto(Guid StaffId, string Name, string Email, string? F
 
 /// <summary>One request's invites, how many never-signed-in staff are still after them, and the cursor to send again with (the last id done).</summary>
 public record ImportInvitesDto(List<ImportInviteDto> Invites, int Left, Guid? Next);
+
+/// <summary>
+/// Where a staff import's people stand for sign-in invites, each in exactly one count: still to invite, invited before but not signed in, signed in,
+/// or who cannot be invited (archived, no email, or an address the app invented).
+/// </summary>
+public record ImportInviteCountDto(int ToInvite, int InvitedBefore, int SignedIn, int CannotInvite);
