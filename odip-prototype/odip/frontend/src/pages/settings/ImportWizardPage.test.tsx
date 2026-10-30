@@ -16,6 +16,8 @@ vi.mock('@/api/hooks', () => ({
   useUndoImport: () => ({ mutateAsync: undo, isPending: false }),
   useDownloadImportTemplate: () => ({ mutate: template, isPending: false }),
   useImportInvites: () => ({ mutateAsync: invites, isPending: false }),
+  useImportInviteCount: () => ({ data: undefined }),
+  useRecordInvitesSent: () => ({ mutate: vi.fn() }),
   useProviderSettings: () => ({ data: providerSettings.current }),
 }))
 

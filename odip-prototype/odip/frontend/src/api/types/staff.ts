@@ -36,7 +36,7 @@ export interface StaffListDto {
   notes: string | null
 }
 
-export type StaffDetailDto = StaffListDto
+export type StaffDetailDto = StaffListDto & { signInInviteSentAt?: string | null }
 
 export interface CreateStaffDto {
   firstName: string

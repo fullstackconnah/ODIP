@@ -49,6 +49,7 @@ vi.mock('@/api/hooks', () => ({
   useAdminUsers: () => usersPage,
   useCreateAdminUser: () => ({ mutateAsync: mockCreate, isPending: false }),
   useEnsureUserSignInAccount: () => ({ mutateAsync: mockEnsure }),
+  useRecordInvitesSent: () => ({ mutate: vi.fn() }),
   useUpdateAdminUser: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useNotificationPreferences: () => ({ data: { rows: [] }, isLoading: false, isError: false }),
   useUpdateNotificationPreferences: () => ({ mutate: vi.fn(), isPending: false }),

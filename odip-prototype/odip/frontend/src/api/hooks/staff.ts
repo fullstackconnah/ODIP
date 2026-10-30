@@ -104,6 +104,21 @@ export function useEnsureStaffSignInAccount() {
 }
 
 /**
+ * POST /users/invites-sent: tells the server which people Firebase accepted a sign-in invite email for (up to 100), so the next bulk invite
+ * skips them and the Staff page can say when. Callers fire it and forget it: a failed record only means the person shows as to invite again.
+ */
+export function useRecordInvitesSent() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (userIds: string[]) => apiPost<number>('/users/invites-sent', { userIds }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['import-invite-count'] })
+      qc.invalidateQueries({ queryKey: ['staff-overview'] })
+    },
+  })
+}
+
+/**
  * Dry-run findings for a candidate trip assignment — a POST that writes nothing. Mirrors
  * useCheckShift (rostering.ts). Used by StaffAssignModal to preview findings for the fixed
  * staff/trip pairing the modal opened with.

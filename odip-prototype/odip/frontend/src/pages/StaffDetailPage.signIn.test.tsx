@@ -8,9 +8,10 @@ import type { StaffOverviewDto, StaffDetailDto } from '@/api/types/staff'
 // "Send set-password email" on the staff page: staff added through the staff form have a user row and no Firebase account until something
 // makes one, so the action makes sure of the account (POST /staff/{id}/sign-in-account) and only then asks Firebase to send the link.
 
-const { mockUseStaffOverview, mockEnsure, sendPasswordResetEmail, firebase } = vi.hoisted(() => ({
+const { mockUseStaffOverview, mockEnsure, mockRecord, sendPasswordResetEmail, firebase } = vi.hoisted(() => ({
   mockUseStaffOverview: vi.fn(),
   mockEnsure: vi.fn(),
+  mockRecord: vi.fn(),
   sendPasswordResetEmail: vi.fn(),
   // `auth` is null where Firebase is not configured (local dev auth). A getter, so each test can change it.
   firebase: { auth: null as object | null },
@@ -22,6 +23,7 @@ vi.mock('@/api/hooks', () => ({
   useModuleVisibility: () => ({ data: { employmentHeroConnected: false } }),
   useStaffLeaveBalances: () => ({ data: undefined, isLoading: false, isError: false, refetch: () => undefined }),
   useEnsureStaffSignInAccount: () => ({ mutateAsync: mockEnsure }),
+  useRecordInvitesSent: () => ({ mutate: mockRecord }),
 }))
 vi.mock('firebase/auth', () => ({ sendPasswordResetEmail }))
 vi.mock('@/lib/firebase', () => ({
@@ -72,6 +74,7 @@ beforeEach(() => {
   firebase.auth = authStub
   mockEnsure.mockReset().mockResolvedValue({ firebaseAccount: 'created' })
   sendPasswordResetEmail.mockReset().mockResolvedValue(undefined)
+  mockRecord.mockReset()
 })
 
 afterEach(() => {
@@ -237,5 +240,32 @@ describe('StaffDetailPage: Send set-password email', () => {
     await u.click(within(region()).getByRole('button', { name: 'Dismiss notice about Alex Rivera' }))
 
     expect(within(region()).queryByText(/No link was sent to alex@example.com/)).not.toBeInTheDocument()
+  })
+})
+
+describe('StaffDetailPage: invite record', () => {
+  it('records the staff member once the link went, and not when it failed', async () => {
+    const u = renderPage()
+    await u.click(screen.getByRole('button', { name: SEND }))
+    await within(region()).findByText(/We've sent alex@example.com a link to set their password/)
+    expect(mockRecord).toHaveBeenCalledTimes(1)
+    expect(mockRecord).toHaveBeenCalledWith(['staff-1'])
+
+    mockRecord.mockReset()
+    sendPasswordResetEmail.mockRejectedValueOnce(firebaseError('auth/network-request-failed'))
+    await waitFor(() => expect(screen.getByRole('button', { name: SEND })).not.toHaveAttribute('aria-disabled'))
+    await u.click(screen.getByRole('button', { name: SEND }))
+    await within(region()).findByText(/No link was sent to alex@example.com/)
+    expect(mockRecord).not.toHaveBeenCalled()
+  })
+
+  it('shows when the invite was sent, in the house date, and nothing when none was', () => {
+    renderPage({ signInInviteSentAt: '2026-10-30T06:00:00Z' })
+    expect(screen.getByText('Invite sent 30/10/2026')).toBeInTheDocument()
+  })
+
+  it('shows no invite line before any invite', () => {
+    renderPage({ signInInviteSentAt: null })
+    expect(screen.queryByText(/Invite sent/)).not.toBeInTheDocument()
   })
 })

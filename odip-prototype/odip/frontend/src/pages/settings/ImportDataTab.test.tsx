@@ -19,6 +19,8 @@ vi.mock('@/api/hooks', () => ({
   useUndoImport: () => ({ mutate: undoMutate, ...undoState.current }),
   useDownloadImportTemplate: () => ({ mutate: templateMutate, isPending: false }),
   useImportInvites: () => ({ mutateAsync: invites, isPending: false }),
+  useImportInviteCount: () => ({ data: { toInvite: 2, invitedBefore: 0, signedIn: 0, cannotInvite: 0 } }),
+  useRecordInvitesSent: () => ({ mutate: vi.fn() }),
   useProviderSettings: () => ({ data: providerSettings.current }),
 }))
 
@@ -89,9 +91,10 @@ describe('ImportDataTab', () => {
 
     const row = screen.getByRole('row', { name: /staff.csv/ })
     await userEvent.click(within(row).getByRole('button', { name: 'Send sign-in invites (2)' }))
+    await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Send 2 invites' }))
 
     expect(invites).toHaveBeenCalledWith({ batchId: 'b2' })
-    const said = await screen.findByText('Everyone in this import has signed in already, so no invites were sent.')
+    const said = await screen.findByText('Everyone in this import has signed in or been invited, so no invites were sent.')
     expect(row).not.toContainElement(said)
     await userEvent.click(within(row).getByRole('button', { name: 'Undo' }))
     expect(screen.getByText('The 2 staff members it created are removed. This only works while none of them has signed in or been rostered. Anyone already sent a sign-in invite will find it no longer works until they are imported again.')).toBeInTheDocument()
@@ -104,6 +107,7 @@ describe('ImportDataTab', () => {
     renderTab()
     const row = screen.getByRole('row', { name: /staff.csv/ })
     await userEvent.click(within(row).getByRole('button', { name: 'Send sign-in invites (2)' }))
+    await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Send 2 invites' }))
     await screen.findByText(/no invites were sent/)
 
     await userEvent.click(within(row).getByRole('button', { name: 'Undo' }))
