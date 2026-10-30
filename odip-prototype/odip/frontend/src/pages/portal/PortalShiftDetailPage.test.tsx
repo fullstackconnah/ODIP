@@ -305,6 +305,18 @@ describe('PortalShiftDetailPage', () => {
     await waitFor(() => expect(startMutateAsync).toHaveBeenCalledWith({ id: 'shift-1', data: { geolocationDeclined: true } }))
   })
 
+  it('fires Start once when tapped twice while the location is still being asked for', async () => {
+    let answer: (pos: unknown) => void = () => {}
+    Object.defineProperty(global.navigator, 'geolocation', { configurable: true, value: { getCurrentPosition: (success: (pos: unknown) => void) => { answer = success } } })
+    show(makeDetail())
+    const start = screen.getByRole('button', { name: /start shift/i })
+    fireEvent.click(start)
+    fireEvent.click(start)
+    expect(screen.getByRole('button', { name: /starting/i })).toBeDisabled()
+    answer({ coords: { latitude: -27.5, longitude: 153.02 } })
+    await waitFor(() => expect(startMutateAsync).toHaveBeenCalledTimes(1))
+  })
+
   it('hides Start for a ReadOnly user and says why', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'ReadOnly' }))
     show(makeDetail())

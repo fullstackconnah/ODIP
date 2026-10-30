@@ -145,6 +145,8 @@ export default function PortalShiftDetailPage() {
   const startBreak = useStartBreak()
   const endBreak = useEndBreak()
   const [actionError, setActionError] = useState<string | null>(null)
+  // Set on the tap, before the location wait, so a second tap can't send a second Start (the mutation isn't pending yet).
+  const [starting, setStarting] = useState(false)
   // A draft with an open step means the worker was mid-finish (left for the incident form, or reloaded): open it again at that step.
   const [finishing, setFinishing] = useState(() => !!id && loadEndDraft(id)?.step != null)
   const [submitted, setSubmitted] = useState(false)
@@ -153,13 +155,16 @@ export default function PortalShiftDetailPage() {
   const [sheet, setSheet] = useState<{ target: DoseTarget; notGiven: boolean } | null>(null)
 
   async function handleStart() {
-    if (!id) return
+    if (!id || starting) return
+    setStarting(true)
     setActionError(null)
     try {
       const geo = await requestGeolocation()
       await startShift.mutateAsync({ id, data: geo satisfies StartShiftDto })
     } catch (err) {
       setActionError(extractErrorMessage(err, "Couldn't start this shift. Check your connection and try again."))
+    } finally {
+      setStarting(false)
     }
   }
 
@@ -374,8 +379,8 @@ export default function PortalShiftDetailPage() {
   if (canAct && shift.status === 'Published' && canStartNow) {
     bar = (
       <ActionBar className={MAIN_COLUMN_BAR}>
-        <Button size="lg" className="flex-1 lg:flex-none" onClick={handleStart} disabled={startShift.isPending}>
-          {startShift.isPending ? 'Starting…' : 'Start shift'}
+        <Button size="lg" className="flex-1 lg:flex-none" onClick={handleStart} disabled={starting || startShift.isPending}>
+          {starting || startShift.isPending ? 'Starting…' : 'Start shift'}
         </Button>
       </ActionBar>
     )
