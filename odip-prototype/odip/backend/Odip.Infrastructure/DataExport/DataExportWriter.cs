@@ -111,7 +111,7 @@ public static class DataExportWriter
 
         text.Append("HOW THE FILES ARE WRITTEN\r\n");
         text.Append("Each CSV file is UTF-8 with one header row. A value holding a comma, a quote or a line break is in double quotes (RFC 4180).\r\n");
-        text.Append("A value someone typed that starts with =, +, -, @, a tab or a carriage return has a ' added in front, so a spreadsheet shows it as text instead of running it.\r\n");
+        text.Append("A value someone typed that starts with =, +, -, @, a tab or a carriage return has a ' added in front, so a spreadsheet shows it as text instead of running it. A phone number such as +61 412 345 678 is left as it is.\r\n");
         text.Append("Times that record when something happened are in UTC and end in Z, for example 2026-10-14T05:04:00Z.\r\n");
         text.Append("Dates are YYYY-MM-DD. Times of day, such as a shift's start and end, are your local time as HH:MM:SS.\r\n");
         text.Append("These columns are your local time as they were typed or scheduled, with no zone:\r\n");
