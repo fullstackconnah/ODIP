@@ -82,7 +82,7 @@ public class BprCsvService(OdipDbContext db)
         var useCancelItem = isCancellation && row.CancelledItem != null;
         var perHour = (row.Item?.Unit ?? "H") == "H";
         return new BprRowOut(
-            row.Settings?.RegistrationNumber ?? "", row.Participant?.NdisNumber ?? "", l.SupportsDeliveredFrom, l.SupportsDeliveredTo,
+            (row.Settings?.RegistrationNumber ?? "").Trim(), (row.Participant?.NdisNumber ?? "").Trim(), l.SupportsDeliveredFrom, l.SupportsDeliveredTo,
             useCancelItem ? row.CancelledItem!.ItemNumber : l.SupportItemCode, RowReference(l.Id, attempt),
             perHour ? null : l.Hours, perHour ? l.Hours : null, l.UnitPrice, MapGstCode(l.GSTCode),
             isCancellation && !useCancelItem ? "CANC" : "",

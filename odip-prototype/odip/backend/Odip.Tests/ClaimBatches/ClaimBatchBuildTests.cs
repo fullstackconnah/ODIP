@@ -163,6 +163,21 @@ public class ClaimBatchBuildTests
     }
 
     [Fact]
+    public async Task A_number_saved_with_a_trailing_space_is_written_and_stored_trimmed()
+    {
+        using var f = new BatchFixture();
+        var (_, lines, _) = f.AddClaim(ndis: "431234567 ");
+
+        var built = await f.BuildAsync(lines[0].Id);
+
+        Assert.True(built.Ok, string.Join("; ", built.Errors ?? []));
+        Assert.Equal("431234567", (await f.Db.ClaimBatchLines.SingleAsync()).NdisNumber);
+        var file = System.Text.Encoding.UTF8.GetString((await f.Db.ClaimBatches.SingleAsync()).Content);
+        Assert.Contains(",431234567,", file);
+        Assert.DoesNotContain("431234567 ", file);
+    }
+
+    [Fact]
     public async Task A_line_already_in_a_file_cannot_go_in_another()
     {
         using var f = new BatchFixture();

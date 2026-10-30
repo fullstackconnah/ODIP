@@ -417,6 +417,7 @@ public sealed partial class ClaimBatchService(OdipDbContext db, BprCsvService bp
         await LockClaimsAsync(claimIds, ct);
         var items = await db.ClaimLineItems.Include(l => l.TripClaim).Where(l => lineIds.Contains(l.Id)).ToDictionaryAsync(l => l.Id, ct);
 
+        if (requested.Select(r => r.BatchLineId).Distinct().Count() < requested.Count) return Fail<BatchDto>(400, "Each line can be marked paid once per request.");
         var targets = requested.Count > 0
             ? requested.Select(r => (Request: r, Line: lines.FirstOrDefault(l => l.Id == r.BatchLineId))).ToList()
             : lines.Where(l => l.Outcome == ClaimBatchLineOutcome.Successful && l.ClaimLineItemId is { } cid && items.TryGetValue(cid, out var it) && it.Status == ClaimLineItemStatus.Approved)

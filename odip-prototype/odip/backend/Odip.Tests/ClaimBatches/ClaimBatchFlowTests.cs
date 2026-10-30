@@ -68,6 +68,30 @@ public class ClaimBatchFlowTests
     }
 
     [Fact]
+    public async Task Confirm_refuses_a_resubmitted_rejected_line_whose_shift_was_taken()
+    {
+        using var f = new BatchFixture();
+        var (_, lines, _) = f.AddClaim();
+        var first = await UploadedAsync(f, lines[0].Id);
+        await f.Service.ImportResultsAsync(f.TenantId, f.User, first.Id, Csv($"{first.Lines[0].RowReference},Rejected,ZZA,one,"), default);
+        var second = await f.BuildAsync([lines[0].Id]);
+        if (!second.Ok) second = await f.Service.BuildAsync(f.TenantId, f.User, new BuildRequest([lines[0].Id], [], [lines[0].Id]), default);
+        Assert.True(second.Ok, string.Join("; ", second.Errors ?? []));
+        Assert.Equal(2, second.Value!.Lines[0].Attempt);
+        // The rejected line gave its shift back, and another claim took it before the file was confirmed.
+        var (other, otherLines, _) = f.AddClaim();
+        otherLines[0].ParticipantBookingId = lines[0].ParticipantBookingId;
+        await f.Db.SaveChangesAsync();
+
+        var up = await f.Service.ConfirmUploadedAsync(f.TenantId, f.User, second.Value.Id, default);
+
+        Assert.Equal(409, up.Status);
+        Assert.Contains(up.Errors!, e => e.Contains(other.ClaimReference) && e.Contains("already on claim"));
+        Assert.Equal(ClaimBatchStatus.Built, (await f.Db.ClaimBatches.FindAsync(second.Value.Id))!.Status);
+        Assert.Equal(ClaimLineItemStatus.Rejected, (await f.Db.ClaimLineItems.FindAsync(lines[0].Id))!.Status);
+    }
+
+    [Fact]
     public async Task Confirm_refuses_a_cancelled_claim_and_changes_nothing()
     {
         using var f = new BatchFixture();
@@ -258,6 +282,36 @@ public class ClaimBatchFlowTests
             Assert.Equal("Enter an amount between $0.01 and $120.00.", ((BuildRefusalDto)over.Data!).Problems[0].Message);
             Assert.Equal(ClaimLineItemStatus.Approved, (await f.Db.ClaimLineItems.SingleAsync()).Status);
         }
+    }
+
+    [Fact]
+    public async Task Mark_paid_refuses_the_same_line_twice_in_one_request()
+    {
+        var (f, up) = await AcceptedAsync();
+        using (f)
+        {
+            var id = up.Lines[0].BatchLineId;
+            var paid = await f.Service.MarkPaidAsync(f.TenantId, f.User, up.Id, [new PaidLineRequest(id, null), new PaidLineRequest(id, null)], default);
+
+            Assert.Equal((400, "Each line can be marked paid once per request."), (paid.Status, paid.Errors![0]));
+            Assert.Equal(ClaimLineItemStatus.Approved, (await f.Db.ClaimLineItems.SingleAsync()).Status);
+        }
+    }
+
+    [Fact]
+    public async Task Import_records_the_paid_amount_and_mark_paid_defaults_to_it()
+    {
+        using var f = new BatchFixture();
+        var (_, lines, _) = f.AddClaim();
+        var up = await UploadedAsync(f, lines[0].Id);
+        var imported = await f.Service.ImportResultsAsync(f.TenantId, f.User, up.Id, Csv($"{up.Lines[0].RowReference},Successful,,,95.00"), default);
+        Assert.True(imported.Ok, string.Join("; ", imported.Errors ?? []));
+        Assert.Equal(95.00m, (await f.Db.ClaimBatchLines.SingleAsync()).ResultAmount);
+
+        var paid = await f.Service.MarkPaidAsync(f.TenantId, f.User, up.Id, [], default);
+
+        Assert.True(paid.Ok, string.Join("; ", paid.Errors ?? []));
+        Assert.Equal(95.00m, (await f.Db.ClaimLineItems.SingleAsync()).PaidAmount);
     }
 
     [Fact]

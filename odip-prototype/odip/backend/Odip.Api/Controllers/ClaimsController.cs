@@ -285,6 +285,17 @@ public class ClaimsController : ControllerBase
         if (dto.Status is { } wanted && !ClaimStatusRules.CanMove(c.Status, wanted))
             return Conflict(ApiResponse<bool>.Fail($"{c.ClaimReference} is {Words(c.Status)}, so it can't be marked as {Words(wanted)}."));
 
+        // A claim whose lines wait in a live NDIA file is frozen like its lines (PATCH, DELETE): a status moved by hand would leave the file's confirm to resubmit, or never send, what it holds.
+        if (dto.Status is { } moving && moving != c.Status)
+        {
+            var lineIds = await _db.ClaimLineItems.AsNoTracking().Where(l => l.TripClaimId == claimId).Select(l => l.Id).ToListAsync(ct);
+            var inFile = await _db.ClaimBatchLines.AsNoTracking()
+                .Where(b => b.ClaimLineItemId != null && lineIds.Contains(b.ClaimLineItemId.Value) && b.Outcome == ClaimBatchLineOutcome.Pending
+                    && (b.Batch.Status == ClaimBatchStatus.Built || b.Batch.Status == ClaimBatchStatus.Uploaded))
+                .Select(b => b.Batch.FileName).FirstOrDefaultAsync(ct);
+            if (inFile != null) return Conflict(ApiResponse<bool>.Fail($"This claim is in {inFile}. Discard that file first."));
+        }
+
         // The authoriser is a user of the caller's organisation (Users is tenant-filtered); checked before anything is changed, so a refusal writes nothing.
         if (dto.AuthorisedByStaffId is { } authoriserId && !await _db.Users.AnyAsync(u => u.Id == authoriserId, ct))
             return BadRequest(ApiResponse<bool>.Fail("Authorising staff member not found."));

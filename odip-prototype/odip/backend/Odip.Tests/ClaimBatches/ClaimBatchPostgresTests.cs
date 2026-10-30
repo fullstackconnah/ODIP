@@ -72,7 +72,10 @@ public class ClaimBatchPostgresTests : IClassFixture<PostgresFixture>
         var results = await Task.WhenAll(f.Service.BuildAsync(f.TenantId, f.User, request, default), other.BuildAsync(f.TenantId, f.User, request, default));
 
         Assert.Single(results, r => r.Ok);
-        Assert.Single(results, r => !r.Ok && r.Status is 400 or 409);
+        var loser = Assert.Single(results, r => !r.Ok);
+        // The lock makes the loser see the first build's file (a 400 with the line's problem); a lockless race would hit the index (409). Either way it is told the line is already in a file, never "try again".
+        var told = loser.Status == 400 ? ((BuildRefusalDto)loser.Data!).Problems.Select(p => p.Message) : loser.Errors!;
+        Assert.Contains(told, m => m.StartsWith("This line is already in BPR") || m.StartsWith("One of these lines is already in another file"));
         await using var check = PostgresFixture.NewContext(_pg.ConnectionString!);
         Assert.Equal(1, await check.ClaimBatchLines.CountAsync(l => l.TenantId == f.TenantId && l.Outcome == ClaimBatchLineOutcome.Pending));
     }

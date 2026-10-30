@@ -106,6 +106,43 @@ public class ClaimEditFileGuardTests
         Assert.Equal(200, Status(await controller.DeleteClaim(claim.Id, default)));
     }
 
+    private static Task<ActionResult<ApiResponse<bool>>> Put(BatchFixture f, TripClaim claim, TripClaimStatus status) =>
+        ControllerFor(f.Db, f.TenantId).UpdateClaim(claim.Id, new UpdateClaimDto { Status = status }, default);
+
+    [Fact]
+    public async Task A_status_change_is_refused_while_the_claim_is_in_a_built_file()
+    {
+        using var f = new BatchFixture();
+        var (claim, lines, _) = f.AddClaim();
+        var built = await f.BuildAsync(lines[0].Id);
+
+        var refused = await Put(f, claim, TripClaimStatus.Submitted);
+
+        Assert.Equal(409, Status(refused));
+        Assert.Equal($"This claim is in {built.Value!.FileName}. Discard that file first.", Message(refused));
+        Assert.Equal(TripClaimStatus.Draft, (await f.Db.TripClaims.FindAsync(claim.Id))!.Status);
+        Assert.Empty(await f.Db.Invoices.ToListAsync());
+    }
+
+    [Fact]
+    public async Task A_hand_rejection_is_refused_while_the_file_is_built_and_the_confirm_then_works_on_the_untouched_claim()
+    {
+        using var f = new BatchFixture();
+        var (claim, lines, _) = f.AddClaim(status: TripClaimStatus.Submitted, lineStatus: ClaimLineItemStatus.Rejected);
+        var built = await f.BuildAsync(lines[0].Id);
+        Assert.True(built.Ok, string.Join("; ", built.Errors ?? []));
+
+        var refused = await Put(f, claim, TripClaimStatus.Rejected);
+
+        Assert.Equal(409, Status(refused));
+        Assert.Contains(built.Value!.FileName, Message(refused));
+        Assert.Equal(TripClaimStatus.Submitted, (await f.Db.TripClaims.FindAsync(claim.Id))!.Status);
+        var up = await f.Service.ConfirmUploadedAsync(f.TenantId, f.User, built.Value.Id, default);
+        Assert.True(up.Ok, string.Join("; ", up.Errors ?? []));
+        Assert.Equal(TripClaimStatus.Submitted, (await f.Db.TripClaims.FindAsync(claim.Id))!.Status);
+        Assert.Equal(ClaimLineItemStatus.Submitted, (await f.Db.ClaimLineItems.FindAsync(lines[0].Id))!.Status);
+    }
+
     [Fact]
     public async Task The_per_claim_csv_route_serves_the_stored_file()
     {
