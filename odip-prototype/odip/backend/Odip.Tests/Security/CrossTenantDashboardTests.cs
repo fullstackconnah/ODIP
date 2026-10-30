@@ -30,7 +30,7 @@ public class CrossTenantDashboardTests
         db.IncidentReports.Add(new IncidentReport
         {
             Id = Guid.NewGuid(), TenantId = tenantId, ReportedByUserId = reporter.Id, IncidentType = IncidentType.Other, OtherTypeSpecify = "x", Severity = IncidentSeverity.High, Status = IncidentStatus.Draft,
-            Title = "Open", Description = "Open", IncidentDateTime = DateTime.UtcNow.AddDays(-3), CreatedAt = DateTime.UtcNow.AddDays(-3),
+            Title = "Open", Description = "Open", IncidentDateTime = DateTime.UtcNow.AddDays(-3), CreatedAt = DateTime.UtcNow.AddDays(-3), NotifyDueAt = DateTime.UtcNow.AddDays(-2),
             QscReportingStatus = QscReportingStatus.Required,
         });
         db.SaveChanges();

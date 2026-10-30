@@ -48,8 +48,51 @@ public class IncidentsController : ControllerBase
     private Task<IncidentListDto> ListItemAsync(Guid id, CancellationToken ct) =>
         _db.IncidentReports.Where(x => x.Id == id).Select(IncidentProjections.ToListDto(DateTime.UtcNow)).SingleAsync(ct);
 
-    /// <summary>Item 9 of the connection map: raises (Required + not yet reported) or completes (reported, or status left Required) the IncidentQscReport obligation task for this incident. Called from both Create and Update, right before the caller's own SaveChangesAsync.</summary>
-    private async Task RaiseOrCompleteQscTaskAsync(IncidentReport incident, CancellationToken ct)
+    /// <summary>The organisation's state and zone for ONE named tenant (a SuperAdmin context has no tenant filter). No tenant or no settings row gives the Sydney default.</summary>
+    private sealed record ProviderClock(string? State, ProviderTimeZone Tz);
+
+    private async Task<ProviderClock> ProviderClockAsync(Guid? tenantId, CancellationToken ct)
+    {
+        var state = tenantId == null ? null
+            : await _db.ProviderSettings.Where(p => p.TenantId == tenantId).Select(p => p.State).FirstOrDefaultAsync(ct);
+        return new ProviderClock(state, ProviderTimeZoneResolver.FromState(state));
+    }
+
+    /// <summary>
+    /// Stores the Commission deadlines for the incident's class, counted from when the provider became aware (CreatedAt on a legacy row): Within24h notifies 24 hours later and owes the
+    /// detailed report 5 business days later; Within5BusinessDays notifies 5 business days later; None has neither.
+    /// </summary>
+    private async Task ApplyClockAsync(IncidentReport incident, ProviderClock clock, CancellationToken ct)
+    {
+        var aware = incident.AwareAt ?? incident.CreatedAt;
+        incident.NotifyDueAt = null;
+        incident.DetailedReportDueAt = null;
+        incident.DueCountedWithoutHolidays = false;
+        if (incident.ReportableClass == ReportableClass.None) return;
+
+        var start = DateOnly.FromDateTime(ProviderLocalTime.UtcToLocal(aware, clock.Tz.Zone));
+        var wanted = (clock.State ?? "VIC").Trim();
+        var feed = await _db.PublicHolidays.AsNoTracking()
+            .Where(h => h.Date >= new DateOnly(start.Year, 1, 1) && h.Date <= new DateOnly(start.Year + 1, 12, 31))
+            .Select(h => new { h.Date, h.State }).ToListAsync(ct);
+        var years = feed.Where(h => h.State == null || string.Equals(h.State.Trim(), wanted, StringComparison.OrdinalIgnoreCase))
+            .Select(h => h.Date.Year).ToHashSet();
+        var calendar = new Odip.Domain.Billing.Pricing.HolidayCalendar(
+            await PublicHolidayLoader.LoadAsync(_db, start, start.AddDays(40), includePartDay: false, ct));
+        var fiveDays = BusinessDays.EndOfNthAfter(aware, 5, wanted, clock.Tz.Zone, calendar, years);
+        if (incident.ReportableClass == ReportableClass.Within24h)
+        {
+            incident.NotifyDueAt = aware.AddHours(QscReporting.OverdueHours);
+            incident.DetailedReportDueAt = fiveDays.DueUtc;
+        }
+        else incident.NotifyDueAt = fiveDays.DueUtc;
+        incident.DueCountedWithoutHolidays = fiveDays.WeekendsOnly;
+    }
+
+    private static DateTime TruncateToMinute(DateTime value) => new(value.Ticks - value.Ticks % TimeSpan.TicksPerMinute, value.Kind);
+
+    /// <summary>Item 9 of the connection map: raises (Required + not yet reported) or completes (reported, or status left Required) the IncidentQscReport obligation task for this incident, due on the provider-local date of the stored deadline. Called from both Create and Update, right before the caller's own SaveChangesAsync.</summary>
+    private async Task RaiseOrCompleteQscTaskAsync(IncidentReport incident, TimeZoneInfo zone, CancellationToken ct)
     {
         if (incident.QscReportingStatus == QscReportingStatus.Required && incident.QscReportedAt == null)
         {
@@ -57,7 +100,7 @@ public class IncidentsController : ControllerBase
                 SourceKey: $"incident-qsc:{incident.Id}",
                 Type: TaskType.IncidentQscReport,
                 Title: $"Report incident to the NDIS Commission: {incident.Title}",
-                DueDate: DateOnly.FromDateTime(incident.CreatedAt.AddHours(QscReporting.OverdueHours)),
+                DueDate: ProviderLocalTime.TodayIn(incident.NotifyDueAt ?? incident.CreatedAt.AddHours(QscReporting.OverdueHours), zone),
                 LinkTo: $"/incidents/{incident.Id}",
                 IncidentReportId: incident.Id,
                 Priority: TaskPriority.High), ct);
@@ -68,11 +111,26 @@ public class IncidentsController : ControllerBase
         }
     }
 
-    private static readonly IncidentType[] QscRequiredTypes = new[]
+    /// <summary>The 5-day report task: raised while a Within24h incident is active and the report is not sent, completed otherwise. A closed task is never reopened.</summary>
+    private async Task RaiseOrCompleteDetailedReportTaskAsync(IncidentReport incident, TimeZoneInfo zone, CancellationToken ct)
     {
-        IncidentType.Abuse, IncidentType.Neglect, IncidentType.Death,
-        IncidentType.RestrictivePracticeUse, IncidentType.MissingPerson
-    };
+        if (incident.ReportableClass == ReportableClass.Within24h && incident.DetailedReportDueAt is { } due
+            && incident.CommissionDetailedReportedAt == null && incident.IsActive)
+        {
+            await _obligationTasks.EnsureAsync(new Odip.Application.Interfaces.ObligationTaskSpec(
+                SourceKey: $"incident-detailed-report:{incident.Id}",
+                Type: TaskType.IncidentCommissionDetailedReport,
+                Title: $"Send the 5-day report to the NDIS Commission: {incident.Title}",
+                DueDate: ProviderLocalTime.TodayIn(due, zone),
+                LinkTo: $"/incidents/{incident.Id}",
+                IncidentReportId: incident.Id,
+                Priority: TaskPriority.High), ct);
+        }
+        else
+        {
+            await _obligationTasks.CompleteAsync($"incident-detailed-report:{incident.Id}", ct);
+        }
+    }
 
     /// <summary>
     /// §4.4 same-tenant validation for the three user pickers below: null is always fine,
@@ -318,6 +376,8 @@ public class IncidentsController : ControllerBase
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<ApiResponse<IncidentDetailDto>>> GetById(Guid id, CancellationToken ct)
     {
+        var tenantId = await _db.IncidentReports.Where(x => x.Id == id).Select(x => x.TenantId).FirstOrDefaultAsync(ct);
+        var clock = await ProviderClockAsync(tenantId, ct);
         var item = await _db.IncidentReports
             .Include(i => i.TripInstance)
             .Include(i => i.ReportedByUser)
@@ -350,7 +410,7 @@ public class IncidentsController : ControllerBase
                 InvolvedParticipantName = i.InvolvedParticipant != null
                     ? (i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName).Trim() : null,
                 QscReportingStatus = i.QscReportingStatus,
-                IsOverdue24h = QscReporting.IsOverdue(i.IsActive, i.QscReportingStatus, i.QscReportedAt, i.CreatedAt, DateTime.UtcNow),
+                IsOverdue24h = QscReporting.IsOverdue(i.IsActive, i.QscReportingStatus, i.QscReportedAt, i.NotifyDueAt, DateTime.UtcNow),
                 CreatedAt = i.CreatedAt,
                 MedicationAdministrationId = i.MedicationAdministrationId,
                 ShiftId = i.ShiftId,
@@ -393,6 +453,16 @@ public class IncidentsController : ControllerBase
                 }).ToList(),
                 QscReportedAt = i.QscReportedAt,
                 QscReferenceNumber = i.QscReferenceNumber,
+                AwareAt = i.AwareAt ?? i.CreatedAt,
+                ReportableClass = i.ReportableClass,
+                ReportableClassReason = i.ReportableClassReason,
+                NotifyDueAt = i.NotifyDueAt,
+                DetailedReportDueAt = i.DetailedReportDueAt,
+                DueCountedWithoutHolidays = i.DueCountedWithoutHolidays,
+                CommissionDetailedReportedAt = i.CommissionDetailedReportedAt,
+                CommissionFinalReportRequested = i.CommissionFinalReportRequested,
+                CommissionFinalReportedAt = i.CommissionFinalReportedAt,
+                TimeZoneId = clock.Tz.Id,
                 ReviewedByStaffId = i.ReviewedByUserId,
                 ReviewedByName = i.ReviewedByUser != null
                     ? (i.ReviewedByUser.FirstName + " " + i.ReviewedByUser.LastName).Trim() : null,
@@ -520,24 +590,23 @@ public class IncidentsController : ControllerBase
             ShiftNoteId = dto.ShiftNoteId,
             Status = IncidentStatus.Draft
         };
+        // The provider is aware the moment the report is filed; backdating AwareAt goes through Update (Admin, Coordinator, SuperAdmin).
+        incident.CreatedAt = _clock.GetUtcNow().UtcDateTime;
+        incident.AwareAt = incident.CreatedAt;
 
-        // Auto-set QSC reporting requirement for critical incidents. RestrictivePracticeUse is
-        // already in QscRequiredTypes (any RP incident is reportable-territory regardless of the
-        // determination), so `isRpAuthorised == false` is belt-and-braces here rather than a
-        // behaviour change — it's the INC-04 nudge made explicit, and keeps this correct even if
-        // QscRequiredTypes is ever narrowed to drop RestrictivePracticeUse. This only ever raises
-        // QscReportingStatus to Required as a default; like every field here it's still editable
-        // afterwards on the Update flow, so it's a nudge, not a lock.
-        if (dto.Severity == IncidentSeverity.Critical || QscRequiredTypes.Contains(dto.IncidentType) || isRpAuthorised == false)
-        {
-            incident.QscReportingStatus = QscReportingStatus.Required;
-        }
+        // The class starts at the default for the severity and type (critical, a required type or an unauthorised restrictive practice is Within24h); an Admin or
+        // Coordinator can change it on Update, with a reason. The status follows from the class.
+        var clock = await ProviderClockAsync(incident.TenantId, ct);
+        incident.ReportableClass = QscReporting.DefaultClass(dto.Severity, dto.IncidentType, isRpAuthorised);
+        await ApplyClockAsync(incident, clock, ct);
+        incident.QscReportingStatus = QscReporting.DeriveStatus(incident.ReportableClass, null, incident.NotifyDueAt);
 
         _db.IncidentReports.Add(incident);
 
         // Item 9 of the connection map: raise the IncidentQscReport obligation task when this
         // new incident is already Required-and-unreported.
-        await RaiseOrCompleteQscTaskAsync(incident, ct);
+        await RaiseOrCompleteQscTaskAsync(incident, clock.Tz.Zone, ct);
+        await RaiseOrCompleteDetailedReportTaskAsync(incident, clock.Tz.Zone, ct);
 
         // "None of these" from someone who may not write the register (a support worker): a coordinator is asked to add the practice. Nothing is
         // written to the register here; adding it stays the separate, role-checked RestrictivePracticesController action. A coordinator has
@@ -550,7 +619,7 @@ public class IncidentsController : ControllerBase
                 SourceKey: $"incident-rp-register:{incident.Id}",
                 Type: TaskType.RestrictivePracticeRegisterAddition,
                 Title: $"Add {RestrictivePracticeAuthorisation.TypePhrase(incident.RestrictivePracticeType.Value)} to {participant.FullName}'s restrictive practice register",
-                DueDate: DateOnly.FromDateTime(incident.CreatedAt.AddHours(QscReporting.OverdueHours)),
+                DueDate: ProviderLocalTime.TodayIn(incident.CreatedAt.AddHours(QscReporting.OverdueHours), clock.Tz.Zone),
                 LinkTo: $"/incidents/{incident.Id}",
                 IncidentReportId: incident.Id), ct);
         }
@@ -660,6 +729,8 @@ public class IncidentsController : ControllerBase
         i.InvolvedUserId = dto.InvolvedStaffId;
         i.ReportedByUserId = dto.ReportedByStaffId;
         i.TenantId = await ReporterTenantAsync(dto.ReportedByStaffId, ct);
+        var clock = await ProviderClockAsync(i.TenantId, ct);
+        var zone = clock.Tz.Zone;
         i.IncidentType = dto.IncidentType;
         i.OtherTypeSpecify = dto.OtherTypeSpecify;
         // INC-04: RestrictivePracticeType/Id may still be corrected here like any other field, but
@@ -699,9 +770,41 @@ public class IncidentsController : ControllerBase
         i.MedicationAdministrationId = dto.MedicationAdministrationId;
         i.ShiftId = dto.ShiftId;
         i.ShiftNoteId = dto.ShiftNoteId;
-        i.QscReportingStatus = dto.QscReportingStatus;
+        // The Commission clock. The status in the dto is ignored: it follows from the class and the report date.
+        // A row from before the clock has class None with a stored status; read it as Within24h so a save does not turn it into "not required".
+        var storedClass = i.ReportableClass == ReportableClass.None && i.QscReportingStatus is not (QscReportingStatus.NotRequired or QscReportingStatus.Pending)
+            ? ReportableClass.Within24h : i.ReportableClass;
+        var storedAware = i.AwareAt ?? i.CreatedAt;
+        if (dto.AwareAtLocal is { } awareLocal
+            && TruncateToMinute(awareLocal) != TruncateToMinute(ProviderLocalTime.UtcToLocal(storedAware, zone)))
+        {
+            var newAware = ProviderLocalTime.LocalToUtc(awareLocal, zone);
+            if (newAware > _clock.GetUtcNow().UtcDateTime)
+                return BadRequest(ApiResponse<IncidentListDto>.Fail("The time you became aware cannot be in the future."));
+            i.AwareAt = newAware;
+        }
+        i.ReportableClass = dto.ReportableClass ?? storedClass;
+        if (dto.ReportableClass is { } chosen)
+        {
+            var reason = dto.ReportableClassReason?.Trim();
+            if (chosen == QscReporting.DefaultClass(dto.Severity, dto.IncidentType, i.IsRestrictivePracticeAuthorised))
+                i.ReportableClassReason = null;
+            else if (string.IsNullOrEmpty(reason))
+                return BadRequest(ApiResponse<IncidentListDto>.Fail("Give a reason for changing when this incident must be reported."));
+            else if (reason.Length > 500)
+                return BadRequest(ApiResponse<IncidentListDto>.Fail("The reason must be 500 characters or fewer."));
+            else
+                i.ReportableClassReason = reason;
+        }
+        await ApplyClockAsync(i, clock, ct);
         i.QscReportedAt = dto.QscReportedAt;
+        i.QscReportingStatus = QscReporting.DeriveStatus(i.ReportableClass,
+            dto.QscReportedAt is { } reportedLocal ? ProviderLocalTime.LocalToUtc(reportedLocal, zone) : null, i.NotifyDueAt);
         i.QscReferenceNumber = dto.QscReferenceNumber;
+        // Both Commission dates are full-replace like QscReportedAt; the final-report flag keeps what is stored when omitted.
+        i.CommissionDetailedReportedAt = dto.CommissionDetailedReportedAt;
+        i.CommissionFinalReportRequested = dto.CommissionFinalReportRequested ?? i.CommissionFinalReportRequested;
+        i.CommissionFinalReportedAt = dto.CommissionFinalReportedAt;
         i.ReviewedByUserId = dto.ReviewedByStaffId;
         i.ReviewNotes = dto.ReviewNotes;
         i.CorrectiveActions = dto.CorrectiveActions;
@@ -777,7 +880,8 @@ public class IncidentsController : ControllerBase
 
         // Item 9 of the connection map: an edit may change QscReportingStatus/QscReportedAt in
         // either direction — raise/refresh or complete the IncidentQscReport task accordingly.
-        await RaiseOrCompleteQscTaskAsync(i, ct);
+        await RaiseOrCompleteQscTaskAsync(i, zone, ct);
+        await RaiseOrCompleteDetailedReportTaskAsync(i, zone, ct);
 
         await _db.SaveChangesAsync(ct);
 

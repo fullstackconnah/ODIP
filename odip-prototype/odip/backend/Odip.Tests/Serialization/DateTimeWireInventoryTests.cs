@@ -40,7 +40,12 @@ public class DateTimeWireInventoryTests
         new("IncidentDetailDto.QscReportedAt", Typed, "typed into the compliance step"),
         new("IncidentDetailDto.FamilyNotifiedAt", Typed, "typed into the compliance step"),
         new("IncidentDetailDto.SupportCoordinatorNotifiedAt", Typed, "typed into the compliance step"),
+        new("IncidentDetailDto.CommissionDetailedReportedAt", Typed, "typed into the compliance step"),
+        new("IncidentDetailDto.CommissionFinalReportedAt", Typed, "typed into the compliance step"),
         new("UpdateIncidentDto.QscReportedAt", Typed, "posted raw from the datetime-local input"),
+        new("UpdateIncidentDto.AwareAtLocal", Typed, "when the provider became aware, posted raw from the datetime-local input; the server reads it in the provider zone"),
+        new("UpdateIncidentDto.CommissionDetailedReportedAt", Typed, "posted raw from the datetime-local input"),
+        new("UpdateIncidentDto.CommissionFinalReportedAt", Typed, "posted raw from the datetime-local input"),
         new("UpdateIncidentDto.FamilyNotifiedAt", Typed, "posted raw from the datetime-local input"),
         new("UpdateIncidentDto.SupportCoordinatorNotifiedAt", Typed, "posted raw from the datetime-local input"),
 

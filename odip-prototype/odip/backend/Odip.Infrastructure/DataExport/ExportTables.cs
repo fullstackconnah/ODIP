@@ -80,7 +80,7 @@ public static class ExportTables
 
     /// <summary>
     /// A DateTime column that holds provider-local digits rather than an instant. It is taken from the API's own marks: an entity property named
-    /// like a member marked [WallClock] (DateTimeWireInventoryTests lists each one with its reason). Today that gives 12 columns, and
+    /// like a member marked [WallClock] (DateTimeWireInventoryTests lists each one with its reason). Today that gives 14 columns, and
     /// ExportTablesTests pins them.
     /// </summary>
     public static bool IsWallClock(IReadOnlyProperty property) =>
