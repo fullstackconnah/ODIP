@@ -139,6 +139,7 @@ describe('navConfig — who sees what', () => {
       'Budgets',
       'Invoices',
       'Incidents',
+      'Complaints',
       'Settings',
     ])
   })

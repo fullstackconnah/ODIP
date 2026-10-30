@@ -728,7 +728,7 @@ describe('AppLayout — no New Trip shortcut in the sidebar, the drawer or the b
       '/participants', '/agreements', '/medications', '/caregiver-submissions',
       '/rostering', '/rostering/patterns', '/rostering/compatibility', '/rostering/leave', '/rostering/completions', '/staff', '/qualifications',
       '/tasks', '/budgets', '/invoices',
-      '/incidents', '/settings',
+      '/incidents', '/complaints', '/settings',
     ])
   })
 
@@ -789,6 +789,7 @@ describe('AppLayout — the menu each role sees is generated from navConfig', ()
     'Budgets',
     'Invoices',
     'Incidents',
+    'Complaints',
     'Settings',
   ]
   // A SupportWorker starts from My shifts, so the Dashboard is not in their menu; they never see the pages their allow-list leaves out.
@@ -822,8 +823,23 @@ describe('AppLayout — the menu each role sees is generated from navConfig', ()
     signIn('ReadOnly')
     renderAt('/')
     expect(navShape()).toEqual(READ_ONLY_MENU)
-    for (const name of [/Roster board$/, /Shift patterns$/, /Compatibility$/, /Leave$/, /Completions$/, /Budgets$/, /Caregiver forms$/, /Settings$/]) {
+    for (const name of [/Roster board$/, /Shift patterns$/, /Compatibility$/, /Leave$/, /Completions$/, /Budgets$/, /Caregiver forms$/, /Complaints$/, /Settings$/]) {
       expect(screen.queryByRole('link', { name }), String(name)).not.toBeInTheDocument()
+    }
+  })
+
+  it('gives Admin and Coordinator a Complaints link after Incidents, and SupportWorker and ReadOnly none', () => {
+    for (const role of ['Admin', 'Coordinator']) {
+      signIn(role)
+      const { unmount } = renderAt('/')
+      expect(screen.getByRole('link', { name: /Complaints$/ })).toHaveAttribute('href', '/complaints')
+      unmount(); localStorage.clear()
+    }
+    for (const role of ['SupportWorker', 'ReadOnly']) {
+      signIn(role)
+      const { unmount } = renderAt('/')
+      expect(screen.queryByRole('link', { name: /Complaints$/ }), role).not.toBeInTheDocument()
+      unmount(); localStorage.clear()
     }
   })
 
@@ -936,12 +952,12 @@ describe('AppLayout — open groups are remembered (U1)', () => {
     localStorage.setItem(KEY, JSON.stringify(['gone-group', 42, 'trips']))
     const { unmount } = renderAt('/')
     expect(expanded(/Trips$/)).toBe('true')
-    expect(navShape()).toHaveLength(10)
+    expect(navShape()).toHaveLength(11)
     unmount()
 
     localStorage.setItem(KEY, '{not json')
     renderAt('/')
-    expect(navShape()).toHaveLength(10)
+    expect(navShape()).toHaveLength(11)
     expect(expanded(/Trips$/)).toBe('false')
   })
 

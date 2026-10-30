@@ -45,6 +45,8 @@ const TaskCreatePage = React.lazy(() => import('./pages/TaskCreatePage'))
 const IncidentsPage = React.lazy(() => import('./pages/IncidentsPage'))
 const IncidentCreatePage = React.lazy(() => import('./pages/IncidentCreatePage'))
 const IncidentDetailPage = React.lazy(() => import('./pages/IncidentDetailPage'))
+const ComplaintsPage = React.lazy(() => import('./pages/ComplaintsPage'))
+const ComplaintFormPage = React.lazy(() => import('./pages/ComplaintFormPage'))
 const BookingsPage = React.lazy(() => import('./pages/BookingsPage'))
 const SchedulePage = React.lazy(() => import('./pages/SchedulePage'))
 const SettingsPage = React.lazy(() => import('./pages/SettingsPage'))
@@ -171,6 +173,9 @@ const router = createBrowserRouter(
         <Route path="/incidents/new" element={<PrivateRoute page="incidents"><IncidentCreatePage /></PrivateRoute>} />
         <Route path="/incidents/:id/edit" element={<PrivateRoute page="incidents" requiresWrite><IncidentCreatePage /></PrivateRoute>} />
         <Route path="/incidents/:id" element={<PrivateRoute page="incidents"><IncidentDetailPage /></PrivateRoute>} />
+        <Route path="/complaints" element={<PrivateRoute page="complaints"><ComplaintsPage /></PrivateRoute>} />
+        <Route path="/complaints/new" element={<PrivateRoute page="complaints"><ComplaintFormPage /></PrivateRoute>} />
+        <Route path="/complaints/:id" element={<PrivateRoute page="complaints"><ComplaintFormPage /></PrivateRoute>} />
         <Route path="/bookings" element={<PrivateRoute page="bookings"><BookingsPage /></PrivateRoute>} />
         <Route path="/settings" element={<PrivateRoute page="settings"><SettingsPage /></PrivateRoute>} />
         <Route path="/settings/import/:kind" element={<PrivateRoute page="settings" requiresDataImport><ImportWizardPage /></PrivateRoute>} />
