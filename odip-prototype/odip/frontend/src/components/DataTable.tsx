@@ -593,7 +593,7 @@ export function DataTable<T>({
                 >
                   {selectable && (
                     <td
-                      className={`${cellClass} w-10`}
+                      className={`${cellClass} w-10 max-md:-order-3`}
                       onClick={e => e.stopPropagation()}
                     >
                       <label className="inline-flex min-h-[var(--tap-min)] min-w-[var(--tap-min)] items-center justify-center"><input

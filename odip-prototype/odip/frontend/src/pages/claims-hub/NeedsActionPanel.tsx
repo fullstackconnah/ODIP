@@ -102,13 +102,13 @@ export function NeedsActionPanel({ lines, loading, failed, onRetry, fileFilter, 
       {groups.map(g => {
         const columns: Column<RejectedLineDto>[] = [
           { key: 'participant', header: 'Participant', mobile: 'primary', render: l => <CellText>{l.participantName}</CellText> },
-          { key: 'claim', header: 'Claim', mobile: 'meta', render: l => <Link to={`/claims/${l.claimId}`} className="text-[var(--color-muted-foreground)] hover:underline" onClick={e => e.stopPropagation()}>{l.claimReference}</Link> },
-          { key: 'item', header: 'Support item', mobile: 'meta', render: l => <CellText title={l.supportName}>{l.supportNumber}</CellText> },
-          { key: 'delivered', header: 'Delivered', mobile: 'meta', render: l => <span className="whitespace-nowrap">{deliveredText(l.from, l.to)}</span> },
+          { key: 'message', header: 'NDIA message', mobile: 'meta', render: l => <CellText title={l.rejectMessage} className="md:max-w-[16rem]">{l.rejectMessage ?? l.rejectCode}</CellText> },
           { key: 'amount', header: 'Amount', align: 'right', mobile: 'meta', render: l => formatCurrency(l.totalAmount) },
-          { key: 'file', header: 'File', mobile: 'meta', render: l => <button type="button" className={`${TAP_AREA} whitespace-nowrap text-[var(--color-primary)] hover:underline`} onClick={() => onOpenFile(l.batchId)}>{l.fileName}</button> },
-          { key: 'message', header: 'NDIA message', mobile: 'meta', render: l => <CellText title={l.rejectMessage}>{l.rejectMessage ?? l.rejectCode}</CellText> },
           { key: 'age', header: 'Age', mobile: 'status', render: l => <AgeCell days={l.ageDays} band={l.ageBand} /> },
+          { key: 'delivered', header: 'Delivered', mobile: 'meta', render: l => <span className="whitespace-nowrap">{deliveredText(l.from, l.to)}</span> },
+          { key: 'item', header: 'Support item', mobile: 'meta', render: l => <CellText title={l.supportName}>{l.supportNumber}</CellText> },
+          { key: 'claim', header: 'Claim', mobile: 'meta', render: l => <Link to={`/claims/${l.claimId}`} className="text-[var(--color-muted-foreground)] hover:underline" onClick={e => e.stopPropagation()}>{l.claimReference}</Link> },
+          { key: 'file', header: 'File', mobile: 'meta', render: l => <button type="button" className={`${TAP_AREA} whitespace-nowrap text-[var(--color-primary)] hover:underline`} onClick={() => onOpenFile(l.batchId)}>{l.fileName}</button> },
           {
             key: 'actions', header: <span className="sr-only">Actions</span>, align: 'right',
             render: l => (
@@ -146,7 +146,7 @@ export function NeedsActionPanel({ lines, loading, failed, onRetry, fileFilter, 
               </span>
             )}
           >
-            <p className="mb-2 text-[13px] text-[var(--color-muted-foreground)]">{g.hint}</p>
+            {g.hint && <p className="mb-2 text-[13px] text-[var(--color-muted-foreground)]">{g.hint}</p>}
             <DataTable data={g.lines} columns={columns} keyField="batchLineId" />
           </Card>
         )
@@ -154,7 +154,7 @@ export function NeedsActionPanel({ lines, loading, failed, onRetry, fileFilter, 
       <ConfirmDialog
         open={!!confirmSend}
         title="Send this line again?"
-        message={confirmSend && <><p>The NDIA rejected it as {confirmSend.rejectCode}: {confirmSend.rejectMessage ?? CODE_TITLES[confirmSend.rejectCode] ?? 'no message'}. {confirmSend.hint} Your decision is recorded in the audit log.</p>{error && <Callout tone="danger">{error}</Callout>}</>}
+        message={confirmSend && <><p>The NDIA rejected it as {confirmSend.rejectCode}: {confirmSend.rejectMessage ?? CODE_TITLES[confirmSend.rejectCode] ?? 'no message'}.{confirmSend.hint && ` ${confirmSend.hint}`} Your decision is recorded in the audit log.</p>{error && <Callout tone="danger">{error}</Callout>}</>}
         confirmLabel="Send again"
         loading={!!sending}
         onCancel={() => { setConfirmSend(null); setError(null) }}

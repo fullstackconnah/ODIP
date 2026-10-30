@@ -9,10 +9,10 @@ import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { TAP_AREA } from '@/components/tapArea'
 import type { BatchDto, ManagedClaimDto } from '@/api/types'
-import { formatInstantDateAu, plural } from '@/lib/format'
+import { plural } from '@/lib/format'
 import { TONE } from '@/lib/tone'
 import { formatCurrency } from '@/lib/utils'
-import { ROWS_PER_PAGE } from './claimHubSteps'
+import { ROWS_PER_PAGE, instantDay } from './claimHubSteps'
 
 const FILTER_PILL = 'bg-[var(--color-input)] border border-[var(--color-border)]'
 
@@ -25,7 +25,7 @@ export function PaidPanel({ batches, loading, failed, onRetry, onOpen }: { batch
   const rows = useMemo(() => (batches ?? []).filter(b => b.paid > 0).sort((a, b) => (b.resultsImportedAt ?? b.createdAt).localeCompare(a.resultsImportedAt ?? a.createdAt)), [batches])
   const columns: Column<BatchDto>[] = [
     { key: 'file', header: 'File', mobile: 'primary', render: b => <span className="whitespace-nowrap text-sm font-semibold">{b.fileName}</span> },
-    { key: 'results', header: 'Results in', mobile: 'meta', render: b => formatInstantDateAu(b.resultsImportedAt) },
+    { key: 'results', header: 'Results in', mobile: 'meta', render: b => instantDay(b.resultsImportedAt) },
     { key: 'lines', header: 'Lines paid', align: 'right', mobile: 'meta', render: b => `${b.paid} of ${plural(b.successful, 'line')}` },
     { key: 'claimed', header: 'Claimed', align: 'right', mobile: 'meta', render: b => formatCurrency(b.totalAmount) },
     { key: 'paid', header: 'Paid', align: 'right', mobile: 'status', render: b => b.paidAmount < b.totalAmount && b.rejected === 0

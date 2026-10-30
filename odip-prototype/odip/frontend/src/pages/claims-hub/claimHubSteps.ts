@@ -1,4 +1,5 @@
-import { formatDateAu } from '@/lib/utils'
+import { formatDateRange } from '@/lib/dateRange'
+import { formatInstantDateAu } from '@/lib/format'
 import type { BatchDto, HubLineDto } from '@/api/types'
 
 // What the hub's panels share that isn't a component: page sizes, a line's delivery span and quantity, and a file's step.
@@ -6,14 +7,13 @@ import type { BatchDto, HubLineDto } from '@/api/types'
 export const ROWS_PER_PAGE = 50
 export const MAX_FILE_LINES = 5000
 
-/** "12 Aug 2026", or "12–14 Aug 2026" for a span. */
-export function deliveredText(from: string, to: string): string {
-  if (from === to) return formatDateAu(from)
-  const [a, b] = [formatDateAu(from), formatDateAu(to)]
-  const [ad, am, ay] = a.split(' ')
-  const [bd, bm, by] = b.split(' ')
-  if (ay === by && am === bm) return `${ad}–${bd} ${bm} ${by}`
-  return `${a} – ${b}`
+/** "12 Aug 2026", or "12–14 Aug 2026" for a span: the house range format, which always keeps the year. */
+export const deliveredText = formatDateRange
+
+/** "30 Oct 2026": the viewer-zone day of an instant, in the same words as the delivery dates (no numeric dates in the hub). */
+export function instantDay(value: string | null | undefined): string {
+  const [d, m, y] = formatInstantDateAu(value).split('/')
+  return formatDateRange(`${y}-${m}-${d}`, null) || '—'
 }
 
 /** The file's own "H:MM" form, or "1 each" for a quantity line. */

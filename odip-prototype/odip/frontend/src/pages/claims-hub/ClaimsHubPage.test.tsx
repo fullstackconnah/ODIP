@@ -212,6 +212,54 @@ describe('ClaimsHubPage: Needs action', () => {
   })
 })
 
+describe('ClaimsHubPage: finish round 2', () => {
+  it('orders Needs action columns so the NDIA message and Age come before the wide ones', () => {
+    m.lines.mockReturnValue(query(hub({ rejected: [rejected()] })))
+    renderPage('/claims?tab=action')
+
+    const table = within(screen.getByTestId('claims-panel-action')).getByRole('table')
+    expect(within(table).getAllByRole('columnheader').map(h => h.textContent)).toEqual(['Participant', 'NDIA message', 'Amount', 'Age', 'Delivered', 'Support item', 'Claim', 'File', 'Actions'])
+  })
+
+  it('renders no hint line and no double gap in the confirm when the server sends an empty hint', async () => {
+    const user = userEvent.setup()
+    m.lines.mockReturnValue(query(hub({ rejected: [rejected({ hint: '' })] })))
+    renderPage('/claims?tab=action')
+
+    const panel = screen.getByTestId('claims-panel-action')
+    expect([...panel.querySelectorAll('p')].filter(p => !p.textContent?.trim())).toHaveLength(0)
+    await user.click(screen.getByRole('button', { name: /^Send again: / }))
+    expect(screen.getByText(/The NDIA rejected it as V17/).textContent).not.toContain('  ')
+  })
+
+  it('marks a passing Ready line so its Checks cell can leave the phone card, and a blocked line keeps its reason', () => {
+    m.lines.mockReturnValue(query(hub({ ready: [
+      line({ lineId: 'ok', participantName: 'Alex Park' }),
+      line({ lineId: 'bad', claimId: 'c-2', claimReference: 'TC-2', participantName: 'Bo Reed', problems: [{ rule: 'PriceLimit', severity: 'block', message: 'The price is over the limit' }] }),
+    ] })))
+    renderPage()
+
+    const rows = within(screen.getByTestId('claims-panel-ready')).getAllByRole('row')
+    const ok = rows.find(r => r.textContent?.includes('Alex Park'))!
+    const bad = rows.find(r => r.textContent?.includes('Bo Reed'))!
+    expect(ok.querySelector('[data-pass]')).not.toBeNull()
+    expect(bad.querySelector('[data-pass]')).toBeNull()
+    expect(bad).toHaveTextContent('The price is over the limit')
+  })
+
+  it('shows delivered dates with a month name, ranges keeping the year', () => {
+    m.lines.mockReturnValue(query(hub({ ready: [line({ from: '2026-07-31', to: '2026-08-02' })], rejected: [rejected({ from: '2026-08-12', to: '2026-08-12' })] })))
+    renderPage()
+    expect(screen.getByText('31 Jul – 2 Aug 2026')).toBeInTheDocument()
+  })
+
+  it('names the Built date in the Files table with a month name', () => {
+    m.batches.mockReturnValue(query([batch()]))
+    renderPage('/claims?tab=files')
+    expect(within(screen.getByTestId('claims-panel-files')).getByText(/30 Oct 2026/)).toBeInTheDocument()
+  })
+})
+
 describe('ClaimsHubPage: decisions and errors', () => {
   it('takes a decision from the server per line, even for a code the page has no title for', async () => {
     const user = userEvent.setup()
@@ -259,10 +307,31 @@ describe('ClaimsHubPage: file panel', () => {
     m.lines.mockReturnValue(query(hub({ rejected: [rejected()] })))
     renderPage('/claims?tab=files&file=b-1')
 
-    await user.click(screen.getByRole('button', { name: /1 line rejected/ }))
+    await user.click(screen.getByRole('button', { name: 'Review 1 rejected line' }))
     expect(screen.getByTestId('where').textContent).not.toContain('file=')
     expect(screen.getByTestId('where')).toHaveTextContent('tab=action')
     expect(await screen.findByText(/Showing rejected lines from/)).toBeInTheDocument()
+  })
+
+  it("shows a line's reject code inside its Outcome cell, with no Code column", () => {
+    m.batch.mockReturnValue(query(resultsIn()))
+    renderPage('/claims?tab=files&file=b-1')
+
+    const table = within(screen.getByRole('dialog')).getByRole('table')
+    expect(within(table).getAllByRole('columnheader').map(h => h.textContent)).toEqual(['Participant', 'Outcome', 'Amount', 'Support item', 'Delivered'])
+    const [ok, rejectedRow] = within(table).getAllByRole('row').slice(1)
+    expect(within(rejectedRow).getByText('V17')).toBeInTheDocument()
+    expect(ok.textContent).not.toContain('V17')
+  })
+
+  it('reads dates the house way: ranges with a month name, and no stray full stop after the file name', () => {
+    m.batch.mockReturnValue(query(detail()))
+    renderPage('/claims?tab=files&file=b-1')
+
+    const panel = within(screen.getByRole('dialog'))
+    expect(panel.getByText(/^Built 30 Oct 2026 by Sam Lee/)).toBeInTheDocument()
+    expect(panel.getAllByText('1 Aug 2026').length).toBeGreaterThan(0)
+    expect(screen.getByTestId('file-step-name').closest('li')!.textContent).toBe('Upload BPR261030001.csv')
   })
 
   it('will not mark a line paid with a cleared amount, and says so', async () => {

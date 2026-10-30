@@ -20,7 +20,7 @@ export function AgeCell({ days, band }: { days: number; band: AgeBand }) {
 
 export function PassMark({ warning }: { warning?: string }) {
   return (
-    <span className="inline-flex items-center gap-1 text-[var(--color-muted-foreground)]">
+    <span data-pass={warning ? undefined : ''} className="inline-flex items-center gap-1 text-[var(--color-muted-foreground)]">
       <Check className="size-3.5" aria-hidden="true" />Ready
       {warning && <span className={TONE.warning.ink}> · {warning}</span>}
     </span>

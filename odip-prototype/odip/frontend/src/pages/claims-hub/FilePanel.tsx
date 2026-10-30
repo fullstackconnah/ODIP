@@ -17,9 +17,9 @@ import { fetchClaimFile, useClaimBatch, useDiscardBatch, useImportResults, useMa
 import { useSubmitPreview } from '@/api/hooks/claims'
 import { serverSentence } from '@/api/hooks/data-export'
 import type { BatchDetailDto, BatchLineDto, ResultsImportDto } from '@/api/types'
-import { formatInstantDateAu, plural } from '@/lib/format'
+import { plural } from '@/lib/format'
 import { formatCurrency } from '@/lib/utils'
-import { NEXT_ACTION, ROWS_PER_PAGE, STEP_NUMBER, deliveredText, stepOf, type FileStep } from './claimHubSteps'
+import { NEXT_ACTION, ROWS_PER_PAGE, STEP_NUMBER, deliveredText, instantDay, stepOf, type FileStep } from './claimHubSteps'
 
 interface Props {
   batchId: string | null
@@ -97,7 +97,7 @@ export function FilePanel({ batchId, onClose, announce, onReviewRejected }: Prop
       onClose={onClose}
       size="lg"
       title={<span data-testid="file-panel-title" className="whitespace-nowrap">{batch?.fileName ?? 'File'}</span>}
-      description={batch ? `Built ${formatInstantDateAu(batch.createdAt)} by ${batch.createdByName} · ${plural(batch.lineCount, 'line')} · ${formatCurrency(batch.totalAmount)}` : undefined}
+      description={batch ? `Built ${instantDay(batch.createdAt)} by ${batch.createdByName} · ${plural(batch.lineCount, 'line')} · ${formatCurrency(batch.totalAmount)}` : undefined}
       footer={footer}
     >
       <div data-testid="file-panel" className="flex flex-col gap-4">
@@ -146,7 +146,7 @@ function StepCard({ batch, step, announce, onReviewRejected }: { batch: BatchDet
   }
   return (
     <Card title="Discarded">
-      <p className="text-sm">Discarded on {formatInstantDateAu(batch.discardedAt)}. Its lines went back to Ready to send.</p>
+      <p className="text-sm">Discarded on {instantDay(batch.discardedAt)}. Its lines went back to Ready to send.</p>
     </Card>
   )
 }
@@ -165,7 +165,7 @@ function UploadStep({ batch, announce }: { batch: BatchDetailDto; announce: (m: 
         <li>Go to <strong>Payment Request &gt; Bulk Payment Request Upload</strong>.</li>
         <li>
           <span className="inline-flex flex-wrap items-center gap-1">
-            Upload <strong data-testid="file-step-name" className="whitespace-nowrap text-sm font-semibold">{batch.fileName}</strong>.
+            Upload <strong data-testid="file-step-name" className="whitespace-nowrap text-sm font-semibold">{batch.fileName}</strong>
             <button type="button" aria-label="Copy file name" title={copied ? 'Copied' : 'Copy file name'} className={`${TAP_ICON_SQUARE} rounded-sm text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]`} onClick={() => { copyText(batch.fileName); setCopied(true) }}>
               {copied ? <Check className="size-4" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}
             </button>
@@ -292,7 +292,7 @@ function PaidStep({ batch, announce, onReviewRejected }: { batch: BatchDetailDto
     <Card title={nothingToPay ? 'Nothing to pay' : 'Record the payment'}>
       <p className="text-sm">{nothingToPay ? 'The NDIA rejected every line, so there is no money to record.' : 'The NDIA pays successful lines in its next payment run. When the money is in, record it here.'}</p>
       {batch.rejected > 0 && (
-        <button type="button" className={`${TAP_AREA} mt-1 text-sm text-[var(--color-muted-foreground)] hover:underline`} onClick={onReviewRejected}>{plural(batch.rejected, 'line')} rejected</button>
+        <button type="button" className={`${TAP_AREA} mt-1 text-sm font-medium text-[var(--color-primary)] hover:underline`} onClick={onReviewRejected}>Review {plural(batch.rejected, 'rejected line')}</button>
       )}
       {!nothingToPay && (
         <div className="mt-3">
@@ -359,14 +359,18 @@ function FileLines({ lines }: { lines: BatchLineDto[] }) {
   const top = useRef<HTMLDivElement>(null)
   const columns: Column<BatchLineDto>[] = [
     { key: 'participant', header: 'Participant', mobile: 'primary', render: l => <CellText>{l.participantName ?? '—'}</CellText> },
-    { key: 'item', header: 'Support item', mobile: 'meta', render: l => <CellText>{l.supportNumber}</CellText> },
-    { key: 'delivered', header: 'Delivered', mobile: 'meta', render: l => <span className="whitespace-nowrap">{deliveredText(l.from, l.to)}</span> },
-    { key: 'amount', header: 'Amount', align: 'right', mobile: 'meta', render: l => formatCurrency(l.amount) },
     { key: 'outcome', header: 'Outcome', mobile: 'status', render: l => {
       const status = l.paidAmount != null ? 'Paid' : l.outcome
-      return <StatusBadge status={status} colorMap={OUTCOME_TONE} />
+      return (
+        <span className="inline-flex items-center gap-2 whitespace-nowrap">
+          <StatusBadge status={status} colorMap={OUTCOME_TONE} />
+          {l.rejectCode && <span className="text-[13px] text-[var(--color-muted-foreground)]">{l.rejectCode}</span>}
+        </span>
+      )
     } },
-    { key: 'code', header: 'Code', render: l => l.rejectCode ?? '' },
+    { key: 'amount', header: 'Amount', align: 'right', mobile: 'meta', render: l => formatCurrency(l.amount) },
+    { key: 'item', header: 'Support item', mobile: 'meta', render: l => <CellText>{l.supportNumber}</CellText> },
+    { key: 'delivered', header: 'Delivered', mobile: 'meta', render: l => <span className="whitespace-nowrap">{deliveredText(l.from, l.to)}</span> },
   ]
   return (
     <div ref={top} className="scroll-mt-20">

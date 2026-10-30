@@ -5,10 +5,10 @@ import { DataTable, type Column } from '@/components/DataTable'
 import { EmptyState } from '@/components/EmptyState'
 import { PageState } from '@/components/PageState'
 import type { BatchDto } from '@/api/types'
-import { formatInstantDateAu, formatRelative, plural } from '@/lib/format'
+import { formatRelative, plural } from '@/lib/format'
 import { formatCurrency } from '@/lib/utils'
 import { StepBadge } from './claimHubParts'
-import { NEXT_ACTION, NEXT_TEXT, ROWS_PER_PAGE, STEP_NUMBER, isUnfinished, stepOf } from './claimHubSteps'
+import { NEXT_ACTION, NEXT_TEXT, ROWS_PER_PAGE, STEP_NUMBER, instantDay, isUnfinished, stepOf } from './claimHubSteps'
 
 const FILE_NAME = 'whitespace-nowrap text-sm font-semibold'
 
@@ -74,13 +74,8 @@ export function FilesPanel({ batches, loading, failed, onRetry, onOpen, onGoToRe
   const rows = useMemo(() => [...(batches ?? [])].sort((a, b) => Number(a.status === 'Discarded') - Number(b.status === 'Discarded') || b.createdAt.localeCompare(a.createdAt)), [batches])
   const columns: Column<BatchDto>[] = [
     { key: 'file', header: 'File', mobile: 'primary', render: b => <span data-testid="files-file-name" className={`${FILE_NAME} ${b.status === 'Discarded' ? 'text-[var(--color-muted-foreground)]' : ''}`}>{b.fileName}</span> },
-    { key: 'step', header: 'Step', mobile: 'status', render: b => (
-      <span className="inline-flex items-center gap-2 whitespace-nowrap">
-        <StepBadge batch={b} />
-        {b.status !== 'Discarded' && <span className="text-[13px] text-[var(--color-muted-foreground)] max-md:hidden">Next: {NEXT_TEXT[isUnfinished(b) ? stepOf(b) : 'Paid']}</span>}
-      </span>
-    ) },
-    { key: 'built', header: 'Built', mobile: 'meta', render: b => <span className="whitespace-nowrap">Built {formatInstantDateAu(b.createdAt)}<span className="max-md:hidden"> by {b.createdByName}</span></span> },
+    { key: 'step', header: 'Step', mobile: 'status', render: b => <StepBadge batch={b} /> },
+    { key: 'built', header: 'Built', mobile: 'meta', render: b => <span className="whitespace-nowrap"><span className="md:hidden">Built </span>{instantDay(b.createdAt)}<span className="max-md:hidden"> by {b.createdByName}</span></span> },
     { key: 'lines', header: 'Lines', align: 'right', mobile: 'meta', render: b => plural(b.lineCount, 'line') },
     { key: 'total', header: 'Total', align: 'right', mobile: 'meta', render: b => formatCurrency(b.totalAmount) },
     { key: 'results', header: 'Results', mobile: 'hidden', render: b => <span className="whitespace-nowrap">{resultsText(b)}</span> },

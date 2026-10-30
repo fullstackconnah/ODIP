@@ -97,6 +97,8 @@ function create({ respond, failEnvelope, FILE }) {
       'b-discarded': batchLines('b-discarded', 2, () => 'Withdrawn'),
     }
     lines['b-paid'].forEach((l) => { l.paidAmount = l.amount; l.lineStatus = 'Paid' })
+    // The server sends the SHAPE §6 hint by code; a code it does not know sends none.
+    const hints = { V17: "Their budget doesn't cover this line. Check their plan with them or their plan manager.", C38: "Lower the unit price to the price guide limit for that date." }
     const codes = [['V17', true, 'Not enough funding left in the budget.'], ['V17', true, 'Not enough funding left in the budget.'], ['V17', true, 'Not enough funding left.'],
       ['C38', false, 'Unit price exceeds the price limit.'], ['C38', false, 'Unit price exceeds the price limit.'], ['X99', false, 'Unexpected error.']]
     rejected = lines['b-results'].slice(6).map((bl, i) => {
@@ -104,7 +106,7 @@ function create({ respond, failEnvelope, FILE }) {
       Object.assign(bl, { rejectCode: code, rejectMessage: message, needsDecision })
       return {
         ...line(100 + i, 300 + i, NAMES[i % NAMES.length], 61 + i * 7), batchLineId: bl.batchLineId, batchId: 'b-results', fileName: 'BPR261020001.csv',
-        rejectCode: code, rejectMessage: message, needsDecision, hint: '', rejectedAt: daysAgoInstant(8), nextAttempt: 2,
+        rejectCode: code, rejectMessage: message, needsDecision, hint: hints[code] ?? '', rejectedAt: daysAgoInstant(8), nextAttempt: 2,
       }
     })
     managed = [

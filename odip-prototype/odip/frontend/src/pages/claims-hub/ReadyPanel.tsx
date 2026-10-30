@@ -11,6 +11,7 @@ import { SearchInput } from '@/components/SearchInput'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { TAP_TRUNCATED_LINK } from '@/components/tapArea'
 import { useIsBelowMd } from '@/hooks/useIsBelowMd'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { ClaimFileError, useBuildClaimFile } from '@/api/hooks/claimHub'
 import type { HubLineDto } from '@/api/types'
 import { plural } from '@/lib/format'
@@ -135,22 +136,26 @@ export function ReadyPanel({ lines, loading, failed, onRetry, registrationProble
     }
   }
 
-  const columns: Column<HubLineDto>[] = [
+  // Hours / qty needs the room Checks does (its reason and fix link are the point of the table); it shows from 2xl, and the card on a phone never had it.
+  const wide = useMediaQuery('(min-width: 96rem)', false)
+  const allColumns: Column<HubLineDto>[] = [
     {
       key: 'participant', header: 'Participant', pin: 'start', mobile: 'primary', sortable: true,
       render: l => <Link to={`/participants/${l.participantId}`} className={`font-medium hover:underline ${TAP_TRUNCATED_LINK}`}>{l.participantName}</Link>,
     },
     {
       key: 'claim', header: 'Claim', mobile: 'meta',
-      render: l => <Link to={`/claims/${l.claimId}`} className={`text-[var(--color-muted-foreground)] hover:underline ${TAP_TRUNCATED_LINK}`}>{l.claimReference}</Link>,
+      render: l => <Link to={`/claims/${l.claimId}`} title={l.claimReference} className={`block text-[var(--color-muted-foreground)] hover:underline md:max-w-[8rem] md:truncate ${TAP_TRUNCATED_LINK}`}>{l.claimReference}</Link>,
     },
     { key: 'item', header: 'Support item', mobile: 'meta', render: l => <CellText title={l.supportName}>{l.supportNumber}</CellText> },
     { key: 'delivered', header: 'Delivered', mobile: 'meta', sortable: true, render: l => <span className="whitespace-nowrap">{deliveredText(l.from, l.to)}</span> },
     { key: 'hours', header: 'Hours / qty', align: 'right', mobile: 'hidden', render: l => quantityText(l) },
     { key: 'amount', header: 'Amount', align: 'right', mobile: 'meta', sortable: true, render: l => formatCurrency(l.totalAmount) },
     { key: 'age', header: 'Age', mobile: 'status', sortable: true, render: l => <AgeCell days={l.ageDays} band={l.ageBand} /> },
-    { key: 'checks', header: 'Checks', render: l => <Checks line={l} heldBack={!tickable(l)} /> },
+    // A passing line says nothing on a phone card (PassMark carries data-pass); a blocked one gets its reason on a full-width line, no caps label.
+    { key: 'checks', header: 'Checks', className: 'max-md:basis-full max-md:before:hidden! max-md:has-[[data-pass]]:hidden', render: l => <Checks line={l} heldBack={!tickable(l)} /> },
   ]
+  const columns = allColumns.filter(c => wide || c.key !== 'hours')
 
   if (failed && !lines.length) return <div data-testid="claims-panel-ready"><PageState kind="error" noun="claim lines" onRetry={onRetry} /></div>
 
@@ -245,7 +250,7 @@ function Checks({ line, heldBack }: { line: HubLineDto; heldBack: boolean }) {
   if (!heldBack) return <PassMark warning={warn?.message} />
   if (!blocks.length) {
     return (
-      <span id={reasonId(line)} className="text-[var(--color-muted-foreground)]">
+      <span id={reasonId(line)} className="block text-[var(--color-muted-foreground)] md:max-w-[14rem] md:truncate" title={`Another line on ${line.claimReference} needs fixing first. A claim is sent whole.`}>
         Another line on {line.claimReference} needs fixing first. A claim is sent whole.
       </span>
     )
@@ -253,7 +258,7 @@ function Checks({ line, heldBack }: { line: HubLineDto; heldBack: boolean }) {
   const fix = fixLink(line, blocks[0].rule)
   const all = blocks.map(p => p.message).join('. ')
   return (
-    <span className="inline-flex max-w-[28rem] items-center gap-2 max-md:flex-wrap" title={all}>
+    <span className="inline-flex items-center md:max-w-[14rem] gap-2 max-md:flex-wrap" title={all}>
       <span id={reasonId(line)} className={`truncate max-md:whitespace-normal ${TONE.danger.ink}`}>
         {blocks[0].message}
         {blocks.length > 1 && <span className="md:hidden">. {blocks.slice(1).map(p => p.message).join('. ')}</span>}
