@@ -21,7 +21,9 @@ import { formatDateAu } from '@/lib/utils'
 import { defaultReportRange, reportRangeError } from './reportRange'
 
 const STRIP = 'min-h-[60px] flex items-center justify-center px-[var(--card-pad)] py-2 text-center text-sm text-[var(--color-muted-foreground)]'
-const CSV_FAILED = "Couldn't create the CSV. Try again."
+// The range error wraps under its field instead of widening it: it adds nothing to the field's natural width but fills it.
+const ERROR_UNDER_FIELD = '[&>[role=alert]]:w-0 [&>[role=alert]]:min-w-full'
+const CSV_FAILED ="Couldn't create the CSV. Try again."
 const NUMBER = 'tabular-nums whitespace-nowrap'
 
 const byText = (a: string, b: string) => a.localeCompare(b, 'en-AU')
@@ -211,8 +213,8 @@ export default function ReportsPage() {
       <AnnouncementRegion message={csvFailed ? CSV_FAILED : ''} />
       <PageHeader title="Reports" subtitle="Hours, shift fulfilment and leave for the dates you pick, each ready to download as a CSV.">
         <div className="flex flex-wrap items-start gap-2 max-md:grid max-md:w-full max-md:grid-cols-2">
-          <TextField label="From" type="date" value={from} max={to || undefined} error={fromError} onChange={e => setDate('from', e.target.value)} />
-          <TextField label="To" type="date" value={to} min={from || undefined} error={toError} onChange={e => setDate('to', e.target.value)} />
+          <TextField className={ERROR_UNDER_FIELD} label="From" type="date" value={from} max={to || undefined} error={fromError} onChange={e => setDate('from', e.target.value)} />
+          <TextField className={ERROR_UNDER_FIELD} label="To" type="date" value={to} min={from || undefined} error={toError} onChange={e => setDate('to', e.target.value)} />
         </div>
       </PageHeader>
 
