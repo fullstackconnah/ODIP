@@ -129,20 +129,21 @@ public class ComplaintsControllerTests
         Assert.Equal("A tenant context is required.", BadRequestMessage(await Controller(db, null, true).Create(Save(), default)));
     }
 
+    private static object[] C(string name, Action<Dictionary<string, object?>> tweak, string message) => new object[] { name, tweak, message };
+
     public static IEnumerable<object[]> BadSaves() => new[]
     {
-        new object[] { "empty summary", (Action<Dictionary<string, object?>>)(v => v["Summary"] = "  "), "Describe the complaint." },
-        new object[] { "long summary", v => v["Summary"] = new string('x', 4001), "Keep it to 4,000 characters." },
-        new object[] { "long name", v => v["ComplainantName"] = new string('n', 201), "Keep the name to 200 characters." },
-        new object[] { "bad channel", v => v["Channel"] = (ComplaintChannel)99, "Choose an option from the list." },
-        new object[] { "bad kind", v => v["ComplainantKind"] = (ComplainantKind)99, "Choose an option from the list." },
-        new object[] { "anonymous with a name", v => v["ComplainantKind"] = ComplainantKind.Anonymous, "Anonymous complaints keep no name and no participant." },
-        new object[] { "participant kind, no participant", v => { v["ComplainantKind"] = ComplainantKind.Participant; v["ComplainantName"] = null; }, "Choose the participant." },
-        new object[] { "received tomorrow", v => v["ReceivedOn"] = Today.AddDays(1), "The date can't be in the future." },
-        new object[] { "acknowledged before received", v => v["AcknowledgedOn"] = Today.AddDays(-5), "That date can't be before the complaint was received." },
-        new object[] { "outcome told in the future", v => v["OutcomeCommunicatedOn"] = Today.AddDays(1), "The date can't be in the future." },
-        new object[] { "commission ticked, no date", v => v["ToldAboutCommission"] = true, "Add the date they were told." },
-        new object[] { "closed date on an open complaint", v => v["ClosedOn"] = Today, "Only a closed complaint has a closing date." },
+        C("empty summary", v => v["Summary"] = "  ", "Describe the complaint."),
+        C("long summary", v => v["Summary"] = new string('x', 4001), "Keep it to 4,000 characters."),
+        C("long name", v => v["ComplainantName"] = new string('n', 201), "Keep the name to 200 characters."),
+        C("bad channel", v => v["Channel"] = (ComplaintChannel)99, "Choose an option from the list."),
+        C("bad kind", v => v["ComplainantKind"] = (ComplainantKind)99, "Choose an option from the list."),
+        C("anonymous with a name", v => v["ComplainantKind"] = ComplainantKind.Anonymous, "Anonymous complaints keep no name and no participant."),
+        C("participant kind, no participant", v => { v["ComplainantKind"] = ComplainantKind.Participant; v["ComplainantName"] = null; }, "Choose the participant."),
+        C("received tomorrow", v => v["ReceivedOn"] = Today.AddDays(1), "The date can't be in the future."),
+        C("acknowledged before received", v => v["AcknowledgedOn"] = Today.AddDays(-5), "That date can't be before the complaint was received."),
+        C("outcome told in the future", v => v["OutcomeCommunicatedOn"] = Today.AddDays(1), "The date can't be in the future."),
+        C("commission ticked, no date", v => v["ToldAboutCommission"] = true, "Add the date they were told."),
     };
 
     [Theory]
@@ -226,6 +227,7 @@ public class ComplaintsControllerTests
         var controller = Controller(db, TenantA);
 
         Assert.Equal("Add the date it was closed.", BadRequestMessage(await controller.Update(row.Id, Save(v => v["Status"] = ComplaintStatus.Closed), default)));
+        Assert.Equal("Only a closed complaint has a closing date.", BadRequestMessage(await controller.Update(row.Id, Save(v => v["ClosedOn"] = Today), default)));
         var closed = Value(await controller.Update(row.Id, Save(v => { v["Status"] = ComplaintStatus.Closed; v["ClosedOn"] = Today; }), default));
         Assert.Equal(ComplaintStatus.Closed, closed.Status);
         Assert.Null(closed.OpenDays);

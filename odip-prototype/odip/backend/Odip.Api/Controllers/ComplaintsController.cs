@@ -103,14 +103,14 @@ public class ComplaintsController : ControllerBase
     public async Task<ActionResult<ApiResponse<ComplaintDto>>> Create([FromBody] SaveComplaintDto dto, CancellationToken ct)
     {
         if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<ComplaintDto>.Fail("A tenant context is required."));
+        // A new complaint always starts Open, so the form's status (if any) and a closing date are ignored before anything is checked.
+        dto = dto with { Status = ComplaintStatus.Open, ClosedOn = null };
         var today = await TodayAsync(ct);
         var error = await ValidateAsync(dto, tenantId, today, ct);
         if (error != null) return BadRequest(ApiResponse<ComplaintDto>.Fail(error));
 
-        // A new complaint always starts Open, so the form's status (if any) and a closing date are ignored.
-        var complaint = new Complaint { Id = Guid.NewGuid(), TenantId = tenantId, Status = ComplaintStatus.Open };
+        var complaint = new Complaint { Id = Guid.NewGuid(), TenantId = tenantId };
         Apply(complaint, dto);
-        complaint.ClosedOn = null;
         _db.Complaints.Add(complaint);
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<ComplaintDto>.Ok(ToDto((await LoadAsync(complaint.Id, ct))!, today)));
