@@ -34,7 +34,7 @@ export function ComplianceStep({
   staff,
 }: ComplianceStepProps) {
   return (
-    <Card title="Review & compliance">
+    <Card title="Compliance">
       <div className={formGrid}>
         <FormField label="Status" className={span.short}>
           <Dropdown

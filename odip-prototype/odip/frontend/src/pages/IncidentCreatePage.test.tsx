@@ -1065,7 +1065,8 @@ describe('IncidentCreatePage — UX-01 SearchableSelect keyboard support', () =>
     renderCreatePage({ pathname: '/incidents/incident-1/edit' })
 
     // Edit mode's 'all' initialVisited means every step's rail button is clickable immediately.
-    await user.click(await screen.findByRole('button', { name: /Review & compliance/ }))
+    await user.click(await screen.findByRole('button', { name: /Compliance/ }))
+    expect(screen.queryByText(/Review & compliance/)).not.toBeInTheDocument()
 
     const reviewedBy = await screen.findByLabelText('Reviewed By')
     await user.click(reviewedBy)
