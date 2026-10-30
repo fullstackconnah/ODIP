@@ -280,7 +280,7 @@ export default function PortalShiftDetailPage() {
       {handoverOnNow && <HandoverSection shift={shift} canAct={canAct} />}
       {showBefore && <MustKnowLine shift={shift} onAbout={showAbout} />}
       {shift.notes && (
-        <Section id="roster-notes" title="From the roster" icon={<ScrollText className="w-4 h-4" aria-hidden="true" />}>
+        <Section id="roster-notes" title="From the office" icon={<ScrollText className="w-4 h-4" aria-hidden="true" />}>
           <p className="text-sm whitespace-pre-wrap">{shift.notes}</p>
         </Section>
       )}

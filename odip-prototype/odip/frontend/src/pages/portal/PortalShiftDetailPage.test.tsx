@@ -259,6 +259,18 @@ describe('PortalShiftDetailPage', () => {
     expect(screen.getByText(/high support/i)).toBeInTheDocument()
   })
 
+  it('shows the office notes read-only under "From the office"', () => {
+    show(makeDetail({ notes: 'Bring the red bag.' }))
+    expect(screen.getByText('From the office')).toBeInTheDocument()
+    expect(screen.getByText('Bring the red bag.')).toBeInTheDocument()
+    expect(screen.queryByText('From the roster')).not.toBeInTheDocument()
+  })
+
+  it('hides the "From the office" block when the shift has no notes', () => {
+    show(makeDetail({ notes: null }))
+    expect(screen.queryByText('From the office')).not.toBeInTheDocument()
+  })
+
   it('shows a not-found message when the shift is a 404', () => {
     mockUsePortalShiftDetail.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: { response: { status: 404 } } })
     renderAt('shift-1')
