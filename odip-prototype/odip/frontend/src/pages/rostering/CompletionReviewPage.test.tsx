@@ -120,6 +120,11 @@ describe('CompletionReviewPage', () => {
     expect(mockUseCompletions).toHaveBeenCalledWith(expect.objectContaining({ status: 'PendingReview' }), 1, 50)
   })
 
+  it('names the staff filter for a screen reader', () => {
+    renderPage()
+    expect(screen.getByRole('combobox', { name: 'Filter by staff' })).toBeInTheDocument()
+  })
+
   it('renders queue rows with participant, staff and a variance badge', () => {
     mockUseCompletions.mockReturnValue({ data: makePaged([makeQueueItem()]), isLoading: false, isError: false, refetch: vi.fn() })
     renderPage()

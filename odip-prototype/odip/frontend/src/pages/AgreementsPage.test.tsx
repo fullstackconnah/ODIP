@@ -251,14 +251,14 @@ describe('AgreementsPage', () => {
 })
 
 describe('AgreementsBulkBar', () => {
-  it('on a phone is one row: box, count, Actions; the reason is the menu item, and there is no Clear', async () => {
+  it('on a phone is box, count, Actions and no Clear; the reason shows on its own row and again as the menu item', async () => {
     mockNarrow.mockReturnValue(true)
     const user = userEvent.setup()
     render(<AgreementsBulkBar selected={2} approvable={0} canApprove shown={4} allShownSelected={false} onToggleShown={vi.fn()} onClear={vi.fn()} onApprove={vi.fn()} />)
     expect(screen.getByRole('checkbox', { name: 'Select shown' })).toBeInTheDocument()
     expect(screen.getByText('2 selected')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument()
-    expect(screen.queryByText('None of the ticked rows has a draft waiting.')).not.toBeInTheDocument()
+    expect(screen.getByText('None of the ticked rows has a draft waiting.')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /Actions/ }))
     const item = screen.getByRole('option', { name: /Approve/ })

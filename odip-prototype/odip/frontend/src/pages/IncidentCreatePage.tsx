@@ -85,7 +85,7 @@ function computeSteps(incidentType: string | undefined, isEdit: boolean): Wizard
   steps.push({ key: 'details', label: 'Incident details', fields: STEP_DETAILS_FIELDS })
   steps.push({ key: 'witnesses', label: 'Witnesses', fields: STEP_WITNESSES_FIELDS })
   if (isEdit) {
-    steps.push({ key: 'compliance', label: 'Review & compliance', fields: STEP_COMPLIANCE_FIELDS })
+    steps.push({ key: 'compliance', label: 'Compliance', fields: STEP_COMPLIANCE_FIELDS })
   }
   return steps
 }

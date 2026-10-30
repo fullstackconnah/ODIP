@@ -37,6 +37,8 @@ export type SearchableSelectProps = {
   // with the input, matching Dropdown's labelling contract exactly.
   id?: string
   'aria-labelledby'?: string
+  /** A name for a select with no visible label of its own (a filter in a toolbar). */
+  'aria-label'?: string
   'aria-required'?: 'true'
   'aria-invalid'?: 'true'
   'aria-describedby'?: string
@@ -74,6 +76,7 @@ export function SearchableSelect({
   className,
   id,
   'aria-labelledby': ariaLabelledBy,
+  'aria-label': ariaLabel,
   'aria-required': ariaRequired,
   'aria-invalid': ariaInvalid,
   'aria-describedby': ariaDescribedBy,
@@ -342,6 +345,7 @@ export function SearchableSelect({
         role="combobox"
         id={id}
         aria-labelledby={ariaLabelledBy}
+        aria-label={ariaLabel}
         aria-required={ariaRequired}
         aria-invalid={ariaInvalid}
         aria-describedby={ariaDescribedBy}
