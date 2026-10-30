@@ -1,8 +1,8 @@
 using System.Text;
-using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Rostering;
 using Odip.Infrastructure.Services;
 using Xunit;
 
@@ -178,14 +178,28 @@ public class ClaimBatchBuildTests
     }
 
     [Fact]
-    public async Task Lines_made_by_the_claim_generators_for_a_normal_participant_pass_the_hard_checks()
+    public async Task Lines_made_by_the_shift_generator_for_a_normal_participant_pass_the_hard_checks()
     {
         using var f = new BatchFixture();
-        var (claim, lines, _) = f.AddClaim(3);
-        // The fixture's lines are shaped like the generators': an hourly catalogue item at or under the limit, GST code P2, a whole number of minutes.
+        var (_, _, participant) = f.AddClaim(0);
+        var group = f.Db.SupportActivityGroups.Add(new SupportActivityGroup { Id = Guid.NewGuid(), GroupCode = "GRP_COMMUNITY_ACCESS", DisplayName = "Community Access", SupportCategory = 4 }).Entity;
+        f.Db.SupportCatalogueItems.Add(new SupportCatalogueItem
+        {
+            Id = Guid.NewGuid(), ActivityGroupId = group.Id, ItemNumber = "04_Weekday_STD", Description = "Weekday access", DayType = ClaimDayType.Weekday, PriceLimit_VIC = 40m,
+            CatalogueVersion = "2024-25", EffectiveFrom = new DateOnly(2024, 7, 1), IsActive = true,
+        });
+        f.Db.Shifts.Add(new Shift
+        {
+            Id = Guid.NewGuid(), TenantId = f.TenantId, ParticipantId = participant.Id, ServiceDate = new DateOnly(2026, 9, 7), StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0),
+            Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, Status = ShiftStatus.Completed,
+        });
+        await f.Db.SaveChangesAsync();
+        var claim = await new ShiftClaimGenerationService(f.Db).GenerateDraftClaimAsync(participant.Id, new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 7));
+
         var result = await f.BuildClaimsAsync(claim.Id);
-        Assert.True(result.Ok);
-        Assert.Equal(3, result.Value!.LineCount);
+
+        Assert.True(result.Ok, string.Join("; ", result.Errors ?? []) + " " + string.Join("; ", (result.Data as BuildRefusalDto)?.Problems.Select(p => p.Rule + ": " + p.Message) ?? []));
+        Assert.Equal(320m, result.Value!.TotalAmount);
     }
 
     // ---- the per-claim download (G9) ----
@@ -355,14 +369,5 @@ public class ClaimBatchBuildTests
 
         Assert.Equal(404, result.Status);
         Assert.Empty(await f.Db.ClaimBatches.ToListAsync());
-    }
-
-    [Fact]
-    public void The_list_and_detail_queries_never_read_the_file_bytes()
-    {
-        // The file bytes are a column the projections must leave out: if a Select ever tracked the entity, Content would come with it.
-        var source = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Odip.Infrastructure", "Services", "ClaimBatchService.Queries.cs"));
-        Assert.DoesNotContain("Content", source);
-        Assert.DoesNotMatch(new Regex(@"Include\(.*Batch\b"), source);
     }
 }

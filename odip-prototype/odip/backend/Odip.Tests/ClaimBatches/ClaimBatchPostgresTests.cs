@@ -1,12 +1,15 @@
 using System.Text;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Data.Common;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Moq;
 using Npgsql;
 using Odip.Domain.Interfaces;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
 using Odip.Tests.Postgres;
@@ -143,5 +146,34 @@ public class ClaimBatchPostgresTests : IClassFixture<PostgresFixture>
         await using var check = PostgresFixture.NewContext(_pg.ConnectionString!);
         Assert.Equal(ClaimBatchStatus.Built, (await check.ClaimBatches.AsNoTracking().SingleAsync(b => b.Id == built.Value.Id)).Status);
         Assert.Equal(ClaimLineItemStatus.Draft, (await check.ClaimLineItems.AsNoTracking().SingleAsync(l => l.Id == lines[0].Id)).Status);
+    }
+
+    private sealed class CommandLog : DbCommandInterceptor
+    {
+        public List<string> Sql { get; } = [];
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result, CancellationToken ct = default)
+        {
+            Sql.Add(command.CommandText);
+            return base.ReaderExecutingAsync(command, eventData, result, ct);
+        }
+    }
+
+    [SkippableFact(DisplayName = "Postgres: the list, detail and hub queries never select the file bytes")]
+    public async Task The_list_detail_and_hub_never_select_the_file_bytes()
+    {
+        using var f = await NewAsync();
+        var (_, lines, _) = f.AddClaim(shiftLines: true);
+        var built = await f.BuildAsync(lines[0].Id);
+        Assert.True(built.Ok, string.Join("; ", built.Errors ?? []));
+        var log = new CommandLog();
+        await using var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseNpgsql(_pg.ConnectionString!).AddInterceptors(log).Options, TenantOf(f));
+        var service = new ClaimBatchService(db, new BprCsvService(db), new InvoiceService(db), f.Clock);
+
+        await service.BatchesAsync(f.TenantId, null, ClaimBatchService.ListCap, default);
+        await service.DetailAsync(f.TenantId, built.Value!.Id, default);
+        await service.HubAsync(f.TenantId, default);
+
+        Assert.NotEmpty(log.Sql);
+        Assert.DoesNotContain(log.Sql, sql => sql.Contains("\"ClaimBatches\"") && sql.Contains("\"Content\""));
     }
 }
