@@ -164,6 +164,20 @@ describe('ShiftSlideOver override gate', () => {
     expect(call.data.acknowledgedFindingCodes).toEqual(['RATIO_SHORTFALL'])
   })
 
+  it('tells the office that the support worker sees the shift notes', () => {
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'edit', shift: makeShift({ findings: [] }) }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+      />,
+    )
+
+    expect(screen.getByLabelText('Notes')).toHaveAccessibleDescription('The support worker sees this on their shift.')
+  })
+
   it('populates an existing overrideReason when reopening a shift', () => {
     const shift = makeShift({ overrideReason: 'Approved by team lead', findings: [] })
     render(
