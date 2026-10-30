@@ -19,6 +19,7 @@ import type { TripClaimListDto, ShiftClaimFlaggedDto, ShiftClaimGeneratedDto, Sh
 import { ClaimBudgetBlock } from '@/components/ClaimBudgetBlock'
 import type { Tone } from '@/lib/tone'
 import { Button } from '@/components/Button'
+import { TAP_FLOOR } from '@/components/tapArea'
 
 // Distinct from trip-detail/ClaimsTab.tsx (same name, different directory — see the
 // shift-completion design spec §4 "Claims entry point"). This tab lists BOTH kinds of claim a
@@ -71,6 +72,7 @@ export default function ClaimsTab({ participantId, canWrite, otherFunded = false
         ) : undefined
       }
     >
+      {!otherFunded && <div className="mb-3"><p className="text-[13px] text-[var(--color-muted-foreground)]">NDIA-managed claims are sent from Claims. <Link to="/claims" className={`${TAP_FLOOR} font-medium text-[var(--color-primary)] hover:underline`}>Go to Claims</Link></p></div>}
       {phase === 'loading' ? (
         <PageState kind="loading" noun="claim list" />
       ) : phase === 'error' ? (
