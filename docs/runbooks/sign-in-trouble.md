@@ -39,7 +39,7 @@ reasons.
 | "That email and password don't match." | (Firebase) | A wrong password, or an address Firebase has no account for. Firebase deliberately does not say which. | **Forgot password?**; if no email arrives, the address may have no Firebase account yet: an admin sends the set-password email. |
 | "We couldn't sign you in." | `InvalidToken` | The sign-in did not check out (an expired or foreign token, or a token missing what the exchange needs). | Try again. If it keeps happening, the API log says why. |
 
-If everyone sees "Too many attempts" at once, check `/auth/dev-whoami`'s `limiterPartitionKey`. A 172.16.0.0/12 address means every visitor shares one limiter bucket (traffic is arriving through the docker gateway, not the tunnel).
+If everyone sees "Too many attempts" at once, check the visitor address. `/auth/dev-whoami` (its `limiterPartitionKey`) answers only when `DEV_AUTH_ENABLED=true`; on live it defaults to false and the route is a 404. On live, check that nginx passes the visitor address from `CF-Connecting-IP` (`deploy/compose.yaml`, the `ports` comment), and that the API log's client addresses are not all one 172.16.0.0/12 address (the docker gateway), which would put every visitor in one limiter bucket.
 
 The API log has one line per refusal, each starting `Exchange failed` (or `Firebase token verification failed`, `SuperAdmin exchange`), with the reason and
 the address, so the person's report and the log can be matched.

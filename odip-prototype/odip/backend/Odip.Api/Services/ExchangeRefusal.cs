@@ -41,7 +41,7 @@ public static class ExchangeRefusal
     /// <summary>The user's organisation is inactive (or missing).</summary>
     public const string TenantInactive = "TenantInactive";
 
-    /// <summary>Too many failed attempts from this client (a 429 with a Retry-After header).</summary>
+    /// <summary>Too many sign-in requests from this client: the "login" flood limiter, 60 per 5 minutes (a 429 with a Retry-After header).</summary>
     public const string LockedOut = "LockedOut";
 
     /// <summary>The plain sentence that goes in <c>errors[0]</c>. The sign-in page words its own, from the code.</summary>
