@@ -11,7 +11,8 @@ vi.mock('@/lib/permissions', () => ({
   usePermissions: () => perms,
 }))
 
-const { mockUpdateMutate, mockDeleteMutate } = vi.hoisted(() => ({
+const { mockUpdateMutate, mockPutMutate, mockDeleteMutate } = vi.hoisted(() => ({
+  mockPutMutate: vi.fn(),
   mockDeleteMutate: vi.fn(),
   mockUpdateMutate: vi.fn(),
 }))
@@ -20,7 +21,8 @@ const { mockUseTasks } = vi.hoisted(() => ({ mockUseTasks: vi.fn() }))
 
 vi.mock('@/api/hooks', () => ({
   useTasks: mockUseTasks,
-  useUpdateTask: () => ({ mutate: mockUpdateMutate, mutateAsync: vi.fn() }),
+  useUpdateTask: () => ({ mutate: mockPutMutate, mutateAsync: vi.fn() }),
+  useSetTaskStatus: () => ({ mutate: mockUpdateMutate }),
   useDeleteTask: () => ({ mutate: mockDeleteMutate, mutateAsync: vi.fn() }),
 }))
 
@@ -317,9 +319,10 @@ describe('TasksPage — the Mark complete tick', () => {
     await user.click(screen.getByRole('button', { name: 'Mark complete' }))
 
     expect(mockUpdateMutate).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 't1', data: expect.objectContaining({ status: 'Completed' }) }),
+      { id: 't1', status: 'Completed', completedDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) },
       expect.anything(),
     )
+    expect(mockPutMutate).not.toHaveBeenCalled()
     expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't update status. Try again.")
   })
 })

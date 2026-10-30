@@ -14,6 +14,7 @@ import { ROW_ACTIONS_CARD } from '@/components/tapArea'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { useNotices } from '@/hooks/useNotices'
 import { useIsBelowMd } from '@/hooks/useIsBelowMd'
+import type { TruncatableList } from '@/api/hooks/pagedList'
 import { useConfirmIntakeBooking, useConvertParticipantInquiry, useParticipantInquiries } from '@/api/hooks'
 import type { CancelIntakeBookingResultDto, ParticipantInquiryDto } from '@/api/types/inquiries'
 import { usePermissions } from '@/lib/permissions'
@@ -210,12 +211,13 @@ function useInquiriesScreen() {
       },
     )
   }
-  // The /inquiries endpoint takes no query parameters, so the stage and the search are client-side over the already-fetched tenant-scoped list
-  // (the server owns the tenant predicate, and which drafts are direct intakes). An enquiry whose intake is complete is not listed: its participant
-  // is on the Onboarding tab, and once finalised on Active participants.
-  // The closed view lists what the server sent (closed enquiries only), newest close first.
+  // The stage and the search are client-side over the already-fetched tenant-scoped list (the server owns the tenant predicate, and which drafts are
+  // direct intakes); for Closed that list is the newest 200 (/inquiries/closed), so a search never reaches older ones. An enquiry whose intake is
+  // complete is not listed: its participant is on the Onboarding tab, and once finalised on Active participants.
+  // The closed view lists what the server sent (closed enquiries only), newest close first, the id breaking a tie as the server does.
+  const truncated = view === 'closed' ? (inquiries as Partial<TruncatableList<ParticipantInquiryDto>>) : undefined
   const open = view === 'closed'
-    ? [...inquiries].sort((a, b) => (b.closedAt ?? '').localeCompare(a.closedAt ?? ''))
+    ? [...inquiries].sort((a, b) => (b.closedAt ?? '').localeCompare(a.closedAt ?? '') || b.id.localeCompare(a.id))
     : inquiries.filter(row => isOpen(stageOf(row)))
   const filtered = open.filter(row => {
     if (!search.trim()) return true
@@ -365,10 +367,13 @@ function useInquiriesScreen() {
       )}
       {!canManageParticipantLifecycle && <p role="status" className="mb-4 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-accent)] p-3 text-sm text-[var(--color-muted-foreground)]">You can review enquiries, but your role cannot capture, edit, or start participant intake.</p>}
       {error && <Callout tone="error">{error}</Callout>}
+      {truncated?.isTruncated && (
+        <p className="mb-2 text-xs text-[var(--color-muted-foreground)]">Showing the latest {inquiries.length} of {truncated.totalCount} closed enquiries. Search looks through these only.</p>
+      )}
       {showEmptyState && view === 'closed' && <EmptyState icon={ClipboardPlus} title="No closed enquiries" description="Enquiries you close show here, with why and when. You can reopen one." />}
       {showEmptyState && view === 'open' && <EmptyState icon={ClipboardPlus} title="No open enquiries" description="Capture an enquiry when someone first contacts the service, then start their intake. Once an intake is complete, the participant moves to the Onboarding tab." />}
       {showTable && !isLoading && filtered.length === 0
-        ? <EmptyState icon={Search} title="No enquiries match your search" description={`Try a different search term, or clear the search to see every ${view} enquiry.`} action={{ label: 'Clear search', onClick: () => setSearch('') }} />
+        ? <EmptyState icon={Search} title="No enquiries match your search" description={truncated?.isTruncated ? `Try a different search term, or clear the search. Search looks through the latest ${inquiries.length} closed enquiries only.` : `Try a different search term, or clear the search to see every ${view} enquiry.`} action={{ label: 'Clear search', onClick: () => setSearch('') }} />
         : showTable && (view === 'closed'
           ? <DataTable data={filtered} columns={closedColumns} keyField="id" loading={isLoading} sortable emptyMessage="No closed enquiries." onRowClick={canManageParticipantLifecycle ? editExisting : undefined} />
           : <DataTable data={filtered} columns={columns} keyField="id" loading={isLoading} sortable emptyMessage="No open enquiries." onRowClick={canManageParticipantLifecycle ? openRow : undefined} />)}

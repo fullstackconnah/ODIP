@@ -8,6 +8,7 @@ const { mockUseTasks } = vi.hoisted(() => ({ mockUseTasks: vi.fn() }))
 vi.mock('@/api/hooks', () => ({
   useTasks: mockUseTasks,
   useUpdateTask: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
+  useSetTaskStatus: () => ({ mutate: vi.fn() }),
   useDeleteTask: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
 }))
 vi.mock('@/lib/permissions', () => ({ usePermissions: () => ({ canWrite: true }) }))

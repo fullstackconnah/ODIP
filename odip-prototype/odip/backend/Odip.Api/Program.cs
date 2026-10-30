@@ -197,6 +197,9 @@ builder.Services.AddScoped<Odip.Api.RateLimiting.PlanQuoteConcurrencyFilter>();
 // shortcut: process-local, correct for the single api container in deploy/compose.yaml; move to a DB advisory lock if the API is ever scaled out.
 builder.Services.AddKeyedSingleton(Odip.Api.RateLimiting.DataExportConcurrencyFilter.LimiterKey, (_, _) => new Odip.Api.RateLimiting.PlanQuoteConcurrencyLimiter(Odip.Api.RateLimiting.DataExportConcurrencyFilter.PermitsPerOrganisation));
 builder.Services.AddScoped<Odip.Api.RateLimiting.DataExportConcurrencyFilter>();
+// Imports: two at a time per organisation, preview and commit together, on their own limiter so the quote and the export keep theirs.
+builder.Services.AddKeyedSingleton(Odip.Api.RateLimiting.ImportConcurrencyFilter.LimiterKey, (_, _) => new Odip.Api.RateLimiting.PlanQuoteConcurrencyLimiter(Odip.Api.RateLimiting.ImportConcurrencyFilter.PermitsPerOrganisation));
+builder.Services.AddScoped<Odip.Api.RateLimiting.ImportConcurrencyFilter>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.ServiceAgreementDraftService>();
 // Agreement PR 1: a change to a pattern an approved agreement made is saved as the agreement's next revision (through ServiceAgreementDraftService.SaveAsync).
 builder.Services.AddScoped<Odip.Infrastructure.Services.AgreementPatternChangeService>();

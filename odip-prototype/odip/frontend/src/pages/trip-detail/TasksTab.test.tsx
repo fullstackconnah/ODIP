@@ -10,7 +10,7 @@ const { mockUpdateMutate } = vi.hoisted(() => ({
 }))
 
 vi.mock('@/api/hooks', () => ({
-  useUpdateTask: () => ({ mutate: mockUpdateMutate, isPending: false }),
+  useSetTaskStatus: () => ({ mutate: mockUpdateMutate, isPending: false }),
 }))
 
 function baseTask(overrides: Partial<TaskDto> = {}): TaskDto {

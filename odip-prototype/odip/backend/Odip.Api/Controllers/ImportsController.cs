@@ -64,6 +64,7 @@ public class ImportsController : ControllerBase
             : NotFound(ApiResponse<bool>.Fail("Unknown import type."));
 
     [HttpPost("{kind}/preview")]
+    [ServiceFilter(typeof(Odip.Api.RateLimiting.ImportConcurrencyFilter))]
     [RequestSizeLimit(MaxRequestBytes)]
     [RequestFormLimits(MultipartBodyLengthLimit = MaxRequestBytes, MemoryBufferThreshold = MaxRequestBytes)]
     public async Task<ActionResult<ApiResponse<ImportPreviewDto>>> Preview(string kind, IFormFile? file, [FromForm] string? mapping, [FromForm] string? shape, [FromForm] string? from, [FromForm] int? weeks, CancellationToken ct)
@@ -73,6 +74,7 @@ public class ImportsController : ControllerBase
     }
 
     [HttpPost("{kind}/commit")]
+    [ServiceFilter(typeof(Odip.Api.RateLimiting.ImportConcurrencyFilter))]
     [RequestSizeLimit(MaxRequestBytes)]
     [RequestFormLimits(MultipartBodyLengthLimit = MaxRequestBytes, MemoryBufferThreshold = MaxRequestBytes)]
     public async Task<ActionResult<ApiResponse<ImportResultDto>>> Commit(string kind, IFormFile? file, [FromForm] string? mapping,
