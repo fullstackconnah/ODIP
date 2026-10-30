@@ -5078,6 +5078,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<int>("Role")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("SignInInviteSentAt")
+                        .HasColumnType("timestamp without time zone");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
 
