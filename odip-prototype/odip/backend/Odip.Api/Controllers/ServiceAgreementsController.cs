@@ -9,6 +9,7 @@ using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Interfaces;
+using Odip.Infrastructure.Audit;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
 
@@ -158,9 +159,28 @@ public class ServiceAgreementsController : ControllerBase
                 // A failed save can leave a tracked entity that would poison the next item's SaveChanges.
                 _db.ChangeTracker.Clear();
             }
-            results.Add(new AgreementApproveResultDto { ParticipantId = item.ParticipantId, DraftId = item.DraftId, ParticipantName = names.GetValueOrDefault(item.ParticipantId, ""), Outcome = outcome, Reasons = reasons });
+            ApprovalActivationDto? activation = null;
+            if (outcome == "Approved")
+            {
+                // Its own step, after the approval committed and the tracker was cleared: it loads the participant fresh and can never turn this item Failed.
+                // Past the budget it is skipped, so the request still ends inside the proxies' minute.
+                activation = _clock.GetUtcNow() >= deadline
+                    ? new() { Result = ActivationResults.NotActivated, Reason = OutOfTimeToActivateWords }
+                    : await ActivateAsync(tenantId, item.ParticipantId, ct);
+                _db.ChangeTracker.Clear();
+            }
+            results.Add(new AgreementApproveResultDto { ParticipantId = item.ParticipantId, DraftId = item.DraftId, ParticipantName = names.GetValueOrDefault(item.ParticipantId, ""), Outcome = outcome, Reasons = reasons, Activation = activation });
         }
         return Ok(ApiResponse<List<AgreementApproveResultDto>>.Ok(results));
+    }
+
+    private const string OutOfTimeToActivateWords = "the batch ran out of time; use Make active on their page";
+
+    private Task<ApprovalActivationDto> ActivateAsync(Guid tenantId, Guid participantId, CancellationToken ct)
+    {
+        // The interceptor writes the participant's one audit row; the reason rides on it (as ParticipantsController does).
+        if (HttpContext != null) HttpContext.Items[AuditInterceptor.ReasonItemKey(participantId)] = ServiceAgreementApprovalService.ActivationAuditReason;
+        return _approval.ActivateAfterApprovalAsync(tenantId, participantId, ct);
     }
 
     /// <summary>

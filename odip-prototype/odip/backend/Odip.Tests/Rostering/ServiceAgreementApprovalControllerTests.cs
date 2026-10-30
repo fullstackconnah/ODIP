@@ -6,14 +6,19 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Moq;
 using Odip.Api.Controllers;
 using Odip.Api.Serialization;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
+using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
+using Odip.Infrastructure.Audit;
+using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
 using Xunit;
 using static Odip.Tests.Rostering.ApprovalTestSupport;
@@ -25,7 +30,7 @@ namespace Odip.Tests.Rostering;
 /// </summary>
 public class ServiceAgreementApprovalControllerTests
 {
-    private static ServiceAgreementDraftsController Controller(Fixture f, string role = "Admin", Guid? tenantId = null, bool withoutTenant = false)
+    private static ServiceAgreementDraftsController Controller(Fixture f, string role = "Admin", Guid? tenantId = null, bool withoutTenant = false, HttpContext? http = null)
     {
         var tenant = new Mock<ICurrentTenant>();
         tenant.Setup(t => t.TenantId).Returns(withoutTenant ? null : tenantId ?? TenantA);
@@ -33,7 +38,7 @@ public class ServiceAgreementApprovalControllerTests
         var claims = new[] { new Claim(ClaimTypes.NameIdentifier, Admin.UserId!.Value.ToString()), new Claim("fullName", "Alex Admin"), new Claim(ClaimTypes.Role, role) };
         return new ServiceAgreementDraftsController(f.Db, tenant.Object, new ServiceAgreementDraftService(f.Db), approval: f.Service)
         {
-            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity(claims, "test")) } },
+            ControllerContext = new ControllerContext { HttpContext = http ?? new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity(claims, "test")) } },
         };
     }
 
@@ -250,4 +255,221 @@ public class ServiceAgreementApprovalControllerTests
         var one = Value(await controller.Get(f.ParticipantId, v1.Id, CancellationToken.None));
         Assert.Equal("Alex Admin", one.Approval!.ApprovedByName);
     }
+
+    // ── Moving the participant to Active (ApprovalActivatesParticipant) ───────────
+
+    private static readonly DateTime IntakeDone = new(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+
+    private static async Task SettingAsync(Fixture f, bool on)
+    {
+        var row = await f.Db.PlanPricingSettings.SingleOrDefaultAsync(s => s.TenantId == TenantA);
+        if (row is null) f.Db.PlanPricingSettings.Add(new PlanPricingSettings { Id = Guid.NewGuid(), TenantId = TenantA, ApprovalActivatesParticipant = on });
+        else row.ApprovalActivatesParticipant = on;
+        await f.Db.SaveChangesAsync();
+    }
+
+    /// <summary>The fixture's participant as onboarding left it: a draft, not active unless said, intake finished unless said.</summary>
+    private static async Task OnboardingAsync(Fixture f, bool intake = true, bool active = false, DateTime? servicesStarted = null)
+    {
+        var p = await f.Db.Participants.SingleAsync(x => x.Id == f.ParticipantId);
+        (p.IsDraft, p.IsActive, p.IntakeCompletedAt, p.ServicesStartedAt) = (true, active, intake ? IntakeDone : null, servicesStarted);
+        await f.Db.SaveChangesAsync();
+    }
+
+    private static Task<Participant> StoredAsync(Fixture f) => f.Db.Participants.AsNoTracking().SingleAsync(x => x.Id == f.ParticipantId);
+    private static Task<int> ShiftCountAsync(Fixture f) => f.Db.Shifts.CountAsync(s => s.ParticipantId == f.ParticipantId);
+    private static async Task<ServiceAgreementDraftDto> ApproveAsync(Fixture f, ServiceAgreementDraft draft) =>
+        Value(await Controller(f).Approve(f.ParticipantId, draft.Id, new ApproveDraftDto(), CancellationToken.None));
+
+    [Fact]
+    public async Task With_the_setting_off_approving_leaves_an_onboarding_participant_a_draft_and_says_Off()
+    {
+        await using var f = await SetUpAsync(active: false);
+        await OnboardingAsync(f);
+        var draft = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
+
+        var dto = await ApproveAsync(f, draft);
+
+        Assert.Equal(ActivationResults.Off, dto.Activation!.Result);
+        Assert.True((await StoredAsync(f)).IsDraft);
+        Assert.Equal(0, await ShiftCountAsync(f));
+    }
+
+    [Fact]
+    public async Task With_the_setting_on_approving_moves_an_onboarding_participant_to_Active_and_fills_the_started_weeks()
+    {
+        await using var f = await SetUpAsync(active: false);
+        await OnboardingAsync(f);
+        await SettingAsync(f, on: true);
+        var draft = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
+
+        var result = await Controller(f).Approve(f.ParticipantId, draft.Id, new ApproveDraftDto(), CancellationToken.None);
+
+        var dto = Value(result);
+        Assert.Equal((ActivationResults.Activated, (string?)null), (dto.Activation!.Result, dto.Activation.Reason));
+        var stored = await StoredAsync(f);
+        Assert.True(!stored.IsDraft && stored.IsActive);
+        var dates = await f.Db.Shifts.Where(s => s.ParticipantId == f.ParticipantId).Select(s => s.ServiceDate).ToListAsync();
+        Assert.NotEmpty(dates);
+        Assert.All(dates, d => Assert.InRange(d, new DateOnly(2026, 10, 5), HorizonEnd));
+        Assert.True(await f.Db.ServiceAgreementDraftApprovals.AnyAsync(a => a.DraftId == draft.Id));
+        var json = JsonSerializer.Serialize(Assert.IsType<ApiResponse<ServiceAgreementDraftDto>>(Assert.IsType<OkObjectResult>(result.Result).Value), ApiOptions());
+        Assert.Contains("\"activation\":{\"result\":\"Activated\"", json);
+    }
+
+    [Fact]
+    public async Task With_the_setting_on_and_intake_not_finished_the_approval_stands_and_the_answer_says_why()
+    {
+        await using var f = await SetUpAsync(active: false);
+        await OnboardingAsync(f, intake: false);
+        await SettingAsync(f, on: true);
+        var draft = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
+
+        var dto = await ApproveAsync(f, draft);
+
+        Assert.Equal((ActivationResults.NotActivated, "intake not finished"), (dto.Activation!.Result, dto.Activation.Reason));
+        Assert.True(await f.Db.ServiceAgreementDraftApprovals.AnyAsync(a => a.DraftId == draft.Id));
+        Assert.True((await StoredAsync(f)).IsDraft);
+    }
+
+    [Fact]
+    public async Task With_the_setting_on_under_Enforce_without_evidence_it_is_approved_and_not_activated_with_the_refusal_words()
+    {
+        await using var f = await SetUpAsync(active: false);
+        await OnboardingAsync(f);
+        await SettingAsync(f, on: true);
+        (await f.Db.ProviderSettings.SingleAsync(s => s.TenantId == TenantA)).ParticipantReadinessMode = ParticipantReadinessMode.Enforce;
+        await f.Db.SaveChangesAsync();
+        var draft = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
+
+        var dto = await ApproveAsync(f, draft);
+
+        Assert.Equal((ActivationResults.NotActivated, ParticipantReadiness.ActivationEvidenceRequired), (dto.Activation!.Result, dto.Activation.Reason));
+        Assert.True(await f.Db.ServiceAgreementDraftApprovals.AnyAsync(a => a.DraftId == draft.Id));
+        Assert.True((await StoredAsync(f)).IsDraft);
+    }
+
+    [Fact]
+    public async Task Approving_again_with_the_setting_on_changes_nobody_and_carries_no_activation()
+    {
+        await using var f = await SetUpAsync(active: false);
+        await OnboardingAsync(f);
+        var draft = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
+        await ApproveAsync(f, draft);
+        await SettingAsync(f, on: true);
+
+        var again = await ApproveAsync(f, draft);
+
+        Assert.Null(again.Activation);
+        Assert.True((await StoredAsync(f)).IsDraft);
+    }
+
+    [Fact]
+    public async Task With_the_setting_on_an_archived_participant_stays_archived()
+    {
+        await using var f = await SetUpAsync(active: false);
+        var p = await f.Db.Participants.SingleAsync(x => x.Id == f.ParticipantId);
+        (p.IsDraft, p.IsActive, p.IntakeCompletedAt) = (false, false, IntakeDone);
+        await f.Db.SaveChangesAsync();
+        await SettingAsync(f, on: true);
+        var draft = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
+
+        var dto = await ApproveAsync(f, draft);
+
+        Assert.Equal((ActivationResults.NotActivated, "archived"), (dto.Activation!.Result, dto.Activation.Reason));
+        var stored = await StoredAsync(f);
+        Assert.False(stored.IsActive || stored.IsDraft);
+    }
+
+    [Fact]
+    public async Task With_the_setting_on_an_active_participant_is_AlreadyActive_and_no_participant_audit_row_is_written()
+    {
+        await using var f = await SetUpAsync(active: true, audited: true);
+        await SettingAsync(f, on: true);
+        var draft = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
+        var before = (await StoredAsync(f)).UpdatedAt;
+
+        var dto = await ApproveAsync(f, draft);
+
+        Assert.Equal((ActivationResults.AlreadyActive, "already active"), (dto.Activation!.Result, dto.Activation.Reason));
+        var stored = await StoredAsync(f);
+        Assert.Equal((false, true, before), (stored.IsDraft, stored.IsActive, stored.UpdatedAt));
+        var rows = await f.Db.AuditLogs.Where(a => a.EntityType == nameof(Participant) && a.EntityId == f.ParticipantId && a.Action == AuditAction.Updated).ToListAsync();
+        Assert.DoesNotContain(rows, r => r.Changes.Contains("\"IsDraft\"") || r.Changes.Contains("\"IsActive\""));
+    }
+
+    [Fact]
+    public async Task The_participant_audit_row_of_an_activation_carries_the_reason_Agreement_approved()
+    {
+        await using var seed = await SetUpAsync(active: false);
+        await OnboardingAsync(seed);
+        await SettingAsync(seed, on: true);
+        var draft = await AddRevisionAsync(seed, 1, new[] { WeekdayBlock() });
+        // One request's plumbing: the interceptor sees the same HttpContext the controller does, as in the app.
+        var http = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity(new[] { new Claim(ClaimTypes.NameIdentifier, Admin.UserId!.Value.ToString()), new Claim("fullName", "Alex Admin"), new Claim(ClaimTypes.Role, "Admin") }, "test")) };
+        var accessor = new Mock<IHttpContextAccessor>();
+        accessor.Setup(a => a.HttpContext).Returns(http);
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
+        var options = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(seed.DbName).AddInterceptors(new AuditInterceptor(accessor.Object)).Options;
+        await using var f = new Fixture { DbName = seed.DbName, Db = new OdipDbContext(options, tenant.Object), ParticipantId = seed.ParticipantId };
+
+        var dto = Value(await Controller(f, http: http).Approve(f.ParticipantId, draft.Id, new ApproveDraftDto(), CancellationToken.None));
+
+        Assert.Equal(ActivationResults.Activated, dto.Activation!.Result);
+        var row = Assert.Single(await f.Db.AuditLogs.Where(a => a.EntityType == nameof(Participant) && a.EntityId == f.ParticipantId && a.Action == AuditAction.Updated && a.Changes.Contains("\"IsDraft\"")).ToListAsync());
+        var changes = JsonDocument.Parse(row.Changes).RootElement.EnumerateArray().ToDictionary(e => e.GetProperty("Field").GetString()!, e => (e.GetProperty("Old").GetString(), e.GetProperty("New").GetString()));
+        Assert.Equal(("True", "False"), changes["IsDraft"]);
+        Assert.Equal(((string?)null, "Agreement approved"), changes["Reason"]);
+    }
+
+    [Fact]
+    public async Task A_draft_whose_services_started_is_finalised_and_no_shift_is_made_twice()
+    {
+        var started = new DateTime(2026, 10, 2, 0, 0, 0, DateTimeKind.Utc);
+        await using var off = await SetUpAsync(active: true);
+        await OnboardingAsync(off, active: true, servicesStarted: started);
+        await using var on = await SetUpAsync(active: true);
+        await OnboardingAsync(on, active: true, servicesStarted: started);
+        await SettingAsync(on, on: true);
+
+        await ApproveAsync(off, await AddRevisionAsync(off, 1, new[] { WeekdayBlock() }));
+        var dto = await ApproveAsync(on, await AddRevisionAsync(on, 1, new[] { WeekdayBlock() }));
+
+        Assert.Equal(ActivationResults.Activated, dto.Activation!.Result);
+        Assert.False((await StoredAsync(on)).IsDraft);
+        Assert.True(await ShiftCountAsync(off) > 0);
+        Assert.Equal(await ShiftCountAsync(off), await ShiftCountAsync(on));
+    }
+
+    /// <summary>Throws a busy roster on the save that finalises the participant, as a held roster lock would on Postgres.</summary>
+    private sealed class BusyOnFinalise : SaveChangesInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken ct = default)
+        {
+            if (eventData.Context!.ChangeTracker.Entries<Participant>().Any(e => e.State == EntityState.Modified && e.Property(p => p.IsDraft).IsModified)) throw new RosterBusyException();
+            return base.SavingChangesAsync(eventData, result, ct);
+        }
+    }
+
+    [Fact]
+    public async Task When_the_roster_is_busy_during_the_activation_the_approval_stands_and_the_answer_says_to_use_Make_active()
+    {
+        await using var seed = await SetUpAsync(active: false);
+        await OnboardingAsync(seed);
+        await SettingAsync(seed, on: true);
+        var draft = await AddRevisionAsync(seed, 1, new[] { WeekdayBlock() });
+        await using var f = new Fixture { DbName = seed.DbName, Db = NewDb(seed.DbName, false, new BusyOnFinalise()), ParticipantId = seed.ParticipantId };
+
+        var dto = await ApproveAsync(f, draft);
+
+        Assert.Equal((ActivationResults.NotActivated, ServiceAgreementApprovalService.ActivationBusyReason), (dto.Activation!.Result, dto.Activation.Reason));
+        Assert.True(await f.Db.ServiceAgreementDraftApprovals.AnyAsync(a => a.DraftId == draft.Id));
+        Assert.True((await StoredAsync(f)).IsDraft);
+        Assert.Empty(f.Db.ChangeTracker.Entries());
+    }
+
+    [Fact]
+    public void Activation_waits_three_seconds_for_the_roster_not_the_ten_of_Make_active() =>
+        Assert.Equal((TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(10)), (ServiceAgreementApprovalService.ActivationLockWait, RosterGenerationLock.DefaultWait));
 }

@@ -698,7 +698,7 @@ public sealed class ServiceAgreementApprovalService
     /// <summary>"Make active" for a tracked participant: finalises a DRAFT whose intake is complete (open checklist items do not stop it), under the
     /// organisation's activation rule, and fills the started weeks in their own lock pair. Null when done or nothing to do (not a draft); otherwise
     /// the refusal, and nothing is changed. Throws RosterBusyException as PopulateStartedWeeksAsync does. Never call it while holding the roster locks.</summary>
-    public async Task<string?> MakeActiveAsync(Participant participant, CancellationToken ct)
+    public async Task<string?> MakeActiveAsync(Participant participant, CancellationToken ct, TimeSpan? lockWait = null)
     {
         if (!participant.IsDraft) return null;
         if (!participant.IntakeCompletedAt.HasValue) return IntakeNotComplete;
@@ -709,16 +709,45 @@ public sealed class ServiceAgreementApprovalService
         participant.IsDraft = false;
         participant.UpdatedAt = DateTime.UtcNow;
         participant.IsActive = true;
-        await PopulateStartedWeeksAsync(participant.TenantId, participant.Id, ct);
+        await PopulateStartedWeeksAsync(participant.TenantId, participant.Id, ct, lockWait);
         await _db.SaveChangesAsync(ct);
         return null;
     }
 
-    /// <summary>Fills only approved agreement patterns into roster weeks that are already started after a participant becomes service-eligible.</summary>
-    public async Task PopulateStartedWeeksAsync(Guid tenantId, Guid participantId, CancellationToken ct)
+    public const string ActivationAuditReason = "Agreement approved";
+    public const string ActivationBusyReason = "the roster was busy. Use Make active on their onboarding checklist";
+    public const string ActivationFailedReason = "it could not be done just now. Use Make active on their onboarding checklist";
+    /// <summary>Short, so a single approve answers inside its client timeout and a batch keeps moving.</summary>
+    public static readonly TimeSpan ActivationLockWait = TimeSpan.FromSeconds(3);
+
+    /// <summary>After an approval has COMMITTED (its locks released): moves the participant to Active when the organisation's setting says so,
+    /// by MakeActiveAsync. Never throws except on cancellation: the approval stands whatever happens here, and a failure is NotActivated.</summary>
+    public async Task<ApprovalActivationDto> ActivateAfterApprovalAsync(Guid tenantId, Guid participantId, CancellationToken ct)
     {
-        await using var board = await RosterGenerationLock.AcquireAsync(_db, tenantId, ct, _generator.LockWait, scope: "roster-board");
-        await using var held = await RosterGenerationLock.AcquireAsync(_db, participantId, ct, _generator.LockWait);
+        try
+        {
+            if (!PlanPricingPolicy.From(await _pricing.FindSettingsAsync(tenantId, ct)).ApprovalActivatesParticipant) return new() { Result = ActivationResults.Off };
+            var p = await _db.Participants.FirstOrDefaultAsync(x => x.Id == participantId && x.TenantId == tenantId, ct);
+            if (p is null) return NotMoved("not found");
+            if (!p.IsDraft) return p.IsActive ? new() { Result = ActivationResults.AlreadyActive, Reason = "already active" } : NotMoved("archived");   // never restored
+            if (!p.IntakeCompletedAt.HasValue) return NotMoved("intake not finished");
+            return await MakeActiveAsync(p, ct, ActivationLockWait) is { } refused ? NotMoved(refused) : new() { Result = ActivationResults.Activated };
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _db.ChangeTracker.Clear();
+            _logger?.LogWarning(ex, "Activating participant {ParticipantId} after an approval failed", participantId);
+            return NotMoved(ex is RosterBusyException ? ActivationBusyReason : ActivationFailedReason);
+        }
+        static ApprovalActivationDto NotMoved(string why) => new() { Result = ActivationResults.NotActivated, Reason = why };
+    }
+
+    /// <summary>Fills only approved agreement patterns into roster weeks that are already started after a participant becomes service-eligible.</summary>
+    public async Task PopulateStartedWeeksAsync(Guid tenantId, Guid participantId, CancellationToken ct, TimeSpan? lockWait = null)
+    {
+        var wait = lockWait ?? _generator.LockWait;
+        await using var board = await RosterGenerationLock.AcquireAsync(_db, tenantId, ct, wait, scope: "roster-board");
+        await using var held = await RosterGenerationLock.AcquireAsync(_db, participantId, ct, wait);
 
         var participant = await _db.Participants.FirstOrDefaultAsync(p => p.Id == participantId && p.TenantId == tenantId, ct);
         // The lifecycle endpoint has already applied its readiness policy before entering this
