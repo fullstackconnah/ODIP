@@ -19,5 +19,5 @@ export function endingBadgeWords(daysLeft: number): string {
 
 /** The server's alert message with its ISO end date said as the house date ("Thu 12 Nov 2026"). */
 export function houseEndingMessage(message: string): string {
-  return message.replace(/\d{4}-\d{2}-\d{2}/, iso => formatServiceDate(iso))
+  return message.replace(/\d{4}-\d{2}-\d{2}/, iso => formatServiceDate(iso) || iso)
 }

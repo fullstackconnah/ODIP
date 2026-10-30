@@ -37,7 +37,8 @@ export function AgreementsBulkBar({ selected, approvable, canApprove, shown, all
   const draftOff = tooMany || selected === 0
   // Renew needs an approver; Reprice and Extend do not.
   const renewOff = !canApprove
-  const renewReason = renewOff && selected > 0 ? RENEW_REASON : null
+  // On a phone the reserved row holds it even with nothing ticked, so the first tick does not grow the bar.
+  const renewReason = renewOff && (selected > 0 || narrow) ? RENEW_REASON : null
   // The one visible reason line (Renew's and Approve's reasons never coexist: one needs canApprove false, the other true). A phone's count already says "Choose N or fewer".
   const line = tooMany ? (narrow ? null : reason) : (onAction && renewReason) || (canApprove && approveReason) || note
   const verbs: { value: AgreementBulkAction; label: string; icon: typeof RefreshCw }[] = [
@@ -50,7 +51,7 @@ export function AgreementsBulkBar({ selected, approvable, canApprove, shown, all
     ...(canApprove ? [{ value: 'approve', label, description: reason ?? approveReason ?? undefined, disabled: approveOff }] : []),
   ]
   return (
-    <div className={`max-xl:sticky max-xl:top-[calc(3rem+var(--safe-top))] max-xl:z-20 max-xl:shadow-[var(--shadow-hairline)] flex min-h-11 flex-wrap items-center gap-x-4 gap-y-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-1.5 max-md:gap-x-3 ${line ? '' : 'max-md:flex-nowrap'}`} role="region" aria-label="Selection">
+    <div className={`max-xl:sticky max-xl:top-[calc(3rem+var(--safe-top))] max-xl:z-20 max-xl:shadow-[var(--shadow-hairline)] flex min-h-11 flex-wrap items-center gap-x-4 gap-y-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-1.5 max-md:gap-x-3`} role="region" aria-label="Selection">
       {narrow && (
         // The same box as the table's row boxes (DataTable), so it wears the house accent and a 44 px target.
         <label className="inline-flex min-h-[var(--tap-min)] min-w-[var(--tap-min)] shrink-0 items-center justify-center">
@@ -59,9 +60,9 @@ export function AgreementsBulkBar({ selected, approvable, canApprove, shown, all
         </label>
       )}
       <span className={`text-sm tabular-nums ${tooMany && narrow ? 'text-[var(--color-destructive)]' : ''}`} aria-live="polite">{tooMany && narrow ? reason : selected === 0 ? 'None selected' : `${selected} selected`}</span>
-      {/* A phone has no room for Clear: the box clears. The reason line wraps onto its own row there, so it is seen without opening the menu. */}
+      {/* A phone has no room for Clear: the box clears. The reason row below is always there on a phone (empty when nothing is off), so the bar keeps its height and the reason is seen without opening the menu. */}
       {!narrow && <Button variant="ghost" size="sm" onClick={onClear} className={selected > 0 ? "" : "invisible"}>Clear</Button>}
-      {line && <span id={reasonId} className={`text-sm max-md:order-last max-md:basis-full ${tooMany ? 'text-[var(--color-destructive)]' : 'text-[var(--color-muted-foreground)]'}`}>{line}</span>}
+      {(line || narrow) && <span id={reasonId} className={`text-sm max-md:order-last max-md:basis-full max-md:min-h-5 ${tooMany ? 'text-[var(--color-destructive)]' : 'text-[var(--color-muted-foreground)]'}`}>{line}</span>}
       {items.length > 0 && (
         <div className="ml-auto">
           {narrow ? (

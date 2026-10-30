@@ -20,7 +20,7 @@ export type ComplianceStepProps = {
 }
 
 /**
- * Edit-mode-only "Review & Compliance" step — see SPEC-04's "Edit-mode-only fields and the zod
+ * Edit-mode-only "Compliance" step — see SPEC-04's "Edit-mode-only fields and the zod
  * resolver workaround" section. Entirely absent from the step list on create; present as the
  * second-to-last step (right before Review) when editing. Every field here is optional today and
  * stays optional (no error props needed — nothing here is ever a validation failure). Status/QSC

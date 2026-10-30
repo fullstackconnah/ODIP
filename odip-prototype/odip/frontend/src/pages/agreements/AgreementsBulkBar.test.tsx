@@ -31,6 +31,27 @@ describe('AgreementsBulkBar disabled reasons', () => {
     expect(screen.getByText('None of the ticked rows has a draft waiting.')).toBeVisible()
   })
 
+  it('keeps the reason row on a phone whether or not something is off, so the bar never changes height', () => {
+    h.narrow = true
+    const off = render(<AgreementsBulkBar {...base} />)
+    const withReason = off.container.querySelector('[id]')
+    expect(withReason).toHaveTextContent('None of the ticked rows has a draft waiting.')
+    off.unmount()
+    const { container } = render(<AgreementsBulkBar {...base} approvable={2} />)
+    const row = container.querySelector('[id]')
+    expect(row).not.toBeNull()
+    expect(row).toBeEmptyDOMElement()
+    expect(row!.className).toBe(withReason!.className)
+  })
+
+  it('shows the Renew reason on a phone even with nothing ticked, so ticking does not add a row', () => {
+    h.narrow = true
+    const { container, rerender } = render(<AgreementsBulkBar {...base} canApprove={false} selected={0} />)
+    expect(container.querySelector('[id]')).toHaveTextContent(/Your role can't renew agreements/)
+    rerender(<AgreementsBulkBar {...base} canApprove={false} selected={1} />)
+    expect(container.querySelector('[id]')).toHaveTextContent(/Your role can't renew agreements/)
+  })
+
   it('adds nothing when no action is off for a reason', () => {
     h.narrow = false
     const { container } = render(<AgreementsBulkBar {...base} approvable={2} />)
