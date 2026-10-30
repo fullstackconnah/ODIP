@@ -362,9 +362,17 @@ public class ClaimsController : ControllerBase
 
         // What was sent to the NDIA stays as it was sent: only the line's status and what was paid on it still change.
         var claim = item.TripClaim;
-        if ((dto.Hours.HasValue || dto.UnitPrice.HasValue || dto.SupportItemCode != null || dto.ClaimType.HasValue || dto.CancellationReason != null)
-            && claim.Status is not (TripClaimStatus.Draft or TripClaimStatus.Ready))
+        var fieldEdit = dto.Hours.HasValue || dto.UnitPrice.HasValue || dto.SupportItemCode != null || dto.ClaimType.HasValue || dto.CancellationReason != null;
+        // A rejected line can be corrected whatever its claim's status, so it can be lodged again.
+        if (fieldEdit && claim.Status is not (TripClaimStatus.Draft or TripClaimStatus.Ready) && item.Status != ClaimLineItemStatus.Rejected)
             return Conflict(ApiResponse<bool>.Fail("This claim has been submitted, so its lines can't be changed."));
+
+        // A line in a live NDIA file is frozen so the stored file can't drift from the data. Once the file is uploaded a person can still record a portal result by hand.
+        var inFile = await _db.ClaimBatchLines.AsNoTracking()
+            .Where(b => b.ClaimLineItemId == id && b.Outcome == ClaimBatchLineOutcome.Pending && (b.Batch.Status == ClaimBatchStatus.Built || b.Batch.Status == ClaimBatchStatus.Uploaded))
+            .Select(b => new { b.Batch.FileName, b.Batch.Status }).FirstOrDefaultAsync(ct);
+        if (inFile != null && (fieldEdit || (inFile.Status == ClaimBatchStatus.Built && dto.Status is ClaimLineItemStatus.Rejected or ClaimLineItemStatus.Paid)))
+            return Conflict(ApiResponse<bool>.Fail($"This line is in {inFile.FileName}. Discard that file before changing it."));
 
         // The NDIA has not seen a Draft or Ready claim, so none of its lines can be rejected yet.
         if (dto.Status == ClaimLineItemStatus.Rejected && claim.Status is (TripClaimStatus.Draft or TripClaimStatus.Ready))
@@ -421,6 +429,13 @@ public class ClaimsController : ControllerBase
             .FirstOrDefaultAsync(x => x.Id == claimId, ct);
 
         if (claim == null) return NotFound(ApiResponse<bool>.Fail("Claim not found"));
+
+        var lineIds = claim.LineItems.Select(l => l.Id).ToList();
+        var inFile = await _db.ClaimBatchLines.AsNoTracking()
+            .Where(b => b.ClaimLineItemId != null && lineIds.Contains(b.ClaimLineItemId.Value) && b.Outcome == ClaimBatchLineOutcome.Pending
+                && (b.Batch.Status == ClaimBatchStatus.Built || b.Batch.Status == ClaimBatchStatus.Uploaded))
+            .Select(b => b.Batch.FileName).FirstOrDefaultAsync(ct);
+        if (inFile != null) return Conflict(ApiResponse<bool>.Fail($"This claim is in {inFile}. Discard that file first."));
 
         // A claim that has gone to the NDIA keeps its lines and payment record (deleting a paid or part-paid one makes supports already paid claimable again). Rejected stays deletable on purpose:
         // its lines are locked and it cannot go back to Draft, so delete-and-regenerate is the only way to correct an NDIA rejection.
