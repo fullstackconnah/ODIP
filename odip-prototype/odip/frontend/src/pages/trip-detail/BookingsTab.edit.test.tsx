@@ -56,7 +56,7 @@ beforeEach(() => {
       return reply(config, 200, { success: true, data: detail })
     }
     if (method === 'put' && putFails) {
-      const res = reply(config, 500, { success: false, message: 'boom' })
+      const res = reply(config, 500, { success: false })
       throw Object.assign(new Error('Request failed with status code 500'), { isAxiosError: true, response: res, config })
     }
     if (method === 'put') {

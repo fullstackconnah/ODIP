@@ -25,7 +25,7 @@ import { RESERVATION_STATUSES } from '@/api/types/enums'
 import type { TripDetailDto } from '@/api/types/trips'
 import { toUpdateReservationDto, type ReservationDto } from '@/api/types/reservations'
 import type { AccommodationListDto } from '@/api/types/accommodation'
-import { formatCurrency } from '@/lib/utils'
+import { extractErrorMessage, formatCurrency } from '@/lib/utils'
 import { FormField, labelClass } from '@/components/FormField'
 import { modalGrid } from '@/lib/formGrid'
 
@@ -482,7 +482,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
 
             {/* Error */}
             {(createReservation.isError || createAccommodation.isError) && (
-              <p className="text-sm text-[var(--color-destructive)]">Couldn't add this reservation. Check your connection and try again.</p>
+              <p className="text-sm text-[var(--color-destructive)]">{extractErrorMessage(createReservation.error ?? createAccommodation.error, "Couldn't add this reservation. Check your connection and try again.")}</p>
             )}
           </div>
         </Modal>
@@ -557,7 +557,7 @@ export default function AccommodationTab({ tripId, trip, accommodation, canWrite
 
             {/* Error */}
             {updateReservation.isError && (
-              <p className="text-sm text-[var(--color-destructive)]">Couldn't update this reservation. Check your connection and try again.</p>
+              <p className="text-sm text-[var(--color-destructive)]">{extractErrorMessage(updateReservation.error, "Couldn't update this reservation. Check your connection and try again.")}</p>
             )}
           </div>
         </Modal>

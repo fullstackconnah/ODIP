@@ -14,7 +14,7 @@ import { SearchableSelect } from '@/components/SearchableSelect'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { RosterGateFields } from '@/pages/rostering/components/RosterGateFields'
 import { getRosterGate } from '@/pages/rostering/lib/rosterGate'
-import { formatDateAu } from '@/lib/utils'
+import { extractErrorMessage, formatDateAu } from '@/lib/utils'
 import { formatRatio } from '@/lib/format'
 import { ASSIGNMENT_STATUSES, SLEEPOVER_TYPES, type SleepoverType, type AssignmentStatus } from '@/api/types/enums'
 import type { TripDetailDto } from '@/api/types/trips'
@@ -157,7 +157,7 @@ export default function StaffTab({ tripId, trip, staff, canWrite }: StaffTabProp
           setAddFindings(serverFindings)
           if (getRosterGate(serverFindings).needsReason && !addOverrideReason.trim()) setAddReasonRequired(true)
         } else {
-          setAddError("Couldn't add this staff member. Check your connection and try again.")
+          setAddError(extractErrorMessage(err, "Couldn't add this staff member. Check your connection and try again."))
         }
       },
     })
@@ -237,7 +237,7 @@ export default function StaffTab({ tripId, trip, staff, canWrite }: StaffTabProp
           setEditFindings(serverFindings)
           if (getRosterGate(serverFindings).needsReason && !editOverrideReason.trim()) setEditReasonRequired(true)
         } else {
-          setEditError("Couldn't update this assignment. Check your connection and try again.")
+          setEditError(extractErrorMessage(err, "Couldn't update this assignment. Check your connection and try again."))
         }
       },
     })

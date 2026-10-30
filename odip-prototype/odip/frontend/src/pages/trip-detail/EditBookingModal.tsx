@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { extractErrorMessage } from '@/lib/utils'
 import { useBooking, useUpdateBooking } from '@/api/hooks'
 import { Dropdown } from '@/components/Dropdown'
 import { Modal } from '@/components/Modal'
@@ -227,7 +228,7 @@ export function EditBookingModal({ booking, onClose, onSaved }: { booking: Booki
 
           {/* Error */}
           {updateBooking.isError && (
-            <p className="text-sm text-[var(--color-destructive)]">Couldn't update this booking. Check your connection and try again.</p>
+            <p className="text-sm text-[var(--color-destructive)]">{extractErrorMessage(updateBooking.error, "Couldn't update this booking. Check your connection and try again.")}</p>
           )}
         </div>
       )}
