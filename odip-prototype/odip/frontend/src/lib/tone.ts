@@ -222,6 +222,10 @@ export const STATUS_TONE: Record<string, Tone> = {
   resolved: 'success',
   closed: 'neutral',
 
+  // Complaints. Resolved and Closed are above; a complaint waiting for its first response is amber, one being looked into is blue.
+  open: 'warning',
+  investigating: 'info',
+
   // Medication. A wrong-medication dose is as red as a refused or missed one (it was amber on the participant's Medications tab).
   administered: 'success',
   refused: 'danger',

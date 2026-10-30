@@ -8,7 +8,7 @@ import {
   SCHEDULED_ACTIVITY_STATUSES, TASK_PRIORITIES, TASK_ITEM_STATUSES, INCIDENT_SEVERITIES, INCIDENT_STATUSES,
   QSC_REPORTING_STATUSES, INSURANCE_STATUSES, PAYMENT_STATUSES, TRIP_CLAIM_STATUSES, CLAIM_LINE_ITEM_STATUSES,
   CLAIM_STATUSES, SHIFT_STATUSES, MEDICATION_STATUSES, MEDICATION_ADMINISTRATION_STATUSES, WITNESS_STATUSES,
-  CONTACT_ROLE_STATUSES, PLAN_TYPES, INVOICE_STATUSES, PAYROLL_SHIFT_STATUSES,
+  CONTACT_ROLE_STATUSES, PLAN_TYPES, INVOICE_STATUSES, PAYROLL_SHIFT_STATUSES, COMPLAINT_STATUSES,
 } from '@/api/types/enums'
 import { LEAVE_STATUSES, LEAVE_STATUS_COLORS } from '@/api/types/leave'
 import { NOTIFICATION_OUTBOX_STATUSES, NOTIFICATION_STATUS_COLORS } from '@/api/types/notifications'
@@ -37,6 +37,7 @@ const STATUS_ENUMS: Record<string, readonly string[]> = {
   TaskItemStatus: TASK_ITEM_STATUSES,
   IncidentSeverity: INCIDENT_SEVERITIES,
   IncidentStatus: INCIDENT_STATUSES,
+  ComplaintStatus: COMPLAINT_STATUSES,
   QscReportingStatus: QSC_REPORTING_STATUSES,
   InsuranceStatus: INSURANCE_STATUSES,
   PaymentStatus: PAYMENT_STATUSES,
@@ -86,6 +87,8 @@ describe('every real status has a deliberate tone (L3-02)', () => {
     const expected: Record<string, Tone> = {
       // Incidents: the register's colours agree with the dashboard's "Open incidents" tile (Closed and Resolved are not open).
       underreview: 'warning', escalated: 'danger', resolved: 'success', closed: 'neutral',
+      // Complaints: open waits for a first response, investigating is being worked (Resolved and Closed are the incident rows above).
+      open: 'warning', investigating: 'info',
       // Claims: Approved is green for leave and witnesses too.
       ready: 'info', approved: 'success', declined: 'danger',
       // Not yet on the trip, or not yet confirmed: awaiting a decision, a hold running out, a queue.
