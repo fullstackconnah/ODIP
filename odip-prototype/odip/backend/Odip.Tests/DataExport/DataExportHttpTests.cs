@@ -133,8 +133,15 @@ public class DataExportHttpTests
         }));
         var tenantId = await host.SeedAsync("Sunrise Care");
 
-        using (var failed = await host.GetAsync("/api/v1/data-export", "Admin", tenantClaim: tenantId, completion: HttpCompletionOption.ResponseHeadersRead))
-            await Record.ExceptionAsync(() => failed.Content.ReadAsByteArrayAsync()); // aborted part-way
+        // The server resets the connection as soon as the export fails, and on a busy machine that can beat the headers to the client (CI: the reset
+        // surfaced from SendAsync, "Connection reset by peer", before any byte). So the headers read is inside the Record too: this test is about the
+        // slot, and either way the download broke.
+        var failure = await Record.ExceptionAsync(async () =>
+        {
+            using var failed = await host.GetAsync("/api/v1/data-export", "Admin", tenantClaim: tenantId, completion: HttpCompletionOption.ResponseHeadersRead);
+            await failed.Content.ReadAsByteArrayAsync(); // aborted part-way
+        });
+        Assert.True(failure is HttpRequestException or IOException, $"The first export must break the download; it saw {failure?.GetType().Name ?? "a clean end"}.");
 
         using (var afterFailure = await host.ExportOnceTheSlotIsFreeAsync(tenantId)) Assert.Equal(HttpStatusCode.OK, afterFailure.StatusCode);
         using (var afterSuccess = await host.ExportOnceTheSlotIsFreeAsync(tenantId)) Assert.Equal(HttpStatusCode.OK, afterSuccess.StatusCode);
