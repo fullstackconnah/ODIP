@@ -103,6 +103,7 @@ function PeriodsTable({ pool }: { pool: FundingPoolDto }) {
       <DataTable<FundingPeriodDto>
         data={pool.periods}
         keyField="id"
+        emptyMessage="No periods recorded for this pool."
         compact
         columns={[
           { key: 'periodStart', header: 'Period', pin: false, render: period => <span className="tabular-nums">{writtenSpan(period.periodStart, period.periodEnd)}</span> },
