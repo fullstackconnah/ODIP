@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiClient } from '@/api/client'
-import { apiSend, apiShiftStatus, createQueue, FINISH_TIMEOUT_MS, LEASE_MS, RETRY_AFTER_MS, replayBody, type NewRecord, type QueueRecord, type SendResult } from './queue'
+import { apiSend, apiShiftStatus, createQueue, FINISH_TIMEOUT_MS, isStillTrying, STILL_TRYING_AFTER, LEASE_MS, RETRY_AFTER_MS, replayBody, type NewRecord, type QueueRecord, type SendResult } from './queue'
 
 const label = { participant: 'Jordan Smith', serviceDate: '2026-10-28', rostered: '9:00 am - 1:00 pm' }
 const ok: SendResult = { kind: 'ok', data: {} }
@@ -214,7 +214,7 @@ describe('offline queue', () => {
     expect(q.getSnapshot()[0]).toMatchObject({ status: 'notSent', httpStatus: 400, code: 'SHIFT_CLIENT_TIME_TOO_OLD' })
   })
 
-  it('5xx, 408, 429 and no response stay waiting and stop the replay', async () => {
+  it('no response stays waiting and stops the replay, for every shift', async () => {
     const q = make()
     online = true
     q.enqueue(rec('start'))
@@ -224,6 +224,88 @@ describe('offline queue', () => {
     expect(r).toMatchObject({ offline: true, sent: 0, notSent: 0, waiting: 2 })
     expect(sent).toHaveLength(1)
     expect(q.getSnapshot().every((x) => x.status === 'waiting')).toBe(true)
+  })
+
+  describe('still trying', () => {
+    const server = (status: number): SendResult => ({ kind: 'offline', status })
+    const spaced = async (q: ReturnType<typeof make>, n: number) => { for (let i = 0; i < n; i++) { clock += 61_000; await q.replay() } }
+
+    it('a 500 counts a try and the record stays waiting', async () => {
+      const q = make()
+      online = true
+      q.enqueue(rec('start'))
+      answer = () => server(500)
+      const r = await q.replay()
+      expect(q.getSnapshot()[0]).toMatchObject({ status: 'waiting', attempts: 1 })
+      expect(r.offline).toBe(false)
+      expect(q.getSyncState().stillOffline).toBe(false)
+    })
+
+    it('no response, 401, 408 and 429 never count', async () => {
+      const q = make()
+      online = true
+      q.enqueue(rec('start'))
+      for (const a of [{ kind: 'offline' }, server(401), server(408), server(429)] as SendResult[]) {
+        answer = () => a
+        clock += 61_000
+        await q.replay()
+      }
+      expect(q.getSnapshot()[0].attempts ?? 0).toBe(0)
+    })
+
+    it('a second 500 within 60 seconds does not count', async () => {
+      const q = make()
+      online = true
+      q.enqueue(rec('start'))
+      answer = () => server(503)
+      await q.replay()
+      await q.replay()
+      expect(q.getSnapshot()[0].attempts).toBe(1)
+      await spaced(q, 1)
+      expect(q.getSnapshot()[0].attempts).toBe(2)
+    })
+
+    it('the fifth spaced failure keeps the record, then a 200 removes it', async () => {
+      const q = make()
+      online = true
+      const added = q.enqueue(rec('note', { body: { id: 'n1', body: 'hi' } }))
+      answer = () => server(500)
+      await spaced(q, STILL_TRYING_AFTER + 2)
+      const [kept] = q.getSnapshot()
+      expect(kept).toMatchObject({ id: added.id, status: 'waiting', body: { id: 'n1', body: 'hi' } })
+      expect(kept.attempts).toBe(STILL_TRYING_AFTER + 2)
+      expect(isStillTrying(kept)).toBe(true)
+      answer = () => ok
+      await spaced(q, 1)
+      expect(q.getSnapshot()).toEqual([])
+    })
+
+    it('isStillTrying needs 5 tries and waiting; a missing count reads as 0; attempts survive a reload', async () => {
+      const q = make()
+      online = true
+      q.enqueue(rec('start'))
+      expect(isStillTrying(q.getSnapshot()[0])).toBe(false)
+      answer = () => server(500)
+      await spaced(q, STILL_TRYING_AFTER - 1)
+      expect(isStillTrying(make().getSnapshot()[0])).toBe(false)
+      await spaced(q, 1)
+      expect(make().getSnapshot()[0].attempts).toBe(STILL_TRYING_AFTER)
+      expect(isStillTrying(make().getSnapshot()[0])).toBe(true)
+      expect(isStillTrying({ ...q.getSnapshot()[0], status: 'notSent' })).toBe(false)
+    })
+
+    it('a 500 on one shift does not stop another shift, but skips the rest of its own', async () => {
+      const q = make()
+      online = true
+      q.enqueue(rec('start', {}, 'sA'))
+      q.enqueue(rec('tick', {}, 'sA'))
+      q.enqueue(rec('start', {}, 'sB'))
+      answer = (r) => (r.shiftId === 'sA' ? server(500) : ok)
+      const r = await q.replay()
+      expect(sent.map((s) => `${s.rec.shiftId}:${s.rec.kind}`)).toEqual(['sA:start', 'sB:start'])
+      expect(r.offline).toBe(false)
+      expect(q.getSnapshot().map((x) => x.shiftId)).toEqual(['sA', 'sA'])
+    })
   })
 
   it('user or view-as mismatch holds: another session sends nothing of this one', async () => {
