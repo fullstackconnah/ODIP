@@ -241,7 +241,7 @@ function ImportStep({ batch, announce, onImported, onReviewRejected }: { batch: 
         <p className="text-sm">
           When the NDIA has processed the file, go to <strong>Payment Request &gt; View Payment Requests</strong>, search for <strong>{stem}</strong>, and download the results file. This can take a business day or more.
         </p>
-        {waiting && <p className="mt-1 text-sm">{plural(batch.pending, 'line')} haven't come back from the NDIA yet. Import the next results file when it arrives.</p>}
+        {waiting && <p className="mt-1 text-sm">{plural(batch.pending, 'line')} {batch.pending === 1 ? "hasn't" : "haven't"} come back from the NDIA yet. Import the next results file when it arrives.</p>}
         {waiting && batch.rejected > 0 && onReviewRejected && (
           <button type="button" className={`${TAP_AREA} mt-1 text-sm font-medium text-[var(--color-primary)] hover:underline`} onClick={onReviewRejected}>Review {plural(batch.rejected, 'rejected line')}</button>
         )}

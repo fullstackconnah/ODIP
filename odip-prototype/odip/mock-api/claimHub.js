@@ -2,7 +2,7 @@
 // Synthetic names only. Ages are fixed numbers, as the server works them out against the provider's today: 59, 60, 80, 90 and 91 are the band edges.
 //
 // Captures switch state with POST /mock/claim-batches/state: { reset: true } restores every fixture, { registrationMissing: true } is the setup Callout,
-// { empty: true } empties every list.
+// { empty: true } empties every list, { paidPending: true } adds a results-in file whose successful line is paid while two lines still wait on the NDIA.
 
 const FILE_CSV = 'RegistrationNumber,NDISNumber,SupportsDeliveredFrom,SupportsDeliveredTo,SupportNumber,ClaimReference,Quantity,Hours,UnitPrice,GSTCode\n'
 const NAMES = ['Ava Nguyen', 'Sam Lee', 'Jo Carter', 'Mia Chen', 'Ravi Patel', 'Lena Novak', 'Tom Baker', 'Priya Shah']
@@ -225,6 +225,12 @@ function create({ respond, failEnvelope, FILE }) {
       ['mock/claim-batches/state', (body) => {
         if (body.reset) reset()
         if (typeof body.registrationMissing === 'boolean') registrationMissing = body.registrationMissing
+        if (body.paidPending) {
+          batches.push(counts(batchRow('b-paid-pending', 'BPR261024001.csv', 'ResultsImported', 6, { uploadedAt: daysAgoInstant(6), uploadedByName: 'Jo Carter', resultsImportedAt: daysAgoInstant(4) })))
+          lines['b-paid-pending'] = batchLines('b-paid-pending', 3, (i) => (i === 0 ? 'Successful' : 'Pending'))
+          Object.assign(lines['b-paid-pending'][0], { paidAmount: lines['b-paid-pending'][0].amount, lineStatus: 'Paid' })
+          counts(batches[batches.length - 1])
+        }
         if (body.empty) { ready = []; rejected = []; managed = []; batches = [] }
         return { registrationMissing, ready: ready.length, batches: batches.length }
       }],

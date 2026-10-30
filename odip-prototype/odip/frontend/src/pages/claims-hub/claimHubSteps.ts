@@ -25,12 +25,12 @@ export function quantityText(line: Pick<HubLineDto, 'hours' | 'quantity'>): stri
 
 export type FileStep = 'Built' | 'Uploaded' | 'Results in' | 'Paid' | 'Discarded'
 
-/** A file's step: Paid is derived (every successful line paid), the rest is its status (SHAPE §4). */
+/** A file's step: Paid is derived (every successful line paid, none pending), the rest is its status (SHAPE §4). */
 export function stepOf(b: BatchDto): FileStep {
   if (b.status === 'Discarded') return 'Discarded'
   if (b.status === 'Built') return 'Built'
   if (b.status === 'Uploaded') return 'Uploaded'
-  return b.successful > 0 && b.paid >= b.successful ? 'Paid' : 'Results in'
+  return b.successful > 0 && b.paid >= b.successful && b.pending === 0 ? 'Paid' : 'Results in'
 }
 
 /** Finished: discarded, or results in with every successful line paid and none still pending. A file with no successful lines has nothing to pay (0 of 0), so it is finished at Results in, unless lines are still waiting on the NDIA. */

@@ -400,6 +400,31 @@ describe('ClaimsHubPage: file panel', () => {
     expect(screen.getByTestId('where')).toHaveTextContent('tab=action')
   })
 
+  it('keeps a paid file with lines still pending at Results in with one Import results action', () => {
+    m.batches.mockReturnValue(query([batch({ status: 'ResultsImported', successful: 1, rejected: 0, pending: 2, paid: 1 })]))
+    m.batch.mockReturnValue(query(resultsIn({ successful: 1, rejected: 0, pending: 2, paid: 1 })))
+    renderPage('/claims?tab=files')
+
+    expect(within(screen.getByTestId('claims-strip')).getByRole('button', { name: 'Import results: BPR261030001.csv' })).toBeInTheDocument()
+    expect(within(screen.getByTestId('claims-strip')).getByText(/Step 3 of 4 · Import the results/)).toBeInTheDocument()
+    expect(screen.getByText('Results in')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Mark paid/ })).toBeNull()
+
+    cleanup()
+    renderPage('/claims?file=b-1')
+    const panel = within(screen.getByTestId('file-panel'))
+    expect(panel.getByTestId('file-next-action')).toHaveTextContent('Import results')
+    expect(panel.getByText("2 lines haven't come back from the NDIA yet. Import the next results file when it arrives.")).toBeInTheDocument()
+    expect(screen.queryByText(/line paid ·|lines paid ·/)).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Mark / })).toBeNull()
+  })
+
+  it('says "1 line hasn’t" style singular when a single line is still pending', () => {
+    m.batch.mockReturnValue(query(resultsIn({ successful: 0, rejected: 2, pending: 1 })))
+    renderPage('/claims?file=b-1')
+    expect(screen.getByText("1 line hasn't come back from the NDIA yet. Import the next results file when it arrives.")).toBeInTheDocument()
+  })
+
   it('keeps Mark paid as the one action when successful lines are unpaid, and only adds the waiting count', () => {
     m.batches.mockReturnValue(query([batch({ status: 'ResultsImported', successful: 1, rejected: 1, pending: 2, paid: 0 })]))
     m.batch.mockReturnValue(query(resultsIn({ pending: 2 })))
