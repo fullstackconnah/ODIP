@@ -693,6 +693,27 @@ public sealed class ServiceAgreementApprovalService
 
     private Task<DateOnly> ProviderTodayAsync(Guid tenantId, CancellationToken ct) => ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct);
 
+    private const string IntakeNotComplete = "Complete the participant's intake before making them active.";
+
+    /// <summary>"Make active" for a tracked participant: finalises a DRAFT whose intake is complete (open checklist items do not stop it), under the
+    /// organisation's activation rule, and fills the started weeks in their own lock pair. Null when done or nothing to do (not a draft); otherwise
+    /// the refusal, and nothing is changed. Throws RosterBusyException as PopulateStartedWeeksAsync does. Never call it while holding the roster locks.</summary>
+    public async Task<string?> MakeActiveAsync(Participant participant, CancellationToken ct)
+    {
+        if (!participant.IsDraft) return null;
+        if (!participant.IntakeCompletedAt.HasValue) return IntakeNotComplete;
+        // Warn (the default) activates, Enforce needs evidence. A draft whose services started is active already but has never been
+        // through this rule, so it is asked too.
+        if ((!participant.IsActive || participant.ServicesStartedAt != null) && await ParticipantReadiness.ActivationBlockAsync(_db, participant, _clock, ct) is var block && block != ActivationBlock.None)
+            return ParticipantReadiness.ActivationRefusal(block);
+        participant.IsDraft = false;
+        participant.UpdatedAt = DateTime.UtcNow;
+        participant.IsActive = true;
+        await PopulateStartedWeeksAsync(participant.TenantId, participant.Id, ct);
+        await _db.SaveChangesAsync(ct);
+        return null;
+    }
+
     /// <summary>Fills only approved agreement patterns into roster weeks that are already started after a participant becomes service-eligible.</summary>
     public async Task PopulateStartedWeeksAsync(Guid tenantId, Guid participantId, CancellationToken ct)
     {
