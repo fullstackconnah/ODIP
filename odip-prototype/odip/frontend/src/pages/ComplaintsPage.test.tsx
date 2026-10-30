@@ -170,6 +170,24 @@ describe('ComplaintsPage', () => {
     expect(lastParams().longOpen).toBeUndefined()
   })
 
+  it('the "n complaints" subtitle waits for a list: hidden while loading and after a failed load', () => {
+    mockUseComplaints.mockReturnValue(list([], { isLoading: true }))
+    const loading = renderPage()
+    expect(screen.queryByText(/d+ complaints?$/)).not.toBeInTheDocument()
+    loading.unmount()
+    mockUseComplaints.mockReturnValue(list([], { isError: true, error: { response: { status: 500 } } }))
+    renderPage()
+    expect(screen.queryByText(/d+ complaints?$/)).not.toBeInTheDocument()
+  })
+
+  it('an unacknowledged complaint reads "Not acknowledged" on the phone card as well as "Not yet" under the column', () => {
+    mockUseComplaints.mockReturnValue(list([row({ acknowledgedOn: null })]))
+    renderPage()
+    const r = screen.getAllByRole('row')[1]
+    expect(within(r).getByText('Not acknowledged')).toBeInTheDocument()
+    expect(within(r).getByText('Not yet')).toBeInTheDocument()
+  })
+
   it('a failed load shows the error with Try again', async () => {
     const refetch = vi.fn()
     mockUseComplaints.mockReturnValue(list([], { isError: true, error: { response: { status: 500 } }, refetch }))

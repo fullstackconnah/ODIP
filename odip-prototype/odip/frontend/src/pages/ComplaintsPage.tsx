@@ -31,9 +31,8 @@ const SEARCH_DEBOUNCE_MS = 300
 
 const STATUS_FILTER_ITEMS: DropdownItem[] = COMPLAINT_STATUSES.map(s => ({ value: s, label: COMPLAINT_STATUS_LABELS[s] }))
 
-/** "Since today", "1 day", "12 days"; an en dash (read as "Not open") once the complaint is Resolved or Closed. */
-function OpenFor({ openDays }: { openDays?: number | null }) {
-  if (openDays == null) return <span aria-hidden="true">{'–'}</span>
+/** "Since today", "1 day", "12 days". */
+function OpenFor({ openDays }: { openDays: number }) {
   const text = openDays === 0 ? 'Since today' : plural(openDays, 'day')
   return <span className={`tabular-nums ${openDays > LONG_OPEN_DAYS ? `${TONE.warning.ink} font-medium` : ''}`}>{text}</span>
 }
@@ -109,24 +108,25 @@ export default function ComplaintsPage() {
         </Link>
       ),
     },
-    { key: 'complainant', header: 'Complainant', maxWidth: '10rem', mobile: 'meta', render: complainantText },
-    { key: 'receivedOn', header: 'Received', mobile: 'meta', render: c => <><span className="md:hidden">Received </span>{formatDateAu(c.receivedOn)}</> },
+    // A long unbroken name would stretch the table's min-content width, and with it every phone card.
+    { key: 'complainant', header: 'Complainant', maxWidth: '12rem', className: 'max-md:[overflow-wrap:anywhere]', mobile: 'meta', render: complainantText },
+    { key: 'receivedOn', header: 'Received', mobile: 'meta', render: c => <span><span className="md:hidden">Received </span>{formatDateAu(c.receivedOn)}</span> },
     { key: 'status', header: 'Status', mobile: 'status', render: c => <StatusBadge status={c.status} label={COMPLAINT_STATUS_LABELS[c.status as ComplaintStatus] ?? c.status} /> },
     {
       key: 'openDays',
       header: 'Open for',
       mobile: 'meta',
       render: c => c.openDays == null
-        ? <><span aria-hidden="true">{'–'}</span><span className="sr-only">Not open</span></>
-        : <><span className="md:hidden">Open </span><OpenFor openDays={c.openDays} /></>,
+        ? <span><span aria-hidden="true" className="max-md:hidden">{'–'}</span><span className="md:sr-only">Not open</span></span>
+        : <span><span className="md:hidden">Open </span><OpenFor openDays={c.openDays} /></span>,
     },
     {
       key: 'acknowledgedOn',
       header: 'Acknowledged',
       mobile: 'meta',
       render: c => c.acknowledgedOn
-        ? <><span className="md:hidden">Acknowledged </span>{formatDateAu(c.acknowledgedOn)}</>
-        : <span className="text-[var(--color-muted-foreground)]">Not yet</span>,
+        ? <span><span className="md:hidden">Acknowledged </span>{formatDateAu(c.acknowledgedOn)}</span>
+        : <span className="text-[var(--color-muted-foreground)]"><span className="md:hidden">Not acknowledged</span><span className="max-md:hidden">Not yet</span></span>,
     },
     { key: 'actions', header: '', render: c => <RowActions>{actionButtons(c)}</RowActions> },
   ]
@@ -165,7 +165,7 @@ export default function ComplaintsPage() {
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
-      <PageHeader title="Complaints" subtitle={forbidden ? undefined : plural(totalCount, 'complaint')} action={recordAction}>
+      <PageHeader title="Complaints" subtitle={forbidden || isLoading || isError ? undefined : plural(totalCount, 'complaint')} action={recordAction}>
         {toggleButtons}
         {!showArchived && (
           <>
