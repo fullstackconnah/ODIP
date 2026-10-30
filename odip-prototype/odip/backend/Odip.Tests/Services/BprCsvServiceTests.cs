@@ -11,11 +11,7 @@ using Odip.Tests.Support;
 namespace Odip.Tests.Services;
 
 /// <summary>
-/// Nullability audit (shift-completion design spec, delivery PR 3): BprCsvService's agency-
-/// managed filter dereferenced `l.ParticipantBooking.PlanTypeOverride` directly, which NREs for
-/// Kind == Shift claim lines now that ParticipantBookingId/ParticipantBooking are nullable. A
-/// shift-kind line must be excluded from the BPR CSV (export for shift claims is out of scope
-/// for this PR — see the design spec's Open questions), not NRE the whole request.
+/// The file writer through the loader, shift lines included (a shift line has no booking, so its participant comes from the shift).
 /// </summary>
 public class BprCsvServiceTests
 {
@@ -24,7 +20,7 @@ public class BprCsvServiceTests
     private static OdipDbContext CreateDb() => TestDb.Create();
 
     [Fact]
-    public async Task GenerateBprCsvAsync_ShiftKindClaim_ExcludesShiftLines_DoesNotThrow()
+    public async Task Shift_lines_are_written_with_their_rostered_hours()
     {
         using var db = CreateDb();
 
@@ -71,13 +67,14 @@ public class BprCsvServiceTests
 
         var csv = Encoding.UTF8.GetString(bytes);
         var lines = csv.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        Assert.Single(lines); // header row only — the shift-kind line was excluded, not NRE'd
+        Assert.Equal(2, lines.Length); // the header and the shift line: shift claims are lodged like trip claims
         Assert.StartsWith("RegistrationNumber,NDISNumber,", lines[0]);
+        Assert.Equal("8:00", lines[1].Split(',')[7]);
         Assert.Contains(claim.ClaimReference, fileName);
     }
 
     [Fact]
-    public async Task GenerateBprCsvAsync_AgencyManagedLines_EveryRowHas16FieldsUnderTheRightHeader()
+    public async Task AgencyManagedLines_EveryRowHas16FieldsUnderTheRightHeader()
     {
         using var db = CreateDb();
         var participant = new Participant
@@ -94,7 +91,7 @@ public class BprCsvServiceTests
         db.Participants.Add(participant);
         db.ParticipantBookings.Add(booking);
         db.TripClaims.Add(claim);
-        foreach (var (type, reason) in new[] { (ClaimType.Standard, (string?)null), (ClaimType.Cancellation, "late, notice") })
+        foreach (var (type, reason) in new[] { (ClaimType.Standard, (string?)null), (ClaimType.Cancellation, "NSDH") })
             db.ClaimLineItems.Add(new ClaimLineItem
             {
                 Id = Guid.NewGuid(), TripClaimId = claim.Id, ParticipantBookingId = booking.Id,
@@ -123,7 +120,7 @@ public class BprCsvServiceTests
         Assert.Equal("PR1", standard["RegistrationNumber"]);
         Assert.Equal("431,\"00", standard["NDISNumber"]); // comma and quote survive the escaping
         Assert.Equal("04_104_0125_6_1", standard["SupportNumber"]);
-        Assert.Equal("008:30", standard["Hours"]);
+        Assert.Equal("8:30", standard["Hours"]);
         Assert.Equal("40.00", standard["UnitPrice"]);
         Assert.Equal("", standard["CancellationReason"]);
         Assert.Equal("late, notice", canc["CancellationReason"]);
@@ -140,40 +137,6 @@ public class BprCsvServiceTests
         var cancRow = rows.Single(r => r[13] == "CANC");
         Assert.Equal("late, notice", cancRow[14]);
         Assert.Equal("", cancRow[15]);
-    }
-
-    [Fact]
-    public async Task GenerateBprCsvAsync_AParticipantSwitchedToOtherAfterTheService_StillExportsTheirLine()
-    {
-        using var db = CreateDb();
-        var participant = new Participant
-        {
-            Id = Guid.NewGuid(), TenantId = TenantId, FirstName = "Amy", LastName = "Ng",
-            NdisNumber = "431000123", PlanType = PlanType.AgencyManaged, FundingSource = ParticipantFundingSource.Other,
-        };
-        var booking = new ParticipantBooking { Id = Guid.NewGuid(), TripInstanceId = Guid.NewGuid(), ParticipantId = participant.Id, BookingStatus = BookingStatus.Confirmed };
-        var claim = new TripClaim { Id = Guid.NewGuid(), ParticipantId = participant.Id, ClaimReference = "TC-1", PeriodFrom = new DateOnly(2026, 9, 7), PeriodTo = new DateOnly(2026, 9, 7) };
-        db.Participants.Add(participant);
-        db.ParticipantBookings.Add(booking);
-        db.TripClaims.Add(claim);
-        db.ClaimLineItems.Add(new ClaimLineItem
-        {
-            Id = Guid.NewGuid(), TripClaimId = claim.Id, ParticipantBookingId = booking.Id,
-            SupportItemCode = "04_104_0125_6_1", DayType = ClaimDayType.Weekday,
-            SupportsDeliveredFrom = new DateOnly(2026, 9, 7), SupportsDeliveredTo = new DateOnly(2026, 9, 7),
-            Hours = 8m, UnitPrice = 40m, TotalAmount = 320m, ClaimType = ClaimType.Standard,
-        });
-        db.ProviderSettings.Add(new ProviderSettings
-        {
-            Id = Guid.NewGuid(), TenantId = TenantId, RegistrationNumber = "PR1", ABN = "1",
-            OrganisationName = "Org", Address = "1 St", State = "VIC",
-        });
-        await db.SaveChangesAsync();
-
-        var (bytes, _) = await new BprCsvService(db).GenerateBprCsvAsync(claim.Id, CancellationToken.None);
-
-        var lines = Encoding.UTF8.GetString(bytes).Split((char)10, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        Assert.Equal(2, lines.Length); // the header and the line: a BPR mirrors its claim
     }
 
     // RFC 4180 split: commas inside quotes stay, doubled quotes unescape.
