@@ -135,7 +135,7 @@ public class BprCsvServiceTests
         // Pin positions independent of the header line (NDIA spec order).
         Assert.Equal("RegistrationNumber,NDISNumber,SupportsDeliveredFrom,SupportsDeliveredTo,SupportNumber,ClaimReference,Quantity,Hours,UnitPrice,GSTCode,AuthorisedBy,ParticipantApproved,InKindFundingProgram,ClaimType,CancellationReason,ABNofSupportProvider", lines[0]);
         var cancRow = rows.Single(r => r[13] == "CANC");
-        Assert.Equal("late, notice", cancRow[14]);
+        Assert.Equal("NSDH", cancRow[14]);
         Assert.Equal("", cancRow[15]);
     }
 
