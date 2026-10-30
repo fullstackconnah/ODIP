@@ -147,6 +147,20 @@ public class UniqueIndexEmulatorTests
     }
 
     [Fact]
+    public async Task OnePendingBatchLinePerClaimLine_AnyNumberOfAnsweredOnes()
+    {
+        var env = new DemoTestEnv(Clock);
+        var line = Guid.NewGuid();
+        ClaimBatchLine Attempt(ClaimBatchLineOutcome outcome) => new()
+        {
+            Id = Guid.NewGuid(), TenantId = Tenant, BatchId = Guid.NewGuid(), ClaimLineItemId = line, RowReference = Guid.NewGuid().ToString("N"), Outcome = outcome,
+        };
+        await SaveAsync(env, Attempt(ClaimBatchLineOutcome.Pending), Attempt(ClaimBatchLineOutcome.Rejected), Attempt(ClaimBatchLineOutcome.Successful));
+
+        await AssertRefusedAsync("UX_ClaimBatchLines_OnePendingPerLine", () => SaveAsync(env, Attempt(ClaimBatchLineOutcome.Pending)));
+    }
+
+    [Fact]
     public async Task EveryUniqueIndexInTheModel_HasAFilterTheEmulatorUnderstands_SoANewKindIsNoticedNotIgnored()
     {
         var env = new DemoTestEnv(Clock);

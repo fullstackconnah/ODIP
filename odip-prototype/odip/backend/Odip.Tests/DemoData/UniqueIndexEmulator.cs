@@ -110,7 +110,7 @@ internal sealed class UniqueIndexEmulator : SaveChangesInterceptor
     private static readonly Regex NotNull = new("^\"(?<c>\\w+)\" IS NOT NULL$", RegexOptions.CultureInvariant);
     private static readonly Regex IsNull = new("^\"(?<c>\\w+)\" IS NULL$", RegexOptions.CultureInvariant);
     private static readonly Regex Flag = new("^\"(?<c>\\w+)\"$", RegexOptions.CultureInvariant);
-    private static readonly Regex OneOf = new("^\"(?<c>\\w+)\" IN \\((?<v>[0-9, ]+)\\)$", RegexOptions.CultureInvariant);
+    private static readonly Regex OneOf = new("^\"(?<c>\\w+)\" (?:IN \\((?<v>[0-9, ]+)\\)|= (?<v>[0-9]+))$", RegexOptions.CultureInvariant); // "= 0" is a one-value list
 
     private static bool HoldsRow(IIndex index, Func<IProperty, object?> valueOf)
     {
