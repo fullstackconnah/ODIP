@@ -139,9 +139,7 @@ if (string.IsNullOrEmpty(firebaseServiceAccount))
 var devAuthEnabled = string.Equals(
     Environment.GetEnvironmentVariable("DEV_AUTH_ENABLED"), "true", StringComparison.OrdinalIgnoreCase);
 
-Odip.Api.Health.DevAuthGuard.EnsureAllowed(devAuthEnabled,
-    string.Equals(Environment.GetEnvironmentVariable("DEV_AUTH_ALLOW_IN_PRODUCTION"), "true", StringComparison.OrdinalIgnoreCase),
-    builder.Environment);
+Odip.Api.Health.DevAuthGuard.EnsureAllowed(builder.Configuration, builder.Environment);
 
 if (devAuthEnabled)
 {

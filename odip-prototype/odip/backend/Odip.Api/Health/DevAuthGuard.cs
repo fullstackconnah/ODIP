@@ -3,8 +3,11 @@ namespace Odip.Api.Health;
 /// <summary>Startup guard: the passwordless dev login must never be live in Production by one wrong flag.</summary>
 public static class DevAuthGuard
 {
-    public static void EnsureAllowed(bool devAuthEnabled, bool allowInProduction, IHostEnvironment env)
+    // Reads IConfiguration (env, appsettings, command line) like every other DEV_AUTH_ENABLED reader.
+    public static void EnsureAllowed(IConfiguration config, IHostEnvironment env)
     {
+        var devAuthEnabled = string.Equals(config["DEV_AUTH_ENABLED"], "true", StringComparison.OrdinalIgnoreCase);
+        var allowInProduction = string.Equals(config["DEV_AUTH_ALLOW_IN_PRODUCTION"], "true", StringComparison.OrdinalIgnoreCase);
         if (devAuthEnabled && env.IsProduction() && !allowInProduction)
             throw new InvalidOperationException(
                 "DEV_AUTH_ENABLED=true is not allowed in the Production environment: it issues tokens without a password. " +
