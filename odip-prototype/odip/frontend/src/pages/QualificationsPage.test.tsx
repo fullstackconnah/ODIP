@@ -163,7 +163,7 @@ describe('QualificationsPage: the list', () => {
 
     expect(screen.getByText('10 days')).toBeInTheDocument()
     expect(screen.getByText('30 days')).toBeInTheDocument() // 31 Oct
-    expect(screen.getAllByText('Current').length).toBeGreaterThan(0) // 1 Nov, 31 days: it was "30 days" when the day count lost an hour
+    expect(screen.getAllByText('Current')).toHaveLength(2) // 1 Nov, 31 days: it was "30 days" when the day count lost an hour
   })
 })
 

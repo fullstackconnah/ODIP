@@ -586,7 +586,7 @@ public class StaffController : ControllerBase
         s.DriverLicenceExpiryDate = dto.DriverLicenceExpiryDate;
         s.ManualHandlingExpiryDate = dto.ManualHandlingExpiryDate;
         s.MedicationCompetencyExpiryDate = dto.MedicationCompetencyExpiryDate;
-        // A caller who cannot see the number sends none: keep what is stored rather than wipe it.
+        // Defence in depth: every role Update allows sees the number; a caller who could not would send none, so keep what is stored rather than wipe it.
         if (StaffScreeningMask.CanSee(User, s.Id)) s.WorkerScreeningNumber = dto.WorkerScreeningNumber;
         s.WorkerScreeningExpiryDate = dto.WorkerScreeningExpiryDate;
         s.UpdatedAt = DateTime.UtcNow;

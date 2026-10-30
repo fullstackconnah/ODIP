@@ -37,9 +37,9 @@ function makeStaff(overrides: Partial<StaffListDto> = {}): StaffListDto {
   } as StaffListDto
 }
 
-function renderPage() {
+function renderPage(url = '/') {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[url]}>
       <StaffPage />
     </MemoryRouter>,
   )
@@ -536,11 +536,37 @@ describe('StaffPage — a missing worker screening', () => {
     mockUseStaff.mockReturnValue({ data: rows(), isLoading: false })
     renderPage()
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Screening missing (1)' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Screening missing' }))
 
     expect(screen.getByText('Alex Rivera')).toBeInTheDocument()
     expect(screen.queryByText('Blake Nguyen')).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('tab', { name: 'All' }))
     expect(screen.getByText('Blake Nguyen')).toBeInTheDocument()
+  })
+
+  it('shows the count as a badge on the tab', () => {
+    mockUseStaff.mockReturnValue({ data: rows(), isLoading: false })
+    renderPage()
+
+    expect(within(screen.getByRole('tab', { name: 'Screening missing' })).getByText('1')).toBeInTheDocument()
+  })
+
+  it('keeps the filter in the URL, and says so kindly when nobody is missing one', () => {
+    mockUseStaff.mockReturnValue({ data: [rows()[1]], isLoading: false })
+    renderPage('/?tab=missing')
+
+    expect(screen.getByRole('tab', { name: 'Screening missing' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByText('Everyone here has a screening date')).toBeInTheDocument()
+    expect(screen.queryByText('No staff found')).not.toBeInTheDocument()
+  })
+
+  it('hides the tabs on the archived list, even for a shared ?tab=missing link', async () => {
+    mockUseStaff.mockReturnValue({ data: [rows()[2]], isLoading: false })
+    renderPage('/?tab=missing')
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Archived' }))
+
+    expect(screen.queryByRole('tablist', { name: 'Staff filters' })).not.toBeInTheDocument()
+    expect(screen.getByText('Casey Archer')).toBeInTheDocument()
   })
 })

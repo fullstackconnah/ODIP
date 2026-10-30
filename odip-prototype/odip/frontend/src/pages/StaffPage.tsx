@@ -16,6 +16,7 @@ import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link } from 'react-router-dom'
 import { Plus, UserCog, CalendarOff } from 'lucide-react'
 import { useState } from 'react'
+import { useTabParam } from '@/hooks/useTabParam'
 import { usePermissions } from '@/lib/permissions'
 import { deadlineState } from '@/lib/deadline'
 import { toUpdateStaffDto, type StaffListDto, type UpdateStaffDto } from '@/api/types/staff'
@@ -88,7 +89,7 @@ export default function StaffPage() {
   const { data: staffData = [], isLoading, isError, refetch } = pageQuery
   // PP-45 — StaffController's GetAll only supports `isActive`, no server-side text search, so the
   // filter is applied client-side (same approach CompatibilityPage takes for its matrix filters).
-  const [screeningTab, setScreeningTab] = useState<'all' | 'missing'>('all')
+  const [screeningTab, setScreeningTab] = useTabParam(['all', 'missing'] as const, 'all')
   const searched = search
     ? staffData.filter((s: StaffListDto) => {
         const q = search.toLowerCase()
@@ -96,7 +97,9 @@ export default function StaffPage() {
       })
     : staffData
   const missingCount = searched.filter(isScreeningMissing).length
-  const staff = screeningTab === 'missing' ? searched.filter(isScreeningMissing) : searched
+  // The tabs are hidden on the archived list, so a shared ?tab=missing link must not filter it.
+  const missingOnly = screeningTab === 'missing' && !showArchived
+  const staff = missingOnly ? searched.filter(isScreeningMissing) : searched
 
   // The confirm (if any) closes either way; a refusal is said above the table.
   function saveStatus(id: string, name: string, data: UpdateStaffDto) {
@@ -212,16 +215,16 @@ export default function StaffPage() {
       {errorNotice}
       {statusError && <Callout tone="error">{statusError}</Callout>}
 
-      {!isLoading && !isError && staffData.length > 0 && (
+      {!isLoading && !isError && !showArchived && staffData.length > 0 && (
         <Tabs
-          tabs={[{ id: 'all', label: 'All' }, { id: 'missing', label: `Screening missing (${missingCount})` }]}
+          tabs={[{ id: 'all', label: 'All' }, { id: 'missing', label: 'Screening missing', badge: missingCount }]}
           active={screeningTab}
-          onChange={(key) => setScreeningTab(key as 'all' | 'missing')}
+          onChange={setScreeningTab}
           ariaLabel="Staff filters"
         />
       )}
 
-      {!isLoading && !isError && staff.length === 0 && screeningTab === 'all' ? (
+      {!isLoading && !isError && staff.length === 0 && !missingOnly ? (
         search ? (
           <EmptyState
             icon={UserCog}
@@ -249,7 +252,7 @@ export default function StaffPage() {
           loading={isLoading}
           error={isError || retryingAfterError(pageQuery)}
           onRetry={() => refetch()}
-          emptyMessage="No staff found"
+          emptyMessage={missingOnly ? 'Everyone here has a screening date' : 'No staff found'}
         />
       )}
       {confirmDialog}

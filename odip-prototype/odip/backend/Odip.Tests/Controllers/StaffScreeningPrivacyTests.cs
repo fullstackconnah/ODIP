@@ -98,4 +98,32 @@ public class StaffScreeningPrivacyTests
         var saved = await db.Users.SingleAsync(u => u.Id == workerId);
         Assert.Equal(Number, saved.WorkerScreeningNumber);
     }
+
+    [Fact]
+    public async Task TheOverview_MasksTheNumberForAColleague_ButNotForThePersonThemselves()
+    {
+        var (db, workerId, otherId) = await SeedAsync();
+
+        var own = Assert.IsType<ApiResponse<StaffOverviewDto>>(Assert.IsType<OkObjectResult>((await As(db, "SupportWorker", workerId).GetOverview(workerId, default)).Result).Value).Data!;
+        var colleague = Assert.IsType<ApiResponse<StaffOverviewDto>>(Assert.IsType<OkObjectResult>((await As(db, "SupportWorker", otherId).GetOverview(workerId, default)).Result).Value).Data!;
+
+        Assert.Equal(Number, own.Staff.WorkerScreeningNumber);
+        Assert.Null(colleague.Staff.WorkerScreeningNumber);
+        Assert.True(colleague.Staff.WorkerScreeningRecorded);
+    }
+
+    [Fact]
+    public async Task AnAdminUpdateWithNoNumber_ClearsTheStoredOne()
+    {
+        var (db, workerId, _) = await SeedAsync();
+
+        await As(db, "Admin").Update(workerId, new UpdateStaffDto
+        {
+            FirstName = "Wendy", LastName = "Worker", Email = "wendy@example.com", Position = Position.SupportWorker, IsActive = true,
+            WorkerScreeningNumber = null, WorkerScreeningExpiryDate = new DateOnly(2031, 1, 1),
+        }, default);
+
+        var saved = await db.Users.SingleAsync(u => u.Id == workerId);
+        Assert.Null(saved.WorkerScreeningNumber);
+    }
 }
