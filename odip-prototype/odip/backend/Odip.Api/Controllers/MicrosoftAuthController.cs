@@ -181,7 +181,7 @@ public class MicrosoftAuthController : ControllerBase
         if (_cache.TryGetValue("ms-state:" + state, out _)) return Refuse(MicrosoftRefusal.InvalidToken, path, "Microsoft callback - state was already used");
         _cache.Set("ms-state:" + state, true, CorrelationLife);
 
-        // The person pressed Cancel at Microsoft. No guess is involved, so it does not spend the failure budget.
+        // The person pressed Cancel at Microsoft. No guess is involved.
         if (!string.IsNullOrEmpty(error)) return Refuse(MicrosoftRefusal.MicrosoftCancelled, path, "Microsoft callback - Entra sent error {Error}", error);
         if (string.IsNullOrEmpty(code)) return Refuse(MicrosoftRefusal.InvalidToken, path, "Microsoft callback - no code");
 

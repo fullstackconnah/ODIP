@@ -294,9 +294,6 @@ public class AuthController : ControllerBase
 
         var tenantToken = GenerateJwtToken(user, tenant.Id);
         SetJwtCookie(tenantToken);
-        // Deliberately does NOT clear the /auth/exchange failure count. Dev login is a
-        // bypass by design; letting it reset the lockout would hand an attacker a way to
-        // clear their own on any instance running with DEV_AUTH_ENABLED.
 
         return Ok(ApiResponse<AuthResponseDto>.Ok(new AuthResponseDto
         {

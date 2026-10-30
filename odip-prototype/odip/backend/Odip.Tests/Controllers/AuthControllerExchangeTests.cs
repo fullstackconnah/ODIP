@@ -1,7 +1,9 @@
 using System.Net;
+using System.Reflection;
 using FirebaseAdmin.Auth;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -983,5 +985,23 @@ public class AuthControllerExchangeTests
         }
 
         Assert.False(controller.Response.Headers.ContainsKey("Retry-After"));
+    }
+
+    /// <summary>
+    /// With no failure counter, the "login" flood limiter is the only brake on sign-in guessing. An attribute is only a declaration, so it is read off each
+    /// compiled action and compared with the policy name, so a dropped or renamed policy fails here rather than silently limiting nothing.
+    /// </summary>
+    [Theory]
+    [InlineData(typeof(AuthController), nameof(AuthController.Exchange))]
+    [InlineData(typeof(AuthController), nameof(AuthController.DevLogin))]
+    [InlineData(typeof(AuthController), nameof(AuthController.DevUsers))]
+    [InlineData(typeof(AuthController), nameof(AuthController.DevWhoAmi))]
+    [InlineData(typeof(MicrosoftAuthController), nameof(MicrosoftAuthController.Start))]
+    [InlineData(typeof(MicrosoftAuthController), nameof(MicrosoftAuthController.Callback))]
+    public void TheSignInActionsAreRateLimitedOnTheLoginPolicy(Type controller, string action)
+    {
+        var policy = controller.GetMethod(action)!.GetCustomAttribute<EnableRateLimitingAttribute>();
+
+        Assert.Equal("login", policy!.PolicyName);   // the policy Program.cs registers: a typo here would leave sign-in unlimited
     }
 }

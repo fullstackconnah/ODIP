@@ -2,8 +2,8 @@ namespace Odip.Api.Services;
 
 /// <summary>
 /// Why <c>AuthController.Exchange</c> refused a sign-in, as a machine-readable code on the response (<c>ApiResponse.Code</c>), so the sign-in page can
-/// tell the person what to do instead of "login failed". The status never changes (401, or 429 for a locked-out client) and every refusal still
-/// spends from the failure budget; only the body says more.
+/// tell the person what to do instead of "login failed". The status never changes (a refusal is always 401; the 429 the sign-in page words as
+/// <see cref="LockedOut"/> is the "login" flood limiter's); only the body says more.
 ///
 /// Why each code is safe to say. The exchange decides in a fixed order, and that order is what keeps this from being an account-enumeration channel:
 /// <list type="number">

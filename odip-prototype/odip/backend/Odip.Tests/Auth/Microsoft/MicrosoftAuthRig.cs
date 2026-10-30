@@ -50,7 +50,7 @@ public sealed record Outcome(string Location, IReadOnlyList<SetCookieHeaderValue
 
 /// <summary>
 /// The controller run the way production runs it: ANONYMOUS (no ambient tenant), real validator over a test key, real data protection, real staff
-/// create and notification raiser, real lockout; only Entra's token endpoint (the redeemer) is a fake. Start and callback are chained through the
+/// create and notification raiser; only Entra's token endpoint (the redeemer) is a fake. Start and callback are chained through the
 /// real correlation cookie, so a test cannot pass by skipping the cookie.
 /// </summary>
 public sealed class MicrosoftAuthRig
