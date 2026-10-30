@@ -48,6 +48,13 @@ public class InvoiceModelTests
     }
 
     [Fact]
+    public void ClaimBatch_types_are_not_in_AuditedEntities()
+    {
+        Assert.DoesNotContain(typeof(ClaimBatch), AuditedEntities.Types);
+        Assert.DoesNotContain(typeof(ClaimBatchLine), AuditedEntities.Types);
+    }
+
+    [Fact]
     public void InvoiceTypes_AreNotAudited()
     {
         Assert.DoesNotContain(typeof(Invoice), AuditedEntities.Types);
