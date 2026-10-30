@@ -110,7 +110,7 @@ export const clearRow = () => screen.queryByText('All clear', { selector: 'span.
 
 export const FULL_ORDER = [
   'Qualification issues', 'Critical participant alerts', 'Budgets at risk', 'Overdue', 'Missing accommodation',
-  'Missing vehicles', 'Missing staff', 'Open incidents', 'QSC overdue', 'Pending leave', 'Shift completions',
+  'Missing vehicles', 'Missing staff', 'Open incidents', 'NDIS Commission overdue', 'Pending leave', 'Shift completions',
 ]
 
 // The same alerts, with three more participants whose budgets are at risk (two over, one forecast to go over). The Critical alerts are still the three on two participants: an over-budget alert is

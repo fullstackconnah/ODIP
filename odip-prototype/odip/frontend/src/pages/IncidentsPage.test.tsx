@@ -106,7 +106,7 @@ describe('IncidentsPage — QSC overdue banner (C-1)', () => {
 
     const banner = screen.getByRole('alert')
     expect(banner).toHaveTextContent(/1 incident/)
-    expect(banner).toHaveTextContent(/requires QSC reporting/)
+    expect(banner).toHaveTextContent(/past (its|their) NDIS Commission deadline/)
     expect(banner.className).toMatch(/bg-error-container/)
     expect(banner.className).not.toMatch(/red-500/)
     expect(banner.className).not.toMatch(/text-red-400/)
@@ -179,7 +179,7 @@ describe('IncidentsPage — QSC overdue banner (C-1)', () => {
     mockUseOverdueQscIncidents.mockReturnValue({ data: [] })
     renderPage('/incidents?qsc=overdue')
 
-    expect(screen.getByText('No overdue QSC reports')).toBeInTheDocument()
+    expect(screen.getByText('No overdue NDIS Commission reports')).toBeInTheDocument()
     expect(screen.queryByText('No incidents reported')).not.toBeInTheDocument()
     expect(screen.queryByText(/report one to get started/i)).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /show all incidents/i })).toHaveAttribute('href', '/incidents')
@@ -373,7 +373,7 @@ describe('IncidentsPage — one-line QSC banner', () => {
     renderPage()
 
     const banner = screen.getByRole('alert')
-    expect(banner).toHaveTextContent('2 incidents require QSC reporting — 24-hour deadline exceeded')
+    expect(banner).toHaveTextContent('2 incidents are past their NDIS Commission deadline')
     expect(banner).toHaveTextContent('NDIS Quality and Safeguards Commission requires reportable incidents to be escalated within 24 hours.')
     expect(within(banner).getByRole('link', { name: 'View overdue incidents' })).toHaveAttribute('href', '/incidents?qsc=overdue')
     // It used to stack a headline paragraph, a reason paragraph and the link on their own lines (88px).
@@ -394,11 +394,11 @@ describe('IncidentsPage — QSC banner grammar', () => {
   }
 
   it('says "1 incident requires" for one overdue incident', () => {
-    expect(headline(1)).toBe('1 incident requires QSC reporting — 24-hour deadline exceeded')
+    expect(headline(1)).toBe('1 incident is past its NDIS Commission deadline')
   })
 
   it('says "2 incidents require" for two, and for any larger count', () => {
-    expect(headline(2)).toBe('2 incidents require QSC reporting — 24-hour deadline exceeded')
+    expect(headline(2)).toBe('2 incidents are past their NDIS Commission deadline')
   })
 
   it('never renders the ungrammatical "1 incident require"', () => {
@@ -427,7 +427,7 @@ describe('IncidentsPage — narrow-desktop columns', () => {
 
     const cells = within(screen.getByText('Slip in kitchen').closest('tr') as HTMLElement).getAllByRole('cell')
     // From md up (the Column Rule); max-md:hidden only leaves a field off the phone card.
-    for (const label of ['Title', 'Severity', 'Status', 'Date', 'QSC', 'Participant', 'Type', 'Trip', 'Reported By']) {
+    for (const label of ['Title', 'Severity', 'Status', 'Date', 'NDIS Commission', 'Participant', 'Type', 'Trip', 'Reported By']) {
       const index = headerIndex(label)
       expect(index, label).toBeGreaterThanOrEqual(0)
       const th = screen.getAllByRole('columnheader')[index]

@@ -90,7 +90,7 @@ export const ACTIVITY_CATEGORIES = ['Leisure', 'Dining', 'Transport', 'Sightseei
 export type ActivityCategory = typeof ACTIVITY_CATEGORIES[number]
 
 // ── Task Type ───────────────────────────────────────────
-export const TASK_TYPES = ['AccommodationRequest', 'AccommodationConfirmation', 'VehicleRequest', 'VehicleConfirmation', 'ParticipantConfirmation', 'FamilyContact', 'InvoiceOop', 'StaffingAllocation', 'RiskReview', 'MedicationCheck', 'PreDeparture', 'PostTrip', 'InsuranceConfirmation', 'GenerateNdisClaims', 'LeaveCoverage', 'IncidentQscReport', 'MedicationWitness', 'FlaggedNoteFollowUp', 'BudgetEmergencyReview', 'RestrictivePracticeRegisterAddition', 'Other'] as const
+export const TASK_TYPES = ['AccommodationRequest', 'AccommodationConfirmation', 'VehicleRequest', 'VehicleConfirmation', 'ParticipantConfirmation', 'FamilyContact', 'InvoiceOop', 'StaffingAllocation', 'RiskReview', 'MedicationCheck', 'PreDeparture', 'PostTrip', 'InsuranceConfirmation', 'GenerateNdisClaims', 'LeaveCoverage', 'IncidentQscReport', 'MedicationWitness', 'FlaggedNoteFollowUp', 'BudgetEmergencyReview', 'RestrictivePracticeRegisterAddition', 'IncidentCommissionDetailedReport', 'Other'] as const
 export type TaskType = typeof TASK_TYPES[number]
 
 // ── Task Priority ───────────────────────────────────────
@@ -239,11 +239,21 @@ export type QscReportingStatus = typeof QSC_REPORTING_STATUSES[number]
 
 /** Compliance step: single source for the QSC Reporting Status Dropdown's items. */
 export const QSC_REPORTING_STATUS_LABELS: Record<QscReportingStatus, string> = {
-  NotRequired: 'Not Required',
+  NotRequired: 'Not required',
   Required: 'Required',
-  ReportedWithin24h: 'Reported Within 24h',
-  ReportedLate: 'Reported Late',
+  ReportedWithin24h: 'Reported on time',
+  ReportedLate: 'Reported late',
   Pending: 'Pending',
+}
+
+// ── Reportable class (when the NDIS Commission must be told) ──
+export const REPORTABLE_CLASSES = ['None', 'Within24h', 'Within5BusinessDays'] as const
+export type ReportableClass = typeof REPORTABLE_CLASSES[number]
+
+export const REPORTABLE_CLASS_LABELS: Record<ReportableClass, string> = {
+  None: 'Not reportable',
+  Within24h: 'Within 24 hours',
+  Within5BusinessDays: 'Within 5 business days',
 }
 
 // ── Insurance Status ────────────────────────────────────

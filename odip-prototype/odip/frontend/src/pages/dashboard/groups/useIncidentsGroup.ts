@@ -15,7 +15,7 @@ export function useIncidentsGroup(enabled: boolean): GroupModel {
   const listed = [...(overdueQsc.data ?? []), ...(needsAttention.data ?? [])]
   const rows = listed.filter((i, n) => listed.findIndex((other) => other.id === i.id) === n).map((i): QuickRow => {
     const flags: QuickRow['flags'] = []
-    if (i.isOverdue24h) flags.push({ label: 'QSC overdue', tone: 'danger' })
+    if (i.isOverdue24h) flags.push({ label: 'NDIS Commission overdue', tone: 'danger' })
     flags.push({ label: INCIDENT_STATUS_LABELS[i.status], tone: toneForStatus(i.status) ?? 'neutral' })
     return {
       id: i.id,

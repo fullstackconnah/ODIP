@@ -156,8 +156,8 @@ const INCIDENT_SEVERITY_FILTER_ITEMS: DropdownItem[] = [
 
 function formatQscLabel(status: string): string {
   switch (status) {
-    case 'ReportedWithin24h': return 'Reported (24h)'
-    case 'ReportedLate': return 'Reported Late'
+    case 'ReportedWithin24h': return 'Reported on time'
+    case 'ReportedLate': return 'Reported late'
     case 'Required': return 'Required'
     case 'Pending': return 'Pending'
     default: return status
@@ -289,7 +289,7 @@ export default function IncidentsPage() {
     { key: 'incidentDateTime', header: 'Date', type: 'date', mobile: 'meta' },
     {
       key: 'qscReportingStatus',
-      header: 'QSC',
+      header: 'NDIS Commission',
       render: (i) => i.qscReportingStatus === 'NotRequired' ? (
         <span className="text-[var(--color-muted-foreground)]">{'\u2014'}</span>
       ) : i.isOverdue24h ? (
@@ -311,8 +311,8 @@ export default function IncidentsPage() {
   const showFlaggedNotes = tab === 'flagged-notes' && canViewFlaggedNotes
   // "1 incident requires", "2 incidents require": the verb agrees with the count.
   const qscHeadline = overdueQsc.length === 1
-    ? '1 incident requires QSC reporting — 24-hour deadline exceeded'
-    : `${overdueQsc.length} incidents require QSC reporting — 24-hour deadline exceeded`
+    ? '1 incident is past its NDIS Commission deadline'
+    : `${overdueQsc.length} incidents are past their NDIS Commission deadline`
   const reportIncidentAction = !showFlaggedNotes && !showArchived && canCreateIncidents && (
     <Button to="/incidents/new" size="md">
       <Plus className="w-4 h-4" /> Report incident
@@ -407,13 +407,13 @@ export default function IncidentsPage() {
       {/* The overdue check is a compliance warning: a failed check says so, it never hides the banner as if nothing were overdue. */}
       {!showArchived && overdueQscError && overdueQsc.length === 0 && (
         <Callout tone="danger" actions={<Button variant="secondary" size="sm" onClick={() => refetchOverdueQsc()}>Try again</Button>}>
-          Couldn't check for incidents past the 24-hour QSC deadline.
+          Couldn't check for incidents past their NDIS Commission deadline.
         </Callout>
       )}
 
       {qscOverdueOnly && (
         <p className="text-sm text-[var(--color-muted-foreground)]">
-          Showing only incidents past the 24-hour QSC deadline.{' '}
+          Showing only incidents past their NDIS Commission deadline.{' '}
           <Link to="/incidents" className="font-medium underline underline-offset-2">Show all incidents</Link>
         </p>
       )}
@@ -424,8 +424,8 @@ export default function IncidentsPage() {
         qscOverdueOnly ? (
           <EmptyState
             icon={ShieldAlert}
-            title="No overdue QSC reports"
-            description="No incidents are currently past the 24-hour QSC deadline."
+            title="No overdue NDIS Commission reports"
+            description="No incidents are past their NDIS Commission deadline."
           />
         ) : !showArchived && (statusFilter || severityFilter) ? (
           <EmptyState

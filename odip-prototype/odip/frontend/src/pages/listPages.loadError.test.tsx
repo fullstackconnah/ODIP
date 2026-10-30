@@ -97,7 +97,7 @@ describe('IncidentsPage when the overdue QSC check fails to load', () => {
       </QueryClientProvider>,
     )
 
-    expect(await screen.findByText(/couldn't check for incidents past the 24-hour QSC deadline/i)).toBeInTheDocument()
+    expect(await screen.findByText(/couldn't check for incidents past their NDIS Commission deadline/i)).toBeInTheDocument()
   })
 })
 

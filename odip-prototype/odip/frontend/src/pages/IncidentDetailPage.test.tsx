@@ -40,6 +40,8 @@ function baseIncident(overrides: Partial<IncidentDetailDto> = {}): IncidentDetai
     wereEmergencyServicesCalled: false, emergencyServicesDetails: null,
     witnessNames: null, witnessStatements: null, injuries: [], witnesses: [],
     qscReportedAt: null, qscReferenceNumber: null,
+    awareAt: '2026-10-03T09:05:00Z', reportableClass: 'None', reportableClassReason: null, notifyDueAt: null, detailedReportDueAt: null, dueCountedWithoutHolidays: false,
+    commissionDetailedReportedAt: null, commissionFinalReportRequested: false, commissionFinalReportedAt: null, timeZoneId: 'Australia/Sydney',
     reviewedByStaffId: null, reviewedByName: null, reviewedAt: null, reviewNotes: null, correctiveActions: null,
     resolvedAt: null, familyNotified: true, familyNotifiedAt: '2026-07-12T08:30:00Z',
     supportCoordinatorNotified: true, supportCoordinatorNotifiedAt: '2026-07-12T08:45:00Z',
@@ -268,5 +270,33 @@ describe('IncidentDetailPage — restrictive practice not determined', () => {
     const card = screen.getByRole('heading', { name: 'Restrictive practice' }).parentElement!.parentElement!
     expect(within(card).getByText('Not determined')).toBeInTheDocument()
     expect(within(card).queryByText('Not authorised')).not.toBeInTheDocument()
+  })
+})
+
+describe('IncidentDetailPage - NDIS Commission reporting row', () => {
+  const required = {
+    reportableClass: 'Within24h' as const, qscReportingStatus: 'Required' as const,
+    notifyDueAt: '2026-11-03T04:15:00Z', detailedReportDueAt: '2026-11-09T12:59:59Z',
+  }
+
+  it('says Not reportable for class None', () => {
+    mockUseIncident.mockReturnValue({ data: baseIncident(), isLoading: false })
+    renderPage()
+    expect(screen.getByText('NDIS Commission reporting')).toBeInTheDocument()
+    expect(screen.getByText('Not reportable')).toBeInTheDocument()
+  })
+
+  it('shows the overdue line in words and the 5-day line when the deadline has passed', () => {
+    mockUseIncident.mockReturnValue({ data: baseIncident({ ...required, notifyDueAt: '2020-01-01T00:00:00Z', detailedReportDueAt: '2099-01-01T00:00:00Z' }), isLoading: false })
+    renderPage()
+    expect(screen.getByText(/^Overdue by \d+ days?$/)).toBeInTheDocument()
+    expect(screen.getByText(/^5-day report due by /)).toBeInTheDocument()
+  })
+
+  it('names the zone-aware deadline while it is still ahead, and the without-holidays note', () => {
+    mockUseIncident.mockReturnValue({ data: baseIncident({ ...required, notifyDueAt: '2099-01-02T04:15:00Z', dueCountedWithoutHolidays: true }), isLoading: false })
+    renderPage()
+    expect(screen.getByText(/^Tell the NDIS Commission by Fri 2 Jan 2099, 3:15 pm \(in /)).toBeInTheDocument()
+    expect(screen.getByText('Counted without public holidays')).toBeInTheDocument()
   })
 })

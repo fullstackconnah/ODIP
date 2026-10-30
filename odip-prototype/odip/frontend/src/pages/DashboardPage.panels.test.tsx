@@ -111,7 +111,7 @@ describe('DashboardPage — Critical participant alerts card', () => {
 
     // The card shows the alert type in the same human wording as the label map, alongside the message.
     expect(screen.getByText('Open serious incident')).toBeInTheDocument()
-    expect(screen.getByText('QSC report overdue')).toBeInTheDocument()
+    expect(screen.getByText('NDIS Commission report overdue')).toBeInTheDocument()
   })
 
   it('a loaded critical count is a collapsed disclosure, not a band tile (card42 T5)', () => {

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type { Resolver, FieldErrors } from 'react-hook-form'
+import { defaultReportableClass } from './reportingDue'
 
 /**
  * IN-1/IN-3/IN-4/IN-6 — the incident wizard's form schema. Mirrors the retired single-step wizard's
@@ -65,6 +66,13 @@ export const incidentBaseSchema = z.object({
   qscReportingStatus: z.string().optional(),
   qscReferenceNumber: z.string().optional(),
   qscReportedAt: z.string().optional(),
+  // N1 incident clock: edit-only, so all optional here; reportableClassRefine asks for the reason once a class is present.
+  awareAt: z.string().optional(),
+  reportableClass: z.string().optional(),
+  reportableClassReason: z.string().optional(),
+  commissionDetailedReportedAt: z.string().optional(),
+  commissionFinalReportRequested: z.boolean().optional(),
+  commissionFinalReportedAt: z.string().optional(),
   reviewedByStaffId: z.string().optional(),
   reviewNotes: z.string().optional(),
   correctiveActions: z.string().optional(),
@@ -101,7 +109,8 @@ export const STEP_WITNESSES_FIELDS = [
 ] as const satisfies readonly (keyof IncidentFormData)[]
 
 export const STEP_COMPLIANCE_FIELDS = [
-  'status', 'qscReportingStatus', 'qscReferenceNumber', 'qscReportedAt', 'reviewedByStaffId',
+  'status', 'awareAt', 'reportableClass', 'reportableClassReason', 'qscReferenceNumber', 'qscReportedAt',
+  'commissionDetailedReportedAt', 'commissionFinalReportRequested', 'commissionFinalReportedAt', 'reviewedByStaffId',
   'reviewNotes', 'correctiveActions', 'familyNotified', 'familyNotifiedAt',
   'supportCoordinatorNotified', 'supportCoordinatorNotifiedAt',
 ] as const satisfies readonly (keyof IncidentFormData)[]
@@ -171,6 +180,13 @@ function detailsRefine(data: Pick<IncidentFormData, 'incidentType' | 'injuries' 
   }
 }
 
+/** The server judges an override against the default of the EDITED severity and type, so this does too. Only fires once a class is present (an edit). */
+function reportableClassRefine(data: Pick<IncidentFormData, 'severity' | 'incidentType' | 'reportableClass' | 'reportableClassReason'>, ctx: z.RefinementCtx) {
+  if (data.reportableClass && data.reportableClass !== defaultReportableClass(data.severity, data.incidentType) && !data.reportableClassReason?.trim()) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['reportableClassReason'], message: 'Give a reason for changing the reporting deadline.' })
+  }
+}
+
 export const basicsSchema = incidentBaseSchema.pick(pickShape(STEP_BASICS_FIELDS)).superRefine(basicsRefine)
 
 // incidentType is added to the pick shape (not to STEP_RESTRICTIVE_PRACTICE_FIELDS itself) purely
@@ -193,7 +209,9 @@ export const detailsSchema = incidentBaseSchema
 // witnesses is valid, matching today's form).
 export const witnessesSchema = incidentBaseSchema.pick(pickShape(STEP_WITNESSES_FIELDS))
 
-export const complianceSchema = incidentBaseSchema.pick(pickShape(STEP_COMPLIANCE_FIELDS))
+export const complianceSchema = incidentBaseSchema
+  .pick({ ...pickShape(STEP_COMPLIANCE_FIELDS), severity: true, incidentType: true })
+  .superRefine(reportableClassRefine)
 
 /**
  * Combined schema for the final-submit resolver — same base object, same refinements as the
@@ -207,6 +225,7 @@ export const incidentSchema = incidentBaseSchema
     if (data.incidentType === 'RestrictivePracticeUse') restrictivePracticeRefine(data, ctx)
   })
   .superRefine(detailsRefine)
+  .superRefine(reportableClassRefine)
 
 // Sets a react-hook-form-shaped error at an arbitrary zod issue path (e.g. ['injuries', 0,
 // 'description']) — mirrors the retired single-step wizard's setPathError, needed here for the same

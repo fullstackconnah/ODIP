@@ -26,7 +26,7 @@ export const ALERT_SEVERITY_STYLES: Record<AlertSeverity, { icon: LucideIcon; to
  */
 export const ALERT_TYPE_LABELS: Record<string, string> = {
   'open-serious-incident': 'Open serious incident',
-  'qsc-report-overdue': 'QSC report overdue',
+  'qsc-report-overdue': 'NDIS Commission report overdue',
   // The budget alerts (phase 2b). `budget-over` is counted by the dashboard's Budgets at risk tile and not listed with the Critical alerts (lib/budgetRisk.ts), but it is still a Critical
   // alert on the participant's page and the Participants table, which show the type where they list it.
   'budget-over': 'Over budget',

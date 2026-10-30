@@ -32,7 +32,7 @@ describe('Incidents group (links only)', () => {
     expect(screen.getByRole('tab', { name: 'Incidents (9)' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'See all open incidents' })).toHaveAttribute('href', '/incidents')
     const overdue = rowOf('Incident q1')
-    expect(within(overdue).getByText('QSC overdue')).toBeInTheDocument()
+    expect(within(overdue).getByText('NDIS Commission overdue')).toBeInTheDocument()
     expect(within(overdue).getByRole('link', { name: 'Open incident: Incident q1' })).toHaveAttribute('href', '/incidents/q1')
     expect(within(overdue).queryByRole('button')).not.toBeInTheDocument()
     expect(within(rowOf('Incident a2')).getByText('Under review')).toBeInTheDocument()   // a status flag is a sentence, not Title Case

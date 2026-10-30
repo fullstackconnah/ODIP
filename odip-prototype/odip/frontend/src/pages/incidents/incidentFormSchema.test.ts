@@ -39,3 +39,28 @@ describe('incident description on the unauthorised-use path', () => {
     expect(incidentSchema.safeParse(values).success).toBe(true)
   })
 })
+
+// N1 incident clock (S2): the class, its reason and the aware time are optional on create (no awareAt submitted), and the reason is
+// required only when an edit moves the class off the default for the form's own severity and type.
+describe('reporting deadline reason', () => {
+  const edit = { ...rpIncident, incidentType: 'Injury', severity: 'Medium', injuries: [{ region: 'Head', injuryType: 'Bruise', description: 'x' }], description: 'Fell.' }
+  const reasonErrors = (values: object) => {
+    const r = incidentSchema.safeParse(values)
+    return r.success ? [] : r.error.issues.filter((i) => i.path[0] === 'reportableClassReason').map((i) => i.message)
+  }
+
+  it('create submits with no awareAt and no class', () => {
+    expect(reasonErrors(edit)).toEqual([])
+  })
+  it('an edit that keeps the default needs no reason', () => {
+    expect(reasonErrors({ ...edit, reportableClass: 'None' })).toEqual([])
+  })
+  it('an edit that overrides the default needs a reason', () => {
+    expect(reasonErrors({ ...edit, reportableClass: 'Within24h' })).toEqual(['Give a reason for changing the reporting deadline.'])
+    expect(reasonErrors({ ...edit, reportableClass: 'Within24h', reportableClassReason: '   ' })).toHaveLength(1)
+    expect(reasonErrors({ ...edit, reportableClass: 'Within24h', reportableClassReason: 'Family asked us to.' })).toEqual([])
+  })
+  it('judges the default against the edited severity', () => {
+    expect(reasonErrors({ ...edit, severity: 'Critical', reportableClass: 'Within24h' })).toEqual([])
+  })
+})

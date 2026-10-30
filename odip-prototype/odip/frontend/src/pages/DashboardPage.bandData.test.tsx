@@ -159,7 +159,7 @@ describe('DashboardPage — needs-attention band: no "All clear" without data', 
 
     // The items the summary answered are clear, and the row names only those: not one of the four that are waiting.
     expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
-    expect(clearNames()).toBe('All clear on overdue tasks, trips missing accommodation, trips missing vehicles, trips missing staff, open incidents and overdue QSC reports')
+    expect(clearNames()).toBe('All clear on overdue tasks, trips missing accommodation, trips missing vehicles, trips missing staff, open incidents and overdue NDIS Commission reports')
     expectPlaceholder(qualification(), { busy: true, say: 'Loading' })
     expectPlaceholder(alerts(), { busy: true, say: 'Loading' })
     expectPlaceholder(leave(), { busy: true, say: 'Loading' })
@@ -288,7 +288,7 @@ describe('DashboardPage — Shift completions: the band counts what the nav badg
     expect(screen.queryByText('All clear. Nothing needs you right now.')).not.toBeInTheDocument()
     expect(tileLabels()).toEqual(['Shift completions'])
     expect(clearRow()).toHaveTextContent(
-      'All clear on qualification issues, critical participant alerts, overdue tasks, trips missing accommodation, trips missing vehicles, trips missing staff, open incidents, overdue QSC reports and pending leave',
+      'All clear on qualification issues, critical participant alerts, overdue tasks, trips missing accommodation, trips missing vehicles, trips missing staff, open incidents, overdue NDIS Commission reports and pending leave',
     )
     expect(clearRow()).not.toHaveTextContent('shift completions')
   })
