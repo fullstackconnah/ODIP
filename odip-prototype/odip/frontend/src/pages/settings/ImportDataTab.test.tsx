@@ -102,6 +102,14 @@ describe('ImportDataTab', () => {
     expect(screen.getByText('The 2 staff members it created are removed. This only works while none of them has signed in or been rostered. Anyone already sent a sign-in invite will find it no longer works until they are imported again.')).toBeInTheDocument()
   })
 
+  it('pads only the stacked buttons of a staff row on desktop, so Send clears the row edge and Undo clears the next Send', () => {
+    history.current = [batch({ id: 'b2', kind: 'Staff', fileName: 'staff.csv' }), batch()]
+    renderTab()
+    const wrapper = (name: RegExp) => within(screen.getByRole('row', { name })).getByRole('button', { name: 'Undo' }).parentElement
+    expect(wrapper(/staff.csv/)).toHaveClass('md:py-2')
+    expect(wrapper(/people.csv/)).not.toHaveClass('md:py-2')
+  })
+
   it('takes the invites results away once their batch is undone', async () => {
     history.current = [batch({ id: 'b2', kind: 'Staff', fileName: 'staff.csv' })]
     invites.mockResolvedValue({ invites: [], left: 0 })

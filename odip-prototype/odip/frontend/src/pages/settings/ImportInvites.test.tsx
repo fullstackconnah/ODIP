@@ -185,7 +185,7 @@ describe('ImportInvites', () => {
     await press('Send sign-in invites (150)')
     const dialog = screen.getByRole('alertdialog')
     expect(within(dialog).getByRole('button', { name: 'Send 100 invites' })).toBeInTheDocument()
-    expect(dialog).toHaveTextContent('They go 100 at a time: press Send sign-in invites again for the rest.')
+    expect(dialog).toHaveTextContent('They go 100 at a time: press Send sign-in invites once more for the rest.')
   })
 
   it('count not available: keeps the old label, confirms with the plain question, and still sends (skipping the invited)', async () => {

@@ -293,7 +293,7 @@ function ManualInvites({ batchId, count, onResult }: { batchId: string; count: n
       <p>{counted.toInvite === 0 ? 'Nobody is waiting for a first invite.' : counted.toInvite === 1 ? "1 staff member hasn't been invited yet." : `${counted.toInvite} staff haven't been invited yet.`}</p>
       {counted.invitedBefore > 0 && <p>{`${plural(counted.invitedBefore, 'was', 'were')} invited before but ${counted.invitedBefore === 1 ? "hasn't" : "haven't"} signed in, so ${counted.invitedBefore === 1 ? 'that person is' : "they're"} skipped.`}</p>}
       {counted.cannotInvite > 0 && <p>{cannotSentence(counted.cannotInvite)}</p>}
-      {total > PAGE && <p>{`They go ${PAGE} at a time: press Send sign-in invites again for the rest.`}</p>}
+      {total > PAGE && <p>{`They go ${PAGE} at a time: press Send sign-in invites once more for the rest.`}</p>}
     </>
   )
 
