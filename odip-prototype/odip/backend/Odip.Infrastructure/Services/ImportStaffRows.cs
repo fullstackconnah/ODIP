@@ -35,11 +35,8 @@ public static class ImportStaffRows
 
     public static List<ImportRowPlan> Build(ImportTable table, IReadOnlyList<string?> mapping)
     {
-        var column = new Dictionary<string, int>();
-        for (var i = 0; i < mapping.Count; i++)
-            if (mapping[i] is { } key) column[key] = i;
-        var monthFirst = DateKeys.ToDictionary(key => key,
-            key => column.TryGetValue(key, out var c) && table.Rows.Any(r => ImportValues.LooksMonthFirst(table.Cell(r, c))));
+        var column = ImportValues.Columns(mapping);
+        var monthFirst = ImportValues.MonthFirst(table, column, DateKeys);
 
         var plans = new List<ImportRowPlan>(table.Rows.Count);
         foreach (var row in table.Rows)

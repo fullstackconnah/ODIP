@@ -50,9 +50,8 @@ public sealed class AgreementPatternChangeService
             return new PatternChangeOutcome(null, new[] { string.Create(CultureInfo.InvariantCulture, $"This agreement has a newer revision, v{newest}. Open the agreement and make the change there.") }, ConflictVersion: newest);
 
 
-        // The provider's today, read for this organisation as the approval reads it (a SuperAdmin's context sees every organisation's settings). The default is tomorrow, or the start when it is later.
-        var provider = ProviderTimeZoneResolver.FromState(await _db.ProviderSettings.Where(p => p.TenantId == tenantId).Select(p => p.State).FirstOrDefaultAsync(ct));
-        var today = ProviderLocalTime.TodayIn(_clock.GetUtcNow().UtcDateTime, provider.Zone);
+        // The provider's today for this organisation, never the first settings row. The default is tomorrow, or the start when it is later.
+        var today = await ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct);
         var tomorrow = today.AddDays(1);
         var from = request.FromDate ?? (tomorrow > source.AgreementStartDate ? tomorrow : source.AgreementStartDate);
         var end = source.AgreementEndDate;
