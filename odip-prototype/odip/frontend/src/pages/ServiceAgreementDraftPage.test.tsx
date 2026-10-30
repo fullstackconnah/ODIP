@@ -707,8 +707,8 @@ describe('Approving can move the participant to Active', () => {
   })
 
   it('says Approved. Not moved to Active: <reason>. when it did not, with one full stop', async () => {
-    await approveWith({ result: 'NotActivated', reason: 'This participant cannot be activated until their signed service agreement evidence is recorded.' })
-    expect(screen.getByText('Approved. Not moved to Active: This participant cannot be activated until their signed service agreement evidence is recorded.')).toBeInTheDocument()
+    await approveWith({ result: 'NotActivated', reason: "their signed agreement isn't recorded yet" })
+    expect(screen.getByText("Approved. Not moved to Active: their signed agreement isn't recorded yet.")).toBeInTheDocument()
   })
 
   it('says nothing more for Off, AlreadyActive or no answer about it', async () => {

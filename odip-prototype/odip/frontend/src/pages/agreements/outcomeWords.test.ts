@@ -88,8 +88,9 @@ describe('moving to Active on approval', () => {
     expect(resultHeading([moved('A'), notMoved('B'), r('Busy', 'C')], 3)).toEqual({ title: '2 of 3 approved', line: "1 wasn't approved, and 1 wasn't moved to Active. Each row says why.", danger: false })
   })
 
-  it('makes one full stop out of a reason that ends in one', () => {
-    expect(notMovedWords('This participant cannot be activated until their plan budget is recorded on the Funding tab.')).toBe('Not moved to Active: This participant cannot be activated until their plan budget is recorded on the Funding tab.')
+  it('ends the server reason with one full stop, whether or not it carries one', () => {
+    expect(notMovedWords("their plan budget isn't on the Funding tab yet")).toBe("Not moved to Active: their plan budget isn't on the Funding tab yet.")
+    expect(notMovedWords('intake not finished.')).toBe('Not moved to Active: intake not finished.')
     expect(notMovedWords('intake not finished')).toBe('Not moved to Active: intake not finished.')
   })
 })
