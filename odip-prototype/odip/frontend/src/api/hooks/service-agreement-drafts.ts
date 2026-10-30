@@ -118,7 +118,8 @@ export const APPROVE_TIMEOUT_MS = 30_000
 
 /**
  * Approves the newest revision for rostering: the server records who and when, makes the weekly roster patterns and the unfilled shifts, and ends the patterns of the revision before. It changes what
- * the revisions list, the patterns page, the roster board and the participant's rostering tab show, so each is refreshed. A refusal (a newer revision exists, something the preview did not know) refreshes
+ * the revisions list, the patterns page, the roster board and the participant's rostering tab show, so each is refreshed; with the organisation's setting on it may also move the participant to Active, so
+ * the participant, their checklist and the onboarding list are refreshed too. A refusal (a newer revision exists, something the preview did not know) refreshes
  * only the revisions and the preview: nothing on the roster changed.
  */
 export function useApproveServiceAgreementDraft() {
@@ -132,6 +133,10 @@ export function useApproveServiceAgreementDraft() {
       queryClient.invalidateQueries({ queryKey: ['roster-board'] }),
       queryClient.invalidateQueries({ queryKey: ['roster-patterns'] }),
       queryClient.invalidateQueries({ queryKey: ['participant-rostering', participantId] }),
+      queryClient.invalidateQueries({ queryKey: ['participants'] }),
+      queryClient.invalidateQueries({ queryKey: ['participant', participantId] }),
+      queryClient.invalidateQueries({ queryKey: ['onboarding', participantId] }),
+      queryClient.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] }),
       // An approved renewal ends the "ending" flag; the alerts are refreshed with the budget figures below.
       queryClient.invalidateQueries({ queryKey: AGREEMENTS_ENDING_KEY }),
       queryClient.invalidateQueries({ queryKey: AGREEMENTS_KEY }),

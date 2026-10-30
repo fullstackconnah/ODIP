@@ -7,9 +7,9 @@ import { noBudgetCheck } from '@/test/fixtures/budgets'
 import { budgetOf, draftBlock, mondayWednesday, settings as makeSettings } from '@/test/fixtures/planPricing'
 import ServiceAgreementDraftPage from './ServiceAgreementDraftPage'
 
-const { createMutate, downloadMutate, drafts, participant, plans, budget, check, refetchDrafts, previewFor, editor, renewMutate, oldDraft, pricingSettings, endingRows } = vi.hoisted(() => ({
+const { createMutate, downloadMutate, drafts, participant, plans, budget, check, refetchDrafts, previewFor, editor, renewMutate, oldDraft, pricingSettings, endingRows, approveMutate } = vi.hoisted(() => ({
   editor: vi.fn(), createMutate: vi.fn(), downloadMutate: vi.fn(), drafts: vi.fn(), participant: vi.fn(), plans: vi.fn(), budget: vi.fn(), check: vi.fn(), refetchDrafts: vi.fn(), previewFor: vi.fn(),
-  renewMutate: vi.fn(), oldDraft: vi.fn(), pricingSettings: vi.fn(), endingRows: vi.fn(),
+  renewMutate: vi.fn(), oldDraft: vi.fn(), pricingSettings: vi.fn(), endingRows: vi.fn(), approveMutate: vi.fn(),
 }))
 vi.mock('@/api/hooks', () => ({
   useParticipant: () => participant(),
@@ -18,7 +18,7 @@ vi.mock('@/api/hooks', () => ({
   useDownloadServiceAgreementDraftPdf: () => ({ mutate: downloadMutate, isPending: false, isError: false }),
   useFundingPlans: () => plans(),
   useApprovalPreview: (_participantId: string, draftId: string) => previewFor(draftId) ?? { data: undefined, isLoading: true, isError: false, error: null, refetch: vi.fn() },
-  useApproveServiceAgreementDraft: () => ({ mutate: vi.fn(), isPending: false }),
+  useApproveServiceAgreementDraft: () => ({ mutate: approveMutate, isPending: false }),
   usePlanPricingSettings: () => ({ data: pricingSettings() }),
   useRenewAgreement: () => ({ mutate: renewMutate, isPending: false }),
   useServiceAgreementDraft: () => oldDraft(),
@@ -70,7 +70,7 @@ beforeEach(() => {
   budget.mockReturnValue({ data: budgetOf('b1'), isError: false, isFetching: false, error: null, refetch: vi.fn() })
   check.mockReturnValue({ data: agreementCheck(0), isError: false, isFetching: false, isPlaceholderData: false, refetch: vi.fn() })
   refetchDrafts.mockResolvedValue({ data: [], isError: false })
-  createMutate.mockReset(); downloadMutate.mockReset(); previewFor.mockReset(); editor.mockReset()
+  createMutate.mockReset(); downloadMutate.mockReset(); approveMutate.mockReset(); previewFor.mockReset(); editor.mockReset()
   pricingSettings.mockReturnValue(makeSettings())
   oldDraft.mockReturnValue({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() })
   renewMutate.mockReset()
@@ -679,5 +679,73 @@ describe('ServiceAgreementDraftPage: renewing an agreement (agreement PR 2)', ()
     expect(screen.getByText('The agreement was not renewed')).toBeInTheDocument()
     expect(screen.getByText(words)).toBeInTheDocument()
     expect(screen.getByText('Approved for rostering')).toBeInTheDocument()
+  })
+})
+
+describe('Approving can move the participant to Active', () => {
+  const readyPreview = { data: { canApprove: true, alreadyApproved: false, reasons: [], patternsToCreate: 1, patternsToEnd: 0, shiftsToCreate: 0, horizonEnd: '2026-12-05', oldShiftsRemaining: { open: 0, assigned: 0 }, overlappingPatterns: [] }, isLoading: false, isError: false, error: null, refetch: vi.fn() }
+  const onboarding = { data: { id: 'p-1', fullName: 'Marcus Tran', firstName: 'Marcus', isDraft: true, addressState: 'VIC', planType: 'PlanManaged' }, isLoading: false, isError: false, refetch: vi.fn() }
+
+  async function approveWith(activation: unknown) {
+    drafts.mockReturnValue({ data: [draft()], isLoading: false, isError: false, refetch: refetchDrafts })
+    previewFor.mockReturnValue(readyPreview)
+    approveMutate.mockImplementation((_vars, options) => options.onSuccess({ ...draft(), activation }))
+    const user = userEvent.setup()
+    const view = renderPage()
+    await user.click(stepButton('Save'))
+    await user.click(screen.getByRole('button', { name: 'Mark approved for rostering' }))
+    await user.click(screen.getByRole('button', { name: 'Approve' }))
+    return { user, unmount: view.unmount }
+  }
+
+  it('says Moved to Active after an approval that moved them, and the notice can be closed', async () => {
+    const { user } = await approveWith({ result: 'Activated' })
+    expect(screen.getByText('Moved to Active.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Close this message' }))
+    expect(screen.queryByText('Moved to Active.')).not.toBeInTheDocument()
+  })
+
+  it('says Approved. Not moved to Active: <reason>. when it did not, with one full stop', async () => {
+    await approveWith({ result: 'NotActivated', reason: 'This participant cannot be activated until their signed service agreement evidence is recorded.' })
+    expect(screen.getByText('Approved. Not moved to Active: This participant cannot be activated until their signed service agreement evidence is recorded.')).toBeInTheDocument()
+  })
+
+  it('says nothing more for Off, AlreadyActive or no answer about it', async () => {
+    for (const activation of [{ result: 'Off' }, { result: 'AlreadyActive', reason: 'already active' }, undefined]) {
+      const { unmount } = await approveWith(activation)
+      expect(screen.queryByText(/to Active/)).not.toBeInTheDocument()
+      unmount()
+    }
+  })
+
+  it('tells the dialog to say it will move an onboarding participant when the setting is on, and keeps quiet otherwise', async () => {
+    pricingSettings.mockReturnValue(makeSettings({ approvalActivatesParticipant: true }))
+    participant.mockReturnValue(onboarding)
+    drafts.mockReturnValue({ data: [draft()], isLoading: false, isError: false, refetch: refetchDrafts })
+    previewFor.mockReturnValue(readyPreview)
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(stepButton('Save'))
+    await user.click(screen.getByRole('button', { name: 'Mark approved for rostering' }))
+    expect(screen.getByText('Approving will also move Marcus to Active if their intake is finished.')).toBeInTheDocument()
+  })
+
+  it('does not say it in the dialog for someone already active', async () => {
+    pricingSettings.mockReturnValue(makeSettings({ approvalActivatesParticipant: true }))
+    participant.mockReturnValue({ ...onboarding, data: { ...onboarding.data, isDraft: false } })
+    drafts.mockReturnValue({ data: [draft()], isLoading: false, isError: false, refetch: refetchDrafts })
+    previewFor.mockReturnValue(readyPreview)
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(stepButton('Save'))
+    await user.click(screen.getByRole('button', { name: 'Mark approved for rostering' }))
+    expect(screen.queryByText(/to Active/)).not.toBeInTheDocument()
+  })
+
+  it('changes the draft-only notice when the setting is on, so it never says approving cannot activate', () => {
+    pricingSettings.mockReturnValue(makeSettings({ approvalActivatesParticipant: true }))
+    drafts.mockReturnValue({ data: [draft()], isLoading: false, isError: false, refetch: refetchDrafts })
+    renderPage()
+    expect(screen.getByText(/Draft only:/).closest('p')).toHaveTextContent("Draft only: not approved for signing or use. It can't invoice or claim. Approving a revision for rostering is separate: it only makes that revision's weekly patterns and unfilled shifts. Approving also moves them to Active if their intake is finished.")
   })
 })

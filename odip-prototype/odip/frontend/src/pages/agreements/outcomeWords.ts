@@ -15,6 +15,10 @@ export const OUTCOME_BADGE: Record<AgreementApproveOutcome, { tone: Tone; label:
   Failed: { tone: 'danger', label: 'Not approved: try again' },
 }
 
+/** The reason an approval did not move someone to Active, as one sentence (the server's refusal words already end with a full stop). */
+export const notMovedWords = (reason: string | null | undefined) => `Not moved to Active: ${(reason ?? '').trim().replace(/\.$/, '')}.`
+export const MOVED_WORDS = 'Moved to Active.'
+
 export const ALREADY_APPROVED = 'These were already approved.'
 export const NO_REPLY_LAST = (n: number) => `No answer came back for the last ${n}: some may have been approved.`
 export const NO_REPLY_WORDS = "We didn't hear back, so some of these may have been approved. Refresh to check before trying again."
