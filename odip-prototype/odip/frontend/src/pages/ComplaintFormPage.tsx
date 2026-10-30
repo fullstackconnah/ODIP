@@ -168,12 +168,14 @@ function ComplaintForm({ complaint }: { complaint?: ComplaintDto }) {
   const create = useCreateComplaint()
   const update = useUpdateComplaint()
   const mutation = isEdit ? update : create
-  const { data: staff = [] } = useStaff()
+  const { data: staff = [] } = useStaff({ isActive: 'true' })
   const { data: incidents = [], isLoading: incidentsLoading } = useIncidents({ pageSize: '200' })
 
-  const initial = useMemo(() => (complaint ? valuesFrom(complaint) : blankValues(currentUserId ?? '')), [complaint, currentUserId])
+  const initial = useMemo(() => (complaint ? valuesFrom(complaint) : blankValues('')), [complaint])
   const [values, setValues] = useState<FormValues>(initial)
   const [saved, setSaved] = useState<FormValues>(initial)
+  // The version this form was loaded or last saved at: a refetch never swaps it, so a real conflict still gets the 409.
+  const [version, setVersion] = useState(complaint?.updatedAt)
   const [errors, setErrors] = useState<FieldErrors>({})
   const [refusal, setRefusal] = useState<string | null>(null)
   const [announcement, setAnnouncement] = useState('')
@@ -203,7 +205,17 @@ function ComplaintForm({ complaint }: { complaint?: ComplaintDto }) {
     if (createdId) navigate(`/complaints/${createdId}`, { replace: true })
   }, [createdId, navigate])
 
+  const handlerTouched = useRef(false)
+  // A new complaint is handled by the signed-in user, but only once they show in the active staff list (a SuperAdmin or a leaver would not).
+  useEffect(() => {
+    if (isEdit || handlerTouched.current || !currentUserId || !staff.some(s => s.id === currentUserId)) return
+    handlerTouched.current = true
+    setValues(v => ({ ...v, handledByUserId: currentUserId }))
+    setSaved(v => ({ ...v, handledByUserId: currentUserId }))
+  }, [isEdit, currentUserId, staff])
+
   const set = <K extends keyof FormValues>(key: K, value: FormValues[K]) => {
+    if (key === 'handledByUserId') handlerTouched.current = true
     setValues(v => ({ ...v, [key]: value }))
     setErrors(e => (e[key] ? { ...e, [key]: undefined } : e))
   }
@@ -232,10 +244,14 @@ function ComplaintForm({ complaint }: { complaint?: ComplaintDto }) {
     setErrors(e => ({ ...e, toldAboutCommissionOn: undefined }))
   }
 
-  const staffItems = useMemo(
-    () => [{ value: '', label: 'Nobody yet' }, ...staff.map(s => ({ value: s.id, label: s.fullName }))],
-    [staff],
-  )
+  const staffItems = useMemo(() => {
+    const items = staff.map(s => ({ value: s.id, label: s.fullName }))
+    // A handler already saved stays visible even once they have left, the way a saved incident link does.
+    if (values.handledByUserId && !items.some(i => i.value === values.handledByUserId)) {
+      items.unshift({ value: values.handledByUserId, label: complaint?.handledByUserId === values.handledByUserId && complaint.handledByName ? complaint.handledByName : 'Former staff member' })
+    }
+    return [{ value: '', label: 'Nobody yet' }, ...items]
+  }, [staff, values.handledByUserId, complaint])
   // The incident list is filtered here, not on the server (IncidentsController is not touched): with a participant chosen, only their incidents.
   // shortcut: the 200 newest incidents only, upgrade to a server-side participant filter when a tenant passes that.
   const incidentItems = useMemo(() => {
@@ -257,13 +273,14 @@ function ComplaintForm({ complaint }: { complaint?: ComplaintDto }) {
       focusFirstInvalid.current = true
       return
     }
-    const dto = toDto(values, isEdit, complaint?.updatedAt)
+    const dto = toDto(values, isEdit, version)
     try {
       const res = isEdit
         ? await update.mutateAsync({ id: complaint!.id, data: dto })
         : await create.mutateAsync(dto)
       if (!res.success || !res.data) throw res
       setSaved(values)
+      setVersion(res.data.updatedAt)
       setAnnouncement('Complaint saved.')
       if (!isEdit) setCreatedId(res.data.id)
     } catch (err) {
@@ -290,7 +307,7 @@ function ComplaintForm({ complaint }: { complaint?: ComplaintDto }) {
       )}
       {refusal && (
         <div ref={refusalRef} tabIndex={-1} className="outline-none">
-          <Callout tone="error" announce={false}>{refusal}</Callout>
+          <Callout tone="danger" announce={false}>{refusal}</Callout>
         </div>
       )}
 
@@ -447,6 +464,6 @@ export default function ComplaintFormPage() {
       ? <PageState kind="not-found" noun="complaint" backTo="/complaints" backLabel="complaints" />
       : <PageState kind="error" noun="complaint" onRetry={() => refetch()} />
   }
-  // Keyed on the saved version, so a reload after a save (or a 409 refresh) starts the form from the server's copy.
-  return <ComplaintForm key={complaint ? `${complaint.id}:${complaint.updatedAt}` : 'new'} complaint={complaint} />
+  // Keyed on the id only: a refetch (window focus, a save elsewhere) must not remount the form and drop what is being typed.
+  return <ComplaintForm key={complaint?.id ?? 'new'} complaint={complaint} />
 }

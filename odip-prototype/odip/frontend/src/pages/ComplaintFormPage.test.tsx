@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import ComplaintFormPage from './ComplaintFormPage'
@@ -253,6 +253,68 @@ describe('ComplaintFormPage', () => {
     expect(Array.from(screen.getByLabelText('Search incidents…').querySelectorAll('option')).map(o => o.textContent)).toEqual([
       'No linked incident', expect.stringContaining('Missing medication'),
     ])
+  })
+
+  // A path change re-renders the page, which re-reads the mocked hooks.
+  const rerenderAt = async (router: ReturnType<typeof renderAt>['router'], path: string) => { await act(() => router.navigate(path)) }
+
+  it('a refetch with a newer updatedAt keeps what was typed, and the save still carries the version it was loaded with', async () => {
+    const user = userEvent.setup()
+    mockUseComplaint.mockReturnValue(loaded(complaint()))
+    const { router } = renderAt('/complaints/c-1')
+    await user.type(screen.getByLabelText('Actions taken'), 'Rang the family')
+
+    mockUseComplaint.mockReturnValue(loaded(complaint({ updatedAt: '2026-10-07T00:00:00Z', summary: 'Changed elsewhere' })))
+    await rerenderAt(router, '/complaints/c-1?r=1')
+
+    expect(screen.getByLabelText('Actions taken')).toHaveValue('Rang the family')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1))
+    expect(mockUpdate.mock.calls[0][0].data.expectedUpdatedAt).toBe('2026-10-06T00:00:00Z')
+  })
+
+  it('a second save sends the version the first one returned, and a real conflict still shows the 409 message', async () => {
+    const user = userEvent.setup()
+    mockUseComplaint.mockReturnValue(loaded(complaint()))
+    renderAt('/complaints/c-1')
+    await user.type(screen.getByLabelText('Actions taken'), 'One')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1))
+    await user.type(screen.getByLabelText('Actions taken'), ' two')
+    mockUpdate.mockRejectedValueOnce({ response: { status: 409, data: { errors: ['Someone else changed this complaint.'] } } })
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Someone else changed this complaint.')).toBeInTheDocument()
+    expect(mockUpdate.mock.calls[1][0].data.expectedUpdatedAt).toBe('y')
+    expect(screen.getByLabelText('Actions taken')).toHaveValue('One two')
+  })
+
+  it('the picker offers active staff only, and still shows a saved handler who has since left', () => {
+    mockUseComplaint.mockReturnValue(loaded(complaint({ handledByUserId: 'u-gone', handledByName: 'Gone Person' })))
+    renderAt('/complaints/c-1')
+    expect(mockUseStaff).toHaveBeenCalledWith({ isActive: 'true' })
+    const picker = screen.getByLabelText('Search staff…') as HTMLSelectElement
+    expect(picker).toHaveValue('u-gone')
+    expect(picker.selectedOptions[0]).toHaveTextContent('Gone Person')
+  })
+
+  it('a new complaint defaults Handled by to the signed-in user only when that user is in the staff list', async () => {
+    const user = userEvent.setup()
+    mockUseStaff.mockReturnValue({ data: [{ id: 'u-other', fullName: 'Someone Else' }] })
+    renderAt('/complaints/new')
+    expect(screen.getByLabelText('Search staff…')).toHaveValue('')
+    await fillRequired(user)
+    await user.selectOptions(screen.getByLabelText(/Who made the complaint/), 'Staff')
+    await user.click(screen.getByRole('button', { name: 'Save complaint' }))
+    await waitFor(() => expect(mockCreate).toHaveBeenCalledTimes(1))
+    expect(mockCreate.mock.calls[0][0].handledByUserId).toBeNull()
+  })
+
+  it('the default Handled by fills in once staff loads', async () => {
+    mockUseStaff.mockReturnValue({ data: [] })
+    const first = renderAt('/complaints/new')
+    mockUseStaff.mockReturnValue({ data: [{ id: 'u-me', fullName: 'Me Myself' }] })
+    await rerenderAt(first.router, '/complaints/new?r=1')
+    expect(screen.getByLabelText('Search staff…')).toHaveValue('u-me')
   })
 
   it('states: loading, not found, error with retry, and a 403 callout', async () => {

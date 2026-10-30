@@ -106,7 +106,7 @@ public class ComplaintsController : ControllerBase
         // A new complaint always starts Open, so the form's status (if any) and a closing date are ignored before anything is checked.
         dto = dto with { Status = ComplaintStatus.Open, ClosedOn = null };
         var today = await TodayAsync(ct);
-        var error = await ValidateAsync(dto, tenantId, today, ct);
+        var error = await ValidateAsync(dto, tenantId, today, null, ct);
         if (error != null) return BadRequest(ApiResponse<ComplaintDto>.Fail(error));
 
         var complaint = new Complaint { Id = Guid.NewGuid(), TenantId = tenantId };
@@ -127,7 +127,7 @@ public class ComplaintsController : ControllerBase
         if (!complaint.IsActive) return BadRequest(ApiResponse<ComplaintDto>.Fail("This complaint is archived. Restore it to change it."));
 
         var today = await TodayAsync(ct);
-        var error = await ValidateAsync(dto, complaint.TenantId, today, ct);
+        var error = await ValidateAsync(dto, complaint.TenantId, today, complaint.HandledByUserId, ct);
         if (error != null) return BadRequest(ApiResponse<ComplaintDto>.Fail(error));
 
         Apply(complaint, dto);
@@ -193,8 +193,8 @@ public class ComplaintsController : ControllerBase
         c.IncidentReportId = dto.IncidentReportId;
     }
 
-    /// <summary>The first problem with a save, in the wording the form shows, or null. Dates are checked against the organisation's today.</summary>
-    private async Task<string?> ValidateAsync(SaveComplaintDto dto, Guid tenantId, DateOnly today, CancellationToken ct)
+    /// <summary>The first problem with a save, in the wording the form shows, or null. Dates are checked against the organisation's today. A handler who has since left stays valid while unchanged (currentHandlerId), so the complaint can still be edited and closed.</summary>
+    private async Task<string?> ValidateAsync(SaveComplaintDto dto, Guid tenantId, DateOnly today, Guid? currentHandlerId, CancellationToken ct)
     {
         var summary = dto.Summary?.Trim();
         if (string.IsNullOrEmpty(summary)) return "Describe the complaint.";
@@ -215,7 +215,7 @@ public class ComplaintsController : ControllerBase
             && !await _db.IncidentReports.AnyAsync(i => i.Id == incidentId && i.TenantId == tenantId, ct))
             return "That incident isn't in this organisation.";
         if (dto.HandledByUserId is Guid userId
-            && !await _db.Users.AnyAsync(u => u.Id == userId && u.TenantId == tenantId && u.IsActive, ct))
+            && !await _db.Users.AnyAsync(u => u.Id == userId && u.TenantId == tenantId && (u.IsActive || userId == currentHandlerId), ct))
             return "That staff member isn't in this organisation.";
 
         if (dto.ReceivedOn > today) return "The date can't be in the future.";

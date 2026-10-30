@@ -235,6 +235,25 @@ public class ComplaintsControllerTests
     }
 
     [Fact]
+    public async Task Update_HandlerDeactivatedButUnchanged_Saves_AChangeToAnInactiveHandlerIsStillRefused()
+    {
+        using var db = TestDb.Create();
+        var handler = AddUser(db, TenantA);
+        var other = AddUser(db, TenantA, active: false);
+        var row = Row(TenantA);
+        row.HandledByUserId = handler.Id;
+        db.Complaints.Add(row);
+        handler.IsActive = false;
+        db.SaveChanges();
+        var controller = Controller(db, TenantA);
+
+        var saved = Value(await controller.Update(row.Id, Save(v => { v["HandledByUserId"] = handler.Id; v["Summary"] = "Closed out"; }), default));
+
+        Assert.Equal(handler.Id, saved.HandledByUserId);
+        Assert.Equal("That staff member isn't in this organisation.", BadRequestMessage(await controller.Update(row.Id, Save(v => v["HandledByUserId"] = other.Id), default)));
+    }
+
+    [Fact]
     public async Task Update_StaleExpectedUpdatedAt_Is409_AndWritesNothing()
     {
         using var db = TestDb.Create();
