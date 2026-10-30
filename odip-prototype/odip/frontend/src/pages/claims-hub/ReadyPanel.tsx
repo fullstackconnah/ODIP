@@ -16,7 +16,8 @@ import type { HubLineDto } from '@/api/types'
 import { plural } from '@/lib/format'
 import { TONE } from '@/lib/tone'
 import { formatCurrency } from '@/lib/utils'
-import { AgeCell, MAX_FILE_LINES, PassMark, ROWS_PER_PAGE, deliveredText, quantityText } from './claimHubParts'
+import { AgeCell, PassMark } from './claimHubParts'
+import { MAX_FILE_LINES, ROWS_PER_PAGE, deliveredText, quantityText } from './claimHubSteps'
 
 type Filter = 'all' | 'ready' | 'blocked'
 

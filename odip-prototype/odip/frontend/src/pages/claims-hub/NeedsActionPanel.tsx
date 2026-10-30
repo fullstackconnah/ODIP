@@ -14,7 +14,8 @@ import { fetchClaimFile, useDismissBatchLine } from '@/api/hooks/claimHub'
 import type { RejectedLineDto } from '@/api/types'
 import { plural } from '@/lib/format'
 import { formatCurrency } from '@/lib/utils'
-import { AgeCell, deliveredText } from './claimHubParts'
+import { AgeCell } from './claimHubParts'
+import { deliveredText } from './claimHubSteps'
 
 // The NDIA's reject codes in plain English (SHAPE §6). The hint and the kind come from the server; this only names the group.
 const CODE_TITLES: Record<string, string> = {

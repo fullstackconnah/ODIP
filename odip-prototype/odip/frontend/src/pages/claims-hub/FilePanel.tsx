@@ -19,7 +19,7 @@ import { serverSentence } from '@/api/hooks/data-export'
 import type { BatchDetailDto, BatchLineDto, ResultsImportDto } from '@/api/types'
 import { formatInstantDateAu, plural } from '@/lib/format'
 import { formatCurrency } from '@/lib/utils'
-import { NEXT_ACTION, ROWS_PER_PAGE, STEP_NUMBER, deliveredText, stepOf, type FileStep } from './claimHubParts'
+import { NEXT_ACTION, ROWS_PER_PAGE, STEP_NUMBER, deliveredText, stepOf, type FileStep } from './claimHubSteps'
 
 interface Props {
   batchId: string | null

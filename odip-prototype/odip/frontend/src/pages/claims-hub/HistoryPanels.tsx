@@ -11,7 +11,7 @@ import type { BatchDto, ManagedClaimDto } from '@/api/types'
 import { formatInstantDateAu, plural } from '@/lib/format'
 import { TONE } from '@/lib/tone'
 import { formatCurrency } from '@/lib/utils'
-import { ROWS_PER_PAGE } from './claimHubParts'
+import { ROWS_PER_PAGE } from './claimHubSteps'
 
 const FILTER_PILL = 'bg-[var(--color-input)] border border-[var(--color-border)]'
 

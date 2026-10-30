@@ -491,7 +491,7 @@ export function DataTable<T>({
                       selectAll.onChange(e.target.checked)
                     } else if (e.target.checked) {
                       onSelectionChange?.(
-                        new Set(tickable.map(row => String((row as any)[keyField])))
+                        new Set(tickable.map(row => String(row[keyField])))
                       )
                     } else {
                       onSelectionChange?.(new Set())

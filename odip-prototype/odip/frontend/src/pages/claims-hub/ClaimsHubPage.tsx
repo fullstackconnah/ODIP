@@ -14,7 +14,7 @@ import { FilesPanel, FilesStrip } from './FilesPanel'
 import { OtherPanel, PaidPanel } from './HistoryPanels'
 import { NeedsActionPanel } from './NeedsActionPanel'
 import { ReadyPanel } from './ReadyPanel'
-import { isUnfinished } from './claimHubParts'
+import { isUnfinished } from './claimHubSteps'
 
 const TAB_KEYS = ['ready', 'files', 'action', 'paid', 'other'] as const
 

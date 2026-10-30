@@ -7,7 +7,8 @@ import { PageState } from '@/components/PageState'
 import type { BatchDto } from '@/api/types'
 import { formatInstantDateAu, formatRelative, plural } from '@/lib/format'
 import { formatCurrency } from '@/lib/utils'
-import { NEXT_ACTION, NEXT_TEXT, ROWS_PER_PAGE, STEP_NUMBER, StepBadge, isUnfinished, stepOf } from './claimHubParts'
+import { StepBadge } from './claimHubParts'
+import { NEXT_ACTION, NEXT_TEXT, ROWS_PER_PAGE, STEP_NUMBER, isUnfinished, stepOf } from './claimHubSteps'
 
 const FILE_NAME = 'whitespace-nowrap text-sm font-semibold'
 
