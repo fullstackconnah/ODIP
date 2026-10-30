@@ -1,3 +1,5 @@
+import type { ApprovalActivationDto } from './service-agreement-drafts'
+
 export interface PriceList { version: string; start: string }
 
 export interface AgreementRevisionRef {
@@ -38,6 +40,8 @@ export interface AgreementApproveResult {
   participantName: string
   outcome: AgreementApproveOutcome
   reasons: string[]
+  /** Approved only: whether it also moved the participant to Active (the organisation's setting). */
+  activation?: ApprovalActivationDto | null
 }
 
 export type AgreementBulkAction = 'renew' | 'extend' | 'reprice'

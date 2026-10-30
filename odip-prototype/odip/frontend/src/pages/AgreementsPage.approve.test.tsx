@@ -22,13 +22,15 @@ const answer = (participantId: string, draftId: string, participantName: string,
   ({ participantId, draftId, participantName, outcome, reasons: outcome === 'NeedsReview' ? ['No item for block weekdays.'] : [] })
 
 let seen: InternalAxiosRequestConfig[]
+let posted: AgreementApproveResult[] | null
 beforeEach(() => {
   seen = []
+  posted = null
   localStorage.setItem('odip_user', JSON.stringify({ role: 'Coordinator' }))
   const adapter: AxiosAdapter = async config => {
     seen.push(config)
     const data = config.method === 'post'
-      ? [answer('p1', 'd1', 'Ana Lee', 'Approved'), answer('p2', 'd2', 'Ben Ng', 'NeedsReview'), answer('p3', 'd3', 'Cy Roe', 'Busy')]
+      ? posted ?? [answer('p1', 'd1', 'Ana Lee', 'Approved'), answer('p2', 'd2', 'Ben Ng', 'NeedsReview'), answer('p3', 'd3', 'Cy Roe', 'Busy')]
       : { canApprove: true, rows }
     return { data: { success: true, data }, status: 200, statusText: 'OK', headers: {}, config } as AxiosResponse
   }
@@ -64,5 +66,32 @@ describe('AgreementsPage approve (real hook)', () => {
     expect(within(items[1]).getByText('Cy Roe')).toBeInTheDocument()
     expect(within(items[1]).getByText('Roster busy: try again')).toBeInTheDocument()
     await waitFor(() => expect(reads()).toBe(2))                    // the invalidation refetched the list
+  })
+
+  it('lists an approved one that was not moved to Active with its reason, and refreshes every participant in the run', async () => {
+    posted = [{ ...answer('p1', 'd1', 'Ana Lee', 'Approved'), activation: { result: 'Activated' } }, { ...answer('p2', 'd2', 'Ben Ng', 'Approved'), activation: { result: 'NotActivated', reason: 'intake not finished' } }]
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const invalidate = vi.spyOn(client, 'invalidateQueries')
+    const user = userEvent.setup()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/agreements']}><AgreementsPage /></MemoryRouter>
+      </QueryClientProvider>,
+    )
+    await screen.findByText('Ana Lee')
+    await user.click(within(screen.getByText('Ana Lee').closest('tr')!).getByRole('checkbox'))
+    await user.click(within(screen.getByText('Ben Ng').closest('tr')!).getByRole('checkbox'))
+    await user.click(screen.getByRole('button', { name: 'Approve 2' }))
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Approve 2' }))
+
+    const dialog = within(await screen.findByRole('dialog', { name: '2 agreements approved' }))
+    expect(dialog.getByText('1 not moved to Active. The row says why.')).toBeInTheDocument()
+    const items = dialog.getAllByRole('listitem')
+    expect(items).toHaveLength(1)
+    expect(within(items[0]).getByText('Ben Ng')).toBeInTheDocument()
+    expect(within(items[0]).getByText('Approved')).toBeInTheDocument()
+    expect(within(items[0]).getByText('Not moved to Active: intake not finished.')).toBeInTheDocument()
+    const keys = invalidate.mock.calls.map(([filters]) => filters?.queryKey)
+    expect(keys).toEqual(expect.arrayContaining([['participants'], ['participant-onboarding-worklist'], ['participant', 'p1'], ['participant', 'p2'], ['onboarding', 'p1'], ['onboarding', 'p2']]))
   })
 })

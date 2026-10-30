@@ -6,7 +6,7 @@ import { Callout } from '@/components/Callout'
 import { Modal } from '@/components/Modal'
 import { StatusBadge } from '@/components/StatusBadge'
 import { plural } from '@/lib/format'
-import { NO_REPLY_LAST, OUTCOME_BADGE, groupResults, resultHeading } from './outcomeWords'
+import { NO_REPLY_LAST, OUTCOME_BADGE, groupResults, notMovedToActive, notMovedWords, resultHeading } from './outcomeWords'
 
 export type ApprovePhase = 'confirm' | 'running' | 'result'
 
@@ -89,6 +89,7 @@ export function ApproveAgreementsDialog({ open, phase, count, skipped, leftOut, 
             <ul className="divide-y divide-[var(--color-border)] rounded-[var(--radius-md)] border border-[var(--color-border)]">
               {listed.map(r => {
                 const badge = OUTCOME_BADGE[r.outcome]
+                const why = notMovedToActive(r) ? notMovedWords(r.activation?.reason) : r.outcome !== 'Failed' && r.reasons[0]
                 return (
                   <li key={r.draftId} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 py-2">
                     <span className="min-w-0 break-words font-medium">{r.participantName || 'Unknown participant'}</span>
@@ -98,7 +99,7 @@ export function ApproveAgreementsDialog({ open, phase, count, skipped, leftOut, 
                         <Link className="text-[var(--color-primary)] underline underline-offset-2" to={`/participants/${r.participantId}/agreement-draft`}>Open it</Link>
                       )}
                     </span>
-                    {r.reasons[0] && r.outcome !== 'Failed' && <span className="basis-full text-[var(--color-muted-foreground)]">{r.reasons[0]}</span>}
+                    {why && <span className="basis-full text-[var(--color-muted-foreground)]">{why}</span>}
                   </li>
                 )
               })}
