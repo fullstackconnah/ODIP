@@ -1,3 +1,4 @@
+import { useId } from 'react'
 import { CalendarPlus, RefreshCw, ShieldCheck, TrendingUp } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { Dropdown } from '@/components/Dropdown'
@@ -27,6 +28,7 @@ interface Props {
 /** The bar above the table: how many are ticked, Clear, and Approve. Below xl it sticks under the app header (paper fill, hairline shadow) so it stays in reach while the list scrolls; from xl up it stays in flow. Its height never depends on the count, so ticking moves nothing. */
 export function AgreementsBulkBar({ selected, approvable, canApprove, shown, allShownSelected, onToggleShown, onClear, onApprove, onAction, note }: Props) {
   const narrow = useIsBelowMd()
+  const reasonId = useId()
   const tooMany = selected > MAX_SELECTED
   const reason = tooMany ? `Choose ${MAX_SELECTED} or fewer (${selected} selected).` : null
   const approveReason = selected > 0 && approvable === 0 ? 'None of the ticked rows has a draft waiting.' : null
@@ -36,6 +38,8 @@ export function AgreementsBulkBar({ selected, approvable, canApprove, shown, all
   // Renew needs an approver; Reprice and Extend do not.
   const renewOff = !canApprove
   const renewReason = renewOff && selected > 0 ? RENEW_REASON : null
+  // The one visible reason line (Renew's and Approve's reasons never coexist: one needs canApprove false, the other true). A phone's count already says "Choose N or fewer".
+  const line = tooMany ? (narrow ? null : reason) : (onAction && renewReason) || (canApprove && approveReason) || note
   const verbs: { value: AgreementBulkAction; label: string; icon: typeof RefreshCw }[] = [
     { value: 'renew', label: selected > 0 ? `Renew ${selected}` : 'Renew', icon: RefreshCw },
     { value: 'reprice', label: 'Reprice to…', icon: TrendingUp },
@@ -46,7 +50,7 @@ export function AgreementsBulkBar({ selected, approvable, canApprove, shown, all
     ...(canApprove ? [{ value: 'approve', label, description: reason ?? approveReason ?? undefined, disabled: approveOff }] : []),
   ]
   return (
-    <div className="max-xl:sticky max-xl:top-[calc(3rem+var(--safe-top))] max-xl:z-20 max-xl:shadow-[var(--shadow-hairline)] flex min-h-11 flex-wrap items-center gap-x-4 gap-y-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-1.5 max-md:flex-nowrap max-md:gap-x-3" role="region" aria-label="Selection">
+    <div className={`max-xl:sticky max-xl:top-[calc(3rem+var(--safe-top))] max-xl:z-20 max-xl:shadow-[var(--shadow-hairline)] flex min-h-11 flex-wrap items-center gap-x-4 gap-y-2 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-1.5 max-md:gap-x-3 ${line ? '' : 'max-md:flex-nowrap'}`} role="region" aria-label="Selection">
       {narrow && (
         // The same box as the table's row boxes (DataTable), so it wears the house accent and a 44 px target.
         <label className="inline-flex min-h-[var(--tap-min)] min-w-[var(--tap-min)] shrink-0 items-center justify-center">
@@ -55,13 +59,9 @@ export function AgreementsBulkBar({ selected, approvable, canApprove, shown, all
         </label>
       )}
       <span className={`text-sm tabular-nums ${tooMany && narrow ? 'text-[var(--color-destructive)]' : ''}`} aria-live="polite">{tooMany && narrow ? reason : selected === 0 ? 'None selected' : `${selected} selected`}</span>
-      {/* A phone has no room for Clear or a reason line: the box clears, and a disabled item gives its own reason. */}
-      {!narrow && (
-        <>
-          <Button variant="ghost" size="sm" onClick={onClear} className={selected > 0 ? "" : "invisible"}>Clear</Button>
-          <span className={`text-sm empty:hidden ${tooMany ? 'text-[var(--color-destructive)]' : 'text-[var(--color-muted-foreground)]'}`}>{tooMany ? reason : (onAction && renewReason) || (canApprove && approveReason) || note}</span>
-        </>
-      )}
+      {/* A phone has no room for Clear: the box clears. The reason line wraps onto its own row there, so it is seen without opening the menu. */}
+      {!narrow && <Button variant="ghost" size="sm" onClick={onClear} className={selected > 0 ? "" : "invisible"}>Clear</Button>}
+      {line && <span id={reasonId} className={`text-sm max-md:order-last max-md:basis-full ${tooMany ? 'text-[var(--color-destructive)]' : 'text-[var(--color-muted-foreground)]'}`}>{line}</span>}
       {items.length > 0 && (
         <div className="ml-auto">
           {narrow ? (
@@ -69,9 +69,9 @@ export function AgreementsBulkBar({ selected, approvable, canApprove, shown, all
           ) : (
             <div className="flex flex-wrap items-center justify-end gap-2">
               {onAction && verbs.map(v => (
-                <Button key={v.value} size="sm" variant="secondary" onClick={() => onAction(v.value)} disabled={draftOff || (v.value === 'renew' && renewOff)}><v.icon className="h-4 w-4" aria-hidden="true" />{v.label}</Button>
+                <Button key={v.value} size="sm" variant="secondary" onClick={() => onAction(v.value)} disabled={draftOff || (v.value === 'renew' && renewOff)} aria-describedby={line && (tooMany || (v.value === 'renew' && renewReason)) ? reasonId : undefined}><v.icon className="h-4 w-4" aria-hidden="true" />{v.label}</Button>
               ))}
-              {canApprove && <Button size="sm" onClick={onApprove} disabled={approveOff} title={reason ?? approveReason ?? undefined}><ShieldCheck className="h-4 w-4" aria-hidden="true" />{label}</Button>}
+              {canApprove && <Button size="sm" onClick={onApprove} disabled={approveOff} title={reason ?? approveReason ?? undefined} aria-describedby={line && (reason ?? approveReason) ? reasonId : undefined}><ShieldCheck className="h-4 w-4" aria-hidden="true" />{label}</Button>}
             </div>
           )}
         </div>
