@@ -361,6 +361,32 @@ public enum QscReportingStatus
     Pending
 }
 
+public enum ComplaintChannel
+{
+    InPerson,
+    Phone,
+    Email,
+    Letter,
+    Other
+}
+
+public enum ComplainantKind
+{
+    Participant,
+    FamilyOrCarer,
+    Staff,
+    Other,
+    Anonymous
+}
+
+public enum ComplaintStatus
+{
+    Open,
+    Investigating,
+    Resolved,
+    Closed
+}
+
 public enum InsuranceStatus
 {
     None,
