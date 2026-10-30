@@ -176,3 +176,12 @@ describe('ParticipantAlertsBanner — alert text is never cut', () => {
     })
   })
 })
+
+describe('ParticipantAlertsBanner: agreement-ended date', () => {
+  it('shows the house date and keeps the ISO date in the row title', () => {
+    const alert: ParticipantAlertDto = { ...criticalAlert, type: 'agreement-ended', message: 'Agreement ended 2026-11-12: shifts stop after it' }
+    renderWithRouter(<ParticipantAlertsBanner alerts={[alert]} />)
+    const row = screen.getByRole('button', { name: /Agreement ended Thu 12 Nov 2026: shifts stop after it/ })
+    expect(row).toHaveAttribute('title', 'Agreement ended 2026-11-12: shifts stop after it')
+  })
+})

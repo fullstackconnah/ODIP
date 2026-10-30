@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import type { ParticipantAlertDto } from '@/api/types'
 import { ALERT_SEVERITY_STYLES } from './alertSeverityStyles'
 import { plural } from '@/lib/format'
+import { houseEndingMessage } from '@/lib/agreementEnding'
 
 export type ParticipantAlertsBannerProps = {
   /** Already ranked Critical-first by the backend (ParticipantAlertsService) — rendered as-is. */
@@ -41,6 +42,9 @@ export function ParticipantAlertsBanner({ alerts: all, onSelectTab, severity }: 
         // Warning/Info rows are announced politely (`role="status"`) once the reader is idle,
         // so a participant with several non-critical alerts doesn't get talked over. The role
         // sits on this wrapper, not the <button> itself, so the row keeps its button semantics.
+        // The server's ISO date in an agreement-ended message is said as the house date; the ISO form stays in the row's title.
+        const text = a.type === 'agreement-ended' ? houseEndingMessage(a.message) : a.message
+        const title = text === a.message ? undefined : a.message
         const role = a.severity === 'Critical' ? 'alert' : 'status'
         const rowClassName = `w-full flex items-start gap-2 text-left text-sm leading-5 px-3 py-1.5 rounded-[var(--radius-md)] ${style.bg} ${style.text} hover:opacity-90 transition-opacity`
         return (
@@ -50,9 +54,9 @@ export function ParticipantAlertsBanner({ alerts: all, onSelectTab, severity }: 
               // straight to that route instead of switching tabs. `aria-label` keeps the
               // accessible name equal to the message even though the severity pill is also
               // rendered inside the link for visual parity with the tab-select row below.
-              <Link to={a.linkTo} aria-label={a.message} className={rowClassName}>
+              <Link to={a.linkTo} aria-label={text} title={title} className={rowClassName}>
                 <Icon className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
-                <span className="flex-1 min-w-0 break-words" aria-hidden="true">{a.message}</span>
+                <span className="flex-1 min-w-0 break-words" aria-hidden="true">{text}</span>
                 {/* Full-strength colour, not a faded one — at 12px this is still small text, and opacity
                     pushes an already-borderline severity colour below the 4.5:1 AA text threshold. */}
                 <span className="text-xs font-bold uppercase tracking-wide shrink-0 mt-0.5" aria-hidden="true">{style.label}</span>
@@ -60,11 +64,12 @@ export function ParticipantAlertsBanner({ alerts: all, onSelectTab, severity }: 
             ) : (
               <button
                 type="button"
+                title={title}
                 onClick={() => onSelectTab?.(a.deepLinkTab)}
                 className={rowClassName}
               >
                 <Icon className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
-                <span className="flex-1 min-w-0 break-words">{a.message}</span>
+                <span className="flex-1 min-w-0 break-words">{text}</span>
                 {/* Full-strength colour, not a faded one — at 12px this is still small text, and opacity
                     pushes an already-borderline severity colour below the 4.5:1 AA text threshold. */}
                 <span className="text-xs font-bold uppercase tracking-wide shrink-0 mt-0.5">{style.label}</span>
