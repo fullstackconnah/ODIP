@@ -4,11 +4,11 @@
  * once the server has refused one (Not sent) the screen falls back to the server's truth.
  */
 import type { PortalShiftDetailDto, PortalShiftsResponseDto, ShiftBreakDto, ShiftCompletionDto, ShiftNoteDto } from '@/api/types'
-import type { QueueRecord } from './queue'
+import { isStillTrying, type QueueRecord } from './queue'
 
 const waitingFor = (records: readonly QueueRecord[], shiftId: string) => records.filter((r) => r.shiftId === shiftId && r.status === 'waiting')
 
-export type QueuedNote = ShiftNoteDto & { waiting?: boolean }
+export type QueuedNote = ShiftNoteDto & { waiting?: boolean; stuck?: boolean }
 
 export function applyQueued(detail: PortalShiftDetailDto, records: readonly QueueRecord[]): PortalShiftDetailDto {
   const mine = waitingFor(records, detail.id)
@@ -69,7 +69,7 @@ export function applyQueuedNotes(notes: readonly ShiftNoteDto[], records: readon
     .map((r) => {
       const b = r.body as { body?: string; createdAt?: string }
       const at = b.createdAt ?? r.clientTime
-      return { id: r.id, shiftId, authorUserId: r.userId, authorName: '', body: b.body ?? '', createdAt: at, updatedAt: at, flaggedCategories: [], flagsAcknowledgedAt: null, incidentId: null, waiting: true }
+      return { id: r.id, shiftId, authorUserId: r.userId, authorName: '', body: b.body ?? '', createdAt: at, updatedAt: at, flaggedCategories: [], flagsAcknowledgedAt: null, incidentId: null, waiting: true, stuck: isStillTrying(r) }
     })
   const known = new Set(notes.map((n) => n.id))
   return [...notes, ...queued.filter((n) => !known.has(n.id))]

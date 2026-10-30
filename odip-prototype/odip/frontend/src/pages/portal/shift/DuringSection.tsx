@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Check, Pill, ListChecks } from 'lucide-react'
 import { useCheckRoutine, useUncheckRoutine } from '@/api/hooks'
 import { useQueueRecords } from '@/api/hooks/portal'
+import { isStillTrying } from '@/lib/offline/queue'
 import { waitingTick } from '@/lib/offline/overlay'
 import { Button } from '@/components/Button'
 import { TAP_AREA } from '@/components/tapArea'
@@ -105,7 +106,7 @@ export function RoutineRow({ routine, shiftId, canAct }: { routine: PortalShiftR
           {routine.description && <span className="block text-[var(--color-muted-foreground)] whitespace-pre-wrap">{routine.description}</span>}
           {waiting ? (
             <span id={subId} className="flex flex-wrap items-center gap-x-1 text-xs text-[var(--color-muted-foreground)]">
-              {routine.isChecked ? 'Done' : 'Not done'}<span className="whitespace-nowrap">&middot;&nbsp;<WaitingToSend /></span>
+              {routine.isChecked ? 'Done' : 'Not done'}<span className="whitespace-nowrap">&middot;&nbsp;<WaitingToSend stuck={isStillTrying(waiting)} /></span>
             </span>
           ) : routine.isChecked && (
             <span className="block text-xs text-[var(--color-muted-foreground)]">

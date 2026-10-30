@@ -233,7 +233,7 @@ export function ShiftNotesSection({
                     <p className="text-xs text-[var(--color-muted-foreground)]">
                       <span className="font-medium text-[var(--color-foreground)]">{(note as QueuedNote).waiting ? 'You' : note.authorName}</span> · {formatNoteTimestamp(note.createdAt)}
                       {note.updatedAt > note.createdAt && ` · edited ${formatNoteTimestamp(note.updatedAt)}`}
-                      {(note as QueuedNote).waiting && <span className="block mt-0.5"><WaitingToSend /></span>}
+                      {(note as QueuedNote).waiting && <span className="block mt-0.5"><WaitingToSend stuck={(note as QueuedNote).stuck} /></span>}
                     </p>
                     {note.authorUserId === currentUserId && !online && !(note as QueuedNote).waiting && (
                       <span className="shrink-0 text-xs text-[var(--color-muted-foreground)]">Editing a sent note needs a connection.</span>
