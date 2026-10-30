@@ -84,15 +84,18 @@ public sealed partial class ClaimBatchService
 
     // ---- hub ----
 
+    /// <summary>The plan's fixed lowercase strings: trip and shift for a claim kind, agency, plan and self for a funding type.</summary>
+    private static string Wire(Enum e) => e.ToString().Replace("Managed", "").ToLowerInvariant();
+
     private HubLineDto HubLine(BprRow row, BatchContext ctx, int attempt)
     {
         var l = row.Line;
         var perHour = (row.Item?.Unit ?? "H") == "H";
         var age = ClaimBatchChecks.AgeDays(ctx.Today, l.SupportsDeliveredFrom);
         var problems = ClaimBatchChecks.For(row, ctx).Select(p => new HubProblemDto(p.Rule, p.Severity, p.Message)).ToList();
-        return new HubLineDto(l.Id, row.Claim.Id, row.Claim.ClaimReference, row.Claim.Kind.ToString(), row.Participant?.Id ?? Guid.Empty, row.Participant?.FullName ?? "",
+        return new HubLineDto(l.Id, row.Claim.Id, row.Claim.ClaimReference, Wire(row.Claim.Kind), row.Participant?.Id ?? Guid.Empty, row.Participant?.FullName ?? "",
             BprCsvService.ToOut(row, attempt).SupportNumber, row.Item?.Description, l.SupportsDeliveredFrom, l.SupportsDeliveredTo, l.Hours, perHour ? null : l.Hours, l.UnitPrice,
-            l.TotalAmount, l.GSTCode, l.ClaimType, l.CancellationReason, (row.PlanType ?? PlanType.AgencyManaged).ToString(), age, ClaimBatchChecks.AgeBand(age), attempt, problems);
+            l.TotalAmount, l.GSTCode, l.ClaimType, l.CancellationReason, Wire(row.PlanType ?? PlanType.AgencyManaged), age, ClaimBatchChecks.AgeBand(age), attempt, problems);
     }
 
     /// <summary>The hub's three lists. The NDIS number is read for the checks and never leaves the server.</summary>
@@ -137,7 +140,7 @@ public sealed partial class ClaimBatchService
             var first = g.First();
             var oldest = g.Min(r => r.Line.SupportsDeliveredFrom);
             var age = ClaimBatchChecks.AgeDays(today, oldest);
-            return new ManagedClaimDto(first.Claim.Id, first.Claim.ClaimReference, first.Participant?.Id, first.Participant?.FullName, first.PlanType.ToString()!, first.Claim.Status,
+            return new ManagedClaimDto(first.Claim.Id, first.Claim.ClaimReference, first.Participant?.Id, first.Participant?.FullName, Wire(first.PlanType!.Value), first.Claim.Status,
                 first.Claim.TotalAmount, age, ClaimBatchChecks.AgeBand(age), invoiceLookup[first.Claim.Id].ToList());
         }).OrderByDescending(c => c.AgeDays).ToList();
 
