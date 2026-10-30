@@ -3199,7 +3199,7 @@ const putRoutes = [
     }
     if (Array.isArray(body.approverRoles) && body.approverRoles.length === 0) return respond(400, failEnvelope(null, ['At least one approver role is needed.']))
     const next = { ...planPricingSettings, isDefault: false }
-    for (const key of ['registrationGroupsHeld', 'crossingPolicy', 'claimProviderTravel', 'travelKmRateStandard', 'travelKmRateAccessible', 'travelRatesProvisional', 'groupOutings', 'approverRoles']) {
+    for (const key of ['registrationGroupsHeld', 'crossingPolicy', 'claimProviderTravel', 'travelKmRateStandard', 'travelKmRateAccessible', 'travelRatesProvisional', 'groupOutings', 'approverRoles', 'approvalActivatesParticipant']) {
       if (body[key] !== undefined) next[key] = body[key]
     }
     if (body.registrationGroupsHeld !== undefined) next.registrationGroupsConfirmed = body.registrationGroupsConfirmed ?? true

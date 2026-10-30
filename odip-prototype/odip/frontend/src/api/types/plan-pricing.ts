@@ -218,6 +218,8 @@ export interface PlanPricingSettingsDto {
   groupOutings: PlanGroupOutingFamily
   staUsesHourlyAndAccommodation: boolean
   approverRoles: string[]
+  /** Approving an agreement moves a participant still onboarding, with intake finished, to Active. Off by default. */
+  approvalActivatesParticipant: boolean
   /** True when nothing is stored yet and these are the owner-approved defaults. */
   isDefault: boolean
 }

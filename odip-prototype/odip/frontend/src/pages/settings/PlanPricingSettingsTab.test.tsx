@@ -125,6 +125,20 @@ describe('Plan pricing settings', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Saved')
   })
 
+  it('offers moving the participant to Active on approval, off by default, and sends only that field', async () => {
+    const user = userEvent.setup()
+    setUp()
+
+    const box = screen.getByRole('checkbox', { name: 'Move the participant to Active when their agreement is approved' })
+    expect(box).not.toBeChecked()
+    expect(screen.getByText('Only people still onboarding with intake finished. Nobody is moved back if an agreement ends.')).toBeInTheDocument()
+    await user.click(box)
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(mutate).toHaveBeenCalledTimes(1)
+    expect(mutate.mock.calls[0][0]).toEqual({ approvalActivatesParticipant: true })
+  })
+
   it('holds the per-kilometre rate to $5, says so next to the field, and will not save a slipped decimal point', async () => {
     const user = userEvent.setup()
     setUp()

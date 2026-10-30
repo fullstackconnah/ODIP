@@ -25,7 +25,7 @@ const provider: ProviderSettingsDto = {
 const pricing: PlanPricingSettingsDto = {
   registrationGroupsHeld: ['0107'], registrationGroupsConfirmed: true, crossingPolicy: 'Split', claimProviderTravel: true,
   travelKmRateStandard: 0.99, travelKmRateAccessible: 2.76, travelRatesProvisional: false, groupOutings: 'GroupActivities',
-  staUsesHourlyAndAccommodation: true, approverRoles: ['Admin'], isDefault: false,
+  staUsesHourlyAndAccommodation: true, approverRoles: ['Admin'], approvalActivatesParticipant: false, isDefault: false,
 }
 const clients: QueryClient[] = []
 function show(client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {

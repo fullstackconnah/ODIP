@@ -43,12 +43,14 @@ type Form = {
   travelRatesProvisional: boolean
   groupOutings: PlanGroupOutingFamily
   approverRoles: string[]
+  approvalActivatesParticipant: boolean
 }
 
 function formOf(settings: PlanPricingSettingsDto): Form {
   return {
     crossingPolicy: settings.crossingPolicy, claimProviderTravel: settings.claimProviderTravel, travelKmRateStandard: settings.travelKmRateStandard,
     travelKmRateAccessible: settings.travelKmRateAccessible, travelRatesProvisional: settings.travelRatesProvisional, groupOutings: settings.groupOutings, approverRoles: [...settings.approverRoles],
+    approvalActivatesParticipant: settings.approvalActivatesParticipant,
   }
 }
 
@@ -64,6 +66,7 @@ function changesOf(saved: PlanPricingSettingsDto, form: Form): UpdatePlanPricing
   if (form.travelRatesProvisional !== saved.travelRatesProvisional) changes.travelRatesProvisional = form.travelRatesProvisional
   if (form.groupOutings !== saved.groupOutings) changes.groupOutings = form.groupOutings
   if (!sameList(form.approverRoles, saved.approverRoles)) changes.approverRoles = form.approverRoles
+  if (form.approvalActivatesParticipant !== saved.approvalActivatesParticipant) changes.approvalActivatesParticipant = form.approvalActivatesParticipant
   return changes
 }
 
@@ -181,6 +184,7 @@ export default function PlanPricingSettingsTab(frame: SectionFrame) {
                 {APPROVER_ROLES.map(role => <CheckboxField key={role} label={role} checked={current.approverRoles.includes(role)} onChange={() => toggleRole(role)} />)}
               </div>
               {current.approverRoles.length === 0 && <p role="alert" className="text-sm text-[var(--color-destructive)]">At least one role must be able to approve.</p>}
+              <CheckboxField label="Move the participant to Active when their agreement is approved" hint="Only people still onboarding with intake finished. Nobody is moved back if an agreement ends." checked={current.approvalActivatesParticipant} onChange={event => edit({ approvalActivatesParticipant: event.target.checked })} />
               <p className="text-[13px] text-[var(--color-muted-foreground)]">These roles may mark a plan approved for rostering, on the newest revision of an agreement draft. Approving makes its weekly roster patterns and unfilled shifts; it is separate from signing. A SuperAdmin acting for an organisation may always approve.</p>
             </section>
           </>
