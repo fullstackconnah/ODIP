@@ -47,6 +47,7 @@ export const MATERIAL_SYMBOLS: readonly string[] = [
   'receipt_long',
   'schedule',
   'settings',
+  'summarize',
   'verified',
   'warning',
 ]
