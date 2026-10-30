@@ -183,7 +183,6 @@ public class RequestTimingMiddlewareTests : IClassFixture<PostgresFixture>
             "// Security headers middleware",
             "app.UseMiddleware<Odip.Api.Middleware.RequestTimingMiddleware>();",
             "app.UseMiddleware<Odip.Api.Middleware.ExceptionHandlingMiddleware>();",
-            "app.UseMiddleware<Odip.Api.Middleware.SignInBudgetPartitionWarningMiddleware>();",
             "app.UseRateLimiter();",
             "app.UseCors();",
             "app.UseAuthentication();",
