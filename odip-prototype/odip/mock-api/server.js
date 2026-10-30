@@ -321,7 +321,7 @@ const staff = [
     isMedicationCompetent: false, isManualHandlingCompetent: true, isOvernightEligible: true,
     isActive: true, firstAidExpiryDate: '2026-08-20', driverLicenceExpiryDate: '2027-10-09',
     manualHandlingExpiryDate: '2026-10-30', medicationCompetencyExpiryDate: null,
-    hasExpiredQualifications: false, notes: 'First aid renewal booked for 18 Aug.',
+    hasExpiredQualifications: false, notes: 'First aid renewal booked for 18 Aug.', signInInviteSentAt: '2026-10-29T23:30:00Z',
   },
   {
     id: 's-0004', firstName: 'Mei', lastName: 'Zhang', fullName: 'Mei Zhang',
@@ -3465,7 +3465,7 @@ const server = http.createServer((req, res) => {
       for (const [pattern, handler] of postRoutes) {
         const params = matchRoute(pattern, segments)
         if (params) {
-          sendResult(res, handler(...params, body))
+          sendResult(res, handler(...params, body, url.searchParams))
           return
         }
       }
