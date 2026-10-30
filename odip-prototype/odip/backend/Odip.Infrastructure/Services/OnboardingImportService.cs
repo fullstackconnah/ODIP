@@ -510,16 +510,23 @@ public sealed partial class OnboardingImportService
     }
 
     /// <summary>
-    /// The staff a sign-in invite goes to: this organisation's staff batch, not undone, its members who have never signed in, in id order (the
-    /// invites' cursor; sorted here, not by the database, so the order is the same Guid comparison the cursor uses). Null: no such batch.
+    /// The staff a sign-in invite goes to: this organisation's staff batch, not undone, its active members who have never signed in and, unless
+    /// asked, were not invited before, in id order (the invites' cursor; sorted here, not by the database, so the order is the same Guid
+    /// comparison the cursor uses). Null: no such batch.
     /// </summary>
-    public async Task<List<User>?> StaffToInviteAsync(Guid batchId, CancellationToken ct)
+    public async Task<List<User>?> StaffToInviteAsync(Guid batchId, CancellationToken ct, bool includeInvitedBefore = false) =>
+        (await BatchStaffAsync(batchId, ct))?
+            .Where(u => u.IsActive && u.LastLoginAt == null && (includeInvitedBefore || u.SignInInviteSentAt == null))
+            .OrderBy(u => u.Id).ToList();
+
+    /// <summary>Every member of this organisation's staff batch, not undone. Null: no such batch.</summary>
+    private async Task<List<User>?> BatchStaffAsync(Guid batchId, CancellationToken ct)
     {
         TenantId();
         var batch = await _db.ImportBatches.FirstOrDefaultAsync(b => b.Id == batchId && b.Kind == ImportKind.Staff && b.UndoneAt == null, ct);
         if (batch is null) return null;
         var ids = _db.ImportBatchItems.Where(i => i.BatchId == batch.Id).Select(i => i.EntityId);
-        return (await _db.Users.Where(u => ids.Contains(u.Id) && u.LastLoginAt == null).ToListAsync(ct)).OrderBy(u => u.Id).ToList();
+        return await _db.Users.Where(u => ids.Contains(u.Id)).ToListAsync(ct);
     }
 
     public async Task<List<ImportBatchDto>> HistoryAsync(CancellationToken ct)

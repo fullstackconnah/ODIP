@@ -107,10 +107,10 @@ public class ImportsController : ControllerBase
     /// says per person what happened. The browser then sends each set-password email, as the Staff page does.
     /// </summary>
     [HttpPost("{batchId:guid}/invites")]
-    public async Task<ActionResult<ApiResponse<ImportInvitesDto>>> Invites(Guid batchId, [FromQuery] Guid? after, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<ImportInvitesDto>>> Invites(Guid batchId, [FromQuery] Guid? after, CancellationToken ct, [FromQuery] bool includeInvitedBefore = false)
     {
         List<User>? staff;
-        try { staff = await _imports.StaffToInviteAsync(batchId, ct); }
+        try { staff = await _imports.StaffToInviteAsync(batchId, ct, includeInvitedBefore); }
         catch (ImportException ex) { return StatusCode(ex.StatusCode, ApiResponse<ImportInvitesDto>.Fail(ex.Message)); }
         if (staff is null) return NotFound(ApiResponse<ImportInvitesDto>.Fail("Staff import not found."));
 

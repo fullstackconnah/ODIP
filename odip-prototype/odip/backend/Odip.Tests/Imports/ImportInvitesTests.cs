@@ -62,6 +62,46 @@ public class ImportInvitesTests
         firebase.Verify(f => f.EnsureSignInAccountAsync("bo@example.com", It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    private static async Task<List<string>> InvitedEmails(ImportsController controller, Guid batchId, bool includeInvitedBefore = false)
+    {
+        var answer = Assert.IsType<OkObjectResult>((await controller.Invites(batchId, null, CancellationToken.None, includeInvitedBefore)).Result);
+        return Assert.IsType<ApiResponse<ImportInvitesDto>>(answer.Value).Data!.Invites.Select(i => i.Email).OrderBy(e => e).ToList();
+    }
+
+    [Fact]
+    public async Task Invites_skip_staff_already_invited()
+    {
+        var (db, controller, _, batchId, _) = await StaffImportedAsync();
+        using var _ = db;
+        (await db.Users.SingleAsync(u => u.Email == "jo@example.com")).SignInInviteSentAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        Assert.Equal(new[] { "al@example.com" }, await InvitedEmails(controller, batchId));
+    }
+
+    [Fact]
+    public async Task Invites_include_the_invited_when_asked()
+    {
+        var (db, controller, _, batchId, _) = await StaffImportedAsync();
+        using var _ = db;
+        (await db.Users.SingleAsync(u => u.Email == "jo@example.com")).SignInInviteSentAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        Assert.Equal(new[] { "al@example.com", "jo@example.com" }, await InvitedEmails(controller, batchId, includeInvitedBefore: true));
+    }
+
+    [Fact]
+    public async Task Invites_skip_archived_staff()
+    {
+        var (db, controller, firebase, batchId, _) = await StaffImportedAsync();
+        using var _ = db;
+        (await db.Users.SingleAsync(u => u.Email == "al@example.com")).IsActive = false;
+        await db.SaveChangesAsync();
+
+        Assert.Equal(new[] { "jo@example.com" }, await InvitedEmails(controller, batchId, includeInvitedBefore: true));
+        firebase.Verify(f => f.EnsureSignInAccountAsync("al@example.com", It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     [Fact]
     public async Task Invites_for_a_batch_that_is_not_a_staff_import_here_are_not_found()
     {
