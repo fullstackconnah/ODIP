@@ -264,6 +264,11 @@ describe('StaffDetailPage: invite record', () => {
     expect(screen.getByText('Invite sent 30/10/2026')).toBeInTheDocument()
   })
 
+  it('shows no invite line once the person has signed in: the invite is spent', () => {
+    renderPage({ signInInviteSentAt: '2026-10-30T06:00:00Z', hasSignedIn: true })
+    expect(screen.queryByText(/Invite sent/)).not.toBeInTheDocument()
+  })
+
   it('shows no invite line before any invite', () => {
     renderPage({ signInInviteSentAt: null })
     expect(screen.queryByText(/Invite sent/)).not.toBeInTheDocument()

@@ -138,11 +138,36 @@ describe('ImportInvites', () => {
   it('only the invited before: the confirm waits for the box', async () => {
     withCount(0, 2, 0)
     render(<ImportInvites batchId="b1" count={2} />)
-    await press('Send sign-in invites (0)')
+    // Nobody is waiting for a first invite, so the row says "again" and the disabled primary is not "Send 0 invites".
+    await press('Send sign-in invites again (2)')
     const dialog = screen.getByRole('alertdialog')
-    expect(within(dialog).getByRole('button', { name: 'Send 0 invites' })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Send invites' })).toBeDisabled()
     await userEvent.click(within(dialog).getByRole('checkbox'))
     expect(within(dialog).getByRole('button', { name: 'Send 2 invites' })).toBeEnabled()
+  })
+
+  it('records every 10 sent as the run goes, then the rest, so a closed tab loses at most 10', async () => {
+    withCount(12)
+    invites.mockResolvedValue({ left: 0, invites: Array.from({ length: 12 }, (_, i) => ({ staffId: `s${i}`, name: `P ${i}`, email: `p${i}@example.com`, firebaseAccount: 'created', error: null })) })
+    sendEmail.mockImplementation(async (email: string) => ({ ok: true, email, account: 'created' }))
+    render(<ImportInvites batchId="b1" count={12} />)
+    await press('Send sign-in invites (12)')
+    await confirm('Send 12 invites')
+    await screen.findByText('Sign-in invites: all 12 sent')
+    expect(record.mock.calls.map(c => c[0].length)).toEqual([10, 2])
+  })
+
+  it('hides the send-again box while a run is part-way, so ticking it cannot restart from the top', async () => {
+    withCount(51, 2)
+    sendEmail.mockImplementation(async (email: string) => ({ ok: true, email, account: 'created' }))
+    invites.mockResolvedValueOnce({ left: 50, next: 's1', invites: [{ staffId: 's1', name: 'Jo Ng', email: 'jo@example.com', firebaseAccount: 'created', error: null }] })
+    render(<ImportInvites batchId="b1" count={51} />)
+    await press('Send sign-in invites (51)')
+    expect(screen.getByRole('checkbox', { name: 'Also send again to the 2 invited before' })).toBeInTheDocument()
+    await confirm('Send 51 invites')
+    await screen.findByText('50 more still to invite: press Send sign-in invites again.')
+    await press('Send sign-in invites (50)')
+    expect(within(screen.getByRole('alertdialog')).queryByRole('checkbox')).toBeNull()
   })
 
   it('nobody left disables the button and says why', async () => {
@@ -168,7 +193,7 @@ describe('ImportInvites', () => {
     invites.mockResolvedValue({ left: 0, invites: [] })
     render(<ImportInvites batchId="b1" count={4} />)
     await press('Send sign-in invites (4)')
-    expect(screen.getByRole('alertdialog')).toHaveTextContent("Send sign-in invites to staff in this import who haven't signed in?")
+    expect(screen.getByRole('alertdialog')).toHaveTextContent("Send sign-in invites to staff in this import who haven't been invited yet?")
     await confirm('Send invites')
     expect(invites).toHaveBeenCalledWith({ batchId: 'b1' })
   })
@@ -179,7 +204,7 @@ describe('ImportInvites', () => {
     await press('Send sign-in invites (4)')
     withCount(9, 2)
     view.rerender(<ImportInvites batchId="b1" count={4} />)
-    expect(screen.getByRole('alertdialog')).toHaveTextContent("Send sign-in invites to staff in this import who haven't signed in?")
+    expect(screen.getByRole('alertdialog')).toHaveTextContent("Send sign-in invites to staff in this import who haven't been invited yet?")
     expect(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Send invites' })).toBeInTheDocument()
   })
 
@@ -248,6 +273,14 @@ describe('ImportInvites: auto (invites as part of the staff import)', () => {
     await announced('Sign-in invites: 3 sent, 1 not sent')
     expect(record.mock.calls.map(c => c[0]).sort()).toEqual([['s0'], ['s2', 's3']])
     expect(invites.mock.calls.every(c => !('includeInvitedBefore' in c[0]))).toBe(true)
+  })
+
+  it('records every 10 sent within a page, not only at the end of it', async () => {
+    invites.mockResolvedValueOnce(page(0, 12))
+    sendEmail.mockImplementation(ok)
+    render(<ImportInvites batchId="r2" count={12} auto />)
+    await announced('Sign-in invites: all 12 sent')
+    expect(record.mock.calls.map(c => c[0].length)).toEqual([10, 2])
   })
 
   it('a rate limit pause still records what was sent so far', async () => {

@@ -145,7 +145,7 @@ export default function StaffDetailPage() {
                   >
                     <Mail className="w-4 h-4" /> Send set-password email
                   </Button>
-                  {staff.signInInviteSentAt && <span className="text-[13px] text-[var(--color-muted-foreground)]">{`Invite sent ${formatDateAu(staff.signInInviteSentAt)}`}</span>}
+                  {staff.signInInviteSentAt && !staff.hasSignedIn && <span className="text-[13px] text-[var(--color-muted-foreground)]">{`Invite sent ${formatDateAu(staff.signInInviteSentAt)}`}</span>}
                   </>
                 )}
                 {canWrite && (

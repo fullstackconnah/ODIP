@@ -389,6 +389,7 @@ public class StaffController : ControllerBase
     private static StaffDetailDto ToStaffDetailDto(User s, DateOnly today) => new()
     {
         SignInInviteSentAt = s.SignInInviteSentAt,
+        HasSignedIn = s.LastLoginAt != null,
         Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
         FullName = (s.FirstName + " " + s.LastName).Trim(), Username = s.Username,
         Role = s.Role, Position = s.Position ?? Position.SupportWorker, Email = s.Email,

@@ -15,6 +15,7 @@ function create({ respond, failEnvelope, rosterShifts, startedWeeks, today, addD
   })
   const batches = [
     staffBatch(1, 'staff-new-starters.csv', 6), staffBatch(2, 'staff-reminders.csv', 5), staffBatch(3, 'staff-all-done.csv', 4), staffBatch(4, 'staff-count-fails.csv', 3),
+    staffBatch(5, 'staff-big-intake.csv', 150),
   ]
   // Invite counts per Staff batch and who is in each group; the invite routes move people from toInvite to invitedBefore, as the real record call does.
   const people = (prefix, n) => Array.from({ length: n }, (_, i) => ({ staffId: `${prefix}-${i + 1}`, name: `${['Ava', 'Ben', 'Cleo'][i % 3]} ${prefix.toUpperCase()}${i + 1}`, email: `${prefix}${i + 1}@example.com` }))
@@ -22,6 +23,7 @@ function create({ respond, failEnvelope, rosterShifts, startedWeeks, today, addD
     'import-staff-1': { toInvite: people('new', 3), invitedBefore: people('old', 2), signedIn: 1, cannotInvite: 0 },
     'import-staff-2': { toInvite: [], invitedBefore: people('rem', 2), signedIn: 3, cannotInvite: 0 },
     'import-staff-3': { toInvite: [], invitedBefore: [], signedIn: 4, cannotInvite: 0 },
+    'import-staff-5': { toInvite: people('big', 150), invitedBefore: [], signedIn: 0, cannotInvite: 0 },
   }
   const countOf = (g) => ({ toInvite: g.toInvite.length, invitedBefore: g.invitedBefore.length, signedIn: g.signedIn, cannotInvite: g.cannotInvite })
   let counter = 0

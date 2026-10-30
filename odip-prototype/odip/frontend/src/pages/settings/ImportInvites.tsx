@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { Button } from '@/components/Button'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { Callout } from '@/components/Callout'
@@ -112,6 +113,7 @@ function AutoInvites({ batchId, count, onSendingChange }: { batchId: string; cou
           return
         }
         if (outcome.ok) sent.push(person.staffId)
+        if (sent.length >= 10) flush() // a closed tab loses at most 10
         setOutcomes(o => [...o, outcome])
         if (!outcome.ok) setFailedPeople(f => [...f, person])
         queue = queue.slice(1)
@@ -259,13 +261,14 @@ function ManualInvites({ batchId, count, onResult }: { batchId: string; count: n
         batchId, ...(resume ? { after: resume.after } : {}), ...(withAgain ? { includeInvitedBefore: true } : {}),
       })
       const outcomes: EmailOutcome[] = []
-      const sent: string[] = []
+      let sent: string[] = []
       // One at a time: Firebase limits how fast one browser may ask for emails, and the outcome says when it does.
       for (const person of people) {
         const outcome: EmailOutcome = person.firebaseAccount
           ? await sendSetPasswordEmailFor(person.email, person.firebaseAccount)
           : { ok: false, email: person.email, reason: 'account', detail: person.error ?? undefined }
         if (outcome.ok) sent.push(person.staffId)
+        if (sent.length >= 10) { record.mutate(sent); sent = [] } // a closed tab loses at most 10
         outcomes.push(outcome)
       }
       if (sent.length > 0) record.mutate(sent)
@@ -294,8 +297,9 @@ function ManualInvites({ batchId, count, onResult }: { batchId: string; count: n
     </>
   )
 
+  // In the Import history the row's own flex-wrap lays the button, this reason line and Undo out; alone on the wizard page it stacks.
   return (
-    <div className="flex flex-col gap-3">
+    <div className={onResult ? 'contents' : 'flex flex-col gap-3'}>
       <div>
         {/* aria-disabled, not disabled, while sending: disabling the button just pressed can drop keyboard focus (see SignInEmailOutcome). */}
         <Button
@@ -306,31 +310,32 @@ function ManualInvites({ batchId, count, onResult }: { batchId: string; count: n
           aria-disabled={sending || undefined}
           className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
         >
-          {sending ? 'Sending invites...' : `Send sign-in invites (${waiting})`}
+          {sending ? 'Sending invites...' : c && !next && c.toInvite === 0 && c.invitedBefore > 0 ? `Send sign-in invites again (${c.invitedBefore})` : `Send sign-in invites (${waiting})`}
         </Button>
       </div>
       {nobodyLeft && (
-        <p className="text-[13px] text-[var(--color-muted-foreground)]">
+        <p className={`${onResult ? 'basis-full order-last ' : ''}whitespace-normal text-pretty text-[13px] text-[var(--color-muted-foreground)]`}>
           {`Everyone in this import has signed in or been invited.${c.cannotInvite > 0 ? ` ${cannotSentence(c.cannotInvite)}` : ''}`}
         </p>
       )}
-      <ConfirmDialog
+      {/* Portalled out of the table's pinned cell, which would right-align and no-wrap the dialog's words. */}
+      {createPortal(<ConfirmDialog
         open={!!confirm}
         title="Send sign-in invites?"
         onCancel={() => { if (!sending) setConfirm(null) }}
         onConfirm={() => void send(counted ? again : false)}
         loading={sending}
         confirmDisabled={!!counted && total === 0}
-        confirmLabel={counted ? `Send ${plural(shown, 'invite')}` : 'Send invites'}
+        confirmLabel={counted && total > 0 ? `Send ${plural(shown, 'invite')}` : 'Send invites'}
         message={counted ? (
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-1">{sentence}</div>
-            {counted.invitedBefore > 0 && !(next && next.again) && (
+            {counted.invitedBefore > 0 && !next && (
               <CheckboxField label={`Also send again to the ${counted.invitedBefore} invited before`} checked={again} onChange={e => setAgain(e.target.checked)} />
             )}
           </div>
-        ) : "Send sign-in invites to staff in this import who haven't signed in?"}
-      />
+        ) : "Send sign-in invites to staff in this import who haven't been invited yet?"}
+      />, document.body)}
       {result && <InviteResults result={result} />}
     </div>
   )

@@ -91,6 +91,8 @@ describe('ImportDataTab', () => {
 
     const row = screen.getByRole('row', { name: /staff.csv/ })
     await userEvent.click(within(row).getByRole('button', { name: 'Send sign-in invites (2)' }))
+    // Out of the table's pinned cell, which would right-align and no-wrap the dialog's words.
+    expect(screen.getByRole('alertdialog').closest('td')).toBeNull()
     await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Send 2 invites' }))
 
     expect(invites).toHaveBeenCalledWith({ batchId: 'b2' })

@@ -180,6 +180,24 @@ public class StaffOverviewControllerTests
     }
 
     [Fact]
+    public async Task GetOverview_says_whether_the_person_has_ever_signed_in_without_sending_when()
+    {
+        var tenantId = Guid.NewGuid();
+        using var db = CreateDb(tenantId, isSuperAdmin: false);
+        var never = SeedStaff(db, tenantId);
+        var signedIn = SeedStaff(db, tenantId, "Ana", "Lee");
+        signedIn.LastLoginAt = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+        await db.SaveChangesAsync();
+        var controller = new StaffController(db, new StaffAvailabilityItemsQuery(db), clock: Clock);
+
+        var neverBody = Assert.IsType<ApiResponse<StaffOverviewDto>>(Assert.IsType<OkObjectResult>((await controller.GetOverview(never.Id, CancellationToken.None)).Result).Value);
+        var signedInBody = Assert.IsType<ApiResponse<StaffOverviewDto>>(Assert.IsType<OkObjectResult>((await controller.GetOverview(signedIn.Id, CancellationToken.None)).Result).Value);
+
+        Assert.False(neverBody.Data!.Staff.HasSignedIn);
+        Assert.True(signedInBody.Data!.Staff.HasSignedIn);
+    }
+
+    [Fact]
     public async Task GetOverview_UpcomingShifts_ExcludesShiftsOutsideTheFourteenDayWindow()
     {
         var tenantId = Guid.NewGuid();
