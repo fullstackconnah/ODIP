@@ -21,7 +21,7 @@ export function SyncRow() {
   let text = ''
   let action: ReactNode = null
   if (s.state === 'waiting') {
-    text = `${s.stillOffline ? 'Still offline. ' : ''}${plural(s.waiting, 'change')} waiting to send${s.stuck > 0 ? ` · ${s.stuck} still trying` : ''}`
+    text = `${s.stillOffline ? 'Still offline. ' : ''}${plural(s.waiting, 'change')} waiting to send${s.stuck > 0 ? `\u00a0· ${s.stuck}\u00a0still\u00a0trying` : ''}`
     action = <Button variant="secondary" size="md" className="shrink-0 whitespace-nowrap" onClick={send}>Send now</Button>
   } else if (s.state === 'sending') {
     icon = <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden="true" />

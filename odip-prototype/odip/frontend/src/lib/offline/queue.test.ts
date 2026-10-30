@@ -10,7 +10,7 @@ let clock: number
 let ids: number
 let sent: { rec: QueueRecord; asReplay: boolean; body: unknown }[]
 let answer: (rec: QueueRecord, asReplay: boolean) => SendResult
-let status: { kind: 'ok'; status: string } | { kind: 'offline' } | { kind: 'refused'; status: number }
+let status: { kind: 'ok'; status: string } | { kind: 'offline'; status?: number } | { kind: 'refused'; status: number }
 let online: boolean
 
 function make() {
@@ -305,6 +305,88 @@ describe('offline queue', () => {
       expect(sent.map((s) => `${s.rec.shiftId}:${s.rec.kind}`)).toEqual(['sA:start', 'sB:start'])
       expect(r.offline).toBe(false)
       expect(q.getSnapshot().map((x) => x.shiftId)).toEqual(['sA', 'sA'])
+    })
+
+    it.each([401, 429])('a %i stops the whole replay without reading as offline or counting', async (code) => {
+      const q = make()
+      online = true
+      q.enqueue(rec('start', {}, 'sA'))
+      q.enqueue(rec('start', {}, 'sB'))
+      answer = () => server(code)
+      const r = await q.replay()
+      expect(sent.map((s) => s.rec.shiftId)).toEqual(['sA'])
+      expect(r.offline).toBe(false)
+      expect(q.getSyncState().stillOffline).toBe(false)
+      expect(q.getSnapshot().map((x) => x.attempts ?? 0)).toEqual([0, 0])
+    })
+
+    it('a 500 on the Finish pre-check skips only that shift, reads as online and never counts', async () => {
+      const q = make()
+      online = true
+      q.enqueue(rec('finish', {}, 'sA'))
+      q.enqueue(rec('start', {}, 'sB'))
+      status = { kind: 'offline', status: 500 }
+      const r = await q.replay()
+      expect(sent.map((s) => s.rec.shiftId)).toEqual(['sB'])
+      expect(r.offline).toBe(false)
+      expect(q.getSyncState().stillOffline).toBe(false)
+      expect(q.getSnapshot().map((x) => x.attempts ?? 0)).toEqual([0])
+    })
+
+    it('a 401 on the Finish pre-check stops the whole replay; no response reads as offline', async () => {
+      const q = make()
+      online = true
+      q.enqueue(rec('finish', {}, 'sA'))
+      q.enqueue(rec('start', {}, 'sB'))
+      status = { kind: 'offline', status: 401 }
+      expect((await q.replay()).offline).toBe(false)
+      status = { kind: 'offline' }
+      expect((await q.replay()).offline).toBe(true)
+      expect(sent).toEqual([])
+    })
+
+    it('counts a failure exactly 60 000 ms after the last one, not 59 999', async () => {
+      const q = createQueue({ send: async () => server(500), shiftStatus: async () => status, now: () => clock, newId: () => 'id-1', isOnline: () => true })
+      q.enqueue(rec('start'))
+      await q.replay()
+      expect(q.getSnapshot()[0].attempts).toBe(1)
+      clock += 59_999
+      await q.replay()
+      expect(q.getSnapshot()[0].attempts).toBe(1)
+      clock += 1
+      await q.replay()
+      expect(q.getSnapshot()[0].attempts).toBe(2)
+    })
+
+    const seed = (id: string, change: Partial<QueueRecord>) => {
+      const key = 'odip_offline:u1:queue'
+      localStorage.setItem(key, JSON.stringify((JSON.parse(localStorage.getItem(key)!) as QueueRecord[]).map((r) => (r.id === id ? { ...r, ...change } : r))))
+    }
+
+    it('Retry on a not-sent record starts its count again', async () => {
+      const q = make()
+      online = true
+      q.enqueue(rec('start', { id: 'n1' }))
+      seed('n1', { status: 'notSent', attempts: STILL_TRYING_AFTER, lastFailedAt: clock })
+      answer = () => ({ kind: 'offline' })
+      await q.retry('n1')
+      expect(q.getSnapshot()[0]).toMatchObject({ status: 'waiting' })
+      expect(q.getSnapshot()[0].attempts).toBeUndefined()
+      expect(q.getSnapshot()[0].lastFailedAt).toBeUndefined()
+    })
+
+    it('a note that becomes a PUT starts a fresh count', async () => {
+      const q = make()
+      online = true
+      q.enqueue(rec('note', { id: 'n1', body: { id: 'n1', body: 'old' } }))
+      seed('n1', { attempts: 3, lastFailedAt: clock + 1_000_000 })
+      answer = (r) => {
+        if (r.method === 'PUT') return server(500)
+        q.rewriteBody('n1', { id: 'n1', body: 'new' })
+        return ok
+      }
+      await q.replay()
+      expect(q.getSnapshot()[0]).toMatchObject({ method: 'PUT', attempts: 1 })
     })
   })
 

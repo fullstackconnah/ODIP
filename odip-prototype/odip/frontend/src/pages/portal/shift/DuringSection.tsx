@@ -69,7 +69,10 @@ function DoseRow({ slot, tz, canAct, onRecord }: { slot: PortalDoseSlotDto; tz: 
 }
 
 export function RoutineRow({ routine, shiftId, canAct }: { routine: PortalShiftRoutineDto; shiftId: string; canAct: boolean }) {
-  const waiting = waitingTick(useQueueRecords(), shiftId, routine.id)
+  const records = useQueueRecords()
+  const waiting = waitingTick(records, shiftId, routine.id)
+  // Replay stops at the earliest failing record, so any waiting tick or untick of this routine can be the stuck one.
+  const stuck = records.some((r) => r.shiftId === shiftId && (r.kind === 'tick' || r.kind === 'untick') && r.target === routine.id && isStillTrying(r))
   const subId = `rt-sub-${routine.id}`
   const check = useCheckRoutine()
   const uncheck = useUncheckRoutine()
@@ -106,7 +109,7 @@ export function RoutineRow({ routine, shiftId, canAct }: { routine: PortalShiftR
           {routine.description && <span className="block text-[var(--color-muted-foreground)] whitespace-pre-wrap">{routine.description}</span>}
           {waiting ? (
             <span id={subId} className="flex flex-wrap items-center gap-x-1 text-xs text-[var(--color-muted-foreground)]">
-              {routine.isChecked ? 'Done' : 'Not done'}<span className="whitespace-nowrap">&middot;&nbsp;<WaitingToSend stuck={isStillTrying(waiting)} /></span>
+              {routine.isChecked ? 'Done' : 'Not done'}<span className="whitespace-nowrap">&middot;&nbsp;<WaitingToSend stuck={stuck} /></span>
             </span>
           ) : routine.isChecked && (
             <span className="block text-xs text-[var(--color-muted-foreground)]">

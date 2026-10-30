@@ -233,6 +233,7 @@ export default function PortalShiftDetailPage() {
   // A Finish saved on this phone: the shift reads as finished, and the bar steps aside until it is sent (SHAPE 3d).
   const finishRec = waitingKind(queued, shift.id, 'finish')
   const finishWaiting = !!finishRec
+  const finishStuck = !!finishRec && isStillTrying(finishRec)
   const alreadySubmitted = offlineQueue.wasAlreadySubmitted(shift.id)
   const savedAt = online ? null : savedAtFor(`detail:${shift.id}`)
   const h = shift.handover
@@ -254,7 +255,7 @@ export default function PortalShiftDetailPage() {
     <>
       {finishWaiting && (
         <Callout tone="info" polite title="Shift finished on this phone" actions={<Button to="/portal" variant="secondary" size="lg">Back to my shifts</Button>}>
-          It&rsquo;s sent to your coordinator when you&rsquo;re back online.&nbsp;<WaitingToSend stuck={!!finishRec && isStillTrying(finishRec)} />
+          {finishStuck ? <>It&rsquo;s sent to your coordinator as soon as it goes through.</> : <>It&rsquo;s sent to your coordinator when you&rsquo;re back online.</>}&nbsp;<WaitingToSend stuck={finishStuck} />
         </Callout>
       )}
       {alreadySubmitted && (
@@ -393,7 +394,7 @@ export default function PortalShiftDetailPage() {
   // No bottom padding on a phone: the sticky bar, then the bottom nav's own padding, end the page.
   return (
     <div className="space-y-3 lg:space-y-4 animate-fade-in lg:pb-4">
-      <AnnouncementRegion message={finishWaiting ? "Shift finished on this phone. It's sent to your coordinator when you're back online." : submitted ? 'Shift submitted. A coordinator will review it.' : ''} />
+      <AnnouncementRegion message={finishWaiting ? `Shift finished on this phone. It's sent to your coordinator ${finishStuck ? 'as soon as it goes through' : "when you're back online"}.` : submitted ? 'Shift submitted. A coordinator will review it.' : ''} />
       <BackButton to="/portal" label="my shifts" variant="link" className="py-3" />
       <PageHeader
         variant="detail"

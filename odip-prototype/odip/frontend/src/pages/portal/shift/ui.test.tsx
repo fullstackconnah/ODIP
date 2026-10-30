@@ -39,6 +39,7 @@ describe('WaitingToSend', () => {
   it('reads Waiting to send, or Still trying when stuck, with the same icon', () => {
     const a = render(<WaitingToSend />)
     expect(a.container).toHaveTextContent('Waiting to send')
+    expect(a.container).not.toHaveTextContent('Still trying')
     const b = render(<WaitingToSend stuck />)
     expect(b.container).toHaveTextContent('Still trying')
     expect(b.container.querySelector('svg')).toBeTruthy()
