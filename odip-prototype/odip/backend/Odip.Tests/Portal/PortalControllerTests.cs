@@ -212,6 +212,40 @@ public class PortalControllerTests
         Assert.IsType<OkObjectResult>((await controller.GetShiftDetail(published.Id, CancellationToken.None)).Result);
     }
 
+    [Fact]   // owner 2026-10-30: the office's Shift.Notes reach the assigned worker, read-only, on both portal reads
+    public async Task OfficeNotes_OfAPublishedShift_ReachTheAssignedWorker_OnDetailAndList()
+    {
+        var (db, tenant) = CreateDb();
+        var me = SeedUser(db, "Ben", "Turner");
+        var shift = SeedShift(db, SeedParticipant(db).Id, me.Id);
+        shift.Notes = "Bring the red bag.";
+        db.SaveChanges();
+        var controller = MakeController(db, tenant.Object, me.Id);
+
+        var detail = Assert.IsType<ApiResponse<PortalShiftDetailDto>>(Assert.IsType<OkObjectResult>((await controller.GetShiftDetail(shift.Id, CancellationToken.None)).Result).Value);
+        Assert.Equal("Bring the red bag.", detail.Data!.Notes);
+        var list = Assert.IsType<ApiResponse<PortalShiftsResponseDto>>(Assert.IsType<OkObjectResult>((await controller.GetMyShifts(ServiceDate.AddDays(-1), ServiceDate.AddDays(1), CancellationToken.None)).Result).Value);
+        Assert.Equal("Bring the red bag.", Assert.Single(list.Data!.Shifts).Notes);
+    }
+
+    [Fact]
+    public async Task OfficeNotes_OfADraft_AreNotFound_AndAnotherWorkerGetsNotFound()
+    {
+        var (db, tenant) = CreateDb();
+        var me = SeedUser(db, "Ben", "Turner");
+        var other = SeedUser(db, "Ava", "Lee");
+        var participant = SeedParticipant(db);
+        var draft = SeedShift(db, participant.Id, me.Id);
+        draft.Status = ShiftStatus.Draft;
+        draft.Notes = "Draft note.";
+        var published = SeedShift(db, participant.Id, me.Id);
+        published.Notes = "Bring the red bag.";
+        db.SaveChanges();
+
+        Assert.IsType<NotFoundObjectResult>((await MakeController(db, tenant.Object, me.Id).GetShiftDetail(draft.Id, CancellationToken.None)).Result);
+        Assert.IsType<NotFoundObjectResult>((await MakeController(db, tenant.Object, other.Id).GetShiftDetail(published.Id, CancellationToken.None)).Result);
+    }
+
     [Fact]
     public async Task ShiftNotes_OfADraft_AreNotFound_ToReadOrWrite()
     {
