@@ -50,11 +50,11 @@ public class WhatsNewSeedTests
     }
 
     [Fact]
-    public void ImportantEntries_AreDarkModeParticipantTabsAndRestraintMedicines()
+    public void ImportantEntries_AreTheFourFlaggedOnes()
     {
         var important = WhatsNewSeed.All.Where(i => i.Important).ToList();
-        Assert.Equal(new[] { "2026-10-dark-mode", "2026-10-participant-tabs", "2026-10-restraint-medicines-register" }, important.Select(i => i.Key));
-        Assert.All(important.Where(i => i.Key != "2026-10-restraint-medicines-register"), i => Assert.Equal(WhatsNewAudience.All, i.Roles));
+        Assert.Equal(new[] { "2026-10-dark-mode", "2026-10-participant-tabs", "2026-10-restraint-medicines-register", "2026-10-screening-missing-counts" }, important.Select(i => i.Key));
+        Assert.All(important.Where(i => i.Key is "2026-10-dark-mode" or "2026-10-participant-tabs"), i => Assert.Equal(WhatsNewAudience.All, i.Roles));
     }
 
     // Walk up to Odip.sln, not [CallerFilePath], which a path-mapped CI build rewrites.
