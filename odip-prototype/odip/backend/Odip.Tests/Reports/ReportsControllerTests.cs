@@ -328,6 +328,8 @@ public class ReportsControllerTests
         Assert.Equal(400, (await Call(c, endpoint, To, From)).Status);
         Assert.Equal(400, (await Call(c, endpoint, From, null)).Status);
         Assert.Equal(400, (await Call(c, endpoint, null, To)).Status);
+        Assert.Equal(400, (await Call(c, endpoint, new DateOnly(9999, 12, 27), new DateOnly(9999, 12, 31))).Status);   // the week loop would overflow DateOnly: refused, not a 500
+        Assert.Equal(400, (await Call(c, endpoint, new DateOnly(1999, 12, 31), new DateOnly(2000, 1, 2))).Status);
     }
 
     [Theory]

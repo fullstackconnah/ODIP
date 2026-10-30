@@ -37,7 +37,7 @@ public class ReportsController : ControllerBase
     private Guid? TenantId => !_tenant.IsSuperAdmin && _tenant.TenantId is { } id ? id : null;
 
     private static bool RangeRefused(DateOnly? from, DateOnly? to) =>
-        from is not { } f || to is not { } t || t < f || t.DayNumber - f.DayNumber + 1 > MaxDays;
+        from is not { } f || to is not { } t || t < f || t.DayNumber - f.DayNumber + 1 > MaxDays || f.Year < 2000 || t.Year > 2100;
 
     private ActionResult<ApiResponse<List<T>>> Refuse<T>(string message) => BadRequest(ApiResponse<List<T>>.Fail(message));
 
@@ -66,7 +66,7 @@ public class ReportsController : ControllerBase
                 && ((c.ReviewOutcome == ReviewOutcome.Approved && c.Shift.Status == ShiftStatus.Completed) || c.Shift.Status == ShiftStatus.PendingReview))
             .Select(c => new
             {
-                c.Id, c.SubmittedByUserId, c.ActualStart, c.ActualEnd, c.TimeZoneId, c.StartedAt, c.ReviewOutcome,
+                c.Id, c.SubmittedByUserId, c.ActualStart, c.ActualEnd,
                 Awaiting = c.Shift!.Status == ShiftStatus.PendingReview,
                 c.Shift.StartTime, c.Shift.EndTime, c.Shift.EndsNextDay, c.Shift.NightType,
             })
