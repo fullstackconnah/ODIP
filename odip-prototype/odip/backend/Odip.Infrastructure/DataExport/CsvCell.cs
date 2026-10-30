@@ -16,7 +16,7 @@ public static class CsvCell
     private static readonly char[] NeedsQuotes = [',', '"', '\r', '\n'];
 
     // \z, not $: $ also matches before a trailing newline.
-    private static readonly Regex PhoneNumber = new(@"^\+[0-9 ]*[0-9][0-9 ]*\z");
+    private static readonly Regex PhoneNumber = new(@"^\+ *[0-9][0-9 ]*\z");
 
     public static string Quote(string value) =>
         value.IndexOfAny(NeedsQuotes) < 0 ? value : "\"" + value.Replace("\"", "\"\"") + "\"";

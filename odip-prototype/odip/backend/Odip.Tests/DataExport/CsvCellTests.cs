@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Odip.Infrastructure.DataExport;
 using Xunit;
 
@@ -26,6 +27,12 @@ public class CsvCellTests
     [InlineData("+61-412", "'+61-412")]
     [InlineData("+SUM(A1)", "'+SUM(A1)")]
     [InlineData("+61412\n", "\"'+61412\n\"")]
+    [InlineData("+61 412\t", "'+61 412\t")]
+    [InlineData("+61 412\r", "\"'+61 412\r\"")]
+    [InlineData("+\u0661\u0662", "'+\u0661\u0662")]
+    [InlineData("+61 (0) 412", "'+61 (0) 412")]
+    [InlineData("+1-555", "'+1-555")]
+    [InlineData("+ 5", "+ 5")]
     [InlineData("=1", "'=1")]
     [InlineData("-5", "'-5")]
     [InlineData("@x", "'@x")]
@@ -38,4 +45,15 @@ public class CsvCellTests
     [InlineData("O'Brien", "O'Brien")]
     [InlineData("", "")]
     public void Text_guards_a_leading_formula_character_then_quotes(string value, string expected) => Assert.Equal(expected, CsvCell.Text(value));
+
+    [Fact]
+    public void Text_checks_a_long_near_miss_phone_number_in_linear_time()
+    {
+        var value = "+" + new string('1', 100_000) + "x";
+        var watch = Stopwatch.StartNew();
+        var cell = CsvCell.Text(value);
+        watch.Stop();
+        Assert.Equal("'" + value, cell);
+        Assert.True(watch.ElapsedMilliseconds < 1000, $"took {watch.ElapsedMilliseconds} ms");
+    }
 }
