@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { AgreementsBulkBar } from './AgreementsBulkBar'
 
 const h = vi.hoisted(() => ({ narrow: false }))
@@ -44,12 +44,33 @@ describe('AgreementsBulkBar disabled reasons', () => {
     expect(row!.className).toBe(withReason!.className)
   })
 
-  it('shows the Renew reason on a phone even with nothing ticked, so ticking does not add a row', () => {
+  it('keeps the Renew reason off the phone bar at 0 and 1 ticked, and on the Renew menu item once a row is ticked', () => {
     h.narrow = true
     const { container, rerender } = render(<AgreementsBulkBar {...base} canApprove={false} selected={0} />)
-    expect(container.querySelector('[id]')).toHaveTextContent(/Your role can't renew agreements/)
+    expect(container.querySelector('[id]')).toBeNull()
     rerender(<AgreementsBulkBar {...base} canApprove={false} selected={1} />)
-    expect(container.querySelector('[id]')).toHaveTextContent(/Your role can't renew agreements/)
+    expect(container.querySelector('[id]')).toBeNull()
+    expect(screen.queryByText(/Your role can't renew agreements/)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Actions/ }))
+    expect(screen.getByRole('option', { name: /Renew 1/ })).toHaveTextContent(/Your role can't renew agreements/)
+  })
+
+  it('reserves no row on a phone for a role that cannot approve, unless there is a note', () => {
+    h.narrow = true
+    const { container, rerender } = render(<AgreementsBulkBar {...base} canApprove={false} selected={1} />)
+    expect(container.querySelector('[id]')).toBeNull()
+    rerender(<AgreementsBulkBar {...base} canApprove={false} selected={1} note="Two were left out." />)
+    expect(container.querySelector('[id]')).toHaveTextContent('Two were left out.')
+  })
+
+  it('announces the phone reason politely, and only on a phone', () => {
+    h.narrow = true
+    const phone = render(<AgreementsBulkBar {...base} />)
+    expect(phone.container.querySelector('[id]')).toHaveAttribute('aria-live', 'polite')
+    phone.unmount()
+    h.narrow = false
+    const wide = render(<AgreementsBulkBar {...base} />)
+    expect(wide.container.querySelector('[id]')).not.toHaveAttribute('aria-live')
   })
 
   it('adds nothing when no action is off for a reason', () => {

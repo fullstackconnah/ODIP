@@ -37,10 +37,9 @@ export function AgreementsBulkBar({ selected, approvable, canApprove, shown, all
   const draftOff = tooMany || selected === 0
   // Renew needs an approver; Reprice and Extend do not.
   const renewOff = !canApprove
-  // On a phone the reserved row holds it even with nothing ticked, so the first tick does not grow the bar.
-  const renewReason = renewOff && (selected > 0 || narrow) ? RENEW_REASON : null
+  const renewReason = renewOff && selected > 0 ? RENEW_REASON : null
   // The one visible reason line (Renew's and Approve's reasons never coexist: one needs canApprove false, the other true). A phone's count already says "Choose N or fewer".
-  const line = tooMany ? (narrow ? null : reason) : (onAction && renewReason) || (canApprove && approveReason) || note
+  const line = tooMany ? (narrow ? null : reason) : (!narrow && onAction && renewReason) || (canApprove && approveReason) || note
   const verbs: { value: AgreementBulkAction; label: string; icon: typeof RefreshCw }[] = [
     { value: 'renew', label: selected > 0 ? `Renew ${selected}` : 'Renew', icon: RefreshCw },
     { value: 'reprice', label: 'Reprice to…', icon: TrendingUp },
@@ -60,9 +59,9 @@ export function AgreementsBulkBar({ selected, approvable, canApprove, shown, all
         </label>
       )}
       <span className={`text-sm tabular-nums ${tooMany && narrow ? 'text-[var(--color-destructive)]' : ''}`} aria-live="polite">{tooMany && narrow ? reason : selected === 0 ? 'None selected' : `${selected} selected`}</span>
-      {/* A phone has no room for Clear: the box clears. The reason row below is always there on a phone (empty when nothing is off), so the bar keeps its height and the reason is seen without opening the menu. */}
+      {/* A phone has no room for Clear: the box clears. On a phone a role that can approve (or has a note) always gets the reason row below (empty when nothing is off), so the bar keeps its height and the Approve reason is seen without opening the menu. Renew's reason stays on its menu item there. */}
       {!narrow && <Button variant="ghost" size="sm" onClick={onClear} className={selected > 0 ? "" : "invisible"}>Clear</Button>}
-      {(line || narrow) && <span id={reasonId} className={`text-sm max-md:order-last max-md:basis-full max-md:min-h-5 ${tooMany ? 'text-[var(--color-destructive)]' : 'text-[var(--color-muted-foreground)]'}`}>{line}</span>}
+      {(line || (narrow && (canApprove || note))) && <span id={reasonId} aria-live={narrow ? 'polite' : undefined} className={`text-sm max-md:order-last max-md:basis-full max-md:min-h-5 ${tooMany ? 'text-[var(--color-destructive)]' : 'text-[var(--color-muted-foreground)]'}`}>{line}</span>}
       {items.length > 0 && (
         <div className="ml-auto">
           {narrow ? (
