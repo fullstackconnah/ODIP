@@ -123,7 +123,7 @@ public class BprCsvServiceTests
         Assert.Equal("8:30", standard["Hours"]);
         Assert.Equal("40.00", standard["UnitPrice"]);
         Assert.Equal("", standard["CancellationReason"]);
-        Assert.Equal("late, notice", canc["CancellationReason"]);
+        Assert.Equal("NSDH", canc["CancellationReason"]);
         // The three legacy fields and the ABN are blank on every row.
         Assert.All(byName, r =>
         {
