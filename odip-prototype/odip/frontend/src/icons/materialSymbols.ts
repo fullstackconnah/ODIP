@@ -48,6 +48,7 @@ export const MATERIAL_SYMBOLS: readonly string[] = [
   'request_quote',
   'schedule',
   'settings',
+  'summarize',
   'verified',
   'warning',
 ]

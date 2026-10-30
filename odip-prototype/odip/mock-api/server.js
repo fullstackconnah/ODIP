@@ -14,6 +14,7 @@ const fundingModule = require('./funding')
 const intakeBookingModule = require('./intakeBooking')
 const rosterBudgetModule = require('./rosterBudget')
 const invoicesModule = require('./invoices')
+const reportsModule = require('./reports')
 const claimHubModule = require('./claimHub')
 const importsModule = require('./imports')
 
@@ -2060,6 +2061,7 @@ const claimLineItemsByClaimId = {
 
 // Xero PR1: the invoice fixtures (claim-inv-f1 ... f10) join the claims above; invoices.js holds their invoices and routes.
 const invoiceMock = invoicesModule.create({ respond, failEnvelope, claims, lineItemsByClaimId: claimLineItemsByClaimId })
+const reportsMock = reportsModule.create({ respond, failEnvelope })
 const claimHub = claimHubModule.create({ respond, failEnvelope, FILE: invoicesModule.FILE })
 
 /** GET/PUT provider-settings: the organisation's billing details, with the invoice numbering invoices.js keeps. */
@@ -2567,6 +2569,7 @@ const routes = [
   ...funding.get,
   ...intake.get,
   ...invoiceMock.get,
+  ...reportsMock.get,
   ...claimHub.get,
   ['provider-settings', () => invoiceMock.settingsDto(providerSettingsRow)],
   ['dashboard/summary', () => dashboardSummary],
@@ -2857,6 +2860,7 @@ const postRoutes = [
   ...funding.post,
   ...intake.post,
   ...invoiceMock.post,
+  ...reportsMock.post,
   ...claimHub.post,
   ['plan-pricing/quote', (body) => {
     if (!Array.isArray(body.blocks)) return respond(400, failEnvelope(null, ['The request needs a list of blocks.']))

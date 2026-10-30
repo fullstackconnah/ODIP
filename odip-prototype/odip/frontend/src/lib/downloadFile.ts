@@ -13,8 +13,13 @@ export async function downloadFile(url: string, filename: string, fallback = "Co
   } catch (err) {
     throw new Error(await serverSentence(isAxiosError(err) ? err.response?.data : undefined, fallback))
   }
+  saveBlob(new Blob([data]), filename)
+}
+
+/** Hands a blob to the browser as a download named `filename`. */
+export function saveBlob(blob: Blob, filename: string): void {
   const link = document.createElement('a')
-  link.href = URL.createObjectURL(new Blob([data]))
+  link.href = URL.createObjectURL(blob)
   link.download = filename
   link.click()
   URL.revokeObjectURL(link.href)
