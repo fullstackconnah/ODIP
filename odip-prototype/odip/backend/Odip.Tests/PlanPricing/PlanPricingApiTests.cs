@@ -323,6 +323,27 @@ public class PlanPricingApiTests
         Assert.Equal((false, CrossingPolicy.Split, true, 0.99m, 2.76m, true), (settings.RegistrationGroupsConfirmed, settings.CrossingPolicy, settings.ClaimProviderTravel, settings.TravelKmRateStandard, settings.TravelKmRateAccessible, settings.TravelRatesProvisional));
         Assert.Equal((GroupOutingFamily.GroupActivities, true), (settings.GroupOutings, settings.StaUsesHourlyAndAccommodation));
         Assert.Equal(new[] { "Admin", "Coordinator" }, settings.ApproverRoles);
+        Assert.False(settings.ApprovalActivatesParticipant);
+    }
+
+    [Fact]
+    public async Task The_approval_activates_setting_round_trips_and_a_request_without_it_leaves_it_alone()
+    {
+        var (db, controller) = await SetUpAsync(TenantA);
+        await using var _ = db;
+
+        var on = Ok(await controller.PutSettings(new UpdatePlanPricingSettingsDto { ApprovalActivatesParticipant = true }, CancellationToken.None));
+        Assert.True(on.ApprovalActivatesParticipant);
+        Assert.True(Ok(await controller.GetSettings(CancellationToken.None)).ApprovalActivatesParticipant);
+        Assert.True((await db.PlanPricingSettings.AsNoTracking().SingleAsync()).ApprovalActivatesParticipant);
+
+        var other = Ok(await controller.PutSettings(new UpdatePlanPricingSettingsDto { ClaimProviderTravel = false }, CancellationToken.None));
+        Assert.True(other.ApprovalActivatesParticipant);                                                         // omitted means unchanged
+        Assert.True((await db.PlanPricingSettings.AsNoTracking().SingleAsync()).ApprovalActivatesParticipant);
+
+        var off = Ok(await controller.PutSettings(new UpdatePlanPricingSettingsDto { ApprovalActivatesParticipant = false }, CancellationToken.None));
+        Assert.False(off.ApprovalActivatesParticipant);
+        Assert.False((await db.PlanPricingSettings.AsNoTracking().SingleAsync()).ApprovalActivatesParticipant);
     }
 
     [Fact]

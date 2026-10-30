@@ -1021,6 +1021,7 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.GroupOutings).HasDefaultValue(Odip.Domain.Billing.Pricing.GroupOutingFamily.GroupActivities);
             entity.Property(e => e.StaUsesHourlyAndAccommodation).HasDefaultValue(true);
             entity.Property(e => e.ApproverRoles).HasMaxLength(100).IsRequired().HasDefaultValue(Odip.Domain.Entities.PlanPricingSettings.DefaultApproverRoles);
+            entity.Property(e => e.ApprovalActivatesParticipant).HasDefaultValue(false);
 
             entity.HasOne(e => e.Tenant)
                 .WithMany()
