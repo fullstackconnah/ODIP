@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Odip.Api.Controllers;
@@ -20,12 +22,18 @@ public class StaffControllerTests
 {
     private static OdipDbContext CreateDb(string dbName, Guid tenantId) => TestDb.ForTenant(dbName, tenantId);
 
+    // The screening number is only returned to managers (StaffScreeningMask), so these tests call as an Admin.
+    private static ControllerContext AdminContext() => new()
+    {
+        HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity(new[] { new Claim(ClaimTypes.Role, "Admin") }, "test")) },
+    };
+
     [Fact]
     public async Task Create_WithWorkerScreeningFields_PersistsAndReturnsThem()
     {
         var tenantId = Guid.NewGuid();
         using var db = CreateDb(Guid.NewGuid().ToString(), tenantId);
-        var controller = new StaffController(db);
+        var controller = new StaffController(db) { ControllerContext = AdminContext() };
 
         var dto = new CreateStaffDto
         {
@@ -56,7 +64,7 @@ public class StaffControllerTests
     {
         var tenantId = Guid.NewGuid();
         using var db = CreateDb(Guid.NewGuid().ToString(), tenantId);
-        var controller = new StaffController(db);
+        var controller = new StaffController(db) { ControllerContext = AdminContext() };
 
         var createDto = new CreateStaffDto
         {
@@ -107,7 +115,7 @@ public class StaffControllerTests
         };
         db.Users.Add(staff);
         await db.SaveChangesAsync();
-        var controller = new StaffController(db);
+        var controller = new StaffController(db) { ControllerContext = AdminContext() };
 
         var updated = Assert.IsType<ApiResponse<StaffDetailDto>>(Assert.IsType<OkObjectResult>(
             (await controller.Update(staff.Id, new UpdateStaffDto { FirstName = "New", LastName = "Starter", Email = "new.starter@example.com", Position = Position.SupportWorker, IsActive = true, Notes = "edited" }, CancellationToken.None)).Result).Value);
@@ -136,7 +144,7 @@ public class StaffControllerTests
             WorkerScreeningExpiryDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1),
         });
         await db.SaveChangesAsync();
-        var controller = new StaffController(db);
+        var controller = new StaffController(db) { ControllerContext = AdminContext() };
 
         var result = await controller.GetAll(null, CancellationToken.None);
 
@@ -161,7 +169,7 @@ public class StaffControllerTests
             LastName = "Lee",
         });
         await db.SaveChangesAsync();
-        var controller = new StaffController(db);
+        var controller = new StaffController(db) { ControllerContext = AdminContext() };
 
         var result = await controller.Create(
             new CreateStaffDto { FirstName = "Sam", LastName = "Lee", Email = "Sam.Lee@gmail.com", Position = Position.SupportWorker },

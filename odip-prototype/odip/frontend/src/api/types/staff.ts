@@ -28,7 +28,10 @@ export interface StaffListDto {
   driverLicenceExpiryDate: string | null
   manualHandlingExpiryDate: string | null
   medicationCompetencyExpiryDate: string | null
+  /** Null for a caller who may not see the number (managers and the person themselves do); see workerScreeningRecorded. */
   workerScreeningNumber: string | null
+  /** True when a number is on file, whether or not this caller may see it. */
+  workerScreeningRecorded: boolean
   workerScreeningExpiryDate: string | null
   /** The first day this person can be rostered. Set only by the Employment Hero sync, so read-only here; null means no limit. */
   employmentStartDate?: string | null

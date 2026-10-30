@@ -1374,7 +1374,10 @@ public record StaffListDto
     public DateOnly? DriverLicenceExpiryDate { get; init; }
     public DateOnly? ManualHandlingExpiryDate { get; init; }
     public DateOnly? MedicationCompetencyExpiryDate { get; init; }
+    /// <summary>Null for callers who may not see the number (see StaffScreeningMask); the expiry date stays visible.</summary>
     public string? WorkerScreeningNumber { get; init; }
+    /// <summary>True when a number is stored, whether or not the caller may see it.</summary>
+    public bool WorkerScreeningRecorded { get; init; }
     public DateOnly? WorkerScreeningExpiryDate { get; init; }
     /// <summary>Employment Hero's start date for this person: read-only here, set only by the payroll sync. Null means no limit.</summary>
     public DateOnly? EmploymentStartDate { get; init; }

@@ -45,7 +45,7 @@ const staff = (overrides: Partial<StaffDetailDto> = {}): StaffDetailDto => ({
   id: 's1', firstName: 'Sam', lastName: 'Staff', fullName: 'Sam Staff', username: 'sam.staff', role: 'SupportWorker', position: 'SupportWorker',
   email: 'sam.staff@acme.example.com', mobile: null, region: null, isDriverEligible: false, isFirstAidQualified: false, isMedicationCompetent: false,
   isManualHandlingCompetent: false, isOvernightEligible: false, isActive: true, firstAidExpiryDate: null, driverLicenceExpiryDate: null,
-  manualHandlingExpiryDate: null, medicationCompetencyExpiryDate: null, workerScreeningNumber: null, workerScreeningExpiryDate: null,
+  manualHandlingExpiryDate: null, medicationCompetencyExpiryDate: null, workerScreeningNumber: null, workerScreeningRecorded: false, workerScreeningExpiryDate: null,
   hasExpiredQualifications: false, notes: null, ...overrides,
 })
 

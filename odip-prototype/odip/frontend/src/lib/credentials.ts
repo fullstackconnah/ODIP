@@ -2,8 +2,8 @@
 // Dashboard's "Qualification Issues" figure, so the three can never disagree. Pure and JSX-free.
 //
 // The rule: a credential with a qualification flag (First Aid, Driver Licence, Manual Handling, Medication Competency) applies when the
-// flag is set, with or without a date (no date is an issue). Worker Screening has no flag, so it applies only once an expiry date has
-// been entered; a screening number alone does not make it apply (there is nothing to expire yet).
+// flag is set, with or without a date (no date is an issue). Worker Screening has no flag: it applies to every active person (the roster
+// warns on a missing screening for anyone it can assign, RosterConflictService WSC_MISSING) and to anyone with a date; no date is an issue.
 import { deadlineState, isDeadlineIssue, type DeadlineState } from './deadline'
 
 export const CREDENTIALS = [
@@ -18,6 +18,8 @@ type Credential = (typeof CREDENTIALS)[number]
 
 /** The staff fields the rule reads (StaffListDto and StaffDetailDto both carry them). */
 export interface CredentialSource {
+  /** A missing screening is an issue only for an active person (StaffListDto/StaffDetailDto always carry it). */
+  isActive?: boolean
   isFirstAidQualified?: boolean
   firstAidExpiryDate?: string | null
   isDriverEligible?: boolean
@@ -49,7 +51,7 @@ export function staffCredentials(staff: CredentialSource, { warnDays, today = ne
   const out: StaffCredential[] = []
   for (const c of CREDENTIALS) {
     const expiryDate = staff[c.field] || null
-    if (!(c.flag === null ? expiryDate !== null : staff[c.flag])) continue
+    if (!(c.flag === null ? expiryDate !== null || staff.isActive === true : staff[c.flag])) continue
     out.push({ key: c.key, label: c.label, field: c.field, expiryDate, state: deadlineState(expiryDate, { warnDays, today }) })
   }
   return out

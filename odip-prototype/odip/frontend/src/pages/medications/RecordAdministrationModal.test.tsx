@@ -60,7 +60,7 @@ function makeStaff(overrides: Partial<StaffListDto> = {}): StaffListDto {
     email: null, mobile: null, region: null, isDriverEligible: false,
     isFirstAidQualified: false, isMedicationCompetent: true, isManualHandlingCompetent: false,
     isOvernightEligible: false, isActive: true, firstAidExpiryDate: null, driverLicenceExpiryDate: null,
-    manualHandlingExpiryDate: null, medicationCompetencyExpiryDate: null, workerScreeningNumber: null,
+    manualHandlingExpiryDate: null, medicationCompetencyExpiryDate: null, workerScreeningNumber: null, workerScreeningRecorded: false,
     workerScreeningExpiryDate: null, hasExpiredQualifications: false, notes: null,
     ...overrides,
   }

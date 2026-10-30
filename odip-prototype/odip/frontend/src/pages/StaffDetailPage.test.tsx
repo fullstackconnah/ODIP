@@ -177,8 +177,8 @@ describe('StaffDetailPage — Availability tab (default)', () => {
 })
 
 describe('StaffDetailPage — Credentials tab', () => {
-  it('shows an empty state when the staff member has no credentials on file', () => {
-    mockUseStaffOverview.mockReturnValue({ data: makeOverview(), isLoading: false })
+  it('shows an empty state when the archived staff member has no credentials on file', () => {
+    mockUseStaffOverview.mockReturnValue({ data: makeOverview({ staff: makeStaff({ isActive: false }) }), isLoading: false })
     renderAtTab('staff-1', 'credentials')
 
     expect(screen.getByText('No credentials on file')).toBeInTheDocument()
@@ -217,7 +217,7 @@ describe('StaffDetailPage — Credentials tab', () => {
 
   it('shows "No date set" for a qualification flag with no expiry date', () => {
     mockUseStaffOverview.mockReturnValue({
-      data: makeOverview({ staff: makeStaff({ isMedicationCompetent: true, medicationCompetencyExpiryDate: null }) }),
+      data: makeOverview({ staff: makeStaff({ isMedicationCompetent: true, medicationCompetencyExpiryDate: null, workerScreeningExpiryDate: daysFromToday(400) }) }),
       isLoading: false,
     })
     renderAtTab('staff-1', 'credentials')
@@ -236,16 +236,16 @@ describe('StaffDetailPage — Credentials tab', () => {
   })
 
   // The one rule (lib/credentials.ts) the Qualifications list and the Dashboard count use too: worker screening has no qualification flag, so
-  // it applies once it has an expiry date. A number alone is not a credential with something to expire.
-  it('does not list worker screening for a number with no expiry date', () => {
+  // it applies to every active person; no expiry date is a missing screening, even with a number on file.
+  it('lists worker screening as undated for an active person whose number has no expiry date', () => {
     mockUseStaffOverview.mockReturnValue({
       data: makeOverview({ staff: makeStaff({ workerScreeningNumber: 'WWC-123', workerScreeningExpiryDate: null }) }),
       isLoading: false,
     })
     renderAtTab('staff-1', 'credentials')
 
-    expect(screen.queryByText('Worker Screening')).not.toBeInTheDocument()
-    expect(screen.getByText('No credentials on file')).toBeInTheDocument()
+    expect(screen.getByText('Worker Screening')).toBeInTheDocument()
+    expect(screen.getByText('No date set')).toBeInTheDocument()
   })
 
   it('says "Expires today" on the day and "Expires in 1 day" the day before', () => {
