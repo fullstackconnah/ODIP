@@ -32,6 +32,10 @@ const board = {
 const checks = []
 const check = (name, value, ok) => { checks.push({ name, pass: !!ok, detail: String(value) }); console.log(`${ok ? 'PASS' : 'FAIL'} ${name}: ${value}`) }
 
+// The board route waits on this gate so the pending state holds until its crop is taken.
+let gate = Promise.resolve()
+const hold = () => { let open; gate = new Promise((res) => { open = res }); return open }
+
 const browser = await chromium.launch({ headless: true })
 
 async function session(mode, delayMs = 0) {
@@ -49,7 +53,7 @@ async function session(mode, delayMs = 0) {
   page.on('pageerror', (e) => check(`page error (${mode})`, e.message, false))
   await page.route('**/api/v1/auth/dev-users', (r) => r.fulfill({ json: devUsers }))
   await page.route('**/api/v1/auth/dev-login', (r) => r.fulfill({ json: devLogin }))
-  await page.route('**/api/v1/rostering/board*', async (r) => { if (delayMs) await new Promise((res) => setTimeout(res, delayMs)); await r.fulfill({ json: envelope(board) }) })
+  await page.route('**/api/v1/rostering/board*', async (r) => { await gate; if (delayMs) await new Promise((res) => setTimeout(res, delayMs)); await r.fulfill({ json: envelope(board) }) })
   await page.route('**/api/v1/provider-settings', (r) => r.fulfill({ json: envelope({ organisationName: 'Synthetic Support' }) }))
   await page.goto(`${BASE_URL}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
   await page.getByRole('button', { name: 'Sign in as selected user' }).click()
@@ -72,6 +76,20 @@ const full = async (page, name, touch = false) => {
   checks.push(...r.checks)
   for (const c of r.checks) console.log(`${c.pass ? 'PASS' : 'FAIL'} ${c.name}: ${JSON.stringify(c.detail)}`)
 }
+// The pending trigger: exact label, spinner, same width as the idle trigger; cropped while the board is held. Fails if never seen.
+async function pending(page, bp, idleWidth, touch) {
+  const btn = page.getByRole('button', { name: 'Preparing…' })
+  await btn.waitFor({ timeout: 10_000 }).catch(() => {})
+  const seen = (await btn.count()) === 1
+  check(`loading label (${bp})`, seen ? 'Preparing…' : 'none', seen)
+  if (!seen) return
+  const spin = await btn.locator('svg.animate-spin').count()
+  check(`loading spinner (${bp})`, spin, spin === 1)
+  const w = (await btn.boundingBox())?.width ?? 0
+  check(`loading width equals idle (${bp})`, `${w}px vs ${idleWidth}px`, Math.abs(w - idleWidth) <= 1)
+  await page.addStyleTag({ content: '.animate-spin{animation:none!important}' }) // the lib's settle waits for animations to end; a spinner never does
+  await crop(page, btn, `loading-${bp}-crop`, touch)
+}
 const OPTION = (page) => page.getByRole('option', { name: 'Weekly Schedule PDF' })
 const trigger = (page) => page.getByRole('button', { name: /^(Documents|Preparing)/ })
 // Computed styles of the app shell, read in whatever media the page is emulating.
@@ -89,7 +107,7 @@ const hidden = (v) => v === 'none' || v === 'absent'
 try {
   // 390 touch: the menu item is a 44px target; then the loading state while the board is slow.
   {
-    const page = await session('touch', 1500)
+    const page = await session('touch')
     await go(page, '/participants/p-0001')
     const h = await page.evaluate(() => document.documentElement.scrollHeight)
     await page.setViewportSize({ width: 390, height: h }) // the resize drops touch emulation: pin it again and prove it held
@@ -106,9 +124,11 @@ try {
     await page.setViewportSize({ width: 390, height: 844 })
     await page.pinCoarse()
     const download = page.waitForEvent('download', { timeout: 90_000 })
+    const idle390 = (await trigger(page).boundingBox())?.width ?? 0
+    const release390 = hold()
     await OPTION(page).click()
-    await page.getByRole('button', { name: /^Preparing/ }).waitFor({ timeout: 5_000 }).catch(() => {})
-    await crop(page, trigger(page), 'loading-390-crop', true)
+    await pending(page, '390', idle390, true)
+    release390()
     const file = (await download).suggestedFilename()
     check('download file name (390)', file, /^.+ - Weekly Schedule 2026-09-07\.pdf$/.test(file))
     await page.context().close()
@@ -116,18 +136,18 @@ try {
 
   // 1280 fine pointer: the menu, the loading label, then print media.
   {
-    const page = await session('fine', 1500)
+    const page = await session('fine')
     await go(page, '/participants/p-0001')
     await trigger(page).click()
     await OPTION(page).waitFor({ timeout: 30_000 })
     await crop(page, page.getByRole('listbox').first(), 'menu-1280-crop')
     await full(page, 'menu-1280')
     const download = page.waitForEvent('download', { timeout: 90_000 })
+    const idle1280 = (await trigger(page).boundingBox())?.width ?? 0
+    const release1280 = hold()
     await OPTION(page).click()
-    const preparing = page.getByRole('button', { name: 'Preparing…' })
-    await preparing.waitFor({ timeout: 5_000 }).catch(() => {})
-    check('loading label (1280)', await preparing.count() ? 'Preparing…' : 'none', (await preparing.count()) === 1)
-    await crop(page, preparing.or(trigger(page)).first(), 'loading-1280-crop')
+    await pending(page, '1280', idle1280, false)
+    release1280()
     const file = (await download).suggestedFilename()
     check('download file name (1280)', file, /^.+ - Weekly Schedule 2026-09-07\.pdf$/.test(file))
     await trigger(page).filter({ hasText: 'Documents' }).waitFor({ timeout: 30_000 })

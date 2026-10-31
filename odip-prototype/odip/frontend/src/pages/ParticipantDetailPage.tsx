@@ -550,6 +550,7 @@ function DocumentsMenu({
       variant="menu"
       triggerVariant="secondary"
       iconOnlyBelowSm
+      triggerClassName="sm:min-w-[9.75rem]" // holds the width from Documents to Preparing…
       label={busy ? 'Preparing…' : 'Documents'}
       icon={busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
       items={items}
