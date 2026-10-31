@@ -111,15 +111,15 @@ const enquiryFeed = [
     createdAt: '2026-02-01T00:00:00Z', participantIsDraft: false, participantIsActive: true, participantIntakeCompletedAt: '2026-02-10T00:00:00Z' },
 ]
 
-// The onboarding checklist (owner decision 2026-10-13): four items derived by the server, three for anyone not NDIS-funded. The mock treats everyone on the
+// The onboarding checklist (owner decision 2026-10-13): six items (three derived by the server, three recorded by hand), five for anyone not NDIS-funded. The mock treats everyone on the
 // worklist as NDIS-funded. Mei has every item open: no date of birth, no draft, no agreement record, no plan budget (funding.js holds plans
 // for p-0002 and p-0004 only). Daniel's services have started and only his plan budget is missing.
 const FUNDING_NOT_RECORDED = 'No plan budget recorded.'
 const FUNDING_ENDED = 'The plan budget has ended: record the new plan.'
 const SERVICES_STARTED = { 'p-0104': '2026-10-08T00:00:00Z' }
 const onboardingWorklist = [
-  { participantId: 'p-0103', fullName: 'Mei Tanaka', servicesStartedAt: null, completedSteps: 0, totalSteps: 4, firstMissing: 'Profile details' },
-  { participantId: 'p-0104', fullName: 'Daniel Osei', servicesStartedAt: SERVICES_STARTED['p-0104'], completedSteps: 3, totalSteps: 4, firstMissing: 'Funding' },
+  { participantId: 'p-0103', fullName: 'Mei Tanaka', servicesStartedAt: null, completedSteps: 0, totalSteps: 6, firstMissing: 'Profile details' },
+  { participantId: 'p-0104', fullName: 'Daniel Osei', servicesStartedAt: SERVICES_STARTED['p-0104'], completedSteps: 5, totalSteps: 6, firstMissing: 'Funding' },
 ]
 
 // Drafts are not on the register, so the participants list never returns these; only their detail and checklist are served (the mock's default
@@ -2609,11 +2609,14 @@ const routes = [
       item('profile', 'Profile details', !fresh, 'Missing: date of birth.'),
       item('serviceNeeds', 'Service needs', !fresh, 'No current agreement draft with dated, priced support lines.'),
       item('agreement', 'Signed agreement', !fresh, 'Record the date it was signed, or why there is no written agreement.'),
+      item('complaints', 'Told how to make a complaint', !fresh, 'Record the date you explained how to make a complaint.'),
+      item('rights', 'Rights explained', !fresh, 'Record the date you explained their rights.'),
       item('funding', 'Funding', budget.recorded, budget.ended ? FUNDING_ENDED : FUNDING_NOT_RECORDED),
     ]
     return {
       participantId: id, items, isReady: items.every((i) => i.done), servicesStartedAt: SERVICES_STARTED[id] ?? null,
       agreementSignedOn: fresh ? null : '2026-10-01', noAgreementReason: null,
+      complaintsExplainedOn: fresh ? null : '2026-10-01', rightsExplainedOn: fresh ? null : '2026-10-01',
     }
   }],
   ['participants/:id/bookings', (id) => bookings.filter((b) => b.participantId === id)],

@@ -78,15 +78,17 @@ function createServer(mode: Mode, extra: FakeParticipant[] = []) {
   // it: a draft is on Enquiries or Onboarding by its intake alone (the seeded demo draft is a draft that is marked active).
   const inOnboarding = () => participants.filter(p => p.isDraft && p.intakeCompletedAt)
   const worklist = () => inOnboarding().map(p => ({
-    participantId: p.id, fullName: name(p), servicesStartedAt: p.servicesStartedAt ?? null, completedSteps: 1, totalSteps: 4, firstMissing: 'Service needs',
+    participantId: p.id, fullName: name(p), servicesStartedAt: p.servicesStartedAt ?? null, completedSteps: 1, totalSteps: 6, firstMissing: 'Service needs',
   }))
-  // ParticipantInquiriesController.BuildDetail: four derived items; this participant has only the profile done.
+  // ParticipantInquiriesController.BuildDetail: six items; this participant has only the profile done.
   const checklist = (id: string) => ({
-    participantId: id, isReady: false, servicesStartedAt: find(id).servicesStartedAt ?? null, agreementSignedOn: null, noAgreementReason: null,
+    participantId: id, isReady: false, servicesStartedAt: find(id).servicesStartedAt ?? null, agreementSignedOn: null, noAgreementReason: null, complaintsExplainedOn: null, rightsExplainedOn: null,
     items: [
       { key: 'profile', label: 'Profile details', done: true, missing: null },
       { key: 'serviceNeeds', label: 'Service needs', done: false, missing: 'No current agreement draft with dated, priced support lines.' },
       { key: 'agreement', label: 'Signed agreement', done: false, missing: 'Record the date it was signed, or why there is no written agreement.' },
+      { key: 'complaints', label: 'Told how to make a complaint', done: false, missing: 'Record the date you explained how to make a complaint.' },
+      { key: 'rights', label: 'Rights explained', done: false, missing: 'Record the date you explained their rights.' },
       { key: 'funding', label: 'Funding', done: false, missing: 'No plan budget recorded.' },
     ],
   })
