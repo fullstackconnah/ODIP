@@ -831,7 +831,7 @@ describe('LeaveApprovalsPage — between md and xl (1024): Staff over Type, Date
   it('stacks the pairs under two headers', () => {
     mockUseLeaveRequests.mockReturnValue(ok([makeLeaveRequest()]))
     renderPage()
-    expect(screen.getAllByRole('columnheader').map(h => h.textContent)).toEqual(['Staff · Type', 'Dates · Requested', 'Status', ''])
+    expect(screen.getAllByRole('columnheader').map(h => h.textContent)).toEqual(['Staff · Type', 'Dates · Requested', 'Status', 'Actions'])
   })
 
   it('puts the type under the name and the requester under the dates in the same cell', () => {
@@ -924,7 +924,7 @@ describe('LeaveApprovalsPage — xl and phones', () => {
   it('keeps the six columns at xl+ and on phones', () => {
     mockUseLeaveRequests.mockReturnValue({ data: [makeLeaveRequest()], isLoading: false, isError: false, refetch: vi.fn() })
     renderPage()
-    expect(screen.getAllByRole('columnheader').map(h => h.textContent)).toEqual(['Staff', 'Type', 'Dates', 'Requested', 'Status', ''])
+    expect(screen.getAllByRole('columnheader').map(h => h.textContent)).toEqual(['Staff', 'Type', 'Dates', 'Requested', 'Status', 'Actions'])
   })
 
   it('keeps the six columns when matchMedia says the width is not between md and xl', () => {
@@ -934,7 +934,7 @@ describe('LeaveApprovalsPage — xl and phones', () => {
     try {
       mockUseLeaveRequests.mockReturnValue({ data: [makeLeaveRequest()], isLoading: false, isError: false, refetch: vi.fn() })
       renderPage()
-      expect(screen.getAllByRole('columnheader').map(h => h.textContent)).toEqual(['Staff', 'Type', 'Dates', 'Requested', 'Status', ''])
+      expect(screen.getAllByRole('columnheader').map(h => h.textContent)).toEqual(['Staff', 'Type', 'Dates', 'Requested', 'Status', 'Actions'])
       const type = screen.getAllByRole('cell').find(c => c.getAttribute('data-label') === 'Type')!
       expect(type).toHaveTextContent('Leave — Annual')
       expect(screen.getByRole('button', { name: 'Approve: Alex Rivera, 14 Sep 2026 – 18 Sep 2026' })).toBeInTheDocument()

@@ -43,7 +43,7 @@ describe('Leave group — what it reads', () => {
     expect(apiGetWithDefault).toHaveBeenCalledWith('/leave/unavailability', [], { status: 'Pending' })
     expect(client.getQueryCache().find({ queryKey: ['leave-requests', { status: 'Pending' }], exact: true })).toBeDefined()
     expect(subjects()).toEqual(['Ana Ruiz', 'Sam Lee', 'Mei Zhang'])
-    expect(headers()).toEqual(['Staff', 'Type', 'Dates', 'Note', ''])
+    expect(headers()).toEqual(['Staff', 'Type', 'Dates', 'Note', 'Actions'])
     expect(facts('Sam Lee')).toEqual(['Annual leave', '20–24 Oct 2026, 5 days', '“Family wedding”'])
     expect(facts('Ana Ruiz')).toEqual(['Annual leave', '15 Oct 2026, 1 day', '—'])
     // The Leave page's word for a rule, and its notes (fetched, not drawn before).
