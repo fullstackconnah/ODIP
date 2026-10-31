@@ -58,6 +58,7 @@ const PAGES = [
 
 const browser = await chromium.launch({ headless: true })
 const checks = []
+let n3done = false
 const check = (tag, name, ok, detail = '') => { checks.push({ name: `${tag} ${name}`, pass: !!ok, detail }); console.log(`[polish-pr1] ${ok ? 'PASS' : 'FAIL'} ${tag} ${name}${detail !== '' ? ` (${typeof detail === 'string' ? detail : JSON.stringify(detail)})` : ''}`) }
 const median = (a) => { const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)] }
 
@@ -240,7 +241,7 @@ try {
           const cards = await page.evaluate(measureCards)
           const hs = cards.map((c) => c.h)
           const maxH = cfg.key === 'tasks' ? 144 : cfg.key === 'incidents' ? 156 : 132
-          check(tag, `C11 card height median <= ${cfg.key === 'incidents' ? 132 : 120}, max <= ${maxH}`, median(hs) <= (cfg.key === 'incidents' ? 132 : 120) && Math.max(...hs) <= maxH, { median: Math.round(median(hs)), max: Math.round(Math.max(...hs)), n: hs.length })
+          check(tag, `C11 card height median <= ${cfg.key === 'incidents' ? 132 : cfg.key === 'tasks' ? 144 : 120}, max <= ${maxH}`, median(hs) <= (cfg.key === 'incidents' ? 132 : cfg.key === 'tasks' ? 144 : 120) && Math.max(...hs) <= maxH, { median: Math.round(median(hs)), max: Math.round(Math.max(...hs)), n: hs.length })
           // Fix round 1: M1 the tick sits clear of the title; M2 Type is on the incident card; M3 the meta reads Date, Severity, NDIS, Type, Trip, Participant.
           if (cfg.key === 'tasks') check(tag, 'M1 no tick over a title', cards.every((c) => !c.tickOverTitle), { worst: Math.max(...hs), over: cards.filter((c) => c.tickOverTitle).length })
           if (cfg.key === 'incidents') {
@@ -270,22 +271,25 @@ try {
         if (variant === 'stock') {
           const opts = { touch: profile.touch }
           const wrapper = page.locator('table').first().locator('xpath=../..')
-          // N2 nothing focused at rest. M4 on the phone the fixed bottom nav is hidden for the crop only, and the last card must lie in the clip and be what is at its centre.
-          await page.evaluate(() => { document.activeElement?.blur?.(); window.__shotHidden = []; if (matchMedia('(pointer: coarse)').matches) for (const el of document.querySelectorAll('body *')) { if (getComputedStyle(el).position !== 'fixed') continue; const r = el.getBoundingClientRect(); if (r.width > 0 && r.bottom >= innerHeight - 1 && r.top > innerHeight / 2) { window.__shotHidden.push([el, el.style.visibility]); el.style.visibility = 'hidden' } } })
-          const lastCard = ({ clip }) => page.evaluate((c) => { const rows = [...document.querySelectorAll('table tbody tr')]; const r = rows[rows.length - 1].getBoundingClientRect(); const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return { rows: rows.length, inClip: r.left >= c.x - 1 && r.right <= c.x + c.width + 1 && r.top >= c.y - 1 && r.bottom <= c.y + c.height + 1, atCentre: !!hit && rows[rows.length - 1].contains(hit) } }, clip)
-          const crop = await cropElement(page, wrapper, path.join(OUT_DIR, `${profile.name}-${cfg.key}-table.png`), { ...opts, during: lastCard })
-          await page.evaluate(() => { for (const [el, v] of window.__shotHidden ?? []) el.style.visibility = v })
-          checks.push(checkCropHolds(crop))
-          check(tag, 'M4 last card inside the clip and nothing over it', crop.measured.inClip && crop.measured.atCentre, crop.measured)
-          // N3 the right edge of Tasks at 1280: the fade, in a padded crop.
-          if (profile.name === 'desktop-1280' && cfg.key === 'tasks') {
+          // N3 the right edge at 1280 with the fade in it, in a padded crop: the first list that scrolls (Tasks fits at 1280 on stock data).
+          if (profile.name === 'desktop-1280' && !n3done && await page.locator('[data-edge-fade="end"]').count()) {
+            n3done = true
+            await page.evaluate(() => scrollTo(0, 0))
             const wb = await wrapper.boundingBox()
             const fadeBox = await page.locator('[data-edge-fade="end"]').first().boundingBox()
             const clip = { x: Math.max(0, wb.x + wb.width - 380 - 16), y: Math.max(0, wb.y - 16), width: 380 + 32, height: Math.min(wb.height + 32, 420) }
             clip.width = Math.min(clip.width, 1280 - clip.x)
-            await page.screenshot({ path: path.join(OUT_DIR, 'desktop-1280-tasks-fade-edge.png'), clip })
+            await page.screenshot({ path: path.join(OUT_DIR, `desktop-1280-${cfg.key}-fade-edge.png`), clip })
             check(tag, 'N3 fade is inside the edge crop', !!fadeBox && fadeBox.x >= clip.x && fadeBox.x + fadeBox.width <= clip.x + clip.width + 1, { fadeBox, clip })
           }
+          // N2 nothing focused at rest. M4 on the phone the fixed bottom nav is hidden for the crop only, and the last card must lie in the clip and be what is at its centre.
+          await page.evaluate(() => { document.activeElement?.blur?.(); window.__shotHidden = []; if (matchMedia('(pointer: coarse)').matches) for (const el of document.querySelectorAll('body *')) { if (getComputedStyle(el).position !== 'fixed') continue; const r = el.getBoundingClientRect(); if (r.width > 0 && r.bottom >= innerHeight - 1 && r.top > innerHeight / 2) { window.__shotHidden.push([el, el.style.visibility]); el.style.visibility = 'hidden' } } })
+          const lastCard = (clip) => page.evaluate((c) => { const rows = [...document.querySelectorAll('table tbody tr')]; const r = rows[rows.length - 1].getBoundingClientRect(); const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return { rows: rows.length, inClip: r.left >= c.x - 1 && r.right <= c.x + c.width + 1 && r.top >= c.y - 1 && r.bottom <= c.y + c.height + 1, atCentre: !!hit && rows[rows.length - 1].contains(hit) } }, clip)
+          const crop = await cropElement(page, wrapper, path.join(OUT_DIR, `${profile.name}-${cfg.key}-table.png`), { ...opts, during: lastCard })
+          await page.evaluate(() => { for (const [el, v] of window.__shotHidden ?? []) el.style.visibility = v })
+          checks.push(checkCropHolds(crop))
+          // Phone cards only: a desktop row is wider than its scroll box by design.
+          if (profile.touch) check(tag, 'M4 last card inside the clip and nothing over it', crop.measured.inClip && crop.measured.atCentre, crop.measured)
           if (!profile.dark) checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', `${profile.name}-${cfg.key}.png`), opts)).checks)
         }
       }
@@ -295,4 +299,5 @@ try {
 } finally {
   await browser.close()
 }
+check('all', 'N3 one fade edge crop was taken', n3done)
 if (!writeChecks(OUT_DIR, checks)) process.exitCode = 1

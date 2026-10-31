@@ -290,6 +290,9 @@
     bottom: 0.25rem;
     margin: 0;
   }
+  .mobile-card-table tbody tr:has(> td[data-card]) > td[data-card='trail']:has(~ td[data-card='trail']) {
+    margin-top: 0;
+  }
   .mobile-card-table .divide-y > * + * {
     border-top: none;
   }
