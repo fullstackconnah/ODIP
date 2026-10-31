@@ -424,6 +424,15 @@ public class RosteringController : ControllerBase
         return Ok(ApiResponse<RosterBoardDto>.Ok(board));
     }
 
+    /// <summary>How full the next weeks are (spec 2026-10-31): shifts, filled and open per week from this week's Monday in the provider's zone. Open = no worker and not Cancelled.</summary>
+    [HttpGet("fill")]
+    public async Task<ActionResult<ApiResponse<RosterFillDto>>> GetFill([FromQuery] int? weeks, CancellationToken ct)
+    {
+        var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
+        var n = Math.Clamp(weeks ?? 8, 4, 8);
+        return Ok(ApiResponse<RosterFillDto>.Ok(new RosterFillDto { Today = today, Weeks = await RosterFill.WeeksAsync(_db, WeekStart(today), n, ct) }));
+    }
+
     /// <summary>
     /// Connection map item 12 — backs the participant hub's Rostering tab. Lives on
     /// RosteringController rather than ParticipantsController (absolute route override, same
