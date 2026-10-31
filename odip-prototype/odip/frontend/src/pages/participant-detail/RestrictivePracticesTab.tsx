@@ -17,9 +17,10 @@ import { PageState } from '@/components/PageState'
 import { queryPhase } from '@/lib/queryPhase'
 import { formatDateAu, extractErrorMessage } from '@/lib/utils'
 import {
-  RESTRICTIVE_PRACTICE_TYPES, RESTRICTIVE_PRACTICE_TYPE_LABELS, RESTRICTIVE_PRACTICE_TYPE_DESCRIPTIONS,
+  RESTRICTIVE_PRACTICE_TYPES, RESTRICTIVE_PRACTICE_TYPE_LABELS, RESTRICTIVE_PRACTICE_TYPE_DESCRIPTIONS, USE_KIND_LABELS,
 } from '@/api/types/restrictive-practices'
-import type { RestrictivePracticeDto, RestrictivePracticeType } from '@/api/types/restrictive-practices'
+import type { BspPlanState, RestrictivePracticeDto, RestrictivePracticeType, RestrictivePracticeUseKind } from '@/api/types/restrictive-practices'
+import { calendarDaysUntil } from '@/lib/dateOnly'
 import { AddRestrictivePracticeDialog } from './AddRestrictivePracticeDialog'
 import { isPastDue } from '@/lib/deadline'
 import { Button } from '@/components/Button'
@@ -41,11 +42,39 @@ const TYPE_BADGE_STYLES: Record<RestrictivePracticeType, string> = {
   Unclassified: 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]',
 }
 
+const USE_KIND_OPTIONS = [{ key: 'Routine', label: USE_KIND_LABELS.Routine }, { key: 'Prn', label: USE_KIND_LABELS.Prn }]
+
+const BSP_PILL_STYLES: Record<BspPlanState, string> = {
+  NotStarted: '',
+  Due: 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]',
+  DueSoon: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
+  Overdue: 'bg-[var(--color-destructive)] text-[var(--color-destructive-foreground)]',
+  InPlace: 'bg-[var(--color-muted)] text-[var(--color-muted-foreground)]',
+}
+
+/** "Interim plan due 7 Nov 2026" / "... overdue ..." / "... in place ...", in the Review chip's style. */
+function BspPill({ plan, state, date }: { plan: 'Interim' | 'Comprehensive'; state: BspPlanState; date: string | null }) {
+  if (state === 'NotStarted' || !date) return null
+  const overdue = state === 'Overdue'
+  const word = overdue ? 'overdue' : state === 'InPlace' ? 'in place' : 'due'
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${BSP_PILL_STYLES[state]}`}>
+      {overdue && <AlertTriangle className="w-3 h-3" />}
+      {plan} plan {word} {formatDateAu(date)}
+    </span>
+  )
+}
+
 type PracticeFormState = {
   type: RestrictivePracticeType
   description: string
   authorisedBy: string
   authorisationDate: string
+  authorisationEndDate: string
+  useKind: RestrictivePracticeUseKind
+  firstUsedOn: string
+  interimBspDate: string
+  comprehensiveBspDate: string
   reviewDate: string
   relatedMedicationId: string
   isActive: boolean
@@ -56,7 +85,8 @@ type PracticeFormState = {
 }
 
 const EMPTY_FORM: PracticeFormState = {
-  type: 'Unclassified', description: '', authorisedBy: '', authorisationDate: '', reviewDate: '',
+  type: 'Unclassified', description: '', authorisedBy: '', authorisationDate: '', authorisationEndDate: '', useKind: 'Routine',
+  firstUsedOn: '', interimBspDate: '', comprehensiveBspDate: '', reviewDate: '',
   relatedMedicationId: '', isActive: true, requiresReporting: null, authorised: false,
 }
 
@@ -69,12 +99,14 @@ function PracticeCard({ practice, canWrite, onEdit, onDelete }: {
   const overdue = practice.isActive && isReviewOverdue(practice.reviewDate)
   // Retired entries aren't badged (the wizard doesn't either); the Inactive pill carries their state.
   const unauthorised = practice.isActive && !isRpAuthorised(practice)
-  // Both on file yet the server says not authorised: the date is still ahead, so it is not yet in force.
-  const whyUnauthorised = practice.authorisedBy?.trim() && practice.authorisationDate
-    ? 'Not yet in force'
-    : !practice.authorisedBy?.trim()
-      ? (practice.authorisationDate ? 'No authoriser on file' : 'No authorisation recorded')
-      : 'No authorisation date on file'
+  // Both on file yet the server says not authorised: either the end date has passed or the start date is still ahead.
+  const whyUnauthorised = practice.authorisationEndDate && isPastDue(practice.authorisationEndDate)
+    ? `Authorisation ended ${formatDateAu(practice.authorisationEndDate)}`
+    : practice.authorisedBy?.trim() && practice.authorisationDate
+      ? 'Not yet in force'
+      : !practice.authorisedBy?.trim()
+        ? (practice.authorisationDate ? 'No authoriser on file' : 'No authorisation recorded')
+        : 'No authorisation date on file'
   return (
     <div
       className={`p-4 rounded-xl border transition-colors ${
@@ -128,8 +160,14 @@ function PracticeCard({ practice, canWrite, onEdit, onDelete }: {
       </div>
       <p className="text-sm text-[var(--color-foreground)] whitespace-pre-wrap mt-2">{practice.description}</p>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs text-[var(--color-muted-foreground)]">
+        <span>{USE_KIND_LABELS[practice.useKind]}</span>
         {practice.authorisedBy && <span>Authorised by {practice.authorisedBy}</span>}
-        {practice.authorisationDate && <span>Authorised {formatDateAu(practice.authorisationDate)}</span>}
+        {practice.authorisationDate && (
+          <span>
+            Authorised {formatDateAu(practice.authorisationDate)}
+            {practice.authorisationEndDate ? ` to ${formatDateAu(practice.authorisationEndDate)}` : ', no end date'}
+          </span>
+        )}
         {unauthorised && <span>{whyUnauthorised}</span>}
         {unauthorised && practice.requiresReporting === false && <span>No report needed</span>}
         {practice.type === 'ChemicalRestraint' && practice.relatedMedicationName && (
@@ -138,6 +176,42 @@ function PracticeCard({ practice, canWrite, onEdit, onDelete }: {
           </span>
         )}
       </div>
+      {practice.isActive && (
+        <div className="flex flex-wrap items-center gap-1.5 mt-2 text-xs text-[var(--color-muted-foreground)]">
+          <span>Behaviour support plan</span>
+          {!practice.firstUsedOn && !practice.interimBspDate && !practice.comprehensiveBspDate && (
+            <span>{canWrite ? 'Add the first use date to see when plans are due' : 'First use date not recorded'}</span>
+          )}
+          {practice.comprehensiveBspDate ? null : (
+            <BspPill plan="Interim" state={practice.interimBspState} date={practice.interimBspState === 'InPlace' ? practice.interimBspDate : practice.interimBspDueOn} />
+          )}
+          <BspPill plan="Comprehensive" state={practice.comprehensiveBspState} date={practice.comprehensiveBspState === 'InPlace' ? practice.comprehensiveBspDate : practice.comprehensiveBspDueOn} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** First used on: the hint offers the earliest use on record with a one-tap fill, and says so when a use is on record before the date entered. */
+function FirstUsedField({ value, suggestion, error, onChange }: { value: string; suggestion: string | null; error?: string; onChange: (v: string) => void }) {
+  const offer = !value && !!suggestion
+  const earlier = !!value && !!suggestion && suggestion < value
+  const hint = offer ? undefined
+    : earlier ? `A use is on record from ${formatDateAu(suggestion!)}, before this date.`
+      : 'The date this practice was first used. It starts the plan due dates.'
+  return (
+    <div>
+      <FormField label="First used on" error={error} hint={hint} descriptionId={offer ? 'first-used-suggestion' : undefined}>
+        <input type="date" value={value} onChange={e => onChange(e.target.value)} />
+      </FormField>
+      {offer && (
+        <div id="first-used-suggestion" className="flex flex-wrap items-center gap-x-2 mt-1 text-xs text-[var(--color-muted-foreground)]">
+          <span>Earliest use on record: {formatDateAu(suggestion!)}.</span>
+          <Button variant="ghost" size="sm" className="pointer-coarse:min-h-11" onClick={() => onChange(suggestion!.split('T')[0])}>
+            Use {formatDateAu(suggestion!)}
+          </Button>
+        </div>
+      )}
     </div>
   )
 }
@@ -156,7 +230,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
   // edit-only — `null` means closed, otherwise the entry currently being edited.
   const [editingPractice, setEditingPractice] = useState<RestrictivePracticeDto | null>(null)
   const [form, setForm] = useState<PracticeFormState>(EMPTY_FORM)
-  const [errors, setErrors] = useState<{ description?: string; authorisedBy?: string; authorisationDate?: string }>({})
+  const [errors, setErrors] = useState<{ description?: string; authorisedBy?: string; authorisationDate?: string; authorisationEndDate?: string; firstUsedOn?: string }>({})
   // A 409 means the entry changed under the editor, not that they did something wrong: it gets the warning tone.
   const [modalError, setModalError] = useState<{ message: string; stale: boolean } | null>(null)
   const [refusals, setRefusals] = useState(0)
@@ -184,6 +258,11 @@ export default function RestrictivePracticesTab({ participantId }: { participant
       description: practice.description,
       authorisedBy: practice.authorisedBy ?? '',
       authorisationDate: practice.authorisationDate ? practice.authorisationDate.split('T')[0] : '',
+      authorisationEndDate: practice.authorisationEndDate ? practice.authorisationEndDate.split('T')[0] : '',
+      useKind: practice.useKind,
+      firstUsedOn: practice.firstUsedOn ? practice.firstUsedOn.split('T')[0] : '',
+      interimBspDate: practice.interimBspDate ? practice.interimBspDate.split('T')[0] : '',
+      comprehensiveBspDate: practice.comprehensiveBspDate ? practice.comprehensiveBspDate.split('T')[0] : '',
       reviewDate: practice.reviewDate ? practice.reviewDate.split('T')[0] : '',
       relatedMedicationId: practice.relatedMedicationId ?? '',
       isActive: practice.isActive,
@@ -201,10 +280,15 @@ export default function RestrictivePracticesTab({ participantId }: { participant
   }
 
   function validate(): boolean {
-    const next: { description?: string; authorisedBy?: string; authorisationDate?: string } = {}
+    const next: { description?: string; authorisedBy?: string; authorisationDate?: string; authorisationEndDate?: string; firstUsedOn?: string } = {}
     if (!form.description.trim()) next.description = 'Add a description'
     if (form.authorised && !form.authorisedBy.trim()) next.authorisedBy = 'Add who authorised it'
     if (form.authorised && !form.authorisationDate) next.authorisationDate = 'Add the date it was authorised'
+    if (form.authorised && form.authorisationEndDate && form.authorisationDate && form.authorisationEndDate < form.authorisationDate) {
+      next.authorisationEndDate = "The end date can't be before the authorisation date"
+    }
+    // shortcut: the browser's calendar day, not the organisation's; the server repeats the check on the organisation's day.
+    if (form.firstUsedOn && (calendarDaysUntil(form.firstUsedOn) ?? 0) > 0) next.firstUsedOn = "The first use date can't be in the future"
     setErrors(next)
     return Object.keys(next).length === 0
   }
@@ -218,6 +302,12 @@ export default function RestrictivePracticesTab({ participantId }: { participant
       description: form.description.trim(),
       authorisedBy: form.authorised ? form.authorisedBy.trim() : null,
       authorisationDate: form.authorised ? form.authorisationDate : null,
+      datesIncluded: true,
+      authorisationEndDate: form.authorised ? (form.authorisationEndDate || null) : null,
+      useKind: form.useKind,
+      firstUsedOn: form.firstUsedOn || null,
+      interimBspDate: form.interimBspDate || null,
+      comprehensiveBspDate: form.comprehensiveBspDate || null,
       reviewDate: form.reviewDate || null,
       relatedMedicationId: form.type === 'ChemicalRestraint' ? (form.relatedMedicationId || null) : null,
       isActive: form.isActive,
@@ -406,6 +496,20 @@ export default function RestrictivePracticesTab({ participantId }: { participant
           {newlyLinking && (
             <Callout tone="info">Linking also ticks Chemical restraint on {pickedMed?.name ?? 'the medicine'}.</Callout>
           )}
+          <FormField
+            label="How is it used?"
+            hint={isLinked
+              ? `Set by the linked medicine, which is ${form.useKind === 'Prn' ? 'PRN' : 'Regular'}.`
+              : 'Routine is part of the everyday plan. As needed (PRN) is used only when a set situation arises.'}
+          >
+            <ToggleGroup
+              ariaLabel="How is it used?"
+              options={USE_KIND_OPTIONS}
+              value={form.useKind}
+              disabled={isLinked}
+              onChange={k => setForm(f => ({ ...f, useKind: k as RestrictivePracticeUseKind }))}
+            />
+          </FormField>
           <CheckboxField
             label="This restrictive practice is authorised"
             hint="If ticked, add who authorised it and the date."
@@ -425,6 +529,15 @@ export default function RestrictivePracticesTab({ participantId }: { participant
               <FormField label="Authorisation date" required error={errors.authorisationDate}>
                 <input type="date" value={form.authorisationDate} onChange={e => setForm(f => ({ ...f, authorisationDate: e.target.value }))} />
               </FormField>
+              <FormField
+                label="Authorisation end date"
+                error={errors.authorisationEndDate}
+                hint={!form.authorisationEndDate
+                  ? 'Leave blank if the authorisation has no end date.'
+                  : isPastDue(form.authorisationEndDate) ? 'This date has passed, so the entry reads Not authorised.' : undefined}
+              >
+                <input type="date" value={form.authorisationEndDate} onChange={e => setForm(f => ({ ...f, authorisationEndDate: e.target.value }))} />
+              </FormField>
             </>
           )}
           {!form.authorised && (
@@ -440,6 +553,22 @@ export default function RestrictivePracticesTab({ participantId }: { participant
           <FormField label="Review date">
             <input type="date" value={form.reviewDate} onChange={e => setForm(f => ({ ...f, reviewDate: e.target.value }))} />
           </FormField>
+          <fieldset className="space-y-4">
+            <legend className="text-sm font-medium text-[var(--color-foreground)]">Behaviour support plan</legend>
+            <p className="text-sm text-[var(--color-muted-foreground)]">The interim plan is due 1 month after first use, and the comprehensive plan 6 months after.</p>
+            <FirstUsedField
+              value={form.firstUsedOn}
+              suggestion={editingPractice?.earliestRecordedUseDate ?? null}
+              error={errors.firstUsedOn}
+              onChange={v => setForm(f => ({ ...f, firstUsedOn: v }))}
+            />
+            <FormField label="Interim plan in place on">
+              <input type="date" value={form.interimBspDate} onChange={e => setForm(f => ({ ...f, interimBspDate: e.target.value }))} />
+            </FormField>
+            <FormField label="Comprehensive plan in place on">
+              <input type="date" value={form.comprehensiveBspDate} onChange={e => setForm(f => ({ ...f, comprehensiveBspDate: e.target.value }))} />
+            </FormField>
+          </fieldset>
           <FormField label="Active" layout="checkbox" hint={linkedCeased ? `${linkedMedLabel} is ceased. Restart the medicine to reactivate this entry.` : 'Inactive entries are hidden from the default list but not deleted'}>
             <input
               type="checkbox"

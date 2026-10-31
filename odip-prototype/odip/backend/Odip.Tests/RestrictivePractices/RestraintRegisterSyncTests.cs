@@ -123,6 +123,25 @@ public class RestraintRegisterSyncTests
     }
 
     [Fact]
+    public async Task UpdateMedication_ReAuthoriseAnEndedEntry_ClearsTheEndDate()
+    {
+        var (db, tenant) = CreateDb();
+        var p = SeedParticipant(db);
+        var c = new MedicationsController(db, tenant);
+        var med = await CreateOkAsync(c, p.Id, RestraintDto(true, "Dr Chen", AuthDate));
+        var ended = await db.RestrictivePractices.SingleAsync();
+        ended.AuthorisationEndDate = AuthDate.AddDays(29);
+        db.SaveChanges();
+        Assert.False(RestrictivePracticeAuthorisation.IsAuthorised(ended, new DateOnly(2100, 1, 1)));
+
+        await UpdateOkAsync(c, med.Id, AsUpdate(RestraintDto(true, "Dr Chen", AuthDate.AddDays(60))));
+
+        var entry = await db.RestrictivePractices.SingleAsync();
+        Assert.Null(entry.AuthorisationEndDate);
+        Assert.True(RestrictivePracticeAuthorisation.IsAuthorised(entry, new DateOnly(2100, 1, 1)));
+    }
+
+    [Fact]
     public async Task CreateMedication_NotAuthorisedReportYes_FlagsUnauthorisedAndReportable()
     {
         var (db, tenant) = CreateDb();

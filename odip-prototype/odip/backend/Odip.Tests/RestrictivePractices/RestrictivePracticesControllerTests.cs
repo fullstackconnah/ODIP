@@ -314,6 +314,61 @@ public class RestrictivePracticesControllerTests
         Assert.False(saved.IsActive);
     }
 
+    private static Domain.Entities.RestrictivePractice SeedDatedEntry(OdipDbContext db, Guid participantId)
+    {
+        var practice = new Domain.Entities.RestrictivePractice
+        {
+            Id = Guid.NewGuid(), ParticipantId = participantId, Type = RestrictivePracticeType.PhysicalRestraint, Description = "d", IsActive = true,
+            AuthorisedBy = "Dr. Nguyen", AuthorisationDate = new DateOnly(2026, 1, 1), AuthorisationEndDate = new DateOnly(2026, 12, 31),
+            FirstUsedOn = new DateOnly(2026, 2, 1), InterimBspDate = new DateOnly(2026, 2, 20), ComprehensiveBspDate = new DateOnly(2026, 6, 1),
+        };
+        db.RestrictivePractices.Add(practice);
+        db.SaveChanges();
+        return practice;
+    }
+
+    [Fact]
+    public async Task Update_FromATabThatSendsNoDates_LeavesTheEndFirstUseAndPlanDatesAsStored()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var practice = SeedDatedEntry(db, SeedParticipant(db).Id);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
+        var dto = new UpdateRestrictivePracticeDto
+        {
+            Type = RestrictivePracticeType.PhysicalRestraint, Description = "Edited", AuthorisedBy = "Dr. Nguyen", AuthorisationDate = new DateOnly(2026, 1, 1), IsActive = true,
+        };
+
+        Assert.IsType<OkObjectResult>((await controller.Update(practice.Id, dto, CancellationToken.None)).Result);
+
+        var saved = await db.RestrictivePractices.SingleAsync();
+        Assert.Equal("Edited", saved.Description);
+        Assert.Equal(new DateOnly(2026, 12, 31), saved.AuthorisationEndDate);
+        Assert.Equal(new DateOnly(2026, 2, 1), saved.FirstUsedOn);
+        Assert.Equal(new DateOnly(2026, 2, 20), saved.InterimBspDate);
+        Assert.Equal(new DateOnly(2026, 6, 1), saved.ComprehensiveBspDate);
+    }
+
+    [Fact]
+    public async Task Update_WithDatesIncluded_AppliesTheDatesAsSent_SoNullClearsAField()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var practice = SeedDatedEntry(db, SeedParticipant(db).Id);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
+        var dto = new UpdateRestrictivePracticeDto
+        {
+            Type = RestrictivePracticeType.PhysicalRestraint, Description = "d", AuthorisedBy = "Dr. Nguyen", AuthorisationDate = new DateOnly(2026, 1, 1), IsActive = true,
+            DatesIncluded = true, AuthorisationEndDate = null, FirstUsedOn = new DateOnly(2026, 2, 5), InterimBspDate = null, ComprehensiveBspDate = new DateOnly(2026, 7, 1),
+        };
+
+        Assert.IsType<OkObjectResult>((await controller.Update(practice.Id, dto, CancellationToken.None)).Result);
+
+        var saved = await db.RestrictivePractices.SingleAsync();
+        Assert.Null(saved.AuthorisationEndDate);
+        Assert.Equal(new DateOnly(2026, 2, 5), saved.FirstUsedOn);
+        Assert.Null(saved.InterimBspDate);
+        Assert.Equal(new DateOnly(2026, 7, 1), saved.ComprehensiveBspDate);
+    }
+
     [Fact]
     public async Task Update_RelatedMedicationBelongsToDifferentParticipant_ReturnsBadRequest()
     {

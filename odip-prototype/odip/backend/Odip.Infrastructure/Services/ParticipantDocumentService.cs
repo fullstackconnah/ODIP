@@ -105,7 +105,9 @@ public class ParticipantDocumentService
                 .FirstOrDefaultAsync(t => t.Id == tripId.Value, ct)
             : null;
 
-        return ParticipantDocumentComposer.ComposeClientOverview(participant, trip, maskIdNumbers);
+        // "Ended" is judged on the organisation's own today, like the register.
+        var today = await ProviderTimeZoneResolver.TodayAsync(_db, participant.TenantId, TimeProvider.System, ct);
+        return ParticipantDocumentComposer.ComposeClientOverview(participant, trip, today, maskIdNumbers);
     }
 
     private async Task<Participant?> LoadParticipantAsync(Guid participantId, CancellationToken ct) =>

@@ -61,7 +61,7 @@ public class IncidentsControllerTests
         {
             Id = Guid.NewGuid(), TenantId = tenantId ?? Guid.NewGuid(), ParticipantId = participantId,
             Type = type, Description = description, IsActive = isActive,
-            AuthorisedBy = authorised ? "Dr Chen" : null, AuthorisationDate = authorised ? authorisationDate ?? new DateOnly(2026, 9, 1) : null,
+            AuthorisedBy = authorised ? "Dr Chen" : null, AuthorisationDate = authorised ? authorisationDate ?? new DateOnly(2026, 8, 1) : null,
         };
         db.RestrictivePractices.Add(practice);
         db.SaveChanges();
@@ -276,7 +276,7 @@ public class IncidentsControllerTests
         Assert.Equal((true, (bool?)false), await ReadBothAsync());
 
         entry.AuthorisedBy = "Dr Chen";
-        entry.AuthorisationDate = new DateOnly(2026, 9, 1);
+        entry.AuthorisationDate = new DateOnly(2026, 8, 1);
         db.SaveChanges();
         Assert.Equal((false, (bool?)true), await ReadBothAsync());
     }
@@ -738,7 +738,8 @@ public class IncidentsControllerTests
         SeedPractice(db, participant.Id, authorisationDate: SydneyToday.AddDays(daysFromSydneyToday));
         var controller = new IncidentsController(db, clock: SydneyNearMidnight());
 
-        await controller.Create(CreateDto(reporter.Id, involvedParticipantId: participant.Id), CancellationToken.None);
+        // The determination is judged on the incident's own date; here that is the organisation's today (10-30 in Sydney, still 10-29 in UTC).
+        await controller.Create(CreateDto(reporter.Id, involvedParticipantId: participant.Id) with { IncidentDateTime = SydneyToday.ToDateTime(new TimeOnly(0, 30)) }, CancellationToken.None);
 
         Assert.Equal(expected, (await db.IncidentReports.SingleAsync()).IsRestrictivePracticeAuthorised);
     }
@@ -751,12 +752,12 @@ public class IncidentsControllerTests
         var participant = SeedParticipant(db);
         var inForce = SeedPractice(db, participant.Id, authorisationDate: SydneyToday);
         var controller = new IncidentsController(db, clock: SydneyNearMidnight());
-        await controller.Create(CreateDto(reporter.Id, involvedParticipantId: participant.Id, restrictivePracticeId: inForce.Id), CancellationToken.None);
+        await controller.Create(CreateDto(reporter.Id, involvedParticipantId: participant.Id, restrictivePracticeId: inForce.Id) with { IncidentDateTime = SydneyToday.ToDateTime(new TimeOnly(0, 30)) }, CancellationToken.None);
         var incident = await db.IncidentReports.SingleAsync();
         Assert.True(incident.IsRestrictivePracticeAuthorised);
         var notYet = SeedPractice(db, participant.Id, description: "Starts tomorrow", authorisationDate: SydneyToday.AddDays(1));
 
-        await controller.Update(incident.Id, RpUpdateDto(reporter.Id, participant.Id, notYet.Id, usedWithoutAuthorisation: false), CancellationToken.None);
+        await controller.Update(incident.Id, RpUpdateDto(reporter.Id, participant.Id, notYet.Id, usedWithoutAuthorisation: false) with { IncidentDateTime = SydneyToday.ToDateTime(new TimeOnly(0, 30)) }, CancellationToken.None);
 
         Assert.False((await db.IncidentReports.SingleAsync()).IsRestrictivePracticeAuthorised);
     }

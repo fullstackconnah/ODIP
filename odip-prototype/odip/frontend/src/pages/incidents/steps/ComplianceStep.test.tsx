@@ -6,7 +6,7 @@ const props = (over: Partial<ComplianceStepProps> = {}): ComplianceStepProps => 
   register: (() => ({})) as unknown as ComplianceStepProps['register'],
   setValue: (() => {}) as ComplianceStepProps['setValue'],
   status: 'Draft', errors: {}, awareAtMax: '2026-11-02T11:30',
-  severity: 'Low', incidentType: 'PropertyDamage', isRestrictivePracticeAuthorised: false,
+  severity: 'Low', incidentType: 'PropertyDamage', isRestrictivePracticeAuthorised: false, restrictivePracticeUseVaried: null,
   reportableClass: 'None', commissionFinalReportRequested: false, reviewedByStaffId: '',
   familyNotified: false, supportCoordinatorNotified: false, staff: [],
   ...over,

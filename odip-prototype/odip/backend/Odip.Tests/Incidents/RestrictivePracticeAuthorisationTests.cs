@@ -39,6 +39,54 @@ public class RestrictivePracticeAuthorisationTests
     public void AuthorisationDate_IsInForceFromItsOwnDay(int daysFromToday, bool expected) =>
         Assert.Equal(expected, RestrictivePracticeAuthorisation.IsAuthorised(Entry(authorisationDate: Today.AddDays(daysFromToday)), Today));
 
+    // The end date is inclusive; a use on it is still authorised, the next day is not.
+    [Theory]
+    [InlineData("2026-10-19", true)]
+    [InlineData("2026-10-20", true)]
+    [InlineData("2026-10-21", false)]
+    public void EndDate_IsInclusive(string onDate, bool expected)
+    {
+        var entry = Entry();
+        entry.AuthorisationEndDate = new DateOnly(2026, 10, 20);
+        Assert.Equal(expected, RestrictivePracticeAuthorisation.IsAuthorised(entry, DateOnly.Parse(onDate)));
+    }
+
+    [Fact]
+    public void NoEndDate_IsOpenEnded() => Assert.True(RestrictivePracticeAuthorisation.IsAuthorised(Entry(), new DateOnly(2100, 1, 1)));
+
+    [Fact]
+    public void OnDateBeforeAuthorisationDate_IsNotAuthorised() =>
+        Assert.False(RestrictivePracticeAuthorisation.IsAuthorised(Entry(authorisationDate: new DateOnly(2026, 10, 25)), new DateOnly(2026, 10, 24)));
+
+    private static RestrictivePractice Linked(MedicationType type, RestrictivePracticeUseKind stored, bool loadNav = true)
+    {
+        var rp = Entry();
+        rp.UseKind = stored;
+        rp.RelatedMedicationId = Guid.NewGuid();
+        if (loadNav) rp.RelatedMedication = new ParticipantMedication { Id = rp.RelatedMedicationId.Value, Type = type };
+        return rp;
+    }
+
+    [Fact]
+    public void UseKindOf_LinkedPrnMedicine_IsPrn() =>
+        Assert.Equal(RestrictivePracticeUseKind.Prn, RestrictivePracticeAuthorisation.UseKindOf(Linked(MedicationType.Prn, RestrictivePracticeUseKind.Routine)));
+
+    [Fact]
+    public void UseKindOf_LinkedRegularMedicine_IsRoutine_EvenWhenStoredPrn() =>
+        Assert.Equal(RestrictivePracticeUseKind.Routine, RestrictivePracticeAuthorisation.UseKindOf(Linked(MedicationType.Regular, RestrictivePracticeUseKind.Prn)));
+
+    [Fact]
+    public void UseKindOf_Unlinked_IsStored()
+    {
+        var rp = Entry();
+        rp.UseKind = RestrictivePracticeUseKind.Prn;
+        Assert.Equal(RestrictivePracticeUseKind.Prn, RestrictivePracticeAuthorisation.UseKindOf(rp));
+    }
+
+    [Fact]
+    public void UseKindOf_LinkedWithoutNavigation_Throws() =>
+        Assert.Throws<InvalidOperationException>(() => RestrictivePracticeAuthorisation.UseKindOf(Linked(MedicationType.Prn, RestrictivePracticeUseKind.Routine, loadNav: false)));
+
     [Theory]
     [InlineData(RestrictivePracticeType.Seclusion, "seclusion")]
     [InlineData(RestrictivePracticeType.ChemicalRestraint, "chemical restraint")]
