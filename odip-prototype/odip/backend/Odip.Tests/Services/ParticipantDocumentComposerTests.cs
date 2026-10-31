@@ -462,7 +462,7 @@ public class ParticipantDocumentComposerTests
     public void ComposeClientOverview_RestrictivePracticeTable_JudgesEndedOnTheOrganisationsToday()
     {
         // 08:00 on 1 Nov in Sydney is still 31 Oct in UTC: an authorisation that ended on 31 Oct has ended for the organisation.
-        var sydneyToday = ProviderLocalTime.TodayIn(new DateTime(2026, 10, 31, 21, 0, 0, DateTimeKind.Utc), ProviderTimeZoneResolver.FromState("NSW").Zone);
+        var sydneyToday = ProviderLocalTime.TodayIn(new DateTime(2026, 10, 31, 21, 0, 0, DateTimeKind.Utc), ProviderTimeZoneResolver.ForInvoiceState("NSW").Zone);
         Assert.Equal(new DateOnly(2026, 11, 1), sydneyToday);
         Assert.Equal("01 Jul 2026 (ended 31 Oct 2026)", AuthorisationCell(new DateOnly(2026, 7, 1), new DateOnly(2026, 10, 31), sydneyToday));
         Assert.Equal("01 Jul 2026", AuthorisationCell(new DateOnly(2026, 7, 1), new DateOnly(2026, 10, 31), new DateOnly(2026, 10, 31)));
