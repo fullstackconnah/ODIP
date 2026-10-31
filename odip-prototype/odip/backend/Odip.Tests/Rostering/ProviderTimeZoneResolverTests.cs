@@ -52,8 +52,9 @@ public class ProviderTimeZoneResolverTests
     private static async Task<Odip.Infrastructure.Data.OdipDbContext> DbWithPerthRowAsync()
     {
         var db = TestDb.Create(Guid.NewGuid().ToString());
-        db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = Tenant, State = "NSW", TimeZoneId = "Australia/Perth" });
+        // The other tenant first, so an unfiltered FirstOrDefault returns Darwin and fails.
         db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = Guid.NewGuid(), State = "NSW", TimeZoneId = "Australia/Darwin" });
+        db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = Tenant, State = "NSW", TimeZoneId = "Australia/Perth" });
         await db.SaveChangesAsync();
         return db;
     }

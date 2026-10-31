@@ -70,6 +70,32 @@ const open = async ({ role, width, height, touch, scheme, initial, putDelay = 0,
 const lines = (loc) => loc.evaluate((el) => Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight)))
 const hintOf = (group) => group.getByText(HINT, { exact: true })
 
+/** Crop the group (plus the foot when `withFoot`) in its natural place and prove the frame shows what its name says: select value, dirty or not, foot text, and select/hint/foot inside the clip and not covered by the foot or bottom nav. */
+const shoot = async (t, ctx, name, want, { withFoot = false, touch = false } = {}) => {
+  const inClip = (b, c) => !!b && b.x >= c.x - 1 && b.y >= c.y - 1 && b.x + b.width <= c.x + c.width + 1 && b.y + b.height <= c.y + c.height + 1
+  const uncovered = (loc) => loc.evaluate((el) => { const r = el.getBoundingClientRect(); const e = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return !!e && (el === e || el.contains(e) || e.contains(el)) })
+  const r = await cropElement(t.page, t.group, path.join(OUT_DIR, name), {
+    touch, natural: true, also: withFoot ? t.foot : undefined,
+    during: async (clip) => {
+      const hint = hintOf(t.group)
+      const hasHint = (await hint.count()) === 1
+      return {
+        value: await t.select.inputValue(),
+        footText: withFoot || want.dirty !== undefined ? ((await t.foot.count()) ? (await t.foot.innerText()).replace(/\s+/g, ' ').trim() : '') : null,
+        selectIn: inClip(await t.select.boundingBox(), clip) && (await uncovered(t.select)),
+        hintIn: hasHint ? inClip(await hint.boundingBox(), clip) && (await uncovered(hint)) : null,
+        footIn: withFoot ? inClip(await t.foot.boundingBox(), clip) : null,
+      }
+    },
+  })
+  checks.push(checkCropHolds(r))
+  const m = r.measured
+  const pass = m.value === want.value && m.selectIn && (!want.hint || m.hintIn === true)
+    && (want.dirty === undefined || (want.dirty ? /Unsaved changes/.test(m.footText ?? '') : !/Unsaved changes/.test(m.footText ?? '')))
+    && (!want.foot || (m.footIn === true && (m.footText ?? '').includes(want.foot)))
+  check(`content of ${name}`, ctx, { want, measured: m }, pass)
+}
+
 try {
   // Warm-up: the dev server pre-bundles on the first visit.
   const warm = await open({ role: 'Admin', width: 1280, height: 900, scheme: 'light', initial: {} })
@@ -93,7 +119,7 @@ try {
     check(`4 hint lines (bare) <= ${vp.touch ? 3 : 2}`, ctx, bare, bare <= (vp.touch ? 3 : 2))
     await hint.evaluate((el, h) => { el.dataset.was = el.textContent; el.textContent = `Changed by someone else. ${h}` }, HINT)
     const prefixed = await lines(group.getByText(`Changed by someone else. ${HINT}`, { exact: true }))
-    check(`4 hint lines (prefixed) <= ${vp.touch ? 3 : 2}`, ctx, prefixed, prefixed <= (vp.touch ? 3 : 2))
+    check('4 hint lines (prefixed, after a 409) <= 3', ctx, prefixed, prefixed <= 3)
     await group.getByText(`Changed by someone else. ${HINT}`, { exact: true }).evaluate((el) => { el.textContent = el.dataset.was })
     const sel = await select.boundingBox()
     check(vp.touch ? '5 select height >= 44' : '5 select height == 32', ctx, sel.height, vp.touch ? sel.height >= 44 : near(sel.height, 32, 0.5))
@@ -105,16 +131,17 @@ try {
       })
       check("5 zone row top equals State top", ctx, tops, tops.state !== null && tops.zone !== null && near(tops.zone, tops.state))
     }
+    await shoot(t, ctx, `tz-default-${vp.name}${vp.touch ? '-touch' : ''}-light.png`, { value: 'Australia/Melbourne', dirty: false, hint: true }, { touch: !!vp.touch })
     // 3: auto-follow.
     await group.getByRole('radio', { name: 'WA' }).click()
     check('3 VIC to WA moves the zone to Perth', ctx, await select.inputValue(), (await select.inputValue()) === 'Australia/Perth')
     check('3 foot says Unsaved changes', ctx, await t.status(), (await t.status()) === 'Unsaved changes')
-    await cropElement(page, group, path.join(OUT_DIR, `tz-default-${vp.name}${vp.touch ? '-touch' : ''}-light.png`), { touch: !!vp.touch }).then((r) => checks.push(checkCropHolds(r)))
     await t.context.close()
 
     const b = await open({ role: 'Admin', ...vp, scheme: 'light', initial: { state: 'NSW', timeZoneId: 'Australia/Brisbane' } })
     await b.group.getByRole('radio', { name: 'VIC' }).click()
     check('3 a hand-set Brisbane stays when NSW becomes VIC', ctx, await b.select.inputValue(), (await b.select.inputValue()) === 'Australia/Brisbane')
+    if (vp.name === '1280') await shoot(b, ctx, 'tz-filled-dirty-1280-light.png', { value: 'Australia/Brisbane', dirty: true, foot: 'Unsaved changes' }, { withFoot: true })
     const blank = await open({ role: 'Admin', ...vp, scheme: 'light', initial: { state: '', timeZoneId: null } })
     check('2 an empty State shows Sydney', ctx, await blank.select.inputValue(), (await blank.select.inputValue()) === 'Australia/Sydney')
     check('2 an empty State is not dirty', ctx, await blank.status(), (await blank.status()) === '')
@@ -123,7 +150,6 @@ try {
     // 6: saving.
     b.state.putDelay = 800
     await b.select.selectOption('Australia/Perth')
-    if (vp.name === '1280') await cropElement(b.page, b.group, path.join(OUT_DIR, 'tz-filled-dirty-1280-light.png'), { touch: false }).then((r) => checks.push(checkCropHolds(r)))
     const save = b.page.getByRole('button', { name: /^(Save changes|Saving)/ })
     await save.click()
     await b.page.getByRole('button', { name: 'Saving…' }).waitFor({ timeout: 5000 })
@@ -139,7 +165,7 @@ try {
     const alert = b.foot.getByRole('alert')
     await alert.waitFor({ timeout: 10_000 })
     check('7 foot error text', ctx, await alert.innerText(), (await alert.innerText()).trim() === 'Not saved. Choose a time zone from the list.')
-    if (vp.name === '1280') await cropElement(b.page, b.group, path.join(OUT_DIR, 'tz-server-error-1280-light.png'), { touch: false }).then((r) => checks.push(checkCropHolds(r)))
+    if (vp.name === '1280') await shoot(b, ctx, 'tz-server-error-1280-light.png', { value: 'Australia/Darwin', foot: 'Not saved. Choose a time zone from the list.' }, { withFoot: true })
     await b.context.close()
 
     // Full page, once per breakpoint.
@@ -150,7 +176,7 @@ try {
 
   // Dark at 1280 for the Admin.
   const dark = await open({ role: 'Admin', width: 1280, height: 900, scheme: 'dark', initial: {} })
-  await cropElement(dark.page, dark.group, path.join(OUT_DIR, 'tz-default-1280-dark.png'), { touch: false }).then((r) => checks.push(checkCropHolds(r)))
+  await shoot(dark, '1280 dark', 'tz-default-1280-dark.png', { value: 'Australia/Melbourne', dirty: false, hint: true })
   await dark.context.close()
 
   // 6 (390 default crop for the hint wrap is taken above). R: the Coordinator's locked view, light and dark.
@@ -173,7 +199,7 @@ try {
     check('R select disabled, input colour, opacity 1', ctx, m, m.disabled && m.color === m.inputColor && m.opacity === '1')
     const ratio = contrast(nums(m.color), nums(m.bg))
     check('R select text contrast >= 4.5', ctx, ratio.toFixed(2), ratio >= 4.5)
-    await cropElement(r.page, r.group, path.join(OUT_DIR, `tz-readonly-390-touch-${scheme}.png`), { touch: true }).then((c) => checks.push(checkCropHolds(c)))
+    await shoot(r, ctx, `tz-readonly-390-touch-${scheme}.png`, { value: 'Australia/Melbourne', hint: true }, { touch: true })
     await r.context.close()
   }
 } finally { await browser.close() }
