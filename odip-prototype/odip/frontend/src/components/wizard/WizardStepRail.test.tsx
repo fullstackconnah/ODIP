@@ -27,7 +27,10 @@ describe('WizardStepRail', () => {
       render(<WizardStepRail steps={steps} visitedSteps={new Set(['a', 'b', 'c'])} currentKey="b" onSelect={vi.fn()} filled />)
 
       const [alpha, beta, gamma] = screen.getAllByRole('button')
-      expect(beta.className).toContain('bg-[var(--color-primary)] text-[var(--color-primary-foreground)]')
+      expect(beta.className).toContain('bg-[var(--color-selected)] text-[var(--color-on-selected)]')
+      expect(beta.className).toContain('shadow-[inset_0_0_0_2px_var(--color-primary)]')
+      expect(beta.className).not.toContain('bg-[var(--color-primary)] ')
+      expect(alpha.className).not.toContain('shadow-[inset')
       expect(alpha.className).toContain('bg-[var(--color-primary)]/10')
       expect(alpha.className).toContain('text-[var(--color-primary)]')
       expect(gamma.className).toContain('bg-[var(--color-accent)]')
@@ -56,11 +59,11 @@ describe('WizardStepRail', () => {
       }
     })
 
-    it("draws the current step's number in primary on white, not as the white veil it had", () => {
+    it("draws the current step's number as the primary dot with the on-primary ink, not the white veil it had", () => {
       render(<WizardStepRail steps={steps} visitedSteps={new Set(['a'])} currentKey="a" onSelect={vi.fn()} filled />)
 
       const bubble = screen.getByRole('button', { name: /alpha/i }).querySelector('span') as HTMLElement
-      expect(bubble.className).toContain('bg-[var(--color-primary-foreground)] text-[var(--color-primary)]')
+      expect(bubble.className).toContain('bg-[var(--color-primary)] text-[var(--color-primary-foreground)]')
       expect(bubble.className).not.toContain('bg-[var(--color-primary-foreground)]/20')
     })
 
@@ -80,13 +83,13 @@ describe('WizardStepRail', () => {
 
       it('reads 4.5:1 or better on the current, the finished, the upcoming and the not-yet-open step, over the page and over a card', () => {
         for (const surface of [token('background'), token('card'), white]) {
-          expect(contrast(white, token('primary'))).toBeGreaterThanOrEqual(4.5) // current
+          expect(contrast(token('on-selected'), token('selected'))).toBeGreaterThanOrEqual(4.5) // current: the label on the tint
+          expect(contrast(token('primary-foreground'), token('primary'))).toBeGreaterThanOrEqual(4.5) // current: the number on the primary dot
           expect(contrast(token('primary'), over(token('primary'), surface, 0.1))).toBeGreaterThanOrEqual(4.5) // finished: primary on primary/10
           expect(contrast(token('muted-foreground'), token('accent'))).toBeGreaterThanOrEqual(4.5) // upcoming
           expect(contrast(token('muted-foreground'), over(token('accent'), surface, 0.4))).toBeGreaterThanOrEqual(4.5) // not yet open: accent/40
           expect(contrast(token('muted-foreground'), token('border'))).toBeGreaterThanOrEqual(4.5) // the number in an upcoming step's bubble
         }
-        expect(contrast(token('primary'), white)).toBeGreaterThanOrEqual(4.5) // the current step's number
       })
 
       it('was under 3:1 with opacity-60 over the accent fill, which is why a step that cannot be opened is no longer faded', () => {
