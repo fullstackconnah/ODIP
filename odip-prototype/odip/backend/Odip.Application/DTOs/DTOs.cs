@@ -1387,10 +1387,10 @@ public record StaffListDto
 
 public record StaffDetailDto : StaffListDto
 {
-    /// <summary>When a sign-in invite email was last sent (UTC); null: never invited. Set on the overview only.</summary>
+    /// <summary>When a sign-in invite email was last sent (UTC); null: never invited. Set on the overview only, and null for non-managers (see StaffScreeningMask).</summary>
     public DateTime? SignInInviteSentAt { get; init; }
-    /// <summary>True once the person has signed in at all; the invite line is only for those who have not. Set on the overview only.</summary>
-    public bool HasSignedIn { get; init; }
+    /// <summary>True once the person has signed in at all; null everywhere but the overview, and for non-managers (see StaffScreeningMask).</summary>
+    public bool? HasSignedIn { get; init; }
 }
 
 /// <summary>Connection map item 12 — one row of GET /staff/{id}/overview's upcomingShifts (today → +14 days).</summary>
