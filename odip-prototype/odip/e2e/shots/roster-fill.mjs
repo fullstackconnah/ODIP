@@ -189,7 +189,7 @@ try {
           check('15 readout inside plot', ctx, { ro, plot }, ro.x >= plot.x - 0.5 && ro.x + ro.width <= plot.x + plot.width + 0.5 && ro.y >= plot.y - 0.5 && ro.y + ro.height <= plot.y + plot.height + 0.5)
           await page.mouse.move(2, 2)
         } else {
-          const tb = await toggle().evaluate((el) => { const r = el.getBoundingClientRect(); const pad = getComputedStyle(el, '::after'); return { w: r.width, h: r.height, padH: parseFloat(pad.height) || 0, padW: parseFloat(pad.width) || 0 } })
+          const tb = await toggle().evaluate((el) => { const r = el.getBoundingClientRect(); const pad = getComputedStyle(el, '::before'); return { w: r.width, h: r.height, padH: parseFloat(pad.height) || 0, padW: parseFloat(pad.width) || 0 } })
           check('16 toggle hit area >= 44', ctx, tb, Math.max(tb.h, tb.padH) >= 44 && Math.max(tb.w, tb.padW) >= 44)
         }
         await shot('loaded', ctx)

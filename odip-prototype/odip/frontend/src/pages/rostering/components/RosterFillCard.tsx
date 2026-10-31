@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react'
+import { useId, useLayoutEffect, useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { useRosterFill } from '@/api/hooks'
 import { Button } from '@/components/Button'
@@ -6,7 +6,6 @@ import { Card } from '@/components/Card'
 import { ChartKey } from '@/components/chart/ChartKey'
 import { RetryCallout } from '@/components/PageState'
 import { TAP_AREA } from '@/components/tapArea'
-import { useMeasuredWidth } from '@/hooks/useMeasuredWidth'
 import { retryingAfterError } from '@/lib/queryPhase'
 import { COLUMNS_MIN, RosterFillChart } from './RosterFillChart'
 import { FILL_ERROR, FILL_LOADING, FILL_SCOPE, FILL_STALE, FILL_TITLE, SENTENCE_SAMPLE, fillSentence } from '../lib/rosterFill'
@@ -16,6 +15,22 @@ import { FILL_ERROR, FILL_LOADING, FILL_SCOPE, FILL_STALE, FILL_TITLE, SENTENCE_
 
 const HIDDEN_KEY = 'odip.roster.fillHidden'
 const WIDE = 1024
+
+/** The element's content width. The card swaps its subtree between loading and loaded, so this follows the element (a callback ref), not one ref object. */
+function useElementWidth() {
+  const [el, setEl] = useState<HTMLElement | null>(null)
+  const [width, setWidth] = useState<number>()
+  useLayoutEffect(() => {
+    if (!el) return
+    const measure = () => setWidth(el.clientWidth)
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [el])
+  return [width, setEl] as const
+}
 
 /** '1' hidden, '0' shown, anything else (or storage unreadable) null: the card then follows its width. */
 function readHidden(): boolean | null {
@@ -30,10 +45,9 @@ function writeHidden(hidden: boolean) {
 
 export function RosterFillCard({ boardWeek, onSelectWeek }: { boardWeek: string | undefined; onSelectWeek: (weekStart: string) => void }) {
   const query = useRosterFill()
-  const boxRef = useRef<HTMLDivElement>(null)
-  const plotBoxRef = useRef<HTMLDivElement>(null)
-  const boxWidth = useMeasuredWidth(boxRef)
-  const plotWidth = useMeasuredWidth(plotBoxRef) ?? 0
+  const [boxWidth, boxRef] = useElementWidth()
+  const [measuredPlot, plotBoxRef] = useElementWidth()
+  const plotWidth = measuredPlot ?? 0
   const [stored, setStored] = useState<boolean | null>(readHidden)
   const bodyId = useId()
   const sentenceId = useId()
