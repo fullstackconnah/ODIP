@@ -29,6 +29,8 @@ export const incidentBaseSchema = z.object({
   unapprovedRestrictivePracticeDetails: z.string().optional(),
   /** "This use was not authorised": only meaningful with restrictivePracticeId. The step ticks it, and locks it, for a Not authorised entry. */
   usedWithoutAuthorisation: z.boolean().optional(),
+  /** Create only: was a linked, authorised use as set out in the plan (false) or varied (true)? Undefined until answered; an edit loads the stored answer (null if none) and is never asked. */
+  rpUseVaried: z.boolean().nullable().optional(),
   /** Form-only, never sent: the description skeleton the step prefilled, so an untouched one counts as no description where the use was not authorised. */
   rpDescriptionSkeleton: z.string().optional(),
 
@@ -98,7 +100,7 @@ export const STEP_BASICS_FIELDS = [
 ] as const satisfies readonly (keyof IncidentFormData)[]
 
 export const STEP_RESTRICTIVE_PRACTICE_FIELDS = [
-  'restrictivePracticeType', 'restrictivePracticeId', 'unapprovedRestrictivePracticeDetails', 'usedWithoutAuthorisation', 'rpDescriptionSkeleton',
+  'restrictivePracticeType', 'restrictivePracticeId', 'unapprovedRestrictivePracticeDetails', 'usedWithoutAuthorisation', 'rpUseVaried', 'rpDescriptionSkeleton',
 ] as const satisfies readonly (keyof IncidentFormData)[]
 
 export const STEP_DETAILS_FIELDS = [
@@ -143,7 +145,7 @@ function writtenDescription(data: { description?: string; rpDescriptionSkeleton?
  * and incidentSchema below), since a non-RP incident has nothing here to validate.
  */
 function restrictivePracticeRefine(
-  data: Pick<IncidentFormData, 'restrictivePracticeType' | 'restrictivePracticeId' | 'unapprovedRestrictivePracticeDetails' | 'usedWithoutAuthorisation' | 'rpDescriptionSkeleton'> & { description?: string },
+  data: Pick<IncidentFormData, 'restrictivePracticeType' | 'restrictivePracticeId' | 'unapprovedRestrictivePracticeDetails' | 'usedWithoutAuthorisation' | 'rpUseVaried' | 'rpDescriptionSkeleton'> & { description?: string },
   ctx: z.RefinementCtx,
 ) {
   if (!data.restrictivePracticeType) {
@@ -167,6 +169,13 @@ function restrictivePracticeRefine(
   if (hasLinked && data.usedWithoutAuthorisation && !writtenDescription(data)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['description'], message: 'Describe what was actually done.' })
   }
+  // Create starts undefined; an edit loads null or the stored answer, so it is never asked again.
+  if (hasLinked && !data.usedWithoutAuthorisation && data.rpUseVaried === undefined) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['rpUseVaried'], message: 'Choose whether this use followed the plan or was varied' })
+  }
+  if (hasLinked && data.rpUseVaried === true && !writtenDescription(data)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['description'], message: 'Describe how the use was varied.' })
+  }
 }
 
 /** IN-5: an Injury incident must record at least one injury row — mirrors the backend's own
@@ -183,8 +192,8 @@ function detailsRefine(data: Pick<IncidentFormData, 'incidentType' | 'injuries' 
 }
 
 /** The server judges an override against the default of the EDITED severity and type, so this does too. Only fires once a class is present (an edit). */
-function reportableClassRefine(data: Pick<IncidentFormData, 'severity' | 'incidentType' | 'reportableClass' | 'reportableClassReason' | 'isRestrictivePracticeAuthorised'>, ctx: z.RefinementCtx) {
-  if (data.reportableClass && data.reportableClass !== defaultReportableClass(data.severity, data.incidentType, data.isRestrictivePracticeAuthorised) && !data.reportableClassReason?.trim()) {
+function reportableClassRefine(data: Pick<IncidentFormData, 'severity' | 'incidentType' | 'reportableClass' | 'reportableClassReason' | 'isRestrictivePracticeAuthorised' | 'rpUseVaried'>, ctx: z.RefinementCtx) {
+  if (data.reportableClass && data.reportableClass !== defaultReportableClass(data.severity, data.incidentType, data.isRestrictivePracticeAuthorised, data.rpUseVaried) && !data.reportableClassReason?.trim()) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['reportableClassReason'], message: 'Give a reason for changing the reporting deadline.' })
   }
 }
@@ -212,7 +221,7 @@ export const detailsSchema = incidentBaseSchema
 export const witnessesSchema = incidentBaseSchema.pick(pickShape(STEP_WITNESSES_FIELDS))
 
 export const complianceSchema = incidentBaseSchema
-  .pick({ ...pickShape(STEP_COMPLIANCE_FIELDS), severity: true, incidentType: true })
+  .pick({ ...pickShape(STEP_COMPLIANCE_FIELDS), severity: true, incidentType: true, isRestrictivePracticeAuthorised: true, rpUseVaried: true })
   .superRefine(reportableClassRefine)
 
 /**

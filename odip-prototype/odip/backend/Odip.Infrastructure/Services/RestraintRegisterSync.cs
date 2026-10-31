@@ -91,6 +91,7 @@ public class RestraintRegisterSync
                 {
                     entry.AuthorisedBy = by;
                     entry.AuthorisationDate = answers.AuthorisationDate;
+                    entry.AuthorisationEndDate = null; // re-authorising through the medicine starts a fresh, open-ended authorisation
                     changed = true;
                 }
             }
@@ -98,6 +99,7 @@ public class RestraintRegisterSync
             {
                 entry.AuthorisedBy = null;
                 entry.AuthorisationDate = null;
+                entry.AuthorisationEndDate = null;
                 changed = true;
             }
             if (answers.RequiresReporting is { } report && entry.RequiresReporting != report)

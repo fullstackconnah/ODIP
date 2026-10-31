@@ -40,17 +40,25 @@ public class IncidentReportingClockTests
     };
 
     [Theory]
-    [InlineData(IncidentSeverity.Critical, IncidentType.PropertyDamage, null, ReportableClass.Within24h)]
-    [InlineData(IncidentSeverity.Low, IncidentType.Abuse, null, ReportableClass.Within24h)]
-    [InlineData(IncidentSeverity.Low, IncidentType.Neglect, null, ReportableClass.Within24h)]
-    [InlineData(IncidentSeverity.Low, IncidentType.Death, null, ReportableClass.Within24h)]
-    [InlineData(IncidentSeverity.Low, IncidentType.MissingPerson, null, ReportableClass.Within24h)]
-    [InlineData(IncidentSeverity.Low, IncidentType.RestrictivePracticeUse, true, ReportableClass.Within24h)]
-    [InlineData(IncidentSeverity.Low, IncidentType.PropertyDamage, false, ReportableClass.Within24h)]
-    [InlineData(IncidentSeverity.High, IncidentType.PropertyDamage, null, ReportableClass.None)]
-    [InlineData(IncidentSeverity.Medium, IncidentType.Injury, true, ReportableClass.None)]
-    public void DefaultClass_FollowsSeverityTypeAndAuthorisation(IncidentSeverity severity, IncidentType type, bool? authorised, ReportableClass expected) =>
-        Assert.Equal(expected, QscReporting.DefaultClass(severity, type, authorised));
+    [InlineData(IncidentSeverity.Critical, IncidentType.PropertyDamage, null, null, ReportableClass.Within24h)]
+    [InlineData(IncidentSeverity.Low, IncidentType.Abuse, null, null, ReportableClass.Within24h)]
+    [InlineData(IncidentSeverity.Low, IncidentType.Neglect, null, null, ReportableClass.Within24h)]
+    [InlineData(IncidentSeverity.Low, IncidentType.Death, null, null, ReportableClass.Within24h)]
+    [InlineData(IncidentSeverity.Low, IncidentType.MissingPerson, null, null, ReportableClass.Within24h)]
+    // Q13 (c): an RP use is reportable unless it was authorised on its date AND used as set out in the plan.
+    [InlineData(IncidentSeverity.Low, IncidentType.RestrictivePracticeUse, true, false, ReportableClass.None)]
+    [InlineData(IncidentSeverity.Low, IncidentType.RestrictivePracticeUse, true, true, ReportableClass.Within24h)]
+    [InlineData(IncidentSeverity.Low, IncidentType.RestrictivePracticeUse, true, null, ReportableClass.Within24h)]
+    [InlineData(IncidentSeverity.Low, IncidentType.RestrictivePracticeUse, false, false, ReportableClass.Within24h)]
+    [InlineData(IncidentSeverity.Low, IncidentType.RestrictivePracticeUse, null, null, ReportableClass.Within24h)]
+    [InlineData(IncidentSeverity.Low, IncidentType.RestrictivePracticeUse, null, false, ReportableClass.Within24h)]
+    [InlineData(IncidentSeverity.Critical, IncidentType.RestrictivePracticeUse, true, false, ReportableClass.Within24h)]
+    [InlineData(IncidentSeverity.Low, IncidentType.PropertyDamage, false, null, ReportableClass.Within24h)]
+    [InlineData(IncidentSeverity.High, IncidentType.PropertyDamage, null, null, ReportableClass.None)]
+    [InlineData(IncidentSeverity.Medium, IncidentType.Injury, true, null, ReportableClass.None)]
+    [InlineData(IncidentSeverity.Low, IncidentType.Injury, null, null, ReportableClass.None)]
+    public void DefaultClass_FollowsSeverityTypeAndAuthorisation(IncidentSeverity severity, IncidentType type, bool? authorised, bool? varied, ReportableClass expected) =>
+        Assert.Equal(expected, QscReporting.DefaultClass(severity, type, authorised, varied));
 
     [Fact]
     public async Task Create_Critical_StoresAwareAtDuesAndRequiredStatus()

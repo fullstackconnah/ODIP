@@ -2152,6 +2152,8 @@ public record IncidentDetailDto : IncidentListDto
     /// recomputes this.
     /// </summary>
     public bool? IsRestrictivePracticeAuthorised { get; init; }
+    /// <summary>Whether an authorised use departed from the behaviour support plan; null for legacy, unauthorised or undeterminable uses.</summary>
+    public bool? RestrictivePracticeUseVaried { get; init; }
     public string Description { get; init; } = string.Empty;
     public string? ImmediateActionsTaken { get; init; }
     public bool WereEmergencyServicesCalled { get; init; }
@@ -2271,6 +2273,8 @@ public record CreateIncidentDto
     /// determination to false, never raise it.
     /// </summary>
     public bool UsedWithoutAuthorisation { get; init; }
+    /// <summary>Create only; Update ignores it (UpdateIncidentDto inherits it). Whether an authorised use departed from the behaviour support plan. Stored only when the use is authorised; null (unanswered) is reportable.</summary>
+    public bool? RestrictivePracticeUseVaried { get; init; }
     public IncidentSeverity Severity { get; init; }
     [Required, StringLength(300, MinimumLength = 1)]
     public string Title { get; init; } = string.Empty;

@@ -40,6 +40,16 @@ function makePractice(overrides: Partial<RestrictivePracticeDto> = {}): Restrict
     relatedMedicationName: null,
     isActive: true,
     isAuthorised: false,
+    useKind: 'Routine',
+    authorisationEndDate: null,
+    firstUsedOn: null,
+    interimBspDate: null,
+    comprehensiveBspDate: null,
+    earliestRecordedUseDate: null,
+    interimBspDueOn: null,
+    comprehensiveBspDueOn: null,
+    interimBspState: 'NotStarted',
+    comprehensiveBspState: 'NotStarted',
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
     ...overrides,
@@ -284,7 +294,7 @@ describe('RestrictivePracticesTab', () => {
 
     expect(screen.getByText('Not authorised')).toBeInTheDocument()
     expect(screen.getByText('Not yet in force')).toBeInTheDocument()
-    expect(screen.getByText('Authorised 31/10/2026')).toBeInTheDocument()
+    expect(screen.getByText('Authorised 31/10/2026, no end date')).toBeInTheDocument()
     expect(screen.queryByText(/Authorised from/)).toBeNull()
     for (const line of EXPLANATIONS) expect(screen.queryByText(line)).not.toBeInTheDocument()
   })
@@ -654,7 +664,7 @@ describe('RestrictivePracticesTab — edit form authorised checkbox', () => {
     await user.click(screen.getByRole('button', { name: /save entry/i }))
 
     const [call] = mockUpdateMutateAsync.mock.calls[0]
-    expect(call).toEqual({ id: 'rp-1', data: { type: 'Unclassified', description: 'Locked doors overnight for safety.', reviewDate: null, relatedMedicationId: null, authorisedBy: null, authorisationDate: null, isActive: true, requiresReporting: null, expectedUpdatedAt: '2026-01-01T00:00:00Z' } })
+    expect(call).toEqual({ id: 'rp-1', data: { type: 'Unclassified', description: 'Locked doors overnight for safety.', reviewDate: null, relatedMedicationId: null, authorisedBy: null, authorisationDate: null, datesIncluded: true, authorisationEndDate: null, useKind: 'Routine', firstUsedOn: null, interimBspDate: null, comprehensiveBspDate: null, isActive: true, requiresReporting: null, expectedUpdatedAt: '2026-01-01T00:00:00Z' } })
   })
 
   it('ticked with a field emptied shows the field error and does not save', async () => {
@@ -682,7 +692,7 @@ describe('RestrictivePracticesTab — edit form authorised checkbox', () => {
     await user.click(screen.getByRole('button', { name: /save entry/i }))
 
     const [call] = mockUpdateMutateAsync.mock.calls[0]
-    expect(call).toEqual({ id: 'rp-1', data: { type: 'Unclassified', description: 'Locked doors overnight for safety.', reviewDate: null, relatedMedicationId: null, authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01', isActive: true, requiresReporting: null, expectedUpdatedAt: '2026-01-01T00:00:00Z' } })
+    expect(call).toEqual({ id: 'rp-1', data: { type: 'Unclassified', description: 'Locked doors overnight for safety.', reviewDate: null, relatedMedicationId: null, authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01', datesIncluded: true, authorisationEndDate: null, useKind: 'Routine', firstUsedOn: null, interimBspDate: null, comprehensiveBspDate: null, isActive: true, requiresReporting: null, expectedUpdatedAt: '2026-01-01T00:00:00Z' } })
   })
 
   it('opens ticked for an inactive record and a description-only edit posts both values unchanged', async () => {
@@ -697,7 +707,7 @@ describe('RestrictivePracticesTab — edit form authorised checkbox', () => {
     await user.click(screen.getByRole('button', { name: /save entry/i }))
 
     const [call] = mockUpdateMutateAsync.mock.calls[0]
-    expect(call).toEqual({ id: 'rp-1', data: { type: 'Unclassified', description: 'Locked doors overnight for safety. Reviewed.', reviewDate: null, relatedMedicationId: null, authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01', isActive: false, requiresReporting: null, expectedUpdatedAt: '2026-01-01T00:00:00Z' } })
+    expect(call).toEqual({ id: 'rp-1', data: { type: 'Unclassified', description: 'Locked doors overnight for safety. Reviewed.', reviewDate: null, relatedMedicationId: null, authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01', datesIncluded: true, authorisationEndDate: null, useKind: 'Routine', firstUsedOn: null, interimBspDate: null, comprehensiveBspDate: null, isActive: false, requiresReporting: null, expectedUpdatedAt: '2026-01-01T00:00:00Z' } })
   })
 
   it('opens ticked for a date-only record, shows the date, and blocks the save asking who', async () => {
@@ -947,5 +957,229 @@ describe('RestrictivePracticesTab — medicine-linked entries', () => {
     await user.click(screen.getByRole('button', { name: 'Edit' }))
     await user.click(screen.getByRole('button', { name: /save entry/i }))
     expect(await screen.findByText(/This entry was changed while you had it open/)).toBeInTheDocument()
+  })
+})
+
+// RP register PR 1: use kind, the authorisation span, the behaviour support plan line and the edit modal's new fields.
+describe('RestrictivePracticesTab use kind, authorisation span and plan line', () => {
+  const authorised = { authorisedBy: 'Dr Chen', authorisationDate: '2026-08-01', isAuthorised: true }
+
+  function renderWith(p: Partial<RestrictivePracticeDto>, role = 'Coordinator') {
+    setUserRole(role)
+    mockUseRestrictivePractices.mockReturnValue({ data: [makePractice(p)], isLoading: false })
+    return render(<RestrictivePracticesTab participantId="participant-1" />)
+  }
+
+  it('leads the meta line with the use kind', () => {
+    renderWith({ useKind: 'Prn', ...authorised })
+    expect(screen.getByText('As needed (PRN)')).toBeInTheDocument()
+  })
+
+  it('reads "Authorised {start} to {end}" with an end date and "no end date" without one', () => {
+    const first = renderWith({ ...authorised, authorisationEndDate: '2099-08-01' })
+    expect(screen.getByText('Authorised 01/08/2026 to 01/08/2099')).toBeInTheDocument()
+    first.unmount()
+    renderWith({ ...authorised })
+    expect(screen.getByText('Authorised 01/08/2026, no end date')).toBeInTheDocument()
+  })
+
+  it('says "Authorisation ended {end}" instead of the other reasons once the end date has passed', () => {
+    renderWith({ ...authorised, authorisationEndDate: '2020-01-31', isAuthorised: false })
+    expect(screen.getByText('Not authorised')).toBeInTheDocument()
+    expect(screen.getByText('Authorisation ended 31/01/2020')).toBeInTheDocument()
+    expect(screen.queryByText('Not yet in force')).not.toBeInTheDocument()
+  })
+
+  it('shows the plan pills from the server states, interim and comprehensive', () => {
+    renderWith({
+      ...authorised, firstUsedOn: '2026-09-01',
+      interimBspState: 'Overdue', interimBspDueOn: '2026-10-01', comprehensiveBspState: 'DueSoon', comprehensiveBspDueOn: '2027-03-01',
+    })
+    expect(screen.getByText('Behaviour support plan')).toBeInTheDocument()
+    expect(screen.getByText('Interim plan overdue 01/10/2026')).toBeInTheDocument()
+    expect(screen.getByText('Comprehensive plan due 01/03/2027')).toBeInTheDocument()
+  })
+
+  it('hides the interim pill once the comprehensive plan is in place', () => {
+    renderWith({
+      ...authorised, firstUsedOn: '2026-03-01', interimBspDate: '2026-03-20', comprehensiveBspDate: '2026-08-20',
+      interimBspState: 'InPlace', comprehensiveBspState: 'InPlace', interimBspDueOn: '2026-04-01', comprehensiveBspDueOn: '2026-09-01',
+    })
+    expect(screen.getByText('Comprehensive plan in place 20/08/2026')).toBeInTheDocument()
+    expect(screen.queryByText(/Interim plan/)).not.toBeInTheDocument()
+  })
+
+  it('shows "in place" for the interim plan with its recorded date', () => {
+    renderWith({
+      ...authorised, firstUsedOn: '2026-09-01', interimBspDate: '2026-09-10',
+      interimBspState: 'InPlace', interimBspDueOn: '2026-10-01', comprehensiveBspState: 'Due', comprehensiveBspDueOn: '2027-03-01',
+    })
+    expect(screen.getByText('Interim plan in place 10/09/2026')).toBeInTheDocument()
+    expect(screen.getByText('Comprehensive plan due 01/03/2027')).toBeInTheDocument()
+  })
+
+  it('asks a writer to add the first use date, and tells a reader it is not recorded', () => {
+    const writer = renderWith({ ...authorised })
+    expect(screen.getByText('Add the first use date to see when plans are due')).toBeInTheDocument()
+    writer.unmount()
+    renderWith({ ...authorised }, 'ReadOnly')
+    expect(screen.getByText('First use date not recorded')).toBeInTheDocument()
+    expect(screen.queryByText(/Add the first use date/)).not.toBeInTheDocument()
+  })
+
+  it('does not ask for the first use date once an interim plan is on file', () => {
+    renderWith({ ...authorised, interimBspDate: '2026-09-10', interimBspState: 'InPlace' })
+    expect(screen.getByText(/Interim plan in place/)).toBeInTheDocument()
+    expect(screen.queryByText(/Add the first use date/)).not.toBeInTheDocument()
+  })
+
+  it('shows no plan line on an inactive entry', async () => {
+    const user = userEvent.setup()
+    renderWith({ ...authorised, isActive: false })
+    await user.click(screen.getByText('Inactive (1)'))
+    expect(screen.queryByText('Behaviour support plan')).not.toBeInTheDocument()
+  })
+})
+
+describe('RestrictivePracticesTab edit modal: use kind, end date and plan dates', () => {
+  const authorised = { authorisedBy: 'Dr Chen', authorisationDate: '2026-08-01', isAuthorised: true }
+
+  async function openEdit(p: Partial<RestrictivePracticeDto>) {
+    const user = userEvent.setup()
+    mockUseRestrictivePractices.mockReturnValue({ data: [makePractice(p)], isLoading: false })
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    return user
+  }
+
+  it('saves the use kind and sends it with the plan dates', async () => {
+    const user = await openEdit({ ...authorised, firstUsedOn: '2026-09-01', interimBspDate: '2026-09-10' })
+    expect(screen.getByText('Routine is part of the everyday plan. As needed (PRN) is used only when a set situation arises.')).toBeInTheDocument()
+    await user.click(screen.getByRole('radio', { name: 'As needed (PRN)' }))
+    await user.click(screen.getByRole('button', { name: /save entry/i }))
+    const data = mockUpdateMutateAsync.mock.calls[0][0].data
+    expect(data).toMatchObject({ useKind: 'Prn', firstUsedOn: '2026-09-01', interimBspDate: '2026-09-10', comprehensiveBspDate: null, authorisationEndDate: null })
+  })
+
+  it('locks the use kind for a linked chemical entry and says the medicine sets it', async () => {
+    await openEdit({ ...authorised, type: 'ChemicalRestraint', relatedMedicationId: 'med-1', relatedMedicationName: 'Risperidone', useKind: 'Prn' })
+    expect(screen.getByText('Set by the linked medicine, which is PRN.')).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Routine' })).toBeDisabled()
+    expect(screen.getByRole('radio', { name: 'As needed (PRN)' })).toBeDisabled()
+  })
+
+  it('hints on a blank end date, and on one that has passed', async () => {
+    const user = await openEdit({ ...authorised })
+    expect(screen.getByText('Leave blank if the authorisation has no end date.')).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Authorisation end date'), '2020-01-31')
+    expect(screen.getByText('This date has passed, so the entry reads Not authorised.')).toBeInTheDocument()
+  })
+
+  it("refuses an end date before the authorisation date and doesn't save", async () => {
+    const user = await openEdit({ ...authorised })
+    await user.type(screen.getByLabelText('Authorisation end date'), '2026-07-31')
+    await user.click(screen.getByRole('button', { name: /save entry/i }))
+    expect(await screen.findByText("The end date can't be before the authorisation date")).toBeInTheDocument()
+    expect(mockUpdateMutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('saves the end date as null when Authorised is unticked', async () => {
+    const user = await openEdit({ ...authorised, authorisationEndDate: '2099-08-01' })
+    await user.click(screen.getByRole('checkbox', { name: /this restrictive practice is authorised/i }))
+    await user.click(screen.getByRole('button', { name: /save entry/i }))
+    expect(mockUpdateMutateAsync.mock.calls[0][0].data).toMatchObject({ authorisedBy: null, authorisationDate: null, authorisationEndDate: null })
+  })
+
+  it('refuses a first use date in the future', async () => {
+    const user = await openEdit({ ...authorised })
+    await user.type(screen.getByLabelText('First used on'), '2099-01-01')
+    await user.click(screen.getByRole('button', { name: /save entry/i }))
+    expect(await screen.findByText("The first use date can't be in the future")).toBeInTheDocument()
+    expect(mockUpdateMutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('offers the earliest use on record and fills it on tap', async () => {
+    const user = await openEdit({ ...authorised, earliestRecordedUseDate: '2026-09-05' })
+    expect(screen.getByText('Earliest use on record: 05/09/2026.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Use 05/09/2026' }))
+    expect(screen.getByLabelText('First used on')).toHaveValue('2026-09-05')
+    expect(screen.queryByRole('button', { name: 'Use 05/09/2026' })).not.toBeInTheDocument()
+  })
+
+  it('says a use is on record before the date entered', async () => {
+    await openEdit({ ...authorised, firstUsedOn: '2026-10-01', earliestRecordedUseDate: '2026-09-05' })
+    expect(screen.getByText('A use is on record from 05/09/2026, before this date.')).toBeInTheDocument()
+  })
+
+  it('explains the field when nothing is on record, with the plan timing in the fieldset intro', async () => {
+    await openEdit({ ...authorised })
+    expect(screen.getByText('The date this practice was first used. It starts the plan due dates.')).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Behaviour support plan' })).toBeInTheDocument()
+    expect(screen.getByText('The interim plan is due 1 month after first use, and the comprehensive plan 6 months after.')).toBeInTheDocument()
+  })
+})
+
+// RP register PR 1: the bulk dialog asks how the batch is used and, for an authorised batch, each row's end date.
+describe('Add entries: use kind and authorisation end date', () => {
+  async function openSetup(user: ReturnType<typeof userEvent.setup>) {
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+    await user.click(screen.getAllByRole('button', { name: /add entries/i })[0])
+  }
+
+  it('defaults the batch to Routine and sends the chosen use kind with each row', async () => {
+    const user = userEvent.setup()
+    mockBulkCreateMutateAsync.mockResolvedValueOnce({ data: [] })
+    await openSetup(user)
+    expect(screen.getByRole('radio', { name: 'Routine' })).toBeChecked()
+    await user.click(screen.getByRole('radio', { name: 'As needed (PRN)' }))
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+    await user.type(screen.getByLabelText('Description, row 1'), 'Held at the kerb')
+    await user.click(screen.getByRole('button', { name: /save 1 entry/i }))
+    const item = mockBulkCreateMutateAsync.mock.calls[0][0].data.items[0]
+    expect(item).toMatchObject({ useKind: 'Prn', authorisationEndDate: null })
+  })
+
+  it('says a linked medicine sets the use kind, for a chemical restraint only', async () => {
+    const user = userEvent.setup()
+    await openSetup(user)
+    expect(screen.queryByText('A linked medicine sets this from its Regular or PRN setting.')).not.toBeInTheDocument()
+    await user.click(screen.getByLabelText(/restrictive practice type/i))
+    await user.click(screen.getByRole('option', { name: /chemical restraint/i }))
+    expect(screen.getByText('A linked medicine sets this from its Regular or PRN setting.')).toBeInTheDocument()
+  })
+
+  it('adds an end date column only for an authorised batch, and sends the date', async () => {
+    const user = userEvent.setup()
+    mockBulkCreateMutateAsync.mockResolvedValueOnce({ data: [] })
+    await openSetup(user)
+    await user.click(screen.getByRole('checkbox', { name: /this restrictive practice is authorised/i }))
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+    await user.type(screen.getByLabelText('Description, row 1'), 'Held at the kerb')
+    await user.type(screen.getByLabelText('Authorised by, row 1'), 'Dr Chen')
+    await user.type(screen.getByLabelText('Authorisation date, row 1'), '2026-08-01')
+    await user.type(screen.getByLabelText('Authorisation end date, row 1'), '2027-08-01')
+    await user.click(screen.getByRole('button', { name: /save 1 entry/i }))
+    expect(mockBulkCreateMutateAsync.mock.calls[0][0].data.items[0]).toMatchObject({ authorisationDate: '2026-08-01', authorisationEndDate: '2027-08-01', useKind: 'Routine' })
+  })
+
+  it('has no end date column for an unauthorised batch', async () => {
+    const user = userEvent.setup()
+    await openSetup(user)
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+    expect(screen.queryByLabelText('Authorisation end date, row 1')).not.toBeInTheDocument()
+  })
+
+  it("refuses an end date before the authorisation date on that row", async () => {
+    const user = userEvent.setup()
+    await openSetup(user)
+    await user.click(screen.getByRole('checkbox', { name: /this restrictive practice is authorised/i }))
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+    await user.type(screen.getByLabelText('Description, row 1'), 'Held at the kerb')
+    await user.type(screen.getByLabelText('Authorised by, row 1'), 'Dr Chen')
+    await user.type(screen.getByLabelText('Authorisation date, row 1'), '2026-08-01')
+    await user.type(screen.getByLabelText('Authorisation end date, row 1'), '2026-07-31')
+    await user.click(screen.getByRole('button', { name: /save 1 entry/i }))
+    expect(await screen.findByText("The end date can't be before the authorisation date.")).toBeInTheDocument()
+    expect(mockBulkCreateMutateAsync).not.toHaveBeenCalled()
   })
 })

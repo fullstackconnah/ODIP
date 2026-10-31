@@ -1,16 +1,19 @@
 import type { IncidentSeverity, IncidentType, QscReportingStatus, ReportableClass } from '@/api/types/enums'
 import { toDatetimeInputValue } from '@/lib/wallClock'
 
-// Mirrors QscReporting.DefaultClass on the server: a critical incident, one of these types, or an unauthorised restrictive practice is due within 24 hours.
-const REQUIRED_TYPES: readonly IncidentType[] = ['Abuse', 'Neglect', 'Death', 'RestrictivePracticeUse', 'MissingPerson']
+// Mirrors QscReporting.DefaultClass on the server: a critical incident, one of these types, an unauthorised restrictive practice, or a restrictive practice use that was not both authorised and used as set out in the plan is due within 24 hours.
+const REQUIRED_TYPES: readonly IncidentType[] = ['Abuse', 'Neglect', 'Death', 'MissingPerson']
 
 export function defaultReportableClass(
   severity: IncidentSeverity | string | undefined,
   incidentType: IncidentType | string | undefined,
   isRestrictivePracticeAuthorised?: boolean | null,
+  restrictivePracticeUseVaried?: boolean | null,
 ): ReportableClass {
   // The flag decides on its own: an unauthorised restrictive practice is due in 24 hours whatever the type.
   return severity === 'Critical' || REQUIRED_TYPES.includes(incidentType as IncidentType) || isRestrictivePracticeAuthorised === false
+    // An unanswered question fails safe, like the server.
+    || (incidentType === 'RestrictivePracticeUse' && !(isRestrictivePracticeAuthorised === true && restrictivePracticeUseVaried === false))
     ? 'Within24h' : 'None'
 }
 

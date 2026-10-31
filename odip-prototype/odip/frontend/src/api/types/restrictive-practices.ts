@@ -30,6 +30,15 @@ export const RESTRICTIVE_PRACTICE_TYPE_DESCRIPTIONS: Record<RestrictivePracticeT
   Unclassified: 'Type not yet recorded — reclassify this entry when you next review it',
 }
 
+/** Routine is part of the everyday plan; Prn is used only when a set situation arises. A linked chemical entry follows its medicine. */
+export const RESTRICTIVE_PRACTICE_USE_KINDS = ['Routine', 'Prn'] as const
+export type RestrictivePracticeUseKind = typeof RESTRICTIVE_PRACTICE_USE_KINDS[number]
+
+export const USE_KIND_LABELS: Record<RestrictivePracticeUseKind, string> = { Routine: 'Routine', Prn: 'As needed (PRN)' }
+
+/** Where a behaviour support plan stands. The server counts due dates from the first use date and the browser only shows them. */
+export type BspPlanState = 'NotStarted' | 'Due' | 'DueSoon' | 'Overdue' | 'InPlace'
+
 export interface RestrictivePracticeDto {
   id: string
   participantId: string
@@ -37,6 +46,19 @@ export interface RestrictivePracticeDto {
   description: string
   authorisedBy: string | null
   authorisationDate: string | null
+  /** "YYYY-MM-DD", inclusive: the last day it is authorised. Null means no end date. */
+  authorisationEndDate: string | null
+  useKind: RestrictivePracticeUseKind
+  /** "YYYY-MM-DD". When the practice was first used; the plan due dates count from it. */
+  firstUsedOn: string | null
+  interimBspDate: string | null
+  comprehensiveBspDate: string | null
+  /** The earliest use on record (an incident or an administered dose): a suggestion for firstUsedOn, never filled in for you. */
+  earliestRecordedUseDate: string | null
+  interimBspDueOn: string | null
+  comprehensiveBspDueOn: string | null
+  interimBspState: BspPlanState
+  comprehensiveBspState: BspPlanState
   /** "YYYY-MM-DD". A review date in the past is surfaced as overdue in the UI. */
   reviewDate: string | null
   /** Only meaningful when type === 'ChemicalRestraint'. */
@@ -58,6 +80,14 @@ export interface UpdateRestrictivePracticeDto {
   description: string
   authorisedBy?: string | null
   authorisationDate?: string | null
+  /** True: the four dates below are meant as sent (null clears one). Absent: the server leaves them as stored. */
+  datesIncluded?: boolean
+  authorisationEndDate?: string | null
+  /** Ignored by the server while a medicine is linked. */
+  useKind?: RestrictivePracticeUseKind
+  firstUsedOn?: string | null
+  interimBspDate?: string | null
+  comprehensiveBspDate?: string | null
   reviewDate?: string | null
   relatedMedicationId?: string | null
   /** null or absent leaves the stored answer as it is. */
@@ -78,6 +108,8 @@ export interface BulkCreateRestrictivePracticeRowDto {
   description: string
   authorisedBy?: string | null
   authorisationDate?: string | null
+  authorisationEndDate?: string | null
+  useKind?: RestrictivePracticeUseKind
   reviewDate?: string | null
   relatedMedicationId?: string | null
   isActive: boolean
