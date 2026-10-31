@@ -18,7 +18,7 @@ const frame = { title: 'Organisation profile', description: 'Who you are.', read
 const row: ProviderSettingsDto = {
   id: 'p1', registrationNumber: '4050', abn: '51824753556', organisationName: 'Jo Care', address: '1 Example Street', state: 'WA', gstRegistered: false, isPaceProvider: false,
   bankAccountName: null, bsb: null, accountNumber: null, invoiceFooterNotes: null,
-  managerName: 'Priya Sharma', managerPhone: '0412 345 007', participantReadinessMode: 'Warn', medicationCompetencyMode: 'Warn',
+  managerName: 'Priya Sharma', managerPhone: '0412 345 007', timeZoneId: null, participantReadinessMode: 'Warn', medicationCompetencyMode: 'Warn',
   updatedAt: '2026-10-23T01:00:00.123456Z',
   invoiceNumberPrefix: 'INV-', creditNotePrefix: 'CN-', invoiceStartNumber: 1, paymentTermsDays: 14, nextInvoiceDisplayNumber: 'INV-0001', invoicesIssued: false,
 }
@@ -97,5 +97,103 @@ describe('Organisation profile: state and manager', () => {
     expect(api.put).toHaveBeenCalledWith('/provider-settings', expect.objectContaining({
       managerName: 'Priya Sharma', managerPhone: '0400 000 000', state: 'WA', organisationName: 'Jo Care', abn: '51824753556',
     }))
+  })
+})
+
+const ZONE_HINT = 'Changing this moves what counts as today for rosters, the portal and reminders. Times already saved stay the same.'
+const zone = () => screen.getByRole('combobox', { name: 'Time zone' })
+
+describe('Organisation profile: time zone', () => {
+  it('lists the seven zones in picker order, with no empty option', async () => {
+    show()
+    await screen.findByDisplayValue('Priya Sharma')
+    const options = Array.from(zone().querySelectorAll('option'))
+    expect(options.map(o => [o.textContent, (o as HTMLOptionElement).value])).toEqual([
+      ['Sydney (NSW, ACT)', 'Australia/Sydney'], ['Melbourne (VIC)', 'Australia/Melbourne'], ['Hobart (TAS)', 'Australia/Hobart'],
+      ['Brisbane (QLD)', 'Australia/Brisbane'], ['Adelaide (SA)', 'Australia/Adelaide'], ['Perth (WA)', 'Australia/Perth'], ['Darwin (NT)', 'Australia/Darwin'],
+    ])
+    expect(zone()).not.toBeRequired()
+    expect(zone()).toHaveAccessibleDescription(ZONE_HINT)
+  })
+
+  it.each([
+    ['NSW', 'Australia/Sydney'], ['ACT', 'Australia/Sydney'], ['VIC', 'Australia/Melbourne'], ['TAS', 'Australia/Hobart'],
+    ['QLD', 'Australia/Brisbane'], ['SA', 'Australia/Adelaide'], ['WA', 'Australia/Perth'], ['NT', 'Australia/Darwin'], ['', 'Australia/Sydney'],
+  ])('shows the default for state "%s" when no zone is saved, and is not dirty', async (state, expected) => {
+    api.get.mockResolvedValue({ ...row, state, timeZoneId: null })
+    show()
+    await screen.findByDisplayValue('Priya Sharma')
+    expect(zone()).toHaveValue(expected)
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
+  })
+
+  it('moves the zone with the state while it is still that state's default', async () => {
+    api.get.mockResolvedValue({ ...row, state: 'VIC' })
+    const user = userEvent.setup()
+    show()
+    await screen.findByDisplayValue('Priya Sharma')
+    await user.click(screen.getByRole('radio', { name: 'WA' }))
+    expect(zone()).toHaveValue('Australia/Perth')
+    expect(screen.getByRole('status')).toHaveTextContent('Unsaved changes')
+  })
+
+  it('keeps a zone that is not the state's default when the state changes', async () => {
+    api.get.mockResolvedValue({ ...row, state: 'NSW', timeZoneId: 'Australia/Brisbane' })
+    const user = userEvent.setup()
+    show()
+    await screen.findByDisplayValue('Priya Sharma')
+    expect(zone()).toHaveValue('Australia/Brisbane')
+    await user.click(screen.getByRole('radio', { name: 'VIC' }))
+    expect(zone()).toHaveValue('Australia/Brisbane')
+  })
+
+  it('sends the row's own null zone when only the address changed, and the picked zone when it was picked', async () => {
+    api.get.mockResolvedValue({ ...row, state: 'VIC' })
+    const user = userEvent.setup()
+    show()
+    const address = await screen.findByRole('textbox', { name: 'Address' })
+    await user.type(address, ' B')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1))
+    expect(api.put.mock.calls[0][1]).toMatchObject({ timeZoneId: null })
+
+    await user.selectOptions(zone(), 'Australia/Perth')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(api.put).toHaveBeenCalledTimes(2))
+    expect(api.put.mock.calls[1][1]).toMatchObject({ timeZoneId: 'Australia/Perth' })
+  })
+
+  it('leads the hint with "Changed by someone else." after a refused save reseeds the zone', async () => {
+    api.get.mockResolvedValue({ ...row, state: 'NSW', timeZoneId: 'Australia/Sydney' })
+    api.put.mockRejectedValue({ response: { status: 409, data: { code: 'PROVIDER_SETTINGS_CHANGED' } } })
+    const user = userEvent.setup()
+    show()
+    await user.type(await screen.findByRole('textbox', { name: 'Address' }), ' B')
+    api.get.mockResolvedValue({ ...row, state: 'NSW', timeZoneId: 'Australia/Perth', updatedAt: '2026-10-23T02:00:00.000000Z' })
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(zone()).toHaveValue('Australia/Perth'))
+    expect(zone()).toHaveAccessibleDescription('Changed by someone else. ' + ZONE_HINT)
+  })
+
+  it('says why the server refused a zone', async () => {
+    api.get.mockResolvedValue({ ...row, state: 'NSW', timeZoneId: 'Australia/Sydney' })
+    api.put.mockRejectedValue({ response: { status: 400, data: { success: false, errors: ['Choose a time zone from the list.'] } } })
+    const user = userEvent.setup()
+    show()
+    await screen.findByDisplayValue('Priya Sharma')
+    await user.selectOptions(zone(), 'Australia/Perth')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Not saved. Choose a time zone from the list.')
+  })
+
+  it('is a disabled select with no Save for a Coordinator, still showing the zone', async () => {
+    api.get.mockResolvedValue({ ...row, state: 'NSW', timeZoneId: 'Australia/Brisbane' })
+    const router = createMemoryRouter([{ path: '/settings', element: <OrganisationProfileSection {...frame} readOnly /> }], { initialEntries: ['/settings'] })
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><RouterProvider router={router} /></QueryClientProvider>)
+    await screen.findByDisplayValue('Priya Sharma')
+    expect(zone()).toBeDisabled()
+    expect(zone()).toHaveValue('Australia/Brisbane')
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
   })
 })

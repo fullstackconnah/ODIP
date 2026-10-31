@@ -32,7 +32,7 @@ function makeSettings(overrides: Partial<ProviderSettingsDto> = {}): ProviderSet
   return {
     id: 'ps-1', registrationNumber: '4050012345', abn: '51824753556', organisationName: 'Sunrise Support Services', address: '12 Wattle St, Brisbane QLD 4000',
     state: 'QLD', gstRegistered: true, isPaceProvider: false, bankAccountName: 'Sunrise Support', bsb: '064-000', accountNumber: '12345678',
-    invoiceFooterNotes: 'Thank you for choosing Sunrise.', managerName: 'Priya Sharma', managerPhone: '0412 345 007',
+    invoiceFooterNotes: 'Thank you for choosing Sunrise.', managerName: 'Priya Sharma', managerPhone: '0412 345 007', timeZoneId: null,
     participantReadinessMode: 'Warn', medicationCompetencyMode: 'Warn', updatedAt: V1,
     invoiceNumberPrefix: 'INV-', creditNotePrefix: 'CN-', invoiceStartNumber: 1, paymentTermsDays: 14, nextInvoiceDisplayNumber: 'INV-0001', invoicesIssued: false, ...overrides,
   }
@@ -107,7 +107,7 @@ describe('Organisation profile', () => {
     expect(screen.getByRole('textbox', { name: 'Address' })).toHaveValue('12 Wattle St, Brisbane QLD 4000')
     expect(screen.getByRole('radio', { name: 'QLD' })).toBeChecked()
     expect(screen.getByRole('heading', { level: 3, name: 'Name and registration' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { level: 3, name: 'Address' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 3, name: 'Address and time zone' })).toBeInTheDocument()
   })
 
   it('on a phone opens as a screen of its own with a Back link, and saves the same way', async () => {

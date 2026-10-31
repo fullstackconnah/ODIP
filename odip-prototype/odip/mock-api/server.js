@@ -2068,7 +2068,7 @@ const claimHub = claimHubModule.create({ respond, failEnvelope, FILE: invoicesMo
 const providerSettingsRow = {
   id: 'ps-0001', registrationNumber: '4050000001', abn: '12345678901', organisationName: 'Sample Support Co', address: '1 Sample St, Brisbane QLD 4000', state: 'QLD',
   gstRegistered: false, isPaceProvider: true, bankAccountName: 'Sample Support Co', bsb: '000-000', accountNumber: '00000000', invoiceFooterNotes: null,
-  managerName: null, managerPhone: null, participantReadinessMode: 'Warn', medicationCompetencyMode: 'Warn',
+  managerName: null, managerPhone: null, timeZoneId: null, participantReadinessMode: 'Warn', medicationCompetencyMode: 'Warn',
 }
 
 function claimDetail(c) {
