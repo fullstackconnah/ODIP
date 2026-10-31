@@ -155,6 +155,48 @@ describe('StaffDetailPage — header', () => {
   })
 })
 
+describe('StaffDetailPage — summary strip', () => {
+  // FactBar glance has no role of its own: its grid is the first ancestor of the "Next shift" label.
+  const strip = () => screen.getByText('Next shift').closest('div.grid') as HTMLElement
+
+  it('sits above the tabs and reads All current and None booked for a person with nothing due', () => {
+    mockUseStaffOverview.mockReturnValue({ data: makeOverview(), isLoading: false })
+    renderAt('staff-1')
+
+    expect(strip()).toHaveTextContent('CredentialsAll current')
+    expect(strip()).toHaveTextContent('Next shiftNone booked')
+    expect(strip().compareDocumentPosition(screen.getByRole('tablist')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // Open incidents are not on the overview DTO, so the strip has two segments and fetches nothing more.
+    expect(strip()).not.toHaveTextContent('Open incidents')
+  })
+
+  it('counts expiring and expired credentials, and names the next shift with the house date', () => {
+    mockUseStaffOverview.mockReturnValue({
+      data: makeOverview({
+        staff: makeStaff({
+          isFirstAidQualified: true, firstAidExpiryDate: daysFromToday(-5),
+          isDriverEligible: true, driverLicenceExpiryDate: daysFromToday(10),
+          isManualHandlingCompetent: true, manualHandlingExpiryDate: daysFromToday(400),
+        }),
+        upcomingShifts: [{ shiftId: 's1', serviceDate: '2026-11-03', startTime: '07:00:00', endTime: '09:00:00', endsNextDay: false, participantId: 'p1', participantName: 'Sam', status: 'Scheduled' }],
+      }),
+      isLoading: false,
+    })
+    renderAt('staff-1')
+
+    expect(strip()).toHaveTextContent('1 expired')
+    expect(strip()).toHaveTextContent('1 expiring')
+    expect(strip()).toHaveTextContent('Tue 3 Nov, 7am')
+  })
+
+  it('lets the tab strip scroll sideways, so Week is not cut off on a phone', () => {
+    mockUseStaffOverview.mockReturnValue({ data: makeOverview(), isLoading: false })
+    renderAt('staff-1')
+
+    expect(screen.getByRole('tablist').className).toContain('md:[scrollbar-width:thin]')
+  })
+})
+
 describe('StaffDetailPage — Availability tab (default)', () => {
   it('renders the AvailabilityList for the staff member', () => {
     mockUseStaffOverview.mockReturnValue({ data: makeOverview(), isLoading: false })
