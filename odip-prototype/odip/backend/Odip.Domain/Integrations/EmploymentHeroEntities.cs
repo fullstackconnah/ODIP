@@ -44,6 +44,8 @@ public enum EmploymentHeroAttentionKind
     FixInOdip = 2,
     /// <summary>A linked staff member who is no longer in EH's employee list: never archived on absence; Dismiss hides it.</summary>
     MissingFromEmploymentHero = 3,
+    /// <summary>The sync brought an unusual address for someone who has never signed in: held until an Admin, Coordinator or SuperAdmin confirms it on the staff page.</summary>
+    ConfirmAddress = 4,
 }
 
 /// <summary>One Needs-attention item on the Employment Hero card. Each sync rewrites the set (Key is stable per problem); a dismissed item stays dismissed while its problem lasts.</summary>

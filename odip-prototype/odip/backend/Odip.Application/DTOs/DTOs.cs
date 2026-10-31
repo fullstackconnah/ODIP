@@ -1391,6 +1391,8 @@ public record StaffDetailDto : StaffListDto
     public DateTime? SignInInviteSentAt { get; init; }
     /// <summary>True once the person has signed in at all; null everywhere but the overview, and for non-managers (see StaffScreeningMask).</summary>
     public bool? HasSignedIn { get; init; }
+    /// <summary>True while the sign-in address waits for a confirmation (User.SignInAddressUnconfirmed); null for non-managers (see StaffScreeningMask).</summary>
+    public bool? SignInAddressUnconfirmed { get; init; }
 }
 
 /// <summary>Connection map item 12 — one row of GET /staff/{id}/overview's upcomingShifts (today → +14 days).</summary>

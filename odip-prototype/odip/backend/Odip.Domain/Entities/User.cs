@@ -71,4 +71,6 @@ public class User : ITenantEntity
     public DateTime? LastLoginAt { get; set; }
     /// <summary>When a sign-in invite email was last sent (UTC). The browser records it after Firebase accepted the send. Null: never invited.</summary>
     public DateTime? SignInInviteSentAt { get; set; }
+    /// <summary>True: the Employment Hero sync brought an address at neither the organisation's domain nor a common provider, so no sign-in until an Admin confirms it. Null: never assessed. False: a person confirmed or set it.</summary>
+    public bool? SignInAddressUnconfirmed { get; set; }
 }

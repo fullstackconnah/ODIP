@@ -516,19 +516,19 @@ public sealed partial class OnboardingImportService
     /// </summary>
     public async Task<List<User>?> StaffToInviteAsync(Guid batchId, CancellationToken ct, bool includeInvitedBefore = false) =>
         (await BatchStaffAsync(batchId, ct))?
-            .Where(u => u.IsActive && u.LastLoginAt == null && (includeInvitedBefore || u.SignInInviteSentAt == null))
+            .Where(u => u.IsActive && u.LastLoginAt == null && u.SignInAddressUnconfirmed != true && (includeInvitedBefore || u.SignInInviteSentAt == null))
             .OrderBy(u => u.Id).ToList();
 
     /// <summary>
     /// How many of a staff batch a sign-in invite would reach, each member in the first bucket that fits: cannot be invited (archived, no email, an
-    /// invented address), signed in, invited before, to invite. Null: no such batch. People the invites still list as per-person failures (a
+    /// invented address, an address waiting to be confirmed), signed in, invited before, to invite. Null: no such batch. People the invites still list as per-person failures (a
     /// SuperAdmin row, the reserved domain) stay in "to invite".
     /// </summary>
     public async Task<ImportInviteCountDto?> InviteCountAsync(Guid batchId, CancellationToken ct)
     {
         var staff = await BatchStaffAsync(batchId, ct);
         if (staff is null) return null;
-        bool CannotInvite(User u) => !u.IsActive || string.IsNullOrWhiteSpace(u.Email) || PlaceholderEmail.Covers(EmailIdentity.Normalise(u.Email));
+        bool CannotInvite(User u) => !u.IsActive || string.IsNullOrWhiteSpace(u.Email) || PlaceholderEmail.Covers(EmailIdentity.Normalise(u.Email)) || u.SignInAddressUnconfirmed == true;
         var cannot = staff.Count(CannotInvite);
         var rest = staff.Where(u => !CannotInvite(u)).ToList();
         var signedIn = rest.Count(u => u.LastLoginAt != null);
