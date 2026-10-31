@@ -5,7 +5,7 @@ import { Loader2, X } from 'lucide-react'
 import {
   useCreateServiceAgreementDraft, useDownloadServiceAgreementDraftPdf, useAgreementsEnding, useFundingPlans, useParticipant, useRenewAgreement, useServiceAgreementDraft, useServiceAgreementDrafts,
 } from '@/api/hooks'
-import type { AgreementState, CreateServiceAgreementDraftDto } from '@/api/types'
+import type { AgreementState, ApprovalActivationDto, CreateServiceAgreementDraftDto } from '@/api/types'
 import { BackButton } from '@/components/BackButton'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
@@ -25,6 +25,7 @@ import { usePermissions } from '@/lib/permissions'
 import { SUPPORT_LABEL, normaliseBlock, stampLocation } from '@/lib/planBlocks'
 import { PRICING_FIRST_YEAR, PRICING_LAST_YEAR, addDays, conflictVersionOf, describeRenewError, describeSaveError, friendlyMessage, isPricingDate, planNeededMessageOf, type SaveFailure } from '@/lib/planQuote'
 import { ApprovalDialog } from './agreement/ApprovalDialog'
+import { movedWords, notMovedWords } from './agreements/outcomeWords'
 import { STATES, planDatesOf, type Details } from '@/lib/agreementDetails'
 import { AgreementStep } from './agreement/AgreementStep'
 import { CheckStep } from './agreement/CheckStep'
@@ -109,6 +110,8 @@ function DraftPage() {
   const [revisingFrom, setRevisingFrom] = useState<string | null>(null)
   const renew = useRenewAgreement()
   const [renewNotice, setRenewNotice] = useState<RenewNotice | null>(null)
+  // What the last approval did to the participant's status, for the revision it approved: another approval or another revision on screen puts it away.
+  const [activationNotice, setActivationNotice] = useState<{ draftId: string; activation: ApprovalActivationDto } | null>(null)
   // "Record a new plan" from a renewal that had no plan: the plan editor opened after the plan that ends (D7). A save sends focus back to the ending words, beside Renew.
   const [recordingNextPlan, setRecordingNextPlan] = useState(false)
   const savedNextPlan = useRef(false)
@@ -375,7 +378,8 @@ function DraftPage() {
         participantId={participantId}
         draft={onScreen}
         onClose={() => setApproving(false)}
-        onApproved={() => setApproving(false)}
+        onApproved={activation => { setApproving(false); setActivationNotice(activation && { draftId: onScreen.id, activation }) }}
+        activatesName={pricing.settings?.approvalActivatesParticipant && participant.data?.isDraft ? participant.data.firstName : undefined}
         onGoToShifts={blockId => { go('week', true); setSelected(shiftIdsOfBlock(onScreen.blocks, blockId)) }}
         onSuperseded={superseded}
       />
@@ -407,6 +411,12 @@ function DraftPage() {
       <Callout tone="warning" className="max-w-prose" actions={<Button size="sm" variant="secondary" onClick={() => { void endingList.refetch() }}>Try again</Button>}>
         Couldn&apos;t check whether this agreement is ending.
       </Callout>
+    )}
+    {activationNotice?.draftId === onScreen?.id && activationNotice?.activation.result === 'Activated' && (
+      <Callout tone="success" className="max-w-prose" actions={closeButton(() => setActivationNotice(null))}>{movedWords(participant.data.firstName)}</Callout>
+    )}
+    {activationNotice?.draftId === onScreen?.id && activationNotice?.activation.result === 'NotActivated' && (
+      <Callout tone="warning" className="max-w-prose" actions={closeButton(() => setActivationNotice(null))}>Approved. {notMovedWords(activationNotice.activation.reason)}</Callout>
     )}
     {renewNotice?.kind === 'plan' && (
       <Callout tone="warning" className="max-w-prose" title="The renewal needs the participant's new plan" actions={closeButton(() => setRenewNotice(null))}>
@@ -442,7 +452,10 @@ function DraftPage() {
           {step === 'agreement' && (
             <div className="flex flex-col gap-[var(--section-gap)]">
               <Callout tone="info" announce={false} className="max-w-prose">
-                <p><strong>Draft only:</strong> not approved for signing or use. It can&apos;t activate the participant, invoice or claim. Approving a revision for rostering is separate: it only makes that revision&apos;s weekly patterns and unfilled shifts.</p>
+                {/* With the organisation's setting on, approving may move them to Active, so the notice no longer says it cannot. */}
+                {pricing.settings?.approvalActivatesParticipant
+                  ? <p><strong>Draft only:</strong> not approved for signing or use. It can&apos;t invoice or claim. Approving a revision for rostering is separate: it only makes that revision&apos;s weekly patterns and unfilled shifts. Approving also moves them to Active if they&apos;re ready.</p>
+                  : <p><strong>Draft only:</strong> not approved for signing or use. It can&apos;t activate the participant, invoice or claim. Approving a revision for rostering is separate: it only makes that revision&apos;s weekly patterns and unfilled shifts.</p>}
                 <p className="mt-2"><strong>Participant identifiers come from the participant record.</strong> NDIS number: {canonicalIdentifiers.ndis}; date of birth: {canonicalIdentifiers.dob}. <Link className="underline font-medium" to={`/participants/${participantId}/profile`}>View or edit participant details</Link>. A snapshot of both is stored with this draft and printed on its PDF, which Admins and Coordinators can open; a later change to the record does not change an existing draft.</p>
               </Callout>
               <AgreementStep
@@ -477,7 +490,7 @@ function DraftPage() {
               history={approvalHistory(drafts.data ?? [])}
               onDownload={() => { if (onScreen) download.mutate({ participantId, id: onScreen.id }) }}
               downloading={download.isPending} downloadFailed={download.isError}
-              approval={approvable ? { mayApprove, approverRoles, notReady: onScreen?.pricing?.needsReview === true, onOpen: () => setApproving(true) } : undefined}
+              approval={approvable ? { mayApprove, approverRoles, notReady: onScreen?.pricing?.needsReview === true, onOpen: () => { setActivationNotice(null); setApproving(true) } } : undefined}
             />
           )}
         </div>

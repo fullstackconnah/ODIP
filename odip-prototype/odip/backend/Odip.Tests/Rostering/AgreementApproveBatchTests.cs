@@ -63,6 +63,8 @@ public class AgreementApproveBatchTests
         Assert.Equal(new[] { "Approved", "AlreadyApproved", "NeedsReview", "Superseded", "Ended", "NotFound", "Approved" }, data!.Select(r => r.Outcome));
         Assert.Equal(new[] { d1.Id, d2.Id, d3.Id, d4.Id, d5.Id, dB.Id, d6.Id }, data!.Select(r => r.DraftId));
         Assert.Equal("Amy Ng", data[0].ParticipantName);
+        Assert.Equal(ActivationResults.Off, data[0].Activation!.Result);                  // the setting is off by default
+        Assert.Null(data[1].Activation);
         Assert.Contains("no item", Assert.Single(data[2].Reasons));
         Assert.Equal(3, await ApprovalRowsAsync(f));                              // d2 (already), d1 and d6; nothing for the refused, ended, superseded or other organisation's
         Assert.True(await f.Db.ServiceAgreementDraftApprovals.AnyAsync(a => a.DraftId == d1.Id));
@@ -232,5 +234,107 @@ public class AgreementApproveBatchTests
         Assert.All(data!.Skip(1), r => Assert.Equal(new[] { "We ran out of time before reaching this one. Try it again." }, r.Reasons));
         Assert.DoesNotContain(data!, r => r.Reasons.Any(w => w.Contains("Another change")));
         Assert.Equal(new[] { d1.Id }, await f.Db.ServiceAgreementDraftApprovals.Select(a => a.DraftId).ToArrayAsync());
+    }
+
+    // ── Moving the participant to Active (ApprovalActivatesParticipant) ───────────
+
+    private static async Task SettingOnAsync(Fixture f)
+    {
+        f.Db.PlanPricingSettings.Add(new PlanPricingSettings { Id = Guid.NewGuid(), TenantId = TenantA, ApprovalActivatesParticipant = true });
+        await f.Db.SaveChangesAsync();
+    }
+
+    /// <summary>An onboarding draft, not active, with its intake finished unless said.</summary>
+    private static async Task<Guid> OnboardingAsync(Fixture f, string firstName, bool intake = true)
+    {
+        var id = await ParticipantAsync(f, firstName, active: false, draftStage: true);
+        if (intake)
+        {
+            (await f.Db.Participants.SingleAsync(p => p.Id == id)).IntakeCompletedAt = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+            await f.Db.SaveChangesAsync();
+        }
+        return id;
+    }
+
+    private static Task<bool> IsDraftAsync(Fixture f, Guid id) => f.Db.Participants.AsNoTracking().Where(p => p.Id == id).Select(p => p.IsDraft).SingleAsync();
+
+    [Fact]
+    public async Task With_the_setting_on_one_item_moves_to_Active_and_the_other_says_why_and_both_stay_Approved()
+    {
+        await using var f = await SetUpAsync();
+        await SettingOnAsync(f);
+        var ready = await OnboardingAsync(f, "Ben");
+        var notYet = await OnboardingAsync(f, "Cal", intake: false);
+        var d1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, participantId: ready);
+        var d2 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, participantId: notYet);
+        await using var db = NewDb(f.DbName);
+        var approval = new ServiceAgreementApprovalService(db, new RosterPlacementGate(), new RosterShiftGenerator(), clock: f.Clock);
+
+        var (_, data) = await PostAsync(Controller(db, f, approval: approval), Batch((ready, d1.Id), (notYet, d2.Id)));
+
+        Assert.Equal(new[] { "Approved", "Approved" }, data!.Select(r => r.Outcome));
+        Assert.Equal(ActivationResults.Activated, data[0].Activation!.Result);
+        Assert.Equal((ActivationResults.NotActivated, "intake not finished"), (data[1].Activation!.Result, data[1].Activation!.Reason));
+        Assert.False(await IsDraftAsync(f, ready));
+        Assert.True(await IsDraftAsync(f, notYet));
+        Assert.Empty(db.ChangeTracker.Entries());
+    }
+
+    /// <summary>Throws on the first save that finalises a participant (the approval's own save never does), then lets later saves through.</summary>
+    private sealed class ThrowOnFirstFinalise : SaveChangesInterceptor
+    {
+        private bool _thrown;
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken ct = default)
+        {
+            if (!_thrown && eventData.Context!.ChangeTracker.Entries<Participant>().Any(e => e.State == EntityState.Modified && e.Property(p => p.IsDraft).IsModified))
+            {
+                _thrown = true;
+                throw new InvalidOperationException("The save failed.");
+            }
+            return base.SavingChangesAsync(eventData, result, ct);
+        }
+    }
+
+    [Fact]
+    public async Task An_activation_that_throws_leaves_its_item_Approved_and_the_next_item_still_moves()
+    {
+        await using var f = await SetUpAsync();
+        await SettingOnAsync(f);
+        var p1 = await OnboardingAsync(f, "Ben");
+        var p2 = await OnboardingAsync(f, "Cal");
+        var d1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, participantId: p1);
+        var d2 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, participantId: p2);
+        await using var db = NewDb(f.DbName, false, new ThrowOnFirstFinalise());
+        var approval = new ServiceAgreementApprovalService(db, new RosterPlacementGate(), new RosterShiftGenerator(), clock: f.Clock);
+
+        var (_, data) = await PostAsync(Controller(db, f, approval: approval), Batch((p1, d1.Id), (p2, d2.Id)));
+
+        Assert.Equal(new[] { "Approved", "Approved" }, data!.Select(r => r.Outcome));
+        Assert.Equal((ActivationResults.NotActivated, ServiceAgreementApprovalService.ActivationFailedReason), (data[0].Activation!.Result, data[0].Activation!.Reason));
+        Assert.Equal(ActivationResults.Activated, data[1].Activation!.Result);
+        Assert.True(await IsDraftAsync(f, p1));
+        Assert.False(await IsDraftAsync(f, p2));
+        Assert.Equal(2, await ApprovalRowsAsync(f));
+        Assert.Empty(db.ChangeTracker.Entries());
+    }
+
+    [Fact]
+    public async Task Once_the_time_budget_is_spent_an_approved_item_is_not_moved_and_says_to_use_Make_active()
+    {
+        await using var f = await SetUpAsync();
+        await SettingOnAsync(f);
+        var p1 = await OnboardingAsync(f, "Ben");
+        var p2 = await OnboardingAsync(f, "Cal");
+        var d1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, participantId: p1);
+        var d2 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, participantId: p2);
+        await using var db = NewDb(f.DbName, false, new AdvanceAfterApproval(f.Clock, AgreementBulkService.Budget + TimeSpan.FromSeconds(1)));
+        var approval = new ServiceAgreementApprovalService(db, new RosterPlacementGate(), new RosterShiftGenerator(), clock: f.Clock);
+
+        var (_, data) = await PostAsync(Controller(db, f, approval: approval), Batch((p1, d1.Id), (p2, d2.Id)));
+
+        Assert.Equal(new[] { "Approved", "Busy" }, data!.Select(r => r.Outcome));
+        Assert.Equal((ActivationResults.NotActivated, "the batch ran out of time; use Make active on their onboarding checklist"), (data[0].Activation!.Result, data[0].Activation!.Reason));
+        Assert.Null(data[1].Activation);
+        Assert.True(await IsDraftAsync(f, p1));
     }
 }

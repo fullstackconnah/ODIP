@@ -37,4 +37,6 @@ public class PlanPricingSettings : ITenantEntity
     public bool StaUsesHourlyAndAccommodation { get; set; } = true;
     /// <summary>The roles that may mark an agreement revision approved for rostering, comma separated (the approval reads this, and so does the screen; the pricing engine does not).</summary>
     public string ApproverRoles { get; set; } = DefaultApproverRoles;
+    /// <summary>Approving an agreement revision moves a participant still onboarding (a draft, intake complete) to Active, by the Make active rule. Off: approval changes nobody's stage.</summary>
+    public bool ApprovalActivatesParticipant { get; set; }
 }

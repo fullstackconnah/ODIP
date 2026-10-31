@@ -17,7 +17,7 @@ import { ApproveAgreementsDialog, type ApprovePhase } from './ApproveAgreementsD
 import { AgreementsBulkBar } from './AgreementsBulkBar'
 import type { BulkRun } from './AgreementActionDialog'
 import { MAX_SELECTED, changeWords } from './agreementRows'
-import { NOT_AN_APPROVER_WORDS, NO_REPLY_LAST, NO_REPLY_WORDS, OUTCOME_BADGE, TOO_MANY_WORDS, summarise } from './outcomeWords'
+import { NOT_AN_APPROVER_WORDS, NO_REPLY_LAST, NO_REPLY_WORDS, OUTCOME_BADGE, TOO_MANY_WORDS, notMovedToActive, notMovedWords, summarise } from './outcomeWords'
 
 const HEADING: Record<AgreementBulkAction, (label: string) => string> = {
   renew: () => 'Renewal drafts',
@@ -51,6 +51,8 @@ export function AgreementsReview({ run, canApprove, onBack }: Props) {
 
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [outcomes, setOutcomes] = useState<Record<string, AgreementApproveResult['outcome']>>({})
+  // Beside each outcome: why an approved one was not moved to Active (empty when it was, or the setting is off).
+  const [notMoved, setNotMoved] = useState<Record<string, string>>({})
   const [dialog, setDialog] = useState<{ open: boolean; phase: ApprovePhase; progress: number; error: string | null; refused: boolean }>({ open: false, phase: 'confirm', progress: 0, error: null, refused: false })
   const [count, setCount] = useState(0)
   const { notices, notify, dismiss } = useNotices()
@@ -77,6 +79,7 @@ export function AgreementsReview({ run, canApprove, onBack }: Props) {
     }
     const answered = Object.fromEntries(result.results.map(r => [r.participantId, r.outcome]))
     setOutcomes(o => ({ ...o, ...answered }))
+    setNotMoved(m => ({ ...m, ...Object.fromEntries(result.results.map(r => [r.participantId, notMovedToActive(r) ? notMovedWords(r.activation?.reason) : ''])) }))
     // Only a busy roster keeps its tick, so the next Approve retries those; everything else answered is done with.
     setSelected(new Set([...selected].filter(id => !answered[id] || answered[id] === 'Busy')))
     const s = summarise(result.results, result.stopped?.notSent ?? 0, !!result.stopped && noReply(result.stopped.error))
@@ -103,6 +106,7 @@ export function AgreementsReview({ run, canApprove, onBack }: Props) {
         <span className="flex flex-wrap items-center gap-x-2">
           <StatusBadge tone={badge.tone} label={badge.label} />
           {o === 'NeedsReview' && <Link to={`/participants/${r.participantId}/agreement-draft`} className="text-[var(--color-primary)] underline underline-offset-2">Open it</Link>}
+          {notMoved[r.participantId] && <span className="basis-full text-[var(--color-muted-foreground)]">{notMoved[r.participantId]}</span>}
         </span>
       )
     }

@@ -90,6 +90,17 @@ describe('AgreementsReview', () => {
     expect(screen.getByRole('columnheader', { name: 'Outcome' })).toBeInTheDocument()
   })
 
+  it('says under the outcome why an approved one was not moved to Active', async () => {
+    mockApprove.mockResolvedValue({ results: [{ participantId: 'a', draftId: 'n-a', participantName: 'Ana Lee', outcome: 'Approved', reasons: [], activation: { result: 'NotActivated', reason: 'intake not finished' } }], stopped: null })
+    show(run())
+    await tick('Ana Lee')
+    await userEvent.click(screen.getByRole('button', { name: 'Approve 1' }))
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Approve 1' }))
+    const row = await waitFor(() => screen.getByText('Ana Lee').closest('tr')!)
+    await waitFor(() => expect(within(row).getByText('Approved')).toBeInTheDocument())
+    expect(within(row).getByText('Not moved to Active: intake not finished.')).toBeInTheDocument()
+  })
+
   it('shows no approve controls for a role that cannot approve', () => {
     show(run(), false)
     expect(screen.queryByRole('button', { name: /^Approve/ })).not.toBeInTheDocument()

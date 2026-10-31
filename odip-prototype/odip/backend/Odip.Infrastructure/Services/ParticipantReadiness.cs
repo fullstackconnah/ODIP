@@ -43,6 +43,13 @@ public sealed record ParticipantReadinessResult(bool Allowed, ParticipantReadine
 /// </summary>
 public static class ParticipantReadiness
 {
+    public const string ActivationEvidenceRequired = "This participant cannot be activated until their signed service agreement evidence is recorded.";
+    public const string ActivationFundingRequired = "This participant cannot be activated until their plan budget is recorded on the Funding tab.";
+
+    /// <summary>The 400 message for an activation the organisation's readiness rule refuses.</summary>
+    public static string ActivationRefusal(ActivationBlock block) =>
+        block == ActivationBlock.FundingNotRecorded ? ActivationFundingRequired : ActivationEvidenceRequired;
+
     public const string IntakeNotComplete = "Intake not complete";
     public const string OnboardingProfileNotComplete = "Onboarding not complete: profile";
     public const string OnboardingServiceTypeNotComplete = "Onboarding not complete: service type";

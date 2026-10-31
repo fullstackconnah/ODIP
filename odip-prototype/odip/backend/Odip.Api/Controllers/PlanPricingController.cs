@@ -132,6 +132,7 @@ public class PlanPricingController : ControllerBase
             if (dto.GroupOutings is { } family) row.GroupOutings = family;
             if (dto.StaUsesHourlyAndAccommodation is { } sta) row.StaUsesHourlyAndAccommodation = sta;
             if (roles is not null) row.ApproverRoles = string.Join(",", roles);
+            if (dto.ApprovalActivatesParticipant is { } activates) row.ApprovalActivatesParticipant = activates;
         }
 
         var settings = await _db.PlanPricingSettings.FirstOrDefaultAsync(s => s.TenantId == tenantId, ct);
@@ -179,6 +180,7 @@ public class PlanPricingController : ControllerBase
             GroupOutings = policy.GroupOutings,
             StaUsesHourlyAndAccommodation = policy.StaUsesHourlyAndAccommodation,
             ApproverRoles = policy.ApproverRoles.ToList(),
+            ApprovalActivatesParticipant = policy.ApprovalActivatesParticipant,
             IsDefault = settings is null,
         };
     }
