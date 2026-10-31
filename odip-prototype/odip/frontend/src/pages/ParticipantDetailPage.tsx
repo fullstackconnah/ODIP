@@ -46,6 +46,7 @@ import { managementLabel } from '@/lib/fundingPlan'
 import { ServicesCard } from './participant-detail/ServicesCard'
 import { ParticipantSafetyFlags } from './participant-detail/ParticipantSafetyFlags'
 import { BeforeYouStartCard } from './participant-detail/BeforeYouStartCard'
+import BudgetTrackCard from './participant-detail/BudgetTrackCard'
 import { ParticipantMoreMenu } from './participant-detail/ParticipantMoreMenu'
 import { useParticipantTabCounts } from './participant-detail/useParticipantTabCounts'
 import {
@@ -448,8 +449,13 @@ export default function ParticipantDetailPage() {
               <ParticipantAlertsBanner severity="other" alerts={alertsData.alerts} onSelectTab={goTo} />
             </section>
           )}
-          <BeforeYouStartCard participant={p} />
-          {topic('Support profile review', 'reviewDate')}
+          <div className="grid items-start gap-[var(--section-gap)] lg:grid-cols-2">
+            <BeforeYouStartCard participant={p} />
+            <div className="flex flex-col gap-[var(--section-gap)]">
+              <BudgetTrackCard participantId={id!} />
+              {topic('Support profile review', 'reviewDate')}
+            </div>
+          </div>
         </div>
       </TabPanel>
       </DirtyEditsContext.Provider>
