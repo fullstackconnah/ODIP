@@ -67,6 +67,15 @@ describe('ComplaintsPage', () => {
     expect(within(table).getByText(/06\/10\/2026/)).toBeInTheDocument()
   })
 
+  it('clamps a long summary to three lines on a phone card and keeps the one-line truncate on desktop', () => {
+    mockUseComplaints.mockReturnValue(list([row({ id: 'a', summary: 'x '.repeat(2000) })]))
+    renderPage()
+    const link = within(screen.getAllByRole('row')[1]).getAllByRole('link')[0]
+    expect(link.className).toContain('max-md:line-clamp-3')
+    expect(link.className).toContain('md:truncate')
+    expect(link).toHaveAttribute('title', 'x '.repeat(2000))
+  })
+
   it('words "Open for" as Since today, 1 day, N days, and an en dash read as "Not open" once closed', () => {
     mockUseComplaints.mockReturnValue(list([
       row({ id: 'a', summary: 'Today', openDays: 0 }),
@@ -77,6 +86,8 @@ describe('ComplaintsPage', () => {
     renderPage()
     const rows = screen.getAllByRole('row').slice(1)
     expect(within(rows[0]).getByText('Since today')).toBeInTheDocument()
+    // The phone card puts the label after "Open", so it reads "Open since today"; the desktop cell keeps the capital.
+    expect(within(rows[0]).getByText('since today').className).toContain('md:hidden')
     expect(within(rows[1]).getByText('1 day')).toBeInTheDocument()
     const old = within(rows[2]).getByText('34 days')
     expect(old.className).toContain('font-medium')

@@ -33,7 +33,10 @@ const STATUS_FILTER_ITEMS: DropdownItem[] = COMPLAINT_STATUSES.map(s => ({ value
 
 /** "Since today", "1 day", "12 days". */
 function OpenFor({ openDays }: { openDays: number }) {
-  const text = openDays === 0 ? 'Since today' : plural(openDays, 'day')
+  // The phone card reads "Open since today" (the label is "Open"); the desktop column keeps the capital.
+  const text = openDays === 0
+    ? <><span className="md:hidden">since today</span><span className="max-md:hidden">Since today</span></>
+    : plural(openDays, 'day')
   return <span className={`tabular-nums ${openDays > LONG_OPEN_DAYS ? `${TONE.warning.ink} font-medium` : ''}`}>{text}</span>
 }
 
@@ -103,7 +106,7 @@ export default function ComplaintsPage() {
       mobile: 'primary',
       className: 'font-medium',
       render: c => (
-        <Link to={`/complaints/${c.id}`} title={c.summary} className={`block md:truncate md:max-w-[15rem] text-[var(--color-primary)] hover:underline ${TAP_TRUNCATED_LINK}`}>
+        <Link to={`/complaints/${c.id}`} title={c.summary} className={`block max-md:line-clamp-3 md:truncate md:max-w-[15rem] text-[var(--color-primary)] hover:underline ${TAP_TRUNCATED_LINK}`}>
           {c.summary}
         </Link>
       ),
