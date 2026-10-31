@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { formatAge, formatDateTimeAu, formatInstantDateAu, formatNoteTimestamp, formatRatio, formatRelative, glanceRatio, joinList, plural } from './format'
+import { formatAge, formatDateTimeAu, formatInstantDateAu, formatNoteTimestamp, formatRatio, formatRelative, formatServiceDate, glanceRatio, joinList, plural } from './format'
 import { restoreZone, setZone } from '@/test/timeZone'
 
 afterEach(restoreZone)
@@ -230,5 +230,14 @@ describe('formatInstantDateAu', () => {
   it('keeps a date-only value on its own day', () => {
     if (!setZone('America/Los_Angeles')) return
     expect(formatInstantDateAu('2026-03-01')).toBe('01/03/2026')
+  })
+})
+
+describe('formatServiceDate', () => {
+  it('writes a service date from fixed words and day arithmetic', () => {
+    expect(formatServiceDate('2026-10-05')).toBe('Mon 5 Oct 2026')
+    expect(formatServiceDate('2027-02-28')).toBe('Sun 28 Feb 2027')
+    expect(formatServiceDate('')).toBe('')
+    expect(formatServiceDate(undefined)).toBe('')
   })
 })

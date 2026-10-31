@@ -1,4 +1,4 @@
-import { formatServiceDate } from './planQuote'
+import { formatServiceDate } from './format'
 
 /**
  * What the screens say of an approved agreement ending within 60 days or ended (agreement PR 2): the server's rule and words (AgreementEnding.Describe) with the house's dates. Only the

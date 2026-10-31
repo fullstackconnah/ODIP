@@ -15,14 +15,15 @@ import { MEDICATION_FORMS, MEDICATION_ROUTES, DRUG_SCHEDULES, MEDICATION_SUPPORT
 import type { MedicationForm, MedicationRoute, Weekday } from '@/api/types/enums'
 import { FORM_LABELS, ROUTE_LABELS, DRUG_SCHEDULE_LABELS, SUPPORT_LEVEL_LABELS, MEDICATION_STATUS_LABELS, PACKAGING_LABELS, FREQUENCY_LABELS, WEEKDAY_LABELS } from '@/api/types/medications'
 import type { CreateMedicationDto, UpdateMedicationDto } from '@/api/types/medications'
-import { extractErrorMessage, formatDateAu } from '@/lib/utils'
+import { extractErrorMessage } from '@/lib/utils'
 import { formGrid, span } from '@/lib/formGrid'
 import { PageHeader } from '@/components/PageHeader'
 import { usePermissions } from '@/lib/permissions'
 import { Button } from '@/components/Button'
 import { BackButton } from '@/components/BackButton'
 import { useBackTarget } from '@/hooks/useBackNavigation'
-import { plural } from '@/lib/format'
+import { formatServiceDate, plural } from '@/lib/format'
+import { unbroken } from '@/lib/intakeBooking'
 import { useFillOnce } from '@/hooks/useFillOnce'
 import { Callout } from '@/components/Callout'
 import { PageState } from '@/components/PageState'
@@ -562,7 +563,7 @@ export default function MedicationFormPage() {
                 </div>
                 {intervalDaysValue && Number(intervalDaysValue) > 0 && anchorDateValue && (
                   <p className="text-xs text-[var(--color-muted-foreground)] md:col-span-2 xl:col-span-12">
-                    Due every {plural(Number(intervalDaysValue), 'day')}, starting {formatDateAu(anchorDateValue)}.
+                    Due every {plural(Number(intervalDaysValue), 'day')}, starting {unbroken(formatServiceDate(anchorDateValue))}.
                   </p>
                 )}
               </div>
