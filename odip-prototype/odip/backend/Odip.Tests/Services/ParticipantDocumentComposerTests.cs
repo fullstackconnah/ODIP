@@ -1,5 +1,6 @@
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Rostering;
 using Odip.Infrastructure.Services;
 using Xunit;
 
@@ -13,6 +14,8 @@ namespace Odip.Tests.Services;
 /// </summary>
 public class ParticipantDocumentComposerTests
 {
+    private static readonly DateOnly Today = new(2026, 10, 31);
+
     private static Participant BuildParticipant(ServiceStreams serviceStreams = ServiceStreams.None)
     {
         var participantId = Guid.NewGuid();
@@ -340,7 +343,7 @@ public class ParticipantDocumentComposerTests
     public void ComposeClientOverview_RendersFixedFieldList()
     {
         var participant = BuildParticipant();
-        var model = ParticipantDocumentComposer.ComposeClientOverview(participant, BuildTrip());
+        var model = ParticipantDocumentComposer.ComposeClientOverview(participant, BuildTrip(), Today);
 
         var section = Assert.Single(model.Sections);
         Assert.Equal("Client Support Needs Summary", section.Heading);
@@ -360,7 +363,7 @@ public class ParticipantDocumentComposerTests
         var participant = BuildParticipant();
         var trip = BuildTrip("Coastal Explorers");
 
-        var model = ParticipantDocumentComposer.ComposeClientOverview(participant, trip);
+        var model = ParticipantDocumentComposer.ComposeClientOverview(participant, trip, Today);
 
         Assert.Equal("Spring Coastal Trip", model.TripName);
         Assert.Equal("12 Oct 2026", model.TripDate);
@@ -373,7 +376,7 @@ public class ParticipantDocumentComposerTests
     {
         var participant = BuildParticipant();
 
-        var model = ParticipantDocumentComposer.ComposeClientOverview(participant, trip: null);
+        var model = ParticipantDocumentComposer.ComposeClientOverview(participant, trip: null, Today);
 
         Assert.Equal("—", model.TripName);
         Assert.Equal("—", model.TripDate);
@@ -390,7 +393,7 @@ public class ParticipantDocumentComposerTests
             Description = "Retired practice", IsActive = false,
         });
 
-        var model = ParticipantDocumentComposer.ComposeClientOverview(participant, BuildTrip());
+        var model = ParticipantDocumentComposer.ComposeClientOverview(participant, BuildTrip(), Today);
 
         var section = Assert.Single(model.Sections);
         Assert.Empty(section.Tables);
@@ -411,7 +414,7 @@ public class ParticipantDocumentComposerTests
             Description = "Retired practice", IsActive = false,
         });
 
-        var model = ParticipantDocumentComposer.ComposeClientOverview(participant, BuildTrip());
+        var model = ParticipantDocumentComposer.ComposeClientOverview(participant, BuildTrip(), Today);
 
         var section = Assert.Single(model.Sections);
         var table = Assert.Single(section.Tables);
@@ -432,8 +435,36 @@ public class ParticipantDocumentComposerTests
             AuthorisationDate = new DateOnly(2020, 1, 1), AuthorisationEndDate = new DateOnly(2020, 6, 30),
         });
 
-        var model = ParticipantDocumentComposer.ComposeClientOverview(participant, BuildTrip());
+        var model = ParticipantDocumentComposer.ComposeClientOverview(participant, BuildTrip(), Today);
 
         Assert.Equal("01 Jan 2020 (ended 30 Jun 2020)", Assert.Single(Assert.Single(Assert.Single(model.Sections).Tables).Rows)[3]);
+    }
+
+    private static string AuthorisationCell(DateOnly start, DateOnly end, DateOnly today)
+    {
+        var participant = BuildParticipant();
+        participant.RestrictivePractices.Add(new RestrictivePractice
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, Type = RestrictivePracticeType.Seclusion, Description = "d", AuthorisedBy = "Dr Lee", IsActive = true,
+            AuthorisationDate = start, AuthorisationEndDate = end,
+        });
+        var model = ParticipantDocumentComposer.ComposeClientOverview(participant, BuildTrip(), today);
+        return Assert.Single(Assert.Single(Assert.Single(model.Sections).Tables).Rows)[3];
+    }
+
+    [Fact]
+    public void ComposeClientOverview_RestrictivePracticeTable_FormatsASingleDigitEndDayLikeTheStartDate()
+    {
+        Assert.Equal("01 Jan 2020 (ended 05 Jun 2020)", AuthorisationCell(new DateOnly(2020, 1, 1), new DateOnly(2020, 6, 5), Today));
+    }
+
+    [Fact]
+    public void ComposeClientOverview_RestrictivePracticeTable_JudgesEndedOnTheOrganisationsToday()
+    {
+        // 08:00 on 1 Nov in Sydney is still 31 Oct in UTC: an authorisation that ended on 31 Oct has ended for the organisation.
+        var sydneyToday = ProviderLocalTime.TodayIn(new DateTime(2026, 10, 31, 21, 0, 0, DateTimeKind.Utc), ProviderTimeZoneResolver.FromState("NSW").Zone);
+        Assert.Equal(new DateOnly(2026, 11, 1), sydneyToday);
+        Assert.Equal("01 Jul 2026 (ended 31 Oct 2026)", AuthorisationCell(new DateOnly(2026, 7, 1), new DateOnly(2026, 10, 31), sydneyToday));
+        Assert.Equal("01 Jul 2026", AuthorisationCell(new DateOnly(2026, 7, 1), new DateOnly(2026, 10, 31), new DateOnly(2026, 10, 31)));
     }
 }

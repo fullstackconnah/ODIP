@@ -80,6 +80,8 @@ export interface UpdateRestrictivePracticeDto {
   description: string
   authorisedBy?: string | null
   authorisationDate?: string | null
+  /** True: the four dates below are meant as sent (null clears one). Absent: the server leaves them as stored. */
+  datesIncluded?: boolean
   authorisationEndDate?: string | null
   /** Ignored by the server while a medicine is linked. */
   useKind?: RestrictivePracticeUseKind

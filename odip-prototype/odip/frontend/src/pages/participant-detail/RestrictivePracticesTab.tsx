@@ -179,7 +179,7 @@ function PracticeCard({ practice, canWrite, onEdit, onDelete }: {
       {practice.isActive && (
         <div className="flex flex-wrap items-center gap-1.5 mt-2 text-xs text-[var(--color-muted-foreground)]">
           <span>Behaviour support plan</span>
-          {!practice.firstUsedOn && !practice.comprehensiveBspDate && (
+          {!practice.firstUsedOn && !practice.interimBspDate && !practice.comprehensiveBspDate && (
             <span>{canWrite ? 'Add the first use date to see when plans are due' : 'First use date not recorded'}</span>
           )}
           {practice.comprehensiveBspDate ? null : (
@@ -302,6 +302,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
       description: form.description.trim(),
       authorisedBy: form.authorised ? form.authorisedBy.trim() : null,
       authorisationDate: form.authorised ? form.authorisationDate : null,
+      datesIncluded: true,
       authorisationEndDate: form.authorised ? (form.authorisationEndDate || null) : null,
       useKind: form.useKind,
       firstUsedOn: form.firstUsedOn || null,

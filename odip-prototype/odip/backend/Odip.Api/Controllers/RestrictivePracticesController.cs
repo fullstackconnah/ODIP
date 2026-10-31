@@ -256,6 +256,11 @@ public class RestrictivePracticesController : ControllerBase
         if (med != null && dto.IsActive && (!practice.IsActive || newlyLinking) && med.Status == MedicationStatus.Ceased)
             return BadRequest(ApiResponse<RestrictivePracticeDto>.Fail($"{RestraintRegisterSync.MedicineLabel(med)} is ceased. Restart the medicine to reactivate this entry."));
 
+        // An older tab sends none of the four dates, and must not wipe them (DatesIncluded is the new form's way to say they are meant).
+        var datesIncluded = dto.DatesIncluded == true;
+        var endDate = datesIncluded ? dto.AuthorisationEndDate : practice.AuthorisationEndDate;
+        var firstUsedOn = datesIncluded ? dto.FirstUsedOn : practice.FirstUsedOn;
+
         // Legacy half-filled rows stay editable: only check when an authorisation field changes.
         if (dto.AuthorisedBy != practice.AuthorisedBy || dto.AuthorisationDate != practice.AuthorisationDate)
         {
@@ -264,12 +269,12 @@ public class RestrictivePracticesController : ControllerBase
         }
 
         // Same legacy tolerance: only check what this save changes.
-        if (dto.AuthorisationEndDate != practice.AuthorisationEndDate || dto.AuthorisationDate != practice.AuthorisationDate)
+        if (endDate != practice.AuthorisationEndDate || dto.AuthorisationDate != practice.AuthorisationDate)
         {
-            var endError = EndDateError(dto.AuthorisationDate, dto.AuthorisationEndDate);
+            var endError = EndDateError(dto.AuthorisationDate, endDate);
             if (endError != null) return BadRequest(ApiResponse<RestrictivePracticeDto>.Fail(endError));
         }
-        if (dto.FirstUsedOn != practice.FirstUsedOn && dto.FirstUsedOn > await ProviderTodayAsync(practice.TenantId, ct))
+        if (firstUsedOn != practice.FirstUsedOn && firstUsedOn > await ProviderTodayAsync(practice.TenantId, ct))
             return BadRequest(ApiResponse<RestrictivePracticeDto>.Fail("The first use date can't be in the future"));
 
         var wasActive = practice.IsActive;
@@ -278,10 +283,13 @@ public class RestrictivePracticesController : ControllerBase
         practice.AuthorisedBy = dto.AuthorisedBy;
         practice.AuthorisationDate = dto.AuthorisationDate;
         practice.ReviewDate = dto.ReviewDate;
-        practice.AuthorisationEndDate = dto.AuthorisationEndDate;
-        practice.FirstUsedOn = dto.FirstUsedOn;
-        practice.InterimBspDate = dto.InterimBspDate;
-        practice.ComprehensiveBspDate = dto.ComprehensiveBspDate;
+        practice.AuthorisationEndDate = endDate;
+        practice.FirstUsedOn = firstUsedOn;
+        if (datesIncluded)
+        {
+            practice.InterimBspDate = dto.InterimBspDate;
+            practice.ComprehensiveBspDate = dto.ComprehensiveBspDate;
+        }
         practice.RelatedMedicationId = dto.RelatedMedicationId;
         // A linked entry follows its medicine, so the stored kind only changes while unlinked.
         if (dto.UseKind is { } useKind && practice.RelatedMedicationId == null) practice.UseKind = useKind;

@@ -664,7 +664,7 @@ describe('RestrictivePracticesTab — edit form authorised checkbox', () => {
     await user.click(screen.getByRole('button', { name: /save entry/i }))
 
     const [call] = mockUpdateMutateAsync.mock.calls[0]
-    expect(call).toEqual({ id: 'rp-1', data: { type: 'Unclassified', description: 'Locked doors overnight for safety.', reviewDate: null, relatedMedicationId: null, authorisedBy: null, authorisationDate: null, authorisationEndDate: null, useKind: 'Routine', firstUsedOn: null, interimBspDate: null, comprehensiveBspDate: null, isActive: true, requiresReporting: null, expectedUpdatedAt: '2026-01-01T00:00:00Z' } })
+    expect(call).toEqual({ id: 'rp-1', data: { type: 'Unclassified', description: 'Locked doors overnight for safety.', reviewDate: null, relatedMedicationId: null, authorisedBy: null, authorisationDate: null, datesIncluded: true, authorisationEndDate: null, useKind: 'Routine', firstUsedOn: null, interimBspDate: null, comprehensiveBspDate: null, isActive: true, requiresReporting: null, expectedUpdatedAt: '2026-01-01T00:00:00Z' } })
   })
 
   it('ticked with a field emptied shows the field error and does not save', async () => {
@@ -692,7 +692,7 @@ describe('RestrictivePracticesTab — edit form authorised checkbox', () => {
     await user.click(screen.getByRole('button', { name: /save entry/i }))
 
     const [call] = mockUpdateMutateAsync.mock.calls[0]
-    expect(call).toEqual({ id: 'rp-1', data: { type: 'Unclassified', description: 'Locked doors overnight for safety.', reviewDate: null, relatedMedicationId: null, authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01', authorisationEndDate: null, useKind: 'Routine', firstUsedOn: null, interimBspDate: null, comprehensiveBspDate: null, isActive: true, requiresReporting: null, expectedUpdatedAt: '2026-01-01T00:00:00Z' } })
+    expect(call).toEqual({ id: 'rp-1', data: { type: 'Unclassified', description: 'Locked doors overnight for safety.', reviewDate: null, relatedMedicationId: null, authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01', datesIncluded: true, authorisationEndDate: null, useKind: 'Routine', firstUsedOn: null, interimBspDate: null, comprehensiveBspDate: null, isActive: true, requiresReporting: null, expectedUpdatedAt: '2026-01-01T00:00:00Z' } })
   })
 
   it('opens ticked for an inactive record and a description-only edit posts both values unchanged', async () => {
@@ -707,7 +707,7 @@ describe('RestrictivePracticesTab — edit form authorised checkbox', () => {
     await user.click(screen.getByRole('button', { name: /save entry/i }))
 
     const [call] = mockUpdateMutateAsync.mock.calls[0]
-    expect(call).toEqual({ id: 'rp-1', data: { type: 'Unclassified', description: 'Locked doors overnight for safety. Reviewed.', reviewDate: null, relatedMedicationId: null, authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01', authorisationEndDate: null, useKind: 'Routine', firstUsedOn: null, interimBspDate: null, comprehensiveBspDate: null, isActive: false, requiresReporting: null, expectedUpdatedAt: '2026-01-01T00:00:00Z' } })
+    expect(call).toEqual({ id: 'rp-1', data: { type: 'Unclassified', description: 'Locked doors overnight for safety. Reviewed.', reviewDate: null, relatedMedicationId: null, authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01', datesIncluded: true, authorisationEndDate: null, useKind: 'Routine', firstUsedOn: null, interimBspDate: null, comprehensiveBspDate: null, isActive: false, requiresReporting: null, expectedUpdatedAt: '2026-01-01T00:00:00Z' } })
   })
 
   it('opens ticked for a date-only record, shows the date, and blocks the save asking who', async () => {
@@ -1024,6 +1024,12 @@ describe('RestrictivePracticesTab use kind, authorisation span and plan line', (
     writer.unmount()
     renderWith({ ...authorised }, 'ReadOnly')
     expect(screen.getByText('First use date not recorded')).toBeInTheDocument()
+    expect(screen.queryByText(/Add the first use date/)).not.toBeInTheDocument()
+  })
+
+  it('does not ask for the first use date once an interim plan is on file', () => {
+    renderWith({ ...authorised, interimBspDate: '2026-09-10', interimBspState: 'InPlace' })
+    expect(screen.getByText(/Interim plan in place/)).toBeInTheDocument()
     expect(screen.queryByText(/Add the first use date/)).not.toBeInTheDocument()
   })
 

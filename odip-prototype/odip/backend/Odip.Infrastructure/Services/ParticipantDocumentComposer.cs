@@ -50,7 +50,7 @@ public static class ParticipantDocumentComposer
     /// when null the TRIP/DATE/GROUP header line still renders with the placeholder dash rather
     /// than being omitted, since it's a fixed cheat-sheet layout, not a conditional section.
     /// </summary>
-    public static ParticipantDocumentModel ComposeClientOverview(Participant participant, TripInstance? trip, bool maskIdNumbers = false)
+    public static ParticipantDocumentModel ComposeClientOverview(Participant participant, TripInstance? trip, DateOnly today, bool maskIdNumbers = false)
     {
         var fields = new List<ParticipantDocumentField>
         {
@@ -73,7 +73,7 @@ public static class ParticipantDocumentComposer
         };
 
         var tables = new List<ParticipantDocumentTable>();
-        var restrictivePracticeTable = BuildRestrictivePracticesTable("Restrictive Practices (Active)", participant.RestrictivePractices);
+        var restrictivePracticeTable = BuildRestrictivePracticesTable("Restrictive Practices (Active)", participant.RestrictivePractices, today);
         // "Omit, don't blank" — same DOC-01 contract the other two composers apply at the section
         // level, applied here at the table level: an active-RP-free participant gets no
         // "Restrictive Practices" table at all on the cheat-sheet, not an empty one with just
@@ -377,7 +377,7 @@ public static class ParticipantDocumentComposer
     /// <see cref="RestrictivePracticeType"/>'s five categories exist) — rendered as a flat active
     /// register instead of fabricating a routine/PRN distinction the schema doesn't carry.
     /// </summary>
-    private static ParticipantDocumentTable BuildRestrictivePracticesTable(string heading, IEnumerable<RestrictivePractice> restrictivePractices)
+    private static ParticipantDocumentTable BuildRestrictivePracticesTable(string heading, IEnumerable<RestrictivePractice> restrictivePractices, DateOnly today)
     {
         var columns = new[] { "Type", "Description", "Authorised By", "Authorisation Date", "Review Date" };
         var rows = restrictivePractices
@@ -387,9 +387,8 @@ public static class ParticipantDocumentComposer
                 Humanize(rp.Type.ToString()),
                 OrPlaceholder(rp.Description),
                 OrPlaceholder(rp.AuthorisedBy),
-                // shortcut: "ended" is judged on the UTC date (the composer has no provider clock), so it can read a day early in Sydney until mid-morning; give the composer the provider today if that matters.
                 rp.AuthorisationDate is { } authDate
-                    ? authDate.ToString("dd MMM yyyy") + (rp.AuthorisationEndDate is { } end && end < DateOnly.FromDateTime(DateTime.UtcNow) ? $" (ended {end:d MMM yyyy})" : "")
+                    ? authDate.ToString("dd MMM yyyy") + (rp.AuthorisationEndDate is { } end && end < today ? $" (ended {end:dd MMM yyyy})" : "")
                     : EmptyPlaceholder,
                 rp.ReviewDate is { } reviewDate ? reviewDate.ToString("dd MMM yyyy") : EmptyPlaceholder,
             })

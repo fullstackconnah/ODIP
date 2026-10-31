@@ -52,6 +52,9 @@ public record UpdateRestrictivePracticeDto
     public DateOnly? ReviewDate { get; init; }
     /// <summary>Ignored while a medicine is linked (the medicine sets it); null leaves the stored value, so an older tab that does not send it changes nothing.</summary>
     public RestrictivePracticeUseKind? UseKind { get; init; }
+    /// <summary>True when the sender fills in the four dates below (the end, first-use and both plan dates), so null clears one. Absent or false (a pre-register-dates tab) leaves all four as stored.</summary>
+    // shortcut: drop DatesIncluded once no pre-#524 tab can be open (one release)
+    public bool? DatesIncluded { get; init; }
     public DateOnly? AuthorisationEndDate { get; init; }
     public DateOnly? FirstUsedOn { get; init; }
     public DateOnly? InterimBspDate { get; init; }

@@ -55,7 +55,7 @@ public class RestrictivePracticeRegisterDatesTests
 
     private static UpdateRestrictivePracticeDto Put(RestrictivePractice rp) => new()
     {
-        Type = rp.Type, Description = rp.Description, AuthorisedBy = rp.AuthorisedBy, AuthorisationDate = rp.AuthorisationDate, IsActive = true,
+        Type = rp.Type, Description = rp.Description, AuthorisedBy = rp.AuthorisedBy, AuthorisationDate = rp.AuthorisationDate, IsActive = true, DatesIncluded = true,
     };
 
     private static RestrictivePracticeDto Dto(ActionResult<ApiResponse<RestrictivePracticeDto>> r) =>
@@ -74,7 +74,7 @@ public class RestrictivePracticeRegisterDatesTests
         var rp = SeedPractice(db, SeedParticipant(db));
         var dto = new UpdateRestrictivePracticeDto
         {
-            Type = rp.Type, Description = rp.Description, AuthorisedBy = "Dr Chen", AuthorisationDate = new DateOnly(2026, 1, 1),
+            Type = rp.Type, Description = rp.Description, AuthorisedBy = "Dr Chen", AuthorisationDate = new DateOnly(2026, 1, 1), DatesIncluded = true,
             AuthorisationEndDate = new DateOnly(2027, 1, 1), UseKind = RestrictivePracticeUseKind.Prn, FirstUsedOn = new DateOnly(2026, 10, 1), IsActive = true,
         };
 
@@ -280,7 +280,7 @@ public class RestrictivePracticeRegisterDatesTests
             id = SeedPractice(seed, p).Id;
         }
         using var scoped = TestDb.ForTenant(dbName, tenantA);
-        var dto = new UpdateRestrictivePracticeDto { Description = "x", AuthorisationDate = new DateOnly(2026, 1, 1), AuthorisationEndDate = new DateOnly(2026, 6, 1), IsActive = true };
+        var dto = new UpdateRestrictivePracticeDto { Description = "x", AuthorisationDate = new DateOnly(2026, 1, 1), AuthorisationEndDate = new DateOnly(2026, 6, 1), IsActive = true, DatesIncluded = true };
 
         var result = await Controller(scoped).Update(id, dto, CancellationToken.None);
 

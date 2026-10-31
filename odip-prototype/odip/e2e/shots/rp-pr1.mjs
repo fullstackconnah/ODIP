@@ -155,6 +155,7 @@ try {
     }
     await noOverflow('register tab')
     await shoot(page.locator('main'), 'register')
+    if (vp.mobile) await shoot(card(ENTRIES[6].description), 'register-ended')
 
     // inactive entry has no plan line
     await page.getByRole('button', { name: /^Inactive/ }).click()
@@ -176,6 +177,8 @@ try {
     const ub = await use.boundingBox()
     if (vp.mobile) check('390 6 Use button >= 44x44', ub, ub.height >= 44 && ub.width >= 44)
     await shoot(dialog, 'edit-modal')
+    await use.scrollIntoViewIfNeeded()
+    await shoot(dialog, 'edit-modal-bsp')
     await use.click()
     const filled = await dialog.getByLabel('First used on').inputValue()
     check(`${vp.name} 6 Use fills First used on`, filled, filled === '2026-09-05')
@@ -186,6 +189,7 @@ try {
     await settled(page)
     const chem = inOrder(await dialog.innerText(), ['Description', 'Linked medication', 'How is it used?'])
     check(`${vp.name} 4 chemical: Linked medication sits between Description and How is it used?`, chem, chem === null)
+    await shoot(dialog, 'edit-modal-linked')
     const g = dialog.getByRole('radiogroup', { name: 'How is it used?' })
     const dis = await g.getAttribute('aria-disabled')
     check(`${vp.name} 5 linked chemical use kind is aria-disabled`, dis, dis === 'true')
@@ -197,6 +201,7 @@ try {
     await bulk.waitFor()
     await toggleRow(bulk.getByRole('radiogroup', { name: 'How is it used?' }), vp, '5 setup use kind')
     await noOverflow('bulk setup')
+    await shoot(bulk, 'bulk-setup')
     await bulk.getByRole('checkbox', { name: 'This restrictive practice is authorised' }).check()
     await bulk.getByRole('button', { name: 'Continue' }).click()
     const rows = page.getByRole('dialog', { name: /^Add entries — / })
@@ -209,7 +214,21 @@ try {
       const sc = await rows.locator('table').first().evaluate((t) => { let e = t.parentElement; while (e && e.scrollWidth <= e.clientWidth + 1 && e.tagName !== 'BODY') e = e.parentElement; return { sw: t.parentElement.scrollWidth, cw: t.parentElement.clientWidth } })
       check('1280 7 bulk table fits its container', sc, sc.sw <= sc.cw + 1)
     }
+    const descWidth = async (label) => {
+      const w = (await rows.getByPlaceholder('What the restrictive practice involves...').first().boundingBox()).width
+      if (!vp.mobile) check(`1280 7 bulk description input >= 220 (${label})`, w, w >= 220)
+    }
+    await descWidth('authorised batch')
     await shoot(rows, 'bulk-rows')
+    await rows.getByRole('button', { name: 'Back' }).click()
+    await bulk.getByLabel('Restrictive practice type').click()
+    await page.getByRole('option', { name: /^Chemical restraint/ }).click()
+    await bulk.getByRole('button', { name: 'Continue' }).click()
+    await rows.waitFor()
+    await settled(page)
+    await descWidth('chemical batch')
+    await noOverflow('bulk rows chemical')
+    await shoot(rows, 'bulk-rows-chemical')
     await rows.getByRole('button', { name: 'Back' }).click()
     await bulk.getByRole('checkbox', { name: 'This restrictive practice is authorised' }).uncheck()
     await bulk.getByRole('button', { name: 'Continue' }).click()
