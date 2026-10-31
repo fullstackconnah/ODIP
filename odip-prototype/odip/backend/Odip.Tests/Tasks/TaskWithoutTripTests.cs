@@ -29,7 +29,7 @@ public class TaskWithoutTripTests
         Assert.Null(created.TripName);
         var stored = await db.BookingTasks.AsNoTracking().SingleAsync();
         Assert.Equal(("Renew fire-safety check", TaskPriority.High, new DateOnly(2026, 11, 3), "Annual", (Guid?)null), (stored.Title, stored.Priority, stored.DueDate, stored.Notes, stored.TripInstanceId));
-        var list = Assert.IsType<ApiResponse<List<TaskDto>>>(Assert.IsType<OkObjectResult>((await controller.GetAll(null, null, null, null, CancellationToken.None)).Result).Value).Data!;
+        var list = Assert.IsType<ApiResponse<PagedResult<TaskDto>>>(Assert.IsType<OkObjectResult>((await controller.GetAll(null, null, null, null, CancellationToken.None)).Result).Value).Data!.Items;
         Assert.Equal(created.Id, Assert.Single(list).Id);
     }
 
@@ -68,7 +68,7 @@ public class TaskWithoutTripTests
         db.SaveChanges();
         var controller = new TasksController(db);
 
-        var list = Assert.IsType<ApiResponse<List<TaskDto>>>(Assert.IsType<OkObjectResult>((await controller.GetAll(null, null, null, null, CancellationToken.None)).Result).Value).Data!;
+        var list = Assert.IsType<ApiResponse<PagedResult<TaskDto>>>(Assert.IsType<OkObjectResult>((await controller.GetAll(null, null, null, null, CancellationToken.None)).Result).Value).Data!.Items;
         Assert.Empty(list);
         Assert.IsType<NotFoundObjectResult>((await controller.GetById(theirs.Id, CancellationToken.None)).Result);
     }
