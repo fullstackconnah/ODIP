@@ -9,9 +9,9 @@ import { SelectField } from '@/components/SelectField'
 import { TextField } from '@/components/TextField'
 import { localIsoDate } from '@/lib/dateOnly'
 import { extractErrorMessage } from '@/lib/utils'
-import { plural } from '@/lib/format'
+import { formatServiceDate, plural } from '@/lib/format'
 import { CHUNK } from '@/lib/runInChunks'
-import { addDays, formatServiceDate, isPricingDate } from '@/lib/planQuote'
+import { addDays, isPricingDate } from '@/lib/planQuote'
 import { bulkSkipCount, bulkSkipNotes, latestEnd } from './agreementRows'
 
 /** A run that stopped partway: what the earlier requests answered, and how many items were never sent. `noReply`: the failed request got no answer, so some of its drafts may exist. */

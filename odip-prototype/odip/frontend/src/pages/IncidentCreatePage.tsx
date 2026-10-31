@@ -43,7 +43,9 @@ import { defaultReportableClass } from './incidents/reportingDue'
 import { RpAuthorisationBadge } from './incidents/RpAuthorisationBadge'
 import { ADMIN_STATUS_LABELS } from '@/api/types/medications'
 import { formatFlaggedCategoryList } from '@/lib/shiftNoteKeywords'
-import { extractErrorMessage, formatDateAu } from '@/lib/utils'
+import { extractErrorMessage } from '@/lib/utils'
+import { formatServiceDate } from '@/lib/format'
+import { unbroken } from '@/lib/intakeBooking'
 import {
   incidentResolver, type IncidentFormData,
   basicsSchema, restrictivePracticeSchema, detailsSchema, witnessesSchema, complianceSchema,
@@ -618,7 +620,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
           <div className="flex items-start gap-3">
             <Info className="w-5 h-5 text-[var(--color-secondary)] shrink-0 mt-0.5" aria-hidden="true" />
             <p className="text-sm text-[var(--color-foreground)]">
-              <strong className="font-medium">Pre-filled from your shift:</strong> {shiftPrefill.participantName}, {formatDateAu(shiftPrefill.serviceDate)}. Review and complete the details below — nothing is filed until you submit this report.
+              <strong className="font-medium">Pre-filled from your shift:</strong> {shiftPrefill.participantName}, {unbroken(formatServiceDate(shiftPrefill.serviceDate))}. Review and complete the details below — nothing is filed until you submit this report.
             </p>
           </div>
         </Card>
@@ -634,11 +636,11 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
       )}
       {shiftNotePrefill && (
         <p className="text-sm text-[var(--color-muted-foreground)]">
-          Linked to: Shift note from {formatDateAu(shiftNotePrefill.serviceDate)}
+          Linked to: Shift note from {unbroken(formatServiceDate(shiftNotePrefill.serviceDate))}
         </p>
       )}
       {shiftPrefill && (
-        <p className="text-sm text-[var(--color-muted-foreground)]">Linked to: Shift on {formatDateAu(shiftPrefill.serviceDate)}</p>
+        <p className="text-sm text-[var(--color-muted-foreground)]">Linked to: Shift on {unbroken(formatServiceDate(shiftPrefill.serviceDate))}</p>
       )}
 
       {mutation.isError && (

@@ -9,7 +9,9 @@ import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { buttonClasses } from '@/components/buttonClasses'
 import { TAP_AREA } from '@/components/tapArea'
-import { formatWithTimeZone, formatDateAu } from '@/lib/utils'
+import { formatWithTimeZone } from '@/lib/utils'
+import { formatServiceDate } from '@/lib/format'
+import { unbroken } from '@/lib/intakeBooking'
 import { SHIFT_PACKAGE_ERROR_CODES } from '@/api/types'
 import { apiErrorMessages, hasApiErrorCode, shiftDetailFromError } from '@/lib/shiftPackageErrors'
 import { Chip, Fact, Section, WaitingToSend } from './ui'
@@ -50,11 +52,11 @@ function Handover({ shift, canAct }: { shift: PortalShiftDetailDto; canAct: bool
         ? <p className="text-sm italic text-[var(--color-muted-foreground)]">{handover.nothingToHandOver ? 'Nothing to hand over.' : 'No handover note was written.'}</p>
         : <p className="text-sm whitespace-pre-wrap">{handover.text}</p>}
       <p className="text-xs text-[var(--color-muted-foreground)]">
-        From {handover.authorName}, shift of {formatDateAu(handover.shiftDate)}, finished {formatWithTimeZone(handover.submittedAt, shift.timeZoneId, { dateStyle: 'medium', timeStyle: 'short' })}
+        From {handover.authorName}, shift of {unbroken(formatServiceDate(handover.shiftDate))}, finished {formatWithTimeZone(handover.submittedAt, shift.timeZoneId, { dateStyle: 'medium', timeStyle: 'short' })}
       </p>
       {handoverTrail.length > 0 && (
         <p className="text-xs text-[var(--color-muted-foreground)]">
-          Recent shifts: {handoverTrail.map(t => `${t.workerName} (${formatDateAu(t.shiftDate)})`).join(', ')}
+          Recent shifts: {handoverTrail.map(t => `${t.workerName} (${unbroken(formatServiceDate(t.shiftDate))})`).join(', ')}
         </p>
       )}
       {handover.requiresAcknowledgement && (handover.isRead ? (
