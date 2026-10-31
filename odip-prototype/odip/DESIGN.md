@@ -161,9 +161,9 @@ components:
   attention-tile-error:
     backgroundColor: "{colors.error-container}"
     textColor: "{colors.on-error-container}"
-  attention-tile-tall:
+  attention-tile:
     rounded: "{rounded.md}"
-    padding: "16px"
+    padding: "12px"
   all-clear:
     backgroundColor: "{colors.primary-fixed}"
     textColor: "{colors.on-primary-fixed}"
@@ -750,7 +750,7 @@ mutation hooks to it, so a decision here is the same decision as on the full pag
 
 ### Attention band
 
-The dashboard's Alerts section, under Needs your decision (Decision list, above): what is wrong elsewhere, as big as the day's trouble. An item that needs action is a **tall tile**, an item at
+The dashboard's Alerts section, under Needs your decision (Decision list, above): what is wrong elsewhere, as loud as the day's trouble. An item that needs action is a **compact soft-wash tile**, an item at
 zero is only a name in ONE **All clear** row, and when every item is at zero the band is that one row. It replaces the row of equal KPI tiles, which gave "3 upcoming trips"
 the same weight as "2 QSC overdue"; those everyday counts now live in the header's meta row. It is `StatCard variant="attention"` tiles in a
 `<section aria-label="Alerts">` under the `h2` "Alerts", composed by `pages/dashboard/AttentionBand.tsx`, opt-in, so every other StatCard is unchanged.
