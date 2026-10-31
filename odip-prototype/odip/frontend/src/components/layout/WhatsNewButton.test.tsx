@@ -62,6 +62,7 @@ describe('WhatsNewButton: the button (V-B1, V-B2)', () => {
     expect(button()).toHaveAccessibleName("What's new")
     expect(button()).toHaveAttribute('title', "What's new")
     expect(button()).toHaveTextContent(/^campaign$/)
+    expect(button().querySelector('.material-symbols-outlined')).toHaveClass('text-[var(--color-muted-foreground)]') // the bar icons share one colour
     expect(button().querySelector('[aria-hidden="true"].rounded-full')).toBeNull()
 
     await ready()

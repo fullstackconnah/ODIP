@@ -183,7 +183,7 @@ export default function StaffPage() {
       <div>
         <PageHeader
           title="Staff"
-          subtitle={plural(staff.length, 'staff member')}
+          count={plural(staff.length, 'staff member')}
           action={!showArchived && !staffFromPayroll && (canWrite || canImportData) && (
             // One cluster, as on the Participants hub: PageHeader dissolves its wrapper from md, and loose buttons would be spread apart.
             <div className="flex shrink-0 items-center gap-2">

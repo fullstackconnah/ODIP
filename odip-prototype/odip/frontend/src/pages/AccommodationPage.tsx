@@ -38,7 +38,7 @@ export default function AccommodationPage() {
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <PageHeader
         title="Accommodation"
-        subtitle={plural(filtered.length, 'property', 'properties')}
+        count={plural(filtered.length, 'property', 'properties')}
         action={!showArchived && canWrite && (
           <Button to="/accommodation/new" size="md">
             <Plus className="w-4 h-4" /> New accommodation

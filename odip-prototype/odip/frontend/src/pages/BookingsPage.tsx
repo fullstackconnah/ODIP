@@ -96,7 +96,7 @@ export default function BookingsPage() {
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <PageHeader
         title="Bookings"
-        subtitle={loadFailed ? undefined : plural(totalCount, 'booking')}
+        count={loadFailed ? undefined : plural(totalCount, 'booking')}
       >
         <SearchInput value={search} onChange={value => { setSearch(value); setPage(1) }} placeholder="Search participants or trips..." />
       </PageHeader>

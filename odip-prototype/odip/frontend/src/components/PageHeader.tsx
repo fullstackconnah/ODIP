@@ -15,7 +15,15 @@ export type PageHeaderProps = {
    * hour, while the tab stays "Management Dashboard". Defaults to `title`.
    */
   documentTitle?: string
+  /**
+   * A string is the description: one muted line under the title (14px, 72ch, wrapping). A ReactNode is a meta row (pair it with
+   * `PageHeaderMeta`) and keeps its 13px line under the title. A count is not a subtitle: pass it as `count`.
+   */
   subtitle?: string | ReactNode
+  /** How many there are ("12 trips"): inline after the title, on its baseline, quiet and tabular. */
+  count?: ReactNode
+  /** An underline `Tabs` that switches this page's views: full width under the title and description, above the filter row. */
+  tabs?: ReactNode
   action?: ReactNode
   /** Below md, keeps the actions on the title row (title takes the room, actions stay one icon-sized cluster) instead of stacking them underneath. */
   actionsBesideTitle?: boolean
@@ -31,17 +39,13 @@ export type PageHeaderProps = {
 }
 
 const H1_CLASS: Record<PageHeaderVariant, string> = {
-  default: 'text-xl font-bold max-md:min-w-0 max-md:break-words',
+  default: 'text-[20px]/[26px] font-bold tracking-[-0.01em] max-md:min-w-0 max-md:break-words md:text-[24px]/[30px]',
   detail: 'text-display text-balance max-md:min-w-0 max-md:break-words',
 }
 
-export function PageHeader({ title, titleNote, documentTitle, subtitle, action, actionsBesideTitle, children, variant = 'default' }: PageHeaderProps) {
+export function PageHeader({ title, titleNote, documentTitle, subtitle, count, tabs, action, actionsBesideTitle, children, variant = 'default' }: PageHeaderProps) {
   useDocumentTitle(documentTitle ?? title)
   const detail = variant === 'detail'
-  // A string subtitle sits inline after the title on the same baseline row; a richer ReactNode
-  // subtitle (e.g. a meta row of chips) keeps its own line below the title/action row. The detail variant always
-  // puts its subtitle below: an inline subtitle beside a 28px title would read as part of the title.
-  const inlineSubtitle = !detail && typeof subtitle === 'string'
 
   // From md up this is the single row it always was: title + inline subtitle on the left,
   // actions on the right. Below md the row stacks — title block first, the actions on their own
@@ -52,9 +56,9 @@ export function PageHeader({ title, titleNote, documentTitle, subtitle, action, 
       ? 'flex flex-row items-start justify-between gap-2 md:items-center md:gap-4'
       : 'flex flex-col gap-2 md:flex-row md:items-center md:justify-between md:gap-4'}>
       {/* Below md only: the title may shrink to the row and break a long word (max-md:min-w-0 +
-          break-words), and an inline subtitle that doesn't fit beside it drops to its own line (flex-wrap)
-          instead of shrinking it. From md up none of that applies: the h1 keeps its min-content width, so
-          a tight row truncates the subtitle rather than breaking the title mid-word, exactly as before. */}
+          break-words), and a count that doesn't fit beside it drops to its own line (flex-wrap) instead of
+          shrinking it. From md up none of that applies: the h1 keeps its min-content width, so a tight row
+          never breaks the title mid-word. */}
       <div className={`flex min-w-0 flex-wrap items-baseline gap-x-2 md:flex-nowrap ${actionsBesideTitle ? 'max-md:flex-1' : ''}`}>
         <h1 className={H1_CLASS[variant]}>
           {titleNote ? (
@@ -66,9 +70,7 @@ export function PageHeader({ title, titleNote, documentTitle, subtitle, action, 
             title
           )}
         </h1>
-        {inlineSubtitle && subtitle && (
-          <span className="text-[13px] text-[var(--color-muted-foreground)] md:truncate">{subtitle}</span>
-        )}
+        {count && <span className="text-[14px]/[20px] font-medium tabular-nums text-[var(--color-muted-foreground)]">{count}</span>}
       </div>
       {action && (
         // `md:contents` dissolves this wrapper from md up, so the caller's action node is a direct
@@ -86,8 +88,10 @@ export function PageHeader({ title, titleNote, documentTitle, subtitle, action, 
   const filterRow = children && (
     // Filter row. `pointer-coarse:gap-y-3`: a 24px pill (Dropdown) that wraps onto a row of its own carries a 44px
     // hit area, 10px past its box; 12px between wrapped rows keeps that pad off the control on the row above.
-    <div className="flex flex-wrap items-center gap-2 pointer-coarse:gap-y-3 mt-2">{children}</div>
+    <div className="flex flex-wrap items-center gap-2 pointer-coarse:gap-y-3 mt-3">{children}</div>
   )
+  // 12px below the block above it: the detail group already opens 8px between its rows.
+  const tabsRow = tabs && <div className={detail ? 'mt-1' : 'mt-3'}>{tabs}</div>
 
   if (detail) {
     // One block, so the page's `--section-gap` opens BELOW the whole header (title + meta) rather than between the
@@ -96,6 +100,7 @@ export function PageHeader({ title, titleNote, documentTitle, subtitle, action, 
       <div className="flex flex-col gap-2">
         {titleRow}
         {subtitle && <div className="text-[13px] text-[var(--color-muted-foreground)]">{subtitle}</div>}
+        {tabsRow}
         {filterRow}
       </div>
     )
@@ -104,9 +109,12 @@ export function PageHeader({ title, titleNote, documentTitle, subtitle, action, 
   return (
     <>
       {titleRow}
-      {subtitle && !inlineSubtitle && (
-        <div className="mt-1 text-[13px] text-[var(--color-muted-foreground)]">{subtitle}</div>
+      {typeof subtitle === 'string' ? (
+        subtitle && <p className="mt-1 max-w-[72ch] text-[14px] leading-[1.45] text-[var(--color-muted-foreground)]">{subtitle}</p>
+      ) : (
+        subtitle && <div className="mt-1 text-[13px] text-[var(--color-muted-foreground)]">{subtitle}</div>
       )}
+      {tabsRow}
       {filterRow}
     </>
   )

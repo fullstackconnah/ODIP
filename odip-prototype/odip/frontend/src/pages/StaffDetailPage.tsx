@@ -4,7 +4,7 @@ import { useStaffOverview, useSettings, useEnsureStaffSignInAccount, useConfirmS
 import { Tabs } from '@/components/Tabs'
 import { LeaveBalances } from '@/components/LeaveBalances'
 import { Card } from '@/components/Card'
-import { PageHeader } from '@/components/PageHeader'
+import { PageHeader, PageHeaderMeta } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -134,16 +134,20 @@ export default function StaffDetailPage() {
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <div className="flex items-start gap-2">
-        <BackButton to="/staff" label="staff" variant="icon" className="mt-1" />
+        {/* A box the height of the display title's first line, so the icon's centre is the title's (the icon overflows it evenly). */}
+        <div className="flex h-[calc(var(--text-display)*var(--text-display-lh))] items-center">
+          <BackButton to="/staff" label="staff" variant="icon" />
+        </div>
         <div className="flex-1 min-w-0">
           <PageHeader
+            variant="detail"
             title={staff.fullName}
             subtitle={
-              <div className="flex flex-wrap items-center gap-3">
+              <PageHeaderMeta>
                 <StatusBadge status={staff.isActive ? 'Active' : 'Inactive'} />
                 <span>{positionAndRegion}</span>
                 {staff.employmentStartDate && <span>Start date {formatDateAu(staff.employmentStartDate)} · From Employment Hero</span>}
-              </div>
+              </PageHeaderMeta>
             }
             action={
               <div className="flex flex-wrap items-center gap-2">
