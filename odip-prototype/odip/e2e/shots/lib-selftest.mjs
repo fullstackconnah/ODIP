@@ -32,7 +32,7 @@ try {
     checks.push({ name: `element settled at full height [${vp.name}]`, pass: r.elementHeight >= 899, detail: { elementHeight: r.elementHeight } })
     if (vp.touch) checks.push({ name: 'pointer coarse after crop at 390 touch', pass: r.coarse, detail: { coarse: r.coarse } })
     const f = await fullPage(page, path.join(OUT_DIR, 'full', `page-${vp.name}.png`), { touch: !!vp.touch })
-    if (vp.touch) checks.push({ name: 'full page keeps touch emulation', pass: f.coarse, detail: { coarse: f.coarse } })
+    checks.push(...f.checks)
     const after = page.viewportSize()
     checks.push({ name: `viewport restored [${vp.name}]`, pass: after.width === vp.width && after.height === vp.height, detail: after })
     await context.close()

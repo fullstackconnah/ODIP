@@ -80,20 +80,23 @@ export async function cropElement(page, locator, file, { pad = 16, touch = false
   })
 }
 
-// Whole page: fullPage on a fine pointer; at touch the viewport is grown instead (a fullPage clip drops the emulation).
-// Put `file` under <outDir>/full/.
+// Whole page: the viewport is grown to the page height (a fullPage clip drops touch emulation and resizes without settling),
+// settled again, and checked for horizontal overflow before the shot. Put the file under <outDir>/full/.
+// Returns { file, coarse, checks }: checks are records for writeChecks.
 export async function fullPage(page, file, { touch = false } = {}) {
   await settle(page)
-  if (!touch) {
-    await page.screenshot({ path: file, fullPage: true })
-    return { file, coarse: false }
-  }
   const h = await page.evaluate(() => document.scrollingElement.scrollHeight)
-  return withHeight(page, Math.min(h, 4000), true, async () => {
+  return withHeight(page, Math.min(h, 4000), touch, async () => {
     await settle(page)
+    const m = await page.evaluate(() => ({ scrollLeft: document.scrollingElement.scrollLeft, scrollWidth: document.scrollingElement.scrollWidth, clientWidth: document.scrollingElement.clientWidth }))
     const coarse = await isCoarse(page)
+    const name = path.basename(file)
+    const checks = [
+      { name: `no horizontal scroll: ${name}`, pass: m.scrollLeft === 0 && m.scrollWidth <= m.clientWidth, detail: m },
+    ]
+    if (touch) checks.push({ name: `full page keeps touch emulation: ${name}`, pass: coarse, detail: { coarse } })
     await page.screenshot({ path: file })
-    return { file, coarse }
+    return { file, coarse, checks }
   })
 }
 
