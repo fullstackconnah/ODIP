@@ -14,6 +14,7 @@ using Odip.Api.Controllers;
 using Odip.Api.Serialization;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
 using Xunit;
 

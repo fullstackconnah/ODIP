@@ -9,6 +9,7 @@ using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
 using Odip.Tests.Medications;
 using Odip.Tests.Support;
@@ -168,7 +169,9 @@ public class RosterFillTests
             ambient.Setup(t => t.TenantId).Returns(tenant);
             ambient.Setup(t => t.IsSuperAdmin).Returns(false);
             using var seed = new OdipDbContext(options, ambient.Object);
-            for (var i = 0; i < count; i++) Add(seed, Monday, assigned: false);
+            for (var i = 0; i < count; i++)
+                seed.Shifts.Add(new Shift { Id = Guid.NewGuid(), ParticipantId = Guid.NewGuid(), ServiceDate = Monday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, Status = ShiftStatus.Published });
+            await seed.SaveChangesAsync();
         }
         var reader = new Mock<ICurrentTenant>();
         reader.Setup(t => t.TenantId).Returns(tenantA);
