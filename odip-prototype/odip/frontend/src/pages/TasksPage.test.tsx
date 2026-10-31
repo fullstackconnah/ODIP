@@ -115,7 +115,7 @@ describe('TasksPage — obligation-engine tasks (item 9)', () => {
     mockUseTasks.mockReturnValue({
       data: [
         { id: 't2', title: 'Find leave cover', taskType: 'LeaveCoverage', ownerName: 'Sam', dueDate: '2026-09-20', priority: 'High', status: 'NotStarted' },
-        { id: 't3', title: 'File QSC report', taskType: 'IncidentQscReport', ownerName: 'Sam', dueDate: '2026-09-20', priority: 'High', status: 'NotStarted' },
+        { id: 't3', title: 'File NDIS Commission report', taskType: 'IncidentQscReport', ownerName: 'Sam', dueDate: '2026-09-20', priority: 'High', status: 'NotStarted' },
         { id: 't4', title: 'Witness medication', taskType: 'MedicationWitness', ownerName: 'Sam', dueDate: '2026-09-20', priority: 'High', status: 'NotStarted' },
         { id: 't5', title: 'Follow up flagged note', taskType: 'FlaggedNoteFollowUp', ownerName: 'Sam', dueDate: '2026-09-20', priority: 'High', status: 'NotStarted' },
       ],
@@ -124,7 +124,7 @@ describe('TasksPage — obligation-engine tasks (item 9)', () => {
     renderPage()
 
     expect(screen.getByText('Leave coverage')).toBeInTheDocument()
-    expect(screen.getByText('QSC incident report')).toBeInTheDocument()
+    expect(screen.getByText('NDIS Commission report')).toBeInTheDocument()
     expect(screen.getByText('Medication witness')).toBeInTheDocument()
     expect(screen.getByText('Flagged note follow-up')).toBeInTheDocument()
   })

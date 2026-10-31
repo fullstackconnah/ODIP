@@ -58,3 +58,6 @@ export interface ImportInviteDto { staffId: string; name: string; email: string;
 
 /** One press of Send sign-in invites (at most 100 people), how many never-signed-in staff are still after them, and the cursor for the next press. */
 export interface ImportInvitesDto { invites: ImportInviteDto[]; left: number; next: string | null }
+
+/** GET /imports/{id}/invites/count: where each member of the batch stands before anything is sent. */
+export interface ImportInviteCountDto { toInvite: number; invitedBefore: number; signedIn: number; cannotInvite: number }

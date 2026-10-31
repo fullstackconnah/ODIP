@@ -36,6 +36,7 @@ vi.mock('@/api/hooks', () => ({
   useUpdateStaff: mutation,
   useStaffDetail: detail,
   useEnsureStaffSignInAccount: mutation,
+  useRecordInvitesSent: () => ({ mutate: vi.fn() }),
   useCreateTask: mutation,
   useUpdateTask: mutation,
   useTask: detail,

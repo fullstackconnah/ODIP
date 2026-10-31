@@ -84,7 +84,7 @@ export function buildMarIncidentPrefill(
   }
 }
 
-function toDatetimeLocalValue(iso: string, timeZone: string | null | undefined): string {
+export function toDatetimeLocalValue(iso: string, timeZone: string | null | undefined): string {
   const date = parseApiDate(iso)
   try {
     const parts = new Intl.DateTimeFormat('en-CA', {

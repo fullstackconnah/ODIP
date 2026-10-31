@@ -30,6 +30,8 @@ function baseIncident(overrides: Partial<IncidentDetailDto> = {}): IncidentDetai
     wereEmergencyServicesCalled: false, emergencyServicesDetails: null,
     witnessNames: null, witnessStatements: null, injuries: [], witnesses: [],
     qscReportedAt: null, qscReferenceNumber: null,
+    awareAt: '2026-10-03T09:05:00Z', reportableClass: 'None', reportableClassReason: null, notifyDueAt: null, detailedReportDueAt: null, dueCountedWithoutHolidays: false,
+    commissionDetailedReportedAt: null, commissionFinalReportRequested: false, commissionFinalReportedAt: null, timeZoneId: 'Australia/Sydney',
     reviewedByStaffId: null, reviewedByName: null, reviewedAt: null, reviewNotes: null, correctiveActions: null,
     resolvedAt: null, familyNotified: false, familyNotifiedAt: null,
     supportCoordinatorNotified: false, supportCoordinatorNotifiedAt: null,

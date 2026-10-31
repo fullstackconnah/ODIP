@@ -145,6 +145,22 @@ public class IncidentReport
     public DateTime? QscReportedAt { get; set; }
     public string? QscReferenceNumber { get; set; }
 
+    // NDIS Commission reporting clock. The instants are UTC; a null AwareAt on a legacy row reads as CreatedAt.
+    public DateTime? AwareAt { get; set; }
+    public ReportableClass ReportableClass { get; set; } = ReportableClass.None;
+    /// <summary>Why the class differs from the default for the severity and type. Null while it is the default.</summary>
+    public string? ReportableClassReason { get; set; }
+    /// <summary>When the Commission must be told. Null while the class is None.</summary>
+    public DateTime? NotifyDueAt { get; set; }
+    /// <summary>When the 5-day detailed report is due. Set only for Within24h.</summary>
+    public DateTime? DetailedReportDueAt { get; set; }
+    /// <summary>True when a year in the business-day count had no public holiday rows, so only weekends were skipped.</summary>
+    public bool DueCountedWithoutHolidays { get; set; }
+    // Provider-local wall clock, like QscReportedAt.
+    public DateTime? CommissionDetailedReportedAt { get; set; }
+    public bool CommissionFinalReportRequested { get; set; }
+    public DateTime? CommissionFinalReportedAt { get; set; }
+
     // Review/resolution
     public Guid? ReviewedByUserId { get; set; }
     public User? ReviewedByUser { get; set; }

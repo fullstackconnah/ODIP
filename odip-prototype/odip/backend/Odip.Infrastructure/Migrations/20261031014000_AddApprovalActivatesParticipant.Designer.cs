@@ -13,8 +13,8 @@ using Odip.Infrastructure.Data;
 namespace Odip.Infrastructure.Migrations
 {
     [DbContext(typeof(OdipDbContext))]
-    [Migration("20261031080000_AddComplaints")]
-    partial class AddComplaints
+    [Migration("20261031014000_AddApprovalActivatesParticipant")]
+    partial class AddApprovalActivatesParticipant
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -606,93 +606,6 @@ namespace Odip.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("CK_ClaimLineItem_ExactlyOneParent", "((\"ParticipantBookingId\" IS NOT NULL)::int + (\"ShiftId\" IS NOT NULL)::int) = 1");
                         });
-                });
-
-            modelBuilder.Entity("Odip.Domain.Entities.Complaint", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateOnly?>("AcknowledgedOn")
-                        .HasColumnType("date");
-
-                    b.Property<string>("ActionsTaken")
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)");
-
-                    b.Property<int>("Channel")
-                        .HasColumnType("integer");
-
-                    b.Property<DateOnly?>("ClosedOn")
-                        .HasColumnType("date");
-
-                    b.Property<int>("ComplainantKind")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("ComplainantName")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<Guid?>("HandledByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("IncidentReportId")
-                        .HasColumnType("uuid");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Outcome")
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)");
-
-                    b.Property<DateOnly?>("OutcomeCommunicatedOn")
-                        .HasColumnType("date");
-
-                    b.Property<Guid?>("ParticipantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateOnly>("ReceivedOn")
-                        .HasColumnType("date");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Summary")
-                        .IsRequired()
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<bool>("ToldAboutCommission")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateOnly?>("ToldAboutCommissionOn")
-                        .HasColumnType("date");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .IsConcurrencyToken()
-                        .HasColumnType("timestamp without time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("HandledByUserId");
-
-                    b.HasIndex("IncidentReportId");
-
-                    b.HasIndex("ParticipantId");
-
-                    b.HasIndex("TenantId");
-
-                    b.HasIndex("TenantId", "IsActive", "Status", "ReceivedOn");
-
-                    b.ToTable("Complaints");
                 });
 
             modelBuilder.Entity("Odip.Domain.Entities.Contact", b =>
@@ -3510,6 +3423,11 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<bool>("ApprovalActivatesParticipant")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
 
                     b.Property<string>("ApproverRoles")
                         .IsRequired()
@@ -6763,38 +6681,6 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("Shift");
 
                     b.Navigation("TripClaim");
-                });
-
-            modelBuilder.Entity("Odip.Domain.Entities.Complaint", b =>
-                {
-                    b.HasOne("Odip.Domain.Entities.User", "HandledBy")
-                        .WithMany()
-                        .HasForeignKey("HandledByUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("Odip.Domain.Entities.IncidentReport", "IncidentReport")
-                        .WithMany()
-                        .HasForeignKey("IncidentReportId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("Odip.Domain.Entities.Participant", "Participant")
-                        .WithMany()
-                        .HasForeignKey("ParticipantId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("Odip.Domain.Entities.Tenant", "Tenant")
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("HandledBy");
-
-                    b.Navigation("IncidentReport");
-
-                    b.Navigation("Participant");
-
-                    b.Navigation("Tenant");
                 });
 
             modelBuilder.Entity("Odip.Domain.Entities.EarlyAccessLaterSubmission", b =>

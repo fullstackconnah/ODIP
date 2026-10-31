@@ -107,10 +107,10 @@ public class ImportsController : ControllerBase
     /// says per person what happened. The browser then sends each set-password email, as the Staff page does.
     /// </summary>
     [HttpPost("{batchId:guid}/invites")]
-    public async Task<ActionResult<ApiResponse<ImportInvitesDto>>> Invites(Guid batchId, [FromQuery] Guid? after, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<ImportInvitesDto>>> Invites(Guid batchId, [FromQuery] Guid? after, CancellationToken ct, [FromQuery] bool includeInvitedBefore = false)
     {
         List<User>? staff;
-        try { staff = await _imports.StaffToInviteAsync(batchId, ct); }
+        try { staff = await _imports.StaffToInviteAsync(batchId, ct, includeInvitedBefore); }
         catch (ImportException ex) { return StatusCode(ex.StatusCode, ApiResponse<ImportInvitesDto>.Fail(ex.Message)); }
         if (staff is null) return NotFound(ApiResponse<ImportInvitesDto>.Fail("Staff import not found."));
 
@@ -127,6 +127,17 @@ public class ImportsController : ControllerBase
             invites.Add(new ImportInviteDto(s.Id, s.FullName, s.Email, outcome.Account?.FirebaseAccount, outcome.Error));
         }
         return Ok(ApiResponse<ImportInvitesDto>.Ok(new ImportInvitesDto(invites, rest.Count - page.Count, page.Count > 0 ? page[^1].Id : after)));
+    }
+
+    /// <summary>How many of a staff import's people a sign-in invite would reach, and how many it would skip and why.</summary>
+    [HttpGet("{batchId:guid}/invites/count")]
+    public async Task<ActionResult<ApiResponse<ImportInviteCountDto>>> InviteCount(Guid batchId, CancellationToken ct)
+    {
+        ImportInviteCountDto? count;
+        try { count = await _imports.InviteCountAsync(batchId, ct); }
+        catch (ImportException ex) { return StatusCode(ex.StatusCode, ApiResponse<ImportInviteCountDto>.Fail(ex.Message)); }
+        if (count is null) return NotFound(ApiResponse<ImportInviteCountDto>.Fail("Staff import not found."));
+        return Ok(ApiResponse<ImportInviteCountDto>.Ok(count));
     }
 
     /// <summary>Runs an import call; a refusal the Admin can act on answers with its own status and message.</summary>

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useApprovalPreview, useApproveServiceAgreementDraft } from '@/api/hooks'
-import type { ApprovalReasonDto, DraftApprovalPreviewDto, OverlappingPatternDto, ServiceAgreementDraftDto } from '@/api/types'
+import type { ApprovalActivationDto, ApprovalReasonDto, DraftApprovalPreviewDto, OverlappingPatternDto, ServiceAgreementDraftDto } from '@/api/types'
 import { BudgetWarnings } from '@/components/BudgetWarnings'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
@@ -67,8 +67,10 @@ type ApprovalDialogProps = {
   /** The revision to approve (the newest, with its blocks): its dates and the shifts a reason is about are said in the dialog. */
   draft: ServiceAgreementDraftDto
   onClose: () => void
-  /** The server approved it: the page has been told to read the revisions again. */
-  onApproved: () => void
+  /** The server approved it: the page has been told to read the revisions again. `activation` is what it did to the participant's status (null when the answer did not say). */
+  onApproved: (activation: ApprovalActivationDto | null) => void
+  /** The participant's first name when approving will try to move them to Active (the setting is on and they are still onboarding); the confirm step says so. */
+  activatesName?: string
   /** A reason is about some shifts (named by the engine's block id): take the person to them. The dialog closes. */
   onGoToShifts?: (blockId: string) => void
   /** The server answered that a newer save has replaced this agreement (409 draft-superseded) to the preview or the approval: the page reads the agreement again. */
@@ -83,7 +85,7 @@ type ApprovalDialogProps = {
  * approval is on its way nothing closes it: the request has been sent, and Cancel would only hide a dialog the approval goes on behind. That hold ends when the request does: an answer, or the time limit
  * (APPROVE_TIMEOUT_MS), after which it says no answer came back, to check the card, and that approving again is safe.
  */
-export function ApprovalDialog({ open, participantId, draft, onClose, onApproved, onGoToShifts, onSuperseded }: ApprovalDialogProps) {
+export function ApprovalDialog({ open, participantId, draft, onClose, onApproved, activatesName, onGoToShifts, onSuperseded }: ApprovalDialogProps) {
   const preview = useApprovalPreview(participantId, draft.id, open)
   const approve = useApproveServiceAgreementDraft()
   const [acknowledged, setAcknowledged] = useState(false)
@@ -116,7 +118,7 @@ export function ApprovalDialog({ open, participantId, draft, onClose, onApproved
   const submit = () => {
     setFailure(null)
     approve.mutate({ participantId, draftId: draft.id, acknowledgeOverlaps: needsAcknowledgement && acknowledged }, {
-      onSuccess: () => onApproved(),
+      onSuccess: answer => onApproved(answer?.activation ?? null),
       onError: error => setFailure(timedOut(error) ? { timedOut: true, messages: [TIMED_OUT_MESSAGE] } : { timedOut: false, messages: failureMessages(error) }),
     })
   }
@@ -142,7 +144,7 @@ export function ApprovalDialog({ open, participantId, draft, onClose, onApproved
           : <PageState kind="error" noun="approval summary" onRetry={() => preview.refetch()} />)}
         {data && (blocked
           ? <Reasons reasons={data.reasons} say={say} groups={groups} onGoToShifts={onGoToShifts ? blockId => { onGoToShifts(blockId); onClose() } : undefined} />
-          : <WhatItDoes participantId={participantId} draft={draft} preview={data} acknowledged={acknowledged} onAcknowledge={setAcknowledged} />)}
+          : <WhatItDoes participantId={participantId} draft={draft} preview={data} activatesName={activatesName} acknowledged={acknowledged} onAcknowledge={setAcknowledged} />)}
         {failure && (failure.timedOut
           // No answer is not a refusal: it may well have been approved, so this says to look, not that it failed. The exits are back (the request is over), and approving again is safe.
           ? <Callout tone="warning" title="No answer came back">{failure.messages[0]}</Callout>
@@ -157,7 +159,7 @@ export function ApprovalDialog({ open, participantId, draft, onClose, onApproved
 }
 
 /** Everything an approval does, in the order a coordinator weighs it: what is made, what ends, what stays, what overlaps, and that it cannot be undone. */
-function WhatItDoes({ participantId, draft, preview, acknowledged, onAcknowledge }: { participantId: string; draft: ServiceAgreementDraftDto; preview: DraftApprovalPreviewDto; acknowledged: boolean; onAcknowledge: (value: boolean) => void }) {
+function WhatItDoes({ participantId, draft, preview, activatesName, acknowledged, onAcknowledge }: { participantId: string; draft: ServiceAgreementDraftDto; preview: DraftApprovalPreviewDto; activatesName?: string; acknowledged: boolean; onAcknowledge: (value: boolean) => void }) {
   const start = formatServiceDate(draft.agreementStartDate)
   const patterns = plural(preview.patternsToCreate, 'weekly pattern')
   const range = `${start} to ${formatServiceDate(draft.agreementEndDate)}`
@@ -181,6 +183,7 @@ function WhatItDoes({ participantId, draft, preview, acknowledged, onAcknowledge
   return (
     <>
       <p className="text-[var(--color-muted-foreground)]">Puts this agreement&apos;s weekly patterns on the roster. It is separate from signing: nothing is signed or sent.</p>
+      {activatesName && <p className="text-[var(--color-muted-foreground)]">Approving will also move {activatesName} to Active if they&apos;re ready.</p>}
       {/* What it does, a short line for each fact: the patterns, the shifts, what ends. */}
       <div className="flex flex-col gap-1 font-medium">
         <p>{`Creates ${patterns}, ${range}.`}</p>

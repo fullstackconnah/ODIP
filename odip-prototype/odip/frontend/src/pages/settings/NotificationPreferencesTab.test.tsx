@@ -65,7 +65,10 @@ describe('NotificationPreferencesTab', () => {
 
     expect(screen.getByRole('heading', { level: 3, name: 'Leave' })).toBeInTheDocument()
     // One tick per event type the app knows (roster #244 adds ShiftUnassigned, so the count comes from the list, not a number).
-    expect(screen.getAllByRole('checkbox')).toHaveLength(NOTIFICATION_EVENT_TYPE_GROUPS.flatMap(g => g.eventTypes).length)
+    // The reserved Agreements events are hidden until something raises them.
+    expect(screen.getAllByRole('checkbox')).toHaveLength(NOTIFICATION_EVENT_TYPE_GROUPS.filter(g => g.label !== 'Agreements').flatMap(g => g.eventTypes).length)
+    expect(screen.queryByRole('heading', { name: 'Agreements' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: /service agreement/i })).not.toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Leave request submitted' })).toBeChecked()
     expect(screen.getByRole('checkbox', { name: 'Incident reported' })).not.toBeChecked()
     expect(screen.queryByText(/sms/i)).not.toBeInTheDocument()

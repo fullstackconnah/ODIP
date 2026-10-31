@@ -67,8 +67,8 @@ export default function ImportDataTab() {
     {
       key: 'actions', header: '', align: 'right', pin: 'end',
       render: b => !b.undoneAt && (
-        <div className="flex flex-wrap justify-end gap-2">
-          {/* The count is the batch's created staff; the server invites only those who have never signed in. */}
+        <div className={`flex flex-wrap justify-end gap-2 ${b.kind === 'Staff' ? 'md:py-2' : ''}`}>
+          {/* The count is the fallback figure (the batch's created staff); the button reads the true count itself, and the server invites only those who have never signed in or been invited. */}
           {b.kind === 'Staff' && <ImportInvites batchId={b.id} count={b.createdCount} onResult={result => setInvited({ batchId: b.id, fileName: b.fileName, result })} />}
           <Button variant="secondary" size="sm" onClick={() => setUndoing(b)}>Undo</Button>
         </div>

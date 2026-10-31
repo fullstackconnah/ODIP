@@ -55,6 +55,7 @@ const QualificationsPage = React.lazy(() => import('./pages/QualificationsPage')
 const ClaimDetailPage = React.lazy(() => import('./pages/ClaimDetailPage'))
 const BudgetsPage = React.lazy(() => import('@/pages/BudgetsPage'))
 const AgreementsPage = React.lazy(() => import('@/pages/AgreementsPage'))
+const ClaimsHubPage = React.lazy(() => import('./pages/claims-hub/ClaimsHubPage'))
 const InvoicesPage = React.lazy(() => import('@/pages/InvoicesPage'))
 const RosterBoardPage = React.lazy(() => import('@/pages/rostering/RosterBoardPage'))
 const PatternsPage = React.lazy(() => import('@/pages/rostering/PatternsPage'))
@@ -62,6 +63,7 @@ const CompatibilityPage = React.lazy(() => import('@/pages/rostering/Compatibili
 const LeaveApprovalsPage = React.lazy(() => import('@/pages/rostering/LeaveApprovalsPage'))
 const CompletionReviewPage = React.lazy(() => import('@/pages/rostering/CompletionReviewPage'))
 const PayrollPage = React.lazy(() => import('@/pages/rostering/PayrollPage'))
+const ReportsPage = React.lazy(() => import('@/pages/reports/ReportsPage'))
 const MedicationsPage = React.lazy(() => import('@/pages/MedicationsPage'))
 const MedicationFormPage = React.lazy(() => import('@/pages/MedicationFormPage'))
 const PortalShiftsPage = React.lazy(() => import('@/pages/portal/PortalShiftsPage'))
@@ -180,6 +182,7 @@ const router = createBrowserRouter(
         <Route path="/settings" element={<PrivateRoute page="settings"><SettingsPage /></PrivateRoute>} />
         <Route path="/settings/import/:kind" element={<PrivateRoute page="settings" requiresDataImport><ImportWizardPage /></PrivateRoute>} />
         <Route path="/qualifications" element={<PrivateRoute page="qualifications"><QualificationsPage /></PrivateRoute>} />
+        <Route path="/claims" element={<PrivateRoute page="claims"><ClaimsHubPage /></PrivateRoute>} />
         <Route path="/claims/:id" element={<PrivateRoute page="claims"><ClaimDetailPage /></PrivateRoute>} />
         <Route path="/agreements" element={<PrivateRoute page="agreements" requiresParticipantLifecycleMutation><AgreementsPage /></PrivateRoute>} />
         <Route path="/budgets" element={<PrivateRoute page="budgets"><BudgetsPage /></PrivateRoute>} />
@@ -191,6 +194,7 @@ const router = createBrowserRouter(
         <Route path="/rostering/completions" element={<PrivateRoute page="rostering"><CompletionReviewPage /></PrivateRoute>} />
 
         <Route path="/rostering/payroll" element={<PrivateRoute page="rostering"><PayrollPage /></PrivateRoute>} />
+        <Route path="/reports" element={<PrivateRoute page="rostering"><ReportsPage /></PrivateRoute>} />
         <Route path="/medications" element={<PrivateRoute page="medications"><MedicationsPage /></PrivateRoute>} />
         <Route path="/medications/new" element={<PrivateRoute page="medications" requiresWrite><MedicationFormPage /></PrivateRoute>} />
         <Route path="/medications/:id/edit" element={<PrivateRoute page="medications" requiresWrite viewableByReadOnly><MedicationFormPage /></PrivateRoute>} />

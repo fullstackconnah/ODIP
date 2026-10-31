@@ -9,6 +9,7 @@ vi.mock('@/api/hooks', () => ({
   useAdminUsers: mockUseAdminUsers,
   useAdminTenantsSummary: () => ({ data: [] }),
   useEnsureUserSignInAccount: () => ({ mutateAsync: vi.fn() }),
+  useRecordInvitesSent: () => ({ mutate: vi.fn() }),
 }))
 
 afterEach(() => {

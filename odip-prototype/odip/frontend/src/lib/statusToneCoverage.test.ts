@@ -69,6 +69,7 @@ const NOT_A_PILL: Record<string, string> = {
   EmploymentHeroOutboxStatus: 'never printed: the payroll check prints PayrollShiftStatus, derived from it',
   BudgetChartStatus: 'whether the budget graph can be drawn; BudgetTrackCard picks the chart, the no-pricing line or nothing from it, never prints the word',
   BudgetExpectedStatus: 'whether the budget graph has an expected line; the chart picks a footnote from it, never prints the word',
+  ClaimBatchStatus: `a claim file's stage; the Claims page shows a step badge derived from it (claimHubSteps), never the word`,
 }
 
 /** The extra enums the walk treats as statuses although their names do not end in "Status" (they are pills too). */

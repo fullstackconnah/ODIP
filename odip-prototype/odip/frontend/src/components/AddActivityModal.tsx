@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { extractErrorMessage } from '@/lib/utils'
 import { useActivities, useCreateScheduledActivity, useUpdateScheduledActivity } from '@/api/hooks'
 import { modalGrid, modalSpan } from '@/lib/formGrid'
 import { Modal } from '@/components/Modal'
@@ -223,7 +224,7 @@ export default function AddActivityModal({ tripDayId, editingActivity, eventTemp
         </div>
 
         {(createActivity.isError || updateActivity.isError) && (
-          <p className="mt-3 text-sm text-[var(--color-destructive)]">Failed to save activity. Please try again.</p>
+          <p className="mt-3 text-sm text-[var(--color-destructive)]">{extractErrorMessage(createActivity.error ?? updateActivity.error, "Couldn't save this activity. Check your connection and try again.")}</p>
         )}
 
     </Modal>

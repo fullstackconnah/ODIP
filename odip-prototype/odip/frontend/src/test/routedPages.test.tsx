@@ -92,6 +92,7 @@ const ROUTES: Route[] = [
   { path: '/settings', url: '/settings', load: () => import('@/pages/SettingsPage') },
   { path: '/settings/import/:kind', url: '/settings/import/participants', load: () => import('@/pages/settings/ImportWizardPage') },
   { path: '/qualifications', url: '/qualifications', load: () => import('@/pages/QualificationsPage') },
+  { path: '/claims', url: '/claims', load: () => import('@/pages/claims-hub/ClaimsHubPage') },
   { path: '/claims/:id', url: `/claims/${ID}`, load: () => import('@/pages/ClaimDetailPage') },
   { path: '/agreements', url: '/agreements', load: () => import('@/pages/AgreementsPage') },
   { path: '/budgets', url: '/budgets', load: () => import('@/pages/BudgetsPage') },
@@ -102,6 +103,7 @@ const ROUTES: Route[] = [
   { path: '/rostering/leave', url: '/rostering/leave', load: () => import('@/pages/rostering/LeaveApprovalsPage') },
   { path: '/rostering/completions', url: '/rostering/completions', load: () => import('@/pages/rostering/CompletionReviewPage') },
   { path: '/rostering/payroll', url: '/rostering/payroll', load: () => import('@/pages/rostering/PayrollPage') },
+  { path: '/reports', url: '/reports', load: () => import('@/pages/reports/ReportsPage') },
   { path: '/medications', url: '/medications', load: () => import('@/pages/MedicationsPage') },
   { path: '/medications/new', url: `/medications/new?participantId=${ID}`, load: () => import('@/pages/MedicationFormPage') },
   { path: '/medications/:id/edit', url: `/medications/${ID}/edit`, load: () => import('@/pages/MedicationFormPage') },
@@ -132,7 +134,7 @@ const ALLOWED: Record<string, string> = {
 // These titles were renamed (or their nav label was) so the two match; this keeps them there.
 const RENAMED_TO_NAV_LABEL = [
   '/incidents', '/complaints', '/schedule', '/qualifications', '/rostering', '/portal', '/portal/payslips',
-  '/trips', '/rostering/patterns', '/rostering/compatibility', '/rostering/leave', '/rostering/completions', '/rostering/payroll',
+  '/trips', '/rostering/patterns', '/rostering/compatibility', '/rostering/leave', '/rostering/completions', '/rostering/payroll', '/reports',
 ]
 
 let previousAdapter: typeof apiClient.defaults.adapter

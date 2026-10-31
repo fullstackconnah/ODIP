@@ -388,6 +388,8 @@ public class StaffController : ControllerBase
 
     private static StaffDetailDto ToStaffDetailDto(User s, DateOnly today) => new()
     {
+        SignInInviteSentAt = s.SignInInviteSentAt,
+        HasSignedIn = s.LastLoginAt != null,
         Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
         FullName = (s.FirstName + " " + s.LastName).Trim(), Username = s.Username,
         Role = s.Role, Position = s.Position ?? Position.SupportWorker, Email = s.Email,
@@ -462,7 +464,7 @@ public class StaffController : ControllerBase
                     || (s.IsMedicationCompetent && s.MedicationCompetencyExpiryDate != null && s.MedicationCompetencyExpiryDate < today)
                     || (s.WorkerScreeningExpiryDate != null && s.WorkerScreeningExpiryDate < today)
             }).ToListAsync(ct);
-        return Ok(ApiResponse<List<StaffListDto>>.Ok(items));
+        return Ok(ApiResponse<List<StaffListDto>>.Ok(items.Select(i => StaffScreeningMask.Apply(i, User)).ToList()));
     }
 
     [HttpGet("{id:guid}")]
@@ -472,7 +474,7 @@ public class StaffController : ControllerBase
         if (s == null) return NotFound(ApiResponse<StaffDetailDto>.Fail("Staff not found"));
 
         var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
-        return Ok(ApiResponse<StaffDetailDto>.Ok(new StaffDetailDto
+        return Ok(ApiResponse<StaffDetailDto>.Ok(StaffScreeningMask.Apply(new StaffDetailDto
         {
             Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
             FullName = (s.FirstName + " " + s.LastName).Trim(), Username = s.Username,
@@ -489,7 +491,7 @@ public class StaffController : ControllerBase
             WorkerScreeningExpiryDate = s.WorkerScreeningExpiryDate,
             EmploymentStartDate = s.EmploymentStartDate,
             HasExpiredQualifications = s.HasExpiredQualificationsOn(today)
-        }));
+        }, User)));
     }
 
     [HttpPost]
@@ -506,7 +508,7 @@ public class StaffController : ControllerBase
         var s = staged.User!;
         await _db.SaveChangesAsync(ct);
         var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
-        return CreatedAtAction(nameof(GetById), new { id = s.Id }, ApiResponse<StaffDetailDto>.Ok(new StaffDetailDto
+        return CreatedAtAction(nameof(GetById), new { id = s.Id }, ApiResponse<StaffDetailDto>.Ok(StaffScreeningMask.Apply(new StaffDetailDto
         {
             Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
             FullName = s.FullName, Username = s.Username,
@@ -523,7 +525,7 @@ public class StaffController : ControllerBase
             WorkerScreeningExpiryDate = s.WorkerScreeningExpiryDate,
             EmploymentStartDate = s.EmploymentStartDate,
             HasExpiredQualifications = s.HasExpiredQualificationsOn(today)
-        }));
+        }, User)));
     }
 
     [HttpPut("{id:guid}")]
@@ -586,7 +588,8 @@ public class StaffController : ControllerBase
         s.DriverLicenceExpiryDate = dto.DriverLicenceExpiryDate;
         s.ManualHandlingExpiryDate = dto.ManualHandlingExpiryDate;
         s.MedicationCompetencyExpiryDate = dto.MedicationCompetencyExpiryDate;
-        s.WorkerScreeningNumber = dto.WorkerScreeningNumber;
+        // Defence in depth: every role Update allows sees the number; a caller who could not would send none, so keep what is stored rather than wipe it.
+        if (StaffScreeningMask.CanSee(User, s.Id)) s.WorkerScreeningNumber = dto.WorkerScreeningNumber;
         s.WorkerScreeningExpiryDate = dto.WorkerScreeningExpiryDate;
         s.UpdatedAt = DateTime.UtcNow;
 
@@ -595,7 +598,7 @@ public class StaffController : ControllerBase
         if (addressChanged)
             _logger?.LogInformation("The sign-in address of staff member {TargetUserId} was changed by {ActorUserId}", s.Id, User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "unknown");
         var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
-        return Ok(ApiResponse<StaffDetailDto>.Ok(new StaffDetailDto
+        return Ok(ApiResponse<StaffDetailDto>.Ok(StaffScreeningMask.Apply(new StaffDetailDto
         {
             Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
             FullName = s.FullName, Username = s.Username,
@@ -612,7 +615,7 @@ public class StaffController : ControllerBase
             WorkerScreeningExpiryDate = s.WorkerScreeningExpiryDate,
             EmploymentStartDate = s.EmploymentStartDate,
             HasExpiredQualifications = s.HasExpiredQualificationsOn(today)
-        }));
+        }, User)));
     }
 
     /// <summary>Archive (soft-delete) a staff member.</summary>
@@ -648,6 +651,28 @@ public class StaffController : ControllerBase
         if (outcome.Account is { } account) return Ok(ApiResponse<SignInAccountDto>.Ok(account));
         if (outcome.BadGateway) return StatusCode(StatusCodes.Status502BadGateway, ApiResponse<SignInAccountDto>.Fail(outcome.Error!));
         return BadRequest(ApiResponse<SignInAccountDto>.Fail(outcome.Error!));
+    }
+
+    /// <summary>
+    /// Records that the browser sent these people a sign-in invite email, so the next bulk invite skips them and the Staff page can say when. Only
+    /// people the caller could invite are stamped (active, never signed in, and a SuperAdmin row only by a SuperAdmin); any other id is skipped
+    /// silently. A tracked save, not a bulk update: Users are audited, so each person gets one Updated row with the caller as the actor. The Users
+    /// query filter keeps it to the caller's own organisation (a SuperAdmin's to the one being viewed, or all when none is).
+    /// </summary>
+    [HttpPost("/api/v1/users/invites-sent")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    [RequestSizeLimit(8_192)]
+    public async Task<ActionResult<ApiResponse<int>>> InvitesSent([FromBody] InvitesSentRequest? body, CancellationToken ct)
+    {
+        var ids = body?.UserIds?.Distinct().ToList() ?? [];
+        if (ids.Count is 0 or > 100) return BadRequest(ApiResponse<int>.Fail("Send between 1 and 100 people at a time."));
+
+        var isSuperAdmin = User.IsInRole("SuperAdmin");
+        var people = await _db.Users.Where(u => ids.Contains(u.Id) && u.IsActive && u.LastLoginAt == null && (isSuperAdmin || u.Role != UserRole.SuperAdmin)).ToListAsync(ct);
+        var now = _clock.GetUtcNow().UtcDateTime;
+        foreach (var person in people) person.SignInInviteSentAt = now;
+        await _db.SaveChangesAsync(ct);
+        return Ok(ApiResponse<int>.Ok(people.Count));
     }
 
     /// <summary>
@@ -729,7 +754,7 @@ public class StaffController : ControllerBase
 
         return Ok(ApiResponse<StaffOverviewDto>.Ok(new StaffOverviewDto
         {
-            Staff = ToStaffDetailDto(s, today),
+            Staff = StaffScreeningMask.Apply(ToStaffDetailDto(s, today), User),
             Availability = availability,
             UpcomingShifts = upcomingShifts,
             UpcomingTripAssignments = upcomingTripAssignments,

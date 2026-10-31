@@ -146,7 +146,7 @@ export default function AccommodationCreatePage() {
 
       {mutation.isError && (
         <Callout tone="error">
-          {extractErrorMessage(mutation.error, `Failed to ${isEdit ? 'update' : 'create'} accommodation. Please check your input and try again.`)}
+          {extractErrorMessage(mutation.error, `Couldn't ${isEdit ? 'update' : 'create'} this accommodation. Check the details and try again.`)}
         </Callout>
       )}
 

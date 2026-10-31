@@ -38,7 +38,7 @@ public class IncidentTenantScopePostgresTests : IClassFixture<PostgresFixture>
         {
             Id = Guid.NewGuid(), TenantId = tenantId, ReportedByUserId = reporter.Id, TripInstanceId = trip.Id, IncidentType = IncidentType.PropertyDamage, Severity = IncidentSeverity.High,
             Status = IncidentStatus.Submitted, Title = "Incident", Description = "What happened.", IncidentDateTime = DateTime.UtcNow.AddHours(-31),
-            CreatedAt = DateTime.UtcNow.AddHours(-30), QscReportingStatus = QscReportingStatus.Required, IsActive = true,
+            CreatedAt = DateTime.UtcNow.AddHours(-30), NotifyDueAt = DateTime.UtcNow.AddHours(-6), QscReportingStatus = QscReportingStatus.Required, IsActive = true,
         };
         db.AddRange(reporter, trip, incident);
         await db.SaveChangesAsync(Ct);
@@ -94,7 +94,7 @@ public class IncidentTenantScopePostgresTests : IClassFixture<PostgresFixture>
         {
             Id = Guid.NewGuid(), ReportedByUserId = mine.Incident.ReportedByUserId, TripInstanceId = mine.Trip.Id, IncidentType = IncidentType.PropertyDamage, Severity = IncidentSeverity.High,
             Status = IncidentStatus.Submitted, Title = "Unscoped", Description = "What happened.", IncidentDateTime = DateTime.UtcNow.AddHours(-31),
-            CreatedAt = DateTime.UtcNow.AddHours(-30), QscReportingStatus = QscReportingStatus.Required, IsActive = true,
+            CreatedAt = DateTime.UtcNow.AddHours(-30), NotifyDueAt = DateTime.UtcNow.AddHours(-6), QscReportingStatus = QscReportingStatus.Required, IsActive = true,
         };
         await using (var admin = PostgresFixture.NewContext(_pg.ConnectionString))
         {

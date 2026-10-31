@@ -53,6 +53,7 @@ public class IncidentOverdueRuleTests
             Id = Guid.NewGuid(), ReportedByUserId = reporterId, IncidentType = IncidentType.PropertyDamage,
             Severity = IncidentSeverity.Low, Status = status, Title = "Incident", Description = "What happened.",
             IncidentDateTime = DateTime.UtcNow.AddDays(-3), CreatedAt = DateTime.UtcNow - age,
+            ReportableClass = ReportableClass.Within24h, NotifyDueAt = DateTime.UtcNow - age + TimeSpan.FromHours(24),
             QscReportingStatus = qsc, QscReportedAt = reportedAt, IsActive = isActive, TripInstanceId = tripId, ShiftId = shiftId,
         };
         db.IncidentReports.Add(incident);

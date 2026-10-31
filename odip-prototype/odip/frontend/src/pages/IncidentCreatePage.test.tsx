@@ -80,7 +80,7 @@ function renderCreatePage(initialEntry: string | { pathname: string; state?: unk
 
 // ── IN-1/IN-3/IN-4/IN-6 wizard navigation helpers ──────────────────────────────────────────
 // The form's fields are now split across wizard steps (Basics / Restrictive Practice
-// [conditional] / Incident Details / Review & Compliance [edit-only] / Review), and three of
+// [conditional] / Incident Details / Compliance [edit-only] / Review), and three of
 // Basics' native <select>s became Dropdown ('form' variant, GEN-1) — opened by clicking the
 // labelled trigger, then picking a `role="option"` by its visible label text, exactly like the
 // pre-existing restrictivePracticeType Dropdown already did on the old single-page form.
@@ -141,12 +141,12 @@ async function fillUnapprovedRpAndNext(user: ReturnType<typeof userEvent.setup>,
 
 /** Fills Incident Details' two required fields (description, date/time) and clicks Next twice —
  * once off Incident Details onto the (always-optional, so immediately-passable) Witnesses step,
- * once more off Witnesses — landing on Review (create mode) or Review & Compliance (edit mode). */
+ * once more off Witnesses — landing on Review (create mode) or Compliance (edit mode). */
 async function fillDetailsMinimallyAndNext(user: ReturnType<typeof userEvent.setup>, description = 'Details here') {
   await user.type(screen.getByPlaceholderText('Detailed description of the incident...'), description)
   await user.type(screen.getByLabelText(/Date & Time/i), '2026-09-01T10:00')
   await clickNext(user) // Incident Details -> Witnesses
-  await clickNext(user) // Witnesses -> Review (or Review & Compliance)
+  await clickNext(user) // Witnesses -> Review (or Compliance)
 }
 
 /** IN-5: adds one injury row via BodyDiagram's always-available button list — required before
@@ -1065,7 +1065,8 @@ describe('IncidentCreatePage — UX-01 SearchableSelect keyboard support', () =>
     renderCreatePage({ pathname: '/incidents/incident-1/edit' })
 
     // Edit mode's 'all' initialVisited means every step's rail button is clickable immediately.
-    await user.click(await screen.findByRole('button', { name: /Review & compliance/ }))
+    await user.click(await screen.findByRole('button', { name: /Compliance/ }))
+    expect(screen.queryByText(/Review & compliance/)).not.toBeInTheDocument()
 
     const reviewedBy = await screen.findByLabelText('Reviewed By')
     await user.click(reviewedBy)
@@ -1350,10 +1351,10 @@ describe('IncidentCreatePage — IN-7 Witnesses step', () => {
       const { data: payload } = mockUpdateMutateAsync.mock.calls[0][0]
       expect(payload.title).toBe('Edited title')
       expect(Object.keys(payload).sort()).toEqual([
-        'correctiveActions', 'description', 'emergencyServicesDetails', 'familyNotified', 'familyNotifiedAt',
+        'awareAtLocal', 'commissionDetailedReportedAt', 'commissionFinalReportRequested', 'commissionFinalReportedAt', 'correctiveActions', 'description', 'emergencyServicesDetails', 'familyNotified', 'familyNotifiedAt',
         'immediateActionsTaken', 'incidentDateTime', 'incidentType', 'injuries', 'involvedParticipantId',
         'involvedStaffId', 'location', 'medicationAdministrationId', 'otherTypeSpecify', 'participantBookingId',
-        'qscReferenceNumber', 'qscReportedAt', 'qscReportingStatus', 'reportedByStaffId', 'restrictivePracticeId',
+        'qscReferenceNumber', 'qscReportedAt', 'qscReportingStatus', 'reportableClass', 'reportableClassReason', 'reportedByStaffId', 'restrictivePracticeId',
         'restrictivePracticeType', 'reviewNotes', 'reviewedByStaffId', 'serviceType', 'severity', 'shiftId',
         'shiftNoteId', 'status', 'supportCoordinatorNotified', 'supportCoordinatorNotifiedAt', 'title',
         'tripInstanceId', 'unapprovedRestrictivePracticeDetails', 'usedWithoutAuthorisation',
@@ -1815,5 +1816,66 @@ describe('IncidentCreatePage — a support worker is the reporter', () => {
     renderCreatePage({ pathname: '/incidents/new', state: colleagueNote })
 
     expect(screen.getByLabelText('Reported By *')).toHaveValue('Alex Rivera')
+  })
+})
+
+// N1 incident clock: the Compliance step edits the aware time and the reporting deadline; the reason is asked for only when the class leaves its default.
+describe('IncidentCreatePage - incident clock on the Compliance step', () => {
+  const existing = {
+    id: 'incident-1', serviceType: 'None', tripInstanceId: null, incidentType: 'PropertyDamage', otherTypeSpecify: null,
+    severity: 'Low', status: 'Draft', title: 'Existing incident', incidentDateTime: '2026-08-01T09:00',
+    location: null, reportedByStaffId: 'staff-1', description: 'Existing description', reportedByName: 'Alex Rivera',
+    involvedParticipantName: null, qscReportingStatus: 'NotRequired', isOverdue24h: false, createdAt: '2026-08-01T00:00:00Z',
+    participantBookingId: null, involvedParticipantId: null, involvedStaffId: null, involvedStaffName: null,
+    immediateActionsTaken: null, wereEmergencyServicesCalled: false, emergencyServicesDetails: null,
+    witnessNames: null, witnessStatements: null, injuries: [], witnesses: [],
+    qscReportedAt: null, qscReferenceNumber: null,
+    awareAt: '2026-08-01T00:00:00Z', reportableClass: 'None', reportableClassReason: null, notifyDueAt: null, detailedReportDueAt: null,
+    dueCountedWithoutHolidays: false, commissionDetailedReportedAt: null, commissionFinalReportRequested: false, commissionFinalReportedAt: null,
+    timeZoneId: 'Australia/Sydney',
+    reviewedByStaffId: null, reviewedByName: null, reviewedAt: null, reviewNotes: null, correctiveActions: null,
+    resolvedAt: null, familyNotified: false, familyNotifiedAt: null, supportCoordinatorNotified: false,
+    supportCoordinatorNotifiedAt: null, updatedAt: '2026-08-01T09:00:00Z',
+  }
+
+  it('sends the aware time in the provider zone and the stored class back on an unchanged save', async () => {
+    mockUseIncident.mockReturnValue({ data: existing })
+    mockUpdateMutateAsync.mockResolvedValue({ success: true, data: { id: 'incident-1' } })
+    const user = userEvent.setup()
+    renderCreatePage({ pathname: '/incidents/incident-1/edit' })
+
+    await user.click(await screen.findByRole('button', { name: /Review$/i }))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    const { data: payload } = mockUpdateMutateAsync.mock.calls[0][0]
+    expect(payload).toEqual(expect.objectContaining({
+      awareAtLocal: '2026-08-01T10:00', reportableClass: 'None', reportableClassReason: undefined,
+      commissionDetailedReportedAt: undefined, commissionFinalReportRequested: false, commissionFinalReportedAt: undefined,
+    }))
+  })
+
+  it('asks for a reason only once the class is moved off its default, and blocks the save without one', async () => {
+    mockUseIncident.mockReturnValue({ data: existing })
+    mockUpdateMutateAsync.mockResolvedValue({ success: true, data: { id: 'incident-1' } })
+    const user = userEvent.setup()
+    renderCreatePage({ pathname: '/incidents/incident-1/edit' })
+
+    await user.click(await screen.findByRole('button', { name: /Compliance/ }))
+    expect(screen.queryByLabelText(/^Reason for the change/)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('5-day report sent')).not.toBeInTheDocument()
+
+    await openAndSelect(user, 'Reporting deadline', 'Within 24 hours')
+    expect(screen.getByLabelText(/^Reason for the change/)).toHaveAttribute('aria-required', 'true')
+    expect(screen.getByLabelText('5-day report sent')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /Review$/i }))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+    expect(mockUpdateMutateAsync).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: /Compliance/ }))
+    await user.type(screen.getByLabelText(/^Reason for the change/), 'Family raised it as serious.')
+    await user.click(screen.getByRole('button', { name: /Review$/i }))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+    expect(mockUpdateMutateAsync.mock.calls[0][0].data).toEqual(expect.objectContaining({ reportableClass: 'Within24h', reportableClassReason: 'Family raised it as serious.' }))
   })
 })

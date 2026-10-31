@@ -288,6 +288,28 @@ describe('ApprovalDialog: approving', () => {
     await user.click(screen.getByRole('button', { name: 'Approve' }))
 
     expect(onApproved).toHaveBeenCalledTimes(1)
+    expect(onApproved).toHaveBeenCalledWith(null)
+  })
+
+  it('hands the page what the approval did to the participant', async () => {
+    approveMutate.mockImplementation((_vars, options) => options.onSuccess({ id: 'd-2', activation: { result: 'NotActivated', reason: 'intake not finished' } }))
+    const user = userEvent.setup()
+    const { onApproved } = setUp()
+
+    await user.click(screen.getByRole('button', { name: 'Approve' }))
+
+    expect(onApproved).toHaveBeenCalledWith({ result: 'NotActivated', reason: 'intake not finished' })
+  })
+
+  it('says approving also moves them to Active only when the page says it will', () => {
+    const line = "Approving will also move Amy to Active if they're ready."
+    setUp({ activatesName: 'Amy' })
+    expect(screen.getByText(line)).toBeInTheDocument()
+  })
+
+  it('says nothing about moving to Active when the page does not ask for it', () => {
+    setUp()
+    expect(screen.queryByText(/to Active/)).not.toBeInTheDocument()
   })
 
   it('keeps the dialog open and says what the server said when it refuses, every reason', async () => {

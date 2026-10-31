@@ -21,7 +21,7 @@ function person(overrides: Partial<StaffListDto>): StaffListDto {
     id: 's-1', firstName: 'Sam', lastName: 'Wilson', fullName: 'Sam Wilson', username: 'swilson', role: 'SupportWorker', position: 'SupportWorker',
     email: null, mobile: null, region: 'North', isDriverEligible: false, isFirstAidQualified: false, isMedicationCompetent: false,
     isManualHandlingCompetent: false, isOvernightEligible: false, isActive: true, firstAidExpiryDate: null, driverLicenceExpiryDate: null,
-    manualHandlingExpiryDate: null, medicationCompetencyExpiryDate: null, workerScreeningNumber: null, workerScreeningExpiryDate: null,
+    manualHandlingExpiryDate: null, medicationCompetencyExpiryDate: null, workerScreeningNumber: null, workerScreeningRecorded: false, workerScreeningExpiryDate: null,
     hasExpiredQualifications: false, notes: null, ...overrides,
   }
 }

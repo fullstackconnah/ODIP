@@ -58,7 +58,7 @@ public class ExportTablesTests
         Assert.Empty(exported.Intersect(leftOut));
         Assert.Empty(exported.Concat(leftOut).Except(model));
         Assert.Equal(exported.Count, exported.Distinct().Count());
-        Assert.Equal((79, 13), (exported.Count, leftOut.Count));
+        Assert.Equal((81, 13), (exported.Count, leftOut.Count));
     }
 
     [Fact]
@@ -100,7 +100,7 @@ public class ExportTablesTests
     }
 
     [Fact]
-    public void The_local_time_columns_are_these_twelve_and_every_other_DateTime_is_an_instant()
+    public void The_local_time_columns_are_these_fourteen_and_every_other_DateTime_is_an_instant()
     {
         var wallClock = ExportTables.All
             .SelectMany(t => Model.FindEntityType(t.EntityType)!.GetProperties().Where(ExportTables.IsWallClock).Select(p => $"{t.EntityType.Name}.{p.Name}"))
@@ -109,12 +109,15 @@ public class ExportTablesTests
 
         Assert.Equal(new[]
         {
+            "IncidentReport.CommissionDetailedReportedAt", "IncidentReport.CommissionFinalReportedAt",
             "IncidentReport.FamilyNotifiedAt", "IncidentReport.IncidentDateTime", "IncidentReport.QscReportedAt", "IncidentReport.SupportCoordinatorNotifiedAt",
             "MedicationAdministration.ScheduledAt",
             "ParticipantMedication.ConsentDate", "ParticipantMedication.EndDate", "ParticipantMedication.NextReviewDue", "ParticipantMedication.StartDate",
             "ShiftRoutineCheck.ScheduledAt",
             "StaffAvailability.EndDateTime", "StaffAvailability.StartDateTime",
         }, wallClock);
+        // The deadlines and the aware time are instants (UTC), not provider-local digits.
+        Assert.DoesNotContain(wallClock, n => n is "IncidentReport.AwareAt" or "IncidentReport.NotifyDueAt" or "IncidentReport.DetailedReportDueAt");
     }
 
     [Fact]

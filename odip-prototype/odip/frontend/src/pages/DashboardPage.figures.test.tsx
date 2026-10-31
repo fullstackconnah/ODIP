@@ -73,7 +73,7 @@ describe('Dashboard "Critical participant alerts" figure', () => {
         { participantId: 'p1', participantName: 'Jamie Smith', isActive: true, criticalCount: 2, warningCount: 0, infoCount: 0,
           alerts: [
             { type: 'plan-expired', severity: 'Critical', message: 'NDIS plan end date has passed', deepLinkTab: 'details', linkTo: null },
-            { type: 'qsc-report-overdue', severity: 'Critical', message: 'QSC report has not been submitted', deepLinkTab: 'details', linkTo: '/incidents/i1' },
+            { type: 'qsc-report-overdue', severity: 'Critical', message: 'NDIS Commission report has not been submitted', deepLinkTab: 'details', linkTo: '/incidents/i1' },
           ] },
         { participantId: 'p2', participantName: 'Alex Rivera', isActive: true, criticalCount: 1, warningCount: 0, infoCount: 0,
           alerts: [{ type: 'plan-expired', severity: 'Critical', message: 'NDIS plan end date has passed', deepLinkTab: 'details', linkTo: null }] },
@@ -95,19 +95,19 @@ describe('Dashboard "Qualification issues" figure', () => {
   beforeEach(() => localStorage.setItem('odip_user', JSON.stringify({ role: 'SuperAdmin' })))
 
   it('says how many staff the issues belong to, so it reads against the Qualifications page headline (a staff count)', () => {
-    // Staff A holds four flagged credentials with no date (4 issues); staff B one expired First Aid (1 issue): the tile counts 5.
+    // Staff A holds four flagged credentials with no date (4 issues) and no screening on file (1); staff B one expired First Aid (1) and a current screening: the tile counts 6.
     const base = { isActive: true, workerScreeningExpiryDate: null }
     mockUseStaff.mockReturnValue({
       data: [
         { ...base, id: 's1', fullName: 'Staff A', isFirstAidQualified: true, isDriverEligible: true, isManualHandlingCompetent: true, isMedicationCompetent: true },
-        { ...base, id: 's2', fullName: 'Staff B', isFirstAidQualified: true, firstAidExpiryDate: '2000-01-01' },
+        { ...base, id: 's2', fullName: 'Staff B', isFirstAidQualified: true, firstAidExpiryDate: '2000-01-01', workerScreeningExpiryDate: '2099-01-01' },
       ],
     })
 
     renderPage()
 
-    const tile = screen.getByRole('group', { name: 'Qualification issues 5' })
-    expect(tile).toHaveTextContent('5')
+    const tile = screen.getByRole('group', { name: 'Qualification issues 6' })
+    expect(tile).toHaveTextContent('6')
     expect(tile).toHaveTextContent('2 staff members')
   })
 })

@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom'
 import { useForm, useWatch, Controller } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useCreateStaff, useUpdateStaff, useStaffDetail, useEnsureStaffSignInAccount } from '@/api/hooks'
+import { useCreateStaff, useUpdateStaff, useStaffDetail, useEnsureStaffSignInAccount, useRecordInvitesSent } from '@/api/hooks'
 import { useRef, useState } from 'react'
 import { FormField } from '@/components/FormField'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
@@ -82,6 +82,7 @@ export default function StaffCreatePage() {
   const createStaff = useCreateStaff()
   const updateStaff = useUpdateStaff()
   const ensureStaffAccount = useEnsureStaffSignInAccount()
+  const recordInvite = useRecordInvitesSent()
   const pageQuery = useStaffDetail(isEdit ? id : undefined)
   const { data: existing, isError: isExistingError, error: existingError, refetch: refetchExisting } = pageQuery
   const mutation = isEdit ? updateStaff : createStaff
@@ -199,6 +200,7 @@ export default function StaffCreatePage() {
           if (emailLinkAvailable && person?.id && person.isActive && person.email) {
             // The server stored the address lower-case; that is the one the email goes to.
             const outcome = await ensureAndSendSetPasswordEmail(person.email, () => ensureStaffAccount.mutateAsync(person.id))
+            if (outcome.ok) recordInvite.mutate([person.id])
             setCreated({ id: person.id, name: person.fullName, email: person.email, outcome })
           } else {
             navigate('/staff', { replace: true })
@@ -229,6 +231,7 @@ export default function StaffCreatePage() {
     if (!created || retrying) return
     setRetrying(true)
     const outcome = await ensureAndSendSetPasswordEmail(created.email, () => ensureStaffAccount.mutateAsync(created.id))
+    if (outcome.ok) recordInvite.mutate([created.id])
     setCreated({ ...created, outcome })
     setRetrying(false)
   }

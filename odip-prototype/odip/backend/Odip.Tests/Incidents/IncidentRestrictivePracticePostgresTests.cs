@@ -58,7 +58,7 @@ public class IncidentRestrictivePracticePostgresTests : IClassFixture<PostgresFi
         Assert.All(incidents, i => Assert.False(i.IsRestrictivePracticeAuthorised));
         var noneOfThese = incidents.Single(i => i.UnapprovedRestrictivePracticeDetails != null);
         var tasks = await check.BookingTasks.AsNoTracking().Where(t => t.IncidentReportId == noneOfThese.Id).OrderBy(t => t.TaskType).ToListAsync(Ct);
-        Assert.Equal(new[] { TaskType.IncidentQscReport, TaskType.RestrictivePracticeRegisterAddition }, tasks.Select(t => t.TaskType));
+        Assert.Equal(new[] { TaskType.IncidentQscReport, TaskType.RestrictivePracticeRegisterAddition, TaskType.IncidentCommissionDetailedReport }, tasks.Select(t => t.TaskType));
         Assert.Equal("Add physical restraint to Sophie Brown's restrictive practice register", tasks[1].Title);
         Assert.Equal(tenantId, tasks[1].TenantId);
         Assert.Equal(1, await check.RestrictivePractices.CountAsync(rp => rp.ParticipantId == participant.Id, Ct));

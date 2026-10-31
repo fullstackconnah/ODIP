@@ -150,6 +150,8 @@ export const navItems: NavEntry[] = [
       },
       // Same 'rostering' key as Completions; hidden until Employment Hero is connected.
       { to: '/rostering/payroll', label: 'Payroll', msIcon: 'payments', page: 'rostering', requiresEmploymentHero: true },
+      // Same 'rostering' key as Completions, so SupportWorker and ReadOnly never see it.
+      { to: '/reports', label: 'Reports', msIcon: 'summarize', page: 'rostering' },
       { to: '/staff', label: 'Staff', msIcon: 'manage_accounts', page: 'staff' },
       { to: '/qualifications', label: 'Qualifications', msIcon: 'health_and_safety', page: 'qualifications' },
     ],
@@ -158,6 +160,8 @@ export const navItems: NavEntry[] = [
   { to: '/tasks', label: 'Tasks', msIcon: 'checklist', page: 'tasks' },
   // Every participant's budget for the funding period running now, sorted by risk (budget phase 2b). Money, so its own page key: SupportWorker's allow-list does not name it and ReadOnly is refused it.
   { to: '/budgets', label: 'Budgets', msIcon: 'account_balance_wallet', page: 'budgets' },
+  // The NDIA claims hub: the lines ready to send, the bulk payment request files and what comes back. It also lights on /claims/:id. No bar slot, as Invoices.
+  { to: '/claims', label: 'Claims', msIcon: 'request_quote', page: 'claims' },
   // Every invoice and credit note the organisation has issued, including those whose claim was deleted; read-only. Same page key as the claims it comes from, so ReadOnly and SupportWorker are refused as the API refuses them. No bar slot: a phone reaches it through More.
   { to: '/invoices', label: 'Invoices', msIcon: 'receipt_long', page: 'claims' },
   { to: '/incidents', label: 'Incidents', msIcon: 'emergency', page: 'incidents', bar: { order: 5, audience: 'field' } },

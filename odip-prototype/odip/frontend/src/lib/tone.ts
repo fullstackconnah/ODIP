@@ -167,6 +167,13 @@ export const STATUS_TONE: Record<string, Tone> = {
   issued: 'info',
   voided: 'neutral',
   credited: 'neutral',
+  // NDIA claim files and their lines: a file's step is information; a discarded file and a withdrawn line no longer count.
+  built: 'info',
+  uploaded: 'info',
+  resultsin: 'info',
+  discarded: 'neutral',
+  successful: 'success',
+  withdrawn: 'neutral',
 
   // QSC
   reportedwithin24h: 'success',

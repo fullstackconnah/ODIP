@@ -219,7 +219,10 @@ public enum TaskType
     BudgetEmergencyReview,
     // A coordinator adding to a participant’s restrictive practice register a practice a support worker reported as "None of these" on an incident.
     // Persisted as an integer (20): append-only, never renumber.
-    RestrictivePracticeRegisterAddition
+    RestrictivePracticeRegisterAddition,
+    // The 5-day detailed report to the NDIS Commission for an incident reportable within 24 hours (incident clock).
+    // Persisted as an integer (21): append-only, never renumber.
+    IncidentCommissionDetailedReport
 }
 
 public enum TaskPriority
@@ -385,6 +388,14 @@ public enum ComplaintStatus
     Investigating,
     Resolved,
     Closed
+}
+
+// How soon an incident must be reported to the NDIS Commission. Persisted as an integer: append-only, never renumber.
+public enum ReportableClass
+{
+    None = 0,
+    Within24h = 1,
+    Within5BusinessDays = 2
 }
 
 public enum InsuranceStatus

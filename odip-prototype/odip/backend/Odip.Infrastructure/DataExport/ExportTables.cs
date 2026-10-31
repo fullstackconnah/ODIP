@@ -80,7 +80,7 @@ public static class ExportTables
 
     /// <summary>
     /// A DateTime column that holds provider-local digits rather than an instant. It is taken from the API's own marks: an entity property named
-    /// like a member marked [WallClock] (DateTimeWireInventoryTests lists each one with its reason). Today that gives 12 columns, and
+    /// like a member marked [WallClock] (DateTimeWireInventoryTests lists each one with its reason). Today that gives 14 columns, and
     /// ExportTablesTests pins them.
     /// </summary>
     public static bool IsWallClock(IReadOnlyProperty property) =>
@@ -251,6 +251,8 @@ public static class ExportTables
             (db, t) => { var claims = Claims(db, t); return db.ClaimLineItems.Where(l => claims.Any(c => c.Id == l.TripClaimId)); }),
         Own<Invoice>("invoices.csv", "Numbered invoices and credit notes as issued: payer, seller and bank details, totals, and voids, including those whose claim was deleted."),
         Own<InvoiceLine>("invoice-lines.csv", "The lines of each invoice and credit note, as issued."),
+        Own<ClaimBatch>("claim-batches.csv", "NDIA claim files: name, status, who built and uploaded them, and when. The file itself is downloaded again from Claims."),
+        Own<ClaimBatchLine>("claim-batch-lines.csv", "Each claim line sent in a claim file, its row reference and what the NDIA answered."),
 
         // Tasks and imports
         Own<BookingTask>("tasks.csv", "Tasks: what, for whom, when due, and their status."),

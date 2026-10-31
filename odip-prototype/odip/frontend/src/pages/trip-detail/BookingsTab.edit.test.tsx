@@ -56,7 +56,7 @@ beforeEach(() => {
       return reply(config, 200, { success: true, data: detail })
     }
     if (method === 'put' && putFails) {
-      const res = reply(config, 500, { success: false, message: 'boom' })
+      const res = reply(config, 500, { success: false })
       throw Object.assign(new Error('Request failed with status code 500'), { isAxiosError: true, response: res, config })
     }
     if (method === 'put') {
@@ -119,7 +119,7 @@ describe('BookingsTab — editing a booking keeps the details the list row does 
     await user.type(notes, 'Changed note')
     await user.click(screen.getByRole('button', { name: 'Save' }))
 
-    expect(await screen.findByText('Failed to update booking. Please try again.')).toBeInTheDocument()
+    expect(await screen.findByText("Couldn't update this booking. Check your connection and try again.")).toBeInTheDocument()
     expect(screen.getByPlaceholderText('Optional notes...')).toHaveValue('Changed note')
   })
 

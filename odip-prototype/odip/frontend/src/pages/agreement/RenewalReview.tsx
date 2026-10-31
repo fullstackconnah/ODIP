@@ -78,7 +78,7 @@ export function RenewalReview({ renewal, renewedFrom, termStart, oldLines, oldBl
               {missing === 1 ? '1 line' : `${missing} lines`} of {was} {missing === 1 ? 'is' : 'are'} not in the new price list, so {now} cannot be approved yet: To look at, below, says what to change.
             </Callout>
           )}
-          <DataTable data={rows} columns={columns} keyField="key" sortable={false} loading={!oldLines} />
+          <DataTable data={rows} columns={columns} keyField="key" sortable={false} loading={!oldLines} emptyMessage="Neither agreement has lines to compare." />
           {oldLines && !tailOnly && <p className="text-sm">{was} came to {formatCurrency(totals.old)}; {now} comes to {formatCurrency(totals.renewal)}.</p>}
         </>
       )}

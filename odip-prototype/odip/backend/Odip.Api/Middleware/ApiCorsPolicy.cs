@@ -13,7 +13,7 @@ public static class ApiCorsPolicy
               .WithHeaders("Authorization", "Content-Type", "Accept", "X-Requested-With", "X-View-As-Tenant", "X-View-As-User")
               .WithMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
               // A browser hides every response header outside the CORS-safelisted few from a page on another origin unless it is listed. Retry-After is the
-              // wait behind a 429 (the "login" flood limiter's, or the "api" limiter's), and the sign-in page says "N minutes" from it.
-              .WithExposedHeaders("Retry-After")
+              // wait behind a 429 (the "login" flood limiter's, or the "api" limiter's), and the sign-in page says "N minutes" from it. The claim file download names its batch and its file in the other two.
+              .WithExposedHeaders("Retry-After", "X-Claim-Batch-Id", "Content-Disposition")
               .AllowCredentials();
 }

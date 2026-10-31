@@ -24,6 +24,7 @@ vi.mock('@/api/hooks', () => ({
   useUpdateStaff: mockUseUpdateStaff,
   useStaffDetail: mockUseStaffDetail,
   useEnsureStaffSignInAccount: () => ({ mutateAsync: vi.fn() }),
+  useRecordInvitesSent: () => ({ mutate: vi.fn() }),
 }))
 
 vi.mock('@/lib/permissions', () => ({
@@ -37,7 +38,7 @@ function makeStaff(overrides: Partial<StaffDetailDto> = {}): StaffDetailDto {
     email: 'priya.shah@odip.com.au', mobile: null, region: null, isDriverEligible: false,
     isFirstAidQualified: false, isMedicationCompetent: false, isManualHandlingCompetent: false,
     isOvernightEligible: false, isActive: true, firstAidExpiryDate: null, driverLicenceExpiryDate: null,
-    manualHandlingExpiryDate: null, medicationCompetencyExpiryDate: null, workerScreeningNumber: null,
+    manualHandlingExpiryDate: null, medicationCompetencyExpiryDate: null, workerScreeningNumber: null, workerScreeningRecorded: false,
     workerScreeningExpiryDate: null, hasExpiredQualifications: false, notes: null,
     ...overrides,
   }

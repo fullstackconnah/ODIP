@@ -10,8 +10,8 @@ import { Card } from '@/components/Card'
 import { PageHeader } from '@/components/PageHeader'
 import { BackButton } from '@/components/BackButton'
 import type { CreateIncidentDto, UpdateIncidentDto, IncidentDetailDto } from '@/api/types/incidents'
-import type { IncidentType, IncidentSeverity, IncidentStatus, QscReportingStatus } from '@/api/types/enums'
-import { SERVICE_STREAMS, INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS, INCIDENT_STATUS_LABELS, QSC_REPORTING_STATUS_LABELS, BODY_REGION_LABELS, INJURY_TYPE_LABELS } from '@/api/types/enums'
+import type { IncidentType, IncidentSeverity, IncidentStatus, QscReportingStatus, ReportableClass } from '@/api/types/enums'
+import { SERVICE_STREAMS, INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS, INCIDENT_STATUS_LABELS, REPORTABLE_CLASS_LABELS, BODY_REGION_LABELS, INJURY_TYPE_LABELS } from '@/api/types/enums'
 import type { BodyRegion, InjuryType } from '@/api/types/enums'
 import { RESTRICTIVE_PRACTICE_TYPE_LABELS } from '@/api/types/restrictive-practices'
 import { usePermissions } from '@/lib/permissions'
@@ -37,7 +37,9 @@ import {
   buildShiftIncidentTitleSkeleton,
   buildShiftIncidentDescriptionSkeleton,
   incidentReturnPath,
+  toDatetimeLocalValue,
 } from '@/lib/incidentPrefill'
+import { defaultReportableClass } from './incidents/reportingDue'
 import { RpAuthorisationBadge } from './incidents/RpAuthorisationBadge'
 import { ADMIN_STATUS_LABELS } from '@/api/types/medications'
 import { formatFlaggedCategoryList } from '@/lib/shiftNoteKeywords'
@@ -85,7 +87,7 @@ function computeSteps(incidentType: string | undefined, isEdit: boolean): Wizard
   steps.push({ key: 'details', label: 'Incident details', fields: STEP_DETAILS_FIELDS })
   steps.push({ key: 'witnesses', label: 'Witnesses', fields: STEP_WITNESSES_FIELDS })
   if (isEdit) {
-    steps.push({ key: 'compliance', label: 'Review & compliance', fields: STEP_COMPLIANCE_FIELDS })
+    steps.push({ key: 'compliance', label: 'Compliance', fields: STEP_COMPLIANCE_FIELDS })
   }
   return steps
 }
@@ -136,6 +138,13 @@ function buildDefaultValues(isEdit: boolean, existingIncident: IncidentDetailDto
       qscReportingStatus: i.qscReportingStatus ?? 'NotRequired',
       qscReferenceNumber: i.qscReferenceNumber ?? '',
       qscReportedAt: i.qscReportedAt ? i.qscReportedAt.slice(0, 16) : '',
+      awareAt: i.awareAt ? toDatetimeLocalValue(i.awareAt, i.timeZoneId) : '',
+      reportableClass: i.reportableClass ?? 'None',
+      reportableClassReason: i.reportableClassReason ?? '',
+      isRestrictivePracticeAuthorised: i.isRestrictivePracticeAuthorised ?? null,
+      commissionDetailedReportedAt: i.commissionDetailedReportedAt ? i.commissionDetailedReportedAt.slice(0, 16) : '',
+      commissionFinalReportRequested: i.commissionFinalReportRequested ?? false,
+      commissionFinalReportedAt: i.commissionFinalReportedAt ? i.commissionFinalReportedAt.slice(0, 16) : '',
       reviewedByStaffId: i.reviewedByStaffId ?? '',
       reviewNotes: i.reviewNotes ?? '',
       correctiveActions: i.correctiveActions ?? '',
@@ -264,7 +273,17 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
   const involvedStaffId = useWatch({ control, name: 'involvedStaffId' })
   const reviewedByStaffId = useWatch({ control, name: 'reviewedByStaffId' })
   const status = useWatch({ control, name: 'status' })
-  const qscReportingStatus = useWatch({ control, name: 'qscReportingStatus' })
+  const reportableClass = useWatch({ control, name: 'reportableClass' })
+  const commissionFinalReportRequested = useWatch({ control, name: 'commissionFinalReportRequested' })
+  const awareAtMax = toDatetimeLocalValue(new Date().toISOString(), existingIncident?.timeZoneId)
+
+  // The class follows the default for the form's severity and type until someone moves it: when it still equals the previous default, it moves to the new one.
+  const previousDefaultRef = useRef(defaultReportableClass(severity, incidentType, existingIncident?.isRestrictivePracticeAuthorised))
+  useEffect(() => {
+    const next = defaultReportableClass(severity, incidentType, existingIncident?.isRestrictivePracticeAuthorised)
+    if (isEdit && getValues('reportableClass') === previousDefaultRef.current) setValue('reportableClass', next, { shouldDirty: true })
+    previousDefaultRef.current = next
+  }, [severity, incidentType, isEdit, existingIncident?.isRestrictivePracticeAuthorised, getValues, setValue])
 
   // IN-4/IN-5: switching incidentType away from the type that owns a conditional step's fields
   // clears them, so a later switch back starts clean (rather than resurrecting stale data from a
@@ -434,6 +453,12 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
           status: (data.status || 'Draft') as IncidentStatus,
           qscReportingStatus: (data.qscReportingStatus || 'NotRequired') as QscReportingStatus,
           qscReportedAt: data.qscReportedAt || undefined,
+          awareAtLocal: data.awareAt || undefined,
+          reportableClass: (data.reportableClass || undefined) as ReportableClass | undefined,
+          reportableClassReason: data.reportableClassReason?.trim() || undefined,
+          commissionDetailedReportedAt: data.commissionDetailedReportedAt || undefined,
+          commissionFinalReportRequested: data.commissionFinalReportRequested ?? false,
+          commissionFinalReportedAt: data.commissionFinalReportedAt || undefined,
           qscReferenceNumber: data.qscReferenceNumber || undefined,
           reviewedByStaffId: data.reviewedByStaffId || undefined,
           reviewNotes: data.reviewNotes || undefined,
@@ -550,7 +575,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
       stepKey: 'compliance',
       rows: [
         { label: 'Status', value: status ? (INCIDENT_STATUS_LABELS[status as IncidentStatus] ?? status) : '—' },
-        { label: 'QSC Reporting Status', value: qscReportingStatus ? (QSC_REPORTING_STATUS_LABELS[qscReportingStatus as QscReportingStatus] ?? qscReportingStatus) : '—' },
+        { label: 'Reporting deadline', value: reportableClass ? (REPORTABLE_CLASS_LABELS[reportableClass as ReportableClass] ?? reportableClass) : '—' },
         { label: 'Reviewed By', value: reviewedByStaffId ? staffName(reviewedByStaffId) : 'Not reviewed' },
         { label: 'Family Notified', value: familyNotified ? 'Yes' : 'No' },
         { label: 'Support Coordinator Notified', value: supportCoordinatorNotified ? 'Yes' : 'No' },
@@ -694,7 +719,13 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
             register={register}
             setValue={setValue}
             status={status}
-            qscReportingStatus={qscReportingStatus}
+            errors={errors}
+            awareAtMax={awareAtMax}
+            severity={severity}
+            incidentType={incidentType}
+            isRestrictivePracticeAuthorised={existingIncident?.isRestrictivePracticeAuthorised}
+            reportableClass={reportableClass}
+            commissionFinalReportRequested={commissionFinalReportRequested}
             reviewedByStaffId={reviewedByStaffId}
             familyNotified={familyNotified}
             supportCoordinatorNotified={supportCoordinatorNotified}

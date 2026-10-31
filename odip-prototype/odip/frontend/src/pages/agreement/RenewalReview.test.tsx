@@ -20,6 +20,11 @@ const renewedFrom = { ...revision(1, '2026-10-12', '2026-11-22', []), isSummary:
 const renewal = { ...revision(2, '2026-11-23', '2027-01-03', [line({})]), pricing: { issues: [{ blockId: 'sat', reason: 'CatalogueNotFound', message: 'No price list item.', count: 6 }] } } as unknown as ServiceAgreementDraftDto
 
 describe('RenewalReview', () => {
+  it('says so when neither agreement has lines to compare', () => {
+    render(<RenewalReview renewal={revision(2, '2026-11-23', '2027-01-03', [])} renewedFrom={renewedFrom} oldLines={[]} oldFailed={false} onRetry={vi.fn()} />)
+    expect(screen.getByText('Neither agreement has lines to compare.')).toBeInTheDocument()
+  })
+
   it('sets the renewal beside the agreement it renews, line by line, with both totals', () => {
     render(<RenewalReview renewal={renewal} renewedFrom={renewedFrom} oldLines={oldLines} oldFailed={false} onRetry={vi.fn()} />)
 

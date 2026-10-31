@@ -247,7 +247,7 @@ public class ParticipantAlertsService
                 i.IncidentDateTime,
                 i.QscReportingStatus,
                 i.QscReportedAt,
-                i.CreatedAt,
+                i.NotifyDueAt,
             })
             .ToListAsync(ct);
         var incidentsByParticipant = participantIncidents.ToLookup(i => i.ParticipantId);
@@ -266,12 +266,12 @@ public class ParticipantAlertsService
                         "history", $"/incidents/{incident.Id}");
                 }
 
-                // Rule 7: QSC report overdue — same predicate as the dashboard summary and the
+                // Rule 7: NDIS Commission report overdue — same predicate as the dashboard summary and the
                 // incidents "overdue QSC" endpoint (already IsActive-filtered above).
-                if (QscReporting.IsOverdue(true, incident.QscReportingStatus, incident.QscReportedAt, incident.CreatedAt, nowUtc))
+                if (QscReporting.IsOverdue(true, incident.QscReportingStatus, incident.QscReportedAt, incident.NotifyDueAt, nowUtc))
                 {
                     Add(p.Id, "qsc-report-overdue", AlertSeverity.Critical,
-                        $"QSC report overdue: {incident.Title}",
+                        $"NDIS Commission report overdue: {incident.Title}",
                         "history", $"/incidents/{incident.Id}");
                 }
             }

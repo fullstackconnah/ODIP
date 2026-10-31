@@ -726,6 +726,7 @@ public class ParticipantAlertsServiceTests
         incident.QscReportingStatus = QscReportingStatus.Required;
         incident.QscReportedAt = null;
         incident.CreatedAt = DateTime.UtcNow.AddHours(-25);
+        incident.NotifyDueAt = incident.CreatedAt.AddHours(24);
         db.IncidentReports.Add(incident);
         db.SaveChanges();
 
@@ -745,6 +746,7 @@ public class ParticipantAlertsServiceTests
         incident.QscReportingStatus = QscReportingStatus.Required;
         incident.QscReportedAt = DateTime.UtcNow.AddHours(-1);
         incident.CreatedAt = DateTime.UtcNow.AddHours(-25);
+        incident.NotifyDueAt = incident.CreatedAt.AddHours(24);
         db.IncidentReports.Add(incident);
         db.SaveChanges();
 
@@ -762,6 +764,7 @@ public class ParticipantAlertsServiceTests
         incident.QscReportingStatus = QscReportingStatus.Required;
         incident.QscReportedAt = null;
         incident.CreatedAt = DateTime.UtcNow.AddHours(-2);
+        incident.NotifyDueAt = incident.CreatedAt.AddHours(24);
         db.IncidentReports.Add(incident);
         db.SaveChanges();
 
@@ -779,6 +782,7 @@ public class ParticipantAlertsServiceTests
         incident.QscReportingStatus = QscReportingStatus.NotRequired;
         incident.QscReportedAt = null;
         incident.CreatedAt = DateTime.UtcNow.AddHours(-25);
+        incident.NotifyDueAt = incident.CreatedAt.AddHours(24);
         db.IncidentReports.Add(incident);
         db.SaveChanges();
 
@@ -796,6 +800,7 @@ public class ParticipantAlertsServiceTests
         incident.QscReportingStatus = QscReportingStatus.Required;
         incident.QscReportedAt = null;
         incident.CreatedAt = DateTime.UtcNow.AddHours(-25);
+        incident.NotifyDueAt = incident.CreatedAt.AddHours(24);
         db.IncidentReports.Add(incident);
         db.SaveChanges();
 
@@ -824,12 +829,14 @@ public class ParticipantAlertsServiceTests
         overdue.QscReportingStatus = QscReportingStatus.Required;
         overdue.QscReportedAt = null;
         overdue.CreatedAt = DateTime.UtcNow.AddHours(-25);
+        overdue.NotifyDueAt = overdue.CreatedAt.AddHours(24);
 
         var notOverdue = NewIncident(participant.Id, IncidentSeverity.Critical, title: "Reported already");
         notOverdue.ReportedByUserId = reporter.Id;
         notOverdue.QscReportingStatus = QscReportingStatus.Required;
         notOverdue.QscReportedAt = DateTime.UtcNow.AddHours(-1);
         notOverdue.CreatedAt = DateTime.UtcNow.AddHours(-25);
+        notOverdue.NotifyDueAt = notOverdue.CreatedAt.AddHours(24);
 
         db.IncidentReports.AddRange(overdue, notOverdue);
         db.SaveChanges();

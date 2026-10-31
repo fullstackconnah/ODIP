@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Pencil, Mail, Plus } from 'lucide-react'
-import { useAdminUsers, useAdminTenantsSummary, useEnsureUserSignInAccount } from '@/api/hooks'
+import { useAdminUsers, useAdminTenantsSummary, useEnsureUserSignInAccount, useRecordInvitesSent } from '@/api/hooks'
 import type { AdminUserDto } from '@/api/types'
 import { Button } from '@/components/Button'
 import { SearchInput } from '@/components/SearchInput'
@@ -83,6 +83,7 @@ export default function UsersTab({ onAddUser, onEditUser, notices: lifted }: Use
   const emailEnabled = canSendSetPasswordEmail()
 
   const ensureAccount = useEnsureUserSignInAccount()
+  const recordInvite = useRecordInvitesSent()
   // What became of each "Send set-password email", kept above the table until dismissed: a row action has no panel to say it in.
   const ownNotices = useNotices()
   const { notices, notify, dismiss } = lifted ?? ownNotices
@@ -107,6 +108,7 @@ export default function UsersTab({ onAddUser, onEditUser, notices: lifted }: Use
     setSendingId(target.id)
     const outcome = await ensureAndSendSetPasswordEmail(target.email, () => ensureAccount.mutateAsync(target.id))
     setSendingId(null)
+    if (outcome.ok) recordInvite.mutate([target.id])
     // The advice names the button this row really has: "reset" for someone who has signed in before, "set" for someone who never has.
     const { tone, message } = describeEmailOutcome(outcome, `use ${sendActionLabel(target.lastLoginAt)} on their row`)
     // The id is the notice's subject: it is how the region finds this row's send button again once the notice is dismissed.

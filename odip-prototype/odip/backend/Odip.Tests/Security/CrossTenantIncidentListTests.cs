@@ -39,7 +39,7 @@ public class CrossTenantIncidentListTests
         {
             Id = Guid.NewGuid(), TenantId = tenantId, ReportedByUserId = reporter.Id, TripInstanceId = trip.Id, ShiftId = shift.Id, IncidentType = IncidentType.PropertyDamage,
             Severity = IncidentSeverity.High, Status = IncidentStatus.Submitted, Title = "Incident", Description = "What happened.",
-            IncidentDateTime = DateTime.UtcNow.AddHours(-31), CreatedAt = DateTime.UtcNow.AddHours(-30), QscReportingStatus = QscReportingStatus.Required, IsActive = true,
+            IncidentDateTime = DateTime.UtcNow.AddHours(-31), CreatedAt = DateTime.UtcNow.AddHours(-30), NotifyDueAt = DateTime.UtcNow.AddHours(-6), QscReportingStatus = QscReportingStatus.Required, IsActive = true,
         };
         db.IncidentReports.Add(incident);
         db.SaveChanges();
