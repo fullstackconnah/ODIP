@@ -154,6 +154,39 @@ export const INCIDENT_STATUS_LABELS: Record<IncidentStatus, string> = {
   Closed: 'Closed',
 }
 
+// ── Complaints register ─────────────────────────────────
+export const COMPLAINT_STATUSES = ['Open', 'Investigating', 'Resolved', 'Closed'] as const
+export type ComplaintStatus = typeof COMPLAINT_STATUSES[number]
+
+export const COMPLAINT_STATUS_LABELS: Record<ComplaintStatus, string> = {
+  Open: 'Open',
+  Investigating: 'Investigating',
+  Resolved: 'Resolved',
+  Closed: 'Closed',
+}
+
+export const COMPLAINT_CHANNELS = ['InPerson', 'Phone', 'Email', 'Letter', 'Other'] as const
+export type ComplaintChannel = typeof COMPLAINT_CHANNELS[number]
+
+export const COMPLAINT_CHANNEL_LABELS: Record<ComplaintChannel, string> = {
+  InPerson: 'In person',
+  Phone: 'Phone',
+  Email: 'Email',
+  Letter: 'Letter',
+  Other: 'Other',
+}
+
+export const COMPLAINANT_KINDS = ['Participant', 'FamilyOrCarer', 'Staff', 'Other', 'Anonymous'] as const
+export type ComplainantKind = typeof COMPLAINANT_KINDS[number]
+
+export const COMPLAINANT_KIND_LABELS: Record<ComplainantKind, string> = {
+  Participant: 'Participant',
+  FamilyOrCarer: 'Family or carer',
+  Staff: 'Staff',
+  Other: 'Other',
+  Anonymous: 'Anonymous',
+}
+
 // ── Body Region (IN-5 — injury incidents) ───────────────
 // View-independent: a region is a body part, not "body part as seen from the front/back". The
 // frontend BodyDiagram component maps each of these onto an always-visible list button plus,

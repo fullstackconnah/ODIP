@@ -137,7 +137,7 @@ Before you run it:
 4. After a purge, `DEMO_DATA_SCENARIOS=On` starts the demo over from the date of the next tick; it does not bring back the previous rows.
 5. If the Demo tenant was ever billed, `ClaimLineItems` rows that name a demo shift (`Restrict`) stop the delete of that shift. Clear them
    first, after checking they belong to the Demo tenant: `DELETE FROM "ClaimLineItems" WHERE "ShiftId" IN (SELECT "Id" FROM demo_shift);`
-   (run it after the temporary tables below exist, before the `Shifts` delete). Rows in `BookingTasks`, `IncidentReports` and
+   (run it after the temporary tables below exist, before the `Shifts` delete). Rows in `BookingTasks`, `IncidentReports`, `Complaints` (its `IncidentReportId`) and
    `RestrictivePractices` that point at a demo row are set to null by the database, not blocked.
 
 ```sql

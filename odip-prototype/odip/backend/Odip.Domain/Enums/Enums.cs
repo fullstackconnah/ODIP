@@ -364,6 +364,32 @@ public enum QscReportingStatus
     Pending
 }
 
+public enum ComplaintChannel
+{
+    InPerson,
+    Phone,
+    Email,
+    Letter,
+    Other
+}
+
+public enum ComplainantKind
+{
+    Participant,
+    FamilyOrCarer,
+    Staff,
+    Other,
+    Anonymous
+}
+
+public enum ComplaintStatus
+{
+    Open,
+    Investigating,
+    Resolved,
+    Closed
+}
+
 // How soon an incident must be reported to the NDIS Commission. Persisted as an integer: append-only, never renumber.
 public enum ReportableClass
 {

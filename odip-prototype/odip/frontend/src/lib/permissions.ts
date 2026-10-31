@@ -14,6 +14,7 @@ export type PageKey =
   | 'staff'
   | 'tasks'
   | 'incidents'
+  | 'complaints'
   | 'bookings'
   | 'qualifications'
   | 'claims'
@@ -46,10 +47,12 @@ const SUPPORT_WORKER_PAGES: PageKey[] = [
  * ClaimsController (claims), CaregiverSubmissionsController, ProviderSettingsController and the admin controllers behind the Settings page
  * (its one GET ReadOnly may make, GET /settings for the qualification warning window, is read by the Qualifications, Staff and Dashboard pages, not here), and the GETs of ServiceAgreementDraftsController (the agreement draft
  * page: a draft carries unit prices, totals and the pricing answer, and money is never visible to ReadOnly or SupportWorker; SupportWorker's allow-list above does not name it either), and the
+ * ComplaintsController (a complaint names people; every route, reads included, admits the three management roles), the
  * Budgets list (GET api/v1/funding/budgets is class-wide SuperAdmin, Admin and Coordinator, like the participant's Funding tab: every figure on it is money, and `canManageFunding` below is its rule).
  * Listing them here keeps the menu, the routes and the in-page links from offering ReadOnly a page that can only answer 403.
  */
 const READ_ONLY_REFUSED_PAGES: PageKey[] = [
+  'complaints',
   'rostering',
   'leave-approvals',
   'claims',

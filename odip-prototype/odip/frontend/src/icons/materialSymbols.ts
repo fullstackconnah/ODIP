@@ -25,6 +25,7 @@ export const MATERIAL_SYMBOLS: readonly string[] = [
   'expand_less',
   'expand_more',
   'fact_check',
+  'feedback',
   'group',
   'groups',
   'health_and_safety',

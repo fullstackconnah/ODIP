@@ -55,6 +55,7 @@ public class AuditController : ControllerBase
             ["ParticipantNote"] = "ParticipantNote",
             ["TripClaim"] = "TripClaim",
             ["ClaimLineItem"] = "ClaimLineItem",
+            ["Complaint"] = "Complaint",
         };
 
         if (!allowedTypes.TryGetValue(entityType, out var canonicalEntityType))
@@ -77,6 +78,7 @@ public class AuditController : ControllerBase
             // TripClaim has no organisation column or filter: a claim is the caller's when its trip (Trip claim) or participant (Shift claim) is, and a line is when its claim is.
             "TripClaim" => await _db.TripClaims.AnyAsync(e => e.Id == entityId && (_db.TripInstances.Any(t => t.Id == e.TripInstanceId) || _db.Participants.Any(p => p.Id == e.ParticipantId)), ct),
             "ClaimLineItem" => await _db.ClaimLineItems.AnyAsync(e => e.Id == entityId && _db.TripClaims.Any(c => c.Id == e.TripClaimId && (_db.TripInstances.Any(t => t.Id == c.TripInstanceId) || _db.Participants.Any(p => p.Id == c.ParticipantId))), ct),
+            "Complaint" => await _db.Complaints.AnyAsync(e => e.Id == entityId, ct),
             _ => false,
         };
         if (!visible) return NotFound(new { error = "Entity not found." });
