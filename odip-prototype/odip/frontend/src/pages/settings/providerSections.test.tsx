@@ -207,7 +207,7 @@ describe('Organisation profile', () => {
     await user.click(saveButton())
 
     await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
-    expect(putBody()).toEqual({ organisationName: 'Sunrise Care', abn: '51824753556', registrationNumber: '4050012345', address: '1 Test St', state: 'WA' })
+    expect(putBody()).toEqual({ organisationName: 'Sunrise Care', abn: '51824753556', registrationNumber: '4050012345', address: '1 Test St', state: 'WA', timeZoneId: 'Australia/Perth' })
   })
 
   it('says which fields the server needs when it refuses a blank one without a message', async () => {

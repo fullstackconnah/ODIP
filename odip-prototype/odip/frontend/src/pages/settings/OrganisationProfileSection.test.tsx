@@ -124,7 +124,7 @@ describe('Organisation profile: time zone', () => {
     show()
     await screen.findByDisplayValue('Priya Sharma')
     expect(zone()).toHaveValue(expected)
-    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toBeEmptyDOMElement()
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
   })
 
