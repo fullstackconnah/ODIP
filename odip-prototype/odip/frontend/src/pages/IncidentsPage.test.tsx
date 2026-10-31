@@ -114,6 +114,19 @@ describe('IncidentsPage — NDIS Commission overdue banner (C-1)', () => {
     expect(banner.className).not.toMatch(/text-red-400/)
   })
 
+  it('keeps the deadline rules in a closed "About the deadlines" disclosure beside the link', () => {
+    mockUseOverdueQscIncidents.mockReturnValue({ data: [baseIncident({ isOverdue24h: true })] })
+    renderPage()
+
+    const banner = screen.getByRole('alert')
+    const details = banner.querySelector('details')
+    expect(details).not.toBeNull()
+    expect(details).not.toHaveAttribute('open')
+    expect(within(banner).getByText('About the deadlines').tagName).toBe('SUMMARY')
+    expect(details).toHaveTextContent('within 5 business days')
+    expect(banner.querySelector('p')).not.toHaveTextContent('Most reportable')
+  })
+
   it('contains a link into the incident list filtered to qsc=overdue (the alert itself stays a plain landmark, not an anchor)', () => {
     mockUseOverdueQscIncidents.mockReturnValue({ data: [baseIncident({ isOverdue24h: true })] })
     renderPage()
@@ -368,7 +381,7 @@ describe('IncidentsPage — Flagged notes tab (connection map item 4)', () => {
 })
 
 describe('IncidentsPage — one-line NDIS Commission banner', () => {
-  it('keeps the headline, the reason and the link in one compact banner', () => {
+  it('keeps the headline and the link in view and the reason one tap away', () => {
     mockUseOverdueQscIncidents.mockReturnValue({
       data: [baseIncident({ isOverdue24h: true }), baseIncident({ id: 'inc-2', isOverdue24h: true })],
     })
@@ -378,13 +391,12 @@ describe('IncidentsPage — one-line NDIS Commission banner', () => {
     expect(banner).toHaveTextContent('2 incidents are past their NDIS Commission deadline')
     expect(banner).toHaveTextContent('Most reportable incidents must be reported to the NDIS Commission within 24 hours.')
     expect(within(banner).getByRole('link', { name: 'View overdue incidents' })).toHaveAttribute('href', '/incidents?qsc=overdue')
-    // One paragraph for the headline and the reason (it used to be two).
-    expect(banner.querySelectorAll('p')).toHaveLength(1)
-    // The two-sentence reason wraps at every width; an ellipsis would hide the second sentence.
-    expect(banner.querySelector('p')!.className).not.toMatch(/truncate/)
-    // On a phone the text takes the full width and the link drops under it, instead of sharing a 150px column.
-    expect(banner.querySelector('p')!.parentElement).toHaveClass('flex-col', 'md:flex-row')
-    expect(banner.querySelector('p')).toHaveClass('md:flex-1')
+    // The headline is its own paragraph; the reason sits inside the closed disclosure. On a phone the headline takes the row and the link and disclosure share the next one.
+    const headline = banner.querySelector('p')!
+    expect(headline).toHaveTextContent('2 incidents are past their NDIS Commission deadline')
+    expect(headline).toHaveClass('basis-full', 'md:flex-1')
+    expect(headline.parentElement).toHaveClass('flex-wrap')
+    expect(banner.querySelector('details p')).toHaveTextContent('Most reportable incidents')
     expect(banner).toHaveTextContent('Some uses of an unauthorised restrictive practice can be reported within 5 business days.')
     // The icon sits beside the FIRST line when the text wraps (items-start + the half-leading offset); py-2.5 around one 20px line is the old 40px box.
     expect(banner).toHaveClass('flex', 'items-start', 'py-2.5')

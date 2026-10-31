@@ -462,7 +462,32 @@ describe('StaffPage — Qualifications chips and the phone card', () => {
 
     const row = screen.getByText('Alex Rivera').closest('tr') as HTMLElement
     const chips = within(row).getByRole('list', { name: 'Qualifications' })
-    expect(within(chips).getAllByRole('listitem').map(li => li.textContent)).toEqual(['Driver', 'Medication', 'Screening missing'])
+    expect(within(chips).getAllByRole('listitem').map(li => li.textContent)).toEqual(['Screening missing', 'Driver', '+1'])
+    expect(within(chips).getByText('+1')).toHaveAttribute('aria-label', 'Also: Medication')
+  })
+
+  it('lists at most three items: the flag first, then what is held, then +n with the rest named', () => {
+    const all = { isDriverEligible: true, isFirstAidQualified: true, isMedicationCompetent: true, isManualHandlingCompetent: true, isOvernightEligible: true }
+    mockUseStaff.mockReturnValue({
+      data: [
+        makeStaff({ id: 's1', fullName: 'Alex Rivera', ...all }),
+        makeStaff({ id: 's2', fullName: 'Blake Nguyen', ...all, workerScreeningExpiryDate: '2099-01-01' }),
+        makeStaff({ id: 's3', fullName: 'Casey Archer', isDriverEligible: true, isFirstAidQualified: true, workerScreeningExpiryDate: '2099-01-01' }),
+      ],
+      isLoading: false,
+    })
+    renderPage()
+
+    const items = (name: string) => within(within(screen.getByText(name).closest('tr') as HTMLElement).getByRole('list', { name: 'Qualifications' })).getAllByRole('listitem')
+    const alex = items('Alex Rivera')
+    expect(alex.map(li => li.textContent)).toEqual(['Screening missing', 'Driver', '+4'])
+    expect(alex[2]).toHaveAttribute('title', 'Also: First aid, Medication, Manual handling, Overnight')
+    expect(alex[2]).toHaveAttribute('aria-label', 'Also: First aid, Medication, Manual handling, Overnight')
+    // No flag: two held, then +n. The valid screening chip counts as held and comes last.
+    const blake = items('Blake Nguyen')
+    expect(blake.map(li => li.textContent)).toEqual(['Driver', 'First aid', '+4'])
+    expect(blake[2]).toHaveAttribute('aria-label', 'Also: Medication, Manual handling, Overnight, Worker screening')
+    expect(items('Casey Archer').map(li => li.textContent)).toEqual(['Driver', 'First aid', '+1'])
   })
 
   it('leaves the cell empty for someone with none who is archived (nothing to chip)', () => {

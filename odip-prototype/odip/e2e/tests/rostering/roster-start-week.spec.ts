@@ -20,11 +20,11 @@ test('a week is started, guarded while its drafts are unpublished, then publishe
   };
   expect(await mine()).toEqual({ started: false, shifts: [] });
 
-  // 1. Dormant: the card over the faded, inert grid.
+  // 1. Dormant: the in-flow Start card, with no ghost grid.
   await page.goto(`/rostering?date=${wednesday}&participant=${participant.id}`);
   const card = page.getByRole('region', { name: "This week hasn't been started" });
   await expect(card).toBeVisible();
-  await expect(page.locator('[inert][aria-hidden="true"]')).toHaveCount(1);
+  await expect(page.locator('[inert][aria-hidden="true"]')).toHaveCount(0);
 
   // 2. Start: the result shows, and this participant's Wednesday and Thursday are agreement drafts.
   await card.getByRole('button', { name: /^Start rostering / }).click();
