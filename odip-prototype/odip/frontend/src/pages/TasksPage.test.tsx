@@ -95,7 +95,7 @@ describe('TasksPage — obligation-engine tasks (item 9)', () => {
     expect(screen.queryByRole('link', { name: 'Beach Trip' })).not.toBeInTheDocument()
   })
 
-  it('renders an "Open" link when the task carries a linkTo', () => {
+  it('makes the title the link when the task carries a linkTo (there is no separate Open column)', () => {
     mockUseTasks.mockReturnValue({
       data: pagedTasks([
         { id: 't2', title: 'Find leave cover', taskType: 'LeaveCoverage', ownerName: 'Sam', dueDate: '2026-09-20', priority: 'High', status: 'NotStarted', linkTo: '/rostering/leave' },
@@ -104,12 +104,14 @@ describe('TasksPage — obligation-engine tasks (item 9)', () => {
     })
     renderPage()
 
-    expect(screen.getByRole('link', { name: 'Open' })).toHaveAttribute('href', '/rostering/leave')
+    expect(screen.getByRole('link', { name: 'Find leave cover' })).toHaveAttribute('href', '/rostering/leave')
+    expect(screen.queryByRole('link', { name: 'Open' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: 'Open' })).not.toBeInTheDocument()
   })
 
-  it('renders no "Open" link when the task has no linkTo', () => {
+  it('leaves the title as plain text when the task has no linkTo', () => {
     renderPage()
-    expect(screen.queryByRole('link', { name: 'Open' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Confirm accommodation' })).not.toBeInTheDocument()
   })
 
   it('shows the human label for each new obligation-engine task type', () => {
@@ -141,7 +143,7 @@ describe('TasksPage — obligation-engine tasks (item 9)', () => {
 
     expect(screen.getByText('Budget emergency review')).toBeInTheDocument()
     expect(screen.getByText('Review emergency shift over budget: Mia Chen on 17 Aug 2026')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Open' })).toHaveAttribute('href', '/rostering?date=2026-08-17&participant=p-1')
+    expect(screen.getByRole('link', { name: /Review emergency shift over budget/ })).toHaveAttribute('href', '/rostering?date=2026-08-17&participant=p-1')
   })
 
   // Platform review V2-B: every type has a label now, the trip-bound ones included (it printed "AccommodationRequest").
@@ -165,16 +167,16 @@ describe('TasksPage — column budget', () => {
     }
   })
 
-  it('caps the Task and Owner text and truncates the trip link on the link itself, with the full text in a tooltip', () => {
+  it('clamps the Task to two lines, caps Owner and Type, and truncates the trip link on the link itself, with the full text in a tooltip', () => {
     renderPage()
     const row = screen.getByRole('link', { name: 'Beach Trip' }).closest('tr')!
     const task = within(row).getByText('Confirm accommodation')
-    expect(task).toHaveClass('md:truncate')
-    expect(task).toHaveStyle('--cell-max: 13rem')
+    expect(task).toHaveClass('md:line-clamp-2', 'md:max-w-[13rem]')
+    expect(task.className).not.toMatch(/md:truncate/)
     expect(task).toHaveAttribute('title', 'Confirm accommodation')
-    expect(within(row).getByText('Sam')).toHaveStyle('--cell-max: 8rem')
+    expect(within(row).getByText('Sam')).toHaveStyle('--cell-max: 7rem')
     // Platform review V2-B (Tasks 1): at 1440 Status was clipped under the pinned actions by ~90px; Task, Trip and Type give ~112px back.
-    expect(within(row).getByText('Accommodation request')).toHaveStyle('--cell-max: 8rem')
+    expect(within(row).getByText('Accommodation request')).toHaveStyle('--cell-max: 7rem')
     // The link is a custom cell, so it limits itself: truncation on the link (not a wrapper, which would clip its focus ring).
     const link = screen.getByRole('link', { name: 'Beach Trip' })
     expect(link).toHaveClass('block', 'truncate', 'md:max-w-[9rem]')
@@ -255,13 +257,13 @@ describe('TasksPage — the emergency review task', () => {
     expect(within(rowOf('Find leave cover')).getAllByText('—').length).toBeGreaterThan(0)
   })
 
-  it('makes the title the way in to the shift, and keeps Open', () => {
+  it('makes the title the way in to the shift', () => {
     showing(review)
     renderPage()
 
     const title = screen.getByRole('link', { name: review.title })
     expect(title).toHaveAttribute('href', review.linkTo)
-    expect(screen.getByRole('link', { name: 'Open' })).toHaveAttribute('href', review.linkTo)
+    expect(screen.queryByRole('link', { name: 'Open' })).not.toBeInTheDocument()
   })
 
   it('wraps the review’s title instead of cutting it, so the participant and the day are on screen', () => {
@@ -269,17 +271,17 @@ describe('TasksPage — the emergency review task', () => {
     renderPage()
 
     const title = screen.getByRole('link', { name: review.title })
-    expect(title).toHaveClass('whitespace-normal')
+    expect(title).toHaveClass('line-clamp-2', 'break-words')
     expect(title).not.toHaveClass('truncate', 'md:truncate')
     expect(title).toHaveAttribute('title', review.title)
   })
 
-  it('still cuts the title of any other task that has a link, on the link itself, with the full text in the tooltip', () => {
+  it('gives the title of any task that has a link the same two lines, on the link itself, with the full text in the tooltip', () => {
     showing(ordinary)
     renderPage()
 
     const title = screen.getByRole('link', { name: 'Find leave cover' })
-    expect(title).toHaveClass('block', 'md:truncate', 'md:max-w-[13rem]')
+    expect(title).toHaveClass('line-clamp-2', 'md:max-w-[13rem]')
     expect(title).toHaveAttribute('title', 'Find leave cover')
     expect(title).toHaveAttribute('href', '/rostering/leave')
   })
@@ -359,26 +361,27 @@ describe('TasksPage — a refused archive', () => {
 
 // Platform review V2-A (Tasks 2): 21 tasks were 6,143px at 390, each card a grid of six caps labels with 20px icons.
 describe('TasksPage — phone card', () => {
-  it('puts the title and the status pill on the title line, trip, type, owner and priority on one muted line, and keeps the due date labelled', () => {
+  it('puts the title and the status pill on the title line, due, priority, trip and owner on one muted line, and leaves the type off the card', () => {
     renderPage()
 
     expect(screen.getByText('Confirm accommodation').closest('td')).toHaveAttribute('data-card', 'primary')
     expect(screen.getByRole('button', { name: /Not Started/i }).closest('td')).toHaveAttribute('data-card', 'status')
-    for (const text of ['Beach Trip', 'Accommodation request', 'Sam', 'Medium']) {
+    for (const text of ['Beach Trip', 'Sam', 'Medium', '01/10/2026']) {
       expect(screen.getByText(text).closest('td'), text).toHaveAttribute('data-card', 'meta')
     }
-    expect(screen.getByText('01/10/2026').closest('td')).not.toHaveAttribute('data-card')
+    expect(screen.getByText('Accommodation request').closest('td')).toHaveClass('max-md:hidden')
   })
 
   it('gives the edit and archive icons and the tick a 44px target on the card', () => {
     renderPage()
 
+    // md+: Edit and Archive are icon buttons that overlay the row on a mouse (the actions column costs no width); below md they are one ⋯ menu.
     const edit = screen.getByRole('link', { name: 'Edit' })
-    expect(edit.closest('div.flex.justify-end')).toHaveClass('max-md:[&_:is(a,button)]:min-h-11', 'max-md:[&_:is(a,button)]:min-w-11')
-    // On a mouse at md+ the cluster overlays the row instead of holding a column, so the Open link beside Status is not cut at 1440.
-    expect(edit.closest('div.flex.justify-end')).toHaveClass('md:pointer-fine:absolute')
+    expect(edit.closest('div.flex')).toHaveClass('md:pointer-fine:absolute')
+    expect(screen.getByRole('button', { name: /More actions for/ })).toHaveClass('min-h-11', 'min-w-11')
     expect(screen.getByRole('button', { name: 'Mark complete' })).toHaveClass('max-md:min-h-11', 'max-md:min-w-11')
     // VC design review fix 3: on the card the tick joins the controls after Due, so Due does not move on a card without a tick.
-    expect(screen.getByRole('button', { name: 'Mark complete' }).closest('td')).toHaveClass('max-md:order-1')
+    // The tick is a trail cell: it ends the meta line with the menu, ahead of it.
+    expect(screen.getByRole('button', { name: 'Mark complete' }).closest('td')).toHaveAttribute('data-card', 'trail')
   })
 })

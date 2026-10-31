@@ -38,7 +38,7 @@ describe('Shift completions group — what it reads', () => {
     renderGroup(() => useCompletionsGroup(true))
 
     await screen.findByText('Sam Lee')
-    expect(headers()).toEqual(['Staff', 'Participant', 'Shift', 'Variance', ''])
+    expect(headers()).toEqual(['Staff', 'Participant', 'Shift', 'Variance', 'Actions'])
     expect(facts('Sam Lee')).toEqual(['Grace Palmer-Hughes', expect.stringMatching(/^14 Oct, 9:02.+ – 3:04.+$/), '+2 min / +4 min'])
     // A shift still open ends in an ellipsis.
     expect(facts('Ana Ruiz')).toEqual(['Grace Palmer-Hughes', expect.stringMatching(/^14 Oct, 9:02.+ – …$/), 'On time / -12 min'])

@@ -107,7 +107,7 @@ describe('TripsPage — table view density', () => {
   it('moves the edit pencil into a hover/focus-revealed cluster as a 24px icon square, with its label and title', () => {
     renderPage()
 
-    const edit = screen.getByRole('button', { name: 'Edit Beach Weekend' })
+    const edit = screen.getByRole('button', { name: 'Edit trip' })
     expect(edit).toHaveAttribute('title', 'Edit trip')
     expect(edit).toHaveClass('h-[var(--control-h-sm)]', 'w-[var(--control-h-sm)]', 'p-0')
 
@@ -118,11 +118,21 @@ describe('TripsPage — table view density', () => {
     expect(statusCell).not.toContainElement(edit)
   })
 
+  it('puts Status second, so it is on screen before the table scrolls, and gives the phone card a ⋯ menu with the same Edit trip', () => {
+    renderPage()
+
+    expect(screen.getAllByRole('columnheader').map(h => h.textContent)).toEqual(['Trip', 'Status', 'Dates', 'Pax', 'Destination', 'Lead', 'Actions'])
+    const row = screen.getByText('Beach Weekend').closest('tr') as HTMLElement
+    expect(within(row).getByRole('button', { name: 'More actions for Beach Weekend' })).toBeInTheDocument()
+    expect(row.querySelector('td[data-card="primary"]')).toHaveTextContent('Beach Weekend')
+    expect(row.querySelector('td[data-card="trail"]')).not.toBeNull()
+  })
+
   it('hides the edit action (and its column) for a role that cannot write', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'SupportWorker' }))
     renderPage()
 
-    expect(screen.queryByRole('button', { name: 'Edit Beach Weekend' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit trip' })).not.toBeInTheDocument()
     // Six data columns only — no empty trailing header for the missing actions.
     expect(screen.getAllByRole('columnheader')).toHaveLength(6)
   })
@@ -132,7 +142,7 @@ describe('TripsPage — table view density', () => {
     mockUseTrip.mockReturnValue({ data: { id: 't1' } })
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: 'Edit Beach Weekend' }))
+    await user.click(screen.getByRole('button', { name: 'Edit trip' }))
 
     expect(screen.getByRole('dialog', { name: 'Edit trip' })).toBeInTheDocument()
     expect(screen.queryByText('Trip detail page')).not.toBeInTheDocument()
@@ -143,7 +153,7 @@ describe('TripsPage — table view density', () => {
     mockUseTrip.mockReturnValue({ data: { id: 't1' } })
     renderPage()
 
-    screen.getByRole('button', { name: 'Edit Beach Weekend' }).focus()
+    screen.getByRole('button', { name: 'Edit trip' }).focus()
     await user.keyboard('{Enter}')
 
     // The clickable row used to swallow the keydown and navigate away.
@@ -192,7 +202,7 @@ describe('TripsPage — narrow-desktop table', () => {
     // Three ranges that never overlap (below 1536, 1536-1791, 1792+): the built CSS emits the
     // arbitrary `min-[1792px]` variant before the named breakpoints, so a stacked `md:` / `2xl:`
     // cap would win over it at 1920.
-    expect(name).toHaveClass('truncate', 'md:max-2xl:max-w-[14rem]', '2xl:max-[1792px]:max-w-[18rem]', 'min-[1792px]:max-w-[22rem]')
+    expect(name).toHaveClass('max-md:line-clamp-2', 'md:truncate', 'md:max-[1366px]:max-w-[12rem]', 'min-[1366px]:max-2xl:max-w-[14rem]', '2xl:max-[1792px]:max-w-[18rem]', 'min-[1792px]:max-w-[22rem]')
     expect(name.className).not.toMatch(/(^|\s)(md|2xl):max-w-/)
     expect(name).toHaveAttribute('title', 'Beach Weekend (BW-2610)')
   })
@@ -222,10 +232,10 @@ describe('TripsPage — narrow-desktop table', () => {
 
     const destination = screen.getByText('Mount Tamborine QLD · Gold Coast Hinterland')
     // Three non-overlapping ranges (below 1366, 1366-1791, 1792+), so none depends on CSS source order:
-    // 12rem keeps 1280 (the tightest width) 53px clear, 13.5rem returns at 1366, 22rem at 1792.
+    // 9rem keeps 1280 (the tightest width) clear of the table's end, 13.5rem returns at 1366, 22rem at 1792.
     expect(destination).toHaveClass(
       'block', 'md:truncate',
-      'md:max-[1366px]:max-w-[12rem]', 'min-[1366px]:max-[1792px]:max-w-[13.5rem]', 'min-[1792px]:max-w-[22rem]',
+      'md:max-[1366px]:max-w-[9rem]', 'min-[1366px]:max-[1792px]:max-w-[13.5rem]', 'min-[1792px]:max-w-[22rem]',
     )
     expect(destination.className).not.toMatch(/(^|\s)(md|2xl):max-w-/)
     expect(destination).toHaveAttribute('title', 'Mount Tamborine QLD · Gold Coast Hinterland')
@@ -288,7 +298,7 @@ describe('TripsPage — 44px hit areas on a touch screen', () => {
   it('pads the table edit pencil (Button iconOnly) so the 36px square is a 44px target', () => {
     renderPage()
 
-    expect(screen.getByRole('button', { name: 'Edit Beach Weekend' })).toHaveClass(...pad)
+    expect(screen.getByRole('button', { name: 'Edit trip' })).toHaveClass(...pad)
   })
 
   it('shows the card pencil on a touch screen (no hover there) with a 44px hit area and room around it', () => {
@@ -401,7 +411,7 @@ describe('TripsPage — write controls follow the role', () => {
     expect(screen.getByText('Confirmed')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Confirmed' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /New trip/ })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Edit Beach Weekend' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit trip' })).not.toBeInTheDocument()
     table.unmount()
 
     localStorage.setItem('odip.trips.view', 'cards')
@@ -416,6 +426,6 @@ describe('TripsPage — write controls follow the role', () => {
     renderPage()
     expect(screen.getByRole('button', { name: 'Confirmed' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /New trip/ })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Edit Beach Weekend' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit trip' })).toBeInTheDocument()
   })
 })

@@ -452,14 +452,15 @@ describe('IncidentsPage — narrow-desktop columns', () => {
     expect(headerIndex('NDIS Commission')).toBe(headerIndex('Title') + 1)
   })
 
-  it('orders the columns Title, NDIS Commission, Severity, Status, Type, Trip, Participant, Reported By, Date', () => {
+  // Polish PR1: Date moves from 9th to 5th, so the five a coordinator triages by (title, NDIS Commission, status, severity, date) are on screen at 1024.
+  it('orders the columns Title, NDIS Commission, Status, Severity, Date, Type, Trip, Participant, Reported By', () => {
     mockUseIncidents.mockReturnValue({ data: [baseIncident()], isLoading: false })
     renderPage()
     const labels = screen.getAllByRole('columnheader').map((th) => (th.textContent || '').trim()).filter(Boolean)
-    expect(labels).toEqual(['Title', 'NDIS Commission', 'Severity', 'Status', 'Type', 'Trip', 'Participant', 'Reported By', 'Date'])
+    expect(labels).toEqual(['Title', 'NDIS Commission', 'Status', 'Severity', 'Date', 'Type', 'Trip', 'Participant', 'Reported By', 'Actions'])
   })
 
-  it('cuts a long title with an ellipsis at a responsive cap and keeps the full title in the tooltip', () => {
+  it('clamps a long title to two lines at a responsive cap, in ink, and keeps the full title in the tooltip', () => {
     mockUseIncidents.mockReturnValue({
       data: [baseIncident({ title: 'Escalation during pre-trip meet and greet' })],
       isLoading: false,
@@ -468,8 +469,11 @@ describe('IncidentsPage — narrow-desktop columns', () => {
 
     const title = screen.getByText('Escalation during pre-trip meet and greet')
     expect(title).toHaveAttribute('title', 'Escalation during pre-trip meet and greet')
-    expect(title).toHaveClass('block', 'md:truncate', 'md:max-w-[15rem]', '2xl:max-w-[18rem]')
-    expect(title.closest('td')).toHaveClass('md:whitespace-nowrap', 'font-medium')
+    expect(title).toHaveClass('line-clamp-2', 'break-words', 'md:max-w-[15rem]', '2xl:max-w-[18rem]', 'text-[var(--color-foreground)]')
+    expect(title.className).not.toMatch(/truncate/)
+    expect(title).not.toHaveClass('text-[var(--color-primary)]')
+    expect(title.closest('td')).toHaveClass('font-medium')
+    expect(title.closest('td')).not.toHaveClass('md:whitespace-nowrap') // wrap: the two lines need room to wrap
     // No vertical padding: the row is the token height, not padding around a wrapped cell.
     expect((title.closest('td') as HTMLElement).className).not.toMatch(/(^|\s)(p|py|pt|pb)-/)
   })
@@ -641,6 +645,8 @@ describe('IncidentsPage — row actions', () => {
     expect(cluster).not.toBeNull()
     expect(cluster).toHaveClass('opacity-0', 'group-focus-within/row:opacity-100', '[@media(pointer:coarse)]:opacity-100')
     expect(cluster.className).not.toMatch(/(^|\s)(hidden|invisible)(\s|$)/)
+    // On a mouse the cluster overlays the row's last cells; the actions column costs no width.
+    expect(cluster).toHaveClass('md:pointer-fine:absolute')
     // The edit link is in the same cluster and still a real, focusable link.
     expect(within(cluster).getByRole('link', { name: 'Edit' })).toHaveAttribute('href', '/incidents/inc-1/edit')
   })
@@ -676,7 +682,7 @@ describe('IncidentsPage — 44px touch targets for its links', () => {
 
     for (const name of ['Beach Day', 'Priya Nair']) {
       const link = screen.getByRole('link', { name })
-      expect(link, name).toHaveClass(PAD, 'inline-block', 'align-middle', 'md:truncate', 'text-[var(--color-primary)]')
+      expect(link, name).toHaveClass(PAD, 'inline-block', 'align-middle', 'md:truncate', 'underline')
       // Padding, not the pad: the ::before of an overflow-hidden link is clipped by the link itself.
       expect(link.className, name).not.toMatch(/before:/)
     }
@@ -786,17 +792,22 @@ describe('IncidentsPage — incident type label', () => {
 // Platform review V2-A (Incidents 3): the phone card was a grid of caps labels with blank space under it.
 describe('IncidentsPage — phone card', () => {
   it('puts the title and status on the title line, the facts on one muted line, and the reporter as a labelled field', () => {
-    mockUseIncidents.mockReturnValue({ data: [baseIncident({ incidentType: 'MedicationError', reportedByName: 'Pat Jones' })], isLoading: false })
+    mockUseIncidents.mockReturnValue({ data: [baseIncident({ incidentType: 'MedicationError', reportedByName: 'Pat Jones', qscReportingStatus: 'NotRequired' })], isLoading: false })
     renderPage()
 
     const row = screen.getByText('Medication Error').closest('tr') as HTMLElement
     expect(row.querySelector('td[data-label="Title"]')).toHaveAttribute('data-card', 'primary')
     expect(row.querySelector('td[data-label="Status"]')).toHaveAttribute('data-card', 'status')
-    for (const label of ['Type', 'Severity', 'Date']) expect(row.querySelector('td[data-label="' + label + '"]'), label).toHaveAttribute('data-card', 'meta')
-    // On the muted line the reporter's name sat unlabelled beside the participant's; as a labelled field it says who it is.
-    const reporter = row.querySelector('td[data-label="Reported By"]') as HTMLElement
+    for (const label of ['Date', 'Severity', 'Type']) expect(row.querySelector('td[data-label="' + label + '"]'), label).toHaveAttribute('data-card', 'meta')
+    // The reporter is left off the card; it stays a column from md up.
+    const reporter = row.querySelector('td[data-label="Reported By"]')
     expect(reporter).not.toHaveAttribute('data-card')
-    expect(reporter).not.toHaveClass('max-md:hidden')
-    expect(reporter).toHaveTextContent('Pat Jones')
+    expect(reporter).toHaveClass('max-md:hidden')
+    // Card meta order is Date, Severity, NDIS, Type, Trip, Participant (a triage read), whatever the desktop column order.
+    const orders = { Date: 'max-md:-order-1!', Severity: 'max-md:order-0!', 'NDIS Commission': 'max-md:order-1!', Type: 'max-md:order-2!', Trip: 'max-md:order-3!', Participant: 'max-md:order-4!' }
+    for (const [label, cls] of Object.entries(orders)) expect(row.querySelector('td[data-label="' + label + '"]'), label).toHaveClass(cls)
+    // A row with nothing to report to the Commission leaves that cell off the card, and the menu ends the meta line.
+    expect(row.querySelector('td[data-label="NDIS Commission"]')).not.toHaveAttribute('data-card')
+    expect(within(row).getByRole('button', { name: /More actions for/ }).closest('td')).toHaveAttribute('data-card', 'trail')
   })
 })
