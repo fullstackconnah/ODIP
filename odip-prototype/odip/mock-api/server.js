@@ -1234,6 +1234,7 @@ const HTTP = Symbol('http-status')
 /** Lets a route answer with a non-200 status (the dispatcher below honours it). */
 const respond = (status, body) => ({ [HTTP]: status, body })
 const rosterFill = require('./mock-roster-fill.js')
+const incidentTrend = require('./mock-incident-trend.js')
 const failEnvelope = (data, errors, code) => {
   const envelope = { success: false }
   if (data != null) envelope.data = data
@@ -2754,6 +2755,13 @@ const routes = [
 
   // incidents
   ['incidents/overdue-qsc', () => incidents.filter((i) => i.isOverdue24h)],
+  // Incidents by month (mock-incident-trend.js). `?fixture=` picks a state for the captures; the screen never sends it.
+  ['incidents/trend', (searchParams) => {
+    const name = (searchParams && searchParams.get('fixture')) || 'mixed'
+    if (name === 'failing') return respond(500, failEnvelope(null, ['The incident trend could not be worked out.']))
+    const data = incidentTrend.byFixture(name, new Date().toISOString().slice(0, 10))
+    return name === 'slow' ? new Promise((resolve) => setTimeout(() => resolve(data), 2500)) : data
+  }],
   ['incidents/trip/:id', (id) => incidents.filter((i) => i.tripInstanceId === id)],
   // Connection map item 12 — the one GET route here that DOES read the query string (see the GET
   // dispatch loop below, which now passes url.searchParams as this handler's only argument): the
