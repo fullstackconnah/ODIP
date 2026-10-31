@@ -161,7 +161,7 @@ components:
   attention-tile-error:
     backgroundColor: "{colors.error-container}"
     textColor: "{colors.on-error-container}"
-  attention-tile:
+  attention-tile-action:
     rounded: "{rounded.md}"
     padding: "12px"
   all-clear:
