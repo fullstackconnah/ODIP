@@ -40,7 +40,7 @@ export interface StaffListDto {
 }
 
 /** `hasSignedIn`: the person has ever signed in (the server sends the fact, not their sign-in time). */
-export type StaffDetailDto = StaffListDto & { signInInviteSentAt?: string | null; hasSignedIn?: boolean }
+export type StaffDetailDto = StaffListDto & { signInInviteSentAt?: string | null; hasSignedIn?: boolean | null }
 
 export interface CreateStaffDto {
   firstName: string

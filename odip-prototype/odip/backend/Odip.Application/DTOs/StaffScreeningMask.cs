@@ -12,6 +12,10 @@ public static class StaffScreeningMask
         user?.IsInRole("SuperAdmin") == true || user?.IsInRole("Admin") == true || user?.IsInRole("Coordinator") == true
         || (Guid.TryParse(user?.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var self) && self == staffId);
 
+    /// <summary>Sign-in facts (invite sent, has signed in) are for managers only; a missing principal is masked.</summary>
+    public static bool CanSeeSignIn(ClaimsPrincipal? user) =>
+        user?.IsInRole("SuperAdmin") == true || user?.IsInRole("Admin") == true || user?.IsInRole("Coordinator") == true;
+
     /// <summary>Sets <c>WorkerScreeningRecorded</c> from the stored number, then hides the number from callers who may not see it.</summary>
     public static StaffListDto Apply(StaffListDto d, ClaimsPrincipal? user) => d with
     {
@@ -23,5 +27,7 @@ public static class StaffScreeningMask
     {
         WorkerScreeningRecorded = !string.IsNullOrWhiteSpace(d.WorkerScreeningNumber),
         WorkerScreeningNumber = CanSee(user, d.Id) ? d.WorkerScreeningNumber : null,
+        SignInInviteSentAt = CanSeeSignIn(user) ? d.SignInInviteSentAt : null,
+        HasSignedIn = CanSeeSignIn(user) ? d.HasSignedIn : null,
     };
 }
