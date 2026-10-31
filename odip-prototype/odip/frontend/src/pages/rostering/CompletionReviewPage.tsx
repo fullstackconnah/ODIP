@@ -16,7 +16,8 @@ import {
 import type { CompletionQueueItemDto, ShiftStatus, ShiftCompletionDto, ApproveBatchResultDto } from '@/api/types'
 import { formatDateAu, formatWithTimeZone, extractErrorMessage } from '@/lib/utils'
 import { formatVarianceMinutes } from './lib/roster'
-import { plural } from '@/lib/format'
+import { formatServiceDate, plural } from '@/lib/format'
+import { unbroken } from '@/lib/intakeBooking'
 import { Button } from '@/components/Button'
 import { TONE } from '@/lib/tone'
 
@@ -235,10 +236,10 @@ export default function CompletionReviewPage() {
         // Always visible (not a hover-revealed RowActions): reviewing is this queue's whole purpose. sm keeps the row at --row-h.
         row.status === 'PendingReview' ? (
           <div className="flex justify-end gap-1.5 pointer-coarse:gap-2">
-            <Button variant="secondary" size="sm" onClick={() => setReturnTarget(row)} aria-label={`Return ${row.staffName} with ${row.participantName} on ${formatDateAu(row.serviceDate)}`}>
+            <Button variant="secondary" size="sm" onClick={() => setReturnTarget(row)} aria-label={`Return ${row.staffName} with ${row.participantName} on ${formatServiceDate(row.serviceDate)}`}>
               Return
             </Button>
-            <Button size="sm" onClick={() => setApproveTarget(row)} aria-label={`Approve ${row.staffName} with ${row.participantName} on ${formatDateAu(row.serviceDate)}`}>
+            <Button size="sm" onClick={() => setApproveTarget(row)} aria-label={`Approve ${row.staffName} with ${row.participantName} on ${formatServiceDate(row.serviceDate)}`}>
               Approve
             </Button>
           </div>
@@ -339,7 +340,7 @@ export default function CompletionReviewPage() {
         loading={approveCompletion.isPending}
         message={
           <div className="space-y-3">
-            <p>{approveTarget ? `Approve ${approveTarget.participantName}'s shift on ${formatDateAu(approveTarget.serviceDate)} for ${approveTarget.staffName}?` : ''}</p>
+            <p>{approveTarget ? `Approve ${approveTarget.participantName}'s shift on ${unbroken(formatServiceDate(approveTarget.serviceDate))} for ${approveTarget.staffName}?` : ''}</p>
             {detail && <WorkerAnswers c={detail} />}
             {detail && <IncidentsList incidents={detail.incidents} />}
             {actionError && <p role="alert" className="text-xs text-[var(--color-destructive)]">{actionError}</p>}
@@ -357,7 +358,7 @@ export default function CompletionReviewPage() {
         loading={returnCompletion.isPending}
         message={
           <div className="space-y-3">
-            <p>{returnTarget ? `Return ${returnTarget.participantName}'s shift on ${formatDateAu(returnTarget.serviceDate)} to ${returnTarget.staffName} for correction?` : ''}</p>
+            <p>{returnTarget ? `Return ${returnTarget.participantName}'s shift on ${unbroken(formatServiceDate(returnTarget.serviceDate))} to ${returnTarget.staffName} for correction?` : ''}</p>
             {detail && <WorkerAnswers c={detail} />}
             {detail && <IncidentsList incidents={detail.incidents} />}
             <label className="block text-sm text-[var(--color-foreground)]">

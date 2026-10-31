@@ -3,7 +3,7 @@ import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { DataTable, type Column } from '@/components/DataTable'
 import { StatusBadge } from '@/components/StatusBadge'
-import { formatServiceDate } from '@/lib/planQuote'
+import { formatServiceDate } from '@/lib/format'
 import { matchBlocks, renewalComparison, renewalTotals, type RenewalRow, type RenewalSide } from '@/lib/renewalComparison'
 import { formatCurrency } from '@/lib/utils'
 
