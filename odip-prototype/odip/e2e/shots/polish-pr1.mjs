@@ -4,7 +4,7 @@
 // List paths in mock-api/server.js: GET /api/v1/tasks, /api/v1/incidents, /api/v1/trips (all `paged`).
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
-import { AU_CONTEXT, prepareOutDir, cropElement, fullPage, checkCropHolds, writeChecks } from './lib/capture.mjs'
+import { AU_CONTEXT, prepareOutDir, cropElement, fullPage, checkCropHolds, writeChecks } from '../shots/lib/capture.mjs'
 
 let chromium
 try {
