@@ -126,7 +126,7 @@ export function RosterFillCard({ boardWeek, onSelectWeek }: { boardWeek: string 
     <Card>
       <div ref={boxRef}>
         {titleRow(true)}
-        {wide ? (
+        {wide && !hidden ? (
           <div className="grid grid-cols-[18rem_minmax(0,1fr)] gap-x-6">
             <div>
               {sentence}
