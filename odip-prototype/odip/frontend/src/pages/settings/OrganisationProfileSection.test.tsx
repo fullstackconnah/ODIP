@@ -138,7 +138,7 @@ describe('Organisation profile: time zone', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Unsaved changes')
   })
 
-  it('keeps a zone that is not the state's default when the state changes', async () => {
+  it("keeps a zone that is not the state's default when the state changes", async () => {
     api.get.mockResolvedValue({ ...row, state: 'NSW', timeZoneId: 'Australia/Brisbane' })
     const user = userEvent.setup()
     show()
@@ -148,7 +148,7 @@ describe('Organisation profile: time zone', () => {
     expect(zone()).toHaveValue('Australia/Brisbane')
   })
 
-  it('sends the row's own null zone when only the address changed, and the picked zone when it was picked', async () => {
+  it("sends the row's own null zone when only the address changed, and the picked zone when it was picked", async () => {
     api.get.mockResolvedValue({ ...row, state: 'VIC' })
     const user = userEvent.setup()
     show()
