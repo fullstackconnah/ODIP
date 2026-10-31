@@ -1233,6 +1233,7 @@ function packageFor(shiftId, participantId, status) {
 const HTTP = Symbol('http-status')
 /** Lets a route answer with a non-200 status (the dispatcher below honours it). */
 const respond = (status, body) => ({ [HTTP]: status, body })
+const rosterFill = require('./mock-roster-fill.js')
 const failEnvelope = (data, errors, code) => {
   const envelope = { success: false }
   if (data != null) envelope.data = data
@@ -2737,16 +2738,18 @@ const routes = [
 
   // tasks
   ['tasks', (searchParams) => {
+    // The server's list bound: the 500 soonest due, with the true total.
+    const page = (rows) => ({ ...paged(rows.slice(0, 500)), totalCount: rows.length, pageSize: 500 })
     // The server's dashboard filters: Overdue is the TaskOverdue rule (stored Overdue, or past due and still open); dueToday is the provider's today;
     // dueThisWeek is today to today + 7.
     const today = providerToday()
     const open = (t) => t.status !== 'Completed' && t.status !== 'Cancelled'
     const status = searchParams.get('status')
-    if (status === 'Overdue') return tasks.filter((t) => t.status === 'Overdue' || (t.dueDate && t.dueDate < today && open(t)))
-    if (status) return tasks.filter((t) => t.status === status)
-    if (searchParams.get('dueToday') === 'true') return tasks.filter((t) => t.dueDate === today)
-    if (searchParams.get('dueThisWeek') === 'true') return tasks.filter((t) => t.dueDate && t.dueDate >= today && t.dueDate <= addDaysIso(today, 7))
-    return tasks
+    if (status === 'Overdue') return page(tasks.filter((t) => t.status === 'Overdue' || (t.dueDate && t.dueDate < today && open(t))))
+    if (status) return page(tasks.filter((t) => t.status === status))
+    if (searchParams.get('dueToday') === 'true') return page(tasks.filter((t) => t.dueDate === today))
+    if (searchParams.get('dueThisWeek') === 'true') return page(tasks.filter((t) => t.dueDate && t.dueDate >= today && t.dueDate <= addDaysIso(today, 7)))
+    return page(tasks)
   }],
 
   // incidents
@@ -2808,6 +2811,13 @@ const routes = [
 
   // Roster board (item 5/2 — assigneeOnApprovedLeave) — see rosterBoard()'s own comment.
   ['rostering/board', (searchParams) => rosterBoard(searchParams)],
+  // How full the next 8 weeks are (mock-roster-fill.js). `?fixture=` picks a state for the captures; the screen never sends it.
+  ['rostering/fill', (searchParams) => {
+    const name = (searchParams && searchParams.get('fixture')) || 'mixed'
+    if (name === 'failing') return respond(500, failEnvelope(null, ['The roster fill could not be worked out.']))
+    const data = rosterFill.byFixture(name, new Date().toISOString().slice(0, 10))
+    return name === 'slow' ? new Promise((resolve) => setTimeout(() => resolve(data), 2500)) : data
+  }],
   // Patterns (phase D): the hand-made ones seeded above and what approvals make; ?participantId= filters like the real list.
   ['rostering/patterns', (searchParams) => rosterPatterns.filter((p) => !searchParams.get('participantId') || p.participantId === searchParams.get('participantId'))],
   ['rostering/patterns/:id', (id) => rosterPatterns.find((p) => p.id === id) || respond(404, failEnvelope(null, ['Pattern not found.']))],

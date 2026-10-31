@@ -25,8 +25,8 @@ const EMPTY_PAGE = { items: [], totalCount: 0, page: 1, pageSize: 1, totalPages:
 const answer = (url: string): Promise<unknown> => {
   if (url === '/dashboard/summary') return Promise.resolve(ZERO_SUMMARY)
   if (url === '/rostering/completions') return Promise.resolve(EMPTY_PAGE)
-  // The Incidents group reads a paged list (fetchPagedList fails on a bare []); /tasks falls through to [], which is right.
-  if (url === '/incidents') return Promise.resolve(EMPTY_PAGE)
+  // The Incidents and Tasks groups read a paged list (fetchPagedList fails on a bare []).
+  if (url === '/incidents' || url === '/tasks') return Promise.resolve(EMPTY_PAGE)
   return Promise.resolve([])
 }
 

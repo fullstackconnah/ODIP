@@ -14,6 +14,7 @@ import { Callout } from '@/components/Callout'
 import { Card } from '@/components/Card'
 import { BudgetWarnings } from '@/components/BudgetWarnings'
 import { PageHeader } from '@/components/PageHeader'
+import { RosterFillCard } from './components/RosterFillCard'
 import { EmptyState } from '@/components/EmptyState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { usePermissions } from '@/lib/permissions'
@@ -69,7 +70,9 @@ const UP_TO_DATE_MS = 6000
 const noop = () => {}
 
 export default function RosterBoardPage() {
-  const { canWrite } = usePermissions()
+  const { canWrite, isSuperAdmin, isAdmin, isCoordinator } = usePermissions()
+  // The fill chart reads an endpoint for these roles only.
+  const showFill = isSuperAdmin || isAdmin || isCoordinator
   // `?date=` (the server's "Re-cover shift" task link) opens the week that contains it, and a later change of it moves the board there; the toolbar owns the week in between.
   const [searchParams, setSearchParams] = useSearchParams()
   const dateParam = searchParams.get('date')
@@ -139,6 +142,19 @@ export default function RosterBoardPage() {
     observer.observe(toolbar)
     return () => observer.disconnect()
   }, [])
+  // The fill card sits above the notices: its height (and the gap under it) comes off the board frame's cap, measured like the toolbar's.
+  const fillRef = useRef<HTMLDivElement>(null)
+  const [fillHeight, setFillHeight] = useState(0)
+  useLayoutEffect(() => {
+    const el = fillRef.current
+    if (!el) { setFillHeight(0); return }
+    const measure = () => setFillHeight(el.offsetHeight)
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [showFill])
   const [hintDismissed, setHintDismissed] = useState(() => {
     try {
       return sessionStorage.getItem(HINT_DISMISSED_KEY) === '1'
@@ -621,6 +637,7 @@ export default function RosterBoardPage() {
       className="flex flex-col gap-[var(--section-gap)] animate-fade-in"
       style={{
         '--roster-toolbar-extra': `${toolbarExtra}px`,
+        ...(fillHeight === 0 ? {} : { '--roster-fill-h': `calc(${fillHeight}px + var(--section-gap))` }),
         ...(noticeHeight === null ? {} : { '--roster-notice-h': `calc(${noticeHeight}px + var(--section-gap))` }),
       } as React.CSSProperties}
     >
@@ -656,6 +673,12 @@ export default function RosterBoardPage() {
           addingAgreementShifts={starting}
         />
       </div>
+
+      {showFill && (
+        <div ref={fillRef}>
+          <RosterFillCard boardWeek={weekStart} onSelectWeek={moveToWeek} />
+        </div>
+      )}
 
       {/* The banner, the standing notice, then the error, in ONE wrapper measured for the board frame: the notice never jumps when an error comes and goes (the brief, section 6). */}
       {noticesShown && (

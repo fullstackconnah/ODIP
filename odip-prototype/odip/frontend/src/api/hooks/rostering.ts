@@ -4,6 +4,7 @@ import { refreshBudgetFigures } from './funding-ledger'
 import { awaitsData } from '@/lib/queryPhase'
 import type {
   RosterBoardDto,
+  RosterFillDto,
   ShiftDto,
   CreateShiftDto,
   UpdateShiftDto,
@@ -34,6 +35,17 @@ import type {
 // ══════════════════════════════════════════════════════════════
 // ROSTER BOARD
 // ══════════════════════════════════════════════════════════════
+
+/** Under the 'roster-board' prefix so every board write refreshes it; the board-only readers skip it by the 'fill' second key (RefreshBoardAction). */
+export const ROSTER_FILL_KEY = ['roster-board', 'fill'] as const
+
+/** How full the next 8 weeks are (spec 2026-10-31): shifts filled and open by week. SuperAdmin, Admin and Coordinator only. */
+export function useRosterFill() {
+  return useQuery({
+    queryKey: ROSTER_FILL_KEY,
+    queryFn: () => apiGet<RosterFillDto>('/rostering/fill', { weeks: 8 }),
+  })
+}
 
 export function useRosterBoard(weekStart: string | undefined, groupBy: 'participant' | 'staff' = 'participant') {
   return useQuery({

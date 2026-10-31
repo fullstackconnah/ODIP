@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import TasksPage from './TasksPage'
 import { restoreZone, setZone } from '@/test/timeZone'
+import { pagedTasks } from '@/test/fixtures/pagedTasks'
 
 vi.mock('@/lib/permissions', () => ({ usePermissions: () => ({ canWrite: true }) }))
 
@@ -21,7 +22,7 @@ vi.mock('@/api/hooks', () => ({
 
 beforeEach(() => {
   mockUseTasks.mockReturnValue({
-    data: [{ id: 't1', title: 'Confirm accommodation', tripInstanceId: 'trip-1', tripName: 'Beach Trip', taskType: 'AccommodationRequest', ownerName: 'Sam', dueDate: '2026-10-05', priority: 'Medium', status: 'NotStarted' }],
+    data: pagedTasks([{ id: 't1', title: 'Confirm accommodation', tripInstanceId: 'trip-1', tripName: 'Beach Trip', taskType: 'AccommodationRequest', ownerName: 'Sam', dueDate: '2026-10-05', priority: 'Medium', status: 'NotStarted' }]),
     isLoading: false,
   })
 })
