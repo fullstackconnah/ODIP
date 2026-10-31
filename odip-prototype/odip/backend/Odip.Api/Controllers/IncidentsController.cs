@@ -112,12 +112,13 @@ public class IncidentsController : ControllerBase
         }
     }
 
-    /// <summary>The 5-day report task: raised while a Within24h incident is active and the report is not sent, completed otherwise. A closed task is never reopened. <paramref name="mayRaise"/> is false on an edit of a row that never had a 5-day due, so editing a legacy incident does not raise an overdue task.</summary>
+    /// <summary>The 5-day report task: raised while a Within24h incident is active and the report is not sent, completed once it is no longer owed. A closed task is never reopened. <paramref name="mayRaise"/> is false on an edit of a row that never had the task (a legacy incident) or of a closed incident: an owed task is then left as it is, neither raised nor completed.</summary>
     private async Task RaiseOrCompleteDetailedReportTaskAsync(IncidentReport incident, TimeZoneInfo zone, CancellationToken ct, bool mayRaise = true)
     {
-        if (mayRaise && incident.ReportableClass == ReportableClass.Within24h && incident.DetailedReportDueAt is { } due
-            && incident.CommissionDetailedReportedAt == null && incident.IsActive)
+        var owed = incident.ReportableClass == ReportableClass.Within24h && incident.DetailedReportDueAt is { } && incident.CommissionDetailedReportedAt == null && incident.IsActive;
+        if (owed && mayRaise)
         {
+            var due = incident.DetailedReportDueAt!.Value;
             await _obligationTasks.EnsureAsync(new Odip.Application.Interfaces.ObligationTaskSpec(
                 SourceKey: $"incident-detailed-report:{incident.Id}",
                 Type: TaskType.IncidentCommissionDetailedReport,
@@ -128,7 +129,7 @@ public class IncidentsController : ControllerBase
                 Priority: TaskPriority.High,
                 TenantId: incident.TenantId), ct);
         }
-        else
+        else if (!owed)
         {
             await _obligationTasks.CompleteAsync($"incident-detailed-report:{incident.Id}", ct);
         }
@@ -777,7 +778,6 @@ public class IncidentsController : ControllerBase
         var storedClass = i.ReportableClass == ReportableClass.None && i.QscReportingStatus is not (QscReportingStatus.NotRequired or QscReportingStatus.Pending)
             ? ReportableClass.Within24h : i.ReportableClass;
         var storedAware = i.AwareAt ?? i.CreatedAt;
-        var hadDetailedDue = i.DetailedReportDueAt != null;
         var clockChanged = dto.ReportableClass is { } picked && picked != storedClass;
         if (dto.AwareAtLocal is { } awareLocal
             && TruncateToMinute(awareLocal) != TruncateToMinute(ProviderLocalTime.UtcToLocal(storedAware, zone)))
@@ -886,7 +886,10 @@ public class IncidentsController : ControllerBase
         // Item 9 of the connection map: an edit may change QscReportingStatus/QscReportedAt in
         // either direction — raise/refresh or complete the IncidentQscReport task accordingly.
         await RaiseOrCompleteQscTaskAsync(i, zone, ct);
-        await RaiseOrCompleteDetailedReportTaskAsync(i, zone, ct, mayRaise: (hadDetailedDue || clockChanged) && i.Status != IncidentStatus.Closed);
+        // IgnoreQueryFilters + the incident's own tenant: a SuperAdmin with no organisation chosen must still see the task.
+        var detailedKey = $"incident-detailed-report:{i.Id}";
+        var hadTask = await _db.BookingTasks.IgnoreQueryFilters().AnyAsync(t => t.SourceKey == detailedKey && t.TenantId == i.TenantId, ct);
+        await RaiseOrCompleteDetailedReportTaskAsync(i, zone, ct, mayRaise: (hadTask || clockChanged) && i.Status != IncidentStatus.Closed);
 
         await _db.SaveChangesAsync(ct);
 

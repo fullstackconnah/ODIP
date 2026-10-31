@@ -314,6 +314,46 @@ public class IncidentReportingClockTests
     }
 
     [Fact]
+    public async Task Update_LegacyRowEditedTwice_NeverRaisesAFiveDayTask()
+    {
+        var (db, controller, reporter) = Arrange();
+        using var _d = db;
+        var legacy = await AddLegacyReportableAsync(db, reporter, IncidentStatus.Submitted, null);
+
+        await controller.Update(legacy.Id, UpdateDto(legacy) with { ReviewNotes = "First look." }, CancellationToken.None);
+        await controller.Update(legacy.Id, UpdateDto(legacy) with { ReviewNotes = "Second look." }, CancellationToken.None);
+
+        Assert.DoesNotContain(await db.BookingTasks.ToListAsync(), t => t.TaskType == TaskType.IncidentCommissionDetailedReport);
+    }
+
+    [Fact]
+    public async Task Update_ClosingAnIncident_LeavesTheOwedFiveDayTaskOpen()
+    {
+        var (db, controller, reporter) = Arrange();
+        using var _d = db;
+        var created = await CreateCriticalAsync(db, controller, reporter.Id);
+
+        await controller.Update(created.Id, UpdateDto(created) with { Status = IncidentStatus.Closed }, CancellationToken.None);
+
+        Assert.NotEqual(TaskItemStatus.Completed, (await db.BookingTasks.SingleAsync(t => t.TaskType == TaskType.IncidentCommissionDetailedReport)).Status);
+    }
+
+    [Fact]
+    public async Task Update_ReviewNotesOnly_KeepsTheFiveDayTaskOpen()
+    {
+        var (db, controller, reporter) = Arrange();
+        using var _d = db;
+        var created = await CreateCriticalAsync(db, controller, reporter.Id);
+
+        await controller.Update(created.Id, UpdateDto(created) with { ReviewNotes = "Reviewed.", Title = "Renamed incident" }, CancellationToken.None);
+
+        // The task is still owed and kept in step with the incident: it stays open and takes the new title.
+        var task = await db.BookingTasks.SingleAsync(t => t.TaskType == TaskType.IncidentCommissionDetailedReport);
+        Assert.NotEqual(TaskItemStatus.Completed, task.Status);
+        Assert.EndsWith("Renamed incident", task.Title);
+    }
+
+    [Fact]
     public async Task Update_ClosedIncident_RaisesNoFiveDayTask()
     {
         var (db, controller, reporter) = Arrange();
@@ -321,6 +361,22 @@ public class IncidentReportingClockTests
         var closed = await AddLegacyReportableAsync(db, reporter, IncidentStatus.Closed, Now.UtcDateTime.AddDays(-1));
 
         await controller.Update(closed.Id, UpdateDto(closed) with { Status = IncidentStatus.Closed }, CancellationToken.None);
+
+        Assert.DoesNotContain(await db.BookingTasks.ToListAsync(), t => t.TaskType == TaskType.IncidentCommissionDetailedReport);
+    }
+
+    [Fact]
+    public async Task Update_ClassChangedWhileClosing_RaisesNoFiveDayTask()
+    {
+        var (db, controller, reporter) = Arrange();
+        using var _d = db;
+        await controller.Create(Dto(reporter.Id, IncidentSeverity.Medium), CancellationToken.None);
+        var created = await db.IncidentReports.SingleAsync();
+
+        await controller.Update(created.Id, UpdateDto(created) with
+        {
+            Status = IncidentStatus.Closed, ReportableClass = ReportableClass.Within24h, ReportableClassReason = "Reportable after review.",
+        }, CancellationToken.None);
 
         Assert.DoesNotContain(await db.BookingTasks.ToListAsync(), t => t.TaskType == TaskType.IncidentCommissionDetailedReport);
     }
