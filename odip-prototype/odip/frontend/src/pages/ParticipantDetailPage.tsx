@@ -1,6 +1,6 @@
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import {
-  useParticipant, useParticipantAlerts, useDownloadIntakeFormPdf, useDownloadParticipantProfilePdf, useDownloadClientOverviewPdf,
+  useParticipant, useParticipantAlerts, useDownloadIntakeFormPdf, useDownloadParticipantProfilePdf, useDownloadClientOverviewPdf, useDownloadWeeklySchedulePdf,
   useGenerateCaregiverLink, useRevokeCaregiverLink, useSupportProfile, useCaregiverSubmissions, useDeleteParticipant, useRestoreParticipant,
 } from '@/api/hooks'
 import { PLAN_TYPE_LABELS, SUPPORT_RATIO_LABELS } from '@/api/types/enums'
@@ -54,7 +54,9 @@ import {
 } from './participant-detail/participantTabs'
 import { plural, formatRelative } from '@/lib/format'
 import { Card } from '@/components/Card'
+import { isDateOnly, parseDateOnly } from '@/lib/dateOnly'
 import { PersonWeek } from './rostering/components/PersonWeek'
+import { daysOfWeek, formatWeekSpan, weekStartFromDateParam } from './rostering/lib/roster'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { retryingAfterError } from '@/lib/queryPhase'
 
@@ -100,6 +102,10 @@ export default function ParticipantDetailPage() {
   // Connection map item 12 — the Rostering section, same canAccessPage gate RosterBoardPage itself
   // uses (see lib/permissions.ts's SUPPORT_WORKER_PAGES — SupportWorker is excluded).
   const canAccessRostering = canAccessPage('rostering')
+  // The roster week a link left in the URL (People tab): the schedule PDF follows it. Anything that is not a real day reads as no week, so the server picks the current one.
+  const [searchParams] = useSearchParams()
+  const weekParam = searchParams.get('week')
+  const week = weekParam && isDateOnly(weekParam) && parseDateOnly(weekParam) !== null ? weekParam : null
   const canSeeHistory = isSuperAdmin || isAdmin
   // Only the tabs this role can see are valid ?tab= keys: a link to Funding opened by a role without it reads as Overview, instead of selecting nothing
   // over an empty body. Funding is money (a participant's plan budget, the claims), so it has its own gates and never `canWrite`.
@@ -157,6 +163,7 @@ export default function ParticipantDetailPage() {
   // it as the safer default (more availability, not less) — same document, blank TRIP/DATE/GROUP
   // header. See this branch's report for the reversible product call.
   const downloadClientOverview = useDownloadClientOverviewPdf()
+  const downloadWeeklySchedule = useDownloadWeeklySchedulePdf(p?.fullName, week)
   const caregiverLink = useCaregiverLink(id!)
   // The same confirm dialog and failure banner the participant list uses; the More menu opens it without a row button.
   const archiveRestore = useArchiveRestore<{ id: string; fullName: string }>({
@@ -316,7 +323,7 @@ export default function ParticipantDetailPage() {
             action={
               // The documents menu and the More menu: no filled primary here, the page's actions are all in menus. justify-start below md
               // (the cluster sits under the title); justify-end from md up.
-              <div className="flex flex-wrap items-start justify-start gap-2 md:justify-end">
+              <div className="flex flex-wrap items-start justify-start gap-2 md:justify-end print:hidden">
                 {/* DOC-01 — the downloads are ungated: downloading/printing documents is a read action, and this page has no
                     more specific canView... flag of its own to gate read-level content on. The caregiver-link items inside are gated on
                     canWriteParticipantDetails (a write action) — see B15 in the discovery fact sheet. */}
@@ -327,6 +334,9 @@ export default function ParticipantDetailPage() {
                   intake={downloadIntakeForm}
                   profile={downloadParticipantProfile}
                   overview={downloadClientOverview}
+                  week={week}
+                  canDownloadSchedule={canAccessRostering}
+                  weeklySchedule={downloadWeeklySchedule}
                   caregiverLink={caregiverLink}
                 />
                 <ParticipantMoreMenu
@@ -341,7 +351,7 @@ export default function ParticipantDetailPage() {
             }
           >
             {/* The download error and the caregiver-link panel sit here, full width, so the title row stays one line at 390 px. */}
-            {(downloadIntakeForm.isError || downloadParticipantProfile.isError || downloadClientOverview.isError) && (
+            {(downloadIntakeForm.isError || downloadParticipantProfile.isError || downloadClientOverview.isError || downloadWeeklySchedule.isError) && (
               <p role="alert" className="w-full text-xs text-[var(--color-destructive)]">
                 Couldn't download the file. Try again, or contact support if this keeps happening.
               </p>
@@ -485,12 +495,12 @@ type PdfDownload = {
 
 /**
  * The header's one menu, at every width (VISUAL-1 V2: seven header controls at 1440 became one menu and Edit). A secondary-look
- * trigger, so Edit stays the page's one filled primary. It holds the three PDF downloads, "Agreement draft" (same gate as before) and
+ * trigger, so Edit stays the page's one filled primary. It holds the PDF downloads (the weekly schedule only for roles that roster), "Agreement draft" (same gate as before) and
  * the caregiver-link actions. Each download keeps its file name and pending state. Their shared `role="alert"` error line and the caregiver link's
  * panel (the issued URL, its error, the Revoke confirm) render in the PageHeader children, outside the action cluster.
  */
 function DocumentsMenu({
-  participantId, fullName, canOpenAgreementDraft, intake, profile, overview, caregiverLink,
+  participantId, fullName, canOpenAgreementDraft, intake, profile, overview, week, canDownloadSchedule, weeklySchedule, caregiverLink,
 }: {
   participantId: string
   fullName: string
@@ -498,6 +508,10 @@ function DocumentsMenu({
   intake: PdfDownload
   profile: PdfDownload
   overview: PdfDownload
+  /** The validated `?week=` day, or null. */
+  week: string | null
+  canDownloadSchedule: boolean
+  weeklySchedule: PdfDownload
   caregiverLink: CaregiverLink
 }) {
   const navigate = useNavigate()
@@ -505,6 +519,8 @@ function DocumentsMenu({
     { value: 'intake', label: 'Intake Form PDF', fileName: `${fullName} - Intake Form.pdf`, mutation: intake },
     { value: 'profile', label: 'Participant Profile PDF', fileName: `${fullName} - Participant Profile.pdf`, mutation: profile },
     { value: 'overview', label: 'Client Overview PDF', fileName: `${fullName} - Client Overview.pdf`, mutation: overview },
+    // The file name is a stem: the hook adds the week the server answers with, so files sort by week.
+    ...(canDownloadSchedule ? [{ value: 'schedule', label: week ? `Weekly Schedule PDF (${formatWeekSpan(daysOfWeek(weekStartFromDateParam(week)))})` : 'Weekly Schedule PDF', fileName: `${fullName} - Weekly Schedule`, mutation: weeklySchedule }] : []),
   ]
   const busy = downloads.some(d => d.mutation.isPending)
 

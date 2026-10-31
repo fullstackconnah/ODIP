@@ -12,7 +12,7 @@ import { __testHooks } from '@/hooks/useBackNavigation'
 
 const {
   mockUseParticipant, mockUseSupportProfile, mockUseParticipantBookings, mockUseParticipantAlerts,
-  mockUseDownloadIntakeFormPdf, mockUseDownloadParticipantProfilePdf, mockUseDownloadClientOverviewPdf,
+  mockUseDownloadIntakeFormPdf, mockUseDownloadParticipantProfilePdf, mockUseDownloadClientOverviewPdf, mockUseDownloadWeeklySchedulePdf,
   mockPatchMutateAsync, mockUseStaff,
   mockUseGenerateCaregiverLink, mockUseRevokeCaregiverLink, mockUseCaregiverSubmissions,
   mockDeleteMutate, mockNotes, mockRisks, realAdl, mockPersonWeek,
@@ -30,6 +30,8 @@ const {
   mockUseDownloadParticipantProfilePdf: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false })),
   // PF-10.6 — same reasoning as the two DOC-01 hooks above.
   mockUseDownloadClientOverviewPdf: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false })),
+  // N8 — the fourth, (participantName, week) -> the same shape; the tests read the arguments the page passed.
+  mockUseDownloadWeeklySchedulePdf: vi.fn((_name?: string, _week?: string | null) => ({ mutate: vi.fn(), isPending: false, isError: false })),
   // PD-7 — the real Details-tab section components (kept real below, see the './participant-detail'
   // mock) call usePatchParticipant()/useStaff() directly. Every PDETAIL-01 test in this file uses
   // the default 'SupportWorker' role (canWriteParticipantDetails === false), so no section's Edit
@@ -60,6 +62,7 @@ vi.mock('@/api/hooks', () => ({
   useDownloadIntakeFormPdf: mockUseDownloadIntakeFormPdf,
   useDownloadParticipantProfilePdf: mockUseDownloadParticipantProfilePdf,
   useDownloadClientOverviewPdf: mockUseDownloadClientOverviewPdf,
+  useDownloadWeeklySchedulePdf: mockUseDownloadWeeklySchedulePdf,
   usePatchParticipant: () => ({ mutateAsync: mockPatchMutateAsync, isPending: false }),
   useStaff: mockUseStaff,
   useGenerateCaregiverLink: mockUseGenerateCaregiverLink,
@@ -126,6 +129,16 @@ function setUserRole(role: string) {
 function renderAt(id: string) {
   return render(
     <MemoryRouter initialEntries={[`/participants/${id}`]}>
+      <Routes>
+        <Route path="/participants/:id" element={<PageWithClient />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+}
+
+function renderAtWeek(id: string, week: string) {
+  return render(
+    <MemoryRouter initialEntries={[`/participants/${id}?week=${week}`]}>
       <Routes>
         <Route path="/participants/:id" element={<PageWithClient />} />
       </Routes>
@@ -941,6 +954,7 @@ describe('ParticipantDetailPage — Documents menu', () => {
     mockUseDownloadIntakeFormPdf.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: false })
     mockUseDownloadParticipantProfilePdf.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: false })
     mockUseDownloadClientOverviewPdf.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: false })
+    mockUseDownloadWeeklySchedulePdf.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: false })
   }
 
   function renderWithAgreementRoute() {
@@ -1000,7 +1014,7 @@ describe('ParticipantDetailPage — Documents menu', () => {
     await openDocuments()
 
     expect(screen.getAllByRole('option').map(o => o.textContent)).toEqual([
-      'Intake Form PDF', 'Participant Profile PDF', 'Client Overview PDF', 'Agreement draft', 'Generate caregiver link',
+      'Intake Form PDF', 'Participant Profile PDF', 'Client Overview PDF', 'Weekly Schedule PDF', 'Agreement draft', 'Generate caregiver link',
     ])
   })
 
@@ -1083,6 +1097,70 @@ describe('ParticipantDetailPage — Documents menu', () => {
     await user.click(screen.getByRole('option', { name: 'Intake Form PDF' }))
 
     expect(mutate).not.toHaveBeenCalled()
+  })
+
+  // N8 — rostering access is the gate (SupportWorker and ReadOnly are outside it), and the item sits after Client Overview.
+  it.each(['ReadOnly', 'SupportWorker'])('does not offer the Weekly Schedule PDF to %s', async role => {
+    setUserRole(role)
+    renderAt('participant-1')
+    await openDocuments()
+    expect(screen.queryByRole('option', { name: /^Weekly Schedule PDF/ })).not.toBeInTheDocument()
+  })
+
+  it.each(['SuperAdmin', 'Admin', 'Coordinator'])('offers the Weekly Schedule PDF to %s, fourth in the menu', async role => {
+    setUserRole(role)
+    renderAt('participant-1')
+    await openDocuments()
+    expect(screen.getAllByRole('option')[3]).toHaveTextContent('Weekly Schedule PDF')
+  })
+
+  it('labels the item plainly, and with the week when ?week= names one', async () => {
+    renderAt('participant-1')
+    await openDocuments()
+    expect(screen.getByRole('option', { name: 'Weekly Schedule PDF' })).toBeInTheDocument()
+    expect(mockUseDownloadWeeklySchedulePdf).toHaveBeenLastCalledWith('Sophie Brown', null)
+    cleanup()
+    renderAtWeek('participant-1', '2026-09-14')
+    await openDocuments()
+    expect(screen.getByRole('option', { name: 'Weekly Schedule PDF (14–20 Sep)' })).toBeInTheDocument()
+    expect(mockUseDownloadWeeklySchedulePdf).toHaveBeenLastCalledWith('Sophie Brown', '2026-09-14')
+  })
+
+  it.each(['abc', '2026-02-30', '2026-09-14T10:00'])('ignores a ?week= of %s: the plain label, and the server picks the week', async week => {
+    renderAtWeek('participant-1', week)
+    await openDocuments()
+    expect(screen.getByRole('option', { name: 'Weekly Schedule PDF' })).toBeInTheDocument()
+    expect(mockUseDownloadWeeklySchedulePdf).toHaveBeenLastCalledWith('Sophie Brown', null)
+  })
+
+  it('choosing the Weekly Schedule PDF starts that download with the participant id and the file name stem', async () => {
+    const user = userEvent.setup()
+    const mutate = vi.fn()
+    mockUseDownloadWeeklySchedulePdf.mockReturnValue({ mutate, isPending: false, isError: false })
+    renderAt('participant-1')
+    await user.click(screen.getByRole('button', { name: 'Documents' }))
+    await user.click(screen.getByRole('option', { name: 'Weekly Schedule PDF' }))
+    expect(mutate).toHaveBeenCalledWith({ id: 'participant-1', fileName: 'Sophie Brown - Weekly Schedule' })
+  })
+
+  it('shows the shared alert when only the schedule download fails', () => {
+    mockUseDownloadWeeklySchedulePdf.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: true })
+    renderAt('participant-1')
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't download the file. Try again, or contact support if this keeps happening.")
+  })
+
+  it('shows "Preparing…" and disables the schedule option while it is being made', async () => {
+    const user = userEvent.setup()
+    mockUseDownloadWeeklySchedulePdf.mockReturnValue({ mutate: vi.fn(), isPending: true, isError: false })
+    renderAt('participant-1')
+    await user.click(screen.getByRole('button', { name: /preparing/i }))
+    expect(screen.getByRole('option', { name: 'Weekly Schedule PDF' })).toHaveAttribute('aria-disabled', 'true')
+  })
+
+  // Print: the Documents and More menus are chrome, not part of the page.
+  it('hides the header action cluster when printing', () => {
+    renderAt('participant-1')
+    expect(screen.getByRole('button', { name: 'Documents' }).closest('.print\\:hidden')).not.toBeNull()
   })
 
   it('collapses the per-button error lines into one shared alert', () => {
