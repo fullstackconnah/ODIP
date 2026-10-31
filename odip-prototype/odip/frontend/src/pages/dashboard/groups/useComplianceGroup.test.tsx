@@ -13,7 +13,7 @@ const member = (o: Record<string, unknown> = {}) => ({
   id: 's1', firstName: 'Sam', lastName: 'Lee', fullName: 'Sam Lee', role: 'SupportWorker', position: 'SupportWorker', email: 'sam@example.com',
   mobile: '0400 000 000', region: 'Brisbane', isDriverEligible: false, isFirstAidQualified: true, isMedicationCompetent: false, isManualHandlingCompetent: false,
   isOvernightEligible: false, isActive: true, notes: 'Prefers mornings.', firstAidExpiryDate: '2026-10-03', driverLicenceExpiryDate: null,
-  manualHandlingExpiryDate: null, medicationCompetencyExpiryDate: null, workerScreeningNumber: 'WS-1', workerScreeningExpiryDate: null, ...o,
+  manualHandlingExpiryDate: null, medicationCompetencyExpiryDate: null, workerScreeningNumber: 'WS-1', workerScreeningExpiryDate: '2099-01-01', ...o,
 })
 const render = (mayEditAdmins = true) => renderGroup(() => useComplianceGroup(true, { staff: useStaff({ isActive: 'true' }), today: TODAY, warningDays: 30, mayEditAdmins }))
 // The staff list, and each person read fresh at save time (GET /staff/{id}): the record as it is now, which may differ from the list (deep S1).
@@ -47,6 +47,17 @@ describe('Staff compliance group — what it lists', () => {
     for (const flag of ['Expired', 'Expires today', '16 days', 'No date set']) expect(screen.getByText(flag)).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Credentials (4)' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add expiry: Cy Moss, driver licence' })).toBeInTheDocument()
+  })
+})
+
+describe('Staff compliance group — a missing screening', () => {
+  it('lists an active person with no screening on file as an undated Worker Screening row', async () => {
+    apiGet.mockResolvedValue([member({ firstAidExpiryDate: '2099-01-01', workerScreeningExpiryDate: null })])
+    render()
+
+    await screen.findByText('Sam Lee')
+    expect(facts('Sam Lee')).toEqual(['Worker Screening', '—'])
+    expect(screen.getByRole('button', { name: 'Add expiry: Sam Lee, worker screening' })).toBeInTheDocument()
   })
 })
 

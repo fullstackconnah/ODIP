@@ -6,6 +6,7 @@ import { EmptyState, type EmptyStateAction } from '@/components/EmptyState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { statusClass } from '@/lib/tone'
 import { SearchInput } from '@/components/SearchInput'
+import { Tabs } from '@/components/Tabs'
 import { CHIP_CLASS } from '@/components/ServiceStreamBadges'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Button } from '@/components/Button'
@@ -15,6 +16,7 @@ import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link } from 'react-router-dom'
 import { Plus, UserCog, CalendarOff } from 'lucide-react'
 import { useState } from 'react'
+import { useTabParam } from '@/hooks/useTabParam'
 import { usePermissions } from '@/lib/permissions'
 import { deadlineState } from '@/lib/deadline'
 import { toUpdateStaffDto, type StaffListDto, type UpdateStaffDto } from '@/api/types/staff'
@@ -42,13 +44,18 @@ const QUALIFICATIONS: Array<[keyof StaffListDto, string]> = [
   ['isOvernightEligible', 'Overnight'],
 ]
 
+// No screening date on an active person: the same case the roster warns on (WSC_MISSING) and Today counts as a credential issue.
+const isScreeningMissing = (s: StaffListDto) => s.isActive && !s.workerScreeningExpiryDate
+
 function Qualifications({ staff }: { staff: StaffListDto }) {
   const held = QUALIFICATIONS.filter(([flag]) => staff[flag]).map(([, label]) => label)
   const screening = staff.workerScreeningExpiryDate
-  if (held.length === 0 && !screening) return null
+  const missing = isScreeningMissing(staff)
+  if (held.length === 0 && !screening && !missing) return null
   return (
     <ul aria-label="Qualifications" className="inline-flex flex-wrap items-center gap-1">
       {held.map(label => <li key={label} className={CHIP_CLASS}>{label}</li>)}
+      {missing && <li><StatusBadge tone="warning" label="Screening missing" /></li>}
       {screening && (isExpired(screening)
         ? <li><StatusBadge status="expired" label="Screening expired" /></li>
         : <li className={CHIP_CLASS}>Worker screening</li>)}
@@ -82,12 +89,17 @@ export default function StaffPage() {
   const { data: staffData = [], isLoading, isError, refetch } = pageQuery
   // PP-45 — StaffController's GetAll only supports `isActive`, no server-side text search, so the
   // filter is applied client-side (same approach CompatibilityPage takes for its matrix filters).
-  const staff = search
+  const [screeningTab, setScreeningTab] = useTabParam(['all', 'missing'] as const, 'all')
+  const searched = search
     ? staffData.filter((s: StaffListDto) => {
         const q = search.toLowerCase()
         return s.fullName?.toLowerCase().includes(q) || positionLabel(s).toLowerCase().includes(q) || s.region?.toLowerCase().includes(q)
       })
     : staffData
+  const missingCount = searched.filter(isScreeningMissing).length
+  // The tabs are hidden on the archived list, so a shared ?tab=missing link must not filter it.
+  const missingOnly = screeningTab === 'missing' && !showArchived
+  const staff = missingOnly ? searched.filter(isScreeningMissing) : searched
 
   // The confirm (if any) closes either way; a refusal is said above the table.
   function saveStatus(id: string, name: string, data: UpdateStaffDto) {
@@ -203,7 +215,16 @@ export default function StaffPage() {
       {errorNotice}
       {statusError && <Callout tone="error">{statusError}</Callout>}
 
-      {!isLoading && !isError && staff.length === 0 ? (
+      {!isLoading && !isError && !showArchived && staffData.length > 0 && (
+        <Tabs
+          tabs={[{ id: 'all', label: 'All' }, { id: 'missing', label: 'Screening missing', badge: missingCount }]}
+          active={screeningTab}
+          onChange={setScreeningTab}
+          ariaLabel="Staff filters"
+        />
+      )}
+
+      {!isLoading && !isError && staff.length === 0 && !(missingOnly && searched.length > 0) ? (
         search ? (
           <EmptyState
             icon={UserCog}
@@ -231,7 +252,7 @@ export default function StaffPage() {
           loading={isLoading}
           error={isError || retryingAfterError(pageQuery)}
           onRetry={() => refetch()}
-          emptyMessage="No staff found"
+          emptyMessage={missingOnly ? 'Everyone here has a screening date' : 'No staff found'}
         />
       )}
       {confirmDialog}

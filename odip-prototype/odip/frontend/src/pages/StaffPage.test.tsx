@@ -37,9 +37,9 @@ function makeStaff(overrides: Partial<StaffListDto> = {}): StaffListDto {
   } as StaffListDto
 }
 
-function renderPage() {
+function renderPage(url = '/') {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[url]}>
       <StaffPage />
     </MemoryRouter>,
   )
@@ -417,10 +417,11 @@ describe('StaffPage — Qualifications chips and the phone card', () => {
 
     const row = screen.getByText('Alex Rivera').closest('tr') as HTMLElement
     const chips = within(row).getByRole('list', { name: 'Qualifications' })
-    expect(within(chips).getAllByRole('listitem').map(li => li.textContent)).toEqual(['Driver', 'Medication'])
+    expect(within(chips).getAllByRole('listitem').map(li => li.textContent)).toEqual(['Driver', 'Medication', 'Screening missing'])
   })
 
-  it('leaves the cell empty for someone with none', () => {
+  it('leaves the cell empty for someone with none who is archived (nothing to chip)', () => {
+    mockUseStaff.mockReturnValue({ data: [makeStaff({ id: 's1', fullName: 'Alex Rivera', isActive: false })], isLoading: false })
     renderPage()
 
     const row = screen.getByText('Alex Rivera').closest('tr') as HTMLElement
@@ -511,5 +512,79 @@ describe('StaffPage — status tones', () => {
     const inactive = within(screen.getByText('Jamie Fox').closest('tr') as HTMLElement).getByRole('button', { name: /^inactive$/i })
     expect(active).toHaveClass(...TONE.success.solid.split(' '))
     expect(inactive).toHaveClass(...TONE.danger.solid.split(' '))
+  })
+})
+
+describe('StaffPage — a missing worker screening', () => {
+  const rows = () => [
+    makeStaff({ id: 's1', fullName: 'Alex Rivera', workerScreeningExpiryDate: null }),
+    makeStaff({ id: 's2', fullName: 'Blake Nguyen', workerScreeningExpiryDate: '2099-01-01' }),
+    makeStaff({ id: 's3', fullName: 'Casey Archer', isActive: false, workerScreeningExpiryDate: null }),
+  ]
+
+  it('chips an active person with no screening date, and nobody else', () => {
+    mockUseStaff.mockReturnValue({ data: rows(), isLoading: false })
+    renderPage()
+
+    const row = (name: string) => screen.getByText(name).closest('tr') as HTMLElement
+    expect(within(row('Alex Rivera')).getByText('Screening missing')).toBeInTheDocument()
+    expect(within(row('Blake Nguyen')).queryByText('Screening missing')).not.toBeInTheDocument()
+    expect(within(row('Casey Archer')).queryByText('Screening missing')).not.toBeInTheDocument()
+  })
+
+  it('filters the list to the people missing a screening, with the count on the tab', async () => {
+    mockUseStaff.mockReturnValue({ data: rows(), isLoading: false })
+    renderPage()
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Screening missing' }))
+
+    expect(screen.getByText('Alex Rivera')).toBeInTheDocument()
+    expect(screen.queryByText('Blake Nguyen')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('tab', { name: 'All' }))
+    expect(screen.getByText('Blake Nguyen')).toBeInTheDocument()
+  })
+
+  it('shows the count as a badge on the tab', () => {
+    mockUseStaff.mockReturnValue({ data: rows(), isLoading: false })
+    renderPage()
+
+    expect(within(screen.getByRole('tab', { name: 'Screening missing' })).getByText('1')).toBeInTheDocument()
+  })
+
+  it('keeps the filter in the URL, and says so kindly when nobody is missing one', () => {
+    mockUseStaff.mockReturnValue({ data: [rows()[1]], isLoading: false })
+    renderPage('/?tab=missing')
+
+    expect(screen.getByRole('tab', { name: 'Screening missing' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByText('Everyone here has a screening date')).toBeInTheDocument()
+    expect(screen.queryByText('No staff found')).not.toBeInTheDocument()
+  })
+
+  it('hides the tabs on the archived list, even for a shared ?tab=missing link', async () => {
+    mockUseStaff.mockReturnValue({ data: [rows()[2]], isLoading: false })
+    renderPage('/?tab=missing')
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Archived' }))
+
+    expect(screen.queryByRole('tablist', { name: 'Staff filters' })).not.toBeInTheDocument()
+    expect(screen.getByText('Casey Archer')).toBeInTheDocument()
+  })
+
+  it('keeps the no-match message for a search that matches nobody on the missing tab', async () => {
+    mockUseStaff.mockReturnValue({ data: rows(), isLoading: false })
+    renderPage('/?tab=missing')
+
+    await userEvent.type(screen.getByPlaceholderText('Search staff...'), 'zzz')
+
+    expect(screen.getByText('No staff match your search')).toBeInTheDocument()
+    expect(screen.queryByText('Everyone here has a screening date')).not.toBeInTheDocument()
+  })
+
+  it('keeps the no-staff empty state for an organisation with nobody, on a shared ?tab=missing link', () => {
+    mockUseStaff.mockReturnValue({ data: [], isLoading: false })
+    renderPage('/?tab=missing')
+
+    expect(screen.getByText('No staff members yet')).toBeInTheDocument()
+    expect(screen.queryByText('Everyone here has a screening date')).not.toBeInTheDocument()
   })
 })
