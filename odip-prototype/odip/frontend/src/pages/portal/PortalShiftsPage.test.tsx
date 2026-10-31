@@ -130,6 +130,28 @@ describe('PortalShiftsPage', () => {
   })
 })
 
+// SHAPE-PR3 8 (B10): the card says how long the shift is, and the two header actions no longer compete with the shift titles.
+describe('PortalShiftsPage — the shift card and header actions', () => {
+  it('puts the duration after the time range, before the ratio', () => {
+    const base = makeShiftsResponse().shifts[0]
+    mockUseMyShifts.mockReturnValue({ data: makeShiftsResponse({ shifts: [{ ...base, durationHours: 8, ratio: 'TwoToOne' }] }), isLoading: false })
+    renderPage()
+    const meta = screen.getByText(/9am–5pm/)
+    expect(meta.textContent).toMatch(/^9am–5pm · 8 h/)
+    expect(meta.textContent).toMatch(/8 h.*2:1/)
+  })
+
+  it('keeps Leave and Witness approvals as ghost buttons', () => {
+    mockUseMyShifts.mockReturnValue({ data: makeShiftsResponse(), isLoading: false })
+    renderPage()
+    for (const name of [/my leave/i, /witness approvals/i]) {
+      const link = screen.getByRole('link', { name })
+      expect(link.className).toContain('text-[var(--color-muted-foreground)]')
+      expect(link.className).not.toContain('bg-[var(--color-primary)]')
+    }
+  })
+})
+
 // V2-C: the week controls are one group that never wraps (prev, the range, next, This week), built from Button; My leave and Witness approvals are header actions, not part of it.
 describe('PortalShiftsPage — the week controls', () => {
   it('keep prev, the range, next and This week in one non-wrapping group of Buttons', () => {

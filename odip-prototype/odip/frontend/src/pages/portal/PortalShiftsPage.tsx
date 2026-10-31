@@ -10,6 +10,7 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { weekStartOf, shiftWeek, daysOfWeek, formatWeekRange, formatDayAccessibleName, formatShiftTimeRange, formatEffectiveRange } from '@/pages/rostering/lib/roster'
 import { addDays, format, parseISO, subDays } from 'date-fns'
 import { RATIO_LABELS, hasEnded, pickCurrentShift, portalStatusLabel } from './lib/portal'
+import { formatHours } from '@/lib/planBlocks'
 import { useNow } from './shift/useNow'
 import { utcInstantToProviderLocal } from './shift/shiftTime'
 import { useOnline } from './shift/useOnline'
@@ -80,7 +81,7 @@ function ShiftLink({ shift }: { shift: PortalShiftSummaryDto }) {
         <div className="min-w-0">
           <p className="font-medium text-[var(--color-foreground)] truncate">{shift.participantName}</p>
           <p className="text-sm text-[var(--color-muted-foreground)]">
-            {formatShiftTimeRange(shift.startTime, shift.endTime)}
+            {formatShiftTimeRange(shift.startTime, shift.endTime)} · {formatHours(shift.durationHours)} h
             {shift.endsNextDay && <span className="ml-1">(+1 day)</span>}
             {shift.ratio !== 'OneToOne' && <span className="ml-2">{RATIO_LABELS[shift.ratio] ?? shift.ratio}</span>}
           </p>
@@ -179,10 +180,10 @@ export default function PortalShiftsPage() {
         title="My shifts"
         action={
           <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <Button to="/portal/leave" variant="secondary" size="md">
+            <Button to="/portal/leave" variant="ghost" size="md">
               <CalendarOff className="w-4 h-4" /> My leave
             </Button>
-            <Button to="/portal/witness-approvals" variant="secondary" size="md">
+            <Button to="/portal/witness-approvals" variant="ghost" size="md">
               <ShieldCheck className="w-4 h-4" /> Witness approvals
               {pendingWitnessCount > 0 && (
                 <span
