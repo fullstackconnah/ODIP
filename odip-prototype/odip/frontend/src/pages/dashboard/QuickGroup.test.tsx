@@ -36,10 +36,10 @@ const decline = (id: string, form: Partial<QuickForm> = {}): RowAction => ({
     failText: "Couldn't decline it. Try again.", submit: vi.fn(async () => ({ announce: `Declined Person ${id}.` })), ...form },
 })
 const row = (id: string, o: Partial<QuickRow> = {}): QuickRow =>
-  ({ id, subject: `Person ${id}`, facts: ['Annual leave', '20–24 Oct 2026, 5 days', null], flags: [], actions: [], ...o })
+  ({ id, subject: `Person ${id}`, facts: ['20–24 Oct 2026, 5 days', 'Annual leave', null], flags: [], actions: [], ...o })
 const model = (o: Partial<GroupModel> = {}): GroupModel => ({
   key: 'leave', title: 'Leave', noun: 'leave requests', phase: 'ready', refetch: vi.fn(), count: 2,
-  subjectHeader: 'Staff', columns: [{ header: 'Type' }, { header: 'Dates' }, { header: 'Note', long: true }],
+  subjectHeader: 'Staff', columns: [{ header: 'Dates' }, { header: 'Type' }, { header: 'Note', long: true }],
   rows: [row('a'), row('b')], link: { to: '/rostering/leave', openLabel: 'Open Leave' }, ...o,
 })
 const status = () => screen.getAllByRole('status').find((el) => el.classList.contains('sr-only'))!
@@ -53,18 +53,28 @@ describe('QuickGroup — the table', () => {
   it('heads its columns with the subject, then each fact, then an empty actions header', () => {
     render(<Harness model={model()} />)
 
-    expect(screen.getAllByRole('columnheader').map((th) => th.textContent)).toEqual(['Staff', 'Type', 'Dates', 'Note', 'Actions'])
+    expect(screen.getAllByRole('columnheader').map((th) => th.textContent)).toEqual(['Staff', 'Dates', 'Type', 'Note', 'Actions'])
     // The header row is the table's look from xl; below xl each row is a card and the header is not shown.
     expect(screen.getAllByRole('row')[0].closest('thead')).toHaveClass('sticky')
   })
 
   it('draws one plain value per column, a dash for a missing one, and cuts long text in the table with its full text in the tooltip', () => {
-    render(<Harness model={model({ rows: [row('a', { facts: ['Annual leave', '20–24 Oct 2026, 5 days', 'Family wedding'] }), row('b')] })} />)
+    render(<Harness model={model({ rows: [row('a', { facts: ['20–24 Oct 2026, 5 days', 'Annual leave', 'Family wedding'] }), row('b')] })} />)
 
-    expect(within(rowOf('Person a')).getAllByRole('cell').map((td) => td.textContent)).toEqual(['Person a', 'Annual leave', '20–24 Oct 2026, 5 days', 'Family wedding', ''])
+    expect(within(rowOf('Person a')).getAllByRole('cell').map((td) => td.textContent)).toEqual(['Person a', '20–24 Oct 2026, 5 days', 'Annual leave', 'Family wedding', ''])
     expect(within(rowOf('Person b')).getAllByRole('cell')[3]).toHaveTextContent('—')
     expect(screen.getByText('Family wedding')).toHaveAttribute('title', 'Family wedding')
-    expect(screen.getByText('Family wedding')).toHaveClass('md:truncate')
+    // A long fact (the free-text note) takes two lines, not one ellipsis; the others stay one line.
+    expect(screen.getByText('Family wedding')).toHaveClass('md:line-clamp-2')
+    expect(screen.getByText('Family wedding')).not.toHaveClass('md:truncate')
+    expect(screen.getAllByText('Annual leave')[0]).toHaveClass('md:truncate')
+    expect(within(rowOf('Person a')).getAllByRole('cell')[3]).not.toHaveClass('md:whitespace-nowrap')
+  })
+
+  it('caps the subject name at 12rem, with the full name in its tooltip', () => {
+    render(<Harness model={model()} />)
+    expect(screen.getByText('Person a')).toHaveClass('md:max-w-[12rem]', 'md:truncate')
+    expect(screen.getByText('Person a')).toHaveAttribute('title', 'Person a')
   })
 
   it('uses the shared house table with bounded context cells and no preview sorting or pager', () => {
@@ -428,7 +438,7 @@ describe('QuickGroup — select and Complete all (decision-bulk SHAPE §3–§6)
 
   it('keeps selection separate from ineligible rows and shows no unselected bulk action', () => {
     render(<Harness model={model({ rows: [tapRow('a'), row('b', { flags: [{ label: 'Your request', tone: 'neutral' }] })] })} />)
-    expect(screen.getAllByRole('columnheader').map(th => th.textContent)).toEqual(['Select', 'Staff', 'Type', 'Dates', 'Note', 'Actions'])
+    expect(screen.getAllByRole('columnheader').map(th => th.textContent)).toEqual(['Select', 'Staff', 'Dates', 'Type', 'Note', 'Actions'])
     expect(within(rowOf('Person b')).queryByRole('checkbox')).not.toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Select leave: Person a' })).not.toBeChecked()
     expect(screen.getByRole('checkbox', { name: 'Select all shown leave requests' })).not.toBeChecked()
@@ -491,7 +501,7 @@ describe('QuickGroup — select and Complete all (decision-bulk SHAPE §3–§6)
     const { unmount } = render(<Harness model={model({ count: 3, rows: [tapRow('a', () => first.promise), tapRow('b'), tapRow('c')] })} />)
     const heads = () => screen.getAllByRole('columnheader').map((th) => th.textContent)
     const before = heads()
-    expect(before).toEqual(['Select all shown leave requests', 'Staff', 'Type', 'Dates', 'Note', 'Actions'])
+    expect(before).toEqual(['Select all shown leave requests', 'Staff', 'Dates', 'Type', 'Note', 'Actions'])
     expect(screen.getByText('None selected')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select leave: Person a' }))

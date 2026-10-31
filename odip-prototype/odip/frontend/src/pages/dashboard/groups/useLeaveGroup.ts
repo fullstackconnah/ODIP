@@ -71,7 +71,7 @@ export function useLeaveGroup(enabled: boolean, viewerId: string | null): GroupM
     return { start: r.startDate, row: {
       id: `leave:${r.id}`,
       subject: r.userFullName,
-      facts: [`${LEAVE_TYPE_LABELS[r.leaveType]} leave`, `${range}, ${plural(days, 'day')}`, r.reason && `“${r.reason}”`],
+      facts: [`${range}, ${plural(days, 'day')}`, `${LEAVE_TYPE_LABELS[r.leaveType]} leave`, r.reason && `“${r.reason}”`],
       flags: own ? [{ label: 'Your request', tone: 'neutral' }] : [],
       actions: own ? [] : [
         { kind: 'form', label: 'Decline', name: `Decline leave: ${r.userFullName}, ${range}`, form: declineForm(r.userFullName, async (note) => {
@@ -96,7 +96,7 @@ export function useLeaveGroup(enabled: boolean, viewerId: string | null): GroupM
       id: `unavailability:${r.id}`,
       subject: r.userFullName,
       // The Leave page's word for a rule.
-      facts: ['Regular unavailability', [when, `${formatShiftTime(r.startTime)} – ${formatShiftTime(r.endTime)}`, from && `from ${from}`].filter(Boolean).join(', '), r.notes && `“${r.notes}”`],
+      facts: [[when, `${formatShiftTime(r.startTime)} – ${formatShiftTime(r.endTime)}`, from && `from ${from}`].filter(Boolean).join(', '), 'Regular unavailability', r.notes && `“${r.notes}”`],
       flags: own ? [{ label: 'Your request', tone: 'neutral' }] : [],
       actions: own ? [] : [
         { kind: 'form', label: 'Decline', name: `Decline unavailability: ${r.userFullName}, ${when}`, form: declineForm(r.userFullName, async (note) => {
@@ -118,7 +118,7 @@ export function useLeaveGroup(enabled: boolean, viewerId: string | null): GroupM
     title: 'Leave',
     noun: 'leave requests',
     subjectHeader: 'Staff',
-    columns: [{ header: 'Type' }, { header: 'Dates' }, { header: 'Note', long: true }],
+    columns: [{ header: 'Dates' }, { header: 'Type' }, { header: 'Note', long: true }],
     phase: groupPhase(leave, unavailability),
     refetch: () => { void leave.refetch(); void unavailability.refetch() },
     readAt: Math.min(leave.dataUpdatedAt, unavailability.dataUpdatedAt),

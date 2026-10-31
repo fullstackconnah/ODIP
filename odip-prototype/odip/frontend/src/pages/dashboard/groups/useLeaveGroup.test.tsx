@@ -43,11 +43,11 @@ describe('Leave group — what it reads', () => {
     expect(apiGetWithDefault).toHaveBeenCalledWith('/leave/unavailability', [], { status: 'Pending' })
     expect(client.getQueryCache().find({ queryKey: ['leave-requests', { status: 'Pending' }], exact: true })).toBeDefined()
     expect(subjects()).toEqual(['Ana Ruiz', 'Sam Lee', 'Mei Zhang'])
-    expect(headers()).toEqual(['Staff', 'Type', 'Dates', 'Note', 'Actions'])
-    expect(facts('Sam Lee')).toEqual(['Annual leave', '20–24 Oct 2026, 5 days', '“Family wedding”'])
-    expect(facts('Ana Ruiz')).toEqual(['Annual leave', '15 Oct 2026, 1 day', '—'])
+    expect(headers()).toEqual(['Staff', 'Dates', 'Type', 'Note', 'Actions'])
+    expect(facts('Sam Lee')).toEqual(['20–24 Oct 2026, 5 days', 'Annual leave', '“Family wedding”'])
+    expect(facts('Ana Ruiz')).toEqual(['15 Oct 2026, 1 day', 'Annual leave', '—'])
     // The Leave page's word for a rule, and its notes (fetched, not drawn before).
-    expect(facts('Mei Zhang')).toEqual(['Regular unavailability', 'Tuesdays, 9am – 12pm, from 21 Oct', '—'])
+    expect(facts('Mei Zhang')).toEqual(['Tuesdays, 9am – 12pm, from 21 Oct', 'Regular unavailability', '—'])
     expect(screen.getByRole('tab', { name: 'Leave (3)' })).toBeInTheDocument()
   })
 
