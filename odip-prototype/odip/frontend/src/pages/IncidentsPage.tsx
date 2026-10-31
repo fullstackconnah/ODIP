@@ -381,15 +381,15 @@ export default function IncidentsPage() {
         <FlaggedNotesTab flaggedNotes={flaggedNotes} isLoading={flaggedNotesLoading} isError={flaggedNotesError || retryingAfterError(flaggedQuery)} onRetry={() => refetchFlaggedNotes()} />
       ) : (
       <>
-      {/* QSC Overdue Alert Banner — one 40px line: the headline, the reason and the link all stay,
-          the reason truncates (md+) before the link ever does. */}
+      {/* QSC Overdue Alert Banner — the headline, the reason and the link all stay; the reason wraps
+          onto a second line rather than being cut, so the 5-business-day sentence is always readable. */}
       {!showArchived && overdueQsc.length > 0 && (
         <div
           role="alert"
           className="flex min-h-10 items-center gap-3 px-3 py-1.5 rounded-[var(--radius-md)] bg-error-container border border-destructive/40 text-on-error-container"
         >
           <AlertTriangle className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
-          <p className="min-w-0 flex-1 text-sm md:truncate">
+          <p className="min-w-0 flex-1 text-sm">
             <span className="font-semibold">{qscHeadline}</span>
             <span className="ml-2 text-[13px]">{'Most reportable incidents must be reported to the NDIS Commission within 24\u00a0hours. Some uses of an unauthorised restrictive practice can be reported within 5\u00a0business days.'}</span>
           </p>

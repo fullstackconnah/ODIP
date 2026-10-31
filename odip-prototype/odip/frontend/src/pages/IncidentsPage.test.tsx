@@ -367,7 +367,7 @@ describe('IncidentsPage — Flagged notes tab (connection map item 4)', () => {
 })
 
 describe('IncidentsPage — one-line NDIS Commission banner', () => {
-  it('compresses to a single 40px line while keeping the headline, the reason and the link', () => {
+  it('keeps the headline, the reason and the link in one compact banner', () => {
     mockUseOverdueQscIncidents.mockReturnValue({
       data: [baseIncident({ isOverdue24h: true }), baseIncident({ id: 'inc-2', isOverdue24h: true })],
     })
@@ -377,8 +377,11 @@ describe('IncidentsPage — one-line NDIS Commission banner', () => {
     expect(banner).toHaveTextContent('2 incidents are past their NDIS Commission deadline')
     expect(banner).toHaveTextContent('Most reportable incidents must be reported to the NDIS Commission within 24 hours.')
     expect(within(banner).getByRole('link', { name: 'View overdue incidents' })).toHaveAttribute('href', '/incidents?qsc=overdue')
-    // It used to stack a headline paragraph, a reason paragraph and the link on their own lines (88px).
+    // One paragraph for the headline and the reason (it used to be two).
     expect(banner.querySelectorAll('p')).toHaveLength(1)
+    // The two-sentence reason wraps at every width; an ellipsis would hide the second sentence.
+    expect(banner.querySelector('p')!.className).not.toMatch(/truncate/)
+    expect(banner).toHaveTextContent('Some uses of an unauthorised restrictive practice can be reported within 5 business days.')
     expect(banner).toHaveClass('flex', 'items-center', 'min-h-10')
     // Keeps the token colours the C-1 test pins, and no raw palette colours.
     expect(banner.className).toMatch(/bg-error-container/)
