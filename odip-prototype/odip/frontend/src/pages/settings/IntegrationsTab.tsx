@@ -369,6 +369,7 @@ function LeaveNotSent({ items }: { items: EmploymentHeroLeaveProblemDto[] }) {
 
 /** The groups, in the server's order: what the Admin does about each kind. */
 const GROUPS: { kind: EmploymentHeroAttentionKind; title: string; intro: string }[] = [
+  { kind: 'ConfirmAddress', title: 'Confirm email address', intro: "They can't sign in until their email is confirmed on their staff page." },
   { kind: 'NotLinked', title: 'Not linked', intro: 'In Bunya Support but not matched to anyone in Employment Hero. Link them, or leave them unlinked.' },
   { kind: 'FixInEmploymentHero', title: 'Fix in Employment Hero', intro: "We can't take these people as they are. Fix them in Employment Hero; each clears at the next sync." },
   { kind: 'FixInOdip', title: 'Fix in Bunya Support', intro: "Only an Admin can make these changes, on the person's staff page." },
@@ -427,6 +428,9 @@ function Attention({ items }: { items: EmploymentHeroAttentionDto[] }) {
                       )}
                       {item.kind === 'FixInOdip' && item.userId && (
                         <Button size="sm" variant="secondary" to={`/staff/${item.userId}/edit`} aria-label={`Open staff page: ${item.name}`}>Open staff page</Button>
+                      )}
+                      {item.kind === 'ConfirmAddress' && item.userId && (
+                        <Button size="sm" variant="secondary" to={`/staff/${item.userId}`} aria-label={`Open staff page: ${item.name}`}>Open staff page</Button>
                       )}
                       {item.kind === 'FixInEmploymentHero' && <span className={MUTED}>Fix it in Employment Hero; it clears at the next sync.</span>}
                     </div>
