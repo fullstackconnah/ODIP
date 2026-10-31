@@ -261,8 +261,31 @@
   .mobile-card-table tbody tr:has(> td[data-card]) > td:not([data-card='primary'], [data-card='status']) {
     margin-top: 0.5rem;
   }
-  .mobile-card-table tbody tr:has(> td[data-card]) > td[data-card='meta'] {
+  .mobile-card-table tbody tr:has(> td[data-card]) > td:is([data-card='meta'], [data-card='trail']) {
     margin-top: 0.25rem;
+  }
+  /* A long title takes two lines: the status pill stays level with the first. */
+  .mobile-card-table tbody td[data-card='status'] {
+    align-self: flex-start;
+  }
+  /*
+   * DataTable mobile: 'trail' (a tick, a ⋯ menu) holds 44px targets that would each cost a line of their own. The last one sits in the card's
+   * bottom-right corner, out of the flow (the meta values end well short of it), and an earlier one (the tick) overhangs its meta line by
+   * negative margins, so the card stays two lines tall plus the title.
+   */
+  .mobile-card-table tbody tr:has(> td[data-card='trail']) {
+    position: relative;
+    min-height: 6.5rem; /* room for the corner menu under a one-line title */
+  }
+  .mobile-card-table tbody tr:has(> td[data-card]) > td[data-card='trail']:not(:has(~ td[data-card='trail'])) {
+    position: absolute;
+    right: 0.25rem;
+    bottom: 0.25rem;
+    margin: 0;
+  }
+  .mobile-card-table tbody tr:has(> td[data-card]) > td[data-card='trail']:has(~ td[data-card='trail']) {
+    margin-top: -0.5rem;
+    margin-bottom: -0.8rem;
   }
   .mobile-card-table .divide-y > * + * {
     border-top: none;
@@ -296,7 +319,7 @@
   .mobile-card-table tbody tr {
     gap: 0.75rem;
   }
-  .mobile-card-table tbody tr:has(> td[data-card]) > td:not([data-card='primary'], [data-card='status'], [data-card='meta']) {
+  .mobile-card-table tbody tr:has(> td[data-card]) > td:not([data-card='primary'], [data-card='status'], [data-card='meta'], [data-card='trail']) {
     margin-top: 0.75rem;
   }
 }

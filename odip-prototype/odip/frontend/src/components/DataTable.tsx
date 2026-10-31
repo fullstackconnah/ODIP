@@ -1,7 +1,9 @@
 import { type CSSProperties, type ReactNode, Children, Fragment, useState, useMemo, useRef, useEffect } from 'react'
 import { formatDateAu, formatCurrency } from '@/lib/utils'
 import { StatusBadge } from '@/components/StatusBadge'
-import { ChevronUp, ChevronDown, ChevronsUpDown, Check } from 'lucide-react'
+import { ChevronUp, ChevronDown, ChevronsUpDown, Check, MoreHorizontal } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Button } from '@/components/Button'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { useUiPreferences } from '@/hooks/useUiPreferences'
 import { ROW_ACTIONS_CARD, TAP_AREA_LINKS } from './tapArea'
@@ -21,6 +23,8 @@ type ColumnBase<T> = {
   sortable?: boolean
   align?: 'left' | 'center' | 'right'
   hidden?: boolean
+  /** Screen-reader text for a column with no visible header (a tick). The actions column is named "Actions" without it. */
+  srHeader?: string
   /**
    * Narrowest this column is ever laid out at (md+): a px number or any CSS length (`'10.25rem'`),
    * border-box, so it includes the cell's horizontal padding. Reserve room for content that changes
@@ -56,9 +60,14 @@ type ColumnBase<T> = {
   /**
    * Where this column goes on the phone card (below md). Unset keeps the labelled field every column gets by default. `primary` is the
    * title line, `status` a pill at the end of it, `meta` folds into one muted line under it (no caps labels, empty values skipped) and
-   * `hidden` leaves the card. The table from md up is unchanged.
+   * `hidden` leaves the card. `trail` ends the meta line, pushed to its right edge (the row's one visible action and its ⋯ menu).
+   * The table from md up is unchanged.
    */
-  mobile?: 'primary' | 'meta' | 'status' | 'hidden'
+  mobile?: 'primary' | 'meta' | 'status' | 'trail' | 'hidden'
+  /** Drop this column (header and cells, every width) while the table has rows and none of them has a value for it (null, '', '—' or []). Data-driven, never by breakpoint (L3-04). */
+  hideWhenEmpty?: boolean
+  /** The cell holds only `RowActions overlay` (or `RowMenu`), so on a mouse the column costs 0px: no padding, no blank strip at rest. */
+  overlay?: boolean
   editable?: {
     /**
      * `ctx.errorId` is the id of the row's error message element (see `rowError` on
@@ -175,6 +184,10 @@ function getValue(obj: any, key: string): any {
   return obj?.[key]
 }
 
+function isEmptyValue(value: unknown): boolean {
+  return value == null || value === '' || value === '—' || (Array.isArray(value) && value.length === 0)
+}
+
 function defaultComparator(type: ColumnType | undefined, a: any, b: any): number {
   if (a == null && b == null) return 0
   if (a == null) return 1
@@ -259,13 +272,19 @@ function pinsOf<T>(columns: Column<T>[]): Array<ColumnPin | undefined> {
 const CARD_CLASS: Record<NonNullable<ColumnBase<unknown>['mobile']>, string> = {
   primary: 'max-md:-order-2 max-md:flex-1 max-md:min-w-0',
   status: 'max-md:-order-2 max-md:ml-auto',
-  meta: 'max-md:-order-1 max-md:flex max-md:items-center max-md:min-w-0 max-md:text-[13px] max-md:text-[var(--color-muted-foreground)]',
+  meta: 'max-md:-order-1 max-md:flex max-md:items-center max-md:min-w-0 max-md:text-[13px] max-md:text-[var(--color-muted-foreground)] max-md:max-w-[12rem] max-md:[&>:is(a,span)]:min-w-0 max-md:[&>:is(a,span)]:truncate',
+  trail: 'max-md:-order-1 max-md:basis-auto max-md:empty:hidden',
   hidden: 'max-md:hidden',
 }
 
 // The actions cell is the card's last line, full width and right-aligned, so the cluster sits in one place whatever the row holds; an empty cell
 // (no actions for this row) leaves the card. Classes, not `data-card`: that attribute switches a row into the title/meta layout (index.css).
 const ACTIONS_CARD = 'max-md:basis-full max-md:text-right max-md:empty:hidden'
+
+/** The row's own link (its identity cell): ink at rest, no underline; green and underlined only on hover and focus. Green carries too many meanings to colour every link in a table. */
+export const ROW_LINK = 'text-[var(--color-foreground)] underline-offset-[3px] hover:text-[var(--color-primary)] hover:underline focus-visible:text-[var(--color-primary)] focus-visible:underline'
+/** A link to another record inside a cell (a trip, a participant): ink with a quiet underline so it still reads as a link; green on hover. */
+export const CROSS_LINK = 'text-[var(--color-foreground)] underline decoration-[var(--color-outline-variant)] underline-offset-[3px] hover:text-[var(--color-primary)] hover:decoration-[var(--color-primary)] focus-visible:text-[var(--color-primary)]'
 
 /** A number is px, a string is passed through as a CSS length. */
 function cssLength(value: number | string): string {
@@ -295,9 +314,9 @@ function plainTextOf<T>(row: T, col: Column<T>, content: ReactNode): string | nu
  * min-[1792px]:max-w-*`). For a link, put the truncation on the link itself, not on a wrapper: the
  * wrapper's `overflow: hidden` would clip the link's focus ring.
  */
-export function CellText({ children, title, className = '' }: { children: ReactNode; title?: string; className?: string }) {
+export function CellText({ children, title, className = '', lines = 1 }: { children: ReactNode; title?: string; className?: string; lines?: 1 | 2 }) {
   const full = title ?? (typeof children === 'string' ? children : undefined)
-  return <span className={`block md:truncate ${className}`} title={full}>{children}</span>
+  return <span className={`block ${lines === 2 ? 'md:line-clamp-2 md:whitespace-normal' : 'md:truncate'} ${className}`} title={full}>{children}</span>
 }
 
 // ── Component ────────────────────────────────────────────────────
@@ -338,7 +357,7 @@ export function DataTable<T>({
   const isControlled = controlledSort !== undefined
   const activeSort = isControlled ? controlledSort ?? null : internalSort
 
-  const visibleColumns = useMemo(() => columns.filter(c => !c.hidden), [columns])
+  const visibleColumns = useMemo(() => columns.filter(c => !c.hidden && !(c.hideWhenEmpty && !loading && data.length > 0 && data.every(row => isEmptyValue(getValue(row, c.key))))), [columns, data, loading])
   // A server-paged table holds one slice, so it can only offer sorting if the caller turns it into a server request (onSortChange).
   const canSort = sortable && (!pagination || !!onSortChange)
 
@@ -378,14 +397,17 @@ export function DataTable<T>({
   // Which edge of the scroll box has content scrolled under its pinned column: the start edge once scrolled right, the end edge while there
   // is more to the right. jsdom measures nothing (all zeros), so both stay false there and a pinned cell is only filled in a real browser.
   const scrollRef = useRef<HTMLDivElement>(null)
-  const [edges, setEdges] = useState({ start: false, end: false })
+  const [edges, setEdges] = useState({ start: false, end: false, startPin: 0, endPin: 0 })
   useEffect(() => {
     const box = scrollRef.current
     if (!box) return
     const measure = () => {
       const start = box.scrollLeft > 1
       const end = box.scrollLeft + box.clientWidth < box.scrollWidth - 1
-      setEdges(previous => (previous.start === start && previous.end === end ? previous : { start, end }))
+      // The fade sits just inside a pinned column, so it starts where that column's header ends.
+      const startPin = box.querySelector<HTMLElement>('th[data-pin="start"]')?.offsetWidth ?? 0
+      const endPin = box.querySelector<HTMLElement>('th[data-pin="end"]')?.offsetWidth ?? 0
+      setEdges(previous => (previous.start === start && previous.end === end && previous.startPin === startPin && previous.endPin === endPin ? previous : { start, end, startPin, endPin }))
     }
     measure()
     box.addEventListener('scroll', measure, { passive: true })
@@ -446,6 +468,8 @@ export function DataTable<T>({
   // its `minWidth` (via a custom property so it, too, only applies from md up).
   const columnClass = (col: Column<T>) =>
     `${col.minWidth != null ? 'md:min-w-[var(--col-min)]' : ''} ${col.width != null ? 'md:w-[var(--col-w)]' : ''}`
+  // An overlay column (only a RowActions overlay inside) costs no width on a mouse: no padding, and the cluster anchors to the cell.
+  const overlayClass = (col: Column<T>) => (col.overlay ? 'relative md:pointer-fine:px-0' : '')
   const pins = pinsOf(visibleColumns)
   // The classes that hold a column to its edge, and fill it opaque once content is scrolled under it.
   const pinClass = (colIndex: number, head: boolean) => {
@@ -469,6 +493,7 @@ export function DataTable<T>({
   if (error && data.length === 0) return <PageState kind="error" noun="list" onRetry={onRetry} />
 
   return (
+    <div className="relative">
     <div ref={scrollRef} className={className ?? 'relative md:bg-[var(--color-card)] md:rounded-md md:border md:border-[var(--color-border)] overflow-x-auto'}>
       {loading && data.length > 0 && (
         <div className="absolute inset-0 bg-[var(--color-card)]/50 flex items-center justify-center z-10 rounded-md">
@@ -513,15 +538,16 @@ export function DataTable<T>({
               return (
                 <th
                   key={col.key}
-                  className={`${alignClass} ${cellClass} text-xs font-medium text-[var(--color-muted-foreground)] whitespace-nowrap ${columnClass(col)} ${pinClass(colIndex, true)} ${isSortable ? 'cursor-pointer select-none' : ''}`}
+                  className={`${alignClass} ${cellClass} text-xs font-medium text-[var(--color-muted-foreground)] whitespace-nowrap ${columnClass(col)} ${overlayClass(col)} ${pinClass(colIndex, true)} ${isSortable ? 'cursor-pointer select-none' : ''}`}
                   style={columnStyle(col)}
+                  data-pin={pins[colIndex]}
                   aria-sort={isSortable ? (isSorted ? (activeSort!.direction === 'asc' ? 'ascending' : 'descending') : 'none') : undefined}
                   onClick={isSortable ? () => handleSort(col.key) : undefined}
                   onKeyDown={isSortable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleSort(col.key) } } : undefined}
                   tabIndex={isSortable ? 0 : undefined}
                 >
-                  <span className="inline-flex items-center gap-1 flex-wrap">
-                    {col.header}
+                  <span className="inline-flex items-center gap-1">
+                    {col.header === '' && (col.srHeader || col.key === 'actions') ? <span className="sr-only">{col.srHeader ?? 'Actions'}</span> : col.header}
                     {isSortable && (
                       isSorted
                         ? activeSort!.direction === 'asc'
@@ -639,7 +665,7 @@ export function DataTable<T>({
                     return (
                       <td
                         key={col.key}
-                        className={`${cellClass} ${col.wrap ? '' : 'md:whitespace-nowrap'} ${alignClass} ${columnClass(col)} ${pinClass(colIndex, false)} ${card ? CARD_CLASS[card] : ''} ${col.key === 'actions' ? ACTIONS_CARD : ''} ${col.className ?? ''} ${TAP_AREA_LINKS}`}
+                        className={`${cellClass} ${col.wrap ? '' : 'md:whitespace-nowrap'} ${alignClass} ${columnClass(col)} ${overlayClass(col)} ${pinClass(colIndex, false)} ${card ? CARD_CLASS[card] : ''} ${col.key === 'actions' && card !== 'trail' ? ACTIONS_CARD : ''} ${col.className ?? ''} ${TAP_AREA_LINKS}`}
                         style={columnStyle(col)}
                         data-label={typeof col.header === 'string' ? col.header : ''}
                         data-card={card === 'hidden' ? undefined : card}
@@ -712,6 +738,9 @@ export function DataTable<T>({
         </div>
       )}
     </div>
+      {edges.end && <span data-edge-fade="end" aria-hidden="true" style={{ right: edges.endPin }} className="pointer-events-none absolute inset-y-0 w-6 max-md:hidden bg-[linear-gradient(to_right,transparent,var(--color-card))]" />}
+      {edges.start && <span data-edge-fade="start" aria-hidden="true" style={{ left: edges.startPin }} className="pointer-events-none absolute inset-y-0 w-6 max-md:hidden bg-[linear-gradient(to_left,transparent,var(--color-card))]" />}
+    </div>
   )
 }
 
@@ -775,11 +804,46 @@ const ROW_ACTIONS_OVERLAY = [
  * over its neighbours on hover, and an empty cluster never leaves a `<div>` that stops the phone card's
  * actions cell matching `:empty` (a blank strip at the card's foot).
  */
-export function RowActions({ children, overlay = false }: { children: ReactNode; overlay?: boolean }) {
+export function RowActions({ children, overlay = false, className = '' }: { children: ReactNode; overlay?: boolean; className?: string }) {
   if (Children.toArray(children).length === 0) return null
   return (
-    <div className={`flex items-center justify-end gap-1.5 pointer-coarse:gap-2 ${ROW_ACTIONS_REVEAL} ${ROW_ACTIONS_LEGACY_ICONS} ${ROW_ACTIONS_CARD} ${overlay ? ROW_ACTIONS_OVERLAY : ''}`}>
+    <div className={`flex items-center justify-end gap-1.5 pointer-coarse:gap-2 ${ROW_ACTIONS_REVEAL} ${ROW_ACTIONS_LEGACY_ICONS} ${ROW_ACTIONS_CARD} ${overlay ? ROW_ACTIONS_OVERLAY : ''} ${className}`}>
       {children}
     </div>
+  )
+}
+
+export type RowMenuItem = { label: string; icon: ReactNode; onSelect?: () => void; to?: string }
+
+/**
+ * One set of row actions, two presentations. From md up the items are icon buttons in a `RowActions overlay` (revealed on hover, the way a desk
+ * coordinator edits in one click); below md they are one ⋯ menu, so a phone card holds a single 44px control instead of a row of icons. Use it in a
+ * column with `overlay: true` (and `mobile: 'trail'`). Archive reads "Archive" with the Archive icon in both: it is undoable, never a red delete.
+ */
+export function RowMenu({ items, name }: { items: RowMenuItem[]; name: string }) {
+  const navigate = useNavigate()
+  if (items.length === 0) return null
+  const run = (item: RowMenuItem) => (item.to ? navigate(item.to) : item.onSelect?.())
+  return (
+    <>
+      <RowActions overlay className="max-md:hidden">
+        {items.map(item => item.to ? (
+          <Button key={item.label} to={item.to} variant="ghost" size="sm" iconOnly title={item.label} aria-label={item.label} onClick={e => e.stopPropagation()}>{item.icon}</Button>
+        ) : (
+          <Button key={item.label} variant="ghost" size="sm" iconOnly title={item.label} aria-label={item.label} onClick={e => { e.stopPropagation(); item.onSelect?.() }}>{item.icon}</Button>
+        ))}
+      </RowActions>
+      {/* The panel is portalled, but React still bubbles its events to the row: keep a row that opens on click from opening. */}
+      <div className="md:hidden" onClick={e => e.stopPropagation()}>
+        <Dropdown
+          variant="icon"
+          label={`More actions for ${name}`}
+          icon={<MoreHorizontal className="w-5 h-5" aria-hidden="true" />}
+          items={items.map(item => ({ value: item.label, label: item.label, icon: item.icon }))}
+          onSelect={value => { const item = items.find(i => i.label === value); if (item) run(item) }}
+          triggerClassName="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
+        />
+      </div>
+    </>
   )
 }

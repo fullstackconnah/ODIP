@@ -2,7 +2,7 @@ import { useIncidents, useRestoreIncident, useDeleteIncident, useOverdueQscIncid
 import type { TruncatableList } from '@/api/hooks/pagedList'
 import type { IncidentListDto, FlaggedShiftNoteDto } from '@/api/types'
 import { INCIDENT_STATUS_LABELS, INCIDENT_TYPE_LABELS, type IncidentStatus, type IncidentType } from '@/api/types/enums'
-import { DataTable, RowActions, type Column } from '@/components/DataTable'
+import { DataTable, RowMenu, ROW_LINK, CROSS_LINK, type Column, type RowMenuItem } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
 import { EmptyState } from '@/components/EmptyState'
@@ -14,7 +14,7 @@ import { TAP_FLOOR, TAP_TRUNCATED_LINK } from '@/components/tapArea'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useState } from 'react'
-import { Filter, Plus, AlertTriangle, ShieldAlert, FileWarning } from 'lucide-react'
+import { Filter, Plus, AlertTriangle, ShieldAlert, FileWarning, Pencil, Archive, ArchiveRestore } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
 import { formatDateAu } from '@/lib/utils'
 import { formatAge, plural } from '@/lib/format'
@@ -196,7 +196,7 @@ export default function IncidentsPage() {
   const deleteIncident = useDeleteIncident()
   const { data: overdueQsc = [], isError: overdueQscError, refetch: refetchOverdueQsc } = useOverdueQscIncidents()
 
-  const { showArchived, params, toggleButtons, confirmDialog, errorNotice, actionButtons } = useArchiveRestore<any>({
+  const { showArchived, params, toggleButtons, confirmDialog, errorNotice, requestArchive, requestRestore } = useArchiveRestore<any>({
     deleteMutation: deleteIncident,
     restoreMutation: restoreIncident,
     entityName: (i) => i.title,
@@ -237,24 +237,35 @@ export default function IncidentsPage() {
     setPage(1)
   }
 
-  // Every row is exactly --row-h from 1280 up: cells never wrap (DataTable). From md up the box scrolls
-  // sideways with the title and the actions pinned, so no column is dropped. NDIS Commission follows
-  // Title, then Severity and Status, ahead of Type, Trip and Participant, so those three columns are on screen at 1280 without scrolling.
+  // The menu a row offers, once: icon buttons on a mouse, one ⋯ on the phone card. Archive is undoable (a confirm, then Closed), so it is never red.
+  const rowItems = (i: IncidentListDto): RowMenuItem[] => canWrite
+    ? [
+        { label: 'Edit', icon: <Pencil className="w-4 h-4" />, to: `/incidents/${i.id}/edit` },
+        showArchived
+          ? { label: 'Restore', icon: <ArchiveRestore className="w-4 h-4" />, onSelect: () => requestRestore(i) }
+          : { label: 'Archive', icon: <Archive className="w-4 h-4" />, onSelect: () => requestArchive(i) },
+      ]
+    : []
+
+  // Every row is exactly --row-h from 1280 up: cells never wrap (DataTable), except the title (two lines). From md up the box scrolls
+  // sideways with the title and the actions pinned, so no column is dropped. Order is Title, NDIS Commission, Status, Severity, Date, then
+  // Type, Trip and Participant: the five a coordinator triages by are on screen at 1024, and Type is too at 1280.
   const incidentColumns: Column<any>[] = [
     {
       key: 'title',
       header: 'Title',
       mobile: 'primary',
+      wrap: true,
       className: 'font-medium',
       // The way into the incident for every role that sees the list; the cap sits on the link itself so its focus ring is not clipped.
-      render: (i) => <Link to={`/incidents/${i.id}`} title={i.title ?? undefined} className={`block md:truncate md:max-w-[15rem] 2xl:max-w-[18rem] text-[var(--color-primary)] hover:underline ${TAP_TRUNCATED_LINK}`}>{i.title ?? '—'}</Link>,
+      render: (i) => <Link to={`/incidents/${i.id}`} title={i.title ?? undefined} className={`line-clamp-2 break-words md:max-w-[15rem] 2xl:max-w-[18rem] ${ROW_LINK} ${TAP_TRUNCATED_LINK}`}>{i.title ?? '—'}</Link>,
     },
     {
       key: 'qscReportingStatus',
       header: 'NDIS Commission',
-      render: (i) => i.qscReportingStatus === 'NotRequired' ? (
-        <span className="text-[var(--color-muted-foreground)]">{'\u2014'}</span>
-      ) : i.isOverdue24h ? (
+      // A plain dash (not a span) so the phone card leaves the cell out when there is nothing to report.
+      mobile: 'meta',
+      render: (i) => i.qscReportingStatus === 'NotRequired' ? '\u2014' : i.isOverdue24h ? (
         // Overdue is the one QSC state that must never be missed, so it always takes the solid
         // error pair (--color-on-error-container on --color-error-container = 7.24:1) whatever the
         // underlying status maps to (Pending/Late are amber, 6.37:1). It no longer pulses:
@@ -265,9 +276,10 @@ export default function IncidentsPage() {
         <StatusBadge status={i.qscReportingStatus} label={formatQscLabel(i.qscReportingStatus)} />
       ),
     },
-    { key: 'severity', header: 'Severity', mobile: 'meta', render: (i) => <StatusBadge status={i.severity} /> },
     { key: 'status', header: 'Status', mobile: 'status', render: (i) => <StatusBadge status={i.status} label={INCIDENT_STATUS_LABELS[i.status as IncidentStatus] ?? i.status} /> },
-    { key: 'incidentType', header: 'Type', maxWidth: '9rem', mobile: 'meta', render: (i) => INCIDENT_TYPE_LABELS[i.incidentType as IncidentType] ?? i.incidentType },
+    { key: 'severity', header: 'Severity', mobile: 'meta', render: (i) => <StatusBadge status={i.severity} /> },
+    { key: 'incidentDateTime', header: 'Date', type: 'date', mobile: 'meta' },
+    { key: 'incidentType', header: 'Type', maxWidth: '9rem', mobile: 'hidden', render: (i) => INCIDENT_TYPE_LABELS[i.incidentType as IncidentType] ?? i.incidentType },
     {
       key: 'tripName',
       header: 'Trip',
@@ -276,7 +288,7 @@ export default function IncidentsPage() {
         <Link
           to={`/trips/${i.tripInstanceId}`}
           title={i.tripName}
-          className={`inline-block align-middle text-[var(--color-primary)] hover:underline md:truncate md:max-[1792px]:max-w-[11rem] min-[1792px]:max-w-[13rem] ${TAP_TRUNCATED_LINK}`}
+          className={`inline-block align-middle max-md:max-w-[9rem] max-md:truncate md:truncate md:max-[1792px]:max-w-[11rem] min-[1792px]:max-w-[13rem] ${CROSS_LINK} ${TAP_TRUNCATED_LINK}`}
         >
           {i.tripName}
         </Link>
@@ -290,15 +302,14 @@ export default function IncidentsPage() {
         <Link
           to={`/participants/${i.involvedParticipantId}`}
           title={i.involvedParticipantName}
-          className={`inline-block align-middle text-[var(--color-primary)] hover:underline md:max-w-[9rem] md:truncate 2xl:max-w-[12rem] ${TAP_TRUNCATED_LINK}`}
+          className={`inline-block align-middle max-md:max-w-[9rem] max-md:truncate md:max-w-[9rem] md:truncate 2xl:max-w-[12rem] ${CROSS_LINK} ${TAP_TRUNCATED_LINK}`}
         >
           {i.involvedParticipantName}
         </Link>
       ) : (i.involvedParticipantName ?? '—'),
     },
-    { key: 'reportedByName', header: 'Reported By', maxWidth: '9rem' },
-    { key: 'incidentDateTime', header: 'Date', type: 'date', mobile: 'meta' },
-    { key: 'actions', header: '', render: (i) => canWrite ? <RowActions>{actionButtons(i)}</RowActions> : null },
+    { key: 'reportedByName', header: 'Reported By', maxWidth: '9rem', mobile: 'hidden' },
+    { key: 'actions', header: '', overlay: true, mobile: 'trail', render: (i) => <RowMenu name={i.title ?? 'incident'} items={rowItems(i)} /> },
   ]
 
   // Same condition the body uses to swap in the queue: a ?view=flagged-notes link from someone who
