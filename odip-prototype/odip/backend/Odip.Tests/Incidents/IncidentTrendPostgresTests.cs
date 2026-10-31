@@ -31,13 +31,13 @@ public class IncidentTrendPostgresTests : IClassFixture<PostgresFixture>
         db.IncidentReports.AddRange(
             Report("2026-09-02T09:00", IncidentType.RestrictivePracticeUse), Report("2026-09-20T09:00", IncidentType.Other),
             Report("2026-10-05T09:00", IncidentType.RestrictivePracticeUse), Report("2026-10-06T09:00", IncidentType.Other, IncidentStatus.Draft),
-            Report("2026-10-07T09:00", IncidentType.Other, active: false));
+            Report("2026-10-07T09:00", IncidentType.Other, IncidentStatus.Closed));
         await db.SaveChangesAsync();
 
         var result = await new IncidentTrendController(db, Medications.FakeClock.AtUtc(2026, 10, 15, 2, 0)).GetTrend(CancellationToken.None);
 
         var months = Assert.IsType<ApiResponse<IncidentTrendDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!.Months;
         Assert.Equal((2, 1, 1), (months[4].Incidents, months[4].RpUses, months[4].OtherIncidents));
-        Assert.Equal((1, 1, 0), (months[5].Incidents, months[5].RpUses, months[5].OtherIncidents));
+        Assert.Equal((2, 1, 1), (months[5].Incidents, months[5].RpUses, months[5].OtherIncidents));
     }
 }

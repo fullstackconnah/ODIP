@@ -88,7 +88,7 @@ export function IncidentTrendChart({ data, width: W, sentenceId }: { data: Incid
               })}
             </svg>
             {readout && shown !== null && (
-              <ChartReadout ref={readoutRef} header={readout.header} className="rf-readout" left={readoutLeft(left + slot * (shown + 0.5), W, readoutSize.w, W < NARROW)} top={Math.min(M.top, H - readoutSize.h)}>
+              <ChartReadout ref={readoutRef} header={readout.header} className="rf-readout" left={Math.max(readoutLeft(left + slot * (shown + 0.5), W, readoutSize.w, W < NARROW), left)} top={Math.min(M.top, H - readoutSize.h)}>
                 {readout.empty ? <p className="text-xs">No incidents</p> : (
                   <>
                     <div className="flex items-center gap-2"><span aria-hidden="true" className="it-rp block h-3 w-3" /><span className="text-sm font-semibold tabular-nums">{readout.rp}</span><span className="text-xs text-[var(--color-muted-foreground)]">{readout.rpText}</span></div>

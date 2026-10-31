@@ -6,7 +6,7 @@ using Odip.Infrastructure.Data;
 
 namespace Odip.Infrastructure.Incidents;
 
-/// <summary>Live, non-Draft incident reports per calendar month (N7). Tenant scoping is the IncidentReport query filter, as on the list.</summary>
+/// <summary>Non-Draft incident reports per calendar month (N7); archiving stores Status = Closed, so archived reports count. Tenant scoping is the IncidentReport query filter, as on the list.</summary>
 public static class IncidentTrend
 {
     public const int Months = 6;

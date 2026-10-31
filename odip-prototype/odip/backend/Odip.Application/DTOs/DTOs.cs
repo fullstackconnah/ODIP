@@ -2629,7 +2629,7 @@ public record IncidentTrendDto
     public List<IncidentTrendMonthDto> Months { get; init; } = new();
 }
 
-/// <summary>One calendar month of live, non-Draft reports by their own (wall-clock) IncidentDateTime. <c>RpUses + OtherIncidents == Incidents</c>.</summary>
+/// <summary>One calendar month of non-Draft reports (Closed, which is how archiving is stored, included) by their own (wall-clock) IncidentDateTime. <c>RpUses + OtherIncidents == Incidents</c>.</summary>
 public record IncidentTrendMonthDto
 {
     /// <summary>"yyyy-MM".</summary>

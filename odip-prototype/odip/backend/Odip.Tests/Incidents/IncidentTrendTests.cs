@@ -54,16 +54,16 @@ public class IncidentTrendTests
     }
 
     [Fact]
-    public async Task GetTrend_DraftAndArchived_AreExcluded_ClosedIsIncluded()
+    public async Task GetTrend_DraftIsExcluded_ClosedAndArchivedAreCounted()
     {
         using var db = TestDb.Create();
         Add(db, "2026-10-02T09:00", status: IncidentStatus.Draft);
-        Add(db, "2026-10-03T09:00", active: false);
+        Add(db, "2026-10-03T09:00", status: IncidentStatus.Closed); // the real archive path: DELETE sets Closed, IsActive stays true
         Add(db, "2026-10-04T09:00", status: IncidentStatus.Closed);
         Add(db, "2026-10-05T09:00", status: IncidentStatus.Resolved);
         Add(db, "2026-10-06T09:00");
 
-        Assert.Equal(3, (await Trend(Controller(db))).Months[5].Incidents);
+        Assert.Equal(4, (await Trend(Controller(db))).Months[5].Incidents);
     }
 
     [Fact]

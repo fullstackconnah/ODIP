@@ -118,7 +118,18 @@ try {
         const vh = grow ? need : vp.height
         const coarse = await page.evaluate(() => matchMedia('(pointer: coarse)').matches)
         check('crop holds the whole card', { ...ctx, shot: name }, { card: bb.height, crop: clip.height, viewport: vh, coarse }, clip.height >= bb.height && y + clip.height <= vh && (!vp.mobile || coarse))
+        // The fixed bottom nav would cover the card's lower edge in the crop: hide it for the shot only (layout unchanged).
+        await page.addStyleTag({ content: 'nav[aria-label="Mobile"]{visibility:hidden !important}' }).then((h) => h.evaluate((el) => { el.id = 'shot-nav-hide' }))
+        const seen = await page.evaluate(() => {
+          const r = document.querySelector('[data-incident-trend]').getBoundingClientRect()
+          const lbl = document.querySelector('[data-xlabel]')
+          const lr = lbl?.getBoundingClientRect()
+          const hit = lr ? document.elementFromPoint(lr.left + lr.width / 2, lr.top + lr.height / 2) : null
+          return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, labelInCard: !lbl || !!hit?.closest('[data-incident-trend]') }
+        })
+        check('crop shows the whole card, axis row not covered', { ...ctx, shot: name }, seen, seen.top >= clip.y && seen.bottom <= clip.y + clip.height && seen.left >= clip.x && seen.right <= clip.x + clip.width && seen.labelInCard)
         await page.screenshot({ path: path.join(OUT_DIR, `${name}-${vp.name}-${scheme}.png`), clip })
+        await page.evaluate(() => document.getElementById('shot-nav-hide')?.remove())
         if (grow) { await page.setViewportSize({ width: vp.width, height: vp.height }); await pinCoarse() }
       }
       // A full page: grow the viewport to the page height (Playwright's fullPage drops touch emulation at 390), re-pin, settle, assert it is still coarse, shoot.

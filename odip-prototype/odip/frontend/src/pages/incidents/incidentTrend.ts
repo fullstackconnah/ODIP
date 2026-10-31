@@ -8,7 +8,7 @@ const plural = (n: number, one: string, many: string) => `${num(n)} ${n === 1 ? 
 const parts = (month: string) => month.split('-').map(Number) as [number, number]
 
 export const TREND_TITLE = 'Incidents by month'
-export const TREND_SCOPE = "Counted by the date each incident happened. Closed reports count; drafts and archived ones don't. The list's filters don't apply."
+export const TREND_SCOPE = "Counted by the date each incident happened. Closed and archived reports count; drafts don't. The list's filters don't apply."
 export const TREND_ERROR = "Couldn't load incidents by month. The list below is unaffected."
 export const TREND_STALE = "The chart couldn't be refreshed, so it may be out of date."
 export const TREND_LOADING = 'Loading incidents by month…'
