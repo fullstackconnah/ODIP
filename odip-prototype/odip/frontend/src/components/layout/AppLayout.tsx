@@ -572,6 +572,10 @@ export default function AppLayout() {
           <span aria-hidden="true" data-brand-tile data-on={railLayout ? '' : undefined} className="pointer-events-none absolute left-4 top-5 size-8 rounded-[8px] bg-[var(--color-primary-fixed)]" />
           {railLayout ? <BrandMark /> : <Wordmark size={21} fold />}
         </div>
+        {/* The bar chip is hidden below md to keep four 44px targets, so the name sits here instead: one muted line that wraps, never truncated. */}
+        {user.tenantName && !isSuperAdmin && !railLayout && (
+          <p className="md:hidden shrink-0 px-2.5 pb-2 text-[13px] leading-[1.35] text-[var(--color-muted-foreground)] break-words">{user.tenantName}</p>
+        )}
 
         {/* Nav. In the rail it bleeds to the aside edges (and pads back), so the nav's scroll clip does not cut a count badge or a focus ring. Every item (group toggles, top-level links, group children, and "Sign Out" below) carries a
             `--tap-min` floor: 32px (28px for a group child) on a mouse as before, 44px under a coarse pointer, where
@@ -665,7 +669,7 @@ export default function AppLayout() {
           <div className="flex items-center justify-between gap-2 h-full pl-[max(var(--gutter,20px),var(--safe-left))] pr-[max(var(--gutter,20px),var(--safe-right))]">
             <div className={`flex min-w-0 items-center gap-4 ${isSuperAdmin ? 'max-sm:gap-2' : ''}`}>
               <button
-                className="flex items-center justify-center lg:hidden shrink-0 p-2 pointer-coarse:size-[var(--tap-min)] pointer-coarse:p-0 rounded-md hover:bg-[var(--color-accent)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
+                className="flex items-center justify-center lg:hidden shrink-0 size-8 pointer-coarse:size-[var(--tap-min)] rounded-full text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
                 onClick={() => setSidebarOpen(!sidebarOpen)}
                 title={sidebarOpen ? 'Close menu' : 'Open menu'}
                 aria-label={sidebarOpen ? 'Close menu' : 'Open menu'}
@@ -675,7 +679,7 @@ export default function AppLayout() {
                 {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </button>
               {user.tenantName && (
-                <span title={user.tenantName} className={`${isSuperAdmin ? 'hidden md:inline-block' : 'inline-block'} max-w-[7.5rem] truncate sm:max-w-none text-xs bg-[var(--color-primary)]/10 text-[var(--color-primary)] px-2.5 py-0.5 rounded-full border border-[var(--color-primary)]/20 font-medium`}>
+                <span title={user.tenantName} className={`hidden md:inline-block max-w-[7.5rem] truncate sm:max-w-none text-xs bg-[var(--color-primary)]/10 text-[var(--color-primary)] px-2.5 py-0.5 rounded-full border border-[var(--color-primary)]/20 font-medium`}>
                   {user.tenantName}
                 </span>
               )}
@@ -687,7 +691,8 @@ export default function AppLayout() {
             <div className="flex shrink-0 items-center gap-3 max-lg:gap-2">
               {isSuperAdmin && <TenantSwitcher />}
               {isSuperAdmin && viewingTenantId && <UserSwitcher />}
-              <ThemeMenu />
+              {/* Below lg the theme choice lives in Settings > Appearance, so the bar keeps four 44px targets. */}
+              <div className="max-lg:hidden"><ThemeMenu /></div>
               <WhatsNewButton />
               <NotificationBell />
               <div className="max-lg:hidden w-8 h-8 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] flex items-center justify-center text-[var(--color-primary-foreground)] font-bold text-sm shadow-md">

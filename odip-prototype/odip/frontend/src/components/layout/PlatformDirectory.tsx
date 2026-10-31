@@ -13,6 +13,10 @@ import { pageDescription, platformLeaves } from './platformDirectoryModel'
 import type { ResolvedEntry } from './navConfig'
 import { getViewAs } from '@/lib/viewAs'
 
+/** The compact trigger is a bare round icon on a phone and the field-style search from md (from xl beside the SuperAdmin switchers). */
+const FIELD_MD = 'md:w-72 md:h-[var(--control-h)] md:justify-start md:rounded-[var(--radius-sm)] md:border md:border-[var(--color-field-border)] md:bg-[var(--color-field)] md:px-3 md:hover:bg-[var(--color-field)] md:hover:border-[var(--color-muted-foreground)]'
+const FIELD_XL = 'xl:w-72 xl:h-[var(--control-h)] xl:justify-start xl:rounded-[var(--radius-sm)] xl:border xl:border-[var(--color-field-border)] xl:bg-[var(--color-field)] xl:px-3 xl:hover:bg-[var(--color-field)] xl:hover:border-[var(--color-muted-foreground)]'
+
 export function PlatformDirectoryTrigger({ entries, compact = false, tight = false }: { entries: ResolvedEntry[]; compact?: boolean; tight?: boolean }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -27,13 +31,21 @@ export function PlatformDirectoryTrigger({ entries, compact = false, tight = fal
 
   return (
     <>
-      <Button variant="secondary" className={`pointer-coarse:min-h-11 pointer-coarse:min-w-11 ${compact ? (tight ? 'max-xl:px-2 xl:w-72 xl:justify-start' : 'max-md:px-2 md:w-72 md:justify-start') : 'w-full justify-between'}`}
-        aria-label={compact ? 'Find a page' : 'Explore the platform'} title={compact ? 'Find a page' : undefined} aria-haspopup="dialog" aria-expanded={open}
-        onClick={() => { setQuery(''); setOpen(true) }}>
-        {compact ? <Search aria-hidden="true" className="h-4 w-4 shrink-0" /> : null}
-        <span className={compact ? (tight ? 'max-xl:sr-only' : 'max-md:sr-only') : undefined}>{compact ? 'Find a page…' : 'Explore the platform'}</span>
-        {!compact && <Grid2X2 aria-hidden="true" className="h-4 w-4" />}
-      </Button>
+      {compact ? (
+        <button type="button" className={`inline-flex shrink-0 items-center justify-center gap-2 size-8 pointer-coarse:min-h-[var(--tap-min)] pointer-coarse:min-w-[var(--tap-min)] rounded-full text-sm font-medium text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] ${tight ? FIELD_XL : FIELD_MD}`}
+          aria-label="Find a page" title="Find a page" aria-haspopup="dialog" aria-expanded={open}
+          onClick={() => { setQuery(''); setOpen(true) }}>
+          <Search aria-hidden="true" className={`h-5 w-5 shrink-0 ${tight ? "xl:h-4 xl:w-4" : "md:h-4 md:w-4"}`} />
+          <span className={tight ? 'max-xl:sr-only' : 'max-md:sr-only'}>Find a page…</span>
+        </button>
+      ) : (
+        <Button variant="secondary" className="pointer-coarse:min-h-11 pointer-coarse:min-w-11 w-full justify-between"
+          aria-label="Explore the platform" aria-haspopup="dialog" aria-expanded={open}
+          onClick={() => { setQuery(''); setOpen(true) }}>
+          <span>Explore the platform</span>
+          <Grid2X2 aria-hidden="true" className="h-4 w-4" />
+        </Button>
+      )}
       {createPortal(<Modal open={open} onClose={close} title="Explore the platform" size="lg"
         className="pointer-coarse:[&_button]:min-h-11 pointer-coarse:[&_button]:min-w-11 pointer-coarse:[&_input]:min-h-11">
         <TextField label="Find a page" type="search" value={query} onChange={event => setQuery(event.target.value)}
