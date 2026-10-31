@@ -29,6 +29,14 @@ public class ProviderSettings : ITenantEntity
     public string? ManagerName { get; set; }
     public string? ManagerPhone { get; set; }
 
+    /// <summary>The IANA zone the organisation's "today" follows (rosters, the portal, reminders). Null = its State's default (StateTimeZoneMap). Only StateTimeZoneMap.Zones are accepted.</summary>
+    public string? TimeZoneId { get; set; }
+    /// <summary>Organisation profile contact details (Settings PR 2b; added with the time zone so one migration carries them).</summary>
+    public string? TradingName { get; set; }
+    public string? ContactEmail { get; set; }
+    public string? ContactPhone { get; set; }
+    public string? Website { get; set; }
+
     /// <summary>
     /// How strictly this organisation applies participant readiness before rostering, booking or
     /// activating a participant. Defaults to <see cref="ParticipantReadinessMode.Warn"/> for every

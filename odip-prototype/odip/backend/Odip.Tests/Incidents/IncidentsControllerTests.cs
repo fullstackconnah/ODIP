@@ -2061,7 +2061,7 @@ public class IncidentsControllerTests
         Assert.Equal(TaskType.IncidentQscReport, task.TaskType);
         Assert.Equal($"incident-qsc:{incident.Id}", task.SourceKey);
         Assert.Equal(incident.Id, task.IncidentReportId);
-        Assert.Equal(DateOnly.FromDateTime(Odip.Domain.Rostering.ProviderLocalTime.UtcToLocal(incident.NotifyDueAt!.Value, Odip.Infrastructure.Services.ProviderTimeZoneResolver.FromState(null).Zone)), task.DueDate);
+        Assert.Equal(DateOnly.FromDateTime(Odip.Domain.Rostering.ProviderLocalTime.UtcToLocal(incident.NotifyDueAt!.Value, Odip.Infrastructure.Services.ProviderTimeZoneResolver.For(null, null).Zone)), task.DueDate);
         Assert.Equal($"/incidents/{incident.Id}", task.LinkTo);
         Assert.Equal(TaskPriority.High, task.Priority);
         Assert.Contains(incident.Title, task.Title);

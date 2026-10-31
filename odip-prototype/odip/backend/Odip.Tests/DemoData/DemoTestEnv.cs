@@ -81,7 +81,7 @@ internal sealed class DemoTestEnv
         });
         // The fixture's aged completion was placed in the default (Sydney) zone: move it into this one, so it is a closed-out 09:00-13:05 shift in every zone.
         var aged = await db.ShiftCompletions.FirstOrDefaultAsync(c => c.Id == DemoFixture.OldCompletionId);
-        if (aged is not null) DemoFixture.PlaceOldCompletion(aged, ProviderTimeZoneResolver.FromState(state));
+        if (aged is not null) DemoFixture.PlaceOldCompletion(aged, ProviderTimeZoneResolver.For(null, state));
         await db.SaveChangesAsync();
     }
 

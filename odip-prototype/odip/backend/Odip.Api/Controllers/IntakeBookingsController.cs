@@ -389,11 +389,11 @@ public class IntakeBookingsController : ControllerBase
     private async Task<Provider> ProviderAsync(Guid tenantId, CancellationToken ct)
     {
         var settings = await _db.ProviderSettings.IgnoreQueryFilters([TenantFilter.Name]).Where(p => p.TenantId == tenantId)
-            .Select(p => new { p.State, p.OrganisationName, p.Address, p.ManagerName, p.ManagerPhone }).FirstOrDefaultAsync(ct);
+            .Select(p => new { p.TimeZoneId, p.State, p.OrganisationName, p.Address, p.ManagerName, p.ManagerPhone }).FirstOrDefaultAsync(ct);
         var name = !string.IsNullOrWhiteSpace(settings?.OrganisationName)
             ? settings.OrganisationName
             : await _db.Tenants.IgnoreQueryFilters([TenantFilter.Name]).Where(t => t.Id == tenantId).Select(t => t.Name).FirstOrDefaultAsync(ct) ?? string.Empty;
-        return new Provider(ProviderTimeZoneResolver.FromState(settings?.State).Id, name, settings?.Address ?? string.Empty, settings?.ManagerName, settings?.ManagerPhone);
+        return new Provider(ProviderTimeZoneResolver.For(settings?.TimeZoneId, settings?.State).Id, name, settings?.Address ?? string.Empty, settings?.ManagerName, settings?.ManagerPhone);
     }
 
     // Who the server attributes the booking to: the viewed-as user under a SuperAdmin's "view as", else the signed-in one (as PortalController resolves it).

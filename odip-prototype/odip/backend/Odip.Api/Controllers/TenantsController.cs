@@ -270,7 +270,7 @@ public class TenantsController : ControllerBase
             GSTRegistered = ps.GSTRegistered, IsPaceProvider = ps.IsPaceProvider,
             BankAccountName = ps.BankAccountName, BSB = ps.BSB,
             AccountNumber = ps.AccountNumber, InvoiceFooterNotes = ps.InvoiceFooterNotes,
-            State = ps.State, ParticipantReadinessMode = ps.ParticipantReadinessMode,
+            State = ps.State, TimeZoneId = ps.TimeZoneId, ParticipantReadinessMode = ps.ParticipantReadinessMode,
             MedicationCompetencyMode = ps.MedicationCompetencyMode,
             InvoiceNumberPrefix = ps.InvoiceNumberPrefix, CreditNotePrefix = ps.CreditNotePrefix,
             InvoiceStartNumber = ps.InvoiceStartNumber, PaymentTermsDays = ps.PaymentTermsDays,

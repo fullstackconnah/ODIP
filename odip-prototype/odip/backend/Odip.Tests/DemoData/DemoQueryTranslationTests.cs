@@ -32,6 +32,7 @@ public class DemoQueryTranslationTests
 
         yield return Q(nameof(DemoQueries.ExistingIds), db => DemoQueries.ExistingIds<Shift>(db, Ids.ToArray()), "WHERE s.\"Id\" = ANY (");
         yield return Q(nameof(DemoQueries.DemoTenantCandidates), DemoQueries.DemoTenantCandidates, "\"Name\" =");
+        yield return Q(nameof(DemoQueries.ProviderZone), DemoQueries.ProviderZone, "\"TimeZoneId\"", "\"State\"");
         yield return Q(nameof(DemoQueries.ProviderState), DemoQueries.ProviderState, "\"State\"");
         yield return Q(nameof(DemoQueries.Participants), DemoQueries.Participants, "\"NdisNumber\"", "\"IsDraft\"");
         yield return Q(nameof(DemoQueries.UsersByEmail), db => DemoQueries.UsersByEmail(db, new List<string> { "a@b.c" }), "\"Email\" = ANY (");
