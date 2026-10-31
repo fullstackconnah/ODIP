@@ -483,9 +483,9 @@ public class FundingReadinessTests
         var result = await Inquiries(db, NoonUtc, TenantA).GetOnboardingWorklist(default);
 
         var rows = Assert.IsType<ApiResponse<List<ParticipantOnboardingWorklistDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
-        Assert.Equal(4, rows.Single(r => r.ParticipantId == ndis.Id).TotalSteps);
-        Assert.Equal(3, rows.Single(r => r.ParticipantId == other.Id).TotalSteps);
-        Assert.Equal(4, rows.Single(r => r.ParticipantId == recorded.Id).TotalSteps);
+        Assert.Equal(6, rows.Single(r => r.ParticipantId == ndis.Id).TotalSteps);
+        Assert.Equal(5, rows.Single(r => r.ParticipantId == other.Id).TotalSteps);
+        Assert.Equal(6, rows.Single(r => r.ParticipantId == recorded.Id).TotalSteps);
         Assert.Equal(rows.Single(r => r.ParticipantId == ndis.Id).CompletedSteps + 1, rows.Single(r => r.ParticipantId == recorded.Id).CompletedSteps);
     }
 

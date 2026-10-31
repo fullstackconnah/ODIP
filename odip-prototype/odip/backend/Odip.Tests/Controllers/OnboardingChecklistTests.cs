@@ -38,12 +38,12 @@ public class OnboardingChecklistTests
         return new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, tenant.Object);
     }
 
-    private static ParticipantInquiriesController Controller(OdipDbContext db)
+    private static ParticipantInquiriesController Controller(OdipDbContext db, TimeProvider? clock = null)
     {
         var tenant = new Mock<ICurrentTenant>();
         tenant.Setup(t => t.TenantId).Returns(Tenant);
         var http = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "coordinator-1")], "Test")) };
-        return new ParticipantInquiriesController(db, tenant.Object, Clock) { ControllerContext = new ControllerContext { HttpContext = http } };
+        return new ParticipantInquiriesController(db, tenant.Object, clock ?? Clock) { ControllerContext = new ControllerContext { HttpContext = http } };
     }
 
     private static Participant InOnboarding(OdipDbContext db, Action<Participant>? change = null)
@@ -77,30 +77,30 @@ public class OnboardingChecklistTests
         Ok(await Controller(db).GetOnboarding(p.Id, CancellationToken.None));
 
     [Fact]
-    public async Task AnNdisParticipant_HasFourItems_InOrder_AndGenderIsNotAskedFor()
+    public async Task AnNdisParticipant_HasSixItems_InOrder_AndGenderIsNotAskedFor()
     {
         using var db = Db();
         var p = InOnboarding(db);
 
         var d = await Checklist(db, p);
 
-        Assert.Equal(["profile", "serviceNeeds", "agreement", "funding"], d.Items.Select(i => i.Key));
-        Assert.Equal(["Profile details", "Service needs", "Signed agreement", "Funding"], d.Items.Select(i => i.Label));
-        Assert.Equal([true, false, false, false], d.Items.Select(i => i.Done));
+        Assert.Equal(["profile", "serviceNeeds", "agreement", "complaints", "rights", "funding"], d.Items.Select(i => i.Key));
+        Assert.Equal(["Profile details", "Service needs", "Signed agreement", "Told how to make a complaint", "Rights explained", "Funding"], d.Items.Select(i => i.Label));
+        Assert.Equal([true, false, false, false, false, false], d.Items.Select(i => i.Done));
         Assert.Null(d.Items[0].Missing);
         Assert.All(d.Items.Skip(1), i => Assert.False(string.IsNullOrWhiteSpace(i.Missing)));
         Assert.False(d.IsReady);
     }
 
     [Fact]
-    public async Task AParticipantFundedAnotherWay_HasThreeItems_AndNeedsNoNdisNumber()
+    public async Task AParticipantFundedAnotherWay_HasFiveItems_AndNeedsNoNdisNumber()
     {
         using var db = Db();
         var p = InOnboarding(db, x => { x.FundingSource = ParticipantFundingSource.Other; x.NdisNumber = null; });
 
         var d = await Checklist(db, p);
 
-        Assert.Equal(["profile", "serviceNeeds", "agreement"], d.Items.Select(i => i.Key));
+        Assert.Equal(["profile", "serviceNeeds", "agreement", "complaints", "rights"], d.Items.Select(i => i.Key));
         Assert.True(d.Items[0].Done);
     }
 
@@ -140,6 +140,7 @@ public class OnboardingChecklistTests
         db.FundingPlans.Add(new FundingPlan { Id = Guid.NewGuid(), TenantId = Tenant, ParticipantId = p.Id, PlanStart = new DateOnly(2026, 7, 1), PlanEnd = new DateOnly(2027, 6, 30) });
         db.SaveChanges();
         Ok(await Controller(db).RecordAgreement(p.Id, new RecordOnboardingAgreementDto { SignedOn = new DateOnly(2026, 10, 2) }, CancellationToken.None));
+        Ok(await Controller(db).RecordExplained(p.Id, new RecordOnboardingExplainedDto { ComplaintsExplainedOn = new DateOnly(2026, 10, 3), RightsExplainedOn = new DateOnly(2026, 10, 3) }, CancellationToken.None));
 
         var d = await Checklist(db, p);
 
@@ -203,6 +204,101 @@ public class OnboardingChecklistTests
         Assert.IsType<NotFoundObjectResult>(result.Result);
     }
 
+    private static Task<ActionResult<ApiResponse<ParticipantOnboardingDto>>> Explained(OdipDbContext db, Participant p, DateOnly? complaints, DateOnly? rights) =>
+        Controller(db).RecordExplained(p.Id, new RecordOnboardingExplainedDto { ComplaintsExplainedOn = complaints, RightsExplainedOn = rights }, CancellationToken.None);
+
+    [Fact]
+    public async Task ExplainedRecord_ChecksTheFutureAgainstTheProvidersToday_NotUtc()
+    {
+        using var db = Db();
+        var p = InOnboarding(db);
+        // 14:30 UTC on 31 October is 01:30 on 1 November in Sydney: 1 November is the provider's today, so it is not in the future.
+        var clock = new FakeClock(new DateTimeOffset(2026, 10, 31, 14, 30, 0, TimeSpan.Zero));
+
+        var d = Ok(await Controller(db, clock).RecordExplained(p.Id, new RecordOnboardingExplainedDto { ComplaintsExplainedOn = new DateOnly(2026, 11, 1) }, CancellationToken.None));
+
+        Assert.Equal(new DateOnly(2026, 11, 1), d.ComplaintsExplainedOn);
+    }
+
+    [Fact]
+    public async Task ExplainedRecord_FlipsItsItemsToDone_AndASecondCallReplacesTheFirst_ANullClearingThatItem()
+    {
+        using var db = Db();
+        var p = InOnboarding(db);
+
+        var d = Ok(await Explained(db, p, new DateOnly(2026, 10, 2), new DateOnly(2026, 10, 3)));
+
+        Assert.True(d.Items.Single(i => i.Key == "complaints").Done);
+        Assert.True(d.Items.Single(i => i.Key == "rights").Done);
+        Assert.Equal((new DateOnly(2026, 10, 2), new DateOnly(2026, 10, 3)), (d.ComplaintsExplainedOn, d.RightsExplainedOn));
+
+        d = Ok(await Explained(db, p, null, new DateOnly(2026, 10, 13)));
+
+        Assert.False(d.Items.Single(i => i.Key == "complaints").Done);
+        Assert.NotNull(d.Items.Single(i => i.Key == "complaints").Missing);
+        Assert.True(d.Items.Single(i => i.Key == "rights").Done);
+        Assert.Null(d.ComplaintsExplainedOn);
+        Assert.Equal(new DateOnly(2026, 10, 13), d.RightsExplainedOn);
+        var row = await db.ParticipantOnboardings.SingleAsync();
+        Assert.Equal("coordinator-1", row.ExplainedRecordedBy);
+        Assert.NotNull(row.ExplainedRecordedAt);
+    }
+
+    public static TheoryData<string, string> InvalidExplained => new()
+    {
+        { "both null", "complaintsExplainedOn" },
+        { "future complaints", "complaintsExplainedOn" },
+        { "future rights", "rightsExplainedOn" },
+        { "old complaints", "complaintsExplainedOn" },
+        { "old rights", "rightsExplainedOn" },
+    };
+
+    [Theory]
+    [MemberData(nameof(InvalidExplained))]
+    public async Task ExplainedRecord_RejectsNoDate_AFutureDate_AndABefore1990Date_NamingTheField(string which, string field)
+    {
+        using var db = Db();
+        var p = InOnboarding(db);
+        DateOnly? future = new DateOnly(2026, 10, 14), old = new DateOnly(1989, 12, 31), ok = new DateOnly(2026, 10, 2);
+
+        var result = which switch
+        {
+            "both null" => await Explained(db, p, null, null),
+            "future complaints" => await Explained(db, p, future, ok),
+            "future rights" => await Explained(db, p, ok, future),
+            "old complaints" => await Explained(db, p, old, ok),
+            _ => await Explained(db, p, ok, old),
+        };
+
+        var problem = Assert.IsType<ValidationProblemDetails>(Assert.IsType<BadRequestObjectResult>(result.Result).Value);
+        Assert.Contains(field, problem.Errors.Keys);
+        var row = await db.ParticipantOnboardings.SingleAsync();
+        Assert.Null(row.ComplaintsExplainedOn);
+        Assert.Null(row.RightsExplainedOn);
+    }
+
+    [Fact]
+    public async Task ExplainedRecord_ForAnotherTenantsParticipant_Is404()
+    {
+        using var db = Db();
+        var p = InOnboarding(db, x => x.TenantId = Guid.NewGuid());
+
+        var result = await Explained(db, p, new DateOnly(2026, 10, 2), null);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public void ExplainedRecord_IsForAdminCoordinatorAndSuperAdminOnly_SoASupportWorkerGets403()
+    {
+        var auth = typeof(ParticipantInquiriesController).GetMethod(nameof(ParticipantInquiriesController.RecordExplained))!
+            .GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), false)
+            .Cast<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>().Single();
+
+        Assert.Equal(["Admin", "Coordinator", "SuperAdmin"], auth.Roles!.Split(',').Order());
+        Assert.DoesNotContain("SupportWorker", auth.Roles);
+    }
+
     [Fact]
     public async Task Worklist_ShowsNOfM_TheFirstMissingItem_AndServicesStarted_AndKeepsAParticipantWhoseItemsAreAllDone()
     {
@@ -212,14 +308,15 @@ public class OnboardingChecklistTests
         ValidDraft(db, done);
         db.SaveChanges();
         Ok(await Controller(db).RecordAgreement(done.Id, new RecordOnboardingAgreementDto { NoAgreementReason = "Not practicable" }, CancellationToken.None));
+        Ok(await Controller(db).RecordExplained(done.Id, new RecordOnboardingExplainedDto { ComplaintsExplainedOn = new DateOnly(2026, 10, 3), RightsExplainedOn = new DateOnly(2026, 10, 3) }, CancellationToken.None));
 
         var rows = Ok(await Controller(db).GetOnboardingWorklist(CancellationToken.None));
 
         var openRow = rows.Single(r => r.ParticipantId == open.Id);
-        Assert.Equal((1, 4, "Service needs"), (openRow.CompletedSteps, openRow.TotalSteps, openRow.FirstMissing));
+        Assert.Equal((1, 6, "Service needs"), (openRow.CompletedSteps, openRow.TotalSteps, openRow.FirstMissing));
         Assert.Equal(open.ServicesStartedAt, openRow.ServicesStartedAt);
         var doneRow = rows.Single(r => r.ParticipantId == done.Id);
-        Assert.Equal((3, 3, (string?)null), (doneRow.CompletedSteps, doneRow.TotalSteps, doneRow.FirstMissing));
+        Assert.Equal((5, 5, (string?)null), (doneRow.CompletedSteps, doneRow.TotalSteps, doneRow.FirstMissing));
     }
 
     [Fact]
@@ -255,7 +352,7 @@ public class OnboardingChecklistTests
         }
         // Absolute: profile and service needs done, the agreement not signed, the ended plan not counting as funding (a swap of the two fact sets would show here).
         var endedRow = rows.Single(r => r.ParticipantId == ended.Id);
-        Assert.Equal((2, 4, "Signed agreement"), (endedRow.CompletedSteps, endedRow.TotalSteps, endedRow.FirstMissing));
+        Assert.Equal((2, 6, "Signed agreement"), (endedRow.CompletedSteps, endedRow.TotalSteps, endedRow.FirstMissing));
         Assert.Equal("The plan budget has ended: record the new plan.", (await Checklist(db, ended)).Items.Single(i => i.Key == "funding").Missing);
         Assert.Equal("No plan budget recorded.", (await Checklist(db, noPlan)).Items.Single(i => i.Key == "funding").Missing);
         Assert.True((await Checklist(db, current)).Items.Single(i => i.Key == "funding").Done);

@@ -169,9 +169,9 @@ export interface ParticipantInquiryDetailDto extends ParticipantInquiryDto, Inqu
   contactRole?: ContactRoleType | null
 }
 
-/** One onboarding checklist item. `key` names the item and its fix: profile (Edit profile), serviceNeeds (the agreement draft), agreement (Record it), funding (the Funding tab). */
+/** One onboarding checklist item. `key` names the item and its fix: profile (Edit profile), serviceNeeds (the agreement draft), agreement, complaints and rights (Record it), funding (the Funding tab). */
 export interface OnboardingChecklistItem {
-  key: 'profile' | 'serviceNeeds' | 'agreement' | 'funding'
+  key: 'profile' | 'serviceNeeds' | 'agreement' | 'complaints' | 'rights' | 'funding'
   label: string
   done: boolean
   /** One line saying what is missing; null when the item is done. */
@@ -181,13 +181,16 @@ export interface OnboardingChecklistItem {
 /** GET /inquiries/{participantId}/onboarding: the checklist, derived by the server (owner decision 2026-10-13). */
 export interface ParticipantOnboardingDto {
   participantId: string
-  /** Four items, three for a participant who is not NDIS-funded. */
+  /** Six items, five for a participant who is not NDIS-funded. */
   items: OnboardingChecklistItem[]
   isReady: boolean
   servicesStartedAt?: string | null
   /** The agreement record: a signed date (yyyy-MM-dd) or a reason there is no written agreement, at most one. */
   agreementSignedOn?: string | null
   noAgreementReason?: string | null
+  /** The dates (yyyy-MM-dd) "Told how to make a complaint" and "Rights explained" were recorded; null until then. */
+  complaintsExplainedOn?: string | null
+  rightsExplainedOn?: string | null
 }
 
 /** A row of GET /inquiries/onboarding-worklist (the Onboarding tab). */
@@ -205,4 +208,10 @@ export interface OnboardingWorklistRow {
 export interface RecordOnboardingAgreementDto {
   signedOn?: string | null
   noAgreementReason?: string | null
+}
+
+/** POST /inquiries/{participantId}/onboarding/explained-record: replaces both dates; null clears that one, and at least one is required. */
+export interface RecordOnboardingExplainedDto {
+  complaintsExplainedOn?: string | null
+  rightsExplainedOn?: string | null
 }

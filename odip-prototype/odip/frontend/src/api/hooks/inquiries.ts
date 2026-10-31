@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { apiDeleteRaw, apiGet, apiPost, apiPut } from '../client'
 import { fetchPagedList } from './pagedList'
-import type { CancelIntakeBookingResultDto, CloseInquiryDto, CloseInquiryResultDto, CreateParticipantInquiryDto, IntakeVisitDto, OnboardingWorklistRow, ParticipantInquiryDetailDto, ParticipantInquiryDto, ParticipantOnboardingDto, RecordOnboardingAgreementDto, SetIntakeBookingDto, UpdateParticipantInquiryDto } from '../types/inquiries'
+import type { CancelIntakeBookingResultDto, CloseInquiryDto, CloseInquiryResultDto, CreateParticipantInquiryDto, IntakeVisitDto, OnboardingWorklistRow, ParticipantInquiryDetailDto, ParticipantInquiryDto, ParticipantOnboardingDto, RecordOnboardingAgreementDto, RecordOnboardingExplainedDto, SetIntakeBookingDto, UpdateParticipantInquiryDto } from '../types/inquiries'
 
 /** The Enquiries tab's rows: the open view (today's key and URL, so every existing caller is unchanged) or the closed one. */
 export function useParticipantInquiries(view: 'open' | 'closed' = 'open') {
@@ -53,6 +53,18 @@ export function useRecordOnboardingAgreement(participantId: string | undefined) 
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data: RecordOnboardingAgreementDto) => apiPost<ParticipantOnboardingDto>(`/inquiries/${participantId}/onboarding/agreement-record`, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['onboarding', participantId] })
+      qc.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })
+    },
+  })
+}
+
+/** The checklist's "Told how to make a complaint" and "Rights explained" items: the date each was explained. The server validates and answers field errors. */
+export function useRecordOnboardingExplained(participantId: string | undefined) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: RecordOnboardingExplainedDto) => apiPost<ParticipantOnboardingDto>(`/inquiries/${participantId}/onboarding/explained-record`, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['onboarding', participantId] })
       qc.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] })

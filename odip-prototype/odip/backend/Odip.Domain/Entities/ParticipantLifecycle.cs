@@ -136,6 +136,12 @@ public class ParticipantOnboarding : ITenantEntity
     public string? NoAgreementReason { get; private set; }
     public DateTime? AgreementRecordedAt { get; private set; }
     public string? AgreementRecordedBy { get; private set; }
+    // The checklist's "Told how to make a complaint" and "Rights explained" items, recorded by hand: the date each was explained to the participant.
+    // They share one recorded-at and recorded-by pair, because they are saved together from one dialog.
+    public DateOnly? ComplaintsExplainedOn { get; private set; }
+    public DateOnly? RightsExplainedOn { get; private set; }
+    public DateTime? ExplainedRecordedAt { get; private set; }
+    public string? ExplainedRecordedBy { get; private set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
@@ -143,5 +149,11 @@ public class ParticipantOnboarding : ITenantEntity
     public void RecordAgreement(DateOnly? signedOn, string? reason, string actor, DateTime atUtc)
     {
         AgreementSignedOn = signedOn; NoAgreementReason = reason; AgreementRecordedBy = actor; AgreementRecordedAt = atUtc; UpdatedAt = atUtc;
+    }
+
+    /// <summary>Records both explained dates at once; a null clears that one. The caller has checked that at least one is given.</summary>
+    public void RecordExplained(DateOnly? complaintsOn, DateOnly? rightsOn, string actor, DateTime atUtc)
+    {
+        ComplaintsExplainedOn = complaintsOn; RightsExplainedOn = rightsOn; ExplainedRecordedBy = actor; ExplainedRecordedAt = atUtc; UpdatedAt = atUtc;
     }
 }

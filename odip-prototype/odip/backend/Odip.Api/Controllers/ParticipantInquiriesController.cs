@@ -315,6 +315,34 @@ public class ParticipantInquiriesController : ControllerBase
     }
 
     /// <summary>
+    /// The checklist's "Told how to make a complaint" and "Rights explained" items, recorded by hand: the date each was explained to the participant.
+    /// The body replaces both values (a null clears that one) and at least one is required. A date may not be after the provider's today or before 1990.
+    /// Field errors come back as a ValidationProblemDetails keyed by the field.
+    /// </summary>
+    [HttpPost("{id:guid}/onboarding/explained-record")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<ParticipantOnboardingDto>>> RecordExplained(Guid id, RecordOnboardingExplainedDto dto, CancellationToken ct)
+    {
+        var (participant, onboarding) = await FindOwnedAsync(id, storeMissingRow: true, ct);
+        if (participant == null || onboarding == null) return NotFound(ApiResponse<ParticipantOnboardingDto>.Fail("Onboarding not found"));
+        var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
+        var errors = new Dictionary<string, string[]>();
+        if (dto.ComplaintsExplainedOn is null && dto.RightsExplainedOn is null) errors["complaintsExplainedOn"] = ["Enter at least one date."];
+        CheckExplainedDate(errors, "complaintsExplainedOn", dto.ComplaintsExplainedOn, today);
+        CheckExplainedDate(errors, "rightsExplainedOn", dto.RightsExplainedOn, today);
+        if (errors.Count > 0) return ValidationProblem(new ValidationProblemDetails(errors));
+        var saved = await RecordAndSaveAsync(participant, onboarding, row => row.RecordExplained(dto.ComplaintsExplainedOn, dto.RightsExplainedOn, Actor(), DateTime.UtcNow), ct);
+        return Ok(ApiResponse<ParticipantOnboardingDto>.Ok(await BuildDetailAlone(participant, saved, ct)));
+    }
+
+    private static void CheckExplainedDate(Dictionary<string, string[]> errors, string field, DateOnly? date, DateOnly today)
+    {
+        if (date > today) errors[field] = ["The date cannot be in the future."];
+        // Same typo guard as the agreement date.
+        else if (date < new DateOnly(1990, 1, 1)) errors[field] = ["Check the date: it is before 1990."];
+    }
+
+    /// <summary>
     /// Records a checklist step and saves it. A participant in onboarding who has no stored row gets one added by <see cref="FindOwnedAsync"/>, and two requests
     /// can both find none: the unique index on the participant rejects the second insert. That is no error for the caller, because the row exists by then, so the
     /// request that lost drops its insert, reloads the winner's row, records the step on it and saves once more (its step is not lost). Returns the row that was saved.
@@ -364,7 +392,7 @@ public class ParticipantInquiriesController : ControllerBase
         new() { Id = Guid.NewGuid(), TenantId = participant.TenantId, ParticipantId = participant.Id };
 
     /// <summary>
-    /// The checklist (owner decision 2026-10-13): four items derived from data, in order, the funding one for an NDIS-funded participant only.
+    /// The checklist (owner decision 2026-10-13): six items in order: profile, service needs and funding derived from data, the other three recorded by hand, the funding one for an NDIS-funded participant only.
     /// The derived checks are <see cref="ParticipantReadinessGate.ProfileDetailsRule"/> and <see cref="ParticipantReadinessGate.ServiceNeedsParticipants"/>,
     /// the same ones the roster issues and the strict gate read.
     /// </summary>
@@ -396,6 +424,8 @@ public class ParticipantInquiriesController : ControllerBase
             Item("profile", "Profile details", profileMissing.Count == 0, $"Missing: {string.Join(", ", profileMissing)}."),
             Item("serviceNeeds", "Service needs", serviceNeedsDone, "No current agreement draft with dated, priced support lines."),
             Item("agreement", "Signed agreement", agreementDone, "Record the date it was signed, or why there is no written agreement."),
+            Item("complaints", "Told how to make a complaint", onboarding.ComplaintsExplainedOn != null, "Record the date you explained how to make a complaint."),
+            Item("rights", "Rights explained", onboarding.RightsExplainedOn != null, "Record the date you explained their rights."),
         };
         if (participant.FundingSource == ParticipantFundingSource.Ndis)
         {
@@ -410,6 +440,7 @@ public class ParticipantInquiriesController : ControllerBase
         {
             ParticipantId = participant.Id, Items = items, IsReady = items.All(i => i.Done), ServicesStartedAt = participant.ServicesStartedAt,
             AgreementSignedOn = onboarding.AgreementSignedOn, NoAgreementReason = onboarding.NoAgreementReason,
+            ComplaintsExplainedOn = onboarding.ComplaintsExplainedOn, RightsExplainedOn = onboarding.RightsExplainedOn,
         };
     }
 
