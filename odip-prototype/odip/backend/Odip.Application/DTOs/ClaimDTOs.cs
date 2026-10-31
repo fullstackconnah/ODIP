@@ -369,6 +369,11 @@ public record ProviderSettingsDto
     public string? ManagerPhone { get; init; }
     /// <summary>The stored IANA zone, or null when unset (the State's default applies, and the form shows that default).</summary>
     public string? TimeZoneId { get; init; }
+    /// <summary>Settings 2b: the organisation's own contact details, all optional (null when blank).</summary>
+    public string? TradingName { get; init; }
+    public string? ContactEmail { get; init; }
+    public string? ContactPhone { get; init; }
+    public string? Website { get; init; }
     /// <summary>How strictly this organisation applies participant readiness. Warn unless an Admin chose Enforce.</summary>
     public ParticipantReadinessMode ParticipantReadinessMode { get; init; } = ParticipantReadinessMode.Warn;
 
@@ -424,6 +429,18 @@ public record UpsertProviderSettingsDto
     /// No data annotation: its 400 is an errors object, which the form would show as the wrong sentence.
     /// </summary>
     public string? TimeZoneId { get; init; }
+    /// <summary>
+    /// OPTIONAL organisation contact details: null or absent leaves the stored value (every section echoes the row), blank clears it, the server trims. Email and website are
+    /// checked by the controller (400 with a sentence). No [EmailAddress] or [Url]: their 400 is an errors object, which the form would show as the wrong sentence.
+    /// </summary>
+    [StringLength(200)]
+    public string? TradingName { get; init; }
+    [StringLength(254)]
+    public string? ContactEmail { get; init; }
+    [StringLength(30)]
+    public string? ContactPhone { get; init; }
+    [StringLength(500)]
+    public string? Website { get; init; }
     /// <summary>
     /// OPTIONAL, and the PUT changes the readiness mode ONLY when this is present: a request that
     /// leaves it out (null or absent) never touches the stored mode, so an older client or a stale
