@@ -53,7 +53,7 @@ describe('QuickGroup — the table', () => {
   it('heads its columns with the subject, then each fact, then an empty actions header', () => {
     render(<Harness model={model()} />)
 
-    expect(screen.getAllByRole('columnheader').map((th) => th.textContent)).toEqual(['Staff', 'Type', 'Dates', 'Note', ''])
+    expect(screen.getAllByRole('columnheader').map((th) => th.textContent)).toEqual(['Staff', 'Type', 'Dates', 'Note', 'Actions'])
     // The header row is the table's look from xl; below xl each row is a card and the header is not shown.
     expect(screen.getAllByRole('row')[0].closest('thead')).toHaveClass('sticky')
   })
@@ -428,7 +428,7 @@ describe('QuickGroup — select and Complete all (decision-bulk SHAPE §3–§6)
 
   it('keeps selection separate from ineligible rows and shows no unselected bulk action', () => {
     render(<Harness model={model({ rows: [tapRow('a'), row('b', { flags: [{ label: 'Your request', tone: 'neutral' }] })] })} />)
-    expect(screen.getAllByRole('columnheader').map(th => th.textContent)).toEqual(['Select', 'Staff', 'Type', 'Dates', 'Note', ''])
+    expect(screen.getAllByRole('columnheader').map(th => th.textContent)).toEqual(['Select', 'Staff', 'Type', 'Dates', 'Note', 'Actions'])
     expect(within(rowOf('Person b')).queryByRole('checkbox')).not.toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Select leave: Person a' })).not.toBeChecked()
     expect(screen.getByRole('checkbox', { name: 'Select all shown leave requests' })).not.toBeChecked()
@@ -491,7 +491,7 @@ describe('QuickGroup — select and Complete all (decision-bulk SHAPE §3–§6)
     const { unmount } = render(<Harness model={model({ count: 3, rows: [tapRow('a', () => first.promise), tapRow('b'), tapRow('c')] })} />)
     const heads = () => screen.getAllByRole('columnheader').map((th) => th.textContent)
     const before = heads()
-    expect(before).toEqual(['Select all shown leave requests', 'Staff', 'Type', 'Dates', 'Note', ''])
+    expect(before).toEqual(['Select all shown leave requests', 'Staff', 'Type', 'Dates', 'Note', 'Actions'])
     expect(screen.getByText('None selected')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select leave: Person a' }))

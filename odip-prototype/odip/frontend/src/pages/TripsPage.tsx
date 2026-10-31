@@ -13,7 +13,7 @@ import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { Dropdown } from '@/components/Dropdown'
 import { StatusBadge } from '@/components/StatusBadge'
-import { CellText, DataTable, RowActions, type Column } from '@/components/DataTable'
+import { CellText, DataTable, RowMenu, type Column } from '@/components/DataTable'
 import { SearchInput } from '@/components/SearchInput'
 import { TAP_AREA } from '@/components/tapArea'
 import { ToggleGroup } from '@/components/ToggleGroup'
@@ -126,9 +126,9 @@ export default function TripsPage() {
     setStatusFilter('')
   }
 
-  const handleOpenEdit = (tripId: string, e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
+  const handleOpenEdit = (tripId: string, e?: React.MouseEvent) => {
+    e?.preventDefault()
+    e?.stopPropagation()
     setEditingTripId(tripId)
   }
 
@@ -158,20 +158,21 @@ export default function TripsPage() {
   // The caps below bound the two cells that can grow without limit.
   // They are ranges that never overlap: Tailwind emits the arbitrary `min-[…px]` variants BEFORE the
   // named breakpoints, so they could not be trusted to override an `md:` / `2xl:` class on one element.
-  const NAME_CAP = 'md:max-2xl:max-w-[14rem] 2xl:max-[1792px]:max-w-[18rem] min-[1792px]:max-w-[22rem]'
-  const DESTINATION_CAP = 'md:max-[1366px]:max-w-[12rem] min-[1366px]:max-[1792px]:max-w-[13.5rem] min-[1792px]:max-w-[22rem]'
+  const NAME_CAP = 'md:max-[1366px]:max-w-[12rem] min-[1366px]:max-2xl:max-w-[14rem] 2xl:max-[1792px]:max-w-[18rem] min-[1792px]:max-w-[22rem]'
+  const DESTINATION_CAP = 'md:max-[1366px]:max-w-[9rem] min-[1366px]:max-[1792px]:max-w-[13.5rem] min-[1792px]:max-w-[22rem]'
   const tripColumns: Column<TripListDto>[] = [
     {
       key: 'tripName',
       header: 'Trip',
       sortable: true,
+      mobile: 'primary',
       render: (t) => (
         // One line: name, then the muted code (13px, the floor for secondary table text). A
         // stacked name/code cell is two lines and pushes the row past --row-h. The name is cut at
         // its cap with the code in its tooltip; below 1536px the code itself gives way first (it is derivable: the full code is in the tooltip).
         <div className="flex min-w-0 items-baseline gap-2">
           <span
-            className={`truncate font-semibold text-[var(--color-foreground)] ${NAME_CAP}`}
+            className={`max-md:line-clamp-2 md:truncate font-semibold text-[var(--color-foreground)] ${NAME_CAP}`}
             title={t.tripCode ? `${t.tripName} (${t.tripCode})` : t.tripName}
           >
             {t.tripName}
@@ -181,28 +182,9 @@ export default function TripsPage() {
       ),
     },
     {
-      key: 'destination',
-      header: 'Destination',
-      sortable: true,
-      render: (t) => (
-        <CellText className={`text-[var(--color-muted-foreground)] ${DESTINATION_CAP}`}>
-          {`${t.destination || 'TBD'}${t.region ? ` · ${t.region}` : ''}`}
-        </CellText>
-      ),
-    },
-    {
-      key: 'startDate',
-      header: 'Dates',
-      sortable: true,
-      render: (t) => (
-        <span className="tabular-nums text-[var(--color-muted-foreground)]">
-          {formatDateAu(t.startDate)} – {formatDateAu(t.endDate)} <span className="text-[13px] md:max-[1792px]:hidden">({t.durationDays}d)</span>
-        </span>
-      ),
-    },
-    {
       key: 'status',
       header: 'Status',
+      mobile: 'status',
       // "Open For Bookings" is the widest label: 104px of text + 10 left / 24 right padding for the
       // caret in the pill + 24 of cell padding = 162px. Reserved up front so the column doesn't jump
       // when a trip's status changes to it.
@@ -220,9 +202,21 @@ export default function TripsPage() {
       ) : <StatusBadge status={t.status} label={TRIP_STATUS_LABELS[t.status] ?? t.status} />,
     },
     {
+      key: 'startDate',
+      header: 'Dates',
+      sortable: true,
+      mobile: 'meta',
+      render: (t) => (
+        <span className="tabular-nums text-[var(--color-muted-foreground)]">
+          {formatDateAu(t.startDate)} – {formatDateAu(t.endDate)} <span className="text-[13px] md:max-[1792px]:hidden">({t.durationDays}d)</span>
+        </span>
+      ),
+    },
+    {
       key: 'currentParticipantCount',
       header: 'Pax',
       align: 'center',
+      mobile: 'meta',
       render: (t) => (
         <span className="inline-flex items-center gap-1.5 tabular-nums">
           {formatRatio(t.currentParticipantCount, t.maxParticipants || '—')}
@@ -233,32 +227,32 @@ export default function TripsPage() {
       ),
     },
     {
+      key: 'destination',
+      header: 'Destination',
+      mobile: 'meta',
+      sortable: true,
+      render: (t) => (
+        <CellText className={`text-[var(--color-muted-foreground)] ${DESTINATION_CAP}`}>
+          {`${t.destination || 'TBD'}${t.region ? ` · ${t.region}` : ''}`}
+        </CellText>
+      ),
+    },
+    {
       key: 'leadCoordinatorName',
       header: 'Lead',
       sortable: true,
-      maxWidth: '10rem',
+      maxWidth: '7rem',
+      mobile: 'meta',
       render: (t) => t.leadCoordinatorName || '—',
     },
     {
       key: 'actions',
       header: '',
       hidden: !canWrite,
-      // 24px, revealed on row hover / focus and always shown on touch. handleOpenEdit stops the
-      // click so it doesn't also open the trip.
-      render: (t) => (
-        <RowActions>
-          <Button
-            variant="ghost"
-            size="sm"
-            iconOnly
-            title="Edit trip"
-            aria-label={`Edit ${t.tripName}`}
-            onClick={e => handleOpenEdit(t.id, e)}
-          >
-            <Pencil className="w-4 h-4" />
-          </Button>
-        </RowActions>
-      ),
+      overlay: true,
+      mobile: 'trail',
+      // Revealed on row hover / focus, always shown on touch; below md one ⋯ menu. RowMenu stops the click so it doesn't also open the trip.
+      render: (t) => <RowMenu name={t.tripName} items={[{ label: 'Edit trip', icon: <Pencil className="w-4 h-4" />, onSelect: () => handleOpenEdit(t.id) }]} />,
     },
   ]
 

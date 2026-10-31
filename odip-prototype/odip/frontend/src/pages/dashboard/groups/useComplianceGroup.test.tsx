@@ -39,7 +39,7 @@ describe('Staff compliance group — what it lists', () => {
     await screen.findByText('Sam Lee')
     expect(apiGet).toHaveBeenCalledWith('/staff', { isActive: 'true' })
     expect(subjects()).toEqual(['Sam Lee', 'Ana Ruiz', 'Ben Ito', 'Cy Moss'])
-    expect(headers()).toEqual(['Staff', 'Credential', 'Expiry', ''])
+    expect(headers()).toEqual(['Staff', 'Credential', 'Expiry', 'Actions'])
     expect(facts('Sam Lee')).toEqual(['First Aid', '3 Oct'])
     expect(facts('Ben Ito')).toEqual(['First Aid', '30 Oct'])
     // Undated: a dash in the table (and nothing on the card).
