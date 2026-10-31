@@ -278,10 +278,8 @@ try {
           // M5 the card meta reads in the shape's order (a subset of it, in order, is fine: an empty value drops off the card).
           if (cfg.cardMeta) check(tag, `M5 card meta reads ${cfg.cardMeta.join(', ')}`, cards.every((c) => c.metaLabels.every((x, i) => cfg.cardMeta.includes(x) && (i === 0 || cfg.cardMeta.indexOf(c.metaLabels[i - 1]) < cfg.cardMeta.indexOf(x)))), { first: cards[0].metaLabels, bad: cards.filter((c) => !c.metaLabels.every((x, i) => cfg.cardMeta.includes(x) && (i === 0 || cfg.cardMeta.indexOf(c.metaLabels[i - 1]) < cfg.cardMeta.indexOf(x)))).slice(0, 2).map((c) => c.metaLabels) })
           if (!full) console.log(`[polish-pr1] RECORD ${cfg.key} card heights ${variant}: median ${Math.round(median(hs))}, max ${Math.round(Math.max(...hs))} (the decision queue is exempt from the height target)`)
-          // Fix round 2: clearing the menu (S1) wraps the one single-row chip card to 2 rows, +22px: Staff max is 165, not 150.
-          // shortcut: Staff qualification chips wrap to 2 lines; chip cap "4 + 2 more" in polish PR3 (A9) restores 120/132
-          const medT = cfg.key === 'staff' ? 142 : cfg.key === 'incidents' ? 132 : cfg.key === 'tasks' ? 144 : 120
-          const maxH = cfg.key === 'staff' ? 165 : cfg.key === 'tasks' ? 144 : cfg.key === 'incidents' ? 156 : 132
+          const medT = cfg.key === 'incidents' ? 132 : cfg.key === 'tasks' ? 144 : 120
+          const maxH = cfg.key === 'tasks' ? 144 : cfg.key === 'incidents' ? 156 : 132
           if (full) check(tag, `C11 card height median <= ${medT}, max <= ${maxH}`, median(hs) <= (medT) && Math.max(...hs) <= maxH, { median: Math.round(median(hs)), max: Math.round(Math.max(...hs)), n: hs.length })
           // Fix round 1: M1 the tick sits clear of the title; M2 Type is on the incident card; M3 the meta reads Date, Severity, NDIS, Type, Trip, Participant.
           if (cfg.key === 'tasks') check(tag, 'M1 no tick over a title', cards.every((c) => !c.tickOverTitle), { worst: Math.max(...hs), over: cards.filter((c) => c.tickOverTitle).length })

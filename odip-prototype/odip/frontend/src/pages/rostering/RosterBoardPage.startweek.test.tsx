@@ -177,16 +177,16 @@ function deferred<T>() {
 describe('Start rostering', () => {
   beforeEach(() => showBoard(UNSTARTED))
 
-  it('an unstarted week: the Start card over a faded, inert grid, with no strip, no drag and no hint', () => {
+  it('an unstarted week: the in-flow Start card with no ghost grid, no strip, no drag and no hint', () => {
     const { container } = renderPage()
     const card = screen.getByRole('region', { name: CARD })
     expect(card).toHaveTextContent("Adds the week's scheduled shifts from approved agreements, with the regular on each one where they're free. Staff see nothing until you publish.")
     expect(card).toHaveTextContent('2 shifts already in this week stay as they are.')
     const start = within(card).getByRole('button', { name: START })
-    expect(start).toHaveClass(PRIMARY, 'h-[calc(var(--control-h)+4px)]')
-    const inert = container.querySelector('[inert]')
-    expect(inert).toHaveAttribute('aria-hidden', 'true')
-    expect(inert?.querySelector('[data-shift-chip="one-off"]')).not.toBeNull()
+    expect(start).toHaveClass(PRIMARY)
+    expect(start).not.toHaveClass('h-[calc(var(--control-h)+4px)]')
+    expect(container.querySelector('[inert]')).toBeNull()
+    expect(container.querySelector('[data-shift-chip]')).toBeNull()
     expect(screen.queryByPlaceholderText('Find staff')).not.toBeInTheDocument()
     expect(h.dnd.props).toBeNull()
     expect(screen.queryByText('Nothing rostered this week')).not.toBeInTheDocument()

@@ -397,14 +397,18 @@ export default function IncidentsPage() {
           className="flex items-start gap-3 px-3 py-2.5 rounded-[var(--radius-md)] bg-error-container border border-destructive/40 text-on-error-container"
         >
           <AlertTriangle className="mt-0.5 w-4 h-4 flex-shrink-0" aria-hidden="true" />
-          <div className="min-w-0 flex-1 flex flex-col items-start gap-1 md:flex-row md:items-center md:gap-3">
-          <p className="min-w-0 text-sm md:flex-1">
-            <span className="font-semibold">{qscHeadline}</span>
-            <span className="ml-2 text-[13px]">{'Most reportable incidents must be reported to the NDIS Commission within 24\u00a0hours. Some uses of an unauthorised restrictive practice can be reported within 5\u00a0business days.'}</span>
-          </p>
-          <Link to="/incidents?qsc=overdue" className={`${TAP_FLOOR} shrink-0 whitespace-nowrap text-sm font-medium underline underline-offset-2`}>
-            View overdue incidents
-          </Link>
+          {/* Headline first, then the link and the rules disclosure on one row. An open disclosure takes the full row below. */}
+          <div className="min-w-0 flex-1 flex flex-wrap items-center gap-x-4 gap-y-0 text-sm">
+            <p className="basis-full font-semibold md:min-w-0 md:flex-1 md:basis-0">{qscHeadline}</p>
+            <Link to="/incidents?qsc=overdue" className={`${TAP_FLOOR} shrink-0 whitespace-nowrap font-medium underline underline-offset-2`}>
+              View overdue incidents
+            </Link>
+            <details className="open:basis-full">
+              <summary className={`${TAP_FLOOR} cursor-pointer list-none whitespace-nowrap font-medium underline underline-offset-2 [&::-webkit-details-marker]:hidden`}>
+                About the deadlines
+              </summary>
+              <p className="pb-1 text-[13px] text-foreground">{'Most reportable incidents must be reported to the NDIS Commission within 24 hours. Some uses of an unauthorised restrictive practice can be reported within 5 business days.'}</p>
+            </details>
           </div>
         </div>
       )}

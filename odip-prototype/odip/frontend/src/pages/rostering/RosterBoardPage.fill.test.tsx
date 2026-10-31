@@ -72,6 +72,16 @@ describe('the fill card on the Rostering page', () => {
     expect(screen.getByRole('heading', { name: 'How full the next weeks are' })).toBeTruthy()
   })
 
+  it('an unstarted week puts the Start card first and the chart below it', () => {
+    as('Admin')
+    showBoard({ ...board(DRAFTS), weekStarted: false, canStart: true } as RosterBoardDto)
+    const { container } = renderPage()
+    const card = screen.getByRole('region', { name: "This week hasn't been started" })
+    const chart = screen.getByRole('heading', { name: 'How full the next weeks are' })
+    expect(card.compareDocumentPosition(chart) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(container.querySelector('[inert]')).toBeNull()
+  })
+
   it.each(['SupportWorker', 'ReadOnly'])('%s does not see the card', role => {
     as(role)
     renderPage()
