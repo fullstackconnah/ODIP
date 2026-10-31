@@ -1,14 +1,14 @@
 // N8: the participant Weekly Schedule PDF menu item and the print rules (run through the runner's `shots` target).
 // Numeric checks 15-19 (SHAPE) plus the 794x1123 print state (PLAN-AMEND S1/S2); padded crops and one full page per breakpoint, once, at the end.
-import { mkdirSync } from 'node:fs'
 import path from 'node:path'
+import { prepareOutDir, cropElement, fullPage, checkCropHolds, writeChecks } from '../shots/lib/capture.mjs'
 
 let chromium
 try { ;({ chromium } = await import('playwright')) } catch { ;({ chromium } = await import('@playwright/test')) }
 
 const { BASE_URL, OUT_DIR } = process.env
 if (!BASE_URL || !OUT_DIR) throw new Error('BASE_URL and OUT_DIR must be set (run this through odip-test.sh shots)')
-mkdirSync(OUT_DIR, { recursive: true })
+prepareOutDir(OUT_DIR)
 
 const envelope = (data) => ({ success: true, data, message: null, errors: [] })
 const devUsers = envelope([{ username: 'dev.coordinator', role: 'Coordinator', tenantName: 'Sample Support Co' }])
@@ -29,8 +29,8 @@ const board = {
   ] }],
 }
 
-const results = []
-const check = (name, value, ok) => { results.push(ok); console.log(`${ok ? 'PASS' : 'FAIL'} ${name}: ${value}`) }
+const checks = []
+const check = (name, value, ok) => { checks.push({ name, pass: !!ok, detail: String(value) }); console.log(`${ok ? 'PASS' : 'FAIL'} ${name}: ${value}`) }
 
 const browser = await chromium.launch({ headless: true })
 
@@ -62,12 +62,15 @@ const go = async (page, p) => {
   await page.goto(`${BASE_URL}${p}`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
   await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => {})
 }
-const crop = async (page, loc, name) => {
-  const bb = await loc.boundingBox()
-  if (!bb) return console.log(`no box for ${name}`)
-  const vp = page.viewportSize()
-  const x = Math.max(0, bb.x - 24), y = Math.max(0, bb.y - 24)
-  await page.screenshot({ path: path.join(OUT_DIR, `${name}.png`), clip: { x, y, width: Math.min(vp.width - x, bb.width + 48), height: Math.min(vp.height - y, bb.height + 48) } })
+const crop = async (page, loc, name, touch = false) => {
+  const r = await cropElement(page, loc, path.join(OUT_DIR, `${name}.png`), { pad: 24, touch })
+  const c = checkCropHolds(r)
+  check(`crop holds ${name}`, JSON.stringify(c.detail), c.pass)
+}
+const full = async (page, name, touch = false) => {
+  const r = await fullPage(page, path.join(OUT_DIR, 'full', `${name}.png`), { touch })
+  checks.push(...r.checks)
+  for (const c of r.checks) console.log(`${c.pass ? 'PASS' : 'FAIL'} ${c.name}: ${JSON.stringify(c.detail)}`)
 }
 const OPTION = (page) => page.getByRole('option', { name: 'Weekly Schedule PDF' })
 const trigger = (page) => page.getByRole('button', { name: /^(Documents|Preparing)/ })
@@ -98,14 +101,14 @@ try {
     await OPTION(page).waitFor({ timeout: 30_000 })
     const ob = await OPTION(page).boundingBox()
     check('15 Weekly Schedule PDF option height (390 touch)', `${ob?.height}px`, (ob?.height ?? 0) >= 44)
-    await crop(page, page.getByRole('listbox').first(), 'menu-390-crop')
-    await page.screenshot({ path: path.join(OUT_DIR, 'menu-390-full.png') })
+    await crop(page, page.getByRole('listbox').first(), 'menu-390-crop', true)
+    await full(page, 'menu-390', true)
     await page.setViewportSize({ width: 390, height: 844 })
     await page.pinCoarse()
     const download = page.waitForEvent('download', { timeout: 90_000 })
     await OPTION(page).click()
     await page.getByRole('button', { name: /^Preparing/ }).waitFor({ timeout: 5_000 }).catch(() => {})
-    await crop(page, page.locator('header, [role="banner"]').last().locator('button').first().or(trigger(page)).first(), 'loading-390-crop')
+    await crop(page, trigger(page), 'loading-390-crop', true)
     const file = (await download).suggestedFilename()
     check('download file name (390)', file, /^.+ - Weekly Schedule 2026-09-07\.pdf$/.test(file))
     await page.context().close()
@@ -118,7 +121,7 @@ try {
     await trigger(page).click()
     await OPTION(page).waitFor({ timeout: 30_000 })
     await crop(page, page.getByRole('listbox').first(), 'menu-1280-crop')
-    await page.screenshot({ path: path.join(OUT_DIR, 'menu-1280-full.png'), fullPage: true })
+    await full(page, 'menu-1280')
     const download = page.waitForEvent('download', { timeout: 90_000 })
     await OPTION(page).click()
     const preparing = page.getByRole('button', { name: 'Preparing…' })
@@ -150,9 +153,9 @@ try {
       await page.emulateMedia({ media: 'screen' })
     }
     await page.emulateMedia({ media: 'print' })
-    await page.screenshot({ path: path.join(OUT_DIR, 'print-participant-1280-full.png'), fullPage: true })
+    await full(page, 'print-participant-1280')
     await go(page, '/budgets')
-    await page.screenshot({ path: path.join(OUT_DIR, 'print-budgets-1280-full.png'), fullPage: true })
+    await full(page, 'print-budgets-1280')
     await page.context().close()
   }
 
@@ -169,6 +172,4 @@ try {
 } finally {
   await browser.close()
 }
-const failed = results.filter((ok) => !ok).length
-console.log(`TOTAL ${results.length - failed}/${results.length} pass`)
-if (failed) process.exitCode = 1
+if (!writeChecks(OUT_DIR, checks)) process.exitCode = 1
