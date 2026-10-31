@@ -166,7 +166,7 @@ export default function StaffPage() {
       },
     },
     // Every flag is on the row (Manual and Overnight were once deleted below 1536, L3-04), as chips; on the card it follows Position and Region.
-    { key: 'qualifications', header: 'Qualifications', mobile: 'meta', className: 'max-md:basis-full max-md:max-w-none! max-md:order-0!', render: (s: StaffListDto) => <Qualifications staff={s} /> },
+    { key: 'qualifications', header: 'Qualifications', mobile: 'meta', className: 'max-md:basis-full max-md:max-w-none! max-md:order-0! max-md:pr-9', render: (s: StaffListDto) => <Qualifications staff={s} /> },
     { key: 'position', header: 'Position', sortable: true, mobile: 'meta', hideWhenEmpty: true, render: positionLabel },
     { key: 'region', header: 'Region', sortable: true, maxWidth: '7rem', mobile: 'meta' },
     { key: 'actions', header: '', overlay: true, mobile: 'trail', render: (s) => <RowMenu name={s.fullName} items={rowItems(s)} /> },
