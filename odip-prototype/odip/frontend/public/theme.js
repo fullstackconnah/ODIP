@@ -8,7 +8,7 @@
     var dark = choice === 'dark' || (choice === 'system' && !!media && media.matches)
     document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light')
     var meta = document.querySelector('meta[name="theme-color"]')
-    if (meta) meta.setAttribute('content', dark ? '#131512' : '#fbf9f5')
+    if (meta) meta.setAttribute('content', dark ? '#151813' : '#fbf9f5')
   }
   function stored() {
     try {
