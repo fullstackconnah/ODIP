@@ -34,8 +34,8 @@ type SettingsSectionProps = SectionFrame & {
   children: ReactNode
 }
 
-// A locked section's text fields read as values in boxes: no Field Grey fill; the Ruled Line border and full ink stay.
-const LOCKED = '[&_input:read-only]:bg-transparent [&_textarea:read-only]:bg-transparent'
+// A locked section's text fields and its disabled select read as values in boxes: no Field Grey fill; the Ruled Line border and full ink stay.
+const LOCKED = '[&_input:read-only]:bg-transparent [&_textarea:read-only]:bg-transparent [&_select:disabled]:bg-transparent [&_select:disabled]:text-[var(--color-foreground)] [&_select:disabled]:opacity-100 [&_select:disabled]:cursor-default'
 
 /**
  * The frame of every Settings section: the h2 (the screen's title below md), one sentence, the locked note for a read-only role, the

@@ -960,6 +960,11 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.BSB).HasMaxLength(10);
             entity.Property(e => e.AccountNumber).HasMaxLength(20);
             entity.Property(e => e.InvoiceFooterNotes).HasMaxLength(2000);
+            entity.Property(e => e.TimeZoneId).HasMaxLength(64);
+            entity.Property(e => e.TradingName).HasMaxLength(200);
+            entity.Property(e => e.ContactEmail).HasMaxLength(254);
+            entity.Property(e => e.ContactPhone).HasMaxLength(30);
+            entity.Property(e => e.Website).HasMaxLength(500);
             // NOT NULL with a constant database default (0 = Warn), so the migration is a
             // metadata-only add on PostgreSQL and every existing row, and any row written by an
             // older build during a rolling deploy, reads back as Warn. Stored as the enum's integer.

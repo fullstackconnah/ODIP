@@ -168,7 +168,7 @@ public class InvoiceService
             ? ("DRAFT – not issued", "A preview for checking. It has no invoice number and is not a tax invoice.", "#515f74")
             : legacy || creditNote ? (null, null, null)
             : inv.Status == InvoiceStatus.Voided
-                ? ("VOID", $"Voided on {Day(ProviderLocalTime.TodayIn(inv.VoidedAt ?? DateTime.UtcNow, ProviderTimeZoneResolver.FromState(inv.SellerState).Zone))}. This invoice is not payable.", "#ba1a1a")
+                ? ("VOID", $"Voided on {Day(ProviderLocalTime.TodayIn(inv.VoidedAt ?? DateTime.UtcNow, ProviderTimeZoneResolver.ForInvoiceState(inv.SellerState).Zone))}. This invoice is not payable.", "#ba1a1a")
             : inv.Status == InvoiceStatus.Credited
                 ? ("CREDITED", $"Credited in full by {creditedBy}{(creditedOn is { } on ? $" on {Day(on)}" : string.Empty)}. Nothing is owed on this invoice.", "#ba1a1a")
             : ((string?)null, (string?)null, (string?)null);
@@ -411,7 +411,7 @@ public class InvoiceService
 
         var tenantId = TenantOf(claim) ?? throw new InvalidOperationException("The claim has no organisation.");
         var settings = await SettingsForAsync(tenantId, ct) ?? throw new InvoiceRefusedException("Set up your organisation's invoice details in Settings first.");
-        var issueDate = ProviderLocalTime.TodayIn(now, ProviderTimeZoneResolver.FromState(settings.State).Zone);
+        var issueDate = ProviderLocalTime.TodayIn(now, ProviderTimeZoneResolver.For(settings.TimeZoneId, settings.State).Zone);
         Guid? actorId = Guid.TryParse(actor?.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var id) ? id : null;
 
         var issued = new List<Invoice>();
@@ -468,7 +468,7 @@ public class InvoiceService
             Id = Guid.NewGuid(), TenantId = original.TenantId, Kind = InvoiceKind.CreditNote, Number = number, DisplayNumber = FormatNumber(prefix, number), Status = InvoiceStatus.Issued,
             TripClaimId = original.TripClaimId, ClaimReference = original.ClaimReference, ParticipantBookingId = original.ParticipantBookingId, ParticipantId = original.ParticipantId,
             ParticipantName = original.ParticipantName, NdisNumber = original.NdisNumber, ServiceReference = original.ServiceReference,
-            IssueDate = ProviderLocalTime.TodayIn(now, ProviderTimeZoneResolver.FromState(original.SellerState).Zone),
+            IssueDate = ProviderLocalTime.TodayIn(now, ProviderTimeZoneResolver.ForInvoiceState(original.SellerState).Zone),
             PayerKind = original.PayerKind, BillToName = original.BillToName, BillToAddress = original.BillToAddress, BillToEmail = original.BillToEmail,
             SellerOrganisationName = original.SellerOrganisationName, SellerAbn = original.SellerAbn, SellerRegistrationNumber = original.SellerRegistrationNumber,
             SellerAddress = original.SellerAddress, SellerState = original.SellerState, GstRegistered = original.GstRegistered,
@@ -529,10 +529,10 @@ public class InvoiceService
         return (Render(invoice, creditedBy: creditNote?.DisplayNumber, creditedOn: creditNote?.IssueDate), $"{invoice.DisplayNumber}.pdf");
     }
 
-    /// <summary>"TAX INVOICE" only for a GST-registered provider; the date is the claim's own (submitted, else created) in the provider's zone, so a re-download never moves it.</summary>
+    /// <summary>"TAX INVOICE" only for a GST-registered provider; the date is the claim's own (submitted, else created) in the zone of the State on the document (never the zone setting), so a re-download never moves it.</summary>
     public static (string Title, DateOnly Date) Heading(bool gstRegistered, TripClaim claim, string? state) =>
         (gstRegistered ? "TAX INVOICE" : "INVOICE",
-         ProviderLocalTime.TodayIn(claim.SubmittedDate ?? claim.CreatedAt, ProviderTimeZoneResolver.FromState(state).Zone));
+         ProviderLocalTime.TodayIn(claim.SubmittedDate ?? claim.CreatedAt, ProviderTimeZoneResolver.ForInvoiceState(state).Zone));
 
     /// <summary>
     /// GST on the invoice: 10% of the lines coded P1 (tax claimable), rounded to the cent. P2 (GST-free), P5 (out of scope) and the

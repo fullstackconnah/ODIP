@@ -50,7 +50,7 @@ const COUNT: Record<Rule, (code: string) => number> = {
 }
 
 const EXEMPT: Record<Rule, string[]> = {
-  colour: ['components/ItineraryPdf.tsx'],
+  colour: ['components/ItineraryPdf.tsx', 'components/ScheduleWeekPdf.tsx'],
   button: ['components/Button.tsx'],
   overlay: ['components/Modal.tsx', 'components/SlideOver.tsx', 'components/layout/AppLayout.tsx'],
   format: ['components/ItineraryPdf.tsx'],

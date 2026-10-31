@@ -42,7 +42,7 @@ public class DemoLiveSetTimeTests
     {
         var env = await TickAsync(Utc(tick), state);
         var d0 = Date(sunday);
-        var zoneId = ProviderTimeZoneResolver.FromState(state).Id;
+        var zoneId = ProviderTimeZoneResolver.For(null, state).Id;
 
         foreach (var (date, levetiracetam) in new[] { (d0.AddDays(-1), Utc(saturdayLevetiracetam).UtcDateTime), (d0, Utc(sundayLevetiracetam).UtcDateTime) })
         {

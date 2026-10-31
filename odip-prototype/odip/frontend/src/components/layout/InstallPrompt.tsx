@@ -85,12 +85,12 @@ export default function InstallPrompt() {
 
   return (
     <>
-      <div data-install-spacer aria-hidden="true" style={{ height: cardH + 8 }} className="lg:hidden" />
+      <div data-install-spacer aria-hidden="true" style={{ height: cardH + 8 }} className="lg:hidden print:hidden" />
       <section
         ref={cardRef}
         aria-labelledby="install-prompt-title"
         data-leaving={leaving ? '' : undefined}
-        className="install-card fixed inset-x-[var(--gutter)] bottom-[calc(var(--mobile-nav-h)+0.5rem)] z-40 lg:hidden"
+        className="install-card fixed inset-x-[var(--gutter)] bottom-[calc(var(--mobile-nav-h)+0.5rem)] z-40 lg:hidden print:hidden"
       >
         <Callout
           tone="info"
