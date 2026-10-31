@@ -32,6 +32,9 @@
   --color-chart-actual: var(--color-primary);
   --color-chart-expected: #2f6db5;
   --color-chart-grid: var(--color-border);
+  /* The roster fill chart (Rostering): identity only, on data marks and legend swatches. Open is a neutral ink on purpose, never amber. */
+  --color-chart-filled: #6b8f3e;
+  --color-chart-open: #6b7160;
   /* Microsoft's own button colours for Sign in with Microsoft (light and dark variants of its branding guidance). */
   --ms-button-bg: #ffffff;
   --ms-button-fg: #5e5e5e;
@@ -435,6 +438,23 @@
 .bt-readout { animation: railFadeIn 0.1s ease-out; }
 
 /*
+ * The roster fill chart (Rostering): Filled is a solid sage mark, Open a hollow mark with a diagonal hatch in a neutral ink (never a warning colour).
+ * The plot is the same one focus stop as .bt-plot. The wash is the hovered week; the readout fades in like .bt-readout.
+ */
+.rf-filled { fill: var(--color-chart-filled); background: var(--color-chart-filled); }
+.rf-open { stroke: var(--color-chart-open); stroke-width: 1.5px; border: 1.5px solid var(--color-chart-open); }
+.rf-hatch { background-image: repeating-linear-gradient(45deg, var(--color-chart-open) 0 1px, transparent 1px 4px); }
+.rf-marker { fill: var(--color-primary); background: var(--color-primary); }
+.rf-wash { fill: var(--color-hover-wash); background: var(--color-hover-wash); transition: opacity 100ms ease-out; }
+.rf-plot { outline: 2px solid transparent; touch-action: pan-y; }
+.rf-plot:focus-visible { outline: 2px solid var(--color-ring); outline-offset: 2px; }
+.rf-readout { animation: railFadeIn 0.1s ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .rf-readout { animation: none; }
+  .rf-wash { transition: none; }
+}
+
+/*
  * The sidebar folding (AppLayout `data-folding`, set from the click until the nav swaps to the rail 80ms later): the words and nested rows
  * fade over 60ms, so they are gone before the swap; badges and chevrons go at once, because the edge reaches them in about 8ms.
  * A click back removes the attribute and the transition carries them home from their current opacity.
@@ -500,6 +520,13 @@ aside[data-folding] [data-fold="word"] { transform: translateX(-12px); }
   .bt-cross { stroke: Highlight; }
   .bt-dot[data-dot] { fill: Highlight; stroke: Canvas; }
   .bt-readout { background: Canvas; color: CanvasText; border: 1px solid CanvasText; }
+  /* The roster fill chart: Filled solid, Open hollow (the hatch is dropped so it reads hollow). */
+  .rf-filled { fill: CanvasText; background: CanvasText; forced-color-adjust: none; }
+  .rf-open { fill: Canvas; stroke: CanvasText; border-color: CanvasText; background: Canvas; forced-color-adjust: none; }
+  .rf-hatch { background-image: none; }
+  .rf-marker { fill: Highlight; background: Highlight; forced-color-adjust: none; }
+  .rf-wash { fill: transparent; background: transparent; }
+  .rf-readout { background: Canvas; color: CanvasText; border: 1px solid CanvasText; }
 }
 
 :root { --wordmark-dot: var(--color-primary-fixed); }
@@ -536,6 +563,8 @@ aside[data-folding] [data-fold="word"] { transform: translateX(-12px); }
   --color-chart-actual: var(--color-primary);
   --color-chart-expected: #5f95e0;
   --color-chart-grid: var(--color-border);
+  --color-chart-filled: #8fb35f;
+  --color-chart-open: #959c88;
   --ms-button-bg: #2f2f2f;
   --ms-button-fg: #ffffff;
   --ms-button-border: #8c8c8c;

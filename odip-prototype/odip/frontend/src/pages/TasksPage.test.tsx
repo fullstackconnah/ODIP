@@ -3,6 +3,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import TasksPage from './TasksPage'
+import { pagedTasks } from '@/test/fixtures/pagedTasks'
 
 // A test sets the role it needs and beforeEach puts it back: a Coordinator-like user who can write (the default).
 const { perms } = vi.hoisted(() => ({ perms: { canWrite: true, isAdmin: false, isSuperAdmin: false, isReadOnly: false } }))
@@ -37,9 +38,9 @@ function renderPage() {
 beforeEach(() => {
   Object.assign(perms, { canWrite: true, isAdmin: false, isSuperAdmin: false, isReadOnly: false })
   mockUseTasks.mockReturnValue({
-    data: [
+    data: pagedTasks([
       { id: 't1', title: 'Confirm accommodation', tripInstanceId: 'trip-1', tripName: 'Beach Trip', taskType: 'AccommodationRequest', ownerName: 'Sam', dueDate: '2026-10-01', priority: 'Medium', status: 'NotStarted' },
-    ],
+    ]),
     isLoading: false,
   })
 })
@@ -82,9 +83,9 @@ describe('TasksPage — cross-domain links', () => {
 describe('TasksPage — obligation-engine tasks (item 9)', () => {
   it('renders "—" in the trip column for a trip-less task', () => {
     mockUseTasks.mockReturnValue({
-      data: [
+      data: pagedTasks([
         { id: 't2', title: 'Find leave cover', taskType: 'LeaveCoverage', ownerName: 'Sam', dueDate: '2026-09-20', priority: 'High', status: 'NotStarted' },
-      ],
+      ]),
       isLoading: false,
     })
     renderPage()
@@ -96,9 +97,9 @@ describe('TasksPage — obligation-engine tasks (item 9)', () => {
 
   it('renders an "Open" link when the task carries a linkTo', () => {
     mockUseTasks.mockReturnValue({
-      data: [
+      data: pagedTasks([
         { id: 't2', title: 'Find leave cover', taskType: 'LeaveCoverage', ownerName: 'Sam', dueDate: '2026-09-20', priority: 'High', status: 'NotStarted', linkTo: '/rostering/leave' },
-      ],
+      ]),
       isLoading: false,
     })
     renderPage()
@@ -113,12 +114,12 @@ describe('TasksPage — obligation-engine tasks (item 9)', () => {
 
   it('shows the human label for each new obligation-engine task type', () => {
     mockUseTasks.mockReturnValue({
-      data: [
+      data: pagedTasks([
         { id: 't2', title: 'Find leave cover', taskType: 'LeaveCoverage', ownerName: 'Sam', dueDate: '2026-09-20', priority: 'High', status: 'NotStarted' },
         { id: 't3', title: 'File NDIS Commission report', taskType: 'IncidentQscReport', ownerName: 'Sam', dueDate: '2026-09-20', priority: 'High', status: 'NotStarted' },
         { id: 't4', title: 'Witness medication', taskType: 'MedicationWitness', ownerName: 'Sam', dueDate: '2026-09-20', priority: 'High', status: 'NotStarted' },
         { id: 't5', title: 'Follow up flagged note', taskType: 'FlaggedNoteFollowUp', ownerName: 'Sam', dueDate: '2026-09-20', priority: 'High', status: 'NotStarted' },
-      ],
+      ]),
       isLoading: false,
     })
     renderPage()
@@ -131,9 +132,9 @@ describe('TasksPage — obligation-engine tasks (item 9)', () => {
 
   it('shows an Admin the emergency booking review task by its human label, with the way to the shift on the roster board', () => {
     mockUseTasks.mockReturnValue({
-      data: [
+      data: pagedTasks([
         { id: 't6', title: 'Review emergency shift over budget: Mia Chen on 17 Aug 2026', taskType: 'BudgetEmergencyReview', ownerName: null, dueDate: '2026-08-18', priority: 'Medium', status: 'NotStarted', linkTo: '/rostering?date=2026-08-17&participant=p-1' },
-      ],
+      ]),
       isLoading: false,
     })
     renderPage()
@@ -197,7 +198,7 @@ describe('TasksPage — the emergency review task', () => {
   }
   const ordinary = { id: 't7', title: 'Find leave cover', taskType: 'LeaveCoverage', ownerName: 'Sam', dueDate: '2026-09-20', priority: 'High', status: 'NotStarted', linkTo: '/rostering/leave' }
   const rowOf = (title: string) => screen.getByText(title).closest('tr') as HTMLElement
-  const showing = (...tasks: object[]) => mockUseTasks.mockReturnValue({ data: tasks, isLoading: false })
+  const showing = (...tasks: object[]) => mockUseTasks.mockReturnValue({ data: pagedTasks(tasks), isLoading: false })
 
   it('offers a Coordinator no way to close, retype or remove the review: no tick, a held status, no edit or archive', () => {
     showing(review)
@@ -332,7 +333,7 @@ describe('TasksPage — View for ReadOnly on a linked task', () => {
   it('shows ReadOnly a View link to the task view on a row with a linkTo', () => {
     Object.assign(perms, { canWrite: false, isReadOnly: true })
     mockUseTasks.mockReturnValue({
-      data: [{ id: 't9', title: 'Cover leave for Sam', taskType: 'Other', ownerName: null, dueDate: '2026-10-01', priority: 'Medium', status: 'NotStarted', linkTo: '/rostering/leave' }],
+      data: pagedTasks([{ id: 't9', title: 'Cover leave for Sam', taskType: 'Other', ownerName: null, dueDate: '2026-10-01', priority: 'Medium', status: 'NotStarted', linkTo: '/rostering/leave' }]),
       isLoading: false,
     })
     renderPage()

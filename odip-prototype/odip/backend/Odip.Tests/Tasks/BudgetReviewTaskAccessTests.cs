@@ -198,7 +198,9 @@ public class BudgetReviewTaskAccessTests : IDisposable
 
         var result = await Tasks(role).GetAll(null, null, null, null, CancellationToken.None);
 
-        var ids = Assert.IsType<ApiResponse<List<TaskDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!.Select(t => t.Id).ToList();
+        var page = Assert.IsType<ApiResponse<PagedResult<TaskDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
+        var ids = page.Items.Select(t => t.Id).ToList();
+        Assert.Equal(ids.Count, page.TotalCount); // the total hides the review from the same roles the rows do
         Assert.Contains(ordinary.Id, ids);
         Assert.Equal(seen, ids.Contains(review.Id));
     }

@@ -63,8 +63,11 @@ public class TasksController : ControllerBase
         return null;
     }
 
+    /// <summary>The list page renders every row it gets in one table, so the list is the soonest-due ListCap rows plus the full count.</summary>
+    public const int ListCap = 500;
+
     [HttpGet]
-    public async Task<ActionResult<ApiResponse<List<TaskDto>>>> GetAll(
+    public async Task<ActionResult<ApiResponse<PagedResult<TaskDto>>>> GetAll(
         [FromQuery] Guid? tripId, [FromQuery] TaskItemStatus? status,
         [FromQuery] bool? dueThisWeek, [FromQuery] Guid? ownerId, CancellationToken ct,
         // Last, so every existing caller keeps compiling; bound by name like the others. The dashboard's Tasks due group: due on the provider's today.
@@ -95,7 +98,10 @@ public class TasksController : ControllerBase
             query = query.Where(t => t.DueDate == today);
         }
 
-        var items = await query.OrderBy(t => t.DueDate).ThenByDescending(t => t.Priority)
+        // Counted after every filter and before the cap, so the total is tenant- and audience-scoped exactly like the rows.
+        var total = await query.CountAsync(ct);
+        // The Id tiebreak keeps the same rows at the cap boundary on every read.
+        var items = await query.OrderBy(t => t.DueDate).ThenByDescending(t => t.Priority).ThenBy(t => t.Id).Take(ListCap)
             .Select(t => new TaskDto
             {
                 Id = t.Id, TripInstanceId = t.TripInstanceId, TripName = t.TripInstance != null ? t.TripInstance.TripName : null,
@@ -108,7 +114,7 @@ public class TasksController : ControllerBase
                 Priority = t.Priority, DueDate = t.DueDate, Status = t.Status,
                 CompletedDate = t.CompletedDate, Notes = t.Notes
             }).ToListAsync(ct);
-        return Ok(ApiResponse<List<TaskDto>>.Ok(items));
+        return Ok(ApiResponse<PagedResult<TaskDto>>.Ok(new PagedResult<TaskDto> { Items = items, TotalCount = total, Page = 1, PageSize = ListCap }));
     }
 
     /// <summary>
