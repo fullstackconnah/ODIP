@@ -128,6 +128,13 @@ describe('InstallPrompt', () => {
     await waitFor(() => expect(container.querySelector('[data-install-spacer]')).toBeNull())
   })
 
+  it('stays off the printed page: neither the card nor its spacer prints', () => {
+    const { container } = renderAt()
+    offer(win)
+    expect(container.querySelector('[data-install-spacer]')).toHaveClass('print:hidden')
+    expect(screen.getByRole('region', { name: /Install Bunya Support/ })).toHaveClass('print:hidden')
+  })
+
   it('names no offline promise to anyone but a support worker', () => {
     localStorage.setItem('odip_user', JSON.stringify({ id: 'u1', role: 'Coordinator' }))
     renderAt()
