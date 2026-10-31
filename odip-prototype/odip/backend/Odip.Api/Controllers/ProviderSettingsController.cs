@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -18,7 +19,7 @@ namespace Odip.Api.Controllers;
 [ApiController]
 [Authorize(Roles = "SuperAdmin,Admin,Coordinator")]
 [Route("api/v1/provider-settings")]
-public class ProviderSettingsController : ControllerBase
+public partial class ProviderSettingsController : ControllerBase
 {
     private readonly OdipDbContext _db;
     private readonly ICurrentTenant? _tenant;
@@ -32,6 +33,10 @@ public class ProviderSettingsController : ControllerBase
     }
 
     private const string ChangedByOther = "Settings were changed by someone else. Reload and try again.";
+
+    // The house email rule (frontend participantSchema EMAIL_PATTERN), so the form and the server agree.
+    [GeneratedRegex(@"^[^\s@]+@[^\s@]+\.[^\s@]+$")]
+    private static partial Regex EmailPattern();
 
     private bool NoOrganisationInScope => _tenant is { IsSuperAdmin: true, TenantId: null };
 
@@ -59,6 +64,7 @@ public class ProviderSettingsController : ControllerBase
             BankAccountName = hideBank ? null : s.BankAccountName, BSB = hideBank ? null : s.BSB,
             AccountNumber = hideBank ? null : s.AccountNumber, InvoiceFooterNotes = s.InvoiceFooterNotes,
             State = s.State, ManagerName = s.ManagerName, ManagerPhone = s.ManagerPhone,
+            TradingName = s.TradingName, ContactEmail = s.ContactEmail, ContactPhone = s.ContactPhone, Website = s.Website,
             TimeZoneId = s.TimeZoneId, // the stored value only: an effective zone would be echoed back and saved by every other section
             ParticipantReadinessMode = s.ParticipantReadinessMode,
             MedicationCompetencyMode = s.MedicationCompetencyMode,
@@ -101,6 +107,14 @@ public class ProviderSettingsController : ControllerBase
 
         if (dto.TimeZoneId is { } requestedZone && !StateTimeZoneMap.Zones.Contains(requestedZone))
             return BadRequest(ApiResponse<bool>.Fail("Choose a time zone from the list."));
+
+        // Contact details: checked on the trimmed value, and a blank is always valid. No [EmailAddress] or [Url]: their 400 is an errors object, not a sentence.
+        var contactEmail = dto.ContactEmail?.Trim();
+        if (!string.IsNullOrEmpty(contactEmail) && !EmailPattern().IsMatch(contactEmail))
+            return BadRequest(ApiResponse<bool>.Fail("Enter a full email address, like office@example.com.au."));
+        var website = dto.Website?.Trim();
+        if (!string.IsNullOrEmpty(website) && !IsFullWebAddress(website))
+            return BadRequest(ApiResponse<bool>.Fail("Enter the full web address, starting with https://."));
 
         // Prices and public holidays follow the state, so none is assumed (a body that omits it used to become Victoria).
         var state = dto.State?.Trim().ToUpperInvariant();
@@ -150,6 +164,11 @@ public class ProviderSettingsController : ControllerBase
         s.BankAccountName = dto.BankAccountName; s.BSB = dto.BSB;
         s.AccountNumber = dto.AccountNumber; s.InvoiceFooterNotes = dto.InvoiceFooterNotes;
         s.State = state; s.ManagerName = dto.ManagerName; s.ManagerPhone = dto.ManagerPhone;
+        // Null leaves the stored value (every section echoes the row); blank clears it. Plain profile fields like the manager contact, so no audit row.
+        if (dto.TradingName is not null) s.TradingName = TrimmedOrNull(dto.TradingName);
+        if (dto.ContactEmail is not null) s.ContactEmail = contactEmail!.Length > 0 ? contactEmail : null;
+        if (dto.ContactPhone is not null) s.ContactPhone = TrimmedOrNull(dto.ContactPhone);
+        if (dto.Website is not null) s.Website = website!.Length > 0 ? website : null;
 
         // Sent and different only (every section echoes the row). One audit row when the effective zone moves: "today" for rosters, the portal and reminders moves with it.
         if (dto.TimeZoneId is { } newZone && newZone != s.TimeZoneId)
@@ -213,6 +232,12 @@ public class ProviderSettingsController : ControllerBase
     }
 
     /// <summary>A prefix ends up in the PDF's file name: 1 to 10 letters, digits, - _ or . (null = not sent).</summary>
+    private static string? TrimmedOrNull(string v) => v.Trim() is { Length: > 0 } t ? t : null;
+
+    /// <summary>An absolute http or https address with a dotted host (a bare example.com.au is refused, not rewritten), no spaces.</summary>
+    private static bool IsFullWebAddress(string v) =>
+        !v.Any(char.IsWhiteSpace) && Uri.TryCreate(v, UriKind.Absolute, out var u) && u.Scheme is "http" or "https" && u.Host.Contains('.');
+
     private static string? PrefixProblem(string? prefix, string example) => prefix switch
     {
         null => null,
