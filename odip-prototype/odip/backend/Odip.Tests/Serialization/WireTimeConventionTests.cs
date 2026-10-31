@@ -91,6 +91,8 @@ public class WireTimeConventionTests
     [InlineData(typeof(IncidentDetailDto), nameof(IncidentDetailDto.QscReportedAt))]
     [InlineData(typeof(IncidentDetailDto), nameof(IncidentDetailDto.FamilyNotifiedAt))]
     [InlineData(typeof(IncidentDetailDto), nameof(IncidentDetailDto.SupportCoordinatorNotifiedAt))]
+    [InlineData(typeof(IncidentDetailDto), nameof(IncidentDetailDto.CommissionDetailedReportedAt))]
+    [InlineData(typeof(IncidentDetailDto), nameof(IncidentDetailDto.CommissionFinalReportedAt))]
     [InlineData(typeof(MedicationListDto), nameof(MedicationListDto.StartDate))]                  // a calendar date held in a DateTime
     [InlineData(typeof(MedicationListDto), nameof(MedicationListDto.NextReviewDue))]
     [InlineData(typeof(StaffAvailabilityDto), nameof(StaffAvailabilityDto.StartDateTime))]

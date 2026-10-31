@@ -39,3 +39,49 @@ describe('incident description on the unauthorised-use path', () => {
     expect(incidentSchema.safeParse(values).success).toBe(true)
   })
 })
+
+// N1 incident clock (S2): the class, its reason and the aware time are optional on create (no awareAt submitted), and the reason is
+// required only when an edit moves the class off the default for the form's own severity and type.
+describe('reporting deadline reason', () => {
+  const edit = { ...rpIncident, incidentType: 'Injury', severity: 'Medium', injuries: [{ region: 'Head', injuryType: 'Bruise', description: 'x' }], description: 'Fell.' }
+  const reasonErrors = (values: object) => {
+    const r = incidentSchema.safeParse(values)
+    return r.success ? [] : r.error.issues.filter((i) => i.path[0] === 'reportableClassReason').map((i) => i.message)
+  }
+
+  it('create submits with no awareAt and no class', () => {
+    expect(reasonErrors(edit)).toEqual([])
+  })
+  it('an edit that keeps the default needs no reason', () => {
+    expect(reasonErrors({ ...edit, reportableClass: 'None' })).toEqual([])
+  })
+  it('an edit that overrides the default needs a reason', () => {
+    expect(reasonErrors({ ...edit, reportableClass: 'Within24h' })).toEqual(['Give a reason for changing the reporting deadline.'])
+    expect(reasonErrors({ ...edit, reportableClass: 'Within24h', reportableClassReason: '   ' })).toHaveLength(1)
+    expect(reasonErrors({ ...edit, reportableClass: 'Within24h', reportableClassReason: 'Family asked us to.' })).toEqual([])
+  })
+  it('judges the default against the edited severity', () => {
+    expect(reasonErrors({ ...edit, severity: 'Critical', reportableClass: 'Within24h' })).toEqual([])
+  })
+})
+
+// N1 incident clock: the server defaults the class from the stored authorisation flag too, so the reason rule must see it.
+describe('reportable class reason (edit)', () => {
+  const injury = {
+    title: 'Fell at the kerb', reportedByStaffId: 'staff-1', incidentType: 'Injury', severity: 'Medium', description: 'Tripped.',
+    incidentDateTime: '2026-10-13T10:00', injuries: [{ region: 'Head', injuryType: 'Bruise', description: 'Bump' }], witnesses: [],
+    involvedParticipantId: 'participant-1',
+  }
+  const reasonIssues = (values: object) => {
+    const result = incidentSchema.safeParse(values)
+    return result.success ? [] : result.error.issues.filter((i) => i.path[0] === 'reportableClassReason')
+  }
+
+  it('needs no reason for Within24h when the stored flag is unauthorised', () => {
+    expect(reasonIssues({ ...injury, isRestrictivePracticeAuthorised: false, reportableClass: 'Within24h' })).toEqual([])
+  })
+
+  it('still asks for a reason once the flag leaves the default at None', () => {
+    expect(reasonIssues({ ...injury, isRestrictivePracticeAuthorised: true, reportableClass: 'Within24h' })).toHaveLength(1)
+  })
+})

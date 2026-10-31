@@ -156,8 +156,8 @@ const INCIDENT_SEVERITY_FILTER_ITEMS: DropdownItem[] = [
 
 function formatQscLabel(status: string): string {
   switch (status) {
-    case 'ReportedWithin24h': return 'Reported (24h)'
-    case 'ReportedLate': return 'Reported Late'
+    case 'ReportedWithin24h': return 'Reported on time'
+    case 'ReportedLate': return 'Reported late'
     case 'Required': return 'Required'
     case 'Pending': return 'Pending'
     default: return status
@@ -237,14 +237,9 @@ export default function IncidentsPage() {
     setPage(1)
   }
 
-  // Every row is exactly --row-h from 1280 up: cells never wrap (DataTable), so a narrower window
-  // drops columns instead of growing rows. The primary columns (title, severity, status, date, QSC,
-  // actions) are always there; participant needs 1280, type 1536, trip and reported-by 1792.
-  // Budget, widest seeded rows, each column padded 2×12 (Manrope measured, see the density verdict
-  // report). 1280 (content 1280 − 232 − 2×20 = 1008, 1006 inside the border): title 264 (capped) +
-  // participant 165.1 + severity 88.2 + status 113.2 + date 104.3 + QSC 124.8 + actions 76 = 935.6,
-  // spare 70. 1536 adds type: 1125.3 of 1262. 1792 adds trip and reported-by: 1467.5 of 1518. The
-  // old layout always needed 1467.5, so its rows wrapped at every viewport under 1742px.
+  // Every row is exactly --row-h from 1280 up: cells never wrap (DataTable). From md up the box scrolls
+  // sideways with the title and the actions pinned, so no column is dropped. NDIS Commission follows
+  // Title, then Severity and Status, ahead of Type, Trip and Participant, so those three columns are on screen at 1280 without scrolling.
   const incidentColumns: Column<any>[] = [
     {
       key: 'title',
@@ -254,6 +249,24 @@ export default function IncidentsPage() {
       // The way into the incident for every role that sees the list; the cap sits on the link itself so its focus ring is not clipped.
       render: (i) => <Link to={`/incidents/${i.id}`} title={i.title ?? undefined} className={`block md:truncate md:max-w-[15rem] 2xl:max-w-[18rem] text-[var(--color-primary)] hover:underline ${TAP_TRUNCATED_LINK}`}>{i.title ?? '—'}</Link>,
     },
+    {
+      key: 'qscReportingStatus',
+      header: 'NDIS Commission',
+      render: (i) => i.qscReportingStatus === 'NotRequired' ? (
+        <span className="text-[var(--color-muted-foreground)]">{'\u2014'}</span>
+      ) : i.isOverdue24h ? (
+        // Overdue is the one QSC state that must never be missed, so it always takes the solid
+        // error pair (--color-on-error-container on --color-error-container = 7.24:1) whatever the
+        // underlying status maps to (Pending/Late are amber, 6.37:1). It no longer pulses:
+        // animate-pulse halves the pill's opacity at its trough, which takes every token pair
+        // down to 2.3-2.7:1 — below the 4.5:1 floor for text.
+        <StatusBadge status="overdue" label="OVERDUE" className="font-semibold" />
+      ) : (
+        <StatusBadge status={i.qscReportingStatus} label={formatQscLabel(i.qscReportingStatus)} />
+      ),
+    },
+    { key: 'severity', header: 'Severity', mobile: 'meta', render: (i) => <StatusBadge status={i.severity} /> },
+    { key: 'status', header: 'Status', mobile: 'status', render: (i) => <StatusBadge status={i.status} label={INCIDENT_STATUS_LABELS[i.status as IncidentStatus] ?? i.status} /> },
     { key: 'incidentType', header: 'Type', maxWidth: '9rem', mobile: 'meta', render: (i) => INCIDENT_TYPE_LABELS[i.incidentType as IncidentType] ?? i.incidentType },
     {
       key: 'tripName',
@@ -283,26 +296,8 @@ export default function IncidentsPage() {
         </Link>
       ) : (i.involvedParticipantName ?? '—'),
     },
-    { key: 'severity', header: 'Severity', mobile: 'meta', render: (i) => <StatusBadge status={i.severity} /> },
-    { key: 'status', header: 'Status', mobile: 'status', render: (i) => <StatusBadge status={i.status} label={INCIDENT_STATUS_LABELS[i.status as IncidentStatus] ?? i.status} /> },
     { key: 'reportedByName', header: 'Reported By', maxWidth: '9rem' },
     { key: 'incidentDateTime', header: 'Date', type: 'date', mobile: 'meta' },
-    {
-      key: 'qscReportingStatus',
-      header: 'QSC',
-      render: (i) => i.qscReportingStatus === 'NotRequired' ? (
-        <span className="text-[var(--color-muted-foreground)]">{'\u2014'}</span>
-      ) : i.isOverdue24h ? (
-        // Overdue is the one QSC state that must never be missed, so it always takes the solid
-        // error pair (--color-on-error-container on --color-error-container = 7.24:1) whatever the
-        // underlying status maps to (Pending/Late are amber, 6.37:1). It no longer pulses:
-        // animate-pulse halves the pill's opacity at its trough, which takes every token pair
-        // down to 2.3-2.7:1 — below the 4.5:1 floor for text.
-        <StatusBadge status="overdue" label="OVERDUE" className="font-semibold" />
-      ) : (
-        <StatusBadge status={i.qscReportingStatus} label={formatQscLabel(i.qscReportingStatus)} />
-      ),
-    },
     { key: 'actions', header: '', render: (i) => canWrite ? <RowActions>{actionButtons(i)}</RowActions> : null },
   ]
 
@@ -311,8 +306,8 @@ export default function IncidentsPage() {
   const showFlaggedNotes = tab === 'flagged-notes' && canViewFlaggedNotes
   // "1 incident requires", "2 incidents require": the verb agrees with the count.
   const qscHeadline = overdueQsc.length === 1
-    ? '1 incident requires QSC reporting — 24-hour deadline exceeded'
-    : `${overdueQsc.length} incidents require QSC reporting — 24-hour deadline exceeded`
+    ? '1 incident is past its NDIS Commission deadline'
+    : `${overdueQsc.length} incidents are past their NDIS Commission deadline`
   const reportIncidentAction = !showFlaggedNotes && !showArchived && canCreateIncidents && (
     <Button to="/incidents/new" size="md">
       <Plus className="w-4 h-4" /> Report incident
@@ -386,34 +381,36 @@ export default function IncidentsPage() {
         <FlaggedNotesTab flaggedNotes={flaggedNotes} isLoading={flaggedNotesLoading} isError={flaggedNotesError || retryingAfterError(flaggedQuery)} onRetry={() => refetchFlaggedNotes()} />
       ) : (
       <>
-      {/* QSC Overdue Alert Banner — one 40px line: the headline, the reason and the link all stay,
-          the reason truncates (md+) before the link ever does. */}
+      {/* QSC Overdue Alert Banner — the headline, the reason and the link all stay; the reason wraps
+          onto a second line rather than being cut, so the 5-business-day sentence is always readable. */}
       {!showArchived && overdueQsc.length > 0 && (
         <div
           role="alert"
           className="flex min-h-10 items-center gap-3 px-3 py-1.5 rounded-[var(--radius-md)] bg-error-container border border-destructive/40 text-on-error-container"
         >
           <AlertTriangle className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
-          <p className="min-w-0 flex-1 text-sm md:truncate">
+          <div className="min-w-0 flex-1 flex flex-col items-start gap-1 md:flex-row md:items-center md:gap-3">
+          <p className="min-w-0 text-sm md:flex-1">
             <span className="font-semibold">{qscHeadline}</span>
-            <span className="ml-2 text-[13px]">NDIS Quality and Safeguards Commission requires reportable incidents to be escalated within 24 hours.</span>
+            <span className="ml-2 text-[13px]">{'Most reportable incidents must be reported to the NDIS Commission within 24\u00a0hours. Some uses of an unauthorised restrictive practice can be reported within 5\u00a0business days.'}</span>
           </p>
           <Link to="/incidents?qsc=overdue" className={`${TAP_FLOOR} shrink-0 whitespace-nowrap text-sm font-medium underline underline-offset-2`}>
             View overdue incidents
           </Link>
+          </div>
         </div>
       )}
 
       {/* The overdue check is a compliance warning: a failed check says so, it never hides the banner as if nothing were overdue. */}
       {!showArchived && overdueQscError && overdueQsc.length === 0 && (
         <Callout tone="danger" actions={<Button variant="secondary" size="sm" onClick={() => refetchOverdueQsc()}>Try again</Button>}>
-          Couldn't check for incidents past the 24-hour QSC deadline.
+          Couldn't check for incidents past their NDIS Commission deadline.
         </Callout>
       )}
 
       {qscOverdueOnly && (
         <p className="text-sm text-[var(--color-muted-foreground)]">
-          Showing only incidents past the 24-hour QSC deadline.{' '}
+          Showing only incidents past their NDIS Commission deadline.{' '}
           <Link to="/incidents" className="font-medium underline underline-offset-2">Show all incidents</Link>
         </p>
       )}
@@ -424,8 +421,8 @@ export default function IncidentsPage() {
         qscOverdueOnly ? (
           <EmptyState
             icon={ShieldAlert}
-            title="No overdue QSC reports"
-            description="No incidents are currently past the 24-hour QSC deadline."
+            title="No overdue NDIS Commission reports"
+            description="No incidents are past their NDIS Commission deadline."
           />
         ) : !showArchived && (statusFilter || severityFilter) ? (
           <EmptyState

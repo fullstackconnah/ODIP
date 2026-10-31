@@ -681,6 +681,7 @@ public class OdipDbContext : DbContext
         {
             e.HasKey(i => i.Id);
             e.Property(i => i.Title).HasMaxLength(300).IsRequired();
+            e.Property(i => i.ReportableClassReason).HasMaxLength(500);
 
             e.HasOne(i => i.TripInstance).WithMany(t => t.IncidentReports).HasForeignKey(i => i.TripInstanceId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(i => i.InvolvedParticipant).WithMany().HasForeignKey(i => i.InvolvedParticipantId);

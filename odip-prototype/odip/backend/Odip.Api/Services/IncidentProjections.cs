@@ -31,7 +31,7 @@ public static class IncidentProjections
         InvolvedParticipantName = i.InvolvedParticipant != null
             ? (i.InvolvedParticipant.FirstName + " " + i.InvolvedParticipant.LastName).Trim() : null,
         QscReportingStatus = i.QscReportingStatus,
-        IsOverdue24h = QscReporting.IsOverdue(i.IsActive, i.QscReportingStatus, i.QscReportedAt, i.CreatedAt, now),
+        IsOverdue24h = QscReporting.IsOverdue(i.IsActive, i.QscReportingStatus, i.QscReportedAt, i.NotifyDueAt, now),
         CreatedAt = i.CreatedAt,
         MedicationAdministrationId = i.MedicationAdministrationId,
         ShiftId = i.ShiftId,

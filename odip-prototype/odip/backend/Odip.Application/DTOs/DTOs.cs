@@ -2165,6 +2165,22 @@ public record IncidentDetailDto : IncidentListDto
     [WallClock]
     public DateTime? QscReportedAt { get; init; }
     public string? QscReferenceNumber { get; init; }
+    /// <summary>When the provider became aware (an INSTANT): the stored value, or CreatedAt on a legacy row. The Commission deadline counts from it.</summary>
+    public DateTime? AwareAt { get; init; }
+    public ReportableClass ReportableClass { get; init; }
+    public string? ReportableClassReason { get; init; }
+    /// <summary>When the Commission must be told (an INSTANT). Null while the class is None.</summary>
+    public DateTime? NotifyDueAt { get; init; }
+    /// <summary>When the 5-day detailed report is due (an INSTANT). Within24h only.</summary>
+    public DateTime? DetailedReportDueAt { get; init; }
+    public bool DueCountedWithoutHolidays { get; init; }
+    [WallClock]
+    public DateTime? CommissionDetailedReportedAt { get; init; }
+    public bool CommissionFinalReportRequested { get; init; }
+    [WallClock]
+    public DateTime? CommissionFinalReportedAt { get; init; }
+    /// <summary>The provider zone (IANA id) the due lines and the Compliance step are shown in.</summary>
+    public string TimeZoneId { get; init; } = string.Empty;
     public Guid? ReviewedByStaffId { get; init; }
     public string? ReviewedByName { get; init; }
     public DateTime? ReviewedAt { get; init; }
@@ -2355,10 +2371,24 @@ public record IncidentWitnessDto
 public record UpdateIncidentDto : CreateIncidentDto
 {
     public IncidentStatus Status { get; init; }
+    /// <summary>Ignored: the status is derived from the class and the report date. Kept so older clients do not get a 400.</summary>
     public QscReportingStatus QscReportingStatus { get; init; }
     [WallClock]
     public DateTime? QscReportedAt { get; init; }
     public string? QscReferenceNumber { get; init; }
+    /// <summary>When the provider became aware, typed in the provider zone. Null keeps the stored value.</summary>
+    [WallClock]
+    public DateTime? AwareAtLocal { get; init; }
+    /// <summary>Null keeps the stored class and reason.</summary>
+    public ReportableClass? ReportableClass { get; init; }
+    public string? ReportableClassReason { get; init; }
+    // Full-replace like QscReportedAt: an omitted date clears.
+    [WallClock]
+    public DateTime? CommissionDetailedReportedAt { get; init; }
+    /// <summary>Null keeps the stored flag.</summary>
+    public bool? CommissionFinalReportRequested { get; init; }
+    [WallClock]
+    public DateTime? CommissionFinalReportedAt { get; init; }
     public Guid? ReviewedByStaffId { get; init; }
     public string? ReviewNotes { get; init; }
     public string? CorrectiveActions { get; init; }

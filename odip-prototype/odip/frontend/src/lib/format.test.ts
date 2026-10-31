@@ -30,8 +30,8 @@ describe('joinList', () => {
   it.each<[string[], string]>([
     [[], ''],
     [['Overdue'], 'Overdue'],
-    [['Overdue', 'QSC overdue'], 'Overdue and QSC overdue'],
-    [['Missing vehicles', 'Open incidents', 'QSC overdue'], 'Missing vehicles, Open incidents and QSC overdue'],
+    [['Overdue', 'NDIS Commission overdue'], 'Overdue and NDIS Commission overdue'],
+    [['Missing vehicles', 'Open incidents', 'NDIS Commission overdue'], 'Missing vehicles, Open incidents and NDIS Commission overdue'],
     [['a', 'b', 'c', 'd'], 'a, b, c and d'],
   ])('joinList(%j) is "%s"', (items, expected) => {
     expect(joinList(items)).toBe(expected)

@@ -19,7 +19,7 @@ const page = (items: unknown[], totalCount = items.length) => ({ items, totalCou
 beforeEach(() => { apiGet.mockReset() })
 
 describe('Incidents group (links only)', () => {
-  it('lists the QSC-overdue ones first, then the rest of what needs somebody, each once, counted by the needsAttention total', async () => {
+  it('lists the NDIS Commission overdue ones first, then the rest of what needs somebody, each once, counted by the needsAttention total', async () => {
     apiGet.mockImplementation((_url: string, params: Record<string, string>) => Promise.resolve(params.isOverdueQsc
       ? page([incident('q1', { isOverdue24h: true, status: 'Resolved' })])
       : page([incident('a1'), incident('q1', { isOverdue24h: true, status: 'Resolved' }), incident('a2', { status: 'UnderReview' })], 9)))
@@ -32,7 +32,7 @@ describe('Incidents group (links only)', () => {
     expect(screen.getByRole('tab', { name: 'Incidents (9)' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'See all open incidents' })).toHaveAttribute('href', '/incidents')
     const overdue = rowOf('Incident q1')
-    expect(within(overdue).getByText('QSC overdue')).toBeInTheDocument()
+    expect(within(overdue).getByText('NDIS Commission overdue')).toBeInTheDocument()
     expect(within(overdue).getByRole('link', { name: 'Open incident: Incident q1' })).toHaveAttribute('href', '/incidents/q1')
     expect(within(overdue).queryByRole('button')).not.toBeInTheDocument()
     expect(within(rowOf('Incident a2')).getByText('Under review')).toBeInTheDocument()   // a status flag is a sentence, not Title Case

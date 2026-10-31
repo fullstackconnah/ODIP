@@ -1602,6 +1602,7 @@ public class IncidentsControllerTests
             await controller.Create(dto, CancellationToken.None);
             var saved = await db.IncidentReports.SingleAsync(i => i.Title == title);
             saved.CreatedAt = DateTime.UtcNow - createdAgo;
+            saved.NotifyDueAt = saved.CreatedAt.AddHours(24);
             saved.QscReportingStatus = qscStatus;
             saved.QscReportedAt = qscReportedAt;
             await db.SaveChangesAsync();
@@ -2056,11 +2057,11 @@ public class IncidentsControllerTests
         var incident = await db.IncidentReports.SingleAsync();
         Assert.Equal(QscReportingStatus.Required, incident.QscReportingStatus);
 
-        var task = await db.BookingTasks.SingleAsync();
+        var task = await db.BookingTasks.SingleAsync(t => t.TaskType == TaskType.IncidentQscReport);
         Assert.Equal(TaskType.IncidentQscReport, task.TaskType);
         Assert.Equal($"incident-qsc:{incident.Id}", task.SourceKey);
         Assert.Equal(incident.Id, task.IncidentReportId);
-        Assert.Equal(DateOnly.FromDateTime(incident.CreatedAt.AddHours(QscReporting.OverdueHours)), task.DueDate);
+        Assert.Equal(DateOnly.FromDateTime(Odip.Domain.Rostering.ProviderLocalTime.UtcToLocal(incident.NotifyDueAt!.Value, Odip.Infrastructure.Services.ProviderTimeZoneResolver.FromState(null).Zone)), task.DueDate);
         Assert.Equal($"/incidents/{incident.Id}", task.LinkTo);
         Assert.Equal(TaskPriority.High, task.Priority);
         Assert.Contains(incident.Title, task.Title);
@@ -2092,7 +2093,7 @@ public class IncidentsControllerTests
             involvedParticipantId: participant.Id, severity: IncidentSeverity.Critical);
         await controller.Create(createDto, CancellationToken.None);
         var incident = await db.IncidentReports.SingleAsync();
-        Assert.Equal(TaskItemStatus.NotStarted, (await db.BookingTasks.SingleAsync()).Status);
+        Assert.Equal(TaskItemStatus.NotStarted, (await db.BookingTasks.SingleAsync(t => t.TaskType == TaskType.IncidentQscReport)).Status);
 
         var updateDto = new UpdateIncidentDto
         {
@@ -2104,13 +2105,13 @@ public class IncidentsControllerTests
         };
         await controller.Update(incident.Id, updateDto, CancellationToken.None);
 
-        var task = await db.BookingTasks.SingleAsync();
+        var task = await db.BookingTasks.SingleAsync(t => t.TaskType == TaskType.IncidentQscReport);
         Assert.Equal(TaskItemStatus.Completed, task.Status);
         Assert.NotNull(task.AutoCompletedAt);
     }
 
     [Fact]
-    public async Task Update_StatusLeavesRequired_CompletesTheTask()
+    public async Task Update_ClassChangedToNone_CompletesTheTask()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var reporter = SeedUser(db);
@@ -2127,11 +2128,11 @@ public class IncidentsControllerTests
             InvolvedParticipantId = participant.Id, Severity = IncidentSeverity.Critical,
             Status = IncidentStatus.Draft, Title = incident.Title, Description = incident.Description,
             IncidentDateTime = incident.IncidentDateTime,
-            QscReportingStatus = QscReportingStatus.NotRequired, QscReportedAt = null,
+            ReportableClass = ReportableClass.None, ReportableClassReason = "Reviewed with the coordinator: not reportable.", QscReportedAt = null,
         };
         await controller.Update(incident.Id, updateDto, CancellationToken.None);
 
-        var task = await db.BookingTasks.SingleAsync();
+        var task = await db.BookingTasks.SingleAsync(t => t.TaskType == TaskType.IncidentQscReport);
         Assert.Equal(TaskItemStatus.Completed, task.Status);
     }
 

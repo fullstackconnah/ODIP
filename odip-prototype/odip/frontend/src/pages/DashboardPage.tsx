@@ -238,9 +238,9 @@ export default function DashboardPage() {
       },
       // The Incidents list already has this filter (?qsc=overdue): the same rule the figure counts.
       {
-        label: 'QSC overdue', noun: 'overdue QSC reports', count: d.qscOverdueCount, tone: 'danger',
-        detail: 'Reportable incidents with no QSC report after 24 hours.',
-        action: { label: 'Review QSC reports', to: '/incidents?qsc=overdue' },
+        label: 'NDIS Commission overdue', noun: 'overdue NDIS Commission reports', count: d.qscOverdueCount, tone: 'danger',
+        detail: 'Reportable incidents not reported to the NDIS Commission by their deadline.',
+        action: { label: 'Review NDIS Commission reports', to: '/incidents?qsc=overdue' },
       },
     )
   }

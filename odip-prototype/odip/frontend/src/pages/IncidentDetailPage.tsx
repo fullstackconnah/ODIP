@@ -16,8 +16,10 @@ import { ADMIN_STATUS_LABELS } from '@/api/types/medications'
 import { SHIFT_NOTE_FLAG_LABELS, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 import { RESTRICTIVE_PRACTICE_TYPE_LABELS } from '@/api/types/restrictive-practices'
 import { RpAuthorisationBadge } from './incidents/RpAuthorisationBadge'
-import { INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS, INCIDENT_STATUS_LABELS, QSC_REPORTING_STATUS_LABELS } from '@/api/types/enums'
+import { INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS, INCIDENT_STATUS_LABELS } from '@/api/types/enums'
+import type { IncidentDetailDto } from '@/api/types/incidents'
 import { retryingAfterError } from '@/lib/queryPhase'
+import { reportingDueLines } from './incidents/reportingDue'
 
 /**
  * Connection map: a small local chip for a shift note's flagged categories — the portal's own
@@ -83,7 +85,7 @@ export default function IncidentDetailPage() {
             { label: 'Date & time', value: <span className="tabular-nums">{formatWallClock(incident.incidentDateTime, { dateStyle: 'medium', timeStyle: 'short' })}</span> },
             { label: 'Location', value: incident.location || '—' },
             { label: 'Reported by', value: incident.reportedByName || '—' },
-            { label: 'QSC reporting status', value: QSC_REPORTING_STATUS_LABELS[incident.qscReportingStatus] ?? incident.qscReportingStatus },
+            { label: 'NDIS Commission', value: <ReportingDue incident={incident} /> },
             { label: 'Description', value: <span className="whitespace-pre-wrap">{incident.description}</span> },
           ]}
         />
@@ -167,6 +169,19 @@ export default function IncidentDetailPage() {
           )}
         </Card>
       )}
+    </div>
+  )
+}
+
+/** The due lines, worked out at render from the stored instants (no timers); overdue is words plus the danger colour, never colour alone. */
+function ReportingDue({ incident }: { incident: IncidentDetailDto }) {
+  const lines = reportingDueLines(incident, new Date())
+  if (lines.length === 0) return <span role="img" aria-label="No reporting deadline">{'\u2014'}</span>
+  return (
+    <div className="space-y-0.5">
+      {lines.map((l) => (
+        <p key={l.text} className={l.tone === 'overdue' ? 'text-[var(--color-destructive)] font-medium' : l.tone === 'muted' ? 'text-xs text-[var(--color-muted-foreground)]' : undefined}>{l.text}</p>
+      ))}
     </div>
   )
 }

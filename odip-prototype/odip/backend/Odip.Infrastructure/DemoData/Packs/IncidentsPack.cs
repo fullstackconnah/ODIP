@@ -137,7 +137,14 @@ public sealed class IncidentsPack : IDemoPack
             IsActive = true,
             CreatedAt = createdUtc,
             UpdatedAt = createdUtc,
+            AwareAt = createdUtc,
         };
+        // The clock the form would have set: a report still to make is Within24h, due 24 hours after filing.
+        if (incident.QscReportingStatus == QscReportingStatus.Required)
+        {
+            incident.ReportableClass = ReportableClass.Within24h;
+            incident.NotifyDueAt = createdUtc.AddHours(QscReporting.OverdueHours);
+        }
 
         var injuries = new List<IncidentInjury>();
         var witnesses = new List<IncidentWitness>();
@@ -197,7 +204,7 @@ public sealed class IncidentsPack : IDemoPack
             task = new BookingTask
             {
                 Id = DemoIds.For("task", "incident-qsc", id), TenantId = c.Run.TenantId, SourceKey = $"incident-qsc:{id}", TaskType = TaskType.IncidentQscReport,
-                Title = $"Report incident to the NDIS Commission: {incident.Title}", DueDate = DateOnly.FromDateTime(createdUtc.AddHours(QscReporting.OverdueHours)),
+                Title = $"Report incident to the NDIS Commission: {incident.Title}", DueDate = DateOnly.FromDateTime(c.Local(createdUtc.AddHours(QscReporting.OverdueHours))),
                 LinkTo = $"/incidents/{id}", IncidentReportId = id, Priority = TaskPriority.High, Status = TaskItemStatus.NotStarted, CreatedAt = createdUtc, UpdatedAt = createdUtc,
             };
         }

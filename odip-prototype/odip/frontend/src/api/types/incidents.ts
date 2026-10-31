@@ -1,4 +1,4 @@
-import type { IncidentType, IncidentSeverity, IncidentStatus, QscReportingStatus, ServiceStream, BodyRegion, InjuryType, WitnessStatus, MedicationAdministrationStatus } from './enums'
+import type { IncidentType, IncidentSeverity, IncidentStatus, QscReportingStatus, ReportableClass, ServiceStream, BodyRegion, InjuryType, WitnessStatus, MedicationAdministrationStatus } from './enums'
 import type { RestrictivePracticeType } from './restrictive-practices'
 import type { ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 
@@ -119,6 +119,21 @@ export interface IncidentDetailDto extends IncidentListDto {
   /** Provider-local WALL-CLOCK value, no zone: the digits are the answer. Read with lib/wallClock, never parseApiDate (DESIGN.md, "Time on the wire"). */
   qscReportedAt: string | null
   qscReferenceNumber: string | null
+  /** An INSTANT (UTC). The Commission deadline counts from it. */
+  awareAt: string
+  reportableClass: ReportableClass
+  reportableClassReason: string | null
+  /** INSTANTS (UTC); null while the class is None (detailed: Within24h only). */
+  notifyDueAt: string | null
+  detailedReportDueAt: string | null
+  /** True when the business days were counted over weekends only (no holiday rows for that year). */
+  dueCountedWithoutHolidays: boolean
+  /** Provider-local WALL-CLOCK values, no zone. */
+  commissionDetailedReportedAt: string | null
+  commissionFinalReportRequested: boolean
+  commissionFinalReportedAt: string | null
+  /** The provider's IANA zone: the due lines and awareAt are shown in it. */
+  timeZoneId: string
   reviewedByStaffId: string | null
   reviewedByName: string | null
   reviewedAt: string | null
@@ -214,6 +229,16 @@ export interface UpdateIncidentDto extends CreateIncidentDto {
   /** Provider-local WALL-CLOCK value, no zone: the digits are the answer. Read with lib/wallClock, never parseApiDate (DESIGN.md, "Time on the wire"). */
   qscReportedAt?: string
   qscReferenceNumber?: string
+  /** Provider-local WALL-CLOCK value; omitted keeps the stored time. */
+  awareAtLocal?: string
+  /** Omitted keeps the stored class. An override of the default needs a reason. */
+  reportableClass?: ReportableClass
+  reportableClassReason?: string
+  /** Full-replace wall-clock dates: an omitted one clears. */
+  commissionDetailedReportedAt?: string
+  /** Omitted keeps the stored flag. */
+  commissionFinalReportRequested?: boolean
+  commissionFinalReportedAt?: string
   reviewedByStaffId?: string
   reviewNotes?: string
   correctiveActions?: string
@@ -264,6 +289,12 @@ export function toUpdateIncidentDto(i: IncidentDetailDto, patch: Partial<UpdateI
     qscReportingStatus: i.qscReportingStatus,
     qscReportedAt: i.qscReportedAt ?? undefined,
     qscReferenceNumber: i.qscReferenceNumber ?? undefined,
+    awareAtLocal: undefined,
+    reportableClass: undefined,
+    reportableClassReason: undefined,
+    commissionDetailedReportedAt: i.commissionDetailedReportedAt ?? undefined,
+    commissionFinalReportRequested: i.commissionFinalReportRequested,
+    commissionFinalReportedAt: i.commissionFinalReportedAt ?? undefined,
     reviewedByStaffId: i.reviewedByStaffId ?? undefined,
     reviewNotes: i.reviewNotes ?? undefined,
     correctiveActions: i.correctiveActions ?? undefined,

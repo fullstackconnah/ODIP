@@ -85,8 +85,8 @@ describe.each(pages)('%s when its list fails to load', (_name, Page, emptyText, 
   })
 })
 
-// The overdue-QSC banner is a compliance warning: when its check fails, the page says so instead of hiding the banner as if nothing were overdue.
-describe('IncidentsPage when the overdue QSC check fails to load', () => {
+// The overdue-NDIS Commission banner is a compliance warning: when its check fails, the page says so instead of hiding the banner as if nothing were overdue.
+describe('IncidentsPage when the overdue NDIS Commission check fails to load', () => {
   it('shows a small error notice with a retry', async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     render(
@@ -97,7 +97,7 @@ describe('IncidentsPage when the overdue QSC check fails to load', () => {
       </QueryClientProvider>,
     )
 
-    expect(await screen.findByText(/couldn't check for incidents past the 24-hour QSC deadline/i)).toBeInTheDocument()
+    expect(await screen.findByText(/couldn't check for incidents past their NDIS Commission deadline/i)).toBeInTheDocument()
   })
 })
 
