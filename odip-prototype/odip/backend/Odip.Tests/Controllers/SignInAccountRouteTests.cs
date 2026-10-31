@@ -707,4 +707,103 @@ public class SignInAccountRouteTests
 
         Assert.IsType<OkObjectResult>(result.Result);
     }
+
+    // ── A held address (see User.SignInAddressUnconfirmed): no account until an Admin confirms it ──
+
+    [Fact]
+    public async Task Staff_route_refuses_a_held_staff_member_without_calling_Firebase_and_allows_them_after_the_confirm()
+    {
+        var (db, tenantId) = StaffDb();
+        var staff = await SeedStaff(db, tenantId, "una@other.org");
+        staff.SignInAddressUnconfirmed = true;
+        await db.SaveChangesAsync();
+        var firebase = FirebaseReturning(SignInAccountResult.Created);
+        var controller = StaffControllerFor(db, "Admin", firebase);
+
+        var refused = await controller.EnsureSignInAccount(staff.Id, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<SignInAccountDto>>(Assert.IsType<BadRequestObjectResult>(refused.Result).Value);
+        Assert.Equal(AddressConfirmation.HeldMessage("Sam Staff"), Assert.Single(body.Errors!));
+        VerifyNeverEnsured(firebase);
+
+        Assert.IsType<OkObjectResult>((await controller.ConfirmAddress(staff.Id, CancellationToken.None)).Result);
+        Assert.IsType<OkObjectResult>((await controller.EnsureSignInAccount(staff.Id, CancellationToken.None)).Result);
+        firebase.Verify(f => f.EnsureSignInAccountAsync("una@other.org", "Sam Staff", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task AdminUsers_route_refuses_a_held_user_without_calling_Firebase()
+    {
+        using var db = AdminDb();
+        var user = await SeedAdminSideUser(db, "una@other.org");
+        user.SignInAddressUnconfirmed = true;
+        await db.SaveChangesAsync();
+        var firebase = FirebaseReturning(SignInAccountResult.Created);
+
+        var result = await AdminController(db, firebase).EnsureSignInAccount(user.Id, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<object>>(Assert.IsType<BadRequestObjectResult>(result).Value);
+        Assert.Equal(AddressConfirmation.HeldMessage("Sam Staff"), Assert.Single(body.Errors!));
+        VerifyNeverEnsured(firebase);
+    }
+
+    [Fact]
+    public void ConfirmAddress_is_reachable_by_Admin_Coordinator_and_SuperAdmin_only()
+    {
+        var method = typeof(StaffController).GetMethod(nameof(StaffController.ConfirmAddress))!;
+
+        Assert.Equal("Admin,Coordinator,SuperAdmin", method.GetCustomAttribute<AuthorizeAttribute>()?.Roles);
+    }
+
+    [Fact]
+    public async Task ConfirmAddress_in_another_organisation_is_not_found_and_leaves_the_hold()
+    {
+        var (db, _) = StaffDb();
+        var someoneElses = await SeedStaff(db, Guid.NewGuid(), "una@other.org");
+        someoneElses.SignInAddressUnconfirmed = true;
+        await db.SaveChangesAsync();   // written by the context of the other tenant's row: InMemory ignores the filter on write
+
+        var result = await StaffControllerFor(db, "Admin", new Mock<IFirebaseUserService>()).ConfirmAddress(someoneElses.Id, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+        Assert.True((await db.Users.IgnoreQueryFilters().SingleAsync(u => u.Id == someoneElses.Id)).SignInAddressUnconfirmed);
+    }
+
+    [Fact]
+    public async Task ConfirmAddress_is_idempotent_and_takes_the_attention_item_with_it()
+    {
+        var (db, tenantId) = StaffDb();
+        var held = await SeedStaff(db, tenantId, "una@other.org");
+        var notHeld = await SeedStaff(db, tenantId, "ana@gmail.com");
+        held.SignInAddressUnconfirmed = true;
+        db.EmploymentHeroAttentions.Add(new Odip.Domain.Integrations.EmploymentHeroAttention
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId, Key = $"ConfirmAddress:{held.Id}", Kind = Odip.Domain.Integrations.EmploymentHeroAttentionKind.ConfirmAddress,
+            UserId = held.Id, Name = "Sam Staff", Reason = "x", CreatedAt = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync();
+        var controller = StaffControllerFor(db, "Coordinator", new Mock<IFirebaseUserService>());
+
+        Assert.IsType<OkObjectResult>((await controller.ConfirmAddress(held.Id, CancellationToken.None)).Result);
+        Assert.IsType<OkObjectResult>((await controller.ConfirmAddress(held.Id, CancellationToken.None)).Result);
+        Assert.IsType<OkObjectResult>((await controller.ConfirmAddress(notHeld.Id, CancellationToken.None)).Result);
+
+        Assert.False((await db.Users.SingleAsync(u => u.Id == held.Id)).SignInAddressUnconfirmed);
+        Assert.Null((await db.Users.SingleAsync(u => u.Id == notHeld.Id)).SignInAddressUnconfirmed);   // a row that was never held is left as it is
+        Assert.Empty(db.EmploymentHeroAttentions);
+    }
+
+    [Fact]
+    public async Task A_SuperAdmin_can_confirm_a_held_row_that_is_its_organisations_only_Admin()
+    {
+        var (db, tenantId) = StaffDb();
+        var onlyAdmin = await SeedStaff(db, tenantId, "ada@other.org", role: UserRole.Admin);
+        onlyAdmin.SignInAddressUnconfirmed = true;
+        await db.SaveChangesAsync();
+
+        var result = await StaffControllerFor(db, "SuperAdmin", new Mock<IFirebaseUserService>()).ConfirmAddress(onlyAdmin.Id, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.False((await db.Users.SingleAsync()).SignInAddressUnconfirmed);
+    }
 }

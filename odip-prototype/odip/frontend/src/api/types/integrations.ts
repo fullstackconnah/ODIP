@@ -1,7 +1,7 @@
 import type { LeaveType } from './leave'
 /** Settings → Integrations → Employment Hero. There is never an API-key field: the key is write-only. */
 import type { PayrollShiftStatus, SleepoverType } from './enums'
-export type EmploymentHeroAttentionKind = 'NotLinked' | 'FixInEmploymentHero' | 'FixInOdip' | 'MissingFromEmploymentHero'
+export type EmploymentHeroAttentionKind = 'NotLinked' | 'FixInEmploymentHero' | 'FixInOdip' | 'MissingFromEmploymentHero' | 'ConfirmAddress'
 
 export interface EmploymentHeroAttentionDto {
   id: string

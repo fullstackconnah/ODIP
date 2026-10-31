@@ -196,6 +196,17 @@ describe('LoginPage: a sign-in the exchange refused', () => {
     expect(within(shown).getByText('Ask your administrator to reactivate it.')).toBeInTheDocument()
   })
 
+  it('tells someone whose address is waiting for confirmation so, with the next step', async () => {
+    mockLogin.mockRejectedValue(new SignInRefused(refusal('AddressUnconfirmed')))
+    const u = renderPage()
+
+    await signIn(u)
+
+    const shown = await alert()
+    expect(within(shown).getByText(`Your organisation needs to confirm ${EMAIL} before you can sign in to Bunya Support.`)).toBeInTheDocument()
+    expect(within(shown).getByText('Ask your administrator to confirm it.')).toBeInTheDocument()
+  })
+
   it('tells a sign-in method that is not enabled to use email and password', async () => {
     mockLogin.mockRejectedValue(new SignInRefused(refusal('ProviderNotAllowed')))
     const u = renderPage()

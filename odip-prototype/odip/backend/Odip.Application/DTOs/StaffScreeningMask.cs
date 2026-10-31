@@ -29,5 +29,6 @@ public static class StaffScreeningMask
         WorkerScreeningNumber = CanSee(user, d.Id) ? d.WorkerScreeningNumber : null,
         SignInInviteSentAt = CanSeeSignIn(user) ? d.SignInInviteSentAt : null,
         HasSignedIn = CanSeeSignIn(user) ? d.HasSignedIn : null,
+        SignInAddressUnconfirmed = CanSeeSignIn(user) ? d.SignInAddressUnconfirmed : null,
     };
 }

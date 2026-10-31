@@ -6,7 +6,7 @@ const refused = (code: SignInRefusal['code'], retryAfterSeconds: number | null =
 describe('the codes', () => {
   it('are exactly the ones the server sends, so a change to the list is deliberate (ExchangeRefusalTests pins the same list)', () => {
     expect([...SIGN_IN_REFUSAL_CODES].sort()).toEqual(
-      ['Ambiguous', 'EmailNotVerified', 'InvalidToken', 'LockedOut', 'NoOdipAccount', 'ProviderNotAllowed', 'TenantInactive'],
+      ['Ambiguous', 'EmailNotVerified', 'InvalidToken', 'LockedOut', 'NoOdipAccount', 'ProviderNotAllowed', 'TenantInactive', 'AddressUnconfirmed'].sort(),
     )
   })
 })
@@ -87,6 +87,16 @@ describe('describeSignInRefusal', () => {
 
   it('says an address with no ODIP account is not set up and who to ask', () => {
     expect(describeSignInRefusal(refused('NoOdipAccount'), email).sentence).toBe("jane.smith@acme.example.com isn't set up in Bunya Support. Ask your administrator to add you.")
+  })
+
+  it('asks the organisation to confirm the address and never calls it wrong', () => {
+    const words = describeSignInRefusal(refused('AddressUnconfirmed'), email)
+
+    expect(words).toEqual({
+      sentence: `Your organisation needs to confirm ${email} before you can sign in to Bunya Support.`,
+      nextStep: 'Ask your administrator to confirm it.',
+    })
+    expect(JSON.stringify(words)).not.toMatch(/wrong|incorrect|invalid/i)
   })
 
   it('says an inactive organisation is inactive, with the next step', () => {

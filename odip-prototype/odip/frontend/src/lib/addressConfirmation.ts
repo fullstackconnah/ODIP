@@ -6,7 +6,8 @@
 /** The `code` of the 400 that asks for the confirmation. */
 export const ADDRESS_NEEDS_CONFIRMATION = 'AddressNeedsConfirmation'
 
-const FALLBACK =
+/** The sentence that asks the admin to check an address; the server's own wording wins when it sends one. */
+export const ADDRESS_CHECK_SENTENCE =
   "This address is not at your organisation's domain or a common email provider. The sign-in link goes to whoever owns it. Check it is right."
 
 /**
@@ -16,5 +17,5 @@ const FALLBACK =
 export function addressConfirmationRequest(err: unknown): string | null {
   const response = (err as { response?: { status?: number; data?: { code?: string; errors?: string[] } } } | null | undefined)?.response
   if (response?.status !== 400 || response.data?.code !== ADDRESS_NEEDS_CONFIRMATION) return null
-  return response.data.errors?.[0] ?? FALLBACK
+  return response.data.errors?.[0] ?? ADDRESS_CHECK_SENTENCE
 }

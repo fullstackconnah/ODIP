@@ -12,7 +12,7 @@ namespace Odip.Tests.Controllers;
 public class ExchangeRefusalTests
 {
     private static readonly string[] Codes =
-        ["InvalidToken", "EmailNotVerified", "ProviderNotAllowed", "NoOdipAccount", "Ambiguous", "TenantInactive", "LockedOut"];
+        ["InvalidToken", "EmailNotVerified", "ProviderNotAllowed", "NoOdipAccount", "Ambiguous", "TenantInactive", "AddressUnconfirmed", "LockedOut"];
 
     [Fact]
     public void The_codes_are_exactly_the_ones_the_sign_in_page_knows_so_a_change_to_them_is_deliberate()
@@ -33,6 +33,16 @@ public class ExchangeRefusalTests
         Assert.Equal(Codes.Length, sentences.Distinct().Count());
         Assert.Equal("Invalid or expired token", ExchangeRefusal.MessageFor(ExchangeRefusal.InvalidToken));
         Assert.Equal("Invalid or expired token", ExchangeRefusal.MessageFor("SomethingNobodyHasMetYet"));
+    }
+
+    [Fact]
+    public void AddressUnconfirmed_asks_the_organisation_to_confirm_and_never_says_the_address_is_wrong()
+    {
+        var sentence = ExchangeRefusal.MessageFor(ExchangeRefusal.AddressUnconfirmed);
+
+        Assert.Equal("Your organisation needs to confirm this email address before you can sign in to Bunya Support.", sentence);
+        Assert.DoesNotContain("wrong", sentence, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("incorrect", sentence, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

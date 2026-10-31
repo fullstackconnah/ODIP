@@ -104,6 +104,22 @@ export function useEnsureStaffSignInAccount() {
 }
 
 /**
+ * POST /staff/{id}/confirm-address: an Admin, Coordinator or SuperAdmin has checked the address the Employment Hero sync brought, so the person can
+ * sign in. Refreshes the page, the lists and the Employment Hero card (its Confirm email address item goes with the hold).
+ */
+export function useConfirmStaffAddress() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => apiPost<boolean>(`/staff/${id}/confirm-address`),
+    onSuccess: (_data, id) => {
+      qc.invalidateQueries({ queryKey: ['staff'] })
+      qc.invalidateQueries({ queryKey: ['staff-overview', id] })
+      qc.invalidateQueries({ queryKey: ['employment-hero'] })
+    },
+  })
+}
+
+/**
  * POST /users/invites-sent: tells the server which people Firebase accepted a sign-in invite email for (up to 100), so the next bulk invite
  * skips them and the Staff page can say when. Callers fire it and forget it: a failed record only means the person shows as to invite again.
  */

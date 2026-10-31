@@ -252,4 +252,48 @@ public class AddressChangeTests
 
         VerifyNoInformationLine(logger);
     }
+
+    // ── A held address (see User.SignInAddressUnconfirmed) ──────────────
+
+    [Fact]
+    public async Task A_changed_address_on_the_staff_form_clears_the_hold()
+    {
+        using var world = StaffWorld();
+        var staff = await SeedStaff(world, lastLoginAt: null);
+        staff.SignInAddressUnconfirmed = true;
+        await world.Db.SaveChangesAsync();
+
+        var result = await StaffAs(world, "Admin", Guid.NewGuid()).Update(staff.Id, UpdateTo("sam@other.org") with { AddressConfirmed = true }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.False((await world.Db.Users.SingleAsync()).SignInAddressUnconfirmed);
+    }
+
+    [Fact]
+    public async Task A_staff_edit_that_leaves_the_address_alone_keeps_the_hold()
+    {
+        using var world = StaffWorld();
+        var staff = await SeedStaff(world, lastLoginAt: null);
+        staff.SignInAddressUnconfirmed = true;
+        await world.Db.SaveChangesAsync();
+
+        await StaffAs(world, "Admin", Guid.NewGuid()).Update(staff.Id, UpdateTo(OldAddress, notes: "rostered Tuesdays"), CancellationToken.None);
+
+        Assert.True((await world.Db.Users.SingleAsync()).SignInAddressUnconfirmed);
+    }
+
+    [Fact]
+    public async Task AdminUsers_update_with_a_new_address_clears_the_hold()
+    {
+        using var db = SuperAdminDb();
+        var user = await SeedAdminSideUser(db);
+        user.SignInAddressUnconfirmed = true;
+        await db.SaveChangesAsync();
+        var controller = new AdminUsersController(db, new Mock<ILogger<AdminUsersController>>().Object, new Mock<IFirebaseUserService>().Object) { ControllerContext = ActingAs("SuperAdmin", Guid.NewGuid()) };
+
+        var result = await controller.Update(user.Id, AdminUpdateTo(NewAddress), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result);
+        Assert.False((await db.Users.IgnoreQueryFilters().SingleAsync(u => u.Id == user.Id)).SignInAddressUnconfirmed);
+    }
 }
