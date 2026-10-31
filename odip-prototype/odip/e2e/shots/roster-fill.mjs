@@ -147,16 +147,30 @@ try {
       // At 390 touch a fullPage shot drops the touch emulation; resize to the page height, re-pin, prove it is still coarse with a 44px control, then shoot.
       const fullShot = async (name, ctx) => {
         const file = path.join(OUT_DIR, 'full', `${name}-${vp.name}-${scheme}.png`)
+        // Playwright's own fullPage resize is not settled before it shoots; grow the viewport ourselves, settle, assert the geometry, then shoot the viewport.
+        const geometry = () => page.evaluate(() => {
+          const r = (e) => e?.getBoundingClientRect()
+          const h = [...document.querySelectorAll('h3')].find((e) => e.textContent === 'How full the next weeks are')
+          const c = r(h?.closest('.rounded-md')); const side = r(document.querySelector('aside')); const el = document.documentElement
+          const rd = (v) => (v == null ? null : Math.round(v * 10) / 10)
+          return { sidebarRight: rd(side && side.width > 0 && side.right > 0 ? side.right : 0), mainLeft: rd(r(document.querySelector('main'))?.left), cardLeft: rd(c?.left), cardRight: rd(c?.right), svgRight: rd(r(h?.closest('.rounded-md')?.querySelector('[data-plot] svg'))?.right), scrollLeft: el.scrollLeft, scrollWidth: el.scrollWidth, clientWidth: el.clientWidth, wide: el.scrollWidth <= el.clientWidth ? [] : [...document.body.querySelectorAll('*')].filter((e) => e.getBoundingClientRect().right > el.clientWidth + 0.5).slice(0, 4).map((e) => `${e.tagName}.${String(e.className).slice(0, 60)}@${Math.round(e.getBoundingClientRect().right)}`) }
+        })
         await park(); await settle(page)
-        if (!vp.mobile) { await page.screenshot({ path: file, fullPage: true }); return }
+        const before = await geometry()
         const h = await page.evaluate(() => document.scrollingElement.scrollHeight)
         await page.setViewportSize({ width: vp.width, height: Math.min(h, 4000) })
-        await pinCoarse(); await settle(page); await page.waitForTimeout(250)
-        const probe = await page.evaluate(() => ({ coarse: matchMedia('(pointer: coarse)').matches, control: document.querySelector('button')?.getBoundingClientRect().height ?? 0 }))
-        check('full page keeps touch emulation', ctx, probe, probe.coarse && probe.control >= 44)
-        await page.screenshot({ path: file })
+        if (vp.mobile) await pinCoarse()
+        await park(); await settle(page); await page.waitForTimeout(250)
+        const g = await geometry()
+        const ok = (vp.mobile || g.cardLeft >= g.sidebarRight) && (g.svgRight === null || g.svgRight <= g.cardRight) && g.scrollLeft === 0 && g.scrollWidth <= g.clientWidth
+        check('22 full page geometry settled after viewport growth', ctx, { before, after: g }, ok)
+        if (vp.mobile) {
+          const probe = await page.evaluate(() => ({ coarse: matchMedia('(pointer: coarse)').matches, control: document.querySelector('button')?.getBoundingClientRect().height ?? 0 }))
+          check('full page keeps touch emulation', ctx, probe, probe.coarse && probe.control >= 44)
+        }
+        if (ok) await page.screenshot({ path: file })
         await page.setViewportSize({ width: vp.width, height: vp.height })
-        await pinCoarse()
+        if (vp.mobile) await pinCoarse()
       }
       const toggle = () => card().getByRole('button', { name: /^(Show|Hide) chart$/ })
       const cardMetrics = () => card().evaluate((c) => { const r = c.getBoundingClientRect(); return { h: r.height, right: r.right, inner: innerWidth, sw: document.documentElement.scrollWidth } })
