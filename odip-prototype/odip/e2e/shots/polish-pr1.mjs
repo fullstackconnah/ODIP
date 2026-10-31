@@ -99,6 +99,7 @@ function measureInPage({ titleHeader, pills, dates, visibleHeaders }) {
     fg, primary, cardBg, boxR, cardRight: rect(card).right, docFits: document.documentElement.scrollWidth <= document.documentElement.clientWidth,
     scrollW: box.scrollWidth, clientW: box.clientWidth, endPin, endThWidth: endTh ? endTh.offsetWidth : null,
     headerNames: ths.map((th) => (headerText(th) || th.querySelector('.sr-only')?.textContent || th.getAttribute('aria-label') || '').trim()),
+    titleWidths: cellsOf(titleHeader).map((td) => td.getBoundingClientRect().width),
     visible, pillMetrics, dateMetrics, cut, clamps, identity, cross, rowCount: rows.length,
     fadeEnd: fadeEnd ? { right: fadeEnd.getBoundingClientRect().right, bg: getComputedStyle(fadeEnd).backgroundImage } : null, fadeStart: !!fadeStart,
     locale: Intl.DateTimeFormat().resolvedOptions(),
@@ -116,7 +117,11 @@ function measureCards() {
     const more = face.filter((el) => /^More actions for/.test(el.getAttribute('aria-label') || ''))
     const rest = face.filter((el) => !more.includes(el))
     const size = (el) => { const b = el.getBoundingClientRect(); return { w: b.width, h: b.height } }
-    return { h: r.getBoundingClientRect().height, others: rest.map(named), banned: face.map(named).filter((n) => /archive|delete|restore/i.test(n)), more: more.map(size), tick: rest.filter((el) => /Mark complete/.test(named(el))).map(size) }
+    const box = (el) => { const b = el.getBoundingClientRect(); return { l: b.left, r: b.right, t: b.top, b: b.bottom } }
+    const titleEl = r.querySelector('td[data-card="primary"] :is(a, span)') || r.querySelector('td[data-card="primary"]')
+    const tickEl = rest.find((el) => /Mark complete/.test(named(el)))
+    const metaLabels = [...r.querySelectorAll('td[data-card="meta"]')].filter(shown).sort((a, b) => { const x = a.getBoundingClientRect(), y = b.getBoundingClientRect(); return Math.abs(x.top - y.top) > 4 ? x.top - y.top : x.left - y.left }).map((td) => td.dataset.label)
+    return { metaLabels, tickOverTitle: !!(tickEl && titleEl) && (() => { const a = box(tickEl), t = box(titleEl); return a.l < t.r && a.r > t.l && a.t < t.b && a.b > t.t })(), h: r.getBoundingClientRect().height, others: rest.map(named), banned: face.map(named).filter((n) => /archive|delete|restore/i.test(n)), more: more.map(size), tick: rest.filter((el) => /Mark complete/.test(named(el))).map(size) }
   })
   return cards
 }
@@ -194,6 +199,8 @@ try {
         check(tag, 'C5 cut text is in the tooltip', badCut.length === 0, badCut.slice(0, 2))
         // C6 dates never truncate.
         check(tag, 'C6 dates and pills never truncate', m.dateMetrics.every((d) => d.sw <= d.cw + 1), m.dateMetrics.filter((d) => d.sw > d.cw + 1).slice(0, 2))
+        // S1 the incident title column is not squeezed at 1280.
+        if (cfg.key === 'incidents' && profile.width === 1280) check(tag, 'S1 title cells at least 176px wide', m.titleWidths.length > 0 && Math.min(...m.titleWidths) >= 176 - 1, { min: Math.round(Math.min(...m.titleWidths)) })
         // C7 two-line clamp on the Task and Incident title, full text in title.
         if (cfg.clamp) check(tag, 'C7 title at most 2 lines, full text in title', m.clamps.length > 0 && m.clamps.every((c) => c.h <= 2 * c.lh + 1 && (c.title === '' ? true : c.title === c.text)), m.clamps.filter((c) => c.h > 2 * c.lh + 1).slice(0, 2))
         // C8 the edge cue.
@@ -232,8 +239,17 @@ try {
         if (profile.touch) {
           const cards = await page.evaluate(measureCards)
           const hs = cards.map((c) => c.h)
-          const maxH = cfg.key === 'tasks' ? 144 : 132
-          check(tag, `C11 card height median <= 120, max <= ${maxH}`, median(hs) <= 120 && Math.max(...hs) <= maxH, { median: Math.round(median(hs)), max: Math.round(Math.max(...hs)), n: hs.length })
+          const maxH = cfg.key === 'tasks' ? 144 : cfg.key === 'incidents' ? 156 : 132
+          check(tag, `C11 card height median <= ${cfg.key === 'incidents' ? 132 : 120}, max <= ${maxH}`, median(hs) <= (cfg.key === 'incidents' ? 132 : 120) && Math.max(...hs) <= maxH, { median: Math.round(median(hs)), max: Math.round(Math.max(...hs)), n: hs.length })
+          // Fix round 1: M1 the tick sits clear of the title; M2 Type is on the incident card; M3 the meta reads Date, Severity, NDIS, Type, Trip, Participant.
+          if (cfg.key === 'tasks') check(tag, 'M1 no tick over a title', cards.every((c) => !c.tickOverTitle), { worst: Math.max(...hs), over: cards.filter((c) => c.tickOverTitle).length })
+          if (cfg.key === 'incidents') {
+            const want = ['Date', 'Severity', 'NDIS Commission', 'Type', 'Trip', 'Participant']
+            const inOrder = (l) => l.every((x, i) => want.includes(x) && (i === 0 || want.indexOf(l[i - 1]) < want.indexOf(x)))
+            check(tag, 'M2 every incident card shows Type', cards.every((c) => c.metaLabels.includes('Type')), cards.filter((c) => !c.metaLabels.includes('Type')).length)
+            check(tag, 'M3 incident card meta reads Date, Severity, NDIS, Type, Trip, Participant', cards.every((c) => inOrder(c.metaLabels)), { first: cards[0].metaLabels, bad: cards.filter((c) => !inOrder(c.metaLabels)).slice(0, 2).map((c) => c.metaLabels) })
+            console.log(`[polish-pr1] RECORD incident card heights ${variant}: median ${Math.round(median(hs))}, max ${Math.round(Math.max(...hs))}`)
+          }
           check(tag, 'C12 at most one action on the face', cards.every((c) => c.others.length <= 1), cards.filter((c) => c.others.length > 1).slice(0, 2).map((c) => c.others))
           check(tag, 'C12 nothing named archive/delete/restore on the face', cards.every((c) => c.banned.length === 0), cards.filter((c) => c.banned.length).slice(0, 2))
           const small = cards.flatMap((c) => [...c.more, ...c.tick]).filter((s) => s.w < 44 - 0.5 || s.h < 44 - 0.5)
@@ -254,7 +270,22 @@ try {
         if (variant === 'stock') {
           const opts = { touch: profile.touch }
           const wrapper = page.locator('table').first().locator('xpath=../..')
-          checks.push(checkCropHolds(await cropElement(page, wrapper, path.join(OUT_DIR, `${profile.name}-${cfg.key}-table.png`), opts)))
+          // N2 nothing focused at rest. M4 on the phone the fixed bottom nav is hidden for the crop only, and the last card must lie in the clip and be what is at its centre.
+          await page.evaluate(() => { document.activeElement?.blur?.(); window.__shotHidden = []; if (matchMedia('(pointer: coarse)').matches) for (const el of document.querySelectorAll('body *')) { if (getComputedStyle(el).position !== 'fixed') continue; const r = el.getBoundingClientRect(); if (r.width > 0 && r.bottom >= innerHeight - 1 && r.top > innerHeight / 2) { window.__shotHidden.push([el, el.style.visibility]); el.style.visibility = 'hidden' } } })
+          const lastCard = ({ clip }) => page.evaluate((c) => { const rows = [...document.querySelectorAll('table tbody tr')]; const r = rows[rows.length - 1].getBoundingClientRect(); const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return { rows: rows.length, inClip: r.left >= c.x - 1 && r.right <= c.x + c.width + 1 && r.top >= c.y - 1 && r.bottom <= c.y + c.height + 1, atCentre: !!hit && rows[rows.length - 1].contains(hit) } }, clip)
+          const crop = await cropElement(page, wrapper, path.join(OUT_DIR, `${profile.name}-${cfg.key}-table.png`), { ...opts, during: lastCard })
+          await page.evaluate(() => { for (const [el, v] of window.__shotHidden ?? []) el.style.visibility = v })
+          checks.push(checkCropHolds(crop))
+          check(tag, 'M4 last card inside the clip and nothing over it', crop.measured.inClip && crop.measured.atCentre, crop.measured)
+          // N3 the right edge of Tasks at 1280: the fade, in a padded crop.
+          if (profile.name === 'desktop-1280' && cfg.key === 'tasks') {
+            const wb = await wrapper.boundingBox()
+            const fadeBox = await page.locator('[data-edge-fade="end"]').first().boundingBox()
+            const clip = { x: Math.max(0, wb.x + wb.width - 380 - 16), y: Math.max(0, wb.y - 16), width: 380 + 32, height: Math.min(wb.height + 32, 420) }
+            clip.width = Math.min(clip.width, 1280 - clip.x)
+            await page.screenshot({ path: path.join(OUT_DIR, 'desktop-1280-tasks-fade-edge.png'), clip })
+            check(tag, 'N3 fade is inside the edge crop', !!fadeBox && fadeBox.x >= clip.x && fadeBox.x + fadeBox.width <= clip.x + clip.width + 1, { fadeBox, clip })
+          }
           if (!profile.dark) checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', `${profile.name}-${cfg.key}.png`), opts)).checks)
         }
       }

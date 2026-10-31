@@ -256,6 +256,7 @@ export default function IncidentsPage() {
       header: 'Title',
       mobile: 'primary',
       wrap: true,
+      minWidth: '11rem',
       className: 'font-medium',
       // The way into the incident for every role that sees the list; the cap sits on the link itself so its focus ring is not clipped.
       render: (i) => <Link to={`/incidents/${i.id}`} title={i.title ?? undefined} className={`line-clamp-2 break-words md:max-w-[15rem] 2xl:max-w-[18rem] ${ROW_LINK} ${TAP_TRUNCATED_LINK}`}>{i.title ?? '—'}</Link>,
@@ -265,6 +266,7 @@ export default function IncidentsPage() {
       header: 'NDIS Commission',
       // A plain dash (not a span) so the phone card leaves the cell out when there is nothing to report.
       mobile: 'meta',
+      className: 'max-md:order-1!',
       render: (i) => i.qscReportingStatus === 'NotRequired' ? '\u2014' : i.isOverdue24h ? (
         // Overdue is the one QSC state that must never be missed, so it always takes the solid
         // error pair (--color-on-error-container on --color-error-container = 7.24:1) whatever the
@@ -277,13 +279,14 @@ export default function IncidentsPage() {
       ),
     },
     { key: 'status', header: 'Status', mobile: 'status', render: (i) => <StatusBadge status={i.status} label={INCIDENT_STATUS_LABELS[i.status as IncidentStatus] ?? i.status} /> },
-    { key: 'severity', header: 'Severity', mobile: 'meta', render: (i) => <StatusBadge status={i.severity} /> },
-    { key: 'incidentDateTime', header: 'Date', type: 'date', mobile: 'meta' },
-    { key: 'incidentType', header: 'Type', maxWidth: '9rem', mobile: 'hidden', render: (i) => INCIDENT_TYPE_LABELS[i.incidentType as IncidentType] ?? i.incidentType },
+    { key: 'severity', header: 'Severity', mobile: 'meta', className: 'max-md:order-0!', render: (i) => <StatusBadge status={i.severity} /> },
+    { key: 'incidentDateTime', header: 'Date', type: 'date', mobile: 'meta', className: 'max-md:-order-1!' },
+    { key: 'incidentType', header: 'Type', maxWidth: '9rem', mobile: 'meta', className: 'max-md:order-2!', render: (i) => INCIDENT_TYPE_LABELS[i.incidentType as IncidentType] ?? i.incidentType },
     {
       key: 'tripName',
       header: 'Trip',
       mobile: 'meta',
+      className: 'max-md:order-3!',
       render: (i) => i.tripInstanceId && i.tripName ? (
         <Link
           to={`/trips/${i.tripInstanceId}`}
@@ -298,6 +301,7 @@ export default function IncidentsPage() {
       key: 'involvedParticipantName',
       header: 'Participant',
       mobile: 'meta',
+      className: 'max-md:order-4!',
       render: (i) => i.involvedParticipantId && i.involvedParticipantName ? (
         <Link
           to={`/participants/${i.involvedParticipantId}`}

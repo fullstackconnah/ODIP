@@ -797,13 +797,14 @@ describe('IncidentsPage — phone card', () => {
     const row = screen.getByText('Medication Error').closest('tr') as HTMLElement
     expect(row.querySelector('td[data-label="Title"]')).toHaveAttribute('data-card', 'primary')
     expect(row.querySelector('td[data-label="Status"]')).toHaveAttribute('data-card', 'status')
-    for (const label of ['Date', 'Severity']) expect(row.querySelector('td[data-label="' + label + '"]'), label).toHaveAttribute('data-card', 'meta')
-    // Type and the reporter are left off the card so the meta values fit two lines; they stay columns from md up.
-    for (const label of ['Type', 'Reported By']) {
-      const cell = row.querySelector('td[data-label="' + label + '"]')
-      expect(cell, label).not.toHaveAttribute('data-card')
-      expect(cell, label).toHaveClass('max-md:hidden')
-    }
+    for (const label of ['Date', 'Severity', 'Type']) expect(row.querySelector('td[data-label="' + label + '"]'), label).toHaveAttribute('data-card', 'meta')
+    // The reporter is left off the card; it stays a column from md up.
+    const reporter = row.querySelector('td[data-label="Reported By"]')
+    expect(reporter).not.toHaveAttribute('data-card')
+    expect(reporter).toHaveClass('max-md:hidden')
+    // Card meta order is Date, Severity, NDIS, Type, Trip, Participant (a triage read), whatever the desktop column order.
+    const orders = { Date: 'max-md:-order-1!', Severity: 'max-md:order-0!', 'NDIS Commission': 'max-md:order-1!', Type: 'max-md:order-2!', Trip: 'max-md:order-3!', Participant: 'max-md:order-4!' }
+    for (const [label, cls] of Object.entries(orders)) expect(row.querySelector('td[data-label="' + label + '"]'), label).toHaveClass(cls)
     // A row with nothing to report to the Commission leaves that cell off the card, and the menu ends the meta line.
     expect(row.querySelector('td[data-label="NDIS Commission"]')).not.toHaveAttribute('data-card')
     expect(within(row).getByRole('button', { name: /More actions for/ }).closest('td')).toHaveAttribute('data-card', 'trail')

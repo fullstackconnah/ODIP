@@ -178,7 +178,7 @@ export default function TasksPage() {
       ) : (t.tripName ?? '—'),
     },
     // Nobody owns the review of an emergency until an Admin takes it, and it is the Admins' to take: say so rather than a dash that reads as "nobody's job".
-    { key: 'ownerName', header: 'Owner', sortable: true, maxWidth: '7rem', mobile: 'meta', render: (t) => t.ownerName ?? (isBudgetReview(t) ? 'Admins' : '—') },
+    { key: 'ownerName', header: 'Owner', sortable: true, maxWidth: '7rem', mobile: 'meta', className: 'max-md:max-w-[8rem]!', render: (t) => t.ownerName ?? (isBudgetReview(t) ? 'Admins' : '—') },
     { key: 'taskType', header: 'Type', sortable: true, maxWidth: '7rem', mobile: 'hidden', render: (t) => TASK_TYPE_LABELS[t.taskType as keyof typeof TASK_TYPE_LABELS] ?? t.taskType },
     // The cluster overlays the row's last cells on a mouse and costs no column (RowMenu, overlay), so nothing is cut at 1440; one ⋯ menu on the phone card.
     { key: 'actions', header: '', overlay: true, mobile: 'trail', render: (t) => <RowMenu name={t.title} items={rowItems(t)} /> },
