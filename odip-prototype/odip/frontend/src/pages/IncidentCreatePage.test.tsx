@@ -935,6 +935,24 @@ describe('IncidentCreatePage — INC-04 determination frozen on edit', () => {
     expect(box).toBeEnabled()
   })
 
+  // RP register PR 1 review D2: the varied question is hidden on edit, so nothing on the step may clear its stored answer.
+  it('keeps the stored varied answer when the tick is ticked and unticked, so Next still passes', async () => {
+    mockUseIncident.mockReturnValue({ data: { ...existingRpIncident, isRestrictivePracticeAuthorised: true, restrictivePracticeUseVaried: false } })
+    mockUseRestrictivePractices.mockReturnValue({ data: [
+      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room, acute crisis.', reviewDate: '2026-12-01', isActive: true, ...AUTHORISED },
+    ] })
+    const user = userEvent.setup()
+    renderCreatePage({ pathname: '/incidents/incident-1/edit' })
+
+    await user.click(await screen.findByRole('button', { name: /Restrictive Practice/i }))
+    const box = await screen.findByRole('checkbox', { name: 'This use was not authorised' })
+    await user.click(box)
+    await user.click(box)
+    await clickNext(user)
+
+    expect(await screen.findByPlaceholderText('Detailed description of the incident...')).toBeInTheDocument() // moved on: the hidden answer was not wiped
+  })
+
   // Review N1: the banner agrees with the Review row and with what the server stores on save.
   it('shows the lowered state in the edit banner once "This use was not authorised" is ticked', async () => {
     mockUseIncident.mockReturnValue({ data: { ...existingRpIncident, isRestrictivePracticeAuthorised: true } })
@@ -1595,6 +1613,43 @@ describe('IncidentCreatePage — restrictive practice authorisation', () => {
     await user.type(screen.getByLabelText(/Describe what was actually done/), 'Held him past the agreed two minutes.')
     await clickNext(user)
     expect(screen.getByPlaceholderText('Detailed description of the incident...')).toHaveValue('Held him past the agreed two minutes.')
+  })
+
+  // RP register PR 1: a use is judged on the incident's own date. The date is typed after this step, so go forward, type it, and come back.
+  async function pickThenSetIncidentDate(user: ReturnType<typeof userEvent.setup>, entryName: RegExp, incidentAt: string, lockedAtPick: boolean) {
+    await toPhysicalRestraintStep(user)
+    await user.click(screen.getByRole('radio', { name: entryName }))
+    if (lockedAtPick) await user.type(screen.getByLabelText(/Describe what was actually done/), 'Held him.')
+    else await user.click(screen.getByRole('radio', { name: 'As set out in the plan' }))
+    await clickNext(user)
+    await user.type(screen.getByLabelText(/Date & Time/i), incidentAt)
+    await clickBack(user)
+  }
+
+  it('does not lock an entry whose authorisation ended yesterday for an incident dated inside its window, and asks the varied question', async () => {
+    const ended = { ...authorisedEntry, id: 'rp-e', description: 'Ended hold.', authorisationDate: '2020-01-01', authorisationEndDate: '2026-10-30', isAuthorised: false }
+    mockUseRestrictivePractices.mockReturnValue({ data: [ended] })
+    const user = userEvent.setup()
+    renderCreatePage()
+    await pickThenSetIncidentDate(user, /Ended hold/, '2026-10-29T10:00', true)
+
+    const tick = screen.getByRole('checkbox', { name: 'This use was not authorised' })
+    expect(tick).not.toBeChecked()
+    expect(tick).toBeEnabled()
+    expect(screen.getByRole('radio', { name: 'Varied' })).toBeInTheDocument()
+  })
+
+  it('reads a use dated before the authorisation started as not authorised: locked ticked, no varied question', async () => {
+    const later = { ...authorisedEntry, id: 'rp-l', description: 'Later hold.', authorisationDate: '2026-11-01', isAuthorised: true }
+    mockUseRestrictivePractices.mockReturnValue({ data: [later] })
+    const user = userEvent.setup()
+    renderCreatePage()
+    await pickThenSetIncidentDate(user, /Later hold/, '2026-10-28T10:00', false)
+
+    const tick = screen.getByRole('checkbox', { name: 'This use was not authorised' })
+    expect(tick).toBeChecked()
+    expect(tick).toBeDisabled()
+    expect(screen.queryByRole('radio', { name: 'Varied' })).not.toBeInTheDocument()
   })
 
   // RP register PR 1: the "varied?" question, asked once per new report of an authorised linked use.

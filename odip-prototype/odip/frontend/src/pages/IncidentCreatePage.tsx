@@ -32,6 +32,7 @@ import {
   buildShiftNoteIncidentDateTime,
   suggestedIncidentTypeForShiftNote,
   previewRpAuthorisation,
+  isRpAuthorisedOn,
   editedRpAuthorisation,
   isShiftIncidentPrefillState,
   buildShiftIncidentTitleSkeleton,
@@ -269,6 +270,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
   const unapprovedRestrictivePracticeDetails = useWatch({ control, name: 'unapprovedRestrictivePracticeDetails' })
   const usedWithoutAuthorisation = useWatch({ control, name: 'usedWithoutAuthorisation' })
   const rpUseVaried = useWatch({ control, name: 'rpUseVaried' })
+  const incidentDateTime = useWatch({ control, name: 'incidentDateTime' })
   const description = useWatch({ control, name: 'description' })
   const witnesses = useWatch({ control, name: 'witnesses' })
   // UX-01: reportedByStaffId/involvedStaffId/reviewedByStaffId are SearchableSelect, which isn't
@@ -300,9 +302,19 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
       setValue('restrictivePracticeId', '')
       setValue('unapprovedRestrictivePracticeDetails', '')
       setValue('usedWithoutAuthorisation', false)
-      setValue('rpUseVaried', undefined)
+      if (!isEdit) setValue('rpUseVaried', undefined)
     }
-  }, [incidentType, setValue])
+  }, [incidentType, isEdit, setValue])
+
+  // The date is typed after the entry is picked, so the locked "not authorised" tick follows the entry judged on that date.
+  const rpLockedRef = useRef(false)
+  useEffect(() => {
+    if (isEdit) return
+    const entry = allRestrictivePractices.find((p) => p.id === restrictivePracticeId)
+    const locked = !!entry && !isRpAuthorisedOn(entry, incidentDateTime?.slice(0, 10))
+    if (locked !== rpLockedRef.current) setValue('usedWithoutAuthorisation', locked, { shouldDirty: true })
+    rpLockedRef.current = locked
+  }, [isEdit, allRestrictivePractices, restrictivePracticeId, incidentDateTime, setValue])
 
   useEffect(() => {
     if (incidentType !== 'Injury') {
@@ -529,7 +541,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
     ? editedAuthorisation === null ? '—' : editedAuthorisation ? 'Authorised' : 'Not authorised'
     : { authorised: 'Authorised', unauthorised: 'Not authorised', unknown: '—' }[previewRpAuthorisation(involvedParticipantId, restrictivePracticeType, allRestrictivePractices, {
       restrictivePracticeId, unapproved: !!unapprovedRestrictivePracticeDetails?.trim(), usedWithoutAuthorisation: !!restrictivePracticeId && !!usedWithoutAuthorisation,
-    })]
+    }, incidentDateTime?.slice(0, 10))]
 
   const reviewGroups: ReviewGroup[] = [
     {
@@ -697,6 +709,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
             usedWithoutAuthorisation={usedWithoutAuthorisation}
             rpUseVaried={rpUseVaried}
             description={description}
+            incidentDateTime={incidentDateTime}
             isEdit={isEdit}
             existingIncident={existingIncident}
           />
