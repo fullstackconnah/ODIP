@@ -13,7 +13,7 @@ using Odip.Infrastructure.Data;
 namespace Odip.Infrastructure.Migrations
 {
     [DbContext(typeof(OdipDbContext))]
-    [Migration("20261031120000_AddProviderTimeZoneAndContact")]
+    [Migration("20261031130000_AddProviderTimeZoneAndContact")]
     partial class AddProviderTimeZoneAndContact
     {
         /// <inheritdoc />
