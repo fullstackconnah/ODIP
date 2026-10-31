@@ -421,6 +421,24 @@ export interface RosterExceptionDto {
  * row rather than in a separate lane. Staff view keeps the pass-1 shape: staff rows plus the
  * dedicated Unfilled lane, which is where over-allocation/double-booking findings are visible.
  */
+/** One Monday-to-Sunday week of GET rostering/fill. filled + open = shifts; Cancelled shifts are not counted; open = no worker. */
+export type RosterFillWeekDto = {
+  weekStart: string
+  shifts: number
+  filled: number
+  open: number
+  hoursFilled: number
+  hoursOpen: number
+  /** Shifts (filled or open) still in Draft. */
+  draft: number
+}
+
+export type RosterFillDto = {
+  /** The provider-timezone date the weeks start from. */
+  today: string
+  weeks: RosterFillWeekDto[]
+}
+
 export type RosterBoardDto =
   | {
       groupBy: 'Participant'

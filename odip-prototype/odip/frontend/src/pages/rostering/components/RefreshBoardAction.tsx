@@ -4,6 +4,9 @@ import { Button } from '@/components/Button'
 import type { RosterBoardDto, ShiftDto } from '@/api/types'
 import { allBoardShifts } from '../lib/roster'
 
+// The fill chart shares the roster-board prefix so board writes refresh it, but it is not a board: leave it out of what is refreshed and re-read.
+const boardQueries = { queryKey: ['roster-board'], type: 'active' as const, predicate: (q: { queryKey: readonly unknown[] }) => q.queryKey[1] !== 'fill' }
+
 const FAILED = "Couldn't refresh the board. Try again."
 
 type RefreshBoardActionProps = {
@@ -36,13 +39,14 @@ export function RefreshBoardAction({ onRefreshed, announce }: RefreshBoardAction
     announce('Refreshing the board…')   // every refresh passes through it, so a second success is a changed sentence and is heard again
     try {
       // No board on screen means nothing was fetched: that is a failure to report, not "up to date".
-      if (queryClient.getQueryCache().findAll({ queryKey: ['roster-board'], type: 'active' }).length === 0) throw new Error('no board on screen')
-      await queryClient.refetchQueries({ queryKey: ['roster-board'], type: 'active' }, { throwOnError: true })
+      if (queryClient.getQueryCache().findAll(boardQueries).length === 0) throw new Error('no board on screen')
+      await queryClient.refetchQueries(boardQueries, { throwOnError: true })
+      void queryClient.invalidateQueries({ queryKey: ['roster-board', 'fill'] })
       pending.current = false
       // The notice went while this ran (a newer write cleared it, or the panel was saved): what it was about is gone, so say nothing and take no focus.
       if (!mounted.current) return
       setState('idle')
-      onRefreshed(queryClient.getQueriesData<RosterBoardDto>({ queryKey: ['roster-board'], type: 'active' }).flatMap(([, board]) => allBoardShifts(board)))
+      onRefreshed(queryClient.getQueriesData<RosterBoardDto>(boardQueries).flatMap(([, board]) => allBoardShifts(board)))
     } catch {
       pending.current = false
       if (!mounted.current) return

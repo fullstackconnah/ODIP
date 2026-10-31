@@ -84,6 +84,7 @@ describe('useDialogBehavior', () => {
     'components/layout/RailTooltip.tsx': 1,
     'components/layout/WhatsNewButton.tsx': 1,
     'components/BudgetTrackChart.tsx': 1, // chart readout, not a layer; Escape only hides the readout
+    'components/chart/useChartPoints.ts': 1, // the fill chart's readout, not a layer; Escape only hides the readout
     'pages/dashboard/QuickGroup.tsx': 1,
     'hooks/useDialogBehavior.ts': 1,
   }

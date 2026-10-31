@@ -549,3 +549,25 @@ public record UpsertCompatibilityDto
     public CompatibilityLevel Level { get; init; }
     public string? Reason { get; init; }
 }
+
+// ── Roster fill (how full the coming weeks are) ──────────────────
+
+public record RosterFillDto
+{
+    /// <summary>The provider's date, so the client labels "this week" without its own clock.</summary>
+    public DateOnly Today { get; init; }
+    public List<RosterFillWeekDto> Weeks { get; init; } = new();
+}
+
+/// <summary>One Monday-start week. Cancelled shifts are in none of the counts; <c>Filled + Open == Shifts</c>.</summary>
+public record RosterFillWeekDto
+{
+    public DateOnly WeekStart { get; init; }
+    public int Shifts { get; init; }
+    public int Filled { get; init; }
+    public int Open { get; init; }
+    public decimal HoursFilled { get; init; }
+    public decimal HoursOpen { get; init; }
+    /// <summary>Draft shifts, filled or not.</summary>
+    public int Draft { get; init; }
+}
