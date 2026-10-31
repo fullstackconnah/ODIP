@@ -77,6 +77,7 @@ public class OdipDbContext : DbContext
     public DbSet<TripDocument> TripDocuments => Set<TripDocument>();
     public DbSet<User> Users => Set<User>();
     public DbSet<IncidentReport> IncidentReports => Set<IncidentReport>();
+    public DbSet<Complaint> Complaints => Set<Complaint>();
     /// <summary>IN-5: see <see cref="Entities.IncidentInjury"/>'s type doc.</summary>
     public DbSet<IncidentInjury> IncidentInjuries => Set<IncidentInjury>();
     /// <summary>IN-7: see <see cref="Entities.IncidentWitness"/>'s type doc.</summary>
@@ -1882,6 +1883,27 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => e.RelatedMedicationId).IsUnique().HasFilter("\"RelatedMedicationId\" IS NOT NULL");
         });
 
+        // ── Complaint ─────────────────────────────────────────────
+        modelBuilder.Entity<Complaint>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Summary).HasMaxLength(4000).IsRequired();
+            entity.Property(e => e.ComplainantName).HasMaxLength(200);
+            entity.Property(e => e.ActionsTaken).HasMaxLength(4000);
+            entity.Property(e => e.Outcome).HasMaxLength(4000);
+            // The version a save must still match: the PUT answers 409 if the complaint changed since the form loaded it.
+            entity.Property(e => e.UpdatedAt).IsConcurrencyToken();
+
+            // SetNull on all three links: a complaint outlives a deleted participant, incident or staff member (none is required).
+            entity.HasOne(e => e.Participant).WithMany().HasForeignKey(e => e.ParticipantId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(e => e.IncidentReport).WithMany().HasForeignKey(e => e.IncidentReportId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(e => e.HandledBy).WithMany().HasForeignKey(e => e.HandledByUserId).OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(e => new { e.TenantId, e.IsActive, e.Status, e.ReceivedOn });
+            entity.HasIndex(e => e.ParticipantId);
+            entity.HasIndex(e => e.IncidentReportId);
+        });
+
         // ── What's new ──────────────────────────────────────────────────────────────
         // Release notes are the same for every organisation, and a read mark belongs to one user, so neither table
         // is an ITenantEntity and neither gets a query filter. Do not add a filter here.
@@ -2324,6 +2346,11 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<RestrictivePractice>()
             .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<RestrictivePractice>()
+            .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<Complaint>()
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<Complaint>()
             .HasIndex(e => e.TenantId);
 
         // ── Contacts (CONTACT-01/02/03) tenant query filters ───────────────────────

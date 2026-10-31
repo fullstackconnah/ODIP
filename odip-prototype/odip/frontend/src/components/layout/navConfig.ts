@@ -165,6 +165,8 @@ export const navItems: NavEntry[] = [
   // Every invoice and credit note the organisation has issued, including those whose claim was deleted; read-only. Same page key as the claims it comes from, so ReadOnly and SupportWorker are refused as the API refuses them. No bar slot: a phone reaches it through More.
   { to: '/invoices', label: 'Invoices', msIcon: 'receipt_long', page: 'claims' },
   { to: '/incidents', label: 'Incidents', msIcon: 'emergency', page: 'incidents', bar: { order: 5, audience: 'field' } },
+  // The complaints register: a complaint names people, so only the management roles open it (ReadOnly is refused, SupportWorker's allow-list does not name it). No bar slot: a phone reaches it through More.
+  { to: '/complaints', label: 'Complaints', msIcon: 'feedback', page: 'complaints' },
   { to: '/settings', label: 'Settings', msIcon: 'settings', page: 'settings' },
 ]
 

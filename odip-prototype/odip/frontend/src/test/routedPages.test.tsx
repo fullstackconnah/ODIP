@@ -27,7 +27,7 @@ const RECORD = {
   serviceDate: '2026-10-12', startTime: '09:00', endTime: '15:00', nightType: 'None',
   breaks: [], finishBlockers: [], medicationsDue: [], prn: [], riskEntries: [],
 }
-const DETAIL = new RegExp(`/(trips|participants|staff|accommodation|vehicles|tasks|incidents|claims|medications|caregiver-submissions|portal/shifts|inquiries)/${ID}$`)
+const DETAIL = new RegExp(`/(trips|participants|staff|accommodation|vehicles|tasks|incidents|complaints|claims|medications|caregiver-submissions|portal/shifts|inquiries)/${ID}$`)
 
 // Reads that wrap the record.
 const WRAPPED: [RegExp, unknown][] = [
@@ -85,6 +85,9 @@ const ROUTES: Route[] = [
   { path: '/incidents/new', url: '/incidents/new', load: () => import('@/pages/IncidentCreatePage') },
   { path: '/incidents/:id/edit', url: `/incidents/${ID}/edit`, load: () => import('@/pages/IncidentCreatePage') },
   { path: '/incidents/:id', url: `/incidents/${ID}`, load: () => import('@/pages/IncidentDetailPage') },
+  { path: '/complaints', url: '/complaints', load: () => import('@/pages/ComplaintsPage') },
+  { path: '/complaints/new', url: '/complaints/new', load: () => import('@/pages/ComplaintFormPage') },
+  { path: '/complaints/:id', url: `/complaints/${ID}`, load: () => import('@/pages/ComplaintFormPage') },
   { path: '/bookings', url: '/bookings', load: () => import('@/pages/BookingsPage') },
   { path: '/settings', url: '/settings', load: () => import('@/pages/SettingsPage') },
   { path: '/settings/import/:kind', url: '/settings/import/participants', load: () => import('@/pages/settings/ImportWizardPage') },
@@ -130,7 +133,7 @@ const ALLOWED: Record<string, string> = {
 
 // These titles were renamed (or their nav label was) so the two match; this keeps them there.
 const RENAMED_TO_NAV_LABEL = [
-  '/incidents', '/schedule', '/qualifications', '/rostering', '/portal', '/portal/payslips',
+  '/incidents', '/complaints', '/schedule', '/qualifications', '/rostering', '/portal', '/portal/payslips',
   '/trips', '/rostering/patterns', '/rostering/compatibility', '/rostering/leave', '/rostering/completions', '/rostering/payroll', '/reports',
 ]
 
