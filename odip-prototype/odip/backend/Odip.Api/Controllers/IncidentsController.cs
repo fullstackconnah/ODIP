@@ -886,9 +886,9 @@ public class IncidentsController : ControllerBase
         // Item 9 of the connection map: an edit may change QscReportingStatus/QscReportedAt in
         // either direction — raise/refresh or complete the IncidentQscReport task accordingly.
         await RaiseOrCompleteQscTaskAsync(i, zone, ct);
-        // IgnoreQueryFilters + the incident's own tenant: a SuperAdmin with no organisation chosen must still see the task.
+        // Bypasses only the Tenant filter so the lookup does not depend on which organisation the caller resolved to; the explicit TenantId below is the scope.
         var detailedKey = $"incident-detailed-report:{i.Id}";
-        var hadTask = await _db.BookingTasks.IgnoreQueryFilters().AnyAsync(t => t.SourceKey == detailedKey && t.TenantId == i.TenantId, ct);
+        var hadTask = await _db.BookingTasks.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(t => t.SourceKey == detailedKey && t.TenantId == i.TenantId, ct);
         await RaiseOrCompleteDetailedReportTaskAsync(i, zone, ct, mayRaise: (hadTask || clockChanged) && i.Status != IncidentStatus.Closed);
 
         await _db.SaveChangesAsync(ct);

@@ -1860,7 +1860,7 @@ describe('IncidentCreatePage - incident clock on the Compliance step', () => {
     const user = userEvent.setup()
     renderCreatePage({ pathname: '/incidents/incident-1/edit' })
 
-    await user.click(await screen.findByRole('button', { name: /Review & compliance/ }))
+    await user.click(await screen.findByRole('button', { name: /Compliance/ }))
     expect(screen.queryByLabelText(/^Reason for the change/)).not.toBeInTheDocument()
     expect(screen.queryByLabelText('5-day report sent')).not.toBeInTheDocument()
 
@@ -1872,7 +1872,7 @@ describe('IncidentCreatePage - incident clock on the Compliance step', () => {
     await user.click(screen.getByRole('button', { name: /^save$/i }))
     expect(mockUpdateMutateAsync).not.toHaveBeenCalled()
 
-    await user.click(screen.getByRole('button', { name: /Review & compliance/ }))
+    await user.click(screen.getByRole('button', { name: /Compliance/ }))
     await user.type(screen.getByLabelText(/^Reason for the change/), 'Family raised it as serious.')
     await user.click(screen.getByRole('button', { name: /Review$/i }))
     await user.click(screen.getByRole('button', { name: /^save$/i }))
