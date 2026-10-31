@@ -797,7 +797,9 @@ describe('IncidentsPage — phone card', () => {
     const row = screen.getByText('Medication Error').closest('tr') as HTMLElement
     expect(row.querySelector('td[data-label="Title"]')).toHaveAttribute('data-card', 'primary')
     expect(row.querySelector('td[data-label="Status"]')).toHaveAttribute('data-card', 'status')
-    for (const label of ['Date', 'Severity', 'Type', 'Reported By']) expect(row.querySelector('td[data-label="' + label + '"]'), label).toHaveAttribute('data-card', 'meta')
+    for (const label of ['Date', 'Severity', 'Reported By']) expect(row.querySelector('td[data-label="' + label + '"]'), label).toHaveAttribute('data-card', 'meta')
+    // Type is left off the card so Severity, Date and the reporter share one line (it stays a column from md up).
+    expect(row.querySelector('td[data-label="Type"]')).not.toHaveAttribute('data-card', 'meta')
     // The reporter's name on the muted line says who it is ("Reported by"), a prefix that only the phone card shows.
     const reporter = row.querySelector('td[data-label="Reported By"]') as HTMLElement
     expect(reporter).toHaveTextContent('Reported by Pat Jones')

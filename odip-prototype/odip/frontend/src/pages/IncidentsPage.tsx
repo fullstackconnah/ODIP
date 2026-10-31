@@ -279,7 +279,7 @@ export default function IncidentsPage() {
     { key: 'status', header: 'Status', mobile: 'status', render: (i) => <StatusBadge status={i.status} label={INCIDENT_STATUS_LABELS[i.status as IncidentStatus] ?? i.status} /> },
     { key: 'severity', header: 'Severity', mobile: 'meta', render: (i) => <StatusBadge status={i.severity} /> },
     { key: 'incidentDateTime', header: 'Date', type: 'date', mobile: 'meta' },
-    { key: 'incidentType', header: 'Type', maxWidth: '9rem', mobile: 'meta', render: (i) => INCIDENT_TYPE_LABELS[i.incidentType as IncidentType] ?? i.incidentType },
+    { key: 'incidentType', header: 'Type', maxWidth: '9rem', mobile: 'hidden', render: (i) => INCIDENT_TYPE_LABELS[i.incidentType as IncidentType] ?? i.incidentType },
     {
       key: 'tripName',
       header: 'Trip',

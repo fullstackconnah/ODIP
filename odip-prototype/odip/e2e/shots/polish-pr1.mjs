@@ -231,6 +231,7 @@ try {
         // The phone card: C11 height, C12 the face, C13 one set of actions.
         if (profile.touch) {
           const cards = await page.evaluate(measureCards)
+          if (variant === 'stock') console.log('[polish-pr1] DIAG ' + tag + ' ' + JSON.stringify(await page.evaluate(() => [...document.querySelectorAll('table tbody tr')].slice(0, 2).map((r) => { const rb = r.getBoundingClientRect(); return { h: Math.round(rb.height), kids: [...r.children].map((c) => { const b = c.getBoundingClientRect(); return [c.getAttribute('data-card') || c.getAttribute('data-label'), Math.round(b.top - rb.top), Math.round(b.left - rb.left), Math.round(b.width), Math.round(b.height), (c.textContent || '').trim().slice(0, 14)].join('|') }) } }))))
           const hs = cards.map((c) => c.h)
           const maxH = cfg.key === 'tasks' ? 144 : 132
           check(tag, `C11 card height median <= 120, max <= ${maxH}`, median(hs) <= 120 && Math.max(...hs) <= maxH, { median: Math.round(median(hs)), max: Math.round(Math.max(...hs)), n: hs.length })
