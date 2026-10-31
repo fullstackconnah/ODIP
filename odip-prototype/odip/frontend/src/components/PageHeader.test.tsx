@@ -93,13 +93,54 @@ describe('PageHeader — narrow-screen layout', () => {
     expect(rowOf('Staff').children).toHaveLength(1)
   })
 
-  it('lets an inline subtitle drop under the title on a phone and only truncate from md up', () => {
-    render(<PageHeader title="Trips" subtitle="Plan and manage every group trip" />)
+  it('sets the count inline after the title on the title baseline, in the quiet tabular step, wrapping below md instead of shrinking the title', () => {
+    render(<PageHeader title="Trips" count="12 trips" />)
 
-    const subtitle = screen.getByText('Plan and manage every group trip')
-    expect(subtitle).toHaveClass('md:truncate')
-    expect(subtitle).not.toHaveClass('truncate')
-    expect(subtitle.parentElement).toHaveClass('flex-wrap', 'md:flex-nowrap')
+    const count = screen.getByText('12 trips')
+    const h1 = screen.getByRole('heading', { level: 1, name: 'Trips' })
+    expect(count.parentElement).toBe(h1.parentElement)
+    expect(h1.compareDocumentPosition(count) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(count).toHaveClass('text-[14px]/[20px]', 'font-medium', 'tabular-nums', 'text-[var(--color-muted-foreground)]')
+    expect(count.parentElement).toHaveClass('items-baseline', 'gap-x-2', 'flex-wrap', 'md:flex-nowrap')
+  })
+
+  it('renders no count element without a count', () => {
+    render(<PageHeader title="Trips" />)
+    expect(screen.getByRole('heading', { level: 1 }).parentElement!.children).toHaveLength(1)
+  })
+
+  it('puts a string subtitle on its own line below the title row as the description: muted, 72ch, wrapping', () => {
+    render(<PageHeader title="Reports" subtitle="Hours, shift fulfilment and leave for the dates you pick." />)
+
+    const description = screen.getByText('Hours, shift fulfilment and leave for the dates you pick.')
+    const row = rowOf('Reports')
+    expect(description.parentElement).toBe(row.parentElement)
+    expect(row.compareDocumentPosition(description) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(description).toHaveClass('mt-1', 'text-[14px]', 'leading-[1.45]', 'max-w-[72ch]', 'text-[var(--color-muted-foreground)]')
+    expect(description).not.toHaveClass('truncate', 'md:truncate')
+  })
+
+  it('renders the tabs slot full width under the description and above the filter row, 12px below the block above', () => {
+    render(
+      <PageHeader title="Incidents" subtitle="Every report" tabs={<div data-testid="tabs">Tabs</div>}>
+        <span data-testid="filters">Filters</span>
+      </PageHeader>,
+    )
+
+    const row = rowOf('Incidents')
+    const description = screen.getByText('Every report')
+    const tabs = screen.getByTestId('tabs').parentElement!
+    const filters = screen.getByTestId('filters').parentElement!
+    expect(tabs).toHaveClass('mt-3')
+    expect(tabs.parentElement).toBe(row.parentElement)
+    expect(row.compareDocumentPosition(description) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(description.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(tabs.compareDocumentPosition(filters) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('renders no tabs wrapper without tabs', () => {
+    const { container } = render(<PageHeader title="Trips" />)
+    expect(container.children).toHaveLength(1)
   })
 
   it('keeps a ReactNode subtitle and the filter row as their own blocks after the title row', () => {
@@ -134,7 +175,7 @@ describe('PageHeader — filter row on a touch screen', () => {
     )
 
     const row = screen.getByTestId('filters').parentElement!
-    expect(row).toHaveClass('flex', 'flex-wrap', 'items-center', 'gap-2', 'mt-2', 'pointer-coarse:gap-y-3')
+    expect(row).toHaveClass('flex', 'flex-wrap', 'items-center', 'gap-2', 'mt-3', 'pointer-coarse:gap-y-3')
     // Row gap only: the column gap between neighbours on a line stays 8px, where the pill's pad is never horizontal.
     expect(row.className).not.toMatch(/pointer-coarse:gap-(?:[0-9]|x)/)
   })
@@ -164,10 +205,11 @@ describe('PageHeader — the default variant is untouched by the detail variant'
     expect(renderDefault('default').container.innerHTML).toBe(html)
   })
 
-  it('keeps the 20px bold title and no display class', () => {
+  it('keeps the bold title at 20/26 below md and 24/30 from md, and no display class', () => {
     renderDefault()
     const h1 = screen.getByRole('heading', { level: 1, name: 'Participants' })
-    expect(h1).toHaveClass('text-xl', 'font-bold')
+    expect(h1).toHaveClass('text-[20px]/[26px]', 'md:text-[24px]/[30px]', 'font-bold', 'tracking-[-0.01em]')
+    expect(h1.className).not.toMatch(/text-xl/)
     expect(h1.className).not.toMatch(/text-display|text-balance/)
   })
 
@@ -179,10 +221,10 @@ describe('PageHeader — the default variant is untouched by the detail variant'
     expect(screen.getByTestId('meta').parentElement).toHaveClass('mt-1', 'text-[13px]')
   })
 
-  it('still puts a string subtitle inline after the title, truncating from md', () => {
+  it('no longer puts a string subtitle inline: it is the description below the title', () => {
     render(<PageHeader title="Trips" subtitle="Plan every trip" />)
-    expect(screen.getByText('Plan every trip')).toHaveClass('md:truncate')
-    expect(screen.getByText('Plan every trip').parentElement).toBe(screen.getByRole('heading', { level: 1 }).parentElement)
+    expect(screen.getByText('Plan every trip')).not.toHaveClass('md:truncate')
+    expect(screen.getByText('Plan every trip').parentElement).not.toBe(screen.getByRole('heading', { level: 1 }).parentElement)
   })
 })
 
@@ -209,7 +251,7 @@ describe('PageHeader — variant="detail"', () => {
     expect(headings).toHaveLength(1)
     expect(headings[0]).toHaveClass('text-display', 'text-balance')
     // Not the 20px headline any more.
-    expect(headings[0].className).not.toMatch(/text-xl|font-bold/)
+    expect(headings[0].className).not.toMatch(/text-[20px]|text-xl|font-bold/)
   })
 
   it('keeps the narrow-screen title rules of the default: shrink and break a long word below md only', () => {
