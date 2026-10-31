@@ -117,9 +117,11 @@ describe('light palette unchanged (dark-mode-2026-10)', () => {
     'chart-actual': 'var(--color-primary)',
     'chart-expected': '#2f6db5',
     'chart-grid': 'var(--color-border)',
+    'chart-filled': '#6b8f3e',
+    'chart-open': '#6b7160',
   }
 
-  it('keeps every light value, and adds the three dark-mode tokens and the four chart tokens (budget-graph-2026-10)', () => {
+  it('keeps every light value, and adds the three dark-mode tokens the four chart tokens (budget-graph-2026-10) and the two roster fill chart tokens', () => {
     expect(parsed).toEqual(LIGHT)
   })
 
