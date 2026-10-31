@@ -119,10 +119,17 @@ describe('light palette unchanged (dark-mode-2026-10)', () => {
     'chart-grid': 'var(--color-border)',
     'chart-filled': '#6b8f3e',
     'chart-open': '#6b7160',
+    'chart-other': '#7a8070',
   }
 
-  it('keeps every light value, and adds the three dark-mode tokens the four chart tokens (budget-graph-2026-10) and the two roster fill chart tokens', () => {
+  it('keeps every light value, and adds the three dark-mode tokens the four chart tokens (budget-graph-2026-10) the two roster fill chart tokens and the incidents chart remainder', () => {
     expect(parsed).toEqual(LIGHT)
+  })
+
+  it('pins the dark incidents chart remainder token', () => {
+    const css = readFileSync(INDEX_CSS_PATH, 'utf-8')
+    const dark = css.slice(css.indexOf('/* Dark theme (dark-mode-2026-10)'))
+    expect(dark).toContain('--color-chart-other: #7f8673')
   })
 
   it('keeps the four shadow tokens equal to the literals they replaced', () => {

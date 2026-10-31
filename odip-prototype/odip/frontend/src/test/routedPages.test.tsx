@@ -35,6 +35,8 @@ const WRAPPED: [RegExp, unknown][] = [
   [new RegExp(`/inquiries/${ID}/onboarding$`), { ...RECORD, items: [] }],
   // The dashboard summary is an object, not a list: with the list shape the page crashed on `upcomingTrips` as soon as it arrived (a race this test used to win).
   [/\/dashboard\/summary$/, { upcomingTripCount: 0, activeParticipantCount: 0, outstandingTaskCount: 0, overdueTaskCount: 0, conflictCount: 0, tripsMissingAccommodation: 0, tripsMissingVehicles: 0, tripsMissingStaff: 0, openIncidentCount: 0, qscOverdueCount: 0, upcomingTrips: [] }],
+  // Incidents by month is an object (six empty months), not a list.
+  [/\/incidents\/trend$/, { today: '2026-10-14', months: ['2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10'].map(month => ({ month, incidents: 0, rpUses: 0, otherIncidents: 0 })) }],
   // Not connected: the Payroll page reads an object, and its not-connected state is its quiet default.
   [/\/payroll\/periods$/, { connected: false, today: '2026-10-14', periods: [] }],
   // The payslip list is an object ($ keeps /portal/payslips/9001/pdf out).
