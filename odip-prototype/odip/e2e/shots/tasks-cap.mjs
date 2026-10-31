@@ -3,6 +3,7 @@
 // totalCount > items.length, the subtitle shows the total, the line wraps to at most 2 lines, no horizontal scroll, 390 stays touch.
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
+import { prepareOutDir, cropElement, fullPage, checkCropHolds, writeChecks } from '../shots/lib/capture.mjs'
 
 let chromium
 try {
@@ -15,6 +16,7 @@ const BASE_URL = process.env.BASE_URL
 const OUT_DIR = process.env.OUT_DIR
 if (!BASE_URL || !OUT_DIR) throw new Error('BASE_URL and OUT_DIR must be set (run this through odip-test.sh shots)')
 mkdirSync(OUT_DIR, { recursive: true })
+prepareOutDir(OUT_DIR)
 
 const ROLE = 'Admin'
 const username = `dev.${ROLE.toLowerCase()}`
@@ -32,8 +34,8 @@ const VIEWPORTS = [
 ]
 
 const browser = await chromium.launch({ headless: true })
-const results = []
-const check = (vp, name, ok, detail = '') => { results.push(ok); console.log(`[tasks-cap] ${ok ? 'PASS' : 'FAIL'} ${vp} ${name}${detail ? ` (${detail})` : ''}`) }
+const checks = []
+const check = (vp, name, ok, detail = '') => { checks.push({ name: `${vp} ${name}`, pass: !!ok, detail }); console.log(`[tasks-cap] ${ok ? 'PASS' : 'FAIL'} ${vp} ${name}${detail ? ` (${detail})` : ''}`) }
 
 try {
   for (const vp of VIEWPORTS) {
@@ -69,8 +71,10 @@ try {
     check(vp.name, 'normal: wraps to at most 2 lines', normal.lines <= 2, `lines=${normal.lines}`)
     check(vp.name, 'subtitle shows the total', (await page.getByText('1234 tasks', { exact: true }).count()) === 1)
     check(vp.name, 'normal: no horizontal scroll', await noHScroll())
-    await line.first().screenshot({ path: path.join(OUT_DIR, `${vp.name}-capped-line.png`) })
-    await page.screenshot({ path: path.join(OUT_DIR, `${vp.name}-tasks-page.png`) })
+    const opts = { touch: vp.touch }
+    checks.push(checkCropHolds(await cropElement(page, line.first(), path.join(OUT_DIR, `${vp.name}-capped-line.png`), opts)))
+    checks.push(checkCropHolds(await cropElement(page, page.getByText('1234 tasks', { exact: true }), path.join(OUT_DIR, `${vp.name}-subtitle.png`), opts)))
+    checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', `${vp.name}-tasks-page.png`), opts)).checks)
 
     // Archived view: archived wording, no hint.
     await page.getByRole('radio', { name: 'Archived' }).click()
@@ -80,7 +84,7 @@ try {
     check(vp.name, 'archived: line names archived tasks and no action', archivedText === 'Showing the first 3 of 1234 archived tasks, soonest due first.', archivedText)
     check(vp.name, 'archived: wraps to at most 2 lines', (await archivedLine.first().evaluate((el) => Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight)))) <= 2)
     check(vp.name, 'archived: no horizontal scroll', await noHScroll())
-    await archivedLine.first().screenshot({ path: path.join(OUT_DIR, `${vp.name}-capped-line-archived.png`) })
+    checks.push(checkCropHolds(await cropElement(page, archivedLine.first(), path.join(OUT_DIR, `${vp.name}-capped-line-archived.png`), opts)))
 
     // Not capped: total equals the rows, so the line is gone.
     total = 3
@@ -93,6 +97,4 @@ try {
 } finally {
   await browser.close()
 }
-const failed = results.filter((ok) => !ok).length
-console.log(`[tasks-cap] ${results.length - failed}/${results.length} checks passed`)
-if (failed) process.exit(1)
+if (!writeChecks(OUT_DIR, checks)) process.exitCode = 1
