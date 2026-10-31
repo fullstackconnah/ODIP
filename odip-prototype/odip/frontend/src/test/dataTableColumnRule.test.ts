@@ -37,4 +37,10 @@ describe('the DataTable column rule (L3-04)', () => {
     }
     expect(offenders).toEqual([])
   })
+
+  // PR1: `hideWhenEmpty` is how a column is allowed to go, and only because every row is empty. It reads the data, never a width.
+  it('drops a column only for hideWhenEmpty, which is decided by the data and never by a breakpoint', () => {
+    const source = readFileSync(join(SRC, 'components/DataTable.tsx'), 'utf-8')
+    expect(source).toMatch(/c\.hideWhenEmpty && [^\n]*data\.every\(/)
+  })
 })

@@ -4,6 +4,9 @@ import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
 const SETTLE_MS = 5000
+
+// Australian dates and times in every shot: spread it into `browser.newContext({ ...AU_CONTEXT, viewport })`.
+export const AU_CONTEXT = { locale: 'en-AU', timezoneId: 'Australia/Sydney' }
 const cdpSessions = new WeakMap()
 
 // Drop earlier PNGs (including the runner's shrink copies) and full/, then recreate full/.

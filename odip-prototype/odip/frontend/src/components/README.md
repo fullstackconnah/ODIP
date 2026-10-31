@@ -87,6 +87,9 @@ Column shape (`Column<T>`):
   align?: 'left' | 'center' | 'right'
   hidden?: boolean                  // the caller's own switch (a column a role cannot see); not a breakpoint
   pin?: 'start' | 'end' | false     // see "The column rule"
+  hideWhenEmpty?: boolean           // drop the column (header and cells) when EVERY row is empty (null, '', '—', []); never by width. Kept with no rows
+  overlay?: boolean                 // the column holds only a `RowActions overlay` cluster: 0px on a mouse at md+ (header and cell), a normal cell on touch
+  mobile?: 'primary' | 'meta' | 'status' | 'trail' | 'hidden'  // phone card; `trail` ends the meta line, pushed to its right edge (a tick, a ⋯ menu)
   minWidth?: number | string        // narrowest the column is laid out at (md+)
   maxWidth?: number | string        // cap for a plain-string cell (ellipsis, full text in `title`); default 24rem
   wrap?: boolean                    // let the cell wrap (prose); default: rows are exactly --row-h
@@ -102,6 +105,13 @@ sideways inside its own box, and two columns stay put while it does: the first l
 column are skipped) pins to the start edge, and the column keyed `actions` pins to the end edge. `pin` picks an edge for any column or opts out with `false`.
 A pinned cell is filled opaque, with a hairline, only while content is scrolled under it, so a tinted row keeps its tint at rest. Below md the table is cards and
 nothing is pinned. `src/test/dataTableColumnRule.test.ts` fails a page that passes `priority`.
+
+**The edge cue.** A table that scrolls says so: a 24px fade (card colour to transparent, no motion) sits on the edge that has more behind it, just inside the pinned
+column on that side (measured, `th[data-pin]`), and swaps to the start edge once scrolled to the end. It is `aria-hidden`, `pointer-events-none` and md+ only.
+**Row actions.** `RowMenu` takes one list of `{ label, icon, to | onSelect }` and shows it as hover-revealed icon buttons on md+ (inside `RowActions overlay`, so the
+`overlay` column costs no width on a mouse) and as one ⋯ menu (44px trigger) below md, so desktop and phone offer the same set. `CellText lines={2}` clamps
+instead of truncating (a title). `ROW_LINK` is the identity link (ink, green and underlined on hover and focus); `CROSS_LINK` is a link to another record inside
+a cell (ink with a quiet underline). Header text never wraps above its sort icon.
 
 **States**
 

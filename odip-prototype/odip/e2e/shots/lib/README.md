@@ -2,6 +2,7 @@
 
 Shared by shot scripts so captures are evidence-grade by default. Plain ESM, Playwright only.
 
+- `AU_CONTEXT` (`{ locale: 'en-AU', timezoneId: 'Australia/Sydney' }`): spread it into `browser.newContext({ ...AU_CONTEXT, viewport })` so dates read the Australian way.
 - `prepareOutDir(outDir)`: deletes earlier PNGs and `full/`, recreates `full/`. One file per name.
 - `settle(page, locator?)`: waits for fonts, finished animations and a bounding box (the locator, else `<main>`) unchanged across two frame pairs, then parks the mouse bottom-right. Throws after 5 s.
 - `cropElement(page, locator, file, { pad = 16, touch = coarse now })`: settles (again after any resize), grows the viewport height to hold the element; the right pad may shrink at the viewport edge; the viewport width never changes and an element wider than it fails `checkCropHolds` (`detail.overflowX`), re-pins touch emulation, shoots element plus pad, restores. Returns `{ file, clip, box, viewport, pad, coarse, touch, elementHeight } (clip is the real post-settle clip)`.

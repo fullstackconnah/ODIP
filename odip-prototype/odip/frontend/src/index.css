@@ -261,8 +261,16 @@
   .mobile-card-table tbody tr:has(> td[data-card]) > td:not([data-card='primary'], [data-card='status']) {
     margin-top: 0.5rem;
   }
-  .mobile-card-table tbody tr:has(> td[data-card]) > td[data-card='meta'] {
+  .mobile-card-table tbody tr:has(> td[data-card]) > td:is([data-card='meta'], [data-card='trail']) {
     margin-top: 0.25rem;
+  }
+  /* A long title takes two lines: the status pill stays level with the first. */
+  .mobile-card-table tbody td[data-card='status'] {
+    align-self: flex-start;
+  }
+  /* DataTable mobile: 'trail' ends the meta line. The last trail cell takes the free space on its left, so the tick and the menu sit at the right edge. */
+  .mobile-card-table tbody td[data-card='trail']:not(:has(~ td[data-card='trail'])) {
+    margin-left: auto;
   }
   .mobile-card-table .divide-y > * + * {
     border-top: none;
@@ -296,7 +304,7 @@
   .mobile-card-table tbody tr {
     gap: 0.75rem;
   }
-  .mobile-card-table tbody tr:has(> td[data-card]) > td:not([data-card='primary'], [data-card='status'], [data-card='meta']) {
+  .mobile-card-table tbody tr:has(> td[data-card]) > td:not([data-card='primary'], [data-card='status'], [data-card='meta'], [data-card='trail']) {
     margin-top: 0.75rem;
   }
 }
