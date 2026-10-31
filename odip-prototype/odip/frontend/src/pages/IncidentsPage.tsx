@@ -386,9 +386,9 @@ export default function IncidentsPage() {
       {!showArchived && overdueQsc.length > 0 && (
         <div
           role="alert"
-          className="flex min-h-10 items-center gap-3 px-3 py-1.5 rounded-[var(--radius-md)] bg-error-container border border-destructive/40 text-on-error-container"
+          className="flex items-start gap-3 px-3 py-2.5 rounded-[var(--radius-md)] bg-error-container border border-destructive/40 text-on-error-container"
         >
-          <AlertTriangle className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+          <AlertTriangle className="mt-0.5 w-4 h-4 flex-shrink-0" aria-hidden="true" />
           <div className="min-w-0 flex-1 flex flex-col items-start gap-1 md:flex-row md:items-center md:gap-3">
           <p className="min-w-0 text-sm md:flex-1">
             <span className="font-semibold">{qscHeadline}</span>
