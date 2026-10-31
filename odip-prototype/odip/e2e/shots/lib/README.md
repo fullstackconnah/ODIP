@@ -4,9 +4,9 @@ Shared by shot scripts so captures are evidence-grade by default. Plain ESM, Pla
 
 - `prepareOutDir(outDir)`: deletes earlier PNGs and `full/`, recreates `full/`. One file per name.
 - `settle(page, locator?)`: waits for fonts, finished animations and a bounding box (the locator, else `<main>`) unchanged across two frame pairs, then parks the mouse bottom-right. Throws after 5 s.
-- `cropElement(page, locator, file, { pad = 16, touch })`: settles (again after any resize), grows the viewport if the element ends below it, re-pins touch emulation, shoots element plus pad, restores. Returns `{ file, cropHeight, elementHeight, pad, coarse, touch }`.
+- `cropElement(page, locator, file, { pad = 16, touch = coarse now })`: settles (again after any resize), grows the viewport (height, and width if the element overflows it) to hold the element; the right pad may shrink at the viewport edge, re-pins touch emulation, shoots element plus pad, restores. Returns `{ file, clip, box, viewport, pad, coarse, touch, elementHeight } (clip is the real post-settle clip)`.
 - `fullPage(page, file, { touch })`: grows the viewport to the page height, settles again, then shoots; returns `{ file, coarse, checks }` (no horizontal scroll: scrollLeft 0 and scrollWidth <= clientWidth; coarse at touch). Push `checks` to your list. Put `file` under `<outDir>/full/`.
-- `checkCropHolds(result)`: `{ name, pass, detail }`; passes when `cropHeight >= elementHeight + 2*pad - 1` (and coarse for a touch crop).
+- `checkCropHolds(result)`: `{ name, pass, detail }`; passes when the clip holds the element box plus pad on all four sides (1px rounding), lies inside the viewport, and is coarse for a touch crop.
 - `writeChecks(outDir, checks)`: writes `checks.json`, prints `TOTAL n/m pass`, returns true when all pass.
 
 ```js
@@ -23,3 +23,5 @@ if (!writeChecks(OUT_DIR, checks)) process.exitCode = 1
 ```
 
 Faults it prevents: frames taken before layout settled; crops that cut the element (worst at 390 touch, where a fullPage clip drops touch emulation); duplicate or stale files under one name.
+
+fullPage measures document scrolling only; an inner scroll container is not measured.

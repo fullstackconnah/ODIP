@@ -13,6 +13,11 @@ if (!BASE_URL || !OUT_DIR) throw new Error('BASE_URL and OUT_DIR must be set (ru
 prepareOutDir(OUT_DIR)
 
 const checks = []
+// checkCropHolds must judge the clip itself: a hand-made cut crop must fail, a whole one must pass.
+const whole = { file: 'x.png', clip: { x: 0, y: 0, width: 110, height: 140 }, box: { x: 10, y: 20, width: 80, height: 100 }, viewport: { width: 200, height: 200 }, pad: 16, coarse: true, touch: true }
+checks.push({ name: 'checkCropHolds passes a whole crop', pass: checkCropHolds(whole).pass, detail: {} })
+checks.push({ name: 'checkCropHolds fails a crop 20px short', pass: !checkCropHolds({ ...whole, clip: { ...whole.clip, height: 120 } }).pass, detail: {} })
+checks.push({ name: 'checkCropHolds fails a clip beyond the viewport', pass: !checkCropHolds({ ...whole, viewport: { width: 200, height: 100 } }).pass, detail: {} })
 const browser = await chromium.launch({ headless: true })
 try {
   for (const vp of [{ name: '1280', width: 1280, height: 800 }, { name: '390', width: 390, height: 390, touch: true }]) {
@@ -21,10 +26,11 @@ try {
     // The login page needs no sign-in. A 900px element is injected so it is taller than the 390 viewport; it grows after a delay to exercise settle.
     await page.goto(`${BASE_URL}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
     await page.evaluate(() => {
+      document.body.innerHTML = '<main></main>' // drop the login page: its viewport-height layout would make fullPage chase its own tail
       const el = document.createElement('div')
       el.id = 'selftest-tall'
       el.style.cssText = 'height:10px;margin:40px 8px;background:linear-gradient(#cde,#fed);transition:height 300ms'
-      document.body.prepend(el)
+      document.querySelector('main').append(el)
       setTimeout(() => { el.style.height = '900px' }, 100)
     })
     const r = await cropElement(page, page.locator('#selftest-tall'), path.join(OUT_DIR, `tall-${vp.name}.png`), { touch: !!vp.touch })

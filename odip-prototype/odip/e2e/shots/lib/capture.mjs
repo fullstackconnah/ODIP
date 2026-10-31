@@ -29,30 +29,30 @@ export async function settle(page, locator) {
   await page.evaluate(() => document.fonts.ready.then(() => undefined))
   await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'), null, { timeout: SETTLE_MS })
     .catch(() => { throw new Error(`settle: animations still running after ${SETTLE_MS}ms`) })
+  const vp = page.viewportSize()
+  await page.mouse.move(vp.width - 4, vp.height - 4) // park first so a hover-driven change lands before the stability check
   let prev = null
   while (Date.now() < deadline) {
     await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
     const b = await box()
     const cur = b ? [b.x, b.y, b.width, b.height].map((v) => Math.round(v * 10)).join(',') : 'none'
-    if (cur === prev) {
-      const vp = page.viewportSize()
-      await page.mouse.move(vp.width - 4, vp.height - 4)
-      return
-    }
+    if (cur === prev) return
     prev = cur
   }
   throw new Error(`settle: layout still moving after ${SETTLE_MS}ms`)
 }
 
-// Run fn with the viewport grown to `height`, then restore it (and the touch emulation).
-async function withHeight(page, height, touch, fn) {
+// Run fn with the viewport grown to `width` x `height`, then restore it (and the touch emulation).
+async function withViewport(page, width, height, touch, fn) {
   const vp = page.viewportSize()
-  const grow = height > vp.height
-  if (grow) {
-    await page.setViewportSize({ width: vp.width, height })
-    if (touch) await pinCoarse(page)
-  }
-  try { return await fn() } finally {
+  const grow = width > vp.width || height > vp.height
+  try {
+    if (grow) {
+      await page.setViewportSize({ width: Math.max(width, vp.width), height: Math.max(height, vp.height) })
+      if (touch) await pinCoarse(page)
+    }
+    return await fn()
+  } finally {
     if (grow) {
       await page.setViewportSize(vp)
       if (touch) await pinCoarse(page)
@@ -62,37 +62,44 @@ async function withHeight(page, height, touch, fn) {
 
 const isCoarse = (page) => page.evaluate(() => matchMedia('(pointer: coarse)').matches)
 
-// Shoot the whole element plus `pad`. Returns { file, cropHeight, elementHeight, pad, coarse, touch }.
-export async function cropElement(page, locator, file, { pad = 16, touch = false } = {}) {
+// Shoot the whole element plus `pad` (a pad shrinks only at the page edge, or the right edge for a fluid-width element).
+// The viewport grows to hold the element: its bottom plus pad, and its width when the element overflows it.
+// Returns { file, clip, box, viewport, pad, coarse, touch, elementHeight }: clip is the real post-settle clip, box the element box.
+export async function cropElement(page, locator, file, { pad = 16, touch } = {}) {
+  touch ??= await isCoarse(page)
   await settle(page, locator)
   await page.evaluate(() => scrollTo(0, 0))
   const first = await locator.boundingBox()
   if (!first) throw new Error(`cropElement: no bounding box for ${file}`)
-  return withHeight(page, Math.ceil(first.y + first.height + pad), touch, async () => {
+  return withViewport(page, Math.ceil(first.x + first.width), Math.ceil(first.y + first.height + pad), touch, async () => {
     await settle(page, locator)
-    const bb = await locator.boundingBox()
-    const x = Math.max(0, bb.x - pad)
-    const y = Math.max(0, bb.y - pad)
-    const clip = { x, y, width: Math.min(page.viewportSize().width - x, bb.width + 2 * pad), height: bb.height + 2 * pad }
+    const box = await locator.boundingBox()
+    const x = Math.max(0, box.x - pad)
+    const y = Math.max(0, box.y - pad)
+    const clip = { x, y, width: Math.min(box.x + box.width + pad, page.viewportSize().width) - x, height: box.y + box.height + pad - y }
     const coarse = await isCoarse(page)
+    const viewport = page.viewportSize()
     await page.screenshot({ path: file, clip })
-    return { file, cropHeight: clip.height, elementHeight: bb.height, pad, coarse, touch }
+    return { file, clip, box, viewport, pad, coarse, touch, elementHeight: box.height }
   })
 }
 
 // Whole page: the viewport is grown to the page height (a fullPage clip drops touch emulation and resizes without settling),
 // settled again, and checked for horizontal overflow before the shot. Put the file under <outDir>/full/.
 // Returns { file, coarse, checks }: checks are records for writeChecks.
-export async function fullPage(page, file, { touch = false } = {}) {
+export async function fullPage(page, file, { touch } = {}) {
+  touch ??= await isCoarse(page)
   await settle(page)
   const h = await page.evaluate(() => document.scrollingElement.scrollHeight)
-  return withHeight(page, Math.min(h, 4000), touch, async () => {
+  return withViewport(page, 0, Math.min(h, 4000), touch, async () => {
     await settle(page)
-    const m = await page.evaluate(() => ({ scrollLeft: document.scrollingElement.scrollLeft, scrollWidth: document.scrollingElement.scrollWidth, clientWidth: document.scrollingElement.clientWidth }))
+    const m = await page.evaluate(() => ({ scrollLeft: document.scrollingElement.scrollLeft, scrollWidth: document.scrollingElement.scrollWidth, clientWidth: document.scrollingElement.clientWidth, scrollHeight: document.scrollingElement.scrollHeight }))
     const coarse = await isCoarse(page)
+    const vh = page.viewportSize().height
     const name = path.basename(file)
     const checks = [
       { name: `no horizontal scroll: ${name}`, pass: m.scrollLeft === 0 && m.scrollWidth <= m.clientWidth, detail: m },
+      { name: `full page not truncated: ${name}`, pass: m.scrollHeight <= vh, detail: { scrollHeight: m.scrollHeight, viewportHeight: vh } },
     ]
     if (touch) checks.push({ name: `full page keeps touch emulation: ${name}`, pass: coarse, detail: { coarse } })
     await page.screenshot({ path: file })
@@ -100,11 +107,14 @@ export async function fullPage(page, file, { touch = false } = {}) {
   })
 }
 
-// Passes only when the crop holds the whole element plus both pads (and the pointer stayed coarse for a touch crop).
-export function checkCropHolds(result) {
-  const need = result.elementHeight + 2 * result.pad - 1
-  const pass = result.cropHeight >= need && (!result.touch || result.coarse)
-  return { name: `crop holds the whole element: ${path.basename(result.file)}`, pass, detail: { cropHeight: result.cropHeight, elementHeight: result.elementHeight, need, coarse: result.coarse } }
+// Passes only when the real clip holds the element plus pad on all four sides (1px rounding; a pad may shrink at the top/left
+// page edge or the right viewport edge), lies inside the viewport, and the pointer stayed coarse for a touch crop.
+export function checkCropHolds({ file, clip, box, viewport, pad, coarse, touch }) {
+  const t = 1
+  const holds = clip.x <= Math.max(0, box.x - pad) + t && clip.y <= Math.max(0, box.y - pad) + t
+    && clip.x + clip.width >= Math.min(box.x + box.width + pad, viewport.width) - t && clip.y + clip.height >= box.y + box.height + pad - t
+  const inside = clip.x >= 0 && clip.y >= 0 && clip.x + clip.width <= viewport.width + t && clip.y + clip.height <= viewport.height + t
+  return { name: `crop holds the whole element: ${path.basename(file)}`, pass: holds && inside && (!touch || coarse), detail: { clip, box, viewport, pad, holds, inside, coarse } }
 }
 
 export function writeChecks(outDir, checks) {
