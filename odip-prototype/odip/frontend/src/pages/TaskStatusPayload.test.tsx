@@ -6,6 +6,7 @@ import { MemoryRouter } from 'react-router-dom'
 import TasksPage from './TasksPage'
 import TasksTab from './trip-detail/TasksTab'
 import type { TaskDto } from '@/api/types'
+import { pagedTasks } from '@/test/fixtures/pagedTasks'
 
 // Only the API client is mocked: the real hooks and a real QueryClient send the request.
 const { mockGet, mockPost, mockPut } = vi.hoisted(() => ({ mockGet: vi.fn(), mockPost: vi.fn(), mockPut: vi.fn() }))
@@ -25,7 +26,7 @@ function renderWithClient(ui: React.ReactNode) {
 }
 
 beforeEach(() => {
-  mockGet.mockReset().mockResolvedValue([task])
+  mockGet.mockReset().mockResolvedValue(pagedTasks([task]))
   mockPost.mockReset().mockResolvedValue(task)
   mockPut.mockReset()
 })
@@ -52,7 +53,7 @@ describe('a status change sends the status only, never the whole task', () => {
 
   it('Tasks page Restore on an archived task posts NotStarted alone, not the whole row', async () => {
     const user = userEvent.setup()
-    mockGet.mockResolvedValue([{ ...task, status: 'Cancelled' }])
+    mockGet.mockResolvedValue(pagedTasks([{ ...task, status: 'Cancelled' }]))
     renderWithClient(<TasksPage />)
     await user.click(await screen.findByRole('radio', { name: 'Archived' }))
     await user.click((await screen.findAllByRole('button', { name: 'Restore' }))[0])
