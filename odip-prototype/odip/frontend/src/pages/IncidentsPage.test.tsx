@@ -436,10 +436,10 @@ describe('IncidentsPage — narrow-desktop columns', () => {
     }
   })
 
-  it('puts the NDIS Commission column straight after Status', () => {
+  it('puts the NDIS Commission column straight after Title', () => {
     mockUseIncidents.mockReturnValue({ data: [baseIncident()], isLoading: false })
     renderPage()
-    expect(headerIndex('NDIS Commission')).toBe(headerIndex('Status') + 1)
+    expect(headerIndex('NDIS Commission')).toBe(headerIndex('Title') + 1)
   })
 
   it('cuts a long title with an ellipsis at a responsive cap and keeps the full title in the tooltip', () => {

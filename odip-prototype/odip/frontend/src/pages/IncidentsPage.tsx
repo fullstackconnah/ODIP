@@ -239,7 +239,7 @@ export default function IncidentsPage() {
 
   // Every row is exactly --row-h from 1280 up: cells never wrap (DataTable). From md up the box scrolls
   // sideways with the title and the actions pinned, so no column is dropped. NDIS Commission follows
-  // Status, ahead of Date and Reported By, so it is the first column to scroll into view.
+  // Title, ahead of Type and Trip, so it is on screen at 1280 without scrolling.
   const incidentColumns: Column<any>[] = [
     {
       key: 'title',
@@ -248,6 +248,22 @@ export default function IncidentsPage() {
       className: 'font-medium',
       // The way into the incident for every role that sees the list; the cap sits on the link itself so its focus ring is not clipped.
       render: (i) => <Link to={`/incidents/${i.id}`} title={i.title ?? undefined} className={`block md:truncate md:max-w-[15rem] 2xl:max-w-[18rem] text-[var(--color-primary)] hover:underline ${TAP_TRUNCATED_LINK}`}>{i.title ?? '—'}</Link>,
+    },
+    {
+      key: 'qscReportingStatus',
+      header: 'NDIS Commission',
+      render: (i) => i.qscReportingStatus === 'NotRequired' ? (
+        <span className="text-[var(--color-muted-foreground)]">{'\u2014'}</span>
+      ) : i.isOverdue24h ? (
+        // Overdue is the one QSC state that must never be missed, so it always takes the solid
+        // error pair (--color-on-error-container on --color-error-container = 7.24:1) whatever the
+        // underlying status maps to (Pending/Late are amber, 6.37:1). It no longer pulses:
+        // animate-pulse halves the pill's opacity at its trough, which takes every token pair
+        // down to 2.3-2.7:1 — below the 4.5:1 floor for text.
+        <StatusBadge status="overdue" label="OVERDUE" className="font-semibold" />
+      ) : (
+        <StatusBadge status={i.qscReportingStatus} label={formatQscLabel(i.qscReportingStatus)} />
+      ),
     },
     { key: 'incidentType', header: 'Type', maxWidth: '9rem', mobile: 'meta', render: (i) => INCIDENT_TYPE_LABELS[i.incidentType as IncidentType] ?? i.incidentType },
     {
@@ -280,22 +296,6 @@ export default function IncidentsPage() {
     },
     { key: 'severity', header: 'Severity', mobile: 'meta', render: (i) => <StatusBadge status={i.severity} /> },
     { key: 'status', header: 'Status', mobile: 'status', render: (i) => <StatusBadge status={i.status} label={INCIDENT_STATUS_LABELS[i.status as IncidentStatus] ?? i.status} /> },
-    {
-      key: 'qscReportingStatus',
-      header: 'NDIS Commission',
-      render: (i) => i.qscReportingStatus === 'NotRequired' ? (
-        <span className="text-[var(--color-muted-foreground)]">{'\u2014'}</span>
-      ) : i.isOverdue24h ? (
-        // Overdue is the one QSC state that must never be missed, so it always takes the solid
-        // error pair (--color-on-error-container on --color-error-container = 7.24:1) whatever the
-        // underlying status maps to (Pending/Late are amber, 6.37:1). It no longer pulses:
-        // animate-pulse halves the pill's opacity at its trough, which takes every token pair
-        // down to 2.3-2.7:1 — below the 4.5:1 floor for text.
-        <StatusBadge status="overdue" label="OVERDUE" className="font-semibold" />
-      ) : (
-        <StatusBadge status={i.qscReportingStatus} label={formatQscLabel(i.qscReportingStatus)} />
-      ),
-    },
     { key: 'reportedByName', header: 'Reported By', maxWidth: '9rem' },
     { key: 'incidentDateTime', header: 'Date', type: 'date', mobile: 'meta' },
     { key: 'actions', header: '', render: (i) => canWrite ? <RowActions>{actionButtons(i)}</RowActions> : null },
