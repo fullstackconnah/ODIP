@@ -107,8 +107,8 @@ public class TasksControllerTests
         var result = await controller.GetAll(tripId: null, status: null, dueThisWeek: null, ownerId: null, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var body = Assert.IsType<ApiResponse<List<TaskDto>>>(ok.Value);
-        var task = Assert.Single(body.Data!);
+        var body = Assert.IsType<ApiResponse<PagedResult<TaskDto>>>(ok.Value);
+        var task = Assert.Single(body.Data!.Items);
         Assert.Null(task.TripInstanceId);
         Assert.Null(task.TripName);
         Assert.Equal("med-witness:x", task.SourceKey);
@@ -127,10 +127,10 @@ public class TasksControllerTests
 
         var result = await controller.GetAll(tripId: null, status: null, dueThisWeek: null, ownerId: null, CancellationToken.None);
 
-        var body = Assert.IsType<ApiResponse<List<TaskDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
-        Assert.Equal(2, body.Data!.Count);
-        Assert.Contains(body.Data, t => t.Title == "Trip task" && t.TripName == trip.TripName);
-        Assert.Contains(body.Data, t => t.Title == "Generic task" && t.TripName == null);
+        var body = Assert.IsType<ApiResponse<PagedResult<TaskDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(2, body.Data!.Items.Count);
+        Assert.Contains(body.Data!.Items, t => t.Title == "Trip task" && t.TripName == trip.TripName);
+        Assert.Contains(body.Data!.Items, t => t.Title == "Generic task" && t.TripName == null);
     }
 
     private sealed class FixedClock(DateTimeOffset utcNow) : TimeProvider { public override DateTimeOffset GetUtcNow() => utcNow; }
@@ -148,8 +148,8 @@ public class TasksControllerTests
 
         var result = await controller.GetAll(tripId: null, status: null, dueThisWeek: null, ownerId: null, CancellationToken.None, dueToday: true);
 
-        var body = Assert.IsType<ApiResponse<List<TaskDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
-        Assert.Equal(new[] { "Due 15" }, body.Data!.Select(t => t.Title));
+        var body = Assert.IsType<ApiResponse<PagedResult<TaskDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(new[] { "Due 15" }, body.Data!.Items.Select(t => t.Title));
     }
 
     /// <summary>Mandatory cross-tenant coverage: a generic task (no TripInstance to inherit scoping from) created under tenant A must not be listed for a tenant B caller.</summary>
@@ -183,7 +183,69 @@ public class TasksControllerTests
 
         var result = await controllerB.GetAll(tripId: null, status: null, dueThisWeek: null, ownerId: null, CancellationToken.None);
 
-        var body = Assert.IsType<ApiResponse<List<TaskDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
-        Assert.Empty(body.Data!);
+        var body = Assert.IsType<ApiResponse<PagedResult<TaskDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Empty(body.Data!.Items);
+    }
+
+    private static BookingTask DueOn(int dayOffset) => new()
+    {
+        Id = Guid.NewGuid(), TaskType = TaskType.RiskReview, Title = $"Due +{dayOffset}", Status = TaskItemStatus.NotStarted,
+        DueDate = new DateOnly(2027, 1, 1).AddDays(dayOffset),
+    };
+
+    /// <summary>The list is bounded: the soonest-due ListCap rows come back with the true total, so the page can say how many it left out.</summary>
+    [Fact]
+    public async System.Threading.Tasks.Task GetAll_MoreThanTheCap_ReturnsTheCapAndTheTrueTotal()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        db.BookingTasks.AddRange(Enumerable.Range(0, TasksController.ListCap + 5).Select(DueOn));
+        await db.SaveChangesAsync();
+
+        var result = await new TasksController(db).GetAll(tripId: null, status: null, dueThisWeek: null, ownerId: null, CancellationToken.None);
+
+        var page = Assert.IsType<ApiResponse<PagedResult<TaskDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
+        Assert.Equal(TasksController.ListCap, page.Items.Count);
+        Assert.Equal(TasksController.ListCap + 5, page.TotalCount);
+        Assert.Equal(new DateOnly(2027, 1, 1).AddDays(TasksController.ListCap - 1), page.Items[^1].DueDate);
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task GetAll_UnderTheCap_TotalEqualsRows()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        db.BookingTasks.AddRange(Enumerable.Range(0, 3).Select(DueOn));
+        await db.SaveChangesAsync();
+
+        var result = await new TasksController(db).GetAll(tripId: null, status: null, dueThisWeek: null, ownerId: null, CancellationToken.None);
+
+        var page = Assert.IsType<ApiResponse<PagedResult<TaskDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
+        Assert.Equal((3, 3), (page.Items.Count, page.TotalCount));
+    }
+
+    /// <summary>The total is the caller's tenant only: tenant A's many tasks never inflate tenant B's count.</summary>
+    [Fact]
+    public async System.Threading.Tasks.Task GetAll_TotalIsTheCallersTenantOnly()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        OdipDbContext Db(Guid tenantId)
+        {
+            var tenant = new Mock<ICurrentTenant>();
+            tenant.Setup(t => t.TenantId).Returns(tenantId);
+            tenant.Setup(t => t.IsSuperAdmin).Returns(false);
+            return new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(dbName).Options, tenant.Object);
+        }
+        using (var dbA = Db(Guid.NewGuid()))
+        {
+            dbA.BookingTasks.AddRange(Enumerable.Range(0, TasksController.ListCap + 5).Select(DueOn));
+            await dbA.SaveChangesAsync();
+        }
+        using var dbB = Db(Guid.NewGuid());
+        dbB.BookingTasks.AddRange(Enumerable.Range(0, 3).Select(DueOn));
+        await dbB.SaveChangesAsync();
+
+        var result = await new TasksController(dbB).GetAll(tripId: null, status: null, dueThisWeek: null, ownerId: null, CancellationToken.None);
+
+        var page = Assert.IsType<ApiResponse<PagedResult<TaskDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
+        Assert.Equal((3, 3), (page.Items.Count, page.TotalCount));
     }
 }
