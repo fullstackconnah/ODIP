@@ -275,8 +275,8 @@ function AddRestrictivePracticeDialogBody({ participantId, onClose, onSaved, def
   // Type is picked once per batch, so a "Linked medication" column only makes sense — and only appears — when the whole batch's type is
   // ChemicalRestraint. Adding a single entry from an incident asks nothing about its authorisation, and has no rows to remove.
   const bulkColumns: Column<BulkRowState>[] = [
-    // The full row on a phone card, and 14rem from md up: otherwise the cell shrinks to the input and a prefilled description can't be read.
-    textColumn('description', 'Description', 'What the restrictive practice involves...', 'max-md:basis-full md:min-w-[14rem]'),
+    // The full row on a phone card, and 16rem from md up: otherwise the cell shrinks to the input and a prefilled description can't be read.
+    textColumn('description', 'Description', 'What the restrictive practice involves...', 'max-md:basis-full md:min-w-[16rem]'),
     ...(single || !authorised ? [] : [textColumn('authorisedBy', 'Authorised by', 'e.g. Dr. Chen'), dateColumn('authorisationDate', 'Authorisation date'), dateColumn('authorisationEndDate', 'Authorisation end date')]),
     dateColumn('reviewDate', 'Review date'),
     ...(bulkType === 'ChemicalRestraint' ? [medicationColumn] : []),

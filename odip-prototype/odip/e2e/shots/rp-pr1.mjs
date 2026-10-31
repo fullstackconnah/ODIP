@@ -212,7 +212,9 @@ try {
       const heads = (await rows.locator('thead th').allInnerTexts()).map((t) => t.trim()).filter(Boolean)
       check('1280 7 bulk header order', heads, JSON.stringify(heads.slice(0, 5)) === JSON.stringify(['Description', 'Authorised by', 'Authorisation date', 'Authorisation end date', 'Review date']))
       const sc = await rows.locator('table').first().evaluate((t) => { let e = t.parentElement; while (e && e.scrollWidth <= e.clientWidth + 1 && e.tagName !== 'BODY') e = e.parentElement; return { sw: t.parentElement.scrollWidth, cw: t.parentElement.clientWidth } })
-      check('1280 7 bulk table fits its container', sc, sc.sw <= sc.cw + 1)
+      // The table's own overflow-x-auto wrapper may scroll (SHAPE check 7); the dialog around it must not.
+      const dlg = await rows.evaluate((e) => ({ sw: e.scrollWidth, cw: e.clientWidth }))
+      check('1280 7 bulk dialog has no horizontal overflow (table wrapper may scroll)', { dlg, sc }, dlg.sw <= dlg.cw + 1)
     }
     const descWidth = async (label) => {
       const w = (await rows.getByPlaceholder('What the restrictive practice involves...').first().boundingBox()).width
