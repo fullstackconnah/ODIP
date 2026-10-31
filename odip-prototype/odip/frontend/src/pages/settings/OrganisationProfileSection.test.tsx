@@ -128,7 +128,7 @@ describe('Organisation profile: time zone', () => {
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
   })
 
-  it('moves the zone with the state while it is still that state's default', async () => {
+    it("moves the zone with the state while it is still that state's default", async () => {
     api.get.mockResolvedValue({ ...row, state: 'VIC' })
     const user = userEvent.setup()
     show()
