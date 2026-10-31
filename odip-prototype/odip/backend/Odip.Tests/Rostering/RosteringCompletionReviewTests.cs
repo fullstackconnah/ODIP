@@ -1012,12 +1012,14 @@ public class RosteringCompletionReviewTests
 
         var claim = new TripClaim
         {
+            TenantId = participant.TenantId,
             Id = Guid.NewGuid(), Kind = ClaimKind.Shift, ParticipantId = participant.Id,
             PeriodFrom = shift.ServiceDate, PeriodTo = shift.ServiceDate, ClaimReference = "TC-CLAIMED-20260908",
         };
         db.TripClaims.Add(claim);
         db.ClaimLineItems.Add(new ClaimLineItem
         {
+            TenantId = claim.TenantId,
             Id = Guid.NewGuid(), TripClaimId = claim.Id, ShiftId = shift.Id, ParticipantBookingId = null,
             SupportItemCode = "04_SHIFT", DayType = ClaimDayType.Weekday,
             SupportsDeliveredFrom = shift.ServiceDate, SupportsDeliveredTo = shift.ServiceDate,

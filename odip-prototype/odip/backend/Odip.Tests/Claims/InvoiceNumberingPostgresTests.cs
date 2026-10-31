@@ -46,11 +46,12 @@ public class InvoiceNumberingPostgresTests : IClassFixture<PostgresFixture>
         {
             var manager = planManagerAddress is null ? null : new Contact { Id = Guid.NewGuid(), FirstName = "Pat", LastName = "Manager", Organisation = "Plan Co", Address = planManagerAddress };
             var person = new Participant { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "P" + i, LastName = "Test", IsActive = true, PlanType = manager is null ? PlanType.SelfManaged : PlanType.PlanManaged, PlanManagerContact = manager };
-            var claim = new TripClaim { Id = Guid.NewGuid(), Kind = ClaimKind.Shift, ParticipantId = person.Id, PeriodFrom = new DateOnly(2026, 10, 1), PeriodTo = new DateOnly(2026, 10, 14), Status = TripClaimStatus.Draft, ClaimReference = $"TC-{Guid.NewGuid():N}"[..20], TotalAmount = 100m };
+            var claim = new TripClaim { TenantId = person.TenantId, Id = Guid.NewGuid(), Kind = ClaimKind.Shift, ParticipantId = person.Id, PeriodFrom = new DateOnly(2026, 10, 1), PeriodTo = new DateOnly(2026, 10, 14), Status = TripClaimStatus.Draft, ClaimReference = $"TC-{Guid.NewGuid():N}"[..20], TotalAmount = 100m };
             // A line has exactly one parent (CK_ClaimLineItem_ExactlyOneParent): here, a shift.
             var shift = new Shift { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = person.Id, ServiceDate = new DateOnly(2026, 10, 2), StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(10, 0), Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, Status = ShiftStatus.Completed };
             db.AddRange(person, shift, claim, new ClaimLineItem
             {
+                TenantId = claim.TenantId,
                 Id = Guid.NewGuid(), TripClaimId = claim.Id, ShiftId = shift.Id, SupportItemCode = "04_104_0125_6_1", DayType = ClaimDayType.Weekday, SupportsDeliveredFrom = new DateOnly(2026, 10, 2), SupportsDeliveredTo = new DateOnly(2026, 10, 2),
                 Hours = 1m, UnitPrice = 100m, TotalAmount = 100m, GSTCode = GSTCode.P2,
             });

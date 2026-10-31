@@ -44,6 +44,7 @@ public class InvoiceServiceTests
 
         var claim = new TripClaim
         {
+            TenantId = participant.TenantId,
             Id = Guid.NewGuid(), Kind = ClaimKind.Shift, ParticipantId = participant.Id,
             PeriodFrom = shift.ServiceDate, PeriodTo = shift.ServiceDate, ClaimReference = "TC-43100002222-20260907",
         };
@@ -51,6 +52,7 @@ public class InvoiceServiceTests
 
         db.ClaimLineItems.Add(new ClaimLineItem
         {
+            TenantId = claim.TenantId,
             Id = Guid.NewGuid(), TripClaimId = claim.Id, ShiftId = shift.Id, ParticipantBookingId = null,
             SupportItemCode = "04_SHIFT", DayType = ClaimDayType.Weekday,
             SupportsDeliveredFrom = shift.ServiceDate, SupportsDeliveredTo = shift.ServiceDate,

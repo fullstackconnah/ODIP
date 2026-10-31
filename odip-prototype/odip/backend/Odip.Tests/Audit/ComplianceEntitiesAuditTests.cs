@@ -112,6 +112,7 @@ public class ComplianceEntitiesAuditTests
 
         var claim = new TripClaim
         {
+            TenantId = trip.TenantId,
             Id = Guid.NewGuid(), TripInstanceId = trip.Id, Status = TripClaimStatus.Draft,
             ClaimReference = "TC-0001",
         };
@@ -150,6 +151,7 @@ public class ComplianceEntitiesAuditTests
 
         var claim = new TripClaim
         {
+            TenantId = trip.TenantId,
             Id = Guid.NewGuid(), TripInstanceId = trip.Id, Status = TripClaimStatus.Draft,
             ClaimReference = "TC-0002",
         };
@@ -158,6 +160,7 @@ public class ComplianceEntitiesAuditTests
 
         var lineItem = new ClaimLineItem
         {
+            TenantId = claim.TenantId,
             Id = Guid.NewGuid(), TripClaimId = claim.Id, ParticipantBookingId = booking.Id,
             SupportItemCode = "01_011_0107_1_1", DayType = ClaimDayType.Weekday,
             SupportsDeliveredFrom = Today, SupportsDeliveredTo = Today,

@@ -149,6 +149,26 @@ public class ShiftClaimGenerationServiceTests
         Assert.Equal(640m, claim.TotalAmount);
     }
 
+    [Fact]
+    public async Task GenerateShiftClaim_ByAnUnscopedSuperAdmin_StampsTheParticipantsOrganisation_OnTheClaimAndEveryLine()
+    {
+        using var db = CreateDb();
+        SeedProviderSettings(db);
+        var participant = SeedParticipant(db);
+        SeedCatalogueItem(db, ClaimDayType.Weekday, false, vicPrice: 40m);
+        SeedShift(db, participant.Id, new DateOnly(2026, 9, 7));
+        SeedShift(db, participant.Id, new DateOnly(2026, 9, 8));
+        await db.SaveChangesAsync();
+
+        var claim = await new ShiftClaimGenerationService(db)
+            .GenerateDraftClaimAsync(participant.Id, new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 8));
+
+        Assert.Equal(participant.TenantId, claim.TenantId);
+        var lines = await db.ClaimLineItems.Where(l => l.TripClaimId == claim.Id).ToListAsync();
+        Assert.Equal(2, lines.Count);
+        Assert.All(lines, l => Assert.Equal(participant.TenantId, l.TenantId));
+    }
+
     // Most NDIS supports are GST-free, and the catalogue carries no GST flag, so every new line is P2 whether or not the provider is GST-registered.
     [Theory]
     [InlineData(true)]
@@ -303,6 +323,7 @@ public class ShiftClaimGenerationServiceTests
         // Simulate a prior claim against the first shift.
         var priorClaim = new TripClaim
         {
+            TenantId = participant.TenantId,
             Id = Guid.NewGuid(), Kind = ClaimKind.Shift, ParticipantId = participant.Id,
             PeriodFrom = new DateOnly(2026, 9, 7), PeriodTo = new DateOnly(2026, 9, 7),
             ClaimReference = "TC-PRIOR-20260101",
@@ -310,6 +331,7 @@ public class ShiftClaimGenerationServiceTests
         db.TripClaims.Add(priorClaim);
         db.ClaimLineItems.Add(new ClaimLineItem
         {
+            TenantId = priorClaim.TenantId,
             Id = Guid.NewGuid(), TripClaimId = priorClaim.Id, ShiftId = alreadyClaimed.Id,
             SupportItemCode = "04_X", SupportsDeliveredFrom = alreadyClaimed.ServiceDate,
             SupportsDeliveredTo = alreadyClaimed.ServiceDate, Hours = 8, UnitPrice = 40, TotalAmount = 320,
@@ -502,10 +524,11 @@ public class ShiftClaimGenerationServiceTests
         var participant = SeedParticipant(db);
         SeedCatalogueItem(db, ClaimDayType.Weekday, false, vicPrice: 10m);
         var shift = SeedShift(db, participant.Id, new DateOnly(2026, 9, 7));
-        var claim = new TripClaim { Id = Guid.NewGuid(), Kind = ClaimKind.Shift, ParticipantId = participant.Id, Status = claimStatus, ClaimReference = "TC-OLD", TotalAmount = 80m };
+        var claim = new TripClaim { TenantId = participant.TenantId, Id = Guid.NewGuid(), Kind = ClaimKind.Shift, ParticipantId = participant.Id, Status = claimStatus, ClaimReference = "TC-OLD", TotalAmount = 80m };
         db.TripClaims.Add(claim);
         db.ClaimLineItems.Add(new ClaimLineItem
         {
+            TenantId = claim.TenantId,
             Id = Guid.NewGuid(), TripClaimId = claim.Id, ShiftId = shift.Id, SupportItemCode = "04_Weekday_STD", DayType = ClaimDayType.Weekday,
             SupportsDeliveredFrom = shift.ServiceDate, SupportsDeliveredTo = shift.ServiceDate, Hours = 8m, UnitPrice = 10m, TotalAmount = 80m, Status = lineStatus,
         });

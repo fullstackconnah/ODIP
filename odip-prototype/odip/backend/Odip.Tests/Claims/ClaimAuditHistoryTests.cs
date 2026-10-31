@@ -28,8 +28,8 @@ public class ClaimAuditHistoryTests
         tenant.Setup(t => t.IsSuperAdmin).Returns(false);
         using var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, tenant.Object);
         var participant = new Participant { Id = Guid.NewGuid(), TenantId = foreign ? Guid.NewGuid() : TenantA, FirstName = "Ada", LastName = "Claim" };
-        var claim = new TripClaim { Id = Guid.NewGuid(), Kind = ClaimKind.Shift, ParticipantId = participant.Id, Status = TripClaimStatus.Submitted, ClaimReference = $"TC-{Guid.NewGuid():N}"[..20] };
-        var line = new ClaimLineItem { Id = Guid.NewGuid(), TripClaimId = claim.Id, ShiftId = Guid.NewGuid(), SupportItemCode = "04_104_0125_6_1", DayType = ClaimDayType.Weekday, Hours = 1m, UnitPrice = 1m, TotalAmount = 1m };
+        var claim = new TripClaim { TenantId = participant.TenantId, Id = Guid.NewGuid(), Kind = ClaimKind.Shift, ParticipantId = participant.Id, Status = TripClaimStatus.Submitted, ClaimReference = $"TC-{Guid.NewGuid():N}"[..20] };
+        var line = new ClaimLineItem { TenantId = claim.TenantId, Id = Guid.NewGuid(), TripClaimId = claim.Id, ShiftId = Guid.NewGuid(), SupportItemCode = "04_104_0125_6_1", DayType = ClaimDayType.Weekday, Hours = 1m, UnitPrice = 1m, TotalAmount = 1m };
         db.AddRange(participant, claim, line);
         db.SaveChanges();
 

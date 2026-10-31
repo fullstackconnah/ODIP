@@ -24,11 +24,11 @@ public class ClaimsTenantScopeTests
     private static readonly Guid TenantA = Guid.NewGuid();
     private static readonly Guid TenantB = Guid.NewGuid();
 
-    private static (OdipDbContext Db, ClaimsController Controller) Create(Guid tenantId)
+    private static (OdipDbContext Db, ClaimsController Controller) Create(Guid? tenantId, bool isSuperAdmin = false)
     {
         var tenant = new Mock<ICurrentTenant>();
         tenant.Setup(t => t.TenantId).Returns(tenantId);
-        tenant.Setup(t => t.IsSuperAdmin).Returns(false);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(isSuperAdmin);
         var options = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
         var db = new OdipDbContext(options, tenant.Object);
         var controller = new ClaimsController(db, new ClaimGenerationService(db), new ShiftClaimGenerationService(db), new BprCsvService(db), new InvoiceService(db),
@@ -53,15 +53,17 @@ public class ClaimsTenantScopeTests
             Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participant.Id, ServiceDate = new DateOnly(2026, 9, 7), StartTime = new TimeOnly(9, 0),
             EndTime = new TimeOnly(17, 0), Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, Status = ShiftStatus.Completed,
         };
-        var tripClaim = new TripClaim { Id = Guid.NewGuid(), Kind = ClaimKind.Trip, TripInstanceId = trip.Id, Status = TripClaimStatus.Draft, ClaimReference = "TC-TRIP", TotalAmount = 480m };
-        var shiftClaim = new TripClaim { Id = Guid.NewGuid(), Kind = ClaimKind.Shift, ParticipantId = participant.Id, Status = TripClaimStatus.Draft, ClaimReference = "TC-SHIFT", TotalAmount = 320m };
+        var tripClaim = new TripClaim { TenantId = trip.TenantId, Id = Guid.NewGuid(), Kind = ClaimKind.Trip, TripInstanceId = trip.Id, Status = TripClaimStatus.Draft, ClaimReference = "TC-TRIP", TotalAmount = 480m };
+        var shiftClaim = new TripClaim { TenantId = participant.TenantId, Id = Guid.NewGuid(), Kind = ClaimKind.Shift, ParticipantId = participant.Id, Status = TripClaimStatus.Draft, ClaimReference = "TC-SHIFT", TotalAmount = 320m };
         var tripLine = new ClaimLineItem
         {
+            TenantId = tripClaim.TenantId,
             Id = Guid.NewGuid(), TripClaimId = tripClaim.Id, ParticipantBookingId = booking.Id, SupportItemCode = "01_002_0117_1_1", DayType = ClaimDayType.Weekday,
             SupportsDeliveredFrom = new DateOnly(2026, 2, 1), SupportsDeliveredTo = new DateOnly(2026, 2, 1), Hours = 8m, UnitPrice = 60m, TotalAmount = 480m,
         };
         var shiftLine = new ClaimLineItem
         {
+            TenantId = shiftClaim.TenantId,
             Id = Guid.NewGuid(), TripClaimId = shiftClaim.Id, ShiftId = shift.Id, SupportItemCode = "04_WD", DayType = ClaimDayType.Weekday,
             SupportsDeliveredFrom = new DateOnly(2026, 9, 7), SupportsDeliveredTo = new DateOnly(2026, 9, 7), Hours = 8m, UnitPrice = 40m, TotalAmount = 320m,
         };
@@ -104,7 +106,7 @@ public class ClaimsTenantScopeTests
         var result = await controller.UpdateClaim(claim.Id, new UpdateClaimDto { Status = TripClaimStatus.Submitted, Notes = "hijacked" }, CancellationToken.None);
 
         Assert.IsType<NotFoundObjectResult>(result.Result);
-        var stored = await db.TripClaims.AsNoTracking().SingleAsync(c => c.Id == claim.Id);
+        var stored = await db.TripClaims.IgnoreQueryFilters().AsNoTracking().SingleAsync(c => c.Id == claim.Id);
         Assert.Equal(TripClaimStatus.Draft, stored.Status);
         Assert.Null(stored.Notes);
     }
@@ -149,7 +151,7 @@ public class ClaimsTenantScopeTests
         var result = await controller.UpdateLineItem(claim.Id, line.Id, new UpdateClaimLineItemDto { Hours = 1m, UnitPrice = 1m }, CancellationToken.None);
 
         Assert.IsType<NotFoundObjectResult>(result.Result);
-        var stored = await db.ClaimLineItems.AsNoTracking().SingleAsync(l => l.Id == line.Id);
+        var stored = await db.ClaimLineItems.IgnoreQueryFilters().AsNoTracking().SingleAsync(l => l.Id == line.Id);
         Assert.Equal((line.Hours, line.UnitPrice, line.TotalAmount), (stored.Hours, stored.UnitPrice, stored.TotalAmount));
     }
 
@@ -165,8 +167,8 @@ public class ClaimsTenantScopeTests
         var result = await controller.DeleteClaim(claim.Id, CancellationToken.None);
 
         Assert.IsType<NotFoundObjectResult>(result.Result);
-        Assert.True(await db.TripClaims.AnyAsync(c => c.Id == claim.Id));
-        Assert.Equal(2, await db.ClaimLineItems.CountAsync());
+        Assert.True(await db.TripClaims.IgnoreQueryFilters().AnyAsync(c => c.Id == claim.Id));
+        Assert.Equal(2, await db.ClaimLineItems.IgnoreQueryFilters().CountAsync());
         Assert.Equal(ClaimStatus.InClaim, (await db.ParticipantBookings.AsNoTracking().SingleAsync(x => x.Id == b.Booking.Id)).ClaimStatus);
     }
 
@@ -183,8 +185,8 @@ public class ClaimsTenantScopeTests
     {
         var (db, controller) = Create(TenantA);
         var b = Seed(db, TenantB);
-        db.TripClaims.Remove(db.TripClaims.Single(c => c.Id == b.TripClaim.Id));   // a trip with no claim yet, so only the trip lookup can refuse
-        db.ClaimLineItems.Remove(db.ClaimLineItems.Single(l => l.Id == b.TripLine.Id));
+        db.TripClaims.Remove(b.TripClaim);   // a trip with no claim yet, so only the trip lookup can refuse
+        db.ClaimLineItems.Remove(b.TripLine);
         db.SaveChanges();
 
         var preview = await controller.PreviewClaim(b.Trip.Id, new ClaimPreviewRequestDto(), CancellationToken.None);
@@ -194,7 +196,7 @@ public class ClaimsTenantScopeTests
         var generateBody = Assert.IsType<ApiResponse<TripClaimListDto>>(Assert.IsType<BadRequestObjectResult>(generate.Result).Value);
         Assert.Equal("Trip not found.", Assert.Single(previewBody.Errors!));
         Assert.Equal("Trip not found.", Assert.Single(generateBody.Errors!));
-        Assert.Single(await db.TripClaims.ToListAsync());   // only the shift claim seeded alongside
+        Assert.Single(await db.TripClaims.IgnoreQueryFilters().ToListAsync());   // only the shift claim seeded alongside
     }
 
     [Fact]
@@ -276,6 +278,129 @@ public class ClaimsTenantScopeTests
         var result = await controller.GetClaim(claim.Id, CancellationToken.None);
 
         Assert.Equal(claim.Id, Assert.IsType<ApiResponse<TripClaimDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!.Id);
+    }
+
+    // The claims carry their own TenantId and a fail-closed filter: a claim is the caller's by that column, not by the trip or participant it hangs off.
+
+    [Fact]
+    public async Task GetClaimsForParticipant_ParticipantOfAnotherTenant_ReturnsEmpty()
+    {
+        var (db, controller) = Create(TenantA);
+        var b = Seed(db, TenantB);
+
+        var result = await controller.GetClaimsForParticipant(b.ShiftClaim.ParticipantId!.Value, null, CancellationToken.None);
+
+        Assert.Empty(Assert.IsType<ApiResponse<List<TripClaimListDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!);
+    }
+
+    [Fact]
+    public async Task GetClaimsForParticipant_OwnParticipant_ListsOnlyOwnClaims()
+    {
+        var (db, controller) = Create(TenantA);
+        var a = Seed(db, TenantA);
+        var b = Seed(db, TenantB);
+        b.ShiftClaim.ParticipantId = a.ShiftClaim.ParticipantId;   // B's claim names A's participant: only its own TenantId keeps it out
+        db.SaveChanges();
+
+        var result = await controller.GetClaimsForParticipant(a.ShiftClaim.ParticipantId!.Value, null, CancellationToken.None);
+
+        Assert.Equal(a.ShiftClaim.Id, Assert.Single(Assert.IsType<ApiResponse<List<TripClaimListDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!).Id);
+    }
+
+    [Fact]
+    public async Task PreviewAndGenerateShiftClaim_ParticipantOfAnotherTenant_Refused_AndCreateNothing()
+    {
+        var (db, controller) = Create(TenantA);
+        var b = Seed(db, TenantB);
+        var participantId = b.ShiftClaim.ParticipantId!.Value;
+        var dto = new GenerateShiftClaimRequestDto { From = new DateOnly(2026, 9, 7), To = new DateOnly(2026, 9, 7) };
+        var before = await db.TripClaims.IgnoreQueryFilters().CountAsync();
+
+        var preview = await controller.PreviewShiftClaim(participantId, dto, CancellationToken.None);
+        var generate = await controller.GenerateShiftClaim(participantId, dto, CancellationToken.None);
+
+        Assert.IsNotType<OkObjectResult>(preview.Result);
+        Assert.IsNotType<OkObjectResult>(generate.Result);
+        Assert.Equal(before, await db.TripClaims.IgnoreQueryFilters().CountAsync());
+    }
+
+    [Fact]
+    public async Task GetClaimInvoices_ClaimOfAnotherTenant_ReturnsNotFound()
+    {
+        var (db, controller) = Create(TenantA);
+        var b = Seed(db, TenantB);
+
+        Assert.IsType<NotFoundObjectResult>((await controller.GetClaimInvoices(b.TripClaim.Id, CancellationToken.None)).Result);
+    }
+
+    [Fact]
+    public async Task SubmitPreview_WithAClaimOfAnotherTenant_ReturnsNotFound()
+    {
+        var (db, controller) = Create(TenantA);
+        var a = Seed(db, TenantA);
+        var b = Seed(db, TenantB);
+
+        var result = await controller.SubmitPreview(new SubmitPreviewRequestDto { ClaimIds = [a.TripClaim.Id, b.TripClaim.Id] }, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+    }
+
+    /// <summary>The decisive case: on the caller's own trip, a claim with no TenantId was found through the trip before. The fail-closed filter hides it.</summary>
+    [Theory]
+    [InlineData("GetClaim")]
+    [InlineData("UpdateClaim")]
+    [InlineData("UpdateLineItem")]
+    [InlineData("DeleteClaim")]
+    [InlineData("DownloadBprCsv")]
+    public async Task AClaimWithNoTenant_OnTheCallersOwnTrip_IsNotFound_ByAnyClaimRoute(string route)
+    {
+        var (db, controller) = Create(TenantA);
+        AddProviderSettings(db);
+        var a = Seed(db, TenantA);
+        a.TripClaim.TenantId = null;
+        a.TripLine.TenantId = null;
+        db.SaveChanges();
+
+        var result = await CallAsync(db, controller, route, a.TripClaim.Id, a.TripLine.Id);
+
+        Assert.IsType<NotFoundObjectResult>(result);
+        Assert.Equal(480m, (await db.TripClaims.IgnoreQueryFilters().AsNoTracking().SingleAsync(c => c.Id == a.TripClaim.Id && c.Status == TripClaimStatus.Draft)).TotalAmount);
+        Assert.True(await db.ClaimLineItems.IgnoreQueryFilters().AnyAsync(l => l.Id == a.TripLine.Id));
+    }
+
+    private static async Task<object?> CallAsync(OdipDbContext db, ClaimsController c, string route, Guid claimId, Guid lineId) => route switch
+    {
+        "GetClaim" => (await c.GetClaim(claimId, CancellationToken.None)).Result,
+        "UpdateClaim" => (await c.UpdateClaim(claimId, new UpdateClaimDto { Notes = "x" }, CancellationToken.None)).Result,
+        "UpdateLineItem" => (await c.UpdateLineItem(claimId, lineId, new UpdateClaimLineItemDto { Hours = 1m, UnitPrice = 1m }, CancellationToken.None)).Result,
+        "DeleteClaim" => (await c.DeleteClaim(claimId, CancellationToken.None)).Result,
+        _ => await c.DownloadBprCsv(claimId, new ClaimBatchService(db, new BprCsvService(db), new InvoiceService(db), TimeProvider.System), CancellationToken.None),
+    };
+
+    /// <summary>A caller with no organisation who is not a SuperAdmin reads neither a claim with no TenantId nor one with a TenantId: the filter's "TenantId != null" arm.</summary>
+    [Fact]
+    public async Task ACallerWithNoTenant_WhoIsNotASuperAdmin_ReadsNoClaimAndNoLine()
+    {
+        var (db, controller) = Create(null);
+        var a = Seed(db, TenantA);
+        var orphan = Seed(db, TenantB);
+        orphan.TripClaim.TenantId = null;
+        orphan.TripLine.TenantId = null;
+        db.SaveChanges();
+
+        Assert.IsType<NotFoundObjectResult>((await controller.GetClaim(a.TripClaim.Id, CancellationToken.None)).Result);
+        Assert.IsType<NotFoundObjectResult>((await controller.GetClaim(orphan.TripClaim.Id, CancellationToken.None)).Result);
+        Assert.Empty(await db.TripClaims.ToListAsync());
+        Assert.Empty(await db.ClaimLineItems.ToListAsync());
+    }
+
+    [Fact]
+    public async Task GetClaim_UnscopedSuperAdmin_StillFindsAnyClaim()
+    {
+        var (db, controller) = Create(null, isSuperAdmin: true);
+        var b = Seed(db, TenantB);
+
+        Assert.IsType<OkObjectResult>((await controller.GetClaim(b.TripClaim.Id, CancellationToken.None)).Result);
     }
 
     [Fact]

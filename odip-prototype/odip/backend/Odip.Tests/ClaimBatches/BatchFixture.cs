@@ -60,7 +60,7 @@ internal sealed class BatchFixture : IDisposable
         {
             Id = Guid.NewGuid(), TenantId = tenant ?? TenantId, FirstName = "Amy" + n, LastName = "Ng", NdisNumber = ndis ?? $"43{n:D7}", PlanType = plan, IsActive = true,
         };
-        var claim = new TripClaim { Id = Guid.NewGuid(), ParticipantId = participant.Id, ClaimReference = $"TC-{n:D3}-{Guid.NewGuid():N}"[..20], Kind = shiftLines ? ClaimKind.Shift : ClaimKind.Trip, Status = status, TotalAmount = 120m * lines };
+        var claim = new TripClaim { TenantId = participant.TenantId, Id = Guid.NewGuid(), ParticipantId = participant.Id, ClaimReference = $"TC-{n:D3}-{Guid.NewGuid():N}"[..20], Kind = shiftLines ? ClaimKind.Shift : ClaimKind.Trip, Status = status, TotalAmount = 120m * lines };
         Db.Participants.Add(participant);
         Db.TripClaims.Add(claim);
         var made = new List<ClaimLineItem>();
@@ -72,6 +72,7 @@ internal sealed class BatchFixture : IDisposable
             var booking = shiftLines ? null : new ParticipantBooking { Id = Guid.NewGuid(), TripInstanceId = Guid.NewGuid(), ParticipantId = participant.Id, BookingStatus = BookingStatus.Confirmed };
             var line = new ClaimLineItem
             {
+                TenantId = claim.TenantId,
                 Id = Guid.NewGuid(), TripClaimId = claim.Id, ParticipantBookingId = booking?.Id, ShiftId = shift?.Id, SupportItemCode = ItemCode, DayType = ClaimDayType.Weekday,
                 SupportsDeliveredFrom = day, SupportsDeliveredTo = day, Hours = 2m, UnitPrice = 60m, TotalAmount = 120m, GSTCode = GSTCode.P2, Status = lineStatus,
             };

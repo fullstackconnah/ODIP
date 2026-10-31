@@ -35,7 +35,7 @@ public class ClaimEditGuardsTests
     private static (TripClaim Claim, ClaimLineItem First, ClaimLineItem Second) Seed(OdipDbContext db, TripClaimStatus status, Guid? tenantId = null)
     {
         var participant = new Participant { Id = Guid.NewGuid(), TenantId = tenantId ?? TenantA, FirstName = "Ada", LastName = "Claim" };
-        var claim = new TripClaim { Id = Guid.NewGuid(), Kind = ClaimKind.Shift, ParticipantId = participant.Id, Status = status, ClaimReference = $"TC-{Guid.NewGuid():N}"[..20], TotalAmount = 130m };
+        var claim = new TripClaim { TenantId = participant.TenantId, Id = Guid.NewGuid(), Kind = ClaimKind.Shift, ParticipantId = participant.Id, Status = status, ClaimReference = $"TC-{Guid.NewGuid():N}"[..20], TotalAmount = 130m };
         ClaimLineItem Line(decimal hours, decimal price) => new()
         {
             Id = Guid.NewGuid(), TripClaimId = claim.Id, ShiftId = Guid.NewGuid(), SupportItemCode = "04_104_0125_6_1", DayType = ClaimDayType.Weekday,
@@ -92,13 +92,14 @@ public class ClaimEditGuardsTests
     private static TripClaim SeedTripDraft(OdipDbContext db, params Participant[] participants)
     {
         var trip = new TripInstance { Id = Guid.NewGuid(), TenantId = TenantA };
-        var claim = new TripClaim { Id = Guid.NewGuid(), TripInstanceId = trip.Id, Status = TripClaimStatus.Draft, ClaimReference = $"TC-{Guid.NewGuid():N}"[..20], TotalAmount = 100m * participants.Length };
+        var claim = new TripClaim { TenantId = trip.TenantId, Id = Guid.NewGuid(), TripInstanceId = trip.Id, Status = TripClaimStatus.Draft, ClaimReference = $"TC-{Guid.NewGuid():N}"[..20], TotalAmount = 100m * participants.Length };
         db.AddRange(trip, claim, new ProviderSettings { Id = Guid.NewGuid(), TenantId = TenantA, RegistrationNumber = "PR001", ABN = "12345678901", OrganisationName = "Test Provider", Address = "1 Test St", State = "NSW" });
         foreach (var p in participants)
         {
             var booking = new ParticipantBooking { Id = Guid.NewGuid(), TripInstanceId = trip.Id, ParticipantId = p.Id, BookingStatus = BookingStatus.Confirmed };
             db.AddRange(p, booking, new ClaimLineItem
             {
+                TenantId = claim.TenantId,
                 Id = Guid.NewGuid(), TripClaimId = claim.Id, ParticipantBookingId = booking.Id, SupportItemCode = "04_104_0125_6_1", DayType = ClaimDayType.Weekday,
                 SupportsDeliveredFrom = new DateOnly(2026, 10, 1), SupportsDeliveredTo = new DateOnly(2026, 10, 1), Hours = 2m, UnitPrice = 50m, TotalAmount = 100m,
             });
@@ -476,9 +477,10 @@ public class ClaimEditGuardsTests
     /// <summary>A second Draft claim for the same participant holding a counting line for the same shift as <paramref name="line"/> (what Generate claims makes once the first line stops counting).</summary>
     private static TripClaim ReclaimOn(OdipDbContext db, TripClaim from, ClaimLineItem line)
     {
-        var other = new TripClaim { Id = Guid.NewGuid(), Kind = ClaimKind.Shift, ParticipantId = from.ParticipantId, Status = TripClaimStatus.Draft, ClaimReference = $"TC-{Guid.NewGuid():N}"[..20], TotalAmount = line.TotalAmount };
+        var other = new TripClaim { TenantId = from.TenantId, Id = Guid.NewGuid(), Kind = ClaimKind.Shift, ParticipantId = from.ParticipantId, Status = TripClaimStatus.Draft, ClaimReference = $"TC-{Guid.NewGuid():N}"[..20], TotalAmount = line.TotalAmount };
         db.AddRange(other, new ClaimLineItem
         {
+            TenantId = other.TenantId,
             Id = Guid.NewGuid(), TripClaimId = other.Id, ShiftId = line.ShiftId, SupportItemCode = line.SupportItemCode, DayType = ClaimDayType.Weekday,
             SupportsDeliveredFrom = line.SupportsDeliveredFrom, SupportsDeliveredTo = line.SupportsDeliveredTo, Hours = line.Hours, UnitPrice = line.UnitPrice, TotalAmount = line.TotalAmount,
         });

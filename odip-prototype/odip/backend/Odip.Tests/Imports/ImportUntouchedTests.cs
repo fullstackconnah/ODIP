@@ -60,7 +60,7 @@ public class ImportUntouchedTests
             ("has a community access risk assessment", (d, id) => d.ParticipantCommunityAccessRiskItems.Add(new ParticipantCommunityAccessRiskItem { Id = Guid.NewGuid(), ParticipantId = id })),
             ("has caregiver form submissions", (d, id) => d.CaregiverProfileSubmissions.Add(new CaregiverProfileSubmission { Id = Guid.NewGuid(), ParticipantId = id })),
             ("has e-signing records", (d, id) => d.ElectronicSigningSnapshots.Add(new ElectronicSigningSnapshot { Id = Guid.NewGuid(), ParticipantId = id, DraftId = Guid.NewGuid() })),
-            ("has trip claims", (d, id) => d.TripClaims.Add(new TripClaim { Id = Guid.NewGuid(), ParticipantId = id })),
+            ("has trip claims", (d, id) => d.TripClaims.Add(new TripClaim { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = id })),
             ("is linked to an inquiry", (d, id) => d.ParticipantInquiries.Add(new ParticipantInquiry { Id = Guid.NewGuid(), ParticipantId = id })),
             ("has contacts added after the import", (d, id) => d.ParticipantContactRoles.Add(new ParticipantContactRole { Id = Guid.NewGuid(), ParticipantId = id, PersonId = Guid.NewGuid(), CreatedAt = importedAt.AddMinutes(1) })),
             ("was edited after the import", (d, id) => d.AuditLogs.Add(new AuditLog { Id = Guid.NewGuid(), EntityType = "Participant", EntityId = id, Action = AuditAction.Updated, ChangedAt = DateTimeOffset.UtcNow })),

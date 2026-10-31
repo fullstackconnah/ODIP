@@ -42,11 +42,12 @@ public class BudgetLedgerClaimReplacesBookingTests
     private static TripClaim ClaimOver(LedgerKit kit, ParticipantBooking booking, TripClaimStatus claimStatus, ClaimLineItemStatus lineStatus, decimal amount = 480m, DateOnly? from = null)
     {
         var trip = kit.Db.TripInstances.First(t => t.Id == booking.TripInstanceId);
-        var claim = new TripClaim { Id = Guid.NewGuid(), Kind = ClaimKind.Trip, TripInstanceId = trip.Id, Status = claimStatus, ClaimReference = $"TC-{Guid.NewGuid():N}"[..20], TotalAmount = amount };
+        var claim = new TripClaim { TenantId = trip.TenantId, Id = Guid.NewGuid(), Kind = ClaimKind.Trip, TripInstanceId = trip.Id, Status = claimStatus, ClaimReference = $"TC-{Guid.NewGuid():N}"[..20], TotalAmount = amount };
         var day = kit.Db.TripDays.First(d => d.TripInstanceId == trip.Id);
         kit.Db.TripClaims.Add(claim);
         kit.Db.ClaimLineItems.Add(new ClaimLineItem
         {
+            TenantId = claim.TenantId,
             Id = Guid.NewGuid(), TripClaimId = claim.Id, ParticipantBookingId = booking.Id,
             SupportItemCode = kit.Item(ClaimDayType.Weekday).ItemNumber, DayType = ClaimDayType.Weekday,
             SupportsDeliveredFrom = from ?? day.Date, SupportsDeliveredTo = from ?? day.Date, Hours = 8m, UnitPrice = amount / 8m, TotalAmount = amount, Status = lineStatus,
@@ -245,10 +246,11 @@ public class BudgetLedgerClaimReplacesBookingTests
         var singleBookingAhead = (await PeriodOf(kit, person)).BookedAhead / 2m;
 
         // The claim covers one booking and its line is rejected: a partial, mixed claim.
-        var claim = new TripClaim { Id = Guid.NewGuid(), Kind = ClaimKind.Trip, TripInstanceId = tripA.Id, Status = TripClaimStatus.Submitted, ClaimReference = $"TC-{Guid.NewGuid():N}"[..20], TotalAmount = 480m };
+        var claim = new TripClaim { TenantId = tripA.TenantId, Id = Guid.NewGuid(), Kind = ClaimKind.Trip, TripInstanceId = tripA.Id, Status = TripClaimStatus.Submitted, ClaimReference = $"TC-{Guid.NewGuid():N}"[..20], TotalAmount = 480m };
         kit.Db.TripClaims.Add(claim);
         kit.Db.ClaimLineItems.Add(new ClaimLineItem
         {
+            TenantId = claim.TenantId,
             Id = Guid.NewGuid(), TripClaimId = claim.Id, ParticipantBookingId = bookingA.Id, SupportItemCode = kit.Item(ClaimDayType.Weekday).ItemNumber,
             DayType = ClaimDayType.Weekday, SupportsDeliveredFrom = Today, SupportsDeliveredTo = Today, Hours = 8m, UnitPrice = 60m, TotalAmount = 480m,
             Status = ClaimLineItemStatus.Rejected,
@@ -281,12 +283,13 @@ public class BudgetLedgerClaimReplacesBookingTests
 
         var singleBookingAhead = (await PeriodOf(kit, person)).BookedAhead / 2m;
 
-        var claim = new TripClaim { Id = Guid.NewGuid(), Kind = ClaimKind.Trip, TripInstanceId = tripA.Id, Status = TripClaimStatus.Submitted, ClaimReference = $"TC-{Guid.NewGuid():N}"[..20], TotalAmount = 960m };
+        var claim = new TripClaim { TenantId = tripA.TenantId, Id = Guid.NewGuid(), Kind = ClaimKind.Trip, TripInstanceId = tripA.Id, Status = TripClaimStatus.Submitted, ClaimReference = $"TC-{Guid.NewGuid():N}"[..20], TotalAmount = 960m };
         kit.Db.TripClaims.Add(claim);
         foreach (var (booking, status) in new[] { (bookingA, ClaimLineItemStatus.Submitted), (bookingB, ClaimLineItemStatus.Rejected) })
         {
             kit.Db.ClaimLineItems.Add(new ClaimLineItem
             {
+                TenantId = claim.TenantId,
                 Id = Guid.NewGuid(), TripClaimId = claim.Id, ParticipantBookingId = booking.Id, SupportItemCode = kit.Item(ClaimDayType.Weekday).ItemNumber,
                 DayType = ClaimDayType.Weekday, SupportsDeliveredFrom = Today, SupportsDeliveredTo = Today, Hours = 8m, UnitPrice = 60m, TotalAmount = 480m, Status = status,
             });
