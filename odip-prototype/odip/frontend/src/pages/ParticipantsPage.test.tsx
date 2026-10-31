@@ -100,19 +100,19 @@ describe('ParticipantsPage — service stream badges', () => {
     })
     renderPage()
 
+    expect(screen.getByRole('columnheader', { name: 'Streams' })).toBeInTheDocument()
     expect(screen.getByText('STA')).toBeInTheDocument()
     expect(screen.getByText('Trip')).toBeInTheDocument()
   })
 
-  it('renders a dash placeholder for an untagged participant', () => {
+  it('drops the Streams column when no participant has a stream, instead of a column of dashes', () => {
     mockUseParticipants.mockReturnValue({
       data: [baseParticipant({ serviceStreams: 'None' })],
       isLoading: false,
     })
     renderPage()
 
-    // The NDIS Number column also renders a dash for a null number, so scope to "at least one".
-    expect(screen.getAllByText('—').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('columnheader', { name: 'Streams' })).not.toBeInTheDocument()
     expect(screen.queryByText('STA')).not.toBeInTheDocument()
   })
 })
@@ -129,10 +129,12 @@ describe('ParticipantsPage — medication quick button', () => {
     })
     renderPage()
 
-    expect(screen.getByRole('button', { name: /view medications for jamie smith/i })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /view medications for alex rivera/i })).not.toBeInTheDocument()
+    const jamie = screen.getByText('Jamie Smith').closest('tr') as HTMLElement
+    const alex = screen.getByText('Alex Rivera').closest('tr') as HTMLElement
+    expect(within(jamie).getByRole('button', { name: 'View medications' })).toBeInTheDocument()
+    expect(within(alex).queryByRole('button', { name: 'View medications' })).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /view medications for jamie smith/i }))
+    await user.click(within(jamie).getByRole('button', { name: 'View medications' }))
 
     // Navigated to the participant-scoped medications view, not the row's own detail-page click.
     expect(screen.getByText('Participant detail page')).toBeInTheDocument()
@@ -326,7 +328,7 @@ describe('ParticipantsPage — status change safety', () => {
     })
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /change status for jamie smith/i }))
+    await user.click(screen.getByRole('button', { name: /^change status$/i }))
 
     // The dialog names the participant, the current state and the consequence.
     expect(screen.getByRole('alertdialog')).toBeInTheDocument()
@@ -363,7 +365,7 @@ describe('ParticipantsPage — status change safety', () => {
     })
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /change status for jamie smith/i }))
+    await user.click(screen.getByRole('button', { name: /^change status$/i }))
     await user.type(screen.getByLabelText(/reason/i), '  Moved interstate  ')
     await user.click(screen.getByRole('button', { name: /set jamie smith as inactive/i }))
 
@@ -385,7 +387,7 @@ describe('ParticipantsPage — status change safety', () => {
     }))
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /change status for jamie smith/i }))
+    await user.click(screen.getByRole('button', { name: /^change status$/i }))
     await user.click(screen.getByRole('button', { name: /set jamie smith as inactive/i }))
 
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
@@ -406,7 +408,7 @@ describe('ParticipantsPage — status change safety', () => {
     }))
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /change status for jamie smith/i }))
+    await user.click(screen.getByRole('button', { name: /^change status$/i }))
     await user.click(screen.getByRole('button', { name: /set jamie smith as inactive/i }))
 
     expect(screen.getByRole('status')).toHaveTextContent('Jamie Smith was already Inactive')
@@ -422,7 +424,7 @@ describe('ParticipantsPage — status change safety', () => {
       options.onError(apiError('A draft participant cannot be activated. Complete their intake and profile first.')))
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /change status for jamie smith/i }))
+    await user.click(screen.getByRole('button', { name: /^change status$/i }))
     await user.click(screen.getByRole('button', { name: /set jamie smith as inactive/i }))
 
     const dialog = screen.getByRole('alertdialog')
@@ -438,7 +440,7 @@ describe('ParticipantsPage — status change safety', () => {
     })
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /change status for jamie smith/i }))
+    await user.click(screen.getByRole('button', { name: /^change status$/i }))
     await user.click(screen.getByRole('button', { name: /^cancel$/i }))
 
     expect(mockStatusMutate).not.toHaveBeenCalled()
@@ -453,7 +455,7 @@ describe('ParticipantsPage — status change safety', () => {
     })
     renderPage()
 
-    expect(screen.queryByRole('button', { name: /change status for jamie smith/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^change status$/i })).not.toBeInTheDocument()
     // The status pill itself is still shown for everyone.
     const rows2 = screen.getAllByRole('row')
     const jamieRow2 = rows2.find(r => r.textContent?.includes('Jamie Smith'))!
@@ -471,7 +473,7 @@ describe('ParticipantsPage — status change safety', () => {
     })
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /change status for alex rivera/i }))
+    await user.click(within(screen.getByText('Alex Rivera').closest('tr') as HTMLElement).getByRole('button', { name: /^change status$/i }))
     await user.click(screen.getByRole('button', { name: /set alex rivera as inactive/i }))
 
     expect(mockStatusMutate).toHaveBeenCalledTimes(1)
@@ -651,19 +653,19 @@ describe('ParticipantsPage — density row actions', () => {
     return screen.getByRole('button', { name }).closest('[class*="group-hover/row:opacity-100"]') as HTMLElement
   }
 
-  it('renders Change status and View medications as 24px controls inside one hover/focus-revealed cluster', () => {
+  it('renders Change status and View medications as 24px icon controls inside one hover/focus-revealed cluster', () => {
     mockUseParticipants.mockReturnValue({
       data: [baseParticipant({ id: 'p1', fullName: 'Jamie Smith', hasActiveMedications: true })],
       isLoading: false,
     })
     renderPage()
 
-    const change = screen.getByRole('button', { name: /change status for jamie smith/i })
-    const meds = screen.getByRole('button', { name: /view medications for jamie smith/i })
-    expect(change).toHaveClass('h-[var(--control-h-sm)]')
+    const change = screen.getByRole('button', { name: /^change status$/i })
+    const meds = screen.getByRole('button', { name: 'View medications' })
+    expect(change).toHaveClass('h-[var(--control-h-sm)]', 'w-[var(--control-h-sm)]', 'p-0')
     expect(meds).toHaveClass('h-[var(--control-h-sm)]', 'w-[var(--control-h-sm)]', 'p-0')
 
-    const cluster = clusterFor(/change status for jamie smith/i)
+    const cluster = clusterFor(/^change status$/i)
     expect(cluster).not.toBeNull()
     expect(cluster).toHaveClass('opacity-0', 'group-focus-within/row:opacity-100', '[@media(pointer:coarse)]:opacity-100')
     expect(cluster).toContainElement(meds)
@@ -676,7 +678,7 @@ describe('ParticipantsPage — density row actions', () => {
     renderPage()
 
     const row = screen.getByText('Jamie Smith').closest('tr') as HTMLElement
-    const cluster = clusterFor(/change status for jamie smith/i)
+    const cluster = clusterFor(/^change status$/i)
     expect(cluster).not.toContainElement(within(row).getByLabelText('Status: Active'))
     const chevron = row.querySelector('svg.lucide-chevron-right') as SVGElement
     expect(chevron).not.toBeNull()
@@ -736,14 +738,14 @@ describe('ParticipantsPage — narrow-desktop columns', () => {
   // L3-04: Region (below 1280), Support Ratio and Repeat (below 2xl) and Plan Type (below 1792px) used to be deleted by breakpoint; the table
   // now scrolls in its box with the name and the row actions pinned (DataTable's column rule), so every column is on the page at every width.
   it('keeps every column at every width, on the header and every row', () => {
-    mockUseParticipants.mockReturnValue({ data: [baseParticipant()], isLoading: false })
+    mockUseParticipants.mockReturnValue({ data: [baseParticipant({ serviceStreams: 'STA' })], isLoading: false })
     renderPage()
 
     const row = screen.getByText('Jamie Smith').closest('tr') as HTMLElement
     const cells = within(row).getAllByRole('cell')
     const headers = screen.getAllByRole('columnheader')
     // From md up (the Column Rule); max-md:hidden only leaves a field off the phone card.
-    for (const label of ['Name', 'NDIS Number', 'Streams', 'Status', 'High', 'Plan Type', 'Region', 'Support Ratio', 'Repeat']) {
+    for (const label of ['Name', 'NDIS Number', 'Streams', 'Status', 'Care needs', 'Plan Type', 'Region', 'Support Ratio', 'Repeat']) {
       const index = headers.findIndex(h => h.textContent?.includes(label))
       expect(index, label).toBeGreaterThanOrEqual(0)
       expect(headers[index].className, label).not.toMatch(/(^|\s)((sm|md|lg|xl|2xl):)?hidden(\s|$)/)
@@ -775,15 +777,14 @@ describe('ParticipantsPage — narrow-desktop columns', () => {
     expect(name.parentElement?.tagName).toBe('TD')
   })
 
-  it('overlays the row actions on a mouse instead of reserving column width, and never lets "Change status" wrap', () => {
+  it('overlays the row actions on a mouse instead of reserving column width, as one RowMenu', () => {
     mockUseParticipants.mockReturnValue({
       data: [baseParticipant({ id: 'p1', fullName: 'Jamie Smith', hasActiveMedications: true })],
       isLoading: false,
     })
     renderPage()
 
-    const change = screen.getByRole('button', { name: /change status for jamie smith/i })
-    expect(change).toHaveClass('whitespace-nowrap')
+    const change = screen.getByRole('button', { name: /^change status$/i })
     const cluster = change.closest('[class*="group-hover/row:opacity-100"]') as HTMLElement
     // Out of the flow (fine pointer, md+), hard against the left edge of its cell, over a gradient.
     expect(cluster).toHaveClass(
@@ -847,31 +848,80 @@ describe('ParticipantsPage — phone card', () => {
     expect(row.querySelector('td[data-label="Name"]')).toHaveAttribute('data-card', 'primary')
     expect(row.querySelector('td[data-label="Status"]')).toHaveAttribute('data-card', 'status')
     for (const label of ['Plan Type', 'Support Ratio', 'Region']) expect(row.querySelector('td[data-label="' + label + '"]'), label).toHaveAttribute('data-card', 'meta')
-    for (const label of ['NDIS Number', 'Streams', 'Repeat']) expect(row.querySelector('td[data-label="' + label + '"]'), label).toHaveClass('max-md:hidden')
+    for (const label of ['NDIS Number', 'Repeat']) expect(row.querySelector('td[data-label="' + label + '"]'), label).toHaveClass('max-md:hidden')
   })
 })
 
-// VC design review fix 1: the card had dropped the care needs. Wheelchair and High support stay on the card as chips when true.
-describe('ParticipantsPage — care needs on the phone card', () => {
-  it('shows Wheelchair and High support as phone-only chips beside the desktop tick, and nothing when false', () => {
+// The care needs are one column (a wheelchair emoji and a bare "High" were two unlabelled columns): the same chips on the desktop row and the phone card.
+describe('ParticipantsPage — care needs', () => {
+  it('shows Wheelchair and High support as chips in one Care needs cell, and an empty cell when neither is true', () => {
     mockUseParticipants.mockReturnValue({
       data: [baseParticipant({ mobilityAidWheelchair: true, isHighSupport: true }), baseParticipant({ id: 'p2', fullName: 'Ava Lee' })],
       isLoading: false,
     })
     renderPage()
 
+    expect(screen.queryByRole('columnheader', { name: 'High' })).not.toBeInTheDocument()
     const row = screen.getByRole('link', { name: /Jamie Smith/ }).closest('tr') as HTMLElement
-    for (const label of ['Wheelchair', 'High support']) {
-      const chip = within(row).getByText(label)
-      expect(chip, label).toHaveClass('md:hidden')
-      const cell = chip.closest('td') as HTMLElement
-      expect(cell, label).toHaveAttribute('data-card', 'meta')
-      expect(cell.querySelector('svg'), label).toHaveClass('max-md:hidden')
-    }
+    const cell = row.querySelector('td[data-label="Care needs"]') as HTMLElement
+    expect(cell).toHaveAttribute('data-card', 'meta')
+    expect(within(cell).getByText('Wheelchair')).toBeInTheDocument()
+    expect(within(cell).getByText('High support')).toBeInTheDocument()
     const ava = screen.getByRole('link', { name: /Ava Lee/ }).closest('tr') as HTMLElement
+    expect(ava.querySelector('td[data-label="Care needs"]')).toHaveClass('max-md:hidden')
     expect(within(ava).queryByText('Wheelchair')).not.toBeInTheDocument()
-    expect(within(ava).queryByText('High support')).not.toBeInTheDocument()
-    expect(ava.querySelector('td[data-label="High"]')).toHaveClass('max-md:hidden')
+  })
+})
+
+// Polish 1b: the register's column order is identity, status, alerts, care needs, then the rest; the card is title + status, one muted line, and a corner menu.
+describe('ParticipantsPage — column order and phone card meta', () => {
+  it('orders the columns Name, Status, Alerts, Care needs, NDIS Number, Region, Support Ratio, Plan Type, Repeat, Streams, then the actions', () => {
+    mockUseParticipants.mockReturnValue({ data: [baseParticipant({ serviceStreams: 'STA' })], isLoading: false })
+    mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
+    renderPage()
+
+    expect(screen.getAllByRole('columnheader').map(h => h.textContent)).toEqual(
+      ['Name', 'Status', 'Alerts', 'Care needs', 'NDIS Number', 'Region', 'Support Ratio', 'Plan Type', 'Repeat', 'Streams', 'Actions'],
+    )
+  })
+
+  it('leaves a participant with no alerts off the card (a plain dash is skipped) and orders the meta Plan Type before Support Ratio', () => {
+    mockUseParticipants.mockReturnValue({ data: [baseParticipant()], isLoading: false })
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
+    renderPage()
+
+    const row = screen.getByText('Jamie Smith').closest('tr') as HTMLElement
+    expect(row.querySelector('td[data-label="Alerts"]')).toHaveClass('max-md:hidden')
+    expect(row.querySelector('td[data-label="Plan Type"]')?.className).toContain('max-md:order-0!')
+    expect(row.querySelector('td[data-label="Support Ratio"]')?.className).toContain('max-md:order-1!')
+  })
+
+  it('ends the card with the row menu in the trail slot, and the whole card opens the record', async () => {
+    const user = userEvent.setup()
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
+    mockUseParticipants.mockReturnValue({ data: [baseParticipant()], isLoading: false })
+    renderPage()
+
+    const row = screen.getByText('Jamie Smith').closest('tr') as HTMLElement
+    const actions = row.querySelector('td[data-label=""]') as HTMLElement
+    expect(actions).toHaveAttribute('data-card', 'trail')
+    expect(actions.className).not.toContain('basis-full')
+    expect(within(actions).getByRole('button', { name: 'More actions for Jamie Smith' })).toBeInTheDocument()
+    // The chevron is the desktop cue; on the card the whole card is the target.
+    expect(actions.querySelector('svg.lucide-chevron-right')).toHaveClass('max-md:hidden')
+    await user.click(within(actions).getByRole('button', { name: 'More actions for Jamie Smith' }))
+    expect(screen.queryByText('Participant detail page')).not.toBeInTheDocument()
+  })
+
+  it('offers the same four actions in the menu as on the desktop row: View medications, Change status, Edit, Archive', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
+    mockUseParticipants.mockReturnValue({ data: [baseParticipant({ hasActiveMedications: true })], isLoading: false })
+    renderPage()
+
+    const row = screen.getByText('Jamie Smith').closest('tr') as HTMLElement
+    const labels = within(row).getAllByRole('button').map(b => b.getAttribute('aria-label')).concat(within(row).getAllByRole('link').map(l => l.getAttribute('aria-label')))
+    for (const label of ['View medications', 'Change status', 'Archive', 'Edit']) expect(labels).toContain(label)
   })
 })
 
