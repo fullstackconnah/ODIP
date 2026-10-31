@@ -723,6 +723,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateOnly>("SupportsDeliveredTo")
                         .HasColumnType("date");
 
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid");
+
                     b.Property<decimal>("TotalAmount")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
@@ -741,6 +744,8 @@ namespace Odip.Infrastructure.Migrations
                     b.HasIndex("ShiftId");
 
                     b.HasIndex("Status");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("TripClaimId");
 
@@ -4935,6 +4940,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateTime?>("SubmittedDate")
                         .HasColumnType("timestamp without time zone");
 
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid");
+
                     b.Property<decimal>("TotalAmount")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
@@ -4956,6 +4964,8 @@ namespace Odip.Infrastructure.Migrations
                     b.HasIndex("ParticipantId");
 
                     b.HasIndex("Status");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("TripInstanceId");
 

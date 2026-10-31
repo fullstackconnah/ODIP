@@ -125,6 +125,7 @@ public class ClaimGenerationService
         var claim = new TripClaim
         {
             Id = claimId,
+            TenantId = trip.TenantId,
             TripInstanceId = tripInstanceId,
             Status = TripClaimStatus.Draft,
             ClaimReference = TripClaim.ReferenceFor(trip.TripCode ?? trip.Id.ToString("N")[..8].ToUpper(), claimId),
@@ -140,6 +141,7 @@ public class ClaimGenerationService
             {
                 Id = Guid.NewGuid(),
                 TripClaimId = claim.Id,
+                TenantId = claim.TenantId,
                 ParticipantBookingId = calc.Booking.Id,
                 SupportItemCode = calc.CatalogueItem.ItemNumber,
                 DayType = calc.DayType,

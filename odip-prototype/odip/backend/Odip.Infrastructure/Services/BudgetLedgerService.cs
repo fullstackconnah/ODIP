@@ -110,7 +110,7 @@ public sealed class BudgetLedgerService
         var to = withPlan.Max(p => currentPlans[p.Id]!.PlanEnd).AddDays(FundingPlan.MaxPlanDays);
         var planIds = withPlan.Select(p => p.Id).ToList();
 
-        var lineRows = await LoadClaimLinesAsync(planIds, from, to, ct);
+        var lineRows = await LoadClaimLinesAsync(tenantId, planIds, from, to, ct);
         var shiftRows = await LoadShiftsAsync(tenantId, planIds, from, to, ct);
         // Bookings are read from the same start as everything else: a trip that has already started and has no claim yet is pending (see AddBookingItems), so it must be loaded as well.
         var bookingRows = await LoadBookingsAsync(tenantId, planIds, from, to, ct);
@@ -298,18 +298,18 @@ public sealed class BudgetLedgerService
     public sealed record CatalogueRow(SupportCatalogueItem Item, string GroupCode);
 
     /// <summary>The lines that count, reached through the participants' shifts and bookings: lines of a claim that is not rejected or cancelled, and not themselves rejected.</summary>
-    private async Task<List<LineRow>> LoadClaimLinesAsync(List<Guid> participantIds, DateOnly from, DateOnly to, CancellationToken ct) =>
-        await ClaimLinesQuery(participantIds, from, to).ToListAsync(ct);
+    private async Task<List<LineRow>> LoadClaimLinesAsync(Guid tenantId, List<Guid> participantIds, DateOnly from, DateOnly to, CancellationToken ct) =>
+        await ClaimLinesQuery(tenantId, participantIds, from, to).ToListAsync(ct);
 
     /// <summary>Whether a claim line still counts: the line is not rejected and its claim is neither rejected nor cancelled. One rule for the ledger and for shift claim generation.</summary>
     public static readonly System.Linq.Expressions.Expression<Func<ClaimLineItem, bool>> ClaimLineStillCounts = l =>
         l.Status != ClaimLineItemStatus.Rejected && l.TripClaim.Status != TripClaimStatus.Rejected && l.TripClaim.Status != TripClaimStatus.Cancelled;
 
     /// <summary>The query behind the claim lines: a query of its own so that a test can show it translates to SQL (EF InMemory would evaluate any LINQ in memory).</summary>
-    public IQueryable<LineRow> ClaimLinesQuery(IReadOnlyCollection<Guid> participantIds, DateOnly from, DateOnly to) =>
+    public IQueryable<LineRow> ClaimLinesQuery(Guid tenantId, IReadOnlyCollection<Guid> participantIds, DateOnly from, DateOnly to) =>
         _db.ClaimLineItems.AsNoTracking()
             .Where(ClaimLineStillCounts)
-            .Where(l => l.SupportsDeliveredFrom >= from && l.SupportsDeliveredFrom <= to
+            .Where(l => l.TenantId == tenantId && l.SupportsDeliveredFrom >= from && l.SupportsDeliveredFrom <= to
                 && ((l.Shift != null && participantIds.Contains(l.Shift.ParticipantId)) || (l.ParticipantBooking != null && participantIds.Contains(l.ParticipantBooking.ParticipantId))))
             .Select(l => new LineRow(
                 l.Id, l.TripClaimId, l.TripClaim.ClaimReference, l.TripClaim.Status, l.Status, l.SupportItemCode, l.SupportsDeliveredFrom, l.Hours, l.TotalAmount, l.PaidAmount,

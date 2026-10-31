@@ -39,12 +39,12 @@ public sealed class NdiaRejectionReader
         Guid ClaimId, string ClaimReference, string Code, DateTime RejectedDate, string ItemCode, DateOnly Date, Guid ParticipantId, PlanType ParticipantPlanType, PlanType? BookingPlanType);
 
     /// <summary>
-    /// The lines of claims that are Rejected with one of the four funds codes, reached through the given participants' shifts and trip bookings (and only those, inside the tenant). A query of its own
+    /// The lines of claims that are Rejected with one of the four funds codes, reached through the given participants' shifts and trip bookings (and only those, inside the tenant: the line's own TenantId, and the shift or trip's, until the contract PR). A query of its own
     /// so that a test can show it translates to SQL (EF InMemory would evaluate any LINQ in memory).
     /// </summary>
     public IQueryable<RejectedLineRow> RejectedLinesQuery(Guid tenantId, IReadOnlyCollection<Guid> participantIds) =>
         _db.ClaimLineItems.AsNoTracking()
-            .Where(l => l.TripClaim.Status == TripClaimStatus.Rejected && l.TripClaim.RejectedDate != null
+            .Where(l => l.TenantId == tenantId && l.TripClaim.Status == TripClaimStatus.Rejected && l.TripClaim.RejectedDate != null
                 && l.TripClaim.RejectionCode != null && NdiaRejectionCodes.NotEnoughFunds.Contains(l.TripClaim.RejectionCode)
                 && ((l.Shift != null && l.Shift.TenantId == tenantId && participantIds.Contains(l.Shift.ParticipantId))
                     || (l.ParticipantBooking != null && l.ParticipantBooking.TripInstance.TenantId == tenantId && participantIds.Contains(l.ParticipantBooking.ParticipantId))))

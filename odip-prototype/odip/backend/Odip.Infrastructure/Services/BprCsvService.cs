@@ -29,15 +29,13 @@ public class BprCsvService(OdipDbContext db)
 
     /// <summary>
     /// Loads the lines of ONE organisation, with their claim, participant (a trip line's through its booking, a shift line's through its shift), catalogue rows and settings. A line of another
-    /// organisation is simply not returned, so the caller can compare the counts. TripClaim has no query filter, so the claim is scoped here by its trip or participant, as ExportTables.Claims does.
+    /// organisation is simply not returned, so the caller can compare the counts. A line is scoped by its own TenantId (its claim's).
     /// </summary>
     public async Task<List<BprRow>> LoadRowsAsync(Guid tenantId, IReadOnlyCollection<Guid> lineIds, CancellationToken ct)
     {
         var lines = await db.ClaimLineItems.AsNoTracking()
             .Include(l => l.TripClaim).Include(l => l.ParticipantBooking).Include(l => l.Shift)
-            .Where(l => lineIds.Contains(l.Id)
-                && (db.TripInstances.Any(t => t.Id == l.TripClaim.TripInstanceId && t.TenantId == tenantId)
-                    || db.Participants.Any(p => p.Id == l.TripClaim.ParticipantId && p.TenantId == tenantId)))
+            .Where(l => lineIds.Contains(l.Id) && l.TenantId == tenantId)
             .ToListAsync(ct);
 
         var participantIds = lines.Select(l => l.ParticipantBooking?.ParticipantId ?? l.Shift?.ParticipantId).OfType<Guid>().Distinct().ToList();
