@@ -2,7 +2,7 @@ import { useIncidents, useRestoreIncident, useDeleteIncident, useOverdueQscIncid
 import type { TruncatableList } from '@/api/hooks/pagedList'
 import type { IncidentListDto, FlaggedShiftNoteDto } from '@/api/types'
 import { INCIDENT_STATUS_LABELS, INCIDENT_TYPE_LABELS, type IncidentStatus, type IncidentType } from '@/api/types/enums'
-import { CellText, DataTable, RowMenu, ROW_LINK, CROSS_LINK, type Column, type RowMenuItem } from '@/components/DataTable'
+import { DataTable, RowMenu, ROW_LINK, CROSS_LINK, type Column, type RowMenuItem } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
 import { EmptyState } from '@/components/EmptyState'
@@ -238,7 +238,7 @@ export default function IncidentsPage() {
   }
 
   // The menu a row offers, once: icon buttons on a mouse, one ⋯ on the phone card. Archive is undoable (a confirm, then Closed), so it is never red.
-  const rowItems = (i: any): RowMenuItem[] => canWrite
+  const rowItems = (i: IncidentListDto): RowMenuItem[] => canWrite
     ? [
         { label: 'Edit', icon: <Pencil className="w-4 h-4" />, to: `/incidents/${i.id}/edit` },
         showArchived
@@ -288,7 +288,7 @@ export default function IncidentsPage() {
         <Link
           to={`/trips/${i.tripInstanceId}`}
           title={i.tripName}
-          className={`inline-block align-middle md:truncate md:max-[1792px]:max-w-[11rem] min-[1792px]:max-w-[13rem] ${CROSS_LINK} ${TAP_TRUNCATED_LINK}`}
+          className={`inline-block align-middle max-md:max-w-[9rem] max-md:truncate md:truncate md:max-[1792px]:max-w-[11rem] min-[1792px]:max-w-[13rem] ${CROSS_LINK} ${TAP_TRUNCATED_LINK}`}
         >
           {i.tripName}
         </Link>
@@ -302,13 +302,13 @@ export default function IncidentsPage() {
         <Link
           to={`/participants/${i.involvedParticipantId}`}
           title={i.involvedParticipantName}
-          className={`inline-block align-middle md:max-w-[9rem] md:truncate 2xl:max-w-[12rem] ${CROSS_LINK} ${TAP_TRUNCATED_LINK}`}
+          className={`inline-block align-middle max-md:max-w-[9rem] max-md:truncate md:max-w-[9rem] md:truncate 2xl:max-w-[12rem] ${CROSS_LINK} ${TAP_TRUNCATED_LINK}`}
         >
           {i.involvedParticipantName}
         </Link>
       ) : (i.involvedParticipantName ?? '—'),
     },
-    { key: 'reportedByName', header: 'Reported By', maxWidth: '9rem', mobile: 'meta', render: (i) => i.reportedByName ? <CellText title={i.reportedByName} className="md:max-w-[9rem]"><span className="md:hidden">Reported by </span>{i.reportedByName}</CellText> : '\u2014' },
+    { key: 'reportedByName', header: 'Reported By', maxWidth: '9rem', mobile: 'hidden' },
     { key: 'actions', header: '', overlay: true, mobile: 'trail', render: (i) => <RowMenu name={i.title ?? 'incident'} items={rowItems(i)} /> },
   ]
 

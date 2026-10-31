@@ -71,7 +71,7 @@ export default function TasksPage() {
   }
 
   // The menu a row offers, once: icon buttons on a mouse, one ⋯ on the phone card. Archive is undoable (a confirm, then Archived), so it is never red.
-  const rowItems = (t: any): RowMenuItem[] => mayChange(t)
+  const rowItems = (t: { id: string; taskType?: string }): RowMenuItem[] => mayChange(t)
     ? [
         { label: 'Edit', icon: <Pencil className="w-4 h-4" />, to: `/tasks/${t.id}/edit` },
         showArchived

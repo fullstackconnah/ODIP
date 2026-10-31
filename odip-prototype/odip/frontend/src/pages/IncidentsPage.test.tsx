@@ -797,13 +797,13 @@ describe('IncidentsPage — phone card', () => {
     const row = screen.getByText('Medication Error').closest('tr') as HTMLElement
     expect(row.querySelector('td[data-label="Title"]')).toHaveAttribute('data-card', 'primary')
     expect(row.querySelector('td[data-label="Status"]')).toHaveAttribute('data-card', 'status')
-    for (const label of ['Date', 'Severity', 'Reported By']) expect(row.querySelector('td[data-label="' + label + '"]'), label).toHaveAttribute('data-card', 'meta')
-    // Type is left off the card so Severity, Date and the reporter share one line (it stays a column from md up).
-    expect(row.querySelector('td[data-label="Type"]')).not.toHaveAttribute('data-card', 'meta')
-    // The reporter's name on the muted line says who it is ("Reported by"), a prefix that only the phone card shows.
-    const reporter = row.querySelector('td[data-label="Reported By"]') as HTMLElement
-    expect(reporter).toHaveTextContent('Reported by Pat Jones')
-    expect(reporter.querySelector('.md\\:hidden')).toHaveTextContent('Reported by')
+    for (const label of ['Date', 'Severity']) expect(row.querySelector('td[data-label="' + label + '"]'), label).toHaveAttribute('data-card', 'meta')
+    // Type and the reporter are left off the card so the meta values fit two lines; they stay columns from md up.
+    for (const label of ['Type', 'Reported By']) {
+      const cell = row.querySelector('td[data-label="' + label + '"]')
+      expect(cell, label).not.toHaveAttribute('data-card')
+      expect(cell, label).toHaveClass('max-md:hidden')
+    }
     // A row with nothing to report to the Commission leaves that cell off the card, and the menu ends the meta line.
     expect(row.querySelector('td[data-label="NDIS Commission"]')).not.toHaveAttribute('data-card')
     expect(within(row).getByRole('button', { name: /More actions for/ }).closest('td')).toHaveAttribute('data-card', 'trail')
