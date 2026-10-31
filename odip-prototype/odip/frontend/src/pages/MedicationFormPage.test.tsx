@@ -91,7 +91,7 @@ describe('MedicationFormPage frequency controls', () => {
     const anchorInput = screen.getByLabelText(/Starting from/)
     await user.type(anchorInput, '2026-08-30')
 
-    expect(screen.getByText(/^Due every 2 days, starting 30\/08\/2026\.$/)).toBeInTheDocument()
+    expect(screen.getByText(/^Due every 2 days, starting Sun 30 Aug 2026\.$/)).toBeInTheDocument()
   })
 
   it('hides the frequency controls entirely for PRN medications', async () => {

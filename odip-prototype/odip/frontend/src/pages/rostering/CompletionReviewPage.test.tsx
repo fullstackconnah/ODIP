@@ -154,6 +154,19 @@ describe('CompletionReviewPage', () => {
     expect(mockApproveMutateAsync).toHaveBeenCalledWith('shift-1')
   })
 
+  it('writes the shift date in the long house format in the action labels and the dialog, and numeric in the table', async () => {
+    const user = userEvent.setup()
+    mockUseCompletions.mockReturnValue({ data: makePaged([makeQueueItem({ serviceDate: '2026-09-08' })]), isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+
+    expect(screen.getByRole('button', { name: "Approve Jack O'Sullivan with Liam Okafor on Tue 8 Sep 2026" })).toBeInTheDocument()
+    expect(screen.getAllByText('08/09/2026').length).toBeGreaterThan(0)
+    await user.click(screen.getByRole('button', { name: /^return jack o'sullivan/i }))
+    const dialog = screen.getByRole('alertdialog')
+    expect(dialog.textContent).toContain('shift on Tue\u00a08\u00a0Sep\u00a02026 to')
+    expect(dialog.textContent).not.toContain('08/09/2026')
+  })
+
   it('shows the incidents list above the approve/return actions when the lazily-fetched detail has incidents', async () => {
     const user = userEvent.setup()
     mockUseCompletions.mockReturnValue({ data: makePaged([makeQueueItem({ shiftId: 'shift-1' })]), isLoading: false, isError: false, refetch: vi.fn() })
