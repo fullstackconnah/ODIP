@@ -109,7 +109,7 @@ export default function TripDetailPage() {
 
   // Each segment's chip AND its attention tint come from one tone (`glanceState`), so the strip can never tint a
   // segment its own badge calls fine. Waitlist is warning; Action Needed and Outstanding are negative; the rest
-  // (Active, On Track, Covered, the wheelchair count) are quiet and keep the card fill. Every "x / y" figure is spelled
+  // (the wheelchair count, and any all-clear, which carries no pill) are quiet and keep the card fill. Every "x / y" figure is spelled
   // by `formatRatio`, so the ratios in one strip cannot drift apart at display size.
   const insuranceConfirmed = trip.insuranceConfirmedCount ?? 0
   const insuranceOutstanding = trip.insuranceOutstandingCount ?? 0
@@ -118,13 +118,13 @@ export default function TripDetailPage() {
       label: 'Participants / Staff',
       icon: factIcon('groups'),
       value: formatRatio(trip.currentParticipantCount, trip.staffAssignedCount),
-      ...((trip.waitlistCount ?? 0) > 0 ? glanceState('warning', 'Waitlist') : glanceState('positive', 'Active')),
+      ...((trip.waitlistCount ?? 0) > 0 ? glanceState('warning', 'Waitlist') : {}),
     },
     {
       label: 'Outstanding Tasks',
       icon: factIcon('checklist'),
       value: trip.outstandingTaskCount ?? 0,
-      ...((trip.outstandingTaskCount ?? 0) > 0 ? glanceState('negative', 'Action Needed') : glanceState('positive', 'On Track')),
+      ...((trip.outstandingTaskCount ?? 0) > 0 ? glanceState('negative', 'Action Needed') : {}),
     },
     {
       label: 'High Support / Overnight',
@@ -136,7 +136,7 @@ export default function TripDetailPage() {
       label: 'Insurance',
       icon: factIcon('health_and_safety'),
       value: formatRatio(insuranceConfirmed, insuranceConfirmed + insuranceOutstanding),
-      ...(insuranceOutstanding > 0 ? glanceState('negative', 'Outstanding') : glanceState('positive', 'Covered')),
+      ...(insuranceOutstanding > 0 ? glanceState('negative', 'Outstanding') : {}),
     },
   ]
 
