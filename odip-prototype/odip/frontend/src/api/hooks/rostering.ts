@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiPost, apiPostRaw, apiPut, apiDelete } from '../client'
 import { refreshBudgetFigures } from './funding-ledger'
 import { awaitsData } from '@/lib/queryPhase'
+import { providerSettingsQuery } from './catalogue'
 import type {
   RosterBoardDto,
   RosterFillDto,
@@ -65,6 +66,22 @@ export function useRosterPersonWeek(kind: 'staff' | 'participant', personId: str
     enabled: !!personId,
     // The last week stays on screen (dimmed) while the next loads, but never another person's: a chip link from one profile to the next reuses the page.
     placeholderData: (prev, prevQuery) => (prevQuery?.queryKey[3] === personId ? prev : undefined),
+  })
+}
+
+/** A participant's week as a family-facing PDF. No `week` lets the server pick the provider's current week; react-pdf loads only on click. Needs rostering access, which the board endpoint enforces. */
+export function useDownloadWeeklySchedulePdf(participantName: string | undefined, week: string | null) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, fileName }: { id: string; fileName: string }) => {
+      const [board, settings] = await Promise.all([
+        apiGet<RosterBoardDto>('/rostering/board', { groupBy: 'participant', participantId: id, ...(week ? { weekStart: week } : {}) }),
+        // Only the header's organisation line comes from here: a failed read drops the line, not the download.
+        qc.fetchQuery(providerSettingsQuery).catch(() => null),
+      ])
+      const { toScheduleWeek, generateScheduleWeekPdf } = await import('@/components/ScheduleWeekPdf')
+      await generateScheduleWeekPdf(toScheduleWeek(board, id, participantName ?? '', settings?.organisationName?.trim() || null), `${fileName} ${board.weekStart}.pdf`)
+    },
   })
 }
 

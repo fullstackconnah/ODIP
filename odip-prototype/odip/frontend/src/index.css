@@ -594,3 +594,9 @@ aside[data-folding] [data-fold="word"] { transform: translateX(-12px); }
   --shadow-hairline-up: 0 -8px 24px -4px rgba(0,0,0,0.35);
   --shadow-lift: 0 0 0 1px rgba(255,255,255,0.06), 0 24px 32px -12px rgba(0,0,0,0.5);
 }
+
+@media print {
+  @page { margin: 15mm; }
+  /* Portals (menus, tooltips, What's new, the bell sheet, editor dialogs) render outside #root; none is page content. */
+  body > :not(#root) { display: none !important; }
+}

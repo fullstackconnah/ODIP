@@ -34,7 +34,7 @@ type DropdownProps = {
   /** Menu variant: the Button look of the trigger. Primary for a header action; secondary for an in-page menu, so a page keeps one filled primary. */
   triggerVariant?: Extract<ButtonVariant, 'primary' | 'secondary'>
   colorClass?: string       // Tailwind color classes for pill trigger background
-  /** Icon variant: replaces the small icon-button look, so a header icon can match its neighbours' size. */
+  /** Icon variant: replaces the small icon-button look, so a header icon can match its neighbours' size. Menu variant: added to the trigger (a min-width that holds across a changing label). */
   triggerClassName?: string
   disabled?: boolean        // caller controls — not auto-applied on empty items
   loading?: boolean
@@ -499,7 +499,7 @@ export function Dropdown({
         onClick={() => setOpen(v => !v)}
         onKeyDown={handleKeyDown}
         // An md Button (primary is the header-action standard), 44px on a touch screen like any md Button, so no pad.
-        className={buttonClasses(triggerVariant, 'md', false, iconOnlyBelowSm ? 'max-sm:w-[var(--control-h)] max-sm:px-0' : undefined)}
+        className={buttonClasses(triggerVariant, 'md', false, [iconOnlyBelowSm && 'max-sm:w-[var(--control-h)] max-sm:px-0', triggerClassName].filter(Boolean).join(' ') || undefined)}
       >
         {icon}
         {iconOnlyBelowSm ? <span className="sr-only sm:not-sr-only">{label}</span> : label}
