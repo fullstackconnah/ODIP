@@ -311,3 +311,19 @@ export function toUpdateIncidentDto(i: IncidentDetailDto, patch: Partial<UpdateI
     ...patch,
   } satisfies Record<keyof UpdateIncidentDto, unknown> // a field added to the type and missed here is a type error
 }
+
+/** GET incidents/trend: the provider's last 6 months, oldest first, the current (partial) month last. Counts only. */
+export type IncidentTrendMonthDto = {
+  /** "yyyy-MM". */
+  month: string
+  incidents: number
+  rpUses: number
+  /** incidents - rpUses. */
+  otherIncidents: number
+}
+
+export type IncidentTrendDto = {
+  /** The provider-timezone date, so the card names "this month" without its own clock. */
+  today: string
+  months: IncidentTrendMonthDto[]
+}

@@ -1,4 +1,4 @@
-const MARK = { filled: 'rf-filled', open: 'rf-open rf-hatch' } as const
+const MARK = { filled: 'rf-filled', open: 'rf-open rf-hatch', rp: 'it-rp', other: 'it-other it-hatch' } as const
 
 /** A legend key for an area mark: a 12x12 swatch wearing the mark's own classes, so its colour (and the forced-colours rows) are the mark's. */
 export function ChartKey({ mark, label }: { mark: keyof typeof MARK; label: string }) {

@@ -133,7 +133,7 @@ describe.each(THEMES)('tone contrast (WCAG AA, 4.5:1), %s theme', (_theme, token
     it.each(['card', 'background', 'popover', 'input'])('the focus ring is visible on %s (3:1)', surface => {
       expect(contrast(t(surface), t('ring'))).toBeGreaterThanOrEqual(3)
     })
-    it.each(['chart-budget', 'chart-actual', 'chart-expected', 'chart-filled', 'chart-open'])('the chart mark %s is visible on the card (3:1)', name => {
+    it.each(['chart-budget', 'chart-actual', 'chart-expected', 'chart-filled', 'chart-open', 'chart-other'])('the chart mark %s is visible on the card (3:1)', name => {
       expect(contrast(t('card'), t(name))).toBeGreaterThanOrEqual(3)
     })
     it.each(['primary', 'destructive', 'warning'])('the %s fill is visible against the card (3:1, light warning excepted: R2-12)', name => {

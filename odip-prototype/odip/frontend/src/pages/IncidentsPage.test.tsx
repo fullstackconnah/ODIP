@@ -22,6 +22,7 @@ vi.mock('@/api/hooks', () => ({
   useRestoreIncident: () => ({ mutate: mockRestoreMutate, isPending: false }),
   useDeleteIncident: () => ({ mutate: mockDeleteMutate, isPending: false }),
   useFlaggedShiftNotes: mockUseFlaggedShiftNotes,
+  useIncidentTrend: () => ({ data: undefined, isLoading: true, isError: false }),
 }))
 
 // The "File incident" action navigates with router state (same mocking pattern as
