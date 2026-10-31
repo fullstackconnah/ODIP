@@ -246,9 +246,11 @@ function ComplaintForm({ complaint }: { complaint?: ComplaintDto }) {
 
   const staffItems = useMemo(() => {
     const items = staff.map(s => ({ value: s.id, label: s.fullName }))
-    // A handler already saved stays visible even once they have left, the way a saved incident link does.
-    if (values.handledByUserId && !items.some(i => i.value === values.handledByUserId)) {
-      items.unshift({ value: values.handledByUserId, label: complaint?.handledByUserId === values.handledByUserId && complaint.handledByName ? complaint.handledByName : 'Former staff member' })
+    // The saved handler always stays an option once they have left, so a switch away can be undone in the same edit. A pick of an inactive person is still covered too.
+    const saved = complaint?.handledByUserId
+    for (const id of new Set([saved, values.handledByUserId])) {
+      if (!id || items.some(i => i.value === id)) continue
+      items.unshift({ value: id, label: `${id === saved && complaint?.handledByName ? complaint.handledByName : 'Former staff member'} (inactive)` })
     }
     return [{ value: '', label: 'Nobody yet' }, ...items]
   }, [staff, values.handledByUserId, complaint])
