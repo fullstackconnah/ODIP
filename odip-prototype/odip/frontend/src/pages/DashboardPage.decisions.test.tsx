@@ -79,7 +79,7 @@ describe('DashboardPage — the order of the page (SHAPE §2)', () => {
     renderPage()
 
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
-    expect(h2s()).toEqual(['Alerts', 'Needs your decision', 'Upcoming trips', 'Your platform'])
+    expect(h2s()).toEqual(['Alerts', 'Needs your decision', 'Upcoming trips'])
     expect(screen.getByRole('heading', { level: 2, name: 'Needs your decision' })).toHaveAttribute('tabindex', '-1')
   })
 
@@ -172,7 +172,7 @@ describe('DashboardPage — the whole page clear (SHAPE §6)', () => {
 
     expect(screen.getByText('All clear. Nothing needs you right now.')).toBeInTheDocument()
     expect(screen.getByText('Checked and at zero: shift completions, leave requests, open incidents, staff credentials to update, tasks due, critical participant alerts, trips missing accommodation, trips missing vehicles and trips missing staff.')).toBeInTheDocument()
-    expect(h2s()).toEqual(['Upcoming trips', 'Your platform'])
+    expect(h2s()).toEqual(['Upcoming trips'])
   })
 
   it('never says it while a group is waiting or has failed', () => {

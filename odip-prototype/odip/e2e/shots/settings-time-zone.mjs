@@ -124,7 +124,7 @@ try {
     const sel = await select.boundingBox()
     check(vp.touch ? '5 select height >= 44' : '5 select height == 32', ctx, sel.height, vp.touch ? sel.height >= 44 : near(sel.height, 32, 0.5))
     if (!vp.touch) {
-      const name = await group.page().getByLabel('Organisation name').boundingBox()
+      const name = await group.page().getByLabel('Legal name').boundingBox()
       const tops = await group.evaluate((g) => {
         const top = (re) => { const el = [...g.querySelectorAll("*")].find((e) => [...e.childNodes].some((n) => n.nodeType === 3 && re.test(n.textContent.trim()))); return el ? el.getBoundingClientRect().y : null }
         return { state: top(/^State$/), zone: top(/^Time zone$/) }

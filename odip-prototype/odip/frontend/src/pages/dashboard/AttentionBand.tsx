@@ -64,7 +64,8 @@ function Tile({ item }: { item: BandItem }) {
 
 export function AttentionBand({ items }: { items: BandItem[] }) {
   if (items.length === 0) return null
-  const tiles = items.filter((item) => item.loading || item.error || item.count > 0)
+  // Danger before warning (the sort is stable, so the given order holds within a tone): what is wrong comes before what is merely due.
+  const tiles = items.filter((item) => item.loading || item.error || item.count > 0).sort((a, b) => Number(b.tone === 'danger') - Number(a.tone === 'danger'))
   const clear = items.filter((item) => !item.loading && !item.error && item.count === 0).map((item) => item.noun ?? item.label)
   const styles = bandTileStyles(tiles.length)
 

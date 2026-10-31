@@ -152,11 +152,11 @@ describe('DashboardPage — needs-attention band: each tile says what it means a
     ['Qualification issues', 'Expired, undated or due within 30 days, across 2 staff members.', 'Review qualifications', '/qualifications'],
     ['Budgets at risk', '3 participants: 2 over, 1 forecast to go over', 'Review budgets', '/budgets'],
     ['Overdue', 'Tasks past their due date and still open.', 'Open overdue tasks', '/tasks?status=Overdue'],
+    ['NDIS Commission overdue', 'Reportable incidents not reported to the NDIS Commission by their deadline.', 'Review NDIS Commission reports', '/incidents?qsc=overdue'],
     ['Missing accommodation', 'Trips start within 60 days with no accommodation reserved.', 'Open trips', '/trips'],
     ['Missing vehicles', 'Trips start within 60 days with no vehicle assigned.', 'Assign vehicles', '/schedule'],
     ['Missing staff', 'Trips start within 60 days with no staff assigned.', 'Assign staff', '/schedule'],
     ['Open incidents', 'Incidents not yet resolved or closed.', 'Open incidents', '/incidents'],
-    ['NDIS Commission overdue', 'Reportable incidents not reported to the NDIS Commission by their deadline.', 'Review NDIS Commission reports', '/incidents?qsc=overdue'],
     ['Pending leave', 'Leave and unavailability requests waiting for a decision.', 'Review leave requests', '/rostering/leave'],
     ['Shift completions', 'Submitted shifts waiting for review before they are billed.', 'Review completions', '/rostering/completions'],
   ] as const
@@ -258,7 +258,7 @@ describe('DashboardPage — needs-attention band: each tile says what it means a
 })
 
 describe('DashboardPage — needs-attention band: tint and the All clear states', () => {
-  it('tints a tile by its tone family: danger takes the error container, warning the warning container, everything in the on-container colour', () => {
+  it('tints a tile by its tone family: danger takes a soft wash of the error container, warning a soft wash of the warning container, words in the foreground', () => {
     showAll()
     renderPage()
 
@@ -267,11 +267,11 @@ describe('DashboardPage — needs-attention band: tint and the All clear states'
     const warning = ['Missing accommodation', 'Missing vehicles', 'Missing staff', 'Open incidents', 'Pending leave', 'Shift completions']
     for (const label of danger) {
       expect(tileFor(label)).toHaveAttribute('data-attention', 'error')
-      expect(tileFor(label)).toHaveClass('bg-[var(--color-error-container)]', 'text-[var(--color-on-error-container)]')
+      expect(tileFor(label)).toHaveClass('bg-[var(--color-error-container)]/30', 'text-[var(--color-foreground)]')
     }
     for (const label of warning) {
       expect(tileFor(label)).toHaveAttribute('data-attention', 'warning')
-      expect(tileFor(label)).toHaveClass('bg-[var(--color-warning-container)]', 'text-[var(--color-on-warning-container)]')
+      expect(tileFor(label)).toHaveClass('bg-[var(--color-warning-container)]/50', 'text-[var(--color-foreground)]')
     }
   })
 
@@ -285,7 +285,7 @@ describe('DashboardPage — needs-attention band: tint and the All clear states'
     expect(row).toHaveTextContent(
       'All clear on qualification issues, critical participant alerts, trips missing accommodation, trips missing vehicles, trips missing staff, open incidents, overdue NDIS Commission reports, pending leave and shift completions',
     )
-    expect(row).toHaveClass('bg-[var(--color-primary-fixed)]', 'text-[var(--color-on-primary-fixed)]')
+    expect(row).toHaveClass('bg-[var(--color-selected)]', 'text-[var(--color-on-selected)]')
     expect(screen.getAllByText('All clear')).toHaveLength(1)
     expect(tileFor('Overdue').compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
@@ -308,7 +308,7 @@ describe('DashboardPage — needs-attention band: tint and the All clear states'
     renderPage()
 
     const field = screen.getByText('All clear. Nothing needs you right now.').closest('div.rounded-md') as HTMLElement
-    expect(field).toHaveClass('bg-[var(--color-primary-fixed)]', 'text-[var(--color-on-primary-fixed)]')
+    expect(field).toHaveClass('bg-[var(--color-selected)]', 'text-[var(--color-on-selected)]')
     // The field stands in place of the band: no band, no link, no second row.
     expect(screen.queryByRole('region', { name: 'Alerts' })).not.toBeInTheDocument()
     expect(within(field).queryAllByRole('link')).toHaveLength(0)
@@ -390,7 +390,7 @@ describe('DashboardPage — the Schedule links say what the role can do', () => 
     renderPage()
 
     expect(within(band()).getAllByRole('link').map((a) => a.textContent)).toEqual([
-      'Review qualifications', 'Open overdue tasks', 'Open trips', 'Open incidents', 'Review NDIS Commission reports',
+      'Review qualifications', 'Open overdue tasks', 'Review NDIS Commission reports', 'Open trips', 'Open incidents',
     ])
   })
 })

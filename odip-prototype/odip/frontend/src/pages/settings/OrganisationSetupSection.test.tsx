@@ -18,7 +18,7 @@ const provider: ProviderSettingsDto = {
   id: 'synthetic-provider', registrationNumber: 'not-shown-registration', abn: 'not-shown-abn',
   organisationName: 'Synthetic Support', address: '1 Example Street', state: 'VIC', gstRegistered: true, isPaceProvider: true,
   bankAccountName: 'PRIVATE BANK NAME', bsb: '123-456', accountNumber: '987654321', invoiceFooterNotes: 'PRIVATE FOOTER',
-  managerName: 'PRIVATE MANAGER', managerPhone: 'PRIVATE PHONE', timeZoneId: null, participantReadinessMode: 'Enforce', medicationCompetencyMode: 'Enforce',
+  managerName: 'PRIVATE MANAGER', managerPhone: 'PRIVATE PHONE', timeZoneId: null, tradingName: null, contactEmail: null, contactPhone: null, website: null, participantReadinessMode: 'Enforce', medicationCompetencyMode: 'Enforce',
   updatedAt: '2026-10-23T01:00:00.123456Z',
   invoiceNumberPrefix: 'INV-', creditNotePrefix: 'CN-', invoiceStartNumber: 1, paymentTermsDays: 14, nextInvoiceDisplayNumber: 'INV-0001', invoicesIssued: false,
 }

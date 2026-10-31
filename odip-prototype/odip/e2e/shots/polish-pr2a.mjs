@@ -1,7 +1,7 @@
 // Polish PR 2a: selected tint + bar, the one field treatment, the calmer dark primary and the dark elevation steps.
 // Numeric checks 1-6 and 9 from SHAPE-PR2 section 6 (exit 1 on any failure), on the section 6 routes at 1280 light, 1280 dark and 390 light touch.
 // A page header (2b scope) holding a second solid primary is recorded as `known2b` (printed and in known2b.json), never as a pass (PLAN-AMEND-PR2A ruling 4).
-// Check 3 skips rounded-full status pills: StatusBadge success is an opaque lime fill and is explicitly unchanged in 2a (SHAPE-PR2 section 1, "Not changed").
+// Check 3 skips only the 48px brand tile: since polish 3a a success pill is the Selected tint, so no pill is excluded.
 // Captures: only the changed states, padded crops plus one full page per breakpoint where it changed.
 import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
@@ -73,7 +73,7 @@ async function measureRoute(page) {
       const r = el.getBoundingClientRect()
       return r.height >= 28 && r.width >= 56 && h.same(getComputedStyle(el).backgroundColor, primary) && getComputedStyle(el).backgroundColor !== 'rgba(0, 0, 0, 0)' && !el.closest('table tbody, [role=dialog]')
     }).map((el) => ({ text: (el.textContent || el.getAttribute('aria-label') || '').trim().slice(0, 40), top: el.getBoundingClientRect().top + scrollY, inHeader: !!el.closest('header, [data-page-header]') || (!!el.closest('main') && el.getBoundingClientRect().top + scrollY < 160) }))
-    const limes = all.filter((el) => { const r = el.getBoundingClientRect(); return getComputedStyle(el).backgroundColor !== 'rgba(0, 0, 0, 0)' && h.same(getComputedStyle(el).backgroundColor, lime) && !(r.width <= 48 && r.height <= 48) && !el.closest('[data-status-badge]') })
+    const limes = all.filter((el) => { const r = el.getBoundingClientRect(); return getComputedStyle(el).backgroundColor !== 'rgba(0, 0, 0, 0)' && h.same(getComputedStyle(el).backgroundColor, lime) && !(r.width <= 48 && r.height <= 48) })
       .map((el) => (el.textContent || '').trim().slice(0, 30))
     const selected = [...document.querySelectorAll('main [role=radio][aria-checked=true], main [role=tab][aria-selected=true], main nav [aria-current=page]')].filter(h.shown).map((el) => {
       const cs = getComputedStyle(el)

@@ -45,7 +45,7 @@ describe('glanceState — one tone decides the chip and the tint', () => {
     const { attention, badge } = glanceState('positive', 'On Track')
     expect(attention).toBeUndefined()
     render(<>{badge}</>)
-    expect(screen.getByText('On Track')).toHaveClass('bg-[var(--color-primary-fixed)]', 'text-[var(--color-on-primary-fixed)]')
+    expect(screen.getByText('On Track')).toHaveClass('bg-[var(--color-selected)]', 'text-[var(--color-on-selected)]')
   })
 
   it('cannot disagree with itself: every tone yields a chip legible on the fill it asks for', () => {

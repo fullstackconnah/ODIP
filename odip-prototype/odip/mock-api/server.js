@@ -2070,7 +2070,7 @@ const claimHub = claimHubModule.create({ respond, failEnvelope, FILE: invoicesMo
 const providerSettingsRow = {
   id: 'ps-0001', registrationNumber: '4050000001', abn: '12345678901', organisationName: 'Sample Support Co', address: '1 Sample St, Brisbane QLD 4000', state: 'QLD',
   gstRegistered: false, isPaceProvider: true, bankAccountName: 'Sample Support Co', bsb: '000-000', accountNumber: '00000000', invoiceFooterNotes: null,
-  managerName: null, managerPhone: null, timeZoneId: null, participantReadinessMode: 'Warn', medicationCompetencyMode: 'Warn',
+  managerName: null, managerPhone: null, timeZoneId: null, tradingName: null, contactEmail: null, contactPhone: null, website: null, participantReadinessMode: 'Warn', medicationCompetencyMode: 'Warn',
 }
 
 function claimDetail(c) {
@@ -3152,6 +3152,8 @@ const putRoutes = [
     const refused = invoiceMock.saveNumbering(body)
     if (refused) return refused
     for (const key of Object.keys(providerSettingsRow)) if (key !== 'id' && body[key] !== undefined) providerSettingsRow[key] = body[key]
+    // The contact fields: blank clears to null, as the server does.
+    for (const key of ['tradingName', 'contactEmail', 'contactPhone', 'website']) if (typeof providerSettingsRow[key] === 'string') providerSettingsRow[key] = providerSettingsRow[key].trim() || null
     return invoiceMock.settingsDto(providerSettingsRow)
   }],
   ...intake.put,
