@@ -135,6 +135,7 @@ describe('IntegrationsTab — connected', () => {
         item({ id: 'i2', kind: 'FixInEmploymentHero', userId: null, employeeId: '201', name: 'Nia Ko', reason: 'They have no email in Employment Hero, and ODIP needs one to add them.' }),
         item({ id: 'i3', kind: 'FixInOdip', userId: 'u3', name: 'Sam Lee', reason: 'Employment Hero has a new email for them.' }),
         item({ id: 'i4', kind: 'MissingFromEmploymentHero', userId: 'u4', name: 'Bo Chan', reason: "Linked, but no longer in Employment Hero's employee list." }),
+        item({ id: 'i5', kind: 'ConfirmAddress', userId: 'u5', name: 'Una Odd', reason: 'Their email (una@other.org) came from Employment Hero.' }),
       ],
     })
     state.employees = [
@@ -146,6 +147,10 @@ describe('IntegrationsTab — connected', () => {
     const row = (name: string) => screen.getByText(name).closest('li') as HTMLElement
     expect(within(row('Nia Ko')).getByText('Fix it in Employment Hero; it clears at the next sync.')).toBeInTheDocument()
     expect(within(row('Sam Lee')).getByRole('link', { name: 'Open staff page: Sam Lee' })).toHaveAttribute('href', '/staff/u3/edit')
+    // The hold clears only when someone confirms the address on the staff page, so there is a link there and no Dismiss.
+    expect(within(row('Una Odd')).getByRole('link', { name: 'Open staff page: Una Odd' })).toHaveAttribute('href', '/staff/u5')
+    expect(within(row('Una Odd')).queryByRole('button', { name: /Dismiss/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Confirm email address (1)' })).toBeInTheDocument()
     await user.click(within(row('Bo Chan')).getByRole('button', { name: 'Dismiss: Bo Chan' }))
     expect(calls.dismiss).toHaveBeenCalledWith('i4')
     // Jane has a same-name suggestion, so Leave unlinked asks first: the next sync would add the EH Jane as a new staff member.

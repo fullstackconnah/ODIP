@@ -59,6 +59,10 @@ public static class AddressConfirmation
         return !CommonEmailProviders.Covers(domain);
     }
 
+    /// <summary>Why a held address (see User.SignInAddressUnconfirmed) cannot get a sign-in account yet. Shared by the staff and SuperAdmin routes.</summary>
+    public static string HeldMessage(string fullName) =>
+        $"Confirm {fullName}'s email address on their staff page first. It came from Employment Hero and isn't at your organisation's domain or a common email provider.";
+
     /// <summary>What to ask the admin to check.</summary>
     public static string Message(string normalisedEmail, string? tenantEmailDomain) =>
         $"{normalisedEmail} is not at {(string.IsNullOrWhiteSpace(tenantEmailDomain) ? "this organisation's domain" : EmailIdentity.NormaliseDomain(tenantEmailDomain))} " +

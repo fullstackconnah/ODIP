@@ -678,4 +678,93 @@ public class EmploymentHeroStaffSyncTests
         Assert.Equal(1, result.Log!.Linked);
         Assert.Contains(db.EmploymentHeroAttentions, a => a.ExternalEmployeeId == "801" && a.Kind == EmploymentHeroAttentionKind.FixInEmploymentHero);
     }
+
+    // The hold on an unusual address (audit I7): the sync brings addresses an Admin never typed, so one at neither the organisation's domain nor a common
+    // provider waits for an Admin to confirm it before it can sign in. null = never assessed, true = held, false = a person confirmed it.
+
+    [Fact]
+    public async Task Sync_holds_an_unusual_address_on_create_and_not_a_common_or_own_domain_one()
+    {
+        var (db, tenant) = await OrganisationAsync();
+        await using var _ = db;
+
+        await RunAsync(db, tenant, Eh(Employee(301, "Una", "Odd", "una@other.org"), Employee(302, "Gil", "Mail", "gil@gmail.com"), Employee(303, "Own", "Dom", "own@acme.org.au")));
+
+        var una = await db.Users.AsNoTracking().SingleAsync(u => u.FirstName == "Una");
+        Assert.True(una.SignInAddressUnconfirmed);
+        Assert.Null((await db.Users.AsNoTracking().SingleAsync(u => u.FirstName == "Gil")).SignInAddressUnconfirmed);
+        Assert.Null((await db.Users.AsNoTracking().SingleAsync(u => u.FirstName == "Own")).SignInAddressUnconfirmed);
+        var item = await db.EmploymentHeroAttentions.SingleAsync();
+        Assert.Equal(($"ConfirmAddress:{una.Id}", EmploymentHeroAttentionKind.ConfirmAddress, (Guid?)una.Id), (item.Key, item.Kind, item.UserId));
+        Assert.Contains("una@other.org", item.Reason);
+    }
+
+    [Fact]
+    public async Task A_repoint_to_an_unusual_address_holds_and_a_repoint_to_a_common_one_does_not()
+    {
+        var (db, tenant) = await OrganisationAsync(t => EhFixture.Staff(t, "Tom", "Ito", "tom@gmail.com", "102"), t => EhFixture.Staff(t, "Ana", "Ruiz", "ana@other.org", "103"));
+        await using var _ = db;
+        var ana = await db.Users.SingleAsync(u => u.FirstName == "Ana");
+        ana.SignInAddressUnconfirmed = true;   // held, as the sync left her
+        await db.SaveChangesAsync();
+
+        await RunAsync(db, tenant, Eh(Employee(102, "Tom", "Ito", "tom@elsewhere.net"), Employee(103, "Ana", "Ruiz", "ana@gmail.com")));
+
+        var tom = await db.Users.AsNoTracking().SingleAsync(u => u.FirstName == "Tom");
+        Assert.Equal(("tom@elsewhere.net", (bool?)true), (tom.Email, tom.SignInAddressUnconfirmed));   // the new address and the hold in the same saved row
+        var tomItems = await db.EmploymentHeroAttentions.Where(a => a.UserId == tom.Id).ToListAsync();
+        Assert.Contains(tomItems, a => a.Kind == EmploymentHeroAttentionKind.ConfirmAddress);
+        Assert.Equal("Employment Hero changed their email to tom@elsewhere.net. Confirm it on their staff page, then send a sign-in invite.",
+            tomItems.Single(a => a.Kind == EmploymentHeroAttentionKind.FixInOdip).Reason);
+        var anaNow = await db.Users.AsNoTracking().SingleAsync(u => u.FirstName == "Ana");
+        Assert.Equal(("ana@gmail.com", (bool?)null), (anaNow.Email, anaNow.SignInAddressUnconfirmed));
+        Assert.DoesNotContain(db.EmploymentHeroAttentions, a => a.UserId == anaNow.Id && a.Kind == EmploymentHeroAttentionKind.ConfirmAddress);
+    }
+
+    [Fact]
+    public async Task An_existing_never_signed_in_linked_user_is_held_on_the_next_sync_and_one_who_has_signed_in_is_not()
+    {
+        var (db, tenant) = await OrganisationAsync(
+            t => EhFixture.Staff(t, "Nia", "New", "nia@other.org", "201"),
+            t => EhFixture.Staff(t, "Sid", "Seen", "sid@other.org", "202", lastLogin: new DateTime(2026, 10, 1)),
+            t => EhFixture.Staff(t, "Cora", "Coord", "cora@other.org", "203", UserRole.Coordinator));   // no Role filter: a Coordinator is held too
+        await using var _ = db;
+
+        await RunAsync(db, tenant, Eh(Employee(201, "Nia", "New", "nia@other.org"), Employee(202, "Sid", "Seen", "sid@other.org"), Employee(203, "Cora", "Coord", "cora@other.org")));
+
+        Assert.True((await db.Users.AsNoTracking().SingleAsync(u => u.FirstName == "Nia")).SignInAddressUnconfirmed);
+        Assert.Null((await db.Users.AsNoTracking().SingleAsync(u => u.FirstName == "Sid")).SignInAddressUnconfirmed);
+        Assert.True((await db.Users.AsNoTracking().SingleAsync(u => u.FirstName == "Cora")).SignInAddressUnconfirmed);
+    }
+
+    [Fact]
+    public async Task A_confirmed_address_is_not_held_again_by_the_next_sync()
+    {
+        var (db, tenant) = await OrganisationAsync();
+        await using var _ = db;
+        var eh = Eh(Employee(301, "Una", "Odd", "una@other.org"));
+        await RunAsync(db, tenant, eh);
+        var una = await db.Users.SingleAsync(u => u.FirstName == "Una");
+        una.SignInAddressUnconfirmed = false;   // what the confirm endpoint does
+        db.EmploymentHeroAttentions.RemoveRange(db.EmploymentHeroAttentions.Where(a => a.Kind == EmploymentHeroAttentionKind.ConfirmAddress));
+        await db.SaveChangesAsync();
+
+        await RunAsync(db, tenant, eh);
+
+        Assert.False((await db.Users.AsNoTracking().SingleAsync(u => u.FirstName == "Una")).SignInAddressUnconfirmed);
+        Assert.DoesNotContain(db.EmploymentHeroAttentions, a => a.Kind == EmploymentHeroAttentionKind.ConfirmAddress);
+    }
+
+    [Fact]
+    public async Task The_ConfirmAddress_item_survives_a_second_sync()
+    {
+        var (db, tenant) = await OrganisationAsync();
+        await using var _ = db;
+        var eh = Eh(Employee(301, "Una", "Odd", "una@other.org"));
+
+        await RunAsync(db, tenant, eh);
+        await RunAsync(db, tenant, eh);   // ReconcileAsync drops every item the run did not emit again
+
+        Assert.Single(db.EmploymentHeroAttentions, a => a.Kind == EmploymentHeroAttentionKind.ConfirmAddress);
+    }
 }

@@ -12,6 +12,7 @@ export const SIGN_IN_REFUSAL_CODES = [
   'NoOdipAccount',
   'Ambiguous',
   'TenantInactive',
+  'AddressUnconfirmed',
   'LockedOut',
 ] as const
 
@@ -103,6 +104,9 @@ export function describeSignInRefusal(refusal: SignInRefusal, email: string, ver
       return { sentence: `${email} isn't set up in Bunya Support. Ask your administrator to add you.` }
     case 'TenantInactive':
       return { sentence: "Your organisation's Bunya Support account is inactive.", nextStep: 'Ask your administrator to reactivate it.' }
+    case 'AddressUnconfirmed':
+      // Not "wrong": the address may well be right, it only has not been checked yet.
+      return { sentence: `Your organisation needs to confirm ${email} before you can sign in to Bunya Support.`, nextStep: 'Ask your administrator to confirm it.' }
     case 'ProviderNotAllowed':
       return { sentence: "That sign-in method isn't enabled for Bunya Support. Use your email and password." }
     case 'Ambiguous':

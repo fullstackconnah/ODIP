@@ -8,6 +8,7 @@ using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Integrations;
 using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
 using Odip.Domain.Rostering.Services;
@@ -389,6 +390,7 @@ public class StaffController : ControllerBase
     private static StaffDetailDto ToStaffDetailDto(User s, DateOnly today) => new()
     {
         SignInInviteSentAt = s.SignInInviteSentAt,
+        SignInAddressUnconfirmed = s.SignInAddressUnconfirmed == true,
         HasSignedIn = s.LastLoginAt != null,
         Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
         FullName = (s.FirstName + " " + s.LastName).Trim(), Username = s.Username,
@@ -580,6 +582,7 @@ public class StaffController : ControllerBase
 
         s.FirstName = dto.FirstName; s.LastName = dto.LastName; s.Position = dto.Position; s.Role = dto.Role;
         s.Email = emailLower; s.Mobile = dto.Mobile; s.Region = dto.Region;
+        if (addressChanged) s.SignInAddressUnconfirmed = false;   // the form asked about an unusual address above: it is person-confirmed now
         s.IsDriverEligible = dto.IsDriverEligible; s.IsFirstAidQualified = dto.IsFirstAidQualified;
         s.IsMedicationCompetent = dto.IsMedicationCompetent; s.IsManualHandlingCompetent = dto.IsManualHandlingCompetent;
         s.IsOvernightEligible = dto.IsOvernightEligible; s.IsActive = dto.IsActive;
@@ -651,6 +654,29 @@ public class StaffController : ControllerBase
         if (outcome.Account is { } account) return Ok(ApiResponse<SignInAccountDto>.Ok(account));
         if (outcome.BadGateway) return StatusCode(StatusCodes.Status502BadGateway, ApiResponse<SignInAccountDto>.Fail(outcome.Error!));
         return BadRequest(ApiResponse<SignInAccountDto>.Fail(outcome.Error!));
+    }
+
+    /// <summary>
+    /// Releases a held sign-in address (see User.SignInAddressUnconfirmed): the caller has checked it. Tenant-scoped (the Users filter: another
+    /// organisation's row is not found), idempotent (a row not held is left as it is), audited by the tracked save.
+    /// </summary>
+    [HttpPost("{id:guid}/confirm-address")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<bool>>> ConfirmAddress(Guid id, CancellationToken ct)
+    {
+        var s = await _db.Users.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (s == null) return NotFound(ApiResponse<bool>.Fail("Staff not found"));
+        if (s.SignInAddressUnconfirmed is true)
+        {
+            s.SignInAddressUnconfirmed = false;
+            s.UpdatedAt = _clock.GetUtcNow().UtcDateTime;
+            // The card's item goes in the same save, so it does not linger until the next sync.
+            _db.EmploymentHeroAttentions.RemoveRange(await _db.EmploymentHeroAttentions
+                .Where(a => a.UserId == s.Id && a.Kind == EmploymentHeroAttentionKind.ConfirmAddress).ToListAsync(ct));
+            await _db.SaveChangesAsync(ct);
+            _logger?.LogInformation("The sign-in address of staff member {TargetUserId} was confirmed by {ActorUserId}", s.Id, User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "unknown");
+        }
+        return Ok(ApiResponse<bool>.Ok(true));
     }
 
     /// <summary>
