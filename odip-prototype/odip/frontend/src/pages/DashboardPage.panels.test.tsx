@@ -95,7 +95,7 @@ describe('DashboardPage — Critical participant alerts card', () => {
         {
           participantId: 'p2', participantName: 'Alex Rivera', isActive: true,
           alerts: [
-            { type: 'qsc-report-overdue', severity: 'Critical', message: 'QSC report has not been submitted', deepLinkTab: 'details', linkTo: '/qsc-reports/qsc-1' },
+            { type: 'qsc-report-overdue', severity: 'Critical', message: 'NDIS Commission report has not been submitted', deepLinkTab: 'details', linkTo: '/qsc-reports/qsc-1' },
           ],
           criticalCount: 1, warningCount: 0, infoCount: 0,
         },

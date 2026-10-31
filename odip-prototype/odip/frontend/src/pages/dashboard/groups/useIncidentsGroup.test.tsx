@@ -19,7 +19,7 @@ const page = (items: unknown[], totalCount = items.length) => ({ items, totalCou
 beforeEach(() => { apiGet.mockReset() })
 
 describe('Incidents group (links only)', () => {
-  it('lists the QSC-overdue ones first, then the rest of what needs somebody, each once, counted by the needsAttention total', async () => {
+  it('lists the NDIS Commission overdue ones first, then the rest of what needs somebody, each once, counted by the needsAttention total', async () => {
     apiGet.mockImplementation((_url: string, params: Record<string, string>) => Promise.resolve(params.isOverdueQsc
       ? page([incident('q1', { isOverdue24h: true, status: 'Resolved' })])
       : page([incident('a1'), incident('q1', { isOverdue24h: true, status: 'Resolved' }), incident('a2', { status: 'UnderReview' })], 9)))

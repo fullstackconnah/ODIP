@@ -91,7 +91,7 @@ export const threeAlertsOnTwoParticipants = {
       participantId: 'p1', participantName: 'Jamie Smith', isActive: true, criticalCount: 2, warningCount: 0, infoCount: 0,
       alerts: [
         { type: 'plan-expired', severity: 'Critical', message: 'NDIS plan end date has passed', deepLinkTab: 'details', linkTo: null },
-        { type: 'qsc-report-overdue', severity: 'Critical', message: 'QSC report has not been submitted', deepLinkTab: 'details', linkTo: '/incidents/i1' },
+        { type: 'qsc-report-overdue', severity: 'Critical', message: 'NDIS Commission report has not been submitted', deepLinkTab: 'details', linkTo: '/incidents/i1' },
       ],
     },
     criticalAlertFor('p2', 'Alex Rivera'),
