@@ -153,7 +153,6 @@ async function tripChecks(page, profile, tag, failing) {
   const glance = await page.evaluate(() => [...document.querySelectorAll('main span')].filter((e) => ['Active', 'Covered'].includes((e.textContent || '').trim()) && /rounded-full/.test(e.className)).length)
   if (!failing) check(tag, '12 no Active or Covered badge in the glance strip', glance === 0, glance)
   if (!failing && !profile.dark && !profile.touch) checks.push(checkCropHolds(await cropElement(page, page.locator('main div.grid').first(), out(profile, 'trip-glance'), { touch: false, pad: 16 })))
-  await page.getByRole('tab', { name: 'Itinerary' }).click()
   if (failing) {
     const retry = page.getByRole('button', { name: 'Try again' }).first()
     await retry.waitFor({ state: 'visible', timeout: 45_000 })
@@ -170,6 +169,15 @@ async function tripChecks(page, profile, tag, failing) {
 
 // Check 13: portal shift cards, 390 only.
 async function portalChecks(page, profile, tag) {
+  // Synthetic shifts on the first day of the week the page asks for (the mock only has shifts on one fixed day); one of them 2:1.
+  const shift = (day, id, startTime, endTime, durationHours, extra = {}) => ({ id, participantId: 'p-0001', participantName: 'Liam Okafor', serviceDate: day, startTime, endTime, endsNextDay: false, durationHours, ratio: 'OneToOne', nightType: 'None', status: 'Published', returnCount: 0, notes: null, ...extra })
+  await page.route('**/api/v1/portal/my-shifts**', (route) => {
+    // `from` is the day before the browsed Monday, so the shifts sit one day on.
+    const from = new URL(route.request().url()).searchParams.get('from') ?? '2026-11-01'
+    const day = new Date(Date.parse(`${from}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10)
+    const shifts = [shift(day, 'sh-am', '07:00:00', '15:00:00', 8), shift(day, 'sh-pm', '16:00:00', '20:30:00', 4.5, { ratio: 'TwoToOne' })]
+    return route.fulfill({ json: envelope({ shifts, tripAssignments: [] }) })
+  })
   await gotoReady(page, '/portal')
   await page.waitForTimeout(800)
   const m = await page.evaluate(() => {
@@ -184,7 +192,7 @@ async function portalChecks(page, profile, tag) {
       const r = el.getBoundingClientRect()
       return r.height >= 28 && r.width >= 56 && h.same(getComputedStyle(el).backgroundColor, primary)
     }).length
-    return { cards: cards.length, durations: secondLines.map((t) => /\d\s?h\b/.test(t)), leaveOk: plain(btn('My leave')), witnessOk: plain(btn('Witness approvals')), solids }
+    return { cards: cards.length, durations: secondLines.map((t) => /\d\s?h(?![a-z])/i.test(t)), leaveOk: plain(btn('My leave')), witnessOk: plain(btn('Witness approvals')), solids }
   })
   check(tag, '13 the portal lists shift cards', m.cards >= 1, m.cards)
   check(tag, '13 each shift card second line shows the duration in h', m.durations.length > 0 && m.durations.every(Boolean), m.durations)
