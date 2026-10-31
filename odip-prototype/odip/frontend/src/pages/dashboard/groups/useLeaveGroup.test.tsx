@@ -51,13 +51,13 @@ describe('Leave group — what it reads', () => {
     expect(screen.getByRole('tab', { name: 'Leave (3)' })).toBeInTheDocument()
   })
 
-  it('wraps the Dates column to two lines, like Note, so a long rule is not cut on a phone card', async () => {
+  it('gives the Dates fact its own full-width line on a phone card, so a long rule is not cut', async () => {
     answer([leave()], [rule()])
     renderGroup(() => useLeaveGroup(true, 'u-viewer'))
 
     await screen.findByText('Sam Lee')
     const dates = [...document.querySelectorAll('td')].find((td) => td.textContent === 'Tuesdays, 9am – 12pm, from 21 Oct')
-    expect(dates?.querySelector('span')).toHaveClass('md:line-clamp-2')
+    expect(dates).toHaveClass('max-md:basis-full', 'max-md:max-w-none!')
   })
 
   it('draws an unavailability rule’s notes in the Note column', async () => {

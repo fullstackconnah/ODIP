@@ -118,7 +118,7 @@ export function useLeaveGroup(enabled: boolean, viewerId: string | null): GroupM
     title: 'Leave',
     noun: 'leave requests',
     subjectHeader: 'Staff',
-    columns: [{ header: 'Dates', long: true }, { header: 'Type' }, { header: 'Note', long: true }],
+    columns: [{ header: 'Dates', wide: true }, { header: 'Type' }, { header: 'Note', long: true }],
     phase: groupPhase(leave, unavailability),
     refetch: () => { void leave.refetch(); void unavailability.refetch() },
     readAt: Math.min(leave.dataUpdatedAt, unavailability.dataUpdatedAt),

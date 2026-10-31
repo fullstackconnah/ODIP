@@ -145,7 +145,12 @@ function measureCards() {
     const titleEl = r.querySelector('td[data-card="primary"] :is(a, span)') || r.querySelector('td[data-card="primary"]')
     const tickEl = rest.find((el) => /Mark complete/.test(named(el)))
     const metaLabels = [...r.querySelectorAll('td[data-card="meta"]')].filter(shown).sort((a, b) => { const x = a.getBoundingClientRect(), y = b.getBoundingClientRect(); return Math.abs(x.top - y.top) > 4 ? x.top - y.top : x.left - y.left }).map((td) => td.dataset.label)
-    return { metaLabels, tickOverTitle: !!(tickEl && titleEl) && (() => { const a = box(tickEl), t = box(titleEl); return a.l < t.r && a.r > t.l && a.t < t.b && a.b > t.t })(), h: r.getBoundingClientRect().height, others: rest.map(named), banned: face.map(named).filter((n) => /archive|delete|restore/i.test(n)), more: more.map(size), tick: rest.filter((el) => /Mark complete/.test(named(el))).map(size) }
+    // Fix round 2: the chips on the menu's rows stop 4px short of it; the Dates fact is not cut.
+    const menu = more[0] ? box(more[0]) : null
+    const chipGaps = menu ? [...r.querySelectorAll('td[data-label="Qualifications"] li')].map(box).filter((c) => c.t < menu.b && c.b > menu.t).map((c) => menu.l - c.r) : []
+    const dates = r.querySelector('td[data-label="Dates"]')?.firstElementChild
+    const datesOver = dates ? dates.scrollWidth - dates.clientWidth : null
+    return { chipGaps, datesOver, metaLabels, tickOverTitle: !!(tickEl && titleEl) && (() => { const a = box(tickEl), t = box(titleEl); return a.l < t.r && a.r > t.l && a.t < t.b && a.b > t.t })(), h: r.getBoundingClientRect().height, others: rest.map(named), banned: face.map(named).filter((n) => /archive|delete|restore/i.test(n)), more: more.map(size), tick: rest.filter((el) => /Mark complete/.test(named(el))).map(size) }
   })
   return cards
 }
@@ -273,9 +278,10 @@ try {
           // M5 the card meta reads in the shape's order (a subset of it, in order, is fine: an empty value drops off the card).
           if (cfg.cardMeta) check(tag, `M5 card meta reads ${cfg.cardMeta.join(', ')}`, cards.every((c) => c.metaLabels.every((x, i) => cfg.cardMeta.includes(x) && (i === 0 || cfg.cardMeta.indexOf(c.metaLabels[i - 1]) < cfg.cardMeta.indexOf(x)))), { first: cards[0].metaLabels, bad: cards.filter((c) => !c.metaLabels.every((x, i) => cfg.cardMeta.includes(x) && (i === 0 || cfg.cardMeta.indexOf(c.metaLabels[i - 1]) < cfg.cardMeta.indexOf(x)))).slice(0, 2).map((c) => c.metaLabels) })
           if (!full) console.log(`[polish-pr1] RECORD ${cfg.key} card heights ${variant}: median ${Math.round(median(hs))}, max ${Math.round(Math.max(...hs))} (the decision queue is exempt from the height target)`)
+          // Fix round 2: clearing the menu (S1) wraps the one single-row chip card to 2 rows, +22px: Staff max is 165, not 150.
           // shortcut: Staff qualification chips wrap to 2 lines; chip cap "4 + 2 more" in polish PR3 (A9) restores 120/132
           const medT = cfg.key === 'staff' ? 142 : cfg.key === 'incidents' ? 132 : cfg.key === 'tasks' ? 144 : 120
-          const maxH = cfg.key === 'staff' ? 150 : cfg.key === 'tasks' ? 144 : cfg.key === 'incidents' ? 156 : 132
+          const maxH = cfg.key === 'staff' ? 165 : cfg.key === 'tasks' ? 144 : cfg.key === 'incidents' ? 156 : 132
           if (full) check(tag, `C11 card height median <= ${medT}, max <= ${maxH}`, median(hs) <= (medT) && Math.max(...hs) <= maxH, { median: Math.round(median(hs)), max: Math.round(Math.max(...hs)), n: hs.length })
           // Fix round 1: M1 the tick sits clear of the title; M2 Type is on the incident card; M3 the meta reads Date, Severity, NDIS, Type, Trip, Participant.
           if (cfg.key === 'tasks') check(tag, 'M1 no tick over a title', cards.every((c) => !c.tickOverTitle), { worst: Math.max(...hs), over: cards.filter((c) => c.tickOverTitle).length })
@@ -286,6 +292,8 @@ try {
             check(tag, 'M3 incident card meta reads Date, Severity, NDIS, Type, Trip, Participant', cards.every((c) => inOrder(c.metaLabels)), { first: cards[0].metaLabels, bad: cards.filter((c) => !inOrder(c.metaLabels)).slice(0, 2).map((c) => c.metaLabels) })
             console.log(`[polish-pr1] RECORD incident card heights ${variant}: median ${Math.round(median(hs))}, max ${Math.round(Math.max(...hs))}`)
           }
+          if (cfg.key === 'staff' && variant === 'stock') { const gaps = cards.flatMap((c) => c.chipGaps); check(tag, 'S1 qualification chips stop 4px short of the menu', gaps.every((g) => g >= 4), { minGap: gaps.length ? Math.round(Math.min(...gaps)) : null, n: gaps.length }) }
+          if (cfg.key === 'leave' && variant === 'stock') { const over = cards.map((c) => c.datesOver).filter((x) => x != null); check(tag, 'L1 Dates never truncate on the card', over.length > 0 && over.every((x) => x <= 1), { maxOver: Math.max(...over), n: over.length }) }
           if (full) check(tag, 'C12 at most one action on the face', cards.every((c) => c.others.length <= 1), cards.filter((c) => c.others.length > 1).slice(0, 2).map((c) => c.others))
           if (full) check(tag, 'C12 nothing named archive/delete/restore on the face', cards.every((c) => c.banned.length === 0), cards.filter((c) => c.banned.length).slice(0, 2))
           const small = cards.flatMap((c) => [...c.more, ...c.tick]).filter((s) => s.w < 44 - 0.5 || s.h < 44 - 0.5)

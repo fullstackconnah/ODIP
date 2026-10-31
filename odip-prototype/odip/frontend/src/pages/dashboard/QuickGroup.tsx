@@ -393,7 +393,7 @@ export function QuickGroup({ model, state, onRecoveryChange }: { model: GroupMod
         {unsure.has(row.id) && <StatusBadge tone="neutral" label="Not confirmed yet" className="shrink-0 whitespace-nowrap" />}
       </div> },
     ...model.columns.map((column, index): Column<QuickRow> => ({
-      key: `fact-${index}`, header: column.header, mobile: 'meta', wrap: column.long,
+      key: `fact-${index}`, header: column.header, mobile: 'meta', wrap: column.long, className: column.wide ? 'max-md:basis-full max-md:max-w-none!' : undefined,
       // A long fact (a note, a participant, a trip) takes two lines before it is cut; its full text stays in the tooltip.
       render: row => <CellText lines={column.long ? 2 : 1} className={`text-[13px] text-[var(--color-muted-foreground)] ${column.long ? 'md:max-w-[14rem]' : 'md:max-w-[18rem]'}`}>{row.facts[index] || '\u2014'}</CellText>,
     })),
