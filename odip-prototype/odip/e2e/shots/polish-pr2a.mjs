@@ -73,7 +73,7 @@ async function measureRoute(page) {
       const r = el.getBoundingClientRect()
       return r.height >= 28 && r.width >= 56 && h.same(getComputedStyle(el).backgroundColor, primary) && getComputedStyle(el).backgroundColor !== 'rgba(0, 0, 0, 0)' && !el.closest('table tbody, [role=dialog]')
     }).map((el) => ({ text: (el.textContent || el.getAttribute('aria-label') || '').trim().slice(0, 40), top: el.getBoundingClientRect().top + scrollY, inHeader: !!el.closest('header, [data-page-header]') || (!!el.closest('main') && el.getBoundingClientRect().top + scrollY < 160) }))
-    const limes = all.filter((el) => { const r = el.getBoundingClientRect(); return getComputedStyle(el).backgroundColor !== 'rgba(0, 0, 0, 0)' && h.same(getComputedStyle(el).backgroundColor, lime) && !(r.width <= 48 && r.height <= 48) && !(parseFloat(getComputedStyle(el).borderTopLeftRadius) >= 999) })
+    const limes = all.filter((el) => { const r = el.getBoundingClientRect(); return getComputedStyle(el).backgroundColor !== 'rgba(0, 0, 0, 0)' && h.same(getComputedStyle(el).backgroundColor, lime) && !(r.width <= 48 && r.height <= 48) && !el.closest('[data-status-badge]') })
       .map((el) => (el.textContent || '').trim().slice(0, 30))
     const selected = [...document.querySelectorAll('main [role=radio][aria-checked=true], main [role=tab][aria-selected=true], main nav [aria-current=page]')].filter(h.shown).map((el) => {
       const cs = getComputedStyle(el)
@@ -150,8 +150,9 @@ try {
         return { a, b }
       })
       check(tag, '6 Email and Password match at rest (fill, border, height, radius)', !!parity.a && !!parity.b && parity.a.bg === parity.b.bg && parity.a.border === parity.b.border && parity.a.height === parity.b.height && parity.a.radius === parity.b.radius, parity)
-      const forgot = await page.getByRole('button', { name: /forgot password/i }).first().evaluate((el) => { const r = el.getBoundingClientRect(); return { h: r.height, fs: getComputedStyle(el).fontSize } })
+      const forgot = await page.getByRole('button', { name: /forgot password/i }).first().evaluate((el) => { const r = el.getBoundingClientRect(); const rg = document.createRange(); rg.selectNodeContents(el); return { h: r.height, fs: getComputedStyle(el).fontSize, lines: rg.getClientRects().length } })
       check(tag, 'forgot password is 14px with a 44px hit area', forgot.fs === '14px' && (!profile.touch || forgot.h >= 44 - 0.5), forgot)
+      if (profile.touch) check(tag, 'forgot password is one line at 390 touch', forgot.h <= 44.5 && forgot.lines === 1, forgot)
       if (profile.name !== 'desktop-1280-dark') checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', `${profile.name}-login.png`), { touch: profile.touch })).checks)
     })
     await context.close()

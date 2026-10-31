@@ -59,7 +59,7 @@ export function StatusBadge({ status, label, tone, colorMap, pulse, icon, classN
   const key = statusKey(status ?? '')
   const color = colorFor(key, tone, colorMap)
   return (
-    <span className={`${SIZE_CLASS[size]} rounded-full ${color} ${icon ? 'inline-flex items-center gap-1' : ''} ${pulse ? 'animate-pulse' : ''} ${className ?? ''}`}>
+    <span data-status-badge className={`${SIZE_CLASS[size]} rounded-full ${color} ${icon ? 'inline-flex items-center gap-1' : ''} ${pulse ? 'animate-pulse' : ''} ${className ?? ''}`}>
       {icon}{label ?? status}
     </span>
   )

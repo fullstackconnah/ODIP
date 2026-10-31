@@ -407,6 +407,7 @@ export function Dropdown({
           aria-invalid={ariaInvalid}
           aria-describedby={ariaDescribedBy}
           aria-activedescendant={open && focusedIndex >= 0 ? `dd-opt-${visibleItems[focusedIndex]?.value}` : undefined}
+          data-status-badge
           disabled={disabled || loading}
           onClick={() => setOpen(v => !v)}
           onKeyDown={handleKeyDown}

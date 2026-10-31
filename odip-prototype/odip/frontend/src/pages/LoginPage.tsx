@@ -342,11 +342,11 @@ export default function LoginPage() {
               </>
             )}
 
-            <div className="flex justify-between items-center mt-6">
+            <div className="flex flex-col items-start gap-1 sm:flex-row sm:justify-between sm:items-center mt-6">
               <button
                 type="button"
                 onClick={handleForgotPassword}
-                className="min-h-[var(--tap-min)] text-sm text-[var(--color-primary)] hover:underline"
+                className="min-h-[var(--tap-min)] whitespace-nowrap text-sm text-[var(--color-primary)] hover:underline"
               >
                 Forgot password?
               </button>
