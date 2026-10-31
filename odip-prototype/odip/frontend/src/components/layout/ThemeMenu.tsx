@@ -21,7 +21,7 @@ export default function ThemeMenu() {
       value={current.value}
       onSelect={v => setPref('theme', v as ThemePreference)}
       label={`Theme: ${current.label}`}
-      icon={<span className="text-[var(--color-primary)] [&>svg]:w-5 [&>svg]:h-5">{current.icon}</span>}
+      icon={<span className="text-[var(--color-muted-foreground)] [&>svg]:w-5 [&>svg]:h-5">{current.icon}</span>}
       triggerClassName="w-8 h-8 pointer-coarse:size-[var(--tap-min)] flex items-center justify-center rounded-full hover:bg-[var(--color-accent)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
     />
   )

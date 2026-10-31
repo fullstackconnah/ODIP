@@ -273,7 +273,7 @@ export default function TripsPage() {
                 ariaLabel="Trips view"
               />
               {canWrite && (
-                <Button to="/trips/new" size="md">
+                <Button to="/trips/new" size="md" className="max-md:order-first">
                   <Plus className="h-4 w-4" /> New trip
                 </Button>
               )}

@@ -1,10 +1,10 @@
 // Polish PR 2b: the page header pattern and the mobile top bar.
-// Numeric checks 1-3 (re-run), 7, 7b, 8 and 10 from SHAPE-PR2 section 6 (exit 1 on any failure), measuring computed boxes and styles, never class names.
+// Numeric checks 1-3 (re-run), 7, 7b, 8, 10, 11 and 12 from SHAPE-PR2 section 6 (exit 1 on any failure), measuring computed boxes and styles, never class names.
 // Routes: section 6. Profiles: 1280 light, 1280 dark, 390 light touch.
-// Captures: the six pinned headers at 1280 and 390 (light), and the 390 top bar with the menu drawer open.
+// Captures: the six pinned headers at 1280 and 390 (light), the top bar at 1280 and at 390 (drawer closed), the 390 bar with the drawer open, and /incidents as one full page per breakpoint.
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
-import { AU_CONTEXT, prepareOutDir, cropElement, checkCropHolds, writeChecks } from '../shots/lib/capture.mjs'
+import { AU_CONTEXT, prepareOutDir, cropElement, fullPage, checkCropHolds, writeChecks } from '../shots/lib/capture.mjs'
 
 let chromium
 try {
@@ -99,7 +99,8 @@ const measureHeader = (page) => page.evaluate(() => {
   const out = { fontSize: cs.fontSize, lineHeight: cs.lineHeight, fontWeight: cs.fontWeight, h1Bottom: hr.bottom }
   const count = h1.nextElementSibling
   if (count && h.shown(count)) out.baselineDelta = Math.abs(h.baseline(count) - h.baseline(h1))
-  const desc = [...document.querySelectorAll('main p')].find((p) => h.shown(p) && /72ch/.test(p.className) && (h1.compareDocumentPosition(p) & Node.DOCUMENT_POSITION_FOLLOWING))
+  // The first visible paragraph after the h1, by position (not by a class).
+  const desc = [...document.querySelectorAll('main p')].find((p) => h.shown(p) && (h1.compareDocumentPosition(p) & Node.DOCUMENT_POSITION_FOLLOWING))
   if (desc) out.descTop = desc.getBoundingClientRect().top
   const back = [...document.querySelectorAll('main a[aria-label^="Back"], main button[aria-label^="Back"]')].find(h.shown)
   if (back) { const br = back.getBoundingClientRect(); out.iconCentre = br.top + br.height / 2; out.lineCentre = hr.top + lineHeight / 2; out.iconOffset = Math.abs(out.iconCentre - out.lineCentre) }
@@ -129,6 +130,29 @@ const measureBar = (page, name) => page.evaluate((chipTitle) => {
   const overflowing = [...header.querySelectorAll('*')].filter(h.shown).filter((el) => el.getBoundingClientRect().right > innerWidth + 0.5).map((el) => el.tagName)
   return { targets, chipDisplay: chip ? getComputedStyle(chip).display : 'absent', headerScroll: header.scrollWidth - header.clientWidth, overlap, overflowing, innerWidth }
 }, name)
+
+// Check 11: the bar icons share one colour (the glyph element of each bar button), unread dots excluded (they hold no glyph).
+const measureBarIcons = (page) => page.evaluate(() => {
+  const h = window.__h
+  const muted = h.tok('muted-foreground')
+  const icons = [...document.querySelectorAll('header button, header a')].filter(h.shown).map((b) => ({ label: b.getAttribute('aria-label') || b.getAttribute('title') || '?', glyph: b.querySelector('svg, .material-symbols-outlined') })).filter((i) => i.glyph && h.shown(i.glyph))
+  return icons.map((i) => ({ label: i.label, color: getComputedStyle(i.glyph).color, ok: h.same(getComputedStyle(i.glyph).color, muted) }))
+})
+
+// Check 12 (390 touch): the primary action comes first in reading order among the page's action buttons.
+const measurePrimaryFirst = (page, primaryName) => page.evaluate((name) => {
+  const h = window.__h
+  const h1 = [...document.querySelectorAll('main h1')].find(h.shown)
+  const links = [...document.querySelectorAll('main a, main button')].filter((el) => h.shown(el) && !el.closest('[role=tablist], [role=radiogroup], table, nav'))
+  const primary = links.find((el) => (el.textContent || '').trim() === name)
+  if (!h1 || !primary) return { error: `h1 ${!!h1}, primary ${!!primary}` }
+  const box = (el) => el.getBoundingClientRect()
+  const p = box(primary)
+  // Secondary actions: the other shown children of the primary's own cluster (the Trips view toggle counts) (its parent row).
+  const rest = [...primary.parentElement.children].filter((el) => el !== primary && h.shown(el))
+  const before = (a, b) => a.top < b.top - 0.5 || (Math.abs(a.top - b.top) <= 0.5 && a.left < b.left)
+  return { rest: rest.length, first: rest.every((el) => before(p, box(el))), primary: { top: p.top, left: p.left }, others: rest.map((el) => ({ label: (el.textContent || '').trim().slice(0, 20), top: box(el).top, left: box(el).left })) }
+}, primaryName)
 
 const staffHref = async (page) => {
   await gotoReady(page, '/staff')
@@ -179,6 +203,15 @@ try {
           if (t.error) check(tag, '8 tab strip', false, t.error)
           else check(tag, '8 tablist is below the h1, and Report incident is not in its row', t.tablistTop > t.h1Bottom && t.reportInTabRow !== true && t.reportInside !== true, t)
         }
+        if (!profile.dark) {
+          const icons = await measureBarIcons(page)
+          check(tag, '11 every bar icon has the muted-foreground colour', icons.length >= 2 && icons.every((i) => i.ok), icons.filter((i) => !i.ok).length ? icons : `${icons.length} icons`)
+        }
+        if (profile.touch && (route.key === 'trips' || route.key === 'participants')) {
+          const f = await measurePrimaryFirst(page, route.key === 'trips' ? 'New trip' : 'New enquiry')
+          if (f.error) check(tag, '12 primary first', false, f.error)
+          else check(tag, '12 primary button comes before every secondary action', f.first && f.rest > 0, f)
+        }
         if (profile.touch) {
           const b = await measureBar(page, tenantName)
           check(tag, '10 four header targets, each 44x44 or more', b.targets.length === 4 && b.targets.every((t) => t.w >= 43.5 && t.h >= 43.5), b.targets.map((t) => `${t.label} ${t.w.toFixed(0)}x${t.h.toFixed(0)}`))
@@ -194,6 +227,10 @@ try {
           const also = (await below.count()) ? below : undefined
           checks.push(checkCropHolds(await cropElement(page, title, path.join(OUT_DIR, `${profile.name}-${route.key}-header.png`), { touch: profile.touch, also, pad: 12 })))
         }
+        if (!profile.dark && route.key === 'trips') {
+          checks.push(checkCropHolds(await cropElement(page, page.locator('header').first(), path.join(OUT_DIR, `${profile.name}-topbar.png`), { touch: profile.touch, pad: 0 })))
+        }
+        if (!profile.dark && route.key === 'incidents') checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', `${profile.name}-incidents.png`), { touch: profile.touch })).checks)
         if (profile.touch && route.key === 'trips') {
           await page.getByRole('button', { name: 'Open menu' }).click()
           await page.waitForTimeout(500)

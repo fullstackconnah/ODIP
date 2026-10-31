@@ -101,7 +101,7 @@ export default function WhatsNewButton() {
         className="w-8 h-8 pointer-coarse:size-[var(--tap-min)] flex items-center justify-center rounded-full hover:bg-[var(--color-accent)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
       >
         <span className="relative inline-flex">
-          <span className="material-symbols-outlined text-[var(--color-primary)]" aria-hidden="true" style={{ fontSize: '20px' }}>campaign</span>
+          <span className="material-symbols-outlined text-[var(--color-muted-foreground)]" aria-hidden="true" style={{ fontSize: '20px' }}>campaign</span>
           {/* Absolute, so it never moves the button or its neighbours; the ring separates it from the glyph in both themes. */}
           {unread > 0 && <span aria-hidden="true" className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-[var(--color-primary)] ring-2 ring-[var(--color-background)]" />}
         </span>

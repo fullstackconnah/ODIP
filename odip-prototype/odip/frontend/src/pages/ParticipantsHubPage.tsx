@@ -90,7 +90,7 @@ export default function ParticipantsHubPage() {
           <div className="flex shrink-0 items-center gap-2">
             {canImportData && <Button to="/settings/import/participants" variant="secondary" size="md">Import</Button>}
             {canManageParticipantLifecycle && (
-              <Button to="/participants/new-inquiry" size="md">
+              <Button to="/participants/new-inquiry" size="md" className="max-md:order-first">
                 <Plus className="w-4 h-4" /> New enquiry
               </Button>
             )}

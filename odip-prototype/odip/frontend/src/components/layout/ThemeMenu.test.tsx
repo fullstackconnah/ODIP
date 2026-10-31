@@ -34,6 +34,7 @@ describe('ThemeMenu', () => {
   it('names the current preference on the trigger', () => {
     setup()
     expect(screen.getByRole('button', { name: 'Theme: System' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Theme: System' }).querySelector('span')).toHaveClass('text-[var(--color-muted-foreground)]') // the bar icons share one colour
   })
 
   it('lists Light, Dark and System with only the current one selected', async () => {

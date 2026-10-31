@@ -348,6 +348,7 @@ describe('TripsPage — starting a new trip', () => {
     renderPage()
 
     expect(screen.getByRole('link', { name: /New trip/ })).toHaveAttribute('href', '/trips/new')
+    expect(screen.getByRole('link', { name: /New trip/ })).toHaveClass('max-md:order-first') // primary first below md
   })
 
   it('hides the button from a role that cannot write', () => {
