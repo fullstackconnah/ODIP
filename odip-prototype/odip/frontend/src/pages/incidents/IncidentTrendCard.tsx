@@ -89,8 +89,8 @@ export function IncidentTrendCard() {
 
   const legend = (
     <div data-legend className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
-      <span className="whitespace-nowrap"><ChartKey mark="rp" label="Restrictive practice uses" /></span>
-      <span className="whitespace-nowrap"><ChartKey mark="other" label="Other incidents" /></span>
+      <span className="flex whitespace-nowrap"><ChartKey mark="rp" label="Restrictive practice uses" /></span>
+      <span className="flex whitespace-nowrap"><ChartKey mark="other" label="Other incidents" /></span>
     </div>
   )
   const sentence = <p id={sentenceId} className="mt-2 max-w-prose text-sm text-[var(--color-foreground)]">{trendSentence(data)}</p>
