@@ -289,7 +289,7 @@ describe('IncidentDetailPage - NDIS Commission reporting row', () => {
   it('marks an empty value cell with a dash the screen reader names', () => {
     mockUseIncident.mockReturnValue({ data: baseIncident({ ...required, notifyDueAt: null, detailedReportDueAt: null }), isLoading: false })
     renderPage()
-    expect(screen.getByLabelText('No reporting deadline')).toHaveTextContent('–')
+    expect(screen.getByLabelText('No reporting deadline')).toHaveTextContent('—')
   })
 
   it('shows the overdue line in words and the 5-day line when the deadline has passed', () => {

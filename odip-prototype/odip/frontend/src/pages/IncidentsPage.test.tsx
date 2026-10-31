@@ -381,6 +381,9 @@ describe('IncidentsPage — one-line NDIS Commission banner', () => {
     expect(banner.querySelectorAll('p')).toHaveLength(1)
     // The two-sentence reason wraps at every width; an ellipsis would hide the second sentence.
     expect(banner.querySelector('p')!.className).not.toMatch(/truncate/)
+    // On a phone the text takes the full width and the link drops under it, instead of sharing a 150px column.
+    expect(banner.querySelector('p')!.parentElement).toHaveClass('flex-col', 'md:flex-row')
+    expect(banner.querySelector('p')).toHaveClass('md:flex-1')
     expect(banner).toHaveTextContent('Some uses of an unauthorised restrictive practice can be reported within 5 business days.')
     expect(banner).toHaveClass('flex', 'items-center', 'min-h-10')
     // Keeps the token colours the C-1 test pins, and no raw palette colours.
@@ -443,6 +446,13 @@ describe('IncidentsPage — narrow-desktop columns', () => {
     mockUseIncidents.mockReturnValue({ data: [baseIncident()], isLoading: false })
     renderPage()
     expect(headerIndex('NDIS Commission')).toBe(headerIndex('Title') + 1)
+  })
+
+  it('orders the columns Title, NDIS Commission, Severity, Status, Type, Trip, Participant, Reported By, Date', () => {
+    mockUseIncidents.mockReturnValue({ data: [baseIncident()], isLoading: false })
+    renderPage()
+    const labels = screen.getAllByRole('columnheader').map((th) => (th.textContent || '').trim()).filter(Boolean)
+    expect(labels).toEqual(['Title', 'NDIS Commission', 'Severity', 'Status', 'Type', 'Trip', 'Participant', 'Reported By', 'Date'])
   })
 
   it('cuts a long title with an ellipsis at a responsive cap and keeps the full title in the tooltip', () => {

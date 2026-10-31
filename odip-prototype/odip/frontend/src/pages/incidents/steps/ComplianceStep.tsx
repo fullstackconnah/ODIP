@@ -52,7 +52,7 @@ export function ComplianceStep({
           />
         </FormField>
 
-        <FormField label="When you became aware" className={span.date} hint="The NDIS Commission deadline counts from this time.">
+        <FormField label="When you became aware" className={span.date} error={errors.awareAt?.message} hint="The NDIS Commission deadline counts from this time.">
           <input type="datetime-local" max={awareAtMax} {...register('awareAt')} />
         </FormField>
 

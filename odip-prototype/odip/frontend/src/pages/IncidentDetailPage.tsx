@@ -176,7 +176,7 @@ export default function IncidentDetailPage() {
 /** The due lines, worked out at render from the stored instants (no timers); overdue is words plus the danger colour, never colour alone. */
 function ReportingDue({ incident }: { incident: IncidentDetailDto }) {
   const lines = reportingDueLines(incident, new Date())
-  if (lines.length === 0) return <span role="img" aria-label="No reporting deadline">{'\u2013'}</span>
+  if (lines.length === 0) return <span role="img" aria-label="No reporting deadline">{'\u2014'}</span>
   return (
     <div className="space-y-0.5">
       {lines.map((l) => (

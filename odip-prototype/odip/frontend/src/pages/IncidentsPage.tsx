@@ -239,7 +239,7 @@ export default function IncidentsPage() {
 
   // Every row is exactly --row-h from 1280 up: cells never wrap (DataTable). From md up the box scrolls
   // sideways with the title and the actions pinned, so no column is dropped. NDIS Commission follows
-  // Title, ahead of Type and Trip, so it is on screen at 1280 without scrolling.
+  // Title, then Severity and Status, ahead of Type, Trip and Participant, so those three columns are on screen at 1280 without scrolling.
   const incidentColumns: Column<any>[] = [
     {
       key: 'title',
@@ -265,6 +265,8 @@ export default function IncidentsPage() {
         <StatusBadge status={i.qscReportingStatus} label={formatQscLabel(i.qscReportingStatus)} />
       ),
     },
+    { key: 'severity', header: 'Severity', mobile: 'meta', render: (i) => <StatusBadge status={i.severity} /> },
+    { key: 'status', header: 'Status', mobile: 'status', render: (i) => <StatusBadge status={i.status} label={INCIDENT_STATUS_LABELS[i.status as IncidentStatus] ?? i.status} /> },
     { key: 'incidentType', header: 'Type', maxWidth: '9rem', mobile: 'meta', render: (i) => INCIDENT_TYPE_LABELS[i.incidentType as IncidentType] ?? i.incidentType },
     {
       key: 'tripName',
@@ -294,8 +296,6 @@ export default function IncidentsPage() {
         </Link>
       ) : (i.involvedParticipantName ?? '—'),
     },
-    { key: 'severity', header: 'Severity', mobile: 'meta', render: (i) => <StatusBadge status={i.severity} /> },
-    { key: 'status', header: 'Status', mobile: 'status', render: (i) => <StatusBadge status={i.status} label={INCIDENT_STATUS_LABELS[i.status as IncidentStatus] ?? i.status} /> },
     { key: 'reportedByName', header: 'Reported By', maxWidth: '9rem' },
     { key: 'incidentDateTime', header: 'Date', type: 'date', mobile: 'meta' },
     { key: 'actions', header: '', render: (i) => canWrite ? <RowActions>{actionButtons(i)}</RowActions> : null },
@@ -389,13 +389,15 @@ export default function IncidentsPage() {
           className="flex min-h-10 items-center gap-3 px-3 py-1.5 rounded-[var(--radius-md)] bg-error-container border border-destructive/40 text-on-error-container"
         >
           <AlertTriangle className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
-          <p className="min-w-0 flex-1 text-sm">
+          <div className="min-w-0 flex-1 flex flex-col items-start gap-1 md:flex-row md:items-center md:gap-3">
+          <p className="min-w-0 text-sm md:flex-1">
             <span className="font-semibold">{qscHeadline}</span>
             <span className="ml-2 text-[13px]">{'Most reportable incidents must be reported to the NDIS Commission within 24\u00a0hours. Some uses of an unauthorised restrictive practice can be reported within 5\u00a0business days.'}</span>
           </p>
           <Link to="/incidents?qsc=overdue" className={`${TAP_FLOOR} shrink-0 whitespace-nowrap text-sm font-medium underline underline-offset-2`}>
             View overdue incidents
           </Link>
+          </div>
         </div>
       )}
 
