@@ -25,6 +25,11 @@ export interface ProviderSettingsDto {
   managerPhone: string | null
   /** The stored IANA zone; null = unset (the State's default applies). */
   timeZoneId: string | null
+  /** Settings 2b: the organisation's own contact details, all optional (null when blank). */
+  tradingName: string | null
+  contactEmail: string | null
+  contactPhone: string | null
+  website: string | null
   /** The org's participant-readiness check. The query can still resolve to `null` for an org with no row yet: treat that as `Warn`. */
   participantReadinessMode: ParticipantReadinessMode
   /** Warn (default): a user without a current Medication Competency may record and the record is flagged. Enforce: refused (403). */
@@ -60,6 +65,11 @@ export interface UpsertProviderSettingsDto {
   managerPhone?: string
   /** Null or absent leaves the stored zone; otherwise one of the server's seven (StateTimeZoneMap.Zones). */
   timeZoneId?: string | null
+  /** Null or absent leaves the stored value; "" clears it; the server trims. Email and website are checked (400 with a sentence). */
+  tradingName?: string | null
+  contactEmail?: string | null
+  contactPhone?: string | null
+  website?: string | null
   /**
    * Send this ONLY when the user deliberately changed the readiness check. The server changes the mode only when the
    * field is present, so echoing the loaded value back from a stale tab would silently revert another admin's change.

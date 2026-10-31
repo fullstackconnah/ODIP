@@ -307,12 +307,15 @@ export function addressPostcodeRefine(data: AddressFields, ctx: z.RefinementCtx)
   }
 }
 
-type ContactMethodFields = { phone?: string; email?: string }
+/** The house email rule: something@something.something, no spaces. Also the Organisation profile contact email check. */
+export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+type ContactMethodFields ={ phone?: string; email?: string }
 export function contactMethodRefine(data: ContactMethodFields, ctx: z.RefinementCtx) {
   if (data.phone && !/^\+?[\d\s\-()]{6,20}$/.test(data.phone)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['phone'], message: 'Please provide a valid phone number.' })
   }
-  if (data.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
+  if (data.email && !EMAIL_PATTERN.test(data.email)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['email'], message: 'Please provide a valid email address.' })
   }
 }
