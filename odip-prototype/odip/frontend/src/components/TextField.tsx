@@ -25,6 +25,8 @@ export type TextFieldProps = CommonFieldProps & Omit<React.InputHTMLAttributes<H
   type?: React.InputHTMLAttributes<HTMLInputElement>['type']
   /** Optional callback when the underlying `<input>` fires `change`. */
   onChange?: (e: ChangeEvent<HTMLInputElement>) => void
+  /** React 19 passes `ref` as a prop; it lands on the `<input>` through `...inputProps`. For a caller that moves focus (a dialog's initialFocusRef). */
+  ref?: React.Ref<HTMLInputElement>
 }
 
 export function TextField({
