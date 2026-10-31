@@ -427,10 +427,10 @@ function Attention({ items }: { items: EmploymentHeroAttentionDto[] }) {
                         <Button size="sm" variant="secondary" disabled={busy} onClick={() => dismiss.mutate(item.id)} aria-label={`Dismiss: ${item.name}`}>Dismiss</Button>
                       )}
                       {item.kind === 'FixInOdip' && item.userId && (
-                        <Button size="sm" variant="secondary" to={`/staff/${item.userId}/edit`} aria-label={`Open staff page: ${item.name}`}>Open staff page</Button>
+                        <Button size="sm" variant="secondary" className="min-h-[var(--tap-min)]" to={`/staff/${item.userId}/edit`} aria-label={`Open staff page: ${item.name}`}>Open staff page</Button>
                       )}
                       {item.kind === 'ConfirmAddress' && item.userId && (
-                        <Button size="sm" variant="secondary" to={`/staff/${item.userId}`} aria-label={`Open staff page: ${item.name}`}>Open staff page</Button>
+                        <Button size="sm" variant="secondary" className="min-h-[var(--tap-min)]" to={`/staff/${item.userId}`} aria-label={`Open staff page: ${item.name}`}>Open staff page</Button>
                       )}
                       {item.kind === 'FixInEmploymentHero' && <span className={MUTED}>Fix it in Employment Hero; it clears at the next sync.</span>}
                     </div>
