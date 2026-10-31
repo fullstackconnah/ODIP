@@ -128,7 +128,7 @@ try {
     await save.click()
     await b.page.getByRole('button', { name: 'Saving…' }).waitFor({ timeout: 5000 })
     check('6 button reads Saving… with aria-busy', ctx, await save.getAttribute('aria-busy'), (await save.getAttribute('aria-busy')) === 'true')
-    await b.foot.getByRole('status').filter({ hasText: /^s*Saveds*$/ }).waitFor({ timeout: 10_000 })
+    await b.foot.getByRole('status').filter({ hasText: /^Saved$/ }).waitFor({ timeout: 10_000 })
     check('6 foot reads Saved', ctx, await b.status(), (await b.status()) === 'Saved')
     check('6 only the changed zone and state went in the PUT', ctx, Object.keys(b.state.bodies[0]).filter((k) => ['timeZoneId', 'state'].includes(k)), b.state.bodies[0].timeZoneId === 'Australia/Perth')
     // 7: a server refusal.
