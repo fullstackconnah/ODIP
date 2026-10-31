@@ -76,8 +76,8 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
       <EmptyState
         size="inline"
         icon={Calendar}
-        title="Unable to load itinerary"
-        description="Make sure the trip has dates and a generated schedule."
+        title="No itinerary yet"
+        description="The itinerary appears once the trip has dates and a schedule."
       />
     )
   }

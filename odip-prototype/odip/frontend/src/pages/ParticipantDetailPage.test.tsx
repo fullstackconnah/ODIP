@@ -81,6 +81,9 @@ vi.mock('@/api/hooks', () => ({
   useRosterPersonWeek: mockPersonWeek,
 }))
 
+// The Overview funding card has its own tests; here only its place on the page matters.
+vi.mock('./participant-detail/BudgetTrackCard', () => ({ default: ({ participantId }: { participantId: string }) => <div data-testid="budget-track-card" data-participant={participantId} /> }))
+
 vi.mock('@/components/AuditHistoryTab', () => ({ default: () => <div data-testid="history-tab" /> }))
 
 vi.mock('./participant-detail', async () => {
@@ -2013,6 +2016,22 @@ describe('ParticipantDetailPage — seven tabs (slice 1)', () => {
     renderAtTab('participant-1', 'about')
     expect(screen.queryByRole('list', { name: 'Safety flags' })).not.toBeInTheDocument()
     expect(screen.queryByText('Safety details not recorded')).not.toBeInTheDocument()
+  })
+
+  it('the "Safety details not recorded" chip is a warning chip, the one flag the Overview card then names the fields of', () => {
+    renderAtTab('participant-1', 'about')
+    const chip = screen.getByText('Safety details not recorded')
+    expect(chip.className).toContain('--color-warning-container')
+  })
+
+  it('Overview puts Before you start and Funding side by side from lg, Funding above the support profile review', () => {
+    renderAtTab('participant-1', 'overview')
+    const before = document.getElementById('before-you-start')!
+    const funding = screen.getByTestId('budget-track-card')
+    expect(funding).toHaveAttribute('data-participant', 'participant-1')
+    const grid = before.closest('[class~="lg:grid-cols-2"]')!
+    expect(grid).not.toBeNull()
+    expect(grid.contains(funding)).toBe(true)
   })
 
   it('T21: the Earlier checklist sub-tab needs the stream and an answered checklist', () => {

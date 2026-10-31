@@ -21,7 +21,10 @@ import { usePermissions } from '@/lib/permissions'
 import { canSendSetPasswordEmail } from '@/lib/setPasswordEmail'
 import { describeEmailOutcome, ensureAndSendSetPasswordEmail } from '@/lib/signInEmail'
 import { ADDRESS_CHECK_SENTENCE } from '@/lib/addressConfirmation'
-import { extractErrorMessage, formatDateAu } from '@/lib/utils'
+import { extractErrorMessage, formatDateAu, formatShiftTime } from '@/lib/utils'
+import { formatServiceDate } from '@/lib/format'
+import { FactBar, type FactBarSegment } from '@/components/FactBar'
+import { attentionForTone } from '@/components/glanceState'
 import { staffCredentials, type StaffCredential } from '@/lib/credentials'
 import { DEADLINE_TONE, deadlineLabel } from '@/lib/deadline'
 import { formatShiftTimeRange, formatVarianceMinutes } from '@/pages/rostering/lib/roster'
@@ -127,6 +130,19 @@ export default function StaffDetailPage() {
   }
 
   const { staff } = overview
+  // The strip answers "are they cleared to work" before a tab is opened. Open incidents are not on the overview DTO, so there is no third segment.
+  const expired = credentialRows.filter(c => c.state.status === 'overdue').length
+  const expiring = credentialRows.filter(c => c.state.status === 'today' || c.state.status === 'soon').length
+  const nextShift = overview.upcomingShifts[0]
+  const summarySegments: FactBarSegment[] = [
+    {
+      label: 'Credentials',
+      value: expired + expiring === 0 ? 'All current' : [expired > 0 && `${expired} expired`, expiring > 0 && `${expiring} expiring`].filter(Boolean).join(', '),
+      attention: expired > 0 ? attentionForTone('negative') : expiring > 0 ? attentionForTone('warning') : undefined,
+    },
+    // formatServiceDate ends in the year (" 2026"); a shift in the next 14 days never needs it.
+    { label: 'Next shift', value: nextShift ? `${formatServiceDate(nextShift.serviceDate).slice(0, -5)}, ${formatShiftTime(nextShift.startTime)}` : 'None booked' },
+  ]
   // Join only the parts that exist: an empty position used to leave the row starting with a
   // stray " · " separator.
   const positionAndRegion = [POSITION_LABELS[staff.position] ?? staff.position, staff.region || 'No region'].filter(Boolean).join(' · ')
@@ -205,6 +221,8 @@ export default function StaffDetailPage() {
       {/* Notices for the actions above. Always mounted (a live region must exist before its content), and collapsed while empty. */}
       <NoticesRegion notices={notices} onDismiss={dismiss} focusAfterDismiss={focusSendButton} className="empty:-mt-[var(--section-gap)]" />
 
+      <FactBar variant="glance" segments={summarySegments} />
+
       <Tabs
         tabs={[
           { id: 'availability', label: 'Availability', icon: CalendarClock },
@@ -216,6 +234,7 @@ export default function StaffDetailPage() {
         ]}
         active={tab}
         onChange={setTab}
+        overflow="scroll"
         ariaLabel="Staff detail sections"
       />
 
