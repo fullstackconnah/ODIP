@@ -49,7 +49,7 @@ describe('Tasks due group — what it lists', () => {
     expect(subjects()).toEqual(['Overdue older', 'Overdue newer', 'Due today urgent', 'Due today medium'])
     expect(screen.getByRole('tab', { name: 'Tasks (4)' })).toBeInTheDocument()
     expect(within(rowOf('Overdue older')).getByText('Overdue')).toBeInTheDocument()
-    expect(headers()).toEqual(['Task', 'Type', 'Due', 'Priority', 'Trip', ''])
+    expect(headers()).toEqual(['Task', 'Type', 'Due', 'Priority', 'Trip', 'Actions'])
     expect(facts('Overdue older')).toEqual(['Insurance confirmation', '8 Oct', 'Urgent', 'Beach Trip'])
     // Every task names its priority (a column with gaps reads as missing data); the trip is on a card only from lg.
     expect(facts('Due today medium')).toEqual(['Insurance confirmation', '14 Oct', 'Medium', 'Beach Trip'])

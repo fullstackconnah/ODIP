@@ -36,7 +36,7 @@ describe('Incidents group (links only)', () => {
     expect(within(overdue).getByRole('link', { name: 'Open incident: Incident q1' })).toHaveAttribute('href', '/incidents/q1')
     expect(within(overdue).queryByRole('button')).not.toBeInTheDocument()
     expect(within(rowOf('Incident a2')).getByText('Under review')).toBeInTheDocument()   // a status flag is a sentence, not Title Case
-    expect(headers()).toEqual(['Incident', 'Participant', 'Type', 'When', ''])
+    expect(headers()).toEqual(['Incident', 'Participant', 'Type', 'When', 'Actions'])
     expect(facts('Incident q1')).toEqual(['Grace Palmer-Hughes', 'Injury', expect.stringMatching(/^14 Oct/)])
   })
 

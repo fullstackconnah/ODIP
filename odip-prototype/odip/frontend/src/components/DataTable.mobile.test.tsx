@@ -166,3 +166,26 @@ describe('DataTable phone card: the actions cell', () => {
     expect(page.parentElement).toHaveClass('max-md:ml-auto')
   })
 })
+
+describe('DataTable phone card: trail', () => {
+  const columns: Column<Row>[] = [
+    { key: 'title', header: 'Task', mobile: 'primary' },
+    { key: 'owner', header: 'Owner', mobile: 'meta' },
+    { key: 'status', header: 'Status', mobile: 'status' },
+    { key: 'actions', header: '', mobile: 'trail', render: () => <button type="button">Go</button> },
+  ]
+
+  it('trail ends the meta line: ordered with it, content width, hidden when empty, and not the full-width actions line', () => {
+    render(<DataTable data={rows} columns={columns} keyField="id" />)
+
+    const cell = screen.getByRole('button', { name: 'Go' }).closest('td')!
+    expect(cell).toHaveAttribute('data-card', 'trail')
+    expect(cell).toHaveClass('max-md:-order-1', 'max-md:basis-auto', 'max-md:empty:hidden')
+    expect(cell.className).not.toMatch(/basis-full/)
+  })
+
+  it('an actions column without trail keeps its own full-width line', () => {
+    render(<DataTable data={rows} columns={columns.map(c => c.key === 'actions' ? { ...c, mobile: undefined } : c)} keyField="id" />)
+    expect(screen.getByRole('button', { name: 'Go' }).closest('td')).toHaveClass('max-md:basis-full')
+  })
+})

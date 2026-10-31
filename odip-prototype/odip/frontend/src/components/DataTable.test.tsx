@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { CellText, DataTable, RowActions } from './DataTable'
+import { MemoryRouter } from 'react-router-dom'
+import { CellText, DataTable, RowActions, RowMenu } from './DataTable'
 import type { Column } from './DataTable'
 import { Button } from './Button'
 import { TAP_AREA, TAP_AREA_LINKS } from './tapArea'
@@ -1160,5 +1161,72 @@ describe('DataTable — rows that cannot be ticked', () => {
       selectAll={{ checked: false, indeterminate: false, label: 'Select all ready', onChange }} />)
     await userEvent.click(screen.getByLabelText('Select all ready'))
     expect(onChange).toHaveBeenCalledWith(true)
+  })
+})
+
+describe('CellText lines', () => {
+  it('one line by default: truncates', () => {
+    render(<CellText>Short</CellText>)
+    expect(screen.getByText('Short')).toHaveClass('md:truncate')
+  })
+  it('two lines clamps instead of truncating, with the full text in the title', () => {
+    render(<CellText lines={2}>A long task title</CellText>)
+    const el = screen.getByText('A long task title')
+    expect(el).toHaveClass('md:line-clamp-2', 'md:whitespace-normal')
+    expect(el.className).not.toMatch(/md:truncate/)
+    expect(el).toHaveAttribute('title', 'A long task title')
+  })
+})
+
+describe('RowMenu: one set of row actions, two presentations', () => {
+  it('shows the items as icon buttons on md+ and as one menu below, the same labels, and runs the choice', async () => {
+    const user = userEvent.setup()
+    const archive = vi.fn()
+    render(
+      <MemoryRouter>
+        <DataTable
+          data={[{ id: '1', name: 'Beach trip' }]}
+          keyField="id"
+          columns={[
+            { key: 'name', header: 'Name' },
+            { key: 'actions', header: '', overlay: true, mobile: 'trail', render: (r) => (
+              <RowMenu name={r.name} items={[
+                { label: 'Edit', icon: <span />, to: '/trips/1/edit' },
+                { label: 'Archive', icon: <span />, onSelect: archive },
+              ]} />
+            ) },
+          ]}
+        />
+      </MemoryRouter>,
+    )
+
+    // md+: icon buttons, hidden below md.
+    const edit = screen.getByRole('link', { name: 'Edit' })
+    expect(edit).toHaveAttribute('href', '/trips/1/edit')
+    expect(edit.closest('.max-md\\:hidden')).not.toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Archive' }))
+    expect(archive).toHaveBeenCalledTimes(1)
+
+    // below md: one trigger named for the row, opening the same labels.
+    const trigger = screen.getByRole('button', { name: 'More actions for Beach trip' })
+    expect(trigger.closest('.md\\:hidden')).not.toBeNull()
+    await user.click(trigger)
+    expect(screen.getAllByRole('option').map(o => o.textContent)).toEqual(['Edit', 'Archive'])
+    await user.click(screen.getByRole('option', { name: 'Archive' }))
+    expect(archive).toHaveBeenCalledTimes(2)
+  })
+
+  it('renders nothing for no items', () => {
+    const { container } = render(<MemoryRouter><RowMenu name="x" items={[]} /></MemoryRouter>)
+    expect(container).toBeEmptyDOMElement()
+  })
+})
+
+describe('DataTable srHeader', () => {
+  it('names an unlabelled column for assistive tech without making it a labelled (pinned) one', () => {
+    const { container } = render(<DataTable data={[{ id: '1', name: 'Row' }]} columns={[{ key: 'tick', header: '', srHeader: 'Mark complete' }, { key: 'name', header: 'Name' }]} keyField="id" />)
+    const ths = container.querySelectorAll('th')
+    expect(ths[0].querySelector('.sr-only')).toHaveTextContent('Mark complete')
+    expect(container.querySelector('th[data-pin="start"]')).toHaveTextContent('Name')
   })
 })

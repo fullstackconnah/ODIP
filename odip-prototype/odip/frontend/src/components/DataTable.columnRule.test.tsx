@@ -96,7 +96,7 @@ describe('DataTable — the column rule: nothing is removed, the box scrolls, th
 
   describe('the pinned cells are opaque only while content is scrolled under them (a tinted row keeps its tint at rest)', () => {
     function scrollBox(container: HTMLElement, { scrollLeft, clientWidth, scrollWidth }: { scrollLeft: number; clientWidth: number; scrollWidth: number }) {
-      const box = container.firstElementChild as HTMLElement
+      const box = container.querySelector('table')!.parentElement as HTMLElement
       Object.defineProperty(box, 'clientWidth', { configurable: true, value: clientWidth })
       Object.defineProperty(box, 'scrollWidth', { configurable: true, value: scrollWidth })
       Object.defineProperty(box, 'scrollLeft', { configurable: true, value: scrollLeft })
@@ -144,5 +144,104 @@ describe('DataTable — the column rule: nothing is removed, the box scrolls, th
     render(<DataTable data={long} columns={columns} keyField="id" />)
 
     expect(screen.getByText(/A very long first column/)).toHaveClass('md:truncate', 'md:max-w-[var(--cell-max,24rem)]')
+  })
+})
+
+// The edge cue: a table that scrolls says so with a fade at the edge that has more behind it, sitting just inside any pinned column.
+describe('DataTable — the edge cue (a fade where content is cut off)', () => {
+  type Item = { id: string; a: string; b: string; actions: string }
+  const items: Item[] = [{ id: '1', a: 'alpha', b: 'bravo', actions: '' }]
+  const columns: Column<Item>[] = [{ key: 'a', header: 'A' }, { key: 'b', header: 'B' }, { key: 'actions', header: '' }]
+
+  function scrollBox(container: HTMLElement, { scrollLeft, clientWidth, scrollWidth, endPin = 0 }: { scrollLeft: number; clientWidth: number; scrollWidth: number; endPin?: number }) {
+    const box = container.querySelector('table')!.parentElement as HTMLElement
+    Object.defineProperty(box, 'clientWidth', { configurable: true, value: clientWidth })
+    Object.defineProperty(box, 'scrollWidth', { configurable: true, value: scrollWidth })
+    Object.defineProperty(box, 'scrollLeft', { configurable: true, value: scrollLeft })
+    const pin = container.querySelector('th[data-pin="end"]')
+    if (pin) Object.defineProperty(pin, 'offsetWidth', { configurable: true, value: endPin })
+    act(() => { box.dispatchEvent(new Event('scroll')) })
+  }
+  const fade = (container: HTMLElement, edge: 'start' | 'end') => container.querySelector<HTMLElement>(`[data-edge-fade="${edge}"]`)
+
+  it('marks the pinned header cells with their edge', () => {
+    const { container } = render(<DataTable data={items} columns={columns} keyField="id" />)
+    expect(container.querySelector('th[data-pin="start"]')).toHaveTextContent('A')
+    expect(container.querySelector('th[data-pin="end"]')).not.toBeNull()
+  })
+
+  it('shows no fade when the table fits', () => {
+    const { container } = render(<DataTable data={items} columns={columns} keyField="id" />)
+    scrollBox(container, { scrollLeft: 0, clientWidth: 500, scrollWidth: 500 })
+    expect(fade(container, 'end')).toBeNull()
+    expect(fade(container, 'start')).toBeNull()
+  })
+
+  it('shows the end fade while there is more to the right, just inside the end-pinned column, and not over the pointer', () => {
+    const { container } = render(<DataTable data={items} columns={columns} keyField="id" />)
+    scrollBox(container, { scrollLeft: 0, clientWidth: 500, scrollWidth: 900, endPin: 48 })
+
+    const end = fade(container, 'end')!
+    expect(end).toHaveAttribute('aria-hidden', 'true')
+    expect(end).toHaveClass('pointer-events-none')
+    expect(end.style.right).toBe('48px')
+    expect(fade(container, 'start')).toBeNull()
+  })
+
+  it('swaps to the start fade once scrolled to the far end', () => {
+    const { container } = render(<DataTable data={items} columns={columns} keyField="id" />)
+    scrollBox(container, { scrollLeft: 400, clientWidth: 500, scrollWidth: 900 })
+    expect(fade(container, 'end')).toBeNull()
+    expect(fade(container, 'start')).not.toBeNull()
+  })
+
+  it('sits at the box edge when nothing is pinned to that side', () => {
+    const unpinned: Column<Item>[] = [{ key: 'a', header: 'A', pin: false }, { key: 'b', header: 'B' }]
+    const { container } = render(<DataTable data={items} columns={unpinned} keyField="id" />)
+    scrollBox(container, { scrollLeft: 0, clientWidth: 500, scrollWidth: 900 })
+    expect(fade(container, 'end')!.style.right).toBe('0px')
+  })
+})
+
+describe('DataTable — hideWhenEmpty and overlay columns', () => {
+  type Item = { id: string; a: string; b: string | null; tags: string[]; actions: string }
+  const columns: Column<Item>[] = [
+    { key: 'a', header: 'A' },
+    { key: 'b', header: 'Position', hideWhenEmpty: true },
+    { key: 'tags', header: 'Streams', hideWhenEmpty: true },
+    { key: 'actions', header: '', overlay: true },
+  ]
+  const row = (id: string, b: string | null, tags: string[] = []): Item => ({ id, a: `row ${id}`, b, tags, actions: '' })
+
+  it('drops a column whose every row is empty (null, empty string, dash or empty list), header and cells', () => {
+    render(<DataTable data={[row('1', null), row('2', '—')]} columns={columns} keyField="id" />)
+    expect(screen.queryByRole('columnheader', { name: 'Position' })).toBeNull()
+    expect(screen.queryByRole('columnheader', { name: 'Streams' })).toBeNull()
+    expect(screen.getAllByRole('row')[1].querySelectorAll('td')).toHaveLength(2)
+  })
+
+  it('keeps it as soon as one row has a value', () => {
+    render(<DataTable data={[row('1', null), row('2', 'Lead', ['NDIS'])]} columns={columns} keyField="id" />)
+    expect(screen.getByRole('columnheader', { name: 'Position' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Streams' })).toBeInTheDocument()
+  })
+
+  it('keeps it with no rows (an empty table is laid out like a filled one)', () => {
+    render(<DataTable data={[]} columns={columns} keyField="id" />)
+    expect(screen.getByRole('columnheader', { name: 'Position' })).toBeInTheDocument()
+  })
+
+  it('an overlay column costs no width on a mouse, header and cell, and names its header for assistive tech', () => {
+    const { container } = render(<DataTable data={[row('1', 'Lead')]} columns={columns} keyField="id" />)
+    const th = container.querySelector('th[data-pin="end"]')!
+    const td = container.querySelector('tbody tr')!.lastElementChild!
+    for (const el of [th, td]) expect(el).toHaveClass('relative', 'md:pointer-fine:px-0')
+    expect(th).toHaveTextContent('Actions')
+    expect(th.querySelector('.sr-only')).not.toBeNull()
+  })
+
+  it('never wraps a header above its sort icon', () => {
+    render(<DataTable data={[row('1', 'Lead')]} columns={[{ key: 'a', header: 'Status', sortable: true }]} keyField="id" sortable />)
+    expect(screen.getByRole('columnheader').firstElementChild!.className).not.toMatch(/flex-wrap/)
   })
 })

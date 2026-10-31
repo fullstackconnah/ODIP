@@ -1,16 +1,16 @@
 import { useTasks, useSetTaskStatus, useDeleteTask } from '@/api/hooks'
 import { TASK_TYPE_LABELS, type TaskItemStatus } from '@/api/types'
-import { DataTable, RowActions, type Column } from '@/components/DataTable'
+import { CellText, DataTable, RowMenu, ROW_LINK, CROSS_LINK, type Column, type RowMenuItem } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Dropdown } from '@/components/Dropdown'
 import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/Button'
-import { getStatusColor } from '@/lib/utils'
+import { getStatusColor, formatDateAu } from '@/lib/utils'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useState } from 'react'
-import { Filter, CheckCircle, Plus, ListChecks, Eye } from 'lucide-react'
+import { Filter, CheckCircle, Plus, ListChecks, Eye, Pencil, Archive, ArchiveRestore } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
 import { plural } from '@/lib/format'
 import { localIsoDate } from '@/lib/dateOnly'
@@ -42,7 +42,7 @@ export default function TasksPage() {
   const setStatus = useSetTaskStatus()
   const deleteTask = useDeleteTask()
 
-  const { showArchived, params, toggleButtons, confirmDialog, errorNotice, actionButtons } = useArchiveRestore<any>({
+  const { showArchived, params, toggleButtons, confirmDialog, errorNotice, requestArchive, requestRestore } = useArchiveRestore<any>({
     deleteMutation: deleteTask,
     // Restore posts the status alone, so it cannot revert an edit made since the list loaded (an update rewrites the whole row).
     restoreMutation: { mutate: ({ id }, options) => setStatus.mutate({ id, status: 'NotStarted' }, options), isPending: setStatus.isPending },
@@ -70,70 +70,49 @@ export default function TasksPage() {
     })
   }
 
+  // The menu a row offers, once: icon buttons on a mouse, one ⋯ on the phone card. Archive is undoable (a confirm, then Archived), so it is never red.
+  const rowItems = (t: { id: string; taskType?: string }): RowMenuItem[] => mayChange(t)
+    ? [
+        { label: 'Edit', icon: <Pencil className="w-4 h-4" />, to: `/tasks/${t.id}/edit` },
+        showArchived
+          ? { label: 'Restore', icon: <ArchiveRestore className="w-4 h-4" />, onSelect: () => requestRestore(t) }
+          : { label: 'Archive', icon: <Archive className="w-4 h-4" />, onSelect: () => requestArchive(t) },
+      ]
+    : isReadOnly && !isBudgetReview(t) ? [{ label: 'View', icon: <Eye className="w-4 h-4" />, to: `/tasks/${t.id}/edit` }] : []
+
   const taskColumns: Column<any>[] = [
     {
       key: 'checkbox',
       header: '',
+      srHeader: 'Mark complete',
       hidden: showArchived,
-      // On the card the tick joins the controls after Due, so Due holds its place on a card without one.
-      className: 'max-md:order-1',
+      // On the phone card the tick is the row's one visible action, ahead of the ⋯ menu at the end of the meta line.
+      mobile: 'trail',
       render: (t) => t.status !== 'Completed' && t.status !== 'Cancelled' && mayChange(t) ? (
         <Button variant="ghost" size="sm" iconOnly onClick={(e) => markComplete(e, t)} title="Mark complete" className="max-md:min-h-11 max-md:min-w-11">
           <CheckCircle className="w-4 h-4" />
         </Button>
       ) : null,
     },
-    // Column budget (density §4): at 1280 the box is ~1006px and the fixed columns (tick, due, priority, status, Open, actions)
-    // take ~500 of it, so the text columns are capped (an ellipsis, full text in the tooltip). Every column stays (Trip and Type were
-    // deleted below 1536 and 1792, L3-04): what does not fit scrolls in the box with the task and the actions pinned. Task 13rem, Trip
-    // 9rem and Type 8rem keep Status clear of the pinned actions at 1440 (it was cut to "Sta", platform review V2-B).
-    // On the phone card the title and status make the title line, trip, type, owner and priority one muted line, and Due stays labelled.
+    // Column budget (density §4): at 1280 the box is ~1006px. Order is identity, status, when, then the rest, so Status is on screen before the
+    // table scrolls (it sat late and fell under the pinned actions, "In Progre"). Every column stays (L3-04): what does not fit scrolls under the
+    // edge fade, with the task pinned. Task 13rem (two lines), Trip 9rem, Owner and Type 7rem.
+    // On the phone card the title and status make the title line; due, priority, trip and owner are one muted line, and the type is on the task.
     {
       key: 'title',
       header: 'Task',
       sortable: true,
       mobile: 'primary',
+      wrap: true,
       className: 'font-medium',
-      maxWidth: '13rem',
-      // The title is the way in when the task has one (this column is pinned, so it is always reachable; "Open" stays for the habit). The review of an emergency names the participant and the day LAST, which is
-      // exactly what a one-line cap cuts, so its title wraps instead and the row says which emergency it is. Every other title is cut on the link itself (a wrapper would clip its focus ring).
+      // The title is the way in when the task has one, so there is no separate "Open" column. The review of an emergency names the participant and the day LAST,
+      // which a one-line cap cuts, so every title gets two lines before an ellipsis, with the full text in the tooltip. The cap sits on the link itself (a wrapper would clip its focus ring).
       render: (t) => t.linkTo ? (
-        <Link
-          to={t.linkTo}
-          title={t.title}
-          className={`text-[var(--color-primary)] hover:underline ${isBudgetReview(t) ? 'whitespace-normal md:max-w-[13rem]' : 'block md:truncate md:max-w-[13rem]'}`}
-        >
-          {t.title}
-        </Link>
-      ) : isBudgetReview(t) ? (
-        <span className="block whitespace-normal md:max-w-[13rem]" title={t.title}>{t.title}</span>
-      ) : isReadOnly ? (
+        <Link to={t.linkTo} title={t.title} className={`line-clamp-2 break-words md:max-w-[13rem] ${ROW_LINK}`}>{t.title}</Link>
+      ) : isReadOnly && !isBudgetReview(t) ? (
         // ReadOnly has no Edit action: the title opens the task as a view (the only place its notes are shown).
-        <Link to={`/tasks/${t.id}/edit`} title={t.title} className="block text-[var(--color-primary)] hover:underline md:truncate md:max-w-[13rem]">{t.title}</Link>
-      ) : t.title,
-    },
-    {
-      key: 'tripName',
-      header: 'Trip',
-      sortable: true,
-      maxWidth: '9rem',
-      mobile: 'meta',
-      render: (t) => t.tripInstanceId && t.tripName ? (
-        // Truncation on the link itself (not a wrapper): a wrapper's overflow: hidden would clip the link's focus ring.
-        <Link to={`/trips/${t.tripInstanceId}`} title={t.tripName} className="block truncate text-[var(--color-primary)] hover:underline md:max-w-[9rem]">
-          {t.tripName}
-        </Link>
-      ) : (t.tripName ?? '—'),
-    },
-    { key: 'taskType', header: 'Type', sortable: true, maxWidth: '8rem', mobile: 'meta', render: (t) => TASK_TYPE_LABELS[t.taskType as keyof typeof TASK_TYPE_LABELS] ?? t.taskType },
-    // Nobody owns the review of an emergency until an Admin takes it, and it is the Admins' to take: say so rather than a dash that reads as "nobody's job".
-    { key: 'ownerName', header: 'Owner', sortable: true, maxWidth: '8rem', mobile: 'meta', render: (t) => t.ownerName ?? (isBudgetReview(t) ? 'Admins' : '—') },
-    { key: 'dueDate', header: 'Due', type: 'date', sortable: true },
-    {
-      key: 'priority',
-      header: 'Priority',
-      mobile: 'meta',
-      render: (t) => <StatusBadge status={t.priority} />,
+        <Link to={`/tasks/${t.id}/edit`} title={t.title} className={`line-clamp-2 break-words md:max-w-[13rem] ${ROW_LINK}`}>{t.title}</Link>
+      ) : <CellText lines={2} className="max-md:line-clamp-2 break-words md:max-w-[13rem]">{t.title}</CellText>,
     },
     {
       key: 'status',
@@ -172,23 +151,37 @@ export default function TasksPage() {
       ),
     },
     {
-      key: 'linkTo',
-      header: '',
-      render: (t) => t.linkTo ? (
-        <Link to={t.linkTo} className="text-[var(--color-primary)] hover:underline">
-          Open
-        </Link>
-      ) : null,
+      key: 'dueDate',
+      header: 'Due',
+      type: 'date',
+      sortable: true,
+      mobile: 'meta',
+      render: (t) => <span className="whitespace-nowrap"><span className="md:hidden">Due </span>{formatDateAu(t.dueDate)}</span>,
     },
-    // ReadOnly has no Edit: View opens the task itself, which a linked task's title does not (it goes to the linked page).
-    // On a mouse the cluster overlays the row's last cells (RowActions overlay) instead of holding a column, so "Open" is not cut at 1440.
-    { key: 'actions', header: '', className: 'relative', render: (t) => mayChange(t) ? <RowActions overlay>{actionButtons(t)}</RowActions> : isReadOnly && !isBudgetReview(t) ? (
-      <RowActions overlay>
-        <Button to={`/tasks/${t.id}/edit`} variant="ghost" size="sm" iconOnly title="View" aria-label="View">
-          <Eye className="w-4 h-4" />
-        </Button>
-      </RowActions>
-    ) : null },
+    {
+      key: 'priority',
+      header: 'Priority',
+      mobile: 'meta',
+      render: (t) => <StatusBadge status={t.priority} />,
+    },
+    {
+      key: 'tripName',
+      header: 'Trip',
+      sortable: true,
+      maxWidth: '9rem',
+      mobile: 'meta',
+      render: (t) => t.tripInstanceId && t.tripName ? (
+        // Truncation on the link itself (not a wrapper): a wrapper's overflow: hidden would clip the link's focus ring.
+        <Link to={`/trips/${t.tripInstanceId}`} title={t.tripName} className={`block truncate md:max-w-[9rem] ${CROSS_LINK}`}>
+          {t.tripName}
+        </Link>
+      ) : (t.tripName ?? '—'),
+    },
+    // Nobody owns the review of an emergency until an Admin takes it, and it is the Admins' to take: say so rather than a dash that reads as "nobody's job".
+    { key: 'ownerName', header: 'Owner', sortable: true, maxWidth: '7rem', mobile: 'meta', className: 'max-md:max-w-[8rem]!', render: (t) => t.ownerName ?? (isBudgetReview(t) ? 'Admins' : '—') },
+    { key: 'taskType', header: 'Type', sortable: true, maxWidth: '7rem', mobile: 'hidden', render: (t) => TASK_TYPE_LABELS[t.taskType as keyof typeof TASK_TYPE_LABELS] ?? t.taskType },
+    // The cluster overlays the row's last cells on a mouse and costs no column (RowMenu, overlay), so nothing is cut at 1440; one ⋯ menu on the phone card.
+    { key: 'actions', header: '', overlay: true, mobile: 'trail', render: (t) => <RowMenu name={t.title} items={rowItems(t)} /> },
   ]
 
   return (

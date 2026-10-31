@@ -223,7 +223,7 @@ describe('AlphaSignupsTab', () => {
       returns(page([makeRow()]))
       render(<AlphaSignupsTab />)
 
-      expect(screen.getAllByRole('columnheader').map(h => h.textContent)).toEqual(['Name', 'Organisation', 'Email', 'Size', 'Last sent', ''])
+      expect(screen.getAllByRole('columnheader').map(h => h.textContent)).toEqual(['Name', 'Organisation', 'Email', 'Size', 'Last sent', 'Actions'])
     })
 
     it('opens role, phone and the whole message under the row from its name, and closes them again', async () => {
