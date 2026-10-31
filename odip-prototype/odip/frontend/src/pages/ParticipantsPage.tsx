@@ -35,11 +35,11 @@ const VIEW_OPTIONS: { key: View; label: string }[] = [
 ]
 
 // A care need the phone card must not lose: the table keeps the tick a 'boolean' column draws, the card shows the need as a chip.
-/** The two care needs as chips, in one cell (a function, not a component, so null reaches DataTable and the empty card cell is dropped): the same on the desktop row and the phone card, named in words (a bare emoji and a lone "High" were two unlabelled columns). */
+/** The two care needs as chips, in one cell, stacked on a desktop row when both are set (side by side they pushed Support Ratio out of the first view) (a function, not a component, so null reaches DataTable and the empty card cell is dropped): the same on the desktop row and the phone card, named in words (a bare emoji and a lone "High" were two unlabelled columns). */
 function careNeeds(p: ParticipantListDto) {
   if (!p.mobilityAidWheelchair && !p.isHighSupport) return null
   return (
-    <span className="inline-flex items-center gap-1 md:w-max">
+    <span className="inline-flex flex-wrap items-center gap-1 md:max-w-[7rem]">
       {p.mobilityAidWheelchair && <span className={CHIP_CLASS}>Wheelchair</span>}
       {p.isHighSupport && <span className={CHIP_CLASS}>High support</span>}
     </span>

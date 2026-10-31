@@ -867,6 +867,7 @@ describe('ParticipantsPage — care needs', () => {
     expect(cell).toHaveAttribute('data-card', 'meta')
     expect(within(cell).getByText('Wheelchair')).toBeInTheDocument()
     expect(within(cell).getByText('High support')).toBeInTheDocument()
+    expect(within(cell).getByText('High support').parentElement).toHaveClass('flex-wrap', 'md:max-w-[7rem]')
     const ava = screen.getByRole('link', { name: /Ava Lee/ }).closest('tr') as HTMLElement
     expect(ava.querySelector('td[data-label="Care needs"]')).toHaveClass('max-md:hidden')
     expect(within(ava).queryByText('Wheelchair')).not.toBeInTheDocument()

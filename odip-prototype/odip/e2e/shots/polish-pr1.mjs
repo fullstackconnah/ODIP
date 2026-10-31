@@ -43,7 +43,7 @@ const PAGES = [
     longPatch: (items) => many(items, 25, (i) => ({ title: i === 0 ? long('Review emergency shift over budget: Mia Chen on 17 Aug 2026', 80) : long(`Confirm accommodation ${i}`, 40 + (i % 3) * 20), linkTo: i % 2 ? '/rostering/leave' : null })),
   },
   {
-    key: 'incidents', path: '/incidents', api: '/api/v1/incidents', titleHeader: 'Title',
+    key: 'incidents', path: '/incidents', api: '/api/v1/incidents', titleHeader: 'Title', tableSel: 'table:has(td[data-card="primary"])',
     visible: { 1280: ['Title', 'NDIS Commission', 'Status', 'Severity', 'Date', 'Type'], 1024: ['Title', 'NDIS Commission', 'Status', 'Severity', 'Date'] },
     pills: ['Status', 'Severity', 'NDIS Commission'], dates: ['Date'], clamp: true, noScroll1280: false,
     longPatch: (items) => many(items, 25, (i) => ({ title: long(`Incident ${i} during the pre-trip meet and greet`, i % 2 ? 100 : 30) })),
@@ -87,7 +87,7 @@ const median = (a) => { const s = [...a].sort((x, y) => x - y); return s[Math.fl
 
 // Everything measured in the page, as plain numbers and strings. `visible` is the header list for this width.
 function measureInPage({ titleHeader, pills, dates, visibleHeaders }) {
-  const table = document.querySelector(window.__T)
+  const table = window.__tbl()
   const box = table.parentElement
   const card = box.parentElement
   const rect = (el) => { const r = el.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height } }
@@ -132,7 +132,7 @@ function measureInPage({ titleHeader, pills, dates, visibleHeaders }) {
 
 // On the phone card: heights, what is on the face, and the one action set.
 function measureCards() {
-  const rows = [...document.querySelectorAll(window.__T + ' tbody tr')]
+  const rows = [...window.__tbl().querySelectorAll('tbody tr')]
   const shown = (el) => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none' }
   const named = (el) => (el.getAttribute('aria-label') || el.textContent || '').trim()
   const cards = rows.map((r) => {
@@ -179,14 +179,15 @@ async function openPage(page, cfg, variant) {
   state.variant = variant
   await page.goto(`${BASE_URL}${cfg.path}`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
   if (cfg.open) await cfg.open(page)
-  await page.locator(`${cfg.tableSel ?? 'table'} tbody tr`).first().waitFor({ state: 'visible', timeout: 60_000 })
-  await page.evaluate((t) => { window.__T = t }, cfg.tableSel ?? 'table')
+  await page.locator(`${cfg.tableSel ?? 'table'} tbody tr:visible`).first().waitFor({ state: 'visible', timeout: 60_000 })
+  // The table on show: Incidents also mounts the flagged-notes table (hidden) ahead of its own.
+  await page.evaluate((t) => { window.__tbl = () => [...document.querySelectorAll(t)].find((el) => el.getClientRects().length > 0) ?? document.querySelector(t) }, cfg.tableSel ?? 'table')
   await page.waitForTimeout(600)
 }
 
 async function fades(page) {
   return page.evaluate(() => {
-    const box = document.querySelector(window.__T).parentElement
+    const box = window.__tbl().parentElement
     const end = document.querySelector('[data-edge-fade="end"]')
     const endTh = box.querySelector('th[data-pin="end"]')
     return { scrolls: box.scrollWidth > box.clientWidth + 1, end: end ? end.getBoundingClientRect().right : null, start: !!document.querySelector('[data-edge-fade="start"]'), boxRight: box.getBoundingClientRect().right, endPin: endTh ? endTh.offsetWidth : 0 }
@@ -236,11 +237,11 @@ try {
           if (profile.width === 1280 && cfg.noScroll1280) check(tag, 'C8 no fade when it fits', f.end == null && !f.start, f)
           else if (f.scrolls) {
             check(tag, 'C8 end fade just inside the end pin', f.end != null && Math.abs(f.end - (f.boxRight - f.endPin)) <= 1, { fadeRight: f.end && Math.round(f.end), expect: Math.round(f.boxRight - f.endPin) })
-            await page.evaluate(() => { const b = document.querySelector(window.__T).parentElement; b.scrollLeft = b.scrollWidth })
+            await page.evaluate(() => { const b = window.__tbl().parentElement; b.scrollLeft = b.scrollWidth })
             await page.waitForTimeout(250)
             const g = await fades(page)
             check(tag, 'C8 scrolled to the end: end fade gone, start fade shown', g.end == null && g.start, g)
-            await page.evaluate(() => { document.querySelector(window.__T).parentElement.scrollLeft = 0 })
+            await page.evaluate(() => { window.__tbl().parentElement.scrollLeft = 0 })
             await page.waitForTimeout(250)
           }
         }
@@ -257,7 +258,7 @@ try {
         }
         // C15 the dark fade ends in the card colour.
         if (profile.dark && md && variant === 'stock') {
-          await page.evaluate(() => { document.querySelector(window.__T).parentElement.scrollLeft = 0 })
+          await page.evaluate(() => { window.__tbl().parentElement.scrollLeft = 0 })
           const g = await page.evaluate(measureInPage, { titleHeader: cfg.titleHeader, pills: [], dates: [], visibleHeaders: [] })
           check(tag, 'C15 dark fade ends in the card colour', g.fadeEnd == null ? g.scrollW <= g.clientW + 1 : g.fadeEnd.bg.includes(g.cardBg), { bg: g.fadeEnd && g.fadeEnd.bg, card: g.cardBg })
         }
@@ -302,7 +303,7 @@ try {
         // Captures: only the changed states, stock data only. A padded table crop per profile, one full page per breakpoint.
         if (variant === 'stock') {
           const opts = { touch: profile.touch }
-          const wrapper = page.locator(cfg.tableSel ?? 'table').first().locator('xpath=../..')
+          const wrapper = page.locator(`${cfg.tableSel ?? 'table'}:visible`).first().locator('xpath=../..')
           // N3 the right edge at 1280 with the fade in it, in a padded crop: the first list that scrolls (Tasks fits at 1280 on stock data).
           if (profile.name === 'desktop-1280' && !n3done && await page.locator('[data-edge-fade="end"]').count()) {
             n3done = true
@@ -316,7 +317,7 @@ try {
           }
           // N2 nothing focused at rest. M4 on the phone the fixed bottom nav is hidden for the crop only, and the last card must lie in the clip and be what is at its centre.
           await page.evaluate(() => { document.activeElement?.blur?.(); window.__shotHidden = []; if (matchMedia('(pointer: coarse)').matches) for (const el of document.querySelectorAll('body *')) { if (getComputedStyle(el).position !== 'fixed') continue; const r = el.getBoundingClientRect(); if (r.width > 0 && r.bottom >= innerHeight - 1 && r.top > innerHeight / 2) { window.__shotHidden.push([el, el.style.visibility]); el.style.visibility = 'hidden' } } })
-          const lastCard = (clip) => page.evaluate((c) => { const rows = [...document.querySelectorAll(window.__T + ' tbody tr')]; const r = rows[rows.length - 1].getBoundingClientRect(); const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return { rows: rows.length, inClip: r.left >= c.x - 1 && r.right <= c.x + c.width + 1 && r.top >= c.y - 1 && r.bottom <= c.y + c.height + 1, atCentre: !!hit && rows[rows.length - 1].contains(hit) } }, clip)
+          const lastCard = (clip) => page.evaluate((c) => { const rows = [...window.__tbl().querySelectorAll('tbody tr')]; const r = rows[rows.length - 1].getBoundingClientRect(); const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return { rows: rows.length, inClip: r.left >= c.x - 1 && r.right <= c.x + c.width + 1 && r.top >= c.y - 1 && r.bottom <= c.y + c.height + 1, atCentre: !!hit && rows[rows.length - 1].contains(hit) } }, clip)
           const crop = await cropElement(page, wrapper, path.join(OUT_DIR, `${profile.name}-${cfg.key}-table.png`), { ...opts, during: lastCard })
           await page.evaluate(() => { for (const [el, v] of window.__shotHidden ?? []) el.style.visibility = v })
           checks.push(checkCropHolds(crop))

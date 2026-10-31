@@ -481,7 +481,7 @@ describe('StaffPage — Qualifications chips and the phone card', () => {
     expect(screen.getByRole('button', { name: /^active$/i }).closest('td')).toHaveAttribute('data-card', 'status')
     for (const text of ['Support worker', 'North', 'Driver']) expect(screen.getByText(text).closest('td'), text).toHaveAttribute('data-card', 'meta')
     // VC design review fix 2: the chips take a line of their own under the muted text.
-    expect(screen.getByText('Driver').closest('td')).toHaveClass('max-md:basis-full')
+    expect(screen.getByText('Driver').closest('td')).toHaveClass('max-md:basis-full', 'max-md:max-w-none!')
   })
 })
 
