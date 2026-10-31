@@ -33,9 +33,9 @@ public static class ImportUntouched
         await Add(db.ParticipantMedications.Where(m => list.Contains(m.ParticipantId)).Select(m => m.ParticipantId), "has medications");
         await Add(db.ServiceAgreementDrafts.Where(a => list.Contains(a.ParticipantId)).Select(a => a.ParticipantId), "has a service agreement");
         await Add(db.FundingPlans.Where(f => list.Contains(f.ParticipantId)).Select(f => f.ParticipantId), "has a funding plan");
-        // The onboarding checklist's stored steps: an agreement recorded, services begun, or made active by its button (only an onboarding import's
+        // The onboarding checklist's stored steps: an agreement or the complaints and rights explanation recorded, services begun, or made active by its button (only an onboarding import's
         // participants have an onboarding row, and they arrive as drafts).
-        await Add(db.ParticipantOnboardings.Where(o => list.Contains(o.ParticipantId) && o.AgreementRecordedAt != null).Select(o => o.ParticipantId), "has onboarding progress");
+        await Add(db.ParticipantOnboardings.Where(o => list.Contains(o.ParticipantId) && (o.AgreementRecordedAt != null || o.ExplainedRecordedAt != null)).Select(o => o.ParticipantId), "has onboarding progress");
         await Add(db.Participants.Where(p => list.Contains(p.Id) && p.ServicesStartedAt != null).Select(p => p.Id), "has begun services");
         await Add(db.Participants.Where(p => list.Contains(p.Id) && !p.IsDraft && db.ParticipantOnboardings.Any(o => o.ParticipantId == p.Id)).Select(p => p.Id), "was made active");
         await Add(db.AuditLogs.Where(a => a.EntityType == nameof(Participant) && a.Action == AuditAction.Updated && list.Contains(a.EntityId))
