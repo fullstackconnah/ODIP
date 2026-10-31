@@ -1,7 +1,7 @@
-// Polish PR1a: the DataTable edge cue, the overlay actions column and the list cards, on Tasks, Incidents and Trips.
+// Polish PR1a + PR1b: the DataTable edge cue, the overlay actions column and the list cards, on Tasks, Incidents, Trips, Participants, Staff and the dashboard Leave tab.
 // Numeric checks C1-C16 from the shape brief (exit 1 on any failure). Stock mock data on every profile, plus a long-and-many variant
 // (25 rows, long strings) at 1280 light and 390 touch. Captures: only the changed states (a padded table crop per profile, one full page per breakpoint).
-// List paths in mock-api/server.js: GET /api/v1/tasks, /api/v1/incidents, /api/v1/trips (all `paged`).
+// List paths in mock-api/server.js: GET /api/v1/tasks, /api/v1/incidents, /api/v1/trips, /api/v1/participants (all `paged`: data.items), /api/v1/staff and /api/v1/leave (plain arrays in data).
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 import { AU_CONTEXT, prepareOutDir, cropElement, fullPage, checkCropHolds, writeChecks } from '../shots/lib/capture.mjs'
@@ -54,6 +54,29 @@ const PAGES = [
     pills: ['Status'], dates: ['Dates'], clamp: false, noScroll1280: true,
     longPatch: (items) => many(items, 25, (i) => ({ tripName: long(`Trip ${i}`, 60), destination: long('Caloundra', 40) })),
   },
+  {
+    key: 'participants', path: '/participants', api: '/api/v1/participants', titleHeader: 'Name',
+    visible: { 1280: ['Name', 'Status', 'Alerts', 'Care needs', 'NDIS Number', 'Region', 'Support Ratio'], 1024: ['Name', 'Status', 'Alerts', 'Care needs'] },
+    pills: ['Status'], dates: [], clamp: false, noScroll1280: false, overlay: false, noHeader: 'Streams',
+    cardMeta: ['Alerts', 'Care needs', 'Region', 'Plan Type', 'Support Ratio'],
+    longPatch: (items) => many(items, 25, (i) => ({ fullName: long(`Participant ${i}`, i % 2 ? 60 : 24), region: long('Greater Brisbane', 40), mobilityAidWheelchair: i % 2 === 0, isHighSupport: i % 3 === 0 })),
+  },
+  {
+    key: 'staff', path: '/staff', api: '/api/v1/staff', arrayData: true, titleHeader: 'Name',
+    visible: { 1280: ['Name', 'Status', 'Qualifications', 'Region'], 1024: ['Name', 'Status', 'Qualifications'] },
+    pills: ['Status'], dates: [], clamp: false, noScroll1280: true, noHeader: 'Position',
+    cardMeta: ['Region', 'Qualifications'],
+    longPatch: (items) => many(items, 25, (i) => ({ fullName: long(`Staff member ${i}`, i % 2 ? 60 : 24), region: long('Greater Brisbane', 40) })),
+  },
+  {
+    // The Leave tab of the dashboard's "Needs your decision" band (every group's panel stays mounted, so the panel is named).
+    key: 'leave', path: '/', api: '/api/v1/leave', arrayData: true, titleHeader: 'Staff', tableSel: '#decisions-panel-leave table',
+    open: async (page) => { await page.locator('#decisions-tab-leave').click(); await page.locator('#decisions-panel-leave').waitFor({ state: 'visible', timeout: 60_000 }) },
+    visible: { 1280: ['Staff', 'Dates'], 1024: ['Staff', 'Dates'] },
+    pills: [], dates: ['Dates'], clamp: false, noScroll1280: false, overlay: false, cardChecks: false,
+    cardMeta: ['Dates', 'Type', 'Note'],
+    longPatch: (items) => many(items, 25, (i) => ({ userFullName: long(`Staff member ${i}`, i % 2 ? 40 : 20), reason: long('Family event interstate', 120) })),
+  },
 ]
 
 const browser = await chromium.launch({ headless: true })
@@ -64,7 +87,7 @@ const median = (a) => { const s = [...a].sort((x, y) => x - y); return s[Math.fl
 
 // Everything measured in the page, as plain numbers and strings. `visible` is the header list for this width.
 function measureInPage({ titleHeader, pills, dates, visibleHeaders }) {
-  const table = document.querySelector('table')
+  const table = document.querySelector(window.__T)
   const box = table.parentElement
   const card = box.parentElement
   const rect = (el) => { const r = el.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height } }
@@ -99,7 +122,7 @@ function measureInPage({ titleHeader, pills, dates, visibleHeaders }) {
   return {
     fg, primary, cardBg, boxR, cardRight: rect(card).right, docFits: document.documentElement.scrollWidth <= document.documentElement.clientWidth,
     scrollW: box.scrollWidth, clientW: box.clientWidth, endPin, endThWidth: endTh ? endTh.offsetWidth : null,
-    headerNames: ths.map((th) => (headerText(th) || th.querySelector('.sr-only')?.textContent || th.getAttribute('aria-label') || '').trim()),
+    headerNames: ths.map((th) => (headerText(th) || th.querySelector('.sr-only')?.textContent || th.getAttribute('aria-label') || th.querySelector('[aria-label]')?.getAttribute('aria-label') || '').trim()),
     titleWidths: cellsOf(titleHeader).map((td) => td.getBoundingClientRect().width),
     visible, pillMetrics, dateMetrics, cut, clamps, identity, cross, rowCount: rows.length,
     fadeEnd: fadeEnd ? { right: fadeEnd.getBoundingClientRect().right, bg: getComputedStyle(fadeEnd).backgroundImage } : null, fadeStart: !!fadeStart,
@@ -109,7 +132,7 @@ function measureInPage({ titleHeader, pills, dates, visibleHeaders }) {
 
 // On the phone card: heights, what is on the face, and the one action set.
 function measureCards() {
-  const rows = [...document.querySelectorAll('table tbody tr')]
+  const rows = [...document.querySelectorAll(window.__T + ' tbody tr')]
   const shown = (el) => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none' }
   const named = (el) => (el.getAttribute('aria-label') || el.textContent || '').trim()
   const cards = rows.map((r) => {
@@ -145,6 +168,7 @@ async function routeLists(page) {
       if (state.variant !== 'long') return route.continue()
       const response = await route.fetch()
       const json = await response.json()
+      if (cfg.arrayData) return route.fulfill({ response, json: { ...json, data: cfg.longPatch(json.data) } })
       const items = cfg.longPatch(json.data.items)
       await route.fulfill({ response, json: { ...json, data: { ...json.data, items, totalCount: items.length, pageSize: 500 } } })
     })
@@ -154,13 +178,15 @@ async function routeLists(page) {
 async function openPage(page, cfg, variant) {
   state.variant = variant
   await page.goto(`${BASE_URL}${cfg.path}`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
-  await page.locator('table tbody tr').first().waitFor({ state: 'attached', timeout: 60_000 })
+  if (cfg.open) await cfg.open(page)
+  await page.locator(`${cfg.tableSel ?? 'table'} tbody tr`).first().waitFor({ state: 'visible', timeout: 60_000 })
+  await page.evaluate((t) => { window.__T = t }, cfg.tableSel ?? 'table')
   await page.waitForTimeout(600)
 }
 
 async function fades(page) {
   return page.evaluate(() => {
-    const box = document.querySelector('table').parentElement
+    const box = document.querySelector(window.__T).parentElement
     const end = document.querySelector('[data-edge-fade="end"]')
     const endTh = box.querySelector('th[data-pin="end"]')
     return { scrolls: box.scrollWidth > box.clientWidth + 1, end: end ? end.getBoundingClientRect().right : null, start: !!document.querySelector('[data-edge-fade="start"]'), boxRight: box.getBoundingClientRect().right, endPin: endTh ? endTh.offsetWidth : 0 }
@@ -210,18 +236,20 @@ try {
           if (profile.width === 1280 && cfg.noScroll1280) check(tag, 'C8 no fade when it fits', f.end == null && !f.start, f)
           else if (f.scrolls) {
             check(tag, 'C8 end fade just inside the end pin', f.end != null && Math.abs(f.end - (f.boxRight - f.endPin)) <= 1, { fadeRight: f.end && Math.round(f.end), expect: Math.round(f.boxRight - f.endPin) })
-            await page.evaluate(() => { const b = document.querySelector('table').parentElement; b.scrollLeft = b.scrollWidth })
+            await page.evaluate(() => { const b = document.querySelector(window.__T).parentElement; b.scrollLeft = b.scrollWidth })
             await page.waitForTimeout(250)
             const g = await fades(page)
             check(tag, 'C8 scrolled to the end: end fade gone, start fade shown', g.end == null && g.start, g)
-            await page.evaluate(() => { document.querySelector('table').parentElement.scrollLeft = 0 })
+            await page.evaluate(() => { document.querySelector(window.__T).parentElement.scrollLeft = 0 })
             await page.waitForTimeout(250)
           }
         }
         // C9 no blank strip at rest: the overlay actions column costs no width on a mouse.
-        if (md && fine) check(tag, 'C9 overlay actions th <= 1px', (m.endThWidth ?? 0) <= 1, m.endThWidth)
+        if (md && fine && cfg.overlay !== false) check(tag, 'C9 overlay actions th <= 1px', (m.endThWidth ?? 0) <= 1, m.endThWidth)
         // C10 every rendered header has an accessible name.
         check(tag, 'C10 every th has a name', m.headerNames.every((n) => n.length > 0), m.headerNames)
+        // C10 a column with nothing in it on the stock data is not drawn (Staff Position, Participants Streams).
+        if (variant === 'stock' && cfg.noHeader) check(tag, `C10 no "${cfg.noHeader}" th on stock data`, !m.headerNames.includes(cfg.noHeader), m.headerNames)
         // C14 link style: the identity link is ink with no underline at rest; a cross-link is not green at rest.
         if (md && fine) {
           check(tag, 'C14 identity link is ink, not underlined, at rest', m.identity.every((l) => l.color === m.fg && l.deco === 'none'), { fg: m.fg, seen: m.identity.slice(0, 2) })
@@ -229,7 +257,7 @@ try {
         }
         // C15 the dark fade ends in the card colour.
         if (profile.dark && md && variant === 'stock') {
-          await page.evaluate(() => { document.querySelector('table').parentElement.scrollLeft = 0 })
+          await page.evaluate(() => { document.querySelector(window.__T).parentElement.scrollLeft = 0 })
           const g = await page.evaluate(measureInPage, { titleHeader: cfg.titleHeader, pills: [], dates: [], visibleHeaders: [] })
           check(tag, 'C15 dark fade ends in the card colour', g.fadeEnd == null ? g.scrollW <= g.clientW + 1 : g.fadeEnd.bg.includes(g.cardBg), { bg: g.fadeEnd && g.fadeEnd.bg, card: g.cardBg })
         }
@@ -240,8 +268,12 @@ try {
         if (profile.touch) {
           const cards = await page.evaluate(measureCards)
           const hs = cards.map((c) => c.h)
+          const full = cfg.cardChecks !== false
+          // M5 the card meta reads in the shape's order (a subset of it, in order, is fine: an empty value drops off the card).
+          if (cfg.cardMeta) check(tag, `M5 card meta reads ${cfg.cardMeta.join(', ')}`, cards.every((c) => c.metaLabels.every((x, i) => cfg.cardMeta.includes(x) && (i === 0 || cfg.cardMeta.indexOf(c.metaLabels[i - 1]) < cfg.cardMeta.indexOf(x)))), { first: cards[0].metaLabels, bad: cards.filter((c) => !c.metaLabels.every((x, i) => cfg.cardMeta.includes(x) && (i === 0 || cfg.cardMeta.indexOf(c.metaLabels[i - 1]) < cfg.cardMeta.indexOf(x)))).slice(0, 2).map((c) => c.metaLabels) })
+          if (!full) console.log(`[polish-pr1] RECORD ${cfg.key} card heights ${variant}: median ${Math.round(median(hs))}, max ${Math.round(Math.max(...hs))} (the decision queue is exempt from the height target)`)
           const maxH = cfg.key === 'tasks' ? 144 : cfg.key === 'incidents' ? 156 : 132
-          check(tag, `C11 card height median <= ${cfg.key === 'incidents' ? 132 : cfg.key === 'tasks' ? 144 : 120}, max <= ${maxH}`, median(hs) <= (cfg.key === 'incidents' ? 132 : cfg.key === 'tasks' ? 144 : 120) && Math.max(...hs) <= maxH, { median: Math.round(median(hs)), max: Math.round(Math.max(...hs)), n: hs.length })
+          if (full) check(tag, `C11 card height median <= ${cfg.key === 'incidents' ? 132 : cfg.key === 'tasks' ? 144 : 120}, max <= ${maxH}`, median(hs) <= (cfg.key === 'incidents' ? 132 : cfg.key === 'tasks' ? 144 : 120) && Math.max(...hs) <= maxH, { median: Math.round(median(hs)), max: Math.round(Math.max(...hs)), n: hs.length })
           // Fix round 1: M1 the tick sits clear of the title; M2 Type is on the incident card; M3 the meta reads Date, Severity, NDIS, Type, Trip, Participant.
           if (cfg.key === 'tasks') check(tag, 'M1 no tick over a title', cards.every((c) => !c.tickOverTitle), { worst: Math.max(...hs), over: cards.filter((c) => c.tickOverTitle).length })
           if (cfg.key === 'incidents') {
@@ -251,11 +283,11 @@ try {
             check(tag, 'M3 incident card meta reads Date, Severity, NDIS, Type, Trip, Participant', cards.every((c) => inOrder(c.metaLabels)), { first: cards[0].metaLabels, bad: cards.filter((c) => !inOrder(c.metaLabels)).slice(0, 2).map((c) => c.metaLabels) })
             console.log(`[polish-pr1] RECORD incident card heights ${variant}: median ${Math.round(median(hs))}, max ${Math.round(Math.max(...hs))}`)
           }
-          check(tag, 'C12 at most one action on the face', cards.every((c) => c.others.length <= 1), cards.filter((c) => c.others.length > 1).slice(0, 2).map((c) => c.others))
-          check(tag, 'C12 nothing named archive/delete/restore on the face', cards.every((c) => c.banned.length === 0), cards.filter((c) => c.banned.length).slice(0, 2))
+          if (full) check(tag, 'C12 at most one action on the face', cards.every((c) => c.others.length <= 1), cards.filter((c) => c.others.length > 1).slice(0, 2).map((c) => c.others))
+          if (full) check(tag, 'C12 nothing named archive/delete/restore on the face', cards.every((c) => c.banned.length === 0), cards.filter((c) => c.banned.length).slice(0, 2))
           const small = cards.flatMap((c) => [...c.more, ...c.tick]).filter((s) => s.w < 44 - 0.5 || s.h < 44 - 0.5)
-          check(tag, 'C12 the ⋯ trigger and the tick are 44x44', small.length === 0 && cards.some((c) => c.more.length), small.slice(0, 2))
-          if (variant === 'stock') {
+          if (full) check(tag, 'C12 the ⋯ trigger and the tick are 44x44', small.length === 0 && cards.some((c) => c.more.length), small.slice(0, 2))
+          if (full && variant === 'stock') {
             const trigger = page.locator('button[aria-label^="More actions for"]').first()
             if (await trigger.count()) {
               const desktop = await trigger.evaluate((el) => [...el.closest('td').querySelectorAll('.max-md\\:hidden [aria-label]')].map((n) => n.getAttribute('aria-label')).sort())
@@ -270,7 +302,7 @@ try {
         // Captures: only the changed states, stock data only. A padded table crop per profile, one full page per breakpoint.
         if (variant === 'stock') {
           const opts = { touch: profile.touch }
-          const wrapper = page.locator('table').first().locator('xpath=../..')
+          const wrapper = page.locator(cfg.tableSel ?? 'table').first().locator('xpath=../..')
           // N3 the right edge at 1280 with the fade in it, in a padded crop: the first list that scrolls (Tasks fits at 1280 on stock data).
           if (profile.name === 'desktop-1280' && !n3done && await page.locator('[data-edge-fade="end"]').count()) {
             n3done = true
@@ -284,7 +316,7 @@ try {
           }
           // N2 nothing focused at rest. M4 on the phone the fixed bottom nav is hidden for the crop only, and the last card must lie in the clip and be what is at its centre.
           await page.evaluate(() => { document.activeElement?.blur?.(); window.__shotHidden = []; if (matchMedia('(pointer: coarse)').matches) for (const el of document.querySelectorAll('body *')) { if (getComputedStyle(el).position !== 'fixed') continue; const r = el.getBoundingClientRect(); if (r.width > 0 && r.bottom >= innerHeight - 1 && r.top > innerHeight / 2) { window.__shotHidden.push([el, el.style.visibility]); el.style.visibility = 'hidden' } } })
-          const lastCard = (clip) => page.evaluate((c) => { const rows = [...document.querySelectorAll('table tbody tr')]; const r = rows[rows.length - 1].getBoundingClientRect(); const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return { rows: rows.length, inClip: r.left >= c.x - 1 && r.right <= c.x + c.width + 1 && r.top >= c.y - 1 && r.bottom <= c.y + c.height + 1, atCentre: !!hit && rows[rows.length - 1].contains(hit) } }, clip)
+          const lastCard = (clip) => page.evaluate((c) => { const rows = [...document.querySelectorAll(window.__T + ' tbody tr')]; const r = rows[rows.length - 1].getBoundingClientRect(); const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return { rows: rows.length, inClip: r.left >= c.x - 1 && r.right <= c.x + c.width + 1 && r.top >= c.y - 1 && r.bottom <= c.y + c.height + 1, atCentre: !!hit && rows[rows.length - 1].contains(hit) } }, clip)
           const crop = await cropElement(page, wrapper, path.join(OUT_DIR, `${profile.name}-${cfg.key}-table.png`), { ...opts, during: lastCard })
           await page.evaluate(() => { for (const [el, v] of window.__shotHidden ?? []) el.style.visibility = v })
           checks.push(checkCropHolds(crop))
