@@ -150,6 +150,7 @@ describe('AllClearField — the whole page clear (the page draws it)', () => {
 
     const field = screen.getByText('All clear. Nothing needs you right now.').closest('div.rounded-md') as HTMLElement
     for (const cls of TONE.success.solid.split(' ')) expect(field).toHaveClass(cls)
+    expect(field).toHaveClass('bg-[var(--color-selected)]', 'text-[var(--color-on-selected)]')
     expect(screen.getByText('Checked and at zero: Alpha, Beta and Gamma.')).toBeInTheDocument()
     expect(field.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
   })
