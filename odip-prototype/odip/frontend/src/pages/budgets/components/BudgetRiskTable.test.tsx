@@ -161,7 +161,7 @@ describe('BudgetRiskTable: a real row', () => {
     expect(screen.getByText('Over').className).toContain('bg-[var(--color-error-container)]')
     expect(screen.getByText('Forecast over').className).toContain('bg-[var(--color-warning-container)]')
     expect(screen.getByText('Approaching').className).toContain('bg-[var(--color-warning-container)]')
-    expect(screen.getByText('On track').className).toContain('bg-[var(--color-primary-fixed)]')
+    expect(screen.getByText('On track').className).toContain('bg-[var(--color-selected)]')
     for (const word of ['Over', 'Forecast over', 'Approaching', 'On track']) expect(screen.getByText(word).className, word).not.toContain('md:bg-[var(--color-card)]')
   })
 

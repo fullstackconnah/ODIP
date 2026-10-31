@@ -10,7 +10,7 @@ describe('StatusBadge — size', () => {
     const badge = screen.getByText('Confirmed')
     // The complete class string, so any drift in the default (used by every table in the app) fails here.
     expect(badge.className.replace(/\s+/g, ' ').trim()).toBe(
-      'text-xs px-2 py-0.5 rounded-full bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
+      'text-xs px-2 py-0.5 rounded-full bg-[var(--color-selected)] text-[var(--color-on-selected)]',
     )
   })
 
@@ -71,7 +71,7 @@ describe('StatusBadge — every trip status', () => {
   it('uses the tones the dashboard and schedule give them (closest existing StatusBadge pairs), not amber for all four', () => {
     const tones: Record<string, string> = {
       Planning: 'bg-[var(--color-secondary-container)] text-[var(--color-info)]',
-      OpenForBookings: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
+      OpenForBookings: 'bg-[var(--color-selected)] text-[var(--color-on-selected)]',
       WaitlistOnly: 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]',
       // Owner decision: In progress is information (blue), not the accessibility pink.
       InProgress: 'bg-[var(--color-secondary-container)] text-[var(--color-info)]',

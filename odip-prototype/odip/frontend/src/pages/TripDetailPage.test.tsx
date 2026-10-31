@@ -407,9 +407,9 @@ describe('TripDetailPage — glance strip', () => {
       expect(cell).not.toHaveAttribute('data-attention')
       expect(cell.className).not.toMatch(/bg-\[/)
     }
-    expect(screen.getByText('Active')).toHaveClass('bg-[var(--color-primary-fixed)]')
-    expect(screen.getByText('On Track')).toHaveClass('bg-[var(--color-primary-fixed)]')
-    expect(screen.getByText('Covered')).toHaveClass('bg-[var(--color-primary-fixed)]')
+    expect(screen.getByText('Active')).toHaveClass('bg-[var(--color-selected)]')
+    expect(screen.getByText('On Track')).toHaveClass('bg-[var(--color-selected)]')
+    expect(screen.getByText('Covered')).toHaveClass('bg-[var(--color-selected)]')
   })
 
   it('cannot tint a segment against its own badge: a tinted cell holds a white-pill chip, a quiet one its own tone', () => {
