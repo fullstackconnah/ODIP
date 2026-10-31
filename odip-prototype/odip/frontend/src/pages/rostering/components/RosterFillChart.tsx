@@ -98,7 +98,7 @@ export function RosterFillChart({ data, boardWeek, width: W, onSelectWeek, sente
                 const barW = Math.min(Math.max(Math.round(slot * 0.5), 16), 48)
                 const onBoard = w.weekStart === boardWeek
                 const fh = w.filled > 0 ? Math.max(2, (w.filled / top) * PLOT_H) : 0
-                const oh = w.open > 0 ? Math.max(4, (w.open / top) * PLOT_H) : 0
+                const oh = w.open > 0 ? Math.max(5.5, (w.open / top) * PLOT_H) : 0
                 return (
                   <g key={w.weekStart}>
                     <rect data-fill-week={w.weekStart} data-on-board={onBoard || undefined} x={M.left + slot * i} y={M.top} width={slot} height={PLOT_H} fill="transparent" />

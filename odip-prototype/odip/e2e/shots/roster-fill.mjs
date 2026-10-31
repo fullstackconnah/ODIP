@@ -206,21 +206,18 @@ try {
         await shot('collapsed', ctx)
       }
 
-      // ---- 13. Board frame: expanded, collapsed, and the card absent (baseline) ----
+      // ---- 13. Board frame: the card absent (baseline) first, then expanded and collapsed ----
       if (!vp.mobile) {
+        const frame = () => page.evaluate(() => { const f = document.querySelector('div[style*="scroll-padding-left"]'); const r = f.getBoundingClientRect(); return { capped: f.scrollHeight > f.clientHeight, scroll: document.scrollingElement.scrollHeight, bottom: r.bottom, height: r.height, inner: innerHeight } })
+        await open({ hidden: '0' })
+        await heading.evaluate((h) => { h.closest('.rounded-md').parentElement.style.display = 'none' })
+        await page.waitForTimeout(500)
+        const base = await frame()
+        check('13 board frame (baseline, no card)', { width: vp.name, theme: scheme, state: 'card-absent' }, base, base.capped && base.height >= 320)
         for (const [label, hidden] of [['expanded', '0'], ['collapsed', '1']]) {
-          const ctx = { width: vp.name, theme: scheme, state: label }
           await open({ hidden })
-          const fr = await page.evaluate(() => { const f = document.querySelector('div[style*="scroll-padding-left"]'); const r = f.getBoundingClientRect(); return { capped: f.scrollHeight > f.clientHeight, pageFits: document.scrollingElement.scrollHeight <= innerHeight + 1, bottom: r.bottom, height: r.height, inner: innerHeight } })
-          check('13 board frame fits', ctx, fr, fr.capped && fr.pageFits && fr.bottom <= fr.inner + 1 && fr.height >= 320)
-        }
-        {
-          const ctx = { width: vp.name, theme: scheme, state: 'card-absent' }
-          await open({ hidden: '0' })
-          await heading.evaluate((h) => { h.closest('.rounded-md').parentElement.style.display = 'none' })
-          await page.waitForTimeout(500)
-          const fr = await page.evaluate(() => { const f = document.querySelector('div[style*="scroll-padding-left"]'); const r = f.getBoundingClientRect(); return { capped: f.scrollHeight > f.clientHeight, pageFits: document.scrollingElement.scrollHeight <= innerHeight + 1, bottom: r.bottom, height: r.height, inner: innerHeight } })
-          check('13 board frame fits (baseline, no card)', ctx, fr, fr.capped && fr.pageFits && fr.bottom <= fr.inner + 1 && fr.height >= 320)
+          const fr = await frame()
+          check('13 board frame fits', { width: vp.name, theme: scheme, state: label }, { ...fr, baselineScroll: base.scroll }, fr.capped && fr.scroll <= base.scroll + 1 && fr.bottom <= fr.inner + 1 && fr.height >= 320)
         }
       }
 

@@ -14,7 +14,7 @@ import { FILL_ERROR, FILL_LOADING, FILL_SCOPE, FILL_STALE, FILL_TITLE, SENTENCE_
 // and each says the board below is unaffected. The hide choice is remembered per device.
 
 const HIDDEN_KEY = 'odip.roster.fillHidden'
-const WIDE = 1024
+const WIDE = 960 // the 1280 desktop card is ~982px inner (shape brief section 3)
 
 /** The element's content width. The card swaps its subtree between loading and loaded, so this follows the element (a callback ref), not one ref object. */
 function useElementWidth() {
@@ -57,7 +57,7 @@ export function RosterFillCard({ boardWeek, onSelectWeek }: { boardWeek: string 
   const wide = (boxWidth ?? 0) >= WIDE
 
   const titleRow = (toggleButton: boolean) => (
-    <div className="flex min-h-8 flex-wrap items-center justify-between gap-x-4 gap-y-1">
+    <div className={`flex flex-wrap items-center justify-between gap-x-4 gap-y-1 ${toggleButton ? 'min-h-8' : ''}`}>
       <h3 className="text-sm font-semibold">{FILL_TITLE}</h3>
       {toggleButton && (
         <Button variant="ghost" size="sm" className={TAP_AREA} onClick={toggle} aria-expanded={!hidden} aria-controls={bodyId}>
