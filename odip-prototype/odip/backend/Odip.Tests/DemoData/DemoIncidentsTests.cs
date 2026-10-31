@@ -115,7 +115,7 @@ public class DemoIncidentsTests
             Assert.Equal(TaskPriority.High, task.Priority);
             Assert.Equal($"/incidents/{incident.Id}", task.LinkTo);
             Assert.Equal(incident.Id, task.IncidentReportId);
-            Assert.Equal(ProviderLocalTime.TodayIn(incident.NotifyDueAt!.Value, ProviderTimeZoneResolver.FromState(null).Zone), task.DueDate);                // the form's own rule: the provider-local date of the stored deadline
+            Assert.Equal(ProviderLocalTime.TodayIn(incident.NotifyDueAt!.Value, ProviderTimeZoneResolver.For(null, null).Zone), task.DueDate);                // the form's own rule: the provider-local date of the stored deadline
             Assert.Equal($"Report incident to the NDIS Commission: {incident.Title}", task.Title);
         }
 

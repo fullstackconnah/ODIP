@@ -147,7 +147,7 @@ public class DemoRosterTests
     {
         var env = await RunAsync();
         var nowUtc = env.Clock.GetUtcNow().UtcDateTime;
-        var anchors = DemoAnchors.Create(nowUtc, "NSW");
+        var anchors = DemoAnchors.Create(nowUtc, providerTimeZoneId: null, providerState: "NSW");
 
         await using var db = env.AdminDb();
         var shifts = await db.Shifts.ToListAsync();

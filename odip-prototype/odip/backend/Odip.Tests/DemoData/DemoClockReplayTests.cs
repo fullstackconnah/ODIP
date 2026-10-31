@@ -121,7 +121,7 @@ public class DemoClockReplayTests
     {
         var (env, result) = await FreshAsync(state, utc);
         var where = $"{state} / {label}";
-        var anchors = DemoAnchors.Create(utc.UtcDateTime, state);
+        var anchors = DemoAnchors.Create(utc.UtcDateTime, providerTimeZoneId: null, providerState: state);
 
         Assert.True(result.Status == DemoTickStatus.Ran, $"{where}: {result.Status} {result.Detail}");
         Assert.True(result.Failures.Count == 0, $"{where}: a pack failed: {string.Join("; ", result.Failures.Select(f => f.Pack + ": " + f.Message))}");
@@ -178,7 +178,7 @@ public class DemoClockReplayTests
             var where = $"rolling / {utc:u}";
             Assert.True(result.Status == DemoTickStatus.Ran, $"{where}: {result.Status}");
             Assert.True(result.Failures.Count == 0, $"{where}: " + string.Join("; ", result.Failures.Select(f => f.Pack + ": " + f.Message)));
-            var anchors = DemoAnchors.Create(utc.UtcDateTime, "NSW");
+            var anchors = DemoAnchors.Create(utc.UtcDateTime, providerTimeZoneId: null, providerState: "NSW");
             await AssertInvariantsAsync(env, anchors, where);
 
             DemoSnapshot now;

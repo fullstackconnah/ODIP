@@ -99,7 +99,7 @@ public class DemoTimeConventionTests
     public async Task T7_CompletionInstants_ConvertBackToTheRosteredLocalTimePlusTheVariance_InEveryZone(string state)
     {
         var env = await RunAsync(state, new DateTimeOffset(2026, 10, 9, 0, 30, 0, TimeSpan.Zero));
-        var zone = DemoAnchors.Create(new DateTime(2026, 10, 9, 0, 30, 0, DateTimeKind.Utc), state).Zone;
+        var zone = DemoAnchors.Create(new DateTime(2026, 10, 9, 0, 30, 0, DateTimeKind.Utc), providerTimeZoneId: null, providerState: state).Zone;
 
         await using var db = env.AdminDb();
         var shifts = await db.Shifts.ToDictionaryAsync(s => s.Id);
@@ -121,7 +121,7 @@ public class DemoTimeConventionTests
     public async Task T7_RequestAndDecisionInstants_AreTheTypedLocalClockTimes_InEveryZone(string state)
     {
         var env = await RunAsync(state);
-        var zone = DemoAnchors.Create(Friday.UtcDateTime, state).Zone;
+        var zone = DemoAnchors.Create(Friday.UtcDateTime, providerTimeZoneId: null, providerState: state).Zone;
         var week = new DateOnly(2026, 10, 5);
 
         await using var db = env.AdminDb();

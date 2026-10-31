@@ -15,7 +15,7 @@ public class DemoAnchorsTests
     [Fact]
     public void Create_FridayMorningInSydney_GivesThePlansWorkedExample()
     {
-        var anchors = DemoAnchors.Create(Utc(2026, 10, 2, 0, 30), "NSW");
+        var anchors = DemoAnchors.Create(Utc(2026, 10, 2, 0, 30), providerTimeZoneId: null, providerState: "NSW");
 
         Assert.Equal(new DateOnly(2026, 10, 2), anchors.D0);
         Assert.Equal(new DateOnly(2026, 9, 28), anchors.W0);
@@ -32,8 +32,8 @@ public class DemoAnchorsTests
     public void Create_UsesTheProvidersCalendarDate_NotTheUtcDate()
     {
         // 13:59 UTC is 23:59 Friday in Sydney (AEST); one minute later it is Saturday there.
-        Assert.Equal(new DateOnly(2026, 10, 2), DemoAnchors.Create(Utc(2026, 10, 2, 13, 59), "NSW").D0);
-        Assert.Equal(new DateOnly(2026, 10, 3), DemoAnchors.Create(Utc(2026, 10, 2, 14, 0), "NSW").D0);
+        Assert.Equal(new DateOnly(2026, 10, 2), DemoAnchors.Create(Utc(2026, 10, 2, 13, 59), providerTimeZoneId: null, providerState: "NSW").D0);
+        Assert.Equal(new DateOnly(2026, 10, 3), DemoAnchors.Create(Utc(2026, 10, 2, 14, 0), providerTimeZoneId: null, providerState: "NSW").D0);
     }
 
     [Theory]
@@ -44,7 +44,7 @@ public class DemoAnchorsTests
     public void Create_WeekStartIsTheMondayOnOrBeforeToday(int y, int m, int d, int wy, int wm, int wd)
     {
         // Noon local (02:00 UTC) so the UTC and local dates agree.
-        var anchors = DemoAnchors.Create(Utc(y, m, d, 2, 0), "NSW");
+        var anchors = DemoAnchors.Create(Utc(y, m, d, 2, 0), providerTimeZoneId: null, providerState: "NSW");
 
         Assert.Equal(new DateOnly(wy, wm, wd), anchors.W0);
         Assert.Equal(DayOfWeek.Monday, anchors.W0.DayOfWeek);
@@ -53,7 +53,7 @@ public class DemoAnchorsTests
     [Fact]
     public void LocalToUtc_FollowsTheZoneAcrossTheDaylightSavingStart()
     {
-        var sydney = DemoAnchors.Create(Utc(2026, 10, 2, 0, 30), "NSW");
+        var sydney = DemoAnchors.Create(Utc(2026, 10, 2, 0, 30), providerTimeZoneId: null, providerState: "NSW");
 
         // Fri 2 Oct 07:00 AEST = 21:00Z the day before; Mon 5 Oct 07:00 AEDT = 20:00Z (one hour earlier in UTC).
         Assert.Equal(Utc(2026, 10, 1, 21, 0), sydney.LocalToUtc(new DateOnly(2026, 10, 2), new TimeOnly(7, 0)));
@@ -64,7 +64,7 @@ public class DemoAnchorsTests
     [Fact]
     public void LocalToUtc_SkewsAValueInsideTheSpringForwardGap_AndNeverThrows()
     {
-        var sydney = DemoAnchors.Create(Utc(2026, 10, 2, 0, 30), "NSW");
+        var sydney = DemoAnchors.Create(Utc(2026, 10, 2, 0, 30), providerTimeZoneId: null, providerState: "NSW");
 
         // 02:30 on Sun 4 Oct does not exist in Sydney; the first valid instant after it is 03:30 AEDT = 16:30Z the day before.
         Assert.Equal(Utc(2026, 10, 3, 16, 30), sydney.LocalToUtc(new DateTime(2026, 10, 4, 2, 30, 0)));
@@ -74,11 +74,11 @@ public class DemoAnchorsTests
     [Fact]
     public void Create_BrisbaneHasNoDaylightSaving_AdelaideDoes()
     {
-        var brisbane = DemoAnchors.Create(Utc(2026, 10, 2, 0, 30), "QLD");
+        var brisbane = DemoAnchors.Create(Utc(2026, 10, 2, 0, 30), providerTimeZoneId: null, providerState: "QLD");
         Assert.Equal("Australia/Brisbane", brisbane.Provider.Id);
         Assert.Equal(Utc(2026, 10, 4, 21, 0), brisbane.LocalToUtc(new DateOnly(2026, 10, 5), new TimeOnly(7, 0)));
 
-        var adelaide = DemoAnchors.Create(Utc(2026, 10, 2, 0, 30), "SA");
+        var adelaide = DemoAnchors.Create(Utc(2026, 10, 2, 0, 30), providerTimeZoneId: null, providerState: "SA");
         Assert.Equal("Australia/Adelaide", adelaide.Provider.Id);
         Assert.Equal(Utc(2026, 10, 4, 20, 30), adelaide.LocalToUtc(new DateOnly(2026, 10, 5), new TimeOnly(7, 0))); // ACDT is UTC+10:30
     }
@@ -89,6 +89,6 @@ public class DemoAnchorsTests
     [InlineData("XX")]
     public void Create_AMissingOrUnknownState_FallsBackToSydney_TheAppsOwnFallback(string? state)
     {
-        Assert.Equal(ProviderLocalTime.FallbackZoneId, DemoAnchors.Create(Utc(2026, 10, 2, 0, 30), state).Provider.Id);
+        Assert.Equal(ProviderLocalTime.FallbackZoneId, DemoAnchors.Create(Utc(2026, 10, 2, 0, 30), providerTimeZoneId: null, providerState: state).Provider.Id);
     }
 }

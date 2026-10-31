@@ -83,10 +83,10 @@ public class ShiftCompletionVarianceTests
     }
 
     [Theory]
-    [InlineData("VIC", "Australia/Sydney")]
+    [InlineData("VIC", "Australia/Melbourne")]
     [InlineData("NSW", "Australia/Sydney")]
     [InlineData("ACT", "Australia/Sydney")]
-    [InlineData("TAS", "Australia/Sydney")]
+    [InlineData("TAS", "Australia/Hobart")]
     [InlineData("QLD", "Australia/Brisbane")]
     [InlineData("SA", "Australia/Adelaide")]
     [InlineData("WA", "Australia/Perth")]
