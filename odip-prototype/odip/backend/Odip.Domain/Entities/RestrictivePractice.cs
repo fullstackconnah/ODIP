@@ -31,6 +31,18 @@ public class RestrictivePractice : ITenantEntity
     public string? AuthorisedBy { get; set; }
     public DateOnly? AuthorisationDate { get; set; }
     public DateOnly? ReviewDate { get; set; }
+    /// <summary>Routine or as needed. Ignored while <see cref="RelatedMedicationId"/> is set: read it through <c>RestrictivePracticeAuthorisation.UseKindOf</c>.</summary>
+    public RestrictivePracticeUseKind UseKind { get; set; } = RestrictivePracticeUseKind.Routine;
+    /// <summary>Last day the authorisation applies (inclusive); null means open-ended.</summary>
+    public DateOnly? AuthorisationEndDate { get; set; }
+    /// <summary>When this practice was first used; starts the behaviour support plan due dates.</summary>
+    public DateOnly? FirstUsedOn { get; set; }
+    /// <summary>When the interim behaviour support plan was put in place.</summary>
+    public DateOnly? InterimBspDate { get; set; }
+    /// <summary>When the comprehensive behaviour support plan was put in place.</summary>
+    public DateOnly? ComprehensiveBspDate { get; set; }
+    /// <summary>First day of the month this entry joins the monthly report. Null means the month the row was created (CreatedAt, provider zone); the migration backfilled existing rows to its deploy month.</summary>
+    public DateOnly? ReportingFromMonth { get; set; }
     /// <summary>Whether this restraint needs reporting to the NDIS Commission; null until answered.</summary>
     public bool? RequiresReporting { get; set; }
 

@@ -15,6 +15,8 @@ vi.mock('@/api/hooks', () => ({
 const created: RestrictivePracticeDto = {
   id: 'rp-new', participantId: 'participant-1', type: 'PhysicalRestraint', description: 'Held both arms at the kerb.',
   authorisedBy: null, authorisationDate: null, reviewDate: null, relatedMedicationId: null, relatedMedicationName: null,
+  useKind: 'Routine', authorisationEndDate: null, firstUsedOn: null, interimBspDate: null, comprehensiveBspDate: null, earliestRecordedUseDate: null,
+  interimBspDueOn: null, comprehensiveBspDueOn: null, interimBspState: 'NotStarted', comprehensiveBspState: 'NotStarted',
   isActive: true, isAuthorised: false, createdAt: '2026-10-14T00:00:00Z', updatedAt: '2026-10-14T00:00:00Z',
 }
 
@@ -104,7 +106,7 @@ describe('AddRestrictivePracticeDialog authorised checkbox (register tab)', () =
 
     expect(mockBulkCreateMutateAsync).toHaveBeenCalledWith({
       participantId: 'participant-1',
-      data: { items: [{ type: 'Seclusion', description: 'Locked door overnight', authorisedBy: null, authorisationDate: null, reviewDate: null, relatedMedicationId: null, isActive: true }] },
+      data: { items: [{ type: 'Seclusion', description: 'Locked door overnight', authorisedBy: null, authorisationDate: null, reviewDate: null, relatedMedicationId: null, isActive: true, authorisationEndDate: null, useKind: 'Routine' }] },
     })
     expect(mockBulkCreateMutateAsync.mock.calls[0][0].data.items).toHaveLength(1)
   })
@@ -146,7 +148,7 @@ describe('AddRestrictivePracticeDialog authorised checkbox (register tab)', () =
 
     expect(mockBulkCreateMutateAsync).toHaveBeenCalledWith({
       participantId: 'participant-1',
-      data: { items: [{ type: 'Seclusion', description: 'Locked door overnight', authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01', reviewDate: null, relatedMedicationId: null, isActive: true }] },
+      data: { items: [{ type: 'Seclusion', description: 'Locked door overnight', authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01', reviewDate: null, relatedMedicationId: null, isActive: true, authorisationEndDate: null, useKind: 'Routine' }] },
     })
     expect(mockBulkCreateMutateAsync.mock.calls[0][0].data.items).toHaveLength(1)
   })
@@ -167,7 +169,7 @@ describe('AddRestrictivePracticeDialog authorised checkbox (register tab)', () =
 
     expect(mockBulkCreateMutateAsync).toHaveBeenCalledWith({
       participantId: 'participant-1',
-      data: { items: [{ type: 'Seclusion', description: 'Locked door overnight', authorisedBy: null, authorisationDate: null, reviewDate: null, relatedMedicationId: null, isActive: true }] },
+      data: { items: [{ type: 'Seclusion', description: 'Locked door overnight', authorisedBy: null, authorisationDate: null, reviewDate: null, relatedMedicationId: null, isActive: true, authorisationEndDate: null, useKind: 'Routine' }] },
     })
     expect(mockBulkCreateMutateAsync.mock.calls[0][0].data.items).toHaveLength(1)
   })

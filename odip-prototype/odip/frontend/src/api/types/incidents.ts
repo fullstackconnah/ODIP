@@ -106,6 +106,8 @@ export interface IncidentDetailDto extends IncidentListDto {
    */
   /** Left out of the JSON when null (not determined): the API writes no null fields. */
   isRestrictivePracticeAuthorised?: boolean | null
+  /** Asked at creation for an authorised use: false = used as set out in the behaviour support plan, true = varied, absent when there is no answer. Frozen at creation. */
+  restrictivePracticeUseVaried?: boolean | null
   description: string
   immediateActionsTaken: string | null
   wereEmergencyServicesCalled: boolean
@@ -200,6 +202,8 @@ export interface CreateIncidentDto {
   unapprovedRestrictivePracticeDetails?: string
   /** "This use was not authorised": the linked practice was used without, or outside, its authorisation, so the incident is stored unauthorised (link kept). On an edit it can only lower the stored determination. */
   usedWithoutAuthorisation?: boolean
+  /** Create only, and only for an authorised use; an edit never changes it. */
+  restrictivePracticeUseVaried?: boolean
   severity: IncidentSeverity
   title: string
   description: string
@@ -270,6 +274,8 @@ export function toUpdateIncidentDto(i: IncidentDetailDto, patch: Partial<UpdateI
     unapprovedRestrictivePracticeDetails: i.unapprovedRestrictivePracticeDetails ?? undefined,
     // Only ever lowers the stored determination, so an update made from the record itself leaves it as it is.
     usedWithoutAuthorisation: false,
+    // Asked on create only; the server ignores it on update.
+    restrictivePracticeUseVaried: undefined,
     severity: i.severity,
     title: i.title,
     description: i.description,

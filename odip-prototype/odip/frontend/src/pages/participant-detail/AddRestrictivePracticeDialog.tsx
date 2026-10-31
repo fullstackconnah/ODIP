@@ -6,12 +6,13 @@ import { Modal } from '@/components/Modal'
 import { FormField } from '@/components/FormField'
 import { Dropdown } from '@/components/Dropdown'
 import { CheckboxField } from '@/components/CheckboxField'
+import { ToggleGroup } from '@/components/ToggleGroup'
 import { DataTable, type Column } from '@/components/DataTable'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { plural } from '@/lib/format'
-import { RESTRICTIVE_PRACTICE_TYPES, RESTRICTIVE_PRACTICE_TYPE_LABELS, RESTRICTIVE_PRACTICE_TYPE_DESCRIPTIONS } from '@/api/types/restrictive-practices'
-import type { RestrictivePracticeDto, RestrictivePracticeType, BulkCreateRestrictivePracticeDto } from '@/api/types/restrictive-practices'
+import { RESTRICTIVE_PRACTICE_TYPES, RESTRICTIVE_PRACTICE_TYPE_LABELS, RESTRICTIVE_PRACTICE_TYPE_DESCRIPTIONS, USE_KIND_LABELS } from '@/api/types/restrictive-practices'
+import type { RestrictivePracticeDto, RestrictivePracticeType, RestrictivePracticeUseKind, BulkCreateRestrictivePracticeDto } from '@/api/types/restrictive-practices'
 
 /** One row of the "Add entries" bulk table — client-side draft state before it becomes its own register entry. */
 type BulkRowState = {
@@ -19,6 +20,7 @@ type BulkRowState = {
   description: string
   authorisedBy: string
   authorisationDate: string
+  authorisationEndDate: string
   reviewDate: string
   /** Only meaningful when the batch type is ChemicalRestraint; ignored otherwise. */
   relatedMedicationId: string
@@ -26,7 +28,7 @@ type BulkRowState = {
 
 function makeBulkRow(description = ''): BulkRowState {
   const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `row-${Date.now()}-${Math.random()}`
-  return { id, description, authorisedBy: '', authorisationDate: '', reviewDate: '', relatedMedicationId: '' }
+  return { id, description, authorisedBy: '', authorisationDate: '', authorisationEndDate: '', reviewDate: '', relatedMedicationId: '' }
 }
 
 /**
@@ -99,6 +101,8 @@ function AddRestrictivePracticeDialogBody({ participantId, onClose, onSaved, def
   // clicks as the old single-entry form did.
   const [bulkStep, setBulkStep] = useState<'setup' | 'rows'>(single ? 'rows' : 'setup')
   const [bulkType, setBulkType] = useState<RestrictivePracticeType>(defaultType ?? RESTRICTIVE_PRACTICE_TYPES[0])
+  // Like the type, one answer for the whole batch. A linked medicine overrides it on the server with its own Regular or PRN setting.
+  const [useKind, setUseKind] = useState<RestrictivePracticeUseKind>('Routine')
   // One answer for the whole batch. Unticked, the authorisation columns are hidden and rows are saved with no authoriser or date (Not authorised).
   const [authorised, setAuthorised] = useState(false)
   const [bulkCountInput, setBulkCountInput] = useState('1')
@@ -145,6 +149,7 @@ function AddRestrictivePracticeDialogBody({ participantId, onClose, onSaved, def
       if (!row.description.trim()) problems.push('Add a description.')
       if (authorised && !row.authorisedBy.trim()) problems.push('Add who authorised it.')
       if (authorised && !row.authorisationDate) problems.push('Add the date it was authorised.')
+      if (authorised && row.authorisationEndDate && row.authorisationDate && row.authorisationEndDate < row.authorisationDate) problems.push("The end date can't be before the authorisation date.")
       if (problems.length > 0) nextErrors.set(row.id, problems.join(' '))
     }
     if (nextErrors.size > 0) {
@@ -162,6 +167,8 @@ function AddRestrictivePracticeDialogBody({ participantId, onClose, onSaved, def
         description: row.description.trim(),
         authorisedBy: authorised ? row.authorisedBy.trim() : null,
         authorisationDate: authorised ? row.authorisationDate : null,
+        // The single path (an incident's "Add to restrictive practice register") asks neither, so the server's defaults apply.
+        ...(single ? {} : { useKind, authorisationEndDate: authorised ? (row.authorisationEndDate || null) : null }),
         reviewDate: row.reviewDate || null,
         relatedMedicationId: bulkType === 'ChemicalRestraint' ? (row.relatedMedicationId || null) : null,
         isActive: true,
@@ -202,7 +209,7 @@ function AddRestrictivePracticeDialogBody({ participantId, onClose, onSaved, def
     },
   })
 
-  const dateColumn = (key: 'authorisationDate' | 'reviewDate', header: string): Column<BulkRowState> => ({
+  const dateColumn = (key: 'authorisationDate' | 'authorisationEndDate' | 'reviewDate', header: string): Column<BulkRowState> => ({
     key,
     header,
     editable: {
@@ -268,9 +275,9 @@ function AddRestrictivePracticeDialogBody({ participantId, onClose, onSaved, def
   // Type is picked once per batch, so a "Linked medication" column only makes sense — and only appears — when the whole batch's type is
   // ChemicalRestraint. Adding a single entry from an incident asks nothing about its authorisation, and has no rows to remove.
   const bulkColumns: Column<BulkRowState>[] = [
-    // The full row on a phone card: otherwise the cell shrinks to the input and a prefilled description can't be read.
-    textColumn('description', 'Description', 'What the restrictive practice involves...', 'max-md:basis-full'),
-    ...(single || !authorised ? [] : [textColumn('authorisedBy', 'Authorised by', 'e.g. Dr. Chen'), dateColumn('authorisationDate', 'Authorisation date')]),
+    // The full row on a phone card, and 16rem from md up: otherwise the cell shrinks to the input and a prefilled description can't be read.
+    textColumn('description', 'Description', 'What the practice involves', 'max-md:basis-full md:min-w-[16rem]'),
+    ...(single || !authorised ? [] : [textColumn('authorisedBy', 'Authorised by', 'e.g. Dr. Chen', bulkType === 'ChemicalRestraint' ? 'md:min-w-[9.5rem]' : undefined), dateColumn('authorisationDate', 'Authorisation date'), dateColumn('authorisationEndDate', 'Authorisation end date')]),
     dateColumn('reviewDate', 'Review date'),
     ...(bulkType === 'ChemicalRestraint' ? [medicationColumn] : []),
     ...(single ? [] : [removeColumn]),
@@ -306,6 +313,14 @@ function AddRestrictivePracticeDialogBody({ participantId, onClose, onSaved, def
               items={RESTRICTIVE_PRACTICE_TYPES.map(t => ({ value: t, label: RESTRICTIVE_PRACTICE_TYPE_LABELS[t], description: RESTRICTIVE_PRACTICE_TYPE_DESCRIPTIONS[t] }))}
             />
           </FormField>
+          <FormField label="How is it used?" hint={bulkType === 'ChemicalRestraint' ? 'A linked medicine sets this from its Regular or PRN setting.' : undefined}>
+            <ToggleGroup
+              ariaLabel="How is it used?"
+              options={[{ key: 'Routine', label: USE_KIND_LABELS.Routine }, { key: 'Prn', label: USE_KIND_LABELS.Prn }]}
+              value={useKind}
+              onChange={k => setUseKind(k as RestrictivePracticeUseKind)}
+            />
+          </FormField>
           <CheckboxField
             label="This restrictive practice is authorised"
             hint="If ticked, add who authorised it and the date."
@@ -334,6 +349,7 @@ function AddRestrictivePracticeDialogBody({ participantId, onClose, onSaved, def
       onClose={onClose}
       title={single ? `Add to restrictive practice register — ${RESTRICTIVE_PRACTICE_TYPE_LABELS[bulkType]}` : `Add entries — ${RESTRICTIVE_PRACTICE_TYPE_LABELS[bulkType]}`}
       size="xl"
+      className={bulkType === 'ChemicalRestraint' ? 'max-w-[75rem]!' : 'max-w-5xl!'} // Modal has no size above xl: the 5-column authorised table needs ~944px, the 7-column chemical one ~1180px (shortcut: one call site, add sizes if a second needs it)
       footer={
         <>
           {single ? (

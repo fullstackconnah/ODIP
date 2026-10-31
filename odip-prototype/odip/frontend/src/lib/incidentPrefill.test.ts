@@ -5,6 +5,7 @@ import {
   buildIncidentTitleSkeleton,
   suggestedIncidentSeverity,
   previewRpAuthorisation,
+  isRpAuthorisedOn,
   isRpAuthorised,
   editedRpAuthorisation,
   buildRpIncidentDescriptionSkeleton,
@@ -140,6 +141,24 @@ describe('isRpAuthorised', () => {
   it('does not recompute from the dates: a filled-in, future-dated entry the server calls Not authorised stays so', () => {
     const entry = { isActive: true, authorisedBy: 'Dr Chen', authorisationDate: '2099-01-01', isAuthorised: false }
     expect(isRpAuthorised(entry)).toBe(false)
+  })
+})
+
+describe('isRpAuthorisedOn', () => {
+  const entry = { isAuthorised: false, isActive: true, authorisedBy: 'Dr Chen', authorisationDate: '2026-09-01', authorisationEndDate: '2026-10-30' }
+
+  it('is the server verdict when there is no incident date', () => {
+    expect(isRpAuthorisedOn(entry)).toBe(false)
+    expect(isRpAuthorisedOn({ ...entry, isAuthorised: true }, '')).toBe(true)
+  })
+
+  it.each([['2026-08-31', false], ['2026-09-01', true], ['2026-10-30', true], ['2026-10-31', false]])('judges %s on the incident date, the end date inclusive: %s', (date, expected) => {
+    expect(isRpAuthorisedOn(entry, date)).toBe(expected)
+  })
+
+  it('needs who authorised it and an active entry', () => {
+    expect(isRpAuthorisedOn({ ...entry, authorisedBy: ' ' }, '2026-10-01')).toBe(false)
+    expect(isRpAuthorisedOn({ ...entry, isActive: false }, '2026-10-01')).toBe(false)
   })
 })
 

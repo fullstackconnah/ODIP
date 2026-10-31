@@ -297,6 +297,16 @@ public class MedicationsControllerTests
     }
 
     [Fact]
+    public async Task Flag_EntryEnded_Unauthorised()
+    {
+        var dto = await RestraintFlagsAsync(MedicationStatus.Active, e =>
+        {
+            e.AuthorisedBy = "Dr Chen"; e.AuthorisationDate = new DateOnly(2000, 1, 1); e.AuthorisationEndDate = new DateOnly(2000, 6, 1);
+        });
+        Assert.Contains("ChemicalRestraintUnauthorised", dto.ComplianceFlags);
+    }
+
+    [Fact]
     public async Task Flag_NoEntry_Unauthorised()
     {
         var dto = await RestraintFlagsAsync(MedicationStatus.Active, null, withEntry: false);
