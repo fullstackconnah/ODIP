@@ -9,6 +9,8 @@ import { Card } from '@/components/Card'
 import { DisclosureToggle } from '@/components/DisclosureToggle'
 import { Button } from '@/components/Button'
 import { Dropdown } from '@/components/Dropdown'
+import { ToggleGroup } from '@/components/ToggleGroup'
+import { isPastDue } from '@/lib/deadline'
 import { RESTRICTIVE_PRACTICE_TYPES, RESTRICTIVE_PRACTICE_TYPE_LABELS } from '@/api/types/restrictive-practices'
 import type { RestrictivePracticeDto, RestrictivePracticeType } from '@/api/types/restrictive-practices'
 import { previewRpAuthorisation, buildRpIncidentDescriptionSkeleton, isRpAuthorised, editedRpAuthorisation } from '@/lib/incidentPrefill'
@@ -29,6 +31,8 @@ export type RestrictivePracticeStepProps = {
   restrictivePracticeId: string | undefined
   unapprovedRestrictivePracticeDetails: string | undefined
   usedWithoutAuthorisation: boolean | undefined
+  /** The answer to "as set out in the plan, or varied?": undefined until answered, false = as set out, true = varied. */
+  rpUseVaried: boolean | null | undefined
   description: string | undefined
   isEdit: boolean
   existingIncident: IncidentDetailDto | undefined
@@ -54,7 +58,7 @@ export type RestrictivePracticeStepProps = {
 export function RestrictivePracticeStep({
   getValues, setValue, errors,
   involvedParticipantId, restrictivePracticeType, restrictivePracticeId, unapprovedRestrictivePracticeDetails,
-  usedWithoutAuthorisation, description, isEdit, existingIncident,
+  usedWithoutAuthorisation, rpUseVaried, description, isEdit, existingIncident,
 }: RestrictivePracticeStepProps) {
   const { canWriteRestrictivePractices } = usePermissions()
   const [showInactive, setShowInactive] = useState(false)
@@ -96,6 +100,10 @@ export function RestrictivePracticeStep({
   const lockedNotAuthorised = !!linkedPractice && !isRpAuthorised(linkedPractice)
     && !(isEdit && restrictivePracticeId === existingIncident?.restrictivePracticeId)
 
+  // The question is for a linked, authorised use on a new incident; anything else clears the answer (the schema asks only when it is shown).
+  const askVaried = !isEdit && !!restrictivePracticeId && !lockedNotAuthorised && !usedWithoutAuthorisation
+  const endedOn = lockedNotAuthorised && isPastDue(linkedPractice?.authorisationEndDate) ? linkedPractice?.authorisationEndDate : null
+
   // INC-04: live preview of the authorised/unauthorised finding while composing a new incident,
   // following the server's determination step for step. On Edit this preview is not used — the
   // banner below reads the frozen existingIncident.isRestrictivePracticeAuthorised instead.
@@ -116,6 +124,7 @@ export function RestrictivePracticeStep({
     setValue('unapprovedRestrictivePracticeDetails', '', { shouldDirty: true, shouldValidate: true })
     const authorised = isRpAuthorised(practice)
     setValue('usedWithoutAuthorisation', !authorised, { shouldDirty: true })
+    setValue('rpUseVaried', undefined)
     if (!authorised) clearUntouchedSkeleton()
     // Only prepopulate Description when it's still empty — never clobber what the reporter has
     // already typed (the same "skeleton, don't overwrite" rule INC-03's MAR prefill follows). Not
@@ -140,6 +149,7 @@ export function RestrictivePracticeStep({
     // link and focuses the reporter on the textarea below.
     setValue('restrictivePracticeId', '', { shouldDirty: true, shouldValidate: true })
     setValue('usedWithoutAuthorisation', false, { shouldDirty: true })
+    setValue('rpUseVaried', undefined)
     clearUntouchedSkeleton()
   }
 
@@ -234,16 +244,39 @@ export function RestrictivePracticeStep({
                 checked={lockedNotAuthorised || !!usedWithoutAuthorisation}
                 disabled={lockedNotAuthorised}
                 onChange={(e) => {
-                  if (e.target.checked) clearUntouchedSkeleton()
+                  if (e.target.checked) {
+                    clearUntouchedSkeleton()
+                    setValue('rpUseVaried', undefined)
+                  }
                   setValue('usedWithoutAuthorisation', e.target.checked, { shouldDirty: true, shouldValidate: true })
                 }}
-                hint={lockedNotAuthorised
+                hint={endedOn
+                  ? `This practice's authorisation ended on ${formatDateAu(endedOn)}, so this use can't be recorded as authorised.`
+                  : lockedNotAuthorised
                   ? "This practice's register entry is missing who authorised it or when, so this use can't be recorded as authorised."
                   : 'Tick this if the practice was used outside its authorisation.'}
               />
-              {(lockedNotAuthorised || usedWithoutAuthorisation) && (
+              {askVaried && (
                 <FormField
-                  label="Describe what was actually done"
+                  label="Was this used as set out in the behaviour support plan, or was it varied?"
+                  required
+                  error={errors.rpUseVaried?.message}
+                  hint={rpUseVaried === true ? 'A varied use is flagged as a possible reportable incident for the NDIS Commission.' : undefined}
+                >
+                  <ToggleGroup
+                    ariaLabel="Was this used as set out in the behaviour support plan, or was it varied?"
+                    options={[{ key: 'asSet', label: 'As set out in the plan' }, { key: 'varied', label: 'Varied' }]}
+                    value={rpUseVaried === true ? 'varied' : rpUseVaried === false ? 'asSet' : ''}
+                    onChange={(k) => {
+                      if (k === 'varied') clearUntouchedSkeleton()
+                      setValue('rpUseVaried', k === 'varied', { shouldDirty: true, shouldValidate: true })
+                    }}
+                  />
+                </FormField>
+              )}
+              {(lockedNotAuthorised || usedWithoutAuthorisation || (askVaried && rpUseVaried === true)) && (
+                <FormField
+                  label={askVaried ? 'Describe how the use was varied' : 'Describe what was actually done'}
                   required
                   error={errors.description?.message}
                   hint="This is the incident's description, which also appears on the Details step."

@@ -35,8 +35,46 @@ describe('incident description on the unauthorised-use path', () => {
   })
 
   it('leaves an Authorised use alone: the skeleton is a fine starting description there', () => {
-    const values = { ...rpIncident, restrictivePracticeId: 'rp-a', usedWithoutAuthorisation: false, description: skeleton, rpDescriptionSkeleton: skeleton }
+    const values = { ...rpIncident, restrictivePracticeId: 'rp-a', usedWithoutAuthorisation: false, rpUseVaried: false, description: skeleton, rpDescriptionSkeleton: skeleton }
     expect(incidentSchema.safeParse(values).success).toBe(true)
+  })
+})
+
+// RP register PR 1: a linked, authorised use on create must answer whether it followed the plan; an edit never asks again.
+describe('the varied question', () => {
+  const linked = { ...rpIncident, restrictivePracticeId: 'rp-a', usedWithoutAuthorisation: false, description: 'Held at the kerb.' }
+  const issues = (schema: typeof incidentSchema | typeof restrictivePracticeSchema, values: object, field: string) => {
+    const r = schema.safeParse(values)
+    return r.success ? [] : r.error.issues.filter((i) => i.path[0] === field).map((i) => i.message)
+  }
+
+  it('an unanswered question blocks a linked, authorised create', () => {
+    const msg = ['Choose whether this use followed the plan or was varied']
+    expect(issues(restrictivePracticeSchema, linked, 'rpUseVaried')).toEqual(msg)
+    expect(issues(incidentSchema, linked, 'rpUseVaried')).toEqual(msg)
+  })
+  it('either answer passes', () => {
+    expect(issues(incidentSchema, { ...linked, rpUseVaried: false }, 'rpUseVaried')).toEqual([])
+    expect(issues(incidentSchema, { ...linked, rpUseVaried: true }, 'rpUseVaried')).toEqual([])
+  })
+  it('an edit loads null and is not asked', () => {
+    expect(issues(incidentSchema, { ...linked, rpUseVaried: null }, 'rpUseVaried')).toEqual([])
+  })
+  it('a use that was not authorised, or an unlinked one, is not asked', () => {
+    expect(issues(incidentSchema, { ...linked, usedWithoutAuthorisation: true }, 'rpUseVaried')).toEqual([])
+    expect(issues(incidentSchema, { ...rpIncident, unapprovedRestrictivePracticeDetails: 'Held both arms.', description: 'x' }, 'rpUseVaried')).toEqual([])
+  })
+  it('Varied needs the reporter own words, not the prefilled skeleton', () => {
+    const msg = ['Describe how the use was varied.']
+    expect(issues(restrictivePracticeSchema, { ...linked, rpUseVaried: true, description: skeleton, rpDescriptionSkeleton: skeleton }, 'description')).toEqual(msg)
+    expect(issues(restrictivePracticeSchema, { ...linked, rpUseVaried: true, description: '' }, 'description')).toEqual(msg)
+    expect(issues(restrictivePracticeSchema, { ...linked, rpUseVaried: true, description: 'Held longer than the plan allows.' }, 'description')).toEqual([])
+    expect(issues(restrictivePracticeSchema, { ...linked, rpUseVaried: false, description: '' }, 'description')).toEqual([])
+  })
+  it('the reason rule uses the answer: authorised and not varied keeps None without a reason', () => {
+    const edit = { ...linked, rpUseVaried: false, isRestrictivePracticeAuthorised: true, reportableClass: 'None' }
+    expect(issues(incidentSchema, edit, 'reportableClassReason')).toEqual([])
+    expect(issues(incidentSchema, { ...edit, rpUseVaried: true }, 'reportableClassReason')).toHaveLength(1)
   })
 })
 

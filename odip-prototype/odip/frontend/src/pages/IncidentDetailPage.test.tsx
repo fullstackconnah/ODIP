@@ -306,3 +306,23 @@ describe('IncidentDetailPage - NDIS Commission reporting row', () => {
     expect(screen.getByText('Counted without public holidays')).toBeInTheDocument()
   })
 })
+
+describe('IncidentDetailPage — behaviour support plan row', () => {
+  const rp = { incidentType: 'RestrictivePracticeUse', restrictivePracticeType: 'Seclusion', restrictivePracticeId: 'rp-2', restrictivePracticeDescription: 'Seclusion room.', isRestrictivePracticeAuthorised: true } as const
+
+  it.each([
+    [false, 'Used as set out in the behaviour support plan'],
+    [true, 'Varied from the behaviour support plan'],
+  ])('reads the stored answer %s', (varied, expected) => {
+    mockUseIncident.mockReturnValue({ data: baseIncident({ ...rp, restrictivePracticeUseVaried: varied }), isLoading: false })
+    renderPage()
+    expect(screen.getByText('Behaviour support plan')).toBeInTheDocument()
+    expect(screen.getByText(expected)).toBeInTheDocument()
+  })
+
+  it('shows no row when the use was not asked about', () => {
+    mockUseIncident.mockReturnValue({ data: baseIncident({ ...rp }), isLoading: false })
+    renderPage()
+    expect(screen.queryByText('Behaviour support plan')).not.toBeInTheDocument()
+  })
+})

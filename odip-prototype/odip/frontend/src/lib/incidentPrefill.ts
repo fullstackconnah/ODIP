@@ -173,6 +173,7 @@ export function isRpAuthorised(p: Pick<RestrictivePracticeDto, 'isAuthorised'>):
  */
 export type RpAuthorisationPreview = 'authorised' | 'unauthorised' | 'unknown'
 
+// shortcut: judges the linked entry on today; the server judges on the incident date, so a back-dated report can differ, upgrade if reporters meet it.
 export function previewRpAuthorisation(
   involvedParticipantId: string | undefined | null,
   restrictivePracticeType: string | undefined | null,

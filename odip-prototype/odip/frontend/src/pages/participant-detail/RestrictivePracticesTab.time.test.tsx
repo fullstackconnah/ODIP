@@ -24,6 +24,7 @@ function practice(reviewDate: string): RestrictivePracticeDto {
   return {
     id: 'rp-1', participantId: 'participant-1', type: 'Unclassified', description: 'Locked doors overnight for safety.',
     authorisedBy: null, authorisationDate: null, reviewDate, relatedMedicationId: null, relatedMedicationName: null,
+    useKind: 'Routine', authorisationEndDate: null, firstUsedOn: null, interimBspDate: null, comprehensiveBspDate: null, earliestRecordedUseDate: null, interimBspDueOn: null, comprehensiveBspDueOn: null, interimBspState: 'NotStarted', comprehensiveBspState: 'NotStarted',
     isActive: true, isAuthorised: false, createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
   } as RestrictivePracticeDto
 }
@@ -40,6 +41,25 @@ describe('RestrictivePracticesTab review badge on the due day (Sydney)', () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date(now))
     mockUseRestrictivePractices.mockReturnValue({ data: [practice('2026-10-03')], isLoading: false })
+
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+
+    expect(screen.getByText(expected)).toBeInTheDocument()
+  })
+})
+
+// RP register PR 1. The authorisation end date is inclusive: the entry still counts on that day, so the "ended" reason only reads from the day after.
+describe('RestrictivePracticesTab authorisation end date (Sydney)', () => {
+  it.each([
+    ['Sat 3 Oct 23:30, the end date itself', '2026-10-03T13:30:00Z', 'Not yet in force'],
+    ['Sun 4 Oct 00:30, the day after', '2026-10-03T14:30:00Z', 'Authorisation ended 03/10/2026'],
+  ])('%s reads %s', (_label, now, expected) => {
+    if (!setZone('Australia/Sydney')) return
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(now))
+    mockUseRestrictivePractices.mockReturnValue({
+      data: [{ ...practice('2027-01-01'), authorisedBy: 'Dr Chen', authorisationDate: '2026-09-01', authorisationEndDate: '2026-10-03' }], isLoading: false,
+    })
 
     render(<RestrictivePracticesTab participantId="participant-1" />)
 

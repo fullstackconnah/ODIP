@@ -117,6 +117,8 @@ function buildDefaultValues(isEdit: boolean, existingIncident: IncidentDetailDto
       unapprovedRestrictivePracticeDetails: i.unapprovedRestrictivePracticeDetails ?? '',
       // Stored unauthorised with a practice linked: that is what "This use was not authorised" records.
       usedWithoutAuthorisation: !!i.restrictivePracticeId && i.isRestrictivePracticeAuthorised === false,
+      // Edit never asks; it only carries the stored answer.
+      rpUseVaried: i.restrictivePracticeUseVaried ?? null,
       severity: i.severity ?? 'Medium',
       title: i.title ?? '',
       description: i.description ?? '',
@@ -264,6 +266,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
   const restrictivePracticeId = useWatch({ control, name: 'restrictivePracticeId' })
   const unapprovedRestrictivePracticeDetails = useWatch({ control, name: 'unapprovedRestrictivePracticeDetails' })
   const usedWithoutAuthorisation = useWatch({ control, name: 'usedWithoutAuthorisation' })
+  const rpUseVaried = useWatch({ control, name: 'rpUseVaried' })
   const description = useWatch({ control, name: 'description' })
   const witnesses = useWatch({ control, name: 'witnesses' })
   // UX-01: reportedByStaffId/involvedStaffId/reviewedByStaffId are SearchableSelect, which isn't
@@ -278,12 +281,12 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
   const awareAtMax = toDatetimeLocalValue(new Date().toISOString(), existingIncident?.timeZoneId)
 
   // The class follows the default for the form's severity and type until someone moves it: when it still equals the previous default, it moves to the new one.
-  const previousDefaultRef = useRef(defaultReportableClass(severity, incidentType, existingIncident?.isRestrictivePracticeAuthorised))
+  const previousDefaultRef = useRef(defaultReportableClass(severity, incidentType, existingIncident?.isRestrictivePracticeAuthorised, existingIncident?.restrictivePracticeUseVaried))
   useEffect(() => {
-    const next = defaultReportableClass(severity, incidentType, existingIncident?.isRestrictivePracticeAuthorised)
+    const next = defaultReportableClass(severity, incidentType, existingIncident?.isRestrictivePracticeAuthorised, existingIncident?.restrictivePracticeUseVaried)
     if (isEdit && getValues('reportableClass') === previousDefaultRef.current) setValue('reportableClass', next, { shouldDirty: true })
     previousDefaultRef.current = next
-  }, [severity, incidentType, isEdit, existingIncident?.isRestrictivePracticeAuthorised, getValues, setValue])
+  }, [severity, incidentType, isEdit, existingIncident?.isRestrictivePracticeAuthorised, existingIncident?.restrictivePracticeUseVaried, getValues, setValue])
 
   // IN-4/IN-5: switching incidentType away from the type that owns a conditional step's fields
   // clears them, so a later switch back starts clean (rather than resurrecting stale data from a
@@ -295,6 +298,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
       setValue('restrictivePracticeId', '')
       setValue('unapprovedRestrictivePracticeDetails', '')
       setValue('usedWithoutAuthorisation', false)
+      setValue('rpUseVaried', undefined)
     }
   }, [incidentType, setValue])
 
@@ -418,6 +422,8 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
       unapprovedRestrictivePracticeDetails: isRp ? data.unapprovedRestrictivePracticeDetails?.trim() || undefined : undefined,
       // "This use was not authorised": only with a linked practice. The server also stores a Not authorised entry's use as unauthorised.
       usedWithoutAuthorisation: isRp && !data.unapprovedRestrictivePracticeDetails?.trim() && !!data.restrictivePracticeId && !!data.usedWithoutAuthorisation,
+      // Asked on create only; the server ignores it on update and stores it only for an authorised use.
+      restrictivePracticeUseVaried: isEdit || !isRp ? undefined : (data.rpUseVaried ?? undefined),
       severity: data.severity as IncidentSeverity,
       title: data.title,
       description: data.description,
@@ -687,6 +693,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
             restrictivePracticeId={restrictivePracticeId}
             unapprovedRestrictivePracticeDetails={unapprovedRestrictivePracticeDetails}
             usedWithoutAuthorisation={usedWithoutAuthorisation}
+            rpUseVaried={rpUseVaried}
             description={description}
             isEdit={isEdit}
             existingIncident={existingIncident}
@@ -724,6 +731,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
             severity={severity}
             incidentType={incidentType}
             isRestrictivePracticeAuthorised={existingIncident?.isRestrictivePracticeAuthorised}
+            restrictivePracticeUseVaried={existingIncident?.restrictivePracticeUseVaried}
             reportableClass={reportableClass}
             commissionFinalReportRequested={commissionFinalReportRequested}
             reviewedByStaffId={reviewedByStaffId}

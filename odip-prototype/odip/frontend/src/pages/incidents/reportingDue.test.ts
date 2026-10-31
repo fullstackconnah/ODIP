@@ -16,6 +16,19 @@ describe('defaultReportableClass (same rows as the server DefaultClass table)', 
   ] as const)('%s %s rp=%s gives %s', (severity, type, rp, expected) => {
     expect(defaultReportableClass(severity, type, rp)).toBe(expected)
   })
+
+  // The use is reportable unless it was authorised on its date AND used as set out in the plan; an unanswered question fails safe.
+  it.each([
+    ['Minor', 'RestrictivePracticeUse', true, false, 'None'],
+    ['Minor', 'RestrictivePracticeUse', true, true, 'Within24h'],
+    ['Minor', 'RestrictivePracticeUse', true, null, 'Within24h'],
+    ['Minor', 'RestrictivePracticeUse', true, undefined, 'Within24h'],
+    ['Minor', 'RestrictivePracticeUse', false, false, 'Within24h'],
+    ['Critical', 'RestrictivePracticeUse', true, false, 'Within24h'],
+    ['Minor', 'Injury', true, true, 'None'],
+  ] as const)('%s %s rp=%s varied=%s gives %s', (severity, type, rp, varied, expected) => {
+    expect(defaultReportableClass(severity, type, rp, varied)).toBe(expected)
+  })
 })
 
 describe('formatDueWhen', () => {
