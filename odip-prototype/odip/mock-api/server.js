@@ -1233,6 +1233,7 @@ function packageFor(shiftId, participantId, status) {
 const HTTP = Symbol('http-status')
 /** Lets a route answer with a non-200 status (the dispatcher below honours it). */
 const respond = (status, body) => ({ [HTTP]: status, body })
+const rosterFill = require('./mock-roster-fill.js')
 const failEnvelope = (data, errors, code) => {
   const envelope = { success: false }
   if (data != null) envelope.data = data
@@ -2805,6 +2806,13 @@ const routes = [
 
   // Roster board (item 5/2 — assigneeOnApprovedLeave) — see rosterBoard()'s own comment.
   ['rostering/board', (searchParams) => rosterBoard(searchParams)],
+  // How full the next 8 weeks are (mock-roster-fill.js). `?fixture=` picks a state for the captures; the screen never sends it.
+  ['rostering/fill', (searchParams) => {
+    const name = (searchParams && searchParams.get('fixture')) || 'mixed'
+    if (name === 'failing') return respond(500, failEnvelope(null, ['The roster fill could not be worked out.']))
+    const data = rosterFill.byFixture(name, new Date().toISOString().slice(0, 10))
+    return name === 'slow' ? new Promise((resolve) => setTimeout(() => resolve(data), 2500)) : data
+  }],
   // Patterns (phase D): the hand-made ones seeded above and what approvals make; ?participantId= filters like the real list.
   ['rostering/patterns', (searchParams) => rosterPatterns.filter((p) => !searchParams.get('participantId') || p.participantId === searchParams.get('participantId'))],
   ['rostering/patterns/:id', (id) => rosterPatterns.find((p) => p.id === id) || respond(404, failEnvelope(null, ['Pattern not found.']))],
