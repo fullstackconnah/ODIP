@@ -615,6 +615,13 @@ export default function RosterBoardPage() {
     </Button>
   )
 
+  // An unstarted week shows the Start card first; the chart moves below it so it never owns the fold.
+  const startCardShown = !isLoading && !loadFailed && !!filteredBoard && unstarted
+  const fillCard = showFill && (
+    <div ref={fillRef}>
+      <RosterFillCard boardWeek={weekStart} onSelectWeek={moveToWeek} />
+    </div>
+  )
   const grid = filteredBoard && (
     <RosterGrid
       board={filteredBoard}
@@ -674,11 +681,7 @@ export default function RosterBoardPage() {
         />
       </div>
 
-      {showFill && (
-        <div ref={fillRef}>
-          <RosterFillCard boardWeek={weekStart} onSelectWeek={moveToWeek} />
-        </div>
-      )}
+      {!startCardShown && fillCard}
 
       {/* The banner, the standing notice, then the error, in ONE wrapper measured for the board frame: the notice never jumps when an error comes and goes (the brief, section 6). */}
       {noticesShown && (
@@ -795,42 +798,37 @@ export default function RosterBoardPage() {
         </div>
       )}
 
-      {!isLoading && !loadFailed && grid && (unstarted ? (
-        // The brief, 2.2: one grid cell, two layers. Below, the week's grid, faded, inert (no pointer, no Tab, no drop target) and hidden from assistive tech;
-        // above it, outside the scrolling frame so it never scrolls away sideways, the card. No scrim and no blur: the faded grid reads as dormant paper.
-        <div className="grid grid-cols-[minmax(0,1fr)]">
-          <div inert aria-hidden="true" className="col-start-1 row-start-1 min-w-0 opacity-40">{grid}</div>
-          {/* relative: the faded layer's opacity paints it as a positioned layer, so this one must be positioned too, and later in the tree, to paint above it. */}
-          <div className="relative col-start-1 row-start-1 flex min-w-0 items-start justify-center pt-12 pb-6 md:items-center md:py-6">
-            <section aria-labelledby="start-week-heading" aria-busy={starting || undefined} className="w-[min(24rem,calc(100%_-_2*var(--card-pad)))]">
-              {/* The Floating Panel shadow (Dropdown's), its tint written from the foreground token: the house colour rule allows no literal colour. */}
-              <Card className="p-[calc(2*var(--card-pad))]! shadow-[var(--shadow-float)]">
-                <div className="flex items-center gap-2">
-                  <CalendarPlus className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
-                  <h3 id="start-week-heading" className="font-display text-base font-semibold text-foreground">This week hasn't been started</h3>
-                </div>
-                {canWrite ? (
-                  <>
-                    <p className="mt-2 text-sm text-muted-foreground">Adds the week's scheduled shifts from approved agreements, with the regular on each one where they're free. Staff see nothing until you publish.</p>
-                    {boardShifts.length > 0 && <p className="mt-2 text-sm text-muted-foreground">{alreadyInWeekLine(boardShifts.length)}</p>}
-                    {/* aria-disabled, not disabled, while it runs: a disabled button drops focus to body, and a failure must leave focus here (the brief, 2.4). */}
-                    <Button
-                      size="lg"
-                      className="mt-4 w-full md:w-auto aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-                      aria-disabled={starting || undefined}
-                      onClick={() => { if (!starting) void handleStartWeek() }}
-                    >
-                      {starting ? 'Starting…' : `Start rostering ${formatWeekSpan(days)}`}
-                    </Button>
-                  </>
-                ) : (
-                  <p className="mt-2 text-sm text-muted-foreground">A coordinator starts each week's rostering.</p>
-                )}
-              </Card>
-            </section>
-          </div>
-        </div>
-      ) : (
+      {startCardShown && (
+        <>
+          <section aria-labelledby="start-week-heading" aria-busy={starting || undefined} className="max-w-[40rem]">
+            <Card>
+              <div className="flex items-center gap-2">
+                <CalendarPlus className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                <h3 id="start-week-heading" className="font-display text-base font-semibold text-foreground">This week hasn't been started</h3>
+              </div>
+              {canWrite ? (
+                <>
+                  <p className="mt-2 text-sm text-muted-foreground">Adds the week's scheduled shifts from approved agreements, with the regular on each one where they're free. Staff see nothing until you publish.</p>
+                  {boardShifts.length > 0 && <p className="mt-2 text-sm text-muted-foreground">{alreadyInWeekLine(boardShifts.length)}</p>}
+                  {/* aria-disabled, not disabled, while it runs: a disabled button drops focus to body, and a failure must leave focus here (the brief, 2.4). */}
+                  <Button
+                    className="mt-4 w-full md:w-auto aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                    aria-disabled={starting || undefined}
+                    onClick={() => { if (!starting) void handleStartWeek() }}
+                  >
+                    {starting ? 'Starting…' : `Start rostering ${formatWeekSpan(days)}`}
+                  </Button>
+                </>
+              ) : (
+                <p className="mt-2 text-sm text-muted-foreground">A coordinator starts each week's rostering.</p>
+              )}
+            </Card>
+          </section>
+          {fillCard}
+        </>
+      )}
+
+      {!isLoading && !loadFailed && grid && !unstarted && (
         // In every mode, not only while drag is on: the plus, and a pick's pending look, reach phones and the Staff view too (SHAPE departure 15). The DndContext stays drag-only.
         <DropStateContext.Provider value={{ disabled: dragsOff, pending: dropPending, pick: canWrite ? togglePicker : undefined, swap: canWrite ? openSwap : undefined, publish: canWrite ? publishShift : undefined, publishingIds, pickingId: pickerShift?.id ?? swapShift?.id ?? null }}>
           {dragOn ? (
@@ -857,7 +855,7 @@ export default function RosterBoardPage() {
             </DndContext>
           ) : grid}
         </DropStateContext.Provider>
-      ))}
+      )}
 
       <ShiftSlideOver
         key={slideOverTarget ? (slideOverTarget.mode === 'edit' ? `shift-${slideOverTarget.shift.id}` : 'shift-new') : 'shift-closed'}
