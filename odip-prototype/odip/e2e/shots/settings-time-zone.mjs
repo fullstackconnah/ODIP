@@ -99,8 +99,8 @@ try {
     check(vp.touch ? '5 select height >= 44' : '5 select height == 32', ctx, sel.height, vp.touch ? sel.height >= 44 : near(sel.height, 32, 0.5))
     if (!vp.touch) {
       const name = await group.page().getByLabel('Organisation name').boundingBox()
-      const stateLabel = await group.getByText("State", { exact: true }).first().boundingBox()
-      const zoneLabel = await group.getByText("Time zone", { exact: true }).first().boundingBox()
+      const stateLabel = await group.getByText(/^State/).first().boundingBox()
+      const zoneLabel = await group.getByText(/^Time zone/).first().boundingBox()
       check("5 zone row top equals State top", ctx, [zoneLabel.y, stateLabel.y], near(zoneLabel.y, stateLabel.y))
     }
     // 3: auto-follow.
