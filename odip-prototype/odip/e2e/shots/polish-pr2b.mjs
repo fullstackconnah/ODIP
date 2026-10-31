@@ -79,7 +79,7 @@ const measureColours = (page) => page.evaluate(() => {
     const r = el.getBoundingClientRect()
     return r.height >= 28 && r.width >= 56 && getComputedStyle(el).backgroundColor !== 'rgba(0, 0, 0, 0)' && h.same(getComputedStyle(el).backgroundColor, primary) && !el.closest('table tbody, [role=dialog]')
   }).map((el) => (el.textContent || el.getAttribute('aria-label') || '').trim().slice(0, 40))
-  const limes = all.filter((el) => { const r = el.getBoundingClientRect(); return getComputedStyle(el).backgroundColor !== 'rgba(0, 0, 0, 0)' && h.same(getComputedStyle(el).backgroundColor, lime) && !(r.width <= 48 && r.height <= 48) && !el.closest('[data-status-badge]') })
+  const limes = all.filter((el) => { const r = el.getBoundingClientRect(); return getComputedStyle(el).backgroundColor !== 'rgba(0, 0, 0, 0)' && h.same(getComputedStyle(el).backgroundColor, lime) && !(r.width <= 48 && r.height <= 48) })
     .map((el) => (el.textContent || '').trim().slice(0, 30))
   const selected = [...document.querySelectorAll('main [role=radio][aria-checked=true], main [role=tab][aria-selected=true], main nav [aria-current=page]')].filter(h.shown).map((el) => {
     const cs = getComputedStyle(el)
