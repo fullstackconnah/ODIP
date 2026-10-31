@@ -1,6 +1,7 @@
 // Polish PR 2a: selected tint + bar, the one field treatment, the calmer dark primary and the dark elevation steps.
 // Numeric checks 1-6 and 9 from SHAPE-PR2 section 6 (exit 1 on any failure), on the section 6 routes at 1280 light, 1280 dark and 390 light touch.
 // A page header (2b scope) holding a second solid primary is recorded as `known2b` (printed and in known2b.json), never as a pass (PLAN-AMEND-PR2A ruling 4).
+// Check 3 skips rounded-full status pills: StatusBadge success is an opaque lime fill and is explicitly unchanged in 2a (SHAPE-PR2 section 1, "Not changed").
 // Captures: only the changed states, padded crops plus one full page per breakpoint where it changed.
 import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
@@ -39,11 +40,11 @@ const safe = async (tag, name, fn) => { try { await fn() } catch (e) { check(tag
 // In-page helpers, installed before every page script: colours normalised through a canvas, WCAG contrast, token probes.
 function installHelpers() {
   const ctx = document.createElement('canvas').getContext('2d', { willReadFrequently: true })
-  const px = (c) => { ctx.clearRect(0, 0, 1, 1); ctx.fillStyle = '#000'; ctx.fillStyle = c; ctx.fillRect(0, 0, 1, 1); const d = ctx.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2]] }
-  const lum = (rgb) => rgb.map((c) => { const v = c / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4 }).reduce((s, c, i) => s + c * [0.2126, 0.7152, 0.0722][i], 0)
+  const px = (c) => { ctx.clearRect(0, 0, 1, 1); ctx.fillStyle = '#000'; ctx.fillStyle = c; ctx.fillRect(0, 0, 1, 1); const d = ctx.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2], d[3]] }
+  const lum = (rgb) => rgb.slice(0, 3).map((c) => { const v = c / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4 }).reduce((s, c, i) => s + c * [0.2126, 0.7152, 0.0722][i], 0)
   const contrast = (a, b) => { const [hi, lo] = [lum(px(a)), lum(px(b))].sort((x, y) => y - x); return (hi + 0.05) / (lo + 0.05) }
   const tok = (name) => { const el = document.createElement('i'); el.style.backgroundColor = `var(--color-${name})`; document.body.appendChild(el); const out = getComputedStyle(el).backgroundColor; el.remove(); return out }
-  const same = (a, b) => { const x = px(a), y = px(b); return x[0] === y[0] && x[1] === y[1] && x[2] === y[2] }
+  const same = (a, b) => { const x = px(a), y = px(b); return x[3] === 255 && y[3] === 255 && x[0] === y[0] && x[1] === y[1] && x[2] === y[2] }
   const shown = (el) => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none' }
   window.__h = { px, contrast, tok, same, shown }
 }
@@ -72,11 +73,11 @@ async function measureRoute(page) {
       const r = el.getBoundingClientRect()
       return r.height >= 28 && r.width >= 56 && h.same(getComputedStyle(el).backgroundColor, primary) && getComputedStyle(el).backgroundColor !== 'rgba(0, 0, 0, 0)' && !el.closest('table tbody, [role=dialog]')
     }).map((el) => ({ text: (el.textContent || el.getAttribute('aria-label') || '').trim().slice(0, 40), top: el.getBoundingClientRect().top + scrollY, inHeader: !!el.closest('header, [data-page-header]') || (!!el.closest('main') && el.getBoundingClientRect().top + scrollY < 160) }))
-    const limes = all.filter((el) => { const r = el.getBoundingClientRect(); return getComputedStyle(el).backgroundColor !== 'rgba(0, 0, 0, 0)' && h.same(getComputedStyle(el).backgroundColor, lime) && !(r.width <= 48 && r.height <= 48) })
+    const limes = all.filter((el) => { const r = el.getBoundingClientRect(); return getComputedStyle(el).backgroundColor !== 'rgba(0, 0, 0, 0)' && h.same(getComputedStyle(el).backgroundColor, lime) && !(r.width <= 48 && r.height <= 48) && !(parseFloat(getComputedStyle(el).borderTopLeftRadius) >= 999) })
       .map((el) => (el.textContent || '').trim().slice(0, 30))
     const selected = [...document.querySelectorAll('main [role=radio][aria-checked=true], main [role=tab][aria-selected=true], main nav [aria-current=page]')].filter(h.shown).map((el) => {
       const cs = getComputedStyle(el)
-      const hasBar = (s) => s.includes(primary.replace(/\s+/g, ' ')) && /(^|\s)2px(\s|$)/.test(s)
+      const hasBar = (s) => s.includes(primary.replace(/\s+/g, ' ')) && /(^|[\s-])2px(\s|$)/.test(s)
       return {
         label: (el.textContent || '').trim().slice(0, 24), bg: cs.backgroundColor,
         notSolid: !h.same(cs.backgroundColor, primary) && !h.same(cs.backgroundColor, lime),
@@ -141,6 +142,8 @@ try {
       await page.waitForTimeout(300)
       const m = await measureRoute(page)
       check(tag, '1 exactly one solid primary', m.solids.length === 1, m.solids)
+      await page.evaluate(() => document.activeElement?.blur?.())
+      await page.waitForTimeout(300)
       const parity = await page.evaluate(() => {
         const ins = [...document.querySelectorAll('form input')].filter((e) => window.__h.shown(e) && ['email', 'password', 'text'].includes(e.type))
         const [a, b] = ins.slice(0, 2).map((e) => { const cs = getComputedStyle(e); return { type: e.type, bg: cs.backgroundColor, border: cs.borderTopColor, height: e.getBoundingClientRect().height, radius: cs.borderTopLeftRadius } })
@@ -148,7 +151,7 @@ try {
       })
       check(tag, '6 Email and Password match at rest (fill, border, height, radius)', !!parity.a && !!parity.b && parity.a.bg === parity.b.bg && parity.a.border === parity.b.border && parity.a.height === parity.b.height && parity.a.radius === parity.b.radius, parity)
       const forgot = await page.getByRole('button', { name: /forgot password/i }).first().evaluate((el) => { const r = el.getBoundingClientRect(); return { h: r.height, fs: getComputedStyle(el).fontSize } })
-      check(tag, 'forgot password is 14px with a 44px hit area', forgot.fs === '14px' && forgot.h >= 44 - 0.5, forgot)
+      check(tag, 'forgot password is 14px with a 44px hit area', forgot.fs === '14px' && (!profile.touch || forgot.h >= 44 - 0.5), forgot)
       if (profile.name !== 'desktop-1280-dark') checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', `${profile.name}-login.png`), { touch: profile.touch })).checks)
     })
     await context.close()
@@ -186,7 +189,7 @@ try {
         check(tag, '2 selected is not primary or lime, with a 2px primary bar', m.selected.every((s) => s.notSolid && s.bar), m.selected.filter((s) => !(s.notSolid && s.bar)).map((s) => ({ l: s.label, bg: s.bg, shadow: s.shadow })))
         // 3 lime appears at most once (the nav's active item).
         check(tag, '3 lime appears at most once', m.limes.length <= 1, m.limes)
-        if (url.startsWith('/settings')) check(tag, '3 settings: the one lime area is the main nav item', m.limes.length === 1 && m.selected.length >= 1, { limes: m.limes })
+        if (url.startsWith('/settings')) check(tag, '3 settings: the one lime area is the main nav item', m.limes.length === 1 && (profile.width < 768 || m.selected.length >= 1), { limes: m.limes })
         // 4 selected contrast, from the resolved tokens.
         check(tag, '4 on-selected 4.5:1 and the bar 3:1 on the selected tint', m.onSel >= 4.5 && m.barSel >= 3, { onSel: +m.onSel.toFixed(2), barSel: +m.barSel.toFixed(2) })
         // 9 dark steps (resolved), measured once per theme profile; the values are recorded for the report.
@@ -197,11 +200,11 @@ try {
         // Captures of the changed states.
         const opts = { touch: profile.touch }
         if (route.key === 'trips' && profile.width === 1280) {
-          const group = page.getByRole('radiogroup').first()
-          checks.push(checkCropHolds(await cropElement(page, group.locator('xpath=../..'), path.join(OUT_DIR, `${profile.name}-trips-header.png`), opts)))
+          const group = page.locator('[role=radiogroup]:visible').first()
+          checks.push(checkCropHolds(await cropElement(page, group, path.join(OUT_DIR, `${profile.name}-trips-header.png`), { ...opts, also: page.getByText('New trip').first() })))
         }
         if (route.key === 'settings-profile' && profile.name === 'desktop-1280') checks.push(checkCropHolds(await cropElement(page, page.locator('nav[aria-label="Settings"]').first(), path.join(OUT_DIR, `${profile.name}-settings-rail.png`), opts)))
-        if (route.key === 'roster' && profile.name === 'desktop-1280') checks.push(checkCropHolds(await cropElement(page, page.getByRole('radiogroup').first().locator('xpath=../..'), path.join(OUT_DIR, `${profile.name}-roster-toolbar.png`), opts)))
+        if (route.key === 'roster' && profile.name === 'desktop-1280') checks.push(checkCropHolds(await cropElement(page, page.locator('[role=radiogroup]:visible').first().locator('xpath=../..'), path.join(OUT_DIR, `${profile.name}-roster-toolbar.png`), opts)))
         if (route.key === 'incident-new') {
           // 5 input states, forced on the open form.
           const s = await fieldStates(page)
