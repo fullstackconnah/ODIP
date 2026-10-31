@@ -35,6 +35,8 @@
   /* The roster fill chart (Rostering): identity only, on data marks and legend swatches. Open is a neutral ink on purpose, never amber. */
   --color-chart-filled: #6b8f3e;
   --color-chart-open: #6b7160;
+  /* The remainder in the incidents chart: a neutral ink so restrictive practice uses are the figure. */
+  --color-chart-other: #7a8070;
   /* Microsoft's own button colours for Sign in with Microsoft (light and dark variants of its branding guidance). */
   --ms-button-bg: #ffffff;
   --ms-button-fg: #5e5e5e;
@@ -453,6 +455,10 @@
   .rf-readout { animation: none; }
   .rf-wash { transition: none; }
 }
+/* The incidents chart: restrictive practice uses solid, the other incidents hollow and hatched. It reuses the .rf-plot, .rf-wash and .rf-readout behaviour. */
+.it-rp { fill: var(--color-chart-expected); background: var(--color-chart-expected); }
+.it-other { stroke: var(--color-chart-other); stroke-width: 1.5px; border: 1.5px solid var(--color-chart-other); }
+.it-hatch { background-image: repeating-linear-gradient(45deg, var(--color-chart-other) 0 1px, transparent 1px 4px); }
 
 /*
  * The sidebar folding (AppLayout `data-folding`, set from the click until the nav swaps to the rail 80ms later): the words and nested rows
@@ -527,6 +533,9 @@ aside[data-folding] [data-fold="word"] { transform: translateX(-12px); }
   .rf-marker { fill: Highlight; background: Highlight; forced-color-adjust: none; }
   .rf-wash { fill: transparent; background: transparent; }
   .rf-readout { background: Canvas; color: CanvasText; border: 1px solid CanvasText; }
+  .it-rp { fill: CanvasText; background: CanvasText; forced-color-adjust: none; }
+  .it-other { fill: Canvas; stroke: CanvasText; border-color: CanvasText; background: Canvas; forced-color-adjust: none; }
+  .it-hatch { background-image: none; }
 }
 
 :root { --wordmark-dot: var(--color-primary-fixed); }
@@ -565,6 +574,7 @@ aside[data-folding] [data-fold="word"] { transform: translateX(-12px); }
   --color-chart-grid: var(--color-border);
   --color-chart-filled: #8fb35f;
   --color-chart-open: #959c88;
+  --color-chart-other: #7f8673;
   --ms-button-bg: #2f2f2f;
   --ms-button-fg: #ffffff;
   --ms-button-border: #8c8c8c;

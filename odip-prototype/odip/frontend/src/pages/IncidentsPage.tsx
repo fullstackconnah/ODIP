@@ -21,6 +21,7 @@ import { formatAge, plural } from '@/lib/format'
 import { SHIFT_NOTE_FLAG_LABELS } from '@/lib/shiftNoteKeywords'
 import type { ShiftNoteIncidentPrefillState } from '@/lib/incidentPrefill'
 import { retryingAfterError } from '@/lib/queryPhase'
+import { IncidentTrendCard } from './incidents/IncidentTrendCard'
 
 type IncidentsTab = 'incidents' | 'flagged-notes'
 
@@ -165,7 +166,7 @@ function formatQscLabel(status: string): string {
 }
 
 export default function IncidentsPage() {
-  const { canWrite, canCreateIncidents, canAccessPage } = usePermissions()
+  const { canWrite, canCreateIncidents, canAccessPage, isSuperAdmin, isAdmin, isCoordinator } = usePermissions()
   // Same gate as /rostering (coordinators, admins, super admins) — a support worker's own
   // notes are already visible to them on the portal shift page; this queue spans every
   // participant's notes, which a support worker should not see.
@@ -407,6 +408,8 @@ export default function IncidentsPage() {
           Couldn't check for incidents past their NDIS Commission deadline.
         </Callout>
       )}
+
+      {(isSuperAdmin || isAdmin || isCoordinator) && !showArchived && !qscOverdueOnly && <IncidentTrendCard />}
 
       {qscOverdueOnly && (
         <p className="text-sm text-[var(--color-muted-foreground)]">

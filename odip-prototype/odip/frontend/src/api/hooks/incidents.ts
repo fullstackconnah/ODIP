@@ -7,6 +7,7 @@ import type {
   IncidentDetailDto,
   CreateIncidentDto,
   UpdateIncidentDto,
+  IncidentTrendDto,
 } from '../types'
 
 /**
@@ -21,6 +22,15 @@ export function useIncidents(params?: Record<string, string>, options?: { enable
     queryKey: ['incidents', params],
     queryFn: () => fetchPagedList<IncidentListDto>('/incidents', params),
     enabled: options?.enabled ?? true,
+  })
+}
+
+/** Incidents and restrictive practice uses by month (SuperAdmin, Admin, Coordinator only). Under the 'incidents' prefix so every incident write refreshes it. */
+export const INCIDENT_TREND_KEY = ['incidents', 'trend'] as const
+export function useIncidentTrend() {
+  return useQuery({
+    queryKey: INCIDENT_TREND_KEY,
+    queryFn: () => apiGet<IncidentTrendDto>('/incidents/trend'),
   })
 }
 

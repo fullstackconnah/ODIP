@@ -1,9 +1,11 @@
-import { useId, useLayoutEffect, useState } from 'react'
+import { useId, useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { useRosterFill } from '@/api/hooks'
 import { Button } from '@/components/Button'
 import { Card } from '@/components/Card'
 import { ChartKey } from '@/components/chart/ChartKey'
+import { readHidden, writeHidden } from '@/components/chart/storedHidden'
+import { useElementWidth } from '@/components/chart/useElementWidth'
 import { RetryCallout } from '@/components/PageState'
 import { TAP_AREA } from '@/components/tapArea'
 import { retryingAfterError } from '@/lib/queryPhase'
@@ -16,44 +18,17 @@ import { FILL_ERROR, FILL_LOADING, FILL_SCOPE, FILL_STALE, FILL_TITLE, SENTENCE_
 const HIDDEN_KEY = 'odip.roster.fillHidden'
 const WIDE = 960 // the 1280 desktop card is ~982px inner (shape brief section 3)
 
-/** The element's content width. The card swaps its subtree between loading and loaded, so this follows the element (a callback ref), not one ref object. */
-function useElementWidth() {
-  const [el, setEl] = useState<HTMLElement | null>(null)
-  const [width, setWidth] = useState<number>()
-  useLayoutEffect(() => {
-    if (!el) return
-    const measure = () => setWidth(el.clientWidth)
-    measure()
-    if (typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(measure)
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [el])
-  return [width, setEl] as const
-}
-
-/** '1' hidden, '0' shown, anything else (or storage unreadable) null: the card then follows its width. */
-function readHidden(): boolean | null {
-  try {
-    const v = window.localStorage.getItem(HIDDEN_KEY)
-    return v === '1' ? true : v === '0' ? false : null
-  } catch { return null }
-}
-function writeHidden(hidden: boolean) {
-  try { window.localStorage.setItem(HIDDEN_KEY, hidden ? '1' : '0') } catch { /* the choice just isn't remembered */ }
-}
-
 export function RosterFillCard({ boardWeek, onSelectWeek }: { boardWeek: string | undefined; onSelectWeek: (weekStart: string) => void }) {
   const query = useRosterFill()
   const [boxWidth, boxRef] = useElementWidth()
   const [measuredPlot, plotBoxRef] = useElementWidth()
   const plotWidth = measuredPlot ?? 0
-  const [stored, setStored] = useState<boolean | null>(readHidden)
+  const [stored, setStored] = useState<boolean | null>(() => readHidden(HIDDEN_KEY))
   const bodyId = useId()
   const sentenceId = useId()
   // A phone-width card starts collapsed (the expanded rows are ~650px); a stored choice wins.
   const hidden = stored ?? (boxWidth !== undefined && boxWidth < COLUMNS_MIN)
-  const toggle = () => { writeHidden(!hidden); setStored(!hidden) }
+  const toggle = () => { writeHidden(HIDDEN_KEY, !hidden); setStored(!hidden) }
   const wide = (boxWidth ?? 0) >= WIDE
 
   const titleRow = (toggleButton: boolean) => (
