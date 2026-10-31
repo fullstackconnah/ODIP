@@ -38,12 +38,12 @@ public class OnboardingChecklistTests
         return new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, tenant.Object);
     }
 
-    private static ParticipantInquiriesController Controller(OdipDbContext db)
+    private static ParticipantInquiriesController Controller(OdipDbContext db, TimeProvider? clock = null)
     {
         var tenant = new Mock<ICurrentTenant>();
         tenant.Setup(t => t.TenantId).Returns(Tenant);
         var http = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "coordinator-1")], "Test")) };
-        return new ParticipantInquiriesController(db, tenant.Object, Clock) { ControllerContext = new ControllerContext { HttpContext = http } };
+        return new ParticipantInquiriesController(db, tenant.Object, clock ?? Clock) { ControllerContext = new ControllerContext { HttpContext = http } };
     }
 
     private static Participant InOnboarding(OdipDbContext db, Action<Participant>? change = null)
@@ -206,6 +206,19 @@ public class OnboardingChecklistTests
 
     private static Task<ActionResult<ApiResponse<ParticipantOnboardingDto>>> Explained(OdipDbContext db, Participant p, DateOnly? complaints, DateOnly? rights) =>
         Controller(db).RecordExplained(p.Id, new RecordOnboardingExplainedDto { ComplaintsExplainedOn = complaints, RightsExplainedOn = rights }, CancellationToken.None);
+
+    [Fact]
+    public async Task ExplainedRecord_ChecksTheFutureAgainstTheProvidersToday_NotUtc()
+    {
+        using var db = Db();
+        var p = InOnboarding(db);
+        // 14:30 UTC on 31 October is 01:30 on 1 November in Sydney: 1 November is the provider's today, so it is not in the future.
+        var clock = new FakeClock(new DateTimeOffset(2026, 10, 31, 14, 30, 0, TimeSpan.Zero));
+
+        var d = Ok(await Controller(db, clock).RecordExplained(p.Id, new RecordOnboardingExplainedDto { ComplaintsExplainedOn = new DateOnly(2026, 11, 1) }, CancellationToken.None));
+
+        Assert.Equal(new DateOnly(2026, 11, 1), d.ComplaintsExplainedOn);
+    }
 
     [Fact]
     public async Task ExplainedRecord_FlipsItsItemsToDone_AndASecondCallReplacesTheFirst_ANullClearingThatItem()
