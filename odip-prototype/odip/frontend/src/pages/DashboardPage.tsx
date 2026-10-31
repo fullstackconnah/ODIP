@@ -26,7 +26,7 @@ import { useDecisionGroups } from './dashboard/useDecisionGroups'
 import { useDecisionState } from './dashboard/useDecisionState'
 import { NeedsYourDecision } from './dashboard/NeedsYourDecision'
 import { isPresent } from './dashboard/quickGroupModel'
-import { DashboardShortcuts, PlatformEntryRail } from '@/components/layout/PlatformDirectory'
+import { DashboardShortcuts } from '@/components/layout/PlatformDirectory'
 import { platformNavigation } from '@/components/layout/platformDirectoryModel'
 import { BUDGET_OVER_ALERT, budgetsAtRisk } from '@/lib/budgetRisk'
 import { budgetsAtRiskItem } from './budgets/budgetBand'
@@ -315,7 +315,6 @@ export default function DashboardPage() {
       {groups.length > 0 && <AnnouncementRegion message={decision.announcement} />}
       {canImportData && <AnnouncementRegion message={hideNote} />}
 
-      <div className={`grid gap-[var(--section-gap)] ${platform.length > 0 ? 'xl:grid-cols-[minmax(0,1fr)_18rem]' : ''}`}>
       <div className="flex min-w-0 flex-col gap-[var(--section-gap)]">
       {(card === 'steps' || card === 'done') && setup.data && (
         <SetupSteps status={setup.data} provider={provider.data ?? null} card={card} onHide={() => { justHid.current = true; setHideNote(SETUP_HIDDEN_MESSAGE); setSetupHiddenState(true) }} />
@@ -456,8 +455,6 @@ export default function DashboardPage() {
           )}
         </Card>
       )}
-      </div>
-      <PlatformEntryRail entries={platform} />
       </div>
     </div>
   )

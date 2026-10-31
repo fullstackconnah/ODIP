@@ -10,7 +10,7 @@ export type StatCardTone = Exclude<Tone, 'accessible'>
 /**
  * `default` (the default) is the small KPI tile: a 12px label over a `text-xl` value. `attention` is the opt-in tile of the
  * dashboard's attention band (DESIGN.md "Attention band"): the value is a display-step tabular figure, the tile is filled
- * with the same container tint the glance strip uses, and a tile at zero recedes. Given an `action` it is the tall tile of a count
+ * with the same container tint the glance strip uses, and a tile at zero recedes. Given an `action` it is the compact action tile of a count
  * somebody has to act on. A StatCard that does not ask for it renders exactly as before.
  */
 export type StatCardVariant = 'default' | 'attention'
@@ -38,12 +38,12 @@ export type StatCardProps = {
   variant?: StatCardVariant
   /**
    * `attention` variant only: the one honest line under the label, saying what the count means ("Tasks past their due date and still open."). Only the
-   * tall tile (see `action`) shows it.
+   * action tile (see `action`) shows it.
    */
   detail?: string
   /**
-   * `attention` variant only: where the count is fixed, as a link inside the tile. It makes the TALL tile: the figure, the label, the `detail` line and
-   * this link, which stretches over the whole tile so the tile is one big target while the page keeps one link with a name of its own. The tall tile is a
+   * `attention` variant only: where the count is fixed, as a link inside the tile. It makes the action tile: the figure, the label, the `detail` line and
+   * this link, which stretches over the whole tile so the tile is one big target while the page keeps one link with a name of its own. The action tile is a
    * named group, not a link, so leave `to` off; it has no caption (the `detail` line takes that job). A tile with no data (`loading` or `error`) is the
    * compact tile whatever it is given: there is no count for the line to explain.
    */
@@ -169,40 +169,46 @@ function AttentionTile({ label, value, className, to, tone = 'neutral', caption,
   )
 }
 
-// ── The tall action tile ──
+// ── The action tile ──
 
-// A count that needs somebody, made big enough to act on: the figure, the label, one honest line saying what the count means, and the link to where it is
-// fixed, stacked in that order. It wears the same fills as the compact tile (ATTENTION_LOOK: the one tone table behind the glance strip and the band), so only
-// the structure is new, and the structure is what makes it tall: its padding is --section-gap on every side (the airier step the dense pages do not use) and
-// it is four lines deep, so it is the biggest colour field on the page. Colour is never the only cue: the number, the label and the line each say it in words.
+// A count that needs somebody, as one compact row at every width: the figure, the label over one honest line saying what the count means (two lines at most),
+// and the link to where it is fixed. It wears the tone's soft wash with the figure in the tone's ink, so the words stay in the foreground colour: only the
+// figure and the wash are tinted, and the dark band is a gentle wash on the card, not a solid maroon. The glance strip's compact tile keeps the solid pair
+// (ATTENTION_LOOK). Colour is never the only cue: the number, the label and the line each say it in words.
+// The warning wash is the container at 50%: the tone's own soft wash IS the solid container, which would be the glance strip's fill.
 const ACTION_TILE =
-  'relative flex min-w-0 flex-col rounded-md border border-[var(--color-border)] p-[var(--section-gap)] @max-[36rem]:py-[var(--card-pad)] transition-opacity has-[a:hover]:opacity-90'
+  'relative flex min-w-0 items-center gap-3 rounded-md border border-[var(--color-border)] p-[var(--card-pad)] text-[var(--color-foreground)] transition-opacity has-[a:hover]:opacity-90'
+const ACTION_WASH: Record<'quiet' | Attention, string> = {
+  quiet: 'bg-[var(--color-card)] text-[var(--color-muted-foreground)]',
+  warning: 'bg-[var(--color-warning-container)]/50',
+  error: TONE.danger.soft,
+}
 
 // The link's `::after` fills the (positioned) tile, so the whole tile is the target while the page keeps ONE link with a name of its own ("Open overdue
 // tasks"). The focus ring is drawn on that pseudo-element for the same reason: it surrounds the tile, not just the words. `--tap-min` floors the link's own
 // box at 44px on touch.
 const ACTION_LINK =
-  'mt-auto inline-flex min-h-[var(--tap-min)] items-center gap-0.5 self-start pt-2 text-sm font-bold underline-offset-4 hover:underline focus:outline-none ' +
+  'ml-auto inline-flex min-h-[var(--tap-min)] shrink-0 items-center gap-0.5 text-sm font-bold underline-offset-4 hover:underline focus:outline-none ' +
   'after:absolute after:inset-0 after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-[var(--color-ring)]'
 
 function ActionTile({ label, value, className, tone = 'neutral', detail, action }: StatCardProps & { action: StatCardAction }) {
   const attention = attentionOf(tone)
-  const classes = `${ACTION_TILE} ${ATTENTION_LOOK[attention ?? 'quiet']} ${className ?? ''}`.trim()
+  const classes = `${ACTION_TILE} ${ACTION_WASH[attention ?? 'quiet']} ${className ?? ''}`.trim()
 
   // A named group, so its accessible name carries the number as well as the label (like the compact tile without a link).
   return (
     <div role="group" aria-label={`${label} ${value}`} data-attention={attention} className={classes}>
-      {/* In a band under 36rem (a phone: one tile a row) the tile is one compact row: figure, label, chevron. The line folds away and the
-          link's words become its name only; the link still covers the tile. Seven tall tiles ran about 1300px there before any trip showed. */}
-      <div className="flex flex-1 flex-col gap-1 @max-[36rem]:flex-row @max-[36rem]:items-center @max-[36rem]:gap-3">
-        <span className="text-display tabular-nums">{value}</span>
+      <span className={`text-display tabular-nums ${attention ? TONE[tone].ink : ''}`.trim()}>{value}</span>
+      {/* In a band under 36rem (a phone: one tile a row) the line folds away and the link's words become its name only; the link still covers the tile.
+          Seven tiles ran about 1300px there before any trip showed. */}
+      <div className="flex min-w-0 flex-1 flex-col">
         <span className="text-sm font-semibold leading-tight">{label}</span>
         {detail && <span className="text-[13px] leading-snug text-balance @max-[36rem]:hidden">{detail}</span>}
-        <Link to={action.to} className={`${ACTION_LINK} @max-[36rem]:ml-auto @max-[36rem]:mt-0 @max-[36rem]:self-center @max-[36rem]:pt-0`}>
-          <span className="@max-[36rem]:sr-only">{action.label}</span>
-          <ChevronRight className="h-4 w-4 shrink-0" aria-hidden="true" />
-        </Link>
       </div>
+      <Link to={action.to} className={ACTION_LINK}>
+        <span className="@max-[36rem]:sr-only">{action.label}</span>
+        <ChevronRight className="h-4 w-4 shrink-0" aria-hidden="true" />
+      </Link>
     </div>
   )
 }

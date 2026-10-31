@@ -108,9 +108,10 @@ export const tileLabels = () => tiles().map(labelOf)
 export const tileFor = (label: string) => tiles().find((tile) => labelOf(tile) === label) as HTMLElement
 export const clearRow = () => screen.queryByText('All clear', { selector: 'span.font-semibold' })?.closest('p') ?? null
 
+// Danger tiles first (the band deals them first, keeping the given order within a tone), then the warnings.
 export const FULL_ORDER = [
-  'Qualification issues', 'Critical participant alerts', 'Budgets at risk', 'Overdue', 'Missing accommodation',
-  'Missing vehicles', 'Missing staff', 'Open incidents', 'NDIS Commission overdue', 'Pending leave', 'Shift completions',
+  'Qualification issues', 'Critical participant alerts', 'Budgets at risk', 'Overdue', 'NDIS Commission overdue',
+  'Missing accommodation', 'Missing vehicles', 'Missing staff', 'Open incidents', 'Pending leave', 'Shift completions',
 ]
 
 // The same alerts, with three more participants whose budgets are at risk (two over, one forecast to go over). The Critical alerts are still the three on two participants: an over-budget alert is
