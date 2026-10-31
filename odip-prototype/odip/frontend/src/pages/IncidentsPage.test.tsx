@@ -94,19 +94,20 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-describe('IncidentsPage — QSC overdue banner (C-1)', () => {
-  it('does not render a banner when there are no overdue QSC incidents', () => {
+describe('IncidentsPage — NDIS Commission overdue banner (C-1)', () => {
+  it('does not render a banner when there are no overdue NDIS Commission incidents', () => {
     renderPage()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
-  it('renders the overdue QSC banner with role="alert" and destructive design tokens, not raw Tailwind reds', () => {
+  it('renders the overdue NDIS Commission banner with role="alert" and destructive design tokens, not raw Tailwind reds', () => {
     mockUseOverdueQscIncidents.mockReturnValue({ data: [baseIncident({ isOverdue24h: true })] })
     renderPage()
 
     const banner = screen.getByRole('alert')
     expect(banner).toHaveTextContent(/1 incident/)
     expect(banner).toHaveTextContent(/past (its|their) NDIS Commission deadline/)
+    expect(banner.textContent).toContain('Most reportable incidents must be reported to the NDIS Commission within 24\u00a0hours. Some uses of an unauthorised restrictive practice can be reported within 5\u00a0business days.')
     expect(banner.className).toMatch(/bg-error-container/)
     expect(banner.className).not.toMatch(/red-500/)
     expect(banner.className).not.toMatch(/text-red-400/)
@@ -153,7 +154,7 @@ describe('IncidentsPage — QSC overdue banner (C-1)', () => {
     expect(screen.queryByText('On-time one')).not.toBeInTheDocument()
   })
 
-  it('final review I3(a): the QSC overdue view ignores the status filter, matching what the banner counted', () => {
+  it('final review I3(a): the NDIS Commission overdue view ignores the status filter, matching what the banner counted', () => {
     // useIncidents is a single mock, so if the page were still passing statusFilter/severityFilter
     // through to the query it would receive this pre-filtered (empty) list instead of the full one.
     mockUseIncidents.mockReturnValue({
@@ -166,7 +167,7 @@ describe('IncidentsPage — QSC overdue banner (C-1)', () => {
     renderPage('/incidents?qsc=overdue')
 
     // Even though no status filter UI selection was made, the query params passed to useIncidents
-    // must not carry a stale status/severity filter while in the QSC overdue view.
+    // must not carry a stale status/severity filter while in the NDIS Commission overdue view.
     const paramsArg = mockUseIncidents.mock.calls.at(-1)?.[0]
     expect(paramsArg).not.toHaveProperty('status')
     expect(paramsArg).not.toHaveProperty('severity')
@@ -174,7 +175,7 @@ describe('IncidentsPage — QSC overdue banner (C-1)', () => {
     expect(screen.getByText('Overdue one')).toBeInTheDocument()
   })
 
-  it('final review I3(b): shows a QSC-specific empty state, not the generic "no incidents" copy, when nothing is overdue', () => {
+  it('final review I3(b): shows a NDIS Commission-specific empty state, not the generic "no incidents" copy, when nothing is overdue', () => {
     mockUseIncidents.mockReturnValue({ data: [], isLoading: false })
     mockUseOverdueQscIncidents.mockReturnValue({ data: [] })
     renderPage('/incidents?qsc=overdue')
@@ -365,7 +366,7 @@ describe('IncidentsPage — Flagged notes tab (connection map item 4)', () => {
   })
 })
 
-describe('IncidentsPage — one-line QSC banner', () => {
+describe('IncidentsPage — one-line NDIS Commission banner', () => {
   it('compresses to a single 40px line while keeping the headline, the reason and the link', () => {
     mockUseOverdueQscIncidents.mockReturnValue({
       data: [baseIncident({ isOverdue24h: true }), baseIncident({ id: 'inc-2', isOverdue24h: true })],
@@ -374,7 +375,7 @@ describe('IncidentsPage — one-line QSC banner', () => {
 
     const banner = screen.getByRole('alert')
     expect(banner).toHaveTextContent('2 incidents are past their NDIS Commission deadline')
-    expect(banner).toHaveTextContent('NDIS Quality and Safeguards Commission requires reportable incidents to be escalated within 24 hours.')
+    expect(banner).toHaveTextContent('Most reportable incidents must be reported to the NDIS Commission within 24 hours.')
     expect(within(banner).getByRole('link', { name: 'View overdue incidents' })).toHaveAttribute('href', '/incidents?qsc=overdue')
     // It used to stack a headline paragraph, a reason paragraph and the link on their own lines (88px).
     expect(banner.querySelectorAll('p')).toHaveLength(1)
@@ -384,7 +385,7 @@ describe('IncidentsPage — one-line QSC banner', () => {
   })
 })
 
-describe('IncidentsPage — QSC banner grammar', () => {
+describe('IncidentsPage — NDIS Commission banner grammar', () => {
   function headline(count: number): string {
     mockUseOverdueQscIncidents.mockReturnValue({
       data: Array.from({ length: count }, (_, n) => baseIncident({ id: `inc-${n}`, isOverdue24h: true })),
@@ -433,6 +434,12 @@ describe('IncidentsPage — narrow-desktop columns', () => {
       const th = screen.getAllByRole('columnheader')[index]
       for (const el of [th, cells[index]]) expect(el.className, label).not.toMatch(/(^|\s)((sm|md|lg|xl|2xl):)?hidden(\s|$)/)
     }
+  })
+
+  it('puts the NDIS Commission column straight after Status, so it is on screen at 1280 before the box scrolls', () => {
+    mockUseIncidents.mockReturnValue({ data: [baseIncident()], isLoading: false })
+    renderPage()
+    expect(headerIndex('NDIS Commission')).toBe(headerIndex('Status') + 1)
   })
 
   it('cuts a long title with an ellipsis at a responsive cap and keeps the full title in the tooltip', () => {
@@ -541,7 +548,7 @@ describe('IncidentsPage — header row', () => {
   })
 })
 
-describe('IncidentsPage — OVERDUE QSC pill contrast', () => {
+describe('IncidentsPage — OVERDUE NDIS Commission pill contrast', () => {
   const INDEX_CSS = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../index.css'), 'utf-8')
   type Rgb = [number, number, number]
 
@@ -563,7 +570,7 @@ describe('IncidentsPage — OVERDUE QSC pill contrast', () => {
     return (hi + 0.05) / (lo + 0.05)
   }
 
-  it('uses the solid error token pair, at least 4.5:1 computed from the token hex values, whatever the underlying QSC status', () => {
+  it('uses the solid error token pair, at least 4.5:1 computed from the token hex values, whatever the underlying NDIS Commission status', () => {
     // The mock API's overdue incident is 'Pending', which StatusBadge would otherwise paint amber.
     mockUseIncidents.mockReturnValue({
       data: [baseIncident({ qscReportingStatus: 'Pending', isOverdue24h: true })],
@@ -638,7 +645,7 @@ describe('IncidentsPage — row actions', () => {
 // Density polish (touch): the participant / trip / involved-participant links in the table truncate (md:truncate,
 // overflow hidden), and a truncating link clips its own TAP_AREA pad, so on a touch tablet they were still 20px tall.
 // From md up, under a coarse pointer, they take vertical padding instead (the link box itself becomes 44px); below md
-// the cells are cards, the links do not truncate, and the DataTable's TAP_AREA_LINKS pad reaches 44px. The QSC banner's
+// the cells are cards, the links do not truncate, and the DataTable's TAP_AREA_LINKS pad reaches 44px. The NDIS Commission banner's
 // "View overdue incidents" link is a standalone link and takes the --tap-min floor.
 describe('IncidentsPage — 44px touch targets for its links', () => {
   const PAD = 'md:pointer-coarse:py-[calc((var(--tap-min)_-_1.25rem)_/_2)]'
@@ -658,7 +665,7 @@ describe('IncidentsPage — 44px touch targets for its links', () => {
     }
   })
 
-  it('floors the QSC banner link "View overdue incidents" at --tap-min', () => {
+  it('floors the NDIS Commission banner link "View overdue incidents" at --tap-min', () => {
     mockUseOverdueQscIncidents.mockReturnValue({ data: [baseIncident({ isOverdue24h: true })] })
     renderPage()
 

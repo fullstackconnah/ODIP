@@ -237,14 +237,9 @@ export default function IncidentsPage() {
     setPage(1)
   }
 
-  // Every row is exactly --row-h from 1280 up: cells never wrap (DataTable), so a narrower window
-  // drops columns instead of growing rows. The primary columns (title, severity, status, date, QSC,
-  // actions) are always there; participant needs 1280, type 1536, trip and reported-by 1792.
-  // Budget, widest seeded rows, each column padded 2×12 (Manrope measured, see the density verdict
-  // report). 1280 (content 1280 − 232 − 2×20 = 1008, 1006 inside the border): title 264 (capped) +
-  // participant 165.1 + severity 88.2 + status 113.2 + date 104.3 + QSC 124.8 + actions 76 = 935.6,
-  // spare 70. 1536 adds type: 1125.3 of 1262. 1792 adds trip and reported-by: 1467.5 of 1518. The
-  // old layout always needed 1467.5, so its rows wrapped at every viewport under 1742px.
+  // Every row is exactly --row-h from 1280 up: cells never wrap (DataTable). From md up the box scrolls
+  // sideways with the title and the actions pinned, so no column is dropped. NDIS Commission follows
+  // Status, ahead of Date and Reported By, so it is the first column to scroll into view.
   const incidentColumns: Column<any>[] = [
     {
       key: 'title',
@@ -285,8 +280,6 @@ export default function IncidentsPage() {
     },
     { key: 'severity', header: 'Severity', mobile: 'meta', render: (i) => <StatusBadge status={i.severity} /> },
     { key: 'status', header: 'Status', mobile: 'status', render: (i) => <StatusBadge status={i.status} label={INCIDENT_STATUS_LABELS[i.status as IncidentStatus] ?? i.status} /> },
-    { key: 'reportedByName', header: 'Reported By', maxWidth: '9rem' },
-    { key: 'incidentDateTime', header: 'Date', type: 'date', mobile: 'meta' },
     {
       key: 'qscReportingStatus',
       header: 'NDIS Commission',
@@ -303,6 +296,8 @@ export default function IncidentsPage() {
         <StatusBadge status={i.qscReportingStatus} label={formatQscLabel(i.qscReportingStatus)} />
       ),
     },
+    { key: 'reportedByName', header: 'Reported By', maxWidth: '9rem' },
+    { key: 'incidentDateTime', header: 'Date', type: 'date', mobile: 'meta' },
     { key: 'actions', header: '', render: (i) => canWrite ? <RowActions>{actionButtons(i)}</RowActions> : null },
   ]
 
@@ -396,7 +391,7 @@ export default function IncidentsPage() {
           <AlertTriangle className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
           <p className="min-w-0 flex-1 text-sm md:truncate">
             <span className="font-semibold">{qscHeadline}</span>
-            <span className="ml-2 text-[13px]">NDIS Quality and Safeguards Commission requires reportable incidents to be escalated within 24 hours.</span>
+            <span className="ml-2 text-[13px]">{'Most reportable incidents must be reported to the NDIS Commission within 24\u00a0hours. Some uses of an unauthorised restrictive practice can be reported within 5\u00a0business days.'}</span>
           </p>
           <Link to="/incidents?qsc=overdue" className={`${TAP_FLOOR} shrink-0 whitespace-nowrap text-sm font-medium underline underline-offset-2`}>
             View overdue incidents
