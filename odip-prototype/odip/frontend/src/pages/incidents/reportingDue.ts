@@ -9,11 +9,12 @@ export function defaultReportableClass(
   incidentType: IncidentType | string | undefined,
   isRestrictivePracticeAuthorised?: boolean | null,
 ): ReportableClass {
+  // The flag decides on its own: an unauthorised restrictive practice is due in 24 hours whatever the type.
   return severity === 'Critical' || REQUIRED_TYPES.includes(incidentType as IncidentType) || isRestrictivePracticeAuthorised === false
     ? 'Within24h' : 'None'
 }
 
-/** "Fri 30 Oct 2026, 3:15 pm". Built from parts: en-AU puts a comma after the weekday and may print a narrow space before pm. */
+/** "Fri 30 Oct 2026, 3:15 pm". Built from parts: en-AU puts a comma after the weekday and may print a narrow space before pm. No-break spaces keep the date together and the time with its am/pm. */
 function formatParts(date: Date, timeZone: string): string {
   const options: Intl.DateTimeFormatOptions = { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }
   let parts: Intl.DateTimeFormatPart[]
@@ -23,7 +24,7 @@ function formatParts(date: Date, timeZone: string): string {
     parts = new Intl.DateTimeFormat('en-AU', options).formatToParts(date)
   }
   const get = (t: string) => parts.find((p) => p.type === t)?.value ?? ''
-  return `${get('weekday')} ${get('day')} ${get('month')} ${get('year')}, ${get('hour')}:${get('minute')} ${get('dayPeriod').toLowerCase()}`
+  return `${get('weekday')}\u00a0${get('day')}\u00a0${get('month')}\u00a0${get('year')}, ${get('hour')}:${get('minute')}\u00a0${get('dayPeriod').toLowerCase()}`
 }
 
 export const formatDueWhen = (iso: string, timeZone: string) => formatParts(new Date(iso), timeZone)
@@ -35,7 +36,7 @@ const formatWallWhen = (wall: string) => formatParts(new Date(`${toDatetimeInput
 export function formatGap(ms: number): string {
   const minutes = Math.floor(Math.abs(ms) / 60_000)
   if (minutes < 1) return 'less than a minute'
-  const unit = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
+  const unit = (n: number, word: string) => `${n}\u00a0${word}${n === 1 ? '' : 's'}`
   if (minutes < 60) return unit(minutes, 'minute')
   const hours = Math.floor(minutes / 60)
   return hours < 48 ? unit(hours, 'hour') : unit(Math.floor(hours / 24), 'day')
@@ -64,7 +65,7 @@ export function reportingDueLines(i: ReportingDueInput, now: Date): DueLine[] {
   else if (i.notifyDueAt) {
     const gap = new Date(i.notifyDueAt).getTime() - now.getTime()
     lines.push(gap > 0
-      ? { text: `Tell the NDIS Commission by ${formatDueWhen(i.notifyDueAt, tz)} (in ${formatGap(gap)})` }
+      ? { text: `Tell the NDIS Commission by ${formatDueWhen(i.notifyDueAt, tz)} (in\u00a0${formatGap(gap)})` }
       : { text: `Overdue by ${formatGap(gap)}`, tone: 'overdue' })
   }
   if (i.reportableClass === 'Within24h' && i.detailedReportDueAt) {

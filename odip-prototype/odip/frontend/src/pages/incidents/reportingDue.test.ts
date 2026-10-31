@@ -19,9 +19,9 @@ describe('defaultReportableClass (same rows as the server DefaultClass table)', 
 })
 
 describe('formatDueWhen', () => {
-  it('reads like "Fri 30 Oct 2026, 3:15 pm" in the provider zone', () => {
-    expect(formatDueWhen('2026-10-30T04:15:00Z', 'Australia/Sydney')).toBe('Fri 30 Oct 2026, 3:15 pm')
-    expect(formatDueWhen('2026-10-30T04:15:00Z', 'Australia/Perth')).toBe('Fri 30 Oct 2026, 12:15 pm')
+  it('reads like "Fri\u00a030\u00a0Oct\u00a02026, 3:15\u00a0pm" in the provider zone', () => {
+    expect(formatDueWhen('2026-10-30T04:15:00Z', 'Australia/Sydney')).toBe('Fri\u00a030\u00a0Oct\u00a02026, 3:15\u00a0pm')
+    expect(formatDueWhen('2026-10-30T04:15:00Z', 'Australia/Perth')).toBe('Fri\u00a030\u00a0Oct\u00a02026, 12:15\u00a0pm')
   })
 })
 
@@ -29,13 +29,13 @@ describe('formatGap', () => {
   it.each([
     [0, 'less than a minute'],
     [59_000, 'less than a minute'],
-    [60_000, '1 minute'],
-    [45 * 60_000, '45 minutes'],
-    [60 * 60_000, '1 hour'],
-    [5 * 3_600_000, '5 hours'],
-    [47 * 3_600_000, '47 hours'],
-    [48 * 3_600_000, '2 days'],
-    [-3 * 24 * 3_600_000, '3 days'],
+    [60_000, '1\u00a0minute'],
+    [45 * 60_000, '45\u00a0minutes'],
+    [60 * 60_000, '1\u00a0hour'],
+    [5 * 3_600_000, '5\u00a0hours'],
+    [47 * 3_600_000, '47\u00a0hours'],
+    [48 * 3_600_000, '2\u00a0days'],
+    [-3 * 24 * 3_600_000, '3\u00a0days'],
   ])('%i ms reads %s', (ms, text) => expect(formatGap(ms)).toBe(text))
 })
 
@@ -57,22 +57,22 @@ describe('reportingDueLines', () => {
   })
   it('before the deadline: tell by, with the gap', () => {
     expect(texts(base, '2026-10-29T23:15:00Z')).toEqual([
-      'Tell the NDIS Commission by Fri 30 Oct 2026, 3:15 pm (in 5 hours)',
-      '5-day report due by Fri 6 Nov 2026, 11:59 pm',
+      'Tell the NDIS Commission by Fri\u00a030\u00a0Oct\u00a02026, 3:15\u00a0pm (in\u00a05\u00a0hours)',
+      '5-day report due by Fri\u00a06\u00a0Nov\u00a02026, 11:59\u00a0pm',
     ])
   })
   it('at or after the deadline: overdue by', () => {
     expect(texts(base, '2026-10-30T04:15:00Z')[0]).toBe('Overdue by less than a minute')
-    expect(texts(base, '2026-10-31T04:15:00Z')[0]).toBe('Overdue by 24 hours')
-    expect(reportingDueLines(base, new Date('2026-10-30T06:15:00Z'))[0]).toEqual({ text: 'Overdue by 2 hours', tone: 'overdue' })
+    expect(texts(base, '2026-10-31T04:15:00Z')[0]).toBe('Overdue by 24\u00a0hours')
+    expect(reportingDueLines(base, new Date('2026-10-30T06:15:00Z'))[0]).toEqual({ text: 'Overdue by 2\u00a0hours', tone: 'overdue' })
   })
   it('met and met late', () => {
     expect(texts({ ...base, qscReportingStatus: 'ReportedWithin24h', qscReportedAt: '2026-10-30T10:00:00' }, '2026-11-01T00:00:00Z')[0]).toBe('Reported on time')
     expect(texts({ ...base, qscReportingStatus: 'ReportedLate', qscReportedAt: '2026-10-30T16:00:00' }, '2026-11-01T00:00:00Z')[0]).toBe('Reported late')
   })
   it('the 5-day report: overdue, then sent', () => {
-    expect(texts(base, '2026-11-06T14:59:59Z')[1]).toBe('5-day report overdue by 2 hours')
-    expect(texts({ ...base, commissionDetailedReportedAt: '2026-11-03T14:05:00' }, '2026-11-06T14:59:59Z')[1]).toBe('5-day report sent Tue 3 Nov 2026, 2:05 pm')
+    expect(texts(base, '2026-11-06T14:59:59Z')[1]).toBe('5-day report overdue by 2\u00a0hours')
+    expect(texts({ ...base, commissionDetailedReportedAt: '2026-11-03T14:05:00' }, '2026-11-06T14:59:59Z')[1]).toBe('5-day report sent Tue\u00a03\u00a0Nov\u00a02026, 2:05\u00a0pm')
   })
   it('a Within5BusinessDays incident has no 5-day line', () => {
     expect(texts({ ...base, reportableClass: 'Within5BusinessDays', detailedReportDueAt: null }, '2026-10-29T23:15:00Z')).toHaveLength(1)
