@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useProviderSettings, useUpsertProviderSettings } from '@/api/hooks'
 import type { ProviderSettingsDto, UpsertProviderSettingsDto } from '@/api/types'
+import { EMAIL_PATTERN } from '@/lib/participantSchema'
 import { apiErrorCode, apiErrorMessages, apiErrorStatus } from '@/lib/shiftPackageErrors'
 import type { SaveResult } from './SettingsSection'
 import { notSavedText } from './settingsSections'
@@ -12,7 +13,20 @@ const CHANGED_BY_OTHER_CODE = 'PROVIDER_SETTINGS_CHANGED'
 const SERVER_CHANGED_BY_OTHER = 'Settings were changed by someone else. Reload and try again.'
 
 /** The server's 400 for a blank required field names the field in an errors object, not a sentence, so the foot says this. */
-const REQUIRED_FIELDS = 'Fill in the registration number, ABN, organisation name and address.'
+const REQUIRED_FIELDS = 'Fill in the registration number, ABN, legal name and address.'
+
+/** The contact checks run on the trimmed value and a blank is always valid. The server applies the same two rules and the same sentences (ProviderSettingsController). */
+export const contactEmailProblem = (v: string) => (v && !EMAIL_PATTERN.test(v) ? 'Enter a full email address, like office@example.com.au.' : undefined)
+
+/** An absolute http or https address with a dotted host: a bare example.com.au is refused, not rewritten. */
+export function websiteProblem(v: string) {
+  if (!v) return undefined
+  try {
+    const url = new URL(v)
+    if (/^https?:$/.test(url.protocol) && url.hostname.includes('.') && !/\s/.test(v)) return undefined
+  } catch { /* not an address */ }
+  return 'Enter the full web address, starting with https://.'
+}
 
 /** A 409: another Admin saved since this form loaded. The server's sentence says to reload; the screen has already done it (see the reseed below). */
 const CHANGED_BY_OTHER = 'Not saved. Someone else changed these settings. Their changes are shown and your edits kept; save again.'
