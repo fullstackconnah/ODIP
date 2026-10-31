@@ -436,7 +436,7 @@ describe('IncidentsPage — narrow-desktop columns', () => {
     }
   })
 
-  it('puts the NDIS Commission column straight after Status, so it is on screen at 1280 before the box scrolls', () => {
+  it('puts the NDIS Commission column straight after Status', () => {
     mockUseIncidents.mockReturnValue({ data: [baseIncident()], isLoading: false })
     renderPage()
     expect(headerIndex('NDIS Commission')).toBe(headerIndex('Status') + 1)
