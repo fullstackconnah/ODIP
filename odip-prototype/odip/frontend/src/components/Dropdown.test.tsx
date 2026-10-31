@@ -141,6 +141,22 @@ describe('Dropdown — 44px coarse-pointer hit area on the compact triggers', ()
     expect(trigger.className).not.toContain('before:')
   })
 
+  it('draws the form trigger as a field: the shared field surface, its edge on hover, and no hover halo', () => {
+    render(<Dropdown variant="form" value="" onChange={() => {}} label="Pick one" items={ITEMS} />)
+    const trigger = screen.getByRole('button', { name: 'Pick one' })
+    expect(trigger).toHaveClass('bg-[var(--color-field)]', 'border-[var(--color-field-border)]')
+    expect(trigger.className).not.toContain('--color-input')
+    expect(trigger.className).not.toContain('hover:shadow')
+    expect(trigger.className).not.toMatch(/opacity-60/)
+  })
+
+  it('draws the in-menu search as a field too', async () => {
+    render(<Dropdown variant="form" value="" onChange={() => {}} label="Pick one" items={ITEMS} searchable />)
+    fireEvent.click(screen.getByRole('button', { name: 'Pick one' }))
+    const search = await screen.findByPlaceholderText('Search...')
+    expect(search).toHaveClass('bg-[var(--color-field)]', 'border-[var(--color-field-border)]')
+  })
+
   it('leaves the chevron sibling out of the pad: it is pointer-events-none, so a tap on it reaches the pill', () => {
     const { container } = render(<Dropdown variant="pill" value="a" onChange={() => {}} items={ITEMS} />)
     const chevronWrap = container.querySelector('span.absolute') as HTMLElement
@@ -279,12 +295,18 @@ describe('Dropdown — disabled item with a description', () => {
   })
 })
 
-describe('Dropdown — keyboard-only focus ring on the value triggers', () => {
-  it.each(['pill', 'form'] as const)('%s trigger rings on focus-visible, not on every focus', (variant) => {
-    render(<Dropdown variant={variant} value="a" onChange={() => {}} label="Pick" items={ITEMS} />)
+describe('Dropdown — focus ring on the value triggers', () => {
+  it('pill trigger rings on focus-visible, not on every focus', () => {
+    render(<Dropdown variant="pill" value="a" onChange={() => {}} label="Pick" items={ITEMS} />)
     const trigger = screen.getByRole('button')
     expect(trigger).toHaveClass('focus-visible:ring-2', 'focus-visible:ring-[var(--color-ring)]')
     expect(trigger).not.toHaveClass('focus:ring-2')
+  })
+
+  // The form trigger is a field now (polish 2a): it rings on focus like every input beside it.
+  it('form trigger rings on focus like a field', () => {
+    render(<Dropdown variant="form" value="a" onChange={() => {}} label="Pick" items={ITEMS} />)
+    expect(screen.getByRole('button')).toHaveClass('focus:ring-2', 'focus:outline-none')
   })
 })
 

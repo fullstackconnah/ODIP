@@ -577,3 +577,41 @@ describe('LoginPage: landmarks and the platform footer', () => {
     expect(within(footer).getByRole('link', { name: 'Accessibility (opens in a new tab)' })).toHaveAttribute('href', '/accessibility')
   })
 })
+
+// SHAPE-PR2 §1 and §2 (the component half of B7): Email and Password are one field component, there is one primary action,
+// the developer button is the secondary, and Forgot password is 14px with a 44px hit area on touch.
+describe('LoginPage: one field treatment, one primary', () => {
+  it('draws Email and Password with the same field classes, the password only adding room for its eye', () => {
+    renderPage()
+    const email = screen.getByLabelText('Email')
+    const password = screen.getByLabelText('Password')
+    const strip = (el: HTMLElement) => el.className.split(/\s+/).filter(c => c !== 'pr-12').sort()
+    expect(strip(password)).toEqual(strip(email))
+    expect(email).toHaveClass('bg-[var(--color-field)]', 'border-[var(--color-field-border)]', 'h-[var(--control-h)]')
+    expect(password).toHaveClass('pr-12')
+  })
+
+  it('draws Sign in as the one primary Button, with no hand-rolled gradient', () => {
+    renderPage()
+    const submit = screen.getByRole('button', { name: 'Sign in' })
+    expect(submit).toHaveAttribute('type', 'submit')
+    expect(submit).toHaveClass('bg-[var(--color-primary)]', 'w-full')
+    expect(submit.className).not.toContain('gradient')
+  })
+
+  it('draws the developer button as a secondary, so the card keeps one primary', () => {
+    firebase.devAuth = true
+    renderPage()
+    const dev = screen.getByRole('button', { name: 'Sign in as selected user' })
+    expect(dev).toHaveClass('border', 'bg-[var(--color-card)]')
+    expect(dev.className).not.toContain('bg-[var(--color-primary)]')
+    expect(dev.className).not.toContain('gradient')
+  })
+
+  it('sets Forgot password at 14px with the touch floor', () => {
+    renderPage()
+    const forgot = screen.getByRole('button', { name: 'Forgot password?' })
+    expect(forgot).toHaveClass('text-sm', 'min-h-[var(--tap-min)]')
+    expect(forgot).not.toHaveClass('text-xs')
+  })
+})

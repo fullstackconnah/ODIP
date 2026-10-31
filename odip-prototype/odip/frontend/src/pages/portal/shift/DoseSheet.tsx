@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useRecordShiftDose, useStaff } from '@/api/hooks'
 import { usePermissions } from '@/lib/permissions'
+import { fieldSurface } from '@/components/FormField'
 import { Modal } from '@/components/Modal'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
@@ -27,7 +28,7 @@ const OUTCOME_LABEL: Record<Outcome, string> = {
   Missed: 'Not given this shift',
 }
 
-const fieldClass = 'w-full px-3 py-2 min-h-[44px] rounded-lg bg-[var(--color-input)] border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]'
+const fieldClass = `w-full py-2 min-h-[44px] text-sm ${fieldSurface}`
 
 interface Props {
   open: boolean

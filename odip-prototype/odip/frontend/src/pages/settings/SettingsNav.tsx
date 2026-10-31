@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useId, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { ChevronRight } from 'lucide-react'
-import { NAV_ACTIVE, NAV_IDLE } from '@/components/layout/navConfig'
+import { NAV_IDLE } from '@/components/layout/navConfig'
 import type { SectionDef, SectionKey } from './settingsSections'
 
 type SettingsNavProps = {
@@ -13,6 +13,9 @@ type SettingsNavProps = {
   /** On the phone list: the row of the section just left, which takes focus back. */
   returnFocusTo?: SectionKey | null
 }
+
+// The open section is a 2px primary bar and the on-selected ink, no fill: the main nav beside it owns the one lime area on the screen.
+const ACTIVE = 'text-[var(--color-on-selected)] font-semibold bg-transparent shadow-[inset_2px_0_0_var(--color-primary)]'
 
 // From md: a rail item, 28px tall like the sidebar's group children (44px under a coarse pointer). Below md: a full-width card row with a
 // chevron, the row-height floor, content ink (it is content here, not chrome) and a Mist press.
@@ -62,7 +65,7 @@ export default function SettingsNav({ sections, current, noOrganisation, returnF
                     to={`/settings?section=${s.key}`}
                     data-section={s.key}
                     aria-current={s.key === current ? 'page' : undefined}
-                    className={`${ITEM} ${s.key === current ? NAV_ACTIVE : NAV_IDLE}`}
+                    className={`${ITEM} ${s.key === current ? ACTIVE : NAV_IDLE}`}
                   >
                     {s.label}
                     <ChevronRight className="h-5 w-5 shrink-0 text-[var(--color-muted-foreground)] md:hidden" aria-hidden="true" />

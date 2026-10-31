@@ -58,7 +58,7 @@ describe('UsersTab: search and pager are the house parts', () => {
     await ui.click(screen.getByRole('button', { name: 'Next page' }))
     expect(mockUseAdminUsers).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 }))
     const search = screen.getByRole('textbox', { name: 'Search users...' })
-    expect(search).toHaveClass('bg-[var(--color-input)]')
+    expect(search).toHaveClass('bg-[var(--color-field)]')
     await ui.type(search, 'a')
 
     expect(mockUseAdminUsers).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, search: 'a' }))

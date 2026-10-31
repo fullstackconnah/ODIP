@@ -260,13 +260,15 @@ for the secondary and accessibility roles. Unchanged by the density work.
 - **Ledger Ink** (`#1b1c1a`): body and heading text. Near-black with a green undertone.
 - **Mist** (`#efeeea`): muted and accent surfaces, hover fills.
 - **Ruled Line** (`#c3c9b5`): all borders and outlines. Slightly green-grey.
-- **Field Grey** (`#e4e2de`): input backgrounds, so a field reads as writable.
+- **Field White** (`--color-field`, `#ffffff`; dark: the raised step `#2d322a`) with a **Field Edge** (`--color-field-border`, `#8a9180`, 3:1): a typeable control. Placeholder ink is `--color-placeholder`, not the value ink. Disabled is the recessed `--color-field-disabled` with the muted ink and no opacity; read-only is transparent with a dashed `--color-border`; invalid is a `--color-destructive` edge and ring.
+- **Field Grey** (`#e4e2de`, `--color-input`): no longer a field. It still paints the grey Dropdown pills and two icon tiles.
+- **Selected Tint** (`--color-selected`, `#e3edd3`; label `--color-on-selected`): in-page selection (segmented controls, sub-tabs, the settings sub-nav, the current wizard step) is this tint plus a 2px `--color-primary` bar, never a solid fill and never the main nav's lime.
 
 ### Dark theme
 "The ledger after hours": the same Organic Ledger under a desk lamp, chosen in Settings > My account > Appearance as Light, Dark or System (the default; System follows the device). Saved per device in `odip_ui_prefs:<userId>`; `public/theme.js` applies it before first paint. The signed-in app, /login, /caregiver/:token and /accessibility follow it; /welcome, the itinerary PDF and email stay light.
-- Surfaces are a deep green-tinted neutral, never black (page `#131512`), and text is a warm off-white, never `#ffffff`. The Warm Base Rule holds in both themes.
-- Depth stays tonal and inverts: a raised surface is lighter (page < sidebar < card < fill/popover < high). Dropdown and SearchableSelect panels use `popover` so they stand off a card; shadows go near-black and only help.
-- `primary` is light olive-lime as ink (success text, links, the ring) and takes dark ink through `primary-foreground` as a fill. Never write `text-white` or a literal colour in a component: use the foreground tokens.
+- Surfaces are a deep green-tinted neutral, never black (page `#151813`), and text is a warm off-white, never `#ffffff`. The Warm Base Rule holds in both themes.
+- Depth stays tonal and inverts: a raised surface is lighter (sidebar < page < card < raised = fill/popover < high; the sidebar recedes below the page as it does in light; each content step is 1.12:1 or more, the sidebar 1.08:1 below the page). Dropdown and SearchableSelect panels use `popover` so they stand off a card; shadows go near-black and only help.
+- `primary` is a calmer olive-lime (`#94c35f`, less luminous than the old `#a6d66b`) as ink (success text, links, the ring) and takes dark ink through `primary-foreground` as a fill. Never write `text-white` or a literal colour in a component: use the foreground tokens.
 - Tones become deep tints with pale inks; amber stays amber (a fill in both themes, ink on it is `warning-foreground`). No new hues, with one exception: the chart series tokens below (see "Chart series").
 - Every pair is held to WCAG AA (4.5:1 text, 3:1 non-text) in both themes by `toneContrast.test.ts`. The dark block at the end of `src/index.css` is the source of truth; the table is a copy.
 
@@ -296,7 +298,13 @@ for the secondary and accessibility roles. Unchanged by the density work.
 | `on-error-container` | `#93000a` | `#ffb4ab` |
 | `border` | `#c3c9b5` | `#434a3e` |
 | `input` | `#e4e2de` | `#2b2f28` |
-| `ring` | `#396200` | `#a6d66b` |
+| `ring` | `#396200` | `#94c35f` |
+| `selected` | `#e3edd3` | `#2c3a22` |
+| `on-selected` | `#2c4c00` | `#c4e59c` |
+| `field` | `#ffffff` | `#2d322a` |
+| `field-border` | `#8a9180` | `#82897a` |
+| `placeholder` | `#6b7160` | `#959c8a` |
+| `field-disabled` | `#efeeea` | `#1a1d17` |
 | `sidebar` | `#f5f3ef` | `#171a15` |
 | `sidebar-foreground` | `#1b1c1a` | `#e4e5dd` |
 | `sidebar-accent` | `rgba(255,255,255,0.4)` | `rgba(255,255,255,0.06)` |
@@ -316,7 +324,7 @@ for the secondary and accessibility roles. Unchanged by the density work.
 | `on-accessible-container` | `#7a2169` | `#ffb3e6` |
 | `warning-foreground` | `#1b1c1a` | `#1b1c1a` |
 | `hover-wash` | `rgba(0,0,0,0.05)` | `rgba(255,255,255,0.06)` |
-| `focus-ring-soft` | `rgba(57,98,0,0.18)` | `rgba(166,214,107,0.28)` |
+| `focus-ring-soft` | `rgba(57,98,0,0.18)` | `rgba(148,195,95,0.28)` |
 | `chart-budget` | `#7a8070` | `#8a9180` |
 | `chart-actual` | `primary` | `primary` |
 | `chart-expected` | `#2f6db5` | `#5f95e0` |
@@ -496,6 +504,8 @@ against white and the warm-grey container steps. Shadows belong to elements that
   The four `--shadow-*` tokens are whole box-shadow values in `index.css`, re-pointed in dark.
 - **Focus Ring** (`ring-2 ring-[var(--color-ring)]`): every focusable element; ring only, the border does
   not move.
+
+**Dark steps.** Tonal depth in dark is five steps: sidebar `#0c0d0b` (3.5 L*), page `#151813`, card `#21251f`, raised `#2d322a` (popover, field, muted, accent) and high `#353a31`. Each content step is 1.12:1 or more over the one below, the high step 1.1:1 over raised, and the sidebar sits 1.08:1 below the page. Light keeps its warm-paper steps.
 
 **The Flat-By-Default Rule.** Surfaces are flat at rest. If a panel in the page flow needs a drop shadow
 to be visible, its background is wrong. Floating layers may carry one.

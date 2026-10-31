@@ -361,7 +361,7 @@ export function SearchableSelect({
         onClick={handleClick}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
-        className={`${inputClass} min-h-[var(--control-h)] pr-9 disabled:opacity-60 disabled:cursor-not-allowed`}
+        className={`${inputClass} min-h-[var(--control-h)] pr-9`}
       />
       <span className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-60">
         {loading ? (

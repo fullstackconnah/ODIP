@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { FileClock } from 'lucide-react'
 import { useAdministrationsReport, useParticipants } from '@/api/hooks'
 import { SERVICES_BEGUN } from '@/api/types/participants'
+import { fieldSurface } from '@/components/FormField'
 import { DataTable, type Column } from '@/components/DataTable'
 import { Dropdown } from '@/components/Dropdown'
 import { EmptyState } from '@/components/EmptyState'
@@ -92,14 +93,14 @@ export default function ReportTab() {
         <div>
           <label className="block text-xs font-medium mb-1 text-[var(--color-muted-foreground)]" htmlFor="report-from">From</label>
           <input id="report-from" type="date" value={from} onChange={e => setFrom(e.target.value)}
-            className="px-3 py-2 rounded-lg bg-[var(--color-input)] border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]" />
+            className={`h-[var(--control-h)] text-sm ${fieldSurface}`} />
         </div>
         <div>
           <label className="block text-xs font-medium mb-1 text-[var(--color-muted-foreground)]" htmlFor="report-to">To</label>
           <input id="report-to" type="date" value={to} onChange={e => setTo(e.target.value)}
             aria-invalid={rangeInvalid || undefined}
             aria-describedby={rangeInvalid ? 'report-range-error' : undefined}
-            className={`px-3 py-2 rounded-lg bg-[var(--color-input)] border text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] ${rangeInvalid ? 'border-[var(--color-destructive)]' : 'border-[var(--color-border)]'}`} />
+            className={`h-[var(--control-h)] text-sm ${fieldSurface}`} />
         </div>
         {report && !rangeInvalid && (
           <span className="text-sm text-[var(--color-muted-foreground)] ml-auto">

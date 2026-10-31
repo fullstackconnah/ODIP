@@ -1,4 +1,5 @@
 import { Search } from 'lucide-react'
+import { inputClass } from './FormField'
 
 export type SearchInputProps = {
   value: string
@@ -18,7 +19,7 @@ export function SearchInput({ value, onChange, placeholder = 'Search...', classN
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
         aria-label={label ?? placeholder}
-        className="w-full h-[var(--control-h)] pl-10 pr-4 rounded-[var(--radius-sm)] bg-[var(--color-input)] border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
+        className={`${inputClass} pl-10 pr-4 text-sm`}
       />
     </div>
   )

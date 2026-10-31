@@ -27,6 +27,14 @@
   --color-border: #c3c9b5;
   --color-input: #e4e2de;
   --color-ring: #396200;
+  /* Selected (in-page) is this tint plus a 2px primary bar, never a solid fill and never the main nav's lime. DESIGN.md "Selected". */
+  --color-selected: #e3edd3;
+  --color-on-selected: #2c4c00;
+  /* A field is a typeable surface with a real edge: fill, 3:1 border, placeholder ink, and the recessed disabled fill. DESIGN.md "Fields". */
+  --color-field: #ffffff;
+  --color-field-border: #8a9180;
+  --color-placeholder: #6b7160;
+  --color-field-disabled: #efeeea;
   /* The budget graph's series (Funding tab): identity, never meaning, and only for data marks. DESIGN.md "Chart series". */
   --color-chart-budget: #7a8070;
   --color-chart-actual: var(--color-primary);
@@ -572,13 +580,13 @@ aside[data-folding] [data-fold="word"] { transform: translateX(-12px); }
 /* Dark theme (dark-mode-2026-10): the same tokens re-pointed; set by public/theme.js. Values: DESIGN.md "Dark theme". */
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --color-background: #131512;
+  --color-background: #151813;
   --color-foreground: #e4e5dd;
-  --color-card: #1c1f1a;
+  --color-card: #21251f;
   --color-card-foreground: #e4e5dd;
-  --color-popover: #262a24;
+  --color-popover: #2d322a;
   --color-popover-foreground: #e4e5dd;
-  --color-primary: #a6d66b;
+  --color-primary: #94c35f;
   --color-primary-foreground: #0f2000;
   --color-primary-container: #8fc254;
   --color-primary-fixed: #2b4712;
@@ -586,9 +594,9 @@ aside[data-folding] [data-fold="word"] { transform: translateX(-12px); }
   --color-secondary: #b3c1d8;
   --color-secondary-foreground: #1a2433;
   --color-secondary-container: #2a374b;
-  --color-muted: #262a24;
+  --color-muted: #2d322a;
   --color-muted-foreground: #b5bcaa;
-  --color-accent: #262a24;
+  --color-accent: #2d322a;
   --color-accent-foreground: #e4e5dd;
   --color-destructive: #ff8f84;
   --color-destructive-foreground: #3b0906;
@@ -596,7 +604,13 @@ aside[data-folding] [data-fold="word"] { transform: translateX(-12px); }
   --color-on-error-container: #ffb4ab;
   --color-border: #434a3e;
   --color-input: #2b2f28;
-  --color-ring: #a6d66b;
+  --color-ring: #94c35f;
+  --color-selected: #2c3a22;
+  --color-on-selected: #c4e59c;
+  --color-field: #2d322a;
+  --color-field-border: #82897a;
+  --color-placeholder: #959c8a;
+  --color-field-disabled: #1a1d17;
   --color-chart-budget: #8a9180;
   --color-chart-actual: var(--color-primary);
   --color-chart-expected: #5f95e0;
@@ -607,16 +621,16 @@ aside[data-folding] [data-fold="word"] { transform: translateX(-12px); }
   --ms-button-bg: #2f2f2f;
   --ms-button-fg: #ffffff;
   --ms-button-border: #8c8c8c;
-  --color-sidebar: #171a15;
+  --color-sidebar: #0c0d0b;
   --color-sidebar-foreground: #e4e5dd;
   --color-sidebar-accent: rgba(255,255,255,0.06);
-  --color-surface: #1c1f1a;
-  --color-surface-container: #262a24;
-  --color-surface-container-low: #171a15;
-  --color-surface-container-high: #2e322b;
-  --color-surface-container-lowest: #1c1f1a;
+  --color-surface: #21251f;
+  --color-surface-container: #2d322a;
+  --color-surface-container-low: #0c0d0b;
+  --color-surface-container-high: #353a31;
+  --color-surface-container-lowest: #21251f;
   --color-outline-variant: #434a3e;
-  --color-success: #a6d66b;
+  --color-success: #94c35f;
   --color-warning: #f59e0b;
   --color-warning-container: #3f2f0b;
   --color-on-warning-container: #f8cd76;
@@ -626,7 +640,7 @@ aside[data-folding] [data-fold="word"] { transform: translateX(-12px); }
   --color-on-accessible-container: #ffb3e6;
   --color-warning-foreground: #1b1c1a;
   --color-hover-wash: rgba(255,255,255,0.06);
-  --color-focus-ring-soft: rgba(166,214,107,0.28);
+  --color-focus-ring-soft: rgba(148,195,95,0.28);
   --wordmark-dot: var(--color-primary);
   --shadow-float: 0 0 0 1px rgba(255,255,255,0.08), 0 24px 40px -12px rgba(0,0,0,0.6);
   --shadow-hairline: 0 24px 32px -12px rgba(0,0,0,0.35);
