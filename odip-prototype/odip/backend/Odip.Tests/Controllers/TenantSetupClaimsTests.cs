@@ -102,6 +102,43 @@ public class TenantSetupClaimsTests
         Assert.Contains(NotConfigured, ex.Message);
     }
 
+    /// <summary>A completed trip with no claim, so GenerateDraftClaimAsync reaches the provider-settings check rather than an earlier refusal.</summary>
+    private static async Task<Guid> ClaimlessCompletedTrip(OdipDbContext db, Guid tenantId)
+    {
+        var trip = new TripInstance { Id = Guid.NewGuid(), TenantId = tenantId, TripName = "Open trip", StartDate = new DateOnly(2026, 3, 1), DurationDays = 1, Status = TripStatus.Completed };
+        db.Add(trip);
+        await db.SaveChangesAsync();
+        return trip.Id;
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_organisation_with_a_blank_or_missing_provider_row_cannot_generate_a_draft_trip_claim(bool removeRow)
+    {
+        var (db, a) = await Setup();
+        using var _ = db;
+        if (removeRow) { db.ProviderSettings.RemoveRange(db.ProviderSettings.Where(s => s.TenantId == a.TenantId)); await db.SaveChangesAsync(); }
+        var tripId = await ClaimlessCompletedTrip(db, a.TenantId);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => new ClaimGenerationService(db).GenerateDraftClaimAsync(tripId));
+        Assert.Contains(NotConfigured, ex.Message);
+        Assert.Empty(db.TripClaims.Where(c => c.TripInstanceId == tripId));
+    }
+
+    [Fact]
+    public async Task A_organisation_with_no_provider_row_cannot_generate_shift_claims()
+    {
+        var (db, a) = await Setup();
+        using var _ = db;
+        db.ProviderSettings.RemoveRange(db.ProviderSettings.Where(s => s.TenantId == a.TenantId));
+        await db.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => new ShiftClaimGenerationService(db).GenerateAsync(a.Participant.Id, new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30)));
+        Assert.Contains(NotConfigured, ex.Message);
+    }
+
     [Fact]
     public async Task A_new_organisation_with_no_provider_fields_cannot_make_a_BPR_CSV()
     {

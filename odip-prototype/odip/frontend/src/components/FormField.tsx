@@ -30,7 +30,8 @@ export const inputClass = `w-full h-[var(--control-h)] ${CONTROL_SURFACE}`
 // ignored (it stayed one line tall however many rows a caller asked for). `min-h` keeps an empty
 // or rows={1} textarea level with its 32px/44px neighbours; `h-auto` lets `rows` set the height;
 // `py-1.5` keeps text off the border, which a fixed-height single line never needed.
-export const textareaClass = `w-full min-h-[var(--control-h)] h-auto py-1.5 ${CONTROL_SURFACE}`
+// Disabled: the dimmed look SearchableSelect and Dropdown use (opacity-60, not-allowed) plus the muted surface and text tokens, so it never reads as editable.
+export const textareaClass = `w-full min-h-[var(--control-h)] h-auto py-1.5 ${CONTROL_SURFACE} disabled:cursor-not-allowed disabled:opacity-60 disabled:bg-[var(--color-muted)] disabled:text-[var(--color-muted-foreground)]`
 export const labelClass = 'block text-[13px] font-medium mb-1 text-[var(--color-muted-foreground)]'
 
 const NATIVE_INPUTS = ['input', 'select', 'textarea']

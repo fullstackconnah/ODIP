@@ -4,21 +4,10 @@ import type { AxiosError } from 'axios'
 import type { PlanFailureReason, PlanIssue, PlanBlock, PlanQuote } from '@/api/types'
 import { isDateOnly, parseDateOnly, formatDayNumber } from './dateOnly'
 import type { PlanStepKey } from './planBlocks'
-import { plural } from './format'
+import { formatServiceDate, plural } from './format'
 import { apiErrorMessages } from './shiftPackageErrors'
 
 // ── Dates ─────────────────────────────────────────────────────────────────────
-
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const
-
-/** "Mon 5 Oct 2026": fixed words and day arithmetic, never Intl (a clock change or an ICU build cannot move it). '' for anything that is not a date. */
-export function formatServiceDate(iso: string | null | undefined): string {
-  const day = parseDateOnly(iso)
-  if (day === null) return ''
-  const date = new Date(day * 86_400_000)
-  return `${WEEKDAYS[date.getUTCDay()]} ${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}`
-}
 
 /** The calendar day after `iso`. */
 export function addDays(iso: string, days: number): string {

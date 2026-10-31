@@ -294,8 +294,23 @@ describe('ComplaintFormPage', () => {
     expect(mockUseStaff).toHaveBeenCalledWith({ isActive: 'true' })
     const picker = screen.getByLabelText('Search staff…') as HTMLSelectElement
     expect(picker).toHaveValue('u-gone')
-    expect(picker.selectedOptions[0]).toHaveTextContent('Gone Person')
+    expect(picker.selectedOptions[0]).toHaveTextContent('Gone Person (inactive)')
   })
+
+  it('keeps the saved inactive handler in the picker after switching away, so the change can be undone', async () => {
+    const user = userEvent.setup()
+    mockUseComplaint.mockReturnValue(loaded(complaint({ handledByUserId: 'u-gone', handledByName: 'Gone Person' })))
+    mockUseStaff.mockReturnValue({ data: [{ id: 'u-other', fullName: 'Someone Else' }] })
+    renderAt('/complaints/c-1')
+    const picker = screen.getByLabelText('Search staff…') as HTMLSelectElement
+    await user.selectOptions(picker, 'u-other')
+    expect(picker).toHaveValue('u-other')
+    expect(screen.getByRole('option', { name: 'Gone Person (inactive)' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Someone Else' })).toBeInTheDocument()
+    await user.selectOptions(picker, 'u-gone')
+    expect(picker).toHaveValue('u-gone')
+  })
+
 
   it('a new complaint defaults Handled by to the signed-in user only when that user is in the staff list', async () => {
     const user = userEvent.setup()

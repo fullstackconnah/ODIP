@@ -22,7 +22,8 @@ import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { apiErrorStatus } from '@/lib/shiftPackageErrors'
 import { formatDateAu } from '@/lib/utils'
-import { plural } from '@/lib/format'
+import { formatServiceDate, plural } from '@/lib/format'
+import { unbroken } from '@/lib/intakeBooking'
 import { TONE } from '@/lib/tone'
 import { retryingAfterError } from '@/lib/queryPhase'
 
@@ -66,7 +67,7 @@ export default function ComplaintsPage() {
     deleteMutation: archiveComplaint,
     restoreMutation: restoreComplaint,
     // Never the complainant's name: the confirm dialog and any error line name the complaint by its date.
-    entityName: c => `the complaint received ${formatDateAu(c.receivedOn)}`,
+    entityName: c => `the complaint received ${unbroken(formatServiceDate(c.receivedOn))}`,
     entityId: c => c.id,
     restoreData: () => ({}),
     editPath: c => `/complaints/${c.id}`,

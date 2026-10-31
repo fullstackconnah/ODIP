@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { CheckCircle2, Circle } from 'lucide-react'
 import { useBeginServices, useMakeParticipantActive, useOnboarding, useParticipant, useRecordOnboardingAgreement, useRecordOnboardingExplained } from '@/api/hooks'
@@ -39,7 +39,7 @@ export default function OnboardingDetailPage() {
   const beginServices = useBeginServices()
   const makeActive = useMakeParticipantActive()
   const [confirming, setConfirming] = useState<'begin' | 'active' | null>(null)
-  const [recording, setRecording] = useState<'agreement' | 'explained' | null>(null)
+  const [recording, setRecording] = useState<'agreement' | 'complaints' | 'rights' | null>(null)
   const d = detail.data
 
   if (detail.isLoading && !retryingAfterError(detail)) return <PageState kind="loading" noun="onboarding record" />
@@ -121,7 +121,7 @@ export default function OnboardingDetailPage() {
                 {item.missing ? <p className="text-[13px] text-[var(--color-muted-foreground)]">{item.missing}</p> : null}
               </div>
             </div>
-            <Fix item={item} participantId={id} canEdit={canAct} canOpenDraft={canAct && canAccessPage('agreement-drafts')} canOpenFunding={canAct && canManageFunding} onRecord={() => setRecording(item.key === 'agreement' ? 'agreement' : 'explained')} />
+            <Fix item={item} participantId={id} canEdit={canAct} canOpenDraft={canAct && canAccessPage('agreement-drafts')} canOpenFunding={canAct && canManageFunding} onRecord={() => setRecording(item.key === 'agreement' || item.key === 'complaints' ? item.key : 'rights')} />
           </li>
         ))}
       </ul>
@@ -153,7 +153,7 @@ export default function OnboardingDetailPage() {
       </>}
     />
     {recording === 'agreement' && <AgreementRecordDialog participantId={id} detail={d} onClose={() => setRecording(null)} />}
-    {recording === 'explained' && <ExplainedRecordDialog participantId={id} detail={d} onClose={() => setRecording(null)} />}
+    {(recording === 'complaints' || recording === 'rights') && <ExplainedRecordDialog participantId={id} detail={d} focus={recording} onClose={() => setRecording(null)} />}
   </div>
 }
 
@@ -210,7 +210,10 @@ function AgreementRecordDialog({ participantId, detail, onClose }: { participant
 /** The two dates, each optional; the server replaces both, so a blank field clears that item. The client checks match the server's (not in the future, not before 1990). */
 const EXPLAINED_MIN = '1990-01-01'
 
-function ExplainedRecordDialog({ participantId, detail, onClose }: { participantId: string; detail: ParticipantOnboardingDto; onClose: () => void }) {
+function ExplainedRecordDialog({ participantId, detail, focus, onClose }: { participantId: string; detail: ParticipantOnboardingDto; focus: 'complaints' | 'rights'; onClose: () => void }) {
+  // Opened from a row, focus goes to that row's own date, not the first field.
+  const complaintsRef = useRef<HTMLInputElement>(null)
+  const rightsRef = useRef<HTMLInputElement>(null)
   const record = useRecordOnboardingExplained(participantId)
   const [complaints, setComplaints] = useState(detail.complaintsExplainedOn ?? '')
   const [rights, setRights] = useState(detail.rightsExplainedOn ?? '')
@@ -230,13 +233,13 @@ function ExplainedRecordDialog({ participantId, detail, onClose }: { participant
   }
 
   return (
-    <Modal open onClose={onClose} title="Complaints and rights" size="sm" footer={<>
+    <Modal open onClose={onClose} title="Complaints and rights" size="sm" initialFocusRef={focus === 'complaints' ? complaintsRef : rightsRef} footer={<>
       <Button variant="secondary" onClick={onClose}>Cancel</Button>
       <Button type="submit" form="explained-record" disabled={!canSave}>Save</Button>
     </>}>
       <form id="explained-record" onSubmit={submit} className="flex flex-col gap-[var(--field-gap-y)]">
-        <TextField label="Told how to make a complaint on" type="date" min={EXPLAINED_MIN} max={today} value={complaints} onChange={e => setComplaints(e.target.value)} error={complaintsError} />
-        <TextField label="Rights explained on" type="date" min={EXPLAINED_MIN} max={today} value={rights} onChange={e => setRights(e.target.value)} error={rightsError} />
+        <TextField ref={complaintsRef} label="Told how to make a complaint on" type="date" min={EXPLAINED_MIN} max={today} value={complaints} onChange={e => setComplaints(e.target.value)} error={complaintsError} />
+        <TextField ref={rightsRef} label="Rights explained on" type="date" min={EXPLAINED_MIN} max={today} value={rights} onChange={e => setRights(e.target.value)} error={rightsError} />
         {formError && <Callout tone="error">{formError}</Callout>}
       </form>
     </Modal>

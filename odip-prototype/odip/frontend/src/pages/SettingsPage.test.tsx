@@ -213,7 +213,7 @@ describe('SettingsPage — Public Holidays tab: who may change the calendar', ()
 
     expect(screen.getByText('Labour Day')).toBeInTheDocument()
     // Every row has a Delete, so its name says which holiday it deletes.
-    for (const name of ['Add holiday', 'Sync holidays', 'Advanced', 'Delete: Labour Day, 05/10/2026 (NSW)']) {
+    for (const name of ['Add holiday', 'Sync holidays', 'Advanced', 'Delete: Labour Day, Mon 5 Oct 2026 (NSW)']) {
       expect(screen.getByRole('button', { name })).toBeInTheDocument()
     }
     expect(screen.queryByText(/only a super admin can change this calendar/i)).not.toBeInTheDocument()

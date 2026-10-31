@@ -9,8 +9,8 @@ import { Callout } from '@/components/Callout'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { DataTable } from '@/components/DataTable'
 import { Dropdown } from '@/components/Dropdown'
-import { plural } from '@/lib/format'
-import { formatDateAu } from '@/lib/utils'
+import { formatServiceDate, plural } from '@/lib/format'
+import { unbroken } from '@/lib/intakeBooking'
 import { retryingAfterError } from '@/lib/queryPhase'
 
 /**
@@ -147,7 +147,7 @@ export default function PublicHolidaysSection({ canEdit }: { canEdit: boolean })
                 key: 'actions',
                 header: '',
                 render: (h: PublicHolidayDto) => (
-                  <Button variant="ghost-danger" size="sm" onClick={() => setDeletingHoliday(h)} aria-label={`Delete: ${h.name}, ${formatDateAu(h.date)} (${h.state || 'All'})`}>
+                  <Button variant="ghost-danger" size="sm" onClick={() => setDeletingHoliday(h)} aria-label={`Delete: ${h.name}, ${formatServiceDate(h.date)} (${h.state || 'All'})`}>
                     Delete
                   </Button>
                 ),
@@ -223,7 +223,7 @@ export default function PublicHolidaysSection({ canEdit }: { canEdit: boolean })
         title="Delete Public Holiday"
         message={
           deletingHoliday
-            ? `Delete the public holiday "${deletingHoliday.name}" on ${formatDateAu(deletingHoliday.date)} (${deletingHoliday.state || 'All states'})? This cannot be undone.`
+            ? `Delete the public holiday "${deletingHoliday.name}" on ${unbroken(formatServiceDate(deletingHoliday.date))} (${deletingHoliday.state || 'All states'})? This cannot be undone.`
             : ''
         }
         confirmLabel="Delete"
