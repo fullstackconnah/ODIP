@@ -105,6 +105,7 @@ describe('IncidentTrendCard', () => {
     expect(document.querySelectorAll('[data-trend-month]')).toHaveLength(6)
     expect(document.querySelector('[data-trend-month="2026-06"] [data-zero]')).toBeTruthy()
     expect(document.querySelectorAll('[data-zero]')).toHaveLength(1)
+    expect(document.querySelector('[data-legend]')).toBeTruthy()
     expect(document.querySelector('caption')?.textContent).toBe('Incidents by month, from May 2026')
   })
 

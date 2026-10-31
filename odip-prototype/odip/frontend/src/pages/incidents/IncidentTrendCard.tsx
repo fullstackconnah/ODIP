@@ -88,7 +88,7 @@ export function IncidentTrendCard() {
   }
 
   const legend = (
-    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+    <div data-legend className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
       <span className="whitespace-nowrap"><ChartKey mark="rp" label="Restrictive practice uses" /></span>
       <span className="whitespace-nowrap"><ChartKey mark="other" label="Other incidents" /></span>
     </div>
