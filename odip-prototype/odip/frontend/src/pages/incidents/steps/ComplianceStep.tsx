@@ -66,7 +66,7 @@ export function ComplianceStep({
         </FormField>
 
         {reportableClass && reportableClass !== defaultReportableClass(severity, incidentType, isRestrictivePracticeAuthorised) && (
-          <FormField label="Reason for the change" className={span.long} error={errors.reportableClassReason?.message}>
+          <FormField label="Reason for the change" required className={span.long} error={errors.reportableClassReason?.message}>
             <textarea {...register('reportableClassReason')} rows={2} maxLength={500} placeholder="Why this incident has a different reporting deadline..." />
           </FormField>
         )}

@@ -85,7 +85,7 @@ export default function IncidentDetailPage() {
             { label: 'Date & time', value: <span className="tabular-nums">{formatWallClock(incident.incidentDateTime, { dateStyle: 'medium', timeStyle: 'short' })}</span> },
             { label: 'Location', value: incident.location || '—' },
             { label: 'Reported by', value: incident.reportedByName || '—' },
-            { label: 'NDIS Commission reporting', value: <ReportingDue incident={incident} /> },
+            { label: 'NDIS Commission', value: <ReportingDue incident={incident} /> },
             { label: 'Description', value: <span className="whitespace-pre-wrap">{incident.description}</span> },
           ]}
         />
@@ -176,6 +176,7 @@ export default function IncidentDetailPage() {
 /** The due lines, worked out at render from the stored instants (no timers); overdue is words plus the danger colour, never colour alone. */
 function ReportingDue({ incident }: { incident: IncidentDetailDto }) {
   const lines = reportingDueLines(incident, new Date())
+  if (lines.length === 0) return <span role="img" aria-label="No reporting deadline">{'\u2013'}</span>
   return (
     <div className="space-y-0.5">
       {lines.map((l) => (

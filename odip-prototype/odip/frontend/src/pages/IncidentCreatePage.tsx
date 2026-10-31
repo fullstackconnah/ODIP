@@ -575,7 +575,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
       stepKey: 'compliance',
       rows: [
         { label: 'Status', value: status ? (INCIDENT_STATUS_LABELS[status as IncidentStatus] ?? status) : '—' },
-        { label: 'NDIS Commission reporting', value: reportableClass ? (REPORTABLE_CLASS_LABELS[reportableClass as ReportableClass] ?? reportableClass) : '—' },
+        { label: 'Reporting deadline', value: reportableClass ? (REPORTABLE_CLASS_LABELS[reportableClass as ReportableClass] ?? reportableClass) : '—' },
         { label: 'Reviewed By', value: reviewedByStaffId ? staffName(reviewedByStaffId) : 'Not reviewed' },
         { label: 'Family Notified', value: familyNotified ? 'Yes' : 'No' },
         { label: 'Support Coordinator Notified', value: supportCoordinatorNotified ? 'Yes' : 'No' },

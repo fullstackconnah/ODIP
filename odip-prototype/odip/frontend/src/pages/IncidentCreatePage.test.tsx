@@ -1860,11 +1860,11 @@ describe('IncidentCreatePage - incident clock on the Compliance step', () => {
     renderCreatePage({ pathname: '/incidents/incident-1/edit' })
 
     await user.click(await screen.findByRole('button', { name: /Review & compliance/ }))
-    expect(screen.queryByLabelText('Reason for the change')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/^Reason for the change/)).not.toBeInTheDocument()
     expect(screen.queryByLabelText('5-day report sent')).not.toBeInTheDocument()
 
     await openAndSelect(user, 'Reporting deadline', 'Within 24 hours')
-    expect(screen.getByLabelText('Reason for the change')).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Reason for the change/)).toHaveAttribute('aria-required', 'true')
     expect(screen.getByLabelText('5-day report sent')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /Review$/i }))
@@ -1872,7 +1872,7 @@ describe('IncidentCreatePage - incident clock on the Compliance step', () => {
     expect(mockUpdateMutateAsync).not.toHaveBeenCalled()
 
     await user.click(screen.getByRole('button', { name: /Review & compliance/ }))
-    await user.type(screen.getByLabelText('Reason for the change'), 'Family raised it as serious.')
+    await user.type(screen.getByLabelText(/^Reason for the change/), 'Family raised it as serious.')
     await user.click(screen.getByRole('button', { name: /Review$/i }))
     await user.click(screen.getByRole('button', { name: /^save$/i }))
     expect(mockUpdateMutateAsync.mock.calls[0][0].data).toEqual(expect.objectContaining({ reportableClass: 'Within24h', reportableClassReason: 'Family raised it as serious.' }))

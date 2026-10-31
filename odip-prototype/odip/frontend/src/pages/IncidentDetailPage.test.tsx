@@ -282,8 +282,14 @@ describe('IncidentDetailPage - NDIS Commission reporting row', () => {
   it('says Not reportable for class None', () => {
     mockUseIncident.mockReturnValue({ data: baseIncident(), isLoading: false })
     renderPage()
-    expect(screen.getByText('NDIS Commission reporting')).toBeInTheDocument()
+    expect(screen.getByText('NDIS Commission')).toBeInTheDocument()
     expect(screen.getByText('Not reportable')).toBeInTheDocument()
+  })
+
+  it('marks an empty value cell with a dash the screen reader names', () => {
+    mockUseIncident.mockReturnValue({ data: baseIncident({ ...required, notifyDueAt: null, detailedReportDueAt: null }), isLoading: false })
+    renderPage()
+    expect(screen.getByLabelText('No reporting deadline')).toHaveTextContent('–')
   })
 
   it('shows the overdue line in words and the 5-day line when the deadline has passed', () => {
