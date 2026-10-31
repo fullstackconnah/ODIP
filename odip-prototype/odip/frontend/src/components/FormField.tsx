@@ -28,14 +28,13 @@ export type FormFieldProps = {
 // destructive; disabled is the recessed fill and muted ink, never an opacity; read-only (an input or textarea with the attribute, so a select or a button
 // never matches) is transparent with a dashed edge. The hover and focus rules exclude the invalid state so the edge colour does not depend on stylesheet order.
 // Exported so a trigger that is a button (Dropdown 'form') wears the same surface.
-export const fieldSurface = [
-  'px-3 rounded-[var(--radius-sm)] border border-[var(--color-field-border)] bg-[var(--color-field)] text-[var(--color-foreground)] placeholder:text-[var(--color-placeholder)] transition-shadow',
-  'hover:[&:not([aria-invalid=true]):not(:disabled):not([readonly])]:border-[var(--color-muted-foreground)]',
-  'focus:outline-none focus:ring-2 focus:[&:not([aria-invalid=true])]:border-[var(--color-ring)] focus:[&:not([aria-invalid=true])]:ring-[var(--color-ring)]',
-  'aria-[invalid=true]:border-[var(--color-destructive)] aria-[invalid=true]:focus:ring-[var(--color-destructive)]',
-  'disabled:cursor-not-allowed disabled:border-[var(--color-border)] disabled:bg-[var(--color-field-disabled)] disabled:text-[var(--color-muted-foreground)]',
-  '[&[readonly]]:border-dashed [&[readonly]]:border-[var(--color-border)] [&[readonly]]:bg-transparent',
-].join(' ')
+export const fieldSurface =
+  'px-3 rounded-[var(--radius-sm)] border border-[var(--color-field-border)] bg-[var(--color-field)] text-[var(--color-foreground)] placeholder:text-[var(--color-placeholder)] transition-shadow ' +
+  'hover:[&:not([aria-invalid=true]):not(:disabled):not([readonly])]:border-[var(--color-muted-foreground)] ' +
+  'focus:outline-none focus:ring-2 focus:[&:not([aria-invalid=true])]:border-[var(--color-ring)] focus:[&:not([aria-invalid=true])]:ring-[var(--color-ring)] ' +
+  'aria-[invalid=true]:border-[var(--color-destructive)] aria-[invalid=true]:focus:ring-[var(--color-destructive)] ' +
+  'disabled:cursor-not-allowed disabled:border-[var(--color-border)] disabled:bg-[var(--color-field-disabled)] disabled:text-[var(--color-muted-foreground)] ' +
+  '[&[readonly]]:border-dashed [&[readonly]]:border-[var(--color-border)] [&[readonly]]:bg-transparent'
 
 export const inputClass = `w-full h-[var(--control-h)] ${fieldSurface}`
 // A textarea must not carry the single-line control's fixed height, or its `rows` attribute is
