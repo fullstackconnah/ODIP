@@ -743,6 +743,23 @@ public enum RestrictivePracticeType
     Unclassified
 }
 
+/// <summary>How a restrictive practice is used: part of the everyday plan, or only when a set situation arises.</summary>
+public enum RestrictivePracticeUseKind
+{
+    Routine = 0,
+    Prn = 1
+}
+
+/// <summary>Where a behaviour support plan stands against its due date (see <c>BspTimeline</c>).</summary>
+public enum BspPlanState
+{
+    NotStarted,
+    Due,
+    DueSoon,
+    Overdue,
+    InPlace
+}
+
 /// <summary>
 /// Business-stream tags for a participant — which service line(s) they engage with (task 6b).
 /// Stored as a bitmask int on <see cref="Odip.Domain.Entities.Participant.ServiceStreams"/>,

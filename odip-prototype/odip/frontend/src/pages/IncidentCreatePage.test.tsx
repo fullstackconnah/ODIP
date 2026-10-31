@@ -806,6 +806,7 @@ describe('IncidentCreatePage — INC-05 link to an authorised practice', () => {
     await fillBasicsMinimallyAndNext(user, { title: 'RP incident', incidentTypeOption: /Restrictive Practice Use/i, selectParticipant: true })
     await openAndSelect(user, /Restrictive Practice Type/i, /^seclusion/i)
     await user.click(screen.getByRole('radio', { name: /Seclusion room during acute crisis/i }))
+    await user.click(screen.getByRole('radio', { name: 'As set out in the plan' }))
     await clickNext(user) // Restrictive Practice -> Incident Details
 
     expect((screen.getByPlaceholderText('Detailed description of the incident...') as HTMLTextAreaElement).value)
@@ -828,6 +829,7 @@ describe('IncidentCreatePage — INC-05 link to an authorised practice', () => {
     await user.type(screen.getByPlaceholderText('Detailed description of the incident...'), 'Already typed details')
     await clickBack(user) // Incident Details -> Restrictive Practice
     await user.click(screen.getByRole('radio', { name: /Seclusion room during acute crisis/i }))
+    await user.click(screen.getByRole('radio', { name: 'As set out in the plan' }))
     await clickNext(user) // Restrictive Practice -> Incident Details
 
     expect((screen.getByPlaceholderText('Detailed description of the incident...') as HTMLTextAreaElement).value)
@@ -844,6 +846,7 @@ describe('IncidentCreatePage — INC-05 link to an authorised practice', () => {
     await fillBasicsMinimallyAndNext(user, { title: 'RP incident', incidentTypeOption: /Restrictive Practice Use/i, selectParticipant: true })
     await openAndSelect(user, /Restrictive Practice Type/i, /^seclusion/i)
     await user.click(screen.getByRole('radio', { name: /Seclusion room during acute crisis/i }))
+    await user.click(screen.getByRole('radio', { name: 'As set out in the plan' }))
     await clickNext(user) // Restrictive Practice -> Incident Details
     await user.type(screen.getByPlaceholderText('Detailed description of the incident...'), ' Details here')
     await user.type(screen.getByLabelText(/Date & Time/i), '2026-09-01T10:00')
@@ -856,6 +859,7 @@ describe('IncidentCreatePage — INC-05 link to an authorised practice', () => {
     expect(payload).toMatchObject({
       restrictivePracticeType: 'Seclusion',
       restrictivePracticeId: 'rp-1',
+      restrictivePracticeUseVaried: false,
     })
     expect(payload.unapprovedRestrictivePracticeDetails).toBeUndefined()
   })
@@ -870,6 +874,7 @@ describe('IncidentCreatePage — INC-05 link to an authorised practice', () => {
     await fillBasicsMinimallyAndNext(user, { title: 'RP incident', incidentTypeOption: /Restrictive Practice Use/i, selectParticipant: true })
     await openAndSelect(user, /Restrictive Practice Type/i, /^seclusion/i)
     await user.click(screen.getByRole('radio', { name: /Seclusion room during acute crisis/i }))
+    await user.click(screen.getByRole('radio', { name: 'As set out in the plan' }))
     await clickNext(user) // Restrictive Practice -> Incident Details
     await fillDetailsMinimallyAndNext(user)
 
@@ -928,6 +933,24 @@ describe('IncidentCreatePage — INC-04 determination frozen on edit', () => {
     const box = await screen.findByRole('checkbox', { name: 'This use was not authorised' })
     expect(box).toBeChecked()
     expect(box).toBeEnabled()
+  })
+
+  // RP register PR 1 review D2: the varied question is hidden on edit, so nothing on the step may clear its stored answer.
+  it('keeps the stored varied answer when the tick is ticked and unticked, so Next still passes', async () => {
+    mockUseIncident.mockReturnValue({ data: { ...existingRpIncident, isRestrictivePracticeAuthorised: true, restrictivePracticeUseVaried: false } })
+    mockUseRestrictivePractices.mockReturnValue({ data: [
+      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room, acute crisis.', reviewDate: '2026-12-01', isActive: true, ...AUTHORISED },
+    ] })
+    const user = userEvent.setup()
+    renderCreatePage({ pathname: '/incidents/incident-1/edit' })
+
+    await user.click(await screen.findByRole('button', { name: /Restrictive Practice/i }))
+    const box = await screen.findByRole('checkbox', { name: 'This use was not authorised' })
+    await user.click(box)
+    await user.click(box)
+    await clickNext(user)
+
+    expect(await screen.findByPlaceholderText('Detailed description of the incident...')).toBeInTheDocument() // moved on: the hidden answer was not wiped
   })
 
   // Review N1: the banner agrees with the Review row and with what the server stores on save.
@@ -1355,7 +1378,7 @@ describe('IncidentCreatePage — IN-7 Witnesses step', () => {
         'immediateActionsTaken', 'incidentDateTime', 'incidentType', 'injuries', 'involvedParticipantId',
         'involvedStaffId', 'location', 'medicationAdministrationId', 'otherTypeSpecify', 'participantBookingId',
         'qscReferenceNumber', 'qscReportedAt', 'qscReportingStatus', 'reportableClass', 'reportableClassReason', 'reportedByStaffId', 'restrictivePracticeId',
-        'restrictivePracticeType', 'reviewNotes', 'reviewedByStaffId', 'serviceType', 'severity', 'shiftId',
+        'restrictivePracticeType', 'restrictivePracticeUseVaried', 'reviewNotes', 'reviewedByStaffId', 'serviceType', 'severity', 'shiftId',
         'shiftNoteId', 'status', 'supportCoordinatorNotified', 'supportCoordinatorNotifiedAt', 'title',
         'tripInstanceId', 'unapprovedRestrictivePracticeDetails', 'usedWithoutAuthorisation',
         'wereEmergencyServicesCalled', 'witnesses',
@@ -1563,6 +1586,7 @@ describe('IncidentCreatePage — restrictive practice authorisation', () => {
     renderCreatePage()
     await toPhysicalRestraintStep(user)
     await user.click(screen.getByRole('radio', { name: /Two-person hold/ }))
+    await user.click(screen.getByRole('radio', { name: 'As set out in the plan' }))
     await clickNext(user)
     await user.type(screen.getByLabelText(/Date & Time/i), '2026-09-01T10:00')
     await clickNext(user)
@@ -1589,6 +1613,143 @@ describe('IncidentCreatePage — restrictive practice authorisation', () => {
     await user.type(screen.getByLabelText(/Describe what was actually done/), 'Held him past the agreed two minutes.')
     await clickNext(user)
     expect(screen.getByPlaceholderText('Detailed description of the incident...')).toHaveValue('Held him past the agreed two minutes.')
+  })
+
+  // RP register PR 1: a use is judged on the incident's own date. The date is typed after this step, so go forward, type it, and come back.
+  async function pickThenSetIncidentDate(user: ReturnType<typeof userEvent.setup>, entryName: RegExp, incidentAt: string, lockedAtPick: boolean) {
+    await toPhysicalRestraintStep(user)
+    await user.click(screen.getByRole('radio', { name: entryName }))
+    if (lockedAtPick) await user.type(screen.getByLabelText(/Describe what was actually done/), 'Held him.')
+    else await user.click(screen.getByRole('radio', { name: 'As set out in the plan' }))
+    await clickNext(user)
+    await user.type(screen.getByLabelText(/Date & Time/i), incidentAt)
+    await clickBack(user)
+  }
+
+  it('does not lock an entry whose authorisation ended yesterday for an incident dated inside its window, and asks the varied question', async () => {
+    const ended = { ...authorisedEntry, id: 'rp-e', description: 'Ended hold.', authorisationDate: '2020-01-01', authorisationEndDate: '2026-10-30', isAuthorised: false }
+    mockUseRestrictivePractices.mockReturnValue({ data: [ended] })
+    const user = userEvent.setup()
+    renderCreatePage()
+    await pickThenSetIncidentDate(user, /Ended hold/, '2026-10-29T10:00', true)
+
+    const tick = screen.getByRole('checkbox', { name: 'This use was not authorised' })
+    expect(tick).not.toBeChecked()
+    expect(tick).toBeEnabled()
+    expect(screen.getByRole('radio', { name: 'Varied' })).toBeInTheDocument()
+  })
+
+  it('keeps a hand-ticked "not authorised" when the date moves out of the window and back', async () => {
+    const ended = { ...authorisedEntry, id: 'rp-e', description: 'Ended hold.', authorisationDate: '2020-01-01', authorisationEndDate: '2026-10-30', isAuthorised: false }
+    mockUseRestrictivePractices.mockReturnValue({ data: [ended] })
+    const user = userEvent.setup()
+    renderCreatePage()
+    await pickThenSetIncidentDate(user, /Ended hold/, '2026-10-29T10:00', true)
+    await user.click(screen.getByRole('checkbox', { name: 'This use was not authorised' }))
+
+    const moveDateTo = async (at: string) => {
+      await clickNext(user)
+      await user.clear(screen.getByLabelText(/Date & Time/i))
+      await user.type(screen.getByLabelText(/Date & Time/i), at)
+      await clickBack(user)
+    }
+    await moveDateTo('2026-10-31T10:00')
+    expect(screen.getByRole('checkbox', { name: 'This use was not authorised' })).toBeDisabled()
+    await moveDateTo('2026-10-29T10:00')
+    const tick = screen.getByRole('checkbox', { name: 'This use was not authorised' })
+    expect(tick).toBeEnabled()
+    expect(tick).toBeChecked()
+  })
+
+  it('reads a use dated before the authorisation started as not authorised: locked ticked, no varied question', async () => {
+    const later = { ...authorisedEntry, id: 'rp-l', description: 'Later hold.', authorisationDate: '2026-11-01', isAuthorised: true }
+    mockUseRestrictivePractices.mockReturnValue({ data: [later] })
+    const user = userEvent.setup()
+    renderCreatePage()
+    await pickThenSetIncidentDate(user, /Later hold/, '2026-10-28T10:00', false)
+
+    const tick = screen.getByRole('checkbox', { name: 'This use was not authorised' })
+    expect(tick).toBeChecked()
+    expect(tick).toBeDisabled()
+    expect(screen.queryByRole('radio', { name: 'Varied' })).not.toBeInTheDocument()
+  })
+
+  // RP register PR 1: the "varied?" question, asked once per new report of an authorised linked use.
+  it('asks whether the use followed the plan only for an authorised linked practice, with no default', async () => {
+    mockUseRestrictivePractices.mockReturnValue({ data: [authorisedEntry, notAuthorisedEntry] })
+    const user = userEvent.setup()
+    renderCreatePage()
+    await toPhysicalRestraintStep(user)
+    expect(screen.queryByRole('radio', { name: 'Varied' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('radio', { name: /Hand-over-hand/ }))
+    expect(screen.queryByRole('radio', { name: 'Varied' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('radio', { name: /Two-person hold/ }))
+    expect(screen.getByRole('radio', { name: 'As set out in the plan' })).not.toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Varied' })).not.toBeChecked()
+
+    await user.click(screen.getByRole('checkbox', { name: 'This use was not authorised' }))
+    expect(screen.queryByRole('radio', { name: 'Varied' })).not.toBeInTheDocument()
+  })
+
+  it('blocks Next until the question is answered, and asks for the varied description', async () => {
+    mockUseRestrictivePractices.mockReturnValue({ data: [authorisedEntry] })
+    const user = userEvent.setup()
+    renderCreatePage()
+    await toPhysicalRestraintStep(user)
+    await user.click(screen.getByRole('radio', { name: /Two-person hold/ }))
+    await clickNext(user)
+    expect(await screen.findByText('Choose whether this use followed the plan or was varied')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('radio', { name: 'Varied' }))
+    expect(screen.getByText('A varied use is flagged as a possible reportable incident for the NDIS Commission.')).toBeInTheDocument()
+    expect(screen.getByLabelText(/Describe how the use was varied/)).toHaveValue('')
+    await clickNext(user)
+    expect(await screen.findByText('Describe how the use was varied.')).toBeInTheDocument()
+  })
+
+  it('submits restrictivePracticeUseVaried true with the reporter words', async () => {
+    mockUseRestrictivePractices.mockReturnValue({ data: [authorisedEntry] })
+    const user = userEvent.setup()
+    renderCreatePage()
+    await toPhysicalRestraintStep(user)
+    await user.click(screen.getByRole('radio', { name: /Two-person hold/ }))
+    await user.click(screen.getByRole('radio', { name: 'Varied' }))
+    await user.type(screen.getByLabelText(/Describe how the use was varied/), 'Held for four minutes instead of two.')
+    await clickNext(user)
+    await user.type(screen.getByLabelText(/Date & Time/i), '2026-09-01T10:00')
+    await clickNext(user)
+    await clickNext(user)
+    await user.click(screen.getByRole('button', { name: /submit incident report/i }))
+
+    expect(mockCreateMutateAsync.mock.calls[0][0]).toMatchObject({
+      restrictivePracticeId: 'rp-a', restrictivePracticeUseVaried: true, description: 'Held for four minutes instead of two.',
+    })
+  })
+
+  it('clears the answer when a different practice is picked', async () => {
+    mockUseRestrictivePractices.mockReturnValue({ data: [authorisedEntry, notAuthorisedEntry] })
+    const user = userEvent.setup()
+    renderCreatePage()
+    await toPhysicalRestraintStep(user)
+    await user.click(screen.getByRole('radio', { name: /Two-person hold/ }))
+    await user.click(screen.getByRole('radio', { name: 'As set out in the plan' }))
+    await user.click(screen.getByRole('radio', { name: /Hand-over-hand/ }))
+    await user.click(screen.getByRole('radio', { name: /Two-person hold/ }))
+
+    expect(screen.getByRole('radio', { name: 'As set out in the plan' })).not.toBeChecked()
+  })
+
+  it('shows a support worker the question too', async () => {
+    localStorage.setItem('odip_user', JSON.stringify({ id: 'staff-1', role: 'SupportWorker' }))
+    mockUseRestrictivePractices.mockReturnValue({ data: [authorisedEntry] })
+    const user = userEvent.setup()
+    renderCreatePage()
+    await toPhysicalRestraintStep(user)
+    await user.click(screen.getByRole('radio', { name: /Two-person hold/ }))
+
+    expect(screen.getByRole('radio', { name: 'Varied' })).toBeInTheDocument()
   })
 
   // Review N3: a link to another participant's register entry would only fail on submit.

@@ -163,6 +163,18 @@ export function isRpAuthorised(p: Pick<RestrictivePracticeDto, 'isAuthorised'>):
   return p.isAuthorised
 }
 
+type RpDated = Pick<RestrictivePracticeDto, 'isAuthorised'> & Partial<Pick<RestrictivePracticeDto, 'isActive' | 'authorisedBy' | 'authorisationDate' | 'authorisationEndDate'>>
+
+/**
+ * The same rule judged on an incident's own date ("YYYY-MM-DD"; owner Q13: a use after the end date, or before the authorisation date, is not authorised),
+ * mirroring RestrictivePracticeAuthorisation.IsAuthorised step for step. Without a date it is the server's verdict on the organisation's today.
+ */
+export function isRpAuthorisedOn(p: RpDated, onDate?: string | null): boolean {
+  if (!onDate) return p.isAuthorised
+  return !!p.isActive && !!p.authorisedBy?.trim() && !!p.authorisationDate && p.authorisationDate <= onDate
+    && (!p.authorisationEndDate || onDate <= p.authorisationEndDate)
+}
+
 /**
  * INC-04 client-side preview of the authorised/unauthorised determination — mirrors
  * IncidentsController.DetermineRestrictivePracticeAuthorisationAsync step for step, so the banner on
@@ -176,13 +188,14 @@ export type RpAuthorisationPreview = 'authorised' | 'unauthorised' | 'unknown'
 export function previewRpAuthorisation(
   involvedParticipantId: string | undefined | null,
   restrictivePracticeType: string | undefined | null,
-  participantPractices: Pick<RestrictivePracticeDto, 'id' | 'type' | 'isActive' | 'isAuthorised'>[],
+  participantPractices: (Pick<RestrictivePracticeDto, 'id' | 'type'> & RpDated)[],
   selection: { restrictivePracticeId?: string; unapproved?: boolean; usedWithoutAuthorisation?: boolean } = {},
+  onDate?: string | null,
 ): RpAuthorisationPreview {
   if (!involvedParticipantId || !restrictivePracticeType) return 'unknown'
   if (selection.unapproved || selection.usedWithoutAuthorisation) return 'unauthorised'
   return participantPractices.some(p => p.type === restrictivePracticeType
-    && (!selection.restrictivePracticeId || p.id === selection.restrictivePracticeId) && isRpAuthorised(p))
+    && (!selection.restrictivePracticeId || p.id === selection.restrictivePracticeId) && isRpAuthorisedOn(p, onDate))
     ? 'authorised' : 'unauthorised'
 }
 

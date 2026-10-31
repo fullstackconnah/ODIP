@@ -23,12 +23,14 @@ public static class QscReporting
     public static readonly IncidentType[] RequiredTypes =
     {
         IncidentType.Abuse, IncidentType.Neglect, IncidentType.Death,
-        IncidentType.RestrictivePracticeUse, IncidentType.MissingPerson
+        IncidentType.MissingPerson
     };
 
-    /// <summary>The class an incident starts with: Within24h for a critical incident, a required type or an unauthorised restrictive practice, else None.</summary>
-    public static ReportableClass DefaultClass(IncidentSeverity severity, IncidentType type, bool? isRestrictivePracticeAuthorised) =>
+    /// <summary>The class an incident starts with: Within24h for a critical incident, a required type, an unauthorised restrictive practice, or a restrictive practice use that was not both authorised and used as set out in the plan, else None.</summary>
+    public static ReportableClass DefaultClass(IncidentSeverity severity, IncidentType type, bool? isRestrictivePracticeAuthorised, bool? restrictivePracticeUseVaried) =>
         severity == IncidentSeverity.Critical || RequiredTypes.Contains(type) || isRestrictivePracticeAuthorised == false
+        // Q13 (c), owner 2026-10-31: an RP use is reportable unless it was authorised on its date AND used as set out in the plan; an unanswered question fails safe.
+        || (type == IncidentType.RestrictivePracticeUse && !(isRestrictivePracticeAuthorised == true && restrictivePracticeUseVaried == false))
             ? ReportableClass.Within24h : ReportableClass.None;
 
     /// <summary>The status follows the class and the report date; nobody sets it by hand. Class None is NotRequired even with a voluntary report date.</summary>

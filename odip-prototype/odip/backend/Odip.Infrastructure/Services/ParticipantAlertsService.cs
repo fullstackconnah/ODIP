@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -17,6 +18,8 @@ namespace Odip.Infrastructure.Services;
 /// Rules implemented (five from the brief; two from the original list were dropped — see below):
 /// 1. <b>restrictive-practice-review-overdue</b> (Warning) — an active <see cref="RestrictivePractice"/>
 ///    row whose <see cref="RestrictivePractice.ReviewDate"/> is in the past.
+///    Plus three behaviour support plan rules on active entries with a first use date: <b>rp-interim-bsp-due</b> (Warning, within
+///    <see cref="BspTimeline.DueSoonDays"/> days), <b>rp-interim-bsp-overdue</b> and <b>rp-comprehensive-bsp-overdue</b> (Critical).
 /// 2. <b>high-risk-medication-witness-gap</b> (Critical) — an active, <see cref="ParticipantMedication.IsHighRisk"/>
 ///    medication with an Administered dose in the last 7 days whose <see cref="MedicationAdministration.WitnessStatus"/>
 ///    is Pending or Declined (i.e. never reached Approved).
@@ -151,6 +154,31 @@ public class ParticipantAlertsService
             Add(rp.ParticipantId, "restrictive-practice-review-overdue", AlertSeverity.Warning,
                 $"{rp.Type} restrictive practice review was due {rp.ReviewDate:yyyy-MM-dd} and is overdue",
                 "restrictive-practices");
+        }
+
+        // ── Behaviour support plans: due dates run from the first use date (see BspTimeline) ──
+        var bspEntries = await _db.RestrictivePractices
+            .Where(rp => participantIds.Contains(rp.ParticipantId) && rp.IsActive && rp.FirstUsedOn != null && rp.ComprehensiveBspDate == null)
+            .Select(rp => new { rp.ParticipantId, rp.Type, FirstUsedOn = rp.FirstUsedOn!.Value, rp.InterimBspDate })
+            .ToListAsync(ct);
+        foreach (var rp in bspEntries)
+        {
+            var phrase = RestrictivePracticeAuthorisation.TypePhrase(rp.Type);
+            var interimDue = BspTimeline.InterimDue(rp.FirstUsedOn);
+            var comprehensiveDue = BspTimeline.ComprehensiveDue(rp.FirstUsedOn);
+            if (rp.InterimBspDate == null)
+            {
+                var state = BspTimeline.State(interimDue, null, today);
+                if (state == BspPlanState.Overdue)
+                    Add(rp.ParticipantId, "rp-interim-bsp-overdue", AlertSeverity.Critical,
+                        $"Interim behaviour support plan for {phrase} was due {interimDue.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)} and is overdue", "restrictive-practices");
+                else if (state == BspPlanState.DueSoon)
+                    Add(rp.ParticipantId, "rp-interim-bsp-due", AlertSeverity.Warning,
+                        $"Interim behaviour support plan for {phrase} is due {interimDue.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)}", "restrictive-practices");
+            }
+            if (BspTimeline.State(comprehensiveDue, null, today) == BspPlanState.Overdue)
+                Add(rp.ParticipantId, "rp-comprehensive-bsp-overdue", AlertSeverity.Critical,
+                    $"Comprehensive behaviour support plan for {phrase} was due {comprehensiveDue.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)} and is overdue", "restrictive-practices");
         }
 
         // ── Rules 2 & 5 share the active-medications + recent-administrations data ──

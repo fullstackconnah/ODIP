@@ -1441,6 +1441,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<int?>("RestrictivePracticeType")
                         .HasColumnType("integer");
 
+                    b.Property<bool?>("RestrictivePracticeUseVaried")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("ReviewNotes")
                         .HasColumnType("text");
 
@@ -4128,9 +4131,15 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateOnly?>("AuthorisationDate")
                         .HasColumnType("date");
 
+                    b.Property<DateOnly?>("AuthorisationEndDate")
+                        .HasColumnType("date");
+
                     b.Property<string>("AuthorisedBy")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<DateOnly?>("ComprehensiveBspDate")
+                        .HasColumnType("date");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
@@ -4140,6 +4149,12 @@ namespace Odip.Infrastructure.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
 
+                    b.Property<DateOnly?>("FirstUsedOn")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("InterimBspDate")
+                        .HasColumnType("date");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
@@ -4148,6 +4163,9 @@ namespace Odip.Infrastructure.Migrations
 
                     b.Property<Guid?>("RelatedMedicationId")
                         .HasColumnType("uuid");
+
+                    b.Property<DateOnly?>("ReportingFromMonth")
+                        .HasColumnType("date");
 
                     b.Property<bool?>("RequiresReporting")
                         .HasColumnType("boolean");
@@ -4164,6 +4182,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateTime>("UpdatedAt")
                         .IsConcurrencyToken()
                         .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("UseKind")
+                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 

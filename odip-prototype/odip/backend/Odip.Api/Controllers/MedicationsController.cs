@@ -784,6 +784,7 @@ public class MedicationsController : ControllerBase
     private static MedicationDetailDto ToDetailDto(ParticipantMedication m, string participantName, int prnDosesInLast24h, DateOnly providerToday, RestrictivePractice? entry)
     {
         var list = ToListDto(m, participantName, providerToday, entry);
+        if (entry != null) entry.RelatedMedication ??= m; // the DTO's use kind follows this medicine
         return new MedicationDetailDto
         {
             Id = list.Id,
