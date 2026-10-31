@@ -21,7 +21,7 @@ test('a participant in onboarding begins services, is rostered, and is made acti
   // 2. The checklist shows the open items.
   await page.goto(`/onboarding/${id}`);
   await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
-  const list = page.getByRole('list', { name: /of 4 done$/ });
+  const list = page.getByRole('list', { name: /of 6 done$/ });
   await expect(list).toBeVisible();
   await expect(list.getByRole('listitem').filter({ hasText: 'Service needs' })).toContainText('To do');
   await expect(list.getByRole('listitem').filter({ hasText: 'Signed agreement' })).toContainText('To do');

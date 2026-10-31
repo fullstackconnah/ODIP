@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { CheckCircle2, Circle } from 'lucide-react'
-import { useBeginServices, useMakeParticipantActive, useOnboarding, useParticipant, useRecordOnboardingAgreement } from '@/api/hooks'
+import { useBeginServices, useMakeParticipantActive, useOnboarding, useParticipant, useRecordOnboardingAgreement, useRecordOnboardingExplained } from '@/api/hooks'
 import type { OnboardingChecklistItem, ParticipantOnboardingDto } from '@/api/types/inquiries'
 import { BackButton } from '@/components/BackButton'
 import { Button } from '@/components/Button'
@@ -14,6 +14,7 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { TextAreaField } from '@/components/TextAreaField'
 import { TextField } from '@/components/TextField'
 import { ToggleGroup } from '@/components/ToggleGroup'
+import { localIsoDate } from '@/lib/dateOnly'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { usePermissions } from '@/lib/permissions'
 import { useIntakeCompleteNotice } from './intake/intakeComplete'
@@ -25,7 +26,7 @@ import { retryingAfterError } from '@/lib/queryPhase'
 /**
  * The onboarding checklist of one participant (owner decisions 2026-10-13): a header (name, stage, View record), one action bar (Begin
  * services, Make active) and one list of the items the server derives from data. Every item is fixed on its own screen; the agreement record is
- * the one thing recorded here. Roles that cannot change the lifecycle see the list read-only.
+ * the three things recorded here (the agreement, how to complain, rights explained). Roles that cannot change the lifecycle see the list read-only.
  */
 export default function OnboardingDetailPage() {
   const { id = '' } = useParams<{ id: string }>()
@@ -38,7 +39,7 @@ export default function OnboardingDetailPage() {
   const beginServices = useBeginServices()
   const makeActive = useMakeParticipantActive()
   const [confirming, setConfirming] = useState<'begin' | 'active' | null>(null)
-  const [recording, setRecording] = useState(false)
+  const [recording, setRecording] = useState<'agreement' | 'explained' | null>(null)
   const d = detail.data
 
   if (detail.isLoading && !retryingAfterError(detail)) return <PageState kind="loading" noun="onboarding record" />
@@ -120,7 +121,7 @@ export default function OnboardingDetailPage() {
                 {item.missing ? <p className="text-[13px] text-[var(--color-muted-foreground)]">{item.missing}</p> : null}
               </div>
             </div>
-            <Fix item={item} participantId={id} canEdit={canAct} canOpenDraft={canAct && canAccessPage('agreement-drafts')} canOpenFunding={canAct && canManageFunding} onRecord={() => setRecording(true)} />
+            <Fix item={item} participantId={id} canEdit={canAct} canOpenDraft={canAct && canAccessPage('agreement-drafts')} canOpenFunding={canAct && canManageFunding} onRecord={() => setRecording(item.key === 'agreement' ? 'agreement' : 'explained')} />
           </li>
         ))}
       </ul>
@@ -151,7 +152,8 @@ export default function OnboardingDetailPage() {
         {openList}
       </>}
     />
-    {recording && <AgreementRecordDialog participantId={id} detail={d} onClose={() => setRecording(false)} />}
+    {recording === 'agreement' && <AgreementRecordDialog participantId={id} detail={d} onClose={() => setRecording(null)} />}
+    {recording === 'explained' && <ExplainedRecordDialog participantId={id} detail={d} onClose={() => setRecording(null)} />}
   </div>
 }
 
@@ -164,7 +166,7 @@ function Fix({ item, participantId, canEdit, canOpenDraft, canOpenFunding, onRec
   if (item.key === 'profile') return canEdit ? <Button {...look} to={`/participants/${participantId}/profile?from=onboarding`}>Edit profile</Button> : null
   // The draft carries money, so only the roles the API admits to it are sent there.
   if (item.key === 'serviceNeeds') return canOpenDraft ? <Button {...look} to={`/participants/${participantId}/agreement-draft?from=onboarding`}>Open agreement draft</Button> : null
-  if (item.key === 'agreement') return canEdit ? <Button {...look} onClick={onRecord}>Record it</Button> : null
+  if (item.key === 'agreement' || item.key === 'complaints' || item.key === 'rights') return canEdit ? <Button {...look} onClick={onRecord}>Record it</Button> : null
   return canOpenFunding ? <Button {...look} to={`/participants/${participantId}?tab=funding`}>Funding tab</Button> : null
 }
 
@@ -199,6 +201,42 @@ function AgreementRecordDialog({ participantId, detail, onClose }: { participant
         {mode === 'signed'
           ? <TextField label="Signed on" type="date" required value={signedOn} onChange={e => setSignedOn(e.target.value)} error={shownError} />
           : <TextAreaField label="Reason there is no written agreement" required rows={3} maxLength={500} value={reason} onChange={e => setReason(e.target.value)} error={shownError} />}
+        {formError && <Callout tone="error">{formError}</Callout>}
+      </form>
+    </Modal>
+  )
+}
+
+/** The two dates, each optional; the server replaces both, so a blank field clears that item. The client checks match the server's (not in the future, not before 1990). */
+const EXPLAINED_MIN = '1990-01-01'
+
+function ExplainedRecordDialog({ participantId, detail, onClose }: { participantId: string; detail: ParticipantOnboardingDto; onClose: () => void }) {
+  const record = useRecordOnboardingExplained(participantId)
+  const [complaints, setComplaints] = useState(detail.complaintsExplainedOn ?? '')
+  const [rights, setRights] = useState(detail.rightsExplainedOn ?? '')
+  const today = localIsoDate()
+  // shortcut: the browser's today stands in for the provider's; the server re-checks with the provider's own zone.
+  const dateError = (v: string) => v > today ? 'The date cannot be in the future.' : v && v < EXPLAINED_MIN ? 'Check the date: it is before 1990.' : undefined
+  const errors = fieldErrors(record.error)
+  const complaintsError = dateError(complaints) ?? errors.complaintsExplainedOn
+  const rightsError = dateError(rights) ?? errors.rightsExplainedOn
+  const formError = record.error && !errors.complaintsExplainedOn && !errors.rightsExplainedOn ? extractErrorMessage(record.error, 'Could not save. Please try again.') : null
+  const canSave = (complaints !== '' || rights !== '') && !dateError(complaints) && !dateError(rights) && !record.isPending
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault()
+    if (!canSave) return
+    record.mutate({ complaintsExplainedOn: complaints || null, rightsExplainedOn: rights || null }, { onSuccess: onClose })
+  }
+
+  return (
+    <Modal open onClose={onClose} title="Complaints and rights" size="sm" footer={<>
+      <Button variant="secondary" onClick={onClose}>Cancel</Button>
+      <Button type="submit" form="explained-record" disabled={!canSave}>Save</Button>
+    </>}>
+      <form id="explained-record" onSubmit={submit} className="flex flex-col gap-[var(--field-gap-y)]">
+        <TextField label="Told how to make a complaint on" type="date" min={EXPLAINED_MIN} max={today} value={complaints} onChange={e => setComplaints(e.target.value)} error={complaintsError} />
+        <TextField label="Rights explained on" type="date" min={EXPLAINED_MIN} max={today} value={rights} onChange={e => setRights(e.target.value)} error={rightsError} />
         {formError && <Callout tone="error">{formError}</Callout>}
       </form>
     </Modal>

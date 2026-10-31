@@ -36,6 +36,12 @@ public class ImportUntouchedTests
                 onboarding.RecordAgreement(new DateOnly(2026, 10, 1), null, "coordinator", DateTime.UtcNow);
                 d.ParticipantOnboardings.Add(onboarding);
             }),
+            ("has onboarding progress", (d, id) =>
+            {
+                var onboarding = new ParticipantOnboarding { Id = Guid.NewGuid(), ParticipantId = id };
+                onboarding.RecordExplained(new DateOnly(2026, 10, 1), null, "coordinator", DateTime.UtcNow);
+                d.ParticipantOnboardings.Add(onboarding);
+            }),
             ("has begun services", (d, id) => d.Participants.Add(new Participant { Id = id, FirstName = "B", LastName = "S", IsDraft = true, IsActive = true, ServicesStartedAt = DateTime.UtcNow })),
             ("was made active", (d, id) =>
             {

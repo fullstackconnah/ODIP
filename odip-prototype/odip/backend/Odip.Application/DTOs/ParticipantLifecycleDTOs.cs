@@ -217,8 +217,8 @@ public record IntakeVisitDto
 }
 
 /// <summary>
-/// The onboarding checklist (owner decision 2026-10-13), read-only and derived from data: clients cannot tick an item. Exactly four items,
-/// three for a participant who is not NDIS-funded (no "Funding" item), in this order.
+/// The onboarding checklist (owner decision 2026-10-13), read-only and derived from data: clients cannot tick an item. Exactly six items,
+/// five for a participant who is not NDIS-funded (no "Funding" item), in this order.
 /// </summary>
 public record ParticipantOnboardingDto
 {
@@ -231,11 +231,14 @@ public record ParticipantOnboardingDto
     /// <summary>The agreement record, for the form that edits it: a signed date or a reason there is no written agreement (at most one is set).</summary>
     public DateOnly? AgreementSignedOn { get; init; }
     public string? NoAgreementReason { get; init; }
+    /// <summary>The dates "Told how to make a complaint" and "Rights explained" were recorded, for the form that edits them; null until recorded.</summary>
+    public DateOnly? ComplaintsExplainedOn { get; init; }
+    public DateOnly? RightsExplainedOn { get; init; }
 }
 
 /// <summary>
 /// One checklist item. <see cref="Key"/> names it and the screen's fix for it: <c>profile</c> (Edit profile), <c>serviceNeeds</c> (Open agreement
-/// draft), <c>agreement</c> (Record it: POST .../onboarding/agreement-record), <c>funding</c> (the Funding tab).
+/// draft), <c>agreement</c> (Record it: POST .../onboarding/agreement-record), <c>complaints</c> and <c>rights</c> (Record it: POST .../onboarding/explained-record), <c>funding</c> (the Funding tab).
 /// </summary>
 public record OnboardingChecklistItemDto
 {
@@ -251,6 +254,13 @@ public record RecordOnboardingAgreementDto
 {
     public DateOnly? SignedOn { get; init; }
     public string? NoAgreementReason { get; init; }
+}
+
+/// <summary>POST /inquiries/{id}/onboarding/explained-record: replaces both dates; a null clears that one, and at least one is required.</summary>
+public record RecordOnboardingExplainedDto
+{
+    public DateOnly? ComplaintsExplainedOn { get; init; }
+    public DateOnly? RightsExplainedOn { get; init; }
 }
 
 /// <summary>Server-derived worklist row (the Onboarding tab); clients cannot choose a lifecycle stage.</summary>

@@ -3448,8 +3448,18 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateOnly?>("AgreementSignedOn")
                         .HasColumnType("date");
 
+                    b.Property<DateOnly?>("ComplaintsExplainedOn")
+                        .HasColumnType("date");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("ExplainedRecordedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ExplainedRecordedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<string>("NoAgreementReason")
                         .HasMaxLength(500)
@@ -3467,6 +3477,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<string>("ProfileCompletedBy")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<DateOnly?>("RightsExplainedOn")
+                        .HasColumnType("date");
 
                     b.Property<bool>("ServiceAgreementSigned")
                         .HasColumnType("boolean");
