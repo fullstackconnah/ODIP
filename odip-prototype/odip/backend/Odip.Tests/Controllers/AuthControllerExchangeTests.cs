@@ -899,6 +899,39 @@ public class AuthControllerExchangeTests
     }
 
     [Fact]
+    public async Task A_held_user_is_refused_at_the_exchange_and_never_stamped_until_an_Admin_confirms_the_address()
+    {
+        using var db = CreateDb();
+        var tenant = SeedTenant(db);
+        var held = SeedUser(db, tenant.Id, "held@other.org");
+        held.SignInAddressUnconfirmed = true;
+        db.SaveChanges();
+
+        var refused = CreateController(db, "held@other.org");
+        AssertRefusal(await Exchange(refused), "AddressUnconfirmed", "Your organisation needs to confirm this email address before you can sign in to Bunya Support.");
+        Assert.False(refused.Response.Headers.ContainsKey("Set-Cookie"));   // no session on the refusal
+        Assert.Null(StoredLastLoginAt(db, held.Id));
+
+        held.SignInAddressUnconfirmed = false;   // an Admin confirmed it
+        db.SaveChanges();
+        Assert.IsType<OkObjectResult>((await Exchange(CreateController(db, "held@other.org"))).Result);
+        Assert.NotNull(StoredLastLoginAt(db, held.Id));
+    }
+
+    [Fact]
+    public async Task A_held_user_in_an_inactive_organisation_is_told_the_organisation_is_inactive_first()
+    {
+        using var db = CreateDb();
+        var closed = SeedTenant(db, isActive: false);
+        var held = SeedUser(db, closed.Id, "held@other.org");
+        held.SignInAddressUnconfirmed = true;
+        db.SaveChanges();
+
+        AssertRefusal(await Exchange(CreateController(db, "held@other.org")), "TenantInactive", "The organisation this account belongs to is inactive.");
+        Assert.Null(StoredLastLoginAt(db, held.Id));
+    }
+
+    [Fact]
     public async Task A_provider_that_is_not_listed_is_refused_as_ProviderNotAllowed()
     {
         using var db = CreateDb();

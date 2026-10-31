@@ -1,11 +1,13 @@
 import { useParams, Link } from 'react-router-dom'
 import { useMemo, useState } from 'react'
-import { useStaffOverview, useSettings, useEnsureStaffSignInAccount, useRecordInvitesSent, useModuleVisibility, useStaffLeaveBalances } from '@/api/hooks'
+import { useStaffOverview, useSettings, useEnsureStaffSignInAccount, useConfirmStaffAddress, useRecordInvitesSent, useModuleVisibility, useStaffLeaveBalances } from '@/api/hooks'
 import { Tabs } from '@/components/Tabs'
 import { LeaveBalances } from '@/components/LeaveBalances'
 import { Card } from '@/components/Card'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/Button'
+import { Callout } from '@/components/Callout'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { NoticesRegion } from '@/components/NoticesRegion'
 import { BackButton } from '@/components/BackButton'
 import { useTabParam } from '@/hooks/useTabParam'
@@ -18,7 +20,8 @@ import { EmptyState } from '@/components/EmptyState'
 import { usePermissions } from '@/lib/permissions'
 import { canSendSetPasswordEmail } from '@/lib/setPasswordEmail'
 import { describeEmailOutcome, ensureAndSendSetPasswordEmail } from '@/lib/signInEmail'
-import { formatDateAu } from '@/lib/utils'
+import { ADDRESS_CHECK_SENTENCE } from '@/lib/addressConfirmation'
+import { extractErrorMessage, formatDateAu } from '@/lib/utils'
 import { staffCredentials, type StaffCredential } from '@/lib/credentials'
 import { DEADLINE_TONE, deadlineLabel } from '@/lib/deadline'
 import { formatShiftTimeRange, formatVarianceMinutes } from '@/pages/rostering/lib/roster'
@@ -58,6 +61,10 @@ export default function StaffDetailPage() {
   const canManageSignIn = (isSuperAdmin || isAdmin || isCoordinator) && canSendSetPasswordEmail()
   const ensureAccount = useEnsureStaffSignInAccount()
   const recordInvite = useRecordInvitesSent()
+  // POST /staff/{id}/confirm-address takes the same three roles. It needs no Firebase, so it is not behind canSendSetPasswordEmail.
+  const canConfirmAddress = isSuperAdmin || isAdmin || isCoordinator
+  const confirmAddress = useConfirmStaffAddress()
+  const [confirming, setConfirming] = useState(false)
   // What became of each "Send set-password email", kept at the top of the page until dismissed.
   const { notices, notify, dismiss } = useNotices()
   const [sending, setSending] = useState(false)
@@ -96,6 +103,19 @@ export default function StaffDetailPage() {
     notify(tone, overview.staff.fullName, message, overview.staff.id)
   }
 
+  // The sync brought an address the organisation has not checked: until an Admin confirms it, the person cannot sign in (so there is no invite to send).
+  async function handleConfirmAddress() {
+    if (!overview || confirmAddress.isPending) return
+    const { id: staffId, fullName } = overview.staff
+    try {
+      await confirmAddress.mutateAsync(staffId)
+      notify('success', fullName, `${fullName}'s address is confirmed. You can send their sign-in invite now.`, staffId)
+    } catch (e) {
+      notify('danger', fullName, extractErrorMessage(e, "That address couldn't be confirmed. Try again."), staffId)
+    }
+    setConfirming(false)
+  }
+
   // Dismissing the last notice hands focus back to the button that raised it.
   const focusSendButton = () => document.querySelector<HTMLElement>('[data-send-set-password]')
 
@@ -132,7 +152,12 @@ export default function StaffDetailPage() {
                     <CalendarOff className="w-4 h-4" /> Leave & availability
                   </Button>
                 )}
-                {canManageSignIn && staff.isActive && !!staff.email && (
+                {canConfirmAddress && staff.isActive && staff.signInAddressUnconfirmed === true && (
+                  <Button variant="secondary" size="md" onClick={() => setConfirming(true)} data-confirm-address>
+                    <Mail className="w-4 h-4" /> Confirm address
+                  </Button>
+                )}
+                {canManageSignIn && staff.isActive && !!staff.email && staff.signInAddressUnconfirmed !== true && (
                   <>
                   <Button
                     variant="secondary"
@@ -158,6 +183,20 @@ export default function StaffDetailPage() {
           />
         </div>
       </div>
+
+      {canConfirmAddress && staff.isActive && staff.signInAddressUnconfirmed === true && (
+        <Callout tone="warning">{`${staff.email} came from Employment Hero and isn't at your organisation's domain or a common email provider. ${staff.firstName} can't sign in until you confirm it.`}</Callout>
+      )}
+      <ConfirmDialog
+        open={confirming}
+        title="Check this address"
+        message={<><strong className="break-all">{staff.email}</strong><br />{ADDRESS_CHECK_SENTENCE}</>}
+        confirmLabel="Use this address"
+        cancelLabel="Go back"
+        loading={confirmAddress.isPending}
+        onConfirm={handleConfirmAddress}
+        onCancel={() => setConfirming(false)}
+      />
 
       {/* Notices for the actions above. Always mounted (a live region must exist before its content), and collapsed while empty. */}
       <NoticesRegion notices={notices} onDismiss={dismiss} focusAfterDismiss={focusSendButton} className="empty:-mt-[var(--section-gap)]" />

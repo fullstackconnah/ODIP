@@ -39,8 +39,11 @@ export interface StaffListDto {
   notes: string | null
 }
 
-/** `hasSignedIn`: the person has ever signed in (the server sends the fact, not their sign-in time). */
-export type StaffDetailDto = StaffListDto & { signInInviteSentAt?: string | null; hasSignedIn?: boolean | null }
+/**
+ * `hasSignedIn`: the person has ever signed in (the server sends the fact, not their sign-in time). `signInAddressUnconfirmed`: the Employment Hero sync brought an
+ * unusual address and an Admin has yet to confirm it, so the person cannot sign in (null for roles that cannot see sign-in facts).
+ */
+export type StaffDetailDto = StaffListDto & { signInInviteSentAt?: string | null; hasSignedIn?: boolean | null; signInAddressUnconfirmed?: boolean | null }
 
 export interface CreateStaffDto {
   firstName: string

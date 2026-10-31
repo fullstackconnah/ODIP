@@ -240,4 +240,20 @@ public class ImportInvitesTests
         Assert.Equal(waiting.Skip(1).Select(u => u.Id).OrderBy(id => id), second.Invites.Select(i => i.StaffId).OrderBy(id => id));
         firebase.Verify(f => f.EnsureSignInAccountAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Exactly(149));
     }
+
+    [Fact]
+    public async Task Import_invites_skip_a_member_with_a_held_address_and_count_them_as_cannot_invite()
+    {
+        var (db, controller, firebase, batchId, _) = await StaffImportedAsync();
+        using var _ = db;
+        (await db.Users.SingleAsync(u => u.Email == "jo@example.com")).SignInAddressUnconfirmed = true;
+        await db.SaveChangesAsync();
+
+        Assert.DoesNotContain("jo@example.com", await InvitedEmails(controller, batchId, includeInvitedBefore: true));
+        var answer = Assert.IsType<OkObjectResult>((await controller.InviteCount(batchId, CancellationToken.None)).Result);
+
+        // jo (held) cannot be invited; bo signed in; al is the one left to invite.
+        Assert.Equal(new ImportInviteCountDto(1, 0, 1, 1), Assert.IsType<ApiResponse<ImportInviteCountDto>>(answer.Value).Data);
+        firebase.Verify(f => f.EnsureSignInAccountAsync("jo@example.com", It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
 }

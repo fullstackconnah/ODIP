@@ -382,6 +382,7 @@ public class AdminUsersController : ControllerBase
         user.FirstName = dto.FirstName;
         user.LastName = dto.LastName;
         user.Email = email;
+        if (email != originalEmail) user.SignInAddressUnconfirmed = false;   // a SuperAdmin typed the new address: a person has decided on it
         user.Username = dto.Username;
         user.Role = role;
         user.IsActive = dto.IsActive;
@@ -445,6 +446,9 @@ public class AdminUsersController : ControllerBase
 
         if (string.IsNullOrWhiteSpace(user.Email))
             return BadRequest(ApiResponse<object>.Fail("This user has no email address."));
+
+        if (user.SignInAddressUnconfirmed is true)
+            return BadRequest(ApiResponse<object>.Fail(AddressConfirmation.HeldMessage(user.FullName)));
 
         var email = EmailIdentity.Normalise(user.Email);
 

@@ -223,10 +223,20 @@ public sealed class EmploymentHeroStaffSync
         public string Key => $"{Kind}:{UserId?.ToString() ?? EmployeeId}";
     }
 
+    /// <summary>
+    /// Whether this person's sign-in address is held for an Admin's confirmation (User.SignInAddressUnconfirmed): never assessed, never signed in, and an
+    /// address the manual add would have asked about. A row a person has decided on (false) or already held (true) is left alone, so a confirmed address is
+    /// not held again by the next run.
+    /// </summary>
+    private static bool Holds(User u, string? tenantDomain) =>
+        u.SignInAddressUnconfirmed is null && u.LastLoginAt is null && !PlaceholderEmail.Covers(EmailIdentity.Normalise(u.Email))
+        && AddressConfirmation.Needed(EmailIdentity.Normalise(u.Email), tenantDomain);
+
     private async Task<List<Problem>> ApplyAsync(OdipDbContext db, Guid tenantId, List<EhEmployee> employees, DateOnly today, EmploymentHeroSyncLog log, CancellationToken ct)
     {
         var problems = new List<Problem>();
         var creator = new StaffCreateService(db, _config);
+        var tenantDomain = await creator.TenantEmailDomainAsync(tenantId, ct);
         // Every staff member of the organisation, archived ones too (their addresses still count); never a SuperAdmin.
         var users = await db.Users.Where(u => u.TenantId == tenantId && u.Role != UserRole.SuperAdmin).ToListAsync(ct);
         var byId = employees.GroupBy(Id).ToDictionary(g => g.Key, g => g.First());
@@ -267,7 +277,7 @@ public sealed class EmploymentHeroStaffSync
             // as long as the problem does; otherwise they would stay locked out unseen.
             if (!u.IsActive && !IsLeaver(e, today))
                 problems.Add(new(EmploymentHeroAttentionKind.FixInOdip, u.Id, Id(e), u.FullName, ArchivedButCurrent));
-            if (!await UpdateAsync(db, creator, u, e, problems, ct)) continue;
+            if (!await UpdateAsync(db, creator, u, e, tenantDomain, problems, ct)) continue;
             if (await SaveOneAsync(db, users, u, ct)) log.Updated++;
             else problems.Add(FixInEh(e, CouldNotSave));
         }
@@ -314,6 +324,7 @@ public sealed class EmploymentHeroStaffSync
             created.TenantId = tenantId;
             created.ExternalPayrollId = Id(e);
             created.EmploymentStartDate = StartOf(e);
+            if (Holds(created, tenantDomain)) created.SignInAddressUnconfirmed = true;   // saved with the row below, so it is never live unheld
             if (await SaveOneAsync(db, users, null, ct)) { users.Add(created); log.Created++; }
             else problems.Add(FixInEh(e, CouldNotSave));
         }
@@ -321,6 +332,10 @@ public sealed class EmploymentHeroStaffSync
         // 4. Staff ODIP has and EH doesn't: shown to the Admin, never archived on absence.
         foreach (var u in users.Where(u => u.IsActive))
         {
+            // Emitted every run from the stored flag: ReconcileAsync drops every item a run does not emit again.
+            if (u.SignInAddressUnconfirmed is true)
+                problems.Add(new(EmploymentHeroAttentionKind.ConfirmAddress, u.Id, u.ExternalPayrollId, u.FullName,
+                    $"Their email ({EmailIdentity.Normalise(u.Email)}) came from Employment Hero and isn't at your organisation's domain or a common email provider. Confirm it before they can sign in."));
             if (u.ExternalPayrollId is null)
             {
                 var namesake = held.GetValueOrDefault(u.Id);
@@ -341,7 +356,7 @@ public sealed class EmploymentHeroStaffSync
     }
 
     /// <summary>EH's values onto one linked person; returns whether anything changed. A value ODIP can't take becomes a problem and leaves the person as they were.</summary>
-    private async Task<bool> UpdateAsync(OdipDbContext db, StaffCreateService creator, User u, EhEmployee e, List<Problem> problems, CancellationToken ct)
+    private async Task<bool> UpdateAsync(OdipDbContext db, StaffCreateService creator, User u, EhEmployee e, string? tenantDomain, List<Problem> problems, CancellationToken ct)
     {
         var changed = false;
         var email = EmailOf(e);
@@ -365,11 +380,16 @@ public sealed class EmploymentHeroStaffSync
                 else
                 {
                     u.Email = email;
+                    u.SignInAddressUnconfirmed = null;   // a new address is assessed afresh
+                    if (Holds(u, tenantDomain)) u.SignInAddressUnconfirmed = true;
                     changed = true;
-                    problems.Add(new(EmploymentHeroAttentionKind.FixInOdip, u.Id, Id(e), u.FullName, $"{EmailChangedStart}{email}. Send them a new sign-in invite."));
+                    problems.Add(new(EmploymentHeroAttentionKind.FixInOdip, u.Id, Id(e), u.FullName, $"{EmailChangedStart}{email}. " +
+                        (u.SignInAddressUnconfirmed is true ? "Confirm it on their staff page, then send a sign-in invite." : "Send them a new sign-in invite.")));
                 }
             }
         }
+        // Ruling 5: a linked person who has never signed in is assessed on this run too (the re-point above has already done it for a new address).
+        if (Holds(u, tenantDomain)) { u.SignInAddressUnconfirmed = true; changed = true; }
         if (changed) u.UpdatedAt = Now();
         return changed;
     }

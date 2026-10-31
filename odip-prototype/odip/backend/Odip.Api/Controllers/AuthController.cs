@@ -212,6 +212,12 @@ public class AuthController : ControllerBase
             return Rejected(ExchangeRefusal.TenantInactive, "Exchange failed — the tenant of user {UserId} is missing or inactive: {Email}", user.Id, email);
         }
 
+        // The Employment Hero sync brought this address and no Admin has confirmed it yet: whoever owns the mailbox could otherwise sign in as this row.
+        if (user.SignInAddressUnconfirmed is true)
+        {
+            return Rejected(ExchangeRefusal.AddressUnconfirmed, "Exchange refused — user {UserId}'s address waits for an Admin to confirm it: {Email}", user.Id, email);
+        }
+
         user.LastLoginAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
 

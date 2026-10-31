@@ -122,7 +122,7 @@ public class EmploymentHeroPostgresTests : IClassFixture<PostgresFixture>
         db.Users.Add(sam);
         await db.SaveChangesAsync();
 
-        var result = await EhFixture.Sync(EhList([StubHttpHandler.Employee(101, "Sam", "Lee", sam.Email), StubHttpHandler.Employee(102, "Ana", "Ruiz", $"ana.{token}@example.org")]))
+        var result = await EhFixture.Sync(EhList([StubHttpHandler.Employee(101, "Sam", "Lee", sam.Email), StubHttpHandler.Employee(102, "Ana", "Ruiz", $"ana.{token}@gmail.com")]))
             .RunAsync(db, tenantId, CancellationToken.None);
 
         Assert.Equal(EmploymentHeroSyncOutcome.Done, result.Outcome);
@@ -138,7 +138,7 @@ public class EmploymentHeroPostgresTests : IClassFixture<PostgresFixture>
         var (setup, tenantId) = await _pg.NewTenantContextAsync();
         await using (setup) await ConnectAsync(setup, tenantId);
         var token = Guid.NewGuid().ToString("N")[..8];
-        var employees = Enumerable.Range(1, 30).Select(i => StubHttpHandler.Employee(800 + i, "New", $"Person{i}", $"new{i}.{token}@example.org")).ToArray();
+        var employees = Enumerable.Range(1, 30).Select(i => StubHttpHandler.Employee(800 + i, "New", $"Person{i}", $"new{i}.{token}@gmail.com")).ToArray();
         await using var a = PostgresFixture.NewContext(_pg.ConnectionString, ImportTestSupport.Tenant(tenantId));
         await using var b = PostgresFixture.NewContext(_pg.ConnectionString, ImportTestSupport.Tenant(tenantId));
 
@@ -171,9 +171,9 @@ public class EmploymentHeroPostgresTests : IClassFixture<PostgresFixture>
         var token = Guid.NewGuid().ToString("N")[..8];
 
         var result = await EhFixture.Sync(EhList([
-                StubHttpHandler.Employee(900, "Nina", "Ross", $"nina.{token}@example.org"),
-                StubHttpHandler.Employee(901, "Omar", "Saeed", $"omar.{token}@example.org"),
-                StubHttpHandler.Employee(902, "Pia", "Tran", $"pia.{token}@example.org")]))
+                StubHttpHandler.Employee(900, "Nina", "Ross", $"nina.{token}@gmail.com"),
+                StubHttpHandler.Employee(901, "Omar", "Saeed", $"omar.{token}@gmail.com"),
+                StubHttpHandler.Employee(902, "Pia", "Tran", $"pia.{token}@gmail.com")]))
             .RunAsync(db, tenantId, CancellationToken.None);
 
         Assert.Equal(EmploymentHeroSyncOutcome.Done, result.Outcome);

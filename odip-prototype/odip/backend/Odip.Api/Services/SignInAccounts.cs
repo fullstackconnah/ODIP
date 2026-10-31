@@ -25,6 +25,8 @@ public static class SignInAccounts
         if (!s.IsActive) return new(null, "This staff member is inactive, so they cannot be given a sign-in account.", false);
         if (string.IsNullOrWhiteSpace(s.Email)) return new(null, "This staff member has no email address.", false);
 
+        if (s.SignInAddressUnconfirmed is true) return new(null, AddressConfirmation.HeldMessage(s.FullName), false);
+
         var email = EmailIdentity.Normalise(s.Email);
         // An address the app invented for a row that had none (see PlaceholderEmail) can never receive the link, so no account is made for it.
         if (PlaceholderEmail.Covers(email)) return new(null, PlaceholderEmail.Message(s.FullName), false);
