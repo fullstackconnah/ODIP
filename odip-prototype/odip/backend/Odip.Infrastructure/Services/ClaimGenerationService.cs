@@ -121,8 +121,6 @@ public class ClaimGenerationService
         if (overrides?.ReturnTime != null) trip.ReturnTime = overrides.ReturnTime;
         if (overrides?.ActiveHoursPerDay != null) trip.ActiveHoursPerDay = overrides.ActiveHoursPerDay.Value;
 
-        var settings = ProviderSettingsGuard.Require(await _db.ProviderSettings.FirstOrDefaultAsync(s => s.TenantId == trip.TenantId, ct));
-
         var claimId = Guid.NewGuid();
         var claim = new TripClaim
         {
