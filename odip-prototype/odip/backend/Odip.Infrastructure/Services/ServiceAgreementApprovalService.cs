@@ -292,7 +292,7 @@ public sealed class ServiceAgreementApprovalService
         var plan = new Plan { Draft = draft, EndsOn = draft.AgreementStartDate.AddDays(-1) };
 
         // The provider's zone and today. Read by the organisation asked about, never by "the first settings row": a SuperAdmin's context sees every organisation's.
-        var provider = ProviderTimeZoneResolver.FromState(await _db.ProviderSettings.Where(p => p.TenantId == tenantId).Select(p => p.State).FirstOrDefaultAsync(ct));
+        var provider = await ProviderTimeZoneResolver.ResolveAsync(_db, tenantId, ct);
         var today = ProviderLocalTime.TodayIn(_clock.GetUtcNow().UtcDateTime, provider.Zone);
         plan.Today = today;
         plan.From = draft.AgreementStartDate > today ? draft.AgreementStartDate : today;
@@ -349,7 +349,8 @@ public sealed class ServiceAgreementApprovalService
 
         // Block times are the delivery state's wall clock and pattern times are the provider's: the same clock only while the two states share a zone.
         var deliveryZone = StateTimeZoneMap.Resolve(draft.State);
-        if (!string.Equals(deliveryZone, provider.Id, StringComparison.Ordinal))
+        // Compare clocks, not ids: Melbourne and Hobart run on Sydney's clock, so VIC-NSW and ACT-TAS stay allowed.
+        if (!string.Equals(StateTimeZoneMap.Clock(deliveryZone), StateTimeZoneMap.Clock(provider.Id), StringComparison.Ordinal))
             plan.Reasons.Add(new ApprovalReasonDto
             {
                 Code = "TimeZoneMismatch",

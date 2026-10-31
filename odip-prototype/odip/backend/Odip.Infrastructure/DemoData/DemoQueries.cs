@@ -6,6 +6,7 @@ using Odip.Infrastructure.Data;
 
 namespace Odip.Infrastructure.DemoData;
 
+public sealed record DemoProviderZoneRow(string? TimeZoneId, string State);
 public sealed record DemoParticipantRow(Guid Id, string? NdisNumber, string FirstName, string LastName, bool IsActive, bool IsDraft);
 
 public sealed record RecordedSlot(Guid MedicationId, DateTime ScheduledAt);
@@ -40,6 +41,8 @@ public static class DemoQueries
     /// <summary>Tenants named Demo: the maintainer then checks the domain and that exactly one is active.</summary>
     public static IQueryable<Tenant> DemoTenantCandidates(OdipDbContext db) =>
         db.Tenants.AsNoTracking().Where(t => t.Name == DemoPeople.TenantName);
+
+    public static IQueryable<DemoProviderZoneRow> ProviderZone(OdipDbContext db) => db.ScopedProviderSettings().AsNoTracking().Select(p => new DemoProviderZoneRow(p.TimeZoneId, p.State));
 
     public static IQueryable<string> ProviderState(OdipDbContext db) => db.ScopedProviderSettings().AsNoTracking().Select(p => p.State);
 

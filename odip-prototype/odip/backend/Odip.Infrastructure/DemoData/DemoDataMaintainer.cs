@@ -129,8 +129,8 @@ public sealed class DemoDataMaintainer
         await using var db = new OdipDbContext(guarded, new ScopedTenantOverride { TenantId = tenantId, IsSuperAdmin = false });
 
         // 3. The provider clock (the same lookup the app's own date rules use) and the day-roll cadence.
-        var state = await DemoQueries.ProviderState(db).FirstOrDefaultAsync(ct);
-        var anchors = DemoAnchors.Create(_clock.GetUtcNow().UtcDateTime, state);
+        var zoneRow = await DemoQueries.ProviderZone(db).FirstOrDefaultAsync(ct);
+        var anchors = DemoAnchors.Create(_clock.GetUtcNow().UtcDateTime, providerTimeZoneId: zoneRow?.TimeZoneId, providerState: zoneRow?.State);
         stamps.NowUtc = anchors.NowUtc;
         // Between 00:00 and 05:00 local only the day's first tick runs, so whatever falls due in those hours is written at the first tick after 05:00 (an event
         // scripted for 00:30 appears at 05:xx; it carries its scripted time, so the row is not wrong, only late to appear).

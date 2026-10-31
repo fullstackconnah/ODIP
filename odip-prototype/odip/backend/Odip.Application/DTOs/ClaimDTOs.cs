@@ -367,6 +367,8 @@ public record ProviderSettingsDto
     /// <summary>MED-02: primary manager contact — shown first by the (future) MED-01 missed-medication guidance.</summary>
     public string? ManagerName { get; init; }
     public string? ManagerPhone { get; init; }
+    /// <summary>The stored IANA zone, or null when unset (the State's default applies, and the form shows that default).</summary>
+    public string? TimeZoneId { get; init; }
     /// <summary>How strictly this organisation applies participant readiness. Warn unless an Admin chose Enforce.</summary>
     public ParticipantReadinessMode ParticipantReadinessMode { get; init; } = ParticipantReadinessMode.Warn;
 
@@ -416,6 +418,12 @@ public record UpsertProviderSettingsDto
     public string? ManagerName { get; init; }
     [StringLength(30)]
     public string? ManagerPhone { get; init; }
+    /// <summary>
+    /// OPTIONAL: null or absent leaves the stored zone, because every settings section echoes the row. Otherwise it must be one of
+    /// <c>StateTimeZoneMap.Zones</c>, or the request gets a 400 "Choose a time zone from the list."; a change of the effective zone writes one audit row.
+    /// No data annotation: its 400 is an errors object, which the form would show as the wrong sentence.
+    /// </summary>
+    public string? TimeZoneId { get; init; }
     /// <summary>
     /// OPTIONAL, and the PUT changes the readiness mode ONLY when this is present: a request that
     /// leaves it out (null or absent) never touches the stored mode, so an older client or a stale

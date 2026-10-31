@@ -12,11 +12,16 @@ internal static class OlderSchemaSeeds
     private static readonly (string Table, string Column, string Type)[] LaterColumns =
     [
         ("Participants", "ServicesStartedAt", "timestamp without time zone"),
+        ("ProviderSettings", "ContactEmail", "character varying(254)"),
+        ("ProviderSettings", "ContactPhone", "character varying(30)"),
         ("ProviderSettings", "CreditNotePrefix", "character varying(10)"),
         ("ProviderSettings", "InvoiceNumberPrefix", "character varying(10)"),
         ("ProviderSettings", "InvoiceStartNumber", "integer"),
         ("ProviderSettings", "PaymentTermsDays", "integer"),
+        ("ProviderSettings", "TimeZoneId", "character varying(64)"),
+        ("ProviderSettings", "TradingName", "character varying(200)"),
         ("ProviderSettings", "UpdatedAt", "timestamp without time zone"),
+        ("ProviderSettings", "Website", "character varying(500)"),
     ];
 
     public static async Task SaveWithLaterColumnsAsync(DbContext db)

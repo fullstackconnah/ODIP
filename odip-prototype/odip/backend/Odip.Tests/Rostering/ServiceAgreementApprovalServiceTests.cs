@@ -344,6 +344,26 @@ public class ServiceAgreementApprovalServiceTests
         Assert.True((await PreviewAsync(f, draft)).Preview!.CanApprove);
     }
 
+    // Melbourne and Hobart run on Sydney's clock: a saved Melbourne zone still allows NSW delivery, but a saved Perth zone does not (the roster then runs on Perth time).
+    [Theory]
+    [InlineData("Australia/Melbourne", true)]
+    [InlineData("Australia/Hobart", true)]
+    [InlineData("Australia/Sydney", true)]
+    [InlineData("Australia/Perth", false)]
+    public async Task The_providers_saved_zone_is_compared_by_clock_with_the_delivery_state(string savedZone, bool allowed)
+    {
+        await using var f = await SetUpAsync(state: "NSW");
+        (await f.Db.ProviderSettings.SingleAsync()).TimeZoneId = savedZone;
+        await f.Db.SaveChangesAsync();
+        var block = Block("b", PlanSupportType.CommunityAccess, DayOfWeek.Monday, T(9), T(13), b => b with { Location = new PlanLocation { State = "NSW" } });
+        var draft = await AddRevisionAsync(f, 1, new[] { block }, state: "NSW");
+
+        var preview = (await PreviewAsync(f, draft)).Preview!;
+
+        Assert.Equal(allowed, preview.CanApprove);
+        if (!allowed) Assert.Equal("TimeZoneMismatch", preview.Reasons.Single().Code);
+    }
+
     [Fact]
     public async Task More_than_a_hundred_patterns_are_refused_with_the_count_and_exactly_a_hundred_is_allowed()
     {

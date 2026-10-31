@@ -71,7 +71,7 @@ public sealed partial class ClaimBatchService(OdipDbContext db, BprCsvService bp
     }
 
     private DateOnly TodayFor(ProviderSettings? settings) =>
-        ProviderLocalTime.TodayIn(clock.GetUtcNow().UtcDateTime, ProviderTimeZoneResolver.FromState(settings?.State).Zone);
+        ProviderLocalTime.TodayIn(clock.GetUtcNow().UtcDateTime, ProviderTimeZoneResolver.For(settings?.TimeZoneId, settings?.State).Zone);
 
     // ---- build ----
 

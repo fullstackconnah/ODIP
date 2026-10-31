@@ -53,9 +53,9 @@ public class IncidentsController : ControllerBase
 
     private async Task<ProviderClock> ProviderClockAsync(Guid? tenantId, CancellationToken ct)
     {
-        var state = tenantId == null ? null
-            : await _db.ProviderSettings.Where(p => p.TenantId == tenantId).Select(p => p.State).FirstOrDefaultAsync(ct);
-        return new ProviderClock(state, ProviderTimeZoneResolver.FromState(state));
+        var row = tenantId == null ? null
+            : await _db.ProviderSettings.Where(p => p.TenantId == tenantId).Select(p => new { p.TimeZoneId, p.State }).FirstOrDefaultAsync(ct);
+        return new ProviderClock(row?.State, ProviderTimeZoneResolver.For(row?.TimeZoneId, row?.State));
     }
 
     /// <summary>

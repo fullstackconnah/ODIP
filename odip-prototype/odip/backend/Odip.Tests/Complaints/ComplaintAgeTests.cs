@@ -48,7 +48,7 @@ public class ComplaintAgeTests
     {
         // 23:30 UTC on 30 Oct is already 31 Oct in Sydney (UTC+11 in summer time).
         var utc = new DateTime(2026, 10, 30, 23, 30, 0, DateTimeKind.Utc);
-        var providerToday = ProviderLocalTime.TodayIn(utc, ProviderTimeZoneResolver.FromState("NSW").Zone);
+        var providerToday = ProviderLocalTime.TodayIn(utc, ProviderTimeZoneResolver.For(null, "NSW").Zone);
         Assert.Equal(new DateOnly(2026, 10, 31), providerToday);
         Assert.Equal(1, ComplaintAge.OpenDays(ComplaintStatus.Open, new DateOnly(2026, 10, 30), providerToday));
         Assert.Equal(0, ComplaintAge.OpenDays(ComplaintStatus.Open, new DateOnly(2026, 10, 30), DateOnly.FromDateTime(utc)));

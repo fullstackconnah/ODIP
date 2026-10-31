@@ -38,21 +38,21 @@ public class UnscopedSuperAdminResolverTests
     public async Task TimeZone_UnscopedSuperAdmin_IsTheDefault_NotAnOrganisations()
     {
         var zone = await ProviderTimeZoneResolver.ResolveAsync(Create(null, true), default);
-        Assert.Equal(ProviderTimeZoneResolver.FromState(null).Id, zone.Id);
+        Assert.Equal(ProviderTimeZoneResolver.For(null, null).Id, zone.Id);
     }
 
     [Fact]
     public async Task TimeZone_SuperAdminViewingAsATenant_IsThatTenants()
     {
         var zone = await ProviderTimeZoneResolver.ResolveAsync(Create(A, true), default);
-        Assert.Equal(ProviderTimeZoneResolver.FromState("QLD").Id, zone.Id);
+        Assert.Equal(ProviderTimeZoneResolver.For(null, "QLD").Id, zone.Id);
     }
 
     [Fact]
     public async Task TimeZone_Admin_IsTheirOrganisations()
     {
         var zone = await ProviderTimeZoneResolver.ResolveAsync(Create(B, false), default);
-        Assert.Equal(ProviderTimeZoneResolver.FromState("WA").Id, zone.Id);
+        Assert.Equal(ProviderTimeZoneResolver.For(null, "WA").Id, zone.Id);
     }
 
     [Fact]

@@ -116,7 +116,7 @@ internal static class DemoFixture
                 ReviewedByUserId = StaffId("sarah"), ReviewOutcome = ReviewOutcome.Approved, VarianceMinutesStart = 0, VarianceMinutesEnd = 5,
                 NothingToHandOver = true, NothingToNoteConfirmed = false, IsActive = true,
             };
-            PlaceOldCompletion(oldCompletion, ProviderTimeZoneResolver.FromState(null));          // no provider settings yet: the resolver's Sydney default
+            PlaceOldCompletion(oldCompletion, ProviderTimeZoneResolver.For(null, null));          // no provider settings yet: the resolver's Sydney default
             db.ShiftCompletions.Add(oldCompletion);
             db.ShiftNotes.Add(new ShiftNote
             {

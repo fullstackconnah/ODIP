@@ -68,22 +68,33 @@ const isCoarse = (page) => page.evaluate(() => matchMedia('(pointer: coarse)').m
 // Shoot the whole element plus `pad` (a pad shrinks only at the page edge, or the right edge for a fluid-width element).
 // The viewport grows in height only, never in width: an element wider than the viewport fails checkCropHolds (overflowX).
 // Returns { file, clip, box, viewport, pad, coarse, touch, elementHeight }: clip is the real post-settle clip, box the element box.
-export async function cropElement(page, locator, file, { pad = 16, touch } = {}) {
+export async function cropElement(page, locator, file, { pad = 16, touch, also, natural, during } = {}) {
   touch ??= await isCoarse(page)
   await settle(page, locator)
   await page.evaluate(() => scrollTo(0, 0))
-  const first = await locator.boundingBox()
+  // `also` widens the crop to a second element (the save foot); `natural` grows the viewport to the page height so sticky and fixed chrome sits in its natural place, not over the element.
+  const boxOf = async () => {
+    const own = await locator.boundingBox()
+    const extra = also ? await also.boundingBox() : null
+    if (!own) return null
+    if (!extra) return own
+    const x = Math.min(own.x, extra.x), y = Math.min(own.y, extra.y)
+    return { x, y, width: Math.max(own.x + own.width, extra.x + extra.width) - x, height: Math.max(own.y + own.height, extra.y + extra.height) - y }
+  }
+  const first = await boxOf()
   if (!first) throw new Error(`cropElement: no bounding box for ${file}`)
-  return withViewport(page, 0, Math.ceil(first.y + first.height + pad), touch, async () => {
+  const pageH = natural ? Math.min(await page.evaluate(() => document.scrollingElement.scrollHeight), 4000) : 0
+  return withViewport(page, 0, Math.max(pageH, Math.ceil(first.y + first.height + pad)), touch, async () => {
     await settle(page, locator)
-    const box = await locator.boundingBox()
+    const box = await boxOf()
     const x = Math.max(0, box.x - pad)
     const y = Math.max(0, box.y - pad)
     const clip = { x, y, width: Math.min(box.x + box.width + pad, page.viewportSize().width) - x, height: box.y + box.height + pad - y }
     const coarse = await isCoarse(page)
     const viewport = page.viewportSize()
+    const measured = during ? await during(clip) : undefined
     await page.screenshot({ path: file, clip })
-    return { file, clip, box, viewport, pad, coarse, touch, elementHeight: box.height }
+    return { file, clip, box, viewport, pad, coarse, touch, elementHeight: box.height, measured }
   })
 }
 

@@ -7,6 +7,7 @@ using Odip.Domain.Billing.Pricing;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
+using Odip.Domain.Rostering;
 using Odip.Infrastructure.Audit;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Integrations;
@@ -58,6 +59,7 @@ public class ProviderSettingsController : ControllerBase
             BankAccountName = hideBank ? null : s.BankAccountName, BSB = hideBank ? null : s.BSB,
             AccountNumber = hideBank ? null : s.AccountNumber, InvoiceFooterNotes = s.InvoiceFooterNotes,
             State = s.State, ManagerName = s.ManagerName, ManagerPhone = s.ManagerPhone,
+            TimeZoneId = s.TimeZoneId, // the stored value only: an effective zone would be echoed back and saved by every other section
             ParticipantReadinessMode = s.ParticipantReadinessMode,
             MedicationCompetencyMode = s.MedicationCompetencyMode,
             EmploymentHeroConnected = await EmploymentHeroStaffSync.IsConnectedAsync(_db, s.TenantId, ct),
@@ -96,6 +98,9 @@ public class ProviderSettingsController : ControllerBase
             ?? (dto.InvoiceStartNumber is < 1 or > 99_999_999 ? "Enter a whole number from 1 to 99,999,999." : null)
             ?? (dto.PaymentTermsDays is < 0 or > 365 ? "Enter a whole number of days from 0 to 365." : null);
         if (bad != null) return BadRequest(ApiResponse<bool>.Fail(bad));
+
+        if (dto.TimeZoneId is { } requestedZone && !StateTimeZoneMap.Zones.Contains(requestedZone))
+            return BadRequest(ApiResponse<bool>.Fail("Choose a time zone from the list."));
 
         // Prices and public holidays follow the state, so none is assumed (a body that omits it used to become Victoria).
         var state = dto.State?.Trim().ToUpperInvariant();
@@ -136,6 +141,8 @@ public class ProviderSettingsController : ControllerBase
         // A brand-new row starts at the defaults (Warn for both modes), which is what applied until now.
         var previousReadiness = s.ParticipantReadinessMode;
         var previousCompetency = s.MedicationCompetencyMode;
+        // The effective zone (a null row follows its State); a brand-new row had the Sydney fallback, not the entity's default State.
+        var previousZone = _db.Entry(s).State == EntityState.Added ? StateTimeZoneMap.Resolve(null) : s.TimeZoneId ?? StateTimeZoneMap.Resolve(s.State);
 
         s.RegistrationNumber = dto.RegistrationNumber; s.ABN = dto.ABN;
         s.OrganisationName = dto.OrganisationName; s.Address = dto.Address;
@@ -143,6 +150,14 @@ public class ProviderSettingsController : ControllerBase
         s.BankAccountName = dto.BankAccountName; s.BSB = dto.BSB;
         s.AccountNumber = dto.AccountNumber; s.InvoiceFooterNotes = dto.InvoiceFooterNotes;
         s.State = state; s.ManagerName = dto.ManagerName; s.ManagerPhone = dto.ManagerPhone;
+
+        // Sent and different only (every section echoes the row). One audit row when the effective zone moves: "today" for rosters, the portal and reminders moves with it.
+        if (dto.TimeZoneId is { } newZone && newZone != s.TimeZoneId)
+        {
+            if (newZone != previousZone)
+                _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(nameof(ProviderSettings), s.Id, nameof(ProviderSettings.TimeZoneId), previousZone, newZone, User));
+            s.TimeZoneId = newZone;
+        }
 
         // Each mode is applied, and audited, independently and only when sent and different. ProviderSettings is deliberately NOT an audited
         // entity: the generic interceptor would copy the bank details into AuditLog, so each change is recorded here on its own, as exactly

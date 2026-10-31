@@ -125,7 +125,7 @@ public class LeaveControllerTests
     /// </summary>
     private static (DateOnly Today, DateOnly Wednesday) OverlapFixtureDates(TimeProvider clock)
     {
-        var providerToday = ProviderLocalTime.TodayIn(clock.GetUtcNow().UtcDateTime, ProviderTimeZoneResolver.FromState(null).Zone);
+        var providerToday = ProviderLocalTime.TodayIn(clock.GetUtcNow().UtcDateTime, ProviderTimeZoneResolver.For(null, null).Zone);
         var wednesday = providerToday.AddDays(((int)DayOfWeek.Wednesday - (int)providerToday.DayOfWeek + 7) % 7);
         return (providerToday, wednesday);
     }

@@ -202,8 +202,8 @@ public sealed class MedicationAdministrationRecorder
         // ── 1. Medication Competency (before any validation: in Enforce mode a worker without the credential should be
         //       told that first, not asked to fix a reason field they cannot then submit). In Warn mode the record goes ahead and
         //       is flagged RecordedWithoutCompetency. ──
-        var settings = await _db.ProviderSettings.Where(p => p.TenantId == med.TenantId).Select(p => new { p.State, p.MedicationCompetencyMode }).FirstOrDefaultAsync(ct);
-        var provider = ProviderTimeZoneResolver.FromState(settings?.State);
+        var settings = await _db.ProviderSettings.Where(p => p.TenantId == med.TenantId).Select(p => new { p.TimeZoneId, p.State, p.MedicationCompetencyMode }).FirstOrDefaultAsync(ct);
+        var provider = ProviderTimeZoneResolver.For(settings?.TimeZoneId, settings?.State);
         var providerToday = DateOnly.FromDateTime(ProviderLocalTime.UtcToLocal(nowUtc, provider.Zone));
         var competency = MedicationCompetencyGate.Evaluate(administeringUser, providerToday);
         var access = DescribeAccess(competency, settings?.MedicationCompetencyMode ?? MedicationCompetencyMode.Warn);

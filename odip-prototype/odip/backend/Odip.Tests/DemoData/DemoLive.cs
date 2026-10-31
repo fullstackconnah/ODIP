@@ -26,7 +26,7 @@ internal static class DemoLive
 
     public static readonly DateOnly Friday = new(2026, 10, 2);
 
-    public static TimeZoneInfo Zone(string state = "NSW") => ProviderTimeZoneResolver.FromState(state).Zone;
+    public static TimeZoneInfo Zone(string state = "NSW") => ProviderTimeZoneResolver.For(null, state).Zone;
 
     /// <summary>A fresh database (the fixture people, the old seed's rows unless told not to, the provider's state) ticked once, in production's pack order, at <paramref name="utc"/>.</summary>
     public static async Task<DemoTestEnv> TickAsync(DateTimeOffset utc, string state = "NSW", bool oldSeed = true)

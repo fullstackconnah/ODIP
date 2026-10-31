@@ -507,7 +507,7 @@ public class DemoMedicationHistoryTests
             var late = (Local(r.AdministeredAt, state)!.Value - r.ScheduledAt!.Value).TotalMinutes;
             Assert.InRange(late, 0, 41);                                                             // a fixed offset would put it an hour out
             Assert.InRange((Local(r.CreatedAt, state) - Local(r.AdministeredAt, state)!.Value).TotalMinutes, 1, 3);
-            Assert.Equal(ProviderTimeZoneResolver.FromState(state).Id, r.AdministeredAtTimeZone);
+            Assert.Equal(ProviderTimeZoneResolver.For(null, state).Id, r.AdministeredAtTimeZone);
         }
     }
 

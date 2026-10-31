@@ -91,8 +91,7 @@ public sealed class NdiaRejectionReader
         var catalogue = (await _db.SupportCatalogueItems.AsNoTracking().Where(i => codes.Contains(i.ItemNumber)).ToListAsync(ct))
             .GroupBy(i => i.ItemNumber, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
-        var state = await _db.ProviderSettings.AsNoTracking().Where(s => s.TenantId == tenantId).Select(s => s.State).FirstOrDefaultAsync(ct);
-        var zone = ProviderTimeZoneResolver.FromState(state).Zone;
+        var zone = (await ProviderTimeZoneResolver.ResolveAsync(_db, tenantId, ct)).Zone;
 
         var latest = new Dictionary<(Guid Participant, Guid Pool), (PoolNdiaRejection Rejection, DateTime At)>();
         foreach (var row in rows)
