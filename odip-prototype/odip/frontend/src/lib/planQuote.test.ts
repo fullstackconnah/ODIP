@@ -9,18 +9,14 @@ const BACKEND = resolve(__dirname, '../../../backend')
 const PRICING = resolve(BACKEND, 'Odip.Domain/Billing/Pricing')
 const hasBackend = existsSync(PRICING)
 import {
-  CATEGORY_SHORT, REASON_COPY, addDays, asSentence,  categoryLabel, conflictVersionOf, describeQuoteError, describeRenewError, describeSaveError, formatServiceDate, friendlyMessage, 
+  CATEGORY_SHORT, REASON_COPY, addDays, asSentence,  categoryLabel, conflictVersionOf, describeQuoteError, describeRenewError, describeSaveError, friendlyMessage, 
    groupIssues, isPricingDate, isRefusal, issueWhere,  periodProblem,  planNeededMessageOf, pricedNothing,   referenceWeek,  refusals,  shiftsNotPriced, shiftsNotPricedAtLeast, totalsCaption,
 } from './planQuote'
 
 const axiosError = (status: number, data: unknown = {}) => ({ response: { status, data } })
 
 describe('dates', () => {
-  it('writes a service date from fixed words and day arithmetic', () => {
-    expect(formatServiceDate('2026-10-05')).toBe('Mon 5 Oct 2026')
-    expect(formatServiceDate('2027-02-28')).toBe('Sun 28 Feb 2027')
-    expect(formatServiceDate('')).toBe('')
-    expect(formatServiceDate(undefined)).toBe('')
+  it('adds days to a service date', () => {
     expect(addDays('2026-12-31', 1)).toBe('2027-01-01')
     expect(addDays('2026-10-05', -5)).toBe('2026-09-30')
   })

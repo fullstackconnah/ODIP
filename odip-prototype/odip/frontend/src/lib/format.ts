@@ -8,7 +8,7 @@
 // Every string a test pins is built from fixed words and arithmetic, never Intl: en-AU renders September as "Sep" in some ICU builds and
 // "Sept" in others (the rule dateRange.ts follows). The two date-time formatters at the bottom are the exception and stay Intl-backed, so
 // they print exactly what they always printed. Nothing reads the clock unless you leave `now` out.
-import { calendarDaysUntil, isDateOnly } from './dateOnly'
+import { calendarDaysUntil, isDateOnly, parseDateOnly } from './dateOnly'
 import { formatDateAu, formatWithTimeZone, parseApiDate } from './utils'
 
 /**
@@ -150,4 +150,15 @@ export function formatBytes(bytes: number): string {
   if (mb < 1) return `${Math.round(bytes / 1024)} KB`
   if (mb < 1024) return `${mb.toFixed(1)} MB`
   return `${(mb / 1024).toFixed(1)} GB`
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const
+
+/** The house date, "Mon 5 Oct 2026", for a date in a sentence, a dialog or an aria-label (a table column stays numeric, formatDateAu): fixed words and day arithmetic, never Intl (a clock change or an ICU build cannot move it). '' for anything that is not a date. */
+export function formatServiceDate(iso: string | null | undefined): string {
+  const day = parseDateOnly(iso)
+  if (day === null) return ''
+  const date = new Date(day * 86_400_000)
+  return `${WEEKDAYS[date.getUTCDay()]} ${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}`
 }

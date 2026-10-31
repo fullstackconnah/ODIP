@@ -500,7 +500,7 @@ describe('IncidentCreatePage — NOTES-02 shift-note prefill acknowledges flags 
   it('shows a compact "Linked to" line naming the shift note\'s date', () => {
     renderCreatePage({ pathname: '/incidents/new', state: shiftNotePrefill })
 
-    expect(screen.getByText(/linked to: shift note from 17\/08\/2026/i)).toBeInTheDocument()
+    expect(screen.getByText(/linked to: shift note from mon 17 aug 2026/i)).toBeInTheDocument()
   })
 
   it('does not call acknowledge-flags on a plain submit with no shift-note prefill', async () => {
@@ -1694,7 +1694,7 @@ describe('IncidentCreatePage: the shift prefill from "Anything to report?"', () 
 
     expect(screen.getByText(/pre-filled from your shift/i)).toBeInTheDocument()
     expect((screen.getByPlaceholderText('Brief incident summary') as HTMLInputElement).value).toContain('Sophie Brown')
-    expect(screen.getByText(/linked to: shift on 17\/08\/2026/i)).toBeInTheDocument()
+    expect(screen.getByText(/linked to: shift on mon 17 aug 2026/i)).toBeInTheDocument()
   })
 
   it('files the incident against the shift, then goes back to the shift', async () => {

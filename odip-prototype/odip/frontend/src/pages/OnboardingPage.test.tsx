@@ -8,7 +8,7 @@ import { intakeCompleteState } from './intake/intakeComplete'
 const { mockUseQuery } = vi.hoisted(() => ({ mockUseQuery: vi.fn() }))
 vi.mock('@tanstack/react-query', () => ({ useQuery: mockUseQuery }))
 
-const row = (over: object = {}) => ({ participantId: 'p-1', fullName: 'Jamie Rivers', servicesStartedAt: null, completedSteps: 2, totalSteps: 4, firstMissing: 'Signed agreement', ...over })
+const row = (over: object = {}) => ({ participantId: 'p-1', fullName: 'Jamie Rivers', servicesStartedAt: null, completedSteps: 2, totalSteps: 6, firstMissing: 'Signed agreement', ...over })
 
 describe('OnboardingPage', () => {
   beforeEach(() => {
@@ -21,7 +21,7 @@ describe('OnboardingPage', () => {
     render(<MemoryRouter initialEntries={['/onboarding']}><Routes><Route path="/onboarding" element={<OnboardingTable />} /><Route path="/onboarding/:id" element={<div>Checklist route</div>} /></Routes></MemoryRouter>)
 
     expect(screen.getByText('Jamie Rivers')).toBeInTheDocument()
-    expect(screen.getByText('2 of 4 done')).toBeInTheDocument()
+    expect(screen.getByText('2 of 6 done')).toBeInTheDocument()
     expect(screen.getByText('Signed agreement')).toBeInTheDocument()
     expect(screen.queryByText('Services started')).not.toBeInTheDocument()
     expect(screen.getAllByRole('button')).toHaveLength(1)
@@ -78,11 +78,11 @@ describe('OnboardingPage', () => {
   it('renders progress as an accessible progressbar, not just a text fraction', () => {
     mockUseQuery.mockReturnValue({ data: [row({ participantId: 'p-3', fullName: 'Rowan Vale' })], isLoading: false })
     render(<MemoryRouter><OnboardingTable /></MemoryRouter>)
-    const bar = screen.getByRole('progressbar', { name: '2 of 4 done' })
+    const bar = screen.getByRole('progressbar', { name: '2 of 6 done' })
     expect(bar).toHaveAttribute('aria-valuenow', '2')
-    expect(bar).toHaveAttribute('aria-valuemax', '4')
+    expect(bar).toHaveAttribute('aria-valuemax', '6')
     // the numeric label stays visible, so progress is never colour-only
-    expect(screen.getByText('2 of 4 done')).toBeInTheDocument()
+    expect(screen.getByText('2 of 6 done')).toBeInTheDocument()
   })
 
   it('filters the worklist by participant name and by what is still open', async () => {

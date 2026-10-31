@@ -220,7 +220,7 @@ describe('ComplaintsPage', () => {
     renderPage()
     await userEvent.click(screen.getByRole('button', { name: 'Archive' }))
     const dialog = screen.getByRole('alertdialog')
-    expect(dialog).toHaveTextContent('Archive "the complaint received 05/10/2026"?')
+    expect(dialog).toHaveTextContent('Archive "the complaint received Mon 5 Oct 2026"?')
     expect(dialog).not.toHaveTextContent('Sam Carer')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Archive' }))
     expect(mockArchiveMutate).toHaveBeenCalledWith('c-1', expect.anything())

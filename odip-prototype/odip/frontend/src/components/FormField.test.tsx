@@ -39,6 +39,16 @@ describe('FormField control sizing', () => {
     }
   })
 
+  it('dims a disabled textarea: muted surface and text, not-allowed cursor', () => {
+    render(
+      <FormField label="Notes">
+        <textarea disabled />
+      </FormField>,
+    )
+
+    expect(screen.getByLabelText('Notes')).toHaveClass('disabled:cursor-not-allowed', 'disabled:opacity-60', 'disabled:bg-[var(--color-muted)]', 'disabled:text-[var(--color-muted-foreground)]')
+  })
+
   it('still merges a caller className onto a textarea', () => {
     render(
       <FormField label="Notes">
