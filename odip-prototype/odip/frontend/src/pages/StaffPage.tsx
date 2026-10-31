@@ -47,18 +47,27 @@ const QUALIFICATIONS: Array<[keyof StaffListDto, string]> = [
 // No screening date on an active person: the same case the roster warns on (WSC_MISSING) and Today counts as a credential issue.
 const isScreeningMissing = (s: StaffListDto) => s.isActive && !s.workerScreeningExpiryDate
 
+// At most three items, the same at every width: the flag first (the one thing that matters), then what is held (two, or one beside a flag), then "+n" naming the rest.
+const HELD_SHOWN = 2
+
 function Qualifications({ staff }: { staff: StaffListDto }) {
-  const held = QUALIFICATIONS.filter(([flag]) => staff[flag]).map(([, label]) => label)
   const screening = staff.workerScreeningExpiryDate
   const missing = isScreeningMissing(staff)
-  if (held.length === 0 && !screening && !missing) return null
+  const expired = !!screening && isExpired(screening)
+  // The valid screening chip is held too, and comes last.
+  const held = [...QUALIFICATIONS.filter(([flag]) => staff[flag]).map(([, label]) => label), ...(screening && !expired ? ['Worker screening'] : [])]
+  if (held.length === 0 && !missing && !expired) return null
+  const flagged = missing || expired
+  const room = HELD_SHOWN - (flagged ? 1 : 0)
+  const shown = held.slice(0, room)
+  const fits = shown.length === held.length
+  const also = `Also: ${held.slice(shown.length).join(', ')}`
   return (
     <ul aria-label="Qualifications" className="inline-flex flex-wrap items-center gap-1">
-      {held.map(label => <li key={label} className={CHIP_CLASS}>{label}</li>)}
       {missing && <li><StatusBadge tone="warning" label="Screening missing" /></li>}
-      {screening && (isExpired(screening)
-        ? <li><StatusBadge status="expired" label="Screening expired" /></li>
-        : <li className={CHIP_CLASS}>Worker screening</li>)}
+      {expired && <li><StatusBadge status="expired" label="Screening expired" /></li>}
+      {shown.map(label => <li key={label} className={CHIP_CLASS}>{label}</li>)}
+      {!fits && <li className={CHIP_CLASS} title={also} aria-label={also}>+{held.length - shown.length}</li>}
     </ul>
   )
 }
