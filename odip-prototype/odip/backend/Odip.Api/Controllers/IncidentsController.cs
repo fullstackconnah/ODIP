@@ -36,13 +36,8 @@ public class IncidentsController : ControllerBase
         _obligationTasks = obligationTasks ?? new Odip.Infrastructure.Tasks.ObligationTaskService(db);
     }
 
-    /// <summary>The organisation's calendar date now: an authorisation dated tomorrow there is not yet in force, whatever the UTC date says.</summary>
-    private async Task<DateOnly> ProviderTodayAsync(Guid tenantId, CancellationToken ct) =>
-        ProviderLocalTime.TodayIn(_clock.GetUtcNow().UtcDateTime, (await ProviderTimeZoneResolver.ResolveAsync(_db, tenantId, ct)).Zone);
-
-    /// <summary>The register entry judged by the shared rule on its own organisation's today.</summary>
-    private async Task<bool> IsAuthorisedTodayAsync(RestrictivePractice rp, CancellationToken ct) =>
-        RestrictivePracticeAuthorisation.IsAuthorised(rp, await ProviderTodayAsync(rp.TenantId, ct));
+    /// <summary>The date an incident's use is judged on: its own date, a provider-local wall clock stored verbatim (no zone conversion). A use after an entry's end date is unauthorised, however late it is entered (owner Q13).</summary>
+    private static DateOnly UseDate(DateTime incidentDateTime) => DateOnly.FromDateTime(incidentDateTime);
 
     /// <summary>The saved incident as the list shows it — Create and Update return this, so it can never differ from <see cref="GetAll"/>'s item.</summary>
     private Task<IncidentListDto> ListItemAsync(Guid id, CancellationToken ct) =>
@@ -284,7 +279,8 @@ public class IncidentsController : ControllerBase
     /// (see <see cref="IncidentReport.IsRestrictivePracticeAuthorised"/> for why Update never
     /// recomputes it). Every register entry is judged by the one shared rule,
     /// <see cref="RestrictivePracticeAuthorisation.IsAuthorised"/> (active, with who authorised it and
-    /// when). In order: null (not determinable) when this isn't a RestrictivePracticeUse incident or
+    /// when, not past its inclusive end date) on the incident's own date, so a use after the end date
+    /// or before the authorisation date is unauthorised, however late it is entered. In order: null (not determinable) when this isn't a RestrictivePracticeUse incident or
     /// no participant or type was given; Unauthorised when the reporter described a practice that is
     /// not on the register, or said this use was not authorised (<see cref="CreateIncidentDto.UsedWithoutAuthorisation"/>);
     /// the linked entry's own state when one was linked; otherwise whether the
@@ -304,9 +300,8 @@ public class IncidentsController : ControllerBase
                 && (dto.RestrictivePracticeId == null || rp.Id == dto.RestrictivePracticeId))
             .ToListAsync(ct);
         if (entries.Count == 0) return false;
-        // Every entry belongs to the participant's tenant, so one today serves them all.
-        var today = await ProviderTodayAsync(entries[0].TenantId, ct);
-        return entries.Any(entry => RestrictivePracticeAuthorisation.IsAuthorised(entry, today));
+        var onDate = UseDate(dto.IncidentDateTime);
+        return entries.Any(entry => RestrictivePracticeAuthorisation.IsAuthorised(entry, onDate));
     }
 
     [HttpGet]
@@ -430,6 +425,7 @@ public class IncidentsController : ControllerBase
                 RestrictivePracticeReviewDate = i.RestrictivePractice != null ? i.RestrictivePractice.ReviewDate : null,
                 UnapprovedRestrictivePracticeDetails = i.UnapprovedRestrictivePracticeDetails,
                 IsRestrictivePracticeAuthorised = i.IsRestrictivePracticeAuthorised,
+                RestrictivePracticeUseVaried = i.RestrictivePracticeUseVaried,
                 Description = i.Description,
                 ImmediateActionsTaken = i.ImmediateActionsTaken,
                 WereEmergencyServicesCalled = i.WereEmergencyServicesCalled,
@@ -578,6 +574,8 @@ public class IncidentsController : ControllerBase
             UnapprovedRestrictivePracticeDetails = string.IsNullOrWhiteSpace(dto.UnapprovedRestrictivePracticeDetails)
                 ? null : dto.UnapprovedRestrictivePracticeDetails.Trim(),
             IsRestrictivePracticeAuthorised = isRpAuthorised,
+            // Only an authorised use has the question; otherwise it is moot and null stays reportable.
+            RestrictivePracticeUseVaried = isRpAuthorised == true ? dto.RestrictivePracticeUseVaried : null,
             Severity = dto.Severity,
             Title = dto.Title,
             Description = dto.Description,
@@ -597,10 +595,10 @@ public class IncidentsController : ControllerBase
         incident.CreatedAt = _clock.GetUtcNow().UtcDateTime;
         incident.AwareAt = incident.CreatedAt;
 
-        // The class starts at the default for the severity and type (critical, a required type or an unauthorised restrictive practice is Within24h); an Admin or
+        // The class starts at the default for the severity and type (critical, a required type, an unauthorised restrictive practice, or one not used as set out in the plan is Within24h); an Admin or
         // Coordinator can change it on Update, with a reason. The status follows from the class.
         var clock = await ProviderClockAsync(incident.TenantId, ct);
-        incident.ReportableClass = QscReporting.DefaultClass(dto.Severity, dto.IncidentType, isRpAuthorised);
+        incident.ReportableClass = QscReporting.DefaultClass(dto.Severity, dto.IncidentType, isRpAuthorised, incident.RestrictivePracticeUseVaried);
         await ApplyClockAsync(incident, clock, ct);
         incident.QscReportingStatus = QscReporting.DeriveStatus(incident.ReportableClass, null, incident.NotifyDueAt);
 
@@ -731,6 +729,9 @@ public class IncidentsController : ControllerBase
         i.InvolvedParticipantId = dto.InvolvedParticipantId;
         i.InvolvedUserId = dto.InvolvedStaffId;
         i.ReportedByUserId = dto.ReportedByStaffId;
+        // Before severity, type and the determination change below: the class this incident would have started with, to tell an untouched default from a chosen override.
+        var oldAuth = i.IsRestrictivePracticeAuthorised;
+        var oldDefault = QscReporting.DefaultClass(i.Severity, i.IncidentType, oldAuth, i.RestrictivePracticeUseVaried);
         i.TenantId = await ReporterTenantAsync(dto.ReportedByStaffId, ct);
         var clock = await ProviderClockAsync(i.TenantId, ct);
         var zone = clock.Tz.Zone;
@@ -743,11 +744,12 @@ public class IncidentsController : ControllerBase
         // The one exception only ever LOWERS it to false: the editor said this use was not authorised,
         // relinked the incident to an entry that is Not authorised (e.g. one just added from it), or
         // switched it to "None of these" (only on that switch, so an old incident saved with its own
-        // text unchanged keeps what it was stored with).
+        // text unchanged keeps what it was stored with). RestrictivePracticeUseVaried is never written here: like the determination it is set at Create.
+        // A relinked entry is judged on the incident's own date.
         if (dto.IncidentType == IncidentType.RestrictivePracticeUse && (dto.UsedWithoutAuthorisation
             || (string.IsNullOrWhiteSpace(i.UnapprovedRestrictivePracticeDetails) && !string.IsNullOrWhiteSpace(dto.UnapprovedRestrictivePracticeDetails))
             || (dto.RestrictivePracticeId.HasValue && dto.RestrictivePracticeId != i.RestrictivePracticeId
-                && !await IsAuthorisedTodayAsync(await _db.RestrictivePractices.SingleAsync(rp => rp.Id == dto.RestrictivePracticeId.Value, ct), ct))))
+                && !RestrictivePracticeAuthorisation.IsAuthorised(await _db.RestrictivePractices.SingleAsync(rp => rp.Id == dto.RestrictivePracticeId.Value, ct), UseDate(dto.IncidentDateTime)))))
             i.IsRestrictivePracticeAuthorised = false;
         // Linked to a register entry now, so the coordinator's "add it to the register" task is done (a no-op when there is none).
         if (dto.RestrictivePracticeId.HasValue)
@@ -788,11 +790,20 @@ public class IncidentsController : ControllerBase
             i.AwareAt = newAware;
             clockChanged = true;
         }
-        i.ReportableClass = dto.ReportableClass ?? storedClass;
-        if (dto.ReportableClass is { } chosen)
+        // This edit lowered an authorised use to unauthorised and the class still sits at the untouched default (the form re-sends the stored one): move it to the new default.
+        var rederive = oldAuth == true && i.IsRestrictivePracticeAuthorised == false
+            && (dto.ReportableClass ?? storedClass) == storedClass && storedClass == oldDefault;
+        var newDefault = QscReporting.DefaultClass(dto.Severity, dto.IncidentType, i.IsRestrictivePracticeAuthorised, i.RestrictivePracticeUseVaried);
+        if (rederive && newDefault != storedClass)
+        {
+            clockChanged = true;
+            i.ReportableClassReason = null;
+        }
+        i.ReportableClass = rederive ? newDefault : dto.ReportableClass ?? storedClass;
+        if (dto.ReportableClass is { } chosen && !rederive)
         {
             var reason = dto.ReportableClassReason?.Trim();
-            if (chosen == QscReporting.DefaultClass(dto.Severity, dto.IncidentType, i.IsRestrictivePracticeAuthorised))
+            if (chosen == newDefault)
                 i.ReportableClassReason = null;
             else if (string.IsNullOrEmpty(reason))
                 return BadRequest(ApiResponse<IncidentListDto>.Fail("Give a reason for changing when this incident must be reported."));

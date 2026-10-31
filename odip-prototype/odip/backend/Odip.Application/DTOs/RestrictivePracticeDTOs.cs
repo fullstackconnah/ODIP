@@ -16,6 +16,18 @@ public record RestrictivePracticeDto
     public string? AuthorisedBy { get; init; }
     public DateOnly? AuthorisationDate { get; init; }
     public DateOnly? ReviewDate { get; init; }
+    /// <summary>Routine or as needed; for a linked chemical entry it follows the medicine (RestrictivePracticeAuthorisation.UseKindOf).</summary>
+    public RestrictivePracticeUseKind UseKind { get; init; }
+    public DateOnly? AuthorisationEndDate { get; init; }
+    public DateOnly? FirstUsedOn { get; init; }
+    public DateOnly? InterimBspDate { get; init; }
+    public DateOnly? ComprehensiveBspDate { get; init; }
+    /// <summary>The earliest use on record (an active use incident, or an administered dose of the linked medicine); a suggestion for FirstUsedOn, never auto-filled.</summary>
+    public DateOnly? EarliestRecordedUseDate { get; init; }
+    public DateOnly? InterimBspDueOn { get; init; }
+    public DateOnly? ComprehensiveBspDueOn { get; init; }
+    public BspPlanState InterimBspState { get; init; }
+    public BspPlanState ComprehensiveBspState { get; init; }
     public Guid? RelatedMedicationId { get; init; }
     public string? RelatedMedicationName { get; init; }
     public MedicationStatus? RelatedMedicationStatus { get; init; }
@@ -38,6 +50,12 @@ public record UpdateRestrictivePracticeDto
     public string? AuthorisedBy { get; init; }
     public DateOnly? AuthorisationDate { get; init; }
     public DateOnly? ReviewDate { get; init; }
+    /// <summary>Ignored while a medicine is linked (the medicine sets it); null leaves the stored value, so an older tab that does not send it changes nothing.</summary>
+    public RestrictivePracticeUseKind? UseKind { get; init; }
+    public DateOnly? AuthorisationEndDate { get; init; }
+    public DateOnly? FirstUsedOn { get; init; }
+    public DateOnly? InterimBspDate { get; init; }
+    public DateOnly? ComprehensiveBspDate { get; init; }
     public Guid? RelatedMedicationId { get; init; }
     public bool IsActive { get; init; }
 
@@ -70,6 +88,8 @@ public record BulkCreateRestrictivePracticeRowDto
     public string? AuthorisedBy { get; init; }
     public DateOnly? AuthorisationDate { get; init; }
     public DateOnly? ReviewDate { get; init; }
+    public RestrictivePracticeUseKind UseKind { get; init; }
+    public DateOnly? AuthorisationEndDate { get; init; }
 
     /// <summary>Only meaningful when <see cref="Type"/> is ChemicalRestraint. Optional — a
     /// chemical restraint row may be added unlinked. Must reference a medication belonging to

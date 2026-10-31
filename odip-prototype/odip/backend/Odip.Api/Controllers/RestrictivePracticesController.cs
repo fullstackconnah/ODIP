@@ -57,8 +57,11 @@ public class RestrictivePracticesController : ControllerBase
             .ThenBy(rp => rp.Type)
             .ToListAsync(ct);
 
-        var today = items.Count == 0 ? default : await ProviderTodayAsync(items[0].TenantId, ct);
-        return Ok(ApiResponse<List<RestrictivePracticeDto>>.Ok(items.Select(rp => ToDto(rp, today)).ToList()));
+        if (items.Count == 0) return Ok(ApiResponse<List<RestrictivePracticeDto>>.Ok(new List<RestrictivePracticeDto>()));
+        var zone = (await ProviderTimeZoneResolver.ResolveAsync(_db, items[0].TenantId, ct)).Zone;
+        var today = ProviderLocalTime.TodayIn(_clock.GetUtcNow().UtcDateTime, zone);
+        var earliest = await EarliestUsesAsync(items, zone, ct);
+        return Ok(ApiResponse<List<RestrictivePracticeDto>>.Ok(items.Select(rp => ToDto(rp, today, earliest.GetValueOrDefault(rp.Id))).ToList()));
     }
 
     /// <summary>
@@ -120,6 +123,8 @@ public class RestrictivePracticesController : ControllerBase
             }
             var pairError = AuthorisationPairError(row.AuthorisedBy, row.AuthorisationDate);
             if (pairError != null) errors.Add($"{label}: {pairError}");
+            var endError = EndDateError(row.AuthorisationDate, row.AuthorisationEndDate);
+            if (endError != null) errors.Add($"{label}: {endError}.");
             if (row.RelatedMedicationId.HasValue)
             {
                 var medicationError = await ValidateRelatedMedicationAsync(row.Type, row.RelatedMedicationId.Value, participantId, ct);
@@ -147,6 +152,8 @@ public class RestrictivePracticesController : ControllerBase
             AuthorisedBy = row.AuthorisedBy,
             AuthorisationDate = row.AuthorisationDate,
             ReviewDate = row.ReviewDate,
+            UseKind = row.UseKind,
+            AuthorisationEndDate = row.AuthorisationEndDate,
             RelatedMedicationId = row.RelatedMedicationId,
             IsActive = row.IsActive,
         }).ToList();
@@ -179,9 +186,19 @@ public class RestrictivePracticesController : ControllerBase
             return Conflict(ApiResponse<List<RestrictivePracticeDto>>.Fail(AlreadyLinkedCopy));
         }
 
+        // A linked row follows its medicine's Regular or PRN setting, so the DTO needs the medicine loaded.
+        foreach (var linked in practices.Where(p => p.RelatedMedicationId.HasValue))
+            linked.RelatedMedication = await _db.ParticipantMedications.FirstAsync(m => m.Id == linked.RelatedMedicationId!.Value, ct);
         var today = await ProviderTodayAsync(participant.TenantId, ct);
         return Ok(ApiResponse<List<RestrictivePracticeDto>>.Ok(practices.Select(rp => ToDto(rp, today)).ToList()));
     }
+
+    /// <summary>The end date needs a start and must not precede it (inclusive: the same day is fine); null when valid.</summary>
+    private static string? EndDateError(DateOnly? start, DateOnly? end) =>
+        end == null ? null
+        : start == null ? "Add the authorisation date before an end date"
+        : end < start ? "The end date can't be before the authorisation date"
+        : null;
 
     /// <summary>The authoriser and the authorisation date are given together, or not at all (same wording as the client).</summary>
     private static string? AuthorisationPairError(string? authorisedBy, DateOnly? authorisationDate)
@@ -246,13 +263,28 @@ public class RestrictivePracticesController : ControllerBase
             if (pairError != null) return BadRequest(ApiResponse<RestrictivePracticeDto>.Fail(pairError));
         }
 
+        // Same legacy tolerance: only check what this save changes.
+        if (dto.AuthorisationEndDate != practice.AuthorisationEndDate || dto.AuthorisationDate != practice.AuthorisationDate)
+        {
+            var endError = EndDateError(dto.AuthorisationDate, dto.AuthorisationEndDate);
+            if (endError != null) return BadRequest(ApiResponse<RestrictivePracticeDto>.Fail(endError));
+        }
+        if (dto.FirstUsedOn != practice.FirstUsedOn && dto.FirstUsedOn > await ProviderTodayAsync(practice.TenantId, ct))
+            return BadRequest(ApiResponse<RestrictivePracticeDto>.Fail("The first use date can't be in the future"));
+
         var wasActive = practice.IsActive;
         practice.Type = dto.Type;
         practice.Description = dto.Description;
         practice.AuthorisedBy = dto.AuthorisedBy;
         practice.AuthorisationDate = dto.AuthorisationDate;
         practice.ReviewDate = dto.ReviewDate;
+        practice.AuthorisationEndDate = dto.AuthorisationEndDate;
+        practice.FirstUsedOn = dto.FirstUsedOn;
+        practice.InterimBspDate = dto.InterimBspDate;
+        practice.ComprehensiveBspDate = dto.ComprehensiveBspDate;
         practice.RelatedMedicationId = dto.RelatedMedicationId;
+        // A linked entry follows its medicine, so the stored kind only changes while unlinked.
+        if (dto.UseKind is { } useKind && practice.RelatedMedicationId == null) practice.UseKind = useKind;
         practice.IsActive = dto.IsActive;
         if (dto.RequiresReporting is bool reporting) practice.RequiresReporting = reporting;
         practice.UpdatedAt = DateTime.UtcNow;
@@ -362,8 +394,13 @@ public class RestrictivePracticesController : ControllerBase
         return null;
     }
 
-    internal static RestrictivePracticeDto ToDto(RestrictivePractice rp, DateOnly today) => new()
+    /// <summary>Needs <c>RelatedMedication</c> loaded for a linked entry (the use kind follows the medicine). <paramref name="earliestUse"/> is the suggestion for the first use date.</summary>
+    internal static RestrictivePracticeDto ToDto(RestrictivePractice rp, DateOnly today, DateOnly? earliestUse = null)
     {
+        var interimDue = rp.FirstUsedOn is { } first ? BspTimeline.InterimDue(first) : (DateOnly?)null;
+        var comprehensiveDue = rp.FirstUsedOn is { } first2 ? BspTimeline.ComprehensiveDue(first2) : (DateOnly?)null;
+        return new()
+        {
         Id = rp.Id,
         ParticipantId = rp.ParticipantId,
         Type = rp.Type,
@@ -377,20 +414,61 @@ public class RestrictivePracticesController : ControllerBase
         RequiresReporting = rp.RequiresReporting,
         IsActive = rp.IsActive,
         IsAuthorised = RestrictivePracticeAuthorisation.IsAuthorised(rp, today),
+        UseKind = RestrictivePracticeAuthorisation.UseKindOf(rp),
+        AuthorisationEndDate = rp.AuthorisationEndDate,
+        FirstUsedOn = rp.FirstUsedOn,
+        InterimBspDate = rp.InterimBspDate,
+        ComprehensiveBspDate = rp.ComprehensiveBspDate,
+        EarliestRecordedUseDate = earliestUse,
+        InterimBspDueOn = interimDue,
+        ComprehensiveBspDueOn = comprehensiveDue,
+        InterimBspState = rp.IsActive ? BspTimeline.InterimState(interimDue, rp.InterimBspDate, rp.ComprehensiveBspDate, today) : BspPlanState.NotStarted,
+        ComprehensiveBspState = rp.IsActive ? BspTimeline.State(comprehensiveDue, rp.ComprehensiveBspDate, today) : BspPlanState.NotStarted,
         CreatedAt = rp.CreatedAt,
         UpdatedAt = rp.UpdatedAt,
-    };
+        };
+    }
+
+    /// <summary>
+    /// The earliest recorded use of each entry, as a suggestion for its first use date: the first active use incident linked to it (a wall-clock date, kept
+    /// as entered), and for a linked chemical entry the first administered dose of its medicine (UTC, read in the provider's zone). One grouped query per
+    /// source, never one per entry.
+    /// </summary>
+    private async Task<Dictionary<Guid, DateOnly>> EarliestUsesAsync(IReadOnlyCollection<RestrictivePractice> items, TimeZoneInfo zone, CancellationToken ct)
+    {
+        var ids = items.Select(rp => rp.Id).ToList();
+        var result = new Dictionary<Guid, DateOnly>();
+        void Keep(Guid id, DateOnly date) { if (!result.TryGetValue(id, out var have) || date < have) result[id] = date; }
+
+        var incidents = await _db.IncidentReports
+            .Where(i => i.IsActive && i.IncidentType == IncidentType.RestrictivePracticeUse && i.RestrictivePracticeId != null && ids.Contains(i.RestrictivePracticeId.Value))
+            .GroupBy(i => i.RestrictivePracticeId!.Value)
+            .Select(g => new { Id = g.Key, First = g.Min(i => i.IncidentDateTime) })
+            .ToListAsync(ct);
+        foreach (var row in incidents) Keep(row.Id, DateOnly.FromDateTime(row.First));
+
+        var byMedicine = items.Where(rp => rp.RelatedMedicationId != null).ToDictionary(rp => rp.RelatedMedicationId!.Value, rp => rp.Id);
+        if (byMedicine.Count == 0) return result;
+        var medIds = byMedicine.Keys.ToList();
+        var doses = await _db.MedicationAdministrations
+            .Where(a => medIds.Contains(a.ParticipantMedicationId) && a.Status == MedicationAdministrationStatus.Administered && a.AdministeredAt != null)
+            .GroupBy(a => a.ParticipantMedicationId)
+            .Select(g => new { Id = g.Key, First = g.Min(a => a.AdministeredAt) })
+            .ToListAsync(ct);
+        foreach (var row in doses)
+            Keep(byMedicine[row.Id], DateOnly.FromDateTime(ProviderLocalTime.UtcToLocal(ProviderLocalTime.AsUtc(row.First!.Value), zone)));
+        return result;
+    }
 
     private async Task<RestrictivePracticeDto> ToDtoWithMedicationNameAsync(RestrictivePractice rp, CancellationToken ct)
     {
-        var today = await ProviderTodayAsync(rp.TenantId, ct);
-        if (!rp.RelatedMedicationId.HasValue) return ToDto(rp, today);
+        var zone = (await ProviderTimeZoneResolver.ResolveAsync(_db, rp.TenantId, ct)).Zone;
+        var today = ProviderLocalTime.TodayIn(_clock.GetUtcNow().UtcDateTime, zone);
+        var earliest = (await EarliestUsesAsync(new[] { rp }, zone, ct)).GetValueOrDefault(rp.Id);
+        if (!rp.RelatedMedicationId.HasValue) return ToDto(rp, today, earliest);
 
-        var medication = await _db.ParticipantMedications
-            .Where(m => m.Id == rp.RelatedMedicationId.Value)
-            .Select(m => new { m.Name, m.Status })
-            .FirstOrDefaultAsync(ct);
-
-        return ToDto(rp, today) with { RelatedMedicationName = medication?.Name, RelatedMedicationStatus = medication?.Status };
+        // The use kind follows the medicine, so load it onto the entry before the DTO reads it.
+        rp.RelatedMedication = await _db.ParticipantMedications.FirstAsync(m => m.Id == rp.RelatedMedicationId.Value, ct);
+        return ToDto(rp, today, earliest);
     }
 }

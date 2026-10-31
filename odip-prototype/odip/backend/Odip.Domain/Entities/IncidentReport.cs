@@ -108,6 +108,8 @@ public class IncidentReport
     /// edited, but the stored determination itself only ever changes by creating a fresh incident.
     /// </summary>
     public bool? IsRestrictivePracticeAuthorised { get; set; }
+    /// <summary>Whether an authorised restrictive practice use departed from the behaviour support plan. Set at Create only, frozen like the determination, stored only when the use was authorised; null for legacy rows and unauthorised or undeterminable uses (null is reportable).</summary>
+    public bool? RestrictivePracticeUseVaried { get; set; }
     public IncidentSeverity Severity { get; set; }
     public IncidentStatus Status { get; set; } = IncidentStatus.Draft;
     public string Title { get; set; } = string.Empty;
