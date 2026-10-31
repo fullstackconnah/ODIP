@@ -295,6 +295,51 @@ describe('StaffPage — column budget', () => {
   })
 })
 
+// Polish 1b: identity, status, then what they hold; Position leaves the table while nobody has one; the actions overlay (0px at rest) and end the phone card.
+describe('StaffPage — column order and phone card', () => {
+  it('orders the columns Name, Status, Qualifications, Position, Region, then the actions', () => {
+    renderPage()
+    expect(screen.getAllByRole('columnheader').map(h => h.textContent)).toEqual(['Name', 'Status', 'Qualifications', 'Position', 'Region', 'Actions'])
+    expect(screen.getByRole('columnheader', { name: 'Actions' })).toHaveAttribute('data-pin', 'end')
+    expect(screen.getByRole('columnheader', { name: 'Actions' }).className).toContain('md:pointer-fine:px-0')
+  })
+
+  it('drops the Position column while no staff member has a position, and brings it back with one', () => {
+    mockUseStaff.mockReturnValue({ data: [makeStaff({ position: '' as StaffListDto['position'] }), makeStaff({ id: 's2', fullName: 'Sam Lee', position: '' as StaffListDto['position'] })], isLoading: false })
+    const { unmount } = renderPage()
+    expect(screen.queryByRole('columnheader', { name: 'Position' })).not.toBeInTheDocument()
+    unmount()
+    mockUseStaff.mockReturnValue({ data: [makeStaff({ position: '' as StaffListDto['position'] }), makeStaff({ id: 's2', fullName: 'Sam Lee' })], isLoading: false })
+    renderPage()
+    expect(screen.getByRole('columnheader', { name: 'Position' })).toBeInTheDocument()
+  })
+
+  it('puts Position, Region, then Qualifications on the card meta line, and the row menu in the trail slot', () => {
+    renderPage()
+    const row = screen.getByText('Alex Rivera').closest('tr') as HTMLElement
+    expect(row.querySelector('td[data-label="Qualifications"]')?.className).toContain('max-md:order-0!')
+    const actions = row.querySelector('td[data-label=""]') as HTMLElement
+    expect(actions).toHaveAttribute('data-card', 'trail')
+    expect(actions.className).not.toContain('basis-full')
+    expect(within(actions).getByRole('button', { name: 'More actions for Alex Rivera' })).toBeInTheDocument()
+  })
+
+  it('offers the same actions on the desktop row as in the card menu: Leave & availability, Edit, Archive', () => {
+    renderPage()
+    const row = screen.getByText('Alex Rivera').closest('tr') as HTMLElement
+    expect(within(row).getByRole('link', { name: 'Leave & availability' })).toBeInTheDocument()
+    expect(within(row).getByRole('link', { name: 'Edit' })).toBeInTheDocument()
+    expect(within(row).getByRole('button', { name: 'Archive' })).toBeInTheDocument()
+  })
+
+  it('gives a role without write access no card menu', () => {
+    setUserRole('SupportWorker')
+    renderPage()
+    const row = screen.getByText('Alex Rivera').closest('tr') as HTMLElement
+    expect(within(row).queryByRole('button', { name: /More actions/ })).not.toBeInTheDocument()
+  })
+})
+
 // Restoring from the Archived list is an update, and UpdateStaff replaces the whole record: the body must be the staff member's own fields (toUpdateStaffDto),
 // not the raw list row, which carries list-only fields (id, fullName, username, ...) and nulls where the server wants nothing.
 describe('StaffPage — restoring an archived staff member', () => {
