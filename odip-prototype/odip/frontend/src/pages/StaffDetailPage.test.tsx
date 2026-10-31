@@ -178,7 +178,7 @@ describe('StaffDetailPage — summary strip', () => {
           isDriverEligible: true, driverLicenceExpiryDate: daysFromToday(10),
           isManualHandlingCompetent: true, manualHandlingExpiryDate: daysFromToday(400),
         }),
-        upcomingShifts: [{ shiftId: 's1', serviceDate: '2026-11-03', startTime: '07:00:00', endTime: '09:00:00', endsNextDay: false, participantId: 'p1', participantName: 'Sam', status: 'Scheduled' }],
+        upcomingShifts: [{ shiftId: 's1', serviceDate: '2026-11-03', startTime: '07:00:00', endTime: '09:00:00', endsNextDay: false, participantId: 'p1', participantName: 'Sam', status: 'Published' }],
       }),
       isLoading: false,
     })
