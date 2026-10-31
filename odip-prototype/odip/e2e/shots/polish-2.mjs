@@ -98,7 +98,7 @@ try {
     if (touch) {
       check('item 2 sm Button hit pad (touch)', `${sm.padW}x${sm.padH} drawn ${sm.w}x${sm.h}`, sm.padW >= 44 && sm.padH >= 44)
     } else {
-      check('item 2 sm Button drawn size (fine)', `${sm.w}x${sm.h}, pad equals box`, Math.round(sm.h) === 24 && Math.abs(sm.padH - sm.h) < 1)
+      check('item 2 sm Button drawn size (fine)', `${sm.w}x${sm.h}, pad inside the box (no extra hit area)`, Math.round(sm.h) === 24 && sm.padH <= sm.h + 0.5 && sm.padW <= sm.w + 0.5)
     }
     for (const [row, label] of [[1, 'Told how to make a complaint on'], [2, 'Rights explained on']]) {
       await records.nth(row).click()
