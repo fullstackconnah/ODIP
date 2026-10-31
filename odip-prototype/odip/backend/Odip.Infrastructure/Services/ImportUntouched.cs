@@ -41,6 +41,7 @@ public static class ImportUntouched
         await Add(db.AuditLogs.Where(a => a.EntityType == nameof(Participant) && a.Action == AuditAction.Updated && list.Contains(a.EntityId))
             .Select(a => a.EntityId), "was edited after the import");
         await Add(db.RestrictivePractices.Where(r => list.Contains(r.ParticipantId)).Select(r => r.ParticipantId), "has restrictive practices");
+        await Add(db.Complaints.Where(c => c.ParticipantId != null && list.Contains(c.ParticipantId.Value)).Select(c => c.ParticipantId!.Value), "has complaints");
         await Add(db.ParticipantRoutines.Where(r => list.Contains(r.ParticipantId)).Select(r => r.ParticipantId), "has routines");
         await Add(db.SupportProfiles.Where(s => list.Contains(s.ParticipantId)).Select(s => s.ParticipantId), "has a support profile");
         await Add(db.StaffParticipantCompatibilities.Where(s => list.Contains(s.ParticipantId)).Select(s => s.ParticipantId), "has staff compatibility entries");
@@ -84,6 +85,7 @@ public static class ImportUntouched
         await Add(db.StaffAvailabilities.Where(a => list.Contains(a.UserId)).Select(a => a.UserId), "has availability");
         await Add(db.StaffParticipantCompatibilities.Where(c => list.Contains(c.UserId)).Select(c => c.UserId), "has participant pairings");
         await Add(db.StaffAssignments.Where(a => list.Contains(a.UserId)).Select(a => a.UserId), "is assigned to a trip");
+        await Add(db.Complaints.Where(c => c.HandledByUserId != null && list.Contains(c.HandledByUserId.Value)).Select(c => c.HandledByUserId!.Value), "handles complaints");
         await Add(db.VehicleAssignments.Where(v => v.DriverUserId != null && list.Contains(v.DriverUserId.Value)).Select(v => v.DriverUserId!.Value), "drives on a trip");
         await Add(db.Participants.Where(p => p.PreferredUserId != null && list.Contains(p.PreferredUserId.Value)).Select(p => p.PreferredUserId!.Value), "is a participant's preferred staff member");
         // Incidents unfiltered, as for participants above.
