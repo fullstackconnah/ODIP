@@ -231,8 +231,10 @@ try {
       check('1280 7 authorised batch fits with no inner scroll, Remove inside the dialog', fit, fit.sw <= fit.cw + 1 && fit.btnRight <= fit.dlgRight)
     }
     const descWidth = async (label) => {
-      const w = (await rows.getByPlaceholder('What the restrictive practice involves...').first().boundingBox()).width
+      const w = (await rows.getByPlaceholder('What the practice involves').first().boundingBox()).width
       if (!vp.mobile) check(`1280 7 bulk description input >= 220 (${label})`, w, w >= 220)
+      const pf = await rows.getByPlaceholder('What the practice involves').first().evaluate((i) => ({ sw: i.scrollWidth, cw: i.clientWidth }))
+      if (!vp.mobile) check(`1280 7 bulk description placeholder reads whole (${label})`, pf, pf.sw <= pf.cw)
     }
     await descWidth('authorised batch')
     await shoot(rows, 'bulk-rows')
@@ -244,6 +246,11 @@ try {
     await settled(page)
     await descWidth('chemical batch')
     await noOverflow('bulk rows chemical')
+    if (!vp.mobile) {
+      const cf = await rows.evaluate((d) => { const w = d.querySelector('table').parentElement; const dr = d.getBoundingClientRect(); const inside = (el) => { const r = el.getBoundingClientRect(); return r.left >= dr.left && r.right <= dr.right }; return { sw: w.scrollWidth, cw: w.clientWidth, dlgSw: d.scrollWidth, dlgCw: d.clientWidth, remove: inside(d.querySelector('tbody button[aria-label*="Remove" i], tbody button:last-of-type')), med: inside(d.querySelector('tbody [aria-labelledby^="bulk-medication-label"]')), authBy: d.querySelector('tbody input[placeholder="e.g. Dr. Chen"]').getBoundingClientRect().width } })
+      check('1280 7 chemical batch fits with no inner scroll, Remove and Linked medication inside the dialog', cf, cf.sw <= cf.cw + 1 && cf.remove && cf.med && cf.dlgSw <= cf.dlgCw + 1)
+      check('1280 7 chemical Authorised by input >= 128', cf.authBy, cf.authBy >= 128)
+    }
     await shoot(rows, 'bulk-rows-chemical')
     await rows.getByRole('button', { name: 'Back' }).click()
     await bulk.getByRole('checkbox', { name: 'This restrictive practice is authorised' }).uncheck()

@@ -276,8 +276,8 @@ function AddRestrictivePracticeDialogBody({ participantId, onClose, onSaved, def
   // ChemicalRestraint. Adding a single entry from an incident asks nothing about its authorisation, and has no rows to remove.
   const bulkColumns: Column<BulkRowState>[] = [
     // The full row on a phone card, and 16rem from md up: otherwise the cell shrinks to the input and a prefilled description can't be read.
-    textColumn('description', 'Description', 'What the restrictive practice involves...', 'max-md:basis-full md:min-w-[16rem]'),
-    ...(single || !authorised ? [] : [textColumn('authorisedBy', 'Authorised by', 'e.g. Dr. Chen'), dateColumn('authorisationDate', 'Authorisation date'), dateColumn('authorisationEndDate', 'Authorisation end date')]),
+    textColumn('description', 'Description', 'What the practice involves', 'max-md:basis-full md:min-w-[16rem]'),
+    ...(single || !authorised ? [] : [textColumn('authorisedBy', 'Authorised by', 'e.g. Dr. Chen', bulkType === 'ChemicalRestraint' ? 'md:min-w-[9.5rem]' : undefined), dateColumn('authorisationDate', 'Authorisation date'), dateColumn('authorisationEndDate', 'Authorisation end date')]),
     dateColumn('reviewDate', 'Review date'),
     ...(bulkType === 'ChemicalRestraint' ? [medicationColumn] : []),
     ...(single ? [] : [removeColumn]),
@@ -349,7 +349,7 @@ function AddRestrictivePracticeDialogBody({ participantId, onClose, onSaved, def
       onClose={onClose}
       title={single ? `Add to restrictive practice register — ${RESTRICTIVE_PRACTICE_TYPE_LABELS[bulkType]}` : `Add entries — ${RESTRICTIVE_PRACTICE_TYPE_LABELS[bulkType]}`}
       size="xl"
-      className="max-w-5xl!" // Modal has no size above xl: the 5-column authorised table needs ~944px (shortcut: one call site, add a size if a second needs it)
+      className={bulkType === 'ChemicalRestraint' ? 'max-w-[75rem]!' : 'max-w-5xl!'} // Modal has no size above xl: the 5-column authorised table needs ~944px, the 7-column chemical one ~1180px (shortcut: one call site, add sizes if a second needs it)
       footer={
         <>
           {single ? (
