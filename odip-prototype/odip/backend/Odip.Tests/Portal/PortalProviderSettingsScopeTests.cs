@@ -58,6 +58,23 @@ public class PortalProviderSettingsScopeTests
     [Fact]
     public async Task ManualFinish_StaffOfTheOrganisation_GetItsZone() => Assert.Equal(Perth, await ManualFinishZone(await Fixture(unscoped: false, staffTenant: Guid.NewGuid())));
 
+    // The saved zone wins over the State: an NSW organisation set to Perth stamps Perth.
+    private static async Task<ShiftPackageFixture> NswSetToPerth()
+    {
+        var f = Create(ShiftStatus.Published);
+        var settings = await f.Db.ProviderSettings.IgnoreQueryFilters().SingleAsync();
+        settings.State = "NSW";
+        settings.TimeZoneId = Perth;
+        await f.Db.SaveChangesAsync();
+        return f;
+    }
+
+    [Fact]
+    public async Task Start_AnNswOrganisationSetToPerth_StampsPerth() => Assert.Equal(Perth, await StartedZone(await NswSetToPerth()));
+
+    [Fact]
+    public async Task ManualFinish_AnNswOrganisationSetToPerth_StampsPerth() => Assert.Equal(Perth, await ManualFinishZone(await NswSetToPerth()));
+
     // Perth's window opens 12 July 01:00 UTC (rostered start 14 July 01:00 UTC less 48 hours); Sydney's opened at 11 July 23:00 UTC. At 12 July 00:00 UTC only
     // the Sydney reading has it open.
     private static readonly DateTimeOffset BeforePerthWindowOpens = new(2026, 7, 12, 0, 0, 0, TimeSpan.Zero);

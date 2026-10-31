@@ -7,6 +7,7 @@ using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 using Odip.Tests.Postgres;
 using Xunit;
 
@@ -57,5 +58,52 @@ public class ProviderSettingsPostgresTests : IClassFixture<PostgresFixture>
         var (check, _c) = Request(tenantId);
         await using (check)
             Assert.Equal("222", (await check.ProviderSettings.SingleAsync()).AccountNumber);
+    }
+
+    private sealed class FixedClock(DateTime utc) : TimeProvider { public override DateTimeOffset GetUtcNow() => new(utc, TimeSpan.Zero); }
+
+    // 14:30 UTC on 31 Oct is 1 Nov in Sydney and still 31 Oct in Perth: the saved zone decides, read through the real query.
+    [SkippableFact]
+    public async Task Today_follows_the_saved_zone_and_falls_back_to_the_State()
+    {
+        Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
+        var (seed, tenantId) = await _pg.NewTenantContextAsync();
+        await using (seed)
+        {
+            seed.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = tenantId, OrganisationName = "Test Org", State = "NSW", TimeZoneId = "Australia/Perth" });
+            await seed.SaveChangesAsync();
+        }
+        var clock = new FixedClock(new DateTime(2026, 10, 31, 14, 30, 0, DateTimeKind.Utc));
+
+        { var (db, _) = Request(tenantId); await using var _d = db; Assert.Equal(new DateOnly(2026, 10, 31), await ProviderTimeZoneResolver.TodayAsync(db, tenantId, clock, CancellationToken.None)); }
+
+        { var (db, _) = Request(tenantId); await using var _d = db; (await db.ProviderSettings.SingleAsync()).TimeZoneId = null; await db.SaveChangesAsync(); }
+        { var (db, _) = Request(tenantId); await using var _d = db; Assert.Equal(new DateOnly(2026, 11, 1), await ProviderTimeZoneResolver.TodayAsync(db, tenantId, clock, CancellationToken.None)); }
+    }
+
+    [SkippableFact]
+    public async Task A_zone_change_on_a_stale_form_is_a_409_with_no_change_and_no_audit_row()
+    {
+        Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
+        var (seed, tenantId) = await _pg.NewTenantContextAsync();
+        await using (seed)
+        {
+            seed.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = tenantId, OrganisationName = "Test Org", State = "VIC", AccountNumber = "111" });
+            await seed.SaveChangesAsync();
+        }
+        DateTime loaded;
+        { var (db, c) = Request(tenantId); await using var _ = db; loaded = await LoadedAsync(c); }
+        { var (db, c) = Request(tenantId); await using var _ = db; Assert.IsType<OkObjectResult>((await c.Upsert(Form("222", loaded), CancellationToken.None)).Result); }
+
+        var stale = Form("222", loaded);
+        stale.TimeZoneId = "Australia/Perth";
+        { var (db, c) = Request(tenantId); await using var _ = db; Assert.IsType<ConflictObjectResult>((await c.Upsert(stale, CancellationToken.None)).Result); }
+
+        var (check, _c) = Request(tenantId);
+        await using (check)
+        {
+            Assert.Null((await check.ProviderSettings.SingleAsync()).TimeZoneId);
+            Assert.Empty(await check.AuditLogs.Where(a => a.Changes.Contains("TimeZoneId")).ToListAsync());
+        }
     }
 }

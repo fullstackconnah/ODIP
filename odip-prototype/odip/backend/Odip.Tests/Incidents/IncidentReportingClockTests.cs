@@ -259,6 +259,20 @@ public class IncidentReportingClockTests
     }
 
     [Fact]
+    public async Task GetById_ForAnNswOrganisationSetToPerth_UsesThePerthZone()
+    {
+        var (db, controller, reporter) = Arrange();
+        using var _d = db;
+        db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = reporter.TenantId, State = "NSW", TimeZoneId = "Australia/Perth" });
+        db.SaveChanges();
+        var created = await CreateCriticalAsync(db, controller, reporter.Id);
+
+        var detail = Assert.IsType<ApiResponse<IncidentDetailDto>>(Assert.IsType<OkObjectResult>((await controller.GetById(created.Id, CancellationToken.None)).Result).Value).Data!;
+
+        Assert.Equal("Australia/Perth", detail.TimeZoneId);
+    }
+
+    [Fact]
     public async Task Update_ReportedAt_DerivesOnTimeOrLate_InTheProviderZone()
     {
         var (db, controller, reporter) = Arrange();
