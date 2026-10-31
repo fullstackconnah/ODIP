@@ -385,7 +385,10 @@ describe('IncidentsPage — one-line NDIS Commission banner', () => {
     expect(banner.querySelector('p')!.parentElement).toHaveClass('flex-col', 'md:flex-row')
     expect(banner.querySelector('p')).toHaveClass('md:flex-1')
     expect(banner).toHaveTextContent('Some uses of an unauthorised restrictive practice can be reported within 5 business days.')
-    expect(banner).toHaveClass('flex', 'items-center', 'min-h-10')
+    // The icon sits beside the FIRST line when the text wraps (items-start + the half-leading offset); py-2.5 around one 20px line is the old 40px box.
+    expect(banner).toHaveClass('flex', 'items-start', 'py-2.5')
+    expect(banner).not.toHaveClass('items-center')
+    expect(banner.querySelector('svg')).toHaveClass('mt-0.5')
     // Keeps the token colours the C-1 test pins, and no raw palette colours.
     expect(banner.className).toMatch(/bg-error-container/)
   })
