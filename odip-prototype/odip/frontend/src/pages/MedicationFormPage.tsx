@@ -6,7 +6,7 @@ import { useState } from 'react'
 import { Plus, X } from 'lucide-react'
 import { useCreateMedication, useUpdateMedication, useMedication, useParticipant } from '@/api/hooks'
 import { Dropdown } from '@/components/Dropdown'
-import { FormField, labelClass } from '@/components/FormField'
+import { FormField, fieldSurface, labelClass } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { CheckboxField } from '@/components/CheckboxField'
@@ -488,7 +488,7 @@ export default function MedicationFormPage() {
                       {times.length === 0 && <span className="text-sm text-[var(--color-muted-foreground)]">No times added yet</span>}
                     </div>
                     <div className="flex items-center gap-2">
-                      <input type="time" value={newTime} onChange={e => setNewTime(e.target.value)} className="px-3 h-[var(--control-h)] rounded-[var(--radius-md)] bg-[var(--color-input)] border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]" />
+                      <input type="time" value={newTime} onChange={e => setNewTime(e.target.value)} className={`h-[var(--control-h)] text-sm ${fieldSurface}`} />
                       <Button
                         variant="secondary"
                         onClick={() => {

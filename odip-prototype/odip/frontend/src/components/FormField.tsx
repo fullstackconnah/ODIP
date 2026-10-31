@@ -23,15 +23,26 @@ export type FormFieldProps = {
   children: ReactNode
 }
 
-const CONTROL_SURFACE = 'px-3 rounded-[var(--radius-sm)] bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-shadow'
+// The one field treatment (DESIGN.md "Fields"): a white (raised, in dark) fill with a 3:1 edge. The placeholder is its own ink, so empty reads apart from filled.
+// Hover (fine pointers) darkens the edge; focus is the primary edge plus a 2px ring; an invalid field (aria-invalid, set by FormField) turns edge and ring
+// destructive; disabled is the recessed fill and muted ink, never an opacity; read-only (an input or textarea with the attribute, so a select or a button
+// never matches) is transparent with a dashed edge. The hover and focus rules exclude the invalid state so the edge colour does not depend on stylesheet order.
+// Exported so a trigger that is a button (Dropdown 'form') wears the same surface.
+export const fieldSurface = [
+  'px-3 rounded-[var(--radius-sm)] border border-[var(--color-field-border)] bg-[var(--color-field)] text-[var(--color-foreground)] placeholder:text-[var(--color-placeholder)] transition-shadow',
+  'hover:[&:not([aria-invalid=true]):not(:disabled):not([readonly])]:border-[var(--color-muted-foreground)]',
+  'focus:outline-none focus:ring-2 focus:[&:not([aria-invalid=true])]:border-[var(--color-ring)] focus:[&:not([aria-invalid=true])]:ring-[var(--color-ring)]',
+  'aria-[invalid=true]:border-[var(--color-destructive)] aria-[invalid=true]:focus:ring-[var(--color-destructive)]',
+  'disabled:cursor-not-allowed disabled:border-[var(--color-border)] disabled:bg-[var(--color-field-disabled)] disabled:text-[var(--color-muted-foreground)]',
+  '[&[readonly]]:border-dashed [&[readonly]]:border-[var(--color-border)] [&[readonly]]:bg-transparent',
+].join(' ')
 
-export const inputClass = `w-full h-[var(--control-h)] ${CONTROL_SURFACE}`
+export const inputClass = `w-full h-[var(--control-h)] ${fieldSurface}`
 // A textarea must not carry the single-line control's fixed height, or its `rows` attribute is
 // ignored (it stayed one line tall however many rows a caller asked for). `min-h` keeps an empty
 // or rows={1} textarea level with its 32px/44px neighbours; `h-auto` lets `rows` set the height;
 // `py-1.5` keeps text off the border, which a fixed-height single line never needed.
-// Disabled: the dimmed look SearchableSelect and Dropdown use (opacity-60, not-allowed) plus the muted surface and text tokens, so it never reads as editable.
-export const textareaClass = `w-full min-h-[var(--control-h)] h-auto py-1.5 ${CONTROL_SURFACE} disabled:cursor-not-allowed disabled:opacity-60 disabled:bg-[var(--color-muted)] disabled:text-[var(--color-muted-foreground)]`
+export const textareaClass = `w-full min-h-[var(--control-h)] h-auto py-1.5 ${fieldSurface}`
 export const labelClass = 'block text-[13px] font-medium mb-1 text-[var(--color-muted-foreground)]'
 
 const NATIVE_INPUTS = ['input', 'select', 'textarea']

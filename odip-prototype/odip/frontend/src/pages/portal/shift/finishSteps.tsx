@@ -4,6 +4,7 @@ import { useDeleteBreak, useEditBreak, useEndBreak, useShiftNotes } from '@/api/
 import { useQueueRecords } from '@/api/hooks/portal'
 import { isStillTrying } from '@/lib/offline/queue'
 import { waitingBreak } from '@/lib/offline/overlay'
+import { fieldSurface } from '@/components/FormField'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { FactList, type FactListItem } from '@/components/FactList'
@@ -22,7 +23,7 @@ import type { EndDraft } from './endDraft'
 import type { PortalFinishBlockerDto, PortalShiftDetailDto, ShiftBreakDto, ShiftNoteDto } from '@/api/types'
 
 const HANDOVER_MAX = 2000
-const fieldClass = 'w-full px-3 py-2 min-h-[44px] rounded-lg bg-[var(--color-input)] border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]'
+const fieldClass = `w-full py-2 min-h-[44px] text-sm ${fieldSurface}`
 const clock = (iso: string, tz: string) => formatWithTimeZone(iso, tz, { hour: 'numeric', minute: '2-digit' })
 
 /** A submit the server refused, with the step that can fix it (stepForCode). */

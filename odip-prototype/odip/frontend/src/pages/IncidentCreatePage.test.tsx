@@ -1497,7 +1497,7 @@ describe('IncidentCreatePage — the current step is marked', () => {
   it('fills the current step on the one-row rail', () => {
     renderCreatePage()
     const current = screen.getByRole('navigation', { name: 'Incident report steps' }).querySelector('[aria-current="step"]')!
-    expect(current).toHaveClass('bg-[var(--color-primary)]', 'text-[var(--color-primary-foreground)]')
+    expect(current).toHaveClass('bg-[var(--color-selected)]', 'text-[var(--color-on-selected)]')
   })
 })
 

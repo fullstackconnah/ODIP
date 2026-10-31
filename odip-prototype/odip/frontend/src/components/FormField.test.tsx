@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { FormField } from './FormField'
+import { FormField, fieldSurface, inputClass, textareaClass } from './FormField'
 
 describe('FormField control sizing', () => {
   it('lets a textarea grow with its rows: min-height + auto height instead of the fixed control height', () => {
@@ -16,7 +16,7 @@ describe('FormField control sizing', () => {
     expect(textarea).not.toHaveClass('h-[var(--control-h)]')
     expect(textarea).toHaveAttribute('rows', '3')
     // The rest of the control surface is shared with inputs.
-    expect(textarea).toHaveClass('w-full', 'px-3', 'rounded-[var(--radius-sm)]', 'bg-[var(--color-input)]')
+    expect(textarea).toHaveClass('w-full', 'px-3', 'rounded-[var(--radius-sm)]', 'bg-[var(--color-field)]')
   })
 
   it('keeps inputs and selects on the fixed --control-h height', () => {
@@ -39,14 +39,36 @@ describe('FormField control sizing', () => {
     }
   })
 
-  it('dims a disabled textarea: muted surface and text, not-allowed cursor', () => {
+  it('recesses a disabled textarea: its own fill, muted text, not-allowed cursor, and no opacity', () => {
     render(
       <FormField label="Notes">
         <textarea disabled />
       </FormField>,
     )
 
-    expect(screen.getByLabelText('Notes')).toHaveClass('disabled:cursor-not-allowed', 'disabled:opacity-60', 'disabled:bg-[var(--color-muted)]', 'disabled:text-[var(--color-muted-foreground)]')
+    expect(screen.getByLabelText('Notes')).toHaveClass('disabled:cursor-not-allowed', 'disabled:bg-[var(--color-field-disabled)]', 'disabled:text-[var(--color-muted-foreground)]')
+    expect(screen.getByLabelText('Notes').className).not.toMatch(/opacity-/)
+  })
+
+  // SHAPE-PR2 §2: one field treatment. A white fill with a 3:1 edge, a placeholder that is not the value ink, a hover edge, a 2px ring on focus,
+  // a destructive edge (and ring) when invalid, a dashed transparent read-only, and a disabled fill that is not an opacity.
+  it.each(['input', 'textarea', 'select'] as const)('gives a %s the one field surface with every state', tag => {
+    const control = tag === 'select' ? <select><option>One</option></select> : tag === 'textarea' ? <textarea /> : <input />
+    render(<FormField label="Thing">{control}</FormField>)
+    const el = screen.getByLabelText('Thing')
+    expect(el).toHaveClass('bg-[var(--color-field)]', 'border-[var(--color-field-border)]', 'placeholder:text-[var(--color-placeholder)]', 'focus:ring-2')
+    expect(el.className).toContain('hover:')
+    expect(el.className).toContain('aria-[invalid=true]:border-[var(--color-destructive)]')
+    expect(el.className).toContain('[&[readonly]]:border-dashed')
+    expect(el.className).toContain('disabled:bg-[var(--color-field-disabled)]')
+    expect(el.className).not.toContain('--color-input')
+    expect(el.className).not.toMatch(/opacity-/)
+  })
+
+  it('exports the surface so a trigger button can share it', () => {
+    expect(fieldSurface).toContain('bg-[var(--color-field)]')
+    expect(inputClass).toContain(fieldSurface)
+    expect(textareaClass).toContain(fieldSurface)
   })
 
   it('still merges a caller className onto a textarea', () => {

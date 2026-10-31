@@ -3,7 +3,7 @@ import { Plus, Trash2 } from 'lucide-react'
 import type { AxiosError } from 'axios'
 import { useBulkCreateRestrictivePractices, useParticipantMedications, useRestrictivePractices } from '@/api/hooks'
 import { Modal } from '@/components/Modal'
-import { FormField } from '@/components/FormField'
+import { FormField, fieldSurface } from '@/components/FormField'
 import { Dropdown } from '@/components/Dropdown'
 import { CheckboxField } from '@/components/CheckboxField'
 import { ToggleGroup } from '@/components/ToggleGroup'
@@ -185,7 +185,7 @@ function AddRestrictivePracticeDialogBody({ participantId, onClose, onSaved, def
     }
   }
 
-  const inputClass = 'w-full min-h-[44px] px-3 py-2 rounded-lg bg-[var(--color-input)] border border-[var(--color-border)] text-sm text-[var(--color-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]'
+  const inputClass = `w-full min-h-[44px] py-2 text-sm ${fieldSurface}`
 
   const textColumn = (key: 'description' | 'authorisedBy', header: string, placeholder: string, className?: string): Column<BulkRowState> => ({
     key,

@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom'
 import { Check, ChevronDown } from 'lucide-react'
 import { TAP_AREA } from './tapArea'
 import { buttonClasses, type ButtonVariant } from './buttonClasses'
+import { fieldSurface, inputClass } from './FormField'
 
 export type DropdownItem = {
   value: string
@@ -336,7 +337,7 @@ export function Dropdown({
             onChange={e => setSearchQuery(e.target.value)}
             onKeyDown={handleSearchKeyDown}
             placeholder="Search..."
-            className="w-full px-3 py-1.5 text-sm bg-[var(--color-input)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
+            className={`${inputClass} text-sm`}
             onClick={e => e.stopPropagation()}
           />
         </div>
@@ -440,7 +441,7 @@ export function Dropdown({
           disabled={disabled || loading}
           onClick={() => setOpen(v => !v)}
           onKeyDown={handleKeyDown}
-          className="w-full flex items-center justify-between h-[var(--control-h)] px-3 rounded-[var(--radius-sm)] text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] hover:shadow-[0_0_0_2px_var(--color-focus-ring-soft)] transition-all disabled:opacity-60 disabled:pointer-events-none bg-[var(--color-input)] text-[var(--color-foreground)]"
+          className={`flex items-center justify-between h-[var(--control-h)] w-full text-sm disabled:pointer-events-none ${fieldSurface}`}
         >
           <span className={selectedLabel ? '' : 'opacity-50 text-[var(--color-muted-foreground)]'}>
             {selectedLabel ?? label ?? 'Select…'}

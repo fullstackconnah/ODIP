@@ -23,8 +23,8 @@ describe('TextAreaField primitive', () => {
   it('uses inputClass so styling matches the rest of the form system', () => {
     render(<TextAreaField label="X" />)
     const textarea = screen.getByLabelText('X')
-    expect(textarea.className).toMatch(/bg-\[var\(--color-input\)\]/)
-    expect(textarea.className).toMatch(/focus:ring-\[var\(--color-ring\)\]/)
+    expect(textarea.className).toMatch(/bg-\[var\(--color-field\)\]/)
+    expect(textarea.className).toMatch(/ring-\[var\(--color-ring\)\]/)
   })
 
   it('renders the hint and links it via aria-describedby', () => {
