@@ -38,7 +38,7 @@ public class ClaimEditGuardsTests
         var claim = new TripClaim { TenantId = participant.TenantId, Id = Guid.NewGuid(), Kind = ClaimKind.Shift, ParticipantId = participant.Id, Status = status, ClaimReference = $"TC-{Guid.NewGuid():N}"[..20], TotalAmount = 130m };
         ClaimLineItem Line(decimal hours, decimal price) => new()
         {
-            Id = Guid.NewGuid(), TripClaimId = claim.Id, ShiftId = Guid.NewGuid(), SupportItemCode = "04_104_0125_6_1", DayType = ClaimDayType.Weekday,
+            TenantId = claim.TenantId, Id = Guid.NewGuid(), TripClaimId = claim.Id, ShiftId = Guid.NewGuid(), SupportItemCode = "04_104_0125_6_1", DayType = ClaimDayType.Weekday,
             SupportsDeliveredFrom = new DateOnly(2026, 10, 1), SupportsDeliveredTo = new DateOnly(2026, 10, 1), Hours = hours, UnitPrice = price, TotalAmount = hours * price,
         };
         var first = Line(2m, 50m);

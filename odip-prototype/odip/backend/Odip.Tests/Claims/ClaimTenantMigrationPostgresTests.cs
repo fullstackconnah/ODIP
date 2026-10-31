@@ -42,12 +42,21 @@ public class ClaimTenantMigrationPostgresTests : IClassFixture<PostgresFixture>
         return participant;
     }
 
+    /// <summary>A line must hang on a booking or a shift (CK_ClaimLineItem_ExactlyOneParent): this is a shift of a participant of an organisation of its own, which the migration never reads.</summary>
+    private static async Task<Guid> PlantShiftAsync(NpgsqlConnection conn)
+    {
+        var shift = Guid.NewGuid();
+        var tenant = await PlantTenantAsync(conn);
+        await InsertAsync(conn, "Shifts", new() { ["Id"] = shift, ["TenantId"] = tenant, ["ParticipantId"] = await PlantParticipantAsync(conn, tenant) });
+        return shift;
+    }
+
     /// <summary>A claim with one line; the claim's trip and participant are optional, the column TenantId is only written when the schema has it.</summary>
     private static async Task<(Guid Claim, Guid Line)> PlantClaimAsync(NpgsqlConnection conn, Guid? trip, Guid? participant, Guid? tenant = null)
     {
         var (claim, line) = (Guid.NewGuid(), Guid.NewGuid());
         var values = new Dictionary<string, object?> { ["Id"] = claim, ["Kind"] = trip is null ? 1 : 0, ["Status"] = 0, ["ClaimReference"] = $"TC-{claim:N}", ["TripInstanceId"] = trip, ["ParticipantId"] = participant };
-        var lineValues = new Dictionary<string, object?> { ["Id"] = line, ["TripClaimId"] = claim };
+        var lineValues = new Dictionary<string, object?> { ["Id"] = line, ["TripClaimId"] = claim, ["ShiftId"] = await PlantShiftAsync(conn) };
         if (tenant is not null) { values["TenantId"] = tenant; lineValues["TenantId"] = tenant; }
         await InsertAsync(conn, "TripClaims", values);
         await InsertAsync(conn, "ClaimLineItems", lineValues);

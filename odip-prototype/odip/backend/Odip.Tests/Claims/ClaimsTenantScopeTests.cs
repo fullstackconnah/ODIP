@@ -304,7 +304,7 @@ public class ClaimsTenantScopeTests
 
         var result = await controller.GetClaimsForParticipant(a.ShiftClaim.ParticipantId!.Value, null, CancellationToken.None);
 
-        Assert.Equal(a.ShiftClaim.Id, Assert.Single(Assert.IsType<ApiResponse<List<TripClaimListDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!).Id);
+        Assert.Equal(new[] { a.ShiftClaim.Id, a.TripClaim.Id }.Order(), Assert.IsType<ApiResponse<List<TripClaimListDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!.Select(c => c.Id).Order());
     }
 
     [Fact]
