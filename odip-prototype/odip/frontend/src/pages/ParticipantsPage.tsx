@@ -2,7 +2,7 @@ import { useParticipants, useDeleteParticipant, useRestoreParticipant, useUpdate
 import { extractErrorMessage, maskNdisNumber } from '@/lib/utils'
 import { MaskedValue } from '@/components/MaskedValue'
 import { StatusBadge } from '@/components/StatusBadge'
-import { DataTable, RowActions, type Column } from '@/components/DataTable'
+import { DataTable, RowMenu, type Column, type RowMenuItem } from '@/components/DataTable'
 import { SearchInput } from '@/components/SearchInput'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { Callout } from '@/components/Callout'
@@ -13,14 +13,14 @@ import { PageState } from '@/components/PageState'
 import { ServiceStreamBadges, CHIP_CLASS } from '@/components/ServiceStreamBadges'
 import { TextField } from '@/components/TextField'
 import { ToggleGroup } from '@/components/ToggleGroup'
-import { Button } from '@/components/Button'
 import { TAP_TRUNCATED_LINK } from '@/components/tapArea'
 
 import { ALERT_SEVERITY_STYLES } from '@/components/alertSeverityStyles'
+import { parseServiceStreams } from '@/api/types/participants'
 import type { ParticipantListDto } from '@/api/types'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { Users, ChevronRight, Pill, Check } from 'lucide-react'
+import { Users, ChevronRight, Pill, Pencil, Archive, ArchiveRestore, ArrowLeftRight } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { usePermissions } from '@/lib/permissions'
 import { houseEndingMessage } from '@/lib/agreementEnding'
@@ -35,12 +35,14 @@ const VIEW_OPTIONS: { key: View; label: string }[] = [
 ]
 
 // A care need the phone card must not lose: the table keeps the tick a 'boolean' column draws, the card shows the need as a chip.
-function CareNeed({ label }: { label: string }) {
+/** The two care needs as chips, in one cell, stacked on a desktop row when both are set (side by side they pushed Support Ratio out of the first view) (a function, not a component, so null reaches DataTable and the empty card cell is dropped): the same on the desktop row and the phone card, named in words (a bare emoji and a lone "High" were two unlabelled columns). */
+function careNeeds(p: ParticipantListDto) {
+  if (!p.mobilityAidWheelchair && !p.isHighSupport) return null
   return (
-    <>
-      <Check className="w-4 h-4 text-[var(--color-primary)] mx-auto max-md:hidden" aria-label={label} />
-      <span className={`${CHIP_CLASS} md:hidden`}>{label}</span>
-    </>
+    <span className="inline-flex flex-wrap items-center gap-1 md:max-w-[7rem]">
+      {p.mobilityAidWheelchair && <span className={CHIP_CLASS}>Wheelchair</span>}
+      {p.isHighSupport && <span className={CHIP_CLASS}>High support</span>}
+    </span>
   )
 }
 
@@ -112,7 +114,7 @@ function useParticipantsScreen() {
     [alertsAggregate],
   )
 
-  const { setShowArchived, confirmDialog, errorNotice, actionButtons } = useArchiveRestore<ParticipantListDto>({
+  const { showArchived, setShowArchived, confirmDialog, errorNotice, requestArchive, requestRestore } = useArchiveRestore<ParticipantListDto>({
     deleteMutation: deleteParticipant,
     restoreMutation: restoreParticipant,
     // Restore reactivates and changes nothing else, so the endpoint takes an empty body: no list row can be sent back.
@@ -203,15 +205,23 @@ function useParticipantsScreen() {
     </>
   )
 
-  // One line per row at any desktop width: DataTable's cells never wrap, so a narrower window
-  // costs columns, not row height. Budget at 1280 (content 1280 − 232 sidebar − 2×20 gutter = 1008,
-  // 1006 inside the table border), each column padded 2×12, Manrope measured (see the density
-  // verdict report). The seeded data has no service streams and no alerts, so the Streams and Alerts
-  // columns are costed at what real data brings: streams at their 10rem cap (184) and two alert
-  // badges (94). Always shown: Name 167.5 + NDIS 98.2 + Streams 184 + wheelchair 40 + High 49.8 +
-  // Status 89.8 + Alerts 94 + chevron 40 = 763.3. 1280 adds Region 178.6: 941.9, spare 64.
-  // 1536 adds Support Ratio 102.4 and Repeat 64.4: 1108.7 of 1262. 1792 adds Plan Type 132.7:
-  // 1241.4 of 1518. The actions used to cost 213px of column; they overlay now (the 40px chevron).
+  // The row's actions, once: icon buttons on a mouse (revealed on hover), one ⋯ menu on the phone card. Archive is undoable (a confirm, then the Archived view), so it is never red.
+  const rowItems = (p: ParticipantListDto): RowMenuItem[] => [
+    ...(p.hasActiveMedications ? [{ label: 'View medications', icon: <Pill className="w-4 h-4" />, onSelect: () => navigate(`/participants/${p.id}?tab=medications`) }] : []),
+    ...(canWrite ? [
+      { label: 'Change status', icon: <ArrowLeftRight className="w-4 h-4" />, onSelect: () => openStatusDialog(p) },
+      { label: 'Edit', icon: <Pencil className="w-4 h-4" />, to: `/participants/${p.id}/edit` },
+      showArchived
+        ? { label: 'Restore', icon: <ArchiveRestore className="w-4 h-4" />, onSelect: () => requestRestore(p) }
+        : { label: 'Archive', icon: <Archive className="w-4 h-4" />, onSelect: () => requestArchive(p) },
+    ] : []),
+  ]
+
+  // One line per row at any desktop width: DataTable's cells never wrap, so a narrower window costs columns, not row height. The order is
+  // identity, status, alerts, care needs, then the rest, so what a coordinator triages by is on screen before the box scrolls (the edge fade
+  // marks the rest). Streams is left out while nobody has one. The 40px chevron cell stays: it is the row's constant "opens the record" cue,
+  // and the row actions overlay the cells before it on hover. On the phone card the whole card opens the record (onRowClick), the chevron goes,
+  // and the menu ends the card: Alerts (when any), Care needs, Region, Plan Type, Support Ratio.
   const participantColumns: Column<ParticipantListDto>[] = [
     {
       key: 'fullName',
@@ -231,37 +241,6 @@ function useParticipantsScreen() {
         </Link>
       ),
     },
-    { key: 'ndisNumber', header: 'NDIS Number', mobile: 'hidden', render: (p) => <span className="font-mono text-[13px] text-[var(--color-muted-foreground)]"><MaskedValue value={maskNdisNumber(p.maskedNdisNumber ?? p.ndisNumber)} /></span> },
-    { key: 'planType', header: 'Plan Type', maxWidth: '10rem', mobile: 'meta', render: (p) => PLAN_TYPE_LABELS[p.planType] ?? p.planType },
-    { key: 'region', header: 'Region', sortable: true, maxWidth: '11rem', mobile: 'meta' },
-    {
-      key: 'serviceStreams',
-      header: 'Streams',
-      mobile: 'hidden',
-      // Chips never wrap onto a second line (w-max), the group is clipped at 10rem instead.
-      render: (p) => (
-        <div className="md:max-w-[10rem] md:overflow-hidden">
-          <ServiceStreamBadges value={p.serviceStreams} className="md:w-max" />
-        </div>
-      ),
-    },
-    {
-      key: 'mobilityAidWheelchair',
-      // The emoji alone has no accessible name for a screen reader — sr-only text gives the
-      // column a real header while keeping the compact glyph for sighted users.
-      header: (
-        <span title="Wheelchair">
-          <span aria-hidden="true">{'\u{1F9BD}'}</span>
-          <span className="sr-only">Wheelchair</span>
-        </span>
-      ),
-      align: 'center',
-      mobile: 'meta',
-      render: (p) => p.mobilityAidWheelchair ? <CareNeed label="Wheelchair" /> : null,
-    },
-    { key: 'isHighSupport', header: 'High', align: 'center', mobile: 'meta', render: (p) => p.isHighSupport ? <CareNeed label="High support" /> : null },
-    { key: 'supportRatio', header: 'Support Ratio', maxWidth: '10rem', mobile: 'meta', render: (p) => SUPPORT_RATIO_LABELS[p.supportRatio] ?? p.supportRatio },
-    { key: 'isRepeatClient', header: 'Repeat', type: 'boolean', align: 'center', mobile: 'hidden' },
     {
       key: 'status',
       header: 'Status',
@@ -280,13 +259,16 @@ function useParticipantsScreen() {
       key: 'alerts',
       header: 'Alerts',
       align: 'center' as const,
+      mobile: 'meta' as const,
+      className: 'text-[var(--color-muted-foreground)]',
       render: (p: ParticipantListDto) => {
         if (alertsLoading) {
           return <span className="inline-block h-4 w-9 rounded-full bg-[var(--color-muted)] animate-pulse" />
         }
         const entry = alertsByParticipant.get(p.id)
         const total = entry ? entry.criticalCount + entry.warningCount + entry.infoCount : 0
-        if (total === 0) return <span className="text-[var(--color-muted-foreground)]">—</span>
+        // A plain dash, not a span: the phone card leaves a plain dash off.
+        if (total === 0) return '—'
         return (
           <span className="inline-flex items-center gap-1" title={entry!.alerts.map((a) => (a.type === 'agreement-ended' ? houseEndingMessage(a.message) : a.message)).join('; ')}>
             {entry!.criticalCount > 0 && (
@@ -311,47 +293,35 @@ function useParticipantsScreen() {
         )
       },
     }] : []),
+    { key: 'careNeeds', header: 'Care needs', mobile: 'meta', render: careNeeds },
+    { key: 'ndisNumber', header: 'NDIS Number', mobile: 'hidden', render: (p) => <span className="font-mono text-[13px] text-[var(--color-muted-foreground)]"><MaskedValue value={maskNdisNumber(p.maskedNdisNumber ?? p.ndisNumber)} /></span> },
+    { key: 'region', header: 'Region', sortable: true, maxWidth: '11rem', mobile: 'meta' },
+    { key: 'supportRatio', header: 'Support Ratio', maxWidth: '10rem', mobile: 'meta', className: 'max-md:order-1!', render: (p) => SUPPORT_RATIO_LABELS[p.supportRatio] ?? p.supportRatio },
+    { key: 'planType', header: 'Plan Type', maxWidth: '10rem', mobile: 'meta', className: 'max-md:order-0!', render: (p) => PLAN_TYPE_LABELS[p.planType] ?? p.planType },
+    { key: 'isRepeatClient', header: 'Repeat', type: 'boolean', align: 'center', mobile: 'hidden' },
+    {
+      key: 'serviceStreams',
+      header: 'Streams',
+      mobile: 'hidden',
+      // Not hideWhenEmpty: the wire value for no streams is the string "None", which that rule does not read as empty.
+      hidden: participants.length > 0 && participants.every(p => parseServiceStreams(p.serviceStreams).length === 0),
+      // Chips never wrap onto a second line (w-max), the group is clipped at 10rem instead.
+      render: (p) => (
+        <div className="md:max-w-[10rem] md:overflow-hidden">
+          <ServiceStreamBadges value={p.serviceStreams} className="md:w-max" />
+        </div>
+      ),
+    },
     {
       key: 'actions',
       header: '',
-      // `relative` anchors the overlay below; the column itself is only the chevron.
+      mobile: 'trail',
+      // The relative cell anchors the overlay in RowMenu; the column itself is only the chevron.
       className: 'relative',
       render: (p) => (
         <div className="flex items-center justify-end gap-1.5">
-          {/* Row actions (24px) appear on row hover / focus and are always shown on touch; the
-              chevron is the row's constant "opens the record" cue, so it stays outside. On a mouse
-              the cluster overlays the row's last cells instead of reserving ~200px of column, so
-              "Change status" can never spill out of (or squeeze) its cell. */}
-          <RowActions overlay>
-            {p.hasActiveMedications && (
-              <Button
-                variant="ghost"
-                size="sm"
-                iconOnly
-                title="View medications"
-                aria-label={`View medications for ${p.fullName}`}
-                onClick={(e) => { e.stopPropagation(); navigate(`/participants/${p.id}?tab=medications`) }}
-              >
-                <Pill className="w-4 h-4" />
-              </Button>
-            )}
-            {canWrite && (
-              <Button
-                variant="secondary"
-                size="sm"
-                className="whitespace-nowrap"
-                aria-label={`Change status for ${p.fullName}`}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  openStatusDialog(p)
-                }}
-              >
-                Change status
-              </Button>
-            )}
-            {canWrite && actionButtons(p)}
-          </RowActions>
-          <ChevronRight className="w-4 h-4 text-[var(--color-muted-foreground)] group-hover/row:text-[var(--color-foreground)] transition-colors shrink-0" aria-hidden="true" />
+          <RowMenu name={p.fullName} items={rowItems(p)} />
+          <ChevronRight className="w-4 h-4 text-[var(--color-muted-foreground)] group-hover/row:text-[var(--color-foreground)] transition-colors shrink-0 max-md:hidden" aria-hidden="true" />
         </div>
       ),
     },

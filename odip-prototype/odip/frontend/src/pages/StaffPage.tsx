@@ -1,5 +1,5 @@
 import { useStaff, useDeleteStaff, useUpdateStaff, useProviderSettings } from '@/api/hooks'
-import { DataTable, RowActions, type Column } from '@/components/DataTable'
+import { DataTable, RowMenu, type Column, type RowMenuItem } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { Dropdown } from '@/components/Dropdown'
 import { EmptyState, type EmptyStateAction } from '@/components/EmptyState'
@@ -14,7 +14,7 @@ import { Callout } from '@/components/Callout'
 import { extractErrorMessage } from '@/lib/utils'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link } from 'react-router-dom'
-import { Plus, UserCog, CalendarOff } from 'lucide-react'
+import { Plus, UserCog, CalendarOff, Pencil, Archive, ArchiveRestore } from 'lucide-react'
 import { useState } from 'react'
 import { useTabParam } from '@/hooks/useTabParam'
 import { usePermissions } from '@/lib/permissions'
@@ -76,7 +76,7 @@ export default function StaffPage() {
   const [confirmDeactivate, setConfirmDeactivate] = useState<{ id: string; name: string; data: UpdateStaffDto } | null>(null)
   const [statusError, setStatusError] = useState<string | null>(null)
 
-  const { showArchived, params, toggleButtons, confirmDialog, errorNotice, actionButtons } = useArchiveRestore<any>({
+  const { showArchived, params, toggleButtons, confirmDialog, errorNotice, requestArchive, requestRestore } = useArchiveRestore<any>({
     deleteMutation: deleteStaff,
     restoreMutation: updateStaff,
     restoreData: (s: StaffListDto) => toUpdateStaffDto(s, { isActive: true }),
@@ -119,6 +119,19 @@ export default function StaffPage() {
     }
   }
 
+  // The row's actions, once: icon buttons on a mouse (revealed on hover), one ⋯ menu on the phone card. Archive is undoable (a confirm, then Inactive), so it is never red.
+  const rowItems = (s: StaffListDto): RowMenuItem[] => [
+    ...(canAccessLeaveApprovals ? [{ label: 'Leave & availability', icon: <CalendarOff className="w-4 h-4" />, to: `/rostering/leave?userId=${s.id}` }] : []),
+    ...(canWrite ? [
+      { label: 'Edit', icon: <Pencil className="w-4 h-4" />, to: `/staff/${s.id}/edit` },
+      showArchived
+        ? { label: 'Restore', icon: <ArchiveRestore className="w-4 h-4" />, onSelect: () => requestRestore(s) }
+        : { label: 'Archive', icon: <Archive className="w-4 h-4" />, onSelect: () => requestArchive(s) },
+    ] : []),
+  ]
+
+  // Order: who, status, what they hold, then Position and Region; the whole table fits a 1280 window. Position leaves while nobody has one. On the
+  // phone card the name and status make the title line, the meta line is Position, Region, Qualifications, and the row menu ends the card.
   const staffColumns: Column<any>[] = [
     {
       key: 'fullName',
@@ -133,12 +146,6 @@ export default function StaffPage() {
         </Link>
       ),
     },
-    // Column budget (density §4): Region is capped (ellipsis, full text in the tooltip); every flag is still on the row (Manual and Overnight
-    // were once deleted below 1536, L3-04), now as Qualifications chips, and what does not fit scrolls in the box with the name and the row
-    // actions pinned. On the phone card the name and status make the title line and the rest one muted line.
-    { key: 'position', header: 'Position', sortable: true, mobile: 'meta', render: positionLabel },
-    { key: 'region', header: 'Region', sortable: true, maxWidth: '7rem', mobile: 'meta' },
-    { key: 'qualifications', header: 'Qualifications', mobile: 'meta', className: 'max-md:basis-full', render: (s: StaffListDto) => <Qualifications staff={s} /> },
     {
       key: 'status',
       header: 'Status',
@@ -158,29 +165,11 @@ export default function StaffPage() {
         ) : <StatusBadge status={current} />
       },
     },
-    {
-      key: 'actions',
-      header: '',
-      render: (s) => (
-        // Row actions (24px) appear on row hover / focus and are always shown on touch.
-        <RowActions>
-          {canAccessLeaveApprovals && (
-            <Button
-              to={`/rostering/leave?userId=${s.id}`}
-              onClick={e => e.stopPropagation()}
-              variant="ghost"
-              size="sm"
-              iconOnly
-              title="Leave & availability"
-              aria-label="Leave & availability"
-            >
-              <CalendarOff className="w-4 h-4" />
-            </Button>
-          )}
-          {canWrite && actionButtons(s)}
-        </RowActions>
-      ),
-    },
+    // Every flag is on the row (Manual and Overnight were once deleted below 1536, L3-04), as chips; on the card it follows Position and Region.
+    { key: 'qualifications', header: 'Qualifications', mobile: 'meta', className: 'max-md:basis-full max-md:max-w-none! max-md:order-0! max-md:pr-9!', render: (s: StaffListDto) => <Qualifications staff={s} /> },
+    { key: 'position', header: 'Position', sortable: true, mobile: 'meta', hideWhenEmpty: true, render: positionLabel },
+    { key: 'region', header: 'Region', sortable: true, maxWidth: '7rem', mobile: 'meta' },
+    { key: 'actions', header: '', overlay: true, mobile: 'trail', render: (s) => <RowMenu name={s.fullName} items={rowItems(s)} /> },
   ]
 
   // The header buttons' gates, so the empty state never offers what the header would not (and never repeats "New staff member", which the header owns). Archived has nothing to import into.

@@ -83,7 +83,8 @@ function renderPage() {
 }
 
 async function openStatusDialog(user: ReturnType<typeof userEvent.setup>, name = 'Jamie Smith') {
-  await user.click(await screen.findByRole('button', { name: `Change status for ${name}` }))
+  const row = (await screen.findByText(name)).closest('tr') as HTMLElement
+  await user.click(within(row).getByRole('button', { name: 'Change status' }))
   return screen.getByRole('alertdialog')
 }
 
