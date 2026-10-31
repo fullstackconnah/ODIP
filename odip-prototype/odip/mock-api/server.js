@@ -2737,16 +2737,18 @@ const routes = [
 
   // tasks
   ['tasks', (searchParams) => {
+    // The server's list bound: the 500 soonest due, with the true total.
+    const page = (rows) => ({ ...paged(rows.slice(0, 500)), totalCount: rows.length, pageSize: 500 })
     // The server's dashboard filters: Overdue is the TaskOverdue rule (stored Overdue, or past due and still open); dueToday is the provider's today;
     // dueThisWeek is today to today + 7.
     const today = providerToday()
     const open = (t) => t.status !== 'Completed' && t.status !== 'Cancelled'
     const status = searchParams.get('status')
-    if (status === 'Overdue') return tasks.filter((t) => t.status === 'Overdue' || (t.dueDate && t.dueDate < today && open(t)))
-    if (status) return tasks.filter((t) => t.status === status)
-    if (searchParams.get('dueToday') === 'true') return tasks.filter((t) => t.dueDate === today)
-    if (searchParams.get('dueThisWeek') === 'true') return tasks.filter((t) => t.dueDate && t.dueDate >= today && t.dueDate <= addDaysIso(today, 7))
-    return tasks
+    if (status === 'Overdue') return page(tasks.filter((t) => t.status === 'Overdue' || (t.dueDate && t.dueDate < today && open(t))))
+    if (status) return page(tasks.filter((t) => t.status === status))
+    if (searchParams.get('dueToday') === 'true') return page(tasks.filter((t) => t.dueDate === today))
+    if (searchParams.get('dueThisWeek') === 'true') return page(tasks.filter((t) => t.dueDate && t.dueDate >= today && t.dueDate <= addDaysIso(today, 7)))
+    return page(tasks)
   }],
 
   // incidents

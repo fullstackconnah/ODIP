@@ -58,7 +58,10 @@ export default function TasksPage() {
   if (!showArchived && statusFilter) queryParams.status = statusFilter
 
   const pageQuery = useTasks(queryParams)
-  const { data: tasks = [], isLoading, isError, refetch } = pageQuery
+  const { data, isLoading, isError, refetch } = pageQuery
+  // The server sends the 500 soonest due and the true total; the table sorts only the rows it holds.
+  const tasks = data?.items ?? []
+  const total = data?.totalCount ?? 0
   const markComplete = (e: React.MouseEvent, task: any) => {
     e.stopPropagation()
     setStatus.mutate({ id: task.id, status: 'Completed', completedDate: localIsoDate() }, {
@@ -192,7 +195,7 @@ export default function TasksPage() {
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <PageHeader
         title="Tasks"
-        subtitle={plural(tasks.length, 'task')}
+        subtitle={plural(total, 'task')}
         action={!showArchived && canWrite && (
           <Button to="/tasks/new" size="md">
             <Plus className="w-4 h-4" /> New task
@@ -216,6 +219,12 @@ export default function TasksPage() {
       </PageHeader>
 
       {errorNotice}
+
+      {!isLoading && !isError && total > tasks.length && (
+        <p className="text-sm text-[var(--color-muted-foreground)]">
+          Showing the first {tasks.length} of {total} {showArchived ? 'archived ' : ''}tasks, soonest due first.{!showArchived && !statusFilter && ' Choose a status to narrow the list.'}
+        </p>
+      )}
 
       {!isLoading && !isError && tasks.length === 0 ? (
         !showArchived && statusFilter ? (
