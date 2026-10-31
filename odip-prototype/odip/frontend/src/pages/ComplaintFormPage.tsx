@@ -316,7 +316,7 @@ function ComplaintForm({ complaint }: { complaint?: ComplaintDto }) {
           <Card title="The complaint">
             <div className={formGrid}>
               <TextField
-                label="Received on" type="date" required className={span.short} max={today}
+                label="Received on" type="date" required className={span.date} max={today}
                 value={values.receivedOn} onChange={e => set('receivedOn', e.target.value)} error={errors.receivedOn}
               />
               <SelectField
@@ -393,7 +393,7 @@ function ComplaintForm({ complaint }: { complaint?: ComplaintDto }) {
                 <SearchableSelect items={staffItems} value={values.handledByUserId} onChange={v => set('handledByUserId', v)} placeholder="Search staff…" />
               </FormField>
               <TextField
-                label="Acknowledged on" type="date" className={span.short} min={values.receivedOn || undefined} max={today}
+                label="Acknowledged on" type="date" className={span.date} min={values.receivedOn || undefined} max={today}
                 hint="The day you let the person know you'd received it."
                 value={values.acknowledgedOn} onChange={e => set('acknowledgedOn', e.target.value)} error={errors.acknowledgedOn}
               />
@@ -408,12 +408,12 @@ function ComplaintForm({ complaint }: { complaint?: ComplaintDto }) {
                     value={values.outcome} onChange={e => set('outcome', e.target.value)} error={errors.outcome}
                   />
                   <TextField
-                    label="Outcome told to the person on" type="date" className={span.short} min={values.receivedOn || undefined} max={today}
+                    label="Outcome told to the person on" type="date" className={span.date} min={values.receivedOn || undefined} max={today}
                     value={values.outcomeCommunicatedOn} onChange={e => set('outcomeCommunicatedOn', e.target.value)} error={errors.outcomeCommunicatedOn}
                   />
                   {values.status === 'Closed' && (
                     <TextField
-                      label="Closed on" type="date" required className={span.short} min={values.receivedOn || undefined} max={today}
+                      label="Closed on" type="date" required className={span.date} min={values.receivedOn || undefined} max={today}
                       value={values.closedOn} onChange={e => set('closedOn', e.target.value)} error={errors.closedOn}
                     />
                   )}
@@ -431,7 +431,7 @@ function ComplaintForm({ complaint }: { complaint?: ComplaintDto }) {
               />
               {values.toldAboutCommission && (
                 <TextField
-                  label="Told on" type="date" required className={span.short} min={values.receivedOn || undefined} max={today}
+                  label="Told on" type="date" required className={span.date} min={values.receivedOn || undefined} max={today}
                   value={values.toldAboutCommissionOn} onChange={e => set('toldAboutCommissionOn', e.target.value)} error={errors.toldAboutCommissionOn}
                 />
               )}
