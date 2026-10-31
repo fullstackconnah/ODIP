@@ -135,8 +135,9 @@ try {
     // 18: the portalled menu is chrome; open it in screen media, then print.
     await trigger(page).click()
     await OPTION(page).waitFor()
+    const option = await OPTION(page).elementHandle() // hidden in print, so hold it before switching: role queries skip display:none
     await page.emulateMedia({ media: 'print' })
-    const portal = await OPTION(page).evaluate((el) => { let n = el; while (n.parentElement && n.parentElement !== document.body) n = n.parentElement; return getComputedStyle(n).display })
+    const portal = await option.evaluate((el) => { let n = el; while (n.parentElement && n.parentElement !== document.body) n = n.parentElement; return getComputedStyle(n).display })
     check('18 portalled menu panel display (print)', portal, portal === 'none')
     await page.emulateMedia({ media: 'screen' })
     await page.keyboard.press('Escape')
