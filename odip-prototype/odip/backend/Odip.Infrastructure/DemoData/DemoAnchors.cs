@@ -13,10 +13,10 @@ public sealed record DemoAnchors(DateTime NowUtc, ProviderTimeZone Provider, Dat
 {
     public TimeZoneInfo Zone => Provider.Zone;
 
-    public static DemoAnchors Create(DateTime nowUtc, string? providerState)
+    public static DemoAnchors Create(DateTime nowUtc, string? providerTimeZoneId, string? providerState)
     {
         var utc = ProviderLocalTime.AsUtc(nowUtc);
-        var provider = ProviderTimeZoneResolver.FromState(providerState);
+        var provider = ProviderTimeZoneResolver.For(providerTimeZoneId, providerState);
         var local = ProviderLocalTime.UtcToLocal(utc, provider.Zone);
         var today = DateOnly.FromDateTime(local);
         return new DemoAnchors(utc, provider, local, today, MondayOf(today));

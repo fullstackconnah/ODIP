@@ -86,7 +86,7 @@ public sealed class BudgetLedgerService
 
         var today = await ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct);
         var providerState = await ProviderStateAsync(tenantId, ct);
-        var timeBasis = ProviderTimeZoneResolver.FromState(providerState).Id;
+        var timeBasis = (await ProviderTimeZoneResolver.ResolveAsync(_db, tenantId, ct)).Id;
         var approaching = await _db.BudgetSettings.AsNoTracking().Where(s => s.TenantId == tenantId).Select(s => (int?)s.ApproachingPercent).FirstOrDefaultAsync(ct)
             ?? BudgetSettings.DefaultApproachingPercent;
 

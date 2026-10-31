@@ -109,25 +109,32 @@ public class ShiftCompletion : ITenantEntity
 /// <summary>
 /// Design spec §3: TimeZoneId is resolved once, at Start, from a static AU-state → IANA-zone
 /// map keyed off ProviderSettings.State — the only geographic signal that exists on the tenant
-/// today. Unmatched/null state falls back to Australia/Sydney (same zone as the map's largest
-/// bucket, and the same zone ProviderSettings.State's own default "VIC" resolves to).
+/// today. Unmatched/null state falls back to Australia/Sydney (the map's largest bucket).
+/// It is also the default for an organisation with no saved ProviderSettings.TimeZoneId, and the
+/// backfill and the frontend picker use the same table.
 /// </summary>
 public static class StateTimeZoneMap
 {
     private static readonly Dictionary<string, string> Map = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["VIC"] = "Australia/Sydney",
+        ["VIC"] = "Australia/Melbourne",
         ["NSW"] = "Australia/Sydney",
         ["ACT"] = "Australia/Sydney",
-        ["TAS"] = "Australia/Sydney",
+        ["TAS"] = "Australia/Hobart",
         ["QLD"] = "Australia/Brisbane",
         ["SA"] = "Australia/Adelaide",
         ["WA"] = "Australia/Perth",
         ["NT"] = "Australia/Darwin",
     };
 
+    /// <summary>The zones an organisation may choose (the map's distinct values). Ordinal: ids are exact-case. Declared after Map: static initialisers run in text order.</summary>
+    public static readonly IReadOnlySet<string> Zones = Map.Values.ToHashSet(StringComparer.Ordinal);
+
     public static string Resolve(string? state) =>
         state is not null && Map.TryGetValue(state, out var zone) ? zone : "Australia/Sydney";
+
+    /// <summary>The clock a zone id runs on: Melbourne and Hobart follow Sydney's rules, so they share its clock; every other id is its own. Compare clocks, not ids, to ask "same time here and there?".</summary>
+    public static string Clock(string id) => id is "Australia/Melbourne" or "Australia/Hobart" ? "Australia/Sydney" : id;
 }
 
 /// <summary>

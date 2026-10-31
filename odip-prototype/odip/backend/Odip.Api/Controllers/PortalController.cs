@@ -350,7 +350,7 @@ public class PortalController : ControllerBase
         var startStamp = dto.StartedAt is { } startedIn ? ShiftBreakRules.ToUtc(startedIn) : now;   // a queued tap: the phone's time, inside ClientTimeRules' bounds
         if (dto.StartedAt is not null && ClientTimeError(ClientTimeRules.Check(startStamp, now, null)) is { } lateStart)
             return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(lateStart.Message, lateStart.Code));
-        var timeZoneId = StateTimeZoneMap.Resolve(providerSettings?.State);
+        var timeZoneId = ProviderTimeZoneResolver.For(providerSettings?.TimeZoneId, providerSettings?.State).Id;
 
         // F7: variance-at-start, computed once here so the coordinator queue can show it before
         // Finish. Finish still recomputes/overwrites VarianceMinutesStart from the final stored
@@ -506,7 +506,7 @@ public class PortalController : ControllerBase
                     "This shift hasn't been started.", ShiftErrorCodes.ShiftNotInProgress));
 
             var providerSettings = await _db.ProviderSettings.Where(p => p.TenantId == shift.TenantId).FirstOrDefaultAsync(ct); // the shift's own organisation: the zone is saved on the completion, so an unscoped SuperAdmin must not pick another
-            var timeZoneId = StateTimeZoneMap.Resolve(providerSettings?.State);
+            var timeZoneId = ProviderTimeZoneResolver.For(providerSettings?.TimeZoneId, providerSettings?.State).Id;
 
             // F4: Legacy Npgsql timestamp behaviour persists Kind verbatim; treat unsuffixed values as UTC.
             var actualStartUtc = dto.ActualStart.Value.Kind switch
