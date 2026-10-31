@@ -108,8 +108,13 @@ public class TenantSetupClaimsTests
         var (db, a) = await Setup();
         using var _ = db;
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => new BprCsvService(db).GenerateBprCsvAsync(a.Claim.Id));
-        Assert.Contains(NotConfigured, ex.Message);
+        a.Participant.PlanType = PlanType.AgencyManaged;
+        await db.SaveChangesAsync();
+
+        var result = await new ClaimBatchService(db, new BprCsvService(db), new InvoiceService(db), TimeProvider.System)
+            .DownloadForClaimAsync(a.TenantId, new System.Security.Claims.ClaimsPrincipal(), a.Claim.Id, CancellationToken.None);
+        Assert.Equal(400, result.Status);
+        Assert.Contains(((BuildRefusalDto)result.Data!).Problems, p => p.Rule == "RegistrationNumber");
     }
 
     [Fact]

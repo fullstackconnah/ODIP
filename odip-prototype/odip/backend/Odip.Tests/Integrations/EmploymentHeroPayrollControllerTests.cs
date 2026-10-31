@@ -154,6 +154,24 @@ public class EmploymentHeroPayrollControllerTests
         Assert.Equal(480, shifts[1].PaidMinutes);   // a sleepover is paid its rostered minutes
     }
 
+    // Reports pays through the same ShiftBreakRules.PaidMinutes, so these pin the money rule from the Payroll side.
+    [Fact]
+    public async Task The_check_pays_a_sleepover_its_rostered_minutes_and_a_standard_shift_net_of_its_break()
+    {
+        var (db, tenant) = await OrgAsync();
+        await using var _ = db;
+        var sam = await EhTimesheetFixture.WorkerAsync(db, tenant, "42");
+        var (_, shortNight) = await EhTimesheetFixture.ApprovedShiftAsync(db, tenant, sam, new DateOnly(2026, 10, 14), new TimeOnly(22, 0), new TimeOnly(6, 0), SleepoverType.Sleepover);
+        shortNight.ActualEnd = shortNight.ActualStart.AddMinutes(420);   // worked 420 of the rostered 480
+        await EhTimesheetFixture.ApprovedShiftAsync(db, tenant, sam, new DateOnly(2026, 10, 15), Nine, Three, breaks: [(120, 30)]);
+        await db.SaveChangesAsync();
+
+        var shifts = Data(await Controller(db, tenant, new StubHttpHandler()).Check(From, To, CancellationToken.None)).Workers.Single().Shifts.OrderBy(s => s.ServiceDate).ToList();
+
+        Assert.Equal((480, 0), (shifts[0].PaidMinutes, shifts[0].BreakMinutes));
+        Assert.Equal((30, 330), (shifts[1].BreakMinutes, shifts[1].PaidMinutes));   // 360 worked - 30 break
+    }
+
     [Theory]
     [InlineData("2026-10-19", "2026-10-06")]
     [InlineData("2026-08-01", "2026-10-19")]

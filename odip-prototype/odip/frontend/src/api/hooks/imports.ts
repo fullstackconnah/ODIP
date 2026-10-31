@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiClient, apiGet, apiPost } from '../client'
 import { refreshBudgetWarnings } from './funding-ledger'
-import type { ImportBatchDto, ImportInvitesDto, ImportKind, ImportLanding, ImportPreviewDto, ImportResultDto, ImportShiftShape } from '../types'
+import type { ImportBatchDto, ImportInviteCountDto, ImportInvitesDto, ImportKind, ImportLanding, ImportPreviewDto, ImportResultDto, ImportShiftShape } from '../types'
 
 const MULTIPART = { headers: { 'Content-Type': 'multipart/form-data' } }
 
@@ -58,9 +58,16 @@ export function useUndoImport() {
  */
 export function useImportInvites() {
   return useMutation({
-    mutationFn: ({ batchId, after }: { batchId: string; after?: string }) =>
-      apiPost<ImportInvitesDto>(`/imports/${batchId}/invites${after ? `?after=${encodeURIComponent(after)}` : ''}`),
+    mutationFn: ({ batchId, after, includeInvitedBefore }: { batchId: string; after?: string; includeInvitedBefore?: boolean }) => {
+      const query = [after ? `after=${encodeURIComponent(after)}` : '', includeInvitedBefore ? 'includeInvitedBefore=true' : ''].filter(Boolean).join('&')
+      return apiPost<ImportInvitesDto>(`/imports/${batchId}/invites${query ? `?${query}` : ''}`)
+    },
   })
+}
+
+/** GET /imports/{id}/invites/count: how many are still to invite, already invited, signed in, or cannot be invited. */
+export function useImportInviteCount(batchId: string) {
+  return useQuery({ queryKey: ['import-invite-count', batchId], queryFn: () => apiGet<ImportInviteCountDto>(`/imports/${batchId}/invites/count`) })
 }
 
 /** GET /imports/{kind}/template (upcoming shifts: of the chosen shape), saved under a name that says what it is. */

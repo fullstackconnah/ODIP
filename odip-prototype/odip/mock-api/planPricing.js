@@ -58,7 +58,7 @@ const MAX_LINES = 60000
 const defaultSettings = () => ({
   registrationGroupsHeld: ['0107', '0104', '0125', '0136', '0115', '0108'], registrationGroupsConfirmed: false, crossingPolicy: 'Split', claimProviderTravel: true,
   travelKmRateStandard: 0.99, travelKmRateAccessible: 2.76, travelRatesProvisional: true, groupOutings: 'GroupActivities', staUsesHourlyAndAccommodation: true,
-  approverRoles: ['Admin', 'Coordinator'], isDefault: true,
+  approverRoles: ['Admin', 'Coordinator'], approvalActivatesParticipant: false, isDefault: true,
 })
 
 // ── Dates and times ──────────────────────────────────────────────────────────

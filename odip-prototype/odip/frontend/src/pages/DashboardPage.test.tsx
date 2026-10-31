@@ -131,6 +131,19 @@ describe('DashboardPage — needs-attention band: a tile for what needs you', ()
 
     expect(screen.getByRole('heading', { name: 'Critical participant alerts (1)' })).toBeInTheDocument()
   })
+
+  it('says the date of an ended agreement as the house date in the Critical alerts list, with no ISO date', () => {
+    asRole('SuperAdmin')
+    const p = criticalAlertFor('p1', 'Jamie Smith')
+    mockUseParticipantAlertsAggregate.mockReturnValue({
+      data: [{ ...p, alerts: [{ ...p.alerts[0], type: 'agreement-ended', message: 'Agreement ended 2026-11-12: shifts stop after it' }] }],
+      isLoading: false,
+    })
+    const { container } = renderPage()
+
+    expect(screen.getByText('Agreement ended Thu 12 Nov 2026: shifts stop after it')).toBeInTheDocument()
+    expect(container).not.toHaveTextContent('2026-11-12')
+  })
 })
 
 describe('DashboardPage — needs-attention band: each tile says what it means and where it is fixed', () => {

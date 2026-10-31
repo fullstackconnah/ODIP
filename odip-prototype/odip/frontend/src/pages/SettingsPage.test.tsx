@@ -84,7 +84,7 @@ vi.mock('@/api/hooks', () => ({
   useRetryNotification: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useSendTestEmail: () => ({ mutateAsync: vi.fn(), isPending: false }),
   // The Plan Pricing tab (Admin and SuperAdmin).
-  usePlanPricingSettings: () => ({ data: { registrationGroupsHeld: ['0107', '0104', '0125', '0136', '0115', '0108'], registrationGroupsConfirmed: false, crossingPolicy: 'Split', claimProviderTravel: true, travelKmRateStandard: 0.99, travelKmRateAccessible: 2.76, travelRatesProvisional: true, groupOutings: 'GroupActivities', staUsesHourlyAndAccommodation: true, approverRoles: ['Admin', 'Coordinator'], isDefault: true }, isLoading: false }),
+  usePlanPricingSettings: () => ({ data: { registrationGroupsHeld: ['0107', '0104', '0125', '0136', '0115', '0108'], registrationGroupsConfirmed: false, crossingPolicy: 'Split', claimProviderTravel: true, travelKmRateStandard: 0.99, travelKmRateAccessible: 2.76, travelRatesProvisional: true, groupOutings: 'GroupActivities', staUsesHourlyAndAccommodation: true, approverRoles: ['Admin', 'Coordinator'], approvalActivatesParticipant: false, isDefault: true }, isLoading: false }),
   useUpdatePlanPricingSettings: () => ({ mutate: vi.fn(), isPending: false }),
   // The Budgets tab (Admin and SuperAdmin; budget phase 1).
   useBudgetSettings: () => ({ data: { mode: 'Warn', approachingPercent: 80, isDefault: true }, isLoading: false, isError: false, refetch: vi.fn() }),

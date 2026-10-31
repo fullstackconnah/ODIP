@@ -7,7 +7,8 @@ import type { ClaimLineItemDto, TripClaimDetailDto } from '@/api/types'
 import { formatDateAu } from '@/lib/utils'
 import { restoreZone, setZone } from '@/test/timeZone'
 
-const { mockUseClaim, mockUpdateClaim, mockUpdateLineItem, mockUseClaimInvoices, mockUseSubmitPreview } = vi.hoisted(() => ({
+const { mockFetchClaimFile, mockUseClaim, mockUpdateClaim, mockUpdateLineItem, mockUseClaimInvoices, mockUseSubmitPreview } = vi.hoisted(() => ({
+  mockFetchClaimFile: vi.fn(),
   mockUseSubmitPreview: vi.fn(),
   mockUseClaim: vi.fn(),
   mockUseClaimInvoices: vi.fn(),
@@ -27,6 +28,9 @@ vi.mock('@/api/hooks', () => ({
   useSubmitPreview: mockUseSubmitPreview,
 }))
 
+// The claim's own NDIA file (G9): the hub's download helper, mocked as the server's answer.
+vi.mock('@/api/hooks/claimHub', () => ({ fetchClaimFile: mockFetchClaimFile, useBuildClaimFile: () => mockFetchClaimFile }))
+
 beforeEach(() => {
   const noInvoices = { invoiceState: 'preview', invoices: [], groups: [], agencyCount: 0 }
   mockUseClaimInvoices.mockReturnValue({ data: noInvoices, isLoading: false, refetch: vi.fn().mockResolvedValue({ data: noInvoices }) })
@@ -42,6 +46,7 @@ function renderPage(initialEntry = '/claims/claim-1') {
       { path: '/claims/:id', element: <ClaimDetailPage /> },
       { path: '/trips/:id', element: <div>Trip detail</div> },
       { path: '/trips', element: <div>Trips list</div> },
+      { path: '/claims', element: <div>Claims hub</div> },
     ],
     { initialEntries: [initialEntry] },
   )
@@ -627,5 +632,34 @@ describe('ClaimDetailPage — Back', () => {
     const back = screen.getByRole('link', { name: 'Back to trips' })
     expect(back).toHaveAttribute('href', '/trips')
     expect(back.compareDocumentPosition(screen.getByRole('heading', { level: 1 })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+})
+
+describe("ClaimDetailPage: the claim's own NDIA file (G9)", () => {
+  it('builds it from the claim, then opens it in Claims', async () => {
+    mockUseClaim.mockReturnValue({ data: baseClaim([baseLineItem()]), isLoading: false })
+    mockFetchClaimFile.mockResolvedValue({ batchId: 'b-5', fileName: 'BPR261030005.csv' })
+    renderPage()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Build NDIA file' }))
+    expect(mockFetchClaimFile).toHaveBeenCalledWith('get', '/claims/claim-1/bpr-csv', undefined, 'CLM-001.csv', expect.any(String))
+    expect(await screen.findByText('Claims hub')).toBeInTheDocument()
+  })
+
+  it("shows the server's 409 where it happened and stays on the claim", async () => {
+    mockUseClaim.mockReturnValue({ data: baseClaim([baseLineItem()]), isLoading: false })
+    mockFetchClaimFile.mockRejectedValue(new Error("This claim was sent in BPR261028001.csv. Import that file's results in Claims before lodging it again."))
+    renderPage()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Build NDIA file' }))
+    expect(await screen.findByText(/This claim was sent in BPR261028001.csv/)).toBeInTheDocument()
+    expect(screen.queryByText('Claims hub')).toBeNull()
+  })
+
+  it('has no NDIA file button when no line is NDIA-managed', () => {
+    mockUseClaim.mockReturnValue({ data: baseClaim([baseLineItem({ planType: 'PlanManaged' })]), isLoading: false })
+    renderPage()
+    expect(screen.queryByRole('button', { name: 'Build NDIA file' })).toBeNull()
+    expect(screen.queryByText('BPR CSV')).toBeNull()
   })
 })

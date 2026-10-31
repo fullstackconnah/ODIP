@@ -640,14 +640,8 @@ public class ParticipantsController : ControllerBase
     };
 
     private const string DraftCannotBeActivated = "A draft participant cannot be activated. Complete their intake and profile first.";
-    private const string ActivationEvidenceRequired = "This participant cannot be activated until their signed service agreement evidence is recorded.";
-    private const string ActivationFundingRequired = "This participant cannot be activated until their plan budget is recorded on the Funding tab.";
     private const string FromUndoneImport = "This person came from an import that was undone. Import them again.";
     private const string BeginServicesEnforced = "Your organisation enforces readiness, so services begin when the participant is made active.";
-
-    /// <summary>The 400 message for an activation the organisation's readiness rule refuses.</summary>
-    private static string ActivationRefusal(ActivationBlock block) =>
-        block == ActivationBlock.FundingNotRecorded ? ActivationFundingRequired : ActivationEvidenceRequired;
 
     /// <summary>
     /// The one way a screen changes whether a participant is active: the flag and an optional reason, nothing else (a partial
@@ -690,7 +684,7 @@ public class ParticipantsController : ControllerBase
                 return BadRequest(ApiResponse<ParticipantStatusResultDto>.Fail(FromUndoneImport));
             var block = await ParticipantReadiness.ActivationBlockAsync(_db, p, _clock, ct);
             if (block != ActivationBlock.None)
-                return BadRequest(ApiResponse<ParticipantStatusResultDto>.Fail(ActivationRefusal(block)));
+                return BadRequest(ApiResponse<ParticipantStatusResultDto>.Fail(ParticipantReadiness.ActivationRefusal(block)));
             // Warn mode activates, and what is still missing comes back as notes for the screen: never blocking. This is the ACTIVATION checklist, so it also lists
             // that the plan budget is not recorded (an NDIS-funded participant with no current plan); the roster and the pickers never list that.
             var issues = await ParticipantReadiness.ActivationIssuesAsync(_db, new[] { p.Id }, _clock, ct);
@@ -760,21 +754,12 @@ public class ParticipantsController : ControllerBase
         var p = await _db.Participants.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (p == null) return NotFound(ApiResponse<ParticipantDetailDto>.Fail("Participant not found"));
 
-        if (p.IsDraft)
+        try
         {
-            if (!p.IntakeCompletedAt.HasValue)
-                return BadRequest(ApiResponse<ParticipantDetailDto>.Fail("Complete the participant's intake before making them active."));
-            // Warn (the default) activates, Enforce needs evidence. A draft whose services started is active already but has never been
-            // through this rule, so it is asked too.
-            if ((!p.IsActive || p.ServicesStartedAt != null) && await ParticipantReadiness.ActivationBlockAsync(_db, p, _clock, ct) is var block && block != ActivationBlock.None)
-                return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(ActivationRefusal(block)));
-            p.IsDraft = false;
-            p.UpdatedAt = DateTime.UtcNow;
-            p.IsActive = true;
-            try { await _agreementApproval.PopulateStartedWeeksAsync(p.TenantId, p.Id, ct); }
-            catch (RosterBusyException busy) { return Conflict(ApiResponse<ParticipantDetailDto>.Fail(busy.Message)); }
-            await _db.SaveChangesAsync(ct);
+            if (await _agreementApproval.MakeActiveAsync(p, ct) is { } refused)
+                return BadRequest(ApiResponse<ParticipantDetailDto>.Fail(refused));
         }
+        catch (RosterBusyException busy) { return Conflict(ApiResponse<ParticipantDetailDto>.Fail(busy.Message)); }
 
         return Ok(ApiResponse<ParticipantDetailDto>.Ok(LifecycleBody(p)));
     }

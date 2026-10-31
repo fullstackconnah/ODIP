@@ -60,7 +60,7 @@ export const incidentBaseSchema = z.object({
 
   participantBookingId: z.string().optional(),
 
-  // Step 4 — Review & Compliance (edit-mode only). Every field here is optional today and stays
+  // Step 4 — Compliance (edit-mode only). Every field here is optional today and stays
   // optional — see the "Edit-mode-only fields" cross-cutting section of SPEC-04.
   status: z.string().optional(),
   qscReportingStatus: z.string().optional(),

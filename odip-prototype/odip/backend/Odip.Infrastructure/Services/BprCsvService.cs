@@ -1,65 +1,108 @@
+using System.Globalization;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
-using Odip.Domain.Billing;
+using Odip.Domain.Billing.Services;
+using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
 
 namespace Odip.Infrastructure.Services;
 
+/// <summary>A claim line with everything the checks and the file need, loaded once. It decides nothing.</summary>
+public sealed record BprRow(
+    ClaimLineItem Line, TripClaim Claim, Participant? Participant, PlanType? PlanType,
+    SupportCatalogueItem? Item, SupportCatalogueItem? CancelledItem, string State, ProviderSettings? Settings);
+
+/// <summary>One row of the file, as it is written.</summary>
+public sealed record BprRowOut(
+    string Registration, string NdisNumber, DateOnly From, DateOnly To, string SupportNumber, string Reference,
+    decimal? Quantity, decimal? Hours, decimal UnitPrice, string Gst, string ClaimType, string CancellationReason, string Abn);
+
 public class BprCsvService(OdipDbContext db)
 {
-    public async Task<(byte[] Content, string FileName)> GenerateBprCsvAsync(Guid claimId, CancellationToken ct = default)
+    // 16 columns: NDIS BPR spec Nov 2025, applies to all providers. The order is the NDIA's.
+    public const string Header = "RegistrationNumber,NDISNumber,SupportsDeliveredFrom,SupportsDeliveredTo,SupportNumber,ClaimReference,Quantity,Hours,UnitPrice,GSTCode,AuthorisedBy,ParticipantApproved,InKindFundingProgram,ClaimType,CancellationReason,ABNofSupportProvider";
+
+    /// <summary>The cancellation item the NDIA wants for a short-notice cancellation: the item's code plus this.</summary>
+    public const string CancellationSuffix = "_CA";
+
+    /// <summary>
+    /// Loads the lines of ONE organisation, with their claim, participant (a trip line's through its booking, a shift line's through its shift), catalogue rows and settings. A line of another
+    /// organisation is simply not returned, so the caller can compare the counts. TripClaim has no query filter, so the claim is scoped here by its trip or participant, as ExportTables.Claims does.
+    /// </summary>
+    public async Task<List<BprRow>> LoadRowsAsync(Guid tenantId, IReadOnlyCollection<Guid> lineIds, CancellationToken ct)
     {
-        var claim = await db.TripClaims
-            .Include(c => c.TripInstance)
-            .Include(c => c.Participant)
-            .Include(c => c.LineItems)
-                .ThenInclude(li => li.ParticipantBooking)
-                    .ThenInclude(pb => pb.Participant)
-            .FirstOrDefaultAsync(c => c.Id == claimId, ct)
-            ?? throw new KeyNotFoundException($"Claim {claimId} not found");
+        var lines = await db.ClaimLineItems.AsNoTracking()
+            .Include(l => l.TripClaim).Include(l => l.ParticipantBooking).Include(l => l.Shift)
+            .Where(l => lineIds.Contains(l.Id)
+                && (db.TripInstances.Any(t => t.Id == l.TripClaim.TripInstanceId && t.TenantId == tenantId)
+                    || db.Participants.Any(p => p.Id == l.TripClaim.ParticipantId && p.TenantId == tenantId)))
+            .ToListAsync(ct);
 
-        // A claim always belongs to a trip or a participant; with neither there is no organisation to read settings for.
-        var tenantId = claim.TripInstance?.TenantId ?? claim.Participant?.TenantId
-            ?? throw new KeyNotFoundException($"Claim {claimId} not found");
-        var settings = ProviderSettingsGuard.Require(await db.ProviderSettings.FirstOrDefaultAsync(s => s.TenantId == tenantId, ct));
+        var participantIds = lines.Select(l => l.ParticipantBooking?.ParticipantId ?? l.Shift?.ParticipantId).OfType<Guid>().Distinct().ToList();
+        var participants = await db.Participants.AsNoTracking().Where(p => p.TenantId == tenantId && participantIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, ct);
+        var settings = await db.ProviderSettings.AsNoTracking().FirstOrDefaultAsync(s => s.TenantId == tenantId, ct);
 
-        // Nullability audit (shift-completion design spec, delivery PR 3): Kind == Shift claim
-        // lines have ParticipantBooking == null — a shift-kind line is excluded here rather than
-        // NRE'd, since BPR-CSV export for shift claims is explicitly out of scope for this PR
-        // (see the design spec's Open questions).
-        var items = claim.LineItems
-            .Where(l => l.ParticipantBooking != null
-                && (l.ParticipantBooking.PlanTypeOverride ?? l.ParticipantBooking.Participant?.PlanType) == PlanType.AgencyManaged)
-            .ToList();
+        var codes = lines.Select(l => l.SupportItemCode).Distinct().ToList();
+        var cancelCodes = codes.Select(c => c + CancellationSuffix).ToList();
+        var catalogue = await db.SupportCatalogueItems.AsNoTracking().Where(i => codes.Contains(i.ItemNumber) || cancelCodes.Contains(i.ItemNumber)).ToListAsync(ct);
 
-        var sb = new StringBuilder();
-
-        // 16 columns — NDIS BPR spec Nov 2025, applies to all providers
-        sb.AppendLine("RegistrationNumber,NDISNumber,SupportsDeliveredFrom,SupportsDeliveredTo,SupportNumber,ClaimReference,Quantity,Hours,UnitPrice,GSTCode,AuthorisedBy,ParticipantApproved,InKindFundingProgram,ClaimType,CancellationReason,ABNofSupportProvider");
-
-        foreach (var item in items)
+        return lines.Select(l =>
         {
-            var ndisNumber = item.ParticipantBooking!.Participant?.NdisNumber ?? string.Empty;
-            var fromDate = item.SupportsDeliveredFrom.ToString("yyyy-MM-dd");
-            var toDate = item.SupportsDeliveredTo.ToString("yyyy-MM-dd");
-            var rowRef = item.Id.ToString("N")[..20];
-            var hours = FormatHours(item.Hours);
-            var unitPrice = item.UnitPrice.ToString("F2");
-            var gstCode = MapGstCode(item.GSTCode);
-            var claimType = MapClaimType(item.ClaimType);
-            var cancellationReason = item.ClaimType == ClaimType.Cancellation
-                ? CsvEscape(item.CancellationReason ?? "")
-                : "";
+            var participantId = l.ParticipantBooking?.ParticipantId ?? l.Shift?.ParticipantId;
+            var participant = participantId is { } id && participants.TryGetValue(id, out var p) ? p : null;
+            // A trip line follows its booking's plan type, else the participant's; a shift has no override.
+            PlanType? planType = participant is null ? null : l.ParticipantBooking?.PlanTypeOverride ?? participant.PlanType;
+            // Each engine priced its line in its own state, so the limit is read in the same one.
+            var state = l.ShiftId != null
+                ? ShiftPriceEstimator.StateFor(participant?.AddressState, settings?.State)
+                : HolidayCalendar.Normalise(settings?.State) is { Length: > 0 } s ? s : "VIC";
+            return new BprRow(l, l.TripClaim, participant, planType,
+                RowFor(catalogue, l.SupportItemCode, l.SupportsDeliveredFrom), RowFor(catalogue, l.SupportItemCode + CancellationSuffix, l.SupportsDeliveredFrom), state, settings);
+        }).ToList();
+    }
 
-            // Quantity (col 7) blank — Hours (col 8) carries duration per NDIS spec
-            // AuthorisedBy, ParticipantApproved, InKindFundingProgram (cols 11-13) are legacy — always blank
-            // ABNofSupportProvider (col 16) always blank for agency-managed bookings
-            sb.AppendLine($"{CsvEscape(settings.RegistrationNumber)},{CsvEscape(ndisNumber)},{fromDate},{toDate},{CsvEscape(item.SupportItemCode)},{rowRef},,{hours},{unitPrice},{gstCode},,,,{claimType},{cancellationReason},");
+    /// <summary>The catalogue row valid on a date for a code; the newest version when more than one is valid.</summary>
+    private static SupportCatalogueItem? RowFor(List<SupportCatalogueItem> catalogue, string code, DateOnly on)
+    {
+        var valid = catalogue.Where(i => i.ItemNumber == code && EffectiveCatalogueResolver.IsValidOn(i, on)).ToList();
+        return EffectiveCatalogueResolver.NewestVersion(valid).FirstOrDefault();
+    }
+
+    /// <summary>{20 hex of the line id}A{attempt}: the NDIA echoes it back in the results file, so a resubmission gets a new one.</summary>
+    public static string RowReference(Guid lineId, int attempt) => lineId.ToString("N")[..20] + "A" + attempt.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>What goes in the row for a loaded line. Exactly one of Quantity and Hours is filled, by the catalogue's unit.</summary>
+    public static BprRowOut ToOut(BprRow row, int attempt)
+    {
+        var l = row.Line;
+        var isCancellation = l.ClaimType == ClaimType.Cancellation;
+        // A short-notice cancellation can have its own "_CA" item, which already says it is a cancellation: ClaimType is then blank.
+        var useCancelItem = isCancellation && row.CancelledItem != null;
+        var perHour = (row.Item?.Unit ?? "H") == "H";
+        return new BprRowOut(
+            (row.Settings?.RegistrationNumber ?? "").Trim(), (row.Participant?.NdisNumber ?? "").Trim(), l.SupportsDeliveredFrom, l.SupportsDeliveredTo,
+            useCancelItem ? row.CancelledItem!.ItemNumber : l.SupportItemCode, RowReference(l.Id, attempt),
+            perHour ? null : l.Hours, perHour ? l.Hours : null, l.UnitPrice, MapGstCode(l.GSTCode),
+            isCancellation && !useCancelItem ? "CANC" : "",
+            isCancellation ? (l.CancellationReason ?? "").Trim().ToUpperInvariant() : "", "");
+    }
+
+    /// <summary>The bytes of the file: the header and one row per line, every line ended CRLF (RFC 4180, and what a spreadsheet writes).</summary>
+    public static byte[] Write(IEnumerable<BprRowOut> rows)
+    {
+        var sb = new StringBuilder(Header).Append("\r\n");
+        foreach (var r in rows)
+        {
+            // AuthorisedBy, ParticipantApproved, InKindFundingProgram (cols 11-13) are legacy: always blank. The ABN (col 16) is blank for agency-managed claims.
+            sb.Append(string.Join(',',
+                CsvEscape(r.Registration), CsvEscape(r.NdisNumber), r.From.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), r.To.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                CsvEscape(r.SupportNumber), r.Reference,
+                r.Quantity?.ToString("0.##", CultureInfo.InvariantCulture) ?? "", r.Hours is { } h ? FormatHours(h) : "",
+                r.UnitPrice.ToString("0.00", CultureInfo.InvariantCulture), r.Gst, "", "", "", r.ClaimType, CsvEscape(r.CancellationReason), CsvEscape(r.Abn))).Append("\r\n");
         }
-
-        var fileName = $"BPR-{claim.ClaimReference}-{DateTime.UtcNow:yyyyMMdd}.csv";
-        return (Encoding.UTF8.GetBytes(sb.ToString()), fileName);
+        return Encoding.UTF8.GetBytes(sb.ToString());
     }
 
     private static string MapGstCode(GSTCode code) => code switch
@@ -67,22 +110,14 @@ public class BprCsvService(OdipDbContext db)
         GSTCode.P1 => "P1",
         GSTCode.P2 => "P2",
         GSTCode.P5 => "P5",
-        _ => "P2"  // safe default for legacy enum values not valid in BPR
+        _ => "P2"  // a legacy enum value; the GstCode check refuses it before a file is written
     };
 
-    private static string MapClaimType(ClaimType type) => type switch
+    /// <summary>Decimal hours as H:MM, not padded: 2.5 is "2:30", 10 is "10:00".</summary>
+    public static string FormatHours(decimal hours)
     {
-        ClaimType.Cancellation => "CANC",
-        _ => ""  // Standard, Variation, Adjustment → blank (Direct Service per NDIS spec)
-    };
-
-    // Format decimal hours as HHH:MM — e.g. 8.5 → "008:30"
-    private static string FormatHours(decimal hours)
-    {
-        var totalMinutes = (int)Math.Round(hours * 60);
-        var h = totalMinutes / 60;
-        var m = totalMinutes % 60;
-        return $"{h:D3}:{m:D2}";
+        var totalMinutes = (int)Math.Round(hours * 60, MidpointRounding.AwayFromZero);
+        return $"{totalMinutes / 60}:{totalMinutes % 60:D2}";
     }
 
     private static string CsvEscape(string value)

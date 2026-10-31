@@ -50,6 +50,8 @@ public sealed record PlanPricingPolicy
     public bool StaUsesHourlyAndAccommodation { get; init; } = true;
     /// <summary>Who may mark an agreement approved (phase D). Stored with the settings; the pricing engine does not read it.</summary>
     public IReadOnlyList<string> ApproverRoles { get; init; } = new[] { "Admin", "Coordinator" };
+    /// <summary>Approving an agreement moves a participant still onboarding to Active (off by default). The pricing engine does not read it.</summary>
+    public bool ApprovalActivatesParticipant { get; init; }
 
     /// <summary>The policy of a stored settings row; no row is <see cref="Default"/>. An unknown registration group is dropped, a repeat counts once, and an empty list holds none.</summary>
     public static PlanPricingPolicy From(PlanPricingSettings? settings)
@@ -71,6 +73,7 @@ public sealed record PlanPricingPolicy
             GroupOutings = settings.GroupOutings,
             StaUsesHourlyAndAccommodation = settings.StaUsesHourlyAndAccommodation,
             ApproverRoles = Split(settings.ApproverRoles),
+            ApprovalActivatesParticipant = settings.ApprovalActivatesParticipant,
         };
     }
 

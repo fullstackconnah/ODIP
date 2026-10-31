@@ -385,3 +385,11 @@ describe('ClaimsTab: marking claims as submitted goes through the submit confirm
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
   })
 })
+
+describe('ClaimsTab: where NDIA-managed claims are sent', () => {
+  it('points to the Claims page', () => {
+    renderTab([])
+    expect(screen.getByText(/NDIA-managed claims are sent from Claims/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Go to Claims' })).toHaveAttribute('href', '/claims')
+  })
+})

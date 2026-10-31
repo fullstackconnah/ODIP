@@ -69,4 +69,6 @@ public class User : ITenantEntity
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? LastLoginAt { get; set; }
+    /// <summary>When a sign-in invite email was last sent (UTC). The browser records it after Firebase accepted the send. Null: never invited.</summary>
+    public DateTime? SignInInviteSentAt { get; set; }
 }

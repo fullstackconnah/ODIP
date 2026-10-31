@@ -1374,7 +1374,10 @@ public record StaffListDto
     public DateOnly? DriverLicenceExpiryDate { get; init; }
     public DateOnly? ManualHandlingExpiryDate { get; init; }
     public DateOnly? MedicationCompetencyExpiryDate { get; init; }
+    /// <summary>Null for callers who may not see the number (see StaffScreeningMask); the expiry date stays visible.</summary>
     public string? WorkerScreeningNumber { get; init; }
+    /// <summary>True when a number is stored, whether or not the caller may see it.</summary>
+    public bool WorkerScreeningRecorded { get; init; }
     public DateOnly? WorkerScreeningExpiryDate { get; init; }
     /// <summary>Employment Hero's start date for this person: read-only here, set only by the payroll sync. Null means no limit.</summary>
     public DateOnly? EmploymentStartDate { get; init; }
@@ -1382,7 +1385,13 @@ public record StaffListDto
     public string? Notes { get; init; }
 }
 
-public record StaffDetailDto : StaffListDto { }
+public record StaffDetailDto : StaffListDto
+{
+    /// <summary>When a sign-in invite email was last sent (UTC); null: never invited. Set on the overview only, and null for non-managers (see StaffScreeningMask).</summary>
+    public DateTime? SignInInviteSentAt { get; init; }
+    /// <summary>True once the person has signed in at all; null everywhere but the overview, and for non-managers (see StaffScreeningMask).</summary>
+    public bool? HasSignedIn { get; init; }
+}
 
 /// <summary>Connection map item 12 — one row of GET /staff/{id}/overview's upcomingShifts (today → +14 days).</summary>
 public record StaffOverviewUpcomingShiftDto

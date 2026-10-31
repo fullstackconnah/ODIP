@@ -3,13 +3,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { apiClient } from '@/api/client'
-import { useClaimInvoices, useDeleteClaim, useIssueCreditNote, useSubmitPreview, useUpdateClaim, useVoidInvoice } from '@/api/hooks/claims'
+import { useClaimInvoices, useDeleteClaim, useIssueCreditNote, useSubmitPreview, useSubmitPreviewChunks, useUpdateClaim, useVoidInvoice } from '@/api/hooks/claims'
 import type { ClaimInvoicesDto, SubmitPreviewDto } from '@/api/types'
 
 // Xero PR1: the invoice hooks, through the real apiClient with only its axios adapter replaced.
 
 interface Call { method: string; url: string; body: unknown }
 const calls: Call[] = []
+let failPreview: ((claimIds: string[]) => boolean) | null = null
 
 const invoices: ClaimInvoicesDto = { invoiceState: 'preview', invoices: [], groups: [], agencyCount: 0 }
 const preview: SubmitPreviewDto = { claims: [], invoiceCount: 0 }
@@ -20,12 +21,16 @@ function payload(data: unknown): AxiosResponse {
 
 beforeEach(() => {
   calls.length = 0
+  failPreview = null
   apiClient.defaults.adapter = async (config: InternalAxiosRequestConfig) => {
     const method = String(config.method ?? 'get').toLowerCase()
     const url = String(config.url ?? '')
     calls.push({ method, url, body: config.data ? JSON.parse(String(config.data)) : undefined })
     if (method === 'get' && url === '/claims/claim-1/invoices') return payload(invoices)
-    if (method === 'post' && url === '/claims/submit-preview') return payload(preview)
+    if (method === 'post' && url === '/claims/submit-preview') {
+      if (failPreview?.((calls.at(-1)!.body as { claimIds: string[] }).claimIds)) throw new Error('test: preview failed')
+      return payload({ ...preview, invoiceCount: 1 })
+    }
     if (method === 'post' && url === '/invoices/inv-1/void') return payload({ id: 'inv-1' })
     if (method === 'post' && url === '/invoices/inv-1/credit-note') return payload({ id: 'cn-1' })
     if (method === 'put' && url === '/claims/claim-1') return payload(true)
@@ -61,6 +66,43 @@ describe('invoice hooks', () => {
     rerender({ on: true })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(calls).toEqual([{ method: 'post', url: '/claims/submit-preview', body: { claimIds: ['claim-1', 'claim-2'] } }])
+  })
+
+  const claimIds = (n: number) => Array.from({ length: n }, (_, i) => `claim-${i}`)
+  const previewSizes = () => calls.filter(c => c.url === '/claims/submit-preview').map(c => (c.body as { claimIds: string[] }).claimIds.length)
+
+  it('useSubmitPreviewChunks sends 100 claims per request and sums the invoice counts', async () => {
+    const { wrapper } = setup()
+    const ids = claimIds(101)
+    const { result } = renderHook(() => useSubmitPreviewChunks(ids, true), { wrapper })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+    expect(previewSizes().sort((a, b) => b - a)).toEqual([100, 1])
+    expect(result.current).toMatchObject({ invoiceCount: 2, isError: false })
+  })
+
+  it('useSubmitPreviewChunks sends one request for 100 claims, and none while disabled', async () => {
+    const { wrapper } = setup()
+    const ids = claimIds(100)
+    const { result, rerender } = renderHook(({ on }) => useSubmitPreviewChunks(ids, on), { wrapper, initialProps: { on: false } })
+    expect(calls).toHaveLength(0)
+    expect(result.current.isLoading).toBe(false)
+    rerender({ on: true })
+    await waitFor(() => expect(result.current.invoiceCount).toBe(1))
+    expect(previewSizes()).toEqual([100])
+  })
+
+  it('useSubmitPreviewChunks reports a failed chunk, and refetch retries only that chunk', async () => {
+    const { wrapper } = setup()
+    const ids = claimIds(101)
+    failPreview = chunk => chunk.length === 1
+    const { result } = renderHook(() => useSubmitPreviewChunks(ids, true), { wrapper })
+    await waitFor(() => expect(result.current.isError).toBe(true))
+    expect(previewSizes().sort((a, b) => b - a)).toEqual([100, 1])
+
+    failPreview = null
+    act(() => result.current.refetch())
+    await waitFor(() => expect(result.current).toMatchObject({ isError: false, invoiceCount: 2 }))
+    expect(previewSizes().sort((a, b) => b - a)).toEqual([100, 1, 1])
   })
 
   it.each([

@@ -177,6 +177,20 @@ public record ServiceAgreementDraftDto
     public DraftApprovalDto? Approval { get; init; }
     /// <summary>Only in the answer to an approval: the shifts of the revision before this one dated on or after this one starts (or today), which approval removed when nobody was on them and otherwise left for a coordinator to move or cancel.</summary>
     public OldShiftsRemainingDto? OldShiftsRemaining { get; init; }
+    /// <summary>Only in the answer to an approval made just now: what it did to the participant's stage. Absent otherwise.</summary>
+    public ApprovalActivationDto? Activation { get; init; }
+}
+
+/// <summary>What an approval did to the participant's stage: <see cref="ActivationResults"/>, with Reason saying why when NotActivated.</summary>
+public record ApprovalActivationDto { public string Result { get; init; } = ""; public string? Reason { get; init; } }
+
+/// <summary>The results of <see cref="ApprovalActivationDto"/>: Off is the organisation's setting being off.</summary>
+public static class ActivationResults
+{
+    public const string Activated = "Activated";
+    public const string AlreadyActive = "AlreadyActive";
+    public const string NotActivated = "NotActivated";
+    public const string Off = "Off";
 }
 
 /// <summary>The body of POST .../approve.</summary>
@@ -360,4 +374,6 @@ public record AgreementApproveResultDto
     /// <summary>Approved, AlreadyApproved, NeedsReview, Superseded, Ended, Busy, NotFound, NotAnApprover or Failed.</summary>
     public string Outcome { get; init; } = "";
     public List<string> Reasons { get; init; } = [];
+    /// <summary>Only on an Approved item: what the approval did to the participant's stage.</summary>
+    public ApprovalActivationDto? Activation { get; init; }
 }

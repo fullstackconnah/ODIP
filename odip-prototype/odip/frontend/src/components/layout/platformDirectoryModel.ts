@@ -18,6 +18,7 @@ const DESCRIPTIONS: Record<string, string> = {
   '/rostering/compatibility': 'Review staff and participant compatibility.',
   '/rostering/leave': 'Review leave and unavailability requests.',
   '/rostering/completions': 'Review submitted shifts before billing.',
+  '/reports': 'Hours, shift fulfilment and leave for any date range.',
   '/staff': 'Manage staff details and credentials.',
   '/qualifications': 'Review qualifications and upcoming expiry dates.',
   '/budgets': 'Review participant funding and budget risk.',

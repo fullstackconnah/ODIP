@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Moq;
@@ -161,6 +163,103 @@ public class StaffOverviewControllerTests
         var result = await controller.GetOverview(Guid.NewGuid(), CancellationToken.None);
 
         Assert.IsType<NotFoundObjectResult>(result.Result);
+    }
+
+    private static ControllerContext AsRole(string role) => new()
+    {
+        HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity(new[] { new Claim(ClaimTypes.Role, role) }, "test")) },
+    };
+
+    private static StaffController OverviewController(OdipDbContext db, string role) =>
+        new(db, new StaffAvailabilityItemsQuery(db), clock: Clock) { ControllerContext = AsRole(role) };
+
+    [Theory]
+    [InlineData("SupportWorker")]
+    [InlineData("ReadOnly")]
+    public async Task GetOverview_hides_a_colleagues_sign_in_facts_from_non_managers(string role)
+    {
+        var tenantId = Guid.NewGuid();
+        using var db = CreateDb(tenantId, isSuperAdmin: false);
+        var staff = SeedStaff(db, tenantId);
+        staff.SignInInviteSentAt = new DateTime(2026, 10, 30, 14, 30, 0, DateTimeKind.Utc);
+        staff.LastLoginAt = new DateTime(2026, 10, 31, 0, 0, 0, DateTimeKind.Utc);
+        await db.SaveChangesAsync();
+
+        var result = await OverviewController(db, role).GetOverview(staff.Id, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<StaffOverviewDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Null(body.Data!.Staff.SignInInviteSentAt);
+        Assert.Null(body.Data.Staff.HasSignedIn);
+    }
+
+    [Theory]
+    [InlineData("Coordinator")]
+    [InlineData("Admin")]
+    [InlineData("SuperAdmin")]
+    public async Task GetOverview_shows_sign_in_facts_to_managers(string role)
+    {
+        var tenantId = Guid.NewGuid();
+        using var db = CreateDb(tenantId, isSuperAdmin: false);
+        var staff = SeedStaff(db, tenantId);
+        var sent = new DateTime(2026, 10, 30, 14, 30, 0, DateTimeKind.Utc);
+        staff.SignInInviteSentAt = sent;
+        staff.LastLoginAt = new DateTime(2026, 10, 31, 0, 0, 0, DateTimeKind.Utc);
+        await db.SaveChangesAsync();
+
+        var result = await OverviewController(db, role).GetOverview(staff.Id, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<StaffOverviewDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(sent, body.Data!.Staff.SignInInviteSentAt);
+        Assert.True(body.Data.Staff.HasSignedIn);
+    }
+
+    [Fact]
+    public async Task GetById_sends_no_has_signed_in_fact_even_for_a_signed_in_person()
+    {
+        var tenantId = Guid.NewGuid();
+        using var db = CreateDb(tenantId, isSuperAdmin: false);
+        var staff = SeedStaff(db, tenantId);
+        staff.LastLoginAt = new DateTime(2026, 10, 31, 0, 0, 0, DateTimeKind.Utc);
+        await db.SaveChangesAsync();
+
+        var result = await OverviewController(db, "Admin").GetById(staff.Id, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<StaffDetailDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Null(body.Data!.HasSignedIn);
+    }
+
+    [Fact]
+    public async Task GetOverview_returns_when_the_sign_in_invite_was_sent()
+    {
+        var tenantId = Guid.NewGuid();
+        using var db = CreateDb(tenantId, isSuperAdmin: false);
+        var staff = SeedStaff(db, tenantId);
+        var sent = new DateTime(2026, 10, 30, 14, 30, 0, DateTimeKind.Utc);
+        staff.SignInInviteSentAt = sent;
+        await db.SaveChangesAsync();
+
+        var result = await OverviewController(db, "Admin").GetOverview(staff.Id, CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<StaffOverviewDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(sent, body.Data!.Staff.SignInInviteSentAt);
+    }
+
+    [Fact]
+    public async Task GetOverview_says_whether_the_person_has_ever_signed_in_without_sending_when()
+    {
+        var tenantId = Guid.NewGuid();
+        using var db = CreateDb(tenantId, isSuperAdmin: false);
+        var never = SeedStaff(db, tenantId);
+        var signedIn = SeedStaff(db, tenantId, "Ana", "Lee");
+        signedIn.LastLoginAt = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+        await db.SaveChangesAsync();
+        var controller = OverviewController(db, "Admin");
+
+        var neverBody = Assert.IsType<ApiResponse<StaffOverviewDto>>(Assert.IsType<OkObjectResult>((await controller.GetOverview(never.Id, CancellationToken.None)).Result).Value);
+        var signedInBody = Assert.IsType<ApiResponse<StaffOverviewDto>>(Assert.IsType<OkObjectResult>((await controller.GetOverview(signedIn.Id, CancellationToken.None)).Result).Value);
+
+        Assert.False(neverBody.Data!.Staff.HasSignedIn);
+        Assert.True(signedInBody.Data!.Staff.HasSignedIn);
     }
 
     [Fact]
