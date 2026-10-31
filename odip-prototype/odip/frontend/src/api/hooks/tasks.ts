@@ -1,11 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiPostRaw, apiPutRaw, apiDeleteRaw } from '../client'
-import type { TaskDto, CreateTaskDto, UpdateTaskDto, TaskItemStatus } from '../types'
+import type { PagedResult, TaskDto, CreateTaskDto, UpdateTaskDto, TaskItemStatus } from '../types'
 
 export function useTasks(params?: Record<string, string>, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['tasks', params],
-    queryFn: () => apiGet<TaskDto[]>('/tasks', params),
+    queryFn: () => apiGet<PagedResult<TaskDto>>('/tasks', params),
     enabled: options?.enabled ?? true,
   })
 }

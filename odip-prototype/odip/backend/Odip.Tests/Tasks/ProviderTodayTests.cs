@@ -76,11 +76,13 @@ public class ProviderTodayTests
 
         var dashboard = Assert.IsType<ApiResponse<DashboardSummaryDto>>(Assert.IsType<OkObjectResult>(
             (await new DashboardController(db, clock).GetSummary(CancellationToken.None)).Result).Value).Data!;
-        var list = Assert.IsType<ApiResponse<List<TaskDto>>>(Assert.IsType<OkObjectResult>(
+        var page = Assert.IsType<ApiResponse<PagedResult<TaskDto>>>(Assert.IsType<OkObjectResult>(
             (await new TasksController(db, clock).GetAll(null, TaskItemStatus.Overdue, null, null, CancellationToken.None)).Result).Value).Data!;
+        var list = page.Items;
 
         Assert.Equal(2, dashboard.OverdueTaskCount);
         Assert.Equal(["late-by-date", "stored-overdue"], list.Select(t => t.SourceKey).Order());
+        Assert.Equal(2, page.TotalCount);
     }
 
     [Fact]
@@ -91,8 +93,8 @@ public class ProviderTodayTests
         await db.SaveChangesAsync();
         var controller = new TasksController(db, FakeClock.AtUtc(2026, 10, 2, 22, 0));
 
-        var list = Assert.IsType<ApiResponse<List<TaskDto>>>(Assert.IsType<OkObjectResult>(
-            (await controller.GetAll(null, null, true, null, CancellationToken.None)).Result).Value).Data!;
+        var list = Assert.IsType<ApiResponse<PagedResult<TaskDto>>>(Assert.IsType<OkObjectResult>(
+            (await controller.GetAll(null, null, true, null, CancellationToken.None)).Result).Value).Data!.Items;
 
         Assert.Equal(["today-in-sydney", "next-week"], list.Select(t => t.SourceKey));
     }

@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { renderGroup, announcement, facts, headers, rowOf, subjects } from './groupHarness'
 import { useTasksGroup } from './useTasksGroup'
+import { pagedTasks } from '@/test/fixtures/pagedTasks'
 
 vi.mock('@/lib/firebase', () => ({ auth: null, devAuthEnabled: true }))
 const { apiGet, apiPostRaw } = vi.hoisted(() => ({ apiGet: vi.fn(), apiPostRaw: vi.fn() }))
@@ -14,13 +15,13 @@ const task = (o: Record<string, unknown> = {}) => ({
   priority: 'Urgent', dueDate: '2026-10-10', status: 'NotStarted', completedDate: null, notes: 'Plan manager emailed 24 Jul.', ...o,
 })
 // The two lists, and each task read fresh at Done (GET /tasks/{id}): the stored row as it is now, which may differ from the list (deep S2).
-const answer = (overdue: Array<{ id: unknown }>, week: Array<{ id: unknown }> = [], fresh: Record<string, unknown> = {}) =>
+const answer = (overdue: Array<{ id: unknown }>, week: Array<{ id: unknown }> = [], fresh: Record<string, unknown> = {}, overdueTotal = overdue.length) =>
   apiGet.mockImplementation((url: string, params?: Record<string, string>) => {
     if (url !== '/tasks') {
       const id = url.split('/')[2]
       return Promise.resolve(fresh[id] ?? [...overdue, ...week].find((t) => t.id === id))
     }
-    return Promise.resolve(params?.status === 'Overdue' ? overdue : week)
+    return Promise.resolve(params?.status === 'Overdue' ? pagedTasks(overdue, overdueTotal) : pagedTasks(week))
   })
 const render = (mayCloseBudgetReview = true) => renderGroup(() => useTasksGroup(true, { today: TODAY, mayCloseBudgetReview }))
 
@@ -54,6 +55,18 @@ describe('Tasks due group — what it lists', () => {
     expect(facts('Due today medium')).toEqual(['Insurance confirmation', '14 Oct', 'Medium', 'Beach Trip'])
     expect(within(rowOf('Due today medium')).getByText('Due today')).toBeInTheDocument()
     expect(within(rowOf('Due today medium')).getByText('Beach Trip').closest('td')).toHaveAttribute('data-card', 'meta')
+  })
+})
+
+describe('Tasks due group — the server cap', () => {
+  it('counts the overdue tasks beyond the cap in the tab, while listing the rows it holds', async () => {
+    answer([task({ id: 'o1', title: 'Overdue one' }), task({ id: 'o2', title: 'Overdue two' }), task({ id: 'o3', title: 'Overdue three' })],
+      [task({ id: 'd1', title: 'Due today one', dueDate: TODAY })], {}, 503)
+    render()
+
+    await screen.findByText('Overdue one')
+    expect(subjects()).toHaveLength(4)
+    expect(screen.getByRole('tab', { name: 'Tasks (504)' })).toBeInTheDocument()
   })
 })
 

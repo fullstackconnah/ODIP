@@ -18,9 +18,9 @@ export function useTasksGroup(enabled: boolean, { today, mayCloseBudgetReview }:
   const completeTask = useCompleteTask()
   const qc = useQueryClient()
 
-  const late = [...(overdue.data ?? [])].sort((a, b) => dueDay(a).localeCompare(dueDay(b)))
+  const late = [...(overdue.data?.items ?? [])].sort((a, b) => dueDay(a).localeCompare(dueDay(b)))
   const lateIds = new Set(late.map((t) => t.id))
-  const dueToday = (dueOnToday.data ?? [])
+  const dueToday = (dueOnToday.data?.items ?? [])
     .filter((t) => isOpen(t) && !lateIds.has(t.id))
     .sort((a, b) => (PRIORITY_RANK[a.priority] ?? 9) - (PRIORITY_RANK[b.priority] ?? 9))
 
@@ -74,7 +74,7 @@ export function useTasksGroup(enabled: boolean, { today, mayCloseBudgetReview }:
     reread: async () => {
       try {
         const [o, d] = await Promise.all([overdue.refetch({ throwOnError: true }), dueOnToday.refetch({ throwOnError: true })])
-        return [...(o.data ?? []), ...(d.data ?? []).filter(isOpen)].map((t) => t.id)
+        return [...(o.data?.items ?? []), ...(d.data?.items ?? []).filter(isOpen)].map((t) => t.id)
       } finally {
         // A Done with no reply never ran its onSuccess, and may have committed: refresh what it would have (useCompleteTask).
         void qc.invalidateQueries({ queryKey: ['tasks'] })
@@ -82,7 +82,8 @@ export function useTasksGroup(enabled: boolean, { today, mayCloseBudgetReview }:
         void qc.invalidateQueries({ queryKey: ['dashboard'] })
       }
     },
-    count: rows.length,
+    // shortcut: overdue past the server cap are added from its total; due-today past the cap is not (closed rows can't be dropped client-side), upgrade = an open filter on dueToday.
+    count: rows.length + Math.max(0, (overdue.data?.totalCount ?? 0) - (overdue.data?.items.length ?? 0)),
     rows,
     link: { to: '/tasks', openLabel: 'Open tasks' },
   }
