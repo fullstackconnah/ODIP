@@ -92,6 +92,13 @@ describe('QuickGroup — the table', () => {
     // A date never breaks or is cut, at any width.
     expect(within(rowOf('Person a')).getAllByRole('cell')[2]).toHaveClass('md:whitespace-nowrap')
   })
+  it('draws a row\'s one-tap action as a secondary button, so the group\'s bulk action is the one solid primary', () => {
+    render(<Harness model={model({ count: 1, rows: [row('a', { actions: [approve('a', vi.fn())] })] })} />)
+
+    const button = screen.getByRole('button', { name: 'Approve leave: Person a' })
+    expect(button).toHaveClass('bg-[var(--color-card)]', 'border')
+    expect(button.className).not.toContain('bg-[var(--color-primary)]')
+  })
 
   it('keeps all fact columns available and marks context for the shared phone-card layout', () => {
     const columns = [{ header: 'Type' }, { header: 'Due' }, { header: 'Trip', long: true, fromLg: true }]
@@ -136,14 +143,14 @@ describe('QuickGroup — a row', () => {
     expect(rowOf('Person a')).toHaveClass('md:h-[var(--row-h)]')
     expect(screen.getByText('Person a').closest('td')).toHaveAttribute('data-card', 'primary')
   })
-  it('puts its buttons in the house row-action cluster: 44px on a phone card, a wider gap on touch, the one-tap action last and primary', () => {
+  it('puts its buttons in the house row-action cluster: 44px on a phone card, a wider gap on touch, the one-tap action last and secondary', () => {
     render(<Harness model={model({ count: 1, rows: [row('a', { actions: [decline('a'), approve('a', vi.fn())] })] })} />)
 
     const buttons = within(rowOf('Person a')).getAllByRole('button')
     expect(buttons.map((b) => b.textContent)).toEqual(['Decline', 'Approve'])
     expect(buttons[0].parentElement!.className).toContain(ROW_ACTIONS_CARD)
     expect(buttons[0].parentElement).toHaveClass('gap-1.5', 'pointer-coarse:gap-2')
-    expect(buttons[1].className).toContain('bg-[var(--color-primary)]')
+    expect(buttons[1].className).not.toContain('bg-[var(--color-primary)]')
     expect(buttons[0].className).not.toContain('bg-[var(--color-primary)]')
   })
 

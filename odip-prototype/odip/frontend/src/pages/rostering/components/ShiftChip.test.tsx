@@ -555,7 +555,7 @@ describe('ShiftChip over-budget marker (budget phase 3)', () => {
       const marker = markerOf(reviewed())
 
       expect(marker).toHaveClass('rounded-full')
-      expect(marker.className).toContain('--color-primary-fixed')
+      expect(marker.className).toContain('--color-selected')
       expect(glyph(marker)).toContain('lucide-check')
     })
 

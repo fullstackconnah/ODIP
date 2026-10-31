@@ -1,13 +1,11 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useNavigate } from 'react-router-dom'
-import { CalendarDays, ChevronRight, Grid2X2, Plus, Search } from 'lucide-react'
+import { CalendarDays, Grid2X2, Plus, Search } from 'lucide-react'
 import { Button } from '@/components/Button'
-import { Card } from '@/components/Card'
 import { Dropdown } from '@/components/Dropdown'
 import { Modal } from '@/components/Modal'
 import { TextField } from '@/components/TextField'
-import { TAP_FLOOR } from '@/components/tapArea'
 import type { usePermissions } from '@/lib/permissions'
 import { pageDescription, platformLeaves } from './platformDirectoryModel'
 import type { ResolvedEntry } from './navConfig'
@@ -95,30 +93,7 @@ export function DashboardShortcuts({ entries, permissions }: { entries: Resolved
   return (
     <div className="flex flex-wrap items-center gap-2">
       {has('/rostering') && <Button variant="secondary" to="/rostering" className="pointer-coarse:min-h-11"><CalendarDays aria-hidden="true" className="h-4 w-4" />Open roster</Button>}
-      {items.length > 0 && <div className="pointer-coarse:[&_button]:min-h-11 pointer-coarse:[&_button]:min-w-11"><Dropdown variant="menu" label="New" icon={<Plus aria-hidden="true" className="h-4 w-4" />} items={items} onSelect={navigate} /></div>}
+      {items.length > 0 && <div className="pointer-coarse:[&_button]:min-h-11 pointer-coarse:[&_button]:min-w-11"><Dropdown variant="menu" triggerVariant="secondary" label="New" icon={<Plus aria-hidden="true" className="h-4 w-4" />} items={items} onSelect={navigate} /></div>}
     </div>
-  )
-}
-
-export function PlatformEntryRail({ entries }: { entries: ResolvedEntry[] }) {
-  const leaves = platformLeaves(entries)
-  const mainPages = ['/trips', '/participants', '/staff'].flatMap(to => leaves.filter(leaf => leaf.to === to))
-  if (leaves.length === 0) return null
-  return (
-    <aside aria-label="Platform entry points" className="min-w-0 self-start">
-      <Card>
-        <h2 className="mb-2 text-sm font-semibold">Your platform</h2>
-        <p className="mb-3 text-[13px] text-[var(--color-muted-foreground)]">Open a workspace or find a page.</p>
-        <ul className="mb-3 divide-y divide-[var(--color-border)]">
-          {mainPages.map(leaf => <li key={leaf.to}>
-            <Link to={leaf.to} className={`${TAP_FLOOR} flex w-full items-center justify-between gap-3 py-3 text-sm hover:text-[var(--color-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]`}>
-              <span><span className="block font-semibold">{leaf.label}</span><span className="block text-[13px] text-[var(--color-muted-foreground)]">{pageDescription(leaf)}</span></span>
-              <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0" />
-            </Link>
-          </li>)}
-        </ul>
-        <PlatformDirectoryTrigger entries={entries} />
-      </Card>
-    </aside>
   )
 }

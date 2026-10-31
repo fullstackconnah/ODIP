@@ -406,7 +406,7 @@ export function QuickGroup({ model, state, onRecoveryChange }: { model: GroupMod
             ? <Button key={action.label} variant="secondary" size="sm" aria-label={action.name} aria-expanded={!!ui.formOpen}
                 aria-controls={formId(row.id)} aria-disabled={busy || undefined} className={busy ? HELD : undefined}
                 onClick={() => { if (!busy) { updateRow(row.id, { formOpen: !ui.formOpen }); setSelected(previous => { const next = new Set(previous); next.delete(row.id); return next }) } }}>{action.label}</Button>
-            : <Button key={action.label} size="sm" aria-label={action.name} aria-disabled={busy || undefined}
+            : <Button key={action.label} variant="secondary" size="sm" aria-label={action.name} aria-disabled={busy || undefined}
                 className={busy ? HELD : undefined} onClick={() => void tap(row, action)}>
                 <span data-reserve={action.busyLabel} className="grid after:invisible after:h-0 after:content-[attr(data-reserve)]">{ui.tapping ? action.busyLabel : action.label}</span>
               </Button>)}
