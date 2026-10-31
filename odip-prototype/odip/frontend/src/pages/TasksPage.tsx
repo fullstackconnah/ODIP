@@ -108,11 +108,11 @@ export default function TasksPage() {
       // The title is the way in when the task has one, so there is no separate "Open" column. The review of an emergency names the participant and the day LAST,
       // which a one-line cap cuts, so every title gets two lines before an ellipsis, with the full text in the tooltip. The cap sits on the link itself (a wrapper would clip its focus ring).
       render: (t) => t.linkTo ? (
-        <Link to={t.linkTo} title={t.title} className={`block line-clamp-2 break-words md:max-w-[13rem] ${ROW_LINK}`}>{t.title}</Link>
+        <Link to={t.linkTo} title={t.title} className={`line-clamp-2 break-words md:max-w-[13rem] ${ROW_LINK}`}>{t.title}</Link>
       ) : isReadOnly && !isBudgetReview(t) ? (
         // ReadOnly has no Edit action: the title opens the task as a view (the only place its notes are shown).
-        <Link to={`/tasks/${t.id}/edit`} title={t.title} className={`block line-clamp-2 break-words md:max-w-[13rem] ${ROW_LINK}`}>{t.title}</Link>
-      ) : <CellText lines={2} className="line-clamp-2 break-words md:max-w-[13rem]">{t.title}</CellText>,
+        <Link to={`/tasks/${t.id}/edit`} title={t.title} className={`line-clamp-2 break-words md:max-w-[13rem] ${ROW_LINK}`}>{t.title}</Link>
+      ) : <CellText lines={2} className="max-md:line-clamp-2 break-words md:max-w-[13rem]">{t.title}</CellText>,
     },
     {
       key: 'status',

@@ -165,6 +165,7 @@ try {
   for (const profile of PROFILES) {
     const context = await browser.newContext({ ...AU_CONTEXT, viewport: { width: profile.width, height: profile.height }, hasTouch: profile.touch, isMobile: profile.touch, colorScheme: profile.dark ? 'dark' : 'light', reducedMotion: 'reduce' })
     const page = await context.newPage()
+    await context.addInitScript(() => { try { localStorage.setItem('odip.trips.view', 'table') } catch { /* ignore */ } })
     await signIn(page)
     await routeLists(page)
     for (const cfg of PAGES) {
@@ -183,11 +184,13 @@ try {
         // C2 Trips fits at 1280 with no scroll.
         if (cfg.noScroll1280 && profile.width === 1280) check(tag, 'C2 fits with no scroll', m.scrollW <= m.clientW + 1, { scrollW: m.scrollW, clientW: m.clientW })
         // C3 the visible set sits left of the fade (and the end pin).
-        if (md) for (const v of m.visible) check(tag, `C3 "${v.text}" visible before scroll`, v.right != null && v.right <= m.boxR.right - m.endPin - 24 + 1, { right: v.right && Math.round(v.right), limit: Math.round(m.boxR.right - m.endPin - 24 + 1) })
+        // Where the table fits there is no fade to stay left of (C2 covers Trips at 1280); the visible set matters where it scrolls.
+        if (md && m.scrollW > m.clientW + 1) for (const v of m.visible) check(tag, `C3 "${v.text}" visible before scroll`, v.right != null && v.right <= m.boxR.right - m.endPin - 24 + 1, { right: v.right && Math.round(v.right), limit: Math.round(m.boxR.right - m.endPin - 24 + 1) })
         // C4 status pills: full text, nowrap, inside the visible region where that column is.
         for (const p of m.pillMetrics) check(tag, `C4 ${p.col} pill whole`, p.sw <= p.cw + 1 && p.ws === 'nowrap' || (!md && p.sw <= p.cw + 1), { sw: p.sw, cw: p.cw, ws: p.ws })
         // C5 a cut cell keeps its text in the tooltip.
-        const badCut = m.cut.filter((c) => c.title !== c.text)
+        // A tooltip may say more than the cell (Trips adds the code to the name), never less.
+        const badCut = m.cut.filter((c) => !c.title.includes(c.text))
         check(tag, 'C5 cut text is in the tooltip', badCut.length === 0, badCut.slice(0, 2))
         // C6 dates never truncate.
         check(tag, 'C6 dates and pills never truncate', m.dateMetrics.every((d) => d.sw <= d.cw + 1), m.dateMetrics.filter((d) => d.sw > d.cw + 1).slice(0, 2))

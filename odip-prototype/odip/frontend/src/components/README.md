@@ -87,6 +87,7 @@ Column shape (`Column<T>`):
   align?: 'left' | 'center' | 'right'
   hidden?: boolean                  // the caller's own switch (a column a role cannot see); not a breakpoint
   pin?: 'start' | 'end' | false     // see "The column rule"
+  srHeader?: string                 // screen-reader text for a column with no visible header (a tick); the actions column is "Actions" without it
   hideWhenEmpty?: boolean           // drop the column (header and cells) when EVERY row is empty (null, '', '—', []); never by width. Kept with no rows
   overlay?: boolean                 // the column holds only a `RowActions overlay` cluster: 0px on a mouse at md+ (header and cell), a normal cell on touch
   mobile?: 'primary' | 'meta' | 'status' | 'trail' | 'hidden'  // phone card; `trail` ends the meta line, pushed to its right edge (a tick, a ⋯ menu)

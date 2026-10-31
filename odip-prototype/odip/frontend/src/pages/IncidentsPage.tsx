@@ -255,9 +255,10 @@ export default function IncidentsPage() {
       key: 'title',
       header: 'Title',
       mobile: 'primary',
+      wrap: true,
       className: 'font-medium',
       // The way into the incident for every role that sees the list; the cap sits on the link itself so its focus ring is not clipped.
-      render: (i) => <Link to={`/incidents/${i.id}`} title={i.title ?? undefined} className={`block line-clamp-2 break-words md:max-w-[15rem] 2xl:max-w-[18rem] ${ROW_LINK} ${TAP_TRUNCATED_LINK}`}>{i.title ?? '—'}</Link>,
+      render: (i) => <Link to={`/incidents/${i.id}`} title={i.title ?? undefined} className={`line-clamp-2 break-words md:max-w-[15rem] 2xl:max-w-[18rem] ${ROW_LINK} ${TAP_TRUNCATED_LINK}`}>{i.title ?? '—'}</Link>,
     },
     {
       key: 'qscReportingStatus',

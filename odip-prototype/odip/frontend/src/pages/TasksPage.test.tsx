@@ -281,7 +281,7 @@ describe('TasksPage — the emergency review task', () => {
     renderPage()
 
     const title = screen.getByRole('link', { name: 'Find leave cover' })
-    expect(title).toHaveClass('block', 'line-clamp-2', 'md:max-w-[13rem]')
+    expect(title).toHaveClass('line-clamp-2', 'md:max-w-[13rem]')
     expect(title).toHaveAttribute('title', 'Find leave cover')
     expect(title).toHaveAttribute('href', '/rostering/leave')
   })

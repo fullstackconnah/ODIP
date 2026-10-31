@@ -468,10 +468,11 @@ describe('IncidentsPage — narrow-desktop columns', () => {
 
     const title = screen.getByText('Escalation during pre-trip meet and greet')
     expect(title).toHaveAttribute('title', 'Escalation during pre-trip meet and greet')
-    expect(title).toHaveClass('block', 'line-clamp-2', 'break-words', 'md:max-w-[15rem]', '2xl:max-w-[18rem]', 'text-[var(--color-foreground)]')
+    expect(title).toHaveClass('line-clamp-2', 'break-words', 'md:max-w-[15rem]', '2xl:max-w-[18rem]', 'text-[var(--color-foreground)]')
     expect(title.className).not.toMatch(/truncate/)
     expect(title).not.toHaveClass('text-[var(--color-primary)]')
-    expect(title.closest('td')).toHaveClass('md:whitespace-nowrap', 'font-medium')
+    expect(title.closest('td')).toHaveClass('font-medium')
+    expect(title.closest('td')).not.toHaveClass('md:whitespace-nowrap') // wrap: the two lines need room to wrap
     // No vertical padding: the row is the token height, not padding around a wrapped cell.
     expect((title.closest('td') as HTMLElement).className).not.toMatch(/(^|\s)(p|py|pt|pb)-/)
   })
