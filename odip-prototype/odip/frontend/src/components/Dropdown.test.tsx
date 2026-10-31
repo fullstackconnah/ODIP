@@ -287,3 +287,10 @@ describe('Dropdown — keyboard-only focus ring on the value triggers', () => {
     expect(trigger).not.toHaveClass('focus:ring-2')
   })
 })
+
+describe('Dropdown — menu trigger width', () => {
+  it('applies triggerClassName to the menu trigger, so a label that changes (Documents, Preparing…) can hold one width', () => {
+    render(<Dropdown variant="menu" label="Export" items={ITEMS} onSelect={() => {}} triggerClassName="sm:min-w-[9.75rem]" />)
+    expect(screen.getByRole('button', { name: 'Export' })).toHaveClass('sm:min-w-[9.75rem]')
+  })
+})
