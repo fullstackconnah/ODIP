@@ -2,7 +2,7 @@
 //   bash F:/Projects/.claude/tools/odip-server-test/odip-test.sh <worktree> shots e2e/shots/roster-fill.mjs <outdir>
 // The mock API serves each state (mock-api/mock-roster-fill.js); a fixture is asked for with `?fixture=`, added here by page.route.
 // Prints "CHECK ok|FAIL name = value", writes checks.json, and exits non-zero when a check fails.
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
 let chromium
@@ -12,6 +12,10 @@ const BASE_URL = process.env.BASE_URL
 const OUT_DIR = process.env.OUT_DIR
 if (!BASE_URL || !OUT_DIR) throw new Error('BASE_URL and OUT_DIR must be set (run this through odip-test.sh shots)')
 mkdirSync(OUT_DIR, { recursive: true })
+// One file per name: drop the PNGs of any earlier run (the runner's shrink copies and full/ originals) before writing.
+for (const f of readdirSync(OUT_DIR)) if (f.endsWith('.png')) rmSync(path.join(OUT_DIR, f))
+rmSync(path.join(OUT_DIR, 'full'), { recursive: true, force: true })
+mkdirSync(path.join(OUT_DIR, 'full'), { recursive: true })
 
 const VIEWPORTS = [{ name: '390', width: 390, height: 844, mobile: true }, { name: '1280', width: 1280, height: 800 }]
 const KEY = 'odip.roster.fillHidden'
@@ -27,6 +31,29 @@ const check = (name, ctx, measured, pass) => {
   console.log(`CHECK ${pass ? 'ok' : 'FAIL'} ${name} [${Object.values(ctx).join(' ')}] = ${JSON.stringify(measured)}`)
 }
 const settled = (p) => p.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'), null, { timeout: 5000 }).catch(() => {})
+
+// Fonts ready, animations done, and the card and main column in the same place on two consecutive frames pairs (the sidebar and the ResizeObserver have finished).
+const settle = async (p) => {
+  await settled(p)
+  const stable = await p.evaluate(async () => {
+    await document.fonts.ready
+    const key = () => {
+      const h = [...document.querySelectorAll('h3')].find((e) => e.textContent === 'How full the next weeks are')
+      const c = h?.closest('.rounded-md')?.getBoundingClientRect()
+      const m = document.querySelector('main')?.getBoundingClientRect()
+      return [c?.left, c?.width, c?.height, m?.left, m?.width].map((v) => Math.round((v ?? -1) * 10)).join(',')
+    }
+    let prev = null
+    for (let i = 0; i < 40; i++) {
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+      const cur = key()
+      if (cur === prev) return true
+      prev = cur
+    }
+    return false
+  })
+  if (!stable) check('layout settles', {}, stable, false)
+}
 
 const browser = await chromium.launch({ headless: true })
 const signIn = async (page) => {
@@ -100,20 +127,34 @@ try {
         await settled(page)
         await page.waitForTimeout(400)
       }
+      // The crop is the whole card plus 16px of padding. A page shorter than that is grown first (at 390 touch a fullPage clip drops the emulation), then restored.
+      const park = () => page.mouse.move(vp.width - 4, vp.height - 4)
       const shot = async (name) => {
-        const bb = await card().boundingBox()
-        const clip = { x: Math.max(0, bb.x - 16), y: Math.max(0, bb.y - 16), width: Math.min(vp.width - Math.max(0, bb.x - 16), bb.width + 32), height: bb.height + 32 }
+        await park(); await settle(page)
+        await page.evaluate(() => scrollTo(0, 0))
+        let bb = await card().boundingBox()
+        const need = Math.ceil(bb.y + bb.height + 16)
+        const grow = need > vp.height
+        if (grow) { await page.setViewportSize({ width: vp.width, height: need }); await pinCoarse(); await settle(page); bb = await card().boundingBox() }
+        const x = Math.max(0, bb.x - 16), y = Math.max(0, bb.y - 16)
+        const clip = { x, y, width: Math.min(vp.width - x, bb.width + 32), height: bb.height + 32 }
+        const vh = grow ? need : vp.height
+        const coarse = await page.evaluate(() => matchMedia('(pointer: coarse)').matches)
+        check('crop holds the whole card', { width: vp.name, theme: scheme, state: name }, { card: bb.height, crop: clip.height, bottom: Math.round(y + clip.height), viewport: vh, coarse }, clip.height >= bb.height && y + clip.height <= vh + 0.5 && (!vp.mobile || coarse))
         await page.screenshot({ path: path.join(OUT_DIR, `${name}-${vp.name}-${scheme}.png`), clip })
+        if (grow) { await page.setViewportSize({ width: vp.width, height: vp.height }); await pinCoarse() }
       }
       // At 390 touch a fullPage shot drops the touch emulation; resize to the page height, re-pin, prove it is still coarse with a 44px control, then shoot.
       const fullShot = async (name, ctx) => {
-        if (!vp.mobile) { await page.screenshot({ path: path.join(OUT_DIR, `${name}-${vp.name}-${scheme}.png`), fullPage: true }); return }
+        const file = path.join(OUT_DIR, 'full', `${name}-${vp.name}-${scheme}.png`)
+        await park(); await settle(page)
+        if (!vp.mobile) { await page.screenshot({ path: file, fullPage: true }); return }
         const h = await page.evaluate(() => document.scrollingElement.scrollHeight)
         await page.setViewportSize({ width: vp.width, height: Math.min(h, 4000) })
-        await pinCoarse(); await settled(page); await page.waitForTimeout(250)
+        await pinCoarse(); await settle(page); await page.waitForTimeout(250)
         const probe = await page.evaluate(() => ({ coarse: matchMedia('(pointer: coarse)').matches, control: document.querySelector('button')?.getBoundingClientRect().height ?? 0 }))
         check('full page keeps touch emulation', ctx, probe, probe.coarse && probe.control >= 44)
-        await page.screenshot({ path: path.join(OUT_DIR, `${name}-${vp.name}-${scheme}.png`) })
+        await page.screenshot({ path: file })
         await page.setViewportSize({ width: vp.width, height: vp.height })
         await pinCoarse()
       }
@@ -187,10 +228,29 @@ try {
           await page.locator('[data-readout]').waitFor({ timeout: 5000 })
           const ro = await page.locator('[data-readout]').boundingBox()
           check('15 readout inside plot', ctx, { ro, plot }, ro.x >= plot.x - 0.5 && ro.x + ro.width <= plot.x + plot.width + 0.5 && ro.y >= plot.y - 0.5 && ro.y + ro.height <= plot.y + plot.height + 0.5)
-          await page.mouse.move(2, 2)
+          await park()
         } else {
           const tb = await toggle().evaluate((el) => { const r = el.getBoundingClientRect(); const pad = getComputedStyle(el, '::before'); return { w: r.width, h: r.height, padH: parseFloat(pad.height) || 0, padW: parseFloat(pad.width) || 0 } })
           check('16 toggle hit area >= 44', ctx, tb, Math.max(tb.h, tb.padH) >= 44 && Math.max(tb.w, tb.padW) >= 44)
+        }
+        if (!vp.mobile) {
+          // 20-21. The plot stays inside the card's content box, settled and after a 1280 -> 1024 -> 1280 resize.
+          const inside = () => card().evaluate((c) => {
+            const cs = getComputedStyle(c); const r = c.getBoundingClientRect()
+            const edge = r.right - parseFloat(cs.paddingRight) - parseFloat(cs.borderRightWidth)
+            const svg = c.querySelector('[data-plot] svg')?.getBoundingClientRect().right ?? null
+            const plot = c.querySelector('[data-plot]').getBoundingClientRect().right
+            return { edge: Math.round(edge * 10) / 10, svg: svg && Math.round(svg * 10) / 10, plot: Math.round(plot * 10) / 10, card: Math.round(r.right * 10) / 10 }
+          })
+          await park(); await settle(page)
+          const settledEdges = await inside()
+          check('20 plot inside card content box (settled)', ctx, settledEdges, settledEdges.svg !== null && settledEdges.svg <= settledEdges.edge + 0.5 && settledEdges.plot <= settledEdges.edge + 0.5)
+          await page.setViewportSize({ width: 1024, height: vp.height }); await settle(page)
+          const mid = await inside()
+          check('21a plot inside card content box (1024)', ctx, mid, mid.plot <= mid.edge + 0.5 && (mid.svg === null || mid.svg <= mid.edge + 0.5))
+          await page.setViewportSize({ width: vp.width, height: vp.height }); await park(); await settle(page)
+          const back = await inside()
+          check('21 plot inside card content box (after 1280 -> 1024 -> 1280)', ctx, back, back.svg !== null && back.svg <= back.edge + 0.5 && back.plot <= back.edge + 0.5)
         }
         await shot('loaded', ctx)
         await fullShot('page-loaded', ctx)
