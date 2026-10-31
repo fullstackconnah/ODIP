@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { readoutLeft } from './ChartReadout'
+import { readoutLeft } from './ticks'
 
 describe('readoutLeft', () => {
   it('sits 12px right of the point, and flips left when it would run off the chart', () => {

@@ -1,9 +1,9 @@
 import { useId, useLayoutEffect, useRef, useState } from 'react'
 import type { RosterFillDto } from '@/api/types'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
-import { ChartReadout, readoutLeft } from '@/components/chart/ChartReadout'
+import { ChartReadout } from '@/components/chart/ChartReadout'
 import { ChartTable } from '@/components/chart/ChartTable'
-import { countTicks } from '@/components/chart/ticks'
+import { countTicks, readoutLeft } from '@/components/chart/ticks'
 import { useChartPoints } from '@/components/chart/useChartPoints'
 import { detailLine, liveLine, movedLine, plotLabel, readoutRows, tableCaption, tableRows, TABLE_COLUMNS, weekLabel, yearBreakIndex } from '../lib/rosterFill'
 

@@ -10,3 +10,9 @@ export function countTicks(max: number, plotH: number): number[] {
   }
   return Array.from({ length: gaps + 1 }, (_, i) => i * step)
 }
+
+/** Where the floating readout's left edge goes: beside the point (12px off), flipped when it would run past the chart, and always inside [0, W - readoutW]. A narrow chart puts it on the side away from the point. */
+export function readoutLeft(cx: number, W: number, readoutW: number, narrow: boolean): number {
+  const left = narrow ? (cx > W / 2 ? 0 : W - readoutW) : cx + 12 + readoutW <= W ? cx + 12 : cx - 12 - readoutW
+  return Math.min(Math.max(left, 0), Math.max(W - readoutW, 0))
+}
