@@ -31,6 +31,7 @@ public record PlanPricingSettingsDto
     public GroupOutingFamily GroupOutings { get; init; }
     public bool StaUsesHourlyAndAccommodation { get; init; }
     public List<string> ApproverRoles { get; init; } = new();
+    public bool ApprovalActivatesParticipant { get; init; }
     public bool IsDefault { get; init; }
 }
 
@@ -50,4 +51,5 @@ public record UpdatePlanPricingSettingsDto
     public GroupOutingFamily? GroupOutings { get; init; }
     public bool? StaUsesHourlyAndAccommodation { get; init; }
     public List<string>? ApproverRoles { get; init; }
+    public bool? ApprovalActivatesParticipant { get; init; }
 }

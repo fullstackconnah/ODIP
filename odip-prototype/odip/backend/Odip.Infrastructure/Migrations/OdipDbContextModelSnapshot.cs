@@ -3566,6 +3566,11 @@ namespace Odip.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("ApprovalActivatesParticipant")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("ApproverRoles")
                         .IsRequired()
                         .ValueGeneratedOnAdd()

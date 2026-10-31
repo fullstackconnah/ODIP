@@ -22,15 +22,22 @@ export function useApproveAgreements(onProgress?: (done: number) => void) {
   return useMutation<ChunkRun<AgreementApproveResult>, never, AgreementDraftRef[]>({
     mutationFn: items => runInChunks(items, CHUNK,
       chunk => apiPost<AgreementApproveResult[]>('/service-agreements/approve-batch', { items: chunk }, { timeout: BATCH_TIMEOUT_MS }), onProgress),
-    onSettled: (run, _e, items) => Promise.all([
-      queryClient.invalidateQueries({ queryKey: AGREEMENTS_KEY }),
-      queryClient.invalidateQueries({ queryKey: AGREEMENTS_ENDING_KEY }),
-      queryClient.invalidateQueries({ queryKey: ['service-agreement-drafts'] }),
-      queryClient.invalidateQueries({ queryKey: ['service-agreement-draft'] }),
-      queryClient.invalidateQueries({ queryKey: ['roster-board'] }),
-      queryClient.invalidateQueries({ queryKey: ['roster-patterns'] }),
-      refreshBudgetFigures(queryClient, [...new Set((run?.results ?? items).map(r => r.participantId))]),
-    ]),
+    onSettled: (run, _e, items) => {
+      const ids = [...new Set((run?.results ?? items).map(r => r.participantId))]
+      return Promise.all([
+        queryClient.invalidateQueries({ queryKey: AGREEMENTS_KEY }),
+        queryClient.invalidateQueries({ queryKey: AGREEMENTS_ENDING_KEY }),
+        queryClient.invalidateQueries({ queryKey: ['service-agreement-drafts'] }),
+        queryClient.invalidateQueries({ queryKey: ['service-agreement-draft'] }),
+        queryClient.invalidateQueries({ queryKey: ['roster-board'] }),
+        queryClient.invalidateQueries({ queryKey: ['roster-patterns'] }),
+        refreshBudgetFigures(queryClient, ids),
+        // With the organisation's setting on, an approval may have moved someone to Active: the lists, their header and their checklist.
+        queryClient.invalidateQueries({ queryKey: ['participants'] }),
+        queryClient.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] }),
+        ...ids.flatMap(id => [queryClient.invalidateQueries({ queryKey: ['participant', id] }), queryClient.invalidateQueries({ queryKey: ['onboarding', id] })]),
+      ])
+    },
   })
 }
 

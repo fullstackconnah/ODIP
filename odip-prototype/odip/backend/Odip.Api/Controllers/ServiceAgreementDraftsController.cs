@@ -9,6 +9,7 @@ using Odip.Application.DTOs;
 using Odip.Domain.Billing.Pricing;
 using Odip.Domain.Entities;
 using Odip.Domain.Interfaces;
+using Odip.Infrastructure.Audit;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
@@ -162,8 +163,17 @@ public class ServiceAgreementDraftsController : ControllerBase
             case ApprovalStatus.Busy:
                 return Conflict(new ApiResponse<ServiceAgreementDraftDto> { Success = false, Errors = outcome.Errors!.ToList(), Code = "roster-busy" });
             default:
-                return Ok(ApiResponse<ServiceAgreementDraftDto>.Ok(ToDto(outcome.Draft!) with { Approval = ApprovalOf(outcome.Approval), OldShiftsRemaining = outcome.OldShifts }));
+                // Its own step after the approval committed: it can never undo or fail the approval. Approving again moves nobody.
+                var activation = outcome.Status == ApprovalStatus.Approved ? await ActivateAsync(tenantId, participantId, ct) : null;
+                return Ok(ApiResponse<ServiceAgreementDraftDto>.Ok(ToDto(outcome.Draft!) with { Approval = ApprovalOf(outcome.Approval), OldShiftsRemaining = outcome.OldShifts, Activation = activation }));
         }
+    }
+
+    private Task<ApprovalActivationDto> ActivateAsync(Guid tenantId, Guid participantId, CancellationToken ct)
+    {
+        // The interceptor writes the participant's one audit row; the reason rides on it (as ParticipantsController does).
+        if (HttpContext != null) HttpContext.Items[AuditInterceptor.ReasonItemKey(participantId)] = ServiceAgreementApprovalService.ActivationAuditReason;
+        return _approval.ActivateAfterApprovalAsync(tenantId, participantId, ct);
     }
 
     /// <summary>

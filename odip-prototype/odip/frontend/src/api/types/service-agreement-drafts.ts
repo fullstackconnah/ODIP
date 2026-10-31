@@ -42,6 +42,14 @@ export interface ServiceAgreementDraftDto {
   approval?: DraftApprovalDto
   /** Only in the answer to an approval: the previous revision's shifts on or after this one starts, which stay on the roster. */
   oldShiftsRemaining?: OldShiftsRemainingDto
+  /** Only in the answer to an approval made just now: whether it moved the participant to Active (the organisation's ApprovalActivatesParticipant setting). Absent or null is read as Off. */
+  activation?: ApprovalActivationDto | null
+}
+
+/** What an approval did to the participant's status. NotActivated carries the reason, a phrase that reads after "Not moved to Active: ". */
+export interface ApprovalActivationDto {
+  result: 'Activated' | 'AlreadyActive' | 'NotActivated' | 'Off'
+  reason?: string | null
 }
 
 /** The record of an approval. There is no un-approving: a change is a new revision, approved in its turn. */

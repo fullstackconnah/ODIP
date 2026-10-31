@@ -17,7 +17,7 @@ export const draftBlock = (block: PlanBlock = mondayWednesday(), requirements: P
 
 export const settings = (changes: Partial<PlanPricingSettingsDto> = {}): PlanPricingSettingsDto => ({
   registrationGroupsHeld: ['0107', '0104', '0125', '0136', '0115', '0108'], registrationGroupsConfirmed: true, crossingPolicy: 'Split', claimProviderTravel: true, travelKmRateStandard: 0.99,
-  travelKmRateAccessible: 2.76, travelRatesProvisional: true, groupOutings: 'GroupActivities', staUsesHourlyAndAccommodation: true, approverRoles: ['Admin', 'Coordinator'], isDefault: false, ...changes,
+  travelKmRateAccessible: 2.76, travelRatesProvisional: true, groupOutings: 'GroupActivities', staUsesHourlyAndAccommodation: true, approverRoles: ['Admin', 'Coordinator'], approvalActivatesParticipant: false, isDefault: false, ...changes,
 })
 
 export const line = (changes: Partial<PlannedLine> = {}): PlannedLine => ({

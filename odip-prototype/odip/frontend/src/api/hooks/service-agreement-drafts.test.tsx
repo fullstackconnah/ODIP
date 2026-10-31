@@ -86,6 +86,18 @@ describe('useApproveServiceAgreementDraft', () => {
     ]))
   })
 
+  it('refreshes the participant too, since an approval may have moved them to Active: the header, the stage tabs, the checklist and the onboarding list', async () => {
+    apiPost.mockResolvedValue({ id: 'd1', version: 2, activation: { result: 'Activated' } })
+    const client = new QueryClient()
+    const invalidate = vi.spyOn(client, 'invalidateQueries')
+    const { result } = renderHook(() => useApproveServiceAgreementDraft(), { wrapper: wrapper(client) })
+
+    await act(async () => { await result.current.mutateAsync({ participantId: 'p1', draftId: 'd1', acknowledgeOverlaps: false }) })
+
+    const keys = invalidate.mock.calls.map(([filters]) => filters?.queryKey)
+    expect(keys).toEqual(expect.arrayContaining([['participants'], ['participant', 'p1'], ['onboarding', 'p1'], ['participant-onboarding-worklist']]))
+  })
+
   it('refreshes only the revisions and the preview when it is refused (a newer revision may exist), and leaves the roster alone', async () => {
     apiPost.mockRejectedValue({ response: { status: 409, data: { success: false, code: 'draft-superseded', errors: ['A newer revision of this agreement draft exists. Approve the latest revision instead.'] } } })
     const client = new QueryClient()
