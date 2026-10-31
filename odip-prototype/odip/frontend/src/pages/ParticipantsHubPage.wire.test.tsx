@@ -130,7 +130,7 @@ describe('ParticipantsHubPage (wire) — the register has its controls back', ()
 
   it('lists a participant whose intake is complete on the Onboarding tab, with their checklist one click away', async () => {
     serve({
-      worklist: [{ participantId: 'w2', fullName: 'Ira Intake', servicesStartedAt: null, completedSteps: 0, totalSteps: 4, firstMissing: 'Profile details' }],
+      worklist: [{ participantId: 'w2', fullName: 'Ira Intake', servicesStartedAt: null, completedSteps: 0, totalSteps: 6, firstMissing: 'Profile details' }],
       enquiries: [{ id: 'e2', participantId: 'w2', firstName: 'Ira', lastName: 'Intake', phone: null, email: null, source: 'Phone', provenance: null, createdAt: '2026-09-02', participantIsDraft: true, participantIsActive: false, participantIntakeCompletedAt: '2026-09-20T03:00:00' }],
     })
     const user = userEvent.setup()
@@ -188,7 +188,7 @@ describe('ParticipantsHubPage (wire) — the register has its controls back', ()
 
 describe('ParticipantsHubPage (wire) — the other two tabs have their search and filter back', () => {
   it('shows the onboarding search once the worklist has rows', async () => {
-    serve({ worklist: [{ participantId: 'w1', fullName: 'Wren Worklist', servicesStartedAt: null, completedSteps: 0, totalSteps: 4, firstMissing: 'Profile details' }] })
+    serve({ worklist: [{ participantId: 'w1', fullName: 'Wren Worklist', servicesStartedAt: null, completedSteps: 0, totalSteps: 6, firstMissing: 'Profile details' }] })
     renderHub('/participants?tab=onboarding')
 
     await screen.findByText('Wren Worklist')

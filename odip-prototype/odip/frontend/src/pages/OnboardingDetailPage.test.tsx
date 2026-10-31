@@ -225,6 +225,17 @@ describe('OnboardingDetailPage: the complaints and rights record', () => {
     expect(recordExplained.mutate).not.toHaveBeenCalled()
   })
 
+  it('puts focus on the date field of the row it was opened from', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    for (const [row, label] of [[1, 'Told how to make a complaint on'], [2, 'Rights explained on']] as const) {
+      const dialog = await openDialog(user, row)
+      expect(within(dialog).getByLabelText(label)).toHaveFocus()
+      await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    }
+  })
+
   it('sends one date and null for the blank one', async () => {
     const user = userEvent.setup()
     renderPage()
