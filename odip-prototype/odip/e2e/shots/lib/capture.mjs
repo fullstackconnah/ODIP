@@ -63,7 +63,7 @@ async function withViewport(page, width, height, touch, fn) {
 const isCoarse = (page) => page.evaluate(() => matchMedia('(pointer: coarse)').matches)
 
 // Shoot the whole element plus `pad` (a pad shrinks only at the page edge, or the right edge for a fluid-width element).
-// The viewport grows to hold the element: its bottom plus pad, and its width when the element overflows it.
+// The viewport grows in height only, never in width: an element wider than the viewport fails checkCropHolds (overflowX).
 // Returns { file, clip, box, viewport, pad, coarse, touch, elementHeight }: clip is the real post-settle clip, box the element box.
 export async function cropElement(page, locator, file, { pad = 16, touch } = {}) {
   touch ??= await isCoarse(page)
@@ -71,7 +71,7 @@ export async function cropElement(page, locator, file, { pad = 16, touch } = {})
   await page.evaluate(() => scrollTo(0, 0))
   const first = await locator.boundingBox()
   if (!first) throw new Error(`cropElement: no bounding box for ${file}`)
-  return withViewport(page, Math.ceil(first.x + first.width), Math.ceil(first.y + first.height + pad), touch, async () => {
+  return withViewport(page, 0, Math.ceil(first.y + first.height + pad), touch, async () => {
     await settle(page, locator)
     const box = await locator.boundingBox()
     const x = Math.max(0, box.x - pad)
@@ -107,14 +107,16 @@ export async function fullPage(page, file, { touch } = {}) {
   })
 }
 
-// Passes only when the real clip holds the element plus pad on all four sides (1px rounding; a pad may shrink at the top/left
+// Passes only when the real clip holds the element plus pad on all four sides (1px rounding; the clip must also hold the bare element box, which must lie inside the viewport width; a pad may shrink at the top/left
 // page edge or the right viewport edge), lies inside the viewport, and the pointer stayed coarse for a touch crop.
 export function checkCropHolds({ file, clip, box, viewport, pad, coarse, touch }) {
   const t = 1
   const holds = clip.x <= Math.max(0, box.x - pad) + t && clip.y <= Math.max(0, box.y - pad) + t
     && clip.x + clip.width >= Math.min(box.x + box.width + pad, viewport.width) - t && clip.y + clip.height >= box.y + box.height + pad - t
+  const overflowX = box.x < -t || box.x + box.width > viewport.width + t
+  const whole = clip.x <= box.x + t && clip.y <= box.y + t && clip.x + clip.width >= box.x + box.width - t && clip.y + clip.height >= box.y + box.height - t && !overflowX
   const inside = clip.x >= 0 && clip.y >= 0 && clip.x + clip.width <= viewport.width + t && clip.y + clip.height <= viewport.height + t
-  return { name: `crop holds the whole element: ${path.basename(file)}`, pass: holds && inside && (!touch || coarse), detail: { clip, box, viewport, pad, holds, inside, coarse } }
+  return { name: `crop holds the whole element: ${path.basename(file)}`, pass: holds && whole && inside && (!touch || coarse), detail: { clip, box, viewport, pad, holds, whole, overflowX, inside, coarse } }
 }
 
 export function writeChecks(outDir, checks) {

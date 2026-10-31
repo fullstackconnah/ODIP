@@ -18,6 +18,7 @@ const whole = { file: 'x.png', clip: { x: 0, y: 0, width: 110, height: 140 }, bo
 checks.push({ name: 'checkCropHolds passes a whole crop', pass: checkCropHolds(whole).pass, detail: {} })
 checks.push({ name: 'checkCropHolds fails a crop 20px short', pass: !checkCropHolds({ ...whole, clip: { ...whole.clip, height: 120 } }).pass, detail: {} })
 checks.push({ name: 'checkCropHolds fails a clip beyond the viewport', pass: !checkCropHolds({ ...whole, viewport: { width: 200, height: 100 } }).pass, detail: {} })
+checks.push({ name: 'checkCropHolds fails an element wider than the viewport', pass: (() => { const r = checkCropHolds({ ...whole, box: { x: 10, y: 20, width: 300, height: 100 }, clip: { x: 0, y: 4, width: 200, height: 132 } }); return !r.pass && r.detail.overflowX === true })(), detail: {} })
 const browser = await chromium.launch({ headless: true })
 try {
   for (const vp of [{ name: '1280', width: 1280, height: 800 }, { name: '390', width: 390, height: 390, touch: true }]) {
@@ -41,6 +42,18 @@ try {
     checks.push(...f.checks)
     const after = page.viewportSize()
     checks.push({ name: `viewport restored [${vp.name}]`, pass: after.width === vp.width && after.height === vp.height, detail: after })
+    if (vp.touch) {
+      // An element wider than the viewport must fail the check, and the crop must not widen the viewport (that would shoot another breakpoint).
+      await page.evaluate(() => {
+        const w = document.createElement('div')
+        w.id = 'selftest-wide'
+        w.style.cssText = 'width:600px;height:40px;margin:8px;background:#cde'
+        document.querySelector('main').append(w)
+      })
+      const wide = await cropElement(page, page.locator('#selftest-wide'), path.join(OUT_DIR, 'wide-390.png'), { touch: true })
+      const c = checkCropHolds(wide)
+      checks.push({ name: 'wide element keeps the 390 viewport and fails the crop check with overflowX', pass: wide.viewport.width === 390 && !c.pass && c.detail.overflowX === true, detail: { viewport: wide.viewport, overflowX: c.detail.overflowX } })
+    }
     await context.close()
   }
 } finally { await browser.close() }
