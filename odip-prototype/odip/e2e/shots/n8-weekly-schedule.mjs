@@ -149,7 +149,7 @@ try {
       const s = await shell(page)
       check(`16 aside / top header / Mobile nav display (print, ${rail})`, `${s.aside} / ${s.header} / ${s.mobileNav}`, [s.aside, s.header, s.mobileNav].every(hidden))
       check(`17 main column margin-left, main left edge (print, ${rail})`, `${s.wrapMargin}, ${s.mainLeft}px`, s.wrapMargin === '0px' && s.mainLeft === 0)
-      const cluster = await trigger(page).evaluate((el) => { const c = el.closest('.print\\:hidden'); return c ? getComputedStyle(c).display : 'no print:hidden ancestor' })
+      const cluster = await page.locator('button', { hasText: /^Documents/ }).first().evaluate((el) => { const c = el.closest('.print\\:hidden'); return c ? getComputedStyle(c).display : 'no print:hidden ancestor' })
       check(`19 header action cluster display (print, ${rail})`, cluster, cluster === 'none')
       await page.emulateMedia({ media: 'screen' })
     }
