@@ -28,10 +28,10 @@ public class ProviderSettingsPostgresTests : IClassFixture<PostgresFixture>
         return (db, new ProviderSettingsController(db, tenant.Object));
     }
 
-    private static UpsertProviderSettingsDto Form(string account, DateTime? expected) => new()
+    private static UpsertProviderSettingsDto Form(string account, DateTime? expected, string? zone = null) => new()
     {
         RegistrationNumber = "REG123", ABN = "12345678901", OrganisationName = "Test Org", Address = "1 Test St", State = "VIC",
-        AccountNumber = account, ExpectedUpdatedAt = expected,
+        AccountNumber = account, ExpectedUpdatedAt = expected, TimeZoneId = zone,
     };
 
     private static async Task<DateTime> LoadedAsync(ProviderSettingsController c) =>
@@ -95,8 +95,7 @@ public class ProviderSettingsPostgresTests : IClassFixture<PostgresFixture>
         { var (db, c) = Request(tenantId); await using var _ = db; loaded = await LoadedAsync(c); }
         { var (db, c) = Request(tenantId); await using var _ = db; Assert.IsType<OkObjectResult>((await c.Upsert(Form("222", loaded), CancellationToken.None)).Result); }
 
-        var stale = Form("222", loaded);
-        stale.TimeZoneId = "Australia/Perth";
+        var stale = Form("222", loaded, "Australia/Perth");
         { var (db, c) = Request(tenantId); await using var _ = db; Assert.IsType<ConflictObjectResult>((await c.Upsert(stale, CancellationToken.None)).Result); }
 
         var (check, _c) = Request(tenantId);
