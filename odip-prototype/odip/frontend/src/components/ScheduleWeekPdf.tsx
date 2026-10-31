@@ -11,6 +11,8 @@ export type ScheduleWeek = { organisationName: string | null; participantName: s
 // A Draft was never shown to anyone and a Cancelled one is not happening.
 const KEPT = new Set<ShiftStatus>(['Published', 'InProgress', 'PendingReview', 'Completed'])
 
+// Pure mapper and download kept beside the document: the lazy import in rostering.ts loads this one module.
+// eslint-disable-next-line react-refresh/only-export-components
 export function toScheduleWeek(board: RosterBoardDto, participantId: string, participantName: string, organisationName: string | null): ScheduleWeek {
   const row = board.groupBy === 'Participant' ? board.participantRows.find(r => r.participantId === participantId) : undefined
   const kept = (row?.shifts ?? []).filter(s => KEPT.has(s.status))
@@ -99,6 +101,7 @@ export function ScheduleWeekDocument({ week }: { week: ScheduleWeek }) {
 }
 
 // The download is ItineraryPdf's: an <a download> click, revoked after 5 s so iOS has time to take the file.
+// eslint-disable-next-line react-refresh/only-export-components
 export async function generateScheduleWeekPdf(week: ScheduleWeek, fileName: string) {
   const blob = await pdf(<ScheduleWeekDocument week={week} />).toBlob()
   const url = URL.createObjectURL(blob)

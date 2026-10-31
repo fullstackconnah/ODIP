@@ -31,7 +31,7 @@ const {
   // PF-10.6 — same reasoning as the two DOC-01 hooks above.
   mockUseDownloadClientOverviewPdf: vi.fn(() => ({ mutate: vi.fn(), isPending: false, isError: false })),
   // N8 — the fourth, (participantName, week) -> the same shape; the tests read the arguments the page passed.
-  mockUseDownloadWeeklySchedulePdf: vi.fn((_name?: string, _week?: string | null) => ({ mutate: vi.fn(), isPending: false, isError: false })),
+  mockUseDownloadWeeklySchedulePdf: vi.fn<(name?: string, week?: string | null) => { mutate: () => void; isPending: boolean; isError: boolean }>(() => ({ mutate: vi.fn(), isPending: false, isError: false })),
   // PD-7 — the real Details-tab section components (kept real below, see the './participant-detail'
   // mock) call usePatchParticipant()/useStaff() directly. Every PDETAIL-01 test in this file uses
   // the default 'SupportWorker' role (canWriteParticipantDetails === false), so no section's Edit
