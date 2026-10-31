@@ -434,10 +434,10 @@ public class RestrictivePracticesController : ControllerBase
     /// as entered), and for a linked chemical entry the first administered dose of its medicine (UTC, read in the provider's zone). One grouped query per
     /// source, never one per entry.
     /// </summary>
-    private async Task<Dictionary<Guid, DateOnly>> EarliestUsesAsync(IReadOnlyCollection<RestrictivePractice> items, TimeZoneInfo zone, CancellationToken ct)
+    private async Task<Dictionary<Guid, DateOnly?>> EarliestUsesAsync(IReadOnlyCollection<RestrictivePractice> items, TimeZoneInfo zone, CancellationToken ct)
     {
         var ids = items.Select(rp => rp.Id).ToList();
-        var result = new Dictionary<Guid, DateOnly>();
+        var result = new Dictionary<Guid, DateOnly?>();
         void Keep(Guid id, DateOnly date) { if (!result.TryGetValue(id, out var have) || date < have) result[id] = date; }
 
         var incidents = await _db.IncidentReports

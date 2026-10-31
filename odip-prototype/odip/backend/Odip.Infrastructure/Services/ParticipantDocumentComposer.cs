@@ -387,7 +387,10 @@ public static class ParticipantDocumentComposer
                 Humanize(rp.Type.ToString()),
                 OrPlaceholder(rp.Description),
                 OrPlaceholder(rp.AuthorisedBy),
-                rp.AuthorisationDate is { } authDate ? authDate.ToString("dd MMM yyyy") : EmptyPlaceholder,
+                // shortcut: "ended" is judged on the UTC date (the composer has no provider clock), so it can read a day early in Sydney until mid-morning; give the composer the provider today if that matters.
+                rp.AuthorisationDate is { } authDate
+                    ? authDate.ToString("dd MMM yyyy") + (rp.AuthorisationEndDate is { } end && end < DateOnly.FromDateTime(DateTime.UtcNow) ? $" (ended {end:d MMM yyyy})" : "")
+                    : EmptyPlaceholder,
                 rp.ReviewDate is { } reviewDate ? reviewDate.ToString("dd MMM yyyy") : EmptyPlaceholder,
             })
             .ToList();

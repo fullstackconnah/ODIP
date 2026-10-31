@@ -421,4 +421,19 @@ public class ParticipantDocumentComposerTests
         Assert.Equal("PRN sedative on outings", row[1]);
         Assert.Equal("Dr Lee", row[2]);
     }
+
+    [Fact]
+    public void ComposeClientOverview_RestrictivePracticeTable_MarksAnEndedAuthorisation()
+    {
+        var participant = BuildParticipant();
+        participant.RestrictivePractices.Add(new RestrictivePractice
+        {
+            Id = Guid.NewGuid(), ParticipantId = participant.Id, Type = RestrictivePracticeType.Seclusion, Description = "d", AuthorisedBy = "Dr Lee", IsActive = true,
+            AuthorisationDate = new DateOnly(2020, 1, 1), AuthorisationEndDate = new DateOnly(2020, 6, 30),
+        });
+
+        var model = ParticipantDocumentComposer.ComposeClientOverview(participant, BuildTrip());
+
+        Assert.Equal("01 Jan 2020 (ended 30 Jun 2020)", Assert.Single(Assert.Single(Assert.Single(model.Sections).Tables).Rows)[3]);
+    }
 }

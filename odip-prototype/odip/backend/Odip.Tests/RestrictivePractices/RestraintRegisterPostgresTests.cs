@@ -2,6 +2,13 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
+using Microsoft.AspNetCore.Mvc;
+using Odip.Api.Controllers;
+using Odip.Application.Common;
+using Odip.Application.DTOs;
+using Odip.Domain.Enums;
+using Odip.Infrastructure.Services;
+using Odip.Tests.Medications;
 using Odip.Tests.Postgres;
 using Xunit;
 
@@ -162,5 +169,70 @@ public class RestraintRegisterPostgresTests : IClassFixture<PostgresFixture>
 
         Assert.Equal(("QLD Senior Practitioner", (DateOnly?)new DateOnly(2026, 8, 2)), await AuthoriserAsync(blankDb));
         Assert.Equal(("Dr Existing", (DateOnly?)new DateOnly(2026, 3, 3)), await AuthoriserAsync(keptDb));
+    }
+
+    [SkippableFact]
+    public async Task Migration_BackfillsReportingFromMonth_ToTheSydneyDeployMonth()
+    {
+        Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
+        var cs = await _pg.CreateDatabaseAsync();
+        await using var db = PostgresFixture.NewContext(cs);
+        var migrator = db.GetService<IMigrator>();
+        await migrator.MigrateAsync(BeforeMigration);
+        var entry = Guid.NewGuid();
+        await using var conn = new NpgsqlConnection(cs);
+        await conn.OpenAsync();
+        var (tenant, participant) = await InsertParentsAsync(conn);
+        await InsertEntryAsync(conn, tenant, participant, null, true, new DateTime(2026, 1, 5, 0, 0, 0, DateTimeKind.Unspecified), id: entry);
+
+        await migrator.MigrateAsync();
+
+        var sydney = TimeZoneInfo.ConvertTime(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("Australia/Sydney"));
+        await using var cmd = new NpgsqlCommand("SELECT \"ReportingFromMonth\", \"UseKind\" FROM \"RestrictivePractices\" WHERE \"Id\" = @i", conn);
+        cmd.Parameters.AddWithValue("i", entry);
+        await using var r = await cmd.ExecuteReaderAsync();
+        Assert.True(await r.ReadAsync());
+        Assert.Equal(new DateOnly(sydney.Year, sydney.Month, 1), r.GetFieldValue<DateOnly>(0));
+        Assert.Equal(0, r.GetInt32(1));
+    }
+
+    [SkippableFact]
+    public async Task NewDateColumns_RoundTrip_AndEarliestUseGroupsOnNpgsql()
+    {
+        Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
+        var cs = await _pg.CreateDatabaseAsync();
+        await using var db = PostgresFixture.NewContext(cs);
+        await db.Database.MigrateAsync();
+        var (entry, user) = (Guid.NewGuid(), Guid.NewGuid());
+        Guid participant;
+        await using (var conn = new NpgsqlConnection(cs))
+        {
+            await conn.OpenAsync();
+            var parents = await InsertParentsAsync(conn);
+            participant = parents.Participant;
+            await ShiftPackagePostgresTests.InsertMinimalRowAsync(conn, "Users", new() { ["Id"] = user, ["TenantId"] = parents.Tenant, ["Username"] = "u" + user.ToString("N"), ["Email"] = $"{user:N}@example.com" });
+            await ShiftPackagePostgresTests.InsertMinimalRowAsync(conn, "RestrictivePractices", new()
+            {
+                ["Id"] = entry, ["TenantId"] = parents.Tenant, ["ParticipantId"] = participant, ["IsActive"] = true, ["Type"] = 4, ["Description"] = "Physical hold",
+                ["AuthorisedBy"] = "Dr Chen", ["AuthorisationDate"] = new DateOnly(2026, 1, 1), ["AuthorisationEndDate"] = new DateOnly(2027, 1, 1), ["FirstUsedOn"] = new DateOnly(2026, 10, 1),
+                ["InterimBspDate"] = new DateOnly(2026, 10, 20), ["UseKind"] = 1, ["CreatedAt"] = DateTime.UtcNow, ["UpdatedAt"] = DateTime.UtcNow,
+            });
+            foreach (var day in new[] { 9, 5 })
+                await ShiftPackagePostgresTests.InsertMinimalRowAsync(conn, "IncidentReports", new()
+                {
+                    ["Id"] = Guid.NewGuid(), ["TenantId"] = parents.Tenant, ["ReportedByUserId"] = user, ["IncidentType"] = (int)IncidentType.RestrictivePracticeUse,
+                    ["RestrictivePracticeId"] = entry, ["IsActive"] = true, ["IncidentDateTime"] = new DateTime(2026, 3, day, 8, 0, 0, DateTimeKind.Unspecified),
+                });
+        }
+
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db), FakeClock.AtUtc(2026, 10, 31, 2, 0));
+        var result = await controller.GetForParticipant(participant, includeInactive: false, CancellationToken.None);
+
+        var dto = Assert.Single(Assert.IsType<ApiResponse<List<RestrictivePracticeDto>>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!);
+        Assert.Equal(new DateOnly(2026, 3, 5), dto.EarliestRecordedUseDate);
+        Assert.Equal(new DateOnly(2027, 1, 1), dto.AuthorisationEndDate);
+        Assert.Equal(RestrictivePracticeUseKind.Prn, dto.UseKind);
+        Assert.Equal(BspPlanState.InPlace, dto.InterimBspState);
+        Assert.Equal(new DateOnly(2027, 4, 1), dto.ComprehensiveBspDueOn);
     }
 }
