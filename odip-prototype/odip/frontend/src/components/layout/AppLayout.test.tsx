@@ -953,12 +953,12 @@ describe('AppLayout — open groups are remembered (U1)', () => {
     localStorage.setItem(KEY, JSON.stringify(['gone-group', 42, 'trips']))
     const { unmount } = renderAt('/')
     expect(expanded(/Trips$/)).toBe('true')
-    expect(navShape()).toHaveLength(11)
+    expect(navShape()).toHaveLength(12)
     unmount()
 
     localStorage.setItem(KEY, '{not json')
     renderAt('/')
-    expect(navShape()).toHaveLength(11)
+    expect(navShape()).toHaveLength(12)
     expect(expanded(/Trips$/)).toBe('false')
   })
 
