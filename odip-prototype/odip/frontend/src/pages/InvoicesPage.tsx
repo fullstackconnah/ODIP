@@ -201,7 +201,7 @@ export default function InvoicesPage() {
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <AnnouncementRegion message={downloadError?.message ?? ''} />
-      <PageHeader title="Invoices" subtitle={!failed && rows.length > 0 ? subtitleFor(totalCount, kind, showOrganisation) : undefined}>
+      <PageHeader title="Invoices" count={!failed && rows.length > 0 ? subtitleFor(totalCount, kind, showOrganisation) : undefined}>
         {filtersDrawn && (
           <div className="flex w-full flex-wrap items-end gap-2 pointer-coarse:gap-y-3">
             <div ref={searchBox} className="max-md:w-full md:w-80">

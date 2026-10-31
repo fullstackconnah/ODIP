@@ -614,7 +614,10 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in max-w-[1600px]">
       {unsavedChangesDialog}
       <div className="flex items-start gap-2">
-        <BackButton to="/incidents" label="incidents" variant="icon" />
+        {/* A box the height of the title's first line (26px, 30px from md), so the icon's centre is the title's. */}
+        <div className="flex h-[26px] items-center md:h-[30px]">
+          <BackButton to="/incidents" label="incidents" variant="icon" />
+        </div>
         <div className="flex-1 min-w-0"><PageHeader title={isEdit ? 'Edit incident report' : 'Report incident'} /></div>
       </div>
 

@@ -135,8 +135,8 @@ describe('StaffDetailPage — header', () => {
     renderAt('staff-1')
 
     // The span holds just the region — not " · North".
-    expect(screen.getByText('North')).toBeInTheDocument()
-    expect(screen.queryByText(/^\s*·/)).not.toBeInTheDocument()
+    // (PageHeaderMeta's own middots are separate aria-hidden spans between the items, so only this span's text is checked.)
+    expect(screen.getByText('North').textContent).toBe('North')
   })
 
   it('shows Inactive status for an inactive staff member', () => {

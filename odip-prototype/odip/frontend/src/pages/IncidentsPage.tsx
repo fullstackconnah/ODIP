@@ -332,32 +332,24 @@ export default function IncidentsPage() {
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
-      {/* The tabs share the H1 row (spec §3), and the H1 now renders on both tabs. PageHeader's title
-          row is `flex justify-between` without wrap, so this wrapper lets it wrap: on a phone the
-          tabs and button drop under the title instead of squeezing it. A plain wrapper also keeps
-          the title and filter rows in block flow, without the flex column's section gap between them. */}
-      <div className="[&>div:first-child]:flex-wrap [&>div:first-child]:gap-y-1">
+      {/* The tabs sit under the title (PageHeader's tabs slot), and the H1 renders on both tabs. A plain wrapper keeps
+          the title, tabs and filter rows in block flow, without the flex column's section gap between them. */}
+      <div>
         <PageHeader
           title="Incidents"
-          subtitle={showFlaggedNotes ? undefined : plural(totalCount, 'incident')}
-          action={(canViewFlaggedNotes || reportIncidentAction) && (
-            <div className="flex flex-auto flex-wrap items-center gap-x-4 gap-y-1">
-              {canViewFlaggedNotes && (
-                <Tabs
-                  tabs={[
-                    { id: 'incidents', label: 'Reports' },
-                    // A failed load is not a count of 0: the label drops the count until there is one.
-                    { id: 'flagged-notes', label: flaggedNotesError && flaggedNotes.length === 0 ? 'Flagged notes' : `Flagged notes (${flaggedNotes.length})` },
-                  ]}
-                  active={tab}
-                  onChange={key => setTab(key as IncidentsTab)}
-                  ariaLabel="Incidents sections"
-                  className="min-w-0 max-md:basis-full"
-                />
-              )}
-              {/* On a phone the action leads the row, under the title as on the other list pages, and the tabs take the row below it. */}
-              {reportIncidentAction && <div className="max-md:order-first md:ml-auto">{reportIncidentAction}</div>}
-            </div>
+          count={showFlaggedNotes ? undefined : plural(totalCount, 'incident')}
+          action={reportIncidentAction || undefined}
+          tabs={canViewFlaggedNotes && (
+            <Tabs
+              tabs={[
+                { id: 'incidents', label: 'Reports' },
+                // A failed load is not a count of 0: the label drops the count until there is one.
+                { id: 'flagged-notes', label: flaggedNotesError && flaggedNotes.length === 0 ? 'Flagged notes' : `Flagged notes (${flaggedNotes.length})` },
+              ]}
+              active={tab}
+              onChange={key => setTab(key as IncidentsTab)}
+              ariaLabel="Incidents sections"
+            />
           )}
         >
           {!showFlaggedNotes && (

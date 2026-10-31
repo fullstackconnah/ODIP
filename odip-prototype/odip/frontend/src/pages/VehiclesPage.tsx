@@ -82,7 +82,7 @@ export default function VehiclesPage() {
       {/* Page header */}
       <PageHeader
         title="Vehicles"
-        subtitle={`${plural(filtered.length, `${showArchived ? 'archived' : 'active'} vehicle`)}, ${plural(totalSeats, 'seat')}`}
+        count={`${plural(filtered.length, `${showArchived ? 'archived' : 'active'} vehicle`)}, ${plural(totalSeats, 'seat')}`}
         action={!showArchived && canWrite && (
           <Button to="/vehicles/new" size="md">
             <Plus className="w-4 h-4" /> New vehicle

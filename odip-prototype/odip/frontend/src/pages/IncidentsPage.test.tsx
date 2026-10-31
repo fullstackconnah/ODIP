@@ -514,14 +514,15 @@ describe('IncidentsPage — narrow-desktop columns', () => {
 })
 
 describe('IncidentsPage — header row', () => {
-  it('puts the H1 and the section tabs on one header row', () => {
+  it('puts the section tabs in the header tabs slot, on their own row under the title (SHAPE-PR2 check 8)', () => {
     renderPage()
 
     const h1 = screen.getByRole('heading', { level: 1, name: 'Incidents' })
     const tablist = screen.getByRole('tablist', { name: 'Incidents sections' })
-    // PageHeader's title row: h1 group + action slot. The tabs live in that same row (spec §3).
+    // PageHeader's title row is h1 group + action slot; the tabs are a later sibling of it, never inside it.
     const titleRow = h1.parentElement?.parentElement as HTMLElement
-    expect(titleRow).toContainElement(tablist)
+    expect(titleRow).not.toContainElement(tablist)
+    expect(h1.compareDocumentPosition(tablist) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('keeps the H1 (and the tabs) when the Flagged notes tab is open, and drops the incident-only controls', async () => {
@@ -548,14 +549,15 @@ describe('IncidentsPage — header row', () => {
 
   // VB review: at 390 "Report incident" landed right-aligned under the tabs. On a phone it leads the header's action row, directly under
   // the title as on the other list pages, and the tabs take the row below; from md up it stays at the right end of the tab row.
-  it('puts Report incident first in the action row on a phone, and at the end of the tab row from md up', () => {
+  it('keeps Report incident in the title row (under the title on a phone, at its right end from md), not in the tab row', () => {
     mockUseIncidents.mockReturnValue({ data: [baseIncident()], isLoading: false })
     renderPage()
 
-    const action = screen.getByRole('link', { name: /report incident/i }).parentElement as HTMLElement
-    expect(action).toHaveClass('max-md:order-first', 'md:ml-auto')
-    expect(action).not.toHaveClass('ml-auto')
-    expect(screen.getByRole('tablist', { name: 'Incidents sections' }).closest('[class~="max-md:basis-full"]')).not.toBeNull()
+    const link = screen.getByRole('link', { name: /report incident/i })
+    const tablist = screen.getByRole('tablist', { name: 'Incidents sections' })
+    const titleRow = screen.getByRole('heading', { level: 1, name: 'Incidents' }).parentElement?.parentElement as HTMLElement
+    expect(titleRow).toContainElement(link)
+    expect(tablist.parentElement).not.toContainElement(link)
   })
 
   it('renders the H1 and the action but no tab strip for a role that cannot see flagged notes', () => {
