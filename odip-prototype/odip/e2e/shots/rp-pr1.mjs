@@ -155,7 +155,19 @@ try {
     }
     await noOverflow('register tab')
     await shoot(page.locator('main'), 'register')
-    if (vp.mobile) await shoot(card(ENTRIES[6].description), 'register-ended')
+    if (vp.mobile) {
+      // Scroll the ended card above the fixed bottom nav, then prove the crop holds it (text visible, not covered).
+      const ended = card(ENTRIES[6].description)
+      await ended.evaluate((e) => { const nav = document.querySelector('nav[aria-label="Mobile"]'); const top = nav ? nav.getBoundingClientRect().top : innerHeight; const r = e.getBoundingClientRect(); window.scrollBy(0, r.bottom - (top - 24)) })
+      await settled(page)
+      const em = await ended.evaluate((e, navSel) => {
+        const r = e.getBoundingClientRect(); const nav = document.querySelector(navSel); const navTop = nav ? nav.getBoundingClientRect().top : innerHeight
+        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
+        return { text: e.innerText, top: r.top, bottom: r.bottom, navTop, covered: !hit || !e.contains(hit) }
+      }, 'nav[aria-label="Mobile"]')
+      check('390 register-ended crop holds the ended card (Authorisation ended, clear of the bottom nav)', em, /Authorisation ended/.test(em.text) && em.top >= 16 && em.bottom + 16 <= em.navTop && !em.covered)
+      await shoot(ended, 'register-ended')
+    }
 
     // inactive entry has no plan line
     await page.getByRole('button', { name: /^Inactive/ }).click()
@@ -215,6 +227,8 @@ try {
       // The table's own overflow-x-auto wrapper may scroll (SHAPE check 7); the dialog around it must not.
       const dlg = await rows.evaluate((e) => ({ sw: e.scrollWidth, cw: e.clientWidth }))
       check('1280 7 bulk dialog has no horizontal overflow (table wrapper may scroll)', { dlg, sc }, dlg.sw <= dlg.cw + 1)
+      const fit = await rows.evaluate((d) => { const w = d.querySelector('table').parentElement; const dr = d.getBoundingClientRect(); const br = d.querySelector('tbody button[aria-label*="Remove" i], tbody button:last-of-type').getBoundingClientRect(); return { sw: w.scrollWidth, cw: w.clientWidth, btnRight: br.right, dlgRight: dr.right } })
+      check('1280 7 authorised batch fits with no inner scroll, Remove inside the dialog', fit, fit.sw <= fit.cw + 1 && fit.btnRight <= fit.dlgRight)
     }
     const descWidth = async (label) => {
       const w = (await rows.getByPlaceholder('What the restrictive practice involves...').first().boundingBox()).width

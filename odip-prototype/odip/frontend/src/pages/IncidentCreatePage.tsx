@@ -308,13 +308,20 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
 
   // The date is typed after the entry is picked, so the locked "not authorised" tick follows the entry judged on that date.
   const rpLockedRef = useRef(false)
+  const tickBeforeLockRef = useRef(false) // a hand tick made before the lock began survives the unlock
+  const lockEntryRef = useRef<string | undefined>('')
   useEffect(() => {
     if (isEdit) return
     const entry = allRestrictivePractices.find((p) => p.id === restrictivePracticeId)
     const locked = !!entry && !isRpAuthorisedOn(entry, incidentDateTime?.slice(0, 10))
-    if (locked !== rpLockedRef.current) setValue('usedWithoutAuthorisation', locked, { shouldDirty: true })
+    if (locked !== rpLockedRef.current) {
+      // A lock from picking the entry already set the tick itself (the pick handler), so only a lock from the date moving counts as a hand tick.
+      if (locked) tickBeforeLockRef.current = lockEntryRef.current === restrictivePracticeId && !!getValues('usedWithoutAuthorisation')
+      if (locked || !tickBeforeLockRef.current) setValue('usedWithoutAuthorisation', locked, { shouldDirty: true })
+    }
     rpLockedRef.current = locked
-  }, [isEdit, allRestrictivePractices, restrictivePracticeId, incidentDateTime, setValue])
+    lockEntryRef.current = restrictivePracticeId
+  }, [isEdit, allRestrictivePractices, restrictivePracticeId, incidentDateTime, setValue, getValues])
 
   useEffect(() => {
     if (incidentType !== 'Injury') {

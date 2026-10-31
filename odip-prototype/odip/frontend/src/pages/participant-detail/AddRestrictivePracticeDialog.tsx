@@ -349,6 +349,7 @@ function AddRestrictivePracticeDialogBody({ participantId, onClose, onSaved, def
       onClose={onClose}
       title={single ? `Add to restrictive practice register — ${RESTRICTIVE_PRACTICE_TYPE_LABELS[bulkType]}` : `Add entries — ${RESTRICTIVE_PRACTICE_TYPE_LABELS[bulkType]}`}
       size="xl"
+      className="max-w-5xl!" // Modal has no size above xl: the 5-column authorised table needs ~944px (shortcut: one call site, add a size if a second needs it)
       footer={
         <>
           {single ? (

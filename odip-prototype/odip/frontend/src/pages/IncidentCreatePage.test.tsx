@@ -1639,6 +1639,28 @@ describe('IncidentCreatePage — restrictive practice authorisation', () => {
     expect(screen.getByRole('radio', { name: 'Varied' })).toBeInTheDocument()
   })
 
+  it('keeps a hand-ticked "not authorised" when the date moves out of the window and back', async () => {
+    const ended = { ...authorisedEntry, id: 'rp-e', description: 'Ended hold.', authorisationDate: '2020-01-01', authorisationEndDate: '2026-10-30', isAuthorised: false }
+    mockUseRestrictivePractices.mockReturnValue({ data: [ended] })
+    const user = userEvent.setup()
+    renderCreatePage()
+    await pickThenSetIncidentDate(user, /Ended hold/, '2026-10-29T10:00', true)
+    await user.click(screen.getByRole('checkbox', { name: 'This use was not authorised' }))
+
+    const moveDateTo = async (at: string) => {
+      await clickNext(user)
+      await user.clear(screen.getByLabelText(/Date & Time/i))
+      await user.type(screen.getByLabelText(/Date & Time/i), at)
+      await clickBack(user)
+    }
+    await moveDateTo('2026-10-31T10:00')
+    expect(screen.getByRole('checkbox', { name: 'This use was not authorised' })).toBeDisabled()
+    await moveDateTo('2026-10-29T10:00')
+    const tick = screen.getByRole('checkbox', { name: 'This use was not authorised' })
+    expect(tick).toBeEnabled()
+    expect(tick).toBeChecked()
+  })
+
   it('reads a use dated before the authorisation started as not authorised: locked ticked, no varied question', async () => {
     const later = { ...authorisedEntry, id: 'rp-l', description: 'Later hold.', authorisationDate: '2026-11-01', isAuthorised: true }
     mockUseRestrictivePractices.mockReturnValue({ data: [later] })
