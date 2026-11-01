@@ -57,8 +57,8 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
         with no sr-only text (a 1px clip box reads as clipped text in an audit). On touch the trigger's 44px tap pad needs room: the
         header gets gap-y-3 between its lines and pb-3 below, only on a row that has a trigger.
       */}
-      <div className={`sticky left-0 z-10 flex min-h-[var(--row-h)] flex-col justify-center border-b border-r border-border bg-card px-2${hasTrigger ? ' pointer-coarse:pb-3' : ''}`}>
-        <div className="flex min-w-0 items-center gap-1 pointer-coarse:gap-y-3">
+      <div className={`sticky left-0 z-10 flex min-h-[var(--row-h)] flex-col justify-center border-b border-r border-border bg-card px-2 pointer-coarse:gap-y-3${hasTrigger ? ' pointer-coarse:pb-3' : ''}`}>
+        <div className="flex min-w-0 items-center gap-1">
           <Link
             to={participantWeekHref(row.participantId, days[0])}
             className="block min-w-0 truncate rounded-sm font-display text-sm font-semibold leading-4 text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"

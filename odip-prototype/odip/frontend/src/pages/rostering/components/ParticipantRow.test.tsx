@@ -340,7 +340,7 @@ describe('ParticipantRow header — readiness trigger', () => {
   it('gives a row with a trigger room for its 44px tap pad on touch, and none otherwise', () => {
     const { unmount } = renderRow({ fullName: 'Grace Palmer-Hughes', readinessIssues: ISSUES })
     expect(headerOf('Grace Palmer-Hughes')).toHaveClass('pointer-coarse:pb-3')
-    expect(headerOf('Grace Palmer-Hughes').firstElementChild).toHaveClass('pointer-coarse:gap-y-3')
+    expect(headerOf('Grace Palmer-Hughes')).toHaveClass('pointer-coarse:gap-y-3')
     unmount()
 
     renderRow({ fullName: 'Mia Chen' })
