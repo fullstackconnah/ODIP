@@ -57,7 +57,11 @@ public record PortalTripAssignmentSummaryDto(
     DateOnly AssignmentStart,
     DateOnly AssignmentEnd,
     bool IsDriver,
-    AssignmentStatus Status);
+    AssignmentStatus Status,
+    /// <summary>The trip's destination as the coordinator typed it; null when blank. Never a participant's home address.</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Destination,
+    /// <summary>The caller's role on this trip as typed (for example Support Worker); null when blank.</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Role);
 
 /// <summary>
 /// Response of GET /api/v1/portal/my-shifts. Post staff/user unification there is no separate
