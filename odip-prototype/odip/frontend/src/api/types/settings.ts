@@ -2,6 +2,10 @@ export interface AppSettingsDto {
   qualificationWarningDays: number
   /** Whole hours a week before the roster warns (OVER_HOURS); 38 until an Admin changes it. */
   weeklyHoursWarning?: number
+  /** Minutes a finished shift may drift from the roster before it goes to review; 15 until an Admin changes it. */
+  varianceReviewMinutes?: number
+  /** Days before a participant's plan ends that the alert starts; 30 until an Admin changes it. */
+  planExpiryWarningDays?: number
   /** Minutes a sign-in lasts before the person must sign in again (Settings > Security); null or absent = no limit, as before. */
   sessionLengthMinutes?: number | null
 }
@@ -27,9 +31,12 @@ export interface UpdateMyProfileDto {
   mobile: string | null
 }
 
+/** Every field is optional: a field left out keeps its stored value, so each section saves only its own. */
 export interface UpdateAppSettingsDto {
-  qualificationWarningDays: number
+  qualificationWarningDays?: number
   weeklyHoursWarning?: number
+  varianceReviewMinutes?: number
+  planExpiryWarningDays?: number
 }
 
 export interface ModuleVisibilityDto {

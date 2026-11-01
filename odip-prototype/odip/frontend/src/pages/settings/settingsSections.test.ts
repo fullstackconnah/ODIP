@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { renderHook } from '@testing-library/react'
 import { usePermissions, type UserRole } from '@/lib/permissions'
 import { SETTINGS_PERMS } from '@/test/fixtures/settingsPermissions'
-import { LEGACY_TAB, notSavedText, requestedSection, shownSection, visibleSections, type SectionKey, type SettingsPerms } from './settingsSections'
+import { LEGACY_TAB, SECTIONS, notSavedText, requestedSection, shownSection, visibleSections, type SectionKey, type SettingsPerms } from './settingsSections'
 
 /** The real usePermissions() for a role signed in the way the app does it (odip_user; odip_viewing_tenant while a SuperAdmin views an organisation). */
 function permsOf(role: UserRole, viewingTenant?: string) {
@@ -27,9 +27,9 @@ const groupsOf = (role: RoleCase) => [...new Set(visibleSections(ROLES[role]()).
 
 describe('who sees which section', () => {
   it('gives each role its sections in rail order', () => {
-    expect(keysOf('Admin')).toEqual(['profile', 'notifications', 'appearance', 'setup', 'workspace-visibility', 'organisation', 'billing', 'safety', 'alerts', 'security', 'pricing', 'budgets', 'templates', 'activities', 'holidays', 'import', 'export', 'integrations', 'failed-sends'])
-    expect(keysOf('Coordinator')).toEqual(['profile', 'notifications', 'appearance', 'organisation', 'billing', 'safety', 'alerts', 'security', 'templates', 'activities', 'holidays'])
-    expect(keysOf('SuperAdmin')).toEqual(['profile', 'notifications', 'appearance', 'setup', 'workspace-visibility', 'organisation', 'billing', 'safety', 'alerts', 'security', 'pricing', 'budgets', 'templates', 'activities', 'import', 'export', 'integrations', 'tenants', 'users', 'catalogue', 'holidays', 'failed-sends', 'alpha-signups', 'whats-new'])
+    expect(keysOf('Admin')).toEqual(['profile', 'notifications', 'appearance', 'setup', 'workspace-visibility', 'organisation', 'billing', 'safety', 'alerts', 'rostering', 'security', 'pricing', 'budgets', 'templates', 'activities', 'holidays', 'import', 'export', 'integrations', 'failed-sends'])
+    expect(keysOf('Coordinator')).toEqual(['profile', 'notifications', 'appearance', 'organisation', 'billing', 'safety', 'alerts', 'rostering', 'security', 'templates', 'activities', 'holidays'])
+    expect(keysOf('SuperAdmin')).toEqual(['profile', 'notifications', 'appearance', 'setup', 'workspace-visibility', 'organisation', 'billing', 'safety', 'alerts', 'rostering', 'security', 'pricing', 'budgets', 'templates', 'activities', 'import', 'export', 'integrations', 'tenants', 'users', 'catalogue', 'holidays', 'failed-sends', 'alpha-signups', 'whats-new'])
     expect(keysOf('SuperAdminNoOrg')).toEqual(['profile', 'notifications', 'appearance', 'tenants', 'users', 'catalogue', 'holidays', 'failed-sends', 'alpha-signups', 'whats-new'])
   })
 
@@ -53,7 +53,7 @@ describe('who sees which section', () => {
 
   it('locks the Organisation sections for a Coordinator, and only for a Coordinator', () => {
     const locked = (role: RoleCase) => visibleSections(ROLES[role]()).filter(s => s.readOnly?.(ROLES[role]())).map(s => s.key)
-    expect(locked('Coordinator')).toEqual(['organisation', 'billing', 'safety', 'alerts', 'security'])
+    expect(locked('Coordinator')).toEqual(['organisation', 'billing', 'safety', 'alerts', 'rostering', 'security'])
     expect(locked('Admin')).toEqual([])
     expect(locked('SuperAdmin')).toEqual([])
   })
@@ -143,5 +143,18 @@ describe('notSavedText (the save foot failure line)', () => {
 
   it('asks to check the connection when there is no answer', () => {
     expect(notSavedText(new Error('Network Error'))).toBe('Not saved. Check your connection and try again.')
+  })
+})
+
+describe('Rostering rules and Alert windows entries', () => {
+  const entry = (key: string) => SECTIONS.find(s => s.key === key)
+  it('puts Rostering rules in Organisation, right after Alert windows, with its pinned description', () => {
+    const keys = SECTIONS.map(s => s.key)
+    expect(keys.indexOf('rostering')).toBe(keys.indexOf('alerts') + 1)
+    expect(entry('rostering')).toMatchObject({ label: 'Rostering rules', group: 'Organisation' })
+    expect(entry('rostering')?.description).toBe('How many hours a week the roster allows before it warns, and how far a finished shift can drift from the roster before it needs review.')
+  })
+  it('words Alert windows as the two expiry warnings only', () => {
+    expect(entry('alerts')?.description).toBe("How early we warn before a staff qualification or a participant's plan expires.")
   })
 })

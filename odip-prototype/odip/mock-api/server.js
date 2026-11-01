@@ -1808,7 +1808,7 @@ const tripVehicleAssignments = {
 }
 
 // Settings (AppSettingsDto)
-const appSettings = { qualificationWarningDays: 30, weeklyHoursWarning: 38 }
+const appSettings = { qualificationWarningDays: 30, weeklyHoursWarning: 38, varianceReviewMinutes: 15, planExpiryWarningDays: 30 }
 
 // Leave requests (LeaveRequestDto) + recurring unavailability (RecurringUnavailabilityDto) —
 // offline preview fixtures for the coordinator LeaveApprovalsPage and self-service

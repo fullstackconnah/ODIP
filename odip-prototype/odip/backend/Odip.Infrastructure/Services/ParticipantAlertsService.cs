@@ -5,6 +5,7 @@ using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Incidents;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Rostering;
 
 namespace Odip.Infrastructure.Services;
 
@@ -26,7 +27,7 @@ namespace Odip.Infrastructure.Services;
 /// 3. <b>routine-coverage-gap</b> (Warning) — a high-support or overnight-support participant with
 ///    no active <see cref="ParticipantRoutine"/> row at all.
 /// 4. <b>plan-expired</b> (Critical) / <b>plan-expiring-soon</b> (Warning) — <see cref="Participant.PlanEndDate"/>
-///    is in the past, or within <see cref="PlanExpiryWarningDays"/> days.
+///    is in the past, or within the participant's organisation's plan-expiry days (Settings > Alert windows, 30 by default).
 /// 5. <b>missed-dose-signal</b> (Warning) — an active, Regular, Daily-frequency medication with
 ///    zero <see cref="MedicationAdministration"/> rows (any status) in the last 7 days. Deliberately
 ///    simple per the brief: only Daily-frequency Regular meds are checked (not SpecificDays/EveryNDays),
@@ -59,9 +60,6 @@ namespace Odip.Infrastructure.Services;
 /// </summary>
 public class ParticipantAlertsService
 {
-    /// <summary>A plan ending within this many days (but not yet past) is a Warning, not Critical.</summary>
-    private const int PlanExpiryWarningDays = 30;
-
     /// <summary>Lookback window for the medication-administration-based signals (rules 2 and 5).</summary>
     private const int AdministrationWindowDays = 7;
 
@@ -105,7 +103,6 @@ public class ParticipantAlertsService
         // administration lookback is a span of instants, so it stays on the UTC clock.
         var nowUtc = _clock.GetUtcNow().UtcDateTime;
         var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
-        var planWarningCutoff = today.AddDays(PlanExpiryWarningDays);
         var administrationWindowStart = nowUtc.AddDays(-AdministrationWindowDays);
 
         var participantsQuery = _db.Participants.AsQueryable();
@@ -126,8 +123,11 @@ public class ParticipantAlertsService
                 p.IsHighSupport,
                 p.OvernightSupport,
                 p.PlanEndDate,
+                p.TenantId,
             })
             .ToListAsync(ct);
+        // A plan ending within the organisation's days (but not yet past) is a Warning, not Critical; each participant by their own organisation.
+        var rules = await OrganisationRules.ForAsync(_db, participants.Select(p => p.TenantId), ct);
 
         if (participants.Count == 0) return new List<ParticipantAlertsDto>();
 
@@ -253,7 +253,7 @@ public class ParticipantAlertsService
                     $"NDIS plan end date ({planEndDate:yyyy-MM-dd}) has passed",
                     "details");
             }
-            else if (planEndDate <= planWarningCutoff)
+            else if (planEndDate <= today.AddDays(OrganisationRules.For(rules, p.TenantId).PlanExpiryWarningDays))
             {
                 Add(p.Id, "plan-expiring-soon", AlertSeverity.Warning,
                     $"NDIS plan ends {planEndDate:yyyy-MM-dd}",

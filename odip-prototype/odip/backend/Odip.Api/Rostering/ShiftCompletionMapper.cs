@@ -18,23 +18,7 @@ namespace Odip.Api.Rostering;
 public static class ShiftCompletionMapper
 {
     /// <summary>
-    /// Clamp bounds for the "Rostering:VarianceReviewMinutes" config key (critique M6). A
-    /// configured 0 would flag every non-zero variance as an outlier, defeating the review
-    /// queue's whole signal; a negative value is nonsensical for a minutes threshold. 240 (4
-    /// hours) is the ceiling: a shift-punctuality "needs review" signal that only fires past a
-    /// 4-hour variance is no longer useful for any shift length this domain schedules, so a
-    /// configured value above it can only be a misconfiguration, never a deliberate policy
-    /// choice.
-    /// </summary>
-    public const int MinVarianceReviewMinutes = 1;
-    public const int MaxVarianceReviewMinutes = 240;
-
-    /// <summary>Clamps a configured (or default) variance-review threshold into the sane range above.</summary>
-    public static int ClampVarianceReviewMinutes(int configured) =>
-        Math.Clamp(configured, MinVarianceReviewMinutes, MaxVarianceReviewMinutes);
-
-    /// <summary>
-    /// True when either variance leg exceeds the configured review threshold (critique P1 —
+    /// True when either variance leg exceeds the organisation's review threshold (critique P1 —
     /// "the coordinator's review queue has no signal for what actually needs attention").
     /// </summary>
     public static bool IsOutlierVariance(int varianceMinutesStart, int varianceMinutesEnd, int thresholdMinutes) =>
@@ -106,14 +90,15 @@ public static class ShiftCompletionMapper
     /// re-finish with moved times) is caught at approval time.
     /// </summary>
     public static async Task<HashSet<Guid>> ShiftsNeedingReviewAsync(
-        OdipDbContext db, IReadOnlyCollection<(Shift Shift, ShiftCompletion Completion)> rows, int thresholdMinutes, CancellationToken ct)
+        OdipDbContext db, IReadOnlyCollection<(Shift Shift, ShiftCompletion Completion)> rows, CancellationToken ct)
     {
+        var rules = await OrganisationRules.ForAsync(db, rows.Select(r => r.Shift.TenantId), ct);
         var extras = await QueueExtrasAsync(db, rows.Select(r => new QueueExtrasInput(
             r.Shift.Id, r.Shift.TenantId, r.Completion.Id, r.Shift.ParticipantId, r.Shift.ServiceDate, r.Shift.StartTime, r.Shift.EndTime, r.Shift.EndsNextDay,
             r.Completion.ActualStart, r.Completion.ActualEnd)).ToList(), ct);
         return rows.Where(r => NeedsReview(
                 extras[r.Completion.Id],
-                IsOutlierVariance(r.Completion.VarianceMinutesStart, r.Completion.VarianceMinutesEnd, thresholdMinutes),
+                IsOutlierVariance(r.Completion.VarianceMinutesStart, r.Completion.VarianceMinutesEnd, OrganisationRules.For(rules, r.Shift.TenantId).VarianceReviewMinutes),
                 r.Completion.StartWasManual,
                 r.Completion.OriginalActualStart != null || r.Completion.OriginalActualEnd != null))
             .Select(r => r.Shift.Id).ToHashSet();
@@ -129,7 +114,7 @@ public static class ShiftCompletionMapper
     /// this only builds one DTO per shift that has an active ShiftCompletion.
     /// </summary>
     public static async Task<List<CompletionQueueItemDto>> BuildQueueItemsAsync(
-        OdipDbContext db, IQueryable<Shift> shiftQuery, int varianceReviewMinutes, CancellationToken ct)
+        OdipDbContext db, IQueryable<Shift> shiftQuery, CancellationToken ct)
     {
         var shiftRows = await shiftQuery
             .Select(s => new
@@ -140,6 +125,7 @@ public static class ShiftCompletionMapper
             })
             .ToListAsync(ct);
         var shiftIds = shiftRows.Select(s => s.Id).ToList();
+        var rules = await OrganisationRules.ForAsync(db, shiftRows.Select(s => s.TenantId), ct);
 
         var completionsByShiftId = await db.ShiftCompletions
             .Where(c => shiftIds.Contains(c.ShiftId) && c.IsActive)
@@ -162,6 +148,7 @@ public static class ShiftCompletionMapper
                 ServiceDate = row.ServiceDate, StartTime = row.StartTime, EndTime = row.EndTime, EndsNextDay = row.EndsNextDay,
             };
             var (rosteredStartUtc, rosteredEndUtc) = ShiftVarianceCalculator.ResolveRosteredTimesUtc(rosteredShift, completion.TimeZoneId);
+            var varianceReviewMinutes = OrganisationRules.For(rules, row.TenantId).VarianceReviewMinutes;
             var isOutlier = IsOutlierVariance(completion.VarianceMinutesStart, completion.VarianceMinutesEnd, varianceReviewMinutes);
             items.Add(new CompletionQueueItemDto(
                 row.Id, completion.Id, row.ParticipantName, row.StaffName,
@@ -189,10 +176,11 @@ public static class ShiftCompletionMapper
     /// empty list rather than paying for the extra query.
     /// </param>
     public static async Task<ShiftCompletionDto> ToDtoAsync(
-        OdipDbContext db, ShiftCompletion c, int varianceReviewMinutes, int shiftReturnCount, CancellationToken ct,
+        OdipDbContext db, ShiftCompletion c, int shiftReturnCount, CancellationToken ct,
         bool includeIncidents = false, DateTime? nowUtc = null)
     {
         var now = nowUtc ?? DateTime.UtcNow;
+        var varianceReviewMinutes = OrganisationRules.For(await OrganisationRules.ForAsync(db, [c.TenantId], ct), c.TenantId).VarianceReviewMinutes;
         var submittedBy = await db.Users.FirstOrDefaultAsync(u => u.Id == c.SubmittedByUserId, ct);
         User? reviewedBy = c.ReviewedByUserId.HasValue
             ? await db.Users.FirstOrDefaultAsync(u => u.Id == c.ReviewedByUserId.Value, ct)

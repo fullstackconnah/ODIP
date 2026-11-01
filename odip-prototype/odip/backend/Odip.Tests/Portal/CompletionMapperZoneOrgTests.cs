@@ -38,7 +38,7 @@ public class CompletionMapperZoneOrgTests
     }
 
     private static Task<List<Odip.Application.DTOs.CompletionQueueItemDto>> Queue(ShiftPackageFixture f) =>
-        ShiftCompletionMapper.BuildQueueItemsAsync(f.Db, f.Db.Shifts.IgnoreQueryFilters().Where(s => s.Id == f.Shift.Id), 30, default);
+        ShiftCompletionMapper.BuildQueueItemsAsync(f.Db, f.Db.Shifts.IgnoreQueryFilters().Where(s => s.Id == f.Shift.Id), default);
 
     [Fact]
     public async Task QueueExtras_PerthOrgShift_CountsTheDoseForASydneyHomeSuperAdmin()
@@ -53,7 +53,7 @@ public class CompletionMapperZoneOrgTests
     {
         var f = await WithScheduledDose(unscopedHomeSydney: true);
 
-        var flagged = await ShiftCompletionMapper.ShiftsNeedingReviewAsync(f.Db, new[] { (f.Shift, f.Completion!) }, 30, default);
+        var flagged = await ShiftCompletionMapper.ShiftsNeedingReviewAsync(f.Db, new[] { (f.Shift, f.Completion!) }, default);
 
         Assert.Contains(f.Shift.Id, flagged);
     }

@@ -851,4 +851,47 @@ public class ParticipantAlertsServiceTests
         Assert.Equal(1, qscAlertCount);
         Assert.Equal(qscAlertCount, dashboardBody.Data!.QscOverdueCount);
     }
+
+    // ── Settings PR 3: the plan-expiry window is the participant's own organisation's ─────────
+
+    private static readonly Guid OrgA = Guid.Parse("a1000000-0000-0000-0000-000000000001"), OrgB = Guid.Parse("b2000000-0000-0000-0000-000000000002");
+
+    private static Participant SeedOrgParticipant(OdipDbContext db, Guid org, DateOnly planEnd)
+    {
+        var participant = new Participant { Id = Guid.NewGuid(), TenantId = org, FirstName = "Sophie", LastName = "Brown", IsActive = true, PlanEndDate = planEnd };
+        db.Participants.Add(participant);
+        db.SaveChanges();
+        return participant;
+    }
+
+    [Theory]
+    [InlineData(59, true)] [InlineData(60, true)] [InlineData(61, false)] // the cutoff day itself still warns
+    public async Task PlanEnd_IsWarnedAboutUpToTheOrganisationsOwnDays(int daysAhead, bool warns)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        db.AppSettings.Add(new AppSettings { Id = Guid.NewGuid(), TenantId = OrgA, PlanExpiryWarningDays = 60 });
+        db.SaveChanges();
+        var today = await ProviderTimeZoneResolver.TodayAsync(db, TimeProvider.System, default);
+        var participant = SeedOrgParticipant(db, OrgA, today.AddDays(daysAhead));
+
+        var alerts = (await new ParticipantAlertsService(db).GetAlertsAsync(participant.Id)).Single().Alerts;
+
+        Assert.Equal(warns, alerts.Any(a => a.Type == "plan-expiring-soon"));
+    }
+
+    [Fact]
+    public async Task PlanEnd_TwoOrganisationsInOnePage_EachJudgedByItsOwnDays()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        db.AppSettings.Add(new AppSettings { Id = Guid.NewGuid(), TenantId = OrgA, PlanExpiryWarningDays = 60 });
+        db.SaveChanges();   // organisation B has no row: 30
+        var today = await ProviderTimeZoneResolver.TodayAsync(db, TimeProvider.System, default);
+        var a = SeedOrgParticipant(db, OrgA, today.AddDays(45));
+        var b = SeedOrgParticipant(db, OrgB, today.AddDays(45));
+
+        var result = await new ParticipantAlertsService(db).GetAlertsAsync(null);
+
+        Assert.Contains(result.Single(r => r.ParticipantId == a.Id).Alerts, x => x.Type == "plan-expiring-soon");
+        Assert.DoesNotContain(result.Single(r => r.ParticipantId == b.Id).Alerts, x => x.Type == "plan-expiring-soon");
+    }
 }

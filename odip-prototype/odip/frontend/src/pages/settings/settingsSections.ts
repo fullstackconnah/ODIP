@@ -15,7 +15,7 @@ export type SettingsPerms = Pick<
 
 export type SectionKey =
   | 'profile' | 'notifications' | 'appearance'
-  | 'setup' | 'workspace-visibility' | 'organisation' | 'microsoft' | 'billing' | 'safety' | 'alerts' | 'security'
+  | 'setup' | 'workspace-visibility' | 'organisation' | 'microsoft' | 'billing' | 'safety' | 'alerts' | 'rostering' | 'security'
   | 'pricing' | 'budgets'
   | 'templates' | 'activities' | 'holidays'
   | 'import' | 'export' | 'integrations' | 'failed-sends'
@@ -57,7 +57,8 @@ export const SECTIONS: SectionDef[] = [
   { key: 'microsoft', label: 'Microsoft sign-in', group: 'Organisation', visible: p => p.isAdmin && !p.viewingAs && p.hasOrganisation && p.microsoftSignIn, description: 'Let your team sign in with their Microsoft work accounts, and choose the role new people get.' },
   { key: 'billing', label: 'Billing details', group: 'Organisation', visible: withOrganisation, readOnly: onlyAdminsChange, description: "The bank account on your invoices, how they're numbered and when they're due, your GST status, and the note printed at the foot of every invoice." },
   { key: 'safety', label: 'Safety checks', group: 'Organisation', visible: withOrganisation, readOnly: onlyAdminsChange, description: "What we stop, and what we only warn about, when something isn't in place. These apply to everyone in your organisation, and every change is recorded in the audit log." },
-  { key: 'alerts', label: 'Alert windows', group: 'Organisation', visible: withOrganisation, readOnly: onlyAdminsChange, description: 'How early we warn before something expires, and how many hours a week the roster allows before it warns. The warnings show on the dashboard, the roster and the pages that list them, for everyone in your organisation.' },
+  { key: 'alerts', label: 'Alert windows', group: 'Organisation', visible: withOrganisation, readOnly: onlyAdminsChange, description: "How early we warn before a staff qualification or a participant's plan expires." },
+  { key: 'rostering', label: 'Rostering rules', group: 'Organisation', visible: withOrganisation, readOnly: onlyAdminsChange, description: 'How many hours a week the roster allows before it warns, and how far a finished shift can drift from the roster before it needs review.' },
   { key: 'security', label: 'Security', group: 'Organisation', visible: withOrganisation, readOnly: onlyAdminsChange, description: 'How long people stay signed in before they must sign in again.' },
   { key: 'pricing', label: 'Plan pricing', group: 'Pricing and budgets', visible: managesOrganisation, description: 'The answers the plan builder uses to price supports: the registration groups you hold, price boundaries, provider travel, group outings, and who may approve an agreement.' },
   { key: 'budgets', label: 'Budgets', group: 'Pricing and budgets', visible: managesOrganisation, description: 'What the roster does when a one-off shift would put a participant over budget, and when a participant counts as approaching it.' },

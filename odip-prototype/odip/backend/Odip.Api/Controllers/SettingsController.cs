@@ -9,6 +9,7 @@ using Odip.Domain.Entities;
 using Odip.Domain.Rostering.Services;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Integrations;
+using Odip.Infrastructure.Rostering;
 
 namespace Odip.Api.Controllers;
 
@@ -24,7 +25,7 @@ public class SettingsController : ControllerBase
     public const string ChooseOrganisation = "Choose an organisation to view as before changing settings: settings belong to one organisation.";
     public SettingsController(OdipDbContext db, ICurrentTenant tenant) { _db = db; _tenant = tenant; }
 
-    // The one setting is the qualification warning window: ReadOnly reads it so its Qualifications, Staff and Dashboard figures match everyone else's.
+    // The organisation's rules and alert windows: ReadOnly reads them so its Qualifications, Staff and Dashboard figures match everyone else's.
     [HttpGet]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin,ReadOnly")]
     public async Task<ActionResult<ApiResponse<AppSettingsDto>>> Get(CancellationToken ct)
@@ -45,14 +46,14 @@ public class SettingsController : ControllerBase
         var s = await _db.AppSettings.OrderBy(x => x.Id).FirstOrDefaultAsync(ct);
         if (s == null)
         {
-            s = new AppSettings { QualificationWarningDays = dto.QualificationWarningDays, WeeklyHoursWarning = dto.WeeklyHoursWarning ?? (int)RosterConflictService.DefaultWeeklyHoursThreshold };
+            s = new AppSettings();   // a field left out takes the entity default
             _db.AppSettings.Add(s);
         }
-        else
-        {
-            s.QualificationWarningDays = dto.QualificationWarningDays;
-            if (dto.WeeklyHoursWarning is { } hours) s.WeeklyHoursWarning = hours;
-        }
+        // Presence-based: a field left out keeps the stored value, so each Settings section saves only its own.
+        if (dto.QualificationWarningDays is { } days) s.QualificationWarningDays = days;
+        if (dto.WeeklyHoursWarning is { } hours) s.WeeklyHoursWarning = hours;
+        if (dto.VarianceReviewMinutes is { } minutes) s.VarianceReviewMinutes = minutes;
+        if (dto.PlanExpiryWarningDays is { } planDays) s.PlanExpiryWarningDays = planDays;
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<AppSettingsDto>.Ok(ToDto(s)));
     }
@@ -61,6 +62,8 @@ public class SettingsController : ControllerBase
     {
         QualificationWarningDays = s?.QualificationWarningDays ?? 30,
         WeeklyHoursWarning = s?.WeeklyHoursWarning ?? (int)RosterConflictService.DefaultWeeklyHoursThreshold,
+        VarianceReviewMinutes = s?.VarianceReviewMinutes ?? OrganisationRules.Default.VarianceReviewMinutes,
+        PlanExpiryWarningDays = s?.PlanExpiryWarningDays ?? OrganisationRules.Default.PlanExpiryWarningDays,
         SessionLengthMinutes = s?.SessionLengthMinutes
     };
 
