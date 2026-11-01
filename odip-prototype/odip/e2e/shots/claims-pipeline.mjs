@@ -156,7 +156,8 @@ try {
 
         await page.locator('[data-plot]').scrollIntoViewIfNeeded()
         const weeks = await weekCenters()
-        const bars = await page.evaluate(() => [...document.querySelectorAll('[data-bar]')].map((e) => { const r = e.getBoundingClientRect(); return { kind: e.dataset.bar, l: r.left, r: r.right, w: r.width, h: r.height, week: e.closest('[data-cp-week]')?.dataset.cpWeek } }))
+        // The hatched Sent rect is drawn 0.75px inside its slot so its 1.5px outline stays in the slot: measure the outer edge, outline included.
+        const bars = await page.evaluate(() => [...document.querySelectorAll('[data-bar]')].map((e) => { const r = e.getBoundingClientRect(); const o = e.dataset.bar === 'sent' ? 0.75 : 0; return { kind: e.dataset.bar, l: r.left - o, r: r.right + o, w: r.width + 2 * o, h: r.height + 2 * o, week: e.closest('[data-cp-week]')?.dataset.cpWeek } }))
         check('1 12 week columns, 24 bars', ctx, { weeks: weeks.length, bars: bars.length }, weeks.length === 12 && bars.length === 24)
 
         const labels = await page.evaluate(() => [...document.querySelectorAll('[data-xlabel]')].map((e) => { const r = e.getBoundingClientRect(); return { text: e.textContent, l: r.left, r: r.right, c: (r.left + r.right) / 2 } }))
