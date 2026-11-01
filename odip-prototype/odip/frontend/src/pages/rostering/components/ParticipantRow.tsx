@@ -85,8 +85,8 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
           <ReadinessNote issues={row.readinessIssues} blocked={row.notReadyForRostering} variant="chip" className="h-4 min-w-6 max-w-max flex-1 rounded-sm px-1.5" />
           <div className="ml-auto flex min-w-0 items-center gap-2">
             {row.inOnboarding && (
-              <span title="Services started; onboarding is still open" className="inline-flex h-4 min-w-0 items-center truncate rounded-sm bg-[var(--color-secondary-container)] px-1.5 text-xs font-medium text-[var(--color-secondary)]">
-                Onboarding
+              <span title="Services started; onboarding is still open" className="inline-flex h-4 min-w-0 items-center rounded-sm bg-[var(--color-secondary-container)] px-1.5 text-xs font-medium text-[var(--color-secondary)]">
+                <span className="truncate">Onboarding</span>
               </span>
             )}
             <span
@@ -97,7 +97,9 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
             >
               {ratioLabel}
             </span>
-            {hideCoverageBadge ? null : covered ? (
+            {hideCoverageBadge ? null : (
+              <span className="inline-flex w-11 shrink-0 justify-end">
+              {covered ? (
               <span role="img" aria-label="Fully covered" title="Fully covered" className="inline-flex shrink-0 items-center text-muted-foreground">
                 <Check className="h-3.5 w-3.5" aria-hidden="true" />
               </span>
@@ -110,6 +112,8 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
               >
                 <AlertTriangle className="h-3 w-3" aria-hidden="true" />
                 <span className="tabular-nums">{unassignedCount}</span>
+              </span>
+            )}
               </span>
             )}
           </div>

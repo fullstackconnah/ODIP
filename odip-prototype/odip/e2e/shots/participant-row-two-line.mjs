@@ -37,6 +37,8 @@ const fixtureRows = (days) => [
   row('p-9004', 'Zara Covered', 'OneToOne', [shiftOf('9004', 'p-9004', 'Zara Covered', days[0], 's-0004')]),
   // No shifts at all: the header alone sets this row's height (the board lists participants by name, so these two sort last).
   row('p-9005', 'Zed Empty', 'TwoToOne', [], { inOnboarding: true, readinessIssues: ['Intake not complete'], notReadyForRostering: false }),
+  // 12 open shifts: a 2-digit unassigned count, which sorts last and must still end on the same ratio-chip edge.
+  row('p-9006', 'Zoe Twelve', 'TwoToOne', Array.from({ length: 12 }, (_, i) => shiftOf(`s-9006${i}`, 'p-9006', 'Zoe Twelve', days[i % 7], null))),
 ]
 
 const checks = []
@@ -76,7 +78,7 @@ async function openRoster(browser, { width, height, touch, dark }) {
 
 // Every participant row header (the sticky cell holding a name link and a "... support" chip), first three plus the covered fourth.
 const measure = (page) => page.evaluate(() => {
-  const heads = [...document.querySelectorAll('div.sticky')].filter((h) => h.querySelector('a[title]') && h.querySelector('[role=img][aria-label$=" support"]')).slice(0, 5)
+  const heads = [...document.querySelectorAll('div.sticky')].filter((h) => h.querySelector('a[title]') && h.querySelector('[role=img][aria-label$=" support"]')).slice(0, 6)
   const r = (el) => el.getBoundingClientRect()
   return {
     coarse: matchMedia('(pointer: coarse)').matches,
@@ -102,8 +104,8 @@ const measure = (page) => page.evaluate(() => {
 
 function runChecks(tag, m, fine) {
   check(`${tag}: pointer is ${fine ? 'fine' : 'coarse'}`, m.coarse === !fine, m.rowH)
-  check(`${tag}: found 5 participant rows`, m.rows.length === 5, m.rows.length)
-  const first3 = m.rows.slice(0, 3)
+  check(`${tag}: found 6 participant rows`, m.rows.length === 6, m.rows.length)
+
   check(`${tag}: 1 name above ratio chip (name bottom <= ratio top) on every row`, m.rows.every((x) => x.nameBottom <= x.ratioTop + 0.5), m.rows.map((x) => [x.nameBottom, x.ratioTop]))
   if (fine) {
     // The rows with bars are taller than --row-h (the bar sets it), so the header cell is measured on the empty row, where it sets the height itself; every row's two lines must also fit in 34px.
@@ -113,9 +115,9 @@ function runChecks(tag, m, fine) {
   }
   check(`${tag}: 3 no header child past the inner right edge`, m.rows.every((x) => x.past.length === 0), m.rows.map((x) => x.past))
   check(`${tag}: 4 long name shows whole or is >= the old one-line bound`, m.rows.every((x) => x.nameFits || x.nameWidth >= x.oldNameWidthBound), m.rows.map((x) => [x.name, x.nameFits, x.nameWidth, x.oldNameWidthBound]))
-  const edges = first3.map((x) => x.ratioRight)
-  check(`${tag}: 5 ratio chips' right edges line up across first 3 rows (+-1)`, first3.length === 3 && Math.max(...edges) - Math.min(...edges) <= 1, edges)
-  if (m.rows[3]) console.log(`[participant-row-two-line] ${tag} info: fully covered row ratio right ${m.rows[3].ratioRight} vs open-shift rows ${edges[0]}`)
+  const edges = m.rows.map((x) => x.ratioRight)
+  check(`${tag}: 5 ratio chips' right edges line up across all rows incl. covered and 2-digit count (+-1)`, m.rows.length >= 6 && Math.max(...edges) - Math.min(...edges) <= 1, edges)
+  if (m.rows[3]) console.log(`[participant-row-two-line] ${tag} info: ratio edges ${edges}`)
 }
 
 const browser = await chromium.launch({ headless: true })

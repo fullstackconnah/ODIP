@@ -321,9 +321,10 @@ describe('ParticipantRow: a participant whose services have started but who is s
   it('carries a small "Onboarding" tag beside the ratio chip, and none for an active participant', () => {
     renderRow({ fullName: 'Sam Started', inOnboarding: true })
     const tag = within(headerOf('Sam Started')).getByText('Onboarding')
-    expect(tag).toHaveAttribute('title', 'Services started; onboarding is still open')
+    expect(tag.parentElement).toHaveAttribute('title', 'Services started; onboarding is still open')
     // The tag is what yields when onboarding, readiness, ratio and coverage meet in a narrow column: it truncates, the ratio and badge do not.
-    expect(tag).toHaveClass('min-w-0', 'truncate')
+    expect(tag.parentElement).toHaveClass('min-w-0')
+    expect(tag).toHaveClass('truncate')
   })
 
   it('shows no tag for a participant who has been made active', () => {
