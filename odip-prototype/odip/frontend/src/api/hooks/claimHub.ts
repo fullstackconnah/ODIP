@@ -2,12 +2,18 @@ import { isAxiosError } from 'axios'
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { apiClient, apiGet, apiPost } from '../client'
 import { readText, serverSentence } from './data-export'
-import type { BatchDetailDto, BatchDto, BatchLineDto, BuildBatchRequestDto, BuildProblemDto, HubLinesDto, MarkPaidRequestDto, ResultsImportDto } from '../types'
+import type { BatchDetailDto, BatchDto, BatchLineDto, BuildBatchRequestDto, BuildProblemDto, HubLinesDto, MarkPaidRequestDto, PipelineDto, ResultsImportDto } from '../types'
 
 // The NDIA claims hub: the claimable lines, the bulk payment request files built from them, and what comes back.
 
 export function useHubLines() {
   return useQuery({ queryKey: ['claim-hub', 'lines'], queryFn: () => apiGet<HubLinesDto>('/claim-hub/lines') })
+}
+
+export const CLAIM_PIPELINE_KEY = ['claim-hub', 'pipeline'] as const
+/** Dollars sent and paid by week (under the claim-hub key, so every hub write refreshes it). */
+export function useClaimPipeline() {
+  return useQuery({ queryKey: CLAIM_PIPELINE_KEY, queryFn: () => apiGet<PipelineDto>('/claim-hub/pipeline') })
 }
 
 export function useClaimBatches() {

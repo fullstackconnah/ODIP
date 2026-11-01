@@ -9,6 +9,7 @@ import { Tabs } from '@/components/Tabs'
 import { useTabParam } from '@/hooks/useTabParam'
 import { plural } from '@/lib/format'
 import { usePermissions } from '@/lib/permissions'
+import { ClaimsPipelineCard } from './ClaimsPipelineCard'
 import { FilePanel } from './FilePanel'
 import { FilesPanel, FilesStrip } from './FilesPanel'
 import { OtherPanel, PaidPanel } from './HistoryPanels'
@@ -95,6 +96,7 @@ export default function ClaimsHubPage() {
     <div className="flex flex-col gap-4">
       {header}
       <AnnouncementRegion message={message} />
+      <ClaimsPipelineCard rejectedCount={data?.rejected.length ?? 0} onShowRejected={() => setTab('action')} />
       <FilesStrip {...filesProps} onShowAll={() => setTab('files')} />
       <Tabs tabs={tabs} active={tab} onChange={setTab} ariaLabel="Claims sections" overflow="scroll" />
       {tab === 'ready' && (

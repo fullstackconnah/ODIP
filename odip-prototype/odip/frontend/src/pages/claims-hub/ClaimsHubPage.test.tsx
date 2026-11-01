@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
-import type { BatchDetailDto, BatchDto, HubLineDto, HubLinesDto, RejectedLineDto, ResultsImportDto } from '@/api/types'
+import type { BatchDetailDto, BatchDto, HubLineDto, HubLinesDto, PipelineDto, RejectedLineDto, ResultsImportDto } from '@/api/types'
 import { ClaimFileError } from '@/api/hooks/claimHub'
 import ClaimsHubPage from './ClaimsHubPage'
 
@@ -10,14 +10,14 @@ import ClaimsHubPage from './ClaimsHubPage'
 
 const m = vi.hoisted(() => ({
   lines: vi.fn(), batches: vi.fn(), batch: vi.fn(), fetchClaimFile: vi.fn(), preview: vi.fn(),
-  uploaded: vi.fn(), discard: vi.fn(), importResults: vi.fn(), paid: vi.fn(), dismiss: vi.fn(),
+  uploaded: vi.fn(), discard: vi.fn(), importResults: vi.fn(), paid: vi.fn(), dismiss: vi.fn(), pipeline: vi.fn(),
 }))
 vi.mock('@/api/hooks/claimHub', async () => {
   const actual = await vi.importActual<typeof import('@/api/hooks/claimHub')>('@/api/hooks/claimHub')
   const mutation = (fn: ReturnType<typeof vi.fn>) => () => ({ mutate: fn, isPending: false, isError: false, error: null, reset: vi.fn() })
   return {
     ClaimFileError: actual.ClaimFileError,
-    useHubLines: m.lines, useClaimBatches: m.batches, useClaimBatch: m.batch, fetchClaimFile: m.fetchClaimFile, useBuildClaimFile: () => m.fetchClaimFile,
+    useHubLines: m.lines, useClaimBatches: m.batches, useClaimPipeline: m.pipeline, useClaimBatch: m.batch, fetchClaimFile: m.fetchClaimFile, useBuildClaimFile: () => m.fetchClaimFile,
     useMarkBatchUploaded: mutation(m.uploaded), useDiscardBatch: mutation(m.discard), useImportResults: mutation(m.importResults),
     useMarkBatchPaid: mutation(m.paid), useDismissBatchLine: mutation(m.dismiss),
   }
@@ -47,6 +47,7 @@ const detail = (over: Partial<BatchDetailDto> = {}): BatchDetailDto => ({
     { batchLineId: 'bl-2', claimId: 'c-1', participantName: 'Alex Park', supportNumber: 'y', from: '2026-08-02', to: '2026-08-02', amount: 175, attempt: 1, rowReference: 'R2', outcome: 'Pending' },
   ], ...over,
 })
+const pipeline = (): PipelineDto => ({ today: '2026-10-30', weeks: Array.from({ length: 12 }, (_, i) => ({ weekStart: new Date(Date.UTC(2026, 7, 10 + 7 * i)).toISOString().slice(0, 10), sent: i === 11 ? 350 : 0, paid: 0, rejected: 0, rejectedLines: 0 })), withNdia: 350, acceptedUnpaid: 0, undatedPaid: 0 })
 const hub = (over: Partial<HubLinesDto> = {}): HubLinesDto => ({ ready: [], rejected: [], managed: [], ...over })
 
 function Where() {
@@ -64,6 +65,7 @@ beforeEach(() => {
   localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin' }))
   m.lines.mockReturnValue(query(hub()))
   m.batches.mockReturnValue(query([]))
+  m.pipeline.mockReturnValue(query(pipeline()))
   m.batch.mockReturnValue({ ...query(undefined), isLoading: false })
   m.preview.mockReturnValue({ invoiceCount: 2, isLoading: false, isError: false, refetch: vi.fn() })
 })
@@ -71,6 +73,20 @@ afterEach(() => {
   cleanup()
   localStorage.clear()
   vi.clearAllMocks()
+})
+
+describe('ClaimsHubPage: sent and paid by week', () => {
+  it('shows the card above the files, and its rejected link opens Needs action', async () => {
+    const user = userEvent.setup()
+    m.lines.mockReturnValue(query(hub({ rejected: [rejected(), rejected({ batchLineId: 'bl-2', lineId: 'l-2' })] })))
+    renderPage()
+
+    const card = document.querySelector('[data-claims-pipeline]')!
+    expect(within(card as HTMLElement).getByText('Claims sent and paid by week')).toBeInTheDocument()
+    expect(card.compareDocumentPosition(screen.getByRole('tablist')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    await user.click(within(card as HTMLElement).getByRole('button', { name: '2 rejected lines need action' }))
+    expect(screen.getByTestId('where')).toHaveTextContent('tab=action')
+  })
 })
 
 describe('ClaimsHubPage: Ready to send', () => {
