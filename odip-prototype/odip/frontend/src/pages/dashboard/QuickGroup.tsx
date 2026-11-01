@@ -383,7 +383,8 @@ export function QuickGroup({ model, state, onRecoveryChange }: { model: GroupMod
           className="[&_input]:m-0 [&_input]:size-4 pointer-coarse:[&_label]:min-w-11"
           checked={selected.has(row.id) && tickable.some(item => item.id === row.id)}
           disabled={!tickable.some(item => item.id === row.id) || !!progress || checking}
-          onChange={event => setSelected(previous => { const next = new Set(previous); if (event.target.checked) next.add(row.id); else next.delete(row.id); return next })} /> : null
+          onChange={event => setSelected(previous => { const next = new Set(previous); if (event.target.checked) next.add(row.id); else next.delete(row.id); return next })} />
+          : <span aria-hidden="true" className="block h-px w-4 pointer-coarse:w-11" />
       } }] : []),
     { key: 'subject', header: model.subjectHeader, pin: 'start', mobile: 'primary', minWidth: '10rem',
       render: row => <div className="flex min-w-0 flex-wrap items-center gap-2 md:flex-nowrap">

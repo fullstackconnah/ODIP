@@ -83,7 +83,7 @@ describe('Organisation profile: state and manager', () => {
     show()
     return screen.findByDisplayValue('Priya Sharma').then(() => {
       expect(screen.getByLabelText('Manager name')).toHaveAttribute('placeholder', 'For example: Priya Sharma')
-      expect(screen.getByLabelText('Manager phone')).toHaveAttribute('placeholder', 'For example: 0412 345 007')
+      expect(screen.getByLabelText('Manager phone')).toHaveAttribute('placeholder', '0412 345 007')
     })
   })
 
