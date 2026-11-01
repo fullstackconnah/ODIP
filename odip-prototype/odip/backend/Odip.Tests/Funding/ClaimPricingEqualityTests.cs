@@ -48,13 +48,13 @@ public class ClaimPricingEqualityTests
         var intensive = kit.SeedParticipant(addressState: "VIC", intensive: true, last: "Intensive");
         var people = new[] { standard, victorian, intensive };
         foreach (var person in people)
-            kit.SeedShift(person, new DateOnly(2026, 10, 6), ShiftStatus.Completed, 20, 23);        // Tuesday evening, 3 h: its own rate band (a shift over two bands is the same figure, see ShiftBandClaimTests)
+        {
             kit.SeedPlan(person, CoreQuarters());
             kit.SeedShift(person, new DateOnly(2026, 10, 1), ShiftStatus.Completed);                // Thursday
             kit.SeedShift(person, new DateOnly(2026, 10, 3), ShiftStatus.Completed, 8, 12);         // Saturday, 4 h
             kit.SeedShift(person, new DateOnly(2026, 10, 4), ShiftStatus.Completed, 10, 14);        // Sunday, 4 h
             kit.SeedShift(person, new DateOnly(2026, 10, 5), ShiftStatus.Completed, 9, 17);         // the holiday
-            kit.SeedShift(person, new DateOnly(2026, 10, 6), ShiftStatus.Completed, 22, 6, endsNextDay: true);   // an overnight shift: 8 h
+            kit.SeedShift(person, new DateOnly(2026, 10, 6), ShiftStatus.Completed, 20, 23);        // Tuesday evening, 3 h: its own rate band (a shift over two bands is the same figure, see ShiftBandClaimTests)
         }
         var estimated = (await ItemsOf(kit, people)).Where(i => i.Kind == LedgerRowKind.CompletedShift).ToList();
         Assert.Equal(15, estimated.Count);
