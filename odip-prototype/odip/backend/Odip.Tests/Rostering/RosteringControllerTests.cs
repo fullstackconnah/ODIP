@@ -1806,4 +1806,93 @@ public class RosteringControllerTests
 
         Assert.IsType<NotFoundObjectResult>(result.Result);
     }
+
+    // ── Where a shift happens: only what a coordinator types for that shift ──
+
+    private static RosteringController LocationController(OdipDbContext db) => new(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+
+    private static ShiftDto Data(ActionResult<ApiResponse<ShiftDto>> result) => Assert.IsType<ApiResponse<ShiftDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
+
+    private static UpdateShiftDto PutOf(ShiftDto s) => new()
+    {
+        ParticipantId = s.ParticipantId, StaffId = null, ServiceDate = s.ServiceDate, StartTime = s.StartTime, EndTime = s.EndTime,
+        Ratio = s.Ratio, NightType = s.NightType, Status = ShiftStatus.Draft,
+    };
+
+    private static UpdateShiftDto PutJson(ShiftDto s, string extra) => JsonSerializer.Deserialize<UpdateShiftDto>(
+        $$"""{ "participantId": "{{s.ParticipantId}}", "serviceDate": "2026-08-24", "startTime": "09:00:00", "endTime": "17:00:00", "ratio": "OneToOne", "nightType": "None", "status": "Draft"{{extra}} }""", ApiJsonOptions)!;
+
+    [Fact]
+    public async Task CreateShift_StoresTrimmedLocation_AndUpdateReplacesIt()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+
+        var created = Data(await LocationController(db).CreateShift(CleanCreateDto(participant.Id, null) with { Location = "  Southside Library  " }, default));
+        Assert.Equal("Southside Library", created.Location);
+        Assert.Equal("Southside Library", (await db.Shifts.SingleAsync()).Location);
+
+        Assert.Equal("Hall B", Data(await LocationController(db).UpdateShift(created.Id, PutOf(created) with { Location = "Hall B" }, default)).Location);
+        Assert.Null(Data(await LocationController(db).UpdateShift(created.Id, PutOf(created) with { Location = "   " }, default)).Location);
+        Assert.Null((await db.Shifts.AsNoTracking().SingleAsync()).Location);
+    }
+
+    [Fact]
+    public async Task CreateShift_LocationOver200_IsRefused_AndExactly200IsSaved()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+
+        var refused = await LocationController(db).CreateShift(CleanCreateDto(participant.Id, null) with { Location = new string('x', 201) }, default);
+        var body = Assert.IsType<ApiResponse<ShiftDto>>(Assert.IsType<BadRequestObjectResult>(refused.Result).Value);
+        Assert.Equal("Keep the location to 200 characters or fewer.", body.Errors![0]);
+        Assert.Empty(await db.Shifts.ToListAsync());
+
+        var saved = Data(await LocationController(db).CreateShift(CleanCreateDto(participant.Id, null) with { Location = new string('x', 200) }, default));
+        Assert.Equal(200, saved.Location!.Length);
+
+        var updateRefused = await LocationController(db).UpdateShift(saved.Id, PutOf(saved) with { Location = new string('y', 201) }, default);
+        Assert.IsType<BadRequestObjectResult>(updateRefused.Result);
+        Assert.Equal(new string('x', 200), (await db.Shifts.AsNoTracking().SingleAsync()).Location);
+    }
+
+    [Fact]
+    public async Task Shift_WithoutTypedLocation_NeverTakesTheParticipantsAddress()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        participant.AddressStreet = "1 Synthetic Street"; participant.AddressSuburb = "Testville"; participant.AddressPostcode = "4000"; participant.AddressState = "QLD";
+        await db.SaveChangesAsync();
+
+        var created = Data(await LocationController(db).CreateShift(CleanCreateDto(participant.Id, null), default));
+
+        Assert.Null(created.Location);
+        Assert.Null((await db.Shifts.AsNoTracking().SingleAsync()).Location);
+    }
+
+    [Fact]
+    public async Task UpdateShift_WithoutLocationKey_KeepsStoredLocation()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var created = Data(await LocationController(db).CreateShift(CleanCreateDto(participant.Id, null) with { Location = "Southside Library" }, default));
+        var put = PutJson(created, "");
+        Assert.False(put.HasLocation);
+
+        Assert.Equal("Southside Library", Data(await LocationController(db).UpdateShift(created.Id, put, default)).Location);
+        Assert.Equal("Southside Library", (await db.Shifts.AsNoTracking().SingleAsync()).Location);
+    }
+
+    [Fact]
+    public async Task UpdateShift_ExplicitNullLocation_ClearsIt()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var created = Data(await LocationController(db).CreateShift(CleanCreateDto(participant.Id, null) with { Location = "Southside Library" }, default));
+        var put = PutJson(created, """, "location": null""");
+        Assert.True(put.HasLocation);
+
+        Assert.Null(Data(await LocationController(db).UpdateShift(created.Id, put, default)).Location);
+        Assert.Null((await db.Shifts.AsNoTracking().SingleAsync()).Location);
+    }
 }

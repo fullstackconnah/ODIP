@@ -89,6 +89,8 @@ public record ShiftDto
     public ShiftStatus Status { get; init; }
     public Guid? ShiftPatternId { get; init; }
     public string? Notes { get; init; }
+    /// <summary>Where the shift happens, as a coordinator typed it for this shift; null when none.</summary>
+    public string? Location { get; init; }
     /// <summary>What the shift asks of a worker (gender, a driver, skills), copied from its pattern when it was generated: informational, shown as chips. Absent when it asks for nothing.</summary>
     public DraftBlockRequirementsDto? Requirements { get; init; }
     /// <summary>True when the pattern this shift was generated from was made by an agreement revision (plan builder, phase D); omitted otherwise. With <see cref="SourceDraftVersion"/> it is what the shift panel says ("From agreement v2"), so the panel needs no read of the pattern.</summary>
@@ -340,6 +342,10 @@ public record CreateShiftDto
     /// <summary>Ignored: the server never takes a pattern link from a request. It sets the link itself when it generates a shift from a pattern, and the budget's one-off rule reads only that saved link, so naming a pattern cannot dodge a hard limit.</summary>
     public Guid? ShiftPatternId { get; init; }
     public string? Notes { get; init; }
+    private readonly string? _location;
+    /// <summary>Where the shift happens, as the coordinator typed it: trimmed, blank is null, at most 200. Never filled from the participant's address. A PUT that leaves it out keeps the stored value (same left-out-versus-null rule as <see cref="UpdateShiftDto.ExpectedStaffId"/>); null or blank clears it. A POST treats both as none.</summary>
+    public string? Location { get => _location; init { _location = value; HasLocation = true; } }
+    [System.Text.Json.Serialization.JsonIgnore] public bool HasLocation { get; private init; }
     /// <summary>Required when the shift carries Warning findings; ignored (never enough) for Blocking findings.</summary>
     public string? OverrideReason { get; init; }
     /// <summary>Finding codes the coordinator is acknowledging. Defaults to every current finding's code when omitted.</summary>

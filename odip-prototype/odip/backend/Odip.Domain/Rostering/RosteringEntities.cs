@@ -81,6 +81,8 @@ public class Shift : ITenantEntity
     /// </summary>
     public string? RequirementsJson { get; set; }
     public string? Notes { get; set; }
+    /// <summary>Where the shift happens, as the coordinator typed it for this shift (a venue, a centre). Null for a shift at the participant's home: never filled from the participant's address.</summary>
+    public string? Location { get; set; }
 
     /// <summary>Why the coordinator accepted the Warning findings below, if any were.</summary>
     public string? OverrideReason { get; set; }

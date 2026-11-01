@@ -173,6 +173,24 @@ public class PortalControllerTests
     }
 
     [Fact]
+    public async Task GetMyShifts_ShiftLocation_ShownOnlyOnCallersOwnShifts()
+    {
+        var (db, tenant) = CreateDb();
+        var me = SeedUser(db, "Ben", "Turner");
+        var other = SeedUser(db, "Cara", "Lee");
+        var participant = SeedParticipant(db);
+        SeedShift(db, participant.Id, me.Id).Location = "Alpha Hall";
+        SeedShift(db, participant.Id, other.Id).Location = "Beta Hall";
+        var draft = SeedShift(db, participant.Id, me.Id); draft.Status = ShiftStatus.Draft; draft.Location = "Draft Hall";
+        db.SaveChanges();
+
+        var result = await MakeController(db, tenant.Object, me.Id).GetMyShifts(ServiceDate.AddDays(-1), ServiceDate.AddDays(1), CancellationToken.None);
+
+        var shift = Assert.Single(Assert.IsType<ApiResponse<PortalShiftsResponseDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!.Shifts);
+        Assert.Equal("Alpha Hall", shift.Location);
+    }
+
+    [Fact]
     public async Task MyShifts_LeavesOutDrafts()   // L1 (2026-10-16): a Draft is invisible to its worker until it is published
     {
         var (db, tenant) = CreateDb();
@@ -1227,10 +1245,13 @@ public class PortalControllerTests
         var shift = Names<PortalShiftSummaryDto>();
 
         Assert.Equal(Sorted("Id", "TripInstanceId", "TripCode", "TripName", "AssignmentStart", "AssignmentEnd", "IsDriver", "Status", "Destination", "Role"), trip);
-        Assert.Equal(Sorted("Id", "ParticipantId", "ParticipantName", "ServiceDate", "StartTime", "EndTime", "EndsNextDay", "DurationHours", "Ratio", "NightType", "Status", "Notes", "ReturnCount"), shift);
+        Assert.Equal(Sorted("Id", "ParticipantId", "ParticipantName", "ServiceDate", "StartTime", "EndTime", "EndsNextDay", "DurationHours", "Ratio", "NightType", "Status", "Notes", "ReturnCount", "Location"), shift);
         // A later Address-like field on either list DTO trips this.
         var addressLike = new System.Text.RegularExpressions.Regex("address|street|suburb|postcode|state", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         Assert.DoesNotContain(trip.Concat(shift), addressLike.IsMatch);
+        // The one place field is the coordinator-typed Location; a second place-like field trips this.
+        var placeLike = new System.Text.RegularExpressions.Regex("location|venue|place|where", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        Assert.Equal(new[] { "Location" }, shift.Where(name => placeLike.IsMatch(name)));
     }
 
     [Fact]
@@ -1243,7 +1264,8 @@ public class PortalControllerTests
         participant.AddressSuburb = "Qxsuburb";
         participant.AddressPostcode = "ZZ-4999";
         db.SaveChanges();
-        SeedShift(db, participant.Id, me.Id);
+        SeedShift(db, participant.Id, me.Id).Location = "Southside Library";
+        db.SaveChanges();
         SeedTripAssignment(db, me.Id, "Surfers Paradise", "Support Worker");
         var controller = MakeController(db, tenant.Object, me.Id);
 
@@ -1254,6 +1276,7 @@ public class PortalControllerTests
         Odip.Api.Serialization.ApiJsonOptions.Configure(options);
         var json = System.Text.Json.JsonSerializer.Serialize(body, options);
         Assert.Contains("Surfers Paradise", json);
+        Assert.Contains("Southside Library", json);
         Assert.DoesNotContain("Zzleaky Street", json);
         Assert.DoesNotContain("Qxsuburb", json);
         Assert.DoesNotContain("ZZ-4999", json);
