@@ -43,6 +43,31 @@ function isBefore(a: Element, b: Element): boolean {
   return Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
 }
 
+describe('ParticipantRow header — two lines: the name above the readiness chip, ratio chip and coverage badge', () => {
+  it('puts the name (with its markers) on line 1 and the ratio and coverage on line 2, in a flex-col --row-h header', () => {
+    renderRow({ fullName: 'Grace Palmer-Hughes', hasRestrictivePractice: true, supportRatio: 'TwoToOne', daysWithoutCover: 6, readinessIssues: ['Intake not complete'] })
+
+    const head = headerOf('Grace Palmer-Hughes')
+    const name = screen.getByRole('link', { name: 'Grace Palmer-Hughes' })
+    const line1 = name.parentElement as HTMLElement
+    const ratio = screen.getByRole('img', { name: '2:1 support' })
+    const line2 = ratio.parentElement!.parentElement as HTMLElement
+    const readiness = screen.getByText(/Intake not complete/).closest('[title]') as HTMLElement
+
+    expect(head).toHaveClass('flex', 'flex-col', 'justify-center', 'min-h-[var(--row-h)]')
+    expect(line1).not.toBe(line2)
+    expect(line1.parentElement).toBe(head)
+    expect(line2.parentElement).toBe(head)
+    expect(isBefore(line1, line2)).toBe(true)
+    // Line 1 holds the name and its safety marker; line 2 the readiness chip then the right-hand group.
+    expect(line1).toContainElement(screen.getByRole('img', { name: 'Restrictive practice authorised' }))
+    expect(line1).not.toContainElement(readiness)
+    expect(line2).toContainElement(readiness)
+    expect(isBefore(readiness, ratio)).toBe(true)
+    expect(line2).toContainElement(screen.getByRole('img', { name: '6 unassigned shifts' }))
+  })
+})
+
 describe('ParticipantRow header — one line: name, ratio chip, coverage badge', () => {
   it('lays the three out on a single --row-h flex line, in that order', () => {
     renderRow({ fullName: 'Grace Palmer-Hughes', supportRatio: 'TwoToOne', daysWithoutCover: 6 })
