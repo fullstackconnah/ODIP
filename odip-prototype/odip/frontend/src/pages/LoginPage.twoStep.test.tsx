@@ -128,6 +128,9 @@ describe("LoginPage: Verify it's you", () => {
     if (code === 'auth/invalid-verification-code') {
       expect(screen.getByLabelText('Code')).toHaveAttribute('aria-invalid', 'true')
       expect(screen.getByLabelText('Code')).toHaveFocus()
+      // The Callout sits between the code field and the Verify button, as in the set-up step.
+      expect(screen.getByLabelText('Code').compareDocumentPosition(screen.getByRole('alert')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(screen.getByRole('alert').compareDocumentPosition(screen.getByRole('button', { name: 'Verify' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     }
   })
 

@@ -20,6 +20,7 @@ public class FirebaseUserServiceResetTests
         public List<string> Calls { get; } = [];
         public Exception? FailClear { get; set; }
         public bool NoAccount { get; set; }
+        public Exception? FailRevoke { get; set; }
 
         public Task<string> GetUidByEmailAsync(string email, CancellationToken ct)
         {
@@ -40,7 +41,7 @@ public class FirebaseUserServiceResetTests
         public Task RevokeRefreshTokensAsync(string uid, CancellationToken ct)
         {
             Calls.Add($"revoke:{uid}");
-            return Task.CompletedTask;
+            return FailRevoke is null ? Task.CompletedTask : throw FailRevoke;
         }
     }
 
@@ -74,6 +75,16 @@ public class FirebaseUserServiceResetTests
         await Assert.ThrowsAsync<HttpRequestException>(() => new FirebaseUserService(gateway).ResetSecondFactorsAsync(Email, CancellationToken.None));
 
         Assert.DoesNotContain("revoke:uid-9", gateway.Calls);
+    }
+
+    [Fact]
+    public async Task A_failed_revoke_after_the_clear_is_RevokeFailed_not_a_throw()
+    {
+        var gateway = new Gateway { FailRevoke = new HttpRequestException("503") };
+
+        var result = await new FirebaseUserService(gateway).ResetSecondFactorsAsync(Email, CancellationToken.None);
+
+        Assert.Equal(SecondFactorResetResult.RevokeFailed, result);
     }
 
     [Fact]

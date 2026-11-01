@@ -27,8 +27,8 @@ const STAFF = () => ({
   availability: [], upcomingShifts: [], upcomingTripAssignments: [], recentIncidents: [], recentCompletions: [],
 })
 
-// The module the app gets for 'firebase/auth'. window.__fbOpts: { mode: 'mfa' | 'plain', signedIn, factors }. Codes: 000000 is wrong, 111111 is too many tries,
-// 222222 is a timed-out sign-in; anything else works.
+// The module the app gets for 'firebase/auth'. window.__fbOpts: { mode: 'mfa' | 'plain', signedIn, factors, noHint, setupError, expired, unenrollFail }. Codes: 000000 is wrong, 111111 is too many tries,
+// 222222 is a timed-out sign-in, 333333 a network error, 555555 needs a recent login; anything else works.
 const FB_STUB = `
 const opts = window.__fbOpts || {}
 const listeners = []
@@ -37,7 +37,7 @@ const makeUser = () => ({ email: ${JSON.stringify(EMAIL)}, getIdToken: async () 
 let user = opts.signedIn ? makeUser() : null
 const auth = { name: 'stub', get currentUser() { return user }, onAuthStateChanged(cb) { listeners.push(cb); setTimeout(() => cb(user), 0); return () => {} } }
 const fail = (code) => Object.assign(new Error(code), { code })
-const byCode = (code) => { if (code === '000000') throw fail('auth/invalid-verification-code'); if (code === '111111') throw fail('auth/too-many-requests'); if (code === '222222') throw fail('auth/invalid-multi-factor-session') }
+const byCode = (code) => { if (code === '000000') throw fail('auth/invalid-verification-code'); if (code === '111111') throw fail('auth/too-many-requests'); if (code === '222222') throw fail('auth/invalid-multi-factor-session'); if (code === '333333') throw fail('auth/network-request-failed'); if (code === '555555') throw fail('auth/requires-recent-login') }
 export const getAuth = () => auth
 export const signOut = async () => { user = null; listeners.forEach((cb) => cb(null)) }
 export const signInWithEmailAndPassword = async () => {
@@ -46,22 +46,22 @@ export const signInWithEmailAndPassword = async () => {
   return { user }
 }
 export const getMultiFactorResolver = () => ({
-  hints: [{ factorId: 'totp', uid: 'h1' }],
+  hints: opts.noHint ? [{ factorId: 'phone', uid: 'h2' }] : [{ factorId: 'totp', uid: 'h1' }],
   resolveSignIn: async (assertion) => { byCode(assertion.code); user = makeUser(); return { user } },
 })
 export const multiFactor = () => ({
   get enrolledFactors() { return factors },
   getSession: async () => 'session',
   enroll: async (assertion) => { byCode(assertion.code); factors.push({ uid: 'f1', displayName: 'Authenticator app', factorId: 'totp', enrollmentTime: new Date('2026-10-28T01:00:00Z').toUTCString() }) },
-  unenroll: async () => { factors.length = 0 },
+  unenroll: async () => { if (opts.unenrollFail) throw fail(opts.unenrollFail === 'recent' ? 'auth/requires-recent-login' : 'auth/internal-error'); factors.length = 0 },
 })
 export const TotpMultiFactorGenerator = {
   FACTOR_ID: 'totp',
-  generateSecret: async () => ({
+  generateSecret: async () => { if (opts.setupError) throw fail(opts.setupError); return {
     secretKey: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567',
     generateQrCodeUrl: (e, i) => 'otpauth://totp/' + encodeURIComponent(i) + ':' + e + '?secret=ABCDEFGHIJKLMNOPQRSTUVWXYZ234567&issuer=' + encodeURIComponent(i),
-    enrollmentCompletionDeadline: new Date(Date.now() + 600000).toISOString(),
-  }),
+    enrollmentCompletionDeadline: new Date(Date.now() + (opts.expired ? -1000 : 600000)).toISOString(),
+  } },
   assertionForSignIn: (uid, code) => ({ code }),
   assertionForEnrollment: (secret, code) => ({ code }),
 }
@@ -114,9 +114,30 @@ async function open(vp, scheme, { role = 'Admin', fb = {}, exchange = 'ok', rese
   return { context, page, touch, tag, vp }
 }
 
-const shot = async (t, loc, name, also) => {
-  const r = await cropElement(t.page, loc, path.join(OUT_DIR, `${name}-${t.vp.name}-${t.scheme}.png`), { touch: t.touch, also })
-  checks.push({ ...checkCropHolds(r), name: `${name} crop holds [${t.tag}]` })
+// Fixed chrome (the Save changes bar, the bottom nav) sits at the bottom of the grown viewport, over the crop. On My account and Staff crops it is hidden for the capture
+// only (injected CSS); a visible fixed element that is neither the target, one of its ancestors or descendants, nor a full-screen scrim and still meets the crop fails the check.
+const FIXED_CSS = '[data-shot-hide]{visibility:hidden!important}'
+async function fixedOverCrop(page, loc, clip, hide) {
+  const target = await loc.elementHandle()
+  return page.evaluate(([c, el, hideIt, css]) => {
+    if (!document.getElementById('shot-hide-css')) { const st = document.createElement('style'); st.id = 'shot-hide-css'; st.textContent = css; document.head.appendChild(st) }
+    const area = innerWidth * innerHeight, hits = []
+    for (const e of document.body.querySelectorAll('*')) {
+      const cs = getComputedStyle(e)
+      if (cs.position !== 'fixed' || cs.visibility === 'hidden' || cs.display === 'none' || Number(cs.opacity) === 0) continue
+      if (e.contains(el) || el.contains(e)) continue
+      const r = e.getBoundingClientRect()
+      if (!r.width || !r.height || r.width * r.height >= 0.95 * area) continue
+      if (hideIt) { e.setAttribute('data-shot-hide', ''); continue }
+      if (r.left < c.x + c.width && r.right > c.x && r.top < c.y + c.height && r.bottom > c.y) hits.push({ tag: e.tagName, cls: String(e.className).slice(0, 60), top: Math.round(r.top), height: Math.round(r.height) })
+    }
+    return hits
+  }, [clip, target, hide, FIXED_CSS])
+}
+const shot = async (t, loc, name, { also, pad, hide = /^(settings|staff)-/.test(name) } = {}) => {
+  const r = await cropElement(t.page, loc, path.join(OUT_DIR, `${name}-${t.vp.name}-${t.scheme}.png`), { touch: t.touch, also, pad, during: (clip) => fixedOverCrop(t.page, loc, clip, hide) })
+  const holds = checkCropHolds(r)
+  checks.push({ ...holds, pass: holds.pass && r.measured.length === 0, detail: { ...holds.detail, fixedOverCrop: r.measured }, name: `${name} crop holds [${t.tag}]` })
 }
 const box = async (loc) => loc.boundingBox()
 const loginCard = (page) => page.getByRole('heading', { level: 2 }).first().locator('xpath=..')
@@ -207,6 +228,12 @@ for (const view of VIEWS) {
     await page.getByText("That code didn't work. Enter the newest code from your app.").waitFor()
     await checkWrong(t, 'verify', code)
     await shot(t, loginCard(page), 'login-verify-wrong')
+    if (vp.mobile) {
+      await code.fill('333333')
+      await page.getByRole('button', { name: 'Verify', exact: true }).click()
+      await page.getByText('Network error. Check your connection and try again.').waitFor()
+      await shot(t, loginCard(page), 'login-verify-network')
+    }
     await code.fill('111111')
     await page.getByRole('button', { name: 'Verify', exact: true }).click()
     await page.getByText('Too many tries. Wait a few minutes, then sign in again.').waitFor()
@@ -267,6 +294,43 @@ for (const view of VIEWS) {
       checks.push(...fp.checks.map((c) => ({ ...c, name: `${c.name} [login-setup ${t.tag}]` })))
     }
     await t.context.close()
+  }
+
+  // ---- S1 no authenticator-app hint, S2 error states: 390 only, light and dark (the no-hint step has no Callout, so light only). Loading and busy states are unit tests. ----
+  if (vp.mobile && !dark) {
+    const t = { ...(await open(vp, scheme, { fb: { mode: 'mfa', noHint: true } })), scheme }
+    await t.page.goto(`${BASE_URL}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
+    await t.page.getByLabel('Email').fill(EMAIL)
+    await t.page.getByLabel('Password', { exact: true }).fill('pw-for-shots')
+    await t.page.getByRole('button', { name: 'Sign in', exact: true }).click()
+    await t.page.getByText("This account's verification method isn't supported here. Ask your administrator to reset two-step verification.").waitFor({ timeout: 30_000 })
+    await shot(t, loginCard(t.page), 'login-verify-unsupported')
+    await t.context.close()
+  }
+  if (vp.mobile) {
+    for (const [name, fb, code, text] of [
+      ['login-setup-network', {}, '333333', 'Network error. Check your connection and try again.'],
+      ['login-setup-recent-login', {}, '555555', 'For your security, sign in again to finish setting up.'],
+      ['login-setup-too-many', {}, '111111', 'Too many tries. Wait a few minutes, then sign in again.'],
+      ['login-setup-expired', { expired: true }, '123456', 'This setup code has expired.'],
+      ['login-setup-unavailable', { setupError: 'auth/operation-not-allowed' }, null, "Two-step verification isn't available yet. Ask your administrator."],
+    ]) {
+      const t = { ...(await open(vp, scheme, { fb: { mode: 'plain', ...fb }, exchange: 'refuse-once' })), scheme }
+      const { page } = t
+      await page.goto(`${BASE_URL}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
+      await page.getByLabel('Email').fill(EMAIL)
+      await page.getByLabel('Password', { exact: true }).fill('pw-for-shots')
+      await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+      await page.getByRole('heading', { name: 'Set up two-step verification' }).waitFor({ timeout: 30_000 })
+      if (code) {
+        await page.getByRole('img', { name: /QR code for setting up two-step verification/ }).waitFor({ timeout: 30_000 })
+        await page.getByLabel('Code', { exact: true }).fill(code)
+        await page.getByRole('button', { name: 'Turn on and sign in' }).click()
+      }
+      await page.getByText(text).waitFor({ timeout: 30_000 })
+      await shot(t, loginCard(page), name)
+      await t.context.close()
+    }
   }
 
   // ---- S3: My account, Two-step verification ----
@@ -332,8 +396,22 @@ for (const view of VIEWS) {
     await shot(t, dialog, 'settings-remove-dialog')
   })
 
+  if (vp.mobile) {
+    for (const [name, unenrollFail, text] of [['settings-remove-dialog-failed', 'failed', "We couldn't remove it. Try again."], ['settings-remove-dialog-recent', 'recent', 'For your security, sign in again to finish removing it.']]) {
+      await settingsState(name, { role: 'Coordinator', fb: { signedIn: true, factors: ['f1'], unenrollFail } }, async (t) => {
+        await group(t.page).getByRole('button', { name: 'Remove two-step verification' }).click()
+        const dialog = t.page.getByRole('alertdialog')
+        await dialog.getByRole('button', { name: 'Remove and sign out' }).click()
+        await dialog.getByText(text).waitFor()
+        await shot(t, dialog, name)
+      })
+    }
+  }
+
   // ---- S4: Staff detail, Reset two-step verification ----
-  for (const [name, status] of [['staff-reset-dialog', 200], ['staff-reset-error', 502]]) {
+  for (const [name, status] of [['staff-reset-dialog', 200], ['staff-reset-error', 502], ['staff-reset-error-400', 400], ['staff-reset-error-403', 403]]) {
+    if (!vp.mobile && (status === 400 || status === 403)) continue
+    const errorText = { 502: "We couldn't reach the sign-in service. Try again.", 400: "Una Odd doesn't have a sign-in yet, so there's nothing to reset.", 403: "You can't reset two-step verification for this person." }[status]
     const t = { ...(await open(vp, scheme, { role: 'Admin', resetStatus: status })), scheme }
     const { page } = t
     await page.goto(`${BASE_URL}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
@@ -357,10 +435,11 @@ for (const view of VIEWS) {
       await resetButton.click()
       const notice = page.getByText("Una Odd's two-step verification is reset. They'll set it up again next time they sign in.")
       await notice.waitFor()
-      await shot(t, notice, 'staff-reset-notice')
+      // The text is one line inside the toast; the crop is the toast (title, text, Dismiss) with 24 px on every side.
+      await shot(t, page.locator('[data-dismiss-notice]').locator('xpath=ancestor::div[@data-tone][1]'), 'staff-reset-notice', { pad: 24 })
     } else {
       await resetButton.click()
-      await dialog.getByText("We couldn't reach the sign-in service. Try again.").waitFor()
+      await dialog.getByText(errorText).waitFor()
       await shot(t, dialog, name)
     }
     await t.context.close()

@@ -120,7 +120,7 @@ function ProfileForm({ frame, username, role, tenantName, isSuperAdmin }: { fram
             />
           </SettingsGroup>
           {profile && <PasswordGroup email={profile.email} />}
-          <TwoStepGroup required={config.data?.mfaRequiredForAdmins === true && (role === 'Admin' || role === 'SuperAdmin')} />
+          <TwoStepGroup required={config.data?.mfaRequiredForAdmins === true && (role === 'Admin' || role === 'SuperAdmin')} superAdmin={role === 'SuperAdmin'} />
         </>
       )}
       {startUrl && !isSuperAdmin && <MicrosoftAccountGroup startUrl={startUrl} />}

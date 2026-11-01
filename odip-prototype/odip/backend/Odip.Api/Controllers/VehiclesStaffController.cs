@@ -662,7 +662,8 @@ public class StaffController : ControllerBase
     [Authorize(Roles = "Admin,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<bool>>> ResetTwoStep(Guid id, CancellationToken ct)
     {
-        var target = await _db.Users.FirstOrDefaultAsync(x => x.Id == id, ct);
+        // A SuperAdmin not viewing an organisation sees every tenant; the reset is only for the viewed one, so it is a 404 as for an Admin.
+        var target = _currentTenant?.IsSuperAdmin == true ? null : await _db.Users.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (target == null) return NotFound(ApiResponse<bool>.Fail("Staff not found"));
 
         var targetIsSuperAdmin = target.Role == UserRole.SuperAdmin
@@ -672,8 +673,11 @@ public class StaffController : ControllerBase
 
         try
         {
-            if (await _firebaseUserService.ResetSecondFactorsAsync(target.Email.Trim(), ct) == SecondFactorResetResult.NoAccount)
+            var outcome = await _firebaseUserService.ResetSecondFactorsAsync(target.Email.Trim(), ct);
+            if (outcome == SecondFactorResetResult.NoAccount)
                 return BadRequest(ApiResponse<bool>.Fail("This person doesn't have a sign-in yet, so there is nothing to reset."));
+            if (outcome == SecondFactorResetResult.RevokeFailed)
+                _logger?.LogError("Two-step verification of staff member {TargetUserId} was cleared but revoking their refresh tokens failed; they stay signed in until their tokens expire", target.Id);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

@@ -33,27 +33,30 @@ public class StaffTwoStepResetTests
         public required Guid TenantId { get; init; }
         public required Mock<IFirebaseUserService> Firebase { get; init; }
         public required User Caller { get; init; }
+        public required Mock<ILogger<StaffController>> Logger { get; init; }
         public required StaffController Controller { get; init; }
     }
 
-    private static Rig Build(string callerRole, bool callerIsSuperAdmin = false, Guid? viewedTenant = null)
+    private static Rig Build(string callerRole, bool callerIsSuperAdmin = false, Guid? viewedTenant = null, bool unscoped = false)
     {
         var tenantId = viewedTenant ?? Guid.NewGuid();
         var currentTenant = new Mock<ICurrentTenant>();
         currentTenant.Setup(t => t.TenantId).Returns(tenantId);
-        currentTenant.Setup(t => t.IsSuperAdmin).Returns(callerIsSuperAdmin);
+        // Production shape: a SuperAdmin viewing an organisation (X-View-As-Tenant) keeps the role claim but ICurrentTenant.IsSuperAdmin is false.
+        currentTenant.Setup(t => t.IsSuperAdmin).Returns(unscoped);
         var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, currentTenant.Object);
         var caller = Seed(db, tenantId, callerIsSuperAdmin ? UserRole.SuperAdmin : Enum.Parse<UserRole>(callerRole));
+        var logger = new Mock<ILogger<StaffController>>();
         var firebase = new Mock<IFirebaseUserService>();
         firebase.Setup(f => f.ResetSecondFactorsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(SecondFactorResetResult.Done);
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Auth:SuperAdminDomain"] = SuperAdminDomain }).Build();
         var identity = new ClaimsIdentity(
             [new Claim(ClaimTypes.Role, callerRole), new Claim(ClaimTypes.NameIdentifier, caller.Id.ToString()), new Claim("fullName", "Cal Ler")], "Test");
-        var controller = new StaffController(db, config: config, firebaseUserService: firebase.Object, logger: new Mock<ILogger<StaffController>>().Object, currentTenant: currentTenant.Object)
+        var controller = new StaffController(db, config: config, firebaseUserService: firebase.Object, logger: logger.Object, currentTenant: currentTenant.Object)
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) } },
         };
-        return new Rig { Db = db, TenantId = tenantId, Firebase = firebase, Caller = caller, Controller = controller };
+        return new Rig { Db = db, TenantId = tenantId, Firebase = firebase, Caller = caller, Logger = logger, Controller = controller };
     }
 
     private static User Seed(OdipDbContext db, Guid tenantId, UserRole role, string? email = null)
@@ -159,6 +162,19 @@ public class StaffTwoStepResetTests
     }
 
     [Fact]
+    public async Task An_unscoped_SuperAdmin_is_404_and_no_firebase_call()
+    {
+        var rig = Build("SuperAdmin", callerIsSuperAdmin: true, unscoped: true);
+        var target = Seed(rig.Db, rig.TenantId, UserRole.Coordinator);
+
+        var result = await Reset(rig, target.Id);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+        rig.Firebase.Verify(f => f.ResetSecondFactorsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Empty(TwoStepAudits(rig.Db));
+    }
+
+    [Fact]
     public async Task Unknown_id_is_404()
     {
         var rig = Build("Admin");
@@ -188,6 +204,20 @@ public class StaffTwoStepResetTests
         var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
         Assert.Equal("This person doesn't have a sign-in yet, so there is nothing to reset.", Assert.IsType<ApiResponse<bool>>(bad.Value).Errors![0]);
         Assert.Empty(TwoStepAudits(rig.Db));
+    }
+
+    [Fact]
+    public async Task Cleared_factors_but_failed_revoke_still_audits_returns_200_and_logs_an_error()
+    {
+        var rig = Build("Admin");
+        var target = Seed(rig.Db, rig.TenantId, UserRole.Coordinator);
+        rig.Firebase.Setup(f => f.ResetSecondFactorsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(SecondFactorResetResult.RevokeFailed);
+
+        var result = await Reset(rig, target.Id);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Single(TwoStepAudits(rig.Db));
+        rig.Logger.Verify(l => l.Log(LogLevel.Error, It.IsAny<EventId>(), It.Is<It.IsAnyType>((v, _) => v.ToString()!.Contains(target.Id.ToString()) && !v.ToString()!.Contains(target.Email)), null, It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Once);
     }
 
     [Fact]

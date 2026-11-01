@@ -362,38 +362,40 @@ export default function LoginPage() {
 
   const cardClass = 'bg-[var(--color-card)] rounded-[var(--radius-lg)] p-8 shadow-[var(--shadow-lift)]'
   const unsupported = step === 'verify' && second?.hintUid === null
+  // On the code step the problem sits under the code field, as in TwoStepSetup; on every other step it leads the card.
+  const problemCallout = problem && (
+    <div id="login-problem">
+    <Callout
+      tone={problem.tone ?? 'error'}
+      announce={problem.tone ? false : undefined}
+      className="mb-4"
+      actions={
+        unverified ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleResend}
+            // The label never changes: this is inside a role=alert, which a screen reader reads whole again whenever its text changes, so progress is
+            // said in the status below instead. Held, not `disabled`: a keyboard user keeps focus on the button while it waits.
+            aria-disabled={resendHeld || resend === 'sending'}
+            aria-busy={resend === 'sending' || undefined}
+            className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
+          >
+            Send it again
+          </Button>
+        ) : undefined
+      }
+    >
+      <p>{problem.sentence}</p>
+      {problem.nextStep && <p>{problem.nextStep}</p>}
+    </Callout>
+    </div>
+  )
   const cardHeader = (
     <>
       <h2 className="text-xl font-semibold mb-6 text-[var(--color-foreground)]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{step === 'verify' ? "Verify it's you" : step === 'enrol' ? 'Set up two-step verification' : 'Sign in to your account'}</h2>
 
-      {problem && (
-        <div id="login-problem">
-        <Callout
-          tone={problem.tone ?? 'error'}
-          announce={problem.tone ? false : undefined}
-          className="mb-4"
-          actions={
-            unverified ? (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={handleResend}
-                // The label never changes: this is inside a role=alert, which a screen reader reads whole again whenever its text changes, so progress is
-                // said in the status below instead. Held, not `disabled`: a keyboard user keeps focus on the button while it waits.
-                aria-disabled={resendHeld || resend === 'sending'}
-                aria-busy={resend === 'sending' || undefined}
-                className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
-              >
-                Send it again
-              </Button>
-            ) : undefined
-          }
-        >
-          <p>{problem.sentence}</p>
-          {problem.nextStep && <p>{problem.nextStep}</p>}
-        </Callout>
-        </div>
-      )}
+      {!(step === 'verify' && !unsupported) && problemCallout}
 
       {/* A polite status that is always on the page, so what a resend does is announced when it is written into it (one that appears already holding its text
           is announced unreliably). The Callouts in it do not announce themselves too, and a failure is said here, not in a second alert. */}
@@ -458,6 +460,7 @@ export default function LoginPage() {
                     invalid={codeProblem === 'wrong'}
                     describedBy={problem ? 'login-problem' : undefined}
                   />
+                  {problemCallout}
                   {codeProblem === 'timed-out' ? (
                     <Button type="button" size="lg" className="w-full" onClick={handleBack}>Sign in again</Button>
                   ) : (
