@@ -37,7 +37,7 @@ test('a participant in onboarding begins services, is rostered, and is made acti
   await page.goto('/rostering');
   const row = page.getByRole('link', { name }).locator('xpath=ancestor::div[contains(@class,"sticky")][1]');
   await expect(row).toBeVisible();
-  await expect(row.getByText('Onboarding', { exact: true })).toBeVisible();
+  await expect(row.getByText('Onboarding', { exact: true }).or(row.getByRole('button', { name: /onboarding is still open/ }))).toBeVisible();
 
   // 5. A shift can be created for them (the server's placement gate, CheckAsync, now accepts them).
   const day = addDays(sydneyToday(), 2);

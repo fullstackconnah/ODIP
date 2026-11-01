@@ -28,6 +28,18 @@ const CHIP = `inline-flex h-5 min-w-0 max-w-full flex-wrap content-start items-c
 const LINE = `flex min-w-0 items-start gap-1.5 text-xs font-medium ${TONE.warning.ink}`
 
 /**
+ * The note's words, in one place: `text` is what it prints, `title` adds the refusal sentence in Enforce. Null when nothing is missing and nothing is enforced.
+ * The roster board's ReadinessTrigger reads its accessible name and panel from this too.
+ */
+export function readinessText(issues: readonly string[] | null | undefined, blocked = false): { text: string; title: string } | null {
+  const reasons = issues && issues.length > 0 ? issues.join(' · ') : null
+  if (!blocked && !reasons) return null
+  // In Enforce the server refuses new shifts and assignments, so the note says so (the brief, section 6). The note itself still disables nothing: the server refuses.
+  const text = blocked ? `Not ready for rostering${reasons ? `: ${reasons}` : ''}` : `Not ready: ${reasons}`
+  return { text, title: blocked ? `${text}. New shifts and assignments are refused until this is done.` : text }
+}
+
+/**
  * A quiet note that a participant is not fully ready yet. In Warn it never blocks; in an organisation that enforces readiness (`blocked`) it says what the server refuses.
  * "Not ready: Intake not complete · No signed service agreement".
  * In Warn mode the server lets rostering, booking and activation go ahead and reports what is missing; this is how that shows.
@@ -36,12 +48,9 @@ const LINE = `flex min-w-0 items-start gap-1.5 text-xs font-medium ${TONE.warnin
  * (the words are always printed). It draws nothing when there is nothing missing, so a ready participant looks exactly as before.
  */
 export function ReadinessNote({ issues, blocked = false, variant = 'line', className }: ReadinessNoteProps) {
-  const reasons = issues && issues.length > 0 ? issues.join(' · ') : null
-  if (!blocked && !reasons) return null
-
-  // In Enforce the server refuses new shifts and assignments, so the note says so (the brief, section 6). The note itself still disables nothing: the server refuses.
-  const text = blocked ? `Not ready for rostering${reasons ? `: ${reasons}` : ''}` : `Not ready: ${reasons}`
-  const title = blocked ? `${text}. New shifts and assignments are refused until this is done.` : text
+  const words = readinessText(issues, blocked)
+  if (!words) return null
+  const { text, title } = words
   const isChip = variant === 'chip'
   const Tag = isChip ? 'span' : 'p'
 

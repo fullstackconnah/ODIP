@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom'
-import { AlertTriangle, Check, Hourglass, ShieldAlert } from 'lucide-react'
+import { Check, Hourglass, ShieldAlert, UserPlus } from 'lucide-react'
 import type { PendingAgreementDto, RosterParticipantRowDto, ShiftDto } from '@/api/types'
-import { ReadinessNote } from '@/components/ReadinessNote'
 import { RosterDayCell } from './RosterDayCell'
+import { ReadinessTrigger } from './ReadinessTrigger'
 import { TripBar } from './TripBar'
 import { barOverlapsWeek, formatDayAccessibleName, isUnfilledShift, participantWeekHref, RATIO_LABELS, rosterDayColumnsTemplate } from '../lib/roster'
 import { plural } from '@/lib/format'
@@ -38,6 +38,8 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
   const covered = unassignedCount === 0
   const ratioLabel = RATIO_LABELS[row.supportRatio] ?? row.supportRatio
   const uncoveredLabel = plural(unassignedCount, 'unassigned shift')
+  // Same test as the trigger itself: any listed issue, or Enforce.
+  const hasTrigger = row.notReadyForRostering === true || (row.readinessIssues?.length ?? 0) > 0
 
   return (
     <>
@@ -45,16 +47,18 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
         Row header: two tight lines inside the --row-h row, as StaffRow does (leading-4 name, h-4 chips: 32px in a 34px row).
         Line 1 is the name, which gets the column's full width and truncates with a title, then the restrictive-practice
         marker (a safety signal, so it must survive) and the pending-agreement hourglass, both shrink-0 glyphs.
-        Line 2 is the readiness chip on the left (a quiet warning, never a block: `flex-1 min-w-6 max-w-max` takes only the
-        room left, shrinks to its icon and truncates with the whole text in its title) and, pushed right, the Onboarding
-        tag, the support ratio and the coverage state (the tag yields first and truncates with its title when all four chips meet in a narrow column; the ratio and badge never shrink), so the ratio and the coverage badge form one right-aligned column
-        down the board. Coverage is the visible signal for the gap this row-per-participant layout exists to surface; a
-        trip bar rendered below can explain an otherwise-empty week without this reading as a failure. It is a COUNT BADGE
-        (a warning icon and the number of unassigned shifts, or a check when fully covered); the words are its title and
-        aria-label, with no sr-only text (a 1px clip box reads as clipped text in an audit).
+        Line 2 is the readiness trigger on the left (ReadinessTrigger: one whole word, "Not ready" or "Blocked", that opens a peek
+        panel with the full reason, so it never truncates) and, pushed right, the Onboarding tag, the support ratio and the coverage
+        state. The tag is drawn only while the row is ready: beside the trigger it would not fit 195px, so its sentence moves into the
+        trigger's name and panel. The ratio and badge never shrink, so they form one right-aligned column down the board. Coverage is the
+        visible signal for the gap this row-per-participant layout exists to surface; a trip bar rendered below can explain an
+        otherwise-empty week without this reading as a failure. It is a COUNT BADGE (a person-plus, the glyph of the "Needs staff"
+        pucks in the row, and the number of unassigned shifts, or a check when fully covered); the words are its title and aria-label,
+        with no sr-only text (a 1px clip box reads as clipped text in an audit). On touch the trigger's 44px tap pad needs room: the
+        header gets gap-y-3 between its lines and pb-3 below, only on a row that has a trigger.
       */}
-      <div className="sticky left-0 z-10 flex min-h-[var(--row-h)] flex-col justify-center border-b border-r border-border bg-card px-2">
-        <div className="flex min-w-0 items-center gap-1">
+      <div className={`sticky left-0 z-10 flex min-h-[var(--row-h)] flex-col justify-center border-b border-r border-border bg-card px-2${hasTrigger ? ' pointer-coarse:pb-3' : ''}`}>
+        <div className="flex min-w-0 items-center gap-1 pointer-coarse:gap-y-3">
           <Link
             to={participantWeekHref(row.participantId, days[0])}
             className="block min-w-0 truncate rounded-sm font-display text-sm font-semibold leading-4 text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -82,11 +86,11 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
         </div>
 
         <div className="flex min-w-0 items-center gap-2">
-          <ReadinessNote issues={row.readinessIssues} blocked={row.notReadyForRostering} variant="chip" className="h-4 min-w-6 max-w-max flex-1 rounded-sm px-1.5" />
+          <ReadinessTrigger issues={row.readinessIssues} blocked={row.notReadyForRostering} onboarding={row.inOnboarding} />
           <div className="ml-auto flex min-w-0 items-center gap-2">
-            {row.inOnboarding && (
-              <span title="Services started; onboarding is still open" className="inline-flex h-4 min-w-0 items-center rounded-sm bg-[var(--color-secondary-container)] px-1.5 text-xs font-medium text-[var(--color-secondary)]">
-                <span className="truncate">Onboarding</span>
+            {row.inOnboarding && !hasTrigger && (
+              <span title="Services started; onboarding is still open" className="inline-flex h-4 items-center rounded-sm bg-[var(--color-secondary-container)] px-1.5 text-xs font-medium text-[var(--color-secondary)]">
+                <span>Onboarding</span>
               </span>
             )}
             <span
@@ -110,7 +114,7 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
                 title={uncoveredLabel}
                 className="inline-flex h-4 shrink-0 items-center gap-1 rounded-sm bg-[var(--color-warning-container)] px-1.5 text-xs font-medium text-[var(--color-on-warning-container)]"
               >
-                <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+                <UserPlus className="h-3 w-3" aria-hidden="true" />
                 <span className="tabular-nums">{unassignedCount}</span>
               </span>
             )}

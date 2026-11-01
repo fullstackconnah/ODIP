@@ -449,10 +449,17 @@
   to { opacity: 1; transform: translateX(0); }
 }
 .rail-tooltip { animation: railFadeIn 0.1s ease-out; }
+/* The roster row's readiness peek panel: it grows 4px down out of its trigger (the origin is set in script), opacity only under reduced motion. */
+@keyframes readinessPeekIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.readiness-peek { animation: readinessPeekIn 0.12s ease-out; }
 .rail-flyout { transform-origin: left; animation: railFlyoutIn 0.15s cubic-bezier(0.2, 0, 0, 1); }
 @media (prefers-reduced-motion: reduce) {
   .rail-tooltip { animation: none; }
   .rail-flyout { animation: railFadeIn 0.1s linear; }
+  .readiness-peek { animation: railFadeIn 0.12s linear; }
 }
 
 /*

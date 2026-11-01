@@ -744,7 +744,7 @@ missing); in **Enforce** it refuses with a 400 instead. This is how the Warn-mod
 
 | Variant | Looks like | Where it goes |
 |---|---|---|
-| `chip` | `TONE.warning.solid` pill (StatusBadge's 12px shape), one 20px line, `min-w-0 max-w-full`; the text `truncate`s with an ellipsis, and is all-or-nothing: with under about 3rem of room it wraps out of the clipped pill and the icon alone is centred (never a fragment of a letter) | A table row's name block (the roster board's participant row), a detail header's meta row beside the status badge (participant detail) |
+| `chip` | `TONE.warning.solid` pill (StatusBadge's 12px shape), one 20px line, `min-w-0 max-w-full`; the text `truncate`s with an ellipsis, and is all-or-nothing: with under about 3rem of room it wraps out of the clipped pill and the icon alone is centred (never a fragment of a letter) | A detail header's meta row beside the status badge (participant detail). The roster board's participant row no longer uses it: that row has `ReadinessTrigger` (below) |
 | `line` | `TONE.warning.ink` text on the card, no wash, wraps to at most three lines (`line-clamp-3`), `role="status"` (announced politely when it appears) | Under a field in a form: the shift panel's Participant field, the Add Booking modal's participant picker |
 
 Both carry the whole text in `title`, so a truncated chip can still be read, and an `AlertTriangle` that is `aria-hidden` (the words are the message; colour is
@@ -753,8 +753,12 @@ never the only cue).
 **Informational, never blocks.** It renders nothing when `issues` is empty, `null` or `undefined`, so a ready participant looks exactly as before. It is not an
 alert (no `role="alert"`), it never disables or hides a control, and nothing reads the issues to gate a Save: the server decides whether a write is allowed.
 It uses the warning tone only: no new colour, and warning text is `TONE.warning.ink`, never `--color-warning`. `className` wins over the base classes (they go
-through `cn`), which is how the board row squares the chip up to its neighbours and has it take only the room the name leaves:
-`h-5 min-w-6 max-w-max flex-1 rounded-sm px-1.5`.
+through `cn`).
+
+**The roster board has its own form** (2026-11-02): `pages/rostering/components/ReadinessTrigger.tsx`, one whole word ("Not ready", or "Blocked" in Enforce) that opens a peek panel
+with the full reason, one issue per line. The chip truncated on every row at the 195px column and a `title` is unreachable on touch. Its words come from the
+`readinessText(issues, blocked)` helper exported here, so they have one source. **One exception to "no new colour":** Enforce ("Blocked") uses the danger
+ink (`TONE.danger.ink`, owner, 2026-11-02), because it stops rostering; Warn stays `TONE.warning.ink`.
 
 ```tsx
 <ReadinessNote issues={participant.readinessIssues} />                          {/* a line under a picker */}
