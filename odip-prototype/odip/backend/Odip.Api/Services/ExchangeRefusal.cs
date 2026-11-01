@@ -44,6 +44,9 @@ public static class ExchangeRefusal
     /// <summary>The user's address came from the Employment Hero sync and waits for an Admin to confirm it (<c>User.SignInAddressUnconfirmed</c>).</summary>
     public const string AddressUnconfirmed = "AddressUnconfirmed";
 
+    /// <summary>The organisation limits how long a sign-in lasts and this one has used it up: the person signs in again. Decided only after the address is verified.</summary>
+    public const string SessionLengthReached = "SessionLengthReached";
+
     /// <summary>Too many sign-in requests from this client: the "login" flood limiter, 60 per 5 minutes (a 429 with a Retry-After header).</summary>
     public const string LockedOut = "LockedOut";
 
@@ -56,6 +59,7 @@ public static class ExchangeRefusal
         Ambiguous => "We can't sign you in with this email address yet. Ask your administrator to check your account.",
         TenantInactive => "The organisation this account belongs to is inactive.",
         AddressUnconfirmed => "Your organisation needs to confirm this email address before you can sign in to Bunya Support.",
+        SessionLengthReached => "Sign in again.",
         LockedOut => "Too many failed sign-in attempts. Try again shortly.",
         _ => "Invalid or expired token",
     };

@@ -12,7 +12,7 @@ namespace Odip.Tests.Controllers;
 public class ExchangeRefusalTests
 {
     private static readonly string[] Codes =
-        ["InvalidToken", "EmailNotVerified", "ProviderNotAllowed", "NoOdipAccount", "Ambiguous", "TenantInactive", "AddressUnconfirmed", "LockedOut"];
+        ["InvalidToken", "EmailNotVerified", "ProviderNotAllowed", "NoOdipAccount", "Ambiguous", "TenantInactive", "AddressUnconfirmed", "SessionLengthReached", "LockedOut"];
 
     [Fact]
     public void The_codes_are_exactly_the_ones_the_sign_in_page_knows_so_a_change_to_them_is_deliberate()

@@ -295,7 +295,7 @@ public class MicrosoftAuthController : ControllerBase
     /// <summary>The ODIP session cookie, and the 12-hour absolute refresh cookie (refresh never re-issues it).</summary>
     private IActionResult StartSession(User row)
     {
-        OdipSession.SetCookie(Response, OdipSession.Token(row, row.TenantId, _config));
+        OdipSession.SetCookie(Response, OdipSession.Token(row, row.TenantId, _config, DateTime.UtcNow.AddMinutes(30)));
         var issued = _clock.GetUtcNow();
         Response.Cookies.Append(RefreshCookie, _refresh.Protect(JsonSerializer.Serialize(new RefreshTicket(row.Id, row.MicrosoftTenantId!.Value, row.MicrosoftObjectId!.Value, issued))), new CookieOptions
         {
@@ -417,7 +417,7 @@ public class MicrosoftAuthController : ControllerBase
         var org = await _db.Tenants.FirstOrDefaultAsync(t => t.Id == user.TenantId && t.IsActive, ct);
         if (org is null) return EndRefresh();
 
-        var token = OdipSession.Token(user, org.Id, _config);
+        var token = OdipSession.Token(user, org.Id, _config, DateTime.UtcNow.AddMinutes(30));
         OdipSession.SetCookie(Response, token);
         return Ok(ApiResponse<AuthResponseDto>.Ok(new AuthResponseDto
         {

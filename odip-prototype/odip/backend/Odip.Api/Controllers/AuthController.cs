@@ -409,7 +409,7 @@ public class AuthController : ControllerBase
 
     private void SetJwtCookie(string token) => OdipSession.SetCookie(Response, token);
 
-    private string GenerateJwtToken(Domain.Entities.User user, Guid tenantId) => OdipSession.Token(user, tenantId, _config);
+    private string GenerateJwtToken(Domain.Entities.User user, Guid tenantId) => OdipSession.Token(user, tenantId, _config, DateTime.UtcNow.AddMinutes(30));
 
     private string GenerateSuperAdminJwtToken(Domain.Entities.User user)
     {

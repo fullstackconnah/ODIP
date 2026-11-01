@@ -22,7 +22,14 @@ public static class OdipSession
         });
     }
 
-    public static string Token(Domain.Entities.User user, Guid tenantId, IConfiguration config)
+    public static readonly TimeSpan TokenLife = TimeSpan.FromMinutes(30);
+
+    // STUBS for the red run.
+    public static bool Ended(DateTime nowUtc, DateTime signedInAtUtc, int? limitMinutes) => false;
+    public static DateTime ExpiresAt(DateTime nowUtc, DateTime signedInAtUtc, int? limitMinutes) => nowUtc + TokenLife;
+    public static DateTime? AuthTime(IReadOnlyDictionary<string, object> claims) => null;
+
+    public static string Token(Domain.Entities.User user, Guid tenantId, IConfiguration config, DateTime expiresAtUtc)
     {
         var creds = new SigningCredentials(SigningKey(config), SecurityAlgorithms.HmacSha256);
 
@@ -40,7 +47,7 @@ public static class OdipSession
             issuer: "Odip",
             audience: "Odip",
             claims: claims,
-            expires: DateTime.UtcNow.AddMinutes(30),
+            expires: expiresAtUtc,
             signingCredentials: creds);
 
         return new JwtSecurityTokenHandler().WriteToken(token);

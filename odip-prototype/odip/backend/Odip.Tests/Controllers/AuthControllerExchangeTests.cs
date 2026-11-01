@@ -27,7 +27,7 @@ namespace Odip.Tests.Controllers;
 /// user row is found whatever case it was stored in (rows written before the email-identity rule existed are mixed-case, and no
 /// migration repairs them), on both the tenant path and the SuperAdmin path.
 /// </summary>
-public class AuthControllerExchangeTests
+public partial class AuthControllerExchangeTests
 {
     private const string TenantDomain = "acme.example.com";
     private const string SuperAdminDomain = "platform.example.com";

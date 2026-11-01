@@ -64,6 +64,12 @@ public class SettingsController : ControllerBase
             WeeklyHoursWarning = s.WeeklyHoursWarning
         }));
     }
+    // STUB for the red run.
+    [HttpPut("security")]
+    [Authorize(Roles = "Admin,SuperAdmin")]
+    public Task<ActionResult<ApiResponse<AppSettingsDto>>> UpdateSecurity([FromBody] UpdateSecuritySettingsDto dto, CancellationToken ct) =>
+        Task.FromResult<ActionResult<ApiResponse<AppSettingsDto>>>(NotFound());
+
     [HttpGet("module-visibility")]
     public async Task<ActionResult<ApiResponse<ModuleVisibilityDto>>> GetModuleVisibility(CancellationToken ct)
     {
