@@ -377,7 +377,7 @@ public sealed partial class ClaimBatchService(OdipDbContext db, BprCsvService bp
 
         await RollUpAsync(touched, ct);
         batch.Status = ClaimBatchStatus.ResultsImported;
-        batch.ResultsImportedAt = clock.GetUtcNow().UtcDateTime;
+        batch.ResultsImportedAt ??= clock.GetUtcNow().UtcDateTime; // a re-import keeps the first date (the chart and the Results in column)
         Audit("ClaimBatch", id, "Results", null, $"{successful} successful, {rejected} rejected, {unchanged} unchanged, {conflicts.Count} conflicts, {unknown.Count} unknown", user);
         await db.SaveChangesAsync(ct);
         await held.CommitAsync(ct);
@@ -441,7 +441,12 @@ public sealed partial class ClaimBatchService(OdipDbContext db, BprCsvService bp
         }
         if (problems.Count > 0) return Fail<BatchDto>(400, $"{problems.Count} line(s) can't be marked paid.", new BuildRefusalDto(problems));
 
-        foreach (var (item, amount) in paying) { item.Status = ClaimLineItemStatus.Paid; item.PaidAmount = amount; }
+        foreach (var (item, amount) in paying)
+        {
+            if (item.Status != ClaimLineItemStatus.Paid) item.PaidAt = clock.GetUtcNow().UtcDateTime;
+            item.Status = ClaimLineItemStatus.Paid;
+            item.PaidAmount = amount;
+        }
         await RollUpAsync(paying.Select(p => p.Item.TripClaimId).Distinct().ToList(), ct);
         Audit("ClaimBatch", id, "Paid", null, $"{paying.Count} lines, ${Money(paying.Sum(p => p.Amount))}", user);
         await db.SaveChangesAsync(ct);
