@@ -83,8 +83,11 @@ public class SecuritySettingsTests
     [InlineData(15, true)]
     [InlineData(480, true)]
     [InlineData(null, true)]
-    public void Bounds(int? minutes, bool valid) =>
-        Assert.Equal(valid, Validator.TryValidateObject(new UpdateSecuritySettingsDto { SessionLengthMinutes = minutes }, new ValidationContext(new UpdateSecuritySettingsDto { SessionLengthMinutes = minutes }), null, true));
+    public void Bounds(int? minutes, bool valid)
+    {
+        var dto = new UpdateSecuritySettingsDto { SessionLengthMinutes = minutes };
+        Assert.Equal(valid, Validator.TryValidateObject(dto, new ValidationContext(dto), null, true));
+    }
 
     [Fact]
     public async Task Security_put_creates_the_row_with_other_defaults()
