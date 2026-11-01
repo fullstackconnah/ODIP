@@ -91,6 +91,10 @@ public record ShiftDto
     public string? Notes { get; init; }
     /// <summary>Where the shift happens, as a coordinator typed it for this shift; null when none.</summary>
     public string? Location { get; init; }
+    /// <summary>The support type (catalogue group code) the shift is claimed under; null is community access.</summary>
+    public string? SupportGroupCode { get; init; }
+    /// <summary>The reference of the claim this shift is on, when one still counts; the support type cannot change while it is set.</summary>
+    public string? ClaimReference { get; init; }
     /// <summary>What the shift asks of a worker (gender, a driver, skills), copied from its pattern when it was generated: informational, shown as chips. Absent when it asks for nothing.</summary>
     public DraftBlockRequirementsDto? Requirements { get; init; }
     /// <summary>True when the pattern this shift was generated from was made by an agreement revision (plan builder, phase D); omitted otherwise. With <see cref="SourceDraftVersion"/> it is what the shift panel says ("From agreement v2"), so the panel needs no read of the pattern.</summary>
@@ -346,6 +350,10 @@ public record CreateShiftDto
     /// <summary>Where the shift happens, as the coordinator typed it: trimmed, blank is null, at most 200. Never filled from the participant's address. A PUT that leaves it out keeps the stored value (same left-out-versus-null rule as <see cref="UpdateShiftDto.ExpectedStaffId"/>); null or blank clears it. A POST treats both as none.</summary>
     public string? Location { get => _location; init { _location = value; HasLocation = true; } }
     [System.Text.Json.Serialization.JsonIgnore] public bool HasLocation { get; private init; }
+    private readonly string? _supportGroupCode;
+    /// <summary>The shift's support type (a catalogue group code); blank is null, which is community access. A PUT that leaves it out keeps the stored value (same left-out-versus-null rule as <c>Location</c>); a POST treats both as none.</summary>
+    public string? SupportGroupCode { get => _supportGroupCode; init { _supportGroupCode = value; HasSupportGroupCode = true; } }
+    [System.Text.Json.Serialization.JsonIgnore] public bool HasSupportGroupCode { get; private init; }
     /// <summary>Required when the shift carries Warning findings; ignored (never enough) for Blocking findings.</summary>
     public string? OverrideReason { get; init; }
     /// <summary>Finding codes the coordinator is acknowledging. Defaults to every current finding's code when omitted.</summary>
@@ -463,6 +471,8 @@ public record CheckShiftDto
     public SleepoverType NightType { get; init; }
     /// <summary>The status the shift would be saved with (budget phase 3): a shift about to be cancelled costs nothing and has no budget finding. Omitted means the shift's own status, or a new Draft.</summary>
     public ShiftStatus? Status { get; init; }
+    /// <summary>The support type the shift would carry (a catalogue group code), so the budget line prices it as the claim will. Omitted means community access.</summary>
+    public string? SupportGroupCode { get; init; }
 }
 
 // ── Shift pattern DTOs ───────────────────────────────────────────
@@ -484,6 +494,8 @@ public record ShiftPatternDto
     public DateOnly? EffectiveTo { get; init; }
     public bool IsActive { get; init; }
     public string? Notes { get; init; }
+    /// <summary>The support type (catalogue group code) every shift of this pattern is claimed under; null is community access.</summary>
+    public string? SupportGroupCode { get; init; }
     /// <summary>The agreement revision whose approval made this pattern (plan builder, phase D); absent for a hand-made or demo pattern.</summary>
     public Guid? SourceDraftId { get; init; }
     /// <summary>The block of that revision this pattern is one weekday of.</summary>
@@ -510,6 +522,10 @@ public record CreateShiftPatternDto
     public DateOnly? EffectiveTo { get; init; }
     public bool IsActive { get; init; } = true;
     public string? Notes { get; init; }
+    private readonly string? _supportGroupCode;
+    /// <summary>The pattern's support type (a catalogue group code); blank is null, which is community access. A PUT that leaves it out keeps the stored value (same left-out-versus-null rule as <c>Location</c>); a POST treats both as none.</summary>
+    public string? SupportGroupCode { get => _supportGroupCode; init { _supportGroupCode = value; HasSupportGroupCode = true; } }
+    [System.Text.Json.Serialization.JsonIgnore] public bool HasSupportGroupCode { get; private init; }
 }
 
 public record UpdateShiftPatternDto : CreateShiftPatternDto;

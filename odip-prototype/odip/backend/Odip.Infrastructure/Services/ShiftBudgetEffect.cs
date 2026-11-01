@@ -9,9 +9,9 @@ using Odip.Infrastructure.Data;
 namespace Odip.Infrastructure.Services;
 
 /// <summary>A shift that is about to be made, or has just been: when it is, how long, and the support it gives. <see cref="ShiftId"/> is set for a shift already saved, so the ledger's own copy of it is not counted twice.</summary>
-public sealed record PlannedShift(Guid? ShiftId, DateOnly ServiceDate, TimeOnly StartTime, TimeOnly EndTime, bool EndsNextDay, SupportRatio Ratio, SleepoverType NightType)
+public sealed record PlannedShift(Guid? ShiftId, DateOnly ServiceDate, TimeOnly StartTime, TimeOnly EndTime, bool EndsNextDay, SupportRatio Ratio, SleepoverType NightType, string? SupportGroupCode = null)
 {
-    public static PlannedShift Of(Shift shift) => new(shift.Id, shift.ServiceDate, shift.StartTime, shift.EndTime, shift.EndsNextDay, shift.Ratio, shift.NightType);
+    public static PlannedShift Of(Shift shift) => new(shift.Id, shift.ServiceDate, shift.StartTime, shift.EndTime, shift.EndsNextDay, shift.Ratio, shift.NightType, shift.SupportGroupCode);
 }
 
 /// <summary>
@@ -46,7 +46,7 @@ public sealed class ShiftBudgetEffect
         if (!ledgers.TryGetValue(participantId, out var participantLedger) || participantLedger.Ledger is null) return new List<BudgetWarningDto>();
         var plan = participantLedger.Ledger.Plan;
 
-        var estimates = await _costs.EstimateAsync(tenantId, participantId, planned.Select(p => new ShiftSpec(p.ServiceDate, p.StartTime, p.EndTime, p.EndsNextDay, p.Ratio, p.NightType)).ToList(), ct);
+        var estimates = await _costs.EstimateAsync(tenantId, participantId, planned.Select(p => new ShiftSpec(p.ServiceDate, p.StartTime, p.EndTime, p.EndsNextDay, p.Ratio, p.NightType, p.SupportGroupCode)).ToList(), ct);
         var planType = await _db.Participants.AsNoTracking().Where(p => p.TenantId == tenantId && p.Id == participantId).Select(p => p.PlanType).FirstAsync(ct);
 
         var added = new List<LedgerItem>();

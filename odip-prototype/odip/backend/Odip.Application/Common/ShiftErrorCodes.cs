@@ -29,6 +29,8 @@ public static class ShiftErrorCodes
     public const string ShiftBatchSizeInvalid = "SHIFT_BATCH_SIZE_INVALID";
     public const string ShiftCompletionNotFound = "SHIFT_COMPLETION_NOT_FOUND";
     public const string ShiftAlreadyClaimed = "SHIFT_ALREADY_CLAIMED";
+    /// <summary>A shift's support type was changed while it is on a claim that still counts; it changes only after that claim is deleted.</summary>
+    public const string ShiftSupportTypeLocked = "SHIFT_SUPPORT_TYPE_LOCKED";
 
     // ── Shift package (breaks) ──
     public const string ShiftBreakAlreadyRunning = "SHIFT_BREAK_ALREADY_RUNNING";

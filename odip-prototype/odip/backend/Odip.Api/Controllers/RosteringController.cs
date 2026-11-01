@@ -227,6 +227,7 @@ public class RosteringController : ControllerBase
         // Budget phase 3: where the Admin's review of each emergency or safety booking stands (one query, and only when the week holds one).
         var budgetReviews = await BudgetReviewsAsync(weekShifts, ct);
         var regulars = await RegularsAsync(weekShifts.Select(s => s.ShiftPatternId), ct);
+        var claimReferences = await ClaimReferencesAsync(weekShifts.Where(s => s.Status == ShiftStatus.Completed).Select(s => s.Id), ct);
         var weekStarted = await WeekStartedAsync(_tenant?.TenantId, start, ct);
         var canStart = (await StartedWeeks.MondaysAsync(_db, _tenant?.TenantId, start, start, ct)).Count == 0;
 
@@ -242,7 +243,7 @@ public class RosteringController : ControllerBase
                 StaffId = shift.UserId, StaffName = staff?.FullName,
                 ServiceDate = shift.ServiceDate, StartTime = shift.StartTime, EndTime = shift.EndTime, EndsNextDay = shift.EndsNextDay,
                 DurationHours = shift.DurationHours, Ratio = shift.Ratio, NightType = shift.NightType, Status = shift.Status,
-                ShiftPatternId = shift.ShiftPatternId, Notes = shift.Notes, Location = shift.Location, OverrideReason = shift.OverrideReason, Requirements = RequirementsOf(shift.RequirementsJson),
+                ShiftPatternId = shift.ShiftPatternId, Notes = shift.Notes, Location = shift.Location, SupportGroupCode = shift.SupportGroupCode, ClaimReference = claimReferences.GetValueOrDefault(shift.Id), OverrideReason = shift.OverrideReason, Requirements = RequirementsOf(shift.RequirementsJson),
                 AcknowledgedFindingCodes = AcknowledgedCodesOf(shift), BudgetReview = budgetReviews.GetValueOrDefault(shift.Id),
                 FromAgreement = fromAgreement ? true : null, SourceDraftVersion = sourceVersion,
                 Findings = findings.Select(ToFindingDto).ToList(),
@@ -525,7 +526,7 @@ public class RosteringController : ControllerBase
         {
             Id = dto.Id ?? Guid.Empty, ParticipantId = dto.ParticipantId, UserId = dto.StaffId,
             ServiceDate = dto.ServiceDate, StartTime = dto.StartTime, EndTime = dto.EndTime, EndsNextDay = dto.EndsNextDay,
-            Ratio = dto.Ratio, NightType = dto.NightType
+            Ratio = dto.Ratio, NightType = dto.NightType, SupportGroupCode = SupportTypeCheck.Tidy(dto.SupportGroupCode)
         };
 
         var findings = await CheckAsync(candidate, dto.Id, ct, callerIsAdmin: CallerIsAdmin);
@@ -586,6 +587,8 @@ public class RosteringController : ControllerBase
         var location = TidyLocation(dto.Location);
         if (location?.Length > LocationMaxLength) return BadRequest(ApiResponse<ShiftDto>.Fail(LocationTooLongMessage));
         if (Shift.HoursBetween(dto.StartTime, dto.EndTime, dto.EndsNextDay) <= 0m) return BadRequest(ApiResponse<ShiftDto>.Fail(ShiftEndsBeforeItStartsMessage, ShiftNoLengthCode));
+        var supportCode = SupportTypeCheck.Tidy(dto.SupportGroupCode);
+        if (await SupportTypeCheck.RefusalAsync(_db, supportCode, dto.ServiceDate, ct) is { } supportRefusal) return BadRequest(ApiResponse<ShiftDto>.Fail(supportRefusal));
 
         var refError = await ValidateRefsAsync(dto.ParticipantId, dto.StaffId, ct);
         if (refError != null) return BadRequest(ApiResponse<ShiftDto>.Fail(refError));
@@ -595,7 +598,7 @@ public class RosteringController : ControllerBase
             Id = Guid.NewGuid(), ParticipantId = dto.ParticipantId, UserId = dto.StaffId,
             ServiceDate = dto.ServiceDate, StartTime = dto.StartTime, EndTime = dto.EndTime, EndsNextDay = dto.EndsNextDay,
             // No ShiftPatternId: a pattern link is the server's (the generator sets it). One a request names is dropped, or a hand-made shift could call itself routine and walk round the hard limit (C3).
-            Ratio = dto.Ratio, NightType = dto.NightType, Notes = dto.Notes, Location = location,
+            Ratio = dto.Ratio, NightType = dto.NightType, Notes = dto.Notes, Location = location, SupportGroupCode = supportCode,
             Status = ShiftStatus.Draft
         };
 
@@ -712,11 +715,19 @@ public class RosteringController : ControllerBase
                 "Shift times cannot be changed after the shift has started. Return the completion to the worker first.",
                 ShiftErrorCodes.ShiftTimesLocked));
 
+        // A PUT that leaves the support type out keeps the stored one. It is checked when it changes (or the date moves under a code), and it is locked while the shift is on a claim that still counts.
+        var supportCode = dto.HasSupportGroupCode ? SupportTypeCheck.Tidy(dto.SupportGroupCode) : shift.SupportGroupCode;
+        var supportChanged = supportCode != shift.SupportGroupCode;
+        if (supportChanged && (await ClaimReferencesAsync(new[] { shift.Id }, ct)).TryGetValue(shift.Id, out var claimedOn))
+            return Conflict(ApiResponse<ShiftDto>.Fail($"This shift is on claim {claimedOn}, so its support type can't change. Delete that claim to change it.", ShiftErrorCodes.ShiftSupportTypeLocked));
+        if ((supportChanged || (supportCode is not null && dto.ServiceDate != shift.ServiceDate)) && await SupportTypeCheck.RefusalAsync(_db, supportCode, dto.ServiceDate, ct) is { } supportRefusal)
+            return BadRequest(ApiResponse<ShiftDto>.Fail(supportRefusal));
+
         var candidate = new Shift
         {
             Id = shift.Id, ParticipantId = dto.ParticipantId, UserId = dto.StaffId,
             ServiceDate = dto.ServiceDate, StartTime = dto.StartTime, EndTime = dto.EndTime, EndsNextDay = dto.EndsNextDay,
-            Ratio = dto.Ratio, NightType = dto.NightType
+            Ratio = dto.Ratio, NightType = dto.NightType, SupportGroupCode = supportCode
         };
 
         var findings = await CheckAsync(candidate, shift.Id, ct, callerIsAdmin: CallerIsAdmin);
@@ -746,6 +757,7 @@ public class RosteringController : ControllerBase
         // The saved pattern link stays as the server set it: an edit never cuts a pattern shift loose from its pattern, and a link a request names is never stored (C3).
         shift.Notes = dto.Notes; shift.Status = dto.Status;
         if (dto.HasLocation) shift.Location = location;
+        shift.SupportGroupCode = supportCode;
         shift.UpdatedAt = DateTime.UtcNow;
         ApplyOverride(shift, findings, budgetGate, dto.OverrideReason, dto.AcknowledgedFindingCodes, previousReason, previousCodes);
         if (budgetGate.EmergencyAccepted) await RaiseEmergencyReviewAsync(shift, ct);
@@ -1592,13 +1604,17 @@ public class RosteringController : ControllerBase
             return BadRequest(ApiResponse<ShiftPatternDto>.Fail(ParticipantReadinessGate.NotReadyMessage));
         if (dto.DefaultStaffId.HasValue && !await _db.Users.AnyAsync(s => s.Id == dto.DefaultStaffId.Value && s.IsActive, ct))
             return BadRequest(ApiResponse<ShiftPatternDto>.Fail("Staff member not found."));
+        var supportCode = SupportTypeCheck.Tidy(dto.SupportGroupCode);
+        var providerToday = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
+        if (await SupportTypeCheck.RefusalAsync(_db, supportCode, dto.EffectiveFrom > providerToday ? dto.EffectiveFrom : providerToday, ct) is { } supportRefusal)
+            return BadRequest(ApiResponse<ShiftPatternDto>.Fail(supportRefusal));
 
         var pattern = new ShiftPattern
         {
             Id = Guid.NewGuid(), ParticipantId = dto.ParticipantId, DefaultUserId = dto.DefaultStaffId,
             DayOfWeek = dto.DayOfWeek, StartTime = dto.StartTime, EndTime = dto.EndTime, EndsNextDay = dto.EndsNextDay,
             Ratio = dto.Ratio, NightType = dto.NightType, EffectiveFrom = dto.EffectiveFrom, EffectiveTo = dto.EffectiveTo,
-            IsActive = dto.IsActive, Notes = dto.Notes
+            IsActive = dto.IsActive, Notes = dto.Notes, SupportGroupCode = supportCode
         };
         _db.ShiftPatterns.Add(pattern);
         await _db.SaveChangesAsync(ct);
@@ -1636,11 +1652,24 @@ public class RosteringController : ControllerBase
         if (dto.DefaultStaffId.HasValue && !await _db.Users.AnyAsync(s => s.Id == dto.DefaultStaffId.Value && s.IsActive, ct))
             return BadRequest(ApiResponse<ShiftPatternDto>.Fail("Staff member not found."));
 
+        // The support type is billing, not the agreement's schedule, so an agreement pattern takes it here. A PUT that leaves it out keeps the stored one; a pattern's type is judged on its start, or today when it started earlier.
+        var oldSupportCode = pattern.SupportGroupCode;
+        var supportCode = dto.HasSupportGroupCode ? SupportTypeCheck.Tidy(dto.SupportGroupCode) : oldSupportCode;
+        var supportChanged = supportCode != oldSupportCode;
+        var providerToday = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
+        if (supportChanged && await SupportTypeCheck.RefusalAsync(_db, supportCode, dto.EffectiveFrom > providerToday ? dto.EffectiveFrom : providerToday, ct) is { } supportRefusal)
+            return BadRequest(ApiResponse<ShiftPatternDto>.Fail(supportRefusal));
+
         pattern.ParticipantId = dto.ParticipantId; pattern.DefaultUserId = dto.DefaultStaffId;
         pattern.DayOfWeek = dto.DayOfWeek; pattern.StartTime = dto.StartTime; pattern.EndTime = dto.EndTime;
         pattern.EndsNextDay = dto.EndsNextDay; pattern.Ratio = dto.Ratio; pattern.NightType = dto.NightType;
         pattern.EffectiveFrom = dto.EffectiveFrom; pattern.EffectiveTo = dto.EffectiveTo; pattern.IsActive = dto.IsActive;
         pattern.Notes = dto.Notes;
+        pattern.SupportGroupCode = supportCode;
+        // The next weeks already on the roster follow the pattern: its upcoming Draft and Published shifts that still carry the old type (none of them can be claimed yet). A shift given its own type, or started, finished or past, is left alone.
+        if (supportChanged)
+            foreach (var upcoming in await _db.Shifts.Where(s => s.ShiftPatternId == id && (s.Status == ShiftStatus.Draft || s.Status == ShiftStatus.Published) && s.ServiceDate >= providerToday && s.SupportGroupCode == oldSupportCode).ToListAsync(ct))
+                upcoming.SupportGroupCode = supportCode;
 
         // DefaultUserId is a concurrency token (REV281B): a regular changed since this load is the stale-board 409, not a silent overwrite.
         try { await _db.SaveChangesAsync(ct); }
@@ -1864,7 +1893,7 @@ public class RosteringController : ControllerBase
         DefaultStaffId = p.DefaultUserId, DefaultStaffName = p.DefaultUser?.FullName,
         DayOfWeek = p.DayOfWeek, StartTime = p.StartTime, EndTime = p.EndTime, EndsNextDay = p.EndsNextDay,
         Ratio = p.Ratio, NightType = p.NightType, EffectiveFrom = p.EffectiveFrom, EffectiveTo = p.EffectiveTo,
-        IsActive = p.IsActive, Notes = p.Notes,
+        IsActive = p.IsActive, Notes = p.Notes, SupportGroupCode = p.SupportGroupCode,
         SourceDraftId = p.SourceDraftId, SourceBlockKey = p.SourceBlockKey, WorkerSlot = p.WorkerSlot,
         SourceDraftVersion = p.SourceDraftId is { } source && sourceVersions is not null && sourceVersions.TryGetValue(source, out var version) ? version : null,
         Requirements = RequirementsOf(p.RequirementsJson),
@@ -2068,6 +2097,17 @@ public class RosteringController : ControllerBase
         return ToPatternDto(pattern, await SourceVersionsAsync(new[] { pattern }, ct));
     }
 
+    /// <summary>The claim reference of each of these shifts that is on a claim that still counts (<see cref="BudgetLedgerService.ClaimLineStillCounts"/>); one query. A shift on none is absent.</summary>
+    private async Task<Dictionary<Guid, string>> ClaimReferencesAsync(IEnumerable<Guid> shiftIds, CancellationToken ct)
+    {
+        var ids = shiftIds.ToList();
+        if (ids.Count == 0) return new Dictionary<Guid, string>();
+        var rows = await _db.ClaimLineItems.AsNoTracking().Where(BudgetLedgerService.ClaimLineStillCounts)
+            .Where(l => l.ShiftId != null && ids.Contains(l.ShiftId.Value))
+            .Select(l => new { ShiftId = l.ShiftId!.Value, l.TripClaim.ClaimReference }).ToListAsync(ct);
+        return rows.GroupBy(r => r.ShiftId).ToDictionary(g => g.Key, g => g.First().ClaimReference);
+    }
+
     private async Task<ShiftDto> ToShiftDtoAsync(Shift shift, List<RosterFinding> findings, CancellationToken ct)
     {
         var participant = await _db.Participants.FirstOrDefaultAsync(p => p.Id == shift.ParticipantId, ct);
@@ -2085,7 +2125,7 @@ public class RosteringController : ControllerBase
             StaffId = shift.UserId, StaffName = staff?.FullName,
             ServiceDate = shift.ServiceDate, StartTime = shift.StartTime, EndTime = shift.EndTime, EndsNextDay = shift.EndsNextDay,
             DurationHours = shift.DurationHours, Ratio = shift.Ratio, NightType = shift.NightType, Status = shift.Status,
-            ShiftPatternId = shift.ShiftPatternId, Notes = shift.Notes, Location = shift.Location, OverrideReason = shift.OverrideReason, Requirements = RequirementsOf(shift.RequirementsJson),
+            ShiftPatternId = shift.ShiftPatternId, Notes = shift.Notes, Location = shift.Location, SupportGroupCode = shift.SupportGroupCode, ClaimReference = (await ClaimReferencesAsync(new[] { shift.Id }, ct)).GetValueOrDefault(shift.Id), OverrideReason = shift.OverrideReason, Requirements = RequirementsOf(shift.RequirementsJson),
             AcknowledgedFindingCodes = AcknowledgedCodesOf(shift), BudgetReview = (await BudgetReviewsAsync(new[] { shift }, ct)).GetValueOrDefault(shift.Id),
             FromAgreement = fromAgreement ? true : null, SourceDraftVersion = sourceVersion,
             Findings = findings.Select(ToFindingDto).ToList(),
@@ -2380,7 +2420,7 @@ public class RosteringController : ControllerBase
         if (_budget is null || _tenant?.TenantId is not { } tenantId) return ShiftBudgetOutcome.Quiet;
         return await _budget.CheckAsync(new ShiftBudgetRequest(
             tenantId, candidate.ParticipantId, existingId == Guid.Empty ? null : existingId, candidate.ServiceDate, candidate.StartTime, candidate.EndTime, candidate.EndsNextDay,
-            candidate.Ratio, candidate.NightType, status, CallerIsAdmin), ct);
+            candidate.Ratio, candidate.NightType, status, CallerIsAdmin, candidate.SupportGroupCode), ct);
     }
 
     /// <summary>

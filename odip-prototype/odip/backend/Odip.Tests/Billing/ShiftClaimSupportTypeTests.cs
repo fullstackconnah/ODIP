@@ -58,12 +58,15 @@ public class ShiftClaimSupportTypeTests
             $"{l.SupportItemCode}|{l.DayType}|{l.Hours}|{l.UnitPrice}|{l.TotalAmount}|{l.GSTCode}|{l.ClaimType}|{l.Status}|{l.SupportsDeliveredFrom:yyyy-MM-dd}|{l.SupportsDeliveredTo:yyyy-MM-dd}")));
 
     /// <summary>Captured on 64887cc5e, before any support type code existed, so a green run proves the null path claims byte for byte as it did.</summary>
-    private const string NullPathGolden = "04_Weekday_INT|Weekday|6.5|50|325.0|P2|Standard|Draft|2026-09-07|2026-09-07
-04_Weekday_STD|Weekday|8|40|320|P2|Standard|Draft|2026-09-07|2026-09-07
-04_PublicHoliday_INT|PublicHoliday|6.5|100.25|651.63|P2|Standard|Draft|2026-09-09|2026-09-09
-04_PublicHoliday_STD|PublicHoliday|8|90.25|722.00|P2|Standard|Draft|2026-09-09|2026-09-09
-04_Saturday_INT|Saturday|6.5|65.5|425.75|P2|Standard|Draft|2026-09-12|2026-09-12
-04_Saturday_STD|Saturday|8|55.5|444.0|P2|Standard|Draft|2026-09-12|2026-09-12";
+    private static readonly string NullPathGolden = string.Join("\n", new[]
+    {
+        "04_Weekday_INT|Weekday|6.5|50|325.0|P2|Standard|Draft|2026-09-07|2026-09-07",
+        "04_Weekday_STD|Weekday|8|40|320|P2|Standard|Draft|2026-09-07|2026-09-07",
+        "04_PublicHoliday_INT|PublicHoliday|6.5|100.25|651.63|P2|Standard|Draft|2026-09-09|2026-09-09",
+        "04_PublicHoliday_STD|PublicHoliday|8|90.25|722.00|P2|Standard|Draft|2026-09-09|2026-09-09",
+        "04_Saturday_INT|Saturday|6.5|65.5|425.75|P2|Standard|Draft|2026-09-12|2026-09-12",
+        "04_Saturday_STD|Saturday|8|55.5|444.0|P2|Standard|Draft|2026-09-12|2026-09-12",
+    });
 
     [Fact]
     public async Task NullSupportType_ClaimLinesMatchTodayExactly()
