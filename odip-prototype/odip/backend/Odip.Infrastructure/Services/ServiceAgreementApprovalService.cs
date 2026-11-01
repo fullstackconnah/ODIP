@@ -208,7 +208,14 @@ public sealed class ServiceAgreementApprovalService
         _db.Shifts.RemoveRange(plan.ToRemove);
 
         // Carry-over: an unchanged support's shifts move to its new pattern as they are; generation then makes none on their days.
-        foreach (var shift in plan.ToCarry) shift.ShiftPatternId = plan.CarryTo[shift.ShiftPatternId!.Value].Id;
+        // A Draft or Published shift that still has its old pattern's support type takes the new pattern's (the pattern cascade's rule); one whose type was set by hand keeps it.
+        var oldCodes = plan.ToEnd.ToDictionary(o => o.Id, o => o.SupportGroupCode);
+        foreach (var shift in plan.ToCarry)
+        {
+            var made = plan.CarryTo[shift.ShiftPatternId!.Value];
+            if ((shift.Status == ShiftStatus.Draft || shift.Status == ShiftStatus.Published) && shift.SupportGroupCode == oldCodes[shift.ShiftPatternId.Value]) shift.SupportGroupCode = made.SupportGroupCode;
+            shift.ShiftPatternId = made.Id;
+        }
 
         if (plan.Ready && plan.Windows.Count > 0)
         {

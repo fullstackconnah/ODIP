@@ -124,7 +124,8 @@ function judge(t, state, s, m) {
   check(t('1 control height 32 (+-1) fine, >= 44 coarse'), s.touch ? m.coarse && c.height >= 44 : !m.coarse && Math.abs(c.height - 32) <= 1, { height: c.height, coarse: m.coarse })
   check(t('2 field width equals the grid content width (+-1)'), Math.abs(c.width - m.grid.width) <= 1 && Math.abs(c.left - m.grid.left) <= 1, { field: [c.left, c.width], grid: [m.grid.left, m.grid.width] })
   check(t('3 below Night type, left edge equals Ratio (+-1)'), c.top >= m.night.bottom && Math.abs(c.left - m.ratio.left) <= 1, { top: c.top, nightBottom: m.night.bottom, left: c.left, ratioLeft: m.ratio.left })
-  check(t('4 each helper at most 3 lines'), m.helpers.length > 0 && m.helpers.every((h) => h.h <= 3 * h.lh + 1), m.helpers)
+  if (state === 'shift-catalogue-loading') check(t('4 loading: helper slot empty'), m.helpers.every((h) => !h.text), m.helpers)
+  else check(t('4 each helper at most 3 lines'), m.helpers.length > 0 && m.helpers.every((h) => h.h <= 3 * h.lh + 1), m.helpers)
   if (s.width === 390) check(t('5 body scrollWidth equals clientWidth'), !!m.scroller && m.scroller.sw === m.scroller.cw, m.scroller)
   if (state === 'shift-locked-claimed') check(t('6 disabled and described by "On claim"'), c.disabled && m.helpers.some((h) => h.text.includes('On claim')), { disabled: c.disabled, helpers: m.helpers.map((h) => h.text) })
   if (state === 'shift-invalid-no-rate' || state === 'shift-catalogue-error') check(t('7 helper slot has role=alert'), m.helpers.some((h) => h.role === 'alert'), m.helpers)
@@ -138,6 +139,13 @@ const SCENES = [
   { tag: '390-light', width: 390, height: 844, touch: true, scheme: 'light' },
   { tag: '390-dark', width: 390, height: 844, touch: true, scheme: 'dark' },
 ]
+
+// Run inside the crop with nothing hidden: the element lies inside the clip, and the topmost thing at its centre is the element or inside it (fixed or sticky chrome over it fails).
+const overlapProbe = (loc, clip) => loc.evaluate((el, c) => {
+  const r = el.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
+  return { inClip: r.left >= c.x - 1 && r.top >= c.y - 1 && r.right <= c.x + c.width + 1 && r.bottom <= c.y + c.height + 1, covered: !hit || !el.contains(hit), hit: hit ? hit.tagName + '.' + String(hit.className).split(' ')[0] : null }
+}, clip)
+const overlapCheck = (file, m) => ({ name: `crop is clear of fixed or sticky chrome: ${file}`, pass: m.inClip && !m.covered, detail: m })
 
 const dialogOf = (page) => page.getByRole('dialog').last()
 const fieldLocator = (page) => dialogOf(page).locator('label', { hasText: /^Support type$/ }).locator('xpath=..')
@@ -166,8 +174,9 @@ async function capture(page, s, state, mode, { full = false } = {}) {
   const m = await measure(page)
   console.log(`[support-type] ${s.tag} ${state} ${JSON.stringify(m)}`)
   judge(t, state, s, m)
-  const crop = await cropElement(page, fieldLocator(page), path.join(OUT_DIR, `${state}-${s.tag}.png`), { touch: s.touch, also: rowLocator(page) })
+  const crop = await cropElement(page, fieldLocator(page), path.join(OUT_DIR, `${state}-${s.tag}.png`), { touch: s.touch, also: rowLocator(page), during: (clip) => overlapProbe(fieldLocator(page), clip) })
   checks.push(checkCropHolds({ ...crop, touch: s.touch }))
+  checks.push(overlapCheck(`${state}-${s.tag}.png`, crop.measured))
   if (full) checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', `${state}-${s.tag}.png`), { touch: s.touch })).checks)
   return m
 }
@@ -190,6 +199,42 @@ async function openShift(page, id) {
   await dialogOf(page).waitFor({ state: 'visible', timeout: 15_000 }).catch(async () => {
     throw new Error(`no dialog after the chip click (url ${page.url()}, chips ${await page.locator('[data-shift-open]').count()})`)
   })
+}
+
+const AMBIGUOUS = 'This support type has more than one hourly rate for some days. Choose a more specific support type.'
+
+// The server refuses a save with the ambiguity sentence; the panel shows it in its foot Callout, which is what gets captured.
+async function ambiguityRefusal(page, s) {
+  const state = 'shift-ambiguity-refusal', t = (n) => `${s.tag} ${state}: ${n}`
+  await page.route(/\/api\/v1\/rostering\/shifts\/sb-unset(\?.*)?$/, (r) => (r.request().method() === 'PUT' ? r.fulfill({ status: 400, json: { success: false, data: null, message: AMBIGUOUS, errors: [AMBIGUOUS] } }) : r.fallback()))
+  await openShift(page, 'sb-unset')
+  await ready(page, 'ok')
+  await fieldLocator(page).locator('input[role=combobox]').click()
+  await page.getByRole('option', { name: 'Art therapy' }).click()
+  await dialogOf(page).locator('[data-shift-save]').click()
+  const callout = dialogOf(page).getByRole('alert').filter({ hasText: AMBIGUOUS })
+  await callout.waitFor({ state: 'visible', timeout: 15_000 })
+  await page.waitForTimeout(500)
+  const m = await callout.evaluate((el) => {
+    const px = (css) => { const c = document.createElement('canvas'); c.width = c.height = 1; const x = c.getContext('2d', { willReadFrequently: true }); x.clearRect(0, 0, 1, 1); x.fillStyle = css; x.fillRect(0, 0, 1, 1); const d = x.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2], d[3] / 255] }
+    const lum = ([r, g, b]) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4 }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b) }
+    // The Callout tint is translucent: composite it, and every layer under it up to the first opaque one, over white.
+    const layers = []; for (let n = el; n; n = n.parentElement) { const c = px(getComputedStyle(n).backgroundColor); layers.push(c); if (c[3] >= 0.99) break }
+    const bg = layers.reverse().reduce((acc, c) => acc.map((v, i) => c[i] * c[3] + v * (1 - c[3])), [255, 255, 255])
+    const fg = px(getComputedStyle(el).color), mix = fg.slice(0, 3).map((v, i) => v * fg[3] + bg[i] * (1 - fg[3]))
+    const [hi, lo] = [lum(mix), lum(bg)].sort((p, q) => q - p)
+    return { text: el.textContent.trim(), sw: el.scrollWidth, cw: el.clientWidth, contrast: +((hi + 0.05) / (lo + 0.05)).toFixed(2) }
+  })
+  console.log(`[support-type] ${s.tag} ${state} ${JSON.stringify(m)}`)
+  check(t('10 refusal copy is the exact sentence'), m.text === AMBIGUOUS, m.text)
+  check(t('10 refusal text fits its Callout'), m.sw <= m.cw, { sw: m.sw, cw: m.cw })
+  check(t('10 refusal contrast >= 4.5'), m.contrast >= 4.5, m.contrast)
+  const crop = await cropElement(page, callout, path.join(OUT_DIR, `${state}-${s.tag}.png`), { touch: s.touch, during: (clip) => overlapProbe(callout, clip) })
+  checks.push(checkCropHolds({ ...crop, touch: s.touch }))
+  checks.push(overlapCheck(`${state}-${s.tag}.png`, crop.measured))
+  await closePanel(page)
+  const discard = page.getByRole('button', { name: /^(Discard|Discard changes|Leave)$/ })
+  if (await discard.first().isVisible().catch(() => false)) await discard.first().click()
 }
 
 const browser = await chromium.launch({ headless: true })
@@ -216,6 +261,10 @@ for (const s of SCENES) {
         check(`${s.tag} ${state}: ran`, false, String(e.message).split('\n')[0])
         await closePanel(page).catch(() => {})
       }
+    }
+    try { await ambiguityRefusal(page, s) } catch (e) {
+      check(`${s.tag} shift-ambiguity-refusal: ran`, false, String(e.message).split('\n')[0])
+      await closePanel(page).catch(() => {})
     }
     await page.goto(`${BASE_URL}/rostering/patterns`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
     const edit = (day) => page.getByRole('button', { name: new RegExp(`^Edit .*${day}.* pattern`) }).first()
@@ -248,7 +297,7 @@ for (const s of SCENES) {
     let sess
     try {
       sess = await session(browser, s, { ...opts, catalogue: mode === 'ok' ? 'ok' : mode })
-      await openShift(sess.page, state === 'shift-read-only' ? null : 'sb-locked')
+      await openShift(sess.page, state === 'shift-catalogue-loading' ? 'sb-unset' : 'sb-locked')   // loading is read on an unset shift: the placeholder shows and the helper slot is empty
       const m = await capture(sess.page, s, state, mode)
       if (state === 'shift-read-only') check(t('read-only: disabled, value shown, no "A change here"'), m.combo.disabled && m.combo.value === 'Community access (default)' && !m.helpers.some((h) => h.text.includes('A change here')), { combo: m.combo, helpers: m.helpers.map((h) => h.text) })
       if (state === 'shift-catalogue-loading') check(t('loading: disabled with the loading placeholder'), m.combo.disabled && m.combo.placeholder === 'Loading support types…', m.combo)

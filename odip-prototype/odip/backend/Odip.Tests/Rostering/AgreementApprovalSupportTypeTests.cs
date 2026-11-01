@@ -90,8 +90,18 @@ public class AgreementApprovalSupportTypeTests
         // And a revision that names another type gets that one.
         var v3 = await AddRevisionAsync(f, 3, new[] { WeekdayBlock() }, start: new DateOnly(2026, 11, 9), end: Nov22);
         await SetLineCodeAsync(f, v3, "Y_WD");
+        // A coordinator set one carried shift to another type by hand; the rest still follow their pattern.
+        var v2Patterns = await f.Db.ShiftPatterns.Where(p => p.SourceDraftId == v2.Id).Select(p => p.Id).ToListAsync();
+        var handSet = await f.Db.Shifts.Where(s => s.ShiftPatternId != null && v2Patterns.Contains(s.ShiftPatternId.Value) && s.ServiceDate >= new DateOnly(2026, 11, 9)).OrderBy(s => s.ServiceDate).FirstAsync();
+        handSet.SupportGroupCode = "GRP_Z";
+        await f.Db.SaveChangesAsync();
         await f.Service.ApproveAsync(TenantA, f.ParticipantId, v3.Id, false, Admin, CancellationToken.None);
         Assert.All(await CodesAsync(f, v3.Id), code => Assert.Equal("GRP_Y", code));
+        var v3Patterns = await f.Db.ShiftPatterns.Where(p => p.SourceDraftId == v3.Id).Select(p => p.Id).ToListAsync();
+        var carried = await f.Db.Shifts.AsNoTracking().Where(s => s.ShiftPatternId != null && v3Patterns.Contains(s.ShiftPatternId.Value) && s.Status == ShiftStatus.Draft).ToListAsync();
+        Assert.NotEmpty(carried);
+        Assert.Equal("GRP_Z", carried.Single(s => s.Id == handSet.Id).SupportGroupCode);
+        Assert.All(carried.Where(s => s.Id != handSet.Id), s => Assert.Equal("GRP_Y", s.SupportGroupCode));
     }
 
     [Fact]

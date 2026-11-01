@@ -1007,7 +1007,6 @@ describe('ShiftSlideOver — the server\'s refusal reaches the user', () => {
         endsNextDay: false,
         ratio: 'OneToOne',
         nightType: 'None',
-        supportGroupCode: null,
         status: 'Published',
         notes: 'Swap with Tuesday',
         location: null,
@@ -1018,6 +1017,25 @@ describe('ShiftSlideOver — the server\'s refusal reaches the user', () => {
     expect(await screen.findByText(NOT_READY_MESSAGE)).toBeInTheDocument()
     expect(screen.queryByText(GENERIC_SHIFT_ERROR)).not.toBeInTheDocument()
     expect(screen.getByLabelText('Notes')).toHaveValue('Swap with Tuesday')
+  })
+
+  it('edit: a notes-only save leaves supportGroupCode out, so a stale panel cannot put an old type back', async () => {
+    const user = userEvent.setup()
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'edit', shift: makeShift({ status: 'Published', findings: [], notes: null, supportGroupCode: 'GRP_ART' }) }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffOptions}
+      />,
+    )
+
+    await user.type(screen.getByLabelText('Notes'), 'Swap with Tuesday')
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
+    expect(mockUpdateMutateAsync.mock.calls[0][0].data).not.toHaveProperty('supportGroupCode')
   })
 
   it('reads the top-level message when the error has no errors list', async () => {

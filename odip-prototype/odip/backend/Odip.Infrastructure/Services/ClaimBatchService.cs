@@ -42,6 +42,7 @@ public sealed partial class ClaimBatchService(OdipDbContext db, BprCsvService bp
     {
         try { return await body(); }
         catch (RosterBusyException) { return Fail<T>(409, BusyMessage); }
+        catch (DbUpdateException ex) when (ClaimSubmission.IsShiftIndexViolation(ex)) { return Fail<T>(409, ClaimSubmission.ShiftHeldMessage); }
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } pg)
         {
             return pg.ConstraintName == OnePendingIndex

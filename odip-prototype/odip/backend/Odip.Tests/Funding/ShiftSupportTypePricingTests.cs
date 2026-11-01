@@ -96,14 +96,16 @@ public class ShiftSupportTypePricingTests
         Assert.Contains("more than one rate matches this support type on 1 Oct 2026", left.Reason);
     }
 
-    [Fact]
-    public async Task AShiftARejectedClaimStillHolds_IsLeftOutWithTheClaimReference()
+    [Theory]
+    [InlineData(TripClaimStatus.Rejected)]
+    [InlineData(TripClaimStatus.Cancelled)]
+    public async Task AShiftARejectedClaimStillHolds_IsLeftOutWithTheClaimReference(TripClaimStatus status)
     {
         var kit = Arrange();
         var person = kit.SeedParticipant(addressState: "VIC");
         var held = Shift(kit, person, Thu, 9, 17, null);
         Shift(kit, person, new DateOnly(2026, 10, 2), 9, 17, null);
-        var rejected = kit.SeedShiftClaim(person, TripClaimStatus.Rejected, 400m, held, reference: "TC-REJECTED-1");   // its line is still Draft, so it still holds the shift
+        var rejected = kit.SeedShiftClaim(person, status, 400m, held, reference: "TC-REJECTED-1");   // its line is still Draft, so it still holds the shift
         var service = new ShiftClaimGenerationService(kit.Db);
 
         var preview = await service.PreviewAsync(person.Id, Thu, Sat, Ct);

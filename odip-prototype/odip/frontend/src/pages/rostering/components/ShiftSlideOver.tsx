@@ -129,6 +129,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   const [nightType, setNightType] = useState<SleepoverType>(existing?.nightType ?? 'None')
   // '' is community access, the null on the wire.
   const [supportGroupCode, setSupportGroupCode] = useState(existing?.supportGroupCode ?? '')
+  const [openedSupportGroupCode] = useState(supportGroupCode)
   // PP-8: echoes the shift's current status back on edit so saving never silently resets it to
   // Draft (the backend's UpdateShiftDto.Status defaults to Draft when the field is omitted).
   // Create always defaults to Draft — the backend hardcodes it there regardless of this value.
@@ -380,7 +381,8 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
       endsNextDay,
       ratio,
       nightType,
-      supportGroupCode: supportGroupCode || null,
+      // On edit the type goes only when this panel changed it: a panel opened before a pattern change moved the shift to a new type must not put the old one back with a notes edit.
+      ...(!isEdit || supportGroupCode !== openedSupportGroupCode ? { supportGroupCode: supportGroupCode || null } : {}),
       status,
       notes: notes.trim() || null,
       location: location.trim() || null,

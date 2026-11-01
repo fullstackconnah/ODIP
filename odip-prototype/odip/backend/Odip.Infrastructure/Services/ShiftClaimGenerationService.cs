@@ -146,7 +146,7 @@ public partial class ShiftClaimGenerationService
         {
             await _db.SaveChangesAsync(ct);
         }
-        catch (DbUpdateException e) when (e.InnerException is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation, ConstraintName: "IX_ClaimLineItems_ShiftId_Counting" })
+        catch (DbUpdateException e) when (ClaimSubmission.IsShiftIndexViolation(e))
         {
             // Another claim run took one of these shifts between the read above and this save (the unique index on ShiftId is the lock).
             throw new InvalidOperationException(ShiftTakenMessage);
@@ -187,11 +187,11 @@ public partial class ShiftClaimGenerationService
         if (shifts.Count == 0)
             throw new InvalidOperationException("No completed, unclaimed shifts found in this date range.");
 
-        // A claim marked Rejected by hand keeps its lines Submitted, so these shifts look unclaimed but the unique index on the shift still holds them (a line that is not Rejected). They are listed,
-        // here beside the query so a preview and a run agree, and say how to free them. (A Cancelled claim is not listed: nothing in the app cancels a claim, so none holds a line.)
+        // A claim marked Rejected (or Cancelled) by hand keeps its lines Submitted, so these shifts look unclaimed but the unique index on the shift still holds them (a line that is not Rejected). They are listed,
+        // here beside the query so a preview and a run agree, and say how to free them.
         var heldIds = shifts.Select(s => s.Id).ToList();
         var heldBy = (await _db.ClaimLineItems.AsNoTracking()
-                .Where(l => l.ShiftId != null && heldIds.Contains(l.ShiftId.Value) && l.Status != ClaimLineItemStatus.Rejected && l.TripClaim.Status == TripClaimStatus.Rejected)
+                .Where(l => l.ShiftId != null && heldIds.Contains(l.ShiftId.Value) && l.Status != ClaimLineItemStatus.Rejected && (l.TripClaim.Status == TripClaimStatus.Rejected || l.TripClaim.Status == TripClaimStatus.Cancelled))
                 .Select(l => new { ShiftId = l.ShiftId!.Value, l.TripClaim.ClaimReference }).ToListAsync(ct))
             .GroupBy(l => l.ShiftId).ToDictionary(g => g.Key, g => g.First().ClaimReference);
 
