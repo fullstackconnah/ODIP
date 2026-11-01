@@ -1491,7 +1491,7 @@ public class RosteringCompletionReviewTests
         db.ShiftBreaks.Add(new ShiftBreak { Id = Guid.NewGuid(), ShiftCompletionId = completion.Id, StartedAt = completion.ActualStart.AddHours(2), EndedAt = completion.ActualStart.AddHours(2).AddMinutes(45), CreatedByUserId = staff.Id });
         db.SaveChanges();
 
-        var item = Assert.Single(await ShiftCompletionMapper.BuildQueueItemsAsync(db, db.Shifts.Where(s => s.Id == shift.Id), 15, CancellationToken.None));
+        var item = Assert.Single(await ShiftCompletionMapper.BuildQueueItemsAsync(db, db.Shifts.Where(s => s.Id == shift.Id), CancellationToken.None));
 
         Assert.Equal(2, item.DosesWithoutOutcome);
         Assert.Equal(45, item.BreakMinutes);
@@ -1499,7 +1499,7 @@ public class RosteringCompletionReviewTests
 
         completion.StartWasManual = true;
         db.SaveChanges();
-        Assert.True(Assert.Single(await ShiftCompletionMapper.BuildQueueItemsAsync(db, db.Shifts.Where(s => s.Id == shift.Id), 15, CancellationToken.None)).StartWasManual);
+        Assert.True(Assert.Single(await ShiftCompletionMapper.BuildQueueItemsAsync(db, db.Shifts.Where(s => s.Id == shift.Id), CancellationToken.None)).StartWasManual);
     }
 
     [Fact]

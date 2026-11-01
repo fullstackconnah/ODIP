@@ -48,7 +48,6 @@ public class RosteringController : ControllerBase
     private readonly IStaffUnavailabilityQuery _unavailabilityQuery;
     private readonly RosterAvailability _availability;
     private readonly RosterWeekStarter _weekStarter;
-    private readonly IConfiguration? _config;
 
     private readonly Odip.Application.Interfaces.INotificationRaiser _notificationRaiser;
     private readonly Odip.Application.Interfaces.IObligationTaskService _obligationTasks;
@@ -79,13 +78,10 @@ public class RosteringController : ControllerBase
         _unavailabilityQuery = unavailabilityQuery;
         _availability = new RosterAvailability(db, unavailabilityQuery);
         _weekStarter = weekStarter ?? new RosterWeekStarter(_generator, _availability);
-        _config = config;
         _notificationRaiser = notificationRaiser ?? new Odip.Infrastructure.Notifications.NotificationRaiser(db);
         _obligationTasks = obligationTasks ?? new Odip.Infrastructure.Tasks.ObligationTaskService(db);
         _package = package ?? new ShiftPackageService(db);
     }
-
-    private int VarianceReviewMinutes => ShiftCompletionMapper.ClampVarianceReviewMinutes(_config?.GetValue<int>("Rostering:VarianceReviewMinutes", 15) ?? 15);
 
     // ══════════════════════════════════════════════════════════════
     // BOARD
@@ -1141,7 +1137,7 @@ public class RosteringController : ControllerBase
     /// memory, then Skip/Take the in-memory list — paging only the response body, not the work.
     /// The orchestrator's ruling for the fix (see the review) was deliberately NOT "persist an
     /// IsOutlierVariance boolean at Finish" — that would encode the currently-configured
-    /// Rostering:VarianceReviewMinutes threshold as data and go stale the moment the threshold
+    /// organisation's shift review minutes as data and go stale the moment the threshold
     /// changed. Instead the outlier predicate is evaluated per-row in SQL, against the
     /// already-persisted VarianceMinutesStart/VarianceMinutesEnd columns and the live threshold,
     /// so both the sort and the Skip/Take run in the database.
@@ -1172,7 +1168,6 @@ public class RosteringController : ControllerBase
                 return BadRequest(ApiResponse<PagedResult<CompletionQueueItemDto>>.Fail("The cursor was not valid."));
             cursor = parsed;
         }
-        var thresholdMinutes = VarianceReviewMinutes;
 
         // Only shifts with a current active completion (inner join, not a dictionary lookup after
         // the fact) — narrows the row set the ORDER BY/Skip/Take below has to work over.
@@ -1190,10 +1185,18 @@ public class RosteringController : ControllerBase
         // nullable column is involved here (VarianceMinutesStart/End are non-nullable ints), so
         // the Postgres-vs-EF-InMemory null-ordering trap the hardening PR hit elsewhere
         // (GetShiftCompletions' SubmittedAt sort) doesn't apply to this key.
-        var keyed = joined.Select(x => new
+        // The threshold is each shift's own organisation's (lowest-Id settings row, clamped, 15 with no row), read in the same query so the queue stays one SQL page.
+        var withThreshold = joined.Select(x => new
         {
             x.Shift, x.Completion,
-            Outlier = Math.Abs(x.Completion.VarianceMinutesStart) > thresholdMinutes || Math.Abs(x.Completion.VarianceMinutesEnd) > thresholdMinutes,
+            Threshold = Math.Min(OrganisationRules.MaxVarianceReviewMinutes, Math.Max(OrganisationRules.MinVarianceReviewMinutes,
+                _db.AppSettings.IgnoreQueryFilters(new[] { TenantFilter.Name }).Where(a => a.TenantId == x.Shift.TenantId).OrderBy(a => a.Id)
+                    .Select(a => (int?)a.VarianceReviewMinutes).FirstOrDefault() ?? OrganisationRules.Default.VarianceReviewMinutes)),
+        });
+        var keyed = withThreshold.Select(x => new
+        {
+            x.Shift, x.Completion, x.Threshold,
+            Outlier = Math.Abs(x.Completion.VarianceMinutesStart) > x.Threshold || Math.Abs(x.Completion.VarianceMinutesEnd) > x.Threshold,
         });
         // The whole queue, counted before the cursor window on purpose: the client wants the queue size, not the rest after the cursor.
         var totalCount = await keyed.CountAsync(ct);
@@ -1220,7 +1223,7 @@ public class RosteringController : ControllerBase
             .Take(pageSize)
             .Select(x => new
             {
-                x.Outlier, x.Shift.Id, x.Shift.TenantId, x.Shift.ServiceDate, x.Shift.StartTime, x.Shift.EndTime, x.Shift.EndsNextDay, x.Shift.Status, x.Shift.ReturnCount, x.Shift.ParticipantId,
+                x.Outlier, x.Threshold, x.Shift.Id, x.Shift.TenantId, x.Shift.ServiceDate, x.Shift.StartTime, x.Shift.EndTime, x.Shift.EndsNextDay, x.Shift.Status, x.Shift.ReturnCount, x.Shift.ParticipantId,
                 ParticipantName = x.Shift.Participant != null ? x.Shift.Participant.FullName : string.Empty,
                 StaffName = x.Shift.User != null ? x.Shift.User.FullName : string.Empty,
                 CompletionId = x.Completion.Id, x.Completion.TimeZoneId, x.Completion.ActualStart, x.Completion.ActualEnd,
@@ -1243,12 +1246,12 @@ public class RosteringController : ControllerBase
                 ServiceDate = row.ServiceDate, StartTime = row.StartTime, EndTime = row.EndTime, EndsNextDay = row.EndsNextDay,
             };
             var (rosteredStartUtc, rosteredEndUtc) = ShiftVarianceCalculator.ResolveRosteredTimesUtc(rosteredShift, row.TimeZoneId);
-            var isOutlier = ShiftCompletionMapper.IsOutlierVariance(row.VarianceMinutesStart, row.VarianceMinutesEnd, thresholdMinutes);
+            var isOutlier = ShiftCompletionMapper.IsOutlierVariance(row.VarianceMinutesStart, row.VarianceMinutesEnd, row.Threshold);
             return new CompletionQueueItemDto(
                 row.Id, row.CompletionId, row.ParticipantName, row.StaffName,
                 row.ServiceDate, rosteredStartUtc, rosteredEndUtc, row.ActualStart, row.ActualEnd,
                 row.VarianceMinutesStart, row.VarianceMinutesEnd, row.Status,
-                row.TimeZoneId, isOutlier, thresholdMinutes, row.ReturnCount,
+                row.TimeZoneId, isOutlier, row.Threshold, row.ReturnCount,
                 extras[row.CompletionId].DosesWithoutOutcome, extras[row.CompletionId].BreakMinutes, row.StartWasManual, row.TimesAdjusted,
                 extras[row.CompletionId].IncidentCount);
         }).ToList();
@@ -1350,13 +1353,12 @@ public class RosteringController : ControllerBase
         if (completions.Count == 0)
             return NotFound(ApiResponse<List<ShiftCompletionDto>>.Fail("Shift completion not found.", ShiftErrorCodes.ShiftCompletionNotFound));
 
-        var thresholdMinutes = VarianceReviewMinutes;
         // All rows share ShiftId == id, so ReturnCount is fetched once (critique M7) instead of
         // once per completion.
         var shiftReturnCount = await _db.Shifts.Where(s => s.Id == id).Select(s => s.ReturnCount).FirstOrDefaultAsync(ct);
         var dtos = new List<ShiftCompletionDto>();
         foreach (var c in completions)
-            dtos.Add(await ShiftCompletionMapper.ToDtoAsync(_db, c, thresholdMinutes, shiftReturnCount, ct));
+            dtos.Add(await ShiftCompletionMapper.ToDtoAsync(_db, c, shiftReturnCount, ct));
         return Ok(ApiResponse<List<ShiftCompletionDto>>.Ok(dtos));
     }
 
@@ -1377,7 +1379,7 @@ public class RosteringController : ControllerBase
         if (error is not null) return error;
         // The dashboard's one tap asks for this: a flag that appeared since its queue read refuses rather than approves. The Completions page approves
         // a flagged shift deliberately, after its review, so it leaves this off.
-        if (requireClean && (await ShiftCompletionMapper.ShiftsNeedingReviewAsync(_db, [(shift!, completion!)], VarianceReviewMinutes, ct)).Count > 0)
+        if (requireClean && (await ShiftCompletionMapper.ShiftsNeedingReviewAsync(_db, [(shift!, completion!)], ct)).Count > 0)
             return Conflict(ApiResponse<ShiftCompletionDto>.Fail(NeedsReviewMessage, ShiftErrorCodes.ShiftNeedsReview));
 
         var now = DateTime.UtcNow;
@@ -1516,7 +1518,7 @@ public class RosteringController : ControllerBase
         // Clean only (the dashboard's Complete all): the queue's flags re-read now, in one pass for the batch; a flagged shift is skipped, never approved.
         var needsReview = dto.CleanOnly
             ? await ShiftCompletionMapper.ShiftsNeedingReviewAsync(_db,
-                resolved.Where(r => r.Resolved.Error is null).Select(r => (r.Resolved.Shift!, r.Resolved.Completion!)).ToList(), VarianceReviewMinutes, ct)
+                resolved.Where(r => r.Resolved.Error is null).Select(r => (r.Resolved.Shift!, r.Resolved.Completion!)).ToList(), ct)
             : new HashSet<Guid>();
 
         foreach (var (shiftId, (resolvedShift, resolvedCompletion, error)) in resolved)
@@ -1934,7 +1936,7 @@ public class RosteringController : ControllerBase
     /// <paramref name="includeIncidents"/> forwards to the mapper's own parameter — only
     /// GetShiftCompletion passes true (see that method's remarks).</summary>
     private Task<ShiftCompletionDto> ToShiftCompletionDtoAsync(ShiftCompletion c, int shiftReturnCount, CancellationToken ct, bool includeIncidents = false)
-        => ShiftCompletionMapper.ToDtoAsync(_db, c, VarianceReviewMinutes, shiftReturnCount, ct, includeIncidents);
+        => ShiftCompletionMapper.ToDtoAsync(_db, c, shiftReturnCount, ct, includeIncidents);
 
     /// <summary>
     /// Resolves a PendingReview shift and its active ShiftCompletion for Approve/Return, or the

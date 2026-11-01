@@ -197,7 +197,7 @@ public class DemoTimeConventionTests
         var completion = await db.ShiftCompletions.OrderBy(c => c.ActualStart).FirstAsync();
         var shift = await db.Shifts.SingleAsync(s => s.Id == completion.ShiftId);
         await using var tenantDb = DemoBoardAssertions.TenantDb(env);
-        var completionDto = await ShiftCompletionMapper.ToDtoAsync(tenantDb, completion, 15, shift.ReturnCount, CancellationToken.None, nowUtc: Friday.UtcDateTime);
+        var completionDto = await ShiftCompletionMapper.ToDtoAsync(tenantDb, completion, shift.ReturnCount, CancellationToken.None, nowUtc: Friday.UtcDateTime);
         using var completionJson = JsonDocument.Parse(JsonSerializer.Serialize(completionDto, options));
         Assert.EndsWith("Z", completionJson.RootElement.GetProperty("actualStart").GetString());
         Assert.EndsWith("Z", completionJson.RootElement.GetProperty("actualEnd").GetString());

@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Odip.Api.Controllers;
+using Odip.Api.Rostering;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
 using Odip.Domain.Entities;
@@ -140,5 +141,42 @@ public class OrganisationRulesVarianceTests
         Assert.Equal(new OrganisationRules(20, 60), OrganisationRules.For(rules, OrgA));
         Assert.Equal(OrganisationRules.Default, OrganisationRules.For(rules, OrgB));
         Assert.Equal(new OrganisationRules(15, 30), OrganisationRules.Default);
+    }
+
+    [Fact]
+    public async Task TheCleanOnlyApproveGate_JudgesMixedShiftsByTheirOwnOrganisation()
+    {
+        using var db = TestDb.Create();
+        SeedRules(db, OrgA, 60);
+        var a = SeedPending(db, OrgA, 20);
+        var b = SeedPending(db, OrgB, 20);   // no row: 15
+        var rows = new[] { a, b }.Select(s => (s, db.ShiftCompletions.Single(c => c.ShiftId == s.Id))).ToList();
+
+        var flagged = await ShiftCompletionMapper.ShiftsNeedingReviewAsync(db, rows, default);
+
+        Assert.Equal([b.Id], flagged);
+    }
+
+    [Fact]
+    public async Task TheStaffOverviewQueue_CarriesEachShiftsOrganisationFigure()
+    {
+        using var db = TestDb.Create();
+        SeedRules(db, OrgA, 45);
+        var a = SeedPending(db, OrgA, 20);
+
+        var item = Assert.Single(await ShiftCompletionMapper.BuildQueueItemsAsync(db, db.Shifts.Where(s => s.Id == a.Id), default));
+
+        Assert.Equal((45, false), (item.VarianceReviewMinutes, item.IsOutlierVariance));
+    }
+
+    [Theory]
+    [InlineData(0, 1)] [InlineData(500, 240)]
+    public async Task TheStaffOverviewQueue_ClampsAStoredFigure_WhichItNeverDidBefore(int stored, int clamped)
+    {
+        using var db = TestDb.Create();
+        SeedRules(db, OrgA, stored);
+        var a = SeedPending(db, OrgA, 0);
+
+        Assert.Equal(clamped, Assert.Single(await ShiftCompletionMapper.BuildQueueItemsAsync(db, db.Shifts.Where(s => s.Id == a.Id), default)).VarianceReviewMinutes);
     }
 }

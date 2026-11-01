@@ -272,11 +272,17 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<bool>("HiddenVehicles")
                         .HasColumnType("boolean");
 
+                    b.Property<int>("PlanExpiryWarningDays")
+                        .HasColumnType("integer");
+
                     b.Property<int>("QualificationWarningDays")
                         .HasColumnType("integer");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
+
+                    b.Property<int>("VarianceReviewMinutes")
+                        .HasColumnType("integer");
 
                     b.Property<int>("WeeklyHoursWarning")
                         .HasColumnType("integer");

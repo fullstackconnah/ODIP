@@ -383,10 +383,6 @@ public class StaffController : ControllerBase
         _staffCreator = new StaffCreateService(db, config);
     }
 
-    /// <summary>Same default as RosteringController's own VarianceReviewMinutes — kept independent
-    /// rather than shared so the two controllers can't accidentally couple on a private property.</summary>
-    private int VarianceReviewMinutes => _config?.GetValue<int>("Rostering:VarianceReviewMinutes", 15) ?? 15;
-
     private static StaffDetailDto ToStaffDetailDto(User s, DateOnly today) => new()
     {
         SignInInviteSentAt = s.SignInInviteSentAt,
@@ -774,7 +770,7 @@ public class StaffController : ControllerBase
             .ToDictionary(x => x.shiftId, x => x.index);
         var recentCompletionsQuery = _db.Shifts.Where(sh => recentCompletionShiftIds.Contains(sh.Id));
         var recentCompletions = (await Odip.Api.Rostering.ShiftCompletionMapper.BuildQueueItemsAsync(
-                _db, recentCompletionsQuery, VarianceReviewMinutes, ct))
+                _db, recentCompletionsQuery, ct))
             .OrderBy(c => recentCompletionRank.GetValueOrDefault(c.ShiftId, int.MaxValue))
             .ToList();
 
