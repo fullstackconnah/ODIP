@@ -91,6 +91,14 @@ describe('SupportTypeField', () => {
     const { control } = show()
     expect(control).toBeDisabled()
     expect(control).toHaveAttribute('placeholder', 'Loading support types…')
+    expect(control).toHaveValue('')   // the placeholder is what shows, not the default label
+  })
+
+  it('shows the placeholder, not a raw stored code, while the catalogue loads', () => {
+    catalogue.current = { data: undefined, isLoading: true, isError: false }
+    const { control } = show({ value: 'GRP_ART' })
+    expect(control).toHaveValue('')
+    expect(control).toHaveAttribute('placeholder', 'Loading support types…')
   })
 
   it('is disabled with the value shown and an alert when the catalogue fails', () => {

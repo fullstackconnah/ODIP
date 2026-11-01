@@ -300,7 +300,7 @@ for (const s of SCENES) {
       await openShift(sess.page, state === 'shift-catalogue-loading' ? 'sb-unset' : 'sb-locked')   // loading is read on an unset shift: the placeholder shows and the helper slot is empty
       const m = await capture(sess.page, s, state, mode)
       if (state === 'shift-read-only') check(t('read-only: disabled, value shown, no "A change here"'), m.combo.disabled && m.combo.value === 'Community access (default)' && !m.helpers.some((h) => h.text.includes('A change here')), { combo: m.combo, helpers: m.helpers.map((h) => h.text) })
-      if (state === 'shift-catalogue-loading') check(t('loading: disabled with the loading placeholder'), m.combo.disabled && m.combo.placeholder === 'Loading support types…', m.combo)
+      if (state === 'shift-catalogue-loading') check(t('loading: disabled with the loading placeholder'), m.combo.disabled && m.combo.placeholder === 'Loading support types…' && m.combo.value === '', m.combo)
     } catch (e) {
       check(`${s.tag} ${state}: ran`, false, String(e.message).split('\n')[0])
     } finally {

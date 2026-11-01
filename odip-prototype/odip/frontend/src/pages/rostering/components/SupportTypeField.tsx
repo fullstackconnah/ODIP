@@ -58,7 +58,7 @@ export function SupportTypeField({ value, onChange, date, canWrite, claimReferen
   return (
     <FormField label="Support type" hint={line} error={error}>
       <SearchableSelect
-        items={items}
+        items={loading ? [] : items}   // nothing to match while loading, so the input is empty and the placeholder shows
         value={value}
         onChange={onChange}
         disabled={!canWrite || locked || loading || failed}
