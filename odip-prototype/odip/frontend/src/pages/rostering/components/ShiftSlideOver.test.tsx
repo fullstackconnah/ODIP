@@ -960,6 +960,7 @@ describe('ShiftSlideOver — the server\'s refusal reaches the user', () => {
       nightType: 'None',
       status: 'Draft',
       notes: 'Bring the sling',
+      location: null,
       overrideReason: null,
       acknowledgedFindingCodes: [],
     })
@@ -1004,6 +1005,7 @@ describe('ShiftSlideOver — the server\'s refusal reaches the user', () => {
         nightType: 'None',
         status: 'Published',
         notes: 'Swap with Tuesday',
+        location: null,
         overrideReason: null,
         acknowledgedFindingCodes: [],
       },
@@ -1134,6 +1136,7 @@ describe('ShiftSlideOver — readiness note (WARN mode)', () => {
       nightType: 'None',
       status: 'Draft',
       notes: null,
+      location: null,
       overrideReason: null,
       acknowledgedFindingCodes: [],
     })
@@ -1386,6 +1389,7 @@ describe('ShiftSlideOver — the live dry-run\'s refusal', () => {
       nightType: 'None',
       status: 'Draft',
       notes: null,
+      location: null,
       overrideReason: null,
       acknowledgedFindingCodes: [],
     })
@@ -1889,5 +1893,56 @@ describe('ShiftSlideOver create from a time-grid slot', () => {
     open(undefined)
     expect(screen.getByLabelText(/^Start time/)).toHaveValue('09:00')
     expect(screen.getByLabelText(/^End time/)).toHaveValue('10:00')
+  })
+})
+
+describe('ShiftSlideOver location (coordinator-typed, never the participant address)', () => {
+  const props = { canWrite: true, participantOptions, staffOptions }
+  const location = () => screen.getByRole('textbox', { name: 'Location' })
+
+  it('is a text field above Notes with the hint, a 200 limit and no browser address suggestions', () => {
+    render(<ShiftSlideOver {...props} target={{ mode: 'edit', shift: makeShift({ location: 'Southside Library', findings: [] }) }} onClose={noop} />)
+
+    expect(location()).toHaveValue('Southside Library')
+    expect(location()).toHaveAttribute('maxlength', '200')
+    expect(location()).toHaveAttribute('autocomplete', 'off')
+    expect(location()).toHaveAccessibleDescription('The support worker sees this on their shift. Leave it empty for a shift at home.')
+    expect(location().compareDocumentPosition(screen.getByLabelText('Notes')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('sends the trimmed text on save, and null once cleared', async () => {
+    const user = userEvent.setup()
+    render(<ShiftSlideOver {...props} target={{ mode: 'edit', shift: makeShift({ findings: [] }) }} onClose={noop} />)
+
+    await user.type(location(), '  Hall B ')
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+    expect(mockUpdateMutateAsync.mock.calls[0][0].data.location).toBe('Hall B')
+
+    await user.clear(location())
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+    expect(mockUpdateMutateAsync.mock.calls[1][0].data.location).toBeNull()
+  })
+
+  it('is disabled for a read-only role, with the value shown', () => {
+    render(<ShiftSlideOver {...props} canWrite={false} target={{ mode: 'edit', shift: makeShift({ location: 'Southside Library' }) }} onClose={noop} />)
+    expect(location()).toBeDisabled()
+    expect(location()).toHaveValue('Southside Library')
+  })
+
+  it('counts as an unsaved change', async () => {
+    const user = userEvent.setup()
+    render(<ShiftSlideOver {...props} target={{ mode: 'edit', shift: makeShift() }} onClose={vi.fn()} />)
+    await user.type(location(), 'Hall B')
+    await user.keyboard('{Escape}')
+    expect(screen.getByRole('alertdialog', { name: 'Discard changes?' })).toBeInTheDocument()
+  })
+
+  it('starts empty on a new shift (a drag to an empty day too) and saves null', async () => {
+    const user = userEvent.setup()
+    render(<ShiftSlideOver {...props} target={{ mode: 'create', participantId: 'participant-1', staffId: null, serviceDate: '2026-08-17' }} onClose={noop} />)
+    expect(location()).toHaveValue('')
+
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+    expect(mockCreateMutateAsync.mock.calls[0][0].location).toBeNull()
   })
 })
