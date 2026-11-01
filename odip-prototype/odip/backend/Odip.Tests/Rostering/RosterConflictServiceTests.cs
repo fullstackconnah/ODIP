@@ -686,6 +686,20 @@ public class RosterConflictServiceTests
     }
 
     [Fact]
+    public void Weekly_total_exactly_at_the_threshold_does_not_fire_over_hours()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, start: new TimeOnly(9, 0), end: new TimeOnly(17, 0)); // 8h
+
+        var findings = new RosterConflictService().Check(
+            candidate,
+            CompliantContext(staff, participant, weeklyHoursThreshold: 8m)); // the rule is a strict ">"
+
+        Assert.False(HasCode(findings, RosterConflictService.OverHours));
+    }
+
+    [Fact]
     public void Over_hours_counts_the_candidates_own_hours_in_the_weekly_total()
     {
         var staff = CompliantStaff();

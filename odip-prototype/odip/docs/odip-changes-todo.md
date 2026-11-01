@@ -412,6 +412,7 @@ owner decision (collected under Open Flags at the end).
   agreement, a delivery state in another time zone than the provider's and more than 100 patterns;
   hand-made overlaps (by their real weekly spans) need a tick. No existing shift is changed: the confirm
   dialog and the result count the old revision's shifts that can still be tidied and link to the roster.
+  (Superseded: the daily top-up described next was removed, and no top-up setting exists.)
   A daily job (`RosterTopUp:Enabled`, default true; `RosterTopUp:HorizonDays`, default 56) keeps the
   horizon for agreement patterns only and never makes a shift a coordinator deleted again
   (`ShiftPatterns.GeneratedThrough`). A roster lock that stays busy answers 409 `roster-busy`. Fix round 1

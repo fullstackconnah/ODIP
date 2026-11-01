@@ -4,14 +4,14 @@ import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import AlertWindowsSection from './AlertWindowsSection'
 
-const { settingsData, mutate } = vi.hoisted(() => ({ settingsData: { qualificationWarningDays: 30, weeklyHoursWarning: 38 }, mutate: vi.fn() }))
+const { settingsData, mutate } = vi.hoisted(() => ({ settingsData: { qualificationWarningDays: 30, weeklyHoursWarning: 38, varianceReviewMinutes: 15, planExpiryWarningDays: 30 }, mutate: vi.fn() }))
 vi.mock('@/api/hooks', () => ({
   useSettings: () => ({ data: settingsData, isError: false, refetch: vi.fn() }),
   useUpdateSettings: () => ({ mutate, isPending: false }),
 }))
 
 function renderSection(readOnly = false) {
-  const element = <AlertWindowsSection title="Alert windows" description="How early we warn." readOnly={readOnly} focusOnMount={false} />
+  const element = <AlertWindowsSection title='Alert windows' description='How early we warn.' readOnly={readOnly} focusOnMount={false} />
   render(<RouterProvider router={createMemoryRouter([{ path: '/settings', element }], { initialEntries: ['/settings?section=alerts'] })} />)
 }
 
@@ -34,7 +34,7 @@ describe('Alert windows', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Unsaved changes')
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    expect(mutate.mock.calls[0][0]).toEqual({ qualificationWarningDays: 60, weeklyHoursWarning: 38 })
+    expect(mutate.mock.calls[0][0]).toEqual({ qualificationWarningDays: 60, planExpiryWarningDays: 30 })
     expect(screen.getByRole('status')).toHaveTextContent('Saved')
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
   })
@@ -61,44 +61,32 @@ describe('Alert windows', () => {
     expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
   })
 
-  // QW7 (OPS-4, hours part): the roster's weekly-hours warning, beside the qualification window.
-  it('shows the weekly hours, saves a changed figure with the window, and keeps it when the server refuses', async () => {
+  // F2: Participant plans sits beside Staff qualifications; each save sends exactly the two windows.
+  it('saves a changed participant-plan window with the qualification window', async () => {
     const user = userEvent.setup()
-    mutate.mockImplementationOnce((_body, opts) => opts.onError({ response: { status: 403, data: {} } }))
+    mutate.mockImplementation((_body, opts) => opts.onSuccess())
     renderSection()
-    const hours = screen.getByLabelText('Weekly hours')
-    expect(hours).toHaveValue(38)
+    const plans = screen.getByRole('button', { name: /Participant plans/ })
+    expect(plans).toHaveTextContent('30 days')
+    expect(screen.getByText(/Warn this many days before a participant.s plan ends. Shown on Participants and the dashboard./)).toBeInTheDocument()
 
-    await user.clear(hours)
-    await user.type(hours, '25')
+    await user.click(plans)
+    await user.click(await screen.findByRole('option', { name: '90 days' }))
     await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    expect(mutate.mock.calls[0][0]).toEqual({ qualificationWarningDays: 30, weeklyHoursWarning: 25 })
-    expect(screen.getByRole('alert')).toHaveTextContent('Not saved. Only an Admin can change these.')
-    expect(screen.getByLabelText('Weekly hours')).toHaveValue(25)
+    expect(mutate.mock.calls[0][0]).toEqual({ qualificationWarningDays: 30, planExpiryWarningDays: 90 })
+    expect(screen.getByRole('status')).toHaveTextContent('Saved')
   })
 
-  it('refuses hours outside 1 to 100 before saving', async () => {
-    const user = userEvent.setup()
+  it('no longer holds Weekly hours (it moved to Rostering rules)', () => {
     renderSection()
-    const hours = screen.getByLabelText('Weekly hours')
-
-    await user.clear(hours)
-    await user.type(hours, '101')
-
-    expect(screen.getByText('Enter a whole number from 1 to 100.')).toBeInTheDocument()
-    // The guidance stays: it matters most when the figure is wrong.
-    expect(screen.getByText(/38 unless you change it/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
-    await user.clear(hours)
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
+    expect(screen.queryByLabelText('Weekly hours')).not.toBeInTheDocument()
   })
 
-  it('locks the hours for a Coordinator: read-only like the sibling fields, so the section\'s locked look applies', () => {
+  it('locks the plan window for a Coordinator', () => {
     renderSection(true)
-    const hours = screen.getByLabelText('Weekly hours')
-    expect(hours).toHaveAttribute('readonly')
-    expect(hours).not.toBeDisabled()
-    expect(hours).toHaveValue(38)
+    const control = screen.getByRole('button', { name: /Participant plans/ })
+    expect(control).toBeDisabled()
+    expect(control).toHaveTextContent('30 days')
   })
 })
