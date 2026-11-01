@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MemoryRouter, useLocation } from 'react-router-dom'
+import { createMemoryRouter, RouterProvider, useLocation } from 'react-router-dom'
 import ProfileSection from './ProfileSection'
 
 // Profile > Microsoft account: any signed-in person can link or unlink their own Microsoft account once their organisation has turned Microsoft sign-in on.
@@ -29,22 +29,19 @@ function renderProfile(role = 'Coordinator', url = '/settings?section=profile') 
   localStorage.setItem('odip_user', JSON.stringify({ role, fullName: 'Jane Smith', username: 'jane@acme.example.com', tenantName: 'Acme' }))
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}>
-      <MemoryRouter initialEntries={[url]}>
-        <section>
-          <h2 tabIndex={-1}>Profile</h2>
-          <ProfileSection />
-        </section>
-        <Where />
-      </MemoryRouter>
+      <RouterProvider router={createMemoryRouter([{ path: '/settings', element: <><ProfileSection title="Profile" description="" readOnly={false} focusOnMount={false} /><Where /></> }], { initialEntries: [url] })} />
     </QueryClientProvider>,
   )
   return userEvent.setup({ delay: null })
 }
 
-const account = (orgLinked: boolean, accountLinked: boolean) => apiGet.mockResolvedValue({ orgLinked, accountLinked })
+const PROFILE = { firstName: 'Jane', lastName: 'Smith', email: 'jane@acme.example.com', mobile: null, managedByEmploymentHero: false }
+let microsoftAccount = { orgLinked: false, accountLinked: false }
+const account = (orgLinked: boolean, accountLinked: boolean) => { microsoftAccount = { orgLinked, accountLinked } }
 
 beforeEach(() => {
-  apiGet.mockReset()
+  microsoftAccount = { orgLinked: false, accountLinked: false }
+  apiGet.mockReset().mockImplementation(async (url: string) => (url === '/profile' ? PROFILE : microsoftAccount))
   apiDelete.mockReset().mockResolvedValue(undefined)
   assign.mockReset()
   config.microsoft = true
@@ -63,7 +60,7 @@ describe('Profile: Microsoft account', () => {
   it('is hidden for a SuperAdmin', async () => {
     account(true, false)
     renderProfile('SuperAdmin')
-    expect(await screen.findByText('Jane Smith')).toBeInTheDocument()
+    expect(await screen.findByDisplayValue('Jane')).toBeInTheDocument()
     expect(screen.queryByText('Microsoft account')).not.toBeInTheDocument()
   })
 
@@ -79,7 +76,7 @@ describe('Profile: Microsoft account', () => {
     config.microsoft = false
     account(true, false)
     renderProfile()
-    expect(await screen.findByText('Jane Smith')).toBeInTheDocument()
+    expect(await screen.findByDisplayValue('Jane')).toBeInTheDocument()
     expect(screen.queryByText('Microsoft account')).not.toBeInTheDocument()
   })
 
@@ -107,15 +104,15 @@ describe('Profile: Microsoft account', () => {
   })
 
   it('after unlinking, focus is on Link Microsoft account', async () => {
-    apiGet.mockResolvedValueOnce({ orgLinked: true, accountLinked: true })
+    account(true, true)
     const u = renderProfile()
     await u.click(await screen.findByRole('button', { name: 'Unlink' }))
-    apiGet.mockResolvedValue({ orgLinked: true, accountLinked: false })
+    account(true, false)
 
     await u.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Unlink' }))
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Link Microsoft account' })).toHaveFocus())
-    expect(screen.getByRole('status')).toHaveTextContent('Microsoft account unlinked.')
+    expect(screen.getAllByRole('status').some(r => r.textContent === 'Microsoft account unlinked.')).toBe(true)
   })
 
   it('?microsoft=linked shows the success Callout even before the account answers, then strips the param', async () => {

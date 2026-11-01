@@ -45,7 +45,7 @@ describe('SettingsNav', () => {
   it('lights nothing on the phone list, where nothing is open', () => {
     renderNav('Coordinator', null)
     expect(nav().querySelectorAll('[aria-current]')).toHaveLength(0)
-    expect(within(nav()).getAllByRole('link')).toHaveLength(10)
+    expect(within(nav()).getAllByRole('link')).toHaveLength(11)
   })
 
   it('tells a SuperAdmin with no organisation why the organisation groups are missing, between My account and Platform', () => {

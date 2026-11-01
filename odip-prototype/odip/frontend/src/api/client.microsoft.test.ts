@@ -91,6 +91,17 @@ describe('a Microsoft session', () => {
     expect(localStorage.getItem('odip_token')).toBeNull()
   })
 
+  it('a Microsoft refresh refused with SessionLengthReached ends the session at /login?microsoft=SessionLengthReached, keeping the queue', async () => {
+    const client = await freshClient()
+    signInAsMicrosoft()
+    script(client, () => ({ status: 401, data: { success: false, code: 'SessionLengthReached' } }))
+
+    expect(await outcome(client.apiGet('/participants'))).toBe('REJECTED 401')
+
+    await vi.waitFor(() => expect(hrefs).toEqual(['/login?microsoft=SessionLengthReached']))
+    expect(localStorage.getItem('odip_token')).toBeNull()
+  })
+
   it('a refresh that failed for any reason but a 401 ends the session without the 12-hour words', async () => {
     const client = await freshClient()
     signInAsMicrosoft()
@@ -115,6 +126,19 @@ describe('a Microsoft session', () => {
 })
 
 describe('a password session', () => {
+  it('an exchange refused with SessionLengthReached on the refresh ends the session at /login?microsoft=SessionLengthReached', async () => {
+    const client = await freshClient()
+    localStorage.setItem('odip_token', 'the-old-token')
+    script(client, (url, nth) => {
+      if (url === '/auth/exchange') return { status: 401, data: { success: false, code: 'SessionLengthReached' } }
+      return nth === 0 ? { status: 401, data: {} } : { status: 200, data: {} }
+    })
+
+    expect(await outcome(client.apiGet('/participants'))).toBe('REJECTED 401')
+
+    await vi.waitFor(() => expect(hrefs).toEqual(['/login?microsoft=SessionLengthReached']))
+  })
+
   it('still uses /auth/exchange and goes to /login', async () => {
     const client = await freshClient()
     localStorage.setItem('odip_token', 'the-old-token')
