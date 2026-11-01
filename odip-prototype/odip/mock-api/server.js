@@ -2082,6 +2082,26 @@ function claimDetail(c) {
   }
 }
 
+/** ShiftClaimRunDto for POST claims/from-shifts[/preview]. See the route comment for the fixture. */
+function shiftClaimRun(body, make) {
+  const from = body?.from ?? '2026-10-19', to = body?.to ?? '2026-11-01'
+  const sleepover = { participantId: 'p-sam', participantName: 'Sam Lee', shiftId: 's-sleep', serviceDate: '2026-10-21', description: 'Shift 22:00–06:00 · 8 h', reason: 'It is a sleepover, which shift claims do not price yet.' }
+  const rows = [
+    { participantId: 'p-sam', participantName: 'Sam Lee', shiftCount: 2, hours: 12, totalAmount: 612.4 },
+    { participantId: 'p-long', participantName: 'Wolfeschlegelsteinhausenbergerdorff Alexandra', shiftCount: 3, hours: 18.5, totalAmount: 1042.75 },
+  ].map((r, i) => (make ? { ...r, claimId: `claim-run-${i}`, claimReference: `TC-RUN-${i + 1}` } : r))
+  const failed = { participantId: 'p-jo', participantName: 'Jo Park', failed: true, reason: "This claim couldn't be made, so nothing was saved for this participant. Run the claim run again: it only picks up shifts that are still unclaimed." }
+  const empty = from.startsWith('2020'), allLeftOut = from.startsWith('2021')
+  const participants = empty || allLeftOut ? [] : rows
+  return {
+    from, to, claimsMade: make ? participants.length : 0,
+    shiftCount: participants.reduce((n, r) => n + r.shiftCount, 0), hours: participants.reduce((n, r) => n + r.hours, 0), totalAmount: participants.reduce((n, r) => n + r.totalAmount, 0),
+    participants, leftOut: empty ? [] : [sleepover],
+    flagged: participants.length ? [{ participantId: 'p-long', participantName: 'Wolfeschlegelsteinhausenbergerdorff Alexandra', shiftId: 's-night', serviceDate: '2026-10-24', description: 'Shift 20:00–04:00 · 8 h', caveat: 'Evening and night rates are not applied yet.' }] : [],
+    skipped: make && participants.length ? [failed] : [],
+  }
+}
+
 /** ShiftClaimPreviewResponseDto for POST participants/:id/claims/from-shifts/preview — stateless
  * like every other POST here (see withDecision above): always the same plausible preview
  * regardless of the from/to body, rather than actually filtering portalShiftBase by date range.
@@ -3118,6 +3138,11 @@ const postRoutes = [
     tripName: '', status: 'Draft', claimReference: `TC-MOCK-${id}`,
     totalAmount: 640, createdAt: new Date().toISOString(), leftOut: shiftClaimLeftOut(), flagged: shiftClaimFlagged(),
   })],
+
+  // The claim run (shift billing PR1): every participant at once. Stateless like the rest. The fixture is three participants (one with a long name, one with a sleepover left out) and,
+  // when made, one that fails; a From in 2020 is the empty answer and a From in 2021 is "everything left out", so the shots reach every state without a second fixture.
+  ['claims/from-shifts/preview', body => shiftClaimRun(body, false)],
+  ['claims/from-shifts', body => shiftClaimRun(body, true)],
 
   // Notifications (design spec §2/§6) — stateless like every other POST here: retry doesn't
   // mutate notificationOutbox, so a follow-up GET admin/notifications still shows the original
