@@ -63,10 +63,12 @@ const PATTERNS = [
 async function session(browser, s, { role = 'Admin', username = 'dev.admin', catalogue = 'ok' } = {}) {
   const context = await browser.newContext({ ...AU_CONTEXT, viewport: { width: s.width, height: s.height }, hasTouch: s.touch, isMobile: s.touch, colorScheme: s.scheme })
   const page = await context.newPage()
+  page.on('pageerror', (e) => console.log('[pageerror]', String(e.message).slice(0, 200)))
+  page.on('framenavigated', (f) => f === page.mainFrame() && console.log('[nav]', f.url()))
   await page.route('**/api/v1/auth/dev-users', (r) => r.fulfill({ json: devUsers(role, username) }))
   await page.route('**/api/v1/auth/dev-login', (r) => r.fulfill({ json: login(role, username) }))
   await page.route('**/api/v1/rostering/board*', (r) => r.fulfill({ json: boardOf(r.request().url()) }))
-  await page.route('**/api/v1/rostering/shifts/check', (r) => r.fulfill({ json: envelope({ findings: [] }) }))
+  await page.route('**/api/v1/rostering/shifts/check', (r) => r.fulfill({ json: envelope([]) }))
   await page.route(/\/api\/v1\/rostering\/patterns(\?.*)?$/, (r) => (r.request().method() === 'GET' ? r.fulfill({ json: envelope(PATTERNS) }) : r.fallback()))
   await page.route('**/api/v1/support-catalogue', (r) => {
     if (catalogue === 'loading') return   // never answers: the field stays loading
@@ -157,6 +159,10 @@ async function ready(page, mode) {
 async function capture(page, s, state, mode, { full = false } = {}) {
   const t = (n) => `${s.tag} ${state}: ${n}`
   await ready(page, mode)
+  // The loading spinner never stops; freeze it so the crop can settle.
+  if (mode === 'loading') await page.evaluate(() => document.getAnimations().forEach((a) => a.pause()))
+  const nDialogs = await page.locator('[role=dialog]').count()
+  if (!nDialogs) console.log(`[support-type] ${s.tag} ${state}: no dialog in the DOM at ${page.url()}`)
   const m = await measure(page)
   console.log(`[support-type] ${s.tag} ${state} ${JSON.stringify(m)}`)
   judge(t, state, s, m)
@@ -172,11 +178,18 @@ async function closePanel(page) {
 }
 
 async function openShift(page, id) {
-  await page.goto(`${BASE_URL}/rostering`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
-  const chip = page.locator(`[data-shift-open="${id}"]`).first()
-  await chip.waitFor({ state: 'visible', timeout: 60_000 })
+  // id null: the participant's week (the only place a ReadOnly user reaches a shift panel); else the roster board.
+  await page.goto(id ? `${BASE_URL}/rostering` : `${BASE_URL}/participants/p-0001?tab=people&section=week`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
+  const chip = page.locator(id ? `[data-shift-open="${id}"]` : '[data-shift-open]').first()
+  await chip.waitFor({ state: 'visible', timeout: 30_000 }).catch(async () => {
+    throw new Error(`no shift chip at ${page.url()}: ${(await page.locator('main').first().innerText().catch(() => '')).split(/\s+/).join(' ').slice(0, 160)}`)
+  })
   await chip.scrollIntoViewIfNeeded()
-  await chip.click()
+  // The chip's centre can sit on the participant or staff name link, which navigates: click its top-left corner (the time) instead.
+  await chip.click({ position: { x: 6, y: 6 } })
+  await dialogOf(page).waitFor({ state: 'visible', timeout: 15_000 }).catch(async () => {
+    throw new Error(`no dialog after the chip click (url ${page.url()}, chips ${await page.locator('[data-shift-open]').count()})`)
+  })
 }
 
 const browser = await chromium.launch({ headless: true })
@@ -230,13 +243,14 @@ for (const s of SCENES) {
     await admin?.context.close()
   }
 
-  for (const [state, mode, opts] of [['shift-catalogue-loading', 'loading', {}], ['shift-catalogue-error', 'error', {}], ['shift-read-only', 'ok', { role: 'ReadOnly', username: 'dev.readonly' }]]) {
+  // shift-read-only is not captured: ReadOnly is refused /rostering and its week section, so no ReadOnly user reaches this panel; the unit tests cover canWrite false.
+  for (const [state, mode, opts] of [['shift-catalogue-loading', 'loading', {}], ['shift-catalogue-error', 'error', {}]]) {
     let sess
     try {
       sess = await session(browser, s, { ...opts, catalogue: mode === 'ok' ? 'ok' : mode })
-      await openShift(sess.page, state === 'shift-read-only' ? 'sb-agreement' : 'sb-locked')
+      await openShift(sess.page, state === 'shift-read-only' ? null : 'sb-locked')
       const m = await capture(sess.page, s, state, mode)
-      if (state === 'shift-read-only') check(t('read-only: disabled, value shown, no "A change here"'), m.combo.disabled && m.combo.value === 'Community participation' && !m.helpers.some((h) => h.text.includes('A change here')), { combo: m.combo, helpers: m.helpers.map((h) => h.text) })
+      if (state === 'shift-read-only') check(t('read-only: disabled, value shown, no "A change here"'), m.combo.disabled && m.combo.value === 'Community access (default)' && !m.helpers.some((h) => h.text.includes('A change here')), { combo: m.combo, helpers: m.helpers.map((h) => h.text) })
       if (state === 'shift-catalogue-loading') check(t('loading: disabled with the loading placeholder'), m.combo.disabled && m.combo.placeholder === 'Loading support types…', m.combo)
     } catch (e) {
       check(`${s.tag} ${state}: ran`, false, String(e.message).split('\n')[0])
