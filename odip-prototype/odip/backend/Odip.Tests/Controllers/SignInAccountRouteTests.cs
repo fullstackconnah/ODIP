@@ -315,13 +315,14 @@ public class SignInAccountRouteTests
 
     // ── POST staff/{id}/sign-in-account ─────────────────────────────────
 
-    private static (OdipDbContext Db, Guid TenantId) StaffDb()
+    private static (OdipDbContext Db, Guid TenantId) StaffDb(bool audited = false)
     {
         var tenantId = Guid.NewGuid();
         var tenant = new Mock<ICurrentTenant>();
         tenant.Setup(t => t.TenantId).Returns(tenantId);
         tenant.Setup(t => t.IsSuperAdmin).Returns(false);
-        var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, tenant.Object);
+        var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .AddInterceptors(audited ? [new Odip.Infrastructure.Audit.AuditInterceptor(new Mock<IHttpContextAccessor>().Object)] : []).Options, tenant.Object);
         return (db, tenantId);
     }
 
@@ -772,7 +773,7 @@ public class SignInAccountRouteTests
     [Fact]
     public async Task ConfirmAddress_is_idempotent_and_takes_the_attention_item_with_it()
     {
-        var (db, tenantId) = StaffDb();
+        var (db, tenantId) = StaffDb(audited: true);
         var held = await SeedStaff(db, tenantId, "una@other.org");
         var notHeld = await SeedStaff(db, tenantId, "ana@gmail.com");
         held.SignInAddressUnconfirmed = true;
@@ -791,6 +792,10 @@ public class SignInAccountRouteTests
         Assert.False((await db.Users.SingleAsync(u => u.Id == held.Id)).SignInAddressUnconfirmed);
         Assert.Null((await db.Users.SingleAsync(u => u.Id == notHeld.Id)).SignInAddressUnconfirmed);   // a row that was never held is left as it is
         Assert.Empty(db.EmploymentHeroAttentions);
+        // The release is audited by the tracked save, once: the seed wrote the hold, the first confirm the release, the repeat saved nothing.
+        var updates = await db.AuditLogs.Where(a => a.EntityId == held.Id && a.Action == AuditAction.Updated).OrderBy(a => a.ChangedAt).ToListAsync();
+        Assert.Equal(2, updates.Count);
+        Assert.Contains("SignInAddressUnconfirmed", updates[1].Changes);
     }
 
     [Fact]

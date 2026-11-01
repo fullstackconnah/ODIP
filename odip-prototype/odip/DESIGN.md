@@ -11,6 +11,8 @@ colors:
   primary-container: "#4d7c0f"
   primary-fixed: "#bbf37c"
   on-primary-fixed: "#0f2000"
+  selected: "#e3edd3"
+  on-selected: "#2c4c00"
   secondary: "#515f74"
   secondary-foreground: "#ffffff"
   secondary-container: "#d5e3fc"
@@ -165,8 +167,8 @@ components:
     rounded: "{rounded.md}"
     padding: "12px"
   all-clear:
-    backgroundColor: "{colors.primary-fixed}"
-    textColor: "{colors.on-primary-fixed}"
+    backgroundColor: "{colors.selected}"
+    textColor: "{colors.on-selected}"
     rounded: "{rounded.md}"
     padding: "12px 16px"
 ---

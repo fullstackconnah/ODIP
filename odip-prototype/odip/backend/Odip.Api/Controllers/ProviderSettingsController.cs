@@ -231,13 +231,13 @@ public partial class ProviderSettingsController : ControllerBase
         return Ok(ApiResponse<DateTime>.Ok(s.UpdatedAt));
     }
 
-    /// <summary>A prefix ends up in the PDF's file name: 1 to 10 letters, digits, - _ or . (null = not sent).</summary>
     private static string? TrimmedOrNull(string v) => v.Trim() is { Length: > 0 } t ? t : null;
 
     /// <summary>An absolute http or https address with a dotted host (a bare example.com.au is refused, not rewritten), no spaces.</summary>
     private static bool IsFullWebAddress(string v) =>
         !v.Any(char.IsWhiteSpace) && Uri.TryCreate(v, UriKind.Absolute, out var u) && u.Scheme is "http" or "https" && u.Host.Contains('.');
 
+    /// <summary>A prefix ends up in the PDF's file name: 1 to 10 letters, digits, - _ or . (null = not sent).</summary>
     private static string? PrefixProblem(string? prefix, string example) => prefix switch
     {
         null => null,

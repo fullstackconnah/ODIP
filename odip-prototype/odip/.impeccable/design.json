@@ -349,7 +349,7 @@
         "status": "opt-in; every other StatCard unchanged",
         "shipsOn": [
           "Management Dashboard (2026-10-01)",
-          "Management Dashboard bolder pass: tall tiles, the All clear row and field (2026-10-02)"
+          "Management Dashboard bolder pass: attention tiles, the All clear row and field (2026-10-02)"
         ],
         "items": [
           "Qualification Issues (the Qualifications page; danger; link /qualifications)",
@@ -413,7 +413,7 @@
           {
             "component": "StatCard",
             "prop": "action",
-            "effect": "attention variant: { label, to }. Makes the tall tile: stacked figure, label (14px 600), detail line (13px) and a link, padded --section-gap; a named group, not a link. The link's pad stretches over the whole tile (one big target, ring around the tile) with a --tap-min floor; the compact tile is used while loading or error"
+            "effect": "attention variant: { label, to }. Makes the attention tile: stacked figure, label (14px 600), detail line (13px) and a link, padded --section-gap; a named group, not a link. The link's pad stretches over the whole tile (one big target, ring around the tile) with a --tap-min floor; the compact tile is used while loading or error"
           },
           {
             "component": "StatCard",
@@ -971,7 +971,7 @@
       },
       {
         "name": "The Attention Band Pattern",
-        "body": "The dashboard opts into a band of `StatCard variant=\"attention\"` tiles directly under its display-step greeting and meta row: a fixed order (Qualification Issues, Critical Participant Alerts, Overdue, Missing Accommodation, Missing Vehicles, Missing Staff, Open Incidents, QSC Overdue, Pending Leave, Shift Completions), Qualification Issues only for a role that can open the Qualifications page, the alerts item only with `canViewAlerts`, Pending Leave only with `canApproveLeave` and Shift Completions only with `canReviewCompletions` (Pending Leave and Shift Completions are the two queues the Staff & roster badge adds together, so the all-clear never sits beside a badge that disagrees). An item above zero is a tall tile: the display-step figure, the label, one honest line saying what the count means and a link to where it is fixed, filled like a glance segment (danger: error container, warning: warning container) with everything in the on-container ink. Items at zero are one All clear row on Pale Sprout naming them by a noun that reads without its tile (\"overdue tasks\", \"overdue QSC reports\", \"trips missing staff\"), and when every item is at zero the band is one full-width Pale Sprout field (\"All clear. Nothing needs you right now.\"). An item with no data (still loading, paused while the browser is offline, or failed) is a quiet en dash tile, `aria-busy` while loading and a screen-reader-only \"Couldn't load\" after a failure, never named as clear, and the band is not the all-clear field while one exists. Tiles are dealt into balanced rows by the band's own width, up to 1, 2, 3, 4 and 5 a row. The everyday counts (upcoming trips, active participants, outstanding tasks) are one quiet line in the header's meta row. Every other StatCard is unchanged.",
+        "body": "The dashboard opts into a band of `StatCard variant=\"attention\"` tiles directly under its display-step greeting and meta row: a fixed order (Qualification Issues, Critical Participant Alerts, Overdue, Missing Accommodation, Missing Vehicles, Missing Staff, Open Incidents, QSC Overdue, Pending Leave, Shift Completions), Qualification Issues only for a role that can open the Qualifications page, the alerts item only with `canViewAlerts`, Pending Leave only with `canApproveLeave` and Shift Completions only with `canReviewCompletions` (Pending Leave and Shift Completions are the two queues the Staff & roster badge adds together, so the all-clear never sits beside a badge that disagrees). An item above zero is an attention tile: the display-step figure, the label, one honest line saying what the count means and a link to where it is fixed, filled like a glance segment (danger: error container, warning: warning container) with everything in the on-container ink. Items at zero are one All clear row on Pale Sprout naming them by a noun that reads without its tile (\"overdue tasks\", \"overdue QSC reports\", \"trips missing staff\"), and when every item is at zero the band is one full-width Pale Sprout field (\"All clear. Nothing needs you right now.\"). An item with no data (still loading, paused while the browser is offline, or failed) is a quiet en dash tile, `aria-busy` while loading and a screen-reader-only \"Couldn't load\" after a failure, never named as clear, and the band is not the all-clear field while one exists. Tiles are dealt into balanced rows by the band's own width, up to 1, 2, 3, 4 and 5 a row. The everyday counts (upcoming trips, active participants, outstanding tasks) are one quiet line in the header's meta row. Every other StatCard is unchanged.",
         "section": "components"
       }
     ],
@@ -987,7 +987,7 @@
       "**Do** colour a status by its tone: add the word to `STATUS_TONE` (or pass a `colorMap` of tones for a domain whose word means something else), never a class string of its own",
       "**Do** make nouns agree with counts through `plural()`, spell ratios through `formatRatio()` (\"x / y\") and relative times through `formatRelative()` (`src/lib/format.ts`), and state a dated deadline through `deadlineState()` and `deadlineLabel()` (`src/lib/deadline.ts`), never by hand",
       "**Do** early-return a record that is loading, failed or missing through `PageState`, give a detail page one `BackButton` that names its destination, and keep its active tab in the URL with `useTabParam`",
-      "**Do** put what needs action in the attention band, as a tall tile with its figure, a line saying what it means and a link to where it is fixed, and the everyday counts in the header's meta row, so the loudest thing on the dashboard is the thing to act on; **do** let the all-clear be the Pale Sprout row and field and nothing else",
+      "**Do** put what needs action in the attention band, as an attention tile with its figure, a line saying what it means and a link to where it is fixed, and the everyday counts in the header's meta row, so the loudest thing on the dashboard is the thing to act on; **do** let the all-clear be the Pale Sprout row and field and nothing else",
       "**Do** show an en dash, not a `0`, for a figure whose request is still loading (`aria-busy`) or has failed (\"Couldn't load\"), and never an \"All clear\" without data",
       "**Do** use `Button` for every action; it owns height, radius and focus",
       "**Do** keep compliance state, alerts and countdowns visually equal to ordinary data",

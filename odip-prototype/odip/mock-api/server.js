@@ -3151,9 +3151,10 @@ const putRoutes = [
   ['provider-settings', (body) => {
     const refused = invoiceMock.saveNumbering(body)
     if (refused) return refused
-    for (const key of Object.keys(providerSettingsRow)) if (key !== 'id' && body[key] !== undefined) providerSettingsRow[key] = body[key]
-    // The contact fields: blank clears to null, as the server does.
-    for (const key of ['tradingName', 'contactEmail', 'contactPhone', 'website']) if (typeof providerSettingsRow[key] === 'string') providerSettingsRow[key] = providerSettingsRow[key].trim() || null
+    // The contact fields: null or absent leaves the stored value, blank clears it, as the server does.
+    const contact = ['tradingName', 'contactEmail', 'contactPhone', 'website']
+    for (const key of Object.keys(providerSettingsRow)) if (key !== 'id' && body[key] !== undefined && !(body[key] === null && contact.includes(key))) providerSettingsRow[key] = body[key]
+    for (const key of contact) if (typeof providerSettingsRow[key] === 'string') providerSettingsRow[key] = providerSettingsRow[key].trim() || null
     return invoiceMock.settingsDto(providerSettingsRow)
   }],
   ...intake.put,
