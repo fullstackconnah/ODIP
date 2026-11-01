@@ -15,6 +15,7 @@ const PLOT_H = 120
 const M = { top: 8, bottom: 38 }
 const H = M.top + PLOT_H + M.bottom
 const LEFT = 44 // fits "$100K" at 12px
+const RIGHT = 12 // narrow only: keeps the last label and bar inside the svg
 const GAP = 2
 
 /** Twelve weeks at every width: a hollow hatched Sent bar beside a solid Paid bar (shape brief 2026-11-01). Zero weeks draw nothing; the readout and the table carry the zeros. */
@@ -27,7 +28,7 @@ export function ClaimsPipelineChart({ data, width: W, sentenceId }: { data: Pipe
   const max = Math.max(...weeks.map(w => Math.max(w.sent, w.paid)), 1)
   const ticks = countTicks(Math.ceil(max), PLOT_H)
   const top = ticks[ticks.length - 1]
-  const slot = (W - LEFT) / weeks.length
+  const slot = (W - LEFT - (narrow ? RIGHT : 0)) / weeks.length
   const baseline = M.top + PLOT_H
   const yOf = (v: number) => baseline - (v / top) * PLOT_H
   const pair = Math.min(Math.max(Math.round(slot * 0.6), 14), 56)

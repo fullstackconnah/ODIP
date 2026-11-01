@@ -46,7 +46,7 @@ const owedClause = (data: PipelineDto) => {
   if (waiting && accepted) return ` ${formatCurrency(data.withNdia)} is waiting on the NDIA's results and ${formatCurrency(data.acceptedUnpaid)} is accepted but not paid yet.`
   if (waiting) return ` ${formatCurrency(data.withNdia)} is waiting on the NDIA's results.`
   if (accepted) return ` ${formatCurrency(data.acceptedUnpaid)} is accepted but not paid yet.`
-  return ' Nothing is waiting on the NDIA.'
+  return ' Nothing is waiting on the NDIA.'
 }
 
 /** No dollars sent or paid in any of the 12 weeks. */

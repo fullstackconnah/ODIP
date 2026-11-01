@@ -84,8 +84,10 @@ try {
       page.on('pageerror', (e) => check('page error', { width: vp.name, theme: scheme }, e.message, false))
 
       let fixture = null
+      let hold = null // a promise the pipeline route waits on, for the loading shot
       await page.route('**/api/v1/claim-hub/pipeline*', async (r) => {
         const url = new URL(r.request().url())
+        if (hold) await hold
         if (fixture) url.searchParams.set('fixture', fixture)
         await r.fulfill({ response: await r.fetch({ url: url.toString() }) })
       })
@@ -166,6 +168,8 @@ try {
         const labelsOk = row.length === want.length && want.every((wi, i) => Math.abs(row[i].c - weeks[wi].c) <= 1.5)
         check('2 x labels: 4 at the current week -0/-3/-6/-9 at 390, 12 at 1280', ctx, { n: row.length, texts: row.map((l) => l.text) }, labelsOk)
         check('3 label boxes >= 4px apart', ctx, { n: row.length }, row.every((l, i) => i === 0 || row[i - 1].r + 4 <= l.l))
+        const svgRight = await page.evaluate(() => document.querySelector('[data-plot] svg').getBoundingClientRect().right)
+        check('F2 every x label (so far included) ends inside the svg', ctx, { svgRight, maxRight: Math.max(...labels.map((l) => l.r)) }, labels.length > 0 && labels.every((l) => l.r <= svgRight + 0.01))
 
         const byWeek = new Map()
         for (const b of bars) byWeek.set(b.week, { ...byWeek.get(b.week), [b.kind]: b })
@@ -269,8 +273,8 @@ try {
         await shot(name, ctx)
       }
 
-      // ---- Error (once per breakpoint, light) ----
-      if (scheme === 'light') {
+      // ---- Error (both themes, both breakpoints) ----
+      {
         const ctx = { width: vp.name, theme: scheme, state: 'error' }
         fixture = 'failing'
         await page.goto(`${BASE_URL}/claims`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
@@ -278,6 +282,35 @@ try {
         await card().getByRole('button', { name: 'Try again' }).waitFor({ timeout: 30_000 })
         await pinCoarse(); await settled(page); await page.waitForTimeout(300)
         await shot('error', ctx)
+      }
+
+      // ---- Loading (390, light): the skeleton holds the loaded card's height ----
+      if (vp.mobile && scheme === 'light') {
+        const ctx = { width: vp.name, theme: scheme, state: 'loading' }
+        await open({ name: 'full', hidden: '0' })
+        const loaded = (await card().boundingBox()).height
+        let release
+        hold = new Promise((r) => { release = r })
+        await page.goto(`${BASE_URL}/claims`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
+        await page.locator('[data-claims-pipeline][aria-busy="true"]').waitFor({ timeout: 60_000 })
+        await pinCoarse(); await page.waitForTimeout(300)
+        const busy = (await card().boundingBox()).height
+        check('loading: skeleton height within 2px of the loaded card', ctx, { busy, loaded }, Math.abs(busy - loaded) <= 2)
+        await shot('loading', ctx)
+        release(); hold = null
+      }
+
+      // ---- Stale data (390, light): a failed refetch keeps the chart and adds the note ----
+      if (vp.mobile && scheme === 'light') {
+        const ctx = { width: vp.name, theme: scheme, state: 'stale' }
+        await open({ name: 'full', hidden: '0' })
+        fixture = 'failing'
+        await page.evaluate(() => { window.dispatchEvent(new Event('focus')); document.dispatchEvent(new Event('visibilitychange')) })
+        await card().getByRole('button', { name: 'Try again' }).waitFor({ timeout: 40_000 })
+        await settled(page); await page.waitForTimeout(300)
+        const n = await page.evaluate(() => document.querySelectorAll('[data-cp-week]').length)
+        check('stale: the 12 weeks stay beside the note', ctx, { n }, n === 12)
+        await shot('stale', ctx)
       }
 
       // ---- Forced colours (1280, light): Paid and Sent differ and Sent has a stroke ----
