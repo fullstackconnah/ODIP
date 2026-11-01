@@ -91,6 +91,11 @@ public class ClaimBatchesController(ClaimBatchService batches, ICurrentTenant te
     [HttpGet("claim-hub/lines")]
     public async Task<IActionResult> Hub(CancellationToken ct) =>
         NoTenant() ?? Ok(ApiResponse<HubLinesDto>.Ok(await batches.HubAsync(tenant.TenantId!.Value, ct)));
+
+    // GET /api/v1/claim-hub/pipeline
+    [HttpGet("claim-hub/pipeline")]
+    public async Task<IActionResult> Pipeline(CancellationToken ct) =>
+        NoTenant() ?? Ok(ApiResponse<PipelineDto>.Ok(await batches.PipelineAsync(tenant.TenantId!.Value, ct)));
 }
 
 public sealed record BuildBatchDto(List<Guid>? LineIds, List<Guid>? ClaimIds, List<Guid>? ConfirmedLineIds);
