@@ -20,6 +20,18 @@ public class BprCsvServiceTests
     private static OdipDbContext CreateDb() => TestDb.Create();
 
     [Fact]
+    public async Task LoadRowsAsync_LineOfAnotherTenant_IsNotReturned_EvenForAnUnscopedSuperAdmin()
+    {
+        using var f = new Odip.Tests.ClaimBatches.BatchFixture();   // a SuperAdmin context: the query filters are off, so only the line's own TenantId scopes the read
+        var (_, mine, _) = f.AddClaim();
+        var (_, foreign, _) = f.AddClaim(tenant: f.OtherTenantId);
+
+        var rows = await new BprCsvService(f.Db).LoadRowsAsync(f.TenantId, [mine[0].Id, foreign[0].Id], CancellationToken.None);
+
+        Assert.Equal(mine[0].Id, Assert.Single(rows).Line.Id);
+    }
+
+    [Fact]
     public async Task Shift_lines_are_written_with_their_rostered_hours()
     {
         using var db = CreateDb();
@@ -41,6 +53,7 @@ public class BprCsvServiceTests
 
         var claim = new TripClaim
         {
+            TenantId = participant.TenantId,
             Id = Guid.NewGuid(), Kind = ClaimKind.Shift, ParticipantId = participant.Id,
             PeriodFrom = shift.ServiceDate, PeriodTo = shift.ServiceDate, ClaimReference = "TC-43100003333-20260907",
         };
@@ -48,6 +61,7 @@ public class BprCsvServiceTests
 
         db.ClaimLineItems.Add(new ClaimLineItem
         {
+            TenantId = claim.TenantId,
             Id = Guid.NewGuid(), TripClaimId = claim.Id, ShiftId = shift.Id, ParticipantBookingId = null,
             SupportItemCode = "04_SHIFT", DayType = ClaimDayType.Weekday,
             SupportsDeliveredFrom = shift.ServiceDate, SupportsDeliveredTo = shift.ServiceDate,
@@ -84,13 +98,14 @@ public class BprCsvServiceTests
             Id = Guid.NewGuid(), TripInstanceId = Guid.NewGuid(), ParticipantId = participant.Id,
             BookingStatus = BookingStatus.Confirmed,
         };
-        var claim = new TripClaim { Id = Guid.NewGuid(), ParticipantId = participant.Id, ClaimReference = "TC-1", PeriodFrom = new DateOnly(2026, 9, 7), PeriodTo = new DateOnly(2026, 9, 7) };
+        var claim = new TripClaim { TenantId = participant.TenantId, Id = Guid.NewGuid(), ParticipantId = participant.Id, ClaimReference = "TC-1", PeriodFrom = new DateOnly(2026, 9, 7), PeriodTo = new DateOnly(2026, 9, 7) };
         db.Participants.Add(participant);
         db.ParticipantBookings.Add(booking);
         db.TripClaims.Add(claim);
         foreach (var (type, reason) in new[] { (ClaimType.Standard, (string?)null), (ClaimType.Cancellation, "NSDH") })
             db.ClaimLineItems.Add(new ClaimLineItem
             {
+                TenantId = claim.TenantId,
                 Id = Guid.NewGuid(), TripClaimId = claim.Id, ParticipantBookingId = booking.Id,
                 SupportItemCode = "04_104_0125_6_1", DayType = ClaimDayType.Weekday,
                 SupportsDeliveredFrom = new DateOnly(2026, 9, 7), SupportsDeliveredTo = new DateOnly(2026, 9, 7),

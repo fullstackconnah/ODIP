@@ -12,7 +12,7 @@ namespace Odip.Tests.Security;
 /// either filter it or say in one line why it needs none. An entity on the list that has since been filtered, or removed, fails too, so the list cannot go stale.
 ///
 /// "Through the trip" and the like mean the endpoints that read or write the entity by an id start from a tenant-filtered parent and answer "not found" for another organisation's row
-/// (see the CrossTenant*Tests files, one test per route). Adding a TenantId column to these is a migration on live data and is deliberately not done yet.
+/// (see the CrossTenant*Tests files, one test per route). Adding a TenantId column to these is a migration on live data: the claim tables have theirs, and the rest follow in the series (spec 2026-10-31-tenant-isolation-design).
 /// </summary>
 public class TenantFilterCoverageTests
 {
@@ -31,8 +31,6 @@ public class TenantFilterCoverageTests
         ["ParticipantGroupRevision"] = "through its participant",
         ["IncidentInjury"] = "through its incident",
         ["IncidentWitness"] = "through its incident, and own-row for the witness",
-        ["TripClaim"] = "through its trip (Trip claims) or participant (Shift claims): ClaimsController.TenantClaims",
-        ["ClaimLineItem"] = "through its claim",
         ["ImportBatchItem"] = "through its batch (ImportBatch is filtered)",
         ["ServiceAgreementDraftBlock"] = "through its draft (ServiceAgreementDraft is filtered)",
         ["ServiceAgreementDraftLine"] = "through its draft (ServiceAgreementDraft is filtered)",
@@ -48,7 +46,7 @@ public class TenantFilterCoverageTests
         ["EarlyAccessRequest"] = "anonymous public submissions with no tenant (see the comment on its mapping)",
         ["EarlyAccessLaterSubmission"] = "a repeat of an anonymous public submission, read only through its sign-up (EarlyAccessRequest)",
         // Legacy.
-        ["Contact"] = "legacy; no endpoint reads or writes it, only the seeder",
+        ["Contact"] = "read through Participant.PlanManagerContact (InvoiceService, ExportTables), so scoped by its participant",
         ["ParticipantContact"] = "legacy; no endpoint reads or writes it, only the seeder",
     };
 

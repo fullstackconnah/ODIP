@@ -261,10 +261,11 @@ internal sealed class LedgerKit : IDisposable
     /// <summary>A shift-kind claim for the participant with one line, for $<paramref name="amount"/>, for the shift given: its code the weekday community access item's unless one is given, its dates the shift's.</summary>
     public TripClaim SeedShiftClaim(Participant participant, TripClaimStatus status, decimal amount, Shift shift, string? itemCode = null, string? reference = null)
     {
-        var claim = new TripClaim { Id = Guid.NewGuid(), Kind = ClaimKind.Shift, ParticipantId = participant.Id, Status = status, ClaimReference = reference ?? $"TC-{Guid.NewGuid():N}"[..20], TotalAmount = amount };
+        var claim = new TripClaim { TenantId = participant.TenantId, Id = Guid.NewGuid(), Kind = ClaimKind.Shift, ParticipantId = participant.Id, Status = status, ClaimReference = reference ?? $"TC-{Guid.NewGuid():N}"[..20], TotalAmount = amount };
         Db.TripClaims.Add(claim);
         Db.ClaimLineItems.Add(new ClaimLineItem
         {
+            TenantId = claim.TenantId,
             Id = Guid.NewGuid(), TripClaimId = claim.Id, ShiftId = shift.Id, SupportItemCode = itemCode ?? Item(ClaimDayType.Weekday).ItemNumber, DayType = ClaimDayType.Weekday,
             SupportsDeliveredFrom = shift.ServiceDate, SupportsDeliveredTo = shift.ServiceDate, Hours = 8m, UnitPrice = amount / 8m, TotalAmount = amount, Status = ClaimLineItemStatus.Draft,
         });
@@ -277,6 +278,7 @@ internal sealed class LedgerKit : IDisposable
     {
         var line = new ClaimLineItem
         {
+            TenantId = claim.TenantId,
             Id = Guid.NewGuid(), TripClaimId = claim.Id, ShiftId = shift.Id, SupportItemCode = itemCode ?? Item(ClaimDayType.Weekday).ItemNumber, DayType = ClaimDayType.Weekday,
             SupportsDeliveredFrom = date ?? shift.ServiceDate, SupportsDeliveredTo = date ?? shift.ServiceDate, Hours = 8m, UnitPrice = amount / 8m, TotalAmount = amount, Status = status, PaidAmount = paid,
         };
@@ -288,9 +290,10 @@ internal sealed class LedgerKit : IDisposable
     /// <summary>A trip claim with one line for a booking.</summary>
     public (TripClaim Claim, ClaimLineItem Line) SeedTripClaim(TripInstance trip, ParticipantBooking booking, TripClaimStatus status, decimal amount, DateOnly from, string? itemCode = null)
     {
-        var claim = new TripClaim { Id = Guid.NewGuid(), Kind = ClaimKind.Trip, TripInstanceId = trip.Id, Status = status, ClaimReference = $"TC-{Guid.NewGuid():N}"[..20], TotalAmount = amount };
+        var claim = new TripClaim { TenantId = trip.TenantId, Id = Guid.NewGuid(), Kind = ClaimKind.Trip, TripInstanceId = trip.Id, Status = status, ClaimReference = $"TC-{Guid.NewGuid():N}"[..20], TotalAmount = amount };
         var line = new ClaimLineItem
         {
+            TenantId = claim.TenantId,
             Id = Guid.NewGuid(), TripClaimId = claim.Id, ParticipantBookingId = booking.Id, SupportItemCode = itemCode ?? Item(ClaimDayType.Weekday).ItemNumber, DayType = ClaimDayType.Weekday,
             SupportsDeliveredFrom = from, SupportsDeliveredTo = from, Hours = 8m, UnitPrice = amount / 8m, TotalAmount = amount, Status = ClaimLineItemStatus.Draft,
         };

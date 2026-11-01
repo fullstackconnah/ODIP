@@ -58,11 +58,6 @@ public sealed partial class ClaimBatchService(OdipDbContext db, BprCsvService bp
         foreach (var id in claimIds.Distinct().Order()) await RosterGenerationLock.AcquireAsync(db, id, ct, scope: ClaimScope);
     }
 
-    /// <summary>The claims of one organisation. TripClaim has no query filter, so the tenant is applied here, by its trip or its participant.</summary>
-    private IQueryable<TripClaim> ClaimsOf(Guid tenantId) =>
-        db.TripClaims.Where(c => db.TripInstances.Any(i => i.Id == c.TripInstanceId && i.TenantId == tenantId)
-            || db.Participants.Any(p => p.Id == c.ParticipantId && p.TenantId == tenantId));
-
     private void Audit(string entityType, Guid entityId, string field, string? oldValue, string? newValue, ClaimsPrincipal user, AuditAction action = AuditAction.Updated)
     {
         var row = SettingChangeAudit.ForFieldChange(entityType, entityId, field, oldValue, newValue, user);
@@ -93,7 +88,7 @@ public sealed partial class ClaimBatchService(OdipDbContext db, BprCsvService bp
         Guid t, ClaimsPrincipal user, IReadOnlyCollection<Guid> lineIds, IReadOnlyCollection<Guid> claimIds, IReadOnlySet<Guid> confirmed, CancellationToken ct)
     {
         // Expansion before the claim locks is read-only and untracked; everything is read again after them.
-        var scoped = ClaimsOf(t);
+        var scoped = db.TripClaims.Where(c => c.TenantId == t);
         var named = await db.ClaimLineItems.AsNoTracking().Where(l => lineIds.Contains(l.Id) && scoped.Any(c => c.Id == l.TripClaimId)).Select(l => new { l.Id, l.TripClaimId }).ToListAsync(ct);
         if (named.Count != lineIds.Count) return Fail<ClaimBatch>(404, NotFound);
         var namedClaims = await scoped.AsNoTracking().Where(c => claimIds.Contains(c.Id)).Select(c => c.Id).ToListAsync(ct);
@@ -218,7 +213,7 @@ public sealed partial class ClaimBatchService(OdipDbContext db, BprCsvService bp
 
     public Task<BatchResult<BuiltFile>> DownloadForClaimAsync(Guid t, ClaimsPrincipal user, Guid claimId, CancellationToken ct) => Guard(async () =>
     {
-        if (!await ClaimsOf(t).AnyAsync(c => c.Id == claimId, ct)) return Fail<BuiltFile>(404, NotFound);
+        if (!await db.TripClaims.AnyAsync(c => c.Id == claimId && c.TenantId == t, ct)) return Fail<BuiltFile>(404, NotFound);
 
         await using var held = await LockBatchAsync(t, ct);
         var allIds = await db.ClaimLineItems.AsNoTracking().Where(l => l.TripClaimId == claimId).Select(l => l.Id).ToListAsync(ct);

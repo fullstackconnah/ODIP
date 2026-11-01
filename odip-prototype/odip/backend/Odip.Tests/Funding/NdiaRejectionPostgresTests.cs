@@ -61,13 +61,18 @@ public class NdiaRejectionPostgresTests : IClassFixture<PostgresFixture>
         await InsertLiveClaimAsync(connectionString, rejected, "TC-LIVE-3", TripClaimStatus.Rejected, 99.99m);
 
         // 2. The migration applies without error and keeps every claim as it was, with the two new columns empty: nothing is inferred for a claim rejected before this existed.
-        await migrator.MigrateAsync();
-        await using var after = PostgresFixture.NewContext(connectionString);
-        var claims = await after.TripClaims.AsNoTracking().OrderBy(c => c.ClaimReference).ToListAsync();
-        Assert.Equal(new[] { "TC-LIVE-1", "TC-LIVE-2", "TC-LIVE-3" }, claims.Select(c => c.ClaimReference));
-        Assert.Equal(new[] { TripClaimStatus.Submitted, TripClaimStatus.Paid, TripClaimStatus.Rejected }, claims.Select(c => c.Status));
-        Assert.Equal(new[] { 1250.5m, 400m, 99.99m }, claims.Select(c => c.TotalAmount));
-        Assert.All(claims, c => { Assert.Null(c.RejectionCode); Assert.Null(c.RejectedDate); });
+        // Only to this migration: these claims have no trip or participant, which the later ClaimTenantId guard refuses, and the model now has columns this schema lacks, so the rows are read raw.
+        await migrator.MigrateAsync(mine);
+        await using var conn = new NpgsqlConnection(connectionString);
+        await conn.OpenAsync();
+        await using var select = new NpgsqlCommand("SELECT \"ClaimReference\", \"Status\", \"TotalAmount\", \"RejectionCode\", \"RejectedDate\" FROM \"TripClaims\" ORDER BY \"ClaimReference\"", conn);
+        await using var reader = await select.ExecuteReaderAsync();
+        var claims = new List<(string Reference, int Status, decimal Total, bool NoCode, bool NoDate)>();
+        while (await reader.ReadAsync()) claims.Add((reader.GetString(0), reader.GetInt32(1), reader.GetDecimal(2), reader.IsDBNull(3), reader.IsDBNull(4)));
+        Assert.Equal(new[] { "TC-LIVE-1", "TC-LIVE-2", "TC-LIVE-3" }, claims.Select(c => c.Reference));
+        Assert.Equal(new[] { (int)TripClaimStatus.Submitted, (int)TripClaimStatus.Paid, (int)TripClaimStatus.Rejected }, claims.Select(c => c.Status));
+        Assert.Equal(new[] { 1250.5m, 400m, 99.99m }, claims.Select(c => c.Total));
+        Assert.All(claims, c => { Assert.True(c.NoCode); Assert.True(c.NoDate); });
     }
 
     /// <summary>A migrated scratch database and a kit over a tenant of it (a provider in NSW, the community access catalogue in). Pass the connection string to get a second organisation of the same database.</summary>

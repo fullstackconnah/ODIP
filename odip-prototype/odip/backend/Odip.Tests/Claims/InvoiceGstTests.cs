@@ -117,11 +117,12 @@ public class InvoiceGstTests
         var participant = new Participant { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Jane", LastName = "Doe", NdisNumber = "43100001234", PlanType = PlanType.SelfManaged };
         var trip = new TripInstance { Id = Guid.NewGuid(), TenantId = tenantId, TripName = "Test Trip", StartDate = new DateOnly(2026, 1, 5), DurationDays = 1 };
         var booking = new ParticipantBooking { Id = Guid.NewGuid(), TripInstanceId = trip.Id, ParticipantId = participant.Id, Participant = participant, BookingStatus = BookingStatus.Confirmed, BookingDate = new DateOnly(2026, 1, 1) };
-        var claim = new TripClaim { Id = Guid.NewGuid(), TripInstanceId = trip.Id, Status = TripClaimStatus.Draft, ClaimReference = "CLM-001" };
+        var claim = new TripClaim { TenantId = trip.TenantId, Id = Guid.NewGuid(), TripInstanceId = trip.Id, Status = TripClaimStatus.Draft, ClaimReference = "CLM-001" };
         db.AddRange(participant, trip, booking, claim);
         foreach (var (amount, code) in lines)
             db.ClaimLineItems.Add(new ClaimLineItem
             {
+                TenantId = claim.TenantId,
                 Id = Guid.NewGuid(), TripClaimId = claim.Id, ParticipantBookingId = booking.Id, SupportItemCode = "01_002_0117_1_1", DayType = ClaimDayType.Weekday,
                 SupportsDeliveredFrom = new DateOnly(2026, 1, 5), SupportsDeliveredTo = new DateOnly(2026, 1, 5), Hours = 1m, UnitPrice = amount, TotalAmount = amount, GSTCode = code,
             });

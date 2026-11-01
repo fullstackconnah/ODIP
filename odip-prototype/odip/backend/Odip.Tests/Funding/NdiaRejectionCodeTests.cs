@@ -65,7 +65,7 @@ public class NdiaRejectionCodeTests
         {
             // A claim belongs to its organisation through its participant, which is what the claim endpoints now check.
             var participant = new Participant { Id = Guid.NewGuid(), TenantId = TenantA, FirstName = "Ada", LastName = "Claim" };
-            var claim = new TripClaim { Id = Guid.NewGuid(), Kind = ClaimKind.Shift, ParticipantId = participant.Id, Status = status, ClaimReference = $"TC-{Guid.NewGuid():N}"[..20], TotalAmount = 400m };
+            var claim = new TripClaim { TenantId = participant.TenantId, Id = Guid.NewGuid(), Kind = ClaimKind.Shift, ParticipantId = participant.Id, Status = status, ClaimReference = $"TC-{Guid.NewGuid():N}"[..20], TotalAmount = 400m };
             Db.Participants.Add(participant);
             Db.TripClaims.Add(claim);
             Db.SaveChanges();
@@ -235,6 +235,26 @@ public class NdiaRejectionCodeTests
         Assert.Equal(TripClaimStatus.Submitted, (await kit.ReloadAsync(claim.Id)).Status);
     }
 
+    // ── The reader's own tenant term ────────────────────────────────────────
+
+    [Fact]
+    public async Task RejectedLines_LineStampedWithAnotherTenant_IsNotRead()
+    {
+        // An unscoped SuperAdmin context has the query filter off, so only the reader's own TenantId term can keep the contrived mismatch out.
+        using var db = Odip.Tests.Support.TestDb.Create();
+        var participant = new Participant { Id = Guid.NewGuid(), TenantId = TenantA, FirstName = "Ada", LastName = "Claim" };
+        var shift = new Shift { Id = Guid.NewGuid(), TenantId = TenantA, ParticipantId = participant.Id, ServiceDate = new DateOnly(2026, 10, 1), StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Status = ShiftStatus.Completed };
+        var claim = new TripClaim { Id = Guid.NewGuid(), TenantId = TenantA, Kind = ClaimKind.Shift, ParticipantId = participant.Id, Status = TripClaimStatus.Rejected, RejectionCode = "V17", RejectedDate = new DateTime(2026, 10, 2, 0, 0, 0, DateTimeKind.Utc), ClaimReference = "TC-NDIA-1" };
+        ClaimLineItem Line(Guid tenant) => new() { Id = Guid.NewGuid(), TenantId = tenant, TripClaimId = claim.Id, ShiftId = shift.Id, SupportItemCode = "04_104_0125_6_1", DayType = ClaimDayType.Weekday, SupportsDeliveredFrom = shift.ServiceDate, SupportsDeliveredTo = shift.ServiceDate };
+        var own = Line(TenantA);
+        db.AddRange(participant, shift, claim, own, Line(Guid.NewGuid()));
+        await db.SaveChangesAsync();
+
+        var rows = await new NdiaRejectionReader(db).RejectedLinesQuery(TenantA, [participant.Id]).ToListAsync();
+
+        Assert.Single(rows);
+    }
+
     // ── The audit row ───────────────────────────────────────────────────────
 
     [Fact]
@@ -262,7 +282,7 @@ public class NdiaRejectionCodeTests
         var claim = kit.SeedClaim();
         var shift = new Shift { Id = Guid.NewGuid(), TenantId = TenantA, ParticipantId = Guid.NewGuid(), ServiceDate = new DateOnly(2026, 10, 1), StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), Status = ShiftStatus.Completed };
         kit.Db.Shifts.Add(shift);
-        var line = new ClaimLineItem { Id = Guid.NewGuid(), TripClaimId = claim.Id, ShiftId = shift.Id, SupportItemCode = "04_104_0125_6_1", DayType = ClaimDayType.Weekday, SupportsDeliveredFrom = shift.ServiceDate, SupportsDeliveredTo = shift.ServiceDate, Hours = 8m, UnitPrice = 50m, TotalAmount = 400m };
+        var line = new ClaimLineItem { TenantId = claim.TenantId, Id = Guid.NewGuid(), TripClaimId = claim.Id, ShiftId = shift.Id, SupportItemCode = "04_104_0125_6_1", DayType = ClaimDayType.Weekday, SupportsDeliveredFrom = shift.ServiceDate, SupportsDeliveredTo = shift.ServiceDate, Hours = 8m, UnitPrice = 50m, TotalAmount = 400m };
         kit.Db.ClaimLineItems.Add(line);
         await kit.Db.SaveChangesAsync();
 

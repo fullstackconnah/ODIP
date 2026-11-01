@@ -65,7 +65,7 @@ public class DataExportWriterTests
         db.AddRange(participant, trip, medication,
             new MedicationAdministration { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantMedicationId = medication.Id, ParticipantId = participant.Id, ScheduledAt = new DateTime(2026, 10, 3, 8, 0, 0), AdministeredAt = new DateTime(2026, 10, 2, 22, 5, 0), RecordedByName = "Jordan Lee" },
             new Shift { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participant.Id, ServiceDate = new DateOnly(2026, 10, 3), StartTime = new TimeOnly(8, 0), EndTime = new TimeOnly(16, 30) },
-            new TripClaim { Id = Guid.NewGuid(), Kind = ClaimKind.Trip, TripInstanceId = trip.Id, ClaimReference = "TC-ADJUSTMENT", TotalAmount = -12.50m },
+            new TripClaim { TenantId = trip.TenantId, Id = Guid.NewGuid(), Kind = ClaimKind.Trip, TripInstanceId = trip.Id, ClaimReference = "TC-ADJUSTMENT", TotalAmount = -12.50m },
             new ParticipantNote { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participant.Id, Title = "Line one, \"quoted\"\r\nline two", Description = "=HYPERLINK(\"http://evil\",\"x\")", CreatedByName = "Jordan Lee" });
         await db.SaveChangesAsync();
 

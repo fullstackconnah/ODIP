@@ -16,6 +16,13 @@ public class TripClaim
 {
     public Guid Id { get; set; }
 
+    /// <summary>
+    /// The organisation the claim belongs to: its trip's (Trip claim) or its participant's (Shift claim). Set by its writer from the parent it already loaded; the tenant query filter hides a null row from everyone but a SuperAdmin with no organisation chosen.
+    /// Not an <see cref="Interfaces.ITenantEntity"/>, whose TenantId is not nullable.
+    /// </summary>
+    // shortcut: nullable so the previous image, whose INSERTs leave it out, still works after a rollback (expand). Contract PR: re-run the backfill for any null, then make it NOT NULL and the entity an ITenantEntity.
+    public Guid? TenantId { get; set; }
+
     public ClaimKind Kind { get; set; } = ClaimKind.Trip;
 
     /// <summary>Set for Kind == Trip; null for Kind == Shift.</summary>

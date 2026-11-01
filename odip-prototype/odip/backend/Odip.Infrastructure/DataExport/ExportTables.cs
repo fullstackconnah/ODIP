@@ -30,7 +30,7 @@ public sealed record ExportColumn(string Name, bool WallClock, Func<object, stri
 /// - a table with no TenantId through its tenant-owned parent, with the id in the parent's subquery too. A SuperAdmin context has the filter off,
 ///   and so would any future caller.
 /// The parents follow the house rules:
-/// - a claim is its trip's or its participant's (ClaimsController.TenantClaims);
+/// - a claim and its lines by their own TenantId (nullable until the contract PR, so a row with none is in no export);
 /// - an incident is the reporting user's (IncidentsController.TenantIncidents);
 /// - a booking, and everything else on a trip, is the trip's.
 /// ExportTablesTests fails on any entity in the model that is in neither list, so a new table can't be missed or leaked without a decision.
@@ -116,13 +116,6 @@ public static class ExportTables
     private static IQueryable<User> Staff(OdipDbContext db, Guid t) => db.Users.Where(u => u.TenantId == t);
     private static IQueryable<TripInstance> Trips(OdipDbContext db, Guid t) => db.TripInstances.Where(x => x.TenantId == t);
     private static IQueryable<ServiceAgreementDraft> Drafts(OdipDbContext db, Guid t) => db.ServiceAgreementDrafts.Where(d => d.TenantId == t);
-
-    private static IQueryable<TripClaim> Claims(OdipDbContext db, Guid t)
-    {
-        var trips = Trips(db, t);
-        var people = Participants(db, t);
-        return db.TripClaims.Where(c => trips.Any(x => x.Id == c.TripInstanceId) || people.Any(p => p.Id == c.ParticipantId));
-    }
 
     private static IQueryable<IncidentReport> Incidents(OdipDbContext db, Guid t)
     {
@@ -246,9 +239,9 @@ public static class ExportTables
             (db, t) => { var incidents = Incidents(db, t); return db.IncidentWitnesses.Where(w => incidents.Any(x => x.Id == w.IncidentReportId)); }),
 
         // Claims
-        Via("claims.csv", "Claims: reference, period, status, totals and dates.", (db, t) => Claims(db, t)),
+        Via("claims.csv", "Claims: reference, period, status, totals and dates.", (db, t) => db.TripClaims.Where(c => c.TenantId == t)),
         Via("claim-lines.csv", "The lines of each claim: support item, dates, hours and price.",
-            (db, t) => { var claims = Claims(db, t); return db.ClaimLineItems.Where(l => claims.Any(c => c.Id == l.TripClaimId)); }),
+            (db, t) => db.ClaimLineItems.Where(l => l.TenantId == t)),
         Own<Invoice>("invoices.csv", "Numbered invoices and credit notes as issued: payer, seller and bank details, totals, and voids, including those whose claim was deleted."),
         Own<InvoiceLine>("invoice-lines.csv", "The lines of each invoice and credit note, as issued."),
         Own<ClaimBatch>("claim-batches.csv", "NDIA claim files: name, status, who built and uploaded them, and when. The file itself is downloaded again from Claims."),

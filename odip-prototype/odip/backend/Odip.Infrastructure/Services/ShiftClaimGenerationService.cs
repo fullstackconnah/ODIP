@@ -106,6 +106,7 @@ public class ShiftClaimGenerationService
         var claim = new TripClaim
         {
             Id = claimId,
+            TenantId = participant.TenantId,
             Kind = ClaimKind.Shift,
             ParticipantId = participantId,
             PeriodFrom = from,
@@ -120,6 +121,7 @@ public class ShiftClaimGenerationService
         {
             Id = Guid.NewGuid(),
             TripClaimId = claim.Id,
+            TenantId = claim.TenantId,
             ShiftId = l.Shift.Id,
             ParticipantBookingId = null,
             SupportItemCode = l.CatalogueItem.ItemNumber,

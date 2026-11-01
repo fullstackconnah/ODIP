@@ -101,7 +101,7 @@ public sealed partial class ClaimBatchService
     /// <summary>The hub's three lists. The NDIS number is read for the checks and never leaves the server.</summary>
     public async Task<HubLinesDto> HubAsync(Guid t, CancellationToken ct)
     {
-        var scoped = ClaimsOf(t).AsNoTracking();
+        var scoped = db.TripClaims.Where(c => c.TenantId == t).AsNoTracking();
         var open = new[] { TripClaimStatus.Draft, TripClaimStatus.Ready };
         var readyIds = await db.ClaimLineItems.AsNoTracking()
             .Where(l => l.Status == ClaimLineItemStatus.Draft && scoped.Any(c => c.Id == l.TripClaimId && open.Contains(c.Status))).Select(l => l.Id).Take(MaxRows).ToListAsync(ct);

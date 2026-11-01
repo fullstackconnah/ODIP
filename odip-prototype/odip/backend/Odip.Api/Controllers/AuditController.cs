@@ -75,9 +75,8 @@ public class AuditController : ControllerBase
             "ParticipantMedication" => await _db.ParticipantMedications.AnyAsync(e => e.Id == entityId, ct),
             "MedicationAdministration" => await _db.MedicationAdministrations.AnyAsync(e => e.Id == entityId, ct),
             "ParticipantNote" => await _db.ParticipantNotes.AnyAsync(e => e.Id == entityId, ct),
-            // TripClaim has no organisation column or filter: a claim is the caller's when its trip (Trip claim) or participant (Shift claim) is, and a line is when its claim is.
-            "TripClaim" => await _db.TripClaims.AnyAsync(e => e.Id == entityId && (_db.TripInstances.Any(t => t.Id == e.TripInstanceId) || _db.Participants.Any(p => p.Id == e.ParticipantId)), ct),
-            "ClaimLineItem" => await _db.ClaimLineItems.AnyAsync(e => e.Id == entityId && _db.TripClaims.Any(c => c.Id == e.TripClaimId && (_db.TripInstances.Any(t => t.Id == c.TripInstanceId) || _db.Participants.Any(p => p.Id == c.ParticipantId))), ct),
+            "TripClaim" => await _db.TripClaims.AnyAsync(e => e.Id == entityId, ct),
+            "ClaimLineItem" => await _db.ClaimLineItems.AnyAsync(e => e.Id == entityId, ct),
             "Complaint" => await _db.Complaints.AnyAsync(e => e.Id == entityId, ct),
             _ => false,
         };

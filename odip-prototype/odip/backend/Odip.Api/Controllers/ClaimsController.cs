@@ -47,13 +47,6 @@ public class ClaimsController : ControllerBase
         _invoiceService = invoiceService;
     }
 
-    /// <summary>
-    /// The caller's own claims. TripClaim has no organisation column and no query filter, so a claim is theirs only if the trip (a Trip claim) or the participant (a Shift claim) it belongs to
-    /// is: both sets are tenant-filtered. Every read or write of a claim by id starts here, so another organisation's claim is "not found".
-    /// </summary>
-    private IQueryable<TripClaim> TenantClaims() =>
-        _db.TripClaims.Where(c => _db.TripInstances.Any(t => t.Id == c.TripInstanceId) || _db.Participants.Any(p => p.Id == c.ParticipantId));
-
     // POST /api/v1/trips/{tripId}/claims/preview
     [HttpPost("trips/{tripId:guid}/claims/preview")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
@@ -123,10 +116,7 @@ public class ClaimsController : ControllerBase
 
     // GET /api/v1/participants/{participantId}/claims?kind=
     // Shift-completion design spec §2 (PR 3) — mirrors GetClaimsForTrip above but filtered by
-    // ParticipantId instead of TripInstanceId. TripClaim is NOT ITenantEntity (standing ruling),
-    // so cross-tenant safety is enforced by gating on the tenant-filtered Participants set
-    // first: a participantId that doesn't resolve under the caller's tenant returns an empty
-    // list rather than leaking another tenant's claims.
+    // ParticipantId instead of TripInstanceId. The participant gate keeps another organisation's participant id an empty list rather than a 404; the claims themselves are tenant-filtered.
     [HttpGet("participants/{participantId:guid}/claims")]
     public async Task<ActionResult<ApiResponse<List<TripClaimListDto>>>> GetClaimsForParticipant(
         Guid participantId, [FromQuery] ClaimKind? kind, CancellationToken ct)
@@ -212,7 +202,7 @@ public class ClaimsController : ControllerBase
     [HttpGet("claims/{claimId:guid}")]
     public async Task<ActionResult<ApiResponse<TripClaimDetailDto>>> GetClaim(Guid claimId, CancellationToken ct)
     {
-        var c = await TenantClaims()
+        var c = await _db.TripClaims
             .Include(x => x.TripInstance)
             .Include(x => x.AuthorisedByUser)
             .Include(x => x.LineItems)
@@ -271,14 +261,14 @@ public class ClaimsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<bool>>> UpdateClaim(Guid claimId, [FromBody] UpdateClaimDto dto, CancellationToken ct)
     {
-        if (!await TenantClaims().AnyAsync(x => x.Id == claimId, ct)) return NotFound(ApiResponse<bool>.Fail("Claim not found"));
+        if (!await _db.TripClaims.AnyAsync(x => x.Id == claimId, ct)) return NotFound(ApiResponse<bool>.Fail("Claim not found"));
 
         // A status change takes the same per-claim lock as a line edit, so it cannot cross one (a line changed after the claim was submitted) or another status change.
         var held = await LockClaimAsync(claimId, ct);
         if (held == null) return ClaimEditBusy();
         await using var _ = held;
 
-        var c = await TenantClaims().FirstOrDefaultAsync(x => x.Id == claimId, ct);
+        var c = await _db.TripClaims.FirstOrDefaultAsync(x => x.Id == claimId, ct);
         if (c == null) return NotFound(ApiResponse<bool>.Fail("Claim not found"));
 
         // A status moves along the paths in CanMove only (the page says "This cannot be undone"), checked before anything is changed, so a refusal writes nothing.
@@ -356,7 +346,7 @@ public class ClaimsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<bool>>> UpdateLineItem(Guid claimId, Guid id, [FromBody] UpdateClaimLineItemDto dto, CancellationToken ct)
     {
-        if (!await TenantClaims().AnyAsync(x => x.Id == claimId, ct)) return NotFound(ApiResponse<bool>.Fail("Claim not found"));
+        if (!await _db.TripClaims.AnyAsync(x => x.Id == claimId, ct)) return NotFound(ApiResponse<bool>.Fail("Claim not found"));
 
         // Hours and price are stored to the cent (numeric(18,2)): a third decimal would store a line whose hours x price no longer equals its total.
         if ((dto.Hours is { } h && decimal.Round(h, 2) != h) || (dto.UnitPrice is { } p && decimal.Round(p, 2) != p))
@@ -430,13 +420,13 @@ public class ClaimsController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<bool>>> DeleteClaim(Guid claimId, CancellationToken ct)
     {
-        if (!await TenantClaims().AnyAsync(x => x.Id == claimId, ct)) return NotFound(ApiResponse<bool>.Fail("Claim not found"));
+        if (!await _db.TripClaims.AnyAsync(x => x.Id == claimId, ct)) return NotFound(ApiResponse<bool>.Fail("Claim not found"));
 
         var held = await LockClaimAsync(claimId, ct);
         if (held == null) return ClaimEditBusy();
         await using var _ = held;
 
-        var claim = await TenantClaims()
+        var claim = await _db.TripClaims
             .Include(c => c.LineItems)
             .FirstOrDefaultAsync(x => x.Id == claimId, ct);
 
@@ -501,7 +491,7 @@ public class ClaimsController : ControllerBase
     [HttpGet("claims/{claimId:guid}/invoices/{groupId:guid}")]
     public async Task<IActionResult> DownloadInvoice(Guid claimId, Guid groupId, CancellationToken ct)
     {
-        if (!await TenantClaims().AnyAsync(x => x.Id == claimId, ct)) return NotFound(ApiResponse<bool>.Fail("Claim not found"));
+        if (!await _db.TripClaims.AnyAsync(x => x.Id == claimId, ct)) return NotFound(ApiResponse<bool>.Fail("Claim not found"));
 
         try
         {
@@ -518,7 +508,7 @@ public class ClaimsController : ControllerBase
     [HttpGet("claims/{claimId:guid}/invoices")]
     public async Task<ActionResult<ApiResponse<ClaimInvoicesDto>>> GetClaimInvoices(Guid claimId, CancellationToken ct)
     {
-        if (!await TenantClaims().AnyAsync(x => x.Id == claimId, ct)) return NotFound(ApiResponse<ClaimInvoicesDto>.Fail("Claim not found"));
+        if (!await _db.TripClaims.AnyAsync(x => x.Id == claimId, ct)) return NotFound(ApiResponse<ClaimInvoicesDto>.Fail("Claim not found"));
         return Ok(ApiResponse<ClaimInvoicesDto>.Ok(await _invoiceService.ClaimInvoicesAsync(claimId, ct)));
     }
 
@@ -528,7 +518,7 @@ public class ClaimsController : ControllerBase
     {
         var ids = dto.ClaimIds.Distinct().ToList();
         if (ids.Count is < 1 or > 100) return BadRequest(ApiResponse<SubmitPreviewDto>.Fail("Choose between 1 and 100 claims."));
-        if (await TenantClaims().CountAsync(c => ids.Contains(c.Id), ct) != ids.Count) return NotFound(ApiResponse<SubmitPreviewDto>.Fail("Claim not found"));
+        if (await _db.TripClaims.CountAsync(c => ids.Contains(c.Id), ct) != ids.Count) return NotFound(ApiResponse<SubmitPreviewDto>.Fail("Claim not found"));
 
         var claims = new List<ClaimSubmitPreviewDto>();
         foreach (var id in ids) claims.Add(await _invoiceService.SubmitPreviewAsync(id, ct));

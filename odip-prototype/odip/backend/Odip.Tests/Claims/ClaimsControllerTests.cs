@@ -90,6 +90,7 @@ public class ClaimsControllerTests
 
         var claim = new TripClaim
         {
+            TenantId = trip.TenantId,
             Id = Guid.NewGuid(),
             TripInstanceId = trip.Id,
             Status = TripClaimStatus.Draft,
@@ -99,6 +100,7 @@ public class ClaimsControllerTests
 
         db.ClaimLineItems.Add(new ClaimLineItem
         {
+            TenantId = claim.TenantId,
             Id = Guid.NewGuid(),
             TripClaimId = claim.Id,
             ParticipantBookingId = booking.Id,
@@ -144,6 +146,7 @@ public class ClaimsControllerTests
 
         var claim = new TripClaim
         {
+            TenantId = participant.TenantId,
             Id = Guid.NewGuid(), Kind = ClaimKind.Shift, ParticipantId = participant.Id,
             PeriodFrom = shift.ServiceDate, PeriodTo = shift.ServiceDate,
             Status = TripClaimStatus.Draft, ClaimReference = "TC-43199991111-20260907",
@@ -152,6 +155,7 @@ public class ClaimsControllerTests
 
         var line = new ClaimLineItem
         {
+            TenantId = claim.TenantId,
             Id = Guid.NewGuid(), TripClaimId = claim.Id, ShiftId = shift.Id, ParticipantBookingId = null,
             SupportItemCode = "04_SHIFT", DayType = ClaimDayType.Weekday,
             SupportsDeliveredFrom = shift.ServiceDate, SupportsDeliveredTo = shift.ServiceDate,
@@ -215,7 +219,7 @@ public class ClaimsControllerTests
         db.TripInstances.Add(trip);
         var booking = new ParticipantBooking { Id = Guid.NewGuid(), TripInstanceId = trip.Id, ParticipantId = participant.Id, BookingStatus = BookingStatus.Confirmed, BookingDate = new DateOnly(2026, 1, 1) };
         db.ParticipantBookings.Add(booking);
-        var tripClaim = new TripClaim { Id = Guid.NewGuid(), Kind = ClaimKind.Trip, TripInstanceId = trip.Id, Status = TripClaimStatus.Draft, ClaimReference = "TC-TRIP-20260101" };
+        var tripClaim = new TripClaim { TenantId = trip.TenantId, Id = Guid.NewGuid(), Kind = ClaimKind.Trip, TripInstanceId = trip.Id, Status = TripClaimStatus.Draft, ClaimReference = "TC-TRIP-20260101" };
         db.TripClaims.Add(tripClaim);
         db.SaveChanges();
 
@@ -280,12 +284,14 @@ public class ClaimsControllerTests
 
         var tripClaim = new TripClaim
         {
+            TenantId = trip.TenantId,
             Id = Guid.NewGuid(), Kind = ClaimKind.Trip, TripInstanceId = trip.Id,
             Status = TripClaimStatus.Draft, ClaimReference = "TC-TRIP-LINKED",
         };
         db.TripClaims.Add(tripClaim);
         db.ClaimLineItems.Add(new ClaimLineItem
         {
+            TenantId = tripClaim.TenantId,
             Id = Guid.NewGuid(), TripClaimId = tripClaim.Id, ParticipantBookingId = booking.Id,
             SupportItemCode = "01_002_0117_1_1", DayType = ClaimDayType.Weekday,
             SupportsDeliveredFrom = new DateOnly(2026, 2, 1), SupportsDeliveredTo = new DateOnly(2026, 2, 1),
@@ -321,10 +327,11 @@ public class ClaimsControllerTests
             BookingStatus = BookingStatus.Confirmed, BookingDate = new DateOnly(2026, 1, 1),
         };
         db.ParticipantBookings.Add(booking);
-        var tripClaim = new TripClaim { Id = Guid.NewGuid(), Kind = ClaimKind.Trip, TripInstanceId = trip.Id, Status = TripClaimStatus.Draft, ClaimReference = "TC-TRIP-2" };
+        var tripClaim = new TripClaim { TenantId = trip.TenantId, Id = Guid.NewGuid(), Kind = ClaimKind.Trip, TripInstanceId = trip.Id, Status = TripClaimStatus.Draft, ClaimReference = "TC-TRIP-2" };
         db.TripClaims.Add(tripClaim);
         db.ClaimLineItems.Add(new ClaimLineItem
         {
+            TenantId = tripClaim.TenantId,
             Id = Guid.NewGuid(), TripClaimId = tripClaim.Id, ParticipantBookingId = booking.Id,
             SupportItemCode = "01_002_0117_1_1", DayType = ClaimDayType.Weekday,
             SupportsDeliveredFrom = new DateOnly(2026, 2, 1), SupportsDeliveredTo = new DateOnly(2026, 2, 1),
@@ -357,10 +364,11 @@ public class ClaimsControllerTests
             BookingStatus = BookingStatus.Confirmed, BookingDate = new DateOnly(2026, 1, 1),
         };
         db.ParticipantBookings.Add(bookingForB);
-        var tripClaim = new TripClaim { Id = Guid.NewGuid(), Kind = ClaimKind.Trip, TripInstanceId = trip.Id, Status = TripClaimStatus.Draft, ClaimReference = "TC-TRIP-3" };
+        var tripClaim = new TripClaim { TenantId = trip.TenantId, Id = Guid.NewGuid(), Kind = ClaimKind.Trip, TripInstanceId = trip.Id, Status = TripClaimStatus.Draft, ClaimReference = "TC-TRIP-3" };
         db.TripClaims.Add(tripClaim);
         db.ClaimLineItems.Add(new ClaimLineItem
         {
+            TenantId = tripClaim.TenantId,
             Id = Guid.NewGuid(), TripClaimId = tripClaim.Id, ParticipantBookingId = bookingForB.Id,
             SupportItemCode = "01_002_0117_1_1", DayType = ClaimDayType.Weekday,
             SupportsDeliveredFrom = new DateOnly(2026, 2, 1), SupportsDeliveredTo = new DateOnly(2026, 2, 1),

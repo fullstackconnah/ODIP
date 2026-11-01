@@ -101,11 +101,12 @@ internal sealed class InvoiceKit
     /// <summary>A trip claim with one line per entry: hours x price stored as the given 2dp total.</summary>
     public TripClaim TripClaim(TripInstance trip, TripClaimStatus status, params (ParticipantBooking Booking, decimal Hours, decimal Price, decimal Total, GSTCode Gst)[] lines)
     {
-        var claim = new TripClaim { Id = Guid.NewGuid(), Kind = ClaimKind.Trip, TripInstanceId = trip.Id, Status = status, ClaimReference = RandomReference(), TotalAmount = lines.Sum(l => l.Total) };
+        var claim = new TripClaim { TenantId = trip.TenantId, Id = Guid.NewGuid(), Kind = ClaimKind.Trip, TripInstanceId = trip.Id, Status = status, ClaimReference = RandomReference(), TotalAmount = lines.Sum(l => l.Total) };
         Db.TripClaims.Add(claim);
         foreach (var l in lines)
             Db.ClaimLineItems.Add(new ClaimLineItem
             {
+                TenantId = claim.TenantId,
                 Id = Guid.NewGuid(), TripClaimId = claim.Id, ParticipantBookingId = l.Booking.Id, SupportItemCode = "04_104_0125_6_1", DayType = ClaimDayType.Weekday,
                 SupportsDeliveredFrom = new DateOnly(2026, 10, 3), SupportsDeliveredTo = new DateOnly(2026, 10, 4), Hours = l.Hours, UnitPrice = l.Price, TotalAmount = l.Total, GSTCode = l.Gst,
             });
@@ -122,6 +123,7 @@ internal sealed class InvoiceKit
     {
         var claim = new TripClaim
         {
+            TenantId = participant.TenantId,
             Id = Guid.NewGuid(), Kind = ClaimKind.Shift, ParticipantId = participant.Id, PeriodFrom = new DateOnly(2026, 10, 1), PeriodTo = new DateOnly(2026, 10, 14),
             Status = status, ClaimReference = RandomReference(), TotalAmount = totals.Sum(),
         };
@@ -129,6 +131,7 @@ internal sealed class InvoiceKit
         foreach (var total in totals)
             Db.ClaimLineItems.Add(new ClaimLineItem
             {
+                TenantId = claim.TenantId,
                 Id = Guid.NewGuid(), TripClaimId = claim.Id, ShiftId = Guid.NewGuid(), SupportItemCode = "04_104_0125_6_1", DayType = ClaimDayType.Weekday,
                 SupportsDeliveredFrom = new DateOnly(2026, 10, 2), SupportsDeliveredTo = new DateOnly(2026, 10, 2), Hours = 1m, UnitPrice = total, TotalAmount = total, GSTCode = GSTCode.P2,
             });

@@ -53,9 +53,10 @@ public class BudgetLedgerSqlTests
         var service = Service(out var db);
         using var _ = db;
 
-        var sql = service.ClaimLinesQuery(Ids, From, To).ToQueryString();
+        var sql = service.ClaimLinesQuery(Guid.NewGuid(), Ids, From, To).ToQueryString();
 
         Assert.Contains("\"ClaimLineItems\"", sql);
+        Assert.Contains("\"TenantId\" =", sql);               // the organisation's own lines only
         Assert.Contains("\"TripClaims\"", sql);
         Assert.Contains("\"Shifts\"", sql);                 // joined: a line has no participant of its own
         Assert.Contains("\"ParticipantBookings\"", sql);

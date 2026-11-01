@@ -571,6 +571,28 @@ public class ClaimGenerationServiceTests
     }
 
     [Fact]
+    public async Task GenerateDraftClaim_ByAnUnscopedSuperAdmin_StampsTheTripsOrganisation_OnTheClaimAndEveryLine()
+    {
+        using var db = CreateDb();
+        var group = SeedActivityGroup(db);
+        SeedProviderSettings(db);
+        SeedCatalogueItem(db, group.Id, ClaimDayType.Weekday, false, vicPrice: 50m);
+        var participant = CreateParticipant();
+        db.Participants.Add(participant);
+        var trip = SeedCompletedTrip(db, new DateOnly(2026, 1, 5), 2, participant,
+            activityGroupId: group.Id, activeHoursPerDay: 8m);
+        await db.SaveChangesAsync();
+
+        var claim = await new ClaimGenerationService(db).GenerateDraftClaimAsync(trip.Id);
+
+        Assert.Equal(trip.TenantId, claim.TenantId);
+        Assert.NotNull(claim.TenantId);
+        var lines = await db.ClaimLineItems.Where(l => l.TripClaimId == claim.Id).ToListAsync();
+        Assert.NotEmpty(lines);
+        Assert.All(lines, l => Assert.Equal(trip.TenantId, l.TenantId));
+    }
+
+    [Fact]
     public async Task GenerateDraftClaimAsync_NonCompletedTrip_ThrowsInvalidOperation()
     {
         using var db = CreateDb();
@@ -609,6 +631,7 @@ public class ClaimGenerationServiceTests
         // Pre-existing active (Draft) claim
         db.TripClaims.Add(new TripClaim
         {
+            TenantId = trip.TenantId,
             Id = Guid.NewGuid(),
             TripInstanceId = trip.Id,
             Status = TripClaimStatus.Draft,
@@ -640,6 +663,7 @@ public class ClaimGenerationServiceTests
         // Pre-existing rejected claim -- should not block new claim
         db.TripClaims.Add(new TripClaim
         {
+            TenantId = trip.TenantId,
             Id = Guid.NewGuid(),
             TripInstanceId = trip.Id,
             Status = TripClaimStatus.Rejected,

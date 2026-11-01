@@ -842,9 +842,7 @@ public class OdipDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
 
             // Shift-completion design spec §1 (PR 3) — Kind == Shift claims key off Participant
-            // + a date range instead of a TripInstance. TripClaim is deliberately NOT
-            // ITenantEntity (standing ruling); callers must scope through the tenant-filtered
-            // Participants/Shifts sets.
+            // + a date range instead of a TripInstance.
             entity.HasOne(e => e.Participant)
                 .WithMany()
                 .HasForeignKey(e => e.ParticipantId)
@@ -2378,6 +2376,16 @@ public class OdipDbContext : DbContext
             // Fail closed: a caller with no tenant must not match NULL-tenant rows (EF null semantics).
             .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || (e.TenantId != null && e.TenantId == _tenant.TenantId));
         modelBuilder.Entity<IncidentReport>()
+            .HasIndex(e => e.TenantId);
+
+        // Fail closed, as IncidentReport: TenantId is nullable until the contract PR.
+        modelBuilder.Entity<TripClaim>()
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || (e.TenantId != null && e.TenantId == _tenant.TenantId));
+        modelBuilder.Entity<TripClaim>()
+            .HasIndex(e => e.TenantId);
+        modelBuilder.Entity<ClaimLineItem>()
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || (e.TenantId != null && e.TenantId == _tenant.TenantId));
+        modelBuilder.Entity<ClaimLineItem>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<EmploymentHeroConnection>()

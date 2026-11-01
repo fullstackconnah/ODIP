@@ -12,6 +12,13 @@ namespace Odip.Domain.Entities;
 public class ClaimLineItem
 {
     public Guid Id { get; set; }
+
+    /// <summary>
+    /// The organisation the line belongs to: its claim's. Set by its writer from the parent it already loaded; the tenant query filter hides a null row from everyone but a SuperAdmin with no organisation chosen.
+    /// Not an <see cref="Interfaces.ITenantEntity"/>, whose TenantId is not nullable.
+    /// </summary>
+    // shortcut: nullable so the previous image, whose INSERTs leave it out, still works after a rollback (expand). Contract PR: re-run the backfill for any null, then make it NOT NULL and the entity an ITenantEntity.
+    public Guid? TenantId { get; set; }
     public Guid TripClaimId { get; set; }
     public TripClaim TripClaim { get; set; } = null!;
 

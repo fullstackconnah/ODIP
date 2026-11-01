@@ -109,10 +109,11 @@ internal static class DataExportTestKit
         admin.SaveChanges();
 
         var booking = new ParticipantBooking { Id = Guid.NewGuid(), TripInstanceId = trip.Id, ParticipantId = participant.Id, BookingStatus = BookingStatus.Confirmed, BookingDate = new DateOnly(2026, 1, 1) };
-        var tripClaim = new TripClaim { Id = Guid.NewGuid(), Kind = ClaimKind.Trip, TripInstanceId = trip.Id, ClaimReference = $"TC-{Guid.NewGuid():N}"[..20], TotalAmount = 480m };
-        var shiftClaim = new TripClaim { Id = Guid.NewGuid(), Kind = ClaimKind.Shift, ParticipantId = participant.Id, ClaimReference = $"SC-{Guid.NewGuid():N}"[..20], TotalAmount = 0m };
+        var tripClaim = new TripClaim { TenantId = trip.TenantId, Id = Guid.NewGuid(), Kind = ClaimKind.Trip, TripInstanceId = trip.Id, ClaimReference = $"TC-{Guid.NewGuid():N}"[..20], TotalAmount = 480m };
+        var shiftClaim = new TripClaim { TenantId = participant.TenantId, Id = Guid.NewGuid(), Kind = ClaimKind.Shift, ParticipantId = participant.Id, ClaimReference = $"SC-{Guid.NewGuid():N}"[..20], TotalAmount = 0m };
         var line = new ClaimLineItem
         {
+            TenantId = tripClaim.TenantId,
             Id = Guid.NewGuid(), TripClaimId = tripClaim.Id, ParticipantBookingId = booking.Id, SupportItemCode = "01_002_0117_1_1", DayType = ClaimDayType.Weekday,
             SupportsDeliveredFrom = new DateOnly(2026, 2, 1), SupportsDeliveredTo = new DateOnly(2026, 2, 1), Hours = 8m, UnitPrice = 60m, TotalAmount = 480m,
         };

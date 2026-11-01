@@ -88,9 +88,10 @@ public class UpcomingShiftsPostgresTests : IClassFixture<PostgresFixture>
                 o.Db.HandoverAcknowledgements.Add(new HandoverAcknowledgement { Id = Guid.NewGuid(), TenantId = o.TenantId, SourceCompletionId = source.Id, ShiftId = kept.Id, UserId = o.StaffId, AcknowledgedAt = at });
                 break;
             case "claim":
-                var claim = o.Db.TripClaims.Add(new TripClaim { Id = Guid.NewGuid(), Kind = ClaimKind.Shift, ParticipantId = o.ParticipantId, PeriodFrom = o.Today, PeriodTo = o.Today, Status = TripClaimStatus.Draft, ClaimReference = $"TC-{Guid.NewGuid():N}"[..20], TotalAmount = 100m }).Entity;
+                var claim = o.Db.TripClaims.Add(new TripClaim { Id = Guid.NewGuid(), TenantId = o.TenantId, Kind = ClaimKind.Shift, ParticipantId = o.ParticipantId, PeriodFrom = o.Today, PeriodTo = o.Today, Status = TripClaimStatus.Draft, ClaimReference = $"TC-{Guid.NewGuid():N}"[..20], TotalAmount = 100m }).Entity;
                 o.Db.ClaimLineItems.Add(new ClaimLineItem
                 {
+                    TenantId = claim.TenantId,
                     Id = Guid.NewGuid(), TripClaimId = claim.Id, ShiftId = kept.Id, SupportItemCode = "04_104_0125_6_1", DayType = ClaimDayType.Weekday, SupportsDeliveredFrom = o.Today, SupportsDeliveredTo = o.Today,
                     Hours = 1m, UnitPrice = 100m, TotalAmount = 100m, GSTCode = GSTCode.P2,
                 });

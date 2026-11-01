@@ -23,10 +23,10 @@ public class AgreementBulkApprovalTests
         Shift Done(DateOnly day) => new() { Id = Guid.NewGuid(), TenantId = TenantA, ParticipantId = f.ParticipantId, ShiftPatternId = pattern.Id, ServiceDate = day, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(13, 0), Status = ShiftStatus.Completed };
         var claimed = Done(s.AddDays(2));
         var unclaimed = Done(s.AddDays(5));
-        var claim = new TripClaim { Id = Guid.NewGuid(), Kind = ClaimKind.Shift, ParticipantId = f.ParticipantId, PeriodFrom = claimed.ServiceDate, PeriodTo = claimed.ServiceDate, ClaimReference = "TC-B15" };
+        var claim = new TripClaim { Id = Guid.NewGuid(), TenantId = TenantA, Kind = ClaimKind.Shift, ParticipantId = f.ParticipantId, PeriodFrom = claimed.ServiceDate, PeriodTo = claimed.ServiceDate, ClaimReference = "TC-B15" };
         f.Db.Shifts.AddRange(claimed, unclaimed);
         f.Db.TripClaims.Add(claim);
-        f.Db.ClaimLineItems.Add(new ClaimLineItem { Id = Guid.NewGuid(), TripClaimId = claim.Id, ShiftId = claimed.Id, SupportItemCode = "04_X", SupportsDeliveredFrom = claimed.ServiceDate, SupportsDeliveredTo = claimed.ServiceDate, Hours = 4, UnitPrice = 73.58m, TotalAmount = 294.32m });
+        f.Db.ClaimLineItems.Add(new ClaimLineItem { TenantId = claim.TenantId, Id = Guid.NewGuid(), TripClaimId = claim.Id, ShiftId = claimed.Id, SupportItemCode = "04_X", SupportsDeliveredFrom = claimed.ServiceDate, SupportsDeliveredTo = claimed.ServiceDate, Hours = 4, UnitPrice = 73.58m, TotalAmount = 294.32m });
         await f.Db.SaveChangesAsync();
         var before = await f.Db.Shifts.AsNoTracking().Where(x => x.Id == claimed.Id || x.Id == unclaimed.Id).OrderBy(x => x.ServiceDate).Select(x => new { x.Id, x.Status, x.ShiftPatternId }).ToListAsync();
 
