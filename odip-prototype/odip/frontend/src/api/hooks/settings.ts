@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiGetWithDefault, apiPutRaw, apiClient } from '../client'
-import type { AppSettingsDto, UpdateAppSettingsDto, ApiResponse, TenantUserDto, ModuleVisibilityDto } from '../types'
+import { apiGet, apiGetWithDefault, apiPut, apiPutRaw, apiClient } from '../client'
+import type { AppSettingsDto, UpdateAppSettingsDto, UpdateSecuritySettingsDto, MyProfileDto, UpdateMyProfileDto, ApiResponse, TenantUserDto, ModuleVisibilityDto } from '../types'
 import { getViewAs } from '@/lib/viewAs'
 
 export function useSettings() {
@@ -21,6 +21,34 @@ export function useUpdateSettings() {
   return useMutation({
     mutationFn: (data: UpdateAppSettingsDto) => apiPutRaw<AppSettingsDto>('/settings', data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
+  })
+}
+
+export function useUpdateSecuritySettings() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: UpdateSecuritySettingsDto) => apiPutRaw<AppSettingsDto>('/settings/security', data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
+  })
+}
+
+/** My account: the signed-in person's own name, mobile and email. Never the viewed user's: the server reads the id from the sign-in. */
+export function useMyProfile() {
+  return useQuery({ queryKey: ['my-profile'], queryFn: () => apiGet<MyProfileDto>('/profile'), retry: false })
+}
+
+export function useUpdateMyProfile() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: UpdateMyProfileDto) => apiPut<MyProfileDto>('/profile', data),
+    onSuccess: saved => {
+      qc.setQueryData(['my-profile'], saved)
+      // The name in the top bar and on this page's header is read from the sign-in response kept in the browser.
+      try {
+        const raw = localStorage.getItem('odip_user')
+        if (raw) localStorage.setItem('odip_user', JSON.stringify({ ...JSON.parse(raw), fullName: `${saved.firstName} ${saved.lastName}` }))
+      } catch { /* storage unavailable: the name updates at the next sign-in */ }
+    },
   })
 }
 

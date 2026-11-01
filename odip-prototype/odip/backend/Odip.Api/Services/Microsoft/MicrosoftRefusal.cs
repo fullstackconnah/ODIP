@@ -6,6 +6,7 @@ public static class MicrosoftRefusal
     public const string InvalidToken = ExchangeRefusal.InvalidToken;
     public const string NoOdipAccount = ExchangeRefusal.NoOdipAccount;
     public const string TenantInactive = ExchangeRefusal.TenantInactive;
+    public const string SessionLengthReached = ExchangeRefusal.SessionLengthReached;
 
     public const string MicrosoftNotLinked = "MicrosoftNotLinked";
     public const string MicrosoftPersonalAccount = "MicrosoftPersonalAccount";

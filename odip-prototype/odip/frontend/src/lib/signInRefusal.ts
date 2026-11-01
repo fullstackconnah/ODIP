@@ -14,6 +14,7 @@ export const SIGN_IN_REFUSAL_CODES = [
   'TenantInactive',
   'AddressUnconfirmed',
   'LockedOut',
+  'SessionLengthReached',
 ] as const
 
 export type SignInRefusalCode = (typeof SIGN_IN_REFUSAL_CODES)[number]
@@ -114,6 +115,8 @@ export function describeSignInRefusal(refusal: SignInRefusal, email: string, ver
       return { sentence: `We can't sign you in with ${email} yet.`, nextStep: 'Ask your administrator to check your account.' }
     case 'LockedOut':
       return { sentence: `Too many attempts. Try again in ${describeWait(refusal.retryAfterSeconds)}.` }
+    case 'SessionLengthReached':
+      return { sentence: 'Your organisation asks you to sign in again.', nextStep: 'Sign in to carry on.' }
     case 'InvalidToken':
       return { sentence: "We couldn't sign you in.", nextStep: 'Try again. If it keeps happening, ask your administrator.' }
   }
@@ -143,6 +146,7 @@ export const MICROSOFT_REFUSAL_CODES = [
   'MicrosoftAccountAlreadyLinked',
   'MicrosoftOnlySignIn',
   'MicrosoftSessionEnded',
+  'SessionLengthReached',
 ] as const
 
 type MicrosoftWords = RefusalWords & { tone: CalloutTone }
@@ -183,6 +187,12 @@ const MICROSOFT_WORDS: Record<(typeof MICROSOFT_REFUSAL_CODES)[number], Microsof
     tone: 'info',
     sentence: "You've been signed out.",
     nextStep: 'Microsoft sign-ins last up to 12 hours, or end sooner if your account changes. Sign in again to carry on.',
+  },
+  // Settings > Security: the organisation's session length ran out. Reached from the Firebase path too, which the login page words through this list.
+  SessionLengthReached: {
+    tone: 'info',
+    sentence: "You've been signed out.",
+    nextStep: 'Your organisation asks everyone to sign in again after a set time. Sign in to carry on.',
   },
 }
 

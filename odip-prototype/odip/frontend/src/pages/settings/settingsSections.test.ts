@@ -27,9 +27,9 @@ const groupsOf = (role: RoleCase) => [...new Set(visibleSections(ROLES[role]()).
 
 describe('who sees which section', () => {
   it('gives each role its sections in rail order', () => {
-    expect(keysOf('Admin')).toEqual(['profile', 'notifications', 'appearance', 'setup', 'workspace-visibility', 'organisation', 'billing', 'safety', 'alerts', 'pricing', 'budgets', 'templates', 'activities', 'holidays', 'import', 'export', 'integrations', 'failed-sends'])
-    expect(keysOf('Coordinator')).toEqual(['profile', 'notifications', 'appearance', 'organisation', 'billing', 'safety', 'alerts', 'templates', 'activities', 'holidays'])
-    expect(keysOf('SuperAdmin')).toEqual(['profile', 'notifications', 'appearance', 'setup', 'workspace-visibility', 'organisation', 'billing', 'safety', 'alerts', 'pricing', 'budgets', 'templates', 'activities', 'import', 'export', 'integrations', 'tenants', 'users', 'catalogue', 'holidays', 'failed-sends', 'alpha-signups', 'whats-new'])
+    expect(keysOf('Admin')).toEqual(['profile', 'notifications', 'appearance', 'setup', 'workspace-visibility', 'organisation', 'billing', 'safety', 'alerts', 'security', 'pricing', 'budgets', 'templates', 'activities', 'holidays', 'import', 'export', 'integrations', 'failed-sends'])
+    expect(keysOf('Coordinator')).toEqual(['profile', 'notifications', 'appearance', 'organisation', 'billing', 'safety', 'alerts', 'security', 'templates', 'activities', 'holidays'])
+    expect(keysOf('SuperAdmin')).toEqual(['profile', 'notifications', 'appearance', 'setup', 'workspace-visibility', 'organisation', 'billing', 'safety', 'alerts', 'security', 'pricing', 'budgets', 'templates', 'activities', 'import', 'export', 'integrations', 'tenants', 'users', 'catalogue', 'holidays', 'failed-sends', 'alpha-signups', 'whats-new'])
     expect(keysOf('SuperAdminNoOrg')).toEqual(['profile', 'notifications', 'appearance', 'tenants', 'users', 'catalogue', 'holidays', 'failed-sends', 'alpha-signups', 'whats-new'])
   })
 
@@ -53,7 +53,7 @@ describe('who sees which section', () => {
 
   it('locks the Organisation sections for a Coordinator, and only for a Coordinator', () => {
     const locked = (role: RoleCase) => visibleSections(ROLES[role]()).filter(s => s.readOnly?.(ROLES[role]())).map(s => s.key)
-    expect(locked('Coordinator')).toEqual(['organisation', 'billing', 'safety', 'alerts'])
+    expect(locked('Coordinator')).toEqual(['organisation', 'billing', 'safety', 'alerts', 'security'])
     expect(locked('Admin')).toEqual([])
     expect(locked('SuperAdmin')).toEqual([])
   })

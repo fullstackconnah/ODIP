@@ -15,7 +15,7 @@ export type SettingsPerms = Pick<
 
 export type SectionKey =
   | 'profile' | 'notifications' | 'appearance'
-  | 'setup' | 'workspace-visibility' | 'organisation' | 'microsoft' | 'billing' | 'safety' | 'alerts'
+  | 'setup' | 'workspace-visibility' | 'organisation' | 'microsoft' | 'billing' | 'safety' | 'alerts' | 'security'
   | 'pricing' | 'budgets'
   | 'templates' | 'activities' | 'holidays'
   | 'import' | 'export' | 'integrations' | 'failed-sends'
@@ -48,7 +48,7 @@ const HOLIDAYS = 'The public holiday calendar that sets holiday rates on plans a
  * for them), under Content and Data for everyone else. One key, one place per role.
  */
 export const SECTIONS: SectionDef[] = [
-  { key: 'profile', label: 'Profile', group: 'My account', visible: everyone, description: "Who you're signed in as." },
+  { key: 'profile', label: 'Profile', group: 'My account', visible: everyone, description: 'Your name and phone, and your password.' },
   { key: 'notifications', label: 'Notifications', group: 'My account', visible: everyone, description: "Which events we email you about. Your choices don't change anyone else's." },
   { key: 'appearance', label: 'Appearance', group: 'My account', visible: everyone, description: 'How Bunya Support looks for you. Saved on this device only, so another computer keeps its own.' },
   { key: 'setup', label: 'Organisation setup', group: 'Organisation', visible: managesOrganisation, description: "Review your organisation's existing settings. You can leave and return at any time." },
@@ -58,6 +58,7 @@ export const SECTIONS: SectionDef[] = [
   { key: 'billing', label: 'Billing details', group: 'Organisation', visible: withOrganisation, readOnly: onlyAdminsChange, description: "The bank account on your invoices, how they're numbered and when they're due, your GST status, and the note printed at the foot of every invoice." },
   { key: 'safety', label: 'Safety checks', group: 'Organisation', visible: withOrganisation, readOnly: onlyAdminsChange, description: "What we stop, and what we only warn about, when something isn't in place. These apply to everyone in your organisation, and every change is recorded in the audit log." },
   { key: 'alerts', label: 'Alert windows', group: 'Organisation', visible: withOrganisation, readOnly: onlyAdminsChange, description: 'How early we warn before something expires, and how many hours a week the roster allows before it warns. The warnings show on the dashboard, the roster and the pages that list them, for everyone in your organisation.' },
+  { key: 'security', label: 'Security', group: 'Organisation', visible: withOrganisation, readOnly: onlyAdminsChange, description: 'How long people stay signed in before they must sign in again.' },
   { key: 'pricing', label: 'Plan pricing', group: 'Pricing and budgets', visible: managesOrganisation, description: 'The answers the plan builder uses to price supports: the registration groups you hold, price boundaries, provider travel, group outings, and who may approve an agreement.' },
   { key: 'budgets', label: 'Budgets', group: 'Pricing and budgets', visible: managesOrganisation, description: 'What the roster does when a one-off shift would put a participant over budget, and when a participant counts as approaching it.' },
   { key: 'templates', label: 'Event templates', group: 'Content', wide: true, visible: withOrganisation, description: 'Starting points for new trips: destination, region, length and accommodation notes. Used by everyone who creates a trip.' },
