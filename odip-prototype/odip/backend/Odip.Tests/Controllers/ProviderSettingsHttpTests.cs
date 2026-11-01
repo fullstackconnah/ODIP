@@ -37,17 +37,33 @@ public class ProviderSettingsHttpTests
     [InlineData("contactEmail", 254)]
     [InlineData("contactPhone", 30)]
     [InlineData("website", 500)]
-    public async Task An_over_length_contact_field_is_refused_with_400_by_the_pipeline_and_the_row_is_untouched(string field, int limit)
+    public async Task A_contact_field_one_over_its_limit_is_refused_with_400_by_the_pipeline_and_at_the_limit_it_saves(string field, int limit)
     {
         await using var app = await StartAsync();
-        var body = $$"""{"registrationNumber":"REG","abn":"12345678901","organisationName":"Org","address":"1 St","state":"NSW","{{field}}":"{{new string('1', limit + 1)}}"}""";
 
-        var response = await app.Client.PutAsync("/api/v1/provider-settings", new StringContent(body, Encoding.UTF8, "application/json"));
+        var over = await app.Client.PutAsync("/api/v1/provider-settings", ContactBody(field, ValueOfLength(field, limit + 1)));
 
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        using var scope = app.Services.CreateScope();
-        Assert.Empty(await scope.ServiceProvider.GetRequiredService<OdipDbContext>().ProviderSettings.IgnoreQueryFilters().ToListAsync());
+        Assert.Equal(HttpStatusCode.BadRequest, over.StatusCode);
+        using (var scope = app.Services.CreateScope())
+            Assert.Empty(await scope.ServiceProvider.GetRequiredService<OdipDbContext>().ProviderSettings.IgnoreQueryFilters().ToListAsync());
+
+        var at = await app.Client.PutAsync("/api/v1/provider-settings", ContactBody(field, ValueOfLength(field, limit)));
+
+        Assert.True(at.IsSuccessStatusCode, await at.Content.ReadAsStringAsync());
+        using var saved = app.Services.CreateScope();
+        Assert.Single(await saved.ServiceProvider.GetRequiredService<OdipDbContext>().ProviderSettings.IgnoreQueryFilters().ToListAsync());
     }
+
+    // Valid in shape (email, web address) at any length, so only [StringLength] can refuse the over-length value.
+    private static string ValueOfLength(string field, int length) => field switch
+    {
+        "contactEmail" => new string('a', length - "@example.com".Length) + "@example.com",
+        "website" => "https://example.com.au/" + new string('a', length - "https://example.com.au/".Length),
+        _ => new string('1', length),
+    };
+
+    private static StringContent ContactBody(string field, string value) => new(
+        $$"""{"registrationNumber":"REG","abn":"12345678901","organisationName":"Org","address":"1 St","state":"NSW","{{field}}":"{{value}}"}""", Encoding.UTF8, "application/json");
 
     [Fact]
     public async Task The_admin_organisation_read_returns_the_four_contact_fields()
