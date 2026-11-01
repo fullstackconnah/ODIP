@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Npgsql;
 using Odip.Application.DTOs;
 using Odip.Domain.Billing.Pricing;
+using Odip.Domain.Billing.Services;
 using Odip.Domain.Entities;
 using Odip.Domain.Rostering;
 using Odip.Domain.Rostering.Services;
@@ -207,7 +208,14 @@ public sealed class ServiceAgreementApprovalService
         _db.Shifts.RemoveRange(plan.ToRemove);
 
         // Carry-over: an unchanged support's shifts move to its new pattern as they are; generation then makes none on their days.
-        foreach (var shift in plan.ToCarry) shift.ShiftPatternId = plan.CarryTo[shift.ShiftPatternId!.Value].Id;
+        // A Draft or Published shift that still has its old pattern's support type takes the new pattern's (the pattern cascade's rule); one whose type was set by hand keeps it.
+        var oldCodes = plan.ToEnd.ToDictionary(o => o.Id, o => o.SupportGroupCode);
+        foreach (var shift in plan.ToCarry)
+        {
+            var made = plan.CarryTo[shift.ShiftPatternId!.Value];
+            if ((shift.Status == ShiftStatus.Draft || shift.Status == ShiftStatus.Published) && shift.SupportGroupCode == oldCodes[shift.ShiftPatternId.Value]) shift.SupportGroupCode = made.SupportGroupCode;
+            shift.ShiftPatternId = made.Id;
+        }
 
         if (plan.Ready && plan.Windows.Count > 0)
         {
@@ -367,7 +375,10 @@ public sealed class ServiceAgreementApprovalService
                     Message = string.Create(CultureInfo.InvariantCulture, $"Approving would make {count} weekly patterns, and one approval makes at most {AgreementPatternMapper.MaxPatternsPerApproval}. Remove blocks or split the plan, then save a new revision."),
                 });
             else
+            {
                 plan.NewPatterns = AgreementPatternMapper.Map(draft, blocks);
+                await SetSupportTypesAsync(draft, plan.NewPatterns, ct);
+            }
         }
 
         await ReadRosterAsync(tenantId, draft, plan, ct, approving);
@@ -394,7 +405,7 @@ public sealed class ServiceAgreementApprovalService
             {
                 try
                 {
-                    var planned = occurrences.Select(o => new PlannedShift(null, o.Date, o.Pattern.StartTime, o.Pattern.EndTime, o.Pattern.EndsNextDay, o.Pattern.Ratio, o.Pattern.NightType)).ToList();
+                    var planned = occurrences.Select(o => new PlannedShift(null, o.Date, o.Pattern.StartTime, o.Pattern.EndTime, o.Pattern.EndsNextDay, o.Pattern.Ratio, o.Pattern.NightType, o.Pattern.SupportGroupCode)).ToList();
                     plan.BudgetWarnings = await _budget.ForShiftsAsync(tenantId, draft.ParticipantId, planned, ct);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
@@ -461,6 +472,24 @@ public sealed class ServiceAgreementApprovalService
     }
 
     /// <summary>
+    /// The support type of each new pattern: the activity group of its block's first hourly line (lowest position) on the agreement's start date, or none when the block has no hourly line (it then claims
+    /// community access, as before). A carried pattern whose draft gives none keeps the one it had (the carry rules below); the type is billing, so it is not part of what makes two patterns the same support.
+    /// </summary>
+    private async Task SetSupportTypesAsync(ServiceAgreementDraft draft, IReadOnlyList<ShiftPattern> patterns, CancellationToken ct)
+    {
+        var codes = draft.Lines.Where(l => !string.IsNullOrEmpty(l.BlockKey)).Select(l => l.ItemCode).Distinct().ToList();
+        if (codes.Count == 0) return;
+        var groupOf = (await _db.SupportCatalogueItems.AsNoTracking().Where(i => codes.Contains(i.ItemNumber) && i.Unit == "H")
+            .Where(EffectiveCatalogueResolver.ValidOn(draft.AgreementStartDate))
+            .Select(i => new { i.ItemNumber, i.ActivityGroup.GroupCode }).ToListAsync(ct))
+            .GroupBy(i => i.ItemNumber).ToDictionary(g => g.Key, g => g.First().GroupCode);
+        var byBlock = draft.Lines.Where(l => !string.IsNullOrEmpty(l.BlockKey)).OrderBy(l => l.Position)
+            .GroupBy(l => l.BlockKey!).ToDictionary(g => g.Key, g => g.Select(l => groupOf.GetValueOrDefault(l.ItemCode)).FirstOrDefault(c => c is not null));
+        foreach (var pattern in patterns)
+            if (pattern.SourceBlockKey is { } key && byBlock.TryGetValue(key, out var code)) pattern.SupportGroupCode = code;
+    }
+
+    /// <summary>
     /// Carry-over: an ended pattern whose new pattern is the same support hands on its default worker, and its shifts from this revision's start (or today) to its end, in whatever state they are in (a worker stays on, a
     /// cancelled day stays cancelled), and the new pattern makes none on their days. Only what is left over is removed or listed. Approving a revision ends every pattern of the one before and makes them
     /// all again, so without this every shift of a support that did not change would get a second, open one beside it.
@@ -477,6 +506,7 @@ public sealed class ServiceAgreementApprovalService
             if (plan.NewPatterns.FirstOrDefault(made => !taken.Contains((made.Id, old.SourceDraftId!.Value)) && SameSupport(old, made)) is not { } same) continue;
             taken.Add((same.Id, old.SourceDraftId!.Value));
             plan.CarryTo[old.Id] = same;
+            same.SupportGroupCode ??= old.SupportGroupCode;
             // The same support keeps its default worker too (a coordinator's own choice, not the agreement's); only a changed support starts with none.
             same.DefaultUserId = old.DefaultUserId is { } user && active.Contains(user) ? user : null;
             // And stays switched off when a coordinator switched it off (the delete refusal tells them to). A pattern an approval switched off because it ended before it began is not that choice.
@@ -522,6 +552,7 @@ public sealed class ServiceAgreementApprovalService
             if (plan.NewPatterns.FirstOrDefault(made => !taken.Contains((made.Id, ended.SourceDraftId!.Value)) && !plan.CarryTo.ContainsValue(made) && SameSupport(ended, made)) is not { } same) continue;
             taken.Add((same.Id, ended.SourceDraftId!.Value));
             plan.HandedOn.Add(same);
+            same.SupportGroupCode ??= ended.SupportGroupCode;
             same.DefaultUserId = ended.DefaultUserId is { } user && active.Contains(user) ? user : null;
             // The carry-over's own guard: a pattern an approval switched off because it ended before it began is not a coordinator's choice.
             if (ended.EffectiveTo is not { } to || to >= ended.EffectiveFrom) same.IsActive = ended.IsActive;

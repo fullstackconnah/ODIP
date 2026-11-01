@@ -142,7 +142,15 @@ public partial class ShiftClaimGenerationService
         _db.ClaimLineItems.AddRange(claimLineItems);
         claim.TotalAmount = claimLineItems.Sum(l => l.TotalAmount);
 
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException e) when (ClaimSubmission.IsShiftIndexViolation(e))
+        {
+            // Another claim run took one of these shifts between the read above and this save (the unique index on ShiftId is the lock).
+            throw new InvalidOperationException(ShiftTakenMessage);
+        }
         await held.CommitAsync(ct);
         // A caveat (an overnight shift: evening and night rates are not applied yet) is shown on the preview line, but a claim line has no column to keep it in, so once the claim exists
         // nothing on it would say so. The response echoes the flagged shifts for the screen that generated it; a lasting flag on the line is a column and a migration, left to the L3-03 follow-up.
@@ -179,6 +187,14 @@ public partial class ShiftClaimGenerationService
         if (shifts.Count == 0)
             throw new InvalidOperationException("No completed, unclaimed shifts found in this date range.");
 
+        // A claim marked Rejected (or Cancelled) by hand keeps its lines Submitted, so these shifts look unclaimed but the unique index on the shift still holds them (a line that is not Rejected). They are listed,
+        // here beside the query so a preview and a run agree, and say how to free them.
+        var heldIds = shifts.Select(s => s.Id).ToList();
+        var heldBy = (await _db.ClaimLineItems.AsNoTracking()
+                .Where(l => l.ShiftId != null && heldIds.Contains(l.ShiftId.Value) && l.Status != ClaimLineItemStatus.Rejected && (l.TripClaim.Status == TripClaimStatus.Rejected || l.TripClaim.Status == TripClaimStatus.Cancelled))
+                .Select(l => new { ShiftId = l.ShiftId!.Value, l.TripClaim.ClaimReference, ClaimStatus = l.TripClaim.Status }).ToListAsync(ct))
+            .GroupBy(l => l.ShiftId).ToDictionary(g => g.Key, g => (g.First().ClaimReference, g.First().ClaimStatus));
+
         // Participant.AddressState with a fallback to ProviderSettings.State — the only
         // geographic signal that exists on the tenant today (Region is free-text prose).
         // ShiftPriceEstimator.StateFor normalises the case, so "Nsw" prices in NSW's column
@@ -198,9 +214,13 @@ public partial class ShiftClaimGenerationService
         // and ICBS items, one valid row per day type and intensity on any date.
         // Every row of the group is loaded, history included, because each shift is priced by the row valid on ITS service date: an import that
         // end-dates a row (a December price set) must not reprice a shift that happened before it and has not been claimed yet.
-        var catalogueItems = await _db.SupportCatalogueItems
-            .Where(i => i.ActivityGroup.GroupCode == CatalogueGroups.CommunityAccessGroupCode)
-            .ToListAsync(ct);
+        // A shift with a support type is priced from that group's rows, a shift without one from community access (the rows each shift is priced from are its own group's, hourly only).
+        var groupCodes = shifts.Select(s => s.SupportGroupCode ?? CatalogueGroups.CommunityAccessGroupCode).Distinct().ToList();
+        var catalogueByGroup = (await _db.SupportCatalogueItems
+                .Where(i => groupCodes.Contains(i.ActivityGroup.GroupCode) && i.Unit == "H")
+                .Select(i => new { i.ActivityGroup.GroupCode, Item = i }).ToListAsync(ct))
+            .GroupBy(r => r.GroupCode).ToDictionary(g => g.Key, g => g.Select(r => r.Item).ToList());
+        List<SupportCatalogueItem> RowsOf(Shift s) => catalogueByGroup.GetValueOrDefault(s.SupportGroupCode ?? CatalogueGroups.CommunityAccessGroupCode) ?? new List<SupportCatalogueItem>();
 
         var lineItems = new List<ShiftLineCalc>();
         var leftOut = new List<ShiftClaimLeftOutDto>();
@@ -216,6 +236,18 @@ public partial class ShiftClaimGenerationService
             if (noNdisNumber is not null)
             {
                 leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = noNdisNumber });
+                continue;
+            }
+            if (heldBy.TryGetValue(shift.Id, out var heldClaim))
+            {
+                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = $"{participant.FullName}: it is on {(heldClaim.ClaimStatus == TripClaimStatus.Cancelled ? "cancelled" : "rejected")} claim {heldClaim.ClaimReference}. Delete that claim, then claim this shift again." });
+                continue;
+            }
+            var catalogueItems = RowsOf(shift);
+            // Money backstop: a support type whose rows overlap on this day is never priced by picking one (saving such a type is refused; an import can make an old one ambiguous later).
+            if (shift.SupportGroupCode is not null && SupportTypeCheck.IsAmbiguousForDay(catalogueItems, DayTypeResolver.Resolve(shift.ServiceDate, publicHolidays), participant.IsIntensiveSupport, shift.ServiceDate))
+            {
+                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = FormattableString.Invariant($"{participant.FullName}: more than one rate matches this support type on {shift.ServiceDate:d MMM yyyy}.") });
                 continue;
             }
             // The one pricing rule, shared with the budget ledger so an estimate is exactly what this claim will say.
@@ -246,7 +278,7 @@ public partial class ShiftClaimGenerationService
         if (lineItems.Count == 0)
         {
             // Nothing priced because no row of the group is valid on any of these dates (the catalogue starts after them): say so, the same way the trip engine does.
-            if (leftOut.All(l => l.Reason == NoCatalogueRateSentence) && !shifts.Any(s => catalogueItems.Any(i => EffectiveCatalogueResolver.IsValidOn(i, s.ServiceDate))))
+            if (leftOut.All(l => l.Reason == NoCatalogueRateSentence) && !shifts.Any(s => RowsOf(s).Any(i => EffectiveCatalogueResolver.IsValidOn(i, s.ServiceDate))))
                 throw new InvalidOperationException(FormattableString.Invariant(
                     $"No catalogue row covers these shifts' dates ({shifts[0].ServiceDate:dd/MM/yyyy} to {shifts[^1].ServiceDate:dd/MM/yyyy}). Import the catalogue for that period first."));
             // There ARE completed, unclaimed shifts here: none of them could be priced, so the refusal says they were left out, and why.
@@ -255,6 +287,9 @@ public partial class ShiftClaimGenerationService
 
         return (lineItems, leftOut, participant);
     }
+
+    /// <summary>The refusal when the unique index on a claim line's shift caught a concurrent claim. A claim run shows it as Skipped, not as a failure.</summary>
+    public const string ShiftTakenMessage = "Another claim took one of these shifts first. Run the claim again.";
 
     private static readonly string NoCatalogueRateSentence = new ShiftPriceOutcome(null, ShiftPriceEstimator.NoCatalogueRateBecause, null).NotPricedSentence!;
 

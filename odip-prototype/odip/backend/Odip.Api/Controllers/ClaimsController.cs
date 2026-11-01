@@ -445,7 +445,8 @@ public class ClaimsController : ControllerBase
 
         ClaimStatusRules.RollUp(claim, lines.Select(l => l.Status).ToList(), _clock.GetUtcNow().UtcDateTime);
 
-        await _db.SaveChangesAsync(ct);
+        try { await _db.SaveChangesAsync(ct); }
+        catch (DbUpdateException e) when (ClaimSubmission.IsShiftIndexViolation(e)) { return Conflict(ApiResponse<bool>.Fail(ClaimSubmission.ShiftHeldMessage)); }
         await held.CommitAsync(ct);
         return Ok(ApiResponse<bool>.Ok(true));
     }

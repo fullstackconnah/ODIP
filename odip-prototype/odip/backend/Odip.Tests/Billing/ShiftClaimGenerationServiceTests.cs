@@ -538,7 +538,6 @@ public class ShiftClaimGenerationServiceTests
 
     [Theory]
     [InlineData(TripClaimStatus.Rejected, ClaimLineItemStatus.Rejected)]
-    [InlineData(TripClaimStatus.Cancelled, ClaimLineItemStatus.Draft)]
     [InlineData(TripClaimStatus.Draft, ClaimLineItemStatus.Rejected)]
     public async Task GenerateDraftClaimAsync_ShiftWhoseClaimOrLineWasRejectedOrCancelled_IsClaimedAgain(TripClaimStatus claimStatus, ClaimLineItemStatus lineStatus)
     {

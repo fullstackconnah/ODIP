@@ -898,6 +898,8 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => e.TripClaimId);
             entity.HasIndex(e => e.ParticipantBookingId);
             entity.HasIndex(e => e.ShiftId);
+            // The database backstop for one counting line per shift. Line status only: a partial index cannot read TripClaim, so a shift on a claim rejected by hand (its lines still Submitted) stays held until that claim is deleted.
+            entity.HasIndex(e => e.ShiftId, "IX_ClaimLineItems_ShiftId_Counting").IsUnique().HasFilter("\"ShiftId\" IS NOT NULL AND \"Status\" <> 5");
             entity.HasIndex(e => e.Status);
         });
 
@@ -1142,6 +1144,7 @@ public class OdipDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Notes).HasMaxLength(2000);
             entity.Property(e => e.Location).HasMaxLength(200);
+            entity.Property(e => e.SupportGroupCode).HasMaxLength(50);
             entity.Property(e => e.OverrideReason).HasMaxLength(2000);
             entity.Property(e => e.AcknowledgedFindingCodes).HasMaxLength(500);
             entity.Property(e => e.RegularAwayReason).HasMaxLength(200);
@@ -1181,6 +1184,7 @@ public class OdipDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Notes).HasMaxLength(2000);
+            entity.Property(e => e.SupportGroupCode).HasMaxLength(50);
             // The slot's regular: a second coordinator's Stop or Make must not overwrite a change made since the board loaded (REV281B).
             entity.Property(e => e.DefaultUserId).IsConcurrencyToken();
 

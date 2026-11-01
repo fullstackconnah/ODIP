@@ -97,6 +97,10 @@ export interface ShiftDto {
   durationHours: number
   ratio: SupportRatio
   nightType: SleepoverType
+  /** The support type (catalogue group code) the shift is billed under; absent means community access. */
+  supportGroupCode?: string | null
+  /** The claim a line of this shift sits on; present while that holds the support type fixed. */
+  claimReference?: string | null
   status: ShiftStatus
   shiftPatternId: string | null
   notes: string | null
@@ -480,6 +484,8 @@ export interface CreateShiftDto {
   endsNextDay: boolean
   ratio: SupportRatio
   nightType: SleepoverType
+  /** The support type chosen, or null for community access. Always sent: the server reads a present null as a clear. */
+  supportGroupCode?: string | null
   /**
    * PP-8: the backend's UpdateShiftDto.Status defaults to Draft when the field is absent from
    * the request body — without this, every edit silently reset a Published/Completed shift back
@@ -568,6 +574,7 @@ export interface CheckShiftDto {
   endsNextDay: boolean
   ratio: SupportRatio
   nightType: SleepoverType
+  supportGroupCode?: string | null
   /** The status the shift would be saved with: a shift about to be cancelled costs nothing and gets no budget finding. Omitted means the shift's own status, or a new Draft. */
   status?: ShiftStatus
 }
@@ -592,6 +599,8 @@ export interface ShiftPatternDto {
   endsNextDay: boolean
   ratio: SupportRatio
   nightType: SleepoverType
+  /** The support type (catalogue group code) its shifts are billed under; absent means community access. */
+  supportGroupCode?: string | null
   effectiveFrom: string
   effectiveTo: string | null
   isActive: boolean
@@ -616,6 +625,8 @@ export interface CreateShiftPatternDto {
   endsNextDay: boolean
   ratio: SupportRatio
   nightType: SleepoverType
+  /** The support type chosen, or null for community access. Always sent: the server reads a present null as a clear. */
+  supportGroupCode?: string | null
   effectiveFrom: string
   effectiveTo?: string | null
   isActive?: boolean

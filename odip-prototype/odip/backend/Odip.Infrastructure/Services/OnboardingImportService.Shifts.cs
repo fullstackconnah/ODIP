@@ -216,7 +216,7 @@ public sealed partial class OnboardingImportService
         var ledgers = await _ledgers.ComputeAsync(tenantId, byParticipant.Keys.ToList(), ct);
         foreach (var (participantId, shifts) in byParticipant)
         {
-            var specs = shifts.Select(x => new ShiftSpec(x.Shift.ServiceDate, x.Shift.StartTime, x.Shift.EndTime, x.Shift.EndsNextDay, x.Shift.Ratio, x.Shift.NightType)).ToList();
+            var specs = shifts.Select(x => new ShiftSpec(x.Shift.ServiceDate, x.Shift.StartTime, x.Shift.EndTime, x.Shift.EndsNextDay, x.Shift.Ratio, x.Shift.NightType, x.Shift.SupportGroupCode)).ToList();
             var over = await _budget.ForecastOverAsync(tenantId, participantId, specs, ledgers.GetValueOrDefault(participantId), ct);
             for (var i = 0; i < shifts.Count; i++)
                 if (over[i] is { } o)

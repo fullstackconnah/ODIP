@@ -97,7 +97,7 @@ public sealed class RosterShiftGenerator
                 {
                     Id = Guid.NewGuid(), TenantId = pattern.TenantId, ParticipantId = pattern.ParticipantId, UserId = pattern.DefaultUserId,
                     ServiceDate = date, StartTime = pattern.StartTime, EndTime = pattern.EndTime, EndsNextDay = pattern.EndsNextDay,
-                    Ratio = pattern.Ratio, NightType = pattern.NightType, Status = ShiftStatus.Draft, ShiftPatternId = pattern.Id,
+                    Ratio = pattern.Ratio, NightType = pattern.NightType, SupportGroupCode = pattern.SupportGroupCode, Status = ShiftStatus.Draft, ShiftPatternId = pattern.Id,
                     RequirementsJson = pattern.RequirementsJson,
                 };
                 db.Shifts.Add(shift);

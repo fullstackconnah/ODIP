@@ -74,7 +74,7 @@ public partial class ShiftClaimGenerationService
                 skipped.Add(Skip(BusyReason, failed: true));
             }
             // The two refusals that mean "nothing to claim": another run got there first, or no catalogue row covers the dates. Their wording is CalculateAsync's.
-            catch (InvalidOperationException e) when (e.Message.StartsWith("No completed, unclaimed shifts found", StringComparison.Ordinal) || e.Message.StartsWith("No catalogue row covers", StringComparison.Ordinal))
+            catch (InvalidOperationException e) when (e.Message.StartsWith("No completed, unclaimed shifts found", StringComparison.Ordinal) || e.Message.StartsWith("No catalogue row covers", StringComparison.Ordinal) || e.Message == ShiftTakenMessage)
             {
                 skipped.Add(Skip(e.Message, failed: false));
             }

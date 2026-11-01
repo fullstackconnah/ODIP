@@ -7,6 +7,13 @@ namespace Odip.Infrastructure.Services;
 /// <summary>The checks a claim must pass to be sent to the NDIA, shared by the claims controller (the claim's own Submitted button) and the NDIA file batches.</summary>
 public static class ClaimSubmission
 {
+    /// <summary>The unique index that lets one line per shift count; the guards below read the claim's status, the index reads the line's, so a hand-rejected claim can pass a guard and still hit it.</summary>
+    public const string ShiftIndexName = "IX_ClaimLineItems_ShiftId_Counting";
+    public const string ShiftHeldMessage = "Another claim holds one of these shifts, so this can't be done. Delete that claim, or reject its line, then try again.";
+
+    public static bool IsShiftIndexViolation(DbUpdateException e) =>
+        e.InnerException is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation, ConstraintName: ShiftIndexName };
+
     /// <summary>
     /// A draft made before the engines left out other-funded participants can still hold their lines: they are not claimed to the NDIS, so the claim can't be sent. The refusal's message, or null.
     /// </summary>

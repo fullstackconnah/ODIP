@@ -83,6 +83,8 @@ public class Shift : ITenantEntity
     public string? Notes { get; set; }
     /// <summary>Where the shift happens, as the coordinator typed it for this shift (a venue, a centre). Null for a shift at the participant's home: never filled from the participant's address.</summary>
     public string? Location { get; set; }
+    /// <summary>The support type (<see cref="Odip.Domain.Entities.SupportActivityGroup.GroupCode"/>) this shift is claimed under. Null is community access; the claim prices that group's hourly row for the shift's day.</summary>
+    public string? SupportGroupCode { get; set; }
 
     /// <summary>Why the coordinator accepted the Warning findings below, if any were.</summary>
     public string? OverrideReason { get; set; }
@@ -150,6 +152,8 @@ public class ShiftPattern : ITenantEntity
 
     public bool IsActive { get; set; } = true;
     public string? Notes { get; set; }
+    /// <summary>The support type (<see cref="Odip.Domain.Entities.SupportActivityGroup.GroupCode"/>) its shifts are claimed under. Null is community access; the claim prices that group's hourly row for the each shift's day.</summary>
+    public string? SupportGroupCode { get; set; }
 
     // The four columns below are set only on a pattern an approved service agreement revision made (plan builder, phase D). A hand-made or demo pattern leaves them null
     // and behaves exactly as it always did: the daily top-up never touches it, and approving a revision never ends it.

@@ -161,6 +161,25 @@ public class UniqueIndexEmulatorTests
     }
 
     [Fact]
+    public async Task OneCountingLinePerShift_ARejectedLineFreesTheShift()
+    {
+        var env = new DemoTestEnv(Clock);
+        var shift = Guid.NewGuid();
+        ClaimLineItem Line(Odip.Domain.Enums.ClaimLineItemStatus status) => new()
+        {
+            TenantId = Tenant, Id = Guid.NewGuid(), TripClaimId = Guid.NewGuid(), ShiftId = shift, SupportItemCode = "04_Weekday_STD", Hours = 1m, UnitPrice = 10m, TotalAmount = 10m, Status = status,
+        };
+        await SaveAsync(env, Line(Odip.Domain.Enums.ClaimLineItemStatus.Draft));
+
+        await AssertRefusedAsync("IX_ClaimLineItems_ShiftId_Counting", () => SaveAsync(env, Line(Odip.Domain.Enums.ClaimLineItemStatus.Submitted)));
+        await SaveAsync(env, Line(Odip.Domain.Enums.ClaimLineItemStatus.Rejected), Line(Odip.Domain.Enums.ClaimLineItemStatus.Rejected));   // a rejected line holds nothing
+        await using var db = env.AdminDb();
+        db.ClaimLineItems.Single(l => l.Status == Odip.Domain.Enums.ClaimLineItemStatus.Draft).Status = Odip.Domain.Enums.ClaimLineItemStatus.Rejected;
+        await db.SaveChangesAsync();
+        await SaveAsync(env, Line(Odip.Domain.Enums.ClaimLineItemStatus.Draft));                                                         // so a new line may take the shift
+    }
+
+    [Fact]
     public async Task EveryUniqueIndexInTheModel_HasAFilterTheEmulatorUnderstands_SoANewKindIsNoticedNotIgnored()
     {
         var env = new DemoTestEnv(Clock);

@@ -18,7 +18,7 @@ namespace Odip.Tests.DemoData;
 /// the host (PR 2 review finding H1). Every <see cref="DemoTestEnv"/> carries one, so every demo test now meets the indexes.
 ///
 /// It follows the database's rules for what the model declares: a key with a NULL part never conflicts (NULLs are distinct), a filtered index only holds
-/// the rows its filter selects ("X" IS NULL, "X" IS NOT NULL, a boolean column, "X" IN (...) are understood; anything else throws, so a new kind of filter
+/// the rows its filter selects ("X" IS NULL, "X" IS NOT NULL, a boolean column, "X" IN (...), "X" IS NOT NULL AND "Y" <> n are understood; anything else throws, so a new kind of filter
 /// is noticed rather than ignored), text compares case-sensitively, and a row being replaced or deleted by the same save frees its key. The violation is
 /// the one Npgsql raises, a DbUpdateException around a PostgresException with state 23505 and the index's name, so the maintainer classifies it as it
 /// would on the server.
@@ -109,6 +109,7 @@ internal sealed class UniqueIndexEmulator : SaveChangesInterceptor
 
     private static readonly Regex NotNull = new("^\"(?<c>\\w+)\" IS NOT NULL$", RegexOptions.CultureInvariant);
     private static readonly Regex IsNull = new("^\"(?<c>\\w+)\" IS NULL$", RegexOptions.CultureInvariant);
+    private static readonly Regex NotNullAndNot = new("^\"(?<c>\\w+)\" IS NOT NULL AND \"(?<d>\\w+)\" <> (?<v>[0-9]+)$", RegexOptions.CultureInvariant);
     private static readonly Regex Flag = new("^\"(?<c>\\w+)\"$", RegexOptions.CultureInvariant);
     private static readonly Regex OneOf = new("^\"(?<c>\\w+)\" (?:IN \\((?<v>[0-9, ]+)\\)|= (?<v>[0-9]+))$", RegexOptions.CultureInvariant); // "= 0" is a one-value list
 
@@ -121,6 +122,11 @@ internal sealed class UniqueIndexEmulator : SaveChangesInterceptor
             ?? throw new NotSupportedException($"The filter of {index.DeclaringEntityType.DisplayName()}'s unique index names a column ({name}) that is not a property."));
 
         if (NotNull.Match(filter) is { Success: true } notNull) return Column(notNull.Groups["c"].Value) is not null;
+        if (NotNullAndNot.Match(filter) is { Success: true } notNullAndNot)
+        {
+            var (present, other) = (Column(notNullAndNot.Groups["c"].Value), Column(notNullAndNot.Groups["d"].Value));
+            return present is not null && other is not null && Convert.ToInt64(other, CultureInfo.InvariantCulture) != long.Parse(notNullAndNot.Groups["v"].Value, CultureInfo.InvariantCulture);
+        }
         if (IsNull.Match(filter) is { Success: true } isNull) return Column(isNull.Groups["c"].Value) is null;
         if (Flag.Match(filter) is { Success: true } flag) return Column(flag.Groups["c"].Value) is true;
         if (OneOf.Match(filter) is { Success: true } oneOf)

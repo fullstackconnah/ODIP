@@ -755,6 +755,10 @@ namespace Odip.Infrastructure.Migrations
 
                     b.HasIndex("ShiftId");
 
+                    b.HasIndex(new[] { "ShiftId" }, "IX_ClaimLineItems_ShiftId_Counting")
+                        .IsUnique()
+                        .HasFilter("\"ShiftId\" IS NOT NULL AND \"Status\" <> 5");
+
                     b.HasIndex("Status");
 
                     b.HasIndex("TenantId");
@@ -6413,6 +6417,10 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
+                    b.Property<string>("SupportGroupCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
 
@@ -6715,6 +6723,10 @@ namespace Odip.Infrastructure.Migrations
 
                     b.Property<TimeOnly>("StartTime")
                         .HasColumnType("time without time zone");
+
+                    b.Property<string>("SupportGroupCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");

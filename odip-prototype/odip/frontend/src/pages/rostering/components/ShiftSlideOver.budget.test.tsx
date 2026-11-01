@@ -18,6 +18,7 @@ const { mockCheckMutate, mockCreateMutateAsync, mockUpdateMutateAsync, mockGetRo
 }))
 
 vi.mock('@/api/hooks', () => ({
+  useSupportCatalogue: () => ({ data: [], isLoading: false, isError: false }),
   useCheckShift: () => ({ mutate: mockCheckMutate, isPending: false }),
   useCreateShift: () => ({ mutateAsync: mockCreateMutateAsync, isPending: false }),
   useUpdateShift: () => ({ mutateAsync: mockUpdateMutateAsync, isPending: false }),
@@ -84,7 +85,7 @@ describe('a budget warning (Warn mode)', () => {
     await user.click(saveButton())
 
     expect(mockCreateMutateAsync).toHaveBeenCalledWith({
-      participantId: 'participant-1', staffId: null, serviceDate: '2026-08-17', startTime: '09:00', endTime: '10:00', endsNextDay: false, ratio: 'OneToOne', nightType: 'None',
+      participantId: 'participant-1', staffId: null, serviceDate: '2026-08-17', startTime: '09:00', endTime: '10:00', endsNextDay: false, ratio: 'OneToOne', nightType: 'None', supportGroupCode: null,
       status: 'Draft', notes: null, location: null, overrideReason: null, acknowledgedFindingCodes: ['BUDGET_FORECAST_OVER'],
     })
   })
@@ -171,7 +172,7 @@ describe('a Coordinator the budget refused', () => {
     await user.click(saveButton())
 
     expect(mockCreateMutateAsync).toHaveBeenCalledWith({
-      participantId: 'participant-1', staffId: null, serviceDate: '2026-08-17', startTime: '09:00', endTime: '10:00', endsNextDay: false, ratio: 'OneToOne', nightType: 'None',
+      participantId: 'participant-1', staffId: null, serviceDate: '2026-08-17', startTime: '09:00', endTime: '10:00', endsNextDay: false, ratio: 'OneToOne', nightType: 'None', supportGroupCode: null,
       status: 'Draft', notes: null, location: null, overrideReason: DESCRIPTION, emergency: true, acknowledgedFindingCodes: ['BUDGET_APPROACHING'],
     })
     await waitFor(() => expect(onClose).toHaveBeenCalled())

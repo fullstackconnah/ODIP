@@ -115,7 +115,7 @@ public sealed class BudgetLedgerService
         // Bookings are read from the same start as everything else: a trip that has already started and has no claim yet is pending (see AddBookingItems), so it must be loaded as well.
         var bookingRows = await LoadBookingsAsync(tenantId, planIds, from, to, ct);
         var tripDays = await LoadTripDaysAsync(bookingRows, ct);
-        var catalogue = await LoadCatalogueAsync(lineRows, bookingRows, ct);
+        var catalogue = await LoadCatalogueAsync(lineRows, bookingRows, shiftRows, ct);
         var holidays = await LoadHolidaysAsync(shiftRows.Count + bookingRows.Count == 0 ? null : (from, to), ct);
 
         var pricing = new Pricing(catalogue, holidays, providerState);
@@ -287,7 +287,7 @@ public sealed class BudgetLedgerService
         Guid Id, Guid ClaimId, string ClaimReference, TripClaimStatus ClaimStatus, ClaimLineItemStatus Status, string ItemCode, DateOnly From, decimal Hours, decimal TotalAmount, decimal? PaidAmount,
         Guid? ShiftId, Guid? BookingId, Guid ParticipantId, PlanType? BookingPlanType);
 
-    public sealed record ShiftRow(Guid Id, Guid ParticipantId, DateOnly ServiceDate, TimeOnly Start, TimeOnly End, bool EndsNextDay, ShiftStatus Status, SupportRatio Ratio, SleepoverType NightType);
+    public sealed record ShiftRow(Guid Id, Guid ParticipantId, DateOnly ServiceDate, TimeOnly Start, TimeOnly End, bool EndsNextDay, ShiftStatus Status, SupportRatio Ratio, SleepoverType NightType, string? SupportGroupCode = null);
 
     public sealed record BookingRow(
         Guid Id, Guid ParticipantId, PlanType? PlanTypeOverride, Guid TripId, string TripName, DateOnly StartDate, int DurationDays, TimeOnly? DepartureTime, TimeOnly? ReturnTime,
@@ -326,7 +326,7 @@ public sealed class BudgetLedgerService
             .Where(s => s.TenantId == tenantId && participantIds.Contains(s.ParticipantId) && s.ServiceDate >= from && s.ServiceDate <= to
                 && (s.Status == ShiftStatus.Draft || s.Status == ShiftStatus.Published || s.Status == ShiftStatus.InProgress || s.Status == ShiftStatus.PendingReview
                     || (s.Status == ShiftStatus.Completed && !_db.ClaimLineItems.Where(ClaimLineStillCounts).Any(l => l.ShiftId == s.Id))))
-            .Select(s => new ShiftRow(s.Id, s.ParticipantId, s.ServiceDate, s.StartTime, s.EndTime, s.EndsNextDay, s.Status, s.Ratio, s.NightType));
+            .Select(s => new ShiftRow(s.Id, s.ParticipantId, s.ServiceDate, s.StartTime, s.EndTime, s.EndsNextDay, s.Status, s.Ratio, s.NightType, s.SupportGroupCode));
 
     /// <summary>
     /// Confirmed bookings of trips that start between <paramref name="from"/> and <paramref name="to"/> and have not been cancelled, and that no claim line has already taken over. The lower
@@ -359,16 +359,19 @@ public sealed class BudgetLedgerService
     }
 
     /// <summary>The catalogue rows everything is priced from: the community access group (shifts, and trips with no group of their own), the groups trips name, and the rows of every code a claim line carries.</summary>
-    private async Task<List<CatalogueRow>> LoadCatalogueAsync(List<LineRow> lines, List<BookingRow> bookings, CancellationToken ct)
+    private async Task<List<CatalogueRow>> LoadCatalogueAsync(List<LineRow> lines, List<BookingRow> bookings, List<ShiftRow> shifts, CancellationToken ct)
     {
+        var groupCodes = shifts.Where(s => s.SupportGroupCode != null).Select(s => s.SupportGroupCode!).Distinct().ToList();
         var codes = lines.Select(l => l.ItemCode).Distinct().ToList();
         var groupIds = bookings.Where(b => b.ActivityGroupId is not null).Select(b => b.ActivityGroupId!.Value).Distinct().ToList();
-        return await CatalogueQuery(groupIds, codes).ToListAsync(ct);
+        return await CatalogueQuery(groupIds, codes, groupCodes).ToListAsync(ct);
     }
 
-    public IQueryable<CatalogueRow> CatalogueQuery(IReadOnlyCollection<Guid> groupIds, IReadOnlyCollection<string> codes) =>
+    /// <summary>The community access rows, the named groups' rows, and (shift support types) the rows of the groups named by code.</summary>
+    public IQueryable<CatalogueRow> CatalogueQuery(IReadOnlyCollection<Guid> groupIds, IReadOnlyCollection<string> codes, IReadOnlyCollection<string>? groupCodes = null) =>
         _db.SupportCatalogueItems.AsNoTracking()
-            .Where(i => i.ActivityGroup.GroupCode == CatalogueGroups.CommunityAccessGroupCode || groupIds.Contains(i.ActivityGroupId) || codes.Contains(i.ItemNumber))
+            .Where(i => i.ActivityGroup.GroupCode == CatalogueGroups.CommunityAccessGroupCode || groupIds.Contains(i.ActivityGroupId) || codes.Contains(i.ItemNumber)
+                || (groupCodes != null && groupCodes.Contains(i.ActivityGroup.GroupCode)))
             .Select(i => new CatalogueRow(i, i.ActivityGroup.GroupCode));
 
     private async Task<HolidayCalendar> LoadHolidaysAsync((DateOnly From, DateOnly To)? window, CancellationToken ct)
@@ -385,6 +388,7 @@ public sealed class BudgetLedgerService
     {
         private readonly Dictionary<string, List<SupportCatalogueItem>> _byCode;
         private readonly Dictionary<Guid, List<SupportCatalogueItem>> _byGroup;
+        private readonly Dictionary<string, List<SupportCatalogueItem>> _byGroupCode;
 
         public Pricing(List<CatalogueRow> catalogue, HolidayCalendar holidays, string? providerState)
         {
@@ -394,6 +398,7 @@ public sealed class BudgetLedgerService
             _byCode = catalogue.GroupBy(c => c.Item.ItemNumber, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.Select(c => c.Item).ToList(), StringComparer.Ordinal);
             _byGroup = catalogue.GroupBy(c => c.Item.ActivityGroupId).ToDictionary(g => g.Key, g => g.Select(c => c.Item).ToList());
             // The category an unpriced shift is counted under: the one the engine's group bills (every community access row is category 4 today).
+            _byGroupCode = catalogue.GroupBy(c => c.GroupCode, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.Select(c => c.Item).Where(i => i.Unit == "H").ToList(), StringComparer.Ordinal);
             DefaultShiftCategory = CommunityAccess.OrderByDescending(i => i.EffectiveFrom).Select(PaceCategories.Of).FirstOrDefault(c => c is not null);
         }
 
@@ -403,6 +408,10 @@ public sealed class BudgetLedgerService
         public int? DefaultShiftCategory { get; }
 
         /// <summary>The rows of a trip's activity group (the community access group when the trip names none).</summary>
+        /// <summary>The hourly rows of a shift's support type (community access when it has none, or when its group is not loaded).</summary>
+        public List<SupportCatalogueItem> ShiftRows(string? groupCode) =>
+            groupCode is not null && _byGroupCode.TryGetValue(groupCode, out var rows) ? rows : CommunityAccess;
+
         public IReadOnlyList<SupportCatalogueItem> GroupRows(Guid? groupId) =>
             groupId is { } id && _byGroup.TryGetValue(id, out var rows) ? rows : CommunityAccess;
 
@@ -435,7 +444,7 @@ public sealed class BudgetLedgerService
     {
         var state = ShiftPriceEstimator.StateFor(person.AddressState, pricing.ProviderState);
         var hours = Shift.HoursBetween(shift.Start, shift.End, shift.EndsNextDay);
-        var outcome = ShiftPriceEstimator.Price(pricing.CommunityAccess, shift.ServiceDate, hours, shift.Ratio, shift.NightType, person.IsIntensive, state, pricing.Holidays.For(state));
+        var outcome = ShiftPriceEstimator.Price(pricing.ShiftRows(shift.SupportGroupCode), shift.ServiceDate, hours, shift.Ratio, shift.NightType, person.IsIntensive, state, pricing.Holidays.For(state));
         var price = outcome.Price;
 
         var completed = shift.Status == ShiftStatus.Completed;

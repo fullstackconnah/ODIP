@@ -2,6 +2,7 @@ using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Odip.Domain.Billing.Catalogue;
 using Odip.Domain.Billing.Services;
+using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Funding;
 using Odip.Domain.Rostering;
@@ -11,7 +12,7 @@ using Odip.Infrastructure.Data;
 namespace Odip.Infrastructure.Services;
 
 /// <summary>One shift to be priced: when it is, how long, and the support it gives. Plain data, so a source of prices needs no entity.</summary>
-public sealed record ShiftSpec(DateOnly ServiceDate, TimeOnly StartTime, TimeOnly EndTime, bool EndsNextDay, SupportRatio Ratio, SleepoverType NightType);
+public sealed record ShiftSpec(DateOnly ServiceDate, TimeOnly StartTime, TimeOnly EndTime, bool EndsNextDay, SupportRatio Ratio, SleepoverType NightType, string? SupportGroupCode = null);
 
 /// <summary>What a shift is estimated to cost, or why it cannot be: nothing is ever invented for a shift the estimator cannot price.</summary>
 public abstract record ShiftCostEstimate
@@ -57,8 +58,10 @@ public sealed class LedgerShiftCostSource : IShiftCostSource
         if (person is null) return shifts.Select(_ => (ShiftCostEstimate)new ShiftCostEstimate.NotPriced("the participant was not found")).ToList();
 
         var providerState = await _db.ProviderSettings.AsNoTracking().Where(s => s.TenantId == tenantId).Select(s => s.State).FirstOrDefaultAsync(ct);
-        var communityAccess = (await _ledger.CatalogueQuery(Array.Empty<Guid>(), Array.Empty<string>()).ToListAsync(ct))
-            .Where(row => row.GroupCode == CatalogueGroups.CommunityAccessGroupCode).Select(row => row.Item).ToList();
+        // Each shift is priced from its own support type's rows (community access when it has none), as the claim and the ledger price it.
+        var groupCodes = shifts.Select(s => s.SupportGroupCode ?? CatalogueGroups.CommunityAccessGroupCode).Distinct().ToList();
+        var rowsByGroup = (await _ledger.CatalogueQuery(Array.Empty<Guid>(), Array.Empty<string>(), groupCodes).ToListAsync(ct))
+            .GroupBy(row => row.GroupCode).ToDictionary(g => g.Key, g => g.Select(row => row.Item).Where(i => i.Unit == "H").ToList());
 
         var from = shifts.Min(s => s.ServiceDate);
         var to = shifts.Max(s => s.ServiceDate);
@@ -69,6 +72,7 @@ public sealed class LedgerShiftCostSource : IShiftCostSource
         return shifts.Select(shift =>
         {
             var hours = Shift.HoursBetween(shift.StartTime, shift.EndTime, shift.EndsNextDay);
+            var communityAccess = rowsByGroup.GetValueOrDefault(shift.SupportGroupCode ?? CatalogueGroups.CommunityAccessGroupCode) ?? new List<SupportCatalogueItem>();
             var outcome = ShiftPriceEstimator.Price(communityAccess, shift.ServiceDate, hours, shift.Ratio, shift.NightType, person.IsIntensiveSupport, state, holidays.For(state));
             return outcome.Price is { } price
                 ? (ShiftCostEstimate)new ShiftCostEstimate.Priced(price.TotalAmount, PaceCategories.Of(price.CatalogueItem))
@@ -83,7 +87,7 @@ public sealed class LedgerShiftCostSource : IShiftCostSource
 /// </summary>
 public sealed record ShiftBudgetRequest(
     Guid TenantId, Guid ParticipantId, Guid? ExistingShiftId, DateOnly ServiceDate, TimeOnly StartTime, TimeOnly EndTime, bool EndsNextDay, SupportRatio Ratio, SleepoverType NightType,
-    ShiftStatus? TargetStatus, bool CallerIsAdmin);
+    ShiftStatus? TargetStatus, bool CallerIsAdmin, string? SupportGroupCode = null);
 
 /// <summary>A shift of an import batch whose budget period is over once the whole batch is counted: the pool, how far over the period would be, whether it was over before the batch, and what the batch adds to it.</summary>
 public sealed record BudgetOver(string PoolName, decimal OverBy, bool AlreadyOver, decimal Added);
@@ -122,13 +126,13 @@ public sealed class ShiftBudgetCheck
         _costs = costs ?? new LedgerShiftCostSource(db, ledger);
     }
 
-    private sealed record Saved(Guid ParticipantId, DateOnly ServiceDate, TimeOnly StartTime, TimeOnly EndTime, bool EndsNextDay, SupportRatio Ratio, SleepoverType NightType, ShiftStatus Status, Guid? ShiftPatternId);
+    private sealed record Saved(Guid ParticipantId, DateOnly ServiceDate, TimeOnly StartTime, TimeOnly EndTime, bool EndsNextDay, SupportRatio Ratio, SleepoverType NightType, ShiftStatus Status, Guid? ShiftPatternId, string? SupportGroupCode);
 
     public async Task<ShiftBudgetOutcome> CheckAsync(ShiftBudgetRequest request, CancellationToken ct)
     {
         var saved = request.ExistingShiftId is { } id
             ? await _db.Shifts.AsNoTracking().Where(s => s.TenantId == request.TenantId && s.Id == id)
-                .Select(s => new Saved(s.ParticipantId, s.ServiceDate, s.StartTime, s.EndTime, s.EndsNextDay, s.Ratio, s.NightType, s.Status, s.ShiftPatternId)).FirstOrDefaultAsync(ct)
+                .Select(s => new Saved(s.ParticipantId, s.ServiceDate, s.StartTime, s.EndTime, s.EndsNextDay, s.Ratio, s.NightType, s.Status, s.ShiftPatternId, s.SupportGroupCode)).FirstOrDefaultAsync(ct)
             : null;
 
         // Never blocked, in any mode: a shift on its way to Cancelled costs nothing, and one that has started or finished is delivered work.
@@ -142,8 +146,8 @@ public sealed class ShiftBudgetCheck
 
         // The saved version only counts when it is this participant's and in the ledger (a Cancelled one is not).
         var oldCounts = saved is { Status: ShiftStatus.Draft or ShiftStatus.Published } s && s.ParticipantId == request.ParticipantId;
-        var specs = new List<ShiftSpec> { new(request.ServiceDate, request.StartTime, request.EndTime, request.EndsNextDay, request.Ratio, request.NightType) };
-        if (oldCounts) specs.Add(new ShiftSpec(saved!.ServiceDate, saved.StartTime, saved.EndTime, saved.EndsNextDay, saved.Ratio, saved.NightType));
+        var specs = new List<ShiftSpec> { new(request.ServiceDate, request.StartTime, request.EndTime, request.EndsNextDay, request.Ratio, request.NightType, request.SupportGroupCode) };
+        if (oldCounts) specs.Add(new ShiftSpec(saved!.ServiceDate, saved.StartTime, saved.EndTime, saved.EndsNextDay, saved.Ratio, saved.NightType, saved.SupportGroupCode));
         var estimates = await _costs.EstimateAsync(request.TenantId, request.ParticipantId, specs, ct);
 
         // A shift the estimator cannot price has no cost to check: no finding, never blocked, and the line says so.
