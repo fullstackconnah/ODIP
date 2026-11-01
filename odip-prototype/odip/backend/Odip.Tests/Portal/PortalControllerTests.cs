@@ -1239,9 +1239,9 @@ public class PortalControllerTests
         var (db, tenant) = CreateDb();
         var me = SeedUser(db);
         var participant = SeedParticipant(db);
-        participant.AddressStreet = "12 Lockhart Street";
-        participant.AddressSuburb = "Wattlegrove";
-        participant.AddressPostcode = "4999";
+        participant.AddressStreet = "Zzleaky Street";
+        participant.AddressSuburb = "Qxsuburb";
+        participant.AddressPostcode = "ZZ-4999";
         db.SaveChanges();
         SeedShift(db, participant.Id, me.Id);
         SeedTripAssignment(db, me.Id, "Surfers Paradise", "Support Worker");
@@ -1254,8 +1254,8 @@ public class PortalControllerTests
         Odip.Api.Serialization.ApiJsonOptions.Configure(options);
         var json = System.Text.Json.JsonSerializer.Serialize(body, options);
         Assert.Contains("Surfers Paradise", json);
-        Assert.DoesNotContain("12 Lockhart Street", json);
-        Assert.DoesNotContain("Wattlegrove", json);
-        Assert.DoesNotContain("4999", json);
+        Assert.DoesNotContain("Zzleaky Street", json);
+        Assert.DoesNotContain("Qxsuburb", json);
+        Assert.DoesNotContain("ZZ-4999", json);
     }
 }
