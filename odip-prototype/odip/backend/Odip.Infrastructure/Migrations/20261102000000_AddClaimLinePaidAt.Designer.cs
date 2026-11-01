@@ -13,7 +13,7 @@ using Odip.Infrastructure.Data;
 namespace Odip.Infrastructure.Migrations
 {
     [DbContext(typeof(OdipDbContext))]
-    [Migration("20261101120000_AddClaimLinePaidAt")]
+    [Migration("20261102000000_AddClaimLinePaidAt")]
     partial class AddClaimLinePaidAt
     {
         /// <inheritdoc />
@@ -275,6 +275,9 @@ namespace Odip.Infrastructure.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<int>("QualificationWarningDays")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("SessionLengthMinutes")
                         .HasColumnType("integer");
 
                     b.Property<Guid>("TenantId")
