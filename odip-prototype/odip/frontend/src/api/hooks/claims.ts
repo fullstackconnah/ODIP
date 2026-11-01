@@ -3,6 +3,7 @@ import { keepPreviousData, useQueries, useQuery, useMutation, useQueryClient, ty
 import { apiGet, apiPost, apiPutRaw, apiPatchRaw, apiDeleteRaw } from '../client'
 import { fetchPagedList } from './pagedList'
 import { refreshBudgetWarnings, refreshLedgers } from './funding-ledger'
+import { CLAIM_PIPELINE_KEY } from './claimHub'
 import type {
   TripClaimListDto,
   TripClaimDetailDto,
@@ -127,6 +128,7 @@ export function useUpdateClaimLineItem() {
       const item = (claim?.lineItems ?? []).find((line) => line.id === itemId)
       const participants = item?.participantId ? [item.participantId] : claimParticipantIds(claim)
       qc.invalidateQueries({ queryKey: ['claim', claimId] })
+      qc.invalidateQueries({ queryKey: CLAIM_PIPELINE_KEY }) // a line moved into or out of Paid changes the chart
       refreshLedgers(qc, participants)
       refreshBudgetWarnings(qc)
     },

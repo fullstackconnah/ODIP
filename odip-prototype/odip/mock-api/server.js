@@ -1235,6 +1235,7 @@ const HTTP = Symbol('http-status')
 const respond = (status, body) => ({ [HTTP]: status, body })
 const rosterFill = require('./mock-roster-fill.js')
 const incidentTrend = require('./mock-incident-trend.js')
+const claimsPipeline = require('./mock-claims-pipeline.js')
 const failEnvelope = (data, errors, code) => {
   const envelope = { success: false }
   if (data != null) envelope.data = data
@@ -2780,6 +2781,13 @@ const routes = [
     const name = (searchParams && searchParams.get('fixture')) || 'mixed'
     if (name === 'failing') return respond(500, failEnvelope(null, ['The incident trend could not be worked out.']))
     const data = incidentTrend.byFixture(name, new Date().toISOString().slice(0, 10))
+    return name === 'slow' ? new Promise((resolve) => setTimeout(() => resolve(data), 2500)) : data
+  }],
+  // Claims sent and paid by week (mock-claims-pipeline.js). `?fixture=` picks a state for the captures; the screen never sends it.
+  ['claim-hub/pipeline', (searchParams) => {
+    const name = (searchParams && searchParams.get('fixture')) || 'mixed'
+    if (name === 'failing') return respond(500, failEnvelope(null, ['The claims chart could not be worked out.']))
+    const data = claimsPipeline.byFixture(name, new Date().toISOString().slice(0, 10))
     return name === 'slow' ? new Promise((resolve) => setTimeout(() => resolve(data), 2500)) : data
   }],
   ['incidents/trip/:id', (id) => incidents.filter((i) => i.tripInstanceId === id)],

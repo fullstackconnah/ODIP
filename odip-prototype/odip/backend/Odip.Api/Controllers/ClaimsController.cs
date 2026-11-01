@@ -431,6 +431,9 @@ public class ClaimsController : ControllerBase
         if (dto.ParticipantApproved.HasValue) item.ParticipantApproved = dto.ParticipantApproved.Value;
         if (dto.Status.HasValue)
         {
+            // PaidAt moves only with the status: re-saving a paid line keeps its week, leaving Paid clears it.
+            if (dto.Status.Value == ClaimLineItemStatus.Paid && item.Status != ClaimLineItemStatus.Paid) item.PaidAt = _clock.GetUtcNow().UtcDateTime;
+            else if (dto.Status.Value != ClaimLineItemStatus.Paid) item.PaidAt = null;
             item.Status = dto.Status.Value;
             if (dto.Status.Value == ClaimLineItemStatus.Paid) item.PaidAmount = dto.PaidAmount ?? item.TotalAmount;
             if (dto.Status.Value == ClaimLineItemStatus.Rejected) item.RejectionReason = dto.RejectionReason;

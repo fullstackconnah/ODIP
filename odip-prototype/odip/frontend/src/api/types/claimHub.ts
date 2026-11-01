@@ -151,3 +151,25 @@ export interface ResultsImportDto {
 export interface MarkPaidRequestDto {
   lines?: { batchLineId: string; amount?: number }[]
 }
+
+/** GET claim-hub/pipeline: dollars sent to the NDIA and paid in each of the last 12 provider-local weeks, and where the money stands today. Money is 2-dp; dates are `yyyy-MM-dd`. */
+export interface PipelineWeekDto {
+  /** The Monday. */
+  weekStart: string
+  sent: number
+  paid: number
+  /** The amount sent on the lines rejected in files whose results were imported this week. */
+  rejected: number
+  rejectedLines: number
+}
+
+export interface PipelineDto {
+  /** The provider-timezone date, so the card names "this week" without its own clock. */
+  today: string
+  /** 12 weeks, oldest first, the current week last. */
+  weeks: PipelineWeekDto[]
+  withNdia: number
+  acceptedUnpaid: number
+  /** Paid before payments were dated: in no week. */
+  undatedPaid: number
+}
