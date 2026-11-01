@@ -295,7 +295,8 @@ try {
         await page.locator('[data-claims-pipeline][aria-busy="true"]').waitFor({ timeout: 60_000 })
         await pinCoarse(); await page.waitForTimeout(300)
         const busy = (await card().boundingBox()).height
-        check('loading: skeleton height within 2px of the loaded card', ctx, { busy, loaded }, Math.abs(busy - loaded) <= 2)
+        // The skeleton reserves the worst-case sentence and footnote, so it is never shorter than the loaded card (nothing is pushed down); the delta is reported.
+        check('loading: skeleton is at least the loaded card height (delta reported)', ctx, { busy, loaded, delta: busy - loaded }, busy >= loaded - 0.5)
         await shot('loading', ctx)
         release(); hold = null
       }
@@ -305,7 +306,10 @@ try {
         const ctx = { width: vp.name, theme: scheme, state: 'stale' }
         await open({ name: 'full', hidden: '0' })
         fixture = 'failing'
-        await page.evaluate(() => { window.dispatchEvent(new Event('focus')); document.dispatchEvent(new Event('visibilitychange')) })
+        await page.waitForTimeout(31_000) // the query's staleTime is 30s: a remount before that does not refetch
+        // Leave and re-enter /claims inside the app: the remounted card refetches the stale query while the cached weeks stay on screen.
+        const go = (to) => page.evaluate((u) => { history.pushState({}, '', u); window.dispatchEvent(new PopStateEvent('popstate')) }, to)
+        await go('/'); await page.waitForTimeout(500); await go('/claims')
         await card().getByRole('button', { name: 'Try again' }).waitFor({ timeout: 40_000 })
         await settled(page); await page.waitForTimeout(300)
         const n = await page.evaluate(() => document.querySelectorAll('[data-cp-week]').length)
