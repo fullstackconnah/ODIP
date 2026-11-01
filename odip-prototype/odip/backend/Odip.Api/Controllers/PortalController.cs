@@ -50,7 +50,6 @@ public class PortalController : ControllerBase
 {
     private readonly OdipDbContext _db;
     private readonly ICurrentTenant _currentTenant;
-    private readonly IConfiguration? _config;
     private readonly Odip.Application.Interfaces.INotificationRaiser _notificationRaiser;
     private readonly Odip.Application.Interfaces.IObligationTaskService _obligationTasks;
     private readonly TimeProvider _clock;
@@ -73,7 +72,6 @@ public class PortalController : ControllerBase
     {
         _db = db;
         _currentTenant = currentTenant;
-        _config = config;
         _notificationRaiser = notificationRaiser ?? new Odip.Infrastructure.Notifications.NotificationRaiser(db);
         _obligationTasks = obligationTasks ?? new Odip.Infrastructure.Tasks.ObligationTaskService(db);
         _clock = clock ?? TimeProvider.System;
@@ -85,8 +83,6 @@ public class PortalController : ControllerBase
     }
 
     private DateTime NowUtc => _clock.GetUtcNow().UtcDateTime;
-
-    private int VarianceReviewMinutes => ShiftCompletionMapper.ClampVarianceReviewMinutes(_config?.GetValue<int>("Rostering:VarianceReviewMinutes", 15) ?? 15);
 
     /// <summary>
     /// The caller's own upcoming shifts (and, if cheap, trip staffing assignments) in
@@ -265,7 +261,7 @@ public class PortalController : ControllerBase
     /// <summary>Maps a ShiftCompletion to its DTO — thin wrapper so this and RosteringController's
     /// identical mapping need to stay in one place; see <see cref="ShiftCompletionMapper"/>.</summary>
     private Task<ShiftCompletionDto> ToShiftCompletionDtoAsync(ShiftCompletion c, int shiftReturnCount, CancellationToken ct) =>
-        ShiftCompletionMapper.ToDtoAsync(_db, c, VarianceReviewMinutes, shiftReturnCount, ct, nowUtc: NowUtc);
+        ShiftCompletionMapper.ToDtoAsync(_db, c, shiftReturnCount, ct, nowUtc: NowUtc);
 
     /// <summary>
     /// Resolves one of the caller's own shifts (Participant included, draft-excluded — same rule
