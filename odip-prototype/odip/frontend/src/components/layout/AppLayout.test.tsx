@@ -141,27 +141,28 @@ describe('platform page finder', () => {
 describe('AppLayout — the organisation name in the header', () => {
   afterEach(() => localStorage.clear())
 
-  it('is shown on a phone too: not hidden below the sm breakpoint, and trimmed with an ellipsis instead of crowding the bar', () => {
+  // Below md the bar keeps four 44px targets (menu, page finder, What's new, bell), so the name moves into the menu drawer.
+  it('shows in the bar from md up, trimmed with an ellipsis, and never below md', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin', tenantName: 'Jo Care Support Services' }))
     renderAt('/trips')
-    const name = screen.getByText('Jo Care Support Services')
-    expect(name).not.toHaveClass('hidden')
-    expect(name).toHaveClass('truncate')
-    expect(name).toHaveAttribute('title', 'Jo Care Support Services')
+    const chip = within(document.querySelector('header')!).getByText('Jo Care Support Services')
+    expect(chip).toHaveClass('hidden', 'md:inline-block', 'truncate')
+    expect(chip).toHaveAttribute('title', 'Jo Care Support Services')
   })
 
-  it('is hidden on a phone for a SuperAdmin, whose tenant switcher already names the organisation and needs the room', () => {
+  it('shows in the menu drawer below md as one muted 13px line under the wordmark that wraps and is never truncated', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin', tenantName: 'Jo Care Support Services' }))
+    renderAt('/trips')
+    const line = within(document.querySelector('aside')!).getByText('Jo Care Support Services')
+    expect(line).toHaveClass('md:hidden', 'text-[13px]', 'text-[var(--color-muted-foreground)]', 'break-words')
+    expect(line).not.toHaveClass('truncate')
+  })
+
+  it('is not repeated in the drawer for a SuperAdmin, whose tenant switcher already names the organisation', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'SuperAdmin', tenantName: 'Jo Care Support Services' }))
     renderAt('/trips')
-    expect(screen.getByText('Jo Care Support Services')).toHaveClass('hidden', 'md:inline-block')
-    expect(screen.getByText('Jo Care Support Services')).not.toHaveClass('sm:inline-block')
-  })
-
-  it('keeps showing a staff member\'s organisation at every width', () => {
-    localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin', tenantName: 'Jo Care Support Services' }))
-    renderAt('/trips')
-    expect(screen.getByText('Jo Care Support Services')).toHaveClass('inline-block')
-    expect(screen.getByText('Jo Care Support Services')).not.toHaveClass('hidden')
+    expect(within(document.querySelector('header')!).getByText('Jo Care Support Services')).toHaveClass('hidden', 'md:inline-block')
+    expect(within(document.querySelector('aside')!).queryByText('Jo Care Support Services')).toBeNull()
   })
 })
 
@@ -404,7 +405,7 @@ describe('AppLayout — 44px coarse-pointer hit areas', () => {
 
   it('gives the header "Open menu" toggle (36px) a real 44px box under touch and keeps it when it becomes "Close menu"', () => {
     renderAt('/trips')
-    expect(screen.getByRole('button', { name: 'Open menu' })).toHaveClass('p-2', 'lg:hidden', ...box)
+    expect(screen.getByRole('button', { name: 'Open menu' })).toHaveClass('size-8', 'rounded-full', 'lg:hidden', ...box)
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }))
     expect(screen.getByRole('button', { name: 'Close menu' })).toHaveClass(...box)
   })
@@ -434,6 +435,19 @@ describe('AppLayout — 44px coarse-pointer hit areas', () => {
     expect(screen.getByRole('button', { name: /Find a page/ }).parentElement).toHaveClass('shrink-0')
   })
 
+  it('hides the theme menu below lg (it stays reachable as Settings > Appearance), so the bar keeps four targets on a phone', () => {
+    renderAt('/trips')
+    const themeMenu = screen.getByRole('button', { name: /theme/i })
+    expect(themeMenu.closest('[class~="max-lg:hidden"]')).not.toBeNull()
+  })
+
+  it('draws the page finder as a bare round icon button below md and as a field from md', () => {
+    renderAt('/trips')
+    const finder = screen.getByRole('button', { name: 'Find a page' })
+    expect(finder).toHaveClass('size-8', 'rounded-full', 'hover:bg-[var(--color-accent)]', 'text-[var(--color-muted-foreground)]', 'pointer-coarse:min-h-[var(--tap-min)]', 'pointer-coarse:min-w-[var(--tap-min)]')
+    expect(finder).toHaveClass('md:w-72', 'md:bg-[var(--color-field)]', 'md:border-[var(--color-field-border)]')
+  })
+
   it('collapses the page finder to its icon below xl only while a SuperAdmin views a tenant, where two switchers need the room', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'Admin', firstName: 'Sam' }))
     const { unmount } = renderAt('/trips')
@@ -442,7 +456,7 @@ describe('AppLayout — 44px coarse-pointer hit areas', () => {
     localStorage.setItem('odip_user', JSON.stringify({ role: 'SuperAdmin', firstName: 'Sam' }))
     sessionStorage.setItem('odip_viewing_tenant', 'tenant-0001')
     renderAt('/trips')
-    expect(screen.getByRole('button', { name: 'Find a page' })).toHaveClass('xl:w-72', 'max-xl:px-2')
+    expect(screen.getByRole('button', { name: 'Find a page' })).toHaveClass('xl:w-72')
     expect(screen.getByRole('button', { name: 'Find a page' })).toHaveAttribute('title', 'Find a page')
     expect(screen.getByRole('button', { name: 'Find a page' })).not.toHaveClass('md:w-72')
   })

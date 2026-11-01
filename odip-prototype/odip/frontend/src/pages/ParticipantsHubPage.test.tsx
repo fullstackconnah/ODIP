@@ -136,6 +136,7 @@ describe('ParticipantsHubPage — single PageHeader + tabbed lifecycle', () => {
     renderHub()
     // Visible on the default Active participants tab.
     expect(screen.getByRole('link', { name: /New enquiry/i })).toHaveAttribute('href', '/participants/new-inquiry')
+    expect(screen.getByRole('link', { name: /New enquiry/i })).toHaveClass('max-md:order-first') // primary first below md
     // Visible on Enquiries.
     await user.click(screen.getByRole('tab', { name: 'Enquiries' }))
     expect(screen.getByRole('link', { name: /New enquiry/i })).toHaveAttribute('href', '/participants/new-inquiry')

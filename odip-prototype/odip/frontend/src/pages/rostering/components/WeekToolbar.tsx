@@ -96,14 +96,15 @@ export function WeekToolbar({
         {allPublished && <StatusBadge tone="info" label={heldBack ? 'All staffed shifts published' : 'All published'} className="shrink-0 whitespace-nowrap" />}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 max-sm:w-full">
         <ToggleGroup
+          className="max-sm:w-full max-sm:[&>button]:flex-1"
           options={[{ key: 'participant', label: 'By participant' }, { key: 'staff', label: 'By staff' }]}
           value={groupBy}
           onChange={key => onGroupByChange(key as BoardViewMode)}
         />
         {/* As wide as the name chosen (a participant's full name wrapped onto two lines inside a fixed 160px box), within limits. */}
-        <div className="w-auto min-w-40 max-w-64">
+        <div className="w-auto min-w-40 max-w-64 max-sm:flex-1 max-sm:max-w-none">
           <Dropdown
             variant="form"
             value={participantFilter}
@@ -133,6 +134,8 @@ export function WeekToolbar({
         >
           Unfilled only
         </Button>
+        {/* The actions share the last row at a phone width; from sm up the wrapper vanishes and they flow with the filters as before. */}
+        <div className="max-sm:flex max-sm:w-full max-sm:flex-wrap max-sm:items-center max-sm:gap-2 sm:contents">
         {/* Nothing to open at zero, so no button (V2-G). */}
         {exceptionsCount > 0 && (
           <Button variant="secondary" size="md" onClick={onOpenExceptions}>
@@ -162,6 +165,7 @@ export function WeekToolbar({
             <Plus className="h-4 w-4" /> New shift
           </Button>
         )}
+        </div>
       </div>
     </div>
   )

@@ -108,7 +108,8 @@ export function WizardStepRail<V>({
       // shape without locking the mobile/tablet horizontal mode.
       (forceVertical || isVerticalAtLg) && 'lg:w-full lg:justify-start lg:rounded-lg lg:text-left',
       filled && {
-        'bg-[var(--color-primary)] text-[var(--color-primary-foreground)]': isCurrent,
+        // The current step is the selected tint with a 2px primary ring (a pill stands alone, so a ring rather than a bar), not a second solid green beside the form's Next.
+        'bg-[var(--color-selected)] text-[var(--color-on-selected)] shadow-[inset_0_0_0_2px_var(--color-primary)]': isCurrent,
         'bg-[var(--color-primary)]/10 text-[var(--color-primary)]': isCompleted && !isCurrent,
         // A step that cannot be opened yet is the lighter fill, not a faded one: opacity-60 over this fill was about 2.9:1.
         'bg-[var(--color-accent)] text-[var(--color-muted-foreground)]': !isCurrent && !isCompleted && isClickable,
@@ -164,7 +165,7 @@ export function WizardStepRail<V>({
                 <span
                   className={`flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold shrink-0 ${
                     isCurrent
-                      ? filled ? 'bg-[var(--color-primary-foreground)] text-[var(--color-primary)]' : 'bg-[var(--color-primary-foreground)]/20'      // filled: white over the olive, 7.2:1; the 20% veil was 4.46:1
+                      ? filled ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)]' : 'bg-[var(--color-primary-foreground)]/20'      // filled: the primary dot with its own ink, 7.2:1 light; the 20% veil was 4.46:1
                       : isCompleted ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)]' : 'bg-[var(--color-border)]'
                   }`}
                 >

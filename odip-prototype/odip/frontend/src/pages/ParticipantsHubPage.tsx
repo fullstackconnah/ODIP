@@ -79,9 +79,8 @@ export default function ParticipantsHubPage() {
     [],
   )
 
-  // Block flow, not a flex column with a section gap: the title row (32px) and the tab strip (40px
-  // + its 1px rule) sit directly on each other, 73px in all, where the old markup spent 32 + 16 +
-  // 41 and then a 36px description row before the table.
+  // Block flow, not a flex column with a section gap: the title row (32px), 12px, and the tab strip (40px
+  // + its 1px rule) are 85px in all, where the old markup spent 32 + 16 + 41 and then a 36px description row before the table.
   return (
     <div className="animate-fade-in">
       <PageHeader
@@ -91,14 +90,14 @@ export default function ParticipantsHubPage() {
           <div className="flex shrink-0 items-center gap-2">
             {canImportData && <Button to="/settings/import/participants" variant="secondary" size="md">Import</Button>}
             {canManageParticipantLifecycle && (
-              <Button to="/participants/new-inquiry" size="md">
+              <Button to="/participants/new-inquiry" size="md" className="max-md:order-first">
                 <Plus className="w-4 h-4" /> New enquiry
               </Button>
             )}
           </div>
         ) : undefined}
+        tabs={<Tabs tabs={items} active={activeId} onChange={selectTab} ariaLabel="Lifecycle stages" />}
       />
-      <Tabs tabs={items} active={activeId} onChange={selectTab} ariaLabel="Lifecycle stages" />
     </div>
   )
 }

@@ -383,18 +383,20 @@ export function QuickGroup({ model, state, onRecoveryChange }: { model: GroupMod
           className="[&_input]:m-0 [&_input]:size-4 pointer-coarse:[&_label]:min-w-11"
           checked={selected.has(row.id) && tickable.some(item => item.id === row.id)}
           disabled={!tickable.some(item => item.id === row.id) || !!progress || checking}
-          onChange={event => setSelected(previous => { const next = new Set(previous); if (event.target.checked) next.add(row.id); else next.delete(row.id); return next })} /> : null
+          onChange={event => setSelected(previous => { const next = new Set(previous); if (event.target.checked) next.add(row.id); else next.delete(row.id); return next })} />
+          : <span aria-hidden="true" className="block h-px w-4 pointer-coarse:w-11" />
       } }] : []),
     { key: 'subject', header: model.subjectHeader, pin: 'start', mobile: 'primary', minWidth: '10rem',
       render: row => <div className="flex min-w-0 flex-wrap items-center gap-2 md:flex-nowrap">
         <span ref={element => { if (element) subjects.current.set(row.id, element); else subjects.current.delete(row.id) }}
-          data-quick-subject className="min-w-0 font-semibold md:max-w-[16rem] md:truncate" title={row.subject}>{row.subject}</span>
+          data-quick-subject className="min-w-0 font-semibold md:max-w-[12rem] md:truncate" title={row.subject}>{row.subject}</span>
         {row.flags.slice(0, 2).map(flag => <StatusBadge key={flag.label} tone={flag.tone} label={flag.label} className="shrink-0 whitespace-nowrap" />)}
         {unsure.has(row.id) && <StatusBadge tone="neutral" label="Not confirmed yet" className="shrink-0 whitespace-nowrap" />}
       </div> },
     ...model.columns.map((column, index): Column<QuickRow> => ({
-      key: `fact-${index}`, header: column.header, mobile: 'meta',
-      render: row => <CellText className="text-[13px] text-[var(--color-muted-foreground)] md:max-w-[18rem]">{row.facts[index] || '\u2014'}</CellText>,
+      key: `fact-${index}`, header: column.header, mobile: 'meta', wrap: column.long, className: column.wide ? 'max-md:basis-full max-md:max-w-none!' : undefined,
+      // A long fact (a note, a participant, a trip) takes two lines before it is cut; its full text stays in the tooltip.
+      render: row => <CellText lines={column.long ? 2 : 1} className={`text-[13px] text-[var(--color-muted-foreground)] ${column.long ? 'md:max-w-[14rem]' : 'md:max-w-[18rem]'}`}>{row.facts[index] || '\u2014'}</CellText>,
     })),
     { key: 'actions', header: '', render: row => {
       const ui = rowUiOf(row.id), busy = !!ui.tapping || !!ui.submitting || locked(row)
@@ -405,7 +407,7 @@ export function QuickGroup({ model, state, onRecoveryChange }: { model: GroupMod
             ? <Button key={action.label} variant="secondary" size="sm" aria-label={action.name} aria-expanded={!!ui.formOpen}
                 aria-controls={formId(row.id)} aria-disabled={busy || undefined} className={busy ? HELD : undefined}
                 onClick={() => { if (!busy) { updateRow(row.id, { formOpen: !ui.formOpen }); setSelected(previous => { const next = new Set(previous); next.delete(row.id); return next }) } }}>{action.label}</Button>
-            : <Button key={action.label} size="sm" aria-label={action.name} aria-disabled={busy || undefined}
+            : <Button key={action.label} variant="secondary" size="sm" aria-label={action.name} aria-disabled={busy || undefined}
                 className={busy ? HELD : undefined} onClick={() => void tap(row, action)}>
                 <span data-reserve={action.busyLabel} className="grid after:invisible after:h-0 after:content-[attr(data-reserve)]">{ui.tapping ? action.busyLabel : action.label}</span>
               </Button>)}

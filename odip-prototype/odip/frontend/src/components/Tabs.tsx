@@ -98,7 +98,8 @@ const SCROLL_FADE = '[mask-image:linear-gradient(to_right,black_calc(100%_-_2rem
 // (dashed) one never changes a width. Quiet colours are muted-foreground mixed down, because --color-border is under 2:1 and fails WCAG 1.4.11.
 const SUB_LIST = '-m-1 p-1 flex flex-nowrap gap-x-2 gap-y-2 overflow-x-auto scroll-smooth max-md:[scrollbar-width:none] max-md:[&::-webkit-scrollbar]:hidden md:flex-wrap max-md:[mask-image:linear-gradient(to_right,black_calc(100%_-_2rem),transparent)] max-md:pr-9'
 const SUB_CHIP = 'inline-flex h-8 items-center rounded-md border px-3 text-[13px] font-medium whitespace-nowrap transition-colors group-focus-visible:ring-2 group-focus-visible:ring-[var(--color-ring)] group-focus-visible:ring-offset-2'
-const SUB_ACTIVE = 'border-transparent bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]'
+// Selected, not the main nav's lime: the tint, the on-selected label and a 2px primary bar, as ToggleGroup and the settings sub-nav.
+const SUB_ACTIVE = 'border-transparent bg-[var(--color-selected)] text-[var(--color-on-selected)] font-semibold shadow-[inset_0_-2px_0_var(--color-primary)]'
 const SUB_IDLE = 'border-transparent text-[var(--color-muted-foreground)] group-hover:bg-[var(--color-accent)] group-hover:text-[var(--color-foreground)] group-active:bg-[var(--color-surface-container-high)]'
 const SUB_QUIET = 'border-dashed border-[color-mix(in_srgb,var(--color-muted-foreground)_60%,transparent)] text-[color-mix(in_srgb,var(--color-muted-foreground)_80%,transparent)] group-hover:bg-[var(--color-accent)] group-hover:text-[var(--color-foreground)] group-active:bg-[var(--color-surface-container-high)]'
 
@@ -256,10 +257,10 @@ export function Tabs({ tabs, active, onChange, ariaLabel = 'Tabs', idPrefix, cla
                 onChange(tab.id)
               }}
               onKeyDown={e => onKeyDown(e, tab.id)}
-              className={sub ? `group flex shrink-0 min-h-[var(--tap-min)] min-w-[var(--tap-min)] items-center focus-visible:outline-none ${tab.disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}` : `flex shrink-0 min-h-[var(--tap-min)] items-center gap-2 px-3 py-2 text-sm font-medium border-b-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-inset whitespace-nowrap ${
+              className={sub ? `group flex shrink-0 min-h-[var(--tap-min)] min-w-[var(--tap-min)] items-center focus-visible:outline-none ${tab.disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}` : `flex shrink-0 min-h-[var(--tap-min)] items-center gap-2 px-3 py-2 text-sm border-b-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-inset whitespace-nowrap ${
                 isActive
-                  ? 'border-[var(--color-primary)] text-[var(--color-primary)]'
-                  : 'border-transparent text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]'
+                  ? 'font-semibold border-[var(--color-primary)] text-[var(--color-primary)]'
+                  : 'font-medium border-transparent text-[var(--color-muted-foreground)] hover:text-[var(--color-foreground)]'
               } ${tab.disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
             >
               {sub ? (

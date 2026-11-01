@@ -132,7 +132,8 @@ public class PortalController : ControllerBase
             .ToListAsync(ct);
         var tripDtos = tripAssignments.Select(a => new PortalTripAssignmentSummaryDto(
             a.Id, a.TripInstanceId, a.TripInstance.TripCode, a.TripInstance.TripName,
-            a.AssignmentStart, a.AssignmentEnd, a.IsDriver, a.Status)).ToList();
+            a.AssignmentStart, a.AssignmentEnd, a.IsDriver, a.Status,
+            NullIfBlank(a.TripInstance.Destination), NullIfBlank(a.AssignmentRole))).ToList();
 
         return Ok(ApiResponse<PortalShiftsResponseDto>.Ok(
             new PortalShiftsResponseDto(shiftDtos, tripDtos, provider.Id)));
@@ -1532,9 +1533,11 @@ public class PortalController : ControllerBase
     private Task<Guid> StaffTenantIdAsync(Guid staffId, CancellationToken ct) =>
         _db.Users.Where(u => u.Id == staffId).Select(u => u.TenantId).FirstAsync(ct);
 
+    private static string? NullIfBlank(string? text) => string.IsNullOrWhiteSpace(text) ? null : text.Trim();
+
     private static PortalShiftSummaryDto ToSummaryDto(Shift s) => new(
         s.Id, s.ParticipantId, s.Participant?.FullName ?? string.Empty, s.ServiceDate, s.StartTime, s.EndTime,
-        s.EndsNextDay, s.DurationHours, s.Ratio, s.NightType, s.Status, s.Notes, s.ReturnCount);
+        s.EndsNextDay, s.DurationHours, s.Ratio, s.NightType, s.Status, s.Notes, s.ReturnCount, s.Location);
 
     // These duplicate LeaveController's own ToDto overloads rather than sharing them — matches
     // the codebase's existing precedent of small per-controller mapping/validation helpers (e.g.

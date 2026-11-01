@@ -7,6 +7,7 @@ import { formatNoteTimestamp, formatRatio } from '@/lib/format'
 import type { ShiftNoteDto } from '@/api/types'
 import { formatFlaggedCategoryList, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 import type { ShiftNoteIncidentPrefillState } from '@/lib/incidentPrefill'
+import { fieldSurface } from '@/components/FormField'
 import { Button } from '@/components/Button'
 import { useOnline } from '../shift/useOnline'
 import { WaitingToSend } from '../shift/ui'
@@ -15,7 +16,7 @@ import { Callout } from '@/components/Callout'
 
 const BODY_MAX_LENGTH = 1000
 
-const textareaClass = 'w-full px-3 py-2 rounded-lg bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-foreground)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)] transition-shadow'
+const textareaClass = `w-full py-2 text-sm ${fieldSurface}`
 
 function CharCount({ length }: { length: number }) {
   const nearCap = length >= BODY_MAX_LENGTH * 0.9

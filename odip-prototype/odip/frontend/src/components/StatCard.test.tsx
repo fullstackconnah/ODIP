@@ -136,10 +136,10 @@ describe('StatCard — attention variant', () => {
     )
 
     const chip = screen.getByText('All clear')
-    expect(chip).toHaveClass('rounded-full', 'bg-[var(--color-primary-fixed)]', 'text-[var(--color-on-primary-fixed)]')
-    // A lime chip never sits on a tint (DESIGN.md, The Attention Tint Rule).
+    expect(chip).toHaveClass('rounded-full', 'bg-[var(--color-selected)]', 'text-[var(--color-on-selected)]')
+    // The positive chip never sits on a tint (DESIGN.md, The Attention Tint Rule).
     const plain = screen.getByText('Chase these')
-    expect(plain).not.toHaveClass('bg-[var(--color-primary-fixed)]')
+    expect(plain).not.toHaveClass('bg-[var(--color-selected)]')
     expect(plain).not.toHaveClass('rounded-full')
   })
 
@@ -252,7 +252,7 @@ describe('StatCard — attention variant, the tall action tile', () => {
     )
   const group = (name = 'Overdue 2') => screen.getByRole('group', { name })
 
-  it('stacks the figure, the label, the line and the link, in that order', () => {
+  it('lays the figure, the label over the line, and the link in ONE row, in that order', () => {
     renderTall()
 
     const tile = group()
@@ -265,9 +265,12 @@ describe('StatCard — attention variant, the tall action tile', () => {
     for (let i = 1; i < parts.length; i++) {
       expect(parts[i - 1].compareDocumentPosition(parts[i]) & Node.DOCUMENT_POSITION_FOLLOWING, `part ${i}`).toBeTruthy()
     }
-    // One column of them: nothing sits beside the figure, so the tile stays tall at any width.
-    expect(parts[0].parentElement).toHaveClass('flex', 'flex-col')
-    expect(parts[0].parentElement).toBe(parts[3].parentElement)
+    // One row at every width (the compact tile): the figure and the link are the tile's own children, the label and the line share the column between them.
+    expect(group()).toHaveClass('flex', 'items-center')
+    expect(parts[0].parentElement).toBe(group())
+    expect(parts[3].parentElement).toBe(group())
+    expect(parts[1].parentElement).toBe(parts[2].parentElement)
+    expect(parts[1].parentElement).toHaveClass('flex-col', 'min-w-0', 'flex-1')
   })
 
   // A line that wraps ("2 participants: 1 over, 1 forecast to go over") must not leave one word alone on its second line: the line balances its wrap.
@@ -277,15 +280,14 @@ describe('StatCard — attention variant, the tall action tile', () => {
     expect(within(group()).getByText('Tasks past their due date and still open.')).toHaveClass('text-balance')
   })
 
-  it('sets the figure at the display step in tabular figures, the label at the title step and the line at the 13px secondary step', () => {
+  it('sets the figure at 2xl in tabular figures, the label at the title step and the line at the 13px secondary step, two lines at most', () => {
     renderTall()
 
     const tile = group()
     expect(within(tile).getByText('2')).toHaveClass('text-display', 'tabular-nums')
     expect(within(tile).getByText('Overdue')).toHaveClass('text-sm', 'font-semibold')
     expect(within(tile).getByText('Tasks past their due date and still open.')).toHaveClass('text-[13px]')
-    // No new type size: the only display class on the tile is the figure's, and nothing is bigger than it.
-    expect(tile.querySelectorAll('.text-display')).toHaveLength(1)
+    // No new type size: nothing on the tile is bigger than the figure.
     expect(tile.innerHTML).not.toMatch(/text-(?:xl|2xl|3xl|4xl|5xl|6xl|\[(?:1[5-9]|[2-9]\d)px\])/)
   })
 
@@ -299,7 +301,8 @@ describe('StatCard — attention variant, the tall action tile', () => {
     expect(within(tile).getByRole('link', { name: 'Open overdue tasks' })).toHaveAttribute('href', '/tasks?status=Overdue')
   })
 
-  it('tints a danger tile with the error container and a warning tile with the warning container, everything in the on-container colour', () => {
+  // The tone's soft wash, not its solid container pair (which made the dark band muddy): the figure takes the tone's ink, the label and the line stay foreground.
+  it('washes a danger tile with the soft error wash and a warning tile with a lighter warning wash, the figure in the tone ink', () => {
     renderCard(
       <>
         <StatCard variant="attention" label="Danger" value={1} tone="danger" detail="d" action={ACTION} />
@@ -309,12 +312,16 @@ describe('StatCard — attention variant, the tall action tile', () => {
 
     const danger = group('Danger 1')
     expect(danger).toHaveAttribute('data-attention', 'error')
-    expect(danger).toHaveClass('bg-[var(--color-error-container)]', 'text-[var(--color-on-error-container)]')
+    expect(danger).toHaveClass('bg-[var(--color-error-container)]/30', 'text-[var(--color-foreground)]')
+    expect(within(danger).getByText('1')).toHaveClass('text-[var(--color-destructive)]')
     const warning = group('Warning 1')
     expect(warning).toHaveAttribute('data-attention', 'warning')
-    expect(warning).toHaveClass('bg-[var(--color-warning-container)]', 'text-[var(--color-on-warning-container)]')
-    // The line and the link inherit that colour from the tile: no grey of their own on a tint.
-    for (const el of [within(danger).getByText('d'), within(danger).getByRole('link')]) expect(el.className).not.toMatch(/muted-foreground|text-\[var/)
+    expect(warning).toHaveClass('bg-[var(--color-warning-container)]/50', 'text-[var(--color-foreground)]')
+    expect(within(warning).getByText('1')).toHaveClass('text-[var(--color-on-warning-container)]')
+    // Never the solid container fill, and the line is plain foreground, no grey of its own.
+    for (const tile of [danger, warning]) expect(tile.className.split(' ')).not.toContain('bg-[var(--color-error-container)]')
+    expect(warning.className.split(' ')).not.toContain('bg-[var(--color-warning-container)]')
+    expect(within(danger).getByText('d').className).not.toMatch(/muted-foreground/)
   })
 
   it('stays on the card fill with the muted ink when its tone does not ask for attention', () => {
@@ -335,10 +342,11 @@ describe('StatCard — attention variant, the tall action tile', () => {
     expect(link.className).not.toMatch(/(?:min-h|h)-\[44px\]/)
   })
 
-  it('is padded from --section-gap on every side (the airier step), and never hard-codes a size', () => {
+  it('is padded from --card-pad (the dense step, not --section-gap), and never hard-codes a size', () => {
     renderTall()
 
-    expect(group()).toHaveClass('p-[var(--section-gap)]', 'rounded-md', 'border', 'border-[var(--color-border)]')
+    expect(group()).toHaveClass('p-[var(--card-pad)]', 'rounded-md', 'border', 'border-[var(--color-border)]')
+    expect(group().className).not.toMatch(/section-gap/)
     expect(group().className).not.toMatch(/\bp-\d|\[\d+px\]/)
   })
 
@@ -352,7 +360,7 @@ describe('StatCard — attention variant, the tall action tile', () => {
   it('drops the line when there is none, rather than leaving an empty row', () => {
     renderTall({ detail: undefined })
 
-    expect(group().querySelectorAll(':scope > div > span')).toHaveLength(2) // the figure and the label (the link's words are a span inside the link)
+    expect(group().querySelectorAll(':scope > div > span')).toHaveLength(1) // the label (the figure is the tile's own child; the link's words are inside the link)
   })
 
   it('ignores a caption: the line takes that job', () => {
@@ -410,12 +418,11 @@ describe('StatCard attention action tile — the compact row on a narrow band', 
   it('lays the figure, the label and the chevron in one row, folds the line away and keeps the link named', () => {
     renderTall()
     const tile = screen.getByRole('group', { name: 'Overdue 2' })
-    const figure = within(tile).getByText('2')
-    expect(figure.parentElement).toHaveClass('@max-[36rem]:flex-row', '@max-[36rem]:items-center')
+    // The row is the same at every width; only the line and the link's words fold away under 36rem.
+    expect(tile).toHaveClass('flex', 'items-center')
     expect(within(tile).getByText('Tasks past their due date and still open.')).toHaveClass('@max-[36rem]:hidden')
     const link = within(tile).getByRole('link', { name: 'Open overdue tasks' })
     expect(within(link).getByText('Open overdue tasks')).toHaveClass('@max-[36rem]:sr-only')
-    // mt-auto would push the chevron to the bottom of the row and the link's own self-start to the top: centre it in the row.
-    expect(link).toHaveClass('@max-[36rem]:ml-auto', '@max-[36rem]:mt-0', '@max-[36rem]:self-center')
+    expect(link).toHaveClass('ml-auto')
   })
 })

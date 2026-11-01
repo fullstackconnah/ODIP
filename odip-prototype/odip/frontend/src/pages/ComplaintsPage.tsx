@@ -169,7 +169,7 @@ export default function ComplaintsPage() {
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
-      <PageHeader title="Complaints" subtitle={forbidden || isLoading || isError ? undefined : plural(totalCount, 'complaint')} action={recordAction}>
+      <PageHeader title="Complaints" count={forbidden || isLoading || isError ? undefined : plural(totalCount, 'complaint')} action={recordAction}>
         {toggleButtons}
         {!showArchived && (
           <>

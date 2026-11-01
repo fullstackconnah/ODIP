@@ -50,6 +50,8 @@ export interface FactColumn {
   header: string
   /** Free text (a participant, a note, a trip): cut in the table with its full text in the tooltip, wrapped on a card. Every other fact stays on one line. */
   long?: boolean
+  /** Phone card only: the fact gets its own full-width line. */
+  wide?: boolean
   /** On a card only from lg (a task's trip): one tap away, and the longest wrap on a phone. The table always has it. */
   fromLg?: boolean
 }

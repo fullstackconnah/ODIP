@@ -9,6 +9,19 @@ const options = [
   { key: 'c', label: 'Option C' },
 ]
 
+// Selected is a tint plus a 2px primary bar (SHAPE-PR2 §1): never the solid primary the one next step owns.
+describe('ToggleGroup selected look', () => {
+  it('tints the checked option with the on-selected label and a 2px primary bar, not a solid primary fill', () => {
+    render(<ToggleGroup options={options} value="b" onChange={vi.fn()} ariaLabel="Mode" />)
+    const checked = screen.getByRole('radio', { name: 'Option B' })
+    expect(checked).toHaveClass('bg-[var(--color-selected)]', 'text-[var(--color-on-selected)]', 'font-semibold', 'shadow-[inset_0_-2px_0_var(--color-primary)]')
+    expect(checked.className).not.toContain('bg-[var(--color-primary)]')
+    const idle = screen.getByRole('radio', { name: 'Option A' })
+    expect(idle.className).not.toContain('--color-selected')
+    expect(idle.className).not.toContain('inset_0_-2px')
+  })
+})
+
 describe('ToggleGroup description', () => {
   it('points the radiogroup at the element that explains the choice', () => {
     render(

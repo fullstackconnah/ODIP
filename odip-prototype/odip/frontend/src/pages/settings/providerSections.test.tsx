@@ -32,7 +32,7 @@ function makeSettings(overrides: Partial<ProviderSettingsDto> = {}): ProviderSet
   return {
     id: 'ps-1', registrationNumber: '4050012345', abn: '51824753556', organisationName: 'Sunrise Support Services', address: '12 Wattle St, Brisbane QLD 4000',
     state: 'QLD', gstRegistered: true, isPaceProvider: false, bankAccountName: 'Sunrise Support', bsb: '064-000', accountNumber: '12345678',
-    invoiceFooterNotes: 'Thank you for choosing Sunrise.', managerName: 'Priya Sharma', managerPhone: '0412 345 007', timeZoneId: null,
+    invoiceFooterNotes: 'Thank you for choosing Sunrise.', managerName: 'Priya Sharma', managerPhone: '0412 345 007', timeZoneId: null, tradingName: null, contactEmail: null, contactPhone: null, website: null,
     participantReadinessMode: 'Warn', medicationCompetencyMode: 'Warn', updatedAt: V1,
     invoiceNumberPrefix: 'INV-', creditNotePrefix: 'CN-', invoiceStartNumber: 1, paymentTermsDays: 14, nextInvoiceDisplayNumber: 'INV-0001', invoicesIssued: false, ...overrides,
   }
@@ -101,7 +101,7 @@ const saveButton = () => screen.getByRole('button', { name: 'Save changes' })
 describe('Organisation profile', () => {
   it('shows the identity fields from the row, in two groups', async () => {
     renderSection('organisation')
-    expect(await screen.findByLabelText('Organisation name')).toHaveValue('Sunrise Support Services')
+    expect(await screen.findByLabelText('Legal name')).toHaveValue('Sunrise Support Services')
     expect(screen.getByLabelText('ABN')).toHaveValue('51824753556')
     expect(screen.getByLabelText('NDIS registration number')).toHaveValue('4050012345')
     expect(screen.getByRole('textbox', { name: 'Address' })).toHaveValue('12 Wattle St, Brisbane QLD 4000')
@@ -114,7 +114,7 @@ describe('Organisation profile', () => {
     const user = userEvent.setup()
     screenSize.belowMd = true
     renderSection('organisation')
-    const name = await screen.findByLabelText('Organisation name')
+    const name = await screen.findByLabelText('Legal name')
     expect(screen.getByRole('link', { name: 'Back to settings' })).toBeInTheDocument()
     expect(screen.queryByRole('navigation', { name: 'Settings' })).not.toBeInTheDocument()
 
@@ -129,7 +129,7 @@ describe('Organisation profile', () => {
     const user = userEvent.setup()
     server = makeSettings({ participantReadinessMode: 'Enforce', medicationCompetencyMode: 'Enforce' })
     renderSection('organisation')
-    const name = await screen.findByLabelText('Organisation name')
+    const name = await screen.findByLabelText('Legal name')
 
     await user.clear(name)
     await user.type(name, 'Sunrise Care')
@@ -144,7 +144,7 @@ describe('Organisation profile', () => {
   it('a second save before the refetch lands keeps the first save: the cache holds what was saved', async () => {
     const user = userEvent.setup()
     renderSection('organisation')
-    const name = await screen.findByLabelText('Organisation name')
+    const name = await screen.findByLabelText('Legal name')
     await user.clear(name)
     await user.type(name, 'Sunrise Care')
     // From here every GET of the row hangs: the refetch after the first save never lands.
@@ -168,7 +168,7 @@ describe('Organisation profile', () => {
     const user = userEvent.setup()
     server = makeSettings({ employmentHeroConnected: true })
     renderSection('organisation')
-    await user.type(await screen.findByLabelText('Organisation name'), '!')
+    await user.type(await screen.findByLabelText('Legal name'), '!')
     await user.click(saveButton())
 
     await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
@@ -180,7 +180,7 @@ describe('Organisation profile', () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 30_000 } } })
     queryClient.setQueryData(['provider-settings'], makeSettings({ bsb: '000-000' }))   // what this browser saw earlier
     renderSection('organisation', queryClient)                                          // the server meanwhile holds 064-000
-    const name = await screen.findByLabelText('Organisation name')
+    const name = await screen.findByLabelText('Legal name')
 
     await user.type(name, '!')
     await user.click(saveButton())
@@ -195,7 +195,7 @@ describe('Organisation profile', () => {
     mockApiGet.mockImplementation(async (url: string) => (url === '/provider-settings' ? undefined : []))
     renderSection('organisation')
 
-    const name = await screen.findByLabelText('Organisation name')
+    const name = await screen.findByLabelText('Legal name')
     expect(name).toHaveValue('')
     expect(screen.queryByText(/could not load|couldn.t load/i)).not.toBeInTheDocument()
     await user.type(name, 'Sunrise Care')
@@ -217,7 +217,7 @@ describe('Organisation profile', () => {
     await user.clear(await screen.findByLabelText('ABN'))
     await user.click(saveButton())
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Not saved. Fill in the registration number, ABN, organisation name and address.')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Not saved. Fill in the registration number, ABN, legal name and address.')
     expect(screen.getByLabelText('ABN')).toHaveValue('')
     expect(saveButton()).toBeEnabled()
   })
@@ -543,7 +543,7 @@ describe('Billing details: invoice numbers and payment terms', () => {
     const user = userEvent.setup()
     server = makeSettings({ invoicesIssued: true, nextInvoiceDisplayNumber: 'INV-0043', invoiceStartNumber: 42 })
     renderSection('organisation')
-    const name = await screen.findByLabelText('Organisation name')
+    const name = await screen.findByLabelText('Legal name')
     await user.type(name, '!')
     await user.click(saveButton())
 

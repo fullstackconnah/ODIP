@@ -189,6 +189,21 @@ describe('IncidentCreatePage — the step rail names itself', () => {
   })
 })
 
+describe('IncidentCreatePage — Severity is the first decision of Basics', () => {
+it('is a radio group above every other field, Medium by default, and moves with a click', async () => {
+  const user = userEvent.setup()
+  renderCreatePage()
+  const group = screen.getByRole('radiogroup', { name: /^Severity/ })
+  const before = (el: Element) => !!(group.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING)
+  expect(before(screen.getByPlaceholderText('Brief incident summary'))).toBe(true)
+  expect(before(screen.getByLabelText('Involved Participant'))).toBe(true)
+  expect(within(group).getAllByRole('radio').map(r => r.textContent)).toEqual(Object.values(INCIDENT_SEVERITY_LABELS))
+  expect(within(group).getByRole('radio', { checked: true })).toHaveTextContent(INCIDENT_SEVERITY_LABELS.Medium)
+  await user.click(within(group).getByRole('radio', { name: INCIDENT_SEVERITY_LABELS.High }))
+  expect(within(group).getByRole('radio', { checked: true })).toHaveTextContent(INCIDENT_SEVERITY_LABELS.High)
+})
+})
+
 describe('IncidentCreatePage — INC-01 service type / trip linkage', () => {
   it('does not show the Trip dropdown until Service Type is set to Trip', async () => {
     renderCreatePage()
@@ -584,7 +599,7 @@ describe('IncidentCreatePage — IN-8 producer field trace through to Review', (
     expect(screen.getByLabelText('Involved Participant')).toHaveValue(marPrefill.participantName)
     expect(screen.getByLabelText('Reported By *')).toHaveValue('Alex Rivera')
     expect(screen.getByLabelText('Incident Type *')).toHaveTextContent(INCIDENT_TYPE_LABELS.MedicationError)
-    expect(screen.getByLabelText(/^Severity/)).toHaveTextContent(INCIDENT_SEVERITY_LABELS[suggestedIncidentSeverity(marPrefill.outcome)])
+    expect(within(screen.getByRole('radiogroup', { name: /^Severity/ })).getByRole('radio', { checked: true })).toHaveTextContent(INCIDENT_SEVERITY_LABELS[suggestedIncidentSeverity(marPrefill.outcome)])
     expect(screen.getByLabelText(/Service Type/i)).toHaveTextContent('Trip')
     expect(screen.getByLabelText(/^Trip/)).toHaveValue('Gold Coast Beach Break')
 
@@ -639,7 +654,7 @@ describe('IncidentCreatePage — IN-8 producer field trace through to Review', (
     expect(screen.getByLabelText('Involved Participant')).toHaveValue(shiftNotePrefill.participantName)
     expect(screen.getByLabelText('Reported By *')).toHaveValue('Alex Rivera')
     expect(screen.getByLabelText('Incident Type *')).toHaveTextContent(INCIDENT_TYPE_LABELS[expectedType])
-    expect(screen.getByLabelText(/^Severity/)).toHaveTextContent(INCIDENT_SEVERITY_LABELS.Medium)
+    expect(within(screen.getByRole('radiogroup', { name: /^Severity/ })).getByRole('radio', { checked: true })).toHaveTextContent(INCIDENT_SEVERITY_LABELS.Medium)
 
     await clickNext(user) // Basics -> Incident Details
 
@@ -1497,7 +1512,7 @@ describe('IncidentCreatePage — the current step is marked', () => {
   it('fills the current step on the one-row rail', () => {
     renderCreatePage()
     const current = screen.getByRole('navigation', { name: 'Incident report steps' }).querySelector('[aria-current="step"]')!
-    expect(current).toHaveClass('bg-[var(--color-primary)]', 'text-[var(--color-primary-foreground)]')
+    expect(current).toHaveClass('bg-[var(--color-selected)]', 'text-[var(--color-on-selected)]')
   })
 })
 

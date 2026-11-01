@@ -540,6 +540,19 @@ describe('Tabs primitive — variant="sub"', () => {
     expect(screen.getByRole('tab', { name: 'Gamma' })).not.toHaveTextContent('0')
   })
 
+  it('draws the active sub tab as the selected tint with a 2px primary bar, not the lime nav fill', () => {
+    render(<SubHarness />)
+    const chip = screen.getByRole('tab', { name: 'Alpha' }).firstElementChild as HTMLElement
+    expect(chip).toHaveClass('bg-[var(--color-selected)]', 'text-[var(--color-on-selected)]', 'font-semibold', 'shadow-[inset_0_-2px_0_var(--color-primary)]')
+    expect(chip.className).not.toContain('primary-fixed')
+  })
+
+  it('makes the active underline tab semibold, so selected differs by more than colour', () => {
+    render(<Tabs tabs={subTabs} active="a" onChange={() => {}} ariaLabel="Under" />)
+    expect(screen.getByRole('tab', { name: 'Alpha' })).toHaveClass('font-semibold')
+    expect(screen.getByRole('tab', { name: /Beta/ })).not.toHaveClass('font-semibold')
+  })
+
   it('draws a quiet tab dashed only while it is not the active one', async () => {
     const user = userEvent.setup()
     render(<SubHarness />)

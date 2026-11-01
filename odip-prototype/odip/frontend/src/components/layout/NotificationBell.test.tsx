@@ -69,6 +69,7 @@ describe('NotificationBell: the button', () => {
     renderBell()
 
     expect(bell()).toHaveAccessibleName('Notifications')
+    expect(bell().querySelector('.material-symbols-outlined')).toHaveClass('text-[var(--color-muted-foreground)]') // the bar icons share one colour
     expect(bell()).toBeEnabled()
     expect(bell()).toHaveClass('w-8', 'h-8', 'pointer-coarse:size-[var(--tap-min)]')
     expect(bell()).toHaveTextContent(/^notifications$/) // the icon only: no badge yet

@@ -5,7 +5,7 @@ import type { ParticipantDetailDto } from '@/api/types/participants'
 
 /**
  * The header's safety chips: what a worker must know before they start, on every tab. Each chip jumps to the section that holds the
- * detail. When a safety field has not been answered the row ends with a neutral "Safety details not recorded" chip, so a deep link to any
+ * detail. When a safety field has not been answered the row ends with a warning "Safety details not recorded" chip, so a deep link to any
  * tab still tells "nobody asked" apart from "nothing to flag". Renders nothing only when every field is answered and none flags.
  */
 export function ParticipantSafetyFlags({ participant }: { participant: ParticipantDetailDto }) {
@@ -27,7 +27,7 @@ export function ParticipantSafetyFlags({ participant }: { participant: Participa
       {unanswered.length > 0 && (
         <li>
           <Link to={{ search: '?tab=overview', hash: 'before-you-start' }} className={link}>
-            <FactChip tone="neutral">Safety details not recorded</FactChip>
+            <FactChip tone="warning">Safety details not recorded</FactChip>
           </Link>
         </li>
       )}

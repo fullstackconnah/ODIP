@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, CalendarClock, Info, ShieldAlert } from 'lucide-react'
 import { useMar, useParticipants, useRecordPrnOutcome } from '@/api/hooks'
 import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
+import { fieldSurface } from '@/components/FormField'
 import { Dropdown } from '@/components/Dropdown'
 import { Card } from '@/components/Card'
 import { Modal } from '@/components/Modal'
@@ -161,7 +162,7 @@ export default function MarTab() {
           type="date"
           value={date}
           onChange={e => setDate(e.target.value)}
-          className="h-[var(--control-h)] px-3 rounded-[var(--radius-sm)] bg-[var(--color-input)] border border-[var(--color-border)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
+          className={`h-[var(--control-h)] text-sm ${fieldSurface}`}
           aria-label="Select date"
         />
         <span className="text-sm text-[var(--color-muted-foreground)]">{formatDateAu(date)}</span>
@@ -429,7 +430,7 @@ export default function MarTab() {
           value={outcomeText}
           onChange={e => setOutcomeText(e.target.value)}
           placeholder="Describe the effect of the dose — e.g. settled within 30 minutes"
-          className="w-full px-4 py-2.5 rounded-lg bg-[var(--color-input)] border border-[var(--color-border)] text-[var(--color-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
+          className={`w-full py-2 ${fieldSurface}`}
         />
       </Modal>
     </div>

@@ -26,7 +26,7 @@ describe('TONE: one table decides what each colour means', () => {
   })
 
   it('keeps the exact pairs the app renders today (a solid is a container and its on-container)', () => {
-    expect(TONE.success.solid).toBe('bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]')
+    expect(TONE.success.solid).toBe('bg-[var(--color-selected)] text-[var(--color-on-selected)]')
     expect(TONE.warning.solid).toBe('bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]')
     expect(TONE.danger.solid).toBe('bg-[var(--color-error-container)] text-[var(--color-on-error-container)]')
     expect(TONE.neutral.solid).toBe('bg-[var(--color-input)] text-[var(--color-muted-foreground)]')

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, CalendarCheck2, Car, Moon, ShieldCheck, CalendarOff, WifiOff } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CalendarCheck2, Car, Moon, ShieldCheck, CalendarOff, MapPin, WifiOff } from 'lucide-react'
 import { useIntakeVisits, useMyShifts, usePendingWitnessRequests } from '@/api/hooks'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
@@ -10,6 +10,7 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { weekStartOf, shiftWeek, daysOfWeek, formatWeekRange, formatDayAccessibleName, formatShiftTimeRange, formatEffectiveRange } from '@/pages/rostering/lib/roster'
 import { addDays, format, parseISO, subDays } from 'date-fns'
 import { RATIO_LABELS, hasEnded, pickCurrentShift, portalStatusLabel } from './lib/portal'
+import { formatHours } from '@/lib/planBlocks'
 import { useNow } from './shift/useNow'
 import { utcInstantToProviderLocal } from './shift/shiftTime'
 import { useOnline } from './shift/useOnline'
@@ -80,10 +81,16 @@ function ShiftLink({ shift }: { shift: PortalShiftSummaryDto }) {
         <div className="min-w-0">
           <p className="font-medium text-[var(--color-foreground)] truncate">{shift.participantName}</p>
           <p className="text-sm text-[var(--color-muted-foreground)]">
-            {formatShiftTimeRange(shift.startTime, shift.endTime)}
+            {formatShiftTimeRange(shift.startTime, shift.endTime)} · {formatHours(shift.durationHours)} h
             {shift.endsNextDay && <span className="ml-1">(+1 day)</span>}
             {shift.ratio !== 'OneToOne' && <span className="ml-2">{RATIO_LABELS[shift.ratio] ?? shift.ratio}</span>}
           </p>
+          {shift.location?.trim() && (
+            <p className="text-sm text-[var(--color-muted-foreground)] flex items-center gap-1 min-w-0">
+              <MapPin className="w-3 h-3 shrink-0" aria-hidden />
+              <span className="truncate" title={shift.location.trim()}><span className="sr-only">Location: </span>{shift.location.trim()}</span>
+            </p>
+          )}
         </div>
         <div className="flex flex-col items-end gap-1 shrink-0">
           {/* A plain Rostered shift is the default state and says nothing, so it has no badge (SHAPE §2). */}
@@ -179,10 +186,10 @@ export default function PortalShiftsPage() {
         title="My shifts"
         action={
           <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <Button to="/portal/leave" variant="secondary" size="md">
+            <Button to="/portal/leave" variant="ghost" size="md">
               <CalendarOff className="w-4 h-4" /> My leave
             </Button>
-            <Button to="/portal/witness-approvals" variant="secondary" size="md">
+            <Button to="/portal/witness-approvals" variant="ghost" size="md">
               <ShieldCheck className="w-4 h-4" /> Witness approvals
               {pendingWitnessCount > 0 && (
                 <span
@@ -253,8 +260,19 @@ export default function PortalShiftsPage() {
                         <p className="font-medium text-[var(--color-foreground)] truncate">{a.tripName}</p>
                         <p className="text-sm text-[var(--color-muted-foreground)]">
                           {formatEffectiveRange(a.assignmentStart, a.assignmentEnd)}
-                          {a.isDriver && <span className="ml-2 inline-flex items-center gap-1"><Car className="w-3 h-3" /> Driver</span>}
+                          {a.isDriver && !/driver/i.test(a.role ?? '') && <span className="ml-2 inline-flex items-center gap-1"><Car className="w-3 h-3" /> Driver</span>}
                         </p>
+                        {a.destination?.trim() && (
+                          <p className="text-sm text-[var(--color-muted-foreground)] flex items-center gap-1 min-w-0">
+                            <MapPin className="w-3 h-3 shrink-0" aria-hidden />
+                            <span className="truncate" title={a.destination.trim()}><span className="sr-only">Location: </span>{a.destination.trim()}</span>
+                          </p>
+                        )}
+                        {a.role?.trim() && (
+                          <p className="text-sm text-[var(--color-muted-foreground)] truncate" title={a.role.trim()}>
+                            <span className="sr-only">Your role: </span>{a.role.trim()}
+                          </p>
+                        )}
                       </div>
                       <StatusBadge status={a.status} />
                     </div>

@@ -34,6 +34,14 @@ describe('SettingsNav', () => {
     expect(current[0]).toHaveTextContent('Budgets')
   })
 
+  it('marks the open section with a 2px primary bar and the on-selected ink, not the main nav lime fill', () => {
+    renderNav('Admin', 'budgets')
+    const lit = nav().querySelector('[aria-current="page"]') as HTMLElement
+    expect(lit).toHaveClass('text-[var(--color-on-selected)]', 'font-semibold', 'shadow-[inset_2px_0_0_var(--color-primary)]', 'rounded-l-none')
+    expect(lit.className).not.toContain('primary-fixed')
+    expect(within(nav()).getByRole('link', { name: 'Profile' }).className).not.toContain('inset_2px')
+  })
+
   it('lights nothing on the phone list, where nothing is open', () => {
     renderNav('Coordinator', null)
     expect(nav().querySelectorAll('[aria-current]')).toHaveLength(0)

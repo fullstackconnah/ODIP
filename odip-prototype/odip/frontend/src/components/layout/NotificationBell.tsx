@@ -109,7 +109,7 @@ export default function NotificationBell() {
       >
         {/* The badge sits on the icon exactly as the bottom bar places it. */}
         <span className="relative inline-flex">
-          <span className="material-symbols-outlined text-[var(--color-primary)]" aria-hidden="true" style={{ fontSize: '20px' }}>notifications</span>
+          <span className="material-symbols-outlined text-[var(--color-muted-foreground)]" aria-hidden="true" style={{ fontSize: '20px' }}>notifications</span>
           {unread > 0 && (
             <span className="absolute -top-2 left-full -ml-2">
               <NavCountBadge count={unread} />

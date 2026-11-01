@@ -130,6 +130,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   // Create always defaults to Draft — the backend hardcodes it there regardless of this value.
   const [status, setStatus] = useState<ShiftStatus>(existing?.status ?? 'Draft')
   const [notes, setNotes] = useState(existing?.notes ?? '')
+  const [location, setLocation] = useState(existing?.location ?? '')
   // The marker a shift already carries from a save past its budget (read from the codes the server stored, never from the reason's words). Its reason is shown by the marker, read only: it is not copied into
   // the ordinary reason field below, where a later save would send the server's own sentence back as if somebody had just written it.
   const budgetMarker = markerForAcknowledgedCodes(existing?.acknowledgedFindingCodes)
@@ -166,7 +167,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
 
   // Unsaved edits: the form as it is now against the form as it first rendered. The page keys this component on the target,
   // so "first render" is the moment the panel opened.
-  const current = JSON.stringify([participantId, staffId, serviceDate, startTime, endTime, endsNextDay, ratio, nightType, status, notes, overrideReason, emergencyDescription])
+  const current = JSON.stringify([participantId, staffId, serviceDate, startTime, endTime, endsNextDay, ratio, nightType, status, notes, location, overrideReason, emergencyDescription])
   const [opened] = useState(current)
   const dirty = current !== opened
 
@@ -372,6 +373,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
       nightType,
       status,
       notes: notes.trim() || null,
+      location: location.trim() || null,
       overrideReason: emergencyActive ? emergencyDescription.trim() : overrideReason.trim() || null,
       // A code once: two pools both past their funding are two findings with the same code.
       acknowledgedFindingCodes: [...new Set(warningFindings.map(f => f.code))],
@@ -587,6 +589,11 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
             <RequirementChips requirements={existing.requirements} />
           </FormField>
         )}
+
+        {/* Typed by the coordinator for this shift only; never filled from the participant's address. autoComplete off so the browser offers no saved street addresses. */}
+        <FormField label="Location" hint="The support worker sees this on their shift. Leave it empty for a shift at home.">
+          <input type="text" value={location} maxLength={200} autoComplete="off" disabled={!canWrite} onChange={e => setLocation(e.target.value)} placeholder="e.g. Southside Library" />
+        </FormField>
 
         <FormField label="Notes" hint="The support worker sees this on their shift.">
           <textarea rows={3} value={notes} disabled={!canWrite} onChange={e => setNotes(e.target.value)} placeholder="Optional notes for this shift" />

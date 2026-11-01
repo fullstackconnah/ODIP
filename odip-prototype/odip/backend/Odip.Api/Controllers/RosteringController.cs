@@ -246,7 +246,7 @@ public class RosteringController : ControllerBase
                 StaffId = shift.UserId, StaffName = staff?.FullName,
                 ServiceDate = shift.ServiceDate, StartTime = shift.StartTime, EndTime = shift.EndTime, EndsNextDay = shift.EndsNextDay,
                 DurationHours = shift.DurationHours, Ratio = shift.Ratio, NightType = shift.NightType, Status = shift.Status,
-                ShiftPatternId = shift.ShiftPatternId, Notes = shift.Notes, OverrideReason = shift.OverrideReason, Requirements = RequirementsOf(shift.RequirementsJson),
+                ShiftPatternId = shift.ShiftPatternId, Notes = shift.Notes, Location = shift.Location, OverrideReason = shift.OverrideReason, Requirements = RequirementsOf(shift.RequirementsJson),
                 AcknowledgedFindingCodes = AcknowledgedCodesOf(shift), BudgetReview = budgetReviews.GetValueOrDefault(shift.Id),
                 FromAgreement = fromAgreement ? true : null, SourceDraftVersion = sourceVersion,
                 Findings = findings.Select(ToFindingDto).ToList(),
@@ -579,9 +579,16 @@ public class RosteringController : ControllerBase
         }
     }
 
+    /// <summary>The typed location of a shift: trimmed, blank is null. The caller refuses one over <see cref="LocationMaxLength"/>.</summary>
+    private static string? TidyLocation(string? raw) => string.IsNullOrWhiteSpace(raw) ? null : raw.Trim();
+    private const int LocationMaxLength = 200;
+    private const string LocationTooLongMessage = "Keep the location to 200 characters or fewer.";
+
     /// <summary>The body of <see cref="CreateShift"/>. With <paramref name="movingFrom"/> (already locked and checked) the person leaves it in the same save.</summary>
     private async Task<ActionResult<ApiResponse<ShiftDto>>> CreateShiftCoreAsync(CreateShiftDto dto, Shift? movingFrom, CancellationToken ct)
     {
+        var location = TidyLocation(dto.Location);
+        if (location?.Length > LocationMaxLength) return BadRequest(ApiResponse<ShiftDto>.Fail(LocationTooLongMessage));
         if (Shift.HoursBetween(dto.StartTime, dto.EndTime, dto.EndsNextDay) <= 0m) return BadRequest(ApiResponse<ShiftDto>.Fail(ShiftEndsBeforeItStartsMessage, ShiftNoLengthCode));
 
         var refError = await ValidateRefsAsync(dto.ParticipantId, dto.StaffId, ct);
@@ -592,7 +599,7 @@ public class RosteringController : ControllerBase
             Id = Guid.NewGuid(), ParticipantId = dto.ParticipantId, UserId = dto.StaffId,
             ServiceDate = dto.ServiceDate, StartTime = dto.StartTime, EndTime = dto.EndTime, EndsNextDay = dto.EndsNextDay,
             // No ShiftPatternId: a pattern link is the server's (the generator sets it). One a request names is dropped, or a hand-made shift could call itself routine and walk round the hard limit (C3).
-            Ratio = dto.Ratio, NightType = dto.NightType, Notes = dto.Notes,
+            Ratio = dto.Ratio, NightType = dto.NightType, Notes = dto.Notes, Location = location,
             Status = ShiftStatus.Draft
         };
 
@@ -649,6 +656,9 @@ public class RosteringController : ControllerBase
     /// <summary>The body of <see cref="UpdateShift"/>, run under its locks.</summary>
     private async Task<ActionResult<ApiResponse<ShiftDto>>> UpdateShiftLockedAsync(Guid id, UpdateShiftDto dto, CancellationToken ct)
     {
+        // A PUT that leaves the location out keeps the stored one; null or blank clears it.
+        var location = TidyLocation(dto.Location);
+        if (dto.HasLocation && location?.Length > LocationMaxLength) return BadRequest(ApiResponse<ShiftDto>.Fail(LocationTooLongMessage));
         var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == id, ct);
         if (shift == null) return NotFound(ApiResponse<ShiftDto>.Fail("Shift not found."));
         if (dto.ExpectsStaff && dto.ExpectedStaffId != shift.UserId)
@@ -739,6 +749,7 @@ public class RosteringController : ControllerBase
         shift.EndsNextDay = dto.EndsNextDay; shift.Ratio = dto.Ratio; shift.NightType = dto.NightType;
         // The saved pattern link stays as the server set it: an edit never cuts a pattern shift loose from its pattern, and a link a request names is never stored (C3).
         shift.Notes = dto.Notes; shift.Status = dto.Status;
+        if (dto.HasLocation) shift.Location = location;
         shift.UpdatedAt = DateTime.UtcNow;
         ApplyOverride(shift, findings, budgetGate, dto.OverrideReason, dto.AcknowledgedFindingCodes, previousReason, previousCodes);
         if (budgetGate.EmergencyAccepted) await RaiseEmergencyReviewAsync(shift, ct);
@@ -2072,7 +2083,7 @@ public class RosteringController : ControllerBase
             StaffId = shift.UserId, StaffName = staff?.FullName,
             ServiceDate = shift.ServiceDate, StartTime = shift.StartTime, EndTime = shift.EndTime, EndsNextDay = shift.EndsNextDay,
             DurationHours = shift.DurationHours, Ratio = shift.Ratio, NightType = shift.NightType, Status = shift.Status,
-            ShiftPatternId = shift.ShiftPatternId, Notes = shift.Notes, OverrideReason = shift.OverrideReason, Requirements = RequirementsOf(shift.RequirementsJson),
+            ShiftPatternId = shift.ShiftPatternId, Notes = shift.Notes, Location = shift.Location, OverrideReason = shift.OverrideReason, Requirements = RequirementsOf(shift.RequirementsJson),
             AcknowledgedFindingCodes = AcknowledgedCodesOf(shift), BudgetReview = (await BudgetReviewsAsync(new[] { shift }, ct)).GetValueOrDefault(shift.Id),
             FromAgreement = fromAgreement ? true : null, SourceDraftVersion = sourceVersion,
             Findings = findings.Select(ToFindingDto).ToList(),

@@ -91,7 +91,7 @@ describe('public/theme.js (pre-paint)', () => {
     osDark = true
     run()
     const meta = () => document.querySelector('meta[name="theme-color"]')!.getAttribute('content')
-    expect(meta()).toBe('#131512')
+    expect(meta()).toBe('#151813')
     window.odipTheme!.set('light')
     expect(theme()).toBe('light')
     expect(meta()).toBe('#fbf9f5')

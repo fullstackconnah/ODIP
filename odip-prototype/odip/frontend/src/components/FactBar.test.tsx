@@ -313,7 +313,7 @@ describe('FactBar glance — cell rules and count handling', () => {
 
 describe('FactChip', () => {
   it.each([
-    ['positive', 'bg-[var(--color-primary-fixed)]', 'text-[var(--color-on-primary-fixed)]'],
+    ['positive', 'bg-[var(--color-selected)]', 'text-[var(--color-on-selected)]'],
     ['warning', 'bg-[var(--color-warning-container)]', 'text-[var(--color-on-warning-container)]'],
     ['negative', 'bg-[var(--color-error-container)]', 'text-[var(--color-on-error-container)]'],
     ['neutral', 'bg-[var(--color-input)]', 'text-[var(--color-muted-foreground)]'],

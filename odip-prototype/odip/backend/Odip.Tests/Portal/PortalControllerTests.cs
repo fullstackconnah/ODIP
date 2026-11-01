@@ -173,6 +173,24 @@ public class PortalControllerTests
     }
 
     [Fact]
+    public async Task GetMyShifts_ShiftLocation_ShownOnlyOnCallersOwnShifts()
+    {
+        var (db, tenant) = CreateDb();
+        var me = SeedUser(db, "Ben", "Turner");
+        var other = SeedUser(db, "Cara", "Lee");
+        var participant = SeedParticipant(db);
+        SeedShift(db, participant.Id, me.Id).Location = "Alpha Hall";
+        SeedShift(db, participant.Id, other.Id).Location = "Beta Hall";
+        var draft = SeedShift(db, participant.Id, me.Id); draft.Status = ShiftStatus.Draft; draft.Location = "Draft Hall";
+        db.SaveChanges();
+
+        var result = await MakeController(db, tenant.Object, me.Id).GetMyShifts(ServiceDate.AddDays(-1), ServiceDate.AddDays(1), CancellationToken.None);
+
+        var shift = Assert.Single(Assert.IsType<ApiResponse<PortalShiftsResponseDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!.Shifts);
+        Assert.Equal("Alpha Hall", shift.Location);
+    }
+
+    [Fact]
     public async Task MyShifts_LeavesOutDrafts()   // L1 (2026-10-16): a Draft is invisible to its worker until it is published
     {
         var (db, tenant) = CreateDb();
@@ -1165,5 +1183,102 @@ public class PortalControllerTests
         var result = await controller.DeclineIncidentWitnessRequest(witness.Id, null, CancellationToken.None);
 
         Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // TRIP CARD — where and your role; never a participant home address
+    // ══════════════════════════════════════════════════════════════
+
+    private static StaffAssignment SeedTripAssignment(OdipDbContext db, Guid userId, string? destination, string? role)
+    {
+        var trip = new TripInstance { Id = Guid.NewGuid(), TripName = "Gold Coast Getaway", Destination = destination, StartDate = ServiceDate, DurationDays = 3 };
+        var assignment = new StaffAssignment
+        {
+            Id = Guid.NewGuid(), TripInstanceId = trip.Id, TripInstance = trip, UserId = userId, AssignmentRole = role,
+            AssignmentStart = ServiceDate, AssignmentEnd = ServiceDate.AddDays(2), Status = AssignmentStatus.Confirmed
+        };
+        db.TripInstances.Add(trip);
+        db.StaffAssignments.Add(assignment);
+        db.SaveChanges();
+        return assignment;
+    }
+
+    [Fact]
+    public async Task GetMyShifts_TripAssignment_CarriesDestinationAndRole()
+    {
+        var (db, tenant) = CreateDb();
+        var me = SeedUser(db);
+        SeedTripAssignment(db, me.Id, "  Surfers Paradise ", "Support Worker");
+        var controller = MakeController(db, tenant.Object, me.Id);
+
+        var result = await controller.GetMyShifts(ServiceDate, ServiceDate.AddDays(6), CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<PortalShiftsResponseDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        var trip = Assert.Single(body.Data!.TripAssignments);
+        Assert.Equal("Surfers Paradise", trip.Destination);
+        Assert.Equal("Support Worker", trip.Role);
+    }
+
+    [Fact]
+    public async Task GetMyShifts_TripAssignment_BlankDestinationAndRoleAreNull()
+    {
+        var (db, tenant) = CreateDb();
+        var me = SeedUser(db);
+        SeedTripAssignment(db, me.Id, "   ", null);
+        var controller = MakeController(db, tenant.Object, me.Id);
+
+        var result = await controller.GetMyShifts(ServiceDate, ServiceDate.AddDays(6), CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<PortalShiftsResponseDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        var trip = Assert.Single(body.Data!.TripAssignments);
+        Assert.Null(trip.Destination);
+        Assert.Null(trip.Role);
+    }
+
+    [Fact]
+    public void PortalSummaryDtos_HaveExactlyTheseProperties()
+    {
+        static string[] Names<T>() => typeof(T).GetProperties().Select(p => p.Name).OrderBy(n => n, StringComparer.Ordinal).ToArray();
+        static string[] Sorted(params string[] names) => names.OrderBy(n => n, StringComparer.Ordinal).ToArray();
+
+        var trip = Names<PortalTripAssignmentSummaryDto>();
+        var shift = Names<PortalShiftSummaryDto>();
+
+        Assert.Equal(Sorted("Id", "TripInstanceId", "TripCode", "TripName", "AssignmentStart", "AssignmentEnd", "IsDriver", "Status", "Destination", "Role"), trip);
+        Assert.Equal(Sorted("Id", "ParticipantId", "ParticipantName", "ServiceDate", "StartTime", "EndTime", "EndsNextDay", "DurationHours", "Ratio", "NightType", "Status", "Notes", "ReturnCount", "Location"), shift);
+        // A later Address-like field on either list DTO trips this.
+        var addressLike = new System.Text.RegularExpressions.Regex("address|street|suburb|postcode|state", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        Assert.DoesNotContain(trip.Concat(shift), addressLike.IsMatch);
+        // The one place field is the coordinator-typed Location; a second place-like field trips this.
+        var placeLike = new System.Text.RegularExpressions.Regex("location|venue|place|where", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        Assert.Equal(new[] { "Location" }, shift.Where(name => placeLike.IsMatch(name)));
+    }
+
+    [Fact]
+    public async Task GetMyShifts_NeverCarriesAParticipantHomeAddress()
+    {
+        var (db, tenant) = CreateDb();
+        var me = SeedUser(db);
+        var participant = SeedParticipant(db);
+        participant.AddressStreet = "Zzleaky Street";
+        participant.AddressSuburb = "Qxsuburb";
+        participant.AddressPostcode = "ZZ-4999";
+        db.SaveChanges();
+        SeedShift(db, participant.Id, me.Id).Location = "Southside Library";
+        db.SaveChanges();
+        SeedTripAssignment(db, me.Id, "Surfers Paradise", "Support Worker");
+        var controller = MakeController(db, tenant.Object, me.Id);
+
+        var result = await controller.GetMyShifts(ServiceDate, ServiceDate.AddDays(6), CancellationToken.None);
+
+        var body = Assert.IsType<OkObjectResult>(result.Result).Value;
+        var options = new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web);
+        Odip.Api.Serialization.ApiJsonOptions.Configure(options);
+        var json = System.Text.Json.JsonSerializer.Serialize(body, options);
+        Assert.Contains("Surfers Paradise", json);
+        Assert.Contains("Southside Library", json);
+        Assert.DoesNotContain("Zzleaky Street", json);
+        Assert.DoesNotContain("Qxsuburb", json);
+        Assert.DoesNotContain("ZZ-4999", json);
     }
 }

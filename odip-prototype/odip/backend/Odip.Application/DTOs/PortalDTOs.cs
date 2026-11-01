@@ -46,7 +46,9 @@ public record PortalShiftSummaryDto(
     ShiftStatus Status,
     string? Notes,
     /// <summary>How many times a coordinator returned this shift; a Published shift above 0 is shown as Returned.</summary>
-    int ReturnCount);
+    int ReturnCount,
+    /// <summary>Where the coordinator typed that the shift happens; null when none. Never a participant's home address.</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Location);
 
 /// <summary>One of the caller's own upcoming trip staffing assignments — included in the shifts list when cheap; see brief.</summary>
 public record PortalTripAssignmentSummaryDto(
@@ -57,7 +59,11 @@ public record PortalTripAssignmentSummaryDto(
     DateOnly AssignmentStart,
     DateOnly AssignmentEnd,
     bool IsDriver,
-    AssignmentStatus Status);
+    AssignmentStatus Status,
+    /// <summary>The trip's destination as the coordinator typed it; null when blank. Never a participant's home address.</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Destination,
+    /// <summary>The caller's role on this trip as typed (for example Support Worker); null when blank.</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Role);
 
 /// <summary>
 /// Response of GET /api/v1/portal/my-shifts. Post staff/user unification there is no separate

@@ -112,6 +112,8 @@ describe('PortalShiftsPage', () => {
             assignmentEnd: '2026-08-20',
             isDriver: true,
             status: 'Confirmed',
+            destination: null,
+            role: null,
           },
         ],
       }),
@@ -123,10 +125,101 @@ describe('PortalShiftsPage', () => {
     expect(screen.getByText(/driver/i)).toBeInTheDocument()
   })
 
+  describe('shift location', () => {
+    const show = (location?: string | null) => {
+      const base = makeShiftsResponse()
+      mockUseMyShifts.mockReturnValue({ data: { ...base, shifts: [{ ...base.shifts[0], ...(location === undefined ? {} : { location }) }] }, isLoading: false })
+      renderPage()
+    }
+
+    it('shows the typed location with a screen-reader label', () => {
+      show('Southside Library')
+      expect(screen.getByText('Southside Library')).toHaveAttribute('title', 'Southside Library')
+      expect(screen.getByText(/location:/i)).toBeInTheDocument()
+    })
+
+    it.each([[null], [undefined], ['   ']])('renders no row for %s', (location) => {
+      show(location)
+      expect(screen.queryByText(/location:/i)).not.toBeInTheDocument()
+      expect(document.querySelector('svg.lucide-map-pin')).toBeNull()
+    })
+  })
+
+  describe('trip assignment location and role', () => {
+    const trip = {
+      id: 'assign-1', tripInstanceId: 'trip-1', tripCode: 'TRIP-001', tripName: 'Beach Getaway',
+      assignmentStart: '2026-08-18', assignmentEnd: '2026-08-20', isDriver: false, status: 'Confirmed' as const,
+    }
+    const show = (a: object) => {
+      mockUseMyShifts.mockReturnValue({ data: makeShiftsResponse({ tripAssignments: [a as never] }), isLoading: false })
+      renderPage()
+    }
+
+    it('shows the destination and the role with screen-reader labels', () => {
+      show({ ...trip, destination: 'Surfers Paradise, Gold Coast', role: 'Support Worker' })
+      expect(screen.getByText('Surfers Paradise, Gold Coast')).toHaveAttribute('title', 'Surfers Paradise, Gold Coast')
+      expect(screen.getByText(/location:/i)).toBeInTheDocument()
+      expect(screen.getByText('Support Worker')).toBeInTheDocument()
+      expect(screen.getByText(/your role:/i)).toBeInTheDocument()
+    })
+
+    it('renders neither row when both are null', () => {
+      show({ ...trip, destination: null, role: null })
+      expect(screen.queryByText(/location:/i)).not.toBeInTheDocument()
+      expect(screen.queryByText(/your role:/i)).not.toBeInTheDocument()
+    })
+
+    it('renders neither row when the keys are missing (week saved before the deploy)', () => {
+      show(trip)
+      expect(screen.queryByText(/location:/i)).not.toBeInTheDocument()
+      expect(screen.queryByText(/your role:/i)).not.toBeInTheDocument()
+      expect(screen.queryByText(/undefined/i)).not.toBeInTheDocument()
+    })
+
+    it('treats blank text as absent', () => {
+      show({ ...trip, destination: '   ', role: ' ' })
+      expect(screen.queryByText(/location:/i)).not.toBeInTheDocument()
+      expect(screen.queryByText(/your role:/i)).not.toBeInTheDocument()
+    })
+
+    it('says driver once when the role already says driver', () => {
+      show({ ...trip, isDriver: true, destination: null, role: 'Senior Support / Driver' })
+      expect(screen.getAllByText(/driver/i)).toHaveLength(1)
+    })
+
+    it('keeps the Driver label when the role does not say driver', () => {
+      show({ ...trip, isDriver: true, destination: null, role: 'Support Worker' })
+      expect(screen.getAllByText(/driver/i)).toHaveLength(1)
+      expect(screen.getByText('Driver')).toBeInTheDocument()
+    })
+  })
+
   it('links to the leave portal page', () => {
     mockUseMyShifts.mockReturnValue({ data: makeShiftsResponse(), isLoading: false })
     renderPage()
     expect(screen.getByRole('link', { name: /my leave/i })).toHaveAttribute('href', '/portal/leave')
+  })
+})
+
+// SHAPE-PR3 8 (B10): the card says how long the shift is, and the two header actions no longer compete with the shift titles.
+describe('PortalShiftsPage — the shift card and header actions', () => {
+  it('puts the duration after the time range, before the ratio', () => {
+    const base = makeShiftsResponse().shifts[0]
+    mockUseMyShifts.mockReturnValue({ data: makeShiftsResponse({ shifts: [{ ...base, durationHours: 8, ratio: 'TwoToOne' }] }), isLoading: false })
+    renderPage()
+    const meta = screen.getByText(/9am–5pm/)
+    expect(meta.textContent).toMatch(/^9am–5pm · 8 h/)
+    expect(meta.textContent).toMatch(/8 h.*2:1/)
+  })
+
+  it('keeps Leave and Witness approvals as ghost buttons', () => {
+    mockUseMyShifts.mockReturnValue({ data: makeShiftsResponse(), isLoading: false })
+    renderPage()
+    for (const name of [/my leave/i, /witness approvals/i]) {
+      const link = screen.getByRole('link', { name })
+      expect(link.className).toContain('text-[var(--color-muted-foreground)]')
+      expect(link.className).not.toContain('bg-[var(--color-primary)]')
+    }
   })
 })
 

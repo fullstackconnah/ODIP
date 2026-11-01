@@ -100,6 +100,8 @@ export interface ShiftDto {
   status: ShiftStatus
   shiftPatternId: string | null
   notes: string | null
+  /** Where the shift happens, as a coordinator typed it for this shift (a venue, a centre). Omitted when none: never the participant's address. */
+  location?: string | null
   overrideReason: string | null
   /** The finding codes the server stored when it saved this shift. The over-budget marker is read from these (`markerForAcknowledgedCodes`): `BUDGET_EMERGENCY` for an emergency or safety booking, `BUDGET_FORECAST_OVER` for one an Admin pushed over budget with a written reason. Omitted when none. */
   acknowledgedFindingCodes?: string[]
@@ -488,6 +490,8 @@ export interface CreateShiftDto {
   /** Ignored by the server, which never takes a pattern link from a request: it sets the link itself when it generates a shift from a pattern. The roster panel never sends one. */
   shiftPatternId?: string | null
   notes?: string | null
+  /** Trimmed text or an explicit null. Always sent by the shift panel; the server keeps the stored value when a PUT leaves it out (the board chip does), and clears it on null. */
+  location?: string | null
   overrideReason: string | null
   acknowledgedFindingCodes: string[]
   /**

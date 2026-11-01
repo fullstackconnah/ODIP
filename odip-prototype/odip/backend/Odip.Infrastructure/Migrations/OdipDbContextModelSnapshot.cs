@@ -6355,6 +6355,10 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<bool>("EndsNextDay")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("Location")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<int>("NightType")
                         .HasColumnType("integer");
 

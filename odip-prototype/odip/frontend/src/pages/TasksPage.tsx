@@ -188,7 +188,7 @@ export default function TasksPage() {
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <PageHeader
         title="Tasks"
-        subtitle={plural(total, 'task')}
+        count={plural(total, 'task')}
         action={!showArchived && canWrite && (
           <Button to="/tasks/new" size="md">
             <Plus className="w-4 h-4" /> New task

@@ -40,7 +40,7 @@ export const TONE: Record<Tone, ToneClasses> = {
   },
   // "Go", confirmed, paid, all clear.
   success: {
-    solid: 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]',
+    solid: 'bg-[var(--color-selected)] text-[var(--color-on-selected)]',
     soft: 'bg-[var(--color-primary-fixed)]/40',
     ink: 'text-[var(--color-primary)]',
   },

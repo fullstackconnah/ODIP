@@ -11,6 +11,8 @@ colors:
   primary-container: "#4d7c0f"
   primary-fixed: "#bbf37c"
   on-primary-fixed: "#0f2000"
+  selected: "#e3edd3"
+  on-selected: "#2c4c00"
   secondary: "#515f74"
   secondary-foreground: "#ffffff"
   secondary-container: "#d5e3fc"
@@ -161,12 +163,12 @@ components:
   attention-tile-error:
     backgroundColor: "{colors.error-container}"
     textColor: "{colors.on-error-container}"
-  attention-tile-tall:
+  attention-tile-action:
     rounded: "{rounded.md}"
-    padding: "16px"
+    padding: "12px"
   all-clear:
-    backgroundColor: "{colors.primary-fixed}"
-    textColor: "{colors.on-primary-fixed}"
+    backgroundColor: "{colors.selected}"
+    textColor: "{colors.on-selected}"
     rounded: "{rounded.md}"
     padding: "12px 16px"
 ---
@@ -194,7 +196,7 @@ components:
 > actions stay pinned. The status table and the rule are written under Status Badges & Alerts and Tables.
 
 > Added 2026-10-02 from the dashboard's bolder pass: the dashboard's title is a **greeting with today's date** (`PageHeader`'s `titleNote` and `documentTitle`), and the **attention band**
-> is now a tall tile for each item that needs somebody, one **All clear** row on Pale Sprout for the items that do not, and one Pale Sprout field when nothing does. Nothing new was added to
+> is now a compact soft-wash tile for each item that needs somebody (danger before warning), one **All clear** row on the Selected Tint for the items that do not, and one Selected Tint field when nothing does. Nothing new was added to
 > the system: every figure is still the display step, every fill is still a tone, and the all-clear is the documented "you are here / all clear" green, at full strength. Both parts stay
 > opt-in (`StatCard`'s `action`, `PageHeader`'s `titleNote`); every other tile and header is unchanged.
 
@@ -247,8 +249,8 @@ for the secondary and accessibility roles. Unchanged by the density work.
 - **Deep Fern** (`#4d7c0f`): the container step, used where the primary needs to sit beneath other
   content without becoming the loudest thing on screen.
 - **Pale Sprout** (`#bbf37c`): the *fixed* step, a high-visibility tint for the active navigation
-  item, confirmed/active status badges and similar "you are here / all clear" surfaces, paired with
-  near-black text. The dashboard's all-clear row and field wear it at full strength (13.2:1 against `#0f2000`).
+  item and similar "you are here" surfaces, paired with near-black text. It is location-only: a success status (confirmed, open for bookings, the dashboard's all-clear row and field)
+  wears the Selected Tint pair instead (8.09:1 light, 8.66:1 dark), so green status never matches the nav row.
 
 ### Secondary
 - **Slate Blue** (`#515f74`): informational and neutral-support colour, also the `info` status and
@@ -260,13 +262,15 @@ for the secondary and accessibility roles. Unchanged by the density work.
 - **Ledger Ink** (`#1b1c1a`): body and heading text. Near-black with a green undertone.
 - **Mist** (`#efeeea`): muted and accent surfaces, hover fills.
 - **Ruled Line** (`#c3c9b5`): all borders and outlines. Slightly green-grey.
-- **Field Grey** (`#e4e2de`): input backgrounds, so a field reads as writable.
+- **Field White** (`--color-field`, `#ffffff`; dark: the raised step `#2d322a`) with a **Field Edge** (`--color-field-border`, `#8a9180`, 3:1): a typeable control. Placeholder ink is `--color-placeholder`, not the value ink. Disabled is the recessed `--color-field-disabled` with the muted ink and no opacity; read-only is transparent with a dashed `--color-border`; invalid is a `--color-destructive` edge and ring.
+- **Field Grey** (`#e4e2de`, `--color-input`): no longer a field. It still paints the grey Dropdown pills and two icon tiles.
+- **Selected Tint** (`--color-selected`, `#e3edd3`; label `--color-on-selected`): in-page selection (segmented controls, sub-tabs, the settings sub-nav, the current wizard step) is this tint plus a 2px `--color-primary` bar, never a solid fill and never the main nav's lime.
 
 ### Dark theme
 "The ledger after hours": the same Organic Ledger under a desk lamp, chosen in Settings > My account > Appearance as Light, Dark or System (the default; System follows the device). Saved per device in `odip_ui_prefs:<userId>`; `public/theme.js` applies it before first paint. The signed-in app, /login, /caregiver/:token and /accessibility follow it; /welcome, the itinerary PDF and email stay light.
-- Surfaces are a deep green-tinted neutral, never black (page `#131512`), and text is a warm off-white, never `#ffffff`. The Warm Base Rule holds in both themes.
-- Depth stays tonal and inverts: a raised surface is lighter (page < sidebar < card < fill/popover < high). Dropdown and SearchableSelect panels use `popover` so they stand off a card; shadows go near-black and only help.
-- `primary` is light olive-lime as ink (success text, links, the ring) and takes dark ink through `primary-foreground` as a fill. Never write `text-white` or a literal colour in a component: use the foreground tokens.
+- Surfaces are a deep green-tinted neutral, never black (page `#151813`), and text is a warm off-white, never `#ffffff`. The Warm Base Rule holds in both themes.
+- Depth stays tonal and inverts: a raised surface is lighter (sidebar < page < card < raised = fill/popover < high; the sidebar recedes below the page as it does in light; each content step is 1.12:1 or more, the sidebar 1.08:1 below the page). Dropdown and SearchableSelect panels use `popover` so they stand off a card; shadows go near-black and only help.
+- `primary` is a calmer olive-lime (`#94c35f`, less luminous than the old `#a6d66b`) as ink (success text, links, the ring) and takes dark ink through `primary-foreground` as a fill. Never write `text-white` or a literal colour in a component: use the foreground tokens.
 - Tones become deep tints with pale inks; amber stays amber (a fill in both themes, ink on it is `warning-foreground`). No new hues, with one exception: the chart series tokens below (see "Chart series").
 - Every pair is held to WCAG AA (4.5:1 text, 3:1 non-text) in both themes by `toneContrast.test.ts`. The dark block at the end of `src/index.css` is the source of truth; the table is a copy.
 
@@ -296,7 +300,13 @@ for the secondary and accessibility roles. Unchanged by the density work.
 | `on-error-container` | `#93000a` | `#ffb4ab` |
 | `border` | `#c3c9b5` | `#434a3e` |
 | `input` | `#e4e2de` | `#2b2f28` |
-| `ring` | `#396200` | `#a6d66b` |
+| `ring` | `#396200` | `#94c35f` |
+| `selected` | `#e3edd3` | `#2c3a22` |
+| `on-selected` | `#2c4c00` | `#c4e59c` |
+| `field` | `#ffffff` | `#2d322a` |
+| `field-border` | `#8a9180` | `#82897a` |
+| `placeholder` | `#6b7160` | `#959c8a` |
+| `field-disabled` | `#efeeea` | `#1a1d17` |
 | `sidebar` | `#f5f3ef` | `#171a15` |
 | `sidebar-foreground` | `#1b1c1a` | `#e4e5dd` |
 | `sidebar-accent` | `rgba(255,255,255,0.4)` | `rgba(255,255,255,0.06)` |
@@ -316,7 +326,7 @@ for the secondary and accessibility roles. Unchanged by the density work.
 | `on-accessible-container` | `#7a2169` | `#ffb3e6` |
 | `warning-foreground` | `#1b1c1a` | `#1b1c1a` |
 | `hover-wash` | `rgba(0,0,0,0.05)` | `rgba(255,255,255,0.06)` |
-| `focus-ring-soft` | `rgba(57,98,0,0.18)` | `rgba(166,214,107,0.28)` |
+| `focus-ring-soft` | `rgba(57,98,0,0.18)` | `rgba(148,195,95,0.28)` |
 | `chart-budget` | `#7a8070` | `#8a9180` |
 | `chart-actual` | `primary` | `primary` |
 | `chart-expected` | `#2f6db5` | `#5f95e0` |
@@ -401,7 +411,7 @@ syntax (`h-[var(--control-h)]`) and never restate the pixel value.
 | `--table-head-h` | 32px | 40px |
 | `--cell-px` | 12px | 12px |
 | `--card-pad` | 12px | 16px |
-| `--section-gap` (between stacked blocks; also the padding of the attention band's tiles and all-clear field) | 16px | 20px |
+| `--section-gap` (between stacked blocks; also the padding of the all-clear field) | 16px | 20px |
 | `--field-gap-y` / `--field-gap-x` | 12px / 16px | 16px / 16px |
 | `--gutter` | 20px | 16px |
 | `--tap-min` | 0px | 44px |
@@ -497,6 +507,8 @@ against white and the warm-grey container steps. Shadows belong to elements that
 - **Focus Ring** (`ring-2 ring-[var(--color-ring)]`): every focusable element; ring only, the border does
   not move.
 
+**Dark steps.** Tonal depth in dark is five steps: sidebar `#0c0d0b` (3.5 L*), page `#151813`, card `#21251f`, raised `#2d322a` (popover, field, muted, accent) and high `#353a31`. Each content step is 1.12:1 or more over the one below, the high step 1.1:1 over raised, and the sidebar sits 1.08:1 below the page. Light keeps its warm-paper steps.
+
 **The Flat-By-Default Rule.** Surfaces are flat at rest. If a panel in the page flow needs a drop shadow
 to be visible, its background is wrong. Floating layers may carry one.
 
@@ -563,7 +575,7 @@ Tactile and plain, like a well-used key on a desk.
   page-level void, never inside a card.
 - **StatCard:** a Card with a 12px label, a `text-xl` display-bold value and an optional caption; tone
   (neutral, info, success, warning, danger) tints the fill with the tone's soft wash and sets the figure in its ink (`src/lib/tone.ts`). Its opt-in `variant="attention"` is the
-  attention band's tile, and given an `action` it is the band's tall tile (see Attention band); the default tile, which Vehicles still uses for its three fleet figures, is unchanged.
+  attention band's tile, and given an `action` it is the band's compact action tile (see Attention band); the default tile, which Vehicles still uses for its three fleet figures, is unchanged.
 
 ### Fact list and fact bar
 
@@ -692,7 +704,7 @@ their own facts to tones. It stops at the header: the tab strip and every panel 
 `warning-container` for pending or time-bound (Waitlist), `error-container` for action needed or outstanding (Action Needed, Outstanding). Everything in
 the cell (figure, label, icon) takes the matching on-container colour, so secondary text is tinted from the hue, never grey, and the chip becomes a
 card-white pill so it does not vanish into its own fill. Positive and neutral segments stay on the card fill: on a glance segment, or a compact attention tile, an all-clear is a lime chip, never a fill
-(the dashboard's all-clear row and field are the one deliberate exception, a whole surface in Pale Sprout that says nothing needs anybody: see Attention band). One
+(the dashboard's all-clear row and field are the one deliberate exception, a whole surface in the success tint that says nothing needs anybody: see Attention band). One
 tone decides both chip and fill (`glanceState`), so they cannot disagree, and no colour outside the two containers is ever used. The two fills are
 `TONE.warning.solid` and `TONE.danger.solid` (the pairs the status badges wear, `src/lib/tone.ts`), and `attentionOf` decides which tones ask for a tint,
 so the glance strip, the attention tile and a badge cannot drift apart. Colour is never the only cue:
@@ -740,7 +752,7 @@ mutation hooks to it, so a decision here is the same decision as on the full pag
 
 ### Attention band
 
-The dashboard's Alerts section, under Needs your decision (Decision list, above): what is wrong elsewhere, as big as the day's trouble. An item that needs action is a **tall tile**, an item at
+The dashboard's Alerts section, under Needs your decision (Decision list, above): what is wrong elsewhere, as loud as the day's trouble. An item that needs action is a **compact soft-wash tile**, an item at
 zero is only a name in ONE **All clear** row, and when every item is at zero the band is that one row. It replaces the row of equal KPI tiles, which gave "3 upcoming trips"
 the same weight as "2 QSC overdue"; those everyday counts now live in the header's meta row. It is `StatCard variant="attention"` tiles in a
 `<section aria-label="Alerts">` under the `h2` "Alerts", composed by `pages/dashboard/AttentionBand.tsx`, opt-in, so every other StatCard is unchanged.
@@ -771,13 +783,11 @@ page's own warning window; QSC overdue is a reportable incident with no report a
 member is assigned to a trip on the Schedule (the assignments the count reads) and accommodation on the trip's own tab, so that tile opens the Trips list to choose the trip; QSC Overdue and
 Overdue open their lists already filtered to the rule the figure counts. ReadOnly reaches the Schedule but its writes are refused, so for ReadOnly both Schedule links read "Open schedule" (the same page, no verb it cannot use).
 
-- **Tall tile.** Stacked: the display-step tabular figure, the label at the title step (14px, 600), the line at body secondary (13px) and the link (14px, 700, with a chevron), padded
-  `--section-gap` on every side (16px, 20px on touch), the airier step that no dense page uses. Nothing sits beside the figure, so the tile stays tall at any width the band gives two or more tiles a row; four lines deep it is the biggest
-  colour field on the page. The fill is the tone's solid pair (`TONE.danger.solid` the error container, `TONE.warning.solid` the warning container, the Attention Tint Rule), and the figure, label, line
-  and link all take the matching on-container colour, so secondary text is tinted from the hue, never grey (6.4:1 on the warning container, 7.2:1 on the error container). No icon, no chip. The tile is a
+- **Action tile.** One compact row at every width, at most 88px tall: the `text-display` tabular figure in the tone's ink, then the label (14px, 600) over the line (13px, wraps) in the foreground colour, then the link (14px, 700, with a chevron) at the right,
+  padded `--card-pad`. The fill is the tone's soft wash, not its solid pair: `TONE.danger.soft` (the error container at 30%) and the warning container at 50% (the tone's own soft wash is the solid container, which is the glance strip's fill), so the dark band is a gentle wash on the card and not a solid maroon. The compact glance tile keeps the solid pair (the Attention Tint Rule). Danger tiles come before warning tiles, in the given order within a tone. No icon, no chip. The tile is a
   named group, so its accessible name carries the number and the label ("Overdue 2"), and holds ONE link whose name says what it does ("Open overdue tasks"). The link's pad stretches over the whole tile
   (`after:inset-0`), so the tile is one big target and the focus ring (`ring-2`, the olive ring token) surrounds the tile and not the words; the link's own box keeps a `--tap-min` floor.
-- **A zero is a name, not a tile.** The items at zero are named in ONE row after the tiles on Pale Sprout (`TONE.success.solid`, `#bbf37c` with `#0f2000`) with a check: "All clear on trips missing vehicles,
+- **A zero is a name, not a tile.** The items at zero are named in ONE row after the tiles on the success tint (`TONE.success.solid`, `--color-selected` with `--color-on-selected`) with a check: "All clear on trips missing vehicles,
   open incidents and overdue QSC reports" (each item names itself by a NOUN that reads without its tile, since the row has no line under it: "overdue tasks" and "overdue QSC reports" for the labels
   "Overdue" and "QSC Overdue", "trips missing staff" for "Missing Staff"; the tile keeps its label; the names joined "A, B and C", no serial comma). A zero is never tinted and never a tile, so the band's weight is the day's trouble.
 - **Nothing needs you.** When every item is at zero the band is its one All clear row. "All clear. Nothing needs you right now." is the PAGE's field (`AllClearField`): it stands under the greeting in place of both sections only when every decision group and every alert has data and is at zero, and no notice is waiting, naming every group and every item it checked ("Checked and at
@@ -792,9 +802,9 @@ Overdue open their lists already filtered to the rule the figure counts. ReadOnl
   is 4 + 3) and equal in width within a row, so every row is full and none has a hole (`pages/dashboard/bandLayout.ts`: a 60-track grid, each tile spanning 60 / its row length). The 8px between tiles is padding,
   not a grid gap (60 tracks would add 59 gaps). Nothing truncates, scrolls sideways or shrinks the type, and no label wraps inside its tile at any width.
 - **Touch.** The whole tile is the target and the link keeps a `--tap-min` floor, so it is a 44px target.
-- **Phone.** In a band under 36rem (one tile a row) a tall tile is one compact row instead: the figure, the label and a chevron, padded `--card-pad` top and bottom; the line folds away and the link's words stay as its accessible name only (the link still covers the tile). Container queries on the band, CSS only (`StatCard`), so seven tiles no longer run about 1300px before the first trip.
+- **Phone.** In a band under 36rem (one tile a row) the tile keeps its one row but the line folds away and the link's words stay as its accessible name only (the link still covers the tile). Container queries on the band, CSS only (`StatCard`), so seven tiles no longer run about 1300px before the first trip.
 
-**The Quiet Zero Rule.** Only a count somebody can act on is loud, and only that is a tile. A zero is a name in the All clear row (Pale Sprout, never a tint), and a value that is not known yet, or failed to load,
+**The Quiet Zero Rule.** Only a count somebody can act on is loud, and only that is a tile. A zero is a name in the All clear row (the success tint, never a tile), and a value that is not known yet, or failed to load,
 is an en dash tile, never a 0 and never an "All clear". The page is the all-clear field only when every item and every decision group has data and is at zero. If most items are tiles the band has stopped saying anything, so review
 the tones, not the tint.
 
@@ -811,7 +821,7 @@ on-container text), a soft wash (a tile or a row, paired with the ink) and an in
 |---|---|---|---|---|---|
 | `neutral` | Field Grey `input` / `muted-foreground` | `surface-container` | `muted-foreground` | no state yet, or no longer | Draft, None, Archived, Not started, Closed, Researching, Planned, Not required, Self managed, anything unlisted |
 | `info` | `secondary-container` / `info` | `secondary-container` at 60% | `info` | in the pipeline, nothing wrong; a category | Low, Submitted, Ready, Planning, **In progress**, Published, Validated, NDIA / Agency managed |
-| `success` | Pale Sprout `primary-fixed` / `on-primary-fixed` | `primary-fixed` at 40% | `primary` | go, confirmed, paid, all clear | Confirmed, Open for bookings, Completed, Paid, Active, Approved, Resolved, Claimed, Administered |
+| `success` | Selected Tint `selected` / `on-selected` | `primary-fixed` at 40% | `primary` | go, confirmed, paid, all clear | Confirmed, Open for bookings, Completed, Paid, Active, Approved, Resolved, Claimed, Administered |
 | `warning` | `warning-container` / `on-warning-container` | `warning-container` | `on-warning-container` | awaiting somebody: a decision, a reply, a confirmation, a hold running out | Pending, Enquiry, Held, Waitlist, Requested, Booked, Under review, Pending review, Withheld, Medium, Partially paid |
 | `danger` | `error-container` / `on-error-container` | `error-container` at 30% | `destructive` | action needed, failed, refused, over | Cancelled, Overdue, High, Urgent, Rejected, Expired, Escalated, Declined, Refused, Missed, Wrong medication |
 | `accessible` | `accessible-container` / `on-accessible-container` | `accessible-container` at 60% | `on-accessible-container` | accessibility, and the categories that already use its pink; never a state | Plan managed, Shift claim |
@@ -934,7 +944,7 @@ not. Never hand-roll a `fixed right-0` panel: use `SlideOver`.
 - **Do** colour a status by its tone: add the word to `STATUS_TONE` (or pass a `colorMap` of tones for a domain whose word means something else), never a class string of its own
 - **Do** make nouns agree with counts through `plural()`, spell ratios through `formatRatio()` ("x / y") and relative times through `formatRelative()` (`src/lib/format.ts`), and state a dated deadline through `deadlineState()` and `deadlineLabel()` (`src/lib/deadline.ts`), never by hand
 - **Do** early-return a record that is loading, failed or missing through `PageState`, give a detail page one `BackButton` that names its destination when it is known, and keep its active tab in the URL with `useTabParam` (and the open section of a grouped tab in `?section=`, written with `replace`)
-- **Do** put what needs action in the attention band, as a tall tile with its figure, a line saying what it means and a link to where it is fixed, and the everyday counts in the header's meta row, so the loudest thing on the dashboard is the thing to act on; **do** let the all-clear be the Pale Sprout row and field and nothing else
+- **Do** put what needs action in the attention band, as a compact soft-wash tile with its figure, a line saying what it means and a link to where it is fixed, and the everyday counts in the header's meta row, so the loudest thing on the dashboard is the thing to act on; **do** let the all-clear be the success-tint row and field and nothing else
 - **Do** show an en dash, not a `0`, for a figure whose request is still loading (`aria-busy`) or has failed ("Couldn't load"), and never an "All clear" without data
 - **Do** read every date and time by its kind (instant, wall clock, date: "Time on the wire"), take "today" from the provider (server) or the viewer's local date (browser), and call a due day overdue only from the day after it (`deadlineState`, `isPastDue`)
 - **Do** use `Button` for every action; it owns height, radius and focus

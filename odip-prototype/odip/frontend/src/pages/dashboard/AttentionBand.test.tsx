@@ -47,6 +47,13 @@ describe('AttentionBand — what is a tile', () => {
     expect(screen.queryByRole('group', { name: 'Delta 0' })).not.toBeInTheDocument()
   })
 
+  it('deals danger tiles before warning tiles, keeping the given order within a tone', () => {
+    renderBand([item('Alpha', 1, { tone: 'warning' }), item('Beta', 2), item('Gamma', 3, { tone: 'warning' }), item('Delta', 4)])
+
+    const names = within(band()).getAllByRole('group').map((g) => g.getAttribute('aria-label'))
+    expect(names).toEqual(['Beta 2', 'Delta 4', 'Alpha 1', 'Gamma 3'])
+  })
+
   it('gives each tile its figure, its label, its line and a link to where it is fixed', () => {
     renderBand(FOUR)
 
@@ -89,7 +96,7 @@ describe('AttentionBand — the All clear row', () => {
     expect(row).toHaveTextContent('All clear on Beta and Delta')
     // Pale Sprout with its near-black ink: the system's documented all-clear pair (the success tone's solid).
     for (const cls of TONE.success.solid.split(' ')) expect(row).toHaveClass(cls)
-    expect(row).toHaveClass('bg-[var(--color-primary-fixed)]', 'text-[var(--color-on-primary-fixed)]')
+    expect(row).toHaveClass('bg-[var(--color-selected)]', 'text-[var(--color-on-selected)]')
     // After the last tile, not before it.
     const lastTile = screen.getByRole('group', { name: 'Gamma 2' })
     expect(lastTile.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
@@ -143,6 +150,7 @@ describe('AllClearField — the whole page clear (the page draws it)', () => {
 
     const field = screen.getByText('All clear. Nothing needs you right now.').closest('div.rounded-md') as HTMLElement
     for (const cls of TONE.success.solid.split(' ')) expect(field).toHaveClass(cls)
+    expect(field).toHaveClass('bg-[var(--color-selected)]', 'text-[var(--color-on-selected)]')
     expect(screen.getByText('Checked and at zero: Alpha, Beta and Gamma.')).toBeInTheDocument()
     expect(field.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
   })

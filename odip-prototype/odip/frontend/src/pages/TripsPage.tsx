@@ -258,12 +258,12 @@ export default function TripsPage() {
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
-      {/* Plain wrapper keeps PageHeader's title and filter rows in block flow (32 + 8 + 32 = 72px)
+      {/* Plain wrapper keeps PageHeader's title and filter rows in block flow (32 + 12 + 32 = 76px)
           instead of the flex column's section gap opening between them. */}
       <div>
         <PageHeader
           title="Trips"
-          subtitle={plural(trips.length, 'trip')}
+          count={plural(trips.length, 'trip')}
           action={
             <div className="flex items-center gap-2">
               <ToggleGroup
@@ -273,7 +273,7 @@ export default function TripsPage() {
                 ariaLabel="Trips view"
               />
               {canWrite && (
-                <Button to="/trips/new" size="md">
+                <Button to="/trips/new" size="md" className="max-md:order-first">
                   <Plus className="h-4 w-4" /> New trip
                 </Button>
               )}

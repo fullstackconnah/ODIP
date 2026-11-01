@@ -14,7 +14,7 @@ import { TAP_FLOOR, TAP_TRUNCATED_LINK } from '@/components/tapArea'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useState } from 'react'
-import { Filter, Plus, AlertTriangle, ShieldAlert, FileWarning, Pencil, Archive, ArchiveRestore } from 'lucide-react'
+import { Filter, Plus, AlertTriangle, ShieldAlert, FileWarning, Pencil, Archive, ArchiveRestore, ChevronRight } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
 import { formatDateAu } from '@/lib/utils'
 import { formatAge, plural } from '@/lib/format'
@@ -332,32 +332,24 @@ export default function IncidentsPage() {
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
-      {/* The tabs share the H1 row (spec §3), and the H1 now renders on both tabs. PageHeader's title
-          row is `flex justify-between` without wrap, so this wrapper lets it wrap: on a phone the
-          tabs and button drop under the title instead of squeezing it. A plain wrapper also keeps
-          the title and filter rows in block flow, without the flex column's section gap between them. */}
-      <div className="[&>div:first-child]:flex-wrap [&>div:first-child]:gap-y-1">
+      {/* The tabs sit under the title (PageHeader's tabs slot), and the H1 renders on both tabs. A plain wrapper keeps
+          the title, tabs and filter rows in block flow, without the flex column's section gap between them. */}
+      <div>
         <PageHeader
           title="Incidents"
-          subtitle={showFlaggedNotes ? undefined : plural(totalCount, 'incident')}
-          action={(canViewFlaggedNotes || reportIncidentAction) && (
-            <div className="flex flex-auto flex-wrap items-center gap-x-4 gap-y-1">
-              {canViewFlaggedNotes && (
-                <Tabs
-                  tabs={[
-                    { id: 'incidents', label: 'Reports' },
-                    // A failed load is not a count of 0: the label drops the count until there is one.
-                    { id: 'flagged-notes', label: flaggedNotesError && flaggedNotes.length === 0 ? 'Flagged notes' : `Flagged notes (${flaggedNotes.length})` },
-                  ]}
-                  active={tab}
-                  onChange={key => setTab(key as IncidentsTab)}
-                  ariaLabel="Incidents sections"
-                  className="min-w-0 max-md:basis-full"
-                />
-              )}
-              {/* On a phone the action leads the row, under the title as on the other list pages, and the tabs take the row below it. */}
-              {reportIncidentAction && <div className="max-md:order-first md:ml-auto">{reportIncidentAction}</div>}
-            </div>
+          count={showFlaggedNotes ? undefined : plural(totalCount, 'incident')}
+          action={reportIncidentAction || undefined}
+          tabs={canViewFlaggedNotes && (
+            <Tabs
+              tabs={[
+                { id: 'incidents', label: 'Reports' },
+                // A failed load is not a count of 0: the label drops the count until there is one.
+                { id: 'flagged-notes', label: flaggedNotesError && flaggedNotes.length === 0 ? 'Flagged notes' : `Flagged notes (${flaggedNotes.length})` },
+              ]}
+              active={tab}
+              onChange={key => setTab(key as IncidentsTab)}
+              ariaLabel="Incidents sections"
+            />
           )}
         >
           {!showFlaggedNotes && (
@@ -405,14 +397,19 @@ export default function IncidentsPage() {
           className="flex items-start gap-3 px-3 py-2.5 rounded-[var(--radius-md)] bg-error-container border border-destructive/40 text-on-error-container"
         >
           <AlertTriangle className="mt-0.5 w-4 h-4 flex-shrink-0" aria-hidden="true" />
-          <div className="min-w-0 flex-1 flex flex-col items-start gap-1 md:flex-row md:items-center md:gap-3">
-          <p className="min-w-0 text-sm md:flex-1">
-            <span className="font-semibold">{qscHeadline}</span>
-            <span className="ml-2 text-[13px]">{'Most reportable incidents must be reported to the NDIS Commission within 24\u00a0hours. Some uses of an unauthorised restrictive practice can be reported within 5\u00a0business days.'}</span>
-          </p>
-          <Link to="/incidents?qsc=overdue" className={`${TAP_FLOOR} shrink-0 whitespace-nowrap text-sm font-medium underline underline-offset-2`}>
-            View overdue incidents
-          </Link>
+          {/* Headline first, then the link and the rules disclosure on one row. An open disclosure takes the full row below. */}
+          <div className="min-w-0 flex-1 flex flex-wrap items-center gap-x-4 gap-y-0 text-sm">
+            <p className="basis-full font-semibold md:min-w-0 md:flex-1 md:basis-0">{qscHeadline}</p>
+            <Link to="/incidents?qsc=overdue" className={`${TAP_FLOOR} shrink-0 whitespace-nowrap font-medium underline underline-offset-2`}>
+              View overdue incidents
+            </Link>
+            <details className="group open:basis-full">
+              <summary className={`${TAP_FLOOR} inline-flex cursor-pointer list-none items-center gap-1 whitespace-nowrap font-medium hover:underline hover:underline-offset-2 [&::-webkit-details-marker]:hidden`}>
+                About the deadlines
+                <ChevronRight className="h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-90 motion-reduce:transition-none" aria-hidden="true" />
+              </summary>
+              <p className="pb-1 text-[13px] text-foreground">{'Most reportable incidents must be reported to the NDIS Commission within 24 hours. Some uses of an unauthorised restrictive practice can be reported within 5 business days.'}</p>
+            </details>
           </div>
         </div>
       )}

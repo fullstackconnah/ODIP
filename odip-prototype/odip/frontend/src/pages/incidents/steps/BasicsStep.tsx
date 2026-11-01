@@ -2,6 +2,7 @@ import type { FieldErrors, UseFormRegister, UseFormSetValue } from 'react-hook-f
 import { FormField } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { Dropdown } from '@/components/Dropdown'
+import { ToggleGroup } from '@/components/ToggleGroup'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { ParticipantPicker } from '@/components/ParticipantPicker'
 import { ReadOnlyField } from '@/pages/profile/profileHelpers'
@@ -50,6 +51,16 @@ export function BasicsStep({
     <div className="flex flex-col gap-[var(--section-gap)]">
       <Card title="Who">
         <div className={formGrid}>
+          <FormField label="Severity" required className={span.long}>
+            <ToggleGroup
+              ariaLabel="Severity"
+              options={INCIDENT_SEVERITIES.map((s) => ({ key: s, label: INCIDENT_SEVERITY_LABELS[s] }))}
+              value={severity ?? ''}
+              onChange={(v) => setValue('severity', v as IncidentFormData['severity'], { shouldDirty: true })}
+              className="max-md:w-full max-md:[&>button]:flex-1"
+            />
+          </FormField>
+
           <FormField label="Involved Participant" className={span.medium}>
             <ParticipantPicker
               allowNone
@@ -133,15 +144,6 @@ export function BasicsStep({
               <input {...register('otherTypeSpecify')} placeholder="Describe the incident type" />
             </FormField>
           )}
-
-          <FormField label="Severity" required className={span.short}>
-            <Dropdown
-              variant="form"
-              value={severity ?? ''}
-              onChange={(v) => setValue('severity', v as IncidentFormData['severity'], { shouldDirty: true })}
-              items={INCIDENT_SEVERITIES.map((s) => ({ value: s, label: INCIDENT_SEVERITY_LABELS[s] }))}
-            />
-          </FormField>
         </div>
       </Card>
     </div>

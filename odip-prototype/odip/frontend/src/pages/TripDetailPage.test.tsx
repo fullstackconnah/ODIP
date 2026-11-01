@@ -364,7 +364,7 @@ describe('TripDetailPage — glance strip', () => {
     renderPage()
 
     expect(screen.getByText('0 / 0')).toHaveClass('text-display')
-    expect(within(cellOf('Insurance')).getByText('Covered')).toBeInTheDocument()
+    expect(within(cellOf('Insurance')).queryByText('Covered')).not.toBeInTheDocument()
     expect(cellOf('Insurance')).not.toHaveAttribute('data-attention')
   })
 
@@ -398,7 +398,7 @@ describe('TripDetailPage — glance strip', () => {
     expect(within(support).getByText('1 WC')).toHaveClass('bg-[var(--color-input)]')
   })
 
-  it('leaves every segment plain when nothing needs attention: Active, On Track, Covered on the card fill', () => {
+  it('leaves every segment plain when nothing needs attention: no Active, On Track or Covered pill, silence is the all-clear', () => {
     trip = withTrip(calmCounts)
     renderPage()
 
@@ -407,9 +407,7 @@ describe('TripDetailPage — glance strip', () => {
       expect(cell).not.toHaveAttribute('data-attention')
       expect(cell.className).not.toMatch(/bg-\[/)
     }
-    expect(screen.getByText('Active')).toHaveClass('bg-[var(--color-primary-fixed)]')
-    expect(screen.getByText('On Track')).toHaveClass('bg-[var(--color-primary-fixed)]')
-    expect(screen.getByText('Covered')).toHaveClass('bg-[var(--color-primary-fixed)]')
+    for (const word of ['Active', 'On Track', 'Covered']) expect(screen.queryByText(word)).not.toBeInTheDocument()
   })
 
   it('cannot tint a segment against its own badge: a tinted cell holds a white-pill chip, a quiet one its own tone', () => {
@@ -437,8 +435,8 @@ describe('TripDetailPage — glance strip', () => {
 
     expect(cellOf('Outstanding Tasks')).not.toHaveAttribute('data-attention')
     expect(cellOf('Insurance')).not.toHaveAttribute('data-attention')
-    expect(screen.getByText('On Track')).toBeInTheDocument()
-    expect(screen.getByText('Covered')).toBeInTheDocument()
+    expect(screen.queryByText('On Track')).not.toBeInTheDocument()
+    expect(screen.queryByText('Covered')).not.toBeInTheDocument()
   })
 })
 

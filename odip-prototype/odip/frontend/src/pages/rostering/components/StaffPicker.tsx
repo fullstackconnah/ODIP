@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { format, parseISO } from 'date-fns'
 import { AlertTriangle, Search } from 'lucide-react'
 import type { ShiftDto, StaffLeaveDto, StaffListDto } from '@/api/types'
+import { inputClass } from '@/components/FormField'
 import { SlideOver } from '@/components/SlideOver'
 import { useDialogBehavior } from '@/hooks/useDialogBehavior'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -206,7 +207,7 @@ function PickerSearch({ inputRef, listId, activeId, value, onChange, onKeyDown }
         value={value}
         onChange={e => onChange(e.target.value)}
         onKeyDown={onKeyDown}
-        className="h-[var(--control-h)] w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-input)] pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-ring)]"
+        className={`${inputClass} pl-10 pr-4 text-sm`}
       />
     </div>
   )

@@ -833,7 +833,7 @@ one real, reused component instead of copy-pasted markup per page.
 `StatCard` takes `label`, `value`, `to`, `tone`, `caption`, `className`, `variant`, `detail`, `action`, `loading` and `error`. `variant` is `'default'` (the default: the small KPI
 tile, a 12px label over a `text-xl` value, unchanged and still what Vehicles uses) or `'attention'`, the opt-in tile of the dashboard's **attention
 band** (DESIGN.md "Attention band"): a display-step tabular figure (`text-display`) over a 13px medium label, in its own bordered `--radius-md` tile
-with an 8px side inset (the compact card's). Given an `action` it is the band's **tall tile** instead (below); the compact tile is what an item with no data shows.
+with an 8px side inset (the compact card's). Given an `action` it is the band's **action tile** instead (below); the compact tile is what an item with no data shows.
 
 - `tone`: `'danger'` fills the tile with the error-container and `'warning'` with the warning-container, and the figure and the label take the matching
   on-container colour. Those are the glance strip's own tints: both take `TONE.warning.solid` and `TONE.danger.solid` from `lib/tone.ts` (`attentionOf` decides
@@ -846,18 +846,18 @@ with an 8px side inset (the compact card's). Given an `action` it is the band's 
 - `to`: the whole tile is a `Link` with a focus ring and a `--tap-min` floor, and its accessible name is its content ("Qualification Issues 5"). A tile
   without `to` is a named group ("Overdue 2"), so the number and the label are always in the name. A tinted tile carries `data-attention="error" | "warning"`,
   as a glance cell does.
-- `action` (`{ label, to }`, attention only) and `detail` (a string): a count somebody has to act on. `action` makes the **tall tile**: stacked, the display-step figure, the label (14px, 600), the `detail` line
-  (13px: one honest line saying what the count means) and a link to where it is fixed (`action.label`, `action.to`, a chevron), padded `--section-gap` on every side, so it is the biggest colour field on the
-  page. The fill and the on-container ink are the tone's, as above, and the line and the link take that ink, never grey. The tile is a named group ("Overdue 2"), not a link, so leave `to` off; the link's
+- `action` (`{ label, to }`, attention only) and `detail` (a string): a count somebody has to act on. `action` makes the **action tile**: one compact row, the `text-display` tabular figure in the tone's ink, the label (14px, 600) over the `detail` line
+  (13px, one honest line saying what the count means) and a link to where it is fixed (`action.label`, `action.to`, a chevron), padded `--card-pad`, at most 88px tall.
+  The fill is the tone's soft wash (danger: the error container at 30%; warning: the warning container at 50%), never the solid pair; the label, the line and the link stay in the foreground colour. The tile is a named group ("Overdue 2"), not a link, so leave `to` off; the link's
   `::after` stretches over the whole tile, so the tile is one big target (and the focus ring surrounds it) while the page keeps ONE link with a name of its own ("Open overdue tasks"), and its own box keeps a
   `--tap-min` floor. It has no caption (`detail` takes that job), and it is the compact tile whatever it is given while `loading` or `error` is set. The default variant ignores `detail` and `action`.
 - `loading` and `error` (attention only; the default tile ignores them): the figure is an en dash in the muted style, never tinted, with no caption, and a
   screen-reader-only text replaces the number: "Loading" (and the tile is `aria-busy`) while the request is in flight, "Couldn't load" (not busy) after it
   failed; `loading` wins if both are set. Use them for a figure whose own request has no data yet, so it is never read as a definite zero or an "All clear".
 
-Lay the tiles out with `pages/dashboard/AttentionBand.tsx`, which makes a tall tile of each item above zero, names the items at zero in one "All clear" row on Pale Sprout, and, when every item is at zero, only that
+Lay the tiles out with `pages/dashboard/AttentionBand.tsx`, which makes an action tile of each item above zero (danger before warning), names the items at zero in one "All clear" row on Pale Sprout, and, when every item is at zero, only that
 row (the field that says nothing needs you is the page's `AllClearField`, drawn when every decision group and alert is at zero); its rows are dealt by `pages/dashboard/bandLayout.ts` (balanced, 1 to 5 tiles a row by the band's own width). The compact tile's source order is label, figure, caption, like a glance cell, so a screen reader
-hears "Overdue, 2"; the tall tile reads its figure, label, line and link in that order.
+hears "Overdue, 2"; the action tile reads its figure, label, line and link in that order.
 
 ---
 
