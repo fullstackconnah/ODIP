@@ -13,12 +13,13 @@ using Odip.Infrastructure.Data;
 namespace Odip.Infrastructure.Migrations
 {
     [DbContext(typeof(OdipDbContext))]
-    [Migration("20261101120000_AddRosteringRulesAndPlanExpiry")]
+    [Migration("20261102090000_AddRosteringRulesAndPlanExpiry")]
     partial class AddRosteringRulesAndPlanExpiry
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
+#pragma warning disable 612, 618
             modelBuilder
                 .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
@@ -278,6 +279,9 @@ namespace Odip.Infrastructure.Migrations
                         .HasColumnType("integer");
 
                     b.Property<int>("QualificationWarningDays")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("SessionLengthMinutes")
                         .HasColumnType("integer");
 
                     b.Property<Guid>("TenantId")
@@ -731,6 +735,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateOnly>("SupportsDeliveredTo")
                         .HasColumnType("date");
 
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid");
+
                     b.Property<decimal>("TotalAmount")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
@@ -749,6 +756,8 @@ namespace Odip.Infrastructure.Migrations
                     b.HasIndex("ShiftId");
 
                     b.HasIndex("Status");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("TripClaimId");
 
@@ -4943,6 +4952,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateTime?>("SubmittedDate")
                         .HasColumnType("timestamp without time zone");
 
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid");
+
                     b.Property<decimal>("TotalAmount")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
@@ -4964,6 +4976,8 @@ namespace Odip.Infrastructure.Migrations
                     b.HasIndex("ParticipantId");
 
                     b.HasIndex("Status");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("TripInstanceId");
 
