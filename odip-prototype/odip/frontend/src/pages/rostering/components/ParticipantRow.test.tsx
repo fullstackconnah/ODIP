@@ -68,8 +68,8 @@ describe('ParticipantRow header — two lines: the name above the readiness chip
   })
 })
 
-describe('ParticipantRow header — one line: name, ratio chip, coverage badge', () => {
-  it('lays the three out on a single --row-h flex line, in that order', () => {
+describe('ParticipantRow header — name, ratio chip, coverage badge', () => {
+  it('keeps the three in reading order: name, then ratio chip, then coverage badge', () => {
     renderRow({ fullName: 'Grace Palmer-Hughes', supportRatio: 'TwoToOne', daysWithoutCover: 6 })
 
     const head = headerOf('Grace Palmer-Hughes')
@@ -77,24 +77,22 @@ describe('ParticipantRow header — one line: name, ratio chip, coverage badge',
     const chip = screen.getByRole('img', { name: '2:1 support' })
     const badge = screen.getByRole('img', { name: '6 unassigned shifts' })
 
-    // A row, not the old two stacked lines: no flex-col, vertically centred, still --row-h tall.
-    expect(head).toHaveClass('flex', 'items-center', 'min-h-[var(--row-h)]')
-    expect(head).not.toHaveClass('flex-col')
-    // DOM order is visual order in a single flex row.
+    // Two stacked lines, vertically centred, still --row-h tall.
+    expect(head).toHaveClass('flex', 'flex-col', 'justify-center', 'min-h-[var(--row-h)]')
+    // DOM order is visual order.
     expect(isBefore(name, chip)).toBe(true)
     expect(isBefore(chip, badge)).toBe(true)
   })
 
-  it('never squeezes or cuts the ratio chip or the badge, and keeps gap-2 between them and the name', () => {
+  it('never squeezes or cuts the ratio chip or the badge, and keeps gap-2 between them', () => {
     renderRow({ fullName: 'Grace Palmer-Hughes', supportRatio: 'TwoToOne', daysWithoutCover: 6 })
 
-    const head = headerOf('Grace Palmer-Hughes')
     const name = screen.getByRole('link', { name: 'Grace Palmer-Hughes' })
     const chip = screen.getByRole('img', { name: '2:1 support' })
     const badge = screen.getByRole('img', { name: '6 unassigned shifts' })
 
-    // gap-2 (8px) is the floor between the name group and the chips, so the name never touches the badge.
-    expect(head).toHaveClass('gap-2')
+    // gap-2 (8px) is the floor between the readiness chip and the right-hand group.
+    expect(chip.parentElement!.parentElement).toHaveClass('gap-2')
     // Chip and badge share a shrink-0 group pushed to the right edge: neither can be squeezed.
     const tail = chip.parentElement as HTMLElement
     expect(tail).toHaveClass('shrink-0', 'ml-auto', 'gap-2')
@@ -113,7 +111,7 @@ describe('ParticipantRow header — one line: name, ratio chip, coverage badge',
     const chip = screen.getByRole('img', { name: '1:2 support' })
     expect(chip).toHaveTextContent(/^1:2$/)
     expect(chip).toHaveAttribute('title', '1:2 support')
-    expect(chip).toHaveClass('h-5', 'rounded-sm', 'tabular-nums')
+    expect(chip).toHaveClass('h-4', 'rounded-sm', 'tabular-nums')
   })
 
   it('falls back to the raw value for a ratio with no label, and spells a shared one out', () => {
@@ -183,7 +181,7 @@ describe('ParticipantRow header — coverage badge (a compact count; the words a
     expect(screen.queryByText('6 unassigned shifts')).not.toBeInTheDocument()
     expect(badge.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
     // The amber warning-container tint is the colour meaning; it is unchanged.
-    expect(badge).toHaveClass('bg-[var(--color-warning-container)]', 'text-[var(--color-on-warning-container)]', 'h-5', 'rounded-sm')
+    expect(badge).toHaveClass('bg-[var(--color-warning-container)]', 'text-[var(--color-on-warning-container)]', 'h-4', 'rounded-sm')
   })
 
   it('pluralises the title and name: one shift is "1 unassigned shift"', () => {
@@ -250,7 +248,7 @@ describe('ParticipantRow header — readiness chip', () => {
     }
   })
 
-  it('puts the chip in the name group, after the name and the restrictive-practice marker and ahead of the ratio chip and coverage badge', () => {
+  it('puts the chip on line 2, after the name and the restrictive-practice marker and ahead of the ratio chip and coverage badge', () => {
     renderRow({ fullName: 'Grace Palmer-Hughes', hasRestrictivePractice: true, daysWithoutCover: 6, readinessIssues: ISSUES })
 
     const name = screen.getByRole('link', { name: 'Grace Palmer-Hughes' })
@@ -259,7 +257,8 @@ describe('ParticipantRow header — readiness chip', () => {
     const ratio = screen.getByRole('img', { name: '1:1 support' })
     const badge = screen.getByRole('img', { name: '6 unassigned shifts' })
 
-    expect(name.parentElement).toContainElement(chip)
+    expect(name.parentElement).not.toContainElement(chip)
+    expect(ratio.parentElement!.parentElement).toContainElement(chip)
     expect(isBefore(name, marker)).toBe(true)
     expect(isBefore(marker, chip)).toBe(true)
     expect(isBefore(chip, ratio)).toBe(true)
@@ -278,16 +277,15 @@ describe('ParticipantRow header — readiness chip', () => {
     expect(chip.querySelector('button, input, a')).toBeNull()
   })
 
-  it('stays on the one --row-h line and gives the name the room first: it takes what is left (never stretched past its text), shrinks to its icon, and truncates', () => {
+  it('stays inside the --row-h header on line 2: it takes what is left (never stretched past its text), shrinks to its icon, and truncates', () => {
     renderRow({ fullName: 'Grace Palmer-Hughes', hasRestrictivePractice: true, daysWithoutCover: 6, readinessIssues: ISSUES })
 
     const head = headerOf('Grace Palmer-Hughes')
     const chip = screen.getByText(WARNING).closest('[title]') as HTMLElement
-    // Same single flex line as before: the header is not stacked and not taller than its token.
-    expect(head).toHaveClass('flex', 'items-center', 'min-h-[var(--row-h)]')
-    expect(head).not.toHaveClass('flex-col')
-    // Sized like the row's other chips (h-5, rounded-sm, px-1.5), so it adds no height to a 34px row.
-    expect(chip).toHaveClass('h-5', 'rounded-sm', 'px-1.5')
+    // Not taller than its token.
+    expect(head).toHaveClass('flex', 'flex-col', 'min-h-[var(--row-h)]')
+    // Sized like the row's other chips (h-4, rounded-sm, px-1.5), so name + chips stay within a 34px row.
+    expect(chip).toHaveClass('h-4', 'rounded-sm', 'px-1.5')
     expect(chip).not.toHaveClass('rounded-full')
     // The room it takes: the leftover after the name (flex-1), up to its own text width (max-w-max), never below its icon (min-w-6).
     expect(chip).toHaveClass('flex-1', 'min-w-6', 'max-w-max')
