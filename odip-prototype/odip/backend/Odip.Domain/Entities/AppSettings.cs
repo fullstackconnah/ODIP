@@ -19,4 +19,6 @@ public class AppSettings : ITenantEntity
     public int VarianceReviewMinutes { get; set; } = 15;
     /// <summary>Days before a participant's plan ends that the alert starts. 30 is the old fixed value.</summary>
     public int PlanExpiryWarningDays { get; set; } = 30;
+    /// <summary>Minutes a sign-in lasts, counted from when the person signed in. Null = no limit (today's behaviour); never backfilled.</summary>
+    public int? SessionLengthMinutes { get; set; }
 }

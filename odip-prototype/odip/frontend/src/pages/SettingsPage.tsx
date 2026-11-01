@@ -18,6 +18,7 @@ import AlphaSignupsTab from '@/pages/settings/AlphaSignupsTab'
 import WhatsNewSection from '@/pages/settings/WhatsNewSection'
 import AlertWindowsSection from '@/pages/settings/AlertWindowsSection'
 import RosteringRulesSection from '@/pages/settings/RosteringRulesSection'
+import SecuritySection from '@/pages/settings/SecuritySection'
 import AppearanceSection from '@/pages/settings/AppearanceSection'
 import BillingDetailsSection from '@/pages/settings/BillingDetailsSection'
 import BudgetSettingsTab from '@/pages/settings/BudgetSettingsTab'
@@ -122,7 +123,7 @@ export default function SettingsPage() {
     // A section with a Save renders the frame itself (its dirty state and the guard live with the form); the page frames the rest.
     const framed = (content: ReactNode) => <SettingsSection {...frame} wide={def.wide}>{content}</SettingsSection>
     switch (def.key) {
-      case 'profile': return framed(<ProfileSection />)
+      case 'profile': return <ProfileSection {...frame} />
       case 'notifications': return <NotificationPreferencesTab {...frame} />
       case 'appearance': return framed(<AppearanceSection />)
       case 'workspace-visibility': return <WorkspaceVisibilitySection {...frame} />
@@ -133,6 +134,7 @@ export default function SettingsPage() {
       case 'safety': return <SafetyChecksSection {...frame} />
       case 'alerts': return <AlertWindowsSection {...frame} />
       case 'rostering': return <RosteringRulesSection {...frame} />
+      case 'security': return <SecuritySection {...frame} />
       case 'pricing': return <PlanPricingSettingsTab {...frame} />
       case 'budgets': return <BudgetSettingsTab {...frame} />
       case 'templates': return framed(<EventTemplatesSection />)

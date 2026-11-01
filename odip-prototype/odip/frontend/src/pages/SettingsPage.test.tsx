@@ -61,6 +61,9 @@ vi.mock('@/api/hooks', () => ({
   useUpdateModuleVisibility: () => ({ mutate: vi.fn(), isPending: false }),
   useSettings: () => ({ data: settingsData }),
   useUpdateSettings: () => ({ mutate: vi.fn((_vars, opts) => opts?.onSuccess?.()), isPending: false }),
+  useUpdateSecuritySettings: () => ({ mutate: vi.fn(), isPending: false }),
+  useMyProfile: () => ({ data: { firstName: 'Dana', lastName: 'Whitlock', email: 'dana.whitlock@sunrise.example.com', mobile: null, managedByEmploymentHero: false }, isError: false }),
+  useUpdateMyProfile: () => ({ mutate: vi.fn(), isPending: false }),
   useSupportCatalogue: () => ({ data: [] }),
   usePublicHolidays: () => ({ data: holidayRows.current }),
   useCreatePublicHoliday: () => ({ mutate: vi.fn(), isPending: false }),
@@ -511,7 +514,8 @@ describe('SettingsPage — the shell from md: the rail, the open section and the
   it('says on Profile who you are signed in as', () => {
     renderSettingsPage()
     const profile = screen.getByRole('region', { name: 'Profile' })
-    for (const fact of ['Dana Whitlock', 'dana.whitlock', 'Admin', 'Sunrise Support']) expect(within(profile).getByText(fact)).toBeInTheDocument()
+    for (const fact of ['dana.whitlock', 'Admin', 'Sunrise Support']) expect(within(profile).getByText(fact)).toBeInTheDocument()
+    expect(within(profile).getByDisplayValue('Dana')).toBeInTheDocument()
   })
 
   it.each([['SuperAdmin'], ['SuperAdminNoOrg']] as const)('names no organisation on Profile for a %s: the one in their sign-in is not the one in view', role => {

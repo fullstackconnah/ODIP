@@ -33,14 +33,16 @@ internal static class FirebaseTestClaims
     /// <summary>
     /// What a person who signed in with <paramref name="signInProvider"/> presents: their email, whether it is verified, and the "firebase" claim a real
     /// token carries. A null provider leaves the "firebase" claim out altogether.
+    /// A null <paramref name="authTime"/> leaves "auth_time" out (the default, so existing tests are unchanged); otherwise it is the claim as given.
     /// </summary>
-    public static IReadOnlyDictionary<string, object> For(string email, bool emailVerified = true, string? signInProvider = "password")
+    public static IReadOnlyDictionary<string, object> For(string email, bool emailVerified = true, string? signInProvider = "password", object? authTime = null)
     {
         var payload = new Dictionary<string, object>
         {
             ["iss"] = "https://securetoken.google.com/odip-test", ["aud"] = "odip-test", ["sub"] = "uid-1", ["iat"] = 1, ["exp"] = 2, ["user_id"] = "uid-1",
             ["email"] = email, ["email_verified"] = emailVerified,
         };
+        if (authTime is not null) payload["auth_time"] = authTime;
         if (signInProvider is not null)
         {
             payload["firebase"] = new Dictionary<string, object>

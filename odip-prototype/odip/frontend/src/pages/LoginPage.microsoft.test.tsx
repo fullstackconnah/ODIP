@@ -107,6 +107,13 @@ describe('LoginPage: Sign in with Microsoft', () => {
     expect(screen.getAllByText(/Microsoft sign-ins last up to 12 hours/).length).toBeGreaterThan(0)
   })
 
+  it('SessionLengthReached shows the organisation words', async () => {
+    on()
+    renderAt('/login?microsoft=SessionLengthReached')
+    expect((await screen.findAllByText(/You've been signed out./)).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Your organisation asks everyone to sign in again/).length).toBeGreaterThan(0)
+  })
+
   it('shows the words even when config is still pending, once the card appears', async () => {
     config.value = { isPending: true, isError: false, data: undefined }
     const { rerender } = render(<MemoryRouter initialEntries={['/login?microsoft=MicrosoftCancelled']}><LoginPage /></MemoryRouter>)

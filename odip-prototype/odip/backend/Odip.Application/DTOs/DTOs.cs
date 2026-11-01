@@ -1497,6 +1497,32 @@ public record AppSettingsDto
     public int WeeklyHoursWarning { get; init; }
     public int VarianceReviewMinutes { get; init; }
     public int PlanExpiryWarningDays { get; init; }
+    public int? SessionLengthMinutes { get; init; }
+}
+
+public record UpdateSecuritySettingsDto
+{
+    /// <summary>Null = no limit.</summary>
+    [System.ComponentModel.DataAnnotations.Range(15, 480)]
+    public int? SessionLengthMinutes { get; init; }
+}
+
+public record MyProfileDto
+{
+    public string FirstName { get; init; } = "";
+    public string LastName { get; init; } = "";
+    public string Email { get; init; } = "";
+    public string? Mobile { get; init; }
+    /// <summary>The Employment Hero sync owns the name and mobile of a linked person, so they cannot be edited here.</summary>
+    public bool ManagedByEmploymentHero { get; init; }
+}
+
+/// <summary>Deliberately no id, tenant, role or email: a person edits only their own name and mobile.</summary>
+public record UpdateMyProfileDto
+{
+    public string? FirstName { get; init; }
+    public string? LastName { get; init; }
+    public string? Mobile { get; init; }
 }
 
 /// <summary>Presence-based: a field left out keeps the stored value, so one Settings section's save never touches another section's fields.</summary>

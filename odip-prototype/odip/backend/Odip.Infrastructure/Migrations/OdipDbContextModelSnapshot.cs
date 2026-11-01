@@ -278,6 +278,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<int>("QualificationWarningDays")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("SessionLengthMinutes")
+                        .HasColumnType("integer");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
 
