@@ -24,6 +24,7 @@ vi.mock('@/api/hooks', () => ({
   useStaffLeaveBalances: () => ({ data: undefined, isLoading: false, isError: false, refetch: () => undefined }),
   useEnsureStaffSignInAccount: () => ({ mutateAsync: mockEnsure }),
   useConfirmStaffAddress: () => ({ mutateAsync: vi.fn() }),
+  useResetStaffTwoStep: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useRecordInvitesSent: () => ({ mutate: mockRecord }),
 }))
 vi.mock('firebase/auth', () => ({ sendPasswordResetEmail }))

@@ -69,7 +69,7 @@ vi.mock('@/lib/permissions', async () => {
 // The rail is how these tests leave Users and come back, so they run at desktop width.
 vi.mock('@/hooks/useIsBelowMd', () => ({ useIsBelowMd: () => false }))
 vi.mock('firebase/auth', () => ({ sendPasswordResetEmail }))
-vi.mock('@/lib/firebase', () => ({ auth: { name: 'auth-stub' } }))
+vi.mock('@/lib/firebase', () => ({ auth: { name: 'auth-stub', currentUser: null, onAuthStateChanged: () => () => undefined } }))
 
 beforeEach(() => {
   mockCreate.mockReset().mockResolvedValue({
@@ -109,7 +109,7 @@ describe('SettingsPage Users section: creating a user', () => {
       tenantId: 'tenant-1', firstName: 'New', lastName: 'Person', email: 'new.person@example.com', username: 'newperson', role: 'Coordinator',
       password: undefined,
     })
-    expect(sendPasswordResetEmail).toHaveBeenCalledWith({ name: 'auth-stub' }, 'new.person@example.com')
+    expect(sendPasswordResetEmail).toHaveBeenCalledWith(expect.objectContaining({ name: 'auth-stub' }), 'new.person@example.com')
 
     await u.click(screen.getByRole('button', { name: 'Done' }))
 
@@ -127,7 +127,7 @@ describe('SettingsPage Users section: Send set-password email', () => {
       await screen.findByText("We've sent ann@example.com a link to set their password. It can take a few minutes, so ask them to check spam."),
     ).toBeInTheDocument()
     expect(mockEnsure).toHaveBeenCalledWith('user-1')
-    expect(sendPasswordResetEmail).toHaveBeenCalledWith({ name: 'auth-stub' }, 'ann@example.com')
+    expect(sendPasswordResetEmail).toHaveBeenCalledWith(expect.objectContaining({ name: 'auth-stub' }), 'ann@example.com')
   })
 
   it('says, in the notices above the table, that it could not be sent', async () => {

@@ -22,6 +22,7 @@ vi.mock('@/api/hooks', () => ({
   useStaffLeaveBalances: () => ({ data: undefined, isLoading: false, isError: false, refetch: () => undefined }),
   useEnsureStaffSignInAccount: () => ({ mutateAsync: vi.fn() }),
   useRecordInvitesSent: () => ({ mutate: vi.fn() }),
+  useResetStaffTwoStep: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useConfirmStaffAddress: () => ({
     mutateAsync: async (id: string) => {
       mockConfirm(id)
