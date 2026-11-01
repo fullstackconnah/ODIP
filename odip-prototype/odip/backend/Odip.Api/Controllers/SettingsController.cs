@@ -33,11 +33,7 @@ public class SettingsController : ControllerBase
         var s = _tenant.TenantId is { } tenantId
             ? await _db.AppSettings.Where(x => x.TenantId == tenantId).OrderBy(x => x.Id).FirstOrDefaultAsync(ct)
             : null;
-        return Ok(ApiResponse<AppSettingsDto>.Ok(new AppSettingsDto
-        {
-            QualificationWarningDays = s?.QualificationWarningDays ?? 30,
-            WeeklyHoursWarning = s?.WeeklyHoursWarning ?? (int)RosterConflictService.DefaultWeeklyHoursThreshold
-        }));
+        return Ok(ApiResponse<AppSettingsDto>.Ok(ToDto(s)));
     }
 
     [HttpPut]
@@ -58,17 +54,37 @@ public class SettingsController : ControllerBase
             if (dto.WeeklyHoursWarning is { } hours) s.WeeklyHoursWarning = hours;
         }
         await _db.SaveChangesAsync(ct);
-        return Ok(ApiResponse<AppSettingsDto>.Ok(new AppSettingsDto
-        {
-            QualificationWarningDays = s.QualificationWarningDays,
-            WeeklyHoursWarning = s.WeeklyHoursWarning
-        }));
+        return Ok(ApiResponse<AppSettingsDto>.Ok(ToDto(s)));
     }
-    // STUB for the red run.
+
+    private static AppSettingsDto ToDto(AppSettings? s) => new()
+    {
+        QualificationWarningDays = s?.QualificationWarningDays ?? 30,
+        WeeklyHoursWarning = s?.WeeklyHoursWarning ?? (int)RosterConflictService.DefaultWeeklyHoursThreshold,
+        SessionLengthMinutes = s?.SessionLengthMinutes
+    };
+
+    // Its own PUT: the alert windows PUT requires QualificationWarningDays, and "No limit" (null) must be told apart from a field left out.
     [HttpPut("security")]
     [Authorize(Roles = "Admin,SuperAdmin")]
-    public Task<ActionResult<ApiResponse<AppSettingsDto>>> UpdateSecurity([FromBody] UpdateSecuritySettingsDto dto, CancellationToken ct) =>
-        Task.FromResult<ActionResult<ApiResponse<AppSettingsDto>>>(NotFound());
+    public async Task<ActionResult<ApiResponse<AppSettingsDto>>> UpdateSecurity(
+        [FromBody] UpdateSecuritySettingsDto dto, CancellationToken ct)
+    {
+        if (_tenant.IsSuperAdmin) return BadRequest(ApiResponse<AppSettingsDto>.Fail(ChooseOrganisation));
+        var s = await _db.AppSettings.OrderBy(x => x.Id).FirstOrDefaultAsync(ct);
+        if (s == null)
+        {
+            s = new AppSettings { SessionLengthMinutes = dto.SessionLengthMinutes };
+            _db.AppSettings.Add(s);
+        }
+        else
+        {
+            s.SessionLengthMinutes = dto.SessionLengthMinutes;
+        }
+        await _db.SaveChangesAsync(ct);
+        return Ok(ApiResponse<AppSettingsDto>.Ok(ToDto(s)));
+    }
+
 
     [HttpGet("module-visibility")]
     public async Task<ActionResult<ApiResponse<ModuleVisibilityDto>>> GetModuleVisibility(CancellationToken ct)

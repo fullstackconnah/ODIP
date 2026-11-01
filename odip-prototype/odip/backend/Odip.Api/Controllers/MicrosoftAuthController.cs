@@ -271,7 +271,7 @@ public class MicrosoftAuthController : ControllerBase
             {
                 var winner = await FindByIdentityAsync(id.TenantId, id.ObjectId, ct);
                 if (winner is { IsActive: true } && winner.Role != UserRole.SuperAdmin && winner.TenantId == link.TenantId)
-                    return StartSession(winner);
+                    return await StartSessionAsync(winner, ct);
                 if (pg.ConstraintName == Odip.Domain.Entities.User.MicrosoftIdentityIndexName)
                     return Refuse(MicrosoftRefusal.MicrosoftLinkFromAccount, path, "Microsoft sign-in - lost the first-sign-in race for {Email}", email);
             }
@@ -280,7 +280,7 @@ public class MicrosoftAuthController : ControllerBase
             return Refuse(pg.ConstraintName == EmailIndexName ? MicrosoftRefusal.MicrosoftLinkFromAccount : MicrosoftRefusal.MicrosoftCannotCreate,
                 path, "Microsoft sign-in - {Email} could not be saved", email);
         }
-        return StartSession(created);
+        return await StartSessionAsync(created, ct);
     }
 
     private const string EmailIndexName = "IX_Users_Email";
@@ -289,14 +289,15 @@ public class MicrosoftAuthController : ControllerBase
     {
         row.LastLoginAt = _clock.GetUtcNow().UtcDateTime;
         await _db.SaveChangesAsync(ct);
-        return StartSession(row);
+        return await StartSessionAsync(row, ct);
     }
 
-    /// <summary>The ODIP session cookie, and the 12-hour absolute refresh cookie (refresh never re-issues it).</summary>
-    private IActionResult StartSession(User row)
+    /// <summary>The ODIP session cookie, and the 12-hour absolute refresh cookie (refresh never re-issues it). The one place every Microsoft sign-in builds its token.</summary>
+    private async Task<IActionResult> StartSessionAsync(User row, CancellationToken ct)
     {
-        OdipSession.SetCookie(Response, OdipSession.Token(row, row.TenantId, _config, DateTime.UtcNow.AddMinutes(30)));
         var issued = _clock.GetUtcNow();
+        var limit = await OdipSession.SessionLengthFor(_db, row.TenantId, ct);
+        OdipSession.SetCookie(Response, OdipSession.Token(row, row.TenantId, _config, OdipSession.ExpiresAt(issued.UtcDateTime, issued.UtcDateTime, limit)));
         Response.Cookies.Append(RefreshCookie, _refresh.Protect(JsonSerializer.Serialize(new RefreshTicket(row.Id, row.MicrosoftTenantId!.Value, row.MicrosoftObjectId!.Value, issued))), new CookieOptions
         {
             HttpOnly = true, Secure = true, SameSite = SameSiteMode.Strict, Path = CookiePath, Expires = issued + RefreshLife,
@@ -417,11 +418,20 @@ public class MicrosoftAuthController : ControllerBase
         var org = await _db.Tenants.FirstOrDefaultAsync(t => t.Id == user.TenantId && t.IsActive, ct);
         if (org is null) return EndRefresh();
 
-        var token = OdipSession.Token(user, org.Id, _config, DateTime.UtcNow.AddMinutes(30));
+        // The ticket's IssuedAt is the sign-in time (refresh never re-issues it), so the organisation's session length counts from there.
+        var now = _clock.GetUtcNow().UtcDateTime;
+        var limit = await OdipSession.SessionLengthFor(_db, org.Id, ct);
+        if (OdipSession.Ended(now, ticket.IssuedAt.UtcDateTime, limit))
+        {
+            Response.Cookies.Delete(RefreshCookie, new CookieOptions { Path = CookiePath });
+            return Unauthorized(ApiResponse<object>.Fail("Sign in again.", MicrosoftRefusal.SessionLengthReached));
+        }
+        var expiresAt = OdipSession.ExpiresAt(now, ticket.IssuedAt.UtcDateTime, limit);
+        var token = OdipSession.Token(user, org.Id, _config, expiresAt);
         OdipSession.SetCookie(Response, token);
         return Ok(ApiResponse<AuthResponseDto>.Ok(new AuthResponseDto
         {
-            Id = user.Id, Token = token, ExpiresAt = _clock.GetUtcNow().UtcDateTime.AddMinutes(30), Username = user.Username, FullName = user.FullName,
+            Id = user.Id, Token = token, ExpiresAt = expiresAt, Username = user.Username, FullName = user.FullName,
             Role = user.Role.ToString(), TenantName = org.Name, TenantId = org.Id,
         }));
     }
