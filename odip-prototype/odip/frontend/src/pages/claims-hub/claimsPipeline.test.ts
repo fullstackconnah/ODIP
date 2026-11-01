@@ -25,7 +25,7 @@ describe('pipelineSentence', () => {
     expect(pipelineSentence(busy)).toBe('$1,234.66 sent to the NDIA in the last 12 weeks and $980.20 paid. Nothing is waiting on the NDIA.')
   })
   it('weeks all zero: the empty sentence, with the owed clause when something is owed', () => {
-    expect(pipelineSentence(make())).toBe(`${PIPELINE_EMPTY} Nothing is waiting on the NDIA.`)
+    expect(pipelineSentence(make())).toBe(`${PIPELINE_EMPTY} Nothing is waiting on the\u00A0NDIA.`)
     expect(pipelineSentence(make({ withNdia: 10, acceptedUnpaid: 5 }))).toBe(`${PIPELINE_EMPTY} $10.00 is waiting on the NDIA's results and $5.00 is accepted but not paid yet.`)
   })
 })
