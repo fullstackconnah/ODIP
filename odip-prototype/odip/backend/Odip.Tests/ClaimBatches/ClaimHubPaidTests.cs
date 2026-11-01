@@ -40,4 +40,41 @@ public class ClaimHubPaidTests
         Assert.Equal((0, 0m), (a.Paid, a.PaidAmount));
         Assert.Equal((1, 120m), (b.Paid, b.PaidAmount));
     }
+
+    private static async Task MarkPaidByHandAsync(BatchFixture f, ClaimLineItem line)
+    {
+        var item = await f.Db.ClaimLineItems.SingleAsync(x => x.Id == line.Id);
+        item.Status = ClaimLineItemStatus.Paid;
+        item.PaidAmount = 120m;
+        await f.Db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task A_line_in_a_file_with_no_results_import_that_is_marked_paid_is_paid_under_that_file()
+    {
+        using var f = new BatchFixture();
+        var (_, lines, _) = f.AddClaim();
+        var a = (await f.BuildAsync(lines[0].Id)).Value!;
+        await f.Service.ConfirmUploadedAsync(f.TenantId, f.User, a.Id, default);
+
+        await MarkPaidByHandAsync(f, lines[0]);
+
+        var summary = (await f.Service.BatchesAsync(f.TenantId, null, 10, default)).Single();
+        Assert.Equal((1, 120m), (summary.Paid, summary.PaidAmount));
+    }
+
+    [Fact]
+    public async Task A_line_rejected_and_never_resent_that_is_marked_paid_is_paid_under_the_rejecting_file()
+    {
+        using var f = new BatchFixture();
+        var (_, lines, _) = f.AddClaim();
+        var a = (await f.BuildAsync(lines[0].Id)).Value!;
+        await f.Service.ConfirmUploadedAsync(f.TenantId, f.User, a.Id, default);
+        await f.Service.ImportResultsAsync(f.TenantId, f.User, a.Id, Csv($"{a.Lines[0].RowReference},Rejected,ZZA,one,"), default);
+
+        await MarkPaidByHandAsync(f, lines[0]);
+
+        var summary = (await f.Service.BatchesAsync(f.TenantId, null, 10, default)).Single();
+        Assert.Equal((1, 120m), (summary.Paid, summary.PaidAmount));
+    }
 }
