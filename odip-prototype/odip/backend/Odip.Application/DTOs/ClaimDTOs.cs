@@ -194,7 +194,7 @@ public record ShiftClaimPreviewLineItemDto
     public decimal Hours { get; init; }
     public decimal UnitPrice { get; init; }
     public decimal TotalAmount { get; init; }
-    /// <summary>Something worth saying about a line that is priced but not worked out fully (an overnight shift: evening and night rates are not applied yet); omitted when there is nothing to say.</summary>
+    /// <summary>Something worth saying about a line that is priced but not worked out fully (no shift is flagged now that every band is priced; kept for a future caveat); omitted when there is nothing to say.</summary>
     public string? Note { get; init; }
 }
 
@@ -210,7 +210,7 @@ public record ShiftClaimLeftOutDto
 }
 
 /// <summary>
-/// A shift the claim priced but could not work out fully: an overnight shift is priced as hours at one day rate, and evening and night rates are not applied yet. The preview says so on the line;
+/// A shift the claim priced but could not work out fully: a caveat from the estimator (none is raised now that shifts are split by rate band). The preview says so on the line;
 /// a claim line has no column for it, so the generate response echoes it, and the caveat is not kept on the line once the claim exists.
 /// </summary>
 public record ShiftClaimFlaggedDto
@@ -219,7 +219,7 @@ public record ShiftClaimFlaggedDto
     public DateOnly ServiceDate { get; init; }
     /// <summary>The shift as the ledger describes it ("Shift 22:00–06:00 · 8 h").</summary>
     public string Description { get; init; } = string.Empty;
-    /// <summary>What is not worked out ("Evening and night rates are not applied yet.").</summary>
+    /// <summary>What is not worked out (none is raised now).</summary>
     public string Caveat { get; init; } = string.Empty;
 }
 
@@ -227,7 +227,7 @@ public record ShiftClaimFlaggedDto
 public record ShiftClaimGeneratedDto : TripClaimListDto
 {
     public List<ShiftClaimLeftOutDto> LeftOut { get; init; } = new();
-    /// <summary>The shifts that are in the claim but priced with a caveat (an overnight shift: evening and night rates are not applied yet); empty when there are none.</summary>
+    /// <summary>The shifts that are in the claim but priced with a caveat (no shift is flagged now that every band is priced; kept for a future caveat); empty when there are none.</summary>
     public List<ShiftClaimFlaggedDto> Flagged { get; init; } = new();
 }
 
@@ -252,7 +252,7 @@ public record ShiftClaimRunDto
     public List<ShiftClaimRunParticipantDto> Participants { get; init; } = new();
     /// <summary>The completed, unclaimed shifts the run leaves out, each with the participant and the reason. Never dropped silently.</summary>
     public List<ShiftClaimRunLeftOutDto> LeftOut { get; init; } = new();
-    /// <summary>The shifts in the claims that were priced with a caveat (an overnight shift: evening and night rates are not applied yet).</summary>
+    /// <summary>The shifts in the claims that were priced with a caveat (no shift is flagged now that every band is priced; kept for a future caveat).</summary>
     public List<ShiftClaimRunFlaggedDto> Flagged { get; init; } = new();
     /// <summary>Participants the run could not claim: not failed (nothing left to claim) or failed (nothing saved for them, run again).</summary>
     public List<ShiftClaimRunSkippedDto> Skipped { get; init; } = new();

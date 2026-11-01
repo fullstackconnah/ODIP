@@ -29,6 +29,8 @@ public class ClaimLineItem
     /// <summary>Set for Kind == Shift line items (design spec §1/§3); null for Kind == Trip.</summary>
     public Guid? ShiftId { get; set; }
     public Shift? Shift { get; set; }
+    /// <summary>The band part of a shift's claim, 0 first; with <see cref="ShiftId"/> it is unique among the lines that still count.</summary>
+    public int ShiftPart { get; set; }
 
     public string SupportItemCode { get; set; } = string.Empty;
     public ClaimDayType DayType { get; set; }

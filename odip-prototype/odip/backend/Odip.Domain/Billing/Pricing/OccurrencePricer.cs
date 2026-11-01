@@ -114,15 +114,9 @@ internal sealed class OccurrencePricer
 
     public OccurrenceResult Price(PlanBlock block, DateOnly date, bool ignoreHolidays = false)
     {
-        var state = block.Location.State.Trim().ToUpperInvariant();
-        var start = date.ToDateTime(block.Start);
-        var end = (block.EndsNextDay ? date.AddDays(1) : date).ToDateTime(block.End);
-
-        var headcount = block.Changes
-            .Select(c => (At: start.AddMinutes(block.OffsetFromStart(c.From)), c.ParticipantsPresent))
-            .OrderBy(c => c.At)
-            .ToList();
-        var occ = new Occurrence { Block = block, Date = date, State = state, Zone = ZoneOf(state), Start = start, End = end, IgnoreHolidays = ignoreHolidays, Headcount = headcount };
+        var occ = NewOccurrence(block, date, ignoreHolidays);
+        var start = occ.Start;
+        var end = occ.End;
 
         if (!ignoreHolidays)
         {
@@ -136,7 +130,7 @@ internal sealed class OccurrencePricer
                 {
                     occ.NamedDateReview = true;
                     occ.Result.Issues.Add((PlanFailureReason.NamedDateNotInCalendar,
-                        $"Block '{block.Id}': a day in this block falls on 26 December or 25 April, which the pricing schedule names as public holidays, but the holiday calendar has no row for {state} on it. It is priced as an ordinary day for review: choose Charge to price it as a public holiday or Skip to drop it, or ask the owner to add the day to the overrides."));
+                        $"Block '{block.Id}': a day in this block falls on 26 December or 25 April, which the pricing schedule names as public holidays, but the holiday calendar has no row for {occ.State} on it. It is priced as an ordinary day for review: choose Charge to price it as a public holiday or Skip to drop it, or ask the owner to add the day to the overrides."));
                 }
                 else
                 {
@@ -152,18 +146,7 @@ internal sealed class OccurrencePricer
             }
         }
 
-        var sleepover = PlanSleepover(occ);
-        var pieces = new List<Piece>();
-        if (sleepover is { } window)
-        {
-            if (window.Start > start) pieces.Add(new Piece(start, window.Start, false));
-            pieces.Add(new Piece(window.Start, window.End, true));
-            if (end > window.End) pieces.Add(new Piece(window.End, end, false));
-        }
-        else
-        {
-            pieces.Add(new Piece(start, end, false));
-        }
+        var pieces = PiecesOf(occ);
 
         foreach (var piece in pieces)
         {
@@ -199,6 +182,56 @@ internal sealed class OccurrencePricer
             }
 
         return occ.Result;
+    }
+
+    private Occurrence NewOccurrence(PlanBlock block, DateOnly date, bool ignoreHolidays)
+    {
+        var state = block.Location.State.Trim().ToUpperInvariant();
+        var start = date.ToDateTime(block.Start);
+        var end = (block.EndsNextDay ? date.AddDays(1) : date).ToDateTime(block.End);
+
+        var headcount = block.Changes
+            .Select(c => (At: start.AddMinutes(block.OffsetFromStart(c.From)), c.ParticipantsPresent))
+            .OrderBy(c => c.At)
+            .ToList();
+        return new Occurrence { Block = block, Date = date, State = state, Zone = ZoneOf(state), Start = start, End = end, IgnoreHolidays = ignoreHolidays, Headcount = headcount };
+    }
+
+    /// <summary>The occurrence cut into the sleepover window and the hourly supports around it (the whole occurrence when it has no sleepover).</summary>
+    private List<Piece> PiecesOf(Occurrence occ)
+    {
+        var pieces = new List<Piece>();
+        if (PlanSleepover(occ) is { } window)
+        {
+            if (window.Start > occ.Start) pieces.Add(new Piece(occ.Start, window.Start, false));
+            pieces.Add(new Piece(window.Start, window.End, true));
+            if (occ.End > window.End) pieces.Add(new Piece(window.End, occ.End, false));
+        }
+        else
+        {
+            pieces.Add(new Piece(occ.Start, occ.End, false));
+        }
+
+        return pieces;
+    }
+
+    /// <summary>
+    /// Only the split of one occurrence, for the shift claim (<see cref="ShiftBands"/>): the sleepover rule and the band boundaries of <see cref="Price"/>, in elapsed minutes, with none of its
+    /// money, holiday review or crossing policy. A sleepover window is one part with the sleepover flag; every other piece is cut at the bands.
+    /// </summary>
+    internal List<ShiftBandPart> Parts(PlanBlock block, DateOnly date)
+    {
+        var occ = NewOccurrence(block, date, ignoreHolidays: false);
+        var parts = new List<ShiftBandPart>();
+        foreach (var piece in PiecesOf(occ))
+        {
+            if (piece.Sleepover)
+                parts.Add(new ShiftBandPart(DateOnly.FromDateTime(piece.Start), ClaimDayType.Weekday, "Sleepover", RealMinutes(piece.Start, piece.End, occ.Zone), true));
+            else
+                parts.AddRange(Split(occ, piece.Start, piece.End).Select(s => new ShiftBandPart(DateOnly.FromDateTime(s.Start), s.Span.DayType, s.Span.Band, s.Minutes, false)));
+        }
+
+        return parts;
     }
 
     // ── Time ──────────────────────────────────────────────────────────────────────

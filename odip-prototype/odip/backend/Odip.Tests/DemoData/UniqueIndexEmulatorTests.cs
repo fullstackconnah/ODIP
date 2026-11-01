@@ -161,6 +161,22 @@ public class UniqueIndexEmulatorTests
     }
 
     [Fact]
+    public async Task OneCountingLinePerShiftPart_TwoPartsOfAShiftSave_ARepeatedPartIsRefused()
+    {
+        var env = new DemoTestEnv(Clock);
+        var shift = Guid.NewGuid();
+        ClaimLineItem Line(int part) => new()
+        {
+            TenantId = Tenant, Id = Guid.NewGuid(), TripClaimId = Guid.NewGuid(), ShiftId = shift, ShiftPart = part, SupportItemCode = "04_Weekday_STD", Hours = 1m, UnitPrice = 10m, TotalAmount = 10m,
+            Status = Odip.Domain.Enums.ClaimLineItemStatus.Draft,
+        };
+
+        await SaveAsync(env, Line(0), Line(1));
+
+        await AssertRefusedAsync("IX_ClaimLineItems_ShiftId_ShiftPart_Counting", () => SaveAsync(env, Line(1)));
+    }
+
+    [Fact]
     public async Task OneCountingLinePerShift_ARejectedLineFreesTheShift()
     {
         var env = new DemoTestEnv(Clock);
@@ -171,7 +187,7 @@ public class UniqueIndexEmulatorTests
         };
         await SaveAsync(env, Line(Odip.Domain.Enums.ClaimLineItemStatus.Draft));
 
-        await AssertRefusedAsync("IX_ClaimLineItems_ShiftId_Counting", () => SaveAsync(env, Line(Odip.Domain.Enums.ClaimLineItemStatus.Submitted)));
+        await AssertRefusedAsync("IX_ClaimLineItems_ShiftId_ShiftPart_Counting", () => SaveAsync(env, Line(Odip.Domain.Enums.ClaimLineItemStatus.Submitted)));
         await SaveAsync(env, Line(Odip.Domain.Enums.ClaimLineItemStatus.Rejected), Line(Odip.Domain.Enums.ClaimLineItemStatus.Rejected));   // a rejected line holds nothing
         await using var db = env.AdminDb();
         db.ClaimLineItems.Single(l => l.Status == Odip.Domain.Enums.ClaimLineItemStatus.Draft).Status = Odip.Domain.Enums.ClaimLineItemStatus.Rejected;

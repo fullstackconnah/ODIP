@@ -4,25 +4,26 @@ using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Services;
 using Xunit;
 
 namespace Odip.Tests.Postgres;
 
 /// <summary>
-/// Shift billing PR2 on a real PostgreSQL: the unique partial index IX_ClaimLineItems_ShiftId_Counting (one line per shift unless that line is Rejected), and the two new support type columns.
+/// Shift billing PR2 on a real PostgreSQL: the unique partial index IX_ClaimLineItems_ShiftId_ShiftPart_Counting (one line per shift part unless that line is Rejected), and the two new support type columns.
 /// Skipped, never failed, without POSTGRES_CONNECTION_STRING; the runner's dotnet target provides one.
 /// </summary>
 public class ClaimLineShiftIndexPostgresFacts : IClassFixture<PostgresFixture>
 {
-    private const string IndexName = "IX_ClaimLineItems_ShiftId_Counting";
+    private const string IndexName = ClaimSubmission.ShiftIndexName;
     private readonly PostgresFixture _pg;
     public ClaimLineShiftIndexPostgresFacts(PostgresFixture pg) => _pg = pg;
 
     private void RequirePostgres() => Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
 
-    private static ClaimLineItem Line(Guid tenantId, Guid claimId, Guid shiftId, ClaimLineItemStatus status = ClaimLineItemStatus.Draft) => new()
+    private static ClaimLineItem Line(Guid tenantId, Guid claimId, Guid shiftId, ClaimLineItemStatus status = ClaimLineItemStatus.Draft, int part = 0) => new()
     {
-        Id = Guid.NewGuid(), TenantId = tenantId, TripClaimId = claimId, ShiftId = shiftId, SupportItemCode = "04_104_0125_6_1", DayType = ClaimDayType.Weekday,
+        Id = Guid.NewGuid(), TenantId = tenantId, TripClaimId = claimId, ShiftId = shiftId, ShiftPart = part, SupportItemCode = "04_104_0125_6_1", DayType = ClaimDayType.Weekday,
         SupportsDeliveredFrom = new DateOnly(2026, 10, 2), SupportsDeliveredTo = new DateOnly(2026, 10, 2), Hours = 1m, UnitPrice = 100m, TotalAmount = 100m, GSTCode = GSTCode.P2, Status = status,
     };
 
@@ -86,6 +87,48 @@ public class ClaimLineShiftIndexPostgresFacts : IClassFixture<PostgresFixture>
         Assert.Equal(2, await db.ClaimLineItems.CountAsync(l => l.ShiftId == shift.Id));
     }
 
+
+    [SkippableFact(DisplayName = "Postgres: parts 0 and 1 of one shift both save; a repeat of part 1 is refused")]
+    public async Task TwoPartsOfOneShift_Save_ARepeatedPartIsRefused()
+    {
+        RequirePostgres();
+        var (db, tenantId, person, shift) = await SeedAsync();
+        await using var _ = db;
+        var first = Claim(tenantId, person.Id);
+        db.AddRange(first, Line(tenantId, first.Id, shift.Id, part: 0), Line(tenantId, first.Id, shift.Id, part: 1));
+        await db.SaveChangesAsync();   // does not throw
+
+        var second = Claim(tenantId, person.Id);
+        db.AddRange(second, Line(tenantId, second.Id, shift.Id, part: 1));
+        var e = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+        Assert.True(IsTheIndex(e), e.InnerException?.Message);
+    }
+
+    [SkippableFact(DisplayName = "Postgres: a rejected part 0 frees part 0 only; a second claim of the whole shift collides on part 0")]
+    public async Task RejectedPartFreesOnlyItself_AndASecondClaimCollidesOnPartZero()
+    {
+        RequirePostgres();
+        var (db, tenantId, person, shift) = await SeedAsync();
+        await using var _ = db;
+        var first = Claim(tenantId, person.Id);
+        var part0 = Line(tenantId, first.Id, shift.Id, part: 0);
+        db.AddRange(first, part0, Line(tenantId, first.Id, shift.Id, part: 1));
+        await db.SaveChangesAsync();
+
+        var again = Claim(tenantId, person.Id);
+        db.AddRange(again, Line(tenantId, again.Id, shift.Id, part: 0), Line(tenantId, again.Id, shift.Id, part: 1));
+        var e = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+        Assert.True(IsTheIndex(e), e.InnerException?.Message);
+        db.ChangeTracker.Clear();
+
+        part0 = await db.ClaimLineItems.SingleAsync(l => l.Id == part0.Id);
+        part0.Status = ClaimLineItemStatus.Rejected;
+        await db.SaveChangesAsync();
+        var third = Claim(tenantId, person.Id);
+        db.AddRange(third, Line(tenantId, third.Id, shift.Id, part: 0));
+        await db.SaveChangesAsync();   // part 0 is free again, part 1 was never freed
+        Assert.Equal(3, await db.ClaimLineItems.CountAsync(l => l.ShiftId == shift.Id));
+    }
     [SkippableFact(DisplayName = "Postgres: a line still Submitted on a claim marked Rejected keeps blocking (option A, pinned by name)")]
     public async Task LineOnAHandRejectedClaim_StillBlocks()
     {

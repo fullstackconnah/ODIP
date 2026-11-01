@@ -48,7 +48,7 @@ public class ClaimPricingEqualityTests
         var intensive = kit.SeedParticipant(addressState: "VIC", intensive: true, last: "Intensive");
         var people = new[] { standard, victorian, intensive };
         foreach (var person in people)
-        {
+            kit.SeedShift(person, new DateOnly(2026, 10, 6), ShiftStatus.Completed, 20, 23);        // Tuesday evening, 3 h: its own rate band (a shift over two bands is the same figure, see ShiftBandClaimTests)
             kit.SeedPlan(person, CoreQuarters());
             kit.SeedShift(person, new DateOnly(2026, 10, 1), ShiftStatus.Completed);                // Thursday
             kit.SeedShift(person, new DateOnly(2026, 10, 3), ShiftStatus.Completed, 8, 12);         // Saturday, 4 h

@@ -14,14 +14,22 @@ public sealed record CatalogueGroupDefinition(string GroupCode, string DisplayNa
 public static class CatalogueGroups
 {
     public const string CommunityAccessGroupCode = "GRP_COMMUNITY_ACCESS";
+    public const string PersonalCareGroupCode = "GRP_PERSONAL_CARE";
+    public const string SleepoverGroupCode = "GRP_SLEEPOVER";
+
+    /// <summary>Every short-term accommodation group starts with this; a shift in one is a sleepover in short-term accommodation (RG 0115).</summary>
+    public const string StaGroupPrefix = "GRP_STA_";
+
+    /// <summary>The flat sleepover items a shift claim takes (shift billing PR3): the short-term accommodation sleepover (RG 0115) for a STA group, the non-SIL personal care sleepover (RG 0107) for every other shift.</summary>
+    public const string StaSleepoverItemNumber = "01_206_0115_1_1", SleepoverItemNumber = "01_010_0107_1_1";
 
     private static readonly CatalogueGroupDefinition CommunityAccess = new(CommunityAccessGroupCode, "Group Community Access", 4);
     private static readonly CatalogueGroupDefinition CommunityAccessHighIntensity = new("GRP_COMMUNITY_ACCESS_HI", "Community Access - High Intensity", 4);
-    private static readonly CatalogueGroupDefinition PersonalCare = new("GRP_PERSONAL_CARE", "Personal Care", 1);
+    private static readonly CatalogueGroupDefinition PersonalCare = new(PersonalCareGroupCode, "Personal Care", 1);
     private static readonly CatalogueGroupDefinition GroupActivities = new("GRP_GROUP_ACTIVITIES", "Group Activities", 4);
     private static readonly CatalogueGroupDefinition StaSupport = new("GRP_STA_SUPPORT", "Short-Term Accommodation - Support Hours", 1);
     private static readonly CatalogueGroupDefinition StaAccommodation = new("GRP_STA_ACCOMMODATION", "Short-Term Accommodation - Overnight Stays", 1);
-    private static readonly CatalogueGroupDefinition Sleepover = new("GRP_SLEEPOVER", "Sleepover", 1);
+    private static readonly CatalogueGroupDefinition Sleepover = new(SleepoverGroupCode, "Sleepover", 1);
     private static readonly CatalogueGroupDefinition ProviderTravel = new("GRP_PROVIDER_TRAVEL", "Provider Travel (non-labour costs)", 1);
     private static readonly CatalogueGroupDefinition ActivityBasedTransport = new("GRP_ACTIVITY_BASED_TRANSPORT", "Activity Based Transport", 4);
     private static readonly CatalogueGroupDefinition CentreCapital = new("GRP_CENTRE_CAPITAL", "Centre Capital Cost", 4);

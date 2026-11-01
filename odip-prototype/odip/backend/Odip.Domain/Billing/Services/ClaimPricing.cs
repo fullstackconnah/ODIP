@@ -1,5 +1,9 @@
+using System.Globalization;
+using Odip.Domain.Billing.Catalogue;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Rostering;
+using ShiftBands = Odip.Domain.Billing.Pricing.ShiftBands;
 
 namespace Odip.Domain.Billing.Services;
 
@@ -65,17 +69,31 @@ public static class ClaimPricing
     public static decimal LineAmount(decimal hours, decimal unitPrice) => decimal.Round(LineHours(hours) * unitPrice, 2, MidpointRounding.AwayFromZero);
 }
 
-/// <summary>What a rostered shift is priced at: the catalogue row, the day type, the hours and the price. <see cref="TotalAmount"/> is the rounded hours x unit price to the cent, as the claim line carries it.</summary>
-public sealed record ShiftPrice(SupportCatalogueItem CatalogueItem, ClaimDayType DayType, decimal Hours, decimal UnitPrice, decimal TotalAmount);
+/// <summary>
+/// One line of a priced shift: the catalogue row, the day type, the date the stretch falls on (a night part after midnight is dated the next day), the hours and the price.
+/// <see cref="TotalAmount"/> is the rounded hours x unit price to the cent, as the claim line carries it. A sleepover is one "Each" item: Hours is its quantity, 1.
+/// </summary>
+public sealed record ShiftPrice(SupportCatalogueItem CatalogueItem, ClaimDayType DayType, decimal Hours, decimal UnitPrice, decimal TotalAmount, DateOnly Date);
 
 /// <summary>
-/// What <see cref="ShiftPriceEstimator"/> makes of one shift: its price, or the reason there is none. A shift with no price is never silently dropped by whoever asks: the claim preview and the
-/// generated claim list it and say why, and the budget ledger shows it as a $0 row carrying the reason. <see cref="NotPricedBecause"/> is a clause that follows "left out because" ("it is a
-/// sleepover, which shift claims do not price yet"); <see cref="Caveat"/> is something worth saying about a shift that IS priced.
+/// The rows a shift is priced from, loaded by the caller: the hourly rows of the shift's own group (history included, each part is priced by the row valid on ITS date), the hourly rows of the
+/// personal care group (the night part of a shift whose group has no night row of its own is priced from them), and the flat sleepover rows.
 /// </summary>
-public sealed record ShiftPriceOutcome(ShiftPrice? Price, string? NotPricedBecause, string? Caveat)
+public sealed record ShiftRateRows(IReadOnlyList<SupportCatalogueItem> Group, IReadOnlyList<SupportCatalogueItem> PersonalCare, IReadOnlyList<SupportCatalogueItem> Sleepover);
+
+/// <summary>
+/// What <see cref="ShiftPriceEstimator"/> makes of one shift: its lines (one for each stretch of the shift that has its own rate), or the reason there are none. A shift with no price is never
+/// silently dropped by whoever asks: the claim preview and the generated claim list it and say why, and the budget ledger shows it as a $0 row carrying the reason.
+/// <see cref="NotPricedBecause"/> is a clause that follows "left out because" ("it is a 1:3 group shift, which shift claims do not price yet"); <see cref="Caveat"/> is something worth saying about a shift that IS priced.
+/// </summary>
+public sealed record ShiftPriceOutcome(IReadOnlyList<ShiftPrice> Lines, string? NotPricedBecause, string? Caveat)
 {
-    public bool IsPriced => Price is not null;
+    public static ShiftPriceOutcome Unpriced(string because, params string[] kinds) => new(Array.Empty<ShiftPrice>(), because, null) { NotPricedKinds = kinds };
+
+    public bool IsPriced => Lines.Count > 0;
+
+    /// <summary>What the whole shift costs: the sum of its rounded lines.</summary>
+    public decimal Total => Lines.Sum(l => l.TotalAmount);
 
     /// <summary>
     /// The reasons there is no price, each in a few words ("a sleepover", "a 1:3 group shift", "no catalogue rate for the date"), for a figure that counts the shifts left out and names why.
@@ -83,21 +101,21 @@ public sealed record ShiftPriceOutcome(ShiftPrice? Price, string? NotPricedBecau
     /// </summary>
     public IReadOnlyList<string> NotPricedKinds { get; init; } = Array.Empty<string>();
 
-    /// <summary>The reason as a sentence ("It is a sleepover, which shift claims do not price yet."), or null when the shift is priced.</summary>
+    /// <summary>The reason as a sentence ("It is a 1:3 group shift, which shift claims do not price yet."), or null when the shift is priced.</summary>
     public string? NotPricedSentence => NotPricedBecause is { Length: > 0 } because ? char.ToUpperInvariant(because[0]) + because[1..] + "." : null;
 }
 
 /// <summary>
-/// The one definition of what a rostered shift costs: the shift claim engine prices the claim line of a completed shift with it, and the budget ledger prices every shift that is not
-/// claimed yet with it, so an estimate is exactly what the claim will say. It is the engine's own rule and nothing more: only the community access group is priced (the engine has never
-/// claimed any other), by the row valid on the SERVICE date for the day type (a public holiday, else Saturday, else Sunday, else a weekday) and the participant's intensity, at the price for
-/// the participant's own state (else the organisation's), for the ROSTERED hours. Pure: the caller loads the rows and the holidays.
+/// The one definition of what a rostered shift costs: the shift claim engine prices the claim lines of a completed shift with it, and the budget ledger and the shift-create estimate price every shift
+/// that is not claimed yet with it, so an estimate is exactly what the claim will say.
 ///
-/// <b>The interim guard (the 2026-10-08 review, L3-02).</b> That rule is one one-to-one hourly rate, so it is only right for one-to-one shifts. A shift made from an approved plan can be a
-/// sleepover, a passive night or a group shift, which the plan quotes at a different price (a sleepover is one fixed item, a 1:3 group shift is a third of the hourly rate), and priced here it
-/// would be claimed at up to three times the quote. Until the engine prices them properly (through the plan engine, a follow-up), a shift whose ratio is 1:2 to 1:5, shared or other, or whose night
-/// type is a sleepover or a passive night, has NO price here and says why. Two-to-one is still priced (two one-to-one shifts are the quote). An active night is priced and flagged: the engine does
-/// not apply evening and night rates yet. Every caller gets the same answer: the claim preview and the generated claim leave such a shift out and list it, and the budget ledger counts it as $0.
+/// A shift is cut into the rate bands the agreement engine cuts a quote into (<see cref="ShiftBands"/>: a weekday splits at 06:00 and 20:00, Saturday, Sunday and a whole-day public holiday are one band each, in
+/// elapsed minutes), and each stretch is priced by the row of the shift's own group valid on THAT stretch's date, at the price for the participant's own state (else the organisation's). Night hours of a
+/// group with no night row of its own take the personal care night row (owner ruling, 2026-11-02). A shift is claimed all or nothing: one stretch with no rate leaves the whole shift out.
+/// A sleepover or a passive night (8 elapsed hours or more across midnight) is one flat sleepover item. Pure: the caller loads the rows, the holidays and the zone.
+///
+/// <b>The interim guard (the 2026-10-08 review, L3-02).</b> A group shift (1:2 to 1:5, shared or another ratio) is a fraction of the one-to-one rate and is still not priced here: it has NO price and says why.
+/// Two-to-one is priced (two one-to-one shifts are the quote).
 /// </summary>
 public static class ShiftPriceEstimator
 {
@@ -107,14 +125,31 @@ public static class ShiftPriceEstimator
     /// <summary>The same reason in a few words, for a figure that counts the shifts left out and lists why (<see cref="ShiftPriceOutcome.NotPricedKinds"/>).</summary>
     public const string NoCatalogueRateKind = "no catalogue rate for the date";
 
+    /// <summary>The same, when it is one stretch of a shift cut into several that has no rate.</summary>
+    public const string NoBandRateKind = "no catalogue rate for part of the shift";
+
     /// <summary>Why a shift has no price when it ends at or before it starts (an overnight shift saved without "Ends the next day").</summary>
     public const string NoLengthBecause = "it has no length (it ends at or before its start)";
 
     /// <summary>The same reason in a few words (<see cref="ShiftPriceOutcome.NotPricedKinds"/>).</summary>
     public const string NoLengthKind = "no length";
 
-    /// <summary>What is said about a priced overnight shift: the engine prices it as hours at one day rate.</summary>
-    public const string ActiveNightCaveat = "Evening and night rates are not applied yet.";
+    /// <summary>Why a shift has no price when it says it ends the next day but ends after it starts (it would be more than 24 hours).</summary>
+    public const string TimesMismatchBecause = "its times do not match \"Ends the next day\"";
+
+    public const string TimesMismatchKind = "times do not match";
+
+    public const string SleepoverTooShortKind = "sleepover too short";
+
+    public const string NoSleepoverItemBecause = "no catalogue sleepover item covers this date";
+
+    public const string NoSleepoverItemKind = "no sleepover item for the date";
+
+    public const string AmbiguousSleepoverKind = "more than one sleepover item";
+
+    /// <summary>The sentence a stretch with no rate is left out with: it names the band and the date.</summary>
+    public static string NoBandRateBecause(string band, DateOnly date) =>
+        string.Create(CultureInfo.InvariantCulture, $"no catalogue rate covers its {band} hours on {date:d MMM yyyy}");
 
     /// <summary>How a ratio the engine cannot price is described, or null when it can (one-to-one, and two-to-one: two one-to-one shifts are the quote). An unknown ratio is not priced.</summary>
     private static string? UnpricedRatio(SupportRatio ratio) => ratio switch
@@ -128,12 +163,10 @@ public static class ShiftPriceEstimator
         _ => "a shift with another support ratio",
     };
 
-    /// <summary>How a night type the engine cannot price is described, or null when it can (none, and an active night, which is priced and flagged). An unknown night type is not priced.</summary>
-    private static string? UnpricedNightType(SleepoverType nightType) => nightType switch
+    /// <summary>How a night type that is not known is described, or null when it is. Sleepovers and passive nights are priced as one flat item.</summary>
+    private static string? UnknownNightType(SleepoverType nightType) => nightType switch
     {
-        SleepoverType.None or SleepoverType.ActiveNight => null,
-        SleepoverType.Sleepover => "a sleepover",
-        SleepoverType.PassiveNight => "a passive night",
+        SleepoverType.None or SleepoverType.ActiveNight or SleepoverType.Sleepover or SleepoverType.PassiveNight => null,
         _ => "a shift with another kind of night",
     };
 
@@ -148,26 +181,81 @@ public static class ShiftPriceEstimator
             : HolidayCalendar.Normalise(participantState);
 
     /// <summary>The price of one shift, or the reason it has none (see <see cref="ShiftPriceOutcome"/>).</summary>
+    /// <param name="groupCode">The shift's support group, or null for community access; a short-term accommodation group takes the short-term accommodation sleepover item.</param>
+    /// <param name="publicHolidays">The whole-day holidays that apply in <paramref name="state"/>, loaded to the day after the last service date (a shift runs past midnight).</param>
+    /// <param name="zone">The organisation's time zone, where the clocks change.</param>
     public static ShiftPriceOutcome Price(
-        IReadOnlyList<SupportCatalogueItem> communityAccessItems, DateOnly serviceDate, decimal durationHours, SupportRatio ratio, SleepoverType nightType, bool isIntensive, string state,
-        IReadOnlySet<DateOnly> publicHolidays)
+        ShiftRateRows rows, string? groupCode, DateOnly serviceDate, TimeOnly start, TimeOnly end, bool endsNextDay, SupportRatio ratio, SleepoverType nightType, bool isIntensive, string state,
+        IReadOnlySet<DateOnly> publicHolidays, TimeZoneInfo zone)
     {
         // A shift with no length has no price. Priced as hours x rate it was a zero or NEGATIVE item that the budget ledger summed with the real ones (the phase 3 review, C1): the data is what is wrong,
         // so this is said before the shift's kind.
-        if (durationHours <= 0m) return new ShiftPriceOutcome(null, NoLengthBecause, null) { NotPricedKinds = new[] { NoLengthKind } };
+        if (Shift.HoursBetween(start, end, endsNextDay) <= 0m) return ShiftPriceOutcome.Unpriced(NoLengthBecause, NoLengthKind);
 
         // The kind of shift comes first: a shift that would be wrong to price is not priced however good its rate, and its own kind is the useful thing to say.
-        var unpriced = new[] { UnpricedRatio(ratio), UnpricedNightType(nightType) }.OfType<string>().ToList();
-        if (unpriced.Count > 0)
-            return new ShiftPriceOutcome(null, $"it is {string.Join(" and ", unpriced)}, which shift claims do not price yet", null) { NotPricedKinds = unpriced };
+        var unpriced = new[] { UnpricedRatio(ratio), UnknownNightType(nightType) }.OfType<string>().ToList();
+        if (unpriced.Count > 0) return ShiftPriceOutcome.Unpriced($"it is {string.Join(" and ", unpriced)}, which shift claims do not price yet", unpriced.ToArray());
 
-        var dayType = DayTypeResolver.Resolve(serviceDate, publicHolidays);
-        var item = EffectiveCatalogueResolver.FindForDay(communityAccessItems, dayType, isIntensive, serviceDate);
-        if (item == null) return new ShiftPriceOutcome(null, NoCatalogueRateBecause, null) { NotPricedKinds = new[] { NoCatalogueRateKind } };
+        // "Ends the next day" with an end after the start is more than 24 hours: the data is wrong, so it is not priced as it was.
+        if (endsNextDay && end > start) return ShiftPriceOutcome.Unpriced(TimesMismatchBecause, TimesMismatchKind);
 
-        var unitPrice = CatalogueStatePrice.For(item, state);
-        return new ShiftPriceOutcome(
-            new ShiftPrice(item, dayType, ClaimPricing.LineHours(durationHours), unitPrice, ClaimPricing.LineAmount(durationHours, unitPrice)), null, nightType == SleepoverType.ActiveNight ? ActiveNightCaveat : null);
+        var maySleep = nightType is SleepoverType.Sleepover or SleepoverType.PassiveNight;
+        var split = ShiftBands.Split(serviceDate, start, end, maySleep, publicHolidays, zone);
+        if (maySleep && !split.SleepoverQualified)
+            return ShiftPriceOutcome.Unpriced($"it is {(nightType == SleepoverType.Sleepover ? "a sleepover" : "a passive night")} but is not 8 hours or more across midnight", SleepoverTooShortKind);
+
+        var lines = new List<ShiftPrice>();
+        // Adjacent stretches that land on the same row on the same date are one line, rounded once.
+        var stretches = new List<(SupportCatalogueItem Item, ClaimDayType DayType, DateOnly Date, int Minutes)>();
+        foreach (var part in split.Parts)
+        {
+            if (part.Sleepover)
+            {
+                var sleepover = SleepoverLine(rows.Sleepover, groupCode, part.Date, publicHolidays, state, out var refusal);
+                if (sleepover is null) return refusal!;
+                lines.Add(sleepover);
+                continue;
+            }
+
+            // The night band of a group with no night row of its own is priced as personal care night hours; a group that has its own night row uses it.
+            var item = EffectiveCatalogueResolver.FindForDay(rows.Group, part.DayType, isIntensive, part.Date)
+                ?? (part.DayType == ClaimDayType.WeekdayNight ? EffectiveCatalogueResolver.FindForDay(rows.PersonalCare, part.DayType, isIntensive, part.Date) : null);
+            if (item is null)
+                return split.Parts.Count == 1
+                    ? ShiftPriceOutcome.Unpriced(NoCatalogueRateBecause, NoCatalogueRateKind)
+                    : ShiftPriceOutcome.Unpriced(NoBandRateBecause(part.Band, part.Date), NoBandRateKind);
+
+            if (stretches.Count > 0 && stretches[^1].Item.Id == item.Id && stretches[^1].Date == part.Date)
+                stretches[^1] = (item, part.DayType, part.Date, stretches[^1].Minutes + part.Minutes);
+            else
+                stretches.Add((item, part.DayType, part.Date, part.Minutes));
+        }
+
+        foreach (var s in stretches)
+        {
+            var hours = s.Minutes / 60m;
+            var unitPrice = CatalogueStatePrice.For(s.Item, state);
+            lines.Add(new ShiftPrice(s.Item, s.DayType, ClaimPricing.LineHours(hours), unitPrice, ClaimPricing.LineAmount(hours, unitPrice), s.Date));
+        }
+
+        return new ShiftPriceOutcome(lines.OrderBy(l => l.Date).ToList(), null, null);
+    }
+
+    /// <summary>The flat sleepover line: one item, quantity 1, from the short-term accommodation item for a STA group and the personal care one for every other shift. Null, with the reason, when no row or more than one covers the date.</summary>
+    private static ShiftPrice? SleepoverLine(IReadOnlyList<SupportCatalogueItem> sleepoverRows, string? groupCode, DateOnly date, IReadOnlySet<DateOnly> publicHolidays, string state, out ShiftPriceOutcome? refusal)
+    {
+        var number = groupCode is not null && groupCode.StartsWith(CatalogueGroups.StaGroupPrefix, StringComparison.Ordinal) ? CatalogueGroups.StaSleepoverItemNumber : CatalogueGroups.SleepoverItemNumber;
+        var valid = EffectiveCatalogueResolver.NewestVersion(sleepoverRows.Where(r => r.ItemNumber == number && EffectiveCatalogueResolver.IsValidOn(r, date)).ToList());
+        refusal = valid.Count switch
+        {
+            0 => ShiftPriceOutcome.Unpriced(NoSleepoverItemBecause, NoSleepoverItemKind),
+            1 => null,
+            _ => ShiftPriceOutcome.Unpriced(string.Create(CultureInfo.InvariantCulture, $"more than one sleepover item matches on {date:d MMM yyyy}"), AmbiguousSleepoverKind),
+        };
+        if (refusal is not null) return null;
+
+        var price = CatalogueStatePrice.For(valid[0], state);
+        return new ShiftPrice(valid[0], DayTypeResolver.Resolve(date, publicHolidays), 1m, price, ClaimPricing.LineAmount(1m, price), date);
     }
 }
 

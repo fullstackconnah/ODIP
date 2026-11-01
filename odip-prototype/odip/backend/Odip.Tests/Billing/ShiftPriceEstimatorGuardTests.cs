@@ -9,8 +9,8 @@ namespace Odip.Tests.Billing;
 /// <summary>
 /// The interim guard in the shared <see cref="ShiftPriceEstimator"/> (the 2026-10-08 review, L3-02). The shift claim engine prices a shift as its hours at the community access one-to-one rate, so
 /// a shift from an approved plan that is a sleepover, a passive night or a group shift (1:2 to 1:5, shared, other) was claimed at up to three times what the agreement quoted. Until the engine
-/// prices those properly, the estimator says they have no price and why; two-to-one is still priced (two one-to-one shifts are the quote), and an active night is priced and flagged, because the
-/// engine does not apply evening and night rates yet. The claim preview, the generated claim and the budget ledger all use this one estimator.
+/// prices group shifts properly, the estimator says they have no price and why; two-to-one is still priced (two one-to-one shifts are the quote). Sleepovers, passive nights and the evening and night
+/// bands are priced since shift billing PR3 (see ShiftBandClaimTests). The claim preview, the generated claim and the budget ledger all use this one estimator.
 /// </summary>
 public class ShiftPriceEstimatorGuardTests
 {
@@ -23,13 +23,15 @@ public class ShiftPriceEstimatorGuardTests
         return kit.Db.SupportCatalogueItems.ToList();
     }
 
-    private static ShiftPriceOutcome PriceOf(SupportRatio ratio, SleepoverType night, IReadOnlyList<SupportCatalogueItem>? items = null, DateOnly? date = null) =>
-        ShiftPriceEstimator.Price(items ?? Catalogue(), date ?? Wednesday, 8m, ratio, night, isIntensive: false, "NSW", new HashSet<DateOnly>());
+    private static ShiftPriceOutcome PriceOf(SupportRatio ratio, SleepoverType night, IReadOnlyList<SupportCatalogueItem>? items = null, DateOnly? date = null,
+        TimeOnly? start = null, TimeOnly? end = null, bool endsNextDay = false) =>
+        ShiftPriceEstimator.Price(new ShiftRateRows(items ?? Catalogue(), Array.Empty<SupportCatalogueItem>(), Array.Empty<SupportCatalogueItem>()), null, date ?? Wednesday,
+            start ?? new TimeOnly(9, 0), end ?? new TimeOnly(17, 0), endsNextDay, ratio, night, isIntensive: false, "NSW", new HashSet<DateOnly>(), TimeZoneInfo.Utc);
 
     [Fact]
     public void AShiftOf20Minutes_CarriesHoursRoundedTo2dp_AndTheAmountOfThoseHours()
     {
-        var price = ShiftPriceEstimator.Price(Catalogue(), Wednesday, 1m / 3m, SupportRatio.OneToOne, SleepoverType.None, isIntensive: false, "NSW", new HashSet<DateOnly>()).Price!;
+        var price = PriceOf(SupportRatio.OneToOne, SleepoverType.None, end: new TimeOnly(9, 20)).Lines.Single();
 
         Assert.Equal(0.33m, price.Hours);
         Assert.Equal(19.80m, price.TotalAmount);   // 0.33 h x $60; the unrounded 0.3333 h would give $20.00
@@ -43,7 +45,7 @@ public class ShiftPriceEstimatorGuardTests
         var outcome = PriceOf(ratio, SleepoverType.None);
 
         Assert.True(outcome.IsPriced);
-        Assert.Equal(480m, outcome.Price!.TotalAmount);
+        Assert.Equal(480m, outcome.Total);
         Assert.Null(outcome.NotPricedBecause);
         Assert.Null(outcome.NotPricedSentence);
         Assert.Null(outcome.Caveat);
@@ -62,7 +64,7 @@ public class ShiftPriceEstimatorGuardTests
         var outcome = PriceOf(ratio, SleepoverType.None);
 
         Assert.False(outcome.IsPriced);
-        Assert.Null(outcome.Price);
+        Assert.Empty(outcome.Lines);
         Assert.Equal($"it is {phrase}, which shift claims do not price yet", outcome.NotPricedBecause);
         Assert.Equal($"It is {phrase}, which shift claims do not price yet.", outcome.NotPricedSentence);
         Assert.Equal(new[] { phrase }, outcome.NotPricedKinds);   // the reason in a few words, for a figure that counts such shifts
@@ -71,46 +73,55 @@ public class ShiftPriceEstimatorGuardTests
     [Theory]
     [InlineData(SleepoverType.Sleepover, "a sleepover")]
     [InlineData(SleepoverType.PassiveNight, "a passive night")]
-    public void ASleepoverOrAPassiveNightHasNoPriceAndSaysWhy(SleepoverType night, string phrase)
+    public void ASleepoverOrAPassiveNightThatIsNotAnOvernightOf8HoursHasNoPriceAndSaysWhy(SleepoverType night, string phrase)
     {
-        var outcome = PriceOf(SupportRatio.OneToOne, night);
+        var outcome = PriceOf(SupportRatio.OneToOne, night);   // 09:00-17:00: does not cross midnight
 
         Assert.False(outcome.IsPriced);
-        Assert.Equal($"it is {phrase}, which shift claims do not price yet", outcome.NotPricedBecause);
-        Assert.Equal(new[] { phrase }, outcome.NotPricedKinds);
+        Assert.Equal($"it is {phrase} but is not 8 hours or more across midnight", outcome.NotPricedBecause);
+        Assert.Equal(new[] { ShiftPriceEstimator.SleepoverTooShortKind }, outcome.NotPricedKinds);
     }
 
     [Fact]
-    public void AnActiveNightIsPricedAtTheDayRateAndFlagged_BecauseEveningAndNightRatesAreNotAppliedYet()
+    public void ASleepoverWithNoCatalogueSleepoverItemHasNoPriceAndSaysSo()
+    {
+        var outcome = PriceOf(SupportRatio.OneToOne, SleepoverType.Sleepover, start: new TimeOnly(22, 0), end: new TimeOnly(6, 0), endsNextDay: true);
+
+        Assert.False(outcome.IsPriced);
+        Assert.Equal(ShiftPriceEstimator.NoSleepoverItemBecause, outcome.NotPricedBecause);
+    }
+
+    [Fact]
+    public void AnActiveNightIsPricedWithNoCaveat_BecauseItIsSplitByBandLikeAnyOtherShift()
     {
         var outcome = PriceOf(SupportRatio.OneToOne, SleepoverType.ActiveNight);
 
         Assert.True(outcome.IsPriced);
-        Assert.Equal(480m, outcome.Price!.TotalAmount);
+        Assert.Equal(480m, outcome.Total);
         Assert.Null(outcome.NotPricedBecause);
-        Assert.Equal("Evening and night rates are not applied yet.", outcome.Caveat);
+        Assert.Null(outcome.Caveat);
     }
 
     [Fact]
-    public void ARatioAndANightTypeThatAreBothUnsupportedAreBothNamed()
+    public void AGroupShiftIsRefusedForItsRatioEvenWhenItIsASleepover()
     {
         var outcome = PriceOf(SupportRatio.OneToThree, SleepoverType.Sleepover);
 
         Assert.False(outcome.IsPriced);
-        Assert.Equal("it is a 1:3 group shift and a sleepover, which shift claims do not price yet", outcome.NotPricedBecause);
-        Assert.Equal(new[] { "a 1:3 group shift", "a sleepover" }, outcome.NotPricedKinds);   // each named once, so a list of reasons across shifts never reads "A and B and A"
+        Assert.Equal("it is a 1:3 group shift, which shift claims do not price yet", outcome.NotPricedBecause);
+        Assert.Equal(new[] { "a 1:3 group shift" }, outcome.NotPricedKinds);
     }
 
     [Fact]
-    public void TwoToOneOnAnActiveNightIsPricedAndFlagged_AndAGroupActiveNightIsNotPricedAndNotFlagged()
+    public void TwoToOneOnAnActiveNightIsPriced_AndAGroupActiveNightIsNot()
     {
         var twoToOne = PriceOf(SupportRatio.TwoToOne, SleepoverType.ActiveNight);
         var group = PriceOf(SupportRatio.OneToTwo, SleepoverType.ActiveNight);
 
         Assert.True(twoToOne.IsPriced);
-        Assert.NotNull(twoToOne.Caveat);
+        Assert.Null(twoToOne.Caveat);
         Assert.False(group.IsPriced);
-        Assert.Null(group.Caveat);   // nothing is priced, so there is no price to qualify
+        Assert.Null(group.Caveat);
     }
 
     [Fact]
@@ -136,14 +147,14 @@ public class ShiftPriceEstimatorGuardTests
     // The phase 3 review (C1, 2026-10-09): a shift that ends before it starts (an overnight shift saved without "Ends the next day") has a length of zero or less. Priced as hours x rate it was a NEGATIVE
     // item, which the ledger summed with the real ones, wiping the forecast. A shift with no length has no price, whatever its kind.
     [Theory]
-    [InlineData(0)]
-    [InlineData(-16)]
-    public void AShiftWithNoLengthHasNoPrice_NotAZeroOrNegativeOne(int hours)
+    [InlineData(9)]    // ends when it starts
+    [InlineData(1)]    // ends before it starts
+    public void AShiftWithNoLengthHasNoPrice_NotAZeroOrNegativeOne(int endHour)
     {
-        var outcome = ShiftPriceEstimator.Price(Catalogue(), Wednesday, hours, SupportRatio.OneToOne, SleepoverType.None, isIntensive: false, "NSW", new HashSet<DateOnly>());
+        var outcome = PriceOf(SupportRatio.OneToOne, SleepoverType.None, end: new TimeOnly(endHour, 0));
 
         Assert.False(outcome.IsPriced);
-        Assert.Null(outcome.Price);
+        Assert.Empty(outcome.Lines);
         Assert.Contains("no length", outcome.NotPricedBecause);
         Assert.Equal(new[] { "no length" }, outcome.NotPricedKinds);
     }
@@ -151,7 +162,7 @@ public class ShiftPriceEstimatorGuardTests
     [Fact]
     public void AShiftWithNoLengthSaysSoBeforeItsKind()
     {
-        var outcome = ShiftPriceEstimator.Price(Catalogue(), Wednesday, -4m, SupportRatio.OneToThree, SleepoverType.Sleepover, isIntensive: false, "NSW", new HashSet<DateOnly>());
+        var outcome = PriceOf(SupportRatio.OneToThree, SleepoverType.Sleepover, start: new TimeOnly(17, 0), end: new TimeOnly(13, 0));
 
         Assert.Equal(new[] { "no length" }, outcome.NotPricedKinds);   // the data is wrong first; its kind is not what to say
     }

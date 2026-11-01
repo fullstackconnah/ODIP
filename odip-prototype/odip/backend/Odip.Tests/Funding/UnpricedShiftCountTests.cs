@@ -45,7 +45,7 @@ public class UnpricedShiftCountTests
     {
         var (kit, person) = Arrange();
         Seed(kit, person, new DateOnly(2026, 10, 1));                                                                              // priced: $480
-        Seed(kit, person, new DateOnly(2026, 10, 2), night: SleepoverType.Sleepover, start: 22, end: 6, overnight: true);          // a sleepover
+        Seed(kit, person, new DateOnly(2026, 10, 2), night: SleepoverType.Sleepover, start: 22, end: 6, overnight: true);          // a sleepover: the kit catalogue has no sleepover item
         Seed(kit, person, new DateOnly(2026, 10, 3), ratio: SupportRatio.OneToThree, start: 9, end: 15);                           // a 1:3 group shift
         Seed(kit, person, new DateOnly(2026, 10, 6), night: SleepoverType.Sleepover, start: 22, end: 6, overnight: true);          // a second sleepover: one reason, two shifts
 
@@ -53,7 +53,7 @@ public class UnpricedShiftCountTests
 
         var q2 = ledger.Pools[0].Periods[1];
         Assert.Equal(3, q2.UnpricedShiftCount);
-        Assert.Equal(new[] { "a 1:3 group shift", "a sleepover" }, q2.UnpricedShiftReasons);   // each reason once, in a fixed order
+        Assert.Equal(new[] { "a 1:3 group shift", "no sleepover item for the date" }, q2.UnpricedShiftReasons);   // each reason once, in a fixed order
         Assert.Equal(3, ledger.Pools[0].UnpricedShiftCount);
         Assert.Equal(480m, q2.Pending);                                                      // and the money is what could be priced: the count is what says the figure is low
     }
@@ -76,7 +76,7 @@ public class UnpricedShiftCountTests
     }
 
     [Fact]
-    public async Task AShiftThatIsBothAGroupShiftAndASleepoverCountsOnce_AndNamesBoth()
+    public async Task AGroupShiftThatIsAlsoASleepoverCountsOnce_AndNamesOnlyItsRatio()
     {
         var (kit, person) = Arrange();
         Seed(kit, person, new DateOnly(2026, 10, 2), ratio: SupportRatio.OneToThree, night: SleepoverType.Sleepover, start: 22, end: 6, overnight: true);
@@ -84,7 +84,7 @@ public class UnpricedShiftCountTests
         var q2 = (await LedgerOf(kit, person)).Pools[0].Periods[1];
 
         Assert.Equal(1, q2.UnpricedShiftCount);
-        Assert.Equal(new[] { "a 1:3 group shift", "a sleepover" }, q2.UnpricedShiftReasons);
+        Assert.Equal(new[] { "a 1:3 group shift" }, q2.UnpricedShiftReasons);   // the ratio is refused before the night is looked at
     }
 
     [Fact]
@@ -107,7 +107,7 @@ public class UnpricedShiftCountTests
         var (kit, person) = Arrange();
         Seed(kit, person, new DateOnly(2026, 10, 1));                                                                                // plain
         Seed(kit, person, new DateOnly(2026, 10, 5), ratio: SupportRatio.TwoToOne);                                                  // two-to-one: priced
-        Seed(kit, person, new DateOnly(2026, 10, 6), night: SleepoverType.ActiveNight, start: 18, end: 2, overnight: true);          // an active night: priced and flagged
+        Seed(kit, person, new DateOnly(2026, 10, 6), night: SleepoverType.ActiveNight, start: 12, end: 20);                          // an active night: priced like any other shift
 
         var ledger = await LedgerOf(kit, person);
 

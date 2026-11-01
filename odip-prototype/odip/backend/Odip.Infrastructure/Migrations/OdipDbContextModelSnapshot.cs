@@ -721,6 +721,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<Guid?>("ShiftId")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("ShiftPart")
+                        .HasColumnType("integer");
+
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
@@ -755,7 +758,7 @@ namespace Odip.Infrastructure.Migrations
 
                     b.HasIndex("ShiftId");
 
-                    b.HasIndex(new[] { "ShiftId" }, "IX_ClaimLineItems_ShiftId_Counting")
+                    b.HasIndex(new[] { "ShiftId", "ShiftPart" }, "IX_ClaimLineItems_ShiftId_ShiftPart_Counting")
                         .IsUnique()
                         .HasFilter("\"ShiftId\" IS NOT NULL AND \"Status\" <> 5");
 

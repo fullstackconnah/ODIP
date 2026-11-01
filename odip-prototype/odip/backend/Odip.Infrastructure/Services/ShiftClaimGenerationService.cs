@@ -63,7 +63,7 @@ public partial class ShiftClaimGenerationService
             ? null
             : await _ledger.EffectOfLinesAsync(
                 forMoney,
-                lineItems.Select(l => new ClaimEffectLine(participant.Id, l.Shift.ServiceDate, PaceCategories.Of(l.CatalogueItem), participant.PlanType, l.TotalAmount, ShiftId: l.Shift.Id, BookingId: null)).ToList(),
+                lineItems.Select(l => new ClaimEffectLine(participant.Id, l.Date, PaceCategories.Of(l.CatalogueItem), participant.PlanType, l.TotalAmount, ShiftId: l.Shift.Id, BookingId: null)).ToList(),
                 ct);
 
         return new ShiftClaimPreviewResponseDto
@@ -73,8 +73,8 @@ public partial class ShiftClaimGenerationService
             LineItems = lineItems.Select(l => new ShiftClaimPreviewLineItemDto
             {
                 ShiftId = l.Shift.Id,
-                ServiceDate = l.Shift.ServiceDate,
-                DayTypeLabel = l.DayType.ToString(),
+                ServiceDate = l.Date,
+                DayTypeLabel = DayTypeLabelOf(l),
                 DayType = l.DayType,
                 SupportItemCode = l.CatalogueItem.ItemNumber,
                 Hours = l.Hours,
@@ -113,7 +113,8 @@ public partial class ShiftClaimGenerationService
             Kind = ClaimKind.Shift,
             ParticipantId = participantId,
             PeriodFrom = from,
-            PeriodTo = to,
+            // The header covers every line: a night part after midnight on the last day is dated the day after it.
+            PeriodTo = lineItems.Max(l => l.Date) is var lastLine && lastLine > to ? lastLine : to,
             Status = TripClaimStatus.Draft,
             ClaimReference = BuildClaimReference(participant, claimId),
             CreatedAt = DateTime.UtcNow
@@ -129,8 +130,9 @@ public partial class ShiftClaimGenerationService
             ParticipantBookingId = null,
             SupportItemCode = l.CatalogueItem.ItemNumber,
             DayType = l.DayType,
-            SupportsDeliveredFrom = l.Shift.ServiceDate,
-            SupportsDeliveredTo = l.Shift.ServiceDate,
+            ShiftPart = l.Part,
+            SupportsDeliveredFrom = l.Date,
+            SupportsDeliveredTo = l.Date,
             Hours = l.Hours,
             UnitPrice = l.UnitPrice,
             TotalAmount = l.TotalAmount,
@@ -152,13 +154,13 @@ public partial class ShiftClaimGenerationService
             throw new InvalidOperationException(ShiftTakenMessage);
         }
         await held.CommitAsync(ct);
-        // A caveat (an overnight shift: evening and night rates are not applied yet) is shown on the preview line, but a claim line has no column to keep it in, so once the claim exists
+        // A caveat (the estimator sets none today) is shown on the preview line, but a claim line has no column to keep it in, so once the claim exists
         // nothing on it would say so. The response echoes the flagged shifts for the screen that generated it; a lasting flag on the line is a column and a migration, left to the L3-03 follow-up.
         var flagged = lineItems
             .Where(l => l.Caveat is not null)
             .Select(l => new ShiftClaimFlaggedDto { ShiftId = l.Shift.Id, ServiceDate = l.Shift.ServiceDate, Description = Describe(l.Shift), Caveat = l.Caveat! })
             .ToList();
-        return new ShiftClaimGenerated(claim, leftOut, flagged, claimLineItems.Count, claimLineItems.Sum(l => l.Hours));
+        return new ShiftClaimGenerated(claim, leftOut, flagged, claimLineItems.Count, HourlyHours(lineItems), lineItems.Select(l => l.Shift.Id).Distinct().Count());
     }
 
     // ─── Shared calculation ──────────────────────────────────────────────
@@ -206,7 +208,10 @@ public partial class ShiftClaimGenerationService
         // The shared holiday loader: the synced feed AND the maintained whole-day override rows (the feed misses days such as Boxing Day 2026), every state read and the state matched in any
         // case in memory, so the holiday rows match however they are written ("NSW", "nsw", or with spaces around them). The quote, the trip claim, the budget ledger and the roster read
         // through it too, so a day is a holiday in all of them or in none.
-        var publicHolidays = PublicHolidayLoader.WholeDayCalendarOf(await PublicHolidayLoader.LoadAsync(_db, from, to, includePartDay: false, ct)).For(state);
+        // One day past the range: a shift on its last day runs past midnight into the next, which can be a holiday.
+        var publicHolidays = PublicHolidayLoader.WholeDayCalendarOf(await PublicHolidayLoader.LoadAsync(_db, from, to.AddDays(1), includePartDay: false, ct)).For(state);
+        // The organisation's zone (the shifts are its own and the clocks change there), not the participant's state.
+        var zone = (await ProviderTimeZoneResolver.ResolveAsync(_db, participant.TenantId, ct)).Zone;
 
         // Only the community access group is priced from here. It is the only group that existed when this engine picked "the first active item for the
         // day type", and the catalogue now also holds personal care, sleepover, STA, travel and every other family: an item of those must never be
@@ -216,10 +221,14 @@ public partial class ShiftClaimGenerationService
         // end-dates a row (a December price set) must not reprice a shift that happened before it and has not been claimed yet.
         // A shift with a support type is priced from that group's rows, a shift without one from community access (the rows each shift is priced from are its own group's, hourly only).
         var groupCodes = shifts.Select(s => s.SupportGroupCode ?? CatalogueGroups.CommunityAccessGroupCode).Distinct().ToList();
-        var catalogueByGroup = (await _db.SupportCatalogueItems
-                .Where(i => groupCodes.Contains(i.ActivityGroup.GroupCode) && i.Unit == "H")
-                .Select(i => new { i.ActivityGroup.GroupCode, Item = i }).ToListAsync(ct))
-            .GroupBy(r => r.GroupCode).ToDictionary(g => g.Key, g => g.Select(r => r.Item).ToList());
+        // A group with no night row of its own prices its night hours from personal care's, and a sleepover is the flat item of the sleepover group (hourly rows are Unit H, sleepover rows Unit E).
+        var wantedCodes = groupCodes.Append(CatalogueGroups.PersonalCareGroupCode).Append(CatalogueGroups.SleepoverGroupCode).Distinct().ToList();
+        var loaded = await _db.SupportCatalogueItems
+            .Where(i => wantedCodes.Contains(i.ActivityGroup.GroupCode) && (i.Unit == "H" || i.Unit == "E"))
+            .Select(i => new { i.ActivityGroup.GroupCode, Item = i }).ToListAsync(ct);
+        var catalogueByGroup = loaded.Where(r => r.Item.Unit == "H").GroupBy(r => r.GroupCode).ToDictionary(g => g.Key, g => g.Select(r => r.Item).ToList());
+        var sleepoverRows = loaded.Where(r => r.GroupCode == CatalogueGroups.SleepoverGroupCode && r.Item.Unit == "E").Select(r => r.Item).ToList();
+        var personalCareRows = catalogueByGroup.GetValueOrDefault(CatalogueGroups.PersonalCareGroupCode) ?? new List<SupportCatalogueItem>();
         List<SupportCatalogueItem> RowsOf(Shift s) => catalogueByGroup.GetValueOrDefault(s.SupportGroupCode ?? CatalogueGroups.CommunityAccessGroupCode) ?? new List<SupportCatalogueItem>();
 
         var lineItems = new List<ShiftLineCalc>();
@@ -244,16 +253,11 @@ public partial class ShiftClaimGenerationService
                 continue;
             }
             var catalogueItems = RowsOf(shift);
-            // Money backstop: a support type whose rows overlap on this day is never priced by picking one (saving such a type is refused; an import can make an old one ambiguous later).
-            if (shift.SupportGroupCode is not null && SupportTypeCheck.IsAmbiguousForDay(catalogueItems, DayTypeResolver.Resolve(shift.ServiceDate, publicHolidays), participant.IsIntensiveSupport, shift.ServiceDate))
-            {
-                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = FormattableString.Invariant($"{participant.FullName}: more than one rate matches this support type on {shift.ServiceDate:d MMM yyyy}.") });
-                continue;
-            }
             // The one pricing rule, shared with the budget ledger so an estimate is exactly what this claim will say.
             var outcome = ShiftPriceEstimator.Price(
-                catalogueItems, shift.ServiceDate, shift.DurationHours, shift.Ratio, shift.NightType, participant.IsIntensiveSupport, state, publicHolidays);
-            if (outcome.Price is not { } price)
+                new ShiftRateRows(catalogueItems, personalCareRows, sleepoverRows), shift.SupportGroupCode, shift.ServiceDate, shift.StartTime, shift.EndTime, shift.EndsNextDay, shift.Ratio, shift.NightType,
+                participant.IsIntensiveSupport, state, publicHolidays, zone);
+            if (!outcome.IsPriced)
             {
                 // A shift that cannot be priced is not claimed, and it is not dropped silently either: it is listed with the reason, and it stays completed and unclaimed.
                 leftOut.Add(new ShiftClaimLeftOutDto
@@ -263,16 +267,28 @@ public partial class ShiftClaimGenerationService
                 continue;
             }
 
-            lineItems.Add(new ShiftLineCalc
+            // Money backstop: a support type whose rows overlap on a day it is priced for is never priced by picking one (saving such a type is refused; an import can make an old one ambiguous later).
+            // Each hourly line is checked on its own date and day type, against the rows it was priced from.
+            var ambiguous = shift.SupportGroupCode is null ? null : outcome.Lines.FirstOrDefault(l => l.CatalogueItem.Unit == "H"
+                && SupportTypeCheck.IsAmbiguousForDay(catalogueItems.Contains(l.CatalogueItem) ? catalogueItems : personalCareRows, l.DayType, participant.IsIntensiveSupport, l.Date));
+            if (ambiguous is not null)
+            {
+                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = FormattableString.Invariant($"{participant.FullName}: more than one rate matches this support type on {ambiguous.Date:d MMM yyyy}.") });
+                continue;
+            }
+
+            lineItems.AddRange(outcome.Lines.Select((price, part) => new ShiftLineCalc
             {
                 Shift = shift,
                 CatalogueItem = price.CatalogueItem,
                 DayType = price.DayType,
+                Date = price.Date,
+                Part = part,
                 Hours = price.Hours,
                 UnitPrice = price.UnitPrice,
                 TotalAmount = price.TotalAmount,
                 Caveat = outcome.Caveat
-            });
+            }));
         }
 
         if (lineItems.Count == 0)
@@ -291,7 +307,7 @@ public partial class ShiftClaimGenerationService
     /// <summary>The refusal when the unique index on a claim line's shift caught a concurrent claim. A claim run shows it as Skipped, not as a failure.</summary>
     public const string ShiftTakenMessage = "Another claim took one of these shifts first. Run the claim again.";
 
-    private static readonly string NoCatalogueRateSentence = new ShiftPriceOutcome(null, ShiftPriceEstimator.NoCatalogueRateBecause, null).NotPricedSentence!;
+    private static readonly string NoCatalogueRateSentence = ShiftPriceOutcome.Unpriced(ShiftPriceEstimator.NoCatalogueRateBecause).NotPricedSentence!;
 
     /// <summary>The shift as the budget ledger describes it ("Shift 22:00–06:00 · 8 h"), so the same shift reads the same on every screen.</summary>
     private static string Describe(Shift shift) =>
@@ -313,11 +329,30 @@ public partial class ShiftClaimGenerationService
     private static string BuildClaimReference(Participant participant, Guid claimId) =>
         TripClaim.ReferenceFor(!string.IsNullOrWhiteSpace(participant.NdisNumber) ? participant.NdisNumber : participant.Id.ToString("N")[..8].ToUpper(), claimId);
 
+    /// <summary>The label a shift claim line reads as ("Weekday Evening", not "WeekdayEvening"); a sleepover is its own line.</summary>
+    private static string DayTypeLabelOf(ShiftLineCalc l) => l.CatalogueItem.Unit == "E" ? "Sleepover" : l.DayType switch
+    {
+        ClaimDayType.Weekday => "Weekday",
+        ClaimDayType.Saturday => "Saturday",
+        ClaimDayType.Sunday => "Sunday",
+        ClaimDayType.PublicHoliday => "Public Holiday",
+        ClaimDayType.WeekdayEvening => "Weekday Evening",
+        ClaimDayType.WeekdayNight => "Weekday Night",
+        _ => l.DayType.ToString(),
+    };
+
+    /// <summary>The hours of the hourly lines; a sleepover line's quantity of 1 is a night, not an hour.</summary>
+    private static decimal HourlyHours(IEnumerable<ShiftLineCalc> lines) => lines.Where(l => l.CatalogueItem.Unit == "H").Sum(l => l.Hours);
+
     private class ShiftLineCalc
     {
         public Shift Shift { get; set; } = null!;
         public SupportCatalogueItem CatalogueItem { get; set; } = null!;
         public ClaimDayType DayType { get; set; }
+        /// <summary>The date the line is delivered: the shift's, or the next day for a stretch after midnight.</summary>
+        public DateOnly Date { get; set; }
+        /// <summary>The line's place in the shift's claim, 0 first (unique with the shift among the lines that count).</summary>
+        public int Part { get; set; }
         public decimal Hours { get; set; }
         public decimal UnitPrice { get; set; }
         public decimal TotalAmount { get; set; }
@@ -327,7 +362,7 @@ public partial class ShiftClaimGenerationService
 }
 
 /// <summary>The claim made from shifts, the completed shifts in the range it left out and why, and the shifts in it that were priced with a caveat.</summary>
-public sealed record ShiftClaimGenerated(TripClaim Claim, IReadOnlyList<ShiftClaimLeftOutDto> LeftOut, IReadOnlyList<ShiftClaimFlaggedDto> Flagged, int LineCount, decimal Hours);
+public sealed record ShiftClaimGenerated(TripClaim Claim, IReadOnlyList<ShiftClaimLeftOutDto> LeftOut, IReadOnlyList<ShiftClaimFlaggedDto> Flagged, int LineCount, decimal Hours, int ShiftCount);
 
 /// <summary>Completed, unclaimed shifts were found but none could be priced; <see cref="LeftOut"/> says which and why. The per-participant endpoints answer it as the same 400 as any other refusal.</summary>
 public sealed class NothingClaimableException(string message, IReadOnlyList<ShiftClaimLeftOutDto> leftOut) : InvalidOperationException(message)

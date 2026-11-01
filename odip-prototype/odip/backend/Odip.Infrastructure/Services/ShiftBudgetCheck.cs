@@ -60,22 +60,28 @@ public sealed class LedgerShiftCostSource : IShiftCostSource
         var providerState = await _db.ProviderSettings.AsNoTracking().Where(s => s.TenantId == tenantId).Select(s => s.State).FirstOrDefaultAsync(ct);
         // Each shift is priced from its own support type's rows (community access when it has none), as the claim and the ledger price it.
         var groupCodes = shifts.Select(s => s.SupportGroupCode ?? CatalogueGroups.CommunityAccessGroupCode).Distinct().ToList();
-        var rowsByGroup = (await _ledger.CatalogueQuery(Array.Empty<Guid>(), Array.Empty<string>(), groupCodes).ToListAsync(ct))
-            .GroupBy(row => row.GroupCode).ToDictionary(g => g.Key, g => g.Select(row => row.Item).Where(i => i.Unit == "H").ToList());
+        // Night hours of a group with no night row take the personal care night row, and a sleepover is the flat sleepover item.
+        groupCodes.AddRange(new[] { CatalogueGroups.PersonalCareGroupCode, CatalogueGroups.SleepoverGroupCode });
+        var catalogue = await _ledger.CatalogueQuery(Array.Empty<Guid>(), Array.Empty<string>(), groupCodes).ToListAsync(ct);
+        var rowsByGroup = catalogue.GroupBy(row => row.GroupCode).ToDictionary(g => g.Key, g => g.Select(row => row.Item).Where(i => i.Unit == "H").ToList());
+        var sleepoverRows = catalogue.Where(row => row.GroupCode == CatalogueGroups.SleepoverGroupCode && row.Item.Unit == "E").Select(row => row.Item).ToList();
+        var personalCareRows = rowsByGroup.GetValueOrDefault(CatalogueGroups.PersonalCareGroupCode) ?? new List<SupportCatalogueItem>();
+        var zone = (await ProviderTimeZoneResolver.ResolveAsync(_db, tenantId, ct)).Zone;
 
         var from = shifts.Min(s => s.ServiceDate);
         var to = shifts.Max(s => s.ServiceDate);
         // The one holiday loader the quote, both claim engines and the ledger read through, so a day the override table makes a holiday is priced here as the ledger prices it.
-        var holidays = PublicHolidayLoader.WholeDayCalendarOf(await PublicHolidayLoader.LoadAsync(_db, from, to, includePartDay: false, ct));
+        // A shift on the last day runs past midnight into the next, so the holidays are read one day further.
+        var holidays = PublicHolidayLoader.WholeDayCalendarOf(await PublicHolidayLoader.LoadAsync(_db, from, to.AddDays(1), includePartDay: false, ct));
         var state = ShiftPriceEstimator.StateFor(person.AddressState, providerState);
 
         return shifts.Select(shift =>
         {
-            var hours = Shift.HoursBetween(shift.StartTime, shift.EndTime, shift.EndsNextDay);
-            var communityAccess = rowsByGroup.GetValueOrDefault(shift.SupportGroupCode ?? CatalogueGroups.CommunityAccessGroupCode) ?? new List<SupportCatalogueItem>();
-            var outcome = ShiftPriceEstimator.Price(communityAccess, shift.ServiceDate, hours, shift.Ratio, shift.NightType, person.IsIntensiveSupport, state, holidays.For(state));
-            return outcome.Price is { } price
-                ? (ShiftCostEstimate)new ShiftCostEstimate.Priced(price.TotalAmount, PaceCategories.Of(price.CatalogueItem))
+            var groupRows = rowsByGroup.GetValueOrDefault(shift.SupportGroupCode ?? CatalogueGroups.CommunityAccessGroupCode) ?? new List<SupportCatalogueItem>();
+            var outcome = ShiftPriceEstimator.Price(new ShiftRateRows(groupRows, personalCareRows, sleepoverRows), shift.SupportGroupCode, shift.ServiceDate, shift.StartTime, shift.EndTime, shift.EndsNextDay, shift.Ratio, shift.NightType,
+                person.IsIntensiveSupport, state, holidays.For(state), zone);
+            return outcome.IsPriced
+                ? (ShiftCostEstimate)new ShiftCostEstimate.Priced(outcome.Total, PaceCategories.Of(outcome.Lines[0].CatalogueItem))
                 : new ShiftCostEstimate.NotPriced(outcome.NotPricedBecause ?? "the estimator has no price for it");
         }).ToList();
     }
