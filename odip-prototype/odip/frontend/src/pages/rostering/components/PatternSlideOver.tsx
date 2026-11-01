@@ -13,6 +13,7 @@ import { buttonClasses } from '@/components/buttonClasses'
 import { Callout } from '@/components/Callout'
 import { RequirementChips } from '@/components/RequirementChips'
 import { SlideOver } from '@/components/SlideOver'
+import { SupportTypeField } from './SupportTypeField'
 import { requirementLabels } from '@/lib/workerRequirements'
 import { modalGrid } from '@/lib/formGrid'
 import { localIsoDate } from '@/lib/dateOnly'
@@ -44,11 +45,11 @@ function toTimeInputValue(time: string | undefined): string {
   return (time ?? '09:00').slice(0, 5)
 }
 
-/** The pattern as it is stored, in the shape the PUT takes: what its own fields (default staff, notes) are saved with while a change to the agreement waits for approval. */
+/** The pattern as it is stored, in the shape the PUT takes: what its own fields (default staff, notes, support type) are saved with while a change to the agreement waits for approval. */
 function storedDefinition(pattern: ShiftPatternDto): CreateShiftPatternDto {
   return {
     participantId: pattern.participantId, defaultStaffId: pattern.defaultStaffId, dayOfWeek: pattern.dayOfWeek, startTime: toTimeInputValue(pattern.startTime), endTime: toTimeInputValue(pattern.endTime),
-    endsNextDay: pattern.endsNextDay, ratio: pattern.ratio, nightType: pattern.nightType, effectiveFrom: pattern.effectiveFrom, effectiveTo: pattern.effectiveTo ?? null, isActive: pattern.isActive, notes: pattern.notes,
+    endsNextDay: pattern.endsNextDay, ratio: pattern.ratio, nightType: pattern.nightType, supportGroupCode: pattern.supportGroupCode ?? null, effectiveFrom: pattern.effectiveFrom, effectiveTo: pattern.effectiveTo ?? null, isActive: pattern.isActive, notes: pattern.notes,
   }
 }
 
@@ -79,6 +80,9 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
   const [endsNextDay, setEndsNextDay] = useState(existing?.endsNextDay ?? false)
   const [ratio, setRatio] = useState<SupportRatio>(existing?.ratio ?? 'OneToOne')
   const [nightType, setNightType] = useState<SleepoverType>(existing?.nightType ?? 'None')
+  // '' is community access, the null on the wire.
+  const [supportGroupCode, setSupportGroupCode] = useState(existing?.supportGroupCode ?? '')
+  const [openedSupportGroupCode] = useState(supportGroupCode)
   const [effectiveFrom, setEffectiveFrom] = useState(existing?.effectiveFrom ?? '')
   const [effectiveTo, setEffectiveTo] = useState(existing?.effectiveTo ?? '')
   const [notes, setNotes] = useState(existing?.notes ?? '')
@@ -97,7 +101,7 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
 
   // Unsaved edits: the form as it is now against the form as it first rendered. The page keys this component on the target,
   // so "first render" is the moment the panel opened.
-  const current = JSON.stringify([participantId, defaultStaffId, dayOfWeek, startTime, endTime, endsNextDay, ratio, nightType, effectiveFrom, effectiveTo, notes])
+  const current = JSON.stringify([participantId, defaultStaffId, dayOfWeek, startTime, endTime, endsNextDay, ratio, nightType, supportGroupCode, effectiveFrom, effectiveTo, notes])
   const [opened] = useState(current)
   const dirty = current !== opened
   // What the agreement sets is the day, the times, the ratio and the kind of night (its dates are read-only here): a change to one of those is a change to the agreement. Who does the shifts, and the
@@ -130,6 +134,15 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
   const source = existing?.sourceDraftVersion !== undefined ? `agreement v${existing.sourceDraftVersion}` : 'an agreement'
   const isBusy = createPattern.isPending || updatePattern.isPending || changePattern.isPending
   const nextRevision = preview ? `revision v${preview.version}` : existing?.sourceDraftVersion !== undefined ? `revision v${existing.sourceDraftVersion + 1}` : 'a new revision'
+  // A pattern's rate is read on its first day that is still to come: the later of its start and today.
+  const today = localIsoDate()
+  const supportDate = effectiveFrom > today ? effectiveFrom : today
+  const supportChanged = isEdit && supportGroupCode !== openedSupportGroupCode
+  const supportHint = supportChanged
+    ? 'Upcoming shifts from this pattern that still use the old support type change too.'
+    : isAgreement
+      ? `Set from the service agreement when it made this pattern.${canWrite ? " Changing it here doesn't change the agreement." : ''}`
+      : "Every shift this pattern makes takes this. Claims use its rate for each shift's day."
   const canSave = !!participantId && !!effectiveFrom && !!startTime && !!endTime
   // The length is said under End time, where the person is looking: by the form's own rule, and by the server's 400 for it (the backstop), recognised by its code (with the sentence as the fallback) and said
   // in the server's own words. Never as the alert at the foot.
@@ -150,6 +163,7 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
       endsNextDay,
       ratio,
       nightType,
+      supportGroupCode: supportGroupCode || null,
       effectiveFrom,
       effectiveTo: effectiveTo || null,
       isActive: existing?.isActive ?? true,
@@ -190,9 +204,9 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
     if (!existing) return
     setError(null)
     try {
-      // The regular and notes are the pattern's own and save on it now, with the times the agreement set; the new times wait for the revision's approval.
-      if (defaultStaffId !== existing.defaultStaffId || notes !== (existing.notes ?? '')) {
-        await updatePattern.mutateAsync({ id: existing.id, data: { ...storedDefinition(existing), defaultStaffId, notes: notes.trim() || null } })
+      // The regular, notes and support type are the pattern's own and save on it now, with the times the agreement set; the new times wait for the revision's approval.
+      if (defaultStaffId !== existing.defaultStaffId || notes !== (existing.notes ?? '') || supportChanged) {
+        await updatePattern.mutateAsync({ id: existing.id, data: { ...storedDefinition(existing), defaultStaffId, notes: notes.trim() || null, supportGroupCode: supportGroupCode || null } })
       }
       setSaved(await changePattern.mutateAsync(change(false)))
     } catch (err: unknown) {
@@ -342,6 +356,8 @@ export function PatternSlideOver({ target, onClose, canWrite, participantOptions
             />
           </FormField>
         </div>
+
+        <SupportTypeField value={supportGroupCode} onChange={setSupportGroupCode} date={supportDate} canWrite={canWrite} hint={supportHint} />
 
         <div className={modalGrid}>
           <FormField label="Effective from" required hint={isAgreement ? 'Set by the agreement.' : undefined}>

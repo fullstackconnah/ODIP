@@ -23,7 +23,10 @@ const {
 
 // Only the API layer is mocked — every other collaborator (FindingsList, SlideOver,
 // Dropdown, FormField) is the real component, so this exercises the actual override gate wiring.
+const { catalogue } = vi.hoisted(() => ({ catalogue: { current: { data: [] as unknown[], isLoading: false, isError: false } } }))
+
 vi.mock('@/api/hooks', () => ({
+  useSupportCatalogue: () => catalogue.current,
   useCheckShift: () => ({ mutate: mockCheckMutate, isPending: false }),
   useCreateShift: () => ({ mutateAsync: mockCreateMutateAsync, isPending: false }),
   useUpdateShift: () => ({ mutateAsync: mockUpdateMutateAsync, isPending: false }),
@@ -958,6 +961,7 @@ describe('ShiftSlideOver — the server\'s refusal reaches the user', () => {
       endsNextDay: true,
       ratio: 'OneToOne',
       nightType: 'None',
+      supportGroupCode: null,
       status: 'Draft',
       notes: 'Bring the sling',
       location: null,
@@ -1003,6 +1007,7 @@ describe('ShiftSlideOver — the server\'s refusal reaches the user', () => {
         endsNextDay: false,
         ratio: 'OneToOne',
         nightType: 'None',
+        supportGroupCode: null,
         status: 'Published',
         notes: 'Swap with Tuesday',
         location: null,
@@ -1134,6 +1139,7 @@ describe('ShiftSlideOver — readiness note (WARN mode)', () => {
       endsNextDay: false,
       ratio: 'OneToOne',
       nightType: 'None',
+      supportGroupCode: null,
       status: 'Draft',
       notes: null,
       location: null,
@@ -1316,7 +1322,7 @@ describe('ShiftSlideOver — the live dry-run\'s refusal', () => {
     expect(message.closest('[role="alert"]')).not.toBeNull()
     expect(mockCreateMutateAsync).not.toHaveBeenCalled()
     expect(mockCheckMutate).toHaveBeenCalledWith(
-      { id: undefined, participantId: 'participant-1', staffId: null, serviceDate: '2026-08-17', startTime: '09:00', endTime: '10:00', endsNextDay: false, ratio: 'OneToOne', nightType: 'None' },
+      { id: undefined, participantId: 'participant-1', staffId: null, serviceDate: '2026-08-17', startTime: '09:00', endTime: '10:00', endsNextDay: false, ratio: 'OneToOne', nightType: 'None', supportGroupCode: null },
       expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) }),
     )
     expect(screen.getByRole('button', { name: /^save$/i })).toBeEnabled()
@@ -1387,6 +1393,7 @@ describe('ShiftSlideOver — the live dry-run\'s refusal', () => {
       endsNextDay: false,
       ratio: 'OneToOne',
       nightType: 'None',
+      supportGroupCode: null,
       status: 'Draft',
       notes: null,
       location: null,
@@ -1944,5 +1951,44 @@ describe('ShiftSlideOver location (coordinator-typed, never the participant addr
 
     await user.click(screen.getByRole('button', { name: /^save$/i }))
     expect(mockCreateMutateAsync.mock.calls[0][0].location).toBeNull()
+  })
+})
+
+describe('ShiftSlideOver support type', () => {
+  const GROUPS = [
+    { id: 'g1', groupCode: 'GRP_ART', displayName: 'Art therapy', supportCategory: 4, isActive: true, items: [{ id: 'i1', unit: 'H', effectiveFrom: '2026-07-01' }] },
+  ]
+  beforeEach(() => { catalogue.current = { data: GROUPS, isLoading: false, isError: false } })
+  afterEach(() => { catalogue.current = { data: [], isLoading: false, isError: false } })
+
+  const open = (shift: ShiftDto, canWrite = true) => render(
+    <ShiftSlideOver target={{ mode: 'edit', shift }} onClose={noop} canWrite={canWrite} participantOptions={participantOptions} staffOptions={staffOptions} />,
+  )
+
+  it('a new shift says claims use the day\'s rate, and the chosen type goes out on save', async () => {
+    const user = userEvent.setup()
+    mockCreateMutateAsync.mockResolvedValue({})
+    render(<ShiftSlideOver target={{ mode: 'create', participantId: 'participant-1', staffId: null, serviceDate: '2026-08-17' }} onClose={noop} canWrite participantOptions={participantOptions} staffOptions={staffOptions} />)
+
+    expect(screen.getByRole('combobox', { name: 'Support type' })).toHaveValue('Community access (default)')
+    expect(screen.getByText('Claims use its rate for this shift\'s day.')).toBeInTheDocument()
+    await user.click(screen.getByRole('combobox', { name: 'Support type' }))
+    await user.click(screen.getByRole('option', { name: 'Art therapy' }))
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(mockCreateMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ supportGroupCode: 'GRP_ART' }))
+  })
+
+  it('a shift made from a pattern says the type was copied and a change is for this shift only', () => {
+    open(makeShift({ shiftPatternId: 'pattern-1', supportGroupCode: 'GRP_ART' }))
+    expect(screen.getByText('Copied from its pattern. A change here is for this shift only.')).toBeInTheDocument()
+  })
+
+  it('a shift on a claim cannot change its type and names the claim', () => {
+    open(makeShift({ supportGroupCode: 'GRP_ART', claimReference: 'CLM-0042' }))
+    const field = screen.getByRole('combobox', { name: 'Support type' })
+    expect(field).toBeDisabled()
+    expect(field).toHaveValue('Art therapy')
+    expect(screen.getByText('On claim CLM-0042. Delete that claim to change the support type.')).toBeInTheDocument()
   })
 })

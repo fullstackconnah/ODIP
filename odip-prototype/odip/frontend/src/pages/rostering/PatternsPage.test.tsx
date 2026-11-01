@@ -20,6 +20,7 @@ vi.mock('@/lib/permissions', () => ({
 
 // The slide-over and the generate dialog (both mounted by the page, closed) call these hooks on every render.
 vi.mock('@/api/hooks', () => ({
+  useSupportCatalogue: () => ({ data: [], isLoading: false, isError: false }),
   usePatterns: mockUsePatterns,
   useUpdatePattern: () => ({ mutate: mockUpdateMutate, mutateAsync: mockUpdateMutateAsync, isPending: false }),
   useParticipants: () => ({ data: [{ id: 'participant-1', fullName: 'Mia Chen' }] }),

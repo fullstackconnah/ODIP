@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { fireEvent, render as renderInDom, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { PatternSlideOver } from './PatternSlideOver'
@@ -18,7 +18,10 @@ const { mockCreateMutateAsync, mockUpdateMutateAsync, mockDeleteMutateAsync, moc
 
 // Only the API layer is mocked — FormField, Dropdown, SearchableSelect, ConfirmDialog are the
 // real components, so this exercises the actual Default staff field wiring.
+const { catalogue } = vi.hoisted(() => ({ catalogue: { current: { data: [] as unknown[], isLoading: false, isError: false } } }))
+
 vi.mock('@/api/hooks', () => ({
+  useSupportCatalogue: () => catalogue.current,
   useCreatePattern: () => ({ mutateAsync: mockCreateMutateAsync, isPending: false }),
   useUpdatePattern: () => ({ mutateAsync: mockUpdateMutateAsync, isPending: false }),
   useDeletePattern: () => ({ mutateAsync: mockDeleteMutateAsync, isPending: false }),
@@ -252,6 +255,7 @@ describe('PatternSlideOver — the server\'s refusal reaches the user', () => {
         endsNextDay: true,
         ratio: 'OneToOne',
         nightType: 'None',
+        supportGroupCode: null,
         effectiveFrom: '2026-01-01',
         effectiveTo: null,
         isActive: true,
@@ -297,6 +301,7 @@ describe('PatternSlideOver — the server\'s refusal reaches the user', () => {
       endsNextDay: false,
       ratio: 'OneToOne',
       nightType: 'None',
+      supportGroupCode: null,
       effectiveFrom: '2026-10-05',
       effectiveTo: null,
       isActive: true,
@@ -385,7 +390,7 @@ describe('PatternSlideOver — a pattern an agreement made', () => {
   const checked = { version: 3, agreementStartDate: '2026-10-19', agreementEndDate: '2026-12-20', oldTotal: 7358, newTotal: 7725.9, difference: 367.9, needsReview: false }
   const PRICE = "Price from Mon 19 Oct 2026 to Sun 20 Dec 2026: $7,358.00 as it is at today's prices, $7,725.90 with the change (+$367.90)."
   const STORED = {
-    participantId: 'participant-1', defaultStaffId: 'staff-1', dayOfWeek: 'Monday', startTime: '09:00', endTime: '17:00', endsNextDay: false, ratio: 'OneToOne', nightType: 'None',
+    participantId: 'participant-1', defaultStaffId: 'staff-1', dayOfWeek: 'Monday', startTime: '09:00', endTime: '17:00', endsNextDay: false, ratio: 'OneToOne', nightType: 'None', supportGroupCode: null,
     effectiveFrom: '2026-10-12', effectiveTo: '2026-12-20', isActive: true,
   }
 
@@ -700,5 +705,46 @@ describe('PatternSlideOver — the length of the shift it makes', () => {
     await user.type(endTimeField(), '11:00')
 
     expect(screen.queryByText(REWORDED)).not.toBeInTheDocument()
+  })
+})
+
+describe('PatternSlideOver support type', () => {
+  const GROUPS = [
+    { id: 'g1', groupCode: 'GRP_ART', displayName: 'Art therapy', supportCategory: 4, isActive: true, items: [{ id: 'i1', unit: 'H', effectiveFrom: '2026-07-01' }] },
+    { id: 'g2', groupCode: 'GRP_COMMUNITY_PARTICIPATION', displayName: 'Community participation', supportCategory: 4, isActive: true, items: [{ id: 'i2', unit: 'H', effectiveFrom: '2026-07-01' }] },
+  ]
+  beforeEach(() => { catalogue.current = { data: GROUPS, isLoading: false, isError: false } })
+  afterEach(() => { catalogue.current = { data: [], isLoading: false, isError: false } })
+
+  const open = (pattern: ShiftPatternDto, canWrite = true) => render(
+    <PatternSlideOver target={{ mode: 'edit', pattern }} onClose={noop} canWrite={canWrite} participantOptions={participantOptions} staffOptions={staffOptions} />,
+  )
+
+  it('says what the type does, then that upcoming shifts change too once it is changed, and saves the code', async () => {
+    const user = userEvent.setup()
+    mockUpdateMutateAsync.mockResolvedValue({})
+    open(makePattern({ supportGroupCode: 'GRP_ART' }))
+
+    const field = screen.getByRole('combobox', { name: 'Support type' })
+    expect(field).toHaveValue('Art therapy')
+    expect(screen.getByText('Every shift this pattern makes takes this. Claims use its rate for each shift\'s day.')).toBeInTheDocument()
+
+    await user.click(field)
+    await user.click(screen.getByRole('option', { name: 'Community participation' }))
+    expect(screen.getByText('Upcoming shifts from this pattern that still use the old support type change too.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(mockUpdateMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ supportGroupCode: 'GRP_COMMUNITY_PARTICIPATION' }) }))
+  })
+
+  it('says an agreement pattern got its type from the agreement, and a reader sees only that part', () => {
+    const pattern = makePattern({ supportGroupCode: 'GRP_ART', sourceDraftId: 'draft-1', sourceBlockKey: 'weekdays', sourceDraftVersion: 2 })
+    const { unmount } = open(pattern)
+    expect(screen.getByText('Set from the service agreement when it made this pattern. Changing it here doesn\'t change the agreement.')).toBeInTheDocument()
+    unmount()
+
+    open(pattern, false)
+    expect(screen.getByText('Set from the service agreement when it made this pattern.')).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Support type' })).toBeDisabled()
   })
 })

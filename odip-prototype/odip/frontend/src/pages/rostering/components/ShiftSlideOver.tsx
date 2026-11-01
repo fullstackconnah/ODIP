@@ -27,6 +27,8 @@ import {
 } from './parallel-budget-override'
 import { Button } from '@/components/Button'
 import { SlideOver } from '@/components/SlideOver'
+import { localIsoDate } from '@/lib/dateOnly'
+import { SupportTypeField } from './SupportTypeField'
 import { TAP_FLOOR } from '@/components/tapArea'
 import { bringIntoView } from '@/lib/bringIntoView'
 import { modalGrid } from '@/lib/formGrid'
@@ -125,6 +127,8 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   const [endsNextDay, setEndsNextDay] = useState(existing?.endsNextDay ?? false)
   const [ratio, setRatio] = useState<SupportRatio>(existing?.ratio ?? 'OneToOne')
   const [nightType, setNightType] = useState<SleepoverType>(existing?.nightType ?? 'None')
+  // '' is community access, the null on the wire.
+  const [supportGroupCode, setSupportGroupCode] = useState(existing?.supportGroupCode ?? '')
   // PP-8: echoes the shift's current status back on edit so saving never silently resets it to
   // Draft (the backend's UpdateShiftDto.Status defaults to Draft when the field is omitted).
   // Create always defaults to Draft — the backend hardcodes it there regardless of this value.
@@ -162,12 +166,12 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   // to the exact candidate it was computed for: it hides itself the moment any field of the candidate changes, and a late reply for an
   // older candidate can never show. It never gates Save; a preview that fails without a server message (a network blip) says nothing.
   const [previewRefusal, setPreviewRefusal] = useState<(PanelRefusal & { key: string }) | null>(null)
-  const candidateKey = JSON.stringify([participantId, staffId, serviceDate, startTime, endTime, endsNextDay, ratio, nightType, status])
+  const candidateKey = JSON.stringify([participantId, staffId, serviceDate, startTime, endTime, endsNextDay, ratio, nightType, supportGroupCode, status])
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   // Unsaved edits: the form as it is now against the form as it first rendered. The page keys this component on the target,
   // so "first render" is the moment the panel opened.
-  const current = JSON.stringify([participantId, staffId, serviceDate, startTime, endTime, endsNextDay, ratio, nightType, status, notes, location, overrideReason, emergencyDescription])
+  const current = JSON.stringify([participantId, staffId, serviceDate, startTime, endTime, endsNextDay, ratio, nightType, supportGroupCode, status, notes, location, overrideReason, emergencyDescription])
   const [opened] = useState(current)
   const dirty = current !== opened
 
@@ -227,7 +231,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
     const handle = setTimeout(() => {
       checkShift.mutate(
         // The status the shift would be saved with, for an existing shift: a cancel costs nothing and gets no budget finding.
-        { id: existing?.id, participantId, staffId, serviceDate, startTime, endTime, endsNextDay, ratio, nightType, status: isEdit ? status : undefined },
+        { id: existing?.id, participantId, staffId, serviceDate, startTime, endTime, endsNextDay, ratio, nightType, supportGroupCode: supportGroupCode || null, status: isEdit ? status : undefined },
         {
           onSuccess: ({ findings: f, budgetNote: note }) => {
             setFindings(f)
@@ -248,7 +252,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
     }, 400)
     return () => clearTimeout(handle)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canWrite, participantId, staffId, serviceDate, startTime, endTime, endsNextDay, ratio, nightType, status])
+  }, [canWrite, participantId, staffId, serviceDate, startTime, endTime, endsNextDay, ratio, nightType, supportGroupCode, status])
 
   // A refusal that arrives below the fold is brought into view: the finding, the one-line refusal and the way through are at the bottom of a long form, and a disabled Save cannot be tapped to ask why.
   // It happens when the refusal APPEARS (or a different pool or period is the one refused), not on every re-check: pulling the panel down while the coordinator is still adjusting the times above would
@@ -280,6 +284,11 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   const isCoordinatorSettable = (s: ShiftStatus): boolean =>
     (COORDINATOR_SETTABLE_SHIFT_STATUSES as readonly string[]).includes(s)
   const statusLocked = !!existing && !isCoordinatorSettable(existing.status)
+  // Where the type came from, said once; a change on a shift made from a pattern is for this shift only.
+  const copiedFrom = existing?.fromAgreement ? "the service agreement's pattern" : existing?.shiftPatternId ? 'its pattern' : null
+  const supportHint = copiedFrom
+    ? `Copied from ${copiedFrom}.${canWrite ? ' A change here is for this shift only.' : ''}`
+    : "Claims use its rate for this shift's day."
   const statusItems: DropdownItem[] = statusLocked
     ? [{ value: existing!.status, label: lockedWords(existing!.status), disabled: true }]
     // Published is not offered for a shift nobody is on (Publish week holds it until someone is); a shift already set to Published keeps it.
@@ -371,6 +380,7 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
       endsNextDay,
       ratio,
       nightType,
+      supportGroupCode: supportGroupCode || null,
       status,
       notes: notes.trim() || null,
       location: location.trim() || null,
@@ -562,6 +572,8 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
             />
           </FormField>
         </div>
+
+        <SupportTypeField value={supportGroupCode} onChange={setSupportGroupCode} date={serviceDate || localIsoDate()} canWrite={canWrite} claimReference={existing?.claimReference} hint={supportHint} />
 
         {isEdit && (
           <FormField
