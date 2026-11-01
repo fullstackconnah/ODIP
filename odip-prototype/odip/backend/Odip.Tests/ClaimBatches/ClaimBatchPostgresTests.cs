@@ -168,14 +168,20 @@ public class ClaimBatchPostgresTests : IClassFixture<PostgresFixture>
         var (_, lines, _) = f.AddClaim(shiftLines: true);
         var built = await f.BuildAsync(lines[0].Id);
         Assert.True(built.Ok, string.Join("; ", built.Errors ?? []));
+        await f.Service.ConfirmUploadedAsync(f.TenantId, f.User, built.Value!.Id, default);
+        var paidLine = await f.Db.ClaimLineItems.SingleAsync(x => x.Id == lines[0].Id);
+        paidLine.Status = ClaimLineItemStatus.Paid;
+        paidLine.PaidAmount = 120m;
+        await f.Db.SaveChangesAsync();
         var log = new CommandLog();
         await using var db = new OdipDbContext(new DbContextOptionsBuilder<OdipDbContext>().UseNpgsql(_pg.ConnectionString!).AddInterceptors(log).Options, TenantOf(f));
         var service = new ClaimBatchService(db, new BprCsvService(db), new InvoiceService(db), f.Clock);
 
-        await service.BatchesAsync(f.TenantId, null, ClaimBatchService.ListCap, default);
+        var summary = (await service.BatchesAsync(f.TenantId, null, ClaimBatchService.ListCap, default)).Single();
         await service.DetailAsync(f.TenantId, built.Value!.Id, default);
         await service.HubAsync(f.TenantId, default);
 
+        Assert.Equal((1, 120m), (summary.Paid, summary.PaidAmount));
         Assert.NotEmpty(log.Sql);
         Assert.DoesNotContain(log.Sql, sql => sql.Contains("\"ClaimBatches\"") && sql.Contains("\"Content\""));
     }

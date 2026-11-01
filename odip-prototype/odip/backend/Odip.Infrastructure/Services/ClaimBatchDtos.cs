@@ -39,6 +39,11 @@ public sealed record ResultConflictDto(string RowReference, string Current, stri
 public sealed record ResultsImportDto(
     int Successful, int Rejected, int Unchanged, int LeftAlone, List<ResultConflictDto> Conflicts, List<string> UnknownReferences, List<UnreadRow> UnreadRows, BatchDto Batch);
 
+/// <summary>Claims sent and paid by provider-local week (Monday start), oldest first, plus where the money stands today. Money is never summed on the client.</summary>
+public sealed record PipelineDto(DateOnly Today, List<PipelineWeekDto> Weeks, decimal WithNdia, decimal AcceptedUnpaid, decimal UndatedPaid);
+
+public sealed record PipelineWeekDto(DateOnly WeekStart, decimal Sent, decimal Paid, decimal Rejected, int RejectedLines);
+
 public sealed record PaidLineRequest(Guid BatchLineId, decimal? Amount);
 
 public sealed record HubProblemDto(string Rule, string Severity, string Message);

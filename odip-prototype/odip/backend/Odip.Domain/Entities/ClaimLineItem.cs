@@ -47,4 +47,6 @@ public class ClaimLineItem
     public ClaimLineItemStatus Status { get; set; } = ClaimLineItemStatus.Draft;
     public string? RejectionReason { get; set; }
     public decimal? PaidAmount { get; set; }
+    /// <summary>When the line moved into Paid (UTC); null for a line paid before this was recorded, and for a line that is not Paid. Re-saving a Paid line keeps it.</summary>
+    public DateTime? PaidAt { get; set; }
 }

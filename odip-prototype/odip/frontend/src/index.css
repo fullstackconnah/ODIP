@@ -496,6 +496,9 @@
 .it-rp { fill: var(--color-chart-expected); background: var(--color-chart-expected); }
 .it-other { stroke: var(--color-chart-other); stroke-width: 1.5px; border: 1.5px solid var(--color-chart-other); }
 .it-hatch { background-image: repeating-linear-gradient(45deg, var(--color-chart-other) 0 1px, transparent 1px 4px); }
+/* The claims sent-and-paid chart: Paid solid like the restrictive practice uses, Sent hollow and hatched like the other incidents (same tokens, same forced-colours rows). */
+.cp-paid { fill: var(--color-chart-expected); background: var(--color-chart-expected); }
+.cp-sent { stroke: var(--color-chart-other); stroke-width: 1.5px; border: 1.5px solid var(--color-chart-other); }
 
 /*
  * The sidebar folding (AppLayout `data-folding`, set from the click until the nav swaps to the rail 80ms later): the words and nested rows
@@ -573,6 +576,8 @@ aside[data-folding] [data-fold="word"] { transform: translateX(-12px); }
   .it-rp { fill: CanvasText; background: CanvasText; forced-color-adjust: none; }
   .it-other { fill: Canvas; stroke: CanvasText; border-color: CanvasText; background: Canvas; forced-color-adjust: none; }
   .it-hatch { background-image: none; }
+  .cp-paid { fill: CanvasText; background: CanvasText; forced-color-adjust: none; }
+  .cp-sent { fill: Canvas; stroke: CanvasText; border-color: CanvasText; background: Canvas; forced-color-adjust: none; }
 }
 
 :root { --wordmark-dot: var(--color-primary-fixed); }
