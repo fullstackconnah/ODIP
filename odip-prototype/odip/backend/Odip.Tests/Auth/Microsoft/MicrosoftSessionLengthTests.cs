@@ -83,6 +83,19 @@ public class MicrosoftSessionLengthTests
         Assert.InRange(MinutesFromNow(Jwt(o).ValidTo), 29, 30.1);
     }
 
+    // GUARD: a settings row with a null limit is the same as no row.
+    [Fact]
+    public async Task With_a_null_limit_row_the_sign_in_token_is_30_minutes()
+    {
+        var rig = new MicrosoftAuthRig();
+        var org = rig.Org();
+        rig.Link(org.Id);
+        rig.Person(org.Id, "pat@acme.test", tid: Tid, oid: PersonOid);
+        SeedLimit(rig, org.Id, null);
+        var o = await rig.RunAsync(Token());
+        Assert.InRange(MinutesFromNow(Jwt(o).ValidTo), 29, 30.1);
+    }
+
     [Fact]
     public async Task Refresh_under_the_org_limit_issues_a_token_capped_at_the_limit()
     {

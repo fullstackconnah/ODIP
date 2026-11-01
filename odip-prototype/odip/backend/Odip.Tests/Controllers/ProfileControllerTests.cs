@@ -64,13 +64,15 @@ public class ProfileControllerTests
     public async Task Put_changes_only_the_callers_row()
     {
         using var db = CreateDb(A);
-        var me = Seed(db, A, "Pat", "Lee");
         var colleague = Seed(db, A, "Sam", "Roe");
+        var elsewhere = Seed(db, B, "Zed", "Out");
+        var me = Seed(db, A, "Pat", "Lee");
 
         Assert.Equal("Alex", Data(await As(db, me).Update(Dto("Alex", "Kim", "0411 111 111"), default)).FirstName);
 
         Assert.Equal(("Alex", "Kim", "0411 111 111"), (Stored(db, me.Id).FirstName, Stored(db, me.Id).LastName, Stored(db, me.Id).Mobile));
         Assert.Equal(("Sam", "Roe"), (Stored(db, colleague.Id).FirstName, Stored(db, colleague.Id).LastName));
+        Assert.Equal(("Zed", "Out"), (Stored(db, elsewhere.Id).FirstName, Stored(db, elsewhere.Id).LastName));
     }
 
     [Fact]
@@ -96,13 +98,15 @@ public class ProfileControllerTests
     public async Task SuperAdmin_viewing_as_edits_their_own_row_not_the_viewed_user()
     {
         using var db = CreateDb(B); // view-as: the ambient tenant is the viewed organisation
-        var me = Seed(db, A, "Root", "Admin", role: UserRole.SuperAdmin);
         var viewed = Seed(db, B, "Vera", "Viewed");
+        var colleague = Seed(db, A, "Sam", "Roe");
+        var me = Seed(db, A, "Root", "Admin", role: UserRole.SuperAdmin);
 
         Assert.Equal("Rae", Data(await As(db, me).Update(Dto("Rae", "Admin"), default)).FirstName);
 
         Assert.Equal("Rae", Stored(db, me.Id).FirstName);
         Assert.Equal("Vera", Stored(db, viewed.Id).FirstName);
+        Assert.Equal("Sam", Stored(db, colleague.Id).FirstName);
     }
 
     [Fact]
