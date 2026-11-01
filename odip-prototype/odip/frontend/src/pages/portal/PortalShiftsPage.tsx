@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, CalendarCheck2, Car, Moon, ShieldCheck, CalendarOff, WifiOff } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CalendarCheck2, Car, Moon, ShieldCheck, CalendarOff, MapPin, WifiOff } from 'lucide-react'
 import { useIntakeVisits, useMyShifts, usePendingWitnessRequests } from '@/api/hooks'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
@@ -254,8 +254,19 @@ export default function PortalShiftsPage() {
                         <p className="font-medium text-[var(--color-foreground)] truncate">{a.tripName}</p>
                         <p className="text-sm text-[var(--color-muted-foreground)]">
                           {formatEffectiveRange(a.assignmentStart, a.assignmentEnd)}
-                          {a.isDriver && <span className="ml-2 inline-flex items-center gap-1"><Car className="w-3 h-3" /> Driver</span>}
+                          {a.isDriver && !/driver/i.test(a.role ?? '') && <span className="ml-2 inline-flex items-center gap-1"><Car className="w-3 h-3" /> Driver</span>}
                         </p>
+                        {a.destination?.trim() && (
+                          <p className="text-sm text-[var(--color-muted-foreground)] flex items-center gap-1 min-w-0">
+                            <MapPin className="w-3 h-3 shrink-0" aria-hidden />
+                            <span className="truncate" title={a.destination.trim()}><span className="sr-only">Location: </span>{a.destination.trim()}</span>
+                          </p>
+                        )}
+                        {a.role?.trim() && (
+                          <p className="text-sm text-[var(--color-muted-foreground)] truncate" title={a.role.trim()}>
+                            <span className="sr-only">Your role: </span>{a.role.trim()}
+                          </p>
+                        )}
                       </div>
                       <StatusBadge status={a.status} />
                     </div>
