@@ -1,6 +1,7 @@
 import { AlertTriangle } from 'lucide-react'
 import { TONE } from '@/lib/tone'
 import { cn } from '@/lib/utils'
+import { readinessText } from './readinessText'
 
 export type ReadinessNoteVariant = 'chip' | 'line'
 
@@ -36,12 +37,9 @@ const LINE = `flex min-w-0 items-start gap-1.5 text-xs font-medium ${TONE.warnin
  * (the words are always printed). It draws nothing when there is nothing missing, so a ready participant looks exactly as before.
  */
 export function ReadinessNote({ issues, blocked = false, variant = 'line', className }: ReadinessNoteProps) {
-  const reasons = issues && issues.length > 0 ? issues.join(' · ') : null
-  if (!blocked && !reasons) return null
-
-  // In Enforce the server refuses new shifts and assignments, so the note says so (the brief, section 6). The note itself still disables nothing: the server refuses.
-  const text = blocked ? `Not ready for rostering${reasons ? `: ${reasons}` : ''}` : `Not ready: ${reasons}`
-  const title = blocked ? `${text}. New shifts and assignments are refused until this is done.` : text
+  const words = readinessText(issues, blocked)
+  if (!words) return null
+  const { text, title } = words
   const isChip = variant === 'chip'
   const Tag = isChip ? 'span' : 'p'
 

@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { ParticipantRow } from './ParticipantRow'
 import { makeParticipantRow, makeShift, makeUnfilledShift, WEEK_DAYS } from '../test-fixtures'
-import { TONE } from '@/lib/tone'
 import type { PendingAgreementDto } from '@/api/types'
 
 function noop() {}
@@ -52,7 +52,7 @@ describe('ParticipantRow header — two lines: the name above the readiness chip
     const line1 = name.parentElement as HTMLElement
     const ratio = screen.getByRole('img', { name: '2:1 support' })
     const line2 = ratio.parentElement!.parentElement as HTMLElement
-    const readiness = screen.getByText(/Intake not complete/).closest('[title]') as HTMLElement
+    const readiness = screen.getByRole('button', { name: /^Not ready/ })
 
     expect(head).toHaveClass('flex', 'flex-col', 'justify-center', 'min-h-[var(--row-h)]')
     expect(line1).not.toBe(line2)
@@ -182,6 +182,8 @@ describe('ParticipantRow header — coverage badge (a compact count; the words a
     expect(within(badge).getByText('6')).toHaveClass('tabular-nums')
     expect(screen.queryByText('6 unassigned shifts')).not.toBeInTheDocument()
     expect(badge.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
+    // The person-plus is the glyph of the dashed "Needs staff" pucks in the same row; the triangle now means readiness only.
+    expect(badge.querySelector('svg')).toHaveClass('lucide-user-plus')
     // The amber warning-container tint is the colour meaning; it is unchanged.
     expect(badge).toHaveClass('bg-[var(--color-warning-container)]', 'text-[var(--color-on-warning-container)]', 'h-4', 'rounded-sm')
   })
@@ -231,13 +233,14 @@ describe('ParticipantRow header — coverage badge (a compact count; the words a
   })
 })
 
-// A participant who is not fully ready carries a quiet warning chip in the name group. It is informational (WARN mode never blocks),
-// and it must not cost the row its one --row-h line or its name; a participant with nothing missing must render exactly as before.
-describe('ParticipantRow header — readiness chip', () => {
+// A participant who is not fully ready carries one short amber word on line 2 ("Not ready", or "Blocked" in Enforce) that opens a peek panel with the
+// whole reason. It is informational (WARN mode never blocks), the same words at every width, and a participant with nothing missing renders as before.
+describe('ParticipantRow header — readiness trigger', () => {
   const ISSUES = ['Intake not complete', 'No signed service agreement']
   const WARNING = 'Not ready: Intake not complete · No signed service agreement'
+  const triggerOf = () => screen.getByRole('button', { name: /^(Not ready|Blocked)/ })
 
-  it('draws no chip, and leaves the header markup exactly as it was, for a participant with nothing missing', () => {
+  it('draws no trigger, and leaves the header markup exactly as it was, for a participant with nothing missing', () => {
     const { unmount } = renderRow({ fullName: 'Mia Chen', hasRestrictivePractice: true, daysWithoutCover: 3 })
     const before = headerOf('Mia Chen').innerHTML
     unmount()
@@ -246,52 +249,70 @@ describe('ParticipantRow header — readiness chip', () => {
       const { unmount: unmountThis } = renderRow({ fullName: 'Mia Chen', hasRestrictivePractice: true, daysWithoutCover: 3, readinessIssues })
       expect(headerOf('Mia Chen').innerHTML).toBe(before)
       expect(screen.queryByText(/not ready/i)).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /^(Not ready|Blocked)/ })).not.toBeInTheDocument()
       unmountThis()
     }
   })
 
-  it('puts the chip on line 2, after the name and the restrictive-practice marker and ahead of the ratio chip and coverage badge', () => {
+  it('puts the trigger on line 2, after the name and the restrictive-practice marker and ahead of the ratio chip and coverage badge', () => {
     renderRow({ fullName: 'Grace Palmer-Hughes', hasRestrictivePractice: true, daysWithoutCover: 6, readinessIssues: ISSUES })
 
     const name = screen.getByRole('link', { name: 'Grace Palmer-Hughes' })
     const marker = screen.getByRole('img', { name: 'Restrictive practice authorised' })
-    const chip = screen.getByText(WARNING).closest('[title]') as HTMLElement
+    const trigger = triggerOf()
     const ratio = screen.getByRole('img', { name: '1:1 support' })
     const badge = screen.getByRole('img', { name: '6 unassigned shifts' })
 
-    expect(name.parentElement).not.toContainElement(chip)
-    expect(ratio.parentElement!.parentElement).toContainElement(chip)
+    expect(name.parentElement).not.toContainElement(trigger)
+    expect(ratio.parentElement!.parentElement).toContainElement(trigger)
     expect(isBefore(name, marker)).toBe(true)
-    expect(isBefore(marker, chip)).toBe(true)
-    expect(isBefore(chip, ratio)).toBe(true)
-    expect(isBefore(chip, badge)).toBe(true)
+    expect(isBefore(marker, trigger)).toBe(true)
+    expect(isBefore(trigger, ratio)).toBe(true)
+    expect(isBefore(trigger, badge)).toBe(true)
   })
 
-  it('carries the whole text in its title and wears the warning tone, nothing else', () => {
+  it('says "Not ready" with the whole reason in its accessible name, and no title (the panel replaces it)', () => {
     renderRow({ readinessIssues: ISSUES })
 
-    const chip = screen.getByText(WARNING).closest('[title]') as HTMLElement
-    expect(chip).toHaveAttribute('title', WARNING)
-    for (const cls of TONE.warning.solid.split(' ')) expect(chip).toHaveClass(cls)
-    // Informational: no alert, nothing to press.
-    expect(chip).not.toHaveAttribute('role')
-    expect(chip.closest('[role="alert"]')).toBeNull()
-    expect(chip.querySelector('button, input, a')).toBeNull()
+    const trigger = triggerOf()
+    expect(trigger).toHaveTextContent(/^Not ready$/)
+    expect(trigger).toHaveAttribute('aria-label', WARNING)
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+    expect(trigger).not.toHaveAttribute('title')
+    expect(document.querySelector('span[title^="Not ready"]')).toBeNull()
   })
 
-  it('stays inside the --row-h header on line 2: it takes what is left (never stretched past its text), shrinks to its icon, and truncates', () => {
+  it('opens the panel with one issue per line on a tap, and Escape returns focus to the trigger', async () => {
+    const user = userEvent.setup()
+    renderRow({ readinessIssues: ISSUES })
+
+    await user.click(triggerOf())
+    expect(triggerOf()).toHaveAttribute('aria-expanded', 'true')
+    const panel = document.getElementById(triggerOf().getAttribute('aria-controls')!)!
+    expect(Array.from(panel.querySelectorAll('li')).map(li => li.textContent)).toEqual(ISSUES)
+    await user.keyboard('{Escape}')
+    expect(document.getElementById(triggerOf().getAttribute('aria-controls') ?? 'none')).toBeNull()
+    expect(triggerOf()).toHaveFocus()
+  })
+
+  it('Enforce row: "Blocked" with a ban glyph, so it no longer looks like a Warn row', () => {
+    renderRow({ readinessIssues: ISSUES, notReadyForRostering: true })
+
+    const trigger = triggerOf()
+    expect(trigger).toHaveTextContent(/^Blocked$/)
+    expect(trigger.querySelector('svg')).toHaveClass('lucide-ban')
+    expect(trigger).toHaveAttribute('aria-label', expect.stringMatching(/^Blocked\. Not ready for rostering: Intake not complete/))
+  })
+
+  it('stays on line 2 as a quiet inline word: not truncated, not a pill, never stretched', () => {
     renderRow({ fullName: 'Grace Palmer-Hughes', hasRestrictivePractice: true, daysWithoutCover: 6, readinessIssues: ISSUES })
 
     const head = headerOf('Grace Palmer-Hughes')
-    const chip = screen.getByText(WARNING).closest('[title]') as HTMLElement
-    // Not taller than its token.
+    const trigger = triggerOf()
     expect(head).toHaveClass('flex', 'flex-col', 'min-h-[var(--row-h)]')
-    // Sized like the row's other chips (h-4, rounded-sm, px-1.5), so name + chips stay within a 34px row.
-    expect(chip).toHaveClass('h-4', 'rounded-sm', 'px-1.5')
-    expect(chip).not.toHaveClass('rounded-full')
-    // The room it takes: the leftover after the name (flex-1), up to its own text width (max-w-max), never below its icon (min-w-6).
-    expect(chip).toHaveClass('flex-1', 'min-w-6', 'max-w-max')
-    expect(screen.getByText(WARNING)).toHaveClass('min-w-0', 'truncate')
+    expect(trigger).toHaveClass('h-4', 'shrink-0')
+    expect(trigger.className).not.toMatch(/truncate|overflow-hidden|rounded-full|flex-1|max-w-max/)
+    expect(trigger.querySelector('.truncate')).toBeNull()
   })
 
   it('does not change what the name does: it still truncates with its title, in a group that can shrink', () => {
@@ -315,6 +336,16 @@ describe('ParticipantRow header — readiness chip', () => {
     expect(tail).toContainElement(badge)
     expect(tail.textContent).not.toMatch(/not ready/i)
   })
+
+  it('gives a row with a trigger room for its 44px tap pad on touch, and none otherwise', () => {
+    const { unmount } = renderRow({ fullName: 'Grace Palmer-Hughes', readinessIssues: ISSUES })
+    expect(headerOf('Grace Palmer-Hughes')).toHaveClass('pointer-coarse:pb-3')
+    expect(headerOf('Grace Palmer-Hughes')).toHaveClass('pointer-coarse:gap-y-3')
+    unmount()
+
+    renderRow({ fullName: 'Mia Chen' })
+    expect(headerOf('Mia Chen')).not.toHaveClass('pointer-coarse:pb-3')
+  })
 })
 
 describe('ParticipantRow: a participant whose services have started but who is still onboarding', () => {
@@ -322,9 +353,15 @@ describe('ParticipantRow: a participant whose services have started but who is s
     renderRow({ fullName: 'Sam Started', inOnboarding: true })
     const tag = within(headerOf('Sam Started')).getByText('Onboarding')
     expect(tag.parentElement).toHaveAttribute('title', 'Services started; onboarding is still open')
-    // The tag is what yields when onboarding, readiness, ratio and coverage meet in a narrow column: it truncates, the ratio and badge do not.
-    expect(tag.parentElement).toHaveClass('min-w-0')
-    expect(tag).toHaveClass('truncate')
+  })
+
+  it('draws no tag when the row is not ready: its sentence moves into the trigger name and the panel', async () => {
+    const user = userEvent.setup()
+    renderRow({ fullName: 'Sam Started', inOnboarding: true, readinessIssues: ['Intake not complete'] })
+    expect(within(headerOf('Sam Started')).queryByText('Onboarding')).not.toBeInTheDocument()
+    const trigger = screen.getByRole('button', { name: /onboarding is still open/ })
+    await user.click(trigger)
+    expect(document.getElementById(trigger.getAttribute('aria-controls')!)).toHaveTextContent('Services started; onboarding is still open.')
   })
 
   it('shows no tag for a participant who has been made active', () => {
@@ -358,6 +395,6 @@ describe('ParticipantRow: an agreement waiting for approval, and the Enforce row
 
   it('says "Not ready for rostering" on a row the organisation refuses, even with no reasons', () => {
     renderWith(undefined, { notReadyForRostering: true })
-    expect(within(headerOf('Daniel Osei')).getByText('Not ready for rostering')).toBeInTheDocument()
+    expect(within(headerOf('Daniel Osei')).getByRole('button', { name: /^Blocked\. Not ready for rostering\./ })).toBeInTheDocument()
   })
 })

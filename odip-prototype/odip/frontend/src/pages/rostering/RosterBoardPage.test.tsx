@@ -307,8 +307,7 @@ describe('RosterBoardPage — readiness warnings (never in the way)', () => {
     })
     renderPage()
 
-    const chip = screen.getByText(WARNING)
-    expect(chip.closest('[title]')).toHaveAttribute('title', WARNING)
+    const chip = screen.getByRole('button', { name: WARNING })
     // On Mia's row header, not Noah's.
     const miaHeader = screen.getByRole('link', { name: 'Mia Chen' }).closest('.sticky') as HTMLElement
     const noahHeader = screen.getByRole('link', { name: 'Noah Reid' }).closest('.sticky') as HTMLElement
