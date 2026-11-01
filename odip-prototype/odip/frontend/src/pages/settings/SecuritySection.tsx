@@ -66,7 +66,7 @@ export default function SecuritySection(frame: SectionFrame) {
             <Dropdown variant="form" value={toValue(minutes)} onChange={v => setMinutes(toMinutes(v))} items={items} disabled={frame.readOnly} />
           </FormField>
           {shorter && (
-            <p className="max-w-prose text-[13px] text-[var(--color-muted-foreground)]">
+            <p className={`${span.long} max-w-prose text-[13px] text-[var(--color-muted-foreground)]`}>
               People signed in for longer than this will be asked to sign in again within 30 minutes.
             </p>
           )}
