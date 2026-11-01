@@ -122,7 +122,12 @@ describe('IncidentsPage — NDIS Commission overdue banner (C-1)', () => {
     const details = banner.querySelector('details')
     expect(details).not.toBeNull()
     expect(details).not.toHaveAttribute('open')
-    expect(within(banner).getByText('About the deadlines').tagName).toBe('SUMMARY')
+    const summary = within(banner).getByText('About the deadlines')
+    expect(summary.tagName).toBe('SUMMARY')
+    // Only the link is underlined; the disclosure says so with a chevron that turns when it opens.
+    expect(summary.querySelectorAll('svg')).toHaveLength(1)
+    expect(summary).not.toHaveClass('underline')
+    expect(details).toHaveClass('group')
     expect(details).toHaveTextContent('within 5 business days')
     expect(banner.querySelector('p')).not.toHaveTextContent('Most reportable')
   })

@@ -80,7 +80,7 @@ export default function OrganisationProfileSection(frame: SectionFrame) {
             <SettingsGroup title="Organisation contact">
               <div className={formGrid}>
                 <TextField label="Contact email" type="email" autoComplete="off" maxLength={254} hint={p.hint('contactEmail', "The organisation's main inbox, not a person's.")} error={errorOf('contactEmail')} placeholder="For example: office@example.com.au" className={span.medium} value={p.form.contactEmail} readOnly={readOnly} onChange={e => p.edit({ contactEmail: e.target.value })} onBlur={() => blur('contactEmail')} />
-                <TextField label="Contact phone" inputMode="tel" autoComplete="off" maxLength={30} hint={p.hint('contactPhone', 'The main line or front desk.')} placeholder="For example: 03 9123 4567" className={span.short} value={p.form.contactPhone} readOnly={readOnly} onChange={e => p.edit({ contactPhone: e.target.value })} />
+                <TextField label="Contact phone" inputMode="tel" autoComplete="off" maxLength={30} hint={p.hint('contactPhone', 'The main line or front desk.')} placeholder="03 9123 4567" className={span.short} value={p.form.contactPhone} readOnly={readOnly} onChange={e => p.edit({ contactPhone: e.target.value })} />
                 <TextField label="Website" type="url" autoComplete="off" maxLength={500} hint={p.hint('website')} error={errorOf('website')} placeholder="For example: https://www.example.com.au" className={span.medium} value={p.form.website} readOnly={readOnly} onChange={e => p.edit({ website: e.target.value })} onBlur={() => blur('website')} />
               </div>
             </SettingsGroup>
@@ -88,7 +88,7 @@ export default function OrganisationProfileSection(frame: SectionFrame) {
             <SettingsGroup title="Manager contact">
               <div className={formGrid}>
                 <TextField label="Manager name" hint={p.hint('managerName')} placeholder="For example: Priya Sharma" className={span.medium} value={p.form.managerName} readOnly={readOnly} onChange={e => p.edit({ managerName: e.target.value })} />
-                <TextField label="Manager phone" hint={p.hint('managerPhone')} placeholder="For example: 0412 345 007" inputMode="tel" className={span.short} value={p.form.managerPhone} readOnly={readOnly} onChange={e => p.edit({ managerPhone: e.target.value })} />
+                <TextField label="Manager phone" hint={p.hint('managerPhone')} placeholder="0412 345 007" inputMode="tel" className={span.short} value={p.form.managerPhone} readOnly={readOnly} onChange={e => p.edit({ managerPhone: e.target.value })} />
               </div>
             </SettingsGroup>
           </>

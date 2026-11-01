@@ -15,7 +15,7 @@ type SettingsNavProps = {
 }
 
 // The open section is a 2px primary bar and the on-selected ink, no fill: the main nav beside it owns the one lime area on the screen.
-const ACTIVE = 'text-[var(--color-on-selected)] font-semibold bg-transparent shadow-[inset_2px_0_0_var(--color-primary)]'
+const ACTIVE = 'text-[var(--color-on-selected)] font-semibold bg-transparent rounded-l-none shadow-[inset_2px_0_0_var(--color-primary)]'
 
 // From md: a rail item, 28px tall like the sidebar's group children (44px under a coarse pointer). Below md: a full-width card row with a
 // chevron, the row-height floor, content ink (it is content here, not chrome) and a Mist press.
