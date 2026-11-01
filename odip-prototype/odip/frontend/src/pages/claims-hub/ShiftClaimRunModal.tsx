@@ -166,7 +166,7 @@ function RunBody({ run, made, preview }: { run: ShiftClaimRunDto; made: boolean;
       {made && <p className="text-sm">{run.claimsMade === 0 ? 'No claims were made.' : `Made ${plural(run.claimsMade, 'claim')} for ${formatCurrency(run.totalAmount)} from ${plural(run.shiftCount, 'shift')}.`}</p>}
       {rows.length > 0 && (
         <>
-          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 rounded-xl bg-[var(--color-surface)] p-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
             <span className="text-sm tabular-nums text-[var(--color-muted-foreground)]">{`${plural(rows.length, 'participant')} · ${plural(run.shiftCount, 'shift')} · ${plural(run.hours, 'hour')}`}</span>
             <span className="whitespace-nowrap text-xl font-semibold tabular-nums">{formatCurrency(run.totalAmount)}</span>
           </div>

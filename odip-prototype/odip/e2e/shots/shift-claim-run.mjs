@@ -40,6 +40,8 @@ try {
     await signIn.waitFor({ state: 'visible', timeout: 60_000 })
     await signIn.click()
     await page.waitForURL(u => !u.pathname.startsWith('/login'), { timeout: 60_000 })
+    // An empty hub behind the modal: the mock's long Ready list would make the 390 full page taller than the capture helper can hold, and the hub is not what is under test.
+    await page.route('**/api/v1/claim-hub/lines', r => r.fulfill({ json: envelope({ ready: [], rejected: [], managed: [] }) }))
     await page.goto(`${BASE_URL}/claims`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
     await page.getByRole('button', { name: 'Claim shifts' }).waitFor({ timeout: 60_000 })
     await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => {})
@@ -81,7 +83,7 @@ try {
     await shoot('preview')
     await noOverflow('preview')
     await height(make, 'Make', 'preview')
-    await height(dialog.getByRole('button', { name: 'Close' }), 'Close', 'preview')
+    await height(dialog.getByRole('button', { name: 'Close' }).last(), 'Close', 'preview')
     const from = dialog.getByLabel('From'), to = dialog.getByLabel('To')
     const [fb, tb] = [await from.boundingBox(), await to.boundingBox()]
     if (vp.touch) record('3 To is stacked under From, both >= 44 tall', ctx, { fromBottom: fb.y + fb.height, toTop: tb.y, fromH: fb.height, toH: tb.height }, tb.y >= fb.y + fb.height && fb.height >= 44 && tb.height >= 44)
@@ -105,9 +107,12 @@ try {
     if (scheme === 'dark') {
       const band = await dialog.locator('span.text-xl').first().evaluate(el => {
         const bg = (node) => { const c = document.createElement('canvas').getContext('2d'); c.fillStyle = getComputedStyle(node).backgroundColor; c.fillRect(0, 0, 1, 1); return Array.from(c.getImageData(0, 0, 1, 1).data) }
-        return { band: bg(el.parentElement), panel: bg(el.closest('[role="dialog"]')) }
+        const px = (css) => { const c = document.createElement('canvas').getContext('2d'); c.fillStyle = css; c.fillRect(0, 0, 1, 1); return Array.from(c.getImageData(0, 0, 1, 1).data) }
+        const style = getComputedStyle(el.parentElement)
+        return { band: bg(el.parentElement), panel: bg(el.closest('[role="dialog"]')), border: style.borderTopWidth === '0px' ? null : px(style.borderTopColor) }
       })
-      record('10 dark: summary band differs from the panel', ctx, band, band.band.join() !== band.panel.join())
+      // The band is set apart by its fill or, where the fill matches the panel in dark, by its border.
+      record('10 dark: summary band is set apart from the panel', ctx, band, band.band.join() !== band.panel.join() || (band.border != null && band.border.join() !== band.panel.join()))
     }
     await close()
 
