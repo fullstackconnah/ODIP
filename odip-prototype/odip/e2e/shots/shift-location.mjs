@@ -17,7 +17,7 @@ const envelope = (data) => ({ success: true, data, message: null, errors: [] })
 const login = (role, username) => envelope({ id: '00000000-0000-0000-0000-0000000000a1', token: 'mock-jwt-token', expiresAt: '2099-01-01T00:00:00Z', username, fullName: 'Dev User', role, tenantName: 'Sample Support Co' })
 const devUsers = (role, username) => envelope([{ username, role, tenantName: 'Sample Support Co' }])
 const SHORT = 'Southside Library'
-const LONG = 'Riverside Aquatic Centre, Lane 4 hydrotherapy pool, Gate 2 off the Eastern Carpark'
+const LONG = 'Riverside Aquatic Centre, Lane 4 hydrotherapy pool, Gate 2 off the Eastern Carpark, enter through the community hall and sign in at the front desk before walking to the pool deck'
 const HINT = 'The support worker sees this on their shift. Leave it empty for a shift at home.'
 
 const checks = []
@@ -86,8 +86,7 @@ for (const s of SCENES) {
   try {
     const context = await browser.newContext({ ...AU_CONTEXT, viewport: { width: s.width, height: s.height }, hasTouch: s.touch, isMobile: s.touch, colorScheme: s.scheme })
     const page = await context.newPage()
-    let heroLocation = SHORT
-    await page.route('**/api/v1/portal/my-shifts*', (r) => r.fulfill({ json: envelope({ shifts: [hero(heroLocation), ...cards()], tripAssignments: [], timeZoneId: 'Australia/Sydney' }) }))
+    await page.route('**/api/v1/portal/my-shifts*', (r) => r.fulfill({ json: envelope({ shifts: [hero(SHORT), ...cards()], tripAssignments: [], timeZoneId: 'Australia/Sydney' }) }))
     await signIn(page, 'SupportWorker', 'dev.worker', '/portal')
     await page.locator('a[href*="/portal/shifts/sh-loc-a"]').waitFor({ state: 'visible', timeout: 60_000 })
     await page.waitForTimeout(500)
@@ -114,16 +113,21 @@ for (const s of SCENES) {
     checks.push(checkCropHolds({ ...crop, touch: s.touch }))
     if (s.scheme === 'light' || s.tag === '390-dark') checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', `portal-${s.tag}.png`), { touch: s.touch })).checks)
 
-    heroLocation = null
-    await page.reload({ waitUntil: 'domcontentloaded' })
-    await heroSection.waitFor({ state: 'visible', timeout: 30_000 })
-    await page.waitForTimeout(500)
-    const hWithout = await measureHero(page)
+    // A fresh context: the app keeps an offline copy of the shifts, so a reload would show the old hero.
+    await context.close()
+    const context2 = await browser.newContext({ ...AU_CONTEXT, viewport: { width: s.width, height: s.height }, hasTouch: s.touch, isMobile: s.touch, colorScheme: s.scheme })
+    const page2 = await context2.newPage()
+    await page2.route('**/api/v1/portal/my-shifts*', (r) => r.fulfill({ json: envelope({ shifts: [hero(null), ...cards()], tripAssignments: [], timeZoneId: 'Australia/Sydney' }) }))
+    await signIn(page2, 'SupportWorker', 'dev.worker', '/portal')
+    const heroSection2 = page2.locator('section[aria-labelledby="current-shift-title"]')
+    await heroSection2.waitFor({ state: 'visible', timeout: 30_000 })
+    await page2.waitForTimeout(500)
+    const hWithout = await measureHero(page2)
     check(t('6b hero without a location has no row'), hWithout.rows === 0, hWithout)
     check(t('6c hero without a location is one row shorter'), hWith.height - hWithout.height > 0 && hWith.height - hWithout.height <= 21 + 8, { with: hWith.height, without: hWithout.height })
-    const heroCrop2 = await cropElement(page, heroSection, path.join(OUT_DIR, `hero-no-location-${s.tag}.png`), { touch: s.touch })
+    const heroCrop2 = await cropElement(page2, heroSection2, path.join(OUT_DIR, `hero-no-location-${s.tag}.png`), { touch: s.touch })
     checks.push(checkCropHolds({ ...heroCrop2, touch: s.touch }))
-    await context.close()
+    await context2.close()
   } catch (e) {
     check(t('portal scene ran'), false, String(e.message).split('\n')[0])
   }
