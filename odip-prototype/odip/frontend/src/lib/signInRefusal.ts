@@ -15,6 +15,7 @@ export const SIGN_IN_REFUSAL_CODES = [
   'AddressUnconfirmed',
   'LockedOut',
   'SessionLengthReached',
+  'MfaEnrolmentRequired',
 ] as const
 
 export type SignInRefusalCode = (typeof SIGN_IN_REFUSAL_CODES)[number]
@@ -117,6 +118,8 @@ export function describeSignInRefusal(refusal: SignInRefusal, email: string, ver
       return { sentence: `Too many attempts. Try again in ${describeWait(refusal.retryAfterSeconds)}.` }
     case 'SessionLengthReached':
       return { sentence: 'Your organisation asks you to sign in again.', nextStep: 'Sign in to carry on.' }
+    case 'MfaEnrolmentRequired':
+      return { sentence: 'Your role needs two-step verification.', nextStep: 'Sign in again to set it up.' }
     case 'InvalidToken':
       return { sentence: "We couldn't sign you in.", nextStep: 'Try again. If it keeps happening, ask your administrator.' }
   }

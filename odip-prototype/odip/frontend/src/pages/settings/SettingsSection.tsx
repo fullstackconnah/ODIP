@@ -67,11 +67,15 @@ export function SettingsSection({ title, description, readOnly, focusOnMount, wi
 }
 
 /** A titled block inside a section: an h3 over its fields. Every block after the first is ruled off above. */
-export function SettingsGroup({ title, children }: { title: string; children: ReactNode }) {
+export function SettingsGroup({ title, badge, children }: { title: string; badge?: ReactNode; children: ReactNode }) {
   const id = useId()
   return (
     <section aria-labelledby={id} className="flex flex-col gap-[var(--field-gap-y)] border-[var(--color-border)] [&:not(:first-child)]:border-t [&:not(:first-child)]:pt-[var(--section-gap)]">
-      <h3 id={id} className="text-sm font-semibold">{title}</h3>
+      {badge ? (
+        <div className="flex items-center gap-2"><h3 id={id} className="text-sm font-semibold">{title}</h3>{badge}</div>
+      ) : (
+        <h3 id={id} className="text-sm font-semibold">{title}</h3>
+      )}
       {children}
     </section>
   )
