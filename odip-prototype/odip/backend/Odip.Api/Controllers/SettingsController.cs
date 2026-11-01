@@ -9,6 +9,7 @@ using Odip.Domain.Entities;
 using Odip.Domain.Rostering.Services;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Integrations;
+using Odip.Infrastructure.Rostering;
 
 namespace Odip.Api.Controllers;
 
@@ -49,12 +50,12 @@ public class SettingsController : ControllerBase
         var s = await _db.AppSettings.OrderBy(x => x.Id).FirstOrDefaultAsync(ct);
         if (s == null)
         {
-            s = new AppSettings { QualificationWarningDays = dto.QualificationWarningDays, WeeklyHoursWarning = dto.WeeklyHoursWarning ?? (int)RosterConflictService.DefaultWeeklyHoursThreshold };
+            s = new AppSettings { QualificationWarningDays = dto.QualificationWarningDays.GetValueOrDefault(), WeeklyHoursWarning = dto.WeeklyHoursWarning ?? (int)RosterConflictService.DefaultWeeklyHoursThreshold };
             _db.AppSettings.Add(s);
         }
         else
         {
-            s.QualificationWarningDays = dto.QualificationWarningDays;
+            s.QualificationWarningDays = dto.QualificationWarningDays.GetValueOrDefault();
             if (dto.WeeklyHoursWarning is { } hours) s.WeeklyHoursWarning = hours;
         }
         await _db.SaveChangesAsync(ct);

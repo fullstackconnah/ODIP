@@ -258,7 +258,7 @@ public class RosteringCompletionReviewTests
     }
 
     [Fact]
-    public async Task GetCompletions_ThresholdFromConfig_OverridesDefault()
+    public async Task GetCompletions_ThresholdFromTheOrganisationSetting_OverridesDefault()
     {
         using var db = CreateDb();
         var staff = SeedStaff(db);
@@ -272,10 +272,8 @@ public class RosteringCompletionReviewTests
             StartedAt = DateTime.UtcNow.AddHours(-8), SubmittedAt = DateTime.UtcNow,
             VarianceMinutesStart = 20, VarianceMinutesEnd = 0, IsActive = true, // > default 15, < overridden 30
         });
-        var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?> { ["Rostering:VarianceReviewMinutes"] = "30" })
-            .Build();
-        var controller = MakeController(db, config);
+        Seed(db, new AppSettings { Id = Guid.NewGuid(), TenantId = Guid.Empty, VarianceReviewMinutes = 30 });
+        var controller = MakeController(db);
 
         var result = await controller.GetCompletions(null, null, null, 1, 50, CancellationToken.None);
 
@@ -287,10 +285,10 @@ public class RosteringCompletionReviewTests
     }
 
     [Theory]
-    [InlineData("0", 1)]       // 0 would flag every non-zero variance as an outlier — clamped to the floor (critique M6)
-    [InlineData("-5", 1)]      // negative is nonsensical — clamped to the floor
-    [InlineData("10000", 240)] // absurdly large defeats the queue signal — clamped to the ceiling
-    public async Task GetCompletions_ThresholdFromConfig_OutOfRangeIsClamped(string configured, int expectedClamped)
+    [InlineData(0, 1)]       // 0 would flag every non-zero variance as an outlier — clamped to the floor (critique M6)
+    [InlineData(-5, 1)]      // negative is nonsensical — clamped to the floor
+    [InlineData(10000, 240)] // absurdly large defeats the queue signal — clamped to the ceiling
+    public async Task GetCompletions_ThresholdFromTheOrganisationSetting_OutOfRangeIsClamped(int configured, int expectedClamped)
     {
         using var db = CreateDb();
         var staff = SeedStaff(db);
@@ -304,17 +302,15 @@ public class RosteringCompletionReviewTests
             StartedAt = DateTime.UtcNow.AddHours(-8), SubmittedAt = DateTime.UtcNow,
             VarianceMinutesStart = 0, VarianceMinutesEnd = 0, IsActive = true,
         });
-        var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?> { ["Rostering:VarianceReviewMinutes"] = configured })
-            .Build();
-        var controller = MakeController(db, config);
+        Seed(db, new AppSettings { Id = Guid.NewGuid(), TenantId = Guid.Empty, VarianceReviewMinutes = configured });
+        var controller = MakeController(db);
 
         var result = await controller.GetCompletions(null, null, null, 1, 50, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var body = Assert.IsType<ApiResponse<PagedResult<CompletionQueueItemDto>>>(ok.Value);
         var item = Assert.Single(body.Data!.Items);
-        Assert.Equal(expectedClamped, item.VarianceReviewMinutes); // configured value is clamped, not honoured verbatim
+        Assert.Equal(expectedClamped, item.VarianceReviewMinutes); // a stored value outside the bounds is clamped, not honoured verbatim
     }
 
     [Fact]

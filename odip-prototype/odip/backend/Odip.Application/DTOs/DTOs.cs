@@ -1495,15 +1495,24 @@ public record AppSettingsDto
 {
     public int QualificationWarningDays { get; init; }
     public int WeeklyHoursWarning { get; init; }
+    public int VarianceReviewMinutes { get; init; }
+    public int PlanExpiryWarningDays { get; init; }
 }
 
+/// <summary>Presence-based: a field left out keeps the stored value, so one Settings section's save never touches another section's fields.</summary>
 public record UpdateAppSettingsDto
 {
     [System.ComponentModel.DataAnnotations.Range(1, 365)]
-    public int QualificationWarningDays { get; init; }
+    public int? QualificationWarningDays { get; init; }
     /// <summary>Whole hours a week before the roster warns; left out keeps the stored figure.</summary>
     [System.ComponentModel.DataAnnotations.Range(1, 100)]
     public int? WeeklyHoursWarning { get; init; }
+    /// <summary>Minutes of start or finish variance before a finished shift needs review.</summary>
+    [System.ComponentModel.DataAnnotations.Range(1, 240)]
+    public int? VarianceReviewMinutes { get; init; }
+    /// <summary>Days before a participant's plan ends that the alert starts.</summary>
+    [System.ComponentModel.DataAnnotations.Range(1, 365)]
+    public int? PlanExpiryWarningDays { get; init; }
 }
 
 // ══════════════════════════════════════════════════════════════
