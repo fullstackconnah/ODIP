@@ -1,10 +1,10 @@
 // Roster participant name cell, AFTER the redesign (rn-builder): every state crop, the peek panel on hover / focus / tap, and the numeric checks of SHAPE section 5
 // plus the owner's Blocked-tone ruling (2026-11-02). Computed boxes only; the lead's finish review opens the crops.
 //   bash F:/Projects/.claude/tools/odip-server-test/odip-test.sh <worktree> shots e2e/shots/roster-names.mjs <outdir>
-// Scenes: 1280 fine, 1600 fine (280px column), 390 coarse, each in light and dark (1600 dark is not shot: same tokens as 1280 dark).
+// Scenes: 1280 fine, 1600 fine (280px column), 390 coarse, each in light and dark.
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
-import { AU_CONTEXT, prepareOutDir, cropElement, fullPage, checkCropHolds, writeChecks } from '../shots/lib/capture.mjs'
+import { AU_CONTEXT, prepareOutDir, settle, fullPage, writeChecks } from '../shots/lib/capture.mjs'
 
 let chromium
 try { ;({ chromium } = await import('playwright')) } catch { ;({ chromium } = await import('@playwright/test')) }
@@ -175,6 +175,60 @@ async function shotRegion(page, locators, file, pad = 16) {
   await page.screenshot({ path: file, clip: { x, y, width: right - x, height: bottom - y } })
 }
 
+// Fixed and sticky chrome (the bottom nav, other pinned headers) sits over a crop. Hide all of it for the shot (inline visibility, so layout holds), repeating
+// frame by frame until a pass finds nothing new: the app remounts chrome after a viewport change. Everything hidden is restored after the shot.
+const chromeSeen = new Set()
+async function cropRow(page, loc, file, touch) {
+  const el = await loc.elementHandle()
+  await el.evaluate((e) => e.scrollIntoView({ block: 'center', behavior: 'instant' }))
+  await settle(page, loc)
+  const hid = await page.evaluate(async (el) => {
+    const area = innerWidth * innerHeight, found = [], all = []
+    const frame = () => new Promise((res) => requestAnimationFrame(() => res()))
+    for (let pass = 0; pass < 6; pass++) {
+      let fresh = 0
+      for (const e of document.body.querySelectorAll('*')) {
+        const cs = getComputedStyle(e)
+        if ((cs.position !== 'fixed' && cs.position !== 'sticky') || cs.visibility === 'hidden') continue
+        if (e.contains(el) || el.contains(e)) continue
+        const r = e.getBoundingClientRect()
+        if (!r.width || !r.height || r.width * r.height >= 0.95 * area) continue
+        found.push(e.tagName + '.' + String(e.className).slice(0, 50) + ' ' + cs.position)
+        // descendants too: an icon font span sets its own visibility and shows through a hidden parent
+        for (const n of [e, ...e.querySelectorAll('*')]) { n.style.setProperty('visibility', 'hidden', 'important'); all.push(n) }
+        fresh++
+      }
+      await frame()
+      if (pass > 0 && !fresh) break
+    }
+    window.__shotHid = all
+    return found
+  }, el)
+  hid.forEach((h) => chromeSeen.add(h))
+  await page.evaluate(() => new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res))))
+  const rect = await el.evaluate((e) => { const r = e.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, vw: innerWidth, vh: innerHeight } })
+  const pad = 8
+  const clip = { x: Math.max(0, rect.l - pad), y: Math.max(0, rect.t - pad) }
+  clip.width = Math.min(rect.vw, rect.r + pad) - clip.x
+  clip.height = Math.min(rect.vh, rect.b + pad) - clip.y
+  const v = await el.evaluate((e, c) => {
+    const r = e.getBoundingClientRect(), top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
+    const over = []
+    for (const n of document.body.querySelectorAll('*')) {
+      const cs = getComputedStyle(n)
+      if ((cs.position !== 'fixed' && cs.position !== 'sticky') || cs.visibility === 'hidden' || cs.display === 'none' || Number(cs.opacity) === 0) continue
+      if (n.contains(e) || e.contains(n)) continue
+      const b = n.getBoundingClientRect()
+      if (b.width && b.height && b.width * b.height < 0.95 * innerWidth * innerHeight && b.left < c.x + c.width && b.right > c.x && b.top < c.y + c.height && b.bottom > c.y) over.push(n.tagName + '.' + String(n.className).slice(0, 50))
+    }
+    return { inClip: r.left >= c.x - 1 && r.right <= c.x + c.width + 1 && r.top >= c.y - 1 && r.bottom <= c.y + c.height + 1, topmost: !!top && e.contains(top), over, coarse: matchMedia('(pointer: coarse)').matches }
+  }, clip)
+  await page.screenshot({ path: file, clip })
+  await page.evaluate(() => { for (const n of window.__shotHid || []) n.style.removeProperty('visibility'); window.__shotHid = [] })
+  const ok = v.inClip && v.topmost && v.over.length === 0 && (!touch || v.coarse)
+  return { name: `crop holds the whole element: ${path.basename(file)}`, pass: ok, detail: { clip, rect, ...v } }
+}
+
 const findRow = (rows, name) => rows.find((x) => x.name === name)
 const rowLoc = (page, name) => page.locator('div.sticky', { has: page.locator('a[title]', { hasText: name }) }).first()
 const triggerLoc = (page, name) => rowLoc(page, name).getByRole('button', { name: /^(Not ready|Blocked)/ })
@@ -249,6 +303,7 @@ const SCENES = [
   { tag: '390-light', width: 390, height: 844, touch: true, dark: false, crops: true, full: true },
   { tag: '390-dark', width: 390, height: 844, touch: true, dark: true, crops: true },
   { tag: '1600-light', width: 1600, height: 900, touch: false, dark: false, full: true },
+  { tag: '1600-dark', width: 1600, height: 900, touch: false, dark: true, full: true },
 ]
 const LONG_ROW = 'Lena Long'
 for (const s of SCENES) {
@@ -310,8 +365,7 @@ for (const s of SCENES) {
     if (s.crops) {
       for (const x of fixtureRows([])) {
         const file = path.join(OUT_DIR, `state-${x.state}-${bp}-${theme}.png`)
-        const r = await cropElement(page, rowLoc(page, x.fullName), file, { touch: s.touch })
-        const c = checkCropHolds(r)
+        const c = await cropRow(page, rowLoc(page, x.fullName), file, s.touch)
         checks.push({ ...c, name: `${s.tag}: ${c.name}` })
       }
     }
@@ -329,4 +383,5 @@ for (const s of SCENES) {
   }
 }
 await browser.close()
+console.log('fixed/sticky chrome hidden:', JSON.stringify([...chromeSeen]))
 if (!writeChecks(OUT_DIR, checks)) process.exitCode = 1

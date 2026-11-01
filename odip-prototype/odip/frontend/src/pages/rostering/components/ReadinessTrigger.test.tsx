@@ -140,6 +140,26 @@ describe('ReadinessTrigger — the peek panel', () => {
     expect(panel()).toBeNull()
   })
 
+  it('a window resize closes an open panel, even a pinned one', async () => {
+    const user = userEvent.setup()
+    render(<ReadinessTrigger issues={ISSUES} blocked={false} onboarding={false} />)
+    await user.click(trigger())
+    expect(panel()).not.toBeNull()
+    act(() => { window.dispatchEvent(new Event('resize')) })
+    expect(panel()).toBeNull()
+  })
+
+  it('a touch pointerenter does not open it (the tap does)', () => {
+    vi.useFakeTimers()
+    render(<ReadinessTrigger issues={ISSUES} blocked={false} onboarding={false} />)
+    // jsdom has no PointerEvent, so fireEvent drops pointerType: build the event by hand
+    const over = new Event('pointerover', { bubbles: true })
+    Object.defineProperty(over, 'pointerType', { value: 'touch' })
+    act(() => { trigger().dispatchEvent(over) })
+    act(() => { vi.advanceTimersByTime(500) })
+    expect(panel()).toBeNull()
+  })
+
   it('blur closes an unpinned panel', async () => {
     const user = userEvent.setup()
     render(<><ReadinessTrigger issues={ISSUES} blocked={false} onboarding={false} /><a href="#x">after</a></>)
