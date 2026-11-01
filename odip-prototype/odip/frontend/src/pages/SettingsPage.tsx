@@ -17,6 +17,7 @@ import AdminNotificationsTab from '@/pages/settings/AdminNotificationsTab'
 import AlphaSignupsTab from '@/pages/settings/AlphaSignupsTab'
 import WhatsNewSection from '@/pages/settings/WhatsNewSection'
 import AlertWindowsSection from '@/pages/settings/AlertWindowsSection'
+import RosteringRulesSection from '@/pages/settings/RosteringRulesSection'
 import AppearanceSection from '@/pages/settings/AppearanceSection'
 import BillingDetailsSection from '@/pages/settings/BillingDetailsSection'
 import BudgetSettingsTab from '@/pages/settings/BudgetSettingsTab'
@@ -131,6 +132,7 @@ export default function SettingsPage() {
       case 'billing': return <BillingDetailsSection {...frame} />
       case 'safety': return <SafetyChecksSection {...frame} />
       case 'alerts': return <AlertWindowsSection {...frame} />
+      case 'rostering': return <RosteringRulesSection {...frame} />
       case 'pricing': return <PlanPricingSettingsTab {...frame} />
       case 'budgets': return <BudgetSettingsTab {...frame} />
       case 'templates': return framed(<EventTemplatesSection />)

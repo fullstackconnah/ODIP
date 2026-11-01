@@ -305,6 +305,18 @@ describe('SettingsPage — unsaved-changes warning (PP-77)', () => {
     expect(await screen.findByText(/leave without saving\?/i)).toBeInTheDocument()
   })
 
+  it('warns before leaving Rostering rules with an edit the form cannot save yet (F1)', async () => {
+    const user = userEvent.setup()
+    const { router } = renderSettingsPage('/settings?section=rostering')
+
+    const hours = screen.getByLabelText('Weekly hours')
+    await user.clear(hours)
+    await user.type(hours, '999')
+    await act(async () => { router.navigate('/elsewhere') })
+
+    expect(await screen.findByText(/leave without saving?/i)).toBeInTheDocument()
+  })
+
   it('does not warn when the alert window is untouched', async () => {
     const { router } = renderSettingsPage('/settings?section=alerts')
 
@@ -329,6 +341,18 @@ describe('SettingsPage — unsaved-changes warning (PP-77)', () => {
     await user.click(screen.getByRole('button', { name: 'Keep editing' }))
     expect(router.state.location.search).toBe('?section=alerts')
     expect(screen.getByRole('button', { name: /Staff qualifications/ })).toHaveTextContent('60 days')
+  })
+
+  it('names Rostering rules in the section-switch prompt', async () => {
+    const user = userEvent.setup()
+    screenSize.belowMd = false
+    renderSettingsPage('/settings?section=rostering')
+
+    await user.clear(screen.getByLabelText('Shift review minutes'))
+    await user.type(screen.getByLabelText('Shift review minutes'), '20')
+    await user.click(within(screen.getByRole('navigation', { name: 'Settings' })).getByRole('link', { name: 'Budgets' }))
+
+    expect(screen.getByRole('alertdialog', { name: 'Leave Rostering rules without saving?' })).toBeInTheDocument()
   })
 })
 
