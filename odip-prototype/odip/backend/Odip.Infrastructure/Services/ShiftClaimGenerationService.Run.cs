@@ -17,7 +17,7 @@ namespace Odip.Infrastructure.Services;
 public partial class ShiftClaimGenerationService
 {
     public const string BusyReason = "Another claim for this participant was being made at the same moment. Nothing was saved for them. Run the claim run again in a minute.";
-    public const string FailedReason = "This claim couldn't be made, so nothing was saved for this participant. Run the claim run again: it only picks up shifts that are still unclaimed.";
+    public const string FailedReason = "This claim couldn't be made, so nothing was saved for this participant. Try Claim shifts again: it only picks up shifts that are still unclaimed.";
 
     public Task<ShiftClaimRunDto> PreviewRunAsync(Guid tenantId, DateOnly from, DateOnly to, CancellationToken ct = default) => RunCoreAsync(tenantId, from, to, make: false, ct);
 

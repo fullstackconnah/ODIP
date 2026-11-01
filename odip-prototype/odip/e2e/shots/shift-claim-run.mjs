@@ -48,7 +48,32 @@ try {
 
     const dialog = page.getByRole('dialog')
     const tag = (state) => path.join(OUT_DIR, `${state}-${vp.name}-${scheme}.png`)
-    const shoot = async (state) => checks.push(checkCropHolds(await cropElement(page, dialog, tag(state), { touch: vp.touch })))
+    // The panel scrolls inside the scrim once it outgrows the viewport, so a crop would cut it: grow it to its scrollHeight for the shot (top-aligned, so nothing sits above y=0),
+    // then restore. `must` are [name, locator] pairs: each state's own element has to lie inside the clip.
+    const shoot = async (state, ...must) => {
+      await dialog.evaluate(el => { el.scrollTop = 0; el.style.maxHeight = 'none'; el.style.overflow = 'visible'; el.parentElement.style.alignItems = 'flex-start' })
+      let res
+      try {
+        res = await cropElement(page, dialog, tag(state), {
+          touch: vp.touch,
+          during: async (clip) => {
+            const boxes = []
+            for (const [name, loc] of must) boxes.push({ name, box: await loc.first().boundingBox() })
+            return boxes
+          },
+        })
+      } finally {
+        await dialog.evaluate(el => { el.style.maxHeight = ''; el.style.overflow = ''; el.parentElement.style.alignItems = '' })
+      }
+      checks.push(checkCropHolds(res))
+      for (const { name, box } of res.measured ?? []) {
+        const c = res.clip
+        const inside = !!box && box.x >= c.x - 1 && box.y >= c.y - 1 && box.x + box.width <= c.x + c.width + 1 && box.y + box.height <= c.y + c.height + 1
+        record(`12 ${state}: ${name} inside the clip`, ctx, { box, clip: c }, inside)
+      }
+    }
+    const closeBtn = dialog.getByRole('button', { name: 'Close' }).last()
+    const alertBox = dialog.locator('[role="alert"]')
     const noOverflow = async (state) => {
       const sw = await page.evaluate(() => document.documentElement.scrollWidth)
       record('1 no horizontal scroll', `${ctx} ${state}`, sw, sw <= vp.width)
@@ -74,13 +99,13 @@ try {
     await page.route('**/api/v1/claims/from-shifts/preview', async route => { await held; await route.continue() }, { times: 1 })
     await page.getByRole('button', { name: 'Claim shifts' }).click()
     await dialog.getByRole('status').filter({ hasText: 'Finding completed shifts' }).waitFor()
-    await shoot('loading')
+    await shoot('loading', ['Finding completed shifts', dialog.getByRole('status')])
     release()
     await make.waitFor()
     await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => {})
 
     // Preview
-    await shoot('preview')
+    await shoot('preview', ['Make', make], ['Close', closeBtn], ['Total', dialog.locator('tfoot td').last()])
     await noOverflow('preview')
     await height(make, 'Make', 'preview')
     await height(dialog.getByRole('button', { name: 'Close' }).last(), 'Close', 'preview')
@@ -100,7 +125,13 @@ try {
       for (const i of [1, 2, 3]) styles.push(await cells.nth(i).evaluate(el => { const s = getComputedStyle(el); return { align: s.textAlign, nums: s.fontVariantNumeric } }))
       record('7 numeric cells right-aligned and tabular', ctx, styles, styles.every(s => ['right', 'end'].includes(s.align) && s.nums.includes('tabular-nums')))
     }
+    // The table footer's total stays inside the column the summary band sits in; on the phone the cards fill that column too.
+    const col = await dialog.locator('span.text-xl').first().evaluate(el => { const r = el.parentElement.getBoundingClientRect(); return { left: r.left, right: r.right } })
+    const foot = await dialog.locator('tfoot td').last().boundingBox()
+    record('13 footer total right edge <= container right edge', ctx, { footRight: foot.x + foot.width, containerRight: col.right }, foot.x + foot.width <= col.right + 0.5)
     if (vp.touch) {
+      const cards = await dialog.locator('tbody tr').evaluateAll(trs => trs.map(t => { const r = t.getBoundingClientRect(); return { left: r.left, right: r.right } }))
+      record('9 participant cards span the container width (within 2px)', ctx, { col, cards }, cards.length > 0 && cards.every(c => Math.abs(c.left - col.left) <= 2 && Math.abs(c.right - col.right) <= 2))
       const nameBox = await dialog.getByText(LONG).first().evaluate(el => ({ over: getComputedStyle(el).textOverflow, fits: el.scrollWidth <= el.clientWidth + 1, panelFits: el.closest('[role="dialog"]').scrollWidth <= el.closest('[role="dialog"]').clientWidth + 1 }))
       record('9 long name wraps inside its card, no ellipsis', ctx, nameBox, nameBox.over !== 'ellipsis' && nameBox.fits && nameBox.panelFits)
     }
@@ -120,16 +151,25 @@ try {
     await openRun(); await make.waitFor()
     await dialog.getByLabel('From').fill('2026-10-10')
     await dialog.getByRole('button', { name: 'Update preview' }).waitFor()
-    await shoot('dates-edited')
+    await shoot('dates-edited', ['Update preview', dialog.getByRole('button', { name: 'Update preview' })], ['Make', make])
+    // Updating: the preview request held open, the footer in the clip.
+    let releaseUpdate
+    const heldUpdate = new Promise(res => { releaseUpdate = res })
+    await page.route('**/api/v1/claims/from-shifts/preview', async route => { await heldUpdate; await route.continue() }, { times: 1 })
+    await dialog.getByRole('button', { name: 'Update preview' }).click()
+    await dialog.getByRole('button', { name: 'Updating…' }).waitFor()
+    await shoot('updating', ['Updating…', dialog.getByRole('button', { name: 'Updating…' })], ['Make', make], ['Close', closeBtn])
+    releaseUpdate()
+    await dialog.getByRole('button', { name: 'Update preview' }).waitFor({ state: 'detached' })
     await close()
 
     // Empty (From in 2020) and nothing claimable (From in 2021)
     await openRun(); await make.waitFor(); await setDates('2020-01-01')
     await dialog.getByText('Completed shifts show here until they\'re claimed.').waitFor()
-    await shoot('empty'); await close()
+    await shoot('empty', ['Close', closeBtn]); await close()
     await openRun(); await make.waitFor(); await setDates('2021-01-01')
     await dialog.getByText('Nothing in this period can be claimed yet.').waitFor()
-    await shoot('nothing-claimable'); await close()
+    await shoot('nothing-claimable', ['Close', closeBtn]); await close()
 
     // Budget warning: the same preview with a budget block
     await page.route('**/api/v1/claims/from-shifts/preview', async route => {
@@ -137,26 +177,26 @@ try {
       await route.fulfill({ response: res, json: { ...body, data: { ...body.data, budget: BUDGET } } })
     }, { times: 1 })
     await openRun(); await dialog.getByRole('region', { name: 'Budget' }).waitFor()
-    await shoot('budget-warning'); await close()
+    await shoot('budget-warning', ['Budget block', dialog.getByRole('region', { name: 'Budget' })], ['Make', make]); await close()
 
     // Error: the run request fails
     await openRun(); await make.waitFor()
     await page.route('**/api/v1/claims/from-shifts', r => r.fulfill({ status: 500, json: { success: false, data: null, message: null, errors: [] } }), { times: 1 })
     await make.click()
     await dialog.getByRole('button', { name: 'Try again' }).waitFor()
-    await shoot('error')
+    await shoot('error', ['error callout', alertBox], ['Try again', dialog.getByRole('button', { name: 'Try again' })])
     // Running: hold the retry, shoot, release into the partial-failure result
     let releaseRun
     const heldRun = new Promise(res => { releaseRun = res })
     await page.route('**/api/v1/claims/from-shifts', async route => { await heldRun; await route.continue() }, { times: 1 })
     await dialog.getByRole('button', { name: 'Try again' }).click()
     await dialog.getByRole('status').filter({ hasText: 'Making 2 claims' }).waitFor()
-    await shoot('running')
+    await shoot('running', ['Making 2 claims', dialog.getByRole('status').filter({ hasText: 'Making 2 claims' })])
     releaseRun()
 
     // Done, with a failed participant (the fixture's run always fails Jo Park)
     await dialog.getByRole('button', { name: 'Done' }).waitFor()
-    await shoot('partial-failure')
+    await shoot('partial-failure', ['failed callout', alertBox], ['Done', dialog.getByRole('button', { name: 'Done' })])
     await noOverflow('partial failure')
     await height(dialog.getByRole('button', { name: 'Done' }), 'Done', 'done')
     const geo = await dialog.evaluate(el => {
@@ -190,6 +230,17 @@ try {
       record('10 dark: danger callout contrast >= 4.5', ctx, Math.round(ratio * 100) / 100, ratio >= 4.5)
     }
     checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', `done-${vp.name}-${scheme}.png`), { touch: vp.touch })).checks)
+
+    // Done, every claim made: the same run with the failed participant dropped from the answer.
+    await dialog.getByRole('button', { name: 'Done' }).click(); await dialog.waitFor({ state: 'detached' })
+    await openRun(); await make.waitFor()
+    await page.route('**/api/v1/claims/from-shifts', async route => {
+      const res = await route.fetch(); const body = await res.json()
+      await route.fulfill({ response: res, json: { ...body, data: { ...body.data, skipped: body.data.skipped.filter(x => !x.failed) } } })
+    }, { times: 1 })
+    await make.click()
+    await dialog.getByRole('button', { name: 'Done' }).waitFor()
+    await shoot('done', ['Made line', dialog.getByText(/^Made \d+ claims?/)], ['Done', dialog.getByRole('button', { name: 'Done' })])
     await context.close()
   }
 } finally {

@@ -2091,7 +2091,7 @@ function shiftClaimRun(body, make) {
     { participantId: 'p-sam', participantName: 'Sam Lee', shiftCount: 2, hours: 12, totalAmount: 612.4 },
     { participantId: 'p-long', participantName: 'Wolfeschlegelsteinhausenbergerdorff Alexandra', shiftCount: 3, hours: 18.5, totalAmount: 1042.75 },
   ].map((r, i) => (make ? { ...r, claimId: `claim-run-${i}`, claimReference: `TC-RUN-${i + 1}` } : r))
-  const failed = { participantId: 'p-jo', participantName: 'Jo Park', failed: true, reason: "This claim couldn't be made, so nothing was saved for this participant. Run the claim run again: it only picks up shifts that are still unclaimed." }
+  const failed = { participantId: 'p-jo', participantName: 'Jo Park', failed: true, reason: "This claim couldn't be made, so nothing was saved for this participant. Try Claim shifts again: it only picks up shifts that are still unclaimed." }
   const empty = from.startsWith('2020'), allLeftOut = from.startsWith('2021')
   const participants = empty || allLeftOut ? [] : rows
   return {

@@ -175,11 +175,12 @@ function RunBody({ run, made, preview }: { run: ShiftClaimRunDto; made: boolean;
             keyField="participantId"
             columns={columns}
             footer={
-              <tr>
+              // On the phone the cards sit in the table's first column, so a four-cell footer row would shrink them and push the total out: one flex line there instead.
+              <tr className="max-md:flex max-md:items-baseline max-md:justify-between">
                 <td className="p-3 font-semibold text-[var(--color-foreground)]">Total</td>
-                <td /><td />
+                <td className="max-md:hidden" /><td className="max-md:hidden" />
                 <td className="p-3 text-right font-bold tabular-nums text-[var(--color-foreground)]">{formatCurrency(run.totalAmount)}</td>
-                {made && <td />}
+                {made && <td className="max-md:hidden" />}
               </tr>
             }
           />

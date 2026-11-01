@@ -269,13 +269,17 @@ export function usePreviewShiftClaimRun() {
   })
 }
 
-/** POST /claims/from-shifts: makes one claim per participant. Refreshes what the single-participant generate refreshes, plus the Claims hub lists the new claims land in. */
+/** POST /claims/from-shifts: makes one claim per participant. Refreshes what the single-participant generate refreshes, plus the Claims hub lists the new claims land in. A failed run refreshes the lists too: part of it may have been saved. */
 export function useRunShiftClaims() {
   const qc = useQueryClient()
+  const refreshLists = () => {
+    for (const key of ['claims', 'trip-claims', 'participant-claims', 'rostering-completions', 'roster-board', 'claim-hub', 'claim-batches']) qc.invalidateQueries({ queryKey: [key] })
+  }
   return useMutation({
     mutationFn: (data: ShiftClaimRunRequestDto) => apiPost<ShiftClaimRunDto>('/claims/from-shifts', data),
+    onError: refreshLists,
     onSuccess: run => {
-      for (const key of ['claims', 'trip-claims', 'participant-claims', 'rostering-completions', 'roster-board', 'claim-hub', 'claim-batches']) qc.invalidateQueries({ queryKey: [key] })
+      refreshLists()
       refreshLedgers(qc, run.participants.filter(p => p.claimId).map(p => p.participantId))
       refreshBudgetWarnings(qc)
     },
