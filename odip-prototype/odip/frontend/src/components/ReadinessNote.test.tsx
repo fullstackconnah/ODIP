@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { ReadinessNote } from './ReadinessNote'
+import { readinessText } from './readinessText'
 import { TONE } from '@/lib/tone'
 
 const ISSUES = ['Intake not complete', 'No signed service agreement']
@@ -192,5 +193,24 @@ describe('ReadinessNote — refused in Enforce (blocked)', () => {
   it('still says so with no reasons listed (Review Focus 5: the UnapprovedDraft template closes everyone)', () => {
     render(<ReadinessNote blocked issues={undefined} variant="chip" />)
     expect(screen.getByText('Not ready for rostering')).toBeInTheDocument()
+  })
+})
+
+describe('readinessText — the words the roster board trigger shares with the note', () => {
+  it('returns the Warn text, and the same text as its title', () => {
+    expect(readinessText(ISSUES, false)).toEqual({ text: FULL_TEXT, title: FULL_TEXT })
+  })
+
+  it('returns the Enforce text, with the refusal sentence in the title, and speaks even with no issues', () => {
+    expect(readinessText(ISSUES, true)).toEqual({
+      text: 'Not ready for rostering: Intake not complete · No signed service agreement',
+      title: 'Not ready for rostering: Intake not complete · No signed service agreement. New shifts and assignments are refused until this is done.',
+    })
+    expect(readinessText([], true)?.text).toBe('Not ready for rostering')
+  })
+
+  it('returns null when nothing is missing and nothing is enforced', () => {
+    expect(readinessText([], false)).toBeNull()
+    expect(readinessText(undefined, false)).toBeNull()
   })
 })
