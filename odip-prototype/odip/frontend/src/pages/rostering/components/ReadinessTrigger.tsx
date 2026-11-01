@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type PointerEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertTriangle, Ban } from 'lucide-react'
-import { readinessText } from '@/components/ReadinessNote'
+import { readinessText } from '@/components/readinessText'
 import { TAP_AREA } from '@/components/tapArea'
 import { TONE } from '@/lib/tone'
 

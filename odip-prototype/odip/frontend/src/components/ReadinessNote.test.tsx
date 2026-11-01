@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { ReadinessNote, readinessText } from './ReadinessNote'
+import { ReadinessNote } from './ReadinessNote'
+import { readinessText } from './readinessText'
 import { TONE } from '@/lib/tone'
 
 const ISSUES = ['Intake not complete', 'No signed service agreement']

@@ -757,7 +757,7 @@ through `cn`).
 
 **The roster board has its own form** (2026-11-02): `pages/rostering/components/ReadinessTrigger.tsx`, one whole word ("Not ready", or "Blocked" in Enforce) that opens a peek panel
 with the full reason, one issue per line. The chip truncated on every row at the 195px column and a `title` is unreachable on touch. Its words come from the
-`readinessText(issues, blocked)` helper exported here, so they have one source. **One exception to "no new colour":** Enforce ("Blocked") uses the danger
+`readinessText(issues, blocked)` helper in `components/readinessText.ts`, so they have one source. **One exception to "no new colour":** Enforce ("Blocked") uses the danger
 ink (`TONE.danger.ink`, owner, 2026-11-02), because it stops rostering; Warn stays `TONE.warning.ink`.
 
 ```tsx
