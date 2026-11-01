@@ -27,8 +27,8 @@ public sealed partial class ClaimBatchService
                 Successful = g.Count(l => l.Outcome == ClaimBatchLineOutcome.Successful),
                 Rejected = g.Count(l => l.Outcome == ClaimBatchLineOutcome.Rejected),
                 Withdrawn = g.Count(l => l.Outcome == ClaimBatchLineOutcome.Withdrawn),
-                Paid = g.Count(l => l.ClaimLineItem != null && l.ClaimLineItem.Status == ClaimLineItemStatus.Paid),
-                PaidAmount = g.Sum(l => l.ClaimLineItem != null && l.ClaimLineItem.Status == ClaimLineItemStatus.Paid ? l.ClaimLineItem.PaidAmount ?? 0m : 0m),
+                Paid = g.Count(l => l.Outcome == ClaimBatchLineOutcome.Successful && l.ClaimLineItem != null && l.ClaimLineItem.Status == ClaimLineItemStatus.Paid),
+                PaidAmount = g.Sum(l => l.Outcome == ClaimBatchLineOutcome.Successful && l.ClaimLineItem != null && l.ClaimLineItem.Status == ClaimLineItemStatus.Paid ? l.ClaimLineItem.PaidAmount ?? 0m : 0m),
             }).ToListAsync(ct)).ToDictionary(c => c.Key);
 
         return batches.Select(b =>
