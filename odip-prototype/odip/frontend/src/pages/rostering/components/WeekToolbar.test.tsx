@@ -60,6 +60,16 @@ describe('WeekToolbar "Unfilled only" filter', () => {
     expect(container.querySelector('.min-w-40')).not.toBeNull()
   })
 
+  it('tidies into full-width rows at max-sm: equal-width toggle, participant filter fills its row', () => {
+    renderToolbar({ groupBy: 'participant' })
+
+    const toggle = screen.getByRole('radiogroup')
+    expect(toggle).toHaveClass('max-sm:w-full', 'max-sm:[&>button]:flex-1')
+    const participant = screen.getByRole('button', { name: /All participants/ }).closest('.min-w-40')
+    expect(participant).toHaveClass('max-sm:flex-1', 'max-sm:max-w-none')
+    expect(screen.getByRole('button', { name: 'New shift' }).parentElement).toHaveClass('max-sm:w-full', 'sm:contents')
+  })
+
   it('reflects the checked state via aria-pressed', () => {
     renderToolbar({ unfilledOnly: true })
 
