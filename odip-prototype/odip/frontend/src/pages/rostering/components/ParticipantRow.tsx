@@ -47,7 +47,7 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
         marker (a safety signal, so it must survive) and the pending-agreement hourglass, both shrink-0 glyphs.
         Line 2 is the readiness chip on the left (a quiet warning, never a block: `flex-1 min-w-6 max-w-max` takes only the
         room left, shrinks to its icon and truncates with the whole text in its title) and, pushed right, the Onboarding
-        tag, the support ratio and the coverage state, so the ratio and the coverage badge form one right-aligned column
+        tag, the support ratio and the coverage state (the tag yields first and truncates with its title when all four chips meet in a narrow column; the ratio and badge never shrink), so the ratio and the coverage badge form one right-aligned column
         down the board. Coverage is the visible signal for the gap this row-per-participant layout exists to surface; a
         trip bar rendered below can explain an otherwise-empty week without this reading as a failure. It is a COUNT BADGE
         (a warning icon and the number of unassigned shifts, or a check when fully covered); the words are its title and
@@ -83,9 +83,9 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
 
         <div className="flex min-w-0 items-center gap-2">
           <ReadinessNote issues={row.readinessIssues} blocked={row.notReadyForRostering} variant="chip" className="h-4 min-w-6 max-w-max flex-1 rounded-sm px-1.5" />
-          <div className="ml-auto flex shrink-0 items-center gap-2">
+          <div className="ml-auto flex min-w-0 items-center gap-2">
             {row.inOnboarding && (
-              <span title="Services started; onboarding is still open" className="inline-flex h-4 items-center rounded-sm bg-[var(--color-secondary-container)] px-1.5 text-xs font-medium text-[var(--color-secondary)]">
+              <span title="Services started; onboarding is still open" className="inline-flex h-4 min-w-0 items-center truncate rounded-sm bg-[var(--color-secondary-container)] px-1.5 text-xs font-medium text-[var(--color-secondary)]">
                 Onboarding
               </span>
             )}
@@ -93,12 +93,12 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
               role="img"
               aria-label={`${ratioLabel} support`}
               title={`${ratioLabel} support`}
-              className="inline-flex h-4 items-center rounded-sm bg-surface-container px-1.5 text-xs font-semibold tabular-nums text-foreground"
+              className="inline-flex h-4 items-center rounded-sm shrink-0 bg-surface-container px-1.5 text-xs font-semibold tabular-nums text-foreground"
             >
               {ratioLabel}
             </span>
             {hideCoverageBadge ? null : covered ? (
-              <span role="img" aria-label="Fully covered" title="Fully covered" className="inline-flex items-center text-muted-foreground">
+              <span role="img" aria-label="Fully covered" title="Fully covered" className="inline-flex shrink-0 items-center text-muted-foreground">
                 <Check className="h-3.5 w-3.5" aria-hidden="true" />
               </span>
             ) : (
@@ -106,7 +106,7 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
                 role="img"
                 aria-label={uncoveredLabel}
                 title={uncoveredLabel}
-                className="inline-flex h-4 items-center gap-1 rounded-sm bg-[var(--color-warning-container)] px-1.5 text-xs font-medium text-[var(--color-on-warning-container)]"
+                className="inline-flex h-4 shrink-0 items-center gap-1 rounded-sm bg-[var(--color-warning-container)] px-1.5 text-xs font-medium text-[var(--color-on-warning-container)]"
               >
                 <AlertTriangle className="h-3 w-3" aria-hidden="true" />
                 <span className="tabular-nums">{unassignedCount}</span>

@@ -34,7 +34,9 @@ const fixtureRows = (days) => [
   }),
   row('p-9002', 'Mia Chen', 'TwoToOne', [shiftOf('s-9002a', 'p-9002', 'Mia Chen', days[0], null)]),
   row('p-9003', 'Noah Blake', 'TwoToOne', [shiftOf('s-9003a', 'p-9003', 'Noah Blake', days[2], null)]),
-  row('p-9004', 'Grace Palmer-Hughes', 'OneToOne', days.map((d, i) => shiftOf(`s-9004${i}`, 'p-9004', 'Grace Palmer-Hughes', d, 's-0004')).slice(0, 1)),
+  row('p-9004', 'Zara Covered', 'OneToOne', [shiftOf('9004', 'p-9004', 'Zara Covered', days[0], 's-0004')]),
+  // No shifts at all: the header alone sets this row's height (the board lists participants by name, so these two sort last).
+  row('p-9005', 'Zed Empty', 'TwoToOne', [], { inOnboarding: true, readinessIssues: ['Intake not complete'], notReadyForRostering: false }),
 ]
 
 const checks = []
@@ -43,12 +45,16 @@ const check = (name, pass, detail = '') => checks.push({ name, pass: !!pass, det
 async function openRoster(browser, { width, height, touch, dark }) {
   const context = await browser.newContext({ ...AU_CONTEXT, viewport: { width, height }, hasTouch: touch, isMobile: touch, colorScheme: dark ? 'dark' : 'light' })
   const page = await context.newPage()
+  page.on('console', (m) => { if (m.type() === 'error') console.log(`[participant-row-two-line] console ${m.text().slice(0, 200)}`) })
+  page.on('pageerror', (e) => console.log(`[participant-row-two-line] pageerror ${String(e.message).slice(0, 200)}`))
   await page.route('**/api/v1/auth/dev-users', (r) => r.fulfill({ json: devUsers }))
   await page.route('**/api/v1/auth/dev-login', (r) => r.fulfill({ json: login('Admin') }))
+  let boardCalls = 0, mutated = 0
   await page.route('**/api/v1/rostering/board*', async (r) => {
+    boardCalls++
     const response = await r.fetch()
     const body = await response.json()
-    if (body?.data?.participantRows) { body.data.participantRows = fixtureRows(body.data.days); body.data.exceptions = []; body.data.pendingAgreements = [] }
+    if (body?.data?.participantRows) { mutated++; body.data.weekStarted = true; body.data.participantRows = fixtureRows(body.data.days); body.data.exceptions = []; body.data.pendingAgreements = [] }
     await r.fulfill({ response, json: body })
   })
   await page.goto(`${BASE_URL}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
@@ -57,15 +63,20 @@ async function openRoster(browser, { width, height, touch, dark }) {
   await signIn.click()
   await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 60_000 })
   await page.goto(`${BASE_URL}/rostering`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
-  await page.locator('#roster-week-heading').waitFor({ state: 'visible', timeout: 60_000 })
-  await page.getByRole('link', { name: LONG_NAME }).waitFor({ state: 'visible', timeout: 60_000 })
+  try {
+    await page.locator('#roster-week-heading').waitFor({ state: 'visible', timeout: 30_000 })
+    await page.getByRole('link', { name: LONG_NAME }).waitFor({ state: 'visible', timeout: 30_000 })
+  } catch (e) {
+    console.log(`[participant-row-two-line] open failed: heading=${await page.locator('#roster-week-heading').count()} links=${JSON.stringify(await page.locator('a[title]').evaluateAll((a) => a.slice(0, 8).map((x) => x.title)))} ratio=${await page.locator('[role=img][aria-label$=" support"]').count()} boards=${boardCalls} mutated=${mutated} groupRadios=${JSON.stringify(await page.getByRole('radio').evaluateAll((a) => a.map((x) => x.getAttribute('aria-checked') + x.textContent)))}`)
+    throw e
+  }
   await page.waitForTimeout(800)
   return { context, page }
 }
 
 // Every participant row header (the sticky cell holding a name link and a "... support" chip), first three plus the covered fourth.
 const measure = (page) => page.evaluate(() => {
-  const heads = [...document.querySelectorAll('div.sticky')].filter((h) => h.querySelector('a[title]') && h.querySelector('[role=img][aria-label$=" support"]')).slice(0, 4)
+  const heads = [...document.querySelectorAll('div.sticky')].filter((h) => h.querySelector('a[title]') && h.querySelector('[role=img][aria-label$=" support"]')).slice(0, 5)
   const r = (el) => el.getBoundingClientRect()
   return {
     coarse: matchMedia('(pointer: coarse)').matches,
@@ -75,13 +86,14 @@ const measure = (page) => page.evaluate(() => {
       const innerRight = hb.right - parseFloat(cs.paddingRight) - parseFloat(cs.borderRightWidth)
       const name = h.querySelector('a[title]'), ratio = h.querySelector('[role=img][aria-label$=" support"]')
       const nb = r(name), rb = r(ratio)
+      const line2 = ratio.parentElement.parentElement.getBoundingClientRect()
       const past = [...h.querySelectorAll('*')].filter((e) => r(e).width > 0 && r(e).right > innerRight + 0.5).map((e) => (e.getAttribute('aria-label') || e.textContent || e.tagName).trim().slice(0, 30))
       // Upper bound on the old one-line name width: inner width minus the right-hand group, its gap, and the marker/hourglass glyphs (12px + 4px gap each).
       const tail = ratio.parentElement.getBoundingClientRect()
       const markers = h.querySelectorAll('[role=img][aria-label^="Restrictive"], [role=img][aria-label^="Agreement"]').length * 16
       const innerWidth = innerRight - (hb.left + parseFloat(cs.paddingLeft))
       return {
-        name: name.textContent, headHeight: hb.height, nameBottom: nb.bottom, ratioTop: rb.top, ratioRight: rb.right, nameWidth: nb.width,
+        name: name.textContent, headHeight: hb.height, contentHeight: line2.bottom - nb.top, nameBottom: nb.bottom, ratioTop: rb.top, ratioRight: rb.right, nameWidth: nb.width,
         nameFits: name.scrollWidth <= name.clientWidth, oldNameWidthBound: innerWidth - tail.width - 8 - markers, past,
       }
     }),
@@ -90,18 +102,20 @@ const measure = (page) => page.evaluate(() => {
 
 function runChecks(tag, m, fine) {
   check(`${tag}: pointer is ${fine ? 'fine' : 'coarse'}`, m.coarse === !fine, m.rowH)
-  check(`${tag}: found 4 participant rows`, m.rows.length === 4, m.rows.length)
+  check(`${tag}: found 5 participant rows`, m.rows.length === 5, m.rows.length)
   const first3 = m.rows.slice(0, 3)
   check(`${tag}: 1 name above ratio chip (name bottom <= ratio top) on every row`, m.rows.every((x) => x.nameBottom <= x.ratioTop + 0.5), m.rows.map((x) => [x.nameBottom, x.ratioTop]))
   if (fine) {
-    const one = m.rows.slice(1, 3)
-    check(`${tag}: 2 header height == --row-h (34px, +-1) for rows with one bar`, one.length === 2 && one.every((x) => Math.abs(x.headHeight - 34) <= 1), one.map((x) => x.headHeight))
+    // The rows with bars are taller than --row-h (the bar sets it), so the header cell is measured on the empty row, where it sets the height itself; every row's two lines must also fit in 34px.
+    const empty = m.rows[4]
+    check(`${tag}: 2 header height == --row-h (34px, +-1) on the row with no bars`, !!empty && Math.abs(empty.headHeight - 34) <= 1, empty?.headHeight)
+    check(`${tag}: 2b two lines fit within 34px on every row`, m.rows.every((x) => x.contentHeight <= 34.5), m.rows.map((x) => x.contentHeight))
   }
   check(`${tag}: 3 no header child past the inner right edge`, m.rows.every((x) => x.past.length === 0), m.rows.map((x) => x.past))
   check(`${tag}: 4 long name shows whole or is >= the old one-line bound`, m.rows.every((x) => x.nameFits || x.nameWidth >= x.oldNameWidthBound), m.rows.map((x) => [x.name, x.nameFits, x.nameWidth, x.oldNameWidthBound]))
   const edges = first3.map((x) => x.ratioRight)
   check(`${tag}: 5 ratio chips' right edges line up across first 3 rows (+-1)`, first3.length === 3 && Math.max(...edges) - Math.min(...edges) <= 1, edges)
-  if (m.rows[3]) console.log(`[participant-row-two-line] ${tag} info: covered row ratio right ${m.rows[3].ratioRight} vs open-shift rows ${edges[0]}`)
+  if (m.rows[3]) console.log(`[participant-row-two-line] ${tag} info: fully covered row ratio right ${m.rows[3].ratioRight} vs open-shift rows ${edges[0]}`)
 }
 
 const browser = await chromium.launch({ headless: true })
@@ -120,7 +134,8 @@ for (const s of SCENES) {
     const head2 = page.locator('div.sticky', { has: page.getByRole('link', { name: 'Noah Blake' }) }).first()
     const secondDay = head2.locator('xpath=following-sibling::div[1]/*[2]')
     // Box = sticky column of rows 0-2 and, via the row 2 day cell, two day columns; head0 starts the crop.
-    const crop = await cropElement(page, head0, path.join(OUT_DIR, `rows-${s.tag}.png`), { touch: s.touch, also: secondDay })
+    // At 390 two day columns do not fit the viewport (the crop would fail checkCropHolds), so only the sticky column is cropped there.
+    const crop = await cropElement(page, head0, path.join(OUT_DIR, `rows-${s.tag}.png`), { touch: s.touch, also: s.touch ? head2 : secondDay })
     checks.push(checkCropHolds({ ...crop, touch: s.touch }))
     if (s.tag !== '1280-dark') checks.push(...(await fullPage(page, path.join(OUT_DIR, 'full', `${s.tag}.png`), { touch: s.touch })).checks)
     await context.close()

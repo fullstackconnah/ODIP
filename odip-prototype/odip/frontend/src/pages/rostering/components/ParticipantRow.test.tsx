@@ -93,9 +93,11 @@ describe('ParticipantRow header — name, ratio chip, coverage badge', () => {
 
     // gap-2 (8px) is the floor between the readiness chip and the right-hand group.
     expect(chip.parentElement!.parentElement).toHaveClass('gap-2')
-    // Chip and badge share a shrink-0 group pushed to the right edge: neither can be squeezed.
+    // Chip and badge share a group pushed to the right edge; each is shrink-0, so neither can be squeezed.
     const tail = chip.parentElement as HTMLElement
-    expect(tail).toHaveClass('shrink-0', 'ml-auto', 'gap-2')
+    expect(tail).toHaveClass('ml-auto', 'gap-2')
+    expect(chip).toHaveClass('shrink-0')
+    expect(badge).toHaveClass('shrink-0')
     expect(tail).toContainElement(badge)
     expect(chip.className).not.toMatch(/truncate|overflow-hidden/)
     expect(badge.className).not.toMatch(/truncate|overflow-hidden/)
@@ -307,7 +309,9 @@ describe('ParticipantRow header — readiness chip', () => {
     const ratio = screen.getByRole('img', { name: '1:1 support' })
     const badge = screen.getByRole('img', { name: '6 unassigned shifts' })
     const tail = ratio.parentElement as HTMLElement
-    expect(tail).toHaveClass('shrink-0', 'ml-auto', 'gap-2')
+    expect(tail).toHaveClass('min-w-0', 'ml-auto', 'gap-2')
+    expect(ratio).toHaveClass('shrink-0')
+    expect(badge).toHaveClass('shrink-0')
     expect(tail).toContainElement(badge)
     expect(tail.textContent).not.toMatch(/not ready/i)
   })
@@ -318,6 +322,8 @@ describe('ParticipantRow: a participant whose services have started but who is s
     renderRow({ fullName: 'Sam Started', inOnboarding: true })
     const tag = within(headerOf('Sam Started')).getByText('Onboarding')
     expect(tag).toHaveAttribute('title', 'Services started; onboarding is still open')
+    // The tag is what yields when onboarding, readiness, ratio and coverage meet in a narrow column: it truncates, the ratio and badge do not.
+    expect(tag).toHaveClass('min-w-0', 'truncate')
   })
 
   it('shows no tag for a participant who has been made active', () => {
