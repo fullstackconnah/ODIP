@@ -517,7 +517,9 @@ public enum AuditAction
     Updated,
     Deleted,
     /// <summary>The organisation's full data export was downloaded: EntityType "Tenant", EntityId the organisation, no Changes. Stored as its name.</summary>
-    Exported
+    Exported,
+    /// <summary>An Admin or SuperAdmin cleared a person's two-step verification: EntityType "User", EntityId the person, ChangedBy the caller, no Changes. Stored as its name (12 characters).</summary>
+    TwoStepReset
 }
 
 /// <summary>

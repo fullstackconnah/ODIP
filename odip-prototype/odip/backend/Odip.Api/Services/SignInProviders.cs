@@ -20,6 +20,7 @@ public static class SignInProviders
 
     private const string ClaimName = "firebase";
     private const string ProviderKey = "sign_in_provider";
+    private const string SecondFactorKey = "sign_in_second_factor";
 
     /// <summary>
     /// The providers allowed to sign in, compared without regard to case: <see cref="ConfigKey"/> as a list (appsettings, or Auth__AllowedSignInProviders__0
@@ -41,7 +42,15 @@ public static class SignInProviders
     /// The token's <c>firebase.sign_in_provider</c> ("password", "google.com", "custom", ...), or null when the token carries none in a form this can
     /// read, which the exchange treats as a refusal rather than a guess.
     /// </summary>
-    public static string? From(IReadOnlyDictionary<string, object> claims)
+    public static string? From(IReadOnlyDictionary<string, object> claims) => FirebaseString(claims, ProviderKey);
+
+    /// <summary>
+    /// The token's <c>firebase.sign_in_second_factor</c> ("totp", "phone"), which Firebase sets only on a sign-in that verified a second factor, or null
+    /// when it is missing or the claim is not in a form this can read. Never throws: a token with an odd shape simply has no second factor.
+    /// </summary>
+    public static string? SecondFactor(IReadOnlyDictionary<string, object> claims) => FirebaseString(claims, SecondFactorKey);
+
+    private static string? FirebaseString(IReadOnlyDictionary<string, object> claims, string key)
     {
         if (!claims.TryGetValue(ClaimName, out var firebase) || firebase is null)
             return null;
@@ -49,15 +58,15 @@ public static class SignInProviders
         // The Admin SDK decodes the payload with Newtonsoft into a Dictionary<string, object>, so the nested "firebase" object arrives as a JObject (the
         // exchange tests build their claims through that same decoding, and SignInProvidersTests pins the shape). The other arms cover a different
         // decoder, such as an SDK that moved to System.Text.Json, so that a change of that kind does not turn every sign-in into a refusal.
-        object? provider = firebase switch
+        object? found = firebase switch
         {
-            JObject json => json.TryGetValue(ProviderKey, out var token) && token.Type == JTokenType.String ? token.Value<string>() : null,
+            JObject json => json.TryGetValue(key, out var token) && token.Type == JTokenType.String ? token.Value<string>() : null,
             JsonElement { ValueKind: JsonValueKind.Object } json =>
-                json.TryGetProperty(ProviderKey, out var element) && element.ValueKind == JsonValueKind.String ? element.GetString() : null,
-            IReadOnlyDictionary<string, object> map => map.TryGetValue(ProviderKey, out var value) ? value : null,
+                json.TryGetProperty(key, out var element) && element.ValueKind == JsonValueKind.String ? element.GetString() : null,
+            IReadOnlyDictionary<string, object> map => map.TryGetValue(key, out var value) ? value : null,
             _ => null,
         };
 
-        return provider is string name && !string.IsNullOrWhiteSpace(name) ? name.Trim() : null;
+        return found is string name && !string.IsNullOrWhiteSpace(name) ? name.Trim() : null;
     }
 }

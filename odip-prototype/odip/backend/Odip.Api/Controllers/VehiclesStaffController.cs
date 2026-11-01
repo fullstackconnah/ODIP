@@ -657,6 +657,55 @@ public class StaffController : ControllerBase
     }
 
     /// <summary>
+    /// Clears a person's two-step verification in Firebase (they set it up again at their next password sign-in) and revokes their refresh tokens, so
+    /// they are signed out at their next renewal, within 30 minutes. Tenant-scoped (the Users filter: another organisation's id is a 404 and Firebase is
+    /// never asked). An Admin may reset anyone who is not an Admin or SuperAdmin; a SuperAdmin anyone but a SuperAdmin; a row on the SuperAdmin domain
+    /// exchanges as a SuperAdmin whatever its role says, so it counts as one. The audit row is written only once Firebase has done it.
+    /// </summary>
+    [HttpPost("{id:guid}/two-step/reset")]
+    [Authorize(Roles = "Admin,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<bool>>> ResetTwoStep(Guid id, CancellationToken ct)
+    {
+        var target = await _db.Users.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (target == null) return NotFound(ApiResponse<bool>.Fail("Staff not found"));
+
+        var targetIsSuperAdmin = target.Role == UserRole.SuperAdmin
+            || SuperAdminDomain.Covers(target.Email.Trim().ToLowerInvariant(), SuperAdminDomain.From(_config));
+        if (targetIsSuperAdmin || (target.Role == UserRole.Admin && !User.IsInRole("SuperAdmin")))
+            return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<bool>.Fail("You can't reset two-step verification for this person."));
+
+        try
+        {
+            if (await _firebaseUserService.ResetSecondFactorsAsync(target.Email.Trim(), ct) == SecondFactorResetResult.NoAccount)
+                return BadRequest(ApiResponse<bool>.Fail("This person doesn't have a sign-in yet, so there is nothing to reset."));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger?.LogError(ex, "Resetting two-step verification for staff member {TargetUserId} failed in Firebase", target.Id);
+            return StatusCode(StatusCodes.Status502BadGateway, ApiResponse<bool>.Fail("We couldn't reach the sign-in service. Try again."));
+        }
+
+        var actorId = Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var callerId) ? callerId : (Guid?)null;
+        _db.AuditLogs.Add(new AuditLog
+        {
+            Id = Guid.NewGuid(), EntityType = nameof(User), EntityId = target.Id, Action = AuditAction.TwoStepReset, ChangedAt = _clock.GetUtcNow(),
+            ChangedById = actorId, ChangedByName = User.FindFirstValue("fullName") ?? User.FindFirstValue(ClaimTypes.Name),
+        });
+        _logger?.LogInformation("Two-step verification of staff member {TargetUserId} was reset by {ActorUserId}", target.Id, actorId?.ToString() ?? "unknown");
+        try
+        {
+            // Its own bounded token, not ct: Firebase has already cleared the factors, so a client that leaves must not lose the row that records it.
+            using var auditTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            await _db.SaveChangesAsync(auditTimeout.Token);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Two-step verification of {TargetUserId} was reset in Firebase; the audit row was not written", target.Id);
+        }
+        return Ok(ApiResponse<bool>.Ok(true));
+    }
+
+    /// <summary>
     /// Releases a held sign-in address (see User.SignInAddressUnconfirmed): the caller has checked it. Tenant-scoped (the Users filter: another
     /// organisation's row is not found), idempotent (a row not held is left as it is), audited by the tracked save.
     /// </summary>

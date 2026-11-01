@@ -178,6 +178,19 @@ public class MicrosoftLinkManagementTests
         Assert.Null(off.MicrosoftStartUrl);
     }
 
+    [Fact]
+    public void M10b_Config_MfaRequiredForAdmins_FollowsTheTwoStepSwitch_AndDefaultsOff()
+    {
+        var rig = new MicrosoftAuthRig();
+        Assert.False(Data<AuthConfigDto>(rig.Controller(rig.Http()).Config())!.MfaRequiredForAdmins);
+
+        rig.Settings["Auth:RequireMfaForAdmins"] = "true";
+        Assert.True(Data<AuthConfigDto>(rig.Controller(rig.Http()).Config())!.MfaRequiredForAdmins);
+
+        rig.Settings["Auth:RequireMfaForAdmins"] = "false";
+        Assert.False(Data<AuthConfigDto>(rig.Controller(rig.Http()).Config())!.MfaRequiredForAdmins);
+    }
+
     // ── X1: another organisation's link is invisible and untouchable ──
 
     [Fact]

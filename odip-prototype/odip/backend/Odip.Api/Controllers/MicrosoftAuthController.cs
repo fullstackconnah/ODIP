@@ -464,7 +464,7 @@ public class MicrosoftAuthController : ControllerBase
     public IActionResult Config()
     {
         var cfg = MicrosoftSignInConfig.From(_config);
-        return Ok(ApiResponse<AuthConfigDto>.Ok(new AuthConfigDto(cfg is not null, cfg?.StartUrl(MicrosoftIntent.SignIn))));
+        return Ok(ApiResponse<AuthConfigDto>.Ok(new AuthConfigDto(cfg is not null, cfg?.StartUrl(MicrosoftIntent.SignIn), MfaPolicy.Enforced(_config))));
     }
 
     [HttpGet("link")]
@@ -585,7 +585,7 @@ public class MicrosoftAuthController : ControllerBase
     }
 }
 
-public sealed record AuthConfigDto(bool Microsoft, string? MicrosoftStartUrl);
+public sealed record AuthConfigDto(bool Microsoft, string? MicrosoftStartUrl, bool MfaRequiredForAdmins = false);
 public sealed record MicrosoftTenantLinkDto(Guid MicrosoftTenantId, string DefaultRole, string? LinkedByName, DateTime LinkedAt, DateTime UpdatedAt);
 public sealed record UpdateMicrosoftLinkDto(string? DefaultRole, DateTime ExpectedUpdatedAt);
 public sealed record MicrosoftAccountDto(bool OrgLinked, bool AccountLinked);

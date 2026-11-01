@@ -311,6 +311,22 @@ public class MicrosoftAuthControllerTests
         Assert.Equal("a@acme.test", (await rig.Db.Users.IgnoreQueryFilters([TenantFilter.Name]).SingleAsync()).Email);
     }
 
+    // Microsoft sign-in never reaches the exchange, so the two-step switch does not touch it: Entra is trusted for its own sign-ins.
+    [Fact]
+    public async Task I2b_LinkedAdmin_SignsInThroughMicrosoft_whatever_the_two_step_switch_says()
+    {
+        var rig = new MicrosoftAuthRig();
+        rig.Settings["Auth:RequireMfaForAdmins"] = "true";
+        var org = rig.Org();
+        rig.Link(org.Id);
+        rig.Person(org.Id, "a@acme.test", UserRole.Admin, tid: Tid, oid: PersonOid);
+
+        var o = await rig.RunAsync(Token(email: "a@acme.test"));
+
+        Assert.Equal(MicrosoftSignInPaths.SignInSuccess, o.Location);
+        Assert.NotNull(o.Cookie("odip_jwt"));
+    }
+
     [Theory]
     [InlineData("same-active")]
     [InlineData("same-inactive")]

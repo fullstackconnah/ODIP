@@ -1,4 +1,7 @@
+using System.Net.Http.Json;
+using FirebaseAdmin;
 using FirebaseAdmin.Auth;
+using Google.Apis.Auth.OAuth2;
 
 namespace Odip.Api.Services;
 
@@ -29,6 +32,12 @@ public interface IFirebaseAdminGateway
 
     /// <summary>Deletes the account with this uid.</summary>
     Task DeleteUserAsync(string uid, CancellationToken ct);
+
+    /// <summary>Removes every enrolled second factor from the account (Identity Toolkit accounts:update with an empty mfa object). Throws on any failure.</summary>
+    Task ClearSecondFactorsAsync(string uid, CancellationToken ct);
+
+    /// <summary>Revokes the account's refresh tokens, so its next renewal fails and the person signs in again.</summary>
+    Task RevokeRefreshTokensAsync(string uid, CancellationToken ct);
 }
 
 /// <inheritdoc cref="IFirebaseAdminGateway"/>
@@ -45,4 +54,32 @@ public sealed class FirebaseAdminGateway : IFirebaseAdminGateway
 
     public Task DeleteUserAsync(string uid, CancellationToken ct) =>
         FirebaseAuth.DefaultInstance.DeleteUserAsync(uid, ct);
+
+    public Task RevokeRefreshTokensAsync(string uid, CancellationToken ct) =>
+        FirebaseAuth.DefaultInstance.RevokeRefreshTokensAsync(uid);
+
+    // shortcut: the Admin SDK for .NET has no multi-factor API, so this calls the Identity Toolkit REST endpoint with the app's own credential and a
+    // static client; upgrade when FirebaseAdmin gains one. The body is the Node Admin SDK's way of clearing a user's factors.
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
+
+    public async Task ClearSecondFactorsAsync(string uid, CancellationToken ct)
+    {
+        var app = FirebaseApp.DefaultInstance ?? throw new InvalidOperationException("Firebase is not initialised.");
+        var credential = app.Options.Credential.CreateScoped("https://www.googleapis.com/auth/cloud-platform");
+        var projectId = app.Options.ProjectId ?? (credential.UnderlyingCredential as ServiceAccountCredential)?.ProjectId
+            ?? throw new InvalidOperationException("The Firebase project id is unknown.");
+        var token = await credential.UnderlyingCredential.GetAccessTokenForRequestAsync(cancellationToken: ct);
+
+        using var request = BuildClearSecondFactorsRequest(projectId, token, uid);
+        using var response = await Http.SendAsync(request, ct);
+        response.EnsureSuccessStatusCode();
+    }
+
+    /// <summary>The Identity Toolkit call that clears an account's second factors: POST projects/{id}/accounts:update with {"localId":uid,"mfa":{}}.</summary>
+    public static HttpRequestMessage BuildClearSecondFactorsRequest(string projectId, string accessToken, string uid) =>
+        new(HttpMethod.Post, $"https://identitytoolkit.googleapis.com/v1/projects/{Uri.EscapeDataString(projectId)}/accounts:update")
+        {
+            Headers = { Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken) },
+            Content = JsonContent.Create(new { localId = uid, mfa = new { } }),
+        };
 }

@@ -33,9 +33,10 @@ internal static class FirebaseTestClaims
     /// <summary>
     /// What a person who signed in with <paramref name="signInProvider"/> presents: their email, whether it is verified, and the "firebase" claim a real
     /// token carries. A null provider leaves the "firebase" claim out altogether.
+    /// A non-null <paramref name="signInSecondFactor"/> ("totp", "phone") adds firebase.sign_in_second_factor, which Firebase sets only after a second factor was verified.
     /// A null <paramref name="authTime"/> leaves "auth_time" out (the default, so existing tests are unchanged); otherwise it is the claim as given.
     /// </summary>
-    public static IReadOnlyDictionary<string, object> For(string email, bool emailVerified = true, string? signInProvider = "password", object? authTime = null)
+    public static IReadOnlyDictionary<string, object> For(string email, bool emailVerified = true, string? signInProvider = "password", object? authTime = null, string? signInSecondFactor = null)
     {
         var payload = new Dictionary<string, object>
         {
@@ -45,11 +46,13 @@ internal static class FirebaseTestClaims
         if (authTime is not null) payload["auth_time"] = authTime;
         if (signInProvider is not null)
         {
-            payload["firebase"] = new Dictionary<string, object>
+            var firebase = new Dictionary<string, object>
             {
                 ["identities"] = new Dictionary<string, object> { ["email"] = new[] { email } },
                 ["sign_in_provider"] = signInProvider,
             };
+            if (signInSecondFactor is not null) firebase["sign_in_second_factor"] = signInSecondFactor;
+            payload["firebase"] = firebase;
         }
 
         return FromPayload(JsonSerializer.Serialize(payload));

@@ -45,6 +45,23 @@ public interface IFirebaseUserService
 
     /// <summary>Whether a Firebase sign-in account exists for this address (a person who can use Forgot password). Throws on any failure other than not-found.</summary>
     Task<bool> ExistsAsync(string email, CancellationToken ct);
+
+    /// <summary>
+    /// Clears every second factor on the account with this email and revokes its refresh tokens, so the person signs in with just a password and sets
+    /// two-step verification up again. NoAccount (nothing touched) when there is no Firebase account; throws on any other failure, and revokes only after
+    /// the factors are cleared.
+    /// </summary>
+    Task<SecondFactorResetResult> ResetSecondFactorsAsync(string email, CancellationToken ct);
+}
+
+/// <summary>What <see cref="IFirebaseUserService.ResetSecondFactorsAsync"/> found or did.</summary>
+public enum SecondFactorResetResult
+{
+    /// <summary>The factors were cleared and the refresh tokens revoked.</summary>
+    Done,
+
+    /// <summary>There is no Firebase account for the address, so there was nothing to reset.</summary>
+    NoAccount,
 }
 
 /// <summary>What <see cref="IFirebaseUserService.EnsureSignInAccountAsync"/> found or did.</summary>
@@ -107,6 +124,23 @@ public class FirebaseUserService : IFirebaseUserService
         {
             return false;
         }
+    }
+
+    public async Task<SecondFactorResetResult> ResetSecondFactorsAsync(string email, CancellationToken ct)
+    {
+        string uid;
+        try
+        {
+            uid = await _gateway.GetUidByEmailAsync(email, ct);
+        }
+        catch (FirebaseAuthException ex) when (ex.AuthErrorCode == AuthErrorCode.UserNotFound)
+        {
+            return SecondFactorResetResult.NoAccount;
+        }
+
+        await _gateway.ClearSecondFactorsAsync(uid, ct);
+        await _gateway.RevokeRefreshTokensAsync(uid, ct);
+        return SecondFactorResetResult.Done;
     }
 
     /// <summary>

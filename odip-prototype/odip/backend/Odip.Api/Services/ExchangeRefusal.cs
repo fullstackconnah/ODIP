@@ -13,7 +13,7 @@ namespace Odip.Api.Services;
 /// so a valid token proves nothing about the mailbox, and this is decided from the token alone: it answers the same for an address ODIP knows and one it
 /// does not.</item>
 /// <item>The provider must be one ODIP trusts, or it is <see cref="ProviderNotAllowed"/>, again from the token alone.</item>
-/// <item>Only then does the exchange look at ODIP's own rows: <see cref="NoOdipAccount"/>, <see cref="Ambiguous"/>, <see cref="TenantInactive"/>, <see cref="AddressUnconfirmed"/>.
+/// <item>Only then does the exchange look at ODIP's own rows: <see cref="NoOdipAccount"/>, <see cref="Ambiguous"/>, <see cref="TenantInactive"/>, <see cref="AddressUnconfirmed"/>, <see cref="MfaEnrolmentRequired"/>.
 /// A token that got this far proves control of the mailbox, so these are shown only to the owner of the address, and only about their own address.</item>
 /// </list>
 /// <see cref="LockedOut"/> is no longer sent by the exchange (the failure counter was removed); the sign-in page still words it for any 429, which is now only the flood limiter.
@@ -47,6 +47,12 @@ public static class ExchangeRefusal
     /// <summary>The organisation limits how long a sign-in lasts and this one has used it up: the person signs in again. Decided only after the address is verified.</summary>
     public const string SessionLengthReached = "SessionLengthReached";
 
+    /// <summary>
+    /// The person's role needs two-step verification (see <see cref="MfaPolicy"/>) and this sign-in had no second factor, so they set one up and sign in again.
+    /// Like the codes above it comes only after the email is verified and the provider allowed, and says nothing about anyone but the owner of the address.
+    /// </summary>
+    public const string MfaEnrolmentRequired = "MfaEnrolmentRequired";
+
     /// <summary>Too many sign-in requests from this client: the "login" flood limiter, 60 per 5 minutes (a 429 with a Retry-After header).</summary>
     public const string LockedOut = "LockedOut";
 
@@ -60,6 +66,7 @@ public static class ExchangeRefusal
         TenantInactive => "The organisation this account belongs to is inactive.",
         AddressUnconfirmed => "Your organisation needs to confirm this email address before you can sign in to Bunya Support.",
         SessionLengthReached => "Sign in again.",
+        MfaEnrolmentRequired => "Set up two-step verification to sign in to Bunya Support.",
         LockedOut => "Too many failed sign-in attempts. Try again shortly.",
         _ => "Invalid or expired token",
     };

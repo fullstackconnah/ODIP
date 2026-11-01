@@ -53,6 +53,8 @@ services:
       # every organisation's EH API key, and losing it means each Admin pastes their key again. Empty = integrations off, the rest of ODIP runs.
       - INTEGRATIONS_MASTER_KEY=${INTEGRATIONS_MASTER_KEY:-}
       - EmploymentHero__Enabled=${EMPLOYMENT_HERO_ENABLED:-true}
+      # Two-step verification for Admins and SuperAdmins who sign in with a password. Off (the default) never refuses a sign-in and only logs the ones it would
+      # refuse (MfaWouldRefuse); true refuses them until they set it up. To turn it on, add: - Auth__RequireMfaForAdmins=${REQUIRE_MFA_FOR_ADMINS:-false}
       # Sign in with Microsoft. Empty ClientId/ClientSecret = the feature is off. PublicBaseUrl must be the https origin users reach ODIP on.
       # The app registration must emit the wids claim (Token configuration -> groups claim -> Directory roles; UNVERIFIED whether Entra sends it by default, so check one real token at setup, beside xms_edov). Without it, linking a directory is refused.
       - Microsoft__ClientId=${MICROSOFT_CLIENT_ID:-}
