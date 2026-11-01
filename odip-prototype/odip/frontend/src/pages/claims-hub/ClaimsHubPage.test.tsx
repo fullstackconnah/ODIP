@@ -489,5 +489,15 @@ describe('ClaimsHubPage: no organisation', () => {
     renderPage()
     expect(screen.getByText('Choose an organisation to see its claims.')).toBeInTheDocument()
     expect(screen.queryByRole('tablist')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Claim shifts' })).toBeNull()
+  })
+})
+
+describe('ClaimsHubPage: Claim shifts', () => {
+  it.each(['Admin', 'Coordinator'])('offers the claim run to a %s', role => {
+    localStorage.setItem('odip_user', JSON.stringify({ role }))
+    renderPage()
+    expect(screen.getByRole('button', { name: 'Claim shifts' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'How claiming works' })).toBeInTheDocument()
   })
 })

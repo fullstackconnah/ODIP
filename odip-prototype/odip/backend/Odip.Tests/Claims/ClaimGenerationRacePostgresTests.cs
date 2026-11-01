@@ -86,6 +86,30 @@ public class ClaimGenerationRacePostgresTests : IClassFixture<PostgresFixture>
         foreach (var shift in shifts) Assert.Equal(1, await kit.Db.ClaimLineItems.CountAsync(l => l.ShiftId == shift.Id, Ct));
     }
 
+    [SkippableFact(DisplayName = "Postgres: four claim runs at once claim each shift once")]
+    public async Task FourClaimRunsAtOnce_ClaimEachShiftOnce()
+    {
+        RequirePostgres();
+        using var kit = await KitAsync();
+        var people = Enumerable.Range(1, 3).Select(i => kit.SeedParticipant(first: $"Runner{i}", last: "Race")).ToList();
+        var shifts = people.SelectMany(p => new[] { kit.SeedShift(p, new DateOnly(2026, 10, 1), ShiftStatus.Completed), kit.SeedShift(p, new DateOnly(2026, 10, 2), ShiftStatus.Completed) }).ToList();
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns(kit.TenantId);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(false);
+
+        var runs = await Task.WhenAll(Enumerable.Range(0, AtOnce).Select(async _ =>
+        {
+            await using var db = PostgresFixture.NewContext(_pg.ConnectionString!, tenant.Object);
+            return await new ShiftClaimGenerationService(db).RunAsync(kit.TenantId, new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 14), Ct);
+        }));
+
+        foreach (var shift in shifts) Assert.Equal(1, await kit.Db.ClaimLineItems.CountAsync(l => l.ShiftId == shift.Id, Ct));
+        Assert.Equal(people.Count, await kit.Db.TripClaims.CountAsync(c => c.TenantId == kit.TenantId, Ct));
+        Assert.Equal(people.Count, runs.Sum(r => r.ClaimsMade));
+        // A run that lost the race to a participant finds nothing left (not failed) or timed out waiting for the lock (busy); nothing else.
+        Assert.All(runs.SelectMany(r => r.Skipped), s => Assert.True(!s.Failed || s.Reason == ShiftClaimGenerationService.BusyReason, s.Reason));
+    }
+
     [SkippableFact(DisplayName = "Postgres: a claim generation that cannot get the trip's lock is answered 409, not 400")]
     public async Task AGenerationThatWaitsOutTheLock_IsAnswered409()
     {

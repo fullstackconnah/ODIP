@@ -198,6 +198,38 @@ public class ClaimsController : ControllerBase
         }
     }
 
+    // POST /api/v1/claims/from-shifts/preview: what the claim run would make, for every participant in the organisation with completed, unclaimed shifts.
+    [HttpPost("claims/from-shifts/preview")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public Task<ActionResult<ApiResponse<ShiftClaimRunDto>>> PreviewShiftClaimRun([FromBody] ShiftClaimRunRequestDto dto, CancellationToken ct) =>
+        ShiftClaimRunAsync(dto, make: false, ct);
+
+    // POST /api/v1/claims/from-shifts: one draft shift claim per participant. Dates default to the last 14 days up to yesterday in the organisation's time zone.
+    [HttpPost("claims/from-shifts")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public Task<ActionResult<ApiResponse<ShiftClaimRunDto>>> RunShiftClaims([FromBody] ShiftClaimRunRequestDto dto, CancellationToken ct) =>
+        ShiftClaimRunAsync(dto, make: true, ct);
+
+    private async Task<ActionResult<ApiResponse<ShiftClaimRunDto>>> ShiftClaimRunAsync(ShiftClaimRunRequestDto dto, bool make, CancellationToken ct)
+    {
+        if (_tenant.TenantId is not { } tenantId) return BadRequest(ApiResponse<ShiftClaimRunDto>.Fail("Choose an organisation first."));
+        // The organisation's calendar, never the server's: late in the evening UTC it is already tomorrow in Sydney.
+        var today = await ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct);
+        var from = dto.From ?? today.AddDays(-14);
+        var to = dto.To ?? today.AddDays(-1);
+        if (from > to) return BadRequest(ApiResponse<ShiftClaimRunDto>.Fail("The From date must be on or before the To date."));
+        try
+        {
+            var run = make ? await _shiftGenerator.RunAsync(tenantId, from, to, ct) : await _shiftGenerator.PreviewRunAsync(tenantId, from, to, ct);
+            return Ok(ApiResponse<ShiftClaimRunDto>.Ok(run));
+        }
+        catch (InvalidOperationException ex)
+        {
+            // The whole-run refusal (provider settings not configured); a participant that fails is a row in the response, never this.
+            return BadRequest(ApiResponse<ShiftClaimRunDto>.Fail(ex.Message));
+        }
+    }
+
     // GET /api/v1/claims/{claimId}
     [HttpGet("claims/{claimId:guid}")]
     public async Task<ActionResult<ApiResponse<TripClaimDetailDto>>> GetClaim(Guid claimId, CancellationToken ct)

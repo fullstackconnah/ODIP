@@ -9,6 +9,9 @@ export interface LeftOutItem {
   reason: string
 }
 
+/** The footer of a shift claim's left-out list: the shifts stay waiting. */
+export const SHIFT_LEFT_OUT_FOOTER = 'They stay completed and unclaimed. Nothing here is billed for them.'
+
 /** What a claim leaves out and why: the same warning in the shift claim and the trip claim, so nothing is dropped silently. */
 export function LeftOutCallout({ items, heading, footer }: { items: LeftOutItem[]; heading: string; footer: string }) {
   return (

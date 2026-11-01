@@ -195,6 +195,58 @@ export interface ShiftClaimPreviewResponseDto {
   budget?: ClaimBudgetDto
 }
 
+// ── The claim run: every participant's completed, unclaimed shifts at once ──────
+
+/** Both dates optional: the server then uses the last 14 days up to yesterday, in the organisation's time zone. */
+export interface ShiftClaimRunRequestDto {
+  from?: string
+  to?: string
+}
+
+export interface ShiftClaimRunParticipantDto {
+  participantId: string
+  participantName: string
+  shiftCount: number
+  hours: number
+  totalAmount: number
+  /** Only once the claim is made (not in the preview). */
+  claimId?: string
+  claimReference?: string
+}
+
+export interface ShiftClaimRunLeftOutDto extends ShiftClaimLeftOutDto {
+  participantId: string
+  participantName: string
+}
+
+export interface ShiftClaimRunFlaggedDto extends ShiftClaimFlaggedDto {
+  participantId: string
+  participantName: string
+}
+
+/** A participant the run did not claim. Failed is false when there was simply nothing it could claim for them; true when their claim could not be made. */
+export interface ShiftClaimRunSkippedDto {
+  participantId: string
+  participantName: string
+  reason: string
+  failed: boolean
+}
+
+export interface ShiftClaimRunDto {
+  from: string
+  to: string
+  claimsMade: number
+  shiftCount: number
+  hours: number
+  totalAmount: number
+  participants: ShiftClaimRunParticipantDto[]
+  leftOut: ShiftClaimRunLeftOutDto[]
+  flagged: ShiftClaimRunFlaggedDto[]
+  skipped: ShiftClaimRunSkippedDto[]
+  /** Preview only: what the whole run would do to the budgets. Absent when no participant has a plan that has started. A warning, never a block. */
+  budget?: ClaimBudgetDto
+}
+
 // ── What a claim does to a budget (phase 2a) ──────────────────────────────────
 
 /** Where the part of a claim in a budget row landed: in a recorded pool, in none (it uses no pool's money), or outside the plan's dates. */
