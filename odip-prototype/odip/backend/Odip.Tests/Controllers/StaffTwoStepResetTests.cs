@@ -162,6 +162,19 @@ public class StaffTwoStepResetTests
     }
 
     [Fact]
+    public async Task SuperAdmin_viewing_one_org_is_404_for_a_target_in_another_and_no_firebase_call()
+    {
+        var rig = Build("SuperAdmin", callerIsSuperAdmin: true);
+        var other = Seed(rig.Db, Guid.NewGuid(), UserRole.Coordinator);
+
+        var result = await Reset(rig, other.Id);
+
+        Assert.IsType<NotFoundObjectResult>(result.Result);
+        rig.Firebase.Verify(f => f.ResetSecondFactorsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Empty(TwoStepAudits(rig.Db));
+    }
+
+    [Fact]
     public async Task An_unscoped_SuperAdmin_is_404_and_no_firebase_call()
     {
         var rig = Build("SuperAdmin", callerIsSuperAdmin: true, unscoped: true);

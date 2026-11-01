@@ -114,30 +114,54 @@ async function open(vp, scheme, { role = 'Admin', fb = {}, exchange = 'ok', rese
   return { context, page, touch, tag, vp }
 }
 
-// Fixed chrome (the Save changes bar, the bottom nav) sits at the bottom of the grown viewport, over the crop. On My account and Staff crops it is hidden for the capture
-// only (injected CSS); a visible fixed element that is neither the target, one of its ancestors or descendants, nor a full-screen scrim and still meets the crop fails the check.
-const FIXED_CSS = '[data-shot-hide]{visibility:hidden!important}'
-async function fixedOverCrop(page, loc, clip, hide) {
+// Fixed and sticky chrome (the Save changes bar, the bottom nav) sits over the crop. On My account and Staff crops it is hidden for the capture only (inline visibility, so layout does not move);
+// anything fixed or sticky that is not the target, an ancestor or a descendant, and not a full-screen scrim, is listed once in the run output. After hiding, one animation frame, then a still-visible one over the crop fails the check.
+// `last` is the group's last button: it must lie inside the clip and be the element at its own centre.
+let listedChrome = false
+async function fixedOverCrop(page, loc, clip, hide, lastLoc) {
   const target = await loc.elementHandle()
-  return page.evaluate(([c, el, hideIt, css]) => {
-    if (!document.getElementById('shot-hide-css')) { const st = document.createElement('style'); st.id = 'shot-hide-css'; st.textContent = css; document.head.appendChild(st) }
-    const area = innerWidth * innerHeight, hits = []
+  const last = lastLoc && await lastLoc.count() ? await lastLoc.elementHandle() : null // settings-required-on (an Admin, factor on) has no button
+  const out = await page.evaluate(async ([c, el, hideIt, lastEl]) => {
+    const area = innerWidth * innerHeight, found = [], hits = []
+    // The viewport was just grown, so the app may re-render and remount the chrome: hide, wait a frame, and repeat until a pass finds nothing new.
+    for (let pass = 0; pass < 4; pass++) {
+      let fresh = 0
+      for (const e of document.body.querySelectorAll('*')) {
+        const cs = getComputedStyle(e)
+        if ((cs.position !== 'fixed' && cs.position !== 'sticky') || (hideIt && cs.visibility === 'hidden')) continue
+        if (e.contains(el) || el.contains(e)) continue
+        const r = e.getBoundingClientRect()
+        if (!r.width || !r.height || r.width * r.height >= 0.95 * area) continue
+        if (!found.length || pass === 0) found.push({ tag: e.tagName, cls: String(e.className).slice(0, 60), pos: cs.position, top: Math.round(r.top), height: Math.round(r.height) })
+        // descendants too: an icon font span sets its own visibility and shows through a hidden parent
+        if (hideIt) { for (const n of [e, ...e.querySelectorAll('*')]) n.style.setProperty('visibility', 'hidden', 'important'); fresh++ }
+      }
+      await new Promise((res) => requestAnimationFrame(() => res()))
+      if (!hideIt || (pass > 0 && !fresh)) break
+    }
     for (const e of document.body.querySelectorAll('*')) {
       const cs = getComputedStyle(e)
-      if (cs.position !== 'fixed' || cs.visibility === 'hidden' || cs.display === 'none' || Number(cs.opacity) === 0) continue
+      if ((cs.position !== 'fixed' && cs.position !== 'sticky') || cs.visibility === 'hidden' || cs.display === 'none' || Number(cs.opacity) === 0) continue
       if (e.contains(el) || el.contains(e)) continue
       const r = e.getBoundingClientRect()
       if (!r.width || !r.height || r.width * r.height >= 0.95 * area) continue
-      if (hideIt) { e.setAttribute('data-shot-hide', ''); continue }
       if (r.left < c.x + c.width && r.right > c.x && r.top < c.y + c.height && r.bottom > c.y) hits.push({ tag: e.tagName, cls: String(e.className).slice(0, 60), top: Math.round(r.top), height: Math.round(r.height) })
     }
-    return hits
-  }, [clip, target, hide, FIXED_CSS])
+    let lastOk = null
+    if (lastEl) {
+      const r = lastEl.getBoundingClientRect(), top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
+      lastOk = { inClip: r.left >= c.x && r.right <= c.x + c.width && r.top >= c.y && r.bottom <= c.y + c.height, topmost: !!top && (top === lastEl || lastEl.contains(top)), atPoint: top ? top.tagName + '.' + String(top.className).slice(0, 80) : null, y: Math.round(r.top + r.height / 2) }
+    }
+    return { found, hits, lastOk }
+  }, [clip, target, hide, last])
+  if (!listedChrome && out.found.length) { listedChrome = true; console.log('fixed/sticky chrome:', JSON.stringify(out.found)) }
+  return out
 }
-const shot = async (t, loc, name, { also, pad, hide = /^(settings|staff)-/.test(name) } = {}) => {
-  const r = await cropElement(t.page, loc, path.join(OUT_DIR, `${name}-${t.vp.name}-${t.scheme}.png`), { touch: t.touch, also, pad, during: (clip) => fixedOverCrop(t.page, loc, clip, hide) })
+const shot = async (t, loc, name, { also, pad, last = /^settings-(?!remove-dialog)/.test(name) ? loc.getByRole('button').last() : undefined, hide = /^(settings|staff)-/.test(name) } = {}) => {
+  const r = await cropElement(t.page, loc, path.join(OUT_DIR, `${name}-${t.vp.name}-${t.scheme}.png`), { touch: t.touch, also, pad, during: (clip) => fixedOverCrop(t.page, loc, clip, hide, last) })
   const holds = checkCropHolds(r)
-  checks.push({ ...holds, pass: holds.pass && r.measured.length === 0, detail: { ...holds.detail, fixedOverCrop: r.measured }, name: `${name} crop holds [${t.tag}]` })
+  checks.push({ ...holds, pass: holds.pass && r.measured.hits.length === 0, detail: { ...holds.detail, fixedOverCrop: r.measured.hits }, name: `${name} crop holds [${t.tag}]` })
+  if (r.measured.lastOk) checks.push({ pass: !!r.measured.lastOk?.inClip && !!r.measured.lastOk?.topmost, detail: r.measured.lastOk, name: `${name} last button in clip and on top [${t.tag}]` })
 }
 const box = async (loc) => loc.boundingBox()
 const loginCard = (page) => page.getByRole('heading', { level: 2 }).first().locator('xpath=..')
