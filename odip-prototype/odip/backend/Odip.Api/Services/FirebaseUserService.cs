@@ -45,6 +45,26 @@ public interface IFirebaseUserService
 
     /// <summary>Whether a Firebase sign-in account exists for this address (a person who can use Forgot password). Throws on any failure other than not-found.</summary>
     Task<bool> ExistsAsync(string email, CancellationToken ct);
+
+    /// <summary>
+    /// Clears every second factor on the account with this email and revokes its refresh tokens, so the person signs in with just a password and sets
+    /// two-step verification up again. NoAccount (nothing touched) when there is no Firebase account; throws on any other failure, and revokes only after
+    /// the factors are cleared (a failed revoke after that is RevokeFailed, not a throw).
+    /// </summary>
+    Task<SecondFactorResetResult> ResetSecondFactorsAsync(string email, CancellationToken ct);
+}
+
+/// <summary>What <see cref="IFirebaseUserService.ResetSecondFactorsAsync"/> found or did.</summary>
+public enum SecondFactorResetResult
+{
+    /// <summary>The factors were cleared and the refresh tokens revoked.</summary>
+    Done,
+
+    /// <summary>There is no Firebase account for the address, so there was nothing to reset.</summary>
+    NoAccount,
+
+    /// <summary>The factors were cleared but revoking the refresh tokens failed, so open sessions last until their tokens expire.</summary>
+    RevokeFailed,
 }
 
 /// <summary>What <see cref="IFirebaseUserService.EnsureSignInAccountAsync"/> found or did.</summary>
@@ -107,6 +127,31 @@ public class FirebaseUserService : IFirebaseUserService
         {
             return false;
         }
+    }
+
+    public async Task<SecondFactorResetResult> ResetSecondFactorsAsync(string email, CancellationToken ct)
+    {
+        string uid;
+        try
+        {
+            uid = await _gateway.GetUidByEmailAsync(email, ct);
+        }
+        catch (FirebaseAuthException ex) when (ex.AuthErrorCode == AuthErrorCode.UserNotFound)
+        {
+            return SecondFactorResetResult.NoAccount;
+        }
+
+        await _gateway.ClearSecondFactorsAsync(uid, ct);
+        try
+        {
+            await _gateway.RevokeRefreshTokensAsync(uid, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // The factors are already cleared; the caller must still audit that, so report it instead of failing the whole reset.
+            return SecondFactorResetResult.RevokeFailed;
+        }
+        return SecondFactorResetResult.Done;
     }
 
     /// <summary>

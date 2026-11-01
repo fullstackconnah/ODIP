@@ -1,6 +1,6 @@
 import { useParams, Link } from 'react-router-dom'
 import { useMemo, useState } from 'react'
-import { useStaffOverview, useSettings, useEnsureStaffSignInAccount, useConfirmStaffAddress, useRecordInvitesSent, useModuleVisibility, useStaffLeaveBalances } from '@/api/hooks'
+import { useStaffOverview, useSettings, useEnsureStaffSignInAccount, useConfirmStaffAddress, useResetStaffTwoStep, useRecordInvitesSent, useModuleVisibility, useStaffLeaveBalances } from '@/api/hooks'
 import { Tabs } from '@/components/Tabs'
 import { LeaveBalances } from '@/components/LeaveBalances'
 import { Card } from '@/components/Card'
@@ -23,6 +23,7 @@ import { describeEmailOutcome, ensureAndSendSetPasswordEmail } from '@/lib/signI
 import { ADDRESS_CHECK_SENTENCE } from '@/lib/addressConfirmation'
 import { extractErrorMessage, formatDateAu, formatShiftTime } from '@/lib/utils'
 import { formatServiceDate } from '@/lib/format'
+import { apiErrorStatus } from '@/lib/shiftPackageErrors'
 import { FactBar, type FactBarSegment } from '@/components/FactBar'
 import { attentionForTone } from '@/components/glanceState'
 import { staffCredentials, type StaffCredential } from '@/lib/credentials'
@@ -31,7 +32,7 @@ import { formatShiftTimeRange, formatVarianceMinutes } from '@/pages/rostering/l
 import AvailabilityList from '@/pages/schedule/AvailabilityList'
 import { PersonWeek } from '@/pages/rostering/components/PersonWeek'
 import {
-  Pencil, CalendarOff, CalendarClock, CalendarDays, ShieldCheck, ClipboardList, AlertTriangle, ClipboardCheck, Mail,
+  Pencil, CalendarOff, CalendarClock, CalendarDays, ShieldCheck, ClipboardList, AlertTriangle, ClipboardCheck, Mail, KeyRound,
 } from 'lucide-react'
 import type { StaffOverviewUpcomingShiftDto, StaffOverviewTripAssignmentDto } from '@/api/types/staff'
 import type { IncidentListDto } from '@/api/types/incidents'
@@ -68,6 +69,10 @@ export default function StaffDetailPage() {
   const canConfirmAddress = isSuperAdmin || isAdmin || isCoordinator
   const confirmAddress = useConfirmStaffAddress()
   const [confirming, setConfirming] = useState(false)
+  // POST /staff/{id}/two-step/reset: an Admin resets anyone below Admin, a SuperAdmin anyone but a SuperAdmin (the server decides again). There is only something to reset
+  // once the person has signed in.
+  const resetTwoStep = useResetStaffTwoStep()
+  const [resetting, setResetting] = useState<{ problem: string | null } | null>(null)
   // What became of each "Send set-password email", kept at the top of the page until dismissed.
   const { notices, notify, dismiss } = useNotices()
   const [sending, setSending] = useState(false)
@@ -117,6 +122,24 @@ export default function StaffDetailPage() {
       notify('danger', fullName, extractErrorMessage(e, "That address couldn't be confirmed. Try again."), staffId)
     }
     setConfirming(false)
+  }
+
+  async function handleResetTwoStep() {
+    if (!overview || resetTwoStep.isPending) return
+    const { id: staffId, fullName } = overview.staff
+    try {
+      await resetTwoStep.mutateAsync(staffId)
+    } catch (e) {
+      const status = apiErrorStatus(e)
+      setResetting({
+        problem: status === 400
+          ? `${fullName} doesn't have a sign-in yet, so there's nothing to reset.`
+          : status === 403 ? "You can't reset two-step verification for this person." : "We couldn't reach the sign-in service. Try again.",
+      })
+      return
+    }
+    setResetting(null)
+    notify('success', fullName, `${fullName}'s two-step verification is reset. They'll set it up again next time they sign in.`, staffId)
   }
 
   // Dismissing the last notice hands focus back to the button that raised it.
@@ -177,6 +200,11 @@ export default function StaffDetailPage() {
                     <Mail className="w-4 h-4" /> Confirm address
                   </Button>
                 )}
+                {staff.hasSignedIn && ((isAdmin && staff.role !== 'Admin' && staff.role !== 'SuperAdmin') || (isSuperAdmin && staff.role !== 'SuperAdmin')) && (
+                  <Button variant="secondary" size="md" onClick={() => setResetting({ problem: null })}>
+                    <KeyRound className="w-4 h-4" /> Reset two-step verification
+                  </Button>
+                )}
                 {canManageSignIn && staff.isActive && !!staff.email && staff.signInAddressUnconfirmed !== true && (
                   <>
                   <Button
@@ -216,6 +244,24 @@ export default function StaffDetailPage() {
         loading={confirmAddress.isPending}
         onConfirm={handleConfirmAddress}
         onCancel={() => setConfirming(false)}
+      />
+
+      <ConfirmDialog
+        open={resetting !== null}
+        variant="danger"
+        title={`Reset two-step verification for ${staff.fullName}?`}
+        message={
+          <div className="flex flex-col gap-2">
+            <p>They'll set it up again with their authenticator app next time they sign in with a password. They'll be signed out within 30 minutes.</p>
+            {resetting?.problem && <Callout tone="danger">{resetting.problem}</Callout>}
+          </div>
+        }
+        stacked
+        confirmLabel="Reset"
+        cancelLabel="Go back"
+        loading={resetTwoStep.isPending}
+        onConfirm={handleResetTwoStep}
+        onCancel={() => setResetting(null)}
       />
 
       {/* Notices for the actions above. Always mounted (a live region must exist before its content), and collapsed while empty. */}

@@ -53,6 +53,10 @@ public class FirebaseUserServiceGatewayTests
             Calls.Add($"delete:{uid}");
             return OnDelete(uid);
         }
+
+        public Task ClearSecondFactorsAsync(string uid, CancellationToken ct) => throw new NotSupportedException();
+
+        public Task RevokeRefreshTokensAsync(string uid, CancellationToken ct) => throw new NotSupportedException();
     }
 
     /// <summary>

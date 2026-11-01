@@ -16,6 +16,7 @@ import { apiErrorCode, apiErrorStatus } from '@/lib/shiftPackageErrors'
 import { usePermissions } from '@/lib/permissions'
 import { describeMicrosoftOutcome } from '@/lib/signInRefusal'
 import { MicrosoftLinkAction } from './MicrosoftLinkAction'
+import { TwoStepGroup } from './TwoStepGroup'
 import { SettingsGroup, SettingsSection, type SaveResult, type SectionFrame } from './SettingsSection'
 import { notSavedText } from './settingsSections'
 import { getViewAs } from '@/lib/viewAs'
@@ -119,6 +120,7 @@ function ProfileForm({ frame, username, role, tenantName, isSuperAdmin }: { fram
             />
           </SettingsGroup>
           {profile && <PasswordGroup email={profile.email} />}
+          <TwoStepGroup required={config.data?.mfaRequiredForAdmins === true && (role === 'Admin' || role === 'SuperAdmin')} superAdmin={role === 'SuperAdmin'} />
         </>
       )}
       {startUrl && !isSuperAdmin && <MicrosoftAccountGroup startUrl={startUrl} />}

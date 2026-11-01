@@ -18,10 +18,11 @@ export interface DevUserDto {
   tenantName: string | null
 }
 
-/** GET /auth/config (anonymous): whether Sign in with Microsoft is on, and the server's own start URL for it (on its public host). */
+/** GET /auth/config (anonymous): whether Sign in with Microsoft is on, and the server's own start URL for it (on its public host), and whether two-step verification is required of Admins and SuperAdmins. */
 export interface AuthConfigDto {
   microsoft: boolean
   microsoftStartUrl: string | null
+  mfaRequiredForAdmins: boolean
 }
 
 export type MicrosoftRole = 'ReadOnly' | 'SupportWorker' | 'Coordinator'

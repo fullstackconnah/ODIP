@@ -16,7 +16,7 @@ vi.mock('@/lib/permissions', async () => {
 })
 vi.mock('@/hooks/useIsBelowMd', () => ({ useIsBelowMd: () => false }))
 vi.mock('firebase/auth', () => ({ sendPasswordResetEmail: vi.fn() }))
-vi.mock('@/lib/firebase', () => ({ auth: { name: 'auth-stub' } }))
+vi.mock('@/lib/firebase', () => ({ auth: { name: 'auth-stub', currentUser: null, onAuthStateChanged: () => () => undefined } }))
 
 const tenant = { id: 't-1', name: 'Jo Care', emailDomain: null, isActive: true, createdAt: '2026-01-01T00:00:00Z', userCount: 1 }
 const fullUser = {

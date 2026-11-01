@@ -35,6 +35,8 @@ vi.mock('@/api/hooks', async () => ({
   storeSession: (await vi.importActual<typeof import('@/api/hooks/auth')>('@/api/hooks/auth')).storeSession,
   useLogin: () => ({ mutateAsync: mockLogin, isPending: false }),
   useResendVerification: () => ({ mutateAsync: mockResend, isPending: false }),
+  useVerifySecondFactor: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useExchangeAfterEnrolment: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDevLogin: () => ({ mutateAsync: mockDevLogin, isPending: false }),
   useDevUsers: () => ({ data: [], isError: false, error: null }),
   // GET /auth/config: Microsoft sign-in is off here (LoginPage.microsoft.test.tsx covers it on).

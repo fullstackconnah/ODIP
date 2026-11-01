@@ -1,15 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { sendPasswordResetEmail } from 'firebase/auth'
+import { multiFactor, sendPasswordResetEmail, signOut, TotpMultiFactorGenerator, type MultiFactorResolver, type User } from 'firebase/auth'
 import { auth, devAuthEnabled } from '@/lib/firebase'
-import { useLogin, useResendVerification, useDevLogin, useDevUsers, useAuthConfig, storeSession } from '@/api/hooks'
+import {
+  useLogin, useResendVerification, useDevLogin, useDevUsers, useAuthConfig, storeSession,
+  useVerifySecondFactor, useExchangeAfterEnrolment,
+} from '@/api/hooks'
 import type { AuthResponseDto, ApiResponse } from '@/api/types'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { Callout, type CalloutTone } from '@/components/Callout'
 import { Button } from '@/components/Button'
 import { inputClass } from '@/components/FormField'
+import { CodeField } from '@/components/auth/CodeField'
+import { TwoStepSetup } from '@/components/auth/TwoStepSetup'
 import PlatformFooter from '@/components/layout/PlatformFooter'
 import { SignInRefused, describeMicrosoftOutcome, describeSignInRefusal, type RefusalWords } from '@/lib/signInRefusal'
+import { codeDigits, twoStepProblem, SecondFactorRequired, EnrolmentRequired, SignInAgainNeeded, type TwoStepProblemKind } from '@/lib/twoStep'
 import { VERIFICATION_HOLD_MS, holdLeftMs, readVerificationSend, writeVerificationSend, type VerificationSendRecord } from '@/lib/verificationSend'
 import { Eye, EyeOff } from 'lucide-react'
 import { Wordmark } from '@/components/Wordmark'
@@ -17,9 +23,21 @@ import { Wordmark } from '@/components/Wordmark'
 /** What the person is told: one plain sentence, and what to do next when the sentence does not already say. */
 type Problem = RefusalWords & { tone?: CalloutTone }
 
+/** The card's step: the password; the code from the authenticator app after it ("Verify it's you"); or adding that app, after the exchange asked for it. */
+type Step = 'password' | 'verify' | 'enrol'
+
 export default function LoginPage() {
   const [email, setEmail] = useState('')
+  // Also what the set-up step signs in with again if the exchange still refuses after the factor was added. It only ever lives in this state, so it goes with the page;
+  // it is emptied as soon as it is no longer needed (a session, Back, Cancel).
   const [password, setPassword] = useState('')
+  const [step, setStep] = useState<Step>('password')
+  const [second, setSecond] = useState<{ resolver: MultiFactorResolver; hintUid: string | null } | null>(null)
+  const [enrolUser, setEnrolUser] = useState<User | null>(null)
+  const [code, setCode] = useState('')
+  const [codeProblem, setCodeProblem] = useState<TwoStepProblemKind | null>(null)
+  const [justSetUp, setJustSetUp] = useState(false)
+  const codeRef = useRef<HTMLInputElement>(null)
   const [showPassword, setShowPassword] = useState(false)
   const [params] = useSearchParams()
   // A refused or ended Microsoft sign-in returns here as ?microsoft=<code>. Read once, shown as the card's problem, and dropped from the address.
@@ -40,6 +58,8 @@ export default function LoginPage() {
   const navigate = useNavigate()
   const login = useLogin()
   const resendVerification = useResendVerification()
+  const verify = useVerifySecondFactor()
+  const afterEnrolment = useExchangeAfterEnrolment()
   const devLogin = useDevLogin()
   const devUsers = useDevUsers()
   const config = useAuthConfig()
@@ -65,6 +85,13 @@ export default function LoginPage() {
     if (holdTimer.current) clearTimeout(holdTimer.current)
   }, [])
 
+  useEffect(() => {
+    if (step === 'verify' && (codeProblem === null || codeProblem === 'wrong')) {
+      codeRef.current?.focus()
+      if (codeProblem === 'wrong') codeRef.current?.select()
+    }
+  }, [step, second, codeProblem])
+
   const lastSendAttempt = () => lastSend.current ?? readVerificationSend()
 
   const noteSendAttempt = (address: string, went: boolean) => {
@@ -87,13 +114,99 @@ export default function LoginPage() {
     setResendHeld(false)
   }
 
+  const toPassword = () => {
+    setStep('password')
+    setSecond(null)
+    setEnrolUser(null)
+    setCode('')
+    setCodeProblem(null)
+    setJustSetUp(false)
+  }
+
+  const leaveFirebase = async () => {
+    try {
+      if (auth) await signOut(auth)
+    } catch {
+      /* nothing to clean up */
+    }
+  }
+
   const applyLoginSuccess = (res: ApiResponse<AuthResponseDto>) => {
     if (res.success && res.data) {
+      setPassword('')
+      toPassword()
       storeSession(res.data)
       navigate('/', { replace: true })
       return true
     }
     return false
+  }
+
+  const startVerify = (resolver: MultiFactorResolver) => {
+    const hint = resolver.hints.find(h => h.factorId === TotpMultiFactorGenerator.FACTOR_ID)
+    setSecond({ resolver, hintUid: hint?.uid ?? null })
+    setCode('')
+    setCodeProblem(null)
+    setStep('verify')
+  }
+
+  // The exchange wants two-step verification. An account that already has an app can't add another here (and would be told to sign in again), so it signs out.
+  const startEnrol = async (user: User) => {
+    if (multiFactor(user).enrolledFactors.length > 0) {
+      await leaveFirebase()
+      setProblem({ sentence: 'Sign in again to finish.' })
+      return
+    }
+    setEnrolUser(user)
+    setStep('enrol')
+  }
+
+  // Everything a failed sign-in can be, from the password step or from the set-up step's second sign-in.
+  const showLoginError = async (err: unknown) => {
+    if (err instanceof SecondFactorRequired) {
+      startVerify(err.resolver)
+      return
+    }
+    if (err instanceof EnrolmentRequired) {
+      await startEnrol(err.user)
+      return
+    }
+    // The exchange refused the sign-in and said why: the mutation rejects with a SignInRefused, having already ended the Firebase session and, for an
+    // unverified email, sent the verification link (unless told not to). Anything else is a Firebase AuthError from signInWithEmailAndPassword (has a `.code`)
+    // or a network failure from the exchange call (`.code === 'ERR_NETWORK'`, or a request that got no response).
+    if (err instanceof SignInRefused) {
+      let verification = err.verification
+      if (err.refusal.code === 'EmailNotVerified') {
+        if (verification === 'sent' || verification === 'not-sent') noteSendAttempt(email, verification === 'sent')
+        // A link only "went a moment ago" if that attempt went. After one that failed, say so, as for any send that failed.
+        else if (verification === 'recent' && lastSendAttempt()?.went === false) verification = 'not-sent'
+        setUnverified({ email, password })
+        // Send it again waits out the hold after a send that went; after one that failed it stays free, so the person can try again.
+        if (verification === 'sent' || verification === 'recent') holdResend(holdLeftMs(lastSendAttempt(), email))
+      }
+      setProblem(describeSignInRefusal(err.refusal, email, verification))
+      return
+    }
+
+    const firebaseCode = (err as { code?: string })?.code
+    const httpStatus = (err as { response?: { status?: number } })?.response?.status
+    const isNetworkError = firebaseCode === 'auth/network-request-failed' || firebaseCode === 'ERR_NETWORK' || (!httpStatus && (err as { request?: unknown })?.request)
+
+    if (firebaseCode === 'auth/too-many-requests') {
+      setProblem({ sentence: 'Too many attempts. Try again in a few minutes.' })
+    } else if (
+      firebaseCode === 'auth/wrong-password' ||
+      firebaseCode === 'auth/user-not-found' ||
+      firebaseCode === 'auth/invalid-credential' ||
+      firebaseCode === 'auth/invalid-email'
+    ) {
+      // One sentence for all of them, so a wrong password and an address Firebase has never heard of cannot be told apart.
+      setProblem({ sentence: "That email and password don't match.", nextStep: 'Check them, or use Forgot password.' })
+    } else if (isNetworkError) {
+      setProblem({ sentence: 'Network error. Check your connection and try again.' })
+    } else {
+      setProblem({ sentence: 'Login failed. Please try again.' })
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -111,42 +224,77 @@ export default function LoginPage() {
         setProblem({ sentence: res.errors?.[0] || 'Login failed' })
       }
     } catch (err) {
-      // The exchange refused the sign-in and said why: the mutation rejects with a SignInRefused, having already ended the Firebase session and, for an
-      // unverified email, sent the verification link (unless told not to). Anything else is a Firebase AuthError from signInWithEmailAndPassword (has a `.code`)
-      // or a network failure from the exchange call (`.code === 'ERR_NETWORK'`, or a request that got no response).
+      await showLoginError(err)
+    }
+  }
+
+  const handleVerify = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!second?.hintUid || code.length !== 6 || verify.isPending) return
+    setProblem(null)
+    setCodeProblem(null)
+    try {
+      const res = await verify.mutateAsync({ resolver: second.resolver, hintUid: second.hintUid, code })
+      if (!applyLoginSuccess(res)) {
+        toPassword()
+        setProblem({ sentence: res.errors?.[0] || 'Login failed' })
+      }
+    } catch (err) {
       if (err instanceof SignInRefused) {
-        let verification = err.verification
-        if (err.refusal.code === 'EmailNotVerified') {
-          if (verification === 'sent' || verification === 'not-sent') noteSendAttempt(email, verification === 'sent')
-          // A link only "went a moment ago" if that attempt went. After one that failed, say so, as for any send that failed.
-          else if (verification === 'recent' && lastSendAttempt()?.went === false) verification = 'not-sent'
-          setUnverified({ email, password })
-          // Send it again waits out the hold after a send that went; after one that failed it stays free, so the person can try again.
-          if (verification === 'sent' || verification === 'recent') holdResend(holdLeftMs(lastSendAttempt(), email))
+        toPassword()
+        setProblem(describeSignInRefusal(err.refusal, email, err.verification))
+      } else if (err instanceof EnrolmentRequired) {
+        await leaveFirebase()
+        toPassword()
+        setProblem({ sentence: 'Sign in again to finish.' })
+      } else {
+        const found = twoStepProblem(err, 'verify')
+        setProblem({ sentence: found.sentence })
+        setCodeProblem(found.kind)
+      }
+    }
+  }
+
+  // Back and Cancel: the Firebase session (if any) ends and the password goes; the email stays.
+  const handleBack = async () => {
+    await leaveFirebase()
+    setPassword('')
+    setProblem(null)
+    toPassword()
+  }
+
+  // The factor was added: a fresh token, then the exchange again. If it still refuses, signing in again lands on Verify (the account has an app now).
+  const finishEnrolment = async () => {
+    if (!enrolUser) return
+    setProblem(null)
+    try {
+      const res = await afterEnrolment.mutateAsync({ user: enrolUser })
+      if (!applyLoginSuccess(res)) {
+        toPassword()
+        setProblem({ sentence: res.errors?.[0] || 'Login failed' })
+      }
+    } catch (err) {
+      if (err instanceof EnrolmentRequired) {
+        setJustSetUp(true)
+        try {
+          const res = await login.mutateAsync({ email, password })
+          if (!applyLoginSuccess(res)) {
+            toPassword()
+            setProblem({ sentence: res.errors?.[0] || 'Login failed' })
+          }
+        } catch (again) {
+          await showLoginError(again)
         }
-        setProblem(describeSignInRefusal(err.refusal, email, verification))
         return
       }
-
-      const firebaseCode = (err as { code?: string })?.code
-      const httpStatus = (err as { response?: { status?: number } })?.response?.status
-      const isNetworkError = firebaseCode === 'auth/network-request-failed' || firebaseCode === 'ERR_NETWORK' || (!httpStatus && (err as { request?: unknown })?.request)
-
-      if (firebaseCode === 'auth/too-many-requests') {
-        setProblem({ sentence: 'Too many attempts. Try again in a few minutes.' })
-      } else if (
-        firebaseCode === 'auth/wrong-password' ||
-        firebaseCode === 'auth/user-not-found' ||
-        firebaseCode === 'auth/invalid-credential' ||
-        firebaseCode === 'auth/invalid-email'
-      ) {
-        // One sentence for all of them, so a wrong password and an address Firebase has never heard of cannot be told apart.
-        setProblem({ sentence: "That email and password don't match.", nextStep: 'Check them, or use Forgot password.' })
-      } else if (isNetworkError) {
-        setProblem({ sentence: 'Network error. Check your connection and try again.' })
-      } else {
-        setProblem({ sentence: 'Login failed. Please try again.' })
+      if (err instanceof SignInRefused) {
+        toPassword()
+        setProblem(describeSignInRefusal(err.refusal, email, err.verification))
+        return
       }
+      await leaveFirebase()
+      toPassword()
+      setProblem({ sentence: "Two-step verification is on, but signing in didn't finish.", nextStep: 'Sign in again.' })
     }
   }
 
@@ -157,7 +305,13 @@ export default function LoginPage() {
     try {
       await resendVerification.mutateAsync(unverified)
       setResend('sent')
-    } catch {
+    } catch (err) {
+      if (err instanceof SignInAgainNeeded) {
+        // Not an attempt: nothing was sent, so no hold.
+        clearResend()
+        setProblem({ sentence: 'Sign in again to send it.' })
+        return
+      }
       went = false
       setResend('failed')
     }
@@ -206,6 +360,70 @@ export default function LoginPage() {
     }
   }
 
+  const cardClass = 'bg-[var(--color-card)] rounded-[var(--radius-lg)] p-8 shadow-[var(--shadow-lift)]'
+  const unsupported = step === 'verify' && second?.hintUid === null
+  // On the code step the problem sits under the code field, as in TwoStepSetup; on every other step it leads the card.
+  const problemCallout = problem && (
+    <div id="login-problem">
+    <Callout
+      tone={problem.tone ?? 'error'}
+      announce={problem.tone ? false : undefined}
+      className="mb-4"
+      actions={
+        unverified ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleResend}
+            // The label never changes: this is inside a role=alert, which a screen reader reads whole again whenever its text changes, so progress is
+            // said in the status below instead. Held, not `disabled`: a keyboard user keeps focus on the button while it waits.
+            aria-disabled={resendHeld || resend === 'sending'}
+            aria-busy={resend === 'sending' || undefined}
+            className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
+          >
+            Send it again
+          </Button>
+        ) : undefined
+      }
+    >
+      <p>{problem.sentence}</p>
+      {problem.nextStep && <p>{problem.nextStep}</p>}
+    </Callout>
+    </div>
+  )
+  const cardHeader = (
+    <>
+      <h2 className="text-xl font-semibold mb-6 text-[var(--color-foreground)]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{step === 'verify' ? "Verify it's you" : step === 'enrol' ? 'Set up two-step verification' : 'Sign in to your account'}</h2>
+
+      {!(step === 'verify' && !unsupported) && problemCallout}
+
+      {/* A polite status that is always on the page, so what a resend does is announced when it is written into it (one that appears already holding its text
+          is announced unreliably). The Callouts in it do not announce themselves too, and a failure is said here, not in a second alert. */}
+      <div role="status" aria-live="polite" aria-atomic="true">
+        {unverified && resend === 'sending' && <p className="sr-only">Sending the verification link.</p>}
+        {verify.isPending && <p className="sr-only">Multi-factor verification is being completed.</p>}
+
+        {unverified && resend === 'sent' && (
+          <Callout tone="success" announce={false} className="mb-4">
+            We've sent it again to {unverified.email}. It can take a few minutes, so check your spam folder.
+          </Callout>
+        )}
+
+        {unverified && resend === 'failed' && (
+          <Callout tone="warning" announce={false} className="mb-4">
+            We couldn't send it just now. Wait a few minutes, then try again.
+          </Callout>
+        )}
+      </div>
+
+      {resetSent && (
+        <Callout tone="success" className="mb-4">
+          Password reset email sent. Check your inbox.
+        </Callout>
+      )}
+    </>
+  )
+
   return (
     <div className="min-h-screen flex flex-col bg-[var(--color-background)]">
       <main className="flex-1 flex items-center justify-center p-4">
@@ -215,60 +433,53 @@ export default function LoginPage() {
             <h1><Wordmark size={32} /></h1>
           </div>
 
-          {!config.isPending && (
-          <form onSubmit={handleSubmit} className="bg-[var(--color-card)] rounded-[var(--radius-lg)] p-8 shadow-[var(--shadow-lift)]">
-            <h2 className="text-xl font-semibold mb-6 text-[var(--color-foreground)]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Sign in to your account</h2>
-
-            {problem && (
-              <Callout
-                tone={problem.tone ?? 'error'}
-                announce={problem.tone ? false : undefined}
-                className="mb-4"
-                actions={
-                  unverified ? (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={handleResend}
-                      // The label never changes: this is inside a role=alert, which a screen reader reads whole again whenever its text changes, so progress is
-                      // said in the status below instead. Held, not `disabled`: a keyboard user keeps focus on the button while it waits.
-                      aria-disabled={resendHeld || resend === 'sending'}
-                      aria-busy={resend === 'sending' || undefined}
-                      className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
-                    >
-                      Send it again
-                    </Button>
-                  ) : undefined
-                }
-              >
-                <p>{problem.sentence}</p>
-                {problem.nextStep && <p>{problem.nextStep}</p>}
-              </Callout>
-            )}
-
-            {/* A polite status that is always on the page, so what a resend does is announced when it is written into it (one that appears already holding its text
-                is announced unreliably). The Callouts in it do not announce themselves too, and a failure is said here, not in a second alert. */}
-            <div role="status" aria-live="polite" aria-atomic="true">
-              {unverified && resend === 'sending' && <p className="sr-only">Sending the verification link.</p>}
-
-              {unverified && resend === 'sent' && (
-                <Callout tone="success" announce={false} className="mb-4">
-                  We've sent it again to {unverified.email}. It can take a few minutes, so check your spam folder.
-                </Callout>
-              )}
-
-              {unverified && resend === 'failed' && (
-                <Callout tone="warning" announce={false} className="mb-4">
-                  We couldn't send it just now. Wait a few minutes, then try again.
-                </Callout>
-              )}
+          {!config.isPending && step === 'enrol' && enrolUser && (
+            <div className={cardClass}>
+              {cardHeader}
+              <p className="mb-4 max-w-prose text-sm text-[var(--color-muted-foreground)]">Your role needs a code from an authenticator app when you sign in. It takes about a minute.</p>
+              <TwoStepSetup user={enrolUser} host="login" onEnrolled={finishEnrolment} onCancel={handleBack} onSignInAgain={handleBack} />
             </div>
+          )}
 
-            {resetSent && (
-              <Callout tone="success" className="mb-4">
-                Password reset email sent. Check your inbox.
-              </Callout>
-            )}
+          {!config.isPending && step === 'verify' && (
+            <form onSubmit={handleVerify} className={cardClass}>
+              {cardHeader}
+              {justSetUp && (
+                <Callout tone="success" announce={false} className="mb-4">You're set up. Enter the newest code from your app to finish signing in.</Callout>
+              )}
+              {unsupported ? (
+                <p className="mb-4 max-w-prose text-sm">This account's verification method isn't supported here. Ask your administrator to reset two-step verification.</p>
+              ) : (
+                <div className="space-y-4">
+                  <p className="max-w-prose text-sm">Enter the 6-digit code from your authenticator app.</p>
+                  <CodeField
+                    id="login-code"
+                    ref={codeRef}
+                    value={code}
+                    onChange={t => setCode(codeDigits(t))}
+                    invalid={codeProblem === 'wrong'}
+                    describedBy={problem ? 'login-problem' : undefined}
+                  />
+                  {problemCallout}
+                  {codeProblem === 'timed-out' ? (
+                    <Button type="button" size="lg" className="w-full" onClick={handleBack}>Sign in again</Button>
+                  ) : (
+                    <Button type="submit" size="lg" className="w-full" disabled={code.length !== 6 || verify.isPending || codeProblem === 'too-many'}>
+                      {verify.isPending ? 'Checking…' : 'Verify'}
+                    </Button>
+                  )}
+                </div>
+              )}
+              <div className="mt-6 flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:justify-between">
+                <button type="button" onClick={handleBack} className="min-h-[var(--tap-min)] text-sm text-[var(--color-primary)] hover:underline">Back</button>
+                {!unsupported && <p className="text-xs text-[var(--color-muted-foreground)]">Lost your phone? Ask your administrator to reset two-step verification.</p>}
+              </div>
+            </form>
+          )}
+
+          {!config.isPending && step === 'password' && (
+          <form onSubmit={handleSubmit} className={cardClass}>
+            {cardHeader}
 
             <div className="space-y-4">
               <div>

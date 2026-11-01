@@ -11,6 +11,7 @@ using Odip.Application.Interfaces;
 using Odip.Application.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
+using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
@@ -65,6 +66,20 @@ public class AuthController : ControllerBase
             // its provider allowed, i.e. only for someone who controls the mailbox, and about their own address; an unverified token (which anyone can
             // get for any address) gets the same answer whether or not ODIP knows the address. InvalidToken stays generic.
             return Unauthorized(ApiResponse<AuthResponseDto>.Fail(ExchangeRefusal.MessageFor(code), code));
+        }
+
+        // Two-step verification (see MfaPolicy), decided once the row is known and before any session fact. Switch ON: refuse a required role whose token
+        // carries no totp second factor. Switch OFF: let it through exactly as before and log who would have been refused (ids and provider, no email).
+        ActionResult<ApiResponse<AuthResponseDto>>? MfaRefusal(IReadOnlyDictionary<string, object> tokenClaims, Guid userId, UserRole role, string signInProvider)
+        {
+            if (!MfaPolicy.RequiredFor(role) || MfaPolicy.Satisfied(tokenClaims))
+                return null;
+            if (MfaPolicy.Enforced(_config))
+                return Rejected(
+                    ExchangeRefusal.MfaEnrolmentRequired,
+                    "Exchange refused — user {UserId} ({Role}) must use two-step verification and this sign-in ({Provider}) had none", userId, role, signInProvider);
+            _logger.LogWarning("MfaWouldRefuse — user {UserId} ({Role}) signed in with {Provider} and no second factor", userId, role, signInProvider);
+            return null;
         }
 
         // The token must at least HAVE the shape of one before the SDK is asked to parse it. A token that is not three
@@ -157,6 +172,10 @@ public class AuthController : ControllerBase
                 return Rejected(ExchangeRefusal.NoOdipAccount, "SuperAdmin exchange — email not in DB: {Email}", email);
             }
 
+            // The domain, not the row's role, picks this path, so what is signed in here is a SuperAdmin whatever the row says.
+            if (MfaRefusal(claims, superAdmin.Id, UserRole.SuperAdmin, provider) is { } superAdminMfa)
+                return superAdminMfa;
+
             superAdmin.LastLoginAt = DateTime.UtcNow;
             await _db.SaveChangesAsync(ct);
 
@@ -217,6 +236,9 @@ public class AuthController : ControllerBase
         {
             return Rejected(ExchangeRefusal.AddressUnconfirmed, "Exchange refused — user {UserId}'s address waits for an Admin to confirm it: {Email}", user.Id, email);
         }
+
+        if (MfaRefusal(claims, user.Id, user.Role, provider) is { } mfaRefusal)
+            return mfaRefusal;
 
         // The organisation may limit how long a sign-in lasts, counted from when the person signed in. No limit (null, every organisation
         // until an Admin chooses one) never refuses and issues the same 30 minutes as ever. Decided only here, after the address is verified.

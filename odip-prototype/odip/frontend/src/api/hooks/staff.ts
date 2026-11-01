@@ -119,6 +119,13 @@ export function useConfirmStaffAddress() {
   })
 }
 
+/** POST /staff/{id}/two-step/reset: removes the person's authenticator app so they set it up again at their next password sign-in. Admin, SuperAdmin. */
+export function useResetStaffTwoStep() {
+  return useMutation({
+    mutationFn: (id: string) => apiPost<boolean>(`/staff/${id}/two-step/reset`),
+  })
+}
+
 /**
  * POST /users/invites-sent: tells the server which people Firebase accepted a sign-in invite email for (up to 100), so the next bulk invite
  * skips them and the Staff page can say when. Callers fire it and forget it: a failed record only means the person shows as to invite again.
