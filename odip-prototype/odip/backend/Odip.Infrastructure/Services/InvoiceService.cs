@@ -191,7 +191,7 @@ public class InvoiceService
                             c.Item().Text(inv.SellerAddress).FontSize(9);
                             c.Item().Text($"ABN: {inv.SellerAbn}").FontSize(9);
                             if (!string.IsNullOrWhiteSpace(inv.SellerRegistrationNumber))
-                                c.Item().Text($"NDIS Registration: {inv.SellerRegistrationNumber}").FontSize(9);
+                                c.Item().Text($"Registration: {inv.SellerRegistrationNumber}").FontSize(9);
                         });
                         // 170pt: "DRAFT – not issued" and a 10-character prefix with 8 digits each fit on one line.
                         row.ConstantItem(170).AlignRight().Column(c =>
