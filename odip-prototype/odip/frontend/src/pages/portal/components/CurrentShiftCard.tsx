@@ -1,4 +1,5 @@
 import { usePortalShiftDetail } from '@/api/hooks'
+import { MapPin } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { formatWithTimeZone, parseApiDate } from '@/lib/utils'
 import { formatDayAccessibleName, formatElapsedSince, formatMinutesSpan, formatShiftTimeRange } from '@/pages/rostering/lib/roster'
@@ -46,6 +47,12 @@ export function CurrentShiftCard({ shift }: { shift: PortalShiftSummaryDto }) {
       <p className="text-sm text-[var(--color-muted-foreground)]">
         {formatDayAccessibleName(shift.serviceDate)} · {formatShiftTimeRange(shift.startTime, shift.endTime)}{shift.endsNextDay && ' (+1 day)'}
       </p>
+      {shift.location?.trim() && (
+        <p className="text-sm text-[var(--color-muted-foreground)] flex items-center gap-1 min-w-0">
+          <MapPin className="w-3 h-3 shrink-0" aria-hidden />
+          <span className="truncate" title={shift.location.trim()}><span className="sr-only">Location: </span>{shift.location.trim()}</span>
+        </p>
+      )}
       <p className="text-sm">{state ? `${when} · ${state}` : when}</p>
       {(overdue > 0 || handoverToRead) && (
         <div className="flex flex-wrap gap-2">

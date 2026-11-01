@@ -36,7 +36,7 @@ vi.mock('@/hooks/useIsBelowMd', () => ({ useIsBelowMd: () => false }))
 
 const DRAFT = makeShift({
   id: 'draft-1', participantId: 'p-1', participantName: 'Mia Chen', serviceDate: '2026-08-18', startTime: '09:00:00', endTime: '15:00:00', durationHours: 6,
-  status: 'Draft', staffId: 'staff-2', staffName: 'Sam Wilson', notes: 'Bring the lift sling', overrideReason: 'Cover', acknowledgedFindingCodes: ['SOME_WARNING'],
+  status: 'Draft', staffId: 'staff-2', staffName: 'Sam Wilson', notes: 'Bring the lift sling', location: 'Southside Library', overrideReason: 'Cover', acknowledgedFindingCodes: ['SOME_WARNING'],
 })
 const PUBLISHED = makeShift({ id: 'pub-1', participantId: 'p-1', participantName: 'Mia Chen', serviceDate: '2026-08-17', status: 'Published', staffId: 'staff-2', staffName: 'Sam Wilson' })
 const board = (shifts: ShiftDto[]): RosterBoardDto =>
@@ -74,6 +74,8 @@ describe('Publish from the chip menu', () => {
         status: 'Published', notes: 'Bring the lift sling', overrideReason: 'Cover', acknowledgedFindingCodes: ['SOME_WARNING'], expectedStaffId: 'staff-2',
       }),
     })
+    // Leaving location out keeps the stored value on the server, so a chip loaded before another coordinator typed one cannot overwrite it.
+    expect(h.update.mock.calls[0][0].data).not.toHaveProperty("location")
     await waitFor(() => expect(screen.getByText(/Published Mia Chen, Tuesday 9am to 3pm\. Sam has been notified\./)).toBeInTheDocument())
   })
 

@@ -215,7 +215,7 @@ function create({ funding, respond, failEnvelope, rosterShifts, tasks, participa
       const shift = {
         id, participantId: body.participantId, participantName: who ? who.fullName : 'Participant', staffId: body.staffId || undefined, staffName: undefined, serviceDate: body.serviceDate,
         startTime: `${String(body.startTime).slice(0, 5)}:00`, endTime: `${String(body.endTime).slice(0, 5)}:00`, endsNextDay: !!body.endsNextDay,
-        durationHours: hoursOf(body.startTime, body.endTime, body.endsNextDay), ratio: body.ratio, nightType: body.nightType, status: 'Draft', shiftPatternId: null, notes: body.notes || null,
+        durationHours: hoursOf(body.startTime, body.endTime, body.endsNextDay), ratio: body.ratio, nightType: body.nightType, status: 'Draft', shiftPatternId: null, notes: body.notes || null, location: body.location ?? null,
         overrideReason: emergency ? `Emergency or safety: ${body.overrideReason.trim()}` : adminOverride ? body.overrideReason.trim() : null, assigneeOnApprovedLeave: false, findings: [],
         ...(emergency ? { acknowledgedFindingCodes: ['BUDGET_EMERGENCY'], budgetReview: { state: 'Pending', recordedAt: new Date().toISOString(), reviewTaskTitle: `Review emergency shift over budget: ${who ? who.fullName : 'Participant'} on ${dayMonthYear(body.serviceDate)}` } } : adminOverride ? { acknowledgedFindingCodes: ['BUDGET_FORECAST_OVER'] } : {}),
       }

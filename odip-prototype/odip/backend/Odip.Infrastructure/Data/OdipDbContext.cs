@@ -1143,6 +1143,7 @@ public class OdipDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Notes).HasMaxLength(2000);
+            entity.Property(e => e.Location).HasMaxLength(200);
             entity.Property(e => e.OverrideReason).HasMaxLength(2000);
             entity.Property(e => e.AcknowledgedFindingCodes).HasMaxLength(500);
             entity.Property(e => e.RegularAwayReason).HasMaxLength(200);

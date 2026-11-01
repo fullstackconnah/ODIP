@@ -41,6 +41,8 @@ export interface PortalShiftSummaryDto {
   nightType: SleepoverType
   status: ShiftStatus
   notes: string | null
+  /** Where the coordinator said the shift happens; null (or absent in an old offline cache) shows no row. Never the participant's address. */
+  location?: string | null
   /** How many times a coordinator returned this shift; a Published shift above 0 reads "Returned" on the list. */
   returnCount: number
 }

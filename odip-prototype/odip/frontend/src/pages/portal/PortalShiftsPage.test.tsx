@@ -125,6 +125,26 @@ describe('PortalShiftsPage', () => {
     expect(screen.getByText(/driver/i)).toBeInTheDocument()
   })
 
+  describe('shift location', () => {
+    const show = (location?: string | null) => {
+      const base = makeShiftsResponse()
+      mockUseMyShifts.mockReturnValue({ data: { ...base, shifts: [{ ...base.shifts[0], ...(location === undefined ? {} : { location }) }] }, isLoading: false })
+      renderPage()
+    }
+
+    it('shows the typed location with a screen-reader label', () => {
+      show('Southside Library')
+      expect(screen.getByText('Southside Library')).toHaveAttribute('title', 'Southside Library')
+      expect(screen.getByText(/location:/i)).toBeInTheDocument()
+    })
+
+    it.each([[null], [undefined], ['   ']])('renders no row for %s', (location) => {
+      show(location)
+      expect(screen.queryByText(/location:/i)).not.toBeInTheDocument()
+      expect(document.querySelector('svg.lucide-map-pin')).toBeNull()
+    })
+  })
+
   describe('trip assignment location and role', () => {
     const trip = {
       id: 'assign-1', tripInstanceId: 'trip-1', tripCode: 'TRIP-001', tripName: 'Beach Getaway',

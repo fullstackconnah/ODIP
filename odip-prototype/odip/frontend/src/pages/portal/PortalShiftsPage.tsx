@@ -85,6 +85,12 @@ function ShiftLink({ shift }: { shift: PortalShiftSummaryDto }) {
             {shift.endsNextDay && <span className="ml-1">(+1 day)</span>}
             {shift.ratio !== 'OneToOne' && <span className="ml-2">{RATIO_LABELS[shift.ratio] ?? shift.ratio}</span>}
           </p>
+          {shift.location?.trim() && (
+            <p className="text-sm text-[var(--color-muted-foreground)] flex items-center gap-1 min-w-0">
+              <MapPin className="w-3 h-3 shrink-0" aria-hidden />
+              <span className="truncate" title={shift.location.trim()}><span className="sr-only">Location: </span>{shift.location.trim()}</span>
+            </p>
+          )}
         </div>
         <div className="flex flex-col items-end gap-1 shrink-0">
           {/* A plain Rostered shift is the default state and says nothing, so it has no badge (SHAPE §2). */}

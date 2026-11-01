@@ -383,4 +383,18 @@ public class RosterShiftGeneratorTests
         Assert.Null(db.Database.CurrentTransaction);
         await held.CommitAsync(CancellationToken.None);
     }
+
+    [Fact]
+    public async Task A_generated_shift_never_takes_the_participants_address_as_its_location()
+    {
+        var (db, participantId) = await SeedAsync(id => Pattern(id));
+        await using var _ = db;
+        var participant = await db.Participants.SingleAsync();
+        participant.AddressStreet = "1 Synthetic Street"; participant.AddressSuburb = "Testville"; participant.AddressPostcode = "4000";
+        await db.SaveChangesAsync();
+
+        await new RosterShiftGenerator().GenerateAsync(db, participantId, new[] { (await db.ShiftPatterns.SingleAsync()).Id }, new DateOnly(2026, 10, 12), new DateOnly(2026, 10, 12), CancellationToken.None);
+
+        Assert.Null((await db.Shifts.SingleAsync()).Location);
+    }
 }
