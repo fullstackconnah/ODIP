@@ -77,4 +77,23 @@ public class ClaimHubPaidTests
         var summary = (await f.Service.BatchesAsync(f.TenantId, null, 10, default)).Single();
         Assert.Equal((1, 120m), (summary.Paid, summary.PaidAmount));
     }
+
+    [Fact]
+    public async Task A_line_rebuilt_into_a_file_that_is_still_only_built_stays_paid_under_the_rejecting_file()
+    {
+        using var f = new BatchFixture();
+        var (_, lines, _) = f.AddClaim();
+        var a = (await f.BuildAsync(lines[0].Id)).Value!;
+        await f.Service.ConfirmUploadedAsync(f.TenantId, f.User, a.Id, default);
+        await f.Service.ImportResultsAsync(f.TenantId, f.User, a.Id, Csv($"{a.Lines[0].RowReference},Rejected,ZZA,one,"), default);
+        var second = await f.BuildAsync(lines[0].Id);
+        if (!second.Ok) second = await f.Service.BuildAsync(f.TenantId, f.User, new BuildRequest([lines[0].Id], [], [lines[0].Id]), default);
+        var b = second.Value!;
+
+        await MarkPaidByHandAsync(f, lines[0]);
+
+        var all = await f.Service.BatchesAsync(f.TenantId, null, 10, default);
+        Assert.Equal((1, 120m), (all.Single(x => x.Id == a.Id).Paid, all.Single(x => x.Id == a.Id).PaidAmount));
+        Assert.Equal((0, 0m), (all.Single(x => x.Id == b.Id).Paid, all.Single(x => x.Id == b.Id).PaidAmount));
+    }
 }

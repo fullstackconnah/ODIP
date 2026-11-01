@@ -26,9 +26,9 @@ export function PaidPanel({ batches, loading, failed, onRetry, onOpen }: { batch
   const columns: Column<BatchDto>[] = [
     { key: 'file', header: 'File', mobile: 'primary', render: b => <span className="whitespace-nowrap text-sm font-semibold">{b.fileName}</span> },
     { key: 'results', header: 'Results in', mobile: 'meta', render: b => instantDay(b.resultsImportedAt) },
-    { key: 'lines', header: 'Lines paid', align: 'right', mobile: 'meta', render: b => `${b.paid} of ${plural(b.successful, 'line')}` },
+    { key: 'lines', header: 'Lines paid', align: 'right', mobile: 'meta', render: b => `${b.paid} of ${plural(b.lineCount, 'line')}` },
     { key: 'claimed', header: 'Claimed', align: 'right', mobile: 'meta', render: b => formatCurrency(b.totalAmount) },
-    { key: 'paid', header: 'Paid', align: 'right', mobile: 'status', render: b => b.paidAmount < b.totalAmount && b.rejected === 0
+    { key: 'paid', header: 'Paid', align: 'right', mobile: 'status', render: b => b.pending === 0 && b.rejected === 0 && b.paidAmount < b.totalAmount
       ? <span className={TONE.danger.ink} title="Paid less than claimed">{formatCurrency(b.paidAmount)}</span>
       : formatCurrency(b.paidAmount) },
   ]

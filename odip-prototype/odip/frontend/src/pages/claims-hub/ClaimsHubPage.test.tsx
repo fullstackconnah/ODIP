@@ -1,3 +1,4 @@
+import { TONE } from '@/lib/tone'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -273,6 +274,16 @@ describe('ClaimsHubPage: finish round 2', () => {
     m.batches.mockReturnValue(query([batch()]))
     renderPage('/claims?tab=files')
     expect(within(screen.getByTestId('claims-panel-files')).getByText(/30 Oct 2026/)).toBeInTheDocument()
+  })
+})
+
+describe('ClaimsHubPage: Paid tab', () => {
+  it('counts paid lines against the whole file and keeps the amount out of the danger tone while lines are open', () => {
+    m.batches.mockReturnValue(query([batch({ lineCount: 3, pending: 2, successful: 0, paid: 1, paidAmount: 100, totalAmount: 350 })]))
+    renderPage('/claims?tab=paid')
+    const panel = screen.getByTestId('claims-panel-paid')
+    expect(within(panel).getByText('1 of 3 lines')).toBeInTheDocument()
+    expect(within(panel).getByText('$100.00').className).not.toContain(TONE.danger.ink)
   })
 })
 
