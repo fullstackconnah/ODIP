@@ -6,13 +6,13 @@ const refused = (code: SignInRefusal['code'], retryAfterSeconds: number | null =
 describe('the codes', () => {
   it('are exactly the ones the server sends, so a change to the list is deliberate (ExchangeRefusalTests pins the same list)', () => {
     expect([...SIGN_IN_REFUSAL_CODES].sort()).toEqual(
-      ['Ambiguous', 'EmailNotVerified', 'InvalidToken', 'LockedOut', 'NoOdipAccount', 'ProviderNotAllowed', 'TenantInactive', 'AddressUnconfirmed', 'SessionLengthReached'].sort(),
+      ['Ambiguous', 'EmailNotVerified', 'InvalidToken', 'LockedOut', 'NoOdipAccount', 'ProviderNotAllowed', 'TenantInactive', 'AddressUnconfirmed', 'SessionLengthReached', 'MfaEnrolmentRequired'].sort(),
     )
   })
 })
 
 describe('signInRefusalOf', () => {
-  it.each(['EmailNotVerified', 'NoOdipAccount', 'TenantInactive', 'ProviderNotAllowed', 'Ambiguous', 'InvalidToken', 'SessionLengthReached'])('reads a 401 with the code %s', code => {
+  it.each(['EmailNotVerified', 'NoOdipAccount', 'TenantInactive', 'ProviderNotAllowed', 'Ambiguous', 'InvalidToken', 'SessionLengthReached', 'MfaEnrolmentRequired'])('reads a 401 with the code %s', code => {
     expect(signInRefusalOf({ response: { status: 401, data: { code } } })).toEqual({ code, retryAfterSeconds: null })
   })
 
@@ -131,6 +131,13 @@ describe('describeSignInRefusal', () => {
     expect(describeSignInRefusal(refused('InvalidToken'), email)).toEqual({
       sentence: "We couldn't sign you in.",
       nextStep: 'Try again. If it keeps happening, ask your administrator.',
+    })
+  })
+
+  it('words the two-step refusal', () => {
+    expect(describeSignInRefusal(refused('MfaEnrolmentRequired'), email)).toEqual({
+      sentence: 'Your role needs two-step verification.',
+      nextStep: 'Sign in again to set it up.',
     })
   })
 
