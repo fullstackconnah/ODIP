@@ -13,12 +13,13 @@ using Odip.Infrastructure.Data;
 namespace Odip.Infrastructure.Migrations
 {
     [DbContext(typeof(OdipDbContext))]
-    [Migration("20261102000000_AddClaimLinePaidAt")]
+    [Migration("20261102100000_AddClaimLinePaidAt")]
     partial class AddClaimLinePaidAt
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
+#pragma warning disable 612, 618
             modelBuilder
                 .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
@@ -274,6 +275,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<bool>("HiddenVehicles")
                         .HasColumnType("boolean");
 
+                    b.Property<int>("PlanExpiryWarningDays")
+                        .HasColumnType("integer");
+
                     b.Property<int>("QualificationWarningDays")
                         .HasColumnType("integer");
 
@@ -282,6 +286,9 @@ namespace Odip.Infrastructure.Migrations
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
+
+                    b.Property<int>("VarianceReviewMinutes")
+                        .HasColumnType("integer");
 
                     b.Property<int>("WeeklyHoursWarning")
                         .HasColumnType("integer");
@@ -731,6 +738,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateOnly>("SupportsDeliveredTo")
                         .HasColumnType("date");
 
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid");
+
                     b.Property<decimal>("TotalAmount")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
@@ -749,6 +759,8 @@ namespace Odip.Infrastructure.Migrations
                     b.HasIndex("ShiftId");
 
                     b.HasIndex("Status");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("TripClaimId");
 
@@ -4943,6 +4955,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateTime?>("SubmittedDate")
                         .HasColumnType("timestamp without time zone");
 
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid");
+
                     b.Property<decimal>("TotalAmount")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
@@ -4964,6 +4979,8 @@ namespace Odip.Infrastructure.Migrations
                     b.HasIndex("ParticipantId");
 
                     b.HasIndex("Status");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("TripInstanceId");
 
