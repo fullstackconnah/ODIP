@@ -4,7 +4,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import { FileText } from 'lucide-react'
 import { useParticipantClaims, usePreviewShiftClaim, useGenerateShiftClaim } from '@/api/hooks'
 import { Callout } from '@/components/Callout'
-import { LeftOutCallout } from '@/components/LeftOutCallout'
+import { FlaggedShifts } from '@/components/FlaggedShifts'
+import { LeftOutCallout, SHIFT_LEFT_OUT_FOOTER } from '@/components/LeftOutCallout'
 import { PageState } from '@/components/PageState'
 import { queryPhase } from '@/lib/queryPhase'
 import { Card } from '@/components/Card'
@@ -15,7 +16,7 @@ import { EmptyState } from '@/components/EmptyState'
 import { FormField } from '@/components/FormField'
 import { plural } from '@/lib/format'
 import { extractErrorMessage, formatCurrency, formatDateAu } from '@/lib/utils'
-import type { TripClaimListDto, ShiftClaimFlaggedDto, ShiftClaimGeneratedDto, ShiftClaimLeftOutDto, ShiftClaimPreviewLineItemDto, ShiftClaimPreviewResponseDto } from '@/api/types'
+import type { TripClaimListDto, ShiftClaimGeneratedDto, ShiftClaimLeftOutDto, ShiftClaimPreviewLineItemDto, ShiftClaimPreviewResponseDto } from '@/api/types'
 import { ClaimBudgetBlock } from '@/components/ClaimBudgetBlock'
 import type { Tone } from '@/lib/tone'
 import { Button } from '@/components/Button'
@@ -337,25 +338,6 @@ function GenerateShiftClaimModal({ participantId, onClose }: { participantId: st
     </Modal>
   )
 }
-
-/** The shifts that are in a claim but were priced with a caveat: each with its date, what it is and what is not worked out. The claim line cannot keep the caveat, so this is where it is read. */
-function FlaggedShifts({ shifts }: { shifts: ShiftClaimFlaggedDto[] }) {
-  return (
-    <Callout tone="info">
-      <p className="font-medium">{`${plural(shifts.length, 'shift')} in this claim ${shifts.length === 1 ? 'has' : 'have'} a pricing note`}</p>
-      <ul className="mt-2 flex flex-col gap-1 text-sm">
-        {shifts.map(shift => (
-          <li key={shift.shiftId}>
-            <span className="tabular-nums">{formatDateAu(shift.serviceDate)}</span> · {shift.description} · {shift.caveat}
-          </li>
-        ))}
-      </ul>
-      <p className="mt-2 text-[13px]">Their lines are priced as hours at the day rate. Check them against the hours worked before the claim is submitted.</p>
-    </Callout>
-  )
-}
-
-const SHIFT_LEFT_OUT_FOOTER = 'They stay completed and unclaimed. Nothing here is billed for them.'
 
 /** The completed shifts a shift claim leaves out: each with its date, what it is and why. */
 const shiftItems = (shifts: ShiftClaimLeftOutDto[]) =>

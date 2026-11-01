@@ -122,7 +122,7 @@ public class InvoiceRenderTests
     [InlineData("PR001", true)]
     [InlineData("", false)]
     [InlineData("   ", false)]
-    public void TheNdisRegistrationLine_IsPrintedOnlyWhenARegistrationNumberIsSet(string registration, bool printed)
+    public void TheRegistrationLine_IsPrintedOnlyWhenARegistrationNumberIsSet(string registration, bool printed)
     {
         var invoice = new Invoice
         {
@@ -134,8 +134,28 @@ public class InvoiceRenderTests
 
         var text = TextOf(InvoiceService.Render(invoice));
 
-        Assert.Equal(printed, text.Contains(Skeleton("NDIS Registration")));
+        Assert.Equal(printed, text.Contains(Skeleton("Registration: PR001")));
+        Assert.DoesNotContain(Skeleton("NDIS Registration"), text);   // the label is neutral: it also prints for plan-managed and self-managed participants
         Assert.Contains(Skeleton("ABN: 12345678901"), text);   // the lines around it are untouched
+    }
+
+private static Invoice FixedInvoice(string serviceReference) => new()
+    {
+        Kind = InvoiceKind.Invoice, Status = InvoiceStatus.Issued, DisplayNumber = "INV-1", IssueDate = new DateOnly(2026, 10, 23), DueDate = new DateOnly(2026, 11, 6),
+        BillToName = "Sam Lee", ParticipantName = "Sam Lee", ServiceReference = serviceReference, SellerOrganisationName = "Test Provider", SellerAbn = "12345678901",
+        SellerRegistrationNumber = "PR001", SellerAddress = "1 Test St", SellerState = "NSW", PaymentTermsDays = 14, Subtotal = 100m, Total = 100m,
+        Lines = [new InvoiceLine { SupportItemCode = "04_104_0125_6_1", ServiceFrom = new DateOnly(2026, 10, 3), ServiceTo = new DateOnly(2026, 10, 4), Hours = 1m, UnitPrice = 100m, LineTotal = 100m }],
+    };
+
+    // Golden text captured from the renderer BEFORE the label change (run 20261102-012337-3640); the only edit since is "NDIS Registration" -> "Registration" (Skeleton: NDSRegsraon -> Regsraon). PDF metadata differs per render, so the comparison is on extracted text.
+    private const string GoldenTrip = "NVOCEesProvderNV11esSssued23Oc2026ABN12345678901Due06Nov2026RegsraonPR001BlloParcpanSamLeeSamLeerpCoasalweekendSupporemDaeRangeHoursRaeAmoun0410401256103102026100100001000004102026Suboal10000oal10000Paymenerms14daysPleasepayby06Nov2026anduseNV1ashereerence";
+    private const string GoldenShift = "NVOCEesProvderNV11esSssued23Oc2026ABN12345678901Due06Nov2026RegsraonPR001BlloParcpanSamLeeSamLeePerod01Oc202614Oc2026SupporemDaeRangeHoursRaeAmoun0410401256103102026100100001000004102026Suboal10000oal10000Paymenerms14daysPleasepayby06Nov2026anduseNV1ashereerence";
+
+    [Fact]
+    public void TripAndShiftInvoices_AreUnchanged_ExceptTheRegistrationLabel()
+    {
+        Assert.Equal(GoldenTrip, TextOf(InvoiceService.Render(FixedInvoice("Trip: Coastal weekend"))));
+        Assert.Equal(GoldenShift, TextOf(InvoiceService.Render(FixedInvoice("Period: 01 Oct 2026 – 14 Oct 2026"))));
     }
 
     [Fact]
