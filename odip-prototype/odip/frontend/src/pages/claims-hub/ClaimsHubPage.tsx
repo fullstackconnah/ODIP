@@ -14,6 +14,7 @@ import { FilesPanel, FilesStrip } from './FilesPanel'
 import { OtherPanel, PaidPanel } from './HistoryPanels'
 import { NeedsActionPanel } from './NeedsActionPanel'
 import { ReadyPanel } from './ReadyPanel'
+import { ShiftClaimRunModal } from './ShiftClaimRunModal'
 import { isUnfinished } from './claimHubSteps'
 
 const TAB_KEYS = ['ready', 'files', 'action', 'paid', 'other'] as const
@@ -33,6 +34,7 @@ export default function ClaimsHubPage() {
   const [params, setParams] = useSearchParams()
   const openFile = params.get('file')
   const [how, setHow] = useState(false)
+  const [claimRun, setClaimRun] = useState(false)
   const [message, setMessage] = useState('')
   const [fileFilter, setFileFilter] = useState<string | undefined>()
   const lines = useHubLines()
@@ -55,7 +57,12 @@ export default function ClaimsHubPage() {
     <PageHeader
       title="Claims"
       subtitle="Send NDIA-managed claims as a bulk payment request file, then track what comes back."
-      action={<Button variant="secondary" size="md" onClick={() => setHow(true)}>How claiming works</Button>}
+      action={
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" size="md" onClick={() => setHow(true)}>How claiming works</Button>
+          {hasOrganisation && <Button size="md" onClick={() => setClaimRun(true)}>Claim shifts</Button>}
+        </div>
+      }
     />
   )
   const howModal = (
@@ -118,6 +125,7 @@ export default function ClaimsHubPage() {
         }}
       />
       {howModal}
+      {claimRun && <ShiftClaimRunModal open onClose={() => setClaimRun(false)} />}
     </div>
   )
 }
