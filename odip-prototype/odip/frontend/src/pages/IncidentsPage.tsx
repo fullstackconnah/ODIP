@@ -14,7 +14,7 @@ import { TAP_FLOOR, TAP_TRUNCATED_LINK } from '@/components/tapArea'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useState } from 'react'
-import { Filter, Plus, AlertTriangle, ShieldAlert, FileWarning, Pencil, Archive, ArchiveRestore } from 'lucide-react'
+import { Filter, Plus, AlertTriangle, ShieldAlert, FileWarning, Pencil, Archive, ArchiveRestore, ChevronRight } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
 import { formatDateAu } from '@/lib/utils'
 import { formatAge, plural } from '@/lib/format'
@@ -403,9 +403,10 @@ export default function IncidentsPage() {
             <Link to="/incidents?qsc=overdue" className={`${TAP_FLOOR} shrink-0 whitespace-nowrap font-medium underline underline-offset-2`}>
               View overdue incidents
             </Link>
-            <details className="open:basis-full">
-              <summary className={`${TAP_FLOOR} cursor-pointer list-none whitespace-nowrap font-medium underline underline-offset-2 [&::-webkit-details-marker]:hidden`}>
+            <details className="group open:basis-full">
+              <summary className={`${TAP_FLOOR} inline-flex cursor-pointer list-none items-center gap-1 whitespace-nowrap font-medium hover:underline hover:underline-offset-2 [&::-webkit-details-marker]:hidden`}>
                 About the deadlines
+                <ChevronRight className="h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-90 motion-reduce:transition-none" aria-hidden="true" />
               </summary>
               <p className="pb-1 text-[13px] text-foreground">{'Most reportable incidents must be reported to the NDIS Commission within 24 hours. Some uses of an unauthorised restrictive practice can be reported within 5 business days.'}</p>
             </details>

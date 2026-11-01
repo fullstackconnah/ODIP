@@ -186,7 +186,7 @@ describe('StaffDetailPage — summary strip', () => {
 
     expect(strip()).toHaveTextContent('1 expired')
     expect(strip()).toHaveTextContent('1 expiring')
-    expect(strip()).toHaveTextContent('Tue 3 Nov, 7am')
+    expect(strip()).toHaveTextContent('Next shiftTue 3 Nov, 7am')
   })
 
   it('lets the tab strip scroll sideways, so Week is not cut off on a phone', () => {

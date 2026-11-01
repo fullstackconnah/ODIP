@@ -38,7 +38,7 @@ const ENTRIES = [
   entry({ id: 'rp-over', description: 'Hold whose interim plan is overdue.', firstUsedOn: '2026-08-01', interimBspState: 'Overdue', interimBspDueOn: '2026-09-01', comprehensiveBspState: 'Due', comprehensiveBspDueOn: '2027-02-01' }),
   entry({ id: 'rp-interim', description: 'Hold with the interim plan in place.', firstUsedOn: '2026-08-01', interimBspDate: '2026-08-20', interimBspState: 'InPlace', interimBspDueOn: '2026-09-01', comprehensiveBspState: 'Due', comprehensiveBspDueOn: '2027-02-01' }),
   entry({ id: 'rp-comp', description: 'Hold with the comprehensive plan in place.', firstUsedOn: '2026-03-01', interimBspDate: '2026-03-20', comprehensiveBspDate: '2026-08-20', interimBspState: 'InPlace', comprehensiveBspState: 'InPlace', interimBspDueOn: '2026-04-01', comprehensiveBspDueOn: '2026-09-01' }),
-  entry({ id: 'rp-ended', description: 'Hold whose authorisation has ended.', authorisationEndDate: '2020-01-31', isAuthorised: false }),
+  entry({ id: 'rp-ended', description: 'Hold whose authorisation has ended.', authorisationDate: '2019-08-01', authorisationEndDate: '2020-01-31', isAuthorised: false }),
   entry({ id: 'rp-prn', description: 'Risperidone given as needed.', type: 'ChemicalRestraint', relatedMedicationId: 'med-1', relatedMedicationName: 'Risperidone 1mg', relatedMedicationStatus: 'Active', useKind: 'Prn' }),
   entry({ id: 'rp-off', description: 'Old inactive hold.', isActive: false, firstUsedOn: '2026-01-01', interimBspState: 'Overdue', interimBspDueOn: '2026-02-01' }),
 ]
@@ -118,7 +118,7 @@ try {
     for (const id of ['rp-future', 'rp-ended', 'rp-open']) {
       const e = ENTRIES.find((x) => x.id === id)
       const text = await card(e.description).innerText()
-      const labels = id === 'rp-ended' ? ['Routine', 'Authorised by Dr Chen', 'Authorised 01/08/2026 to 31/01/2020', 'Authorisation ended 31/01/2020'] : id === 'rp-future' ? ['Routine', 'Authorised by Dr Chen', 'Authorised 01/08/2026 to 31/12/2099'] : ['Routine', 'Authorised by Dr Chen', 'Authorised 01/08/2026, no end date']
+      const labels = id === 'rp-ended' ? ['Routine', 'Authorised by Dr Chen', 'Authorised 01/08/2019 to 31/01/2020', 'Authorisation ended 31/01/2020'] : id === 'rp-future' ? ['Routine', 'Authorised by Dr Chen', 'Authorised 01/08/2026 to 31/12/2099'] : ['Routine', 'Authorised by Dr Chen', 'Authorised 01/08/2026, no end date']
       const bad = inOrder(text, labels)
       check(`${vp.name} 1 meta order ${id}`, bad, bad === null)
       if (id === 'rp-ended') check(`${vp.name} 1 ended reads "Authorisation ended", not "Not yet in force"`, text, /Authorisation ended/.test(text) && !/Not yet in force/.test(text))
