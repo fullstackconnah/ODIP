@@ -53,7 +53,7 @@ export function SupportTypeField({ value, onChange, date, canWrite, claimReferen
       : undefined
   const line = locked
     ? `On claim ${claimReference}. Delete that claim to change the support type.`
-    : groups && listed.length === 0 ? EMPTY_CATALOGUE : hint
+    : loading ? undefined : groups && listed.length === 0 ? EMPTY_CATALOGUE : hint
 
   return (
     <FormField label="Support type" hint={line} error={error}>

@@ -129,8 +129,8 @@ function judge(t, state, s, m) {
   if (s.width === 390) check(t('5 body scrollWidth equals clientWidth'), !!m.scroller && m.scroller.sw === m.scroller.cw, m.scroller)
   if (state === 'shift-locked-claimed') check(t('6 disabled and described by "On claim"'), c.disabled && m.helpers.some((h) => h.text.includes('On claim')), { disabled: c.disabled, helpers: m.helpers.map((h) => h.text) })
   if (state === 'shift-invalid-no-rate' || state === 'shift-catalogue-error') check(t('7 helper slot has role=alert'), m.helpers.some((h) => h.role === 'alert'), m.helpers)
-  if (s.scheme === 'dark') check(t('9 dark helper contrast >= 4.5'), m.contrast !== null && m.contrast >= 4.5, m.contrast)
-  else check(t('9 light helper contrast >= 4.5 (info)'), m.contrast !== null && m.contrast >= 4.5, m.contrast)
+  if (s.scheme === 'dark') check(t('9 dark helper contrast >= 4.5'), (m.contrast === null ? state === 'shift-catalogue-loading' : m.contrast >= 4.5), m.contrast)
+  else check(t('9 light helper contrast >= 4.5 (info)'), (m.contrast === null ? state === 'shift-catalogue-loading' : m.contrast >= 4.5), m.contrast)
 }
 
 const SCENES = [

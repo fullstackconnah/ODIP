@@ -1997,6 +1997,14 @@ describe('ShiftSlideOver support type', () => {
     expect(mockCreateMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ supportGroupCode: 'GRP_ART' }))
   })
 
+  it('while the catalogue loads the field shows no helper text', () => {
+    catalogue.current = { data: undefined as unknown as unknown[], isLoading: true, isError: false }
+    open(makeShift({ shiftPatternId: undefined, supportGroupCode: undefined }))
+    expect(screen.getByRole('combobox', { name: 'Support type' })).toHaveAttribute('placeholder', 'Loading support types…')
+    expect(screen.queryByText(/Claims use its rate/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Copied from/)).not.toBeInTheDocument()
+  })
+
   it('a shift made from a pattern says the type was copied and a change is for this shift only', () => {
     open(makeShift({ shiftPatternId: 'pattern-1', supportGroupCode: 'GRP_ART' }))
     expect(screen.getByText('Copied from its pattern. A change here is for this shift only.')).toBeInTheDocument()
