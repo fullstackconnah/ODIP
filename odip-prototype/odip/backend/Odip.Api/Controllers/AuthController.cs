@@ -218,17 +218,31 @@ public class AuthController : ControllerBase
             return Rejected(ExchangeRefusal.AddressUnconfirmed, "Exchange refused — user {UserId}'s address waits for an Admin to confirm it: {Email}", user.Id, email);
         }
 
-        user.LastLoginAt = DateTime.UtcNow;
+        // The organisation may limit how long a sign-in lasts, counted from when the person signed in. No limit (null, every organisation
+        // until an Admin chooses one) never refuses and issues the same 30 minutes as ever. Decided only here, after the address is verified.
+        var now = DateTime.UtcNow;
+        var limit = await OdipSession.SessionLengthFor(_db, tenant.Id, ct);
+        var signedInAt = OdipSession.AuthTime(claims);
+        if (limit is not null)
+        {
+            if (signedInAt is null)
+                return Rejected(ExchangeRefusal.InvalidToken, "Exchange failed — the organisation limits session length and the token carried no readable auth_time: {Email}", email);
+            if (OdipSession.Ended(now, signedInAt.Value, limit))
+                return Rejected(ExchangeRefusal.SessionLengthReached, "Exchange refused — user {UserId} signed in longer ago than the organisation's {Limit} minute session length", user.Id, limit);
+        }
+        var expiresAt = OdipSession.ExpiresAt(now, signedInAt ?? now, limit);
+
+        user.LastLoginAt = now;
         await _db.SaveChangesAsync(ct);
 
-        var tenantToken = GenerateJwtToken(user, tenant.Id);
+        var tenantToken = GenerateJwtToken(user, tenant.Id, expiresAt);
         SetJwtCookie(tenantToken);
 
         return Ok(ApiResponse<AuthResponseDto>.Ok(new AuthResponseDto
         {
             Id = user.Id,
             Token = tenantToken,
-            ExpiresAt = DateTime.UtcNow.AddMinutes(30),
+            ExpiresAt = expiresAt,
             Username = user.Username,
             FullName = user.FullName,
             Role = user.Role.ToString(),
@@ -298,14 +312,17 @@ public class AuthController : ControllerBase
         if (tenant is null)
             return NotFound(ApiResponse<AuthResponseDto>.Fail("Tenant not found for dev user"));
 
-        var tenantToken = GenerateJwtToken(user, tenant.Id);
+        // Dev-login is itself the sign-in, so the sign-in time is now.
+        var devNow = DateTime.UtcNow;
+        var devExpiresAt = OdipSession.ExpiresAt(devNow, devNow, await OdipSession.SessionLengthFor(_db, tenant.Id, ct));
+        var tenantToken = GenerateJwtToken(user, tenant.Id, devExpiresAt);
         SetJwtCookie(tenantToken);
 
         return Ok(ApiResponse<AuthResponseDto>.Ok(new AuthResponseDto
         {
             Id = user.Id,
             Token = tenantToken,
-            ExpiresAt = DateTime.UtcNow.AddMinutes(30),
+            ExpiresAt = devExpiresAt,
             Username = user.Username,
             FullName = user.FullName,
             Role = user.Role.ToString(),
@@ -409,7 +426,7 @@ public class AuthController : ControllerBase
 
     private void SetJwtCookie(string token) => OdipSession.SetCookie(Response, token);
 
-    private string GenerateJwtToken(Domain.Entities.User user, Guid tenantId) => OdipSession.Token(user, tenantId, _config);
+    private string GenerateJwtToken(Domain.Entities.User user, Guid tenantId, DateTime expiresAtUtc) => OdipSession.Token(user, tenantId, _config, expiresAtUtc);
 
     private string GenerateSuperAdminJwtToken(Domain.Entities.User user)
     {

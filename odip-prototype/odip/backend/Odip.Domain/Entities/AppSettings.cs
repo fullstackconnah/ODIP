@@ -15,4 +15,6 @@ public class AppSettings : ITenantEntity
     public int QualificationWarningDays { get; set; } = 30;
     /// <summary>Weekly rostered hours above which a worker gets the OVER_HOURS warning. One number for the organisation; 38 is the old fixed value.</summary>
     public int WeeklyHoursWarning { get; set; } = 38;
+    /// <summary>Minutes a sign-in lasts, counted from when the person signed in. Null = no limit (today's behaviour); never backfilled.</summary>
+    public int? SessionLengthMinutes { get; set; }
 }

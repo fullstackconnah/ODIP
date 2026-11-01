@@ -6,13 +6,13 @@ const refused = (code: SignInRefusal['code'], retryAfterSeconds: number | null =
 describe('the codes', () => {
   it('are exactly the ones the server sends, so a change to the list is deliberate (ExchangeRefusalTests pins the same list)', () => {
     expect([...SIGN_IN_REFUSAL_CODES].sort()).toEqual(
-      ['Ambiguous', 'EmailNotVerified', 'InvalidToken', 'LockedOut', 'NoOdipAccount', 'ProviderNotAllowed', 'TenantInactive', 'AddressUnconfirmed'].sort(),
+      ['Ambiguous', 'EmailNotVerified', 'InvalidToken', 'LockedOut', 'NoOdipAccount', 'ProviderNotAllowed', 'TenantInactive', 'AddressUnconfirmed', 'SessionLengthReached'].sort(),
     )
   })
 })
 
 describe('signInRefusalOf', () => {
-  it.each(['EmailNotVerified', 'NoOdipAccount', 'TenantInactive', 'ProviderNotAllowed', 'Ambiguous', 'InvalidToken'])('reads a 401 with the code %s', code => {
+  it.each(['EmailNotVerified', 'NoOdipAccount', 'TenantInactive', 'ProviderNotAllowed', 'Ambiguous', 'InvalidToken', 'SessionLengthReached'])('reads a 401 with the code %s', code => {
     expect(signInRefusalOf({ response: { status: 401, data: { code } } })).toEqual({ code, retryAfterSeconds: null })
   })
 
@@ -161,7 +161,7 @@ describe('the Microsoft outcome words', () => {
     expect([...MICROSOFT_REFUSAL_CODES]).toEqual([
       'InvalidToken', 'NoOdipAccount', 'TenantInactive', 'LockedOut', 'MicrosoftNotLinked', 'MicrosoftPersonalAccount', 'MicrosoftGuest', 'MicrosoftLinkFromAccount',
       'MicrosoftNoEmail', 'MicrosoftCannotCreate', 'MicrosoftCancelled', 'SignInRequired', 'MicrosoftAdminOnly', 'MicrosoftOrgAlreadyLinked', 'MicrosoftTenantTaken',
-      'MicrosoftSessionChanged', 'MicrosoftWrongTenant', 'MicrosoftAccountTaken', 'MicrosoftAccountAlreadyLinked', 'MicrosoftOnlySignIn', 'MicrosoftSessionEnded',
+      'MicrosoftSessionChanged', 'MicrosoftWrongTenant', 'MicrosoftAccountTaken', 'MicrosoftAccountAlreadyLinked', 'MicrosoftOnlySignIn', 'MicrosoftSessionEnded', 'SessionLengthReached',
     ])
   })
 
@@ -189,6 +189,7 @@ describe('the Microsoft outcome words', () => {
   it('sets the tone per code and tells the person what to do next', () => {
     expect(describeMicrosoftOutcome('MicrosoftCancelled', 'signin').tone).toBe('warning')
     expect(describeMicrosoftOutcome('MicrosoftSessionEnded', 'signin')).toMatchObject({ tone: 'info', sentence: "You've been signed out." })
+    expect(describeMicrosoftOutcome('SessionLengthReached', 'signin')).toMatchObject({ tone: 'info', sentence: "You've been signed out." })
     expect(describeMicrosoftOutcome('MicrosoftOrgAlreadyLinked', 'organisation').tone).toBe('info')
     expect(describeMicrosoftOutcome('MicrosoftOrgAlreadyLinked', 'organisation').nextStep).toBeUndefined()
     expect(describeMicrosoftOutcome('MicrosoftOnlySignIn', 'account')).toMatchObject({
