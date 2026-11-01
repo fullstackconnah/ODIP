@@ -10,6 +10,9 @@ using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
+using Odip.Tests.Funding;
+using System.Reflection;
+using Microsoft.AspNetCore.Authorization;
 using Xunit;
 using Odip.Tests.Support;
 
@@ -533,5 +536,84 @@ public class ClaimsControllerTests
         Assert.IsType<BadRequestObjectResult>(result.Result);
         // No claim should have been generated against tenant B's shift on behalf of tenant A's caller.
         Assert.Empty(await db.TripClaims.IgnoreQueryFilters().ToListAsync());
+    }
+
+    // ── Claim run (shift billing PR1) ──────────────────────────────────────
+
+    private static ClaimsController RunController(LedgerKit kit, TimeProvider? clock = null) =>
+        new(kit.Db, new ClaimGenerationService(kit.Db), new ShiftClaimGenerationService(kit.Db, kit.Ledger, kit.Tenant), new BprCsvService(kit.Db), new InvoiceService(kit.Db), kit.Ledger, kit.Tenant!, clock);
+
+    private static T Body<T>(ActionResult<ApiResponse<T>> r) => Assert.IsType<ApiResponse<T>>(Assert.IsType<OkObjectResult>(r.Result).Value).Data!;
+
+    [Fact]
+    public void ShiftClaimRun_HasTheSameRolesAsTheParticipantShiftClaim()
+    {
+        string RolesOf(string action) => typeof(ClaimsController).GetMethod(action)!.GetCustomAttribute<AuthorizeAttribute>()!.Roles!;
+        var expected = RolesOf(nameof(ClaimsController.GenerateShiftClaim));
+
+        Assert.Equal(expected, RolesOf(nameof(ClaimsController.RunShiftClaims)));
+        Assert.Equal(expected, RolesOf(nameof(ClaimsController.PreviewShiftClaimRun)));
+        Assert.DoesNotContain("SupportWorker", expected);
+        Assert.DoesNotContain("ReadOnly", expected);
+    }
+
+    [Fact]
+    public async Task ShiftClaimRun_ByASuperAdminWithNoOrganisation_IsRefused_AndMakesNothing()
+    {
+        using var db = CreateDb();
+        var participant = SeedParticipantWithCompletedShift(db, Guid.NewGuid(), out var shift);
+        var controller = CreateController(db);
+        var dto = new ShiftClaimRunRequestDto { From = shift.ServiceDate, To = shift.ServiceDate };
+
+        var run = await controller.RunShiftClaims(dto, CancellationToken.None);
+        var preview = await controller.PreviewShiftClaimRun(dto, CancellationToken.None);
+
+        foreach (var result in new[] { run.Result, preview.Result })
+        {
+            var bad = Assert.IsType<BadRequestObjectResult>(result);
+            Assert.Equal("Choose an organisation first.", Assert.Single(Assert.IsType<ApiResponse<ShiftClaimRunDto>>(bad.Value).Errors!));
+        }
+        Assert.Empty(db.TripClaims);
+    }
+
+    [Fact]
+    public async Task ShiftClaimRun_DefaultPeriod_IsTheLast14DaysToYesterday_InSydney()
+    {
+        using var kit = LedgerKit.Create();
+        kit.SeedProvider("NSW").TimeZoneId = "Australia/Sydney";
+        kit.Db.SaveChanges();
+        // 01 Nov 13:30 UTC is 02 Nov 00:30 in Sydney (AEDT): yesterday is 01 Nov. A UTC date would give 18 to 31 Oct.
+        var controller = RunController(kit, new FixedClock(new DateTimeOffset(2026, 11, 1, 13, 30, 0, TimeSpan.Zero)));
+
+        var preview = Body(await controller.PreviewShiftClaimRun(new ShiftClaimRunRequestDto(), CancellationToken.None));
+
+        Assert.Equal(new DateOnly(2026, 10, 19), preview.From);
+        Assert.Equal(new DateOnly(2026, 11, 1), preview.To);
+    }
+
+    [Fact]
+    public async Task ShiftClaimRun_FromAfterTo_IsRefused()
+    {
+        using var kit = LedgerKit.Create();
+        kit.SeedProvider("NSW");
+
+        var result = await RunController(kit).RunShiftClaims(new ShiftClaimRunRequestDto { From = new DateOnly(2026, 10, 5), To = new DateOnly(2026, 10, 4) }, CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Equal("The From date must be on or before the To date.", Assert.Single(Assert.IsType<ApiResponse<ShiftClaimRunDto>>(bad.Value).Errors!));
+    }
+
+    [Fact]
+    public async Task ShiftClaimRun_WithoutProviderSettings_IsOne400_NotAFailedRowPerParticipant()
+    {
+        using var kit = LedgerKit.Create();
+        kit.SeedCommunityAccessCatalogue();
+        var person = kit.SeedParticipant();
+        kit.SeedShift(person, new DateOnly(2026, 10, 1), ShiftStatus.Completed);
+
+        var result = await RunController(kit).RunShiftClaims(new ShiftClaimRunRequestDto { From = new DateOnly(2026, 10, 1), To = new DateOnly(2026, 10, 31) }, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Empty(kit.Db.TripClaims);
     }
 }

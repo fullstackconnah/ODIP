@@ -354,7 +354,7 @@ public class ShiftClaimGenerationServiceTests
         await db.SaveChangesAsync();
 
         var service = new ShiftClaimGenerationService(db);
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        var ex = await Assert.ThrowsAnyAsync<InvalidOperationException>(() =>
             service.GenerateDraftClaimAsync(participant.Id, new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 8)));
 
         Assert.Equal("No completed, unclaimed shifts found in this date range.", ex.Message);
@@ -368,7 +368,7 @@ public class ShiftClaimGenerationServiceTests
         await db.SaveChangesAsync();
 
         var service = new ShiftClaimGenerationService(db);
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAnyAsync<InvalidOperationException>(() =>
             service.GenerateDraftClaimAsync(Guid.NewGuid(), new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 8)));
     }
 
@@ -389,8 +389,8 @@ public class ShiftClaimGenerationServiceTests
         await db.SaveChangesAsync();
         var service = new ShiftClaimGenerationService(db);
 
-        var generate = await Assert.ThrowsAsync<InvalidOperationException>(() => service.GenerateAsync(participant.Id, new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 7)));
-        var preview = await Assert.ThrowsAsync<InvalidOperationException>(() => service.PreviewAsync(participant.Id, new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 7)));
+        var generate = await Assert.ThrowsAnyAsync<InvalidOperationException>(() => service.GenerateAsync(participant.Id, new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 7)));
+        var preview = await Assert.ThrowsAnyAsync<InvalidOperationException>(() => service.PreviewAsync(participant.Id, new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 7)));
 
         foreach (var message in new[] { generate.Message, preview.Message })
         {
@@ -416,8 +416,8 @@ public class ShiftClaimGenerationServiceTests
         await db.SaveChangesAsync();
         var service = new ShiftClaimGenerationService(db);
 
-        var generate = await Assert.ThrowsAsync<InvalidOperationException>(() => service.GenerateAsync(participant.Id, new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 7)));
-        var preview = await Assert.ThrowsAsync<InvalidOperationException>(() => service.PreviewAsync(participant.Id, new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 7)));
+        var generate = await Assert.ThrowsAnyAsync<InvalidOperationException>(() => service.GenerateAsync(participant.Id, new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 7)));
+        var preview = await Assert.ThrowsAnyAsync<InvalidOperationException>(() => service.PreviewAsync(participant.Id, new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 7)));
 
         foreach (var message in new[] { generate.Message, preview.Message })
         {
@@ -462,7 +462,7 @@ public class ShiftClaimGenerationServiceTests
         await db.SaveChangesAsync();
 
         var service = new ShiftClaimGenerationService(db);
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAnyAsync<InvalidOperationException>(() =>
             service.PreviewAsync(participant.Id, new DateOnly(2026, 9, 7), new DateOnly(2026, 9, 8)));
     }
 
@@ -561,7 +561,7 @@ public class ShiftClaimGenerationServiceTests
         using var db = CreateDb();
         var (participantId, shift) = await ArrangeShiftWithClaimLine(db, claimStatus, ClaimLineItemStatus.Draft);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAnyAsync<InvalidOperationException>(() =>
             new ShiftClaimGenerationService(db).GenerateDraftClaimAsync(participantId, shift.ServiceDate, shift.ServiceDate));
     }
 }

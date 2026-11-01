@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Odip.Application.DTOs;
 using Odip.Domain.Billing.Catalogue;
 using Odip.Domain.Billing.Services;
@@ -29,15 +30,17 @@ namespace Odip.Infrastructure.Services;
 /// through the tenant-filtered Participants/Shifts sets, never queried directly by a caller-
 /// supplied id alone.
 /// </summary>
-public class ShiftClaimGenerationService
+public partial class ShiftClaimGenerationService
 {
     private readonly OdipDbContext _db;
     private readonly BudgetLedgerService? _ledger;
     private readonly ICurrentTenant? _tenant;
+    private readonly ILogger<ShiftClaimGenerationService>? _log;
 
     /// <param name="ledger">When given, a preview says what the claim does to the participant's budget (a warning only: nothing here is ever blocked by it).</param>
-    public ShiftClaimGenerationService(OdipDbContext db, BudgetLedgerService? ledger = null, ICurrentTenant? tenant = null)
+    public ShiftClaimGenerationService(OdipDbContext db, BudgetLedgerService? ledger = null, ICurrentTenant? tenant = null, ILogger<ShiftClaimGenerationService>? log = null)
     {
+        _log = log;
         _db = db;
         _ledger = ledger;
         _tenant = tenant;
@@ -89,7 +92,7 @@ public class ShiftClaimGenerationService
         (await GenerateAsync(participantId, from, to, ct)).Claim;
 
     /// <summary>The draft claim for the shifts in the range that can be priced, and the shifts it left out and why (they stay completed and unclaimed).</summary>
-    public async Task<ShiftClaimGenerated> GenerateAsync(
+    public virtual async Task<ShiftClaimGenerated> GenerateAsync(
         Guid participantId, DateOnly from, DateOnly to, CancellationToken ct = default)
     {
         // Two requests at the same moment would both find the same shifts unclaimed and claim them twice, so the second waits here, then reads what the first saved.
@@ -147,7 +150,7 @@ public class ShiftClaimGenerationService
             .Where(l => l.Caveat is not null)
             .Select(l => new ShiftClaimFlaggedDto { ShiftId = l.Shift.Id, ServiceDate = l.Shift.ServiceDate, Description = Describe(l.Shift), Caveat = l.Caveat! })
             .ToList();
-        return new ShiftClaimGenerated(claim, leftOut, flagged);
+        return new ShiftClaimGenerated(claim, leftOut, flagged, claimLineItems.Count, claimLineItems.Sum(l => l.Hours));
     }
 
     // ─── Shared calculation ──────────────────────────────────────────────
@@ -247,7 +250,7 @@ public class ShiftClaimGenerationService
                 throw new InvalidOperationException(FormattableString.Invariant(
                     $"No catalogue row covers these shifts' dates ({shifts[0].ServiceDate:dd/MM/yyyy} to {shifts[^1].ServiceDate:dd/MM/yyyy}). Import the catalogue for that period first."));
             // There ARE completed, unclaimed shifts here: none of them could be priced, so the refusal says they were left out, and why.
-            throw new InvalidOperationException(NothingClaimable(leftOut));
+            throw new NothingClaimableException(NothingClaimable(leftOut), leftOut);
         }
 
         return (lineItems, leftOut, participant);
@@ -289,4 +292,10 @@ public class ShiftClaimGenerationService
 }
 
 /// <summary>The claim made from shifts, the completed shifts in the range it left out and why, and the shifts in it that were priced with a caveat.</summary>
-public sealed record ShiftClaimGenerated(TripClaim Claim, IReadOnlyList<ShiftClaimLeftOutDto> LeftOut, IReadOnlyList<ShiftClaimFlaggedDto> Flagged);
+public sealed record ShiftClaimGenerated(TripClaim Claim, IReadOnlyList<ShiftClaimLeftOutDto> LeftOut, IReadOnlyList<ShiftClaimFlaggedDto> Flagged, int LineCount, decimal Hours);
+
+/// <summary>Completed, unclaimed shifts were found but none could be priced; <see cref="LeftOut"/> says which and why. The per-participant endpoints answer it as the same 400 as any other refusal.</summary>
+public sealed class NothingClaimableException(string message, IReadOnlyList<ShiftClaimLeftOutDto> leftOut) : InvalidOperationException(message)
+{
+    public IReadOnlyList<ShiftClaimLeftOutDto> LeftOut { get; } = leftOut;
+}

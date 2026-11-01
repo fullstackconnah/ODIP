@@ -231,6 +231,68 @@ public record ShiftClaimGeneratedDto : TripClaimListDto
     public List<ShiftClaimFlaggedDto> Flagged { get; init; } = new();
 }
 
+/// <summary>The claim run: dates are optional, and the server fills the missing ones with the last 14 days up to yesterday in the organisation's time zone.</summary>
+public record ShiftClaimRunRequestDto
+{
+    public DateOnly? From { get; init; }
+    public DateOnly? To { get; init; }
+}
+
+/// <summary>What a claim run did (or, for a preview, would do) over the dates, for every participant in the organisation with completed, unclaimed shifts.</summary>
+public record ShiftClaimRunDto
+{
+    public DateOnly From { get; init; }
+    public DateOnly To { get; init; }
+    /// <summary>Claims made: 0 on a preview.</summary>
+    public int ClaimsMade { get; init; }
+    public int ShiftCount { get; init; }
+    public decimal Hours { get; init; }
+    public decimal TotalAmount { get; init; }
+    /// <summary>One row per participant claimed (or, on a preview, to be claimed), by name.</summary>
+    public List<ShiftClaimRunParticipantDto> Participants { get; init; } = new();
+    /// <summary>The completed, unclaimed shifts the run leaves out, each with the participant and the reason. Never dropped silently.</summary>
+    public List<ShiftClaimRunLeftOutDto> LeftOut { get; init; } = new();
+    /// <summary>The shifts in the claims that were priced with a caveat (an overnight shift: evening and night rates are not applied yet).</summary>
+    public List<ShiftClaimRunFlaggedDto> Flagged { get; init; } = new();
+    /// <summary>Participants the run could not claim: not failed (nothing left to claim) or failed (nothing saved for them, run again).</summary>
+    public List<ShiftClaimRunSkippedDto> Skipped { get; init; } = new();
+    /// <summary>On a preview only: what all these claims together would do to the participants' budgets. A warning, never a block.</summary>
+    public ClaimBudgetDto? Budget { get; init; }
+}
+
+public record ShiftClaimRunParticipantDto
+{
+    public Guid ParticipantId { get; init; }
+    public string ParticipantName { get; init; } = string.Empty;
+    public int ShiftCount { get; init; }
+    public decimal Hours { get; init; }
+    public decimal TotalAmount { get; init; }
+    /// <summary>The claim made; null on a preview.</summary>
+    public Guid? ClaimId { get; init; }
+    public string? ClaimReference { get; init; }
+}
+
+public record ShiftClaimRunLeftOutDto : ShiftClaimLeftOutDto
+{
+    public Guid ParticipantId { get; init; }
+    public string ParticipantName { get; init; } = string.Empty;
+}
+
+public record ShiftClaimRunFlaggedDto : ShiftClaimFlaggedDto
+{
+    public Guid ParticipantId { get; init; }
+    public string ParticipantName { get; init; } = string.Empty;
+}
+
+public record ShiftClaimRunSkippedDto
+{
+    public Guid ParticipantId { get; init; }
+    public string ParticipantName { get; init; } = string.Empty;
+    public string Reason { get; init; } = string.Empty;
+    /// <summary>True when something went wrong and nothing was saved for this participant; false when there was simply nothing left to claim.</summary>
+    public bool Failed { get; init; }
+}
+
 // ══════════════════════════════════════════════════════════════
 // INVOICE DTOs (Xero PR1)
 // ══════════════════════════════════════════════════════════════

@@ -168,8 +168,8 @@ public class ShiftClaimLeftOutTests
         var (kit, person) = Arrange();
         Completed(kit, person, new DateOnly(2026, 10, 2), night: SleepoverType.Sleepover, start: 22, end: 6, overnight: true);
 
-        var preview = await Assert.ThrowsAsync<InvalidOperationException>(() => Engine(kit).PreviewAsync(person.Id, From, To, Ct));
-        var generate = await Assert.ThrowsAsync<InvalidOperationException>(() => Engine(kit).GenerateAsync(person.Id, From, To, Ct));
+        var preview = await Assert.ThrowsAnyAsync<InvalidOperationException>(() => Engine(kit).PreviewAsync(person.Id, From, To, Ct));
+        var generate = await Assert.ThrowsAnyAsync<InvalidOperationException>(() => Engine(kit).GenerateAsync(person.Id, From, To, Ct));
 
         const string expected = "Nothing in this date range could be claimed: 1 completed, unclaimed shift was left out. It is a sleepover, which shift claims do not price yet.";
         Assert.Equal(expected, preview.Message);
@@ -185,7 +185,7 @@ public class ShiftClaimLeftOutTests
         Completed(kit, person, new DateOnly(2026, 10, 3), ratio: SupportRatio.OneToThree, start: 9, end: 15);
         Completed(kit, person, new DateOnly(2026, 10, 4), night: SleepoverType.Sleepover, start: 22, end: 6, overnight: true);
 
-        var refusal = await Assert.ThrowsAsync<InvalidOperationException>(() => Engine(kit).PreviewAsync(person.Id, From, To, Ct));
+        var refusal = await Assert.ThrowsAnyAsync<InvalidOperationException>(() => Engine(kit).PreviewAsync(person.Id, From, To, Ct));
 
         Assert.Equal(
             "Nothing in this date range could be claimed: 3 completed, unclaimed shifts were left out. "
@@ -198,7 +198,7 @@ public class ShiftClaimLeftOutTests
     {
         var (kit, person) = Arrange();
 
-        var refusal = await Assert.ThrowsAsync<InvalidOperationException>(() => Engine(kit).PreviewAsync(person.Id, From, To, Ct));
+        var refusal = await Assert.ThrowsAnyAsync<InvalidOperationException>(() => Engine(kit).PreviewAsync(person.Id, From, To, Ct));
 
         Assert.Equal("No completed, unclaimed shifts found in this date range.", refusal.Message);
     }
