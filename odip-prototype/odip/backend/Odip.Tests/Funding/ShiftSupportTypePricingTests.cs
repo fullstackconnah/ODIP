@@ -97,9 +97,9 @@ public class ShiftSupportTypePricingTests
     }
 
     [Theory]
-    [InlineData(TripClaimStatus.Rejected)]
-    [InlineData(TripClaimStatus.Cancelled)]
-    public async Task AShiftARejectedClaimStillHolds_IsLeftOutWithTheClaimReference(TripClaimStatus status)
+    [InlineData(TripClaimStatus.Rejected, "rejected")]
+    [InlineData(TripClaimStatus.Cancelled, "cancelled")]
+    public async Task AShiftARejectedClaimStillHolds_IsLeftOutWithTheClaimReference(TripClaimStatus status, string word)
     {
         var kit = Arrange();
         var person = kit.SeedParticipant(addressState: "VIC");
@@ -111,7 +111,7 @@ public class ShiftSupportTypePricingTests
         var preview = await service.PreviewAsync(person.Id, Thu, Sat, Ct);
         var left = Assert.Single(preview.LeftOut);
         Assert.Equal(held.Id, left.ShiftId);
-        Assert.Contains("it is on rejected claim TC-REJECTED-1. Delete that claim, then claim this shift again.", left.Reason);
+        Assert.Contains($"it is on {word} claim TC-REJECTED-1. Delete that claim, then claim this shift again.", left.Reason);
         Assert.Single(preview.LineItems);
 
         // The same shift again by the run (preview mode), where the reason lands in the run's left-out list.

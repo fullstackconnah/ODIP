@@ -192,8 +192,8 @@ public partial class ShiftClaimGenerationService
         var heldIds = shifts.Select(s => s.Id).ToList();
         var heldBy = (await _db.ClaimLineItems.AsNoTracking()
                 .Where(l => l.ShiftId != null && heldIds.Contains(l.ShiftId.Value) && l.Status != ClaimLineItemStatus.Rejected && (l.TripClaim.Status == TripClaimStatus.Rejected || l.TripClaim.Status == TripClaimStatus.Cancelled))
-                .Select(l => new { ShiftId = l.ShiftId!.Value, l.TripClaim.ClaimReference }).ToListAsync(ct))
-            .GroupBy(l => l.ShiftId).ToDictionary(g => g.Key, g => g.First().ClaimReference);
+                .Select(l => new { ShiftId = l.ShiftId!.Value, l.TripClaim.ClaimReference, ClaimStatus = l.TripClaim.Status }).ToListAsync(ct))
+            .GroupBy(l => l.ShiftId).ToDictionary(g => g.Key, g => (g.First().ClaimReference, g.First().ClaimStatus));
 
         // Participant.AddressState with a fallback to ProviderSettings.State — the only
         // geographic signal that exists on the tenant today (Region is free-text prose).
@@ -238,9 +238,9 @@ public partial class ShiftClaimGenerationService
                 leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = noNdisNumber });
                 continue;
             }
-            if (heldBy.TryGetValue(shift.Id, out var heldReference))
+            if (heldBy.TryGetValue(shift.Id, out var heldClaim))
             {
-                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = $"{participant.FullName}: it is on rejected claim {heldReference}. Delete that claim, then claim this shift again." });
+                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = $"{participant.FullName}: it is on {(heldClaim.ClaimStatus == TripClaimStatus.Cancelled ? "cancelled" : "rejected")} claim {heldClaim.ClaimReference}. Delete that claim, then claim this shift again." });
                 continue;
             }
             var catalogueItems = RowsOf(shift);
