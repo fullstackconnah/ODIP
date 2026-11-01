@@ -112,6 +112,8 @@ describe('PortalShiftsPage', () => {
             assignmentEnd: '2026-08-20',
             isDriver: true,
             status: 'Confirmed',
+            destination: null,
+            role: null,
           },
         ],
       }),
@@ -121,6 +123,55 @@ describe('PortalShiftsPage', () => {
 
     expect(screen.getByText('Beach Getaway')).toBeInTheDocument()
     expect(screen.getByText(/driver/i)).toBeInTheDocument()
+  })
+
+  describe('trip assignment location and role', () => {
+    const trip = {
+      id: 'assign-1', tripInstanceId: 'trip-1', tripCode: 'TRIP-001', tripName: 'Beach Getaway',
+      assignmentStart: '2026-08-18', assignmentEnd: '2026-08-20', isDriver: false, status: 'Confirmed' as const,
+    }
+    const show = (a: object) => {
+      mockUseMyShifts.mockReturnValue({ data: makeShiftsResponse({ tripAssignments: [a as never] }), isLoading: false })
+      renderPage()
+    }
+
+    it('shows the destination and the role with screen-reader labels', () => {
+      show({ ...trip, destination: 'Surfers Paradise, Gold Coast', role: 'Support Worker' })
+      expect(screen.getByText('Surfers Paradise, Gold Coast')).toHaveAttribute('title', 'Surfers Paradise, Gold Coast')
+      expect(screen.getByText(/location:/i)).toBeInTheDocument()
+      expect(screen.getByText('Support Worker')).toBeInTheDocument()
+      expect(screen.getByText(/your role:/i)).toBeInTheDocument()
+    })
+
+    it('renders neither row when both are null', () => {
+      show({ ...trip, destination: null, role: null })
+      expect(screen.queryByText(/location:/i)).not.toBeInTheDocument()
+      expect(screen.queryByText(/your role:/i)).not.toBeInTheDocument()
+    })
+
+    it('renders neither row when the keys are missing (week saved before the deploy)', () => {
+      show(trip)
+      expect(screen.queryByText(/location:/i)).not.toBeInTheDocument()
+      expect(screen.queryByText(/your role:/i)).not.toBeInTheDocument()
+      expect(screen.queryByText(/undefined/i)).not.toBeInTheDocument()
+    })
+
+    it('treats blank text as absent', () => {
+      show({ ...trip, destination: '   ', role: ' ' })
+      expect(screen.queryByText(/location:/i)).not.toBeInTheDocument()
+      expect(screen.queryByText(/your role:/i)).not.toBeInTheDocument()
+    })
+
+    it('says driver once when the role already says driver', () => {
+      show({ ...trip, isDriver: true, destination: null, role: 'Senior Support / Driver' })
+      expect(screen.getAllByText(/driver/i)).toHaveLength(1)
+    })
+
+    it('keeps the Driver label when the role does not say driver', () => {
+      show({ ...trip, isDriver: true, destination: null, role: 'Support Worker' })
+      expect(screen.getAllByText(/driver/i)).toHaveLength(1)
+      expect(screen.getByText('Driver')).toBeInTheDocument()
+    })
   })
 
   it('links to the leave portal page', () => {

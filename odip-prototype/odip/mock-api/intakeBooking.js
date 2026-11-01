@@ -124,12 +124,23 @@ function create({ respond, failEnvelope, enquiryFeed }) {
         }
       })
       .sort((a, b) => a.startsAt.localeCompare(b.startsAt))],
-    // My shifts for the capture: two shifts on the day of Priya's visit, either side of it.
+    // My shifts for the capture: two shifts on the day of Priya's visit, either side of it; the week after holds the trip cards and one plain shift.
     ['portal/my-shifts', (params) => {
       const day = sydneyDay(bookings['inq-0002'].intakeStartsAt)
-      const shift = (id, start, end) => ({ id, participantId: 'p-0001', participantName: 'Liam Okafor', serviceDate: day, startTime: start, endTime: end,
+      const later = (n) => new Date(Date.parse(day + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10)
+      const shift = (id, start, end, serviceDate = day) => ({ id, participantId: 'p-0001', participantName: 'Liam Okafor', serviceDate, startTime: start, endTime: end,
         endsNextDay: false, durationHours: 2, ratio: 'OneToOne', nightType: 'None', status: 'Published', notes: null })
-      return { shifts: inRange(day, params) ? [shift('sh-am', '07:00:00', '09:00:00'), shift('sh-pm', '13:00:00', '15:00:00')] : [], tripAssignments: [] }
+      const trip = (id, tripName, destination, role, isDriver, status) => ({ id, tripInstanceId: 't-' + id, tripCode: null, tripName,
+        assignmentStart: later(7), assignmentEnd: later(9), isDriver, status, destination, role })
+      return {
+        shifts: [...(inRange(day, params) ? [shift('sh-am', '07:00:00', '09:00:00'), shift('sh-pm', '13:00:00', '15:00:00')] : []),
+          ...(inRange(later(7), params) ? [shift('sh-next', '10:00:00', '12:00:00', later(7))] : [])],
+        tripAssignments: inRange(later(7), params) ? [
+          trip('ta-a', 'Gold Coast Getaway', 'Surfers Paradise, Gold Coast', 'Senior Support / Driver', true, 'Confirmed'),
+          trip('ta-b', 'Island weekend', 'Tangalooma Island Resort, Moreton Island, via the Holt Street Wharf ferry terminal', 'Support Worker', false, 'Proposed'),
+          trip('ta-c', 'Day trip to the zoo', null, null, true, 'Confirmed'),
+        ] : [],
+      }
     }],
   ]
 
