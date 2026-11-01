@@ -42,37 +42,22 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
   return (
     <>
       {/*
-        Row header: ONE line inside the --row-h row — name, then the support ratio as a chip, then the
-        coverage state, in that order. The name group (participant link + the restrictive-practice marker,
-        which is a safety signal and must survive) takes whatever width is left and truncates with a title;
-        the ratio chip and the coverage badge are shrink-0, so neither is ever squeezed or cut, and `gap-2`
-        keeps the name from touching them. Coverage is the visible signal for the gap this row-per-participant
-        layout exists to surface. A trip bar rendered below can explain an otherwise-empty week without this
-        reading as a failure.
-
-        The coverage state is a COUNT BADGE at every column width: a warning icon and the number of unassigned
-        shifts on the amber tint, or a check when the week is fully covered. The words ("6 unassigned shifts",
-        "Fully covered") are the badge's title and aria-label, not text in the row. They used to be spelled out
-        in the wide column, and that is what cost the row its identity: 110px of "6 days uncovered" plus the 31px
-        ratio chip and two 8px gaps left 90px of the 247px content box for the name, so "Grace Palmer-Hughes"
-        (151px, plus the 12px restrictive-practice marker and its 4px gap = 167px) read "Grace Pa…" while the
-        same three words repeated down every row. The 35px count badge leaves 165px of the 247px box at the old
-        264px column and 181px at RosterGrid's 280px one, so a name up to ~167px shows whole with its marker
-        (a longer one truncates, with its title). Below 1500px the 195px column keeps the same badge and gives
-        the name ~96px, as it always did. There is no visually-hidden (sr-only) text: those 1px clip boxes are
-        what a "clipped without an ellipsis" audit reports, and role="img" + aria-label announces the same thing.
-
-        A participant who is not fully ready also carries a readiness chip in the name group, after the name and the
-        marker. It is a quiet warning, never a block, and it must not cost the row its one line or its name: it is
-        `flex-1 min-w-6 max-w-max`, so it takes only the room the name leaves (up to its own text width, never stretched
-        past it), shrinks down to just its icon, and truncates with the whole text in its title. A row with nothing
-        missing renders no chip at all, so it is exactly the row above.
+        Row header: two tight lines inside the --row-h row, as StaffRow does (leading-4 name, h-4 chips: 32px in a 34px row).
+        Line 1 is the name, which gets the column's full width and truncates with a title, then the restrictive-practice
+        marker (a safety signal, so it must survive) and the pending-agreement hourglass, both shrink-0 glyphs.
+        Line 2 is the readiness chip on the left (a quiet warning, never a block: `flex-1 min-w-6 max-w-max` takes only the
+        room left, shrinks to its icon and truncates with the whole text in its title) and, pushed right, the Onboarding
+        tag, the support ratio and the coverage state (the tag yields first and truncates with its title when all four chips meet in a narrow column; the ratio and badge never shrink), so the ratio and the coverage badge form one right-aligned column
+        down the board. Coverage is the visible signal for the gap this row-per-participant layout exists to surface; a
+        trip bar rendered below can explain an otherwise-empty week without this reading as a failure. It is a COUNT BADGE
+        (a warning icon and the number of unassigned shifts, or a check when fully covered); the words are its title and
+        aria-label, with no sr-only text (a 1px clip box reads as clipped text in an audit).
       */}
-      <div className="sticky left-0 z-10 flex min-h-[var(--row-h)] items-center gap-2 border-b border-r border-border bg-card px-2">
+      <div className="sticky left-0 z-10 flex min-h-[var(--row-h)] flex-col justify-center border-b border-r border-border bg-card px-2">
         <div className="flex min-w-0 items-center gap-1">
           <Link
             to={participantWeekHref(row.participantId, days[0])}
-            className="block min-w-0 truncate rounded-sm font-display text-sm font-semibold leading-5 text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="block min-w-0 truncate rounded-sm font-display text-sm font-semibold leading-4 text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             title={row.fullName}
           >
             {row.fullName}
@@ -94,38 +79,44 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
               <Hourglass className="h-3 w-3" aria-hidden="true" />
             </span>
           )}
-          <ReadinessNote issues={row.readinessIssues} blocked={row.notReadyForRostering} variant="chip" className="h-5 min-w-6 max-w-max flex-1 rounded-sm px-1.5" />
         </div>
 
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-          {row.inOnboarding && (
-            <span title="Services started; onboarding is still open" className="inline-flex h-5 items-center rounded-sm bg-[var(--color-secondary-container)] px-1.5 text-xs font-medium text-[var(--color-secondary)]">
-              Onboarding
-            </span>
-          )}
-          <span
-            role="img"
-            aria-label={`${ratioLabel} support`}
-            title={`${ratioLabel} support`}
-            className="inline-flex h-5 items-center rounded-sm bg-surface-container px-1.5 text-xs font-semibold tabular-nums text-foreground"
-          >
-            {ratioLabel}
-          </span>
-          {hideCoverageBadge ? null : covered ? (
-            <span role="img" aria-label="Fully covered" title="Fully covered" className="inline-flex items-center text-muted-foreground">
-              <Check className="h-3.5 w-3.5" aria-hidden="true" />
-            </span>
-          ) : (
+        <div className="flex min-w-0 items-center gap-2">
+          <ReadinessNote issues={row.readinessIssues} blocked={row.notReadyForRostering} variant="chip" className="h-4 min-w-6 max-w-max flex-1 rounded-sm px-1.5" />
+          <div className="ml-auto flex min-w-0 items-center gap-2">
+            {row.inOnboarding && (
+              <span title="Services started; onboarding is still open" className="inline-flex h-4 min-w-0 items-center rounded-sm bg-[var(--color-secondary-container)] px-1.5 text-xs font-medium text-[var(--color-secondary)]">
+                <span className="truncate">Onboarding</span>
+              </span>
+            )}
             <span
               role="img"
-              aria-label={uncoveredLabel}
-              title={uncoveredLabel}
-              className="inline-flex h-5 items-center gap-1 rounded-sm bg-[var(--color-warning-container)] px-1.5 text-xs font-medium text-[var(--color-on-warning-container)]"
+              aria-label={`${ratioLabel} support`}
+              title={`${ratioLabel} support`}
+              className="inline-flex h-4 items-center rounded-sm shrink-0 bg-surface-container px-1.5 text-xs font-semibold tabular-nums text-foreground"
             >
-              <AlertTriangle className="h-3 w-3" aria-hidden="true" />
-              <span className="tabular-nums">{unassignedCount}</span>
+              {ratioLabel}
             </span>
-          )}
+            {hideCoverageBadge ? null : (
+              <span className="inline-flex w-11 shrink-0 justify-end">
+              {covered ? (
+              <span role="img" aria-label="Fully covered" title="Fully covered" className="inline-flex shrink-0 items-center text-muted-foreground">
+                <Check className="h-3.5 w-3.5" aria-hidden="true" />
+              </span>
+            ) : (
+              <span
+                role="img"
+                aria-label={uncoveredLabel}
+                title={uncoveredLabel}
+                className="inline-flex h-4 shrink-0 items-center gap-1 rounded-sm bg-[var(--color-warning-container)] px-1.5 text-xs font-medium text-[var(--color-on-warning-container)]"
+              >
+                <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+                <span className="tabular-nums">{unassignedCount}</span>
+              </span>
+            )}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
