@@ -20,6 +20,7 @@ vi.mock('@/api/hooks', () => ({
   useParticipantAlertsAggregate: mockUseParticipantAlertsAggregate,
   usePendingLeaveQueue: mockUsePendingLeaveQueue,
   usePendingCompletionQueue: mockUsePendingCompletionQueue,
+  useUnclaimedShifts: () => ({ count: 0, participants: 0, loading: false, error: false }),
   useSetupStatus: () => ({ data: undefined, isPending: false, fetchStatus: 'idle' }),
   useProviderSettings: () => ({ data: undefined, isPending: false, fetchStatus: 'idle' }),
 }))

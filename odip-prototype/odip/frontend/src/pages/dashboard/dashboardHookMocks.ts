@@ -9,6 +9,7 @@ export const mockUseStaff = vi.fn()
 export const mockUseParticipantAlertsAggregate = vi.fn()
 export const mockUsePendingLeaveQueue = vi.fn()
 export const mockUsePendingCompletionQueue = vi.fn()
+export const mockUseUnclaimedShifts = vi.fn()
 export const mockUseModuleVisibility = vi.fn(() => ({ data: { hiddenAccommodation: false, hiddenVehicles: false }, isError: false }))
 export const mockUseSetupStatus = vi.fn()
 export const mockUseProviderSettings = vi.fn()
@@ -22,6 +23,7 @@ export const hooks = {
   useParticipantAlertsAggregate: mockUseParticipantAlertsAggregate,
   usePendingLeaveQueue: mockUsePendingLeaveQueue,
   usePendingCompletionQueue: mockUsePendingCompletionQueue,
+  useUnclaimedShifts: mockUseUnclaimedShifts,
   useModuleVisibility: mockUseModuleVisibility,
   useSetupStatus: mockUseSetupStatus,
   useProviderSettings: mockUseProviderSettings,

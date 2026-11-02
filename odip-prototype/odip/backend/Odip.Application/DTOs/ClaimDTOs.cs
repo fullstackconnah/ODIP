@@ -240,6 +240,15 @@ public record ShiftClaimRunRequestDto
     public DateOnly? To { get; init; }
 }
 
+/// <summary>The dashboard cue: completed shifts in the claim run's window that no live claim line holds. A candidate count: the run's pricing may still leave some out, and the modal says which and why.</summary>
+public record ShiftClaimWaitingDto
+{
+    public DateOnly From { get; init; }
+    public DateOnly To { get; init; }
+    public int ShiftCount { get; init; }
+    public int ParticipantCount { get; init; }
+}
+
 /// <summary>What a claim run did (or, for a preview, would do) over the dates, for every participant in the organisation with completed, unclaimed shifts.</summary>
 public record ShiftClaimRunDto
 {

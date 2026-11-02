@@ -249,6 +249,11 @@ export interface ShiftCompletionDto {
   timeAdjustmentReason: string | null
   /** Kilometres driven with the participant, one decimal place; null when not given. */
   kilometres: number | null
+  /** Provider travel before and after the shift (not `kilometres`); null when not given. Optional until the review page reads them. */
+  preShiftTravelMinutes?: number | null
+  preShiftTravelKilometres?: number | null
+  postShiftTravelMinutes?: number | null
+  postShiftTravelKilometres?: number | null
   /** "Anything to report?" at Finish: true, false, or null when skipped. */
   anythingToReport: boolean | null
   /** The worker sent a time recorded offline (a start, finish or break time from their phone). */

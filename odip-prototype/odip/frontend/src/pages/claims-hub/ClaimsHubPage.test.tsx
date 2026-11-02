@@ -24,6 +24,8 @@ vi.mock('@/api/hooks/claimHub', async () => {
   }
 })
 vi.mock('@/api/hooks/claims', () => ({ useSubmitPreviewChunks: m.preview }))
+// The run's own behaviour is ShiftClaimRunModal.test; here only whether the page opens and closes it.
+vi.mock('./ShiftClaimRunModal', () => ({ ShiftClaimRunModal: ({ onClose }: { onClose: () => void }) => <div role="dialog" aria-label="Claim run"><button onClick={onClose}>Close run</button></div> }))
 
 const query = <T,>(data: T) => ({ data, isLoading: false, isError: false, error: null, refetch: vi.fn() })
 
@@ -499,5 +501,28 @@ describe('ClaimsHubPage: Claim shifts', () => {
     renderPage()
     expect(screen.getByRole('button', { name: 'Claim shifts' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'How claiming works' })).toBeInTheDocument()
+  })
+
+  it('opens the run from ?run=shifts (the dashboard cue), and closing it removes the param', async () => {
+    renderPage('/claims?run=shifts&tab=action')
+    expect(screen.getByRole('dialog', { name: 'Claim run' })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close run' }))
+
+    expect(screen.queryByRole('dialog', { name: 'Claim run' })).toBeNull()
+    expect(screen.getByTestId('where')).toHaveTextContent('?tab=action')
+  })
+
+  it('the header button opens it by putting run=shifts in the URL', async () => {
+    renderPage()
+    await userEvent.click(screen.getByRole('button', { name: 'Claim shifts' }))
+    expect(screen.getByTestId('where')).toHaveTextContent('run=shifts')
+    expect(screen.getByRole('dialog', { name: 'Claim run' })).toBeInTheDocument()
+  })
+
+  it('does not open for a SuperAdmin with no organisation, even from the URL', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'SuperAdmin' }))
+    renderPage('/claims?run=shifts')
+    expect(screen.queryByRole('dialog', { name: 'Claim run' })).toBeNull()
   })
 })

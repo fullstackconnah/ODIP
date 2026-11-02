@@ -1409,6 +1409,44 @@ public class RosteringController : ControllerBase
     }
 
     /// <summary>
+    /// Staff set the four provider-travel values on a shift's ACTIVE completion (travel PR-A1): how staff add travel on a hand-made shift, or correct the
+    /// worker's after-shift estimate. The body replaces all four. Allowed while the shift is PendingReview, or Completed with no claim line that still counts
+    /// (<see cref="BudgetLedgerService.ClaimLineStillCounts"/>, so a Rejected or Cancelled claim frees it again); otherwise 409 (SHIFT_TRAVEL_ON_CLAIM names the
+    /// claim). A returned row is history and is never edited. The audit interceptor records the change.
+    /// </summary>
+    [HttpPut("shifts/{id:guid}/completion/travel")]
+    public async Task<ActionResult<ApiResponse<ShiftCompletionDto>>> EditCompletionTravel(Guid id, [FromBody] EditCompletionTravelDto dto, CancellationToken ct)
+    {
+        var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == id, ct);
+        if (shift is null)
+            return NotFound(ApiResponse<ShiftCompletionDto>.Fail("Shift not found."));
+        if (PortalController.CheckTravel(dto.PreShiftTravelMinutes, dto.PreShiftTravelKilometres, dto.PostShiftTravelMinutes, dto.PostShiftTravelKilometres) is { } bad)
+            return BadRequest(ApiResponse<ShiftCompletionDto>.Fail(bad.Message, bad.Code));
+        if (shift.Status is not (ShiftStatus.PendingReview or ShiftStatus.Completed))
+            return Conflict(ApiResponse<ShiftCompletionDto>.Fail(
+                "Travel can be changed only while a shift is awaiting review or completed.", ShiftErrorCodes.ShiftNotPendingReview));
+
+        var completion = await _db.ShiftCompletions.FirstOrDefaultAsync(c => c.ShiftId == id && c.IsActive, ct);
+        if (completion is null)
+            return NotFound(ApiResponse<ShiftCompletionDto>.Fail("Completion not found."));
+
+        var claimReference = await _db.ClaimLineItems
+            .Where(l => l.ShiftId == id).Where(BudgetLedgerService.ClaimLineStillCounts)
+            .Select(l => l.TripClaim.ClaimReference).FirstOrDefaultAsync(ct);
+        if (claimReference is not null)
+            return Conflict(ApiResponse<ShiftCompletionDto>.Fail(
+                $"This shift is on claim {claimReference}. Change its travel on the claim, or cancel the claim first.", ShiftErrorCodes.ShiftTravelOnClaim));
+
+        completion.PreShiftTravelMinutes = PortalController.TravelMinutes(dto.PreShiftTravelMinutes);
+        completion.PreShiftTravelKilometres = PortalController.TravelKm(dto.PreShiftTravelKilometres);
+        completion.PostShiftTravelMinutes = PortalController.TravelMinutes(dto.PostShiftTravelMinutes);
+        completion.PostShiftTravelKilometres = PortalController.TravelKm(dto.PostShiftTravelKilometres);
+        completion.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+        return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, shift.ReturnCount, ct)));
+    }
+
+    /// <summary>
     /// Office returns a PendingReview shift to the worker for correction. Same 404/409 as
     /// Approve, plus 400 if reason is blank. Sets ReviewOutcome = Returned, IsActive = false
     /// (excluding this row from the "current" 1:1 without deleting it), increments
