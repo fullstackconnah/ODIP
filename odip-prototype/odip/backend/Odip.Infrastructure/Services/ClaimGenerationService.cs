@@ -265,6 +265,16 @@ public class ClaimGenerationService
 
         var lineItems = new List<LineItemCalc>();
 
+        // A day is claimed once: a participant with a live shift claim line on any day of the trip is left out whole (the same rule as the ledger, so a Rejected or Cancelled claim frees the day),
+        // and the reason names that claim and the dates.
+        // shortcut: this reads once per calculation and does not lock against ShiftClaimGenerationService, so a shift claim made at the same moment can still land; upgrade is the per-participant RosterGenerationLock taken here too.
+        var bookedIds = confirmedBookings.Select(b => b.ParticipantId).ToList();
+        var shiftClaimsOnTripDays = (await _db.ClaimLineItems.AsNoTracking()
+                .Where(BudgetLedgerService.ClaimLineStillCounts)
+                .Where(l => l.Shift != null && bookedIds.Contains(l.Shift.ParticipantId) && l.SupportsDeliveredFrom >= trip.StartDate && l.SupportsDeliveredFrom <= tripEnd)
+                .Select(l => new { l.Shift!.ParticipantId, l.SupportsDeliveredFrom, l.TripClaim.ClaimReference }).ToListAsync(ct))
+            .GroupBy(l => l.ParticipantId).ToDictionary(g => g.Key, g => g.OrderBy(l => l.SupportsDeliveredFrom).ToList());
+
         foreach (var booking in confirmedBookings)
         {
             if (booking.Participant == null)
@@ -279,6 +289,20 @@ public class ClaimGenerationService
                     Reason = ClaimFunding.IsOtherFunded(booking.Participant)
                         ? ClaimFunding.OtherFundedNotClaimed
                         : "NDIS number missing. Add it to their profile, then preview the claim again to include them."
+                });
+                continue;
+            }
+
+            if (shiftClaimsOnTripDays.TryGetValue(booking.ParticipantId, out var clashes))
+            {
+                var dates = clashes.Select(c => c.SupportsDeliveredFrom).Distinct().ToList();
+                var shown = string.Join(", ", dates.Take(3).Select(d => d.ToString("d MMM yyyy", System.Globalization.CultureInfo.InvariantCulture))) + (dates.Count > 3 ? $" and {dates.Count - 3} more" : "");
+                context.ClashedCount++;
+                context.LeftOut.Add(new TripClaimLeftOutDto
+                {
+                    ParticipantId = booking.Participant.Id,
+                    Description = booking.Participant.FullName,
+                    Reason = $"{ClashReasonStart} {clashes[0].ClaimReference} for {shown}. Reject or cancel that claim to include them."
                 });
                 continue;
             }
@@ -305,6 +329,8 @@ public class ClaimGenerationService
         return (lineItems, context);
     }
 
+    private const string ClashReasonStart = "Already on shift claim";
+
     // ─── Helpers ────────────────────────────────────────────────────────
 
     /// <summary>Why a trip ended up with no claim lines, for the person generating the claim: the first cause that applies, most basic first.</summary>
@@ -312,6 +338,11 @@ public class ClaimGenerationService
     {
         if (context.TripDayCount == 0)
             return "This trip has no days recorded, so there is nothing to claim. Check the trip's dates, then generate the claim again.";
+        if (context.ClashedCount > 0 && context.ClashedCount == context.ConfirmedWithNdisNumberCount)
+        {
+            var first = context.LeftOut.First(l => l.Reason.StartsWith(ClashReasonStart, StringComparison.Ordinal));
+            return $"{first.Description}: {first.Reason}";
+        }
         if (context.ConfirmedWithNdisNumberCount == 0 && context.ConfirmedOtherFundedCount > 0 && context.ConfirmedOtherFundedCount == context.ConfirmedParticipantCount)
             return "None of the trip's confirmed participants is claimed to the NDIS (funded another way). Invoice them directly.";
         if (context.ConfirmedWithNdisNumberCount == 0 && context.ConfirmedOtherFundedCount > 0)
@@ -341,6 +372,8 @@ public class ClaimGenerationService
         /// <summary>How many of the confirmed participants have an NDIS number: only they get lines.</summary>
         public int ConfirmedWithNdisNumberCount { get; set; }
         public int ConfirmedOtherFundedCount { get; set; }
+        /// <summary>How many NDIS-funded participants with a number were left out because a live shift claim already covers a day of the trip.</summary>
+        public int ClashedCount { get; set; }
         /// <summary>How many days the trip has (rows in TripDays): none means nothing can be priced.</summary>
         public int TripDayCount { get; set; }
         /// <summary>Confirmed participants skipped for want of an NDIS number, with the reason shown to the person generating the claim.</summary>

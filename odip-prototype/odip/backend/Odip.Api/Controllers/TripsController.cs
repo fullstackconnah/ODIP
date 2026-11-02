@@ -65,7 +65,7 @@ public class TripsController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<ApiResponse<PagedResult<TripListDto>>>> GetAll(
         [FromQuery] TripStatus? status, [FromQuery] string? region, [FromQuery] string? search,
-        [FromQuery] DateOnly? startFrom, [FromQuery] DateOnly? startTo,
+        [FromQuery] DateOnly? startFrom, [FromQuery] DateOnly? startTo, [FromQuery] bool unclaimed = false,
         [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
     {
         (page, pageSize) = PagingParams.Clamp(page, pageSize);
@@ -81,6 +81,8 @@ public class TripsController : ControllerBase
         }
         if (startFrom.HasValue) query = query.Where(t => t.StartDate >= startFrom.Value);
         if (startTo.HasValue) query = query.Where(t => t.StartDate <= startTo.Value);
+        // The claim guard (GenerateDraftClaimAsync) refuses a trip while any claim on it is not Rejected, so "unclaimed" is exactly the trips it would let through.
+        if (unclaimed) query = query.Where(t => !_db.TripClaims.Any(c => c.TripInstanceId == t.Id && c.Status != TripClaimStatus.Rejected));
 
         var projectedQuery = query.OrderByDescending(t => t.StartDate)
             .Select(t => new TripListDto

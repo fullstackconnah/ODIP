@@ -74,6 +74,8 @@ export function useGenerateClaim() {
       apiPost<TripClaimListDto>(`/trips/${tripId}/claims`, data ?? {}),
     onSuccess: (created, { tripId }) => {
       qc.invalidateQueries({ queryKey: ['trip-claims', tripId] })
+      // The hub is made from lines like these, and a claim made from its New claim button must show there.
+      qc.invalidateQueries({ queryKey: ['claim-hub'] })
       // Generating a claim spends the participants it books, but that summary names none of them
       // for a Trip-kind claim (no participantId, no line items), so this lands on the fallback:
       // refresh the ledger keys this client actually holds open.
