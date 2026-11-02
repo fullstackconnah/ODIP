@@ -21,7 +21,7 @@ const isTravelKmLine = (l: Partial<Pick<ClaimLineItemDto, 'supportItemCode'>>) =
 export const isSleepoverLine = (l: Pick<ClaimLineItemDto, 'unit' | 'shiftId'> & Partial<Pick<ClaimLineItemDto, 'supportItemCode'>>) => l.unit === 'E' && !!l.shiftId && !isTravelKmLine(l)
 
 /** "1 night" / "2 nights" for a sleepover line, "$12.87" for travel kilometres, "8h" for the rest. */
-export const lineQuantity = (l: Line) => isSleepoverLine(l) ? (l.hours === 1 ? '1 night' : `${l.hours} nights`) : l.unit === 'E' && !!l.shiftId ? `${l.hours.toFixed(2)}` : `${l.hours}h`
+export const lineQuantity = (l: Line) => isSleepoverLine(l) ? (l.hours === 1 ? '1 night' : `${l.hours} nights`) : l.unit === 'E' && !!l.shiftId ? '$' + l.hours.toFixed(2) : `${l.hours}h`
 
 /** What a shift line is called on a claim: its travel, a sleepover, or its day type. */
 export const lineKindLabel = (l: Line & Pick<ClaimLineItemDto, 'claimType' | 'dayType'>) =>
