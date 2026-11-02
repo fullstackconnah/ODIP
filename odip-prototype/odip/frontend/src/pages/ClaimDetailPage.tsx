@@ -29,6 +29,7 @@ import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { useBuildClaimFile } from '@/api/hooks/claimHub'
 import { InvoicesSection } from './claim-detail/InvoicesSection'
 import { FormField } from '@/components/FormField'
+import { noBreakRefs } from '@/lib/noBreakRef'
 
 
 /** The API sends the enum name ('AgencyManaged'); this page once mapped a spelling it never sends ('NdiaManaged') and printed the raw name. */
@@ -160,7 +161,7 @@ export default function ClaimDetailPage() {
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <AnnouncementRegion message={announcement} />
-      {claimedAgainFrom && <Callout tone="success">Claim <span className="whitespace-nowrap font-medium">{claim.claimReference}</span> made. {claimedAgainFrom} was deleted.</Callout>}
+      {claimedAgainFrom && <Callout tone="success">Claim <span className="whitespace-nowrap font-medium">{claim.claimReference}</span> made. {noBreakRefs(claimedAgainFrom)} was deleted.</Callout>}
       {/* Breadcrumb — for Kind === 'Shift' claims there is no trip to link to (design spec §1/§2,
           PR 3: tripInstanceId is unset), so the period stands in place of the trip link. */}
       <div className="flex items-center gap-2 text-sm text-[var(--color-muted-foreground)]">
