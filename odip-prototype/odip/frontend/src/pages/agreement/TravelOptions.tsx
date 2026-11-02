@@ -45,9 +45,9 @@ export function TravelOptions({ entry, onChange, problems, settings }: StepProps
 
       <section className="flex flex-col gap-[var(--field-gap-y)]" aria-labelledby="plan-travel-heading">
         <h4 id="plan-travel-heading" className="text-sm font-semibold">Provider travel</h4>
-        <p className="text-[13px] text-[var(--color-muted-foreground)]">The worker&apos;s own travel to the participant, claimed on the support item. The minutes are capped by the delivery zone.</p>
+        <p className="text-[13px] text-[var(--color-muted-foreground)]">The worker&apos;s own travel to the participant, claimed on the support item. The minutes are capped by the delivery zone. Shift claims bill the travel workers record, up to the cap, when this is on.</p>
         {!travelAllowed ? (
-          <p className="text-sm text-[var(--color-muted-foreground)]">Your organisation has turned provider travel off in Settings, so none is priced.</p>
+          <p className="text-sm text-[var(--color-muted-foreground)]">Your organisation has turned provider travel off in Settings, so none is priced or claimed.</p>
         ) : (
           <>
             <CheckboxField label="Claim provider travel" checked={travel?.claim === true} onChange={event => patch({ travel: event.target.checked ? { ...(travel ?? DEFAULT_TRAVEL), claim: true } : undefined })} />

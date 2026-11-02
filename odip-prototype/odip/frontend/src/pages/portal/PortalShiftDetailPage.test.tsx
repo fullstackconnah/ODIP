@@ -1116,6 +1116,82 @@ describe('PortalShiftDetailPage: your times, kilometres and drift (Review Focus 
     await waitFor(() => expect(screen.getByLabelText('Kilometres driven with Mia (optional)')).toHaveFocus())
   })
 
+  describe('provider travel (travel PR-B)', () => {
+    const leg = (name: string) => within(screen.getByRole('group', { name }))
+    const preLeg = () => leg('Your trip to Mia (optional)')
+    const postLeg = () => leg('Your trip after the shift (optional)')
+    const type = (el: HTMLElement, value: string) => fireEvent.change(el, { target: { value } })
+
+    it('asks for both legs when the organisation claims travel, and narrows the kilometres help', () => {
+      open({ travelAsked: true })
+      expect(screen.getByText('From wherever you were before this shift.')).toBeInTheDocument()
+      expect(screen.getByText(/To your base or home\. If you.re going straight to another shift, leave this empty and add the trip on that shift\./)).toBeInTheDocument()
+      expect(preLeg().getByLabelText('Minutes')).toHaveValue('')
+      expect(postLeg().getByLabelText('Kilometres')).toHaveAttribute('inputmode', 'decimal')
+      expect(screen.getByText('Only driving with Mia during the shift.')).toBeInTheDocument()
+    })
+
+    it('asks for nothing when the shift detail has no travelAsked (cached before the deploy, carry N5)', async () => {
+      open()
+      expect(screen.queryByRole('group', { name: /trip/i })).not.toBeInTheDocument()
+      expect(screen.getByText('Only driving with Mia, not your trip to or from the shift.')).toBeInTheDocument()
+      toStepFive()
+      expect(screen.queryByText('Trip after the shift')).not.toBeInTheDocument()
+      forward('Submit shift')
+      await waitFor(() => expect(finishMutateAsync).toHaveBeenCalled())
+      expect(finishMutateAsync.mock.calls[0][0].data).not.toHaveProperty('preShiftTravelMinutes')
+    })
+
+    it('sends the four values as numbers and says them on the summary', async () => {
+      open({ travelAsked: true })
+      type(preLeg().getByLabelText('Minutes'), '25')
+      type(preLeg().getByLabelText('Kilometres'), '12.3')
+      type(postLeg().getByLabelText('Minutes'), '20')
+      type(postLeg().getByLabelText('Kilometres'), '10')
+      toStepFive()
+      expect(screen.getByText('25 min, 12.3 km')).toBeInTheDocument()
+      expect(screen.getByText('20 min, 10 km')).toBeInTheDocument()
+      forward('Submit shift')
+      await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledWith({
+        id: 'shift-1',
+        data: expect.objectContaining({ preShiftTravelMinutes: 25, preShiftTravelKilometres: 12.3, postShiftTravelMinutes: 20, postShiftTravelKilometres: 10 }),
+      }))
+    })
+
+    it('empty fields send null and read None', async () => {
+      open({ travelAsked: true })
+      toStepFive()
+      expect(screen.getAllByText('None').length).toBeGreaterThanOrEqual(2)
+      forward('Submit shift')
+      await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledWith({
+        id: 'shift-1',
+        data: expect.objectContaining({ preShiftTravelMinutes: null, preShiftTravelKilometres: null, postShiftTravelMinutes: null, postShiftTravelKilometres: null }),
+      }))
+    })
+
+    it('names a bad leg under its field, on step 1, with focus on the field', async () => {
+      open({ travelAsked: true })
+      type(postLeg().getByLabelText('Minutes'), '481')
+      forward('Confirm times')
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(screen.getAllByText('Enter whole minutes from 0 to 480.')).toHaveLength(1)
+      expect(document.getElementById('finish-post-error')).toHaveTextContent('Enter whole minutes from 0 to 480.')
+      expect(postLeg().getByLabelText('Minutes')).toHaveAttribute('aria-invalid', 'true')
+      await waitFor(() => expect(postLeg().getByLabelText('Minutes')).toHaveFocus())
+      expect(heading('Your times')).toBeInTheDocument()
+    })
+
+    it('names a bad kilometres entry under its field once, not in the bar', async () => {
+      open({ travelAsked: true })
+      type(preLeg().getByLabelText('Kilometres'), '2001')
+      forward('Confirm times')
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(screen.getAllByText('Enter kilometres from 0 to 2,000.')).toHaveLength(1)
+      expect(document.getElementById('finish-pre-error')).toHaveTextContent('Enter kilometres from 0 to 2,000.')
+      expect(preLeg().getByLabelText('Kilometres')).toHaveAttribute('aria-invalid', 'true')
+    })
+  })
+
   it("refuses moved times that leave a break outside, focusing that break's Edit", async () => {
     open({ breaks: [{ id: 'b1', startedAt: '2026-08-17T06:40:00Z', endedAt: '2026-08-17T06:52:00Z', isRunning: false, minutes: 12, editedAt: null, createdByUserId: 'u' }] })
     moveFinish('2026-08-17T16:50')
@@ -1309,6 +1385,6 @@ describe('PortalShiftDetailPage: offline (SHAPE 3, 5)', () => {
     localStorage.setItem('odip_user', JSON.stringify({ id: 'u1' }))
     localStorage.setItem('odip_offline:u1:already:shift-1', JSON.stringify({ savedAt: Date.now(), data: true }))
     show(makeDetail({ status: 'PendingReview', completion: makeCompletion() }))
-    expect(screen.getByText(/already submitted before this phone sent its Finish, so the details entered here \(times, kilometres, handover\) weren.t added/)).toBeInTheDocument()
+    expect(screen.getByText(/already submitted before this phone sent its Finish, so the details entered here \(times, travel, kilometres, handover\) weren.t added/)).toBeInTheDocument()
   })
 })

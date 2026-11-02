@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ClipboardCheck, AlertTriangle } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
@@ -12,6 +12,7 @@ import { Dropdown } from '@/components/Dropdown'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import {
   useCompletions, useCompletion, useApproveCompletion, useReturnCompletion, useApproveCompletionsBatch, useStaff,
+  useEditCompletionTravel, usePlanPricingSettings,
 } from '@/api/hooks'
 import type { CompletionQueueItemDto, ShiftStatus, ShiftCompletionDto, ApproveBatchResultDto } from '@/api/types'
 import { formatDateAu, formatWithTimeZone, extractErrorMessage } from '@/lib/utils'
@@ -20,6 +21,10 @@ import { formatServiceDate, plural } from '@/lib/format'
 import { unbroken } from '@/lib/intakeBooking'
 import { Button } from '@/components/Button'
 import { TONE } from '@/lib/tone'
+import { NumberField } from '@/components/NumberField'
+import { apiErrorCode } from '@/lib/shiftPackageErrors'
+import { SHIFT_PACKAGE_ERROR_CODES as C } from '@/api/types'
+import { travelLabel } from '@/pages/portal/shift/checklist'
 
 const PAGE_SIZE = 50
 
@@ -90,18 +95,69 @@ function IncidentsList({ incidents }: { incidents: ShiftCompletionDto['incidents
   )
 }
 
+/** Staff fix a worker's trip before approving it: four NumberFields, saved on their own so the approval stays one click. */
+function TravelEditor({ c, onOpenChange }: { c: ShiftCompletionDto; onOpenChange: (open: boolean) => void }) {
+  const edit = useEditCompletionTravel()
+  const button = useRef<HTMLButtonElement>(null)
+  const [open, setOpen] = useState(false)
+  const [error, setError] = useState<{ message: string; onClaim: boolean } | null>(null)
+  const [v, setV] = useState({ preMin: NaN, preKm: NaN, postMin: NaN, postKm: NaN })
+  const [bad, setBad] = useState<Record<string, boolean>>({})
+  const toNum = (n?: number | null) => n ?? NaN
+  const toApi = (n: number) => (Number.isNaN(n) ? null : n)
+  const show = (next: boolean) => { setOpen(next); setBad({}); onOpenChange(next) }
+  const close = () => { show(false); setError(null); setTimeout(() => button.current?.focus(), 0) }
+  function begin() {
+    setV({ preMin: toNum(c.preShiftTravelMinutes), preKm: toNum(c.preShiftTravelKilometres), postMin: toNum(c.postShiftTravelMinutes), postKm: toNum(c.postShiftTravelKilometres) })
+    show(true)
+  }
+  async function save() {
+    setError(null)
+    try {
+      await edit.mutateAsync({
+        shiftId: c.shiftId,
+        data: { preShiftTravelMinutes: toApi(v.preMin), preShiftTravelKilometres: toApi(v.preKm), postShiftTravelMinutes: toApi(v.postMin), postShiftTravelKilometres: toApi(v.postKm) },
+      })
+      close()
+    } catch (err) {
+      setError({ message: extractErrorMessage(err, 'Could not save the travel. Please try again.'), onClaim: apiErrorCode(err) === C.travelOnClaim })
+    }
+  }
+  if (!open) return <Button ref={button} variant="ghost" size="sm" onClick={begin}>Edit travel</Button>
+  const leg = (legend: string, min: keyof typeof v, km: keyof typeof v) => (
+    <fieldset className="grid grid-cols-2 gap-3">
+      <legend className="mb-1 text-xs font-medium">{legend}</legend>
+      <NumberField label="Minutes" value={v[min]} min={0} max={480} step={1} onChange={n => setV(p => ({ ...p, [min]: n }))} onBadInput={b => setBad(p => ({ ...p, [min]: b }))} error={bad[min] ? 'Enter a number' : undefined} />
+      <NumberField label="Kilometres" value={v[km]} min={0} max={2000} step="0.1" inputMode="decimal" onChange={n => setV(p => ({ ...p, [km]: n }))} onBadInput={b => setBad(p => ({ ...p, [km]: b }))} error={bad[km] ? 'Enter a number' : undefined} />
+    </fieldset>
+  )
+  return (
+    <div className="mt-2 space-y-3">
+      {leg('Trip to the participant', 'preMin', 'preKm')}
+      {leg('Trip after the shift', 'postMin', 'postKm')}
+      {error && <Callout tone={error.onClaim ? 'warning' : 'danger'}>{error.message}</Callout>}
+      <div className="flex gap-2">
+        <Button onClick={save} disabled={edit.isPending || Object.values(bad).some(Boolean)}>Save travel</Button>
+        <Button variant="secondary" onClick={close} aria-label="Cancel travel edit">Cancel</Button>
+      </div>
+    </div>
+  )
+}
+
 /** What the worker confirmed at Finish (My shifts redesign): moved times with the stamps they replaced, the reason, kilometres, the report answer. */
-function WorkerAnswers({ c }: { c: ShiftCompletionDto }) {
+function WorkerAnswers({ c, canEditTravel = false, onTravelOpenChange = () => {} }: { c: ShiftCompletionDto; canEditTravel?: boolean; onTravelOpenChange?: (open: boolean) => void }) {
   const t = (iso: string) => formatWithTimeZone(iso, c.timeZoneId, { hour: 'numeric', minute: '2-digit' })
   const lines = [
     c.originalActualStart && `Start ${t(c.originalActualStart)}, changed to ${t(c.actualStart)}.`,
     c.originalActualEnd && c.actualEnd && `Finish ${t(c.originalActualEnd)}, changed to ${t(c.actualEnd)}.`,
     c.timeAdjustmentReason && `Reason: ${c.timeAdjustmentReason}`,
     c.kilometres != null && `${c.kilometres} km driven with the participant`,
+    (c.preShiftTravelMinutes != null || c.preShiftTravelKilometres != null) && `Trip to the participant: ${travelLabel(c.preShiftTravelMinutes ?? null, c.preShiftTravelKilometres ?? null)}`,
+    (c.postShiftTravelMinutes != null || c.postShiftTravelKilometres != null) && `Trip after the shift: ${travelLabel(c.postShiftTravelMinutes ?? null, c.postShiftTravelKilometres ?? null)}`,
     c.anythingToReport && 'The worker said there was something to report.',
     c.shiftReturnCount > 0 && `Returned to the worker ${plural(c.shiftReturnCount, 'time')} before.`,
   ].filter((line): line is string => typeof line === 'string')
-  if (lines.length === 0 && !c.sentFromOffline) return null
+  if (lines.length === 0 && !c.sentFromOffline && !canEditTravel) return null
   return (
     <div className="space-y-1">
       {c.sentFromOffline && (
@@ -111,6 +167,7 @@ function WorkerAnswers({ c }: { c: ShiftCompletionDto }) {
         </div>
       )}
       {lines.length > 0 && <ul className="space-y-0.5 text-xs">{lines.map(line => <li key={line}>{line}</li>)}</ul>}
+      {canEditTravel && <TravelEditor c={c} onOpenChange={onTravelOpenChange} />}
     </div>
   )
 }
@@ -150,11 +207,13 @@ export default function CompletionReviewPage() {
   const [returnReason, setReturnReason] = useState('')
   const [actionError, setActionError] = useState<string | null>(null)
   const [batchConfirmOpen, setBatchConfirmOpen] = useState(false)
+  const [travelEditing, setTravelEditing] = useState(false)
   const [batchResults, setBatchResults] = useState<ApproveBatchResultDto[] | null>(null)
 
   const detailShiftId = approveTarget?.shiftId ?? returnTarget?.shiftId
   const { data: detail } = useCompletion(detailShiftId)
 
+  const { data: pricing } = usePlanPricingSettings(canReviewCompletions)
   const approveCompletion = useApproveCompletion()
   const returnCompletion = useReturnCompletion()
   const approveBatch = useApproveCompletionsBatch()
@@ -162,6 +221,7 @@ export default function CompletionReviewPage() {
   function closeApprove() {
     setApproveTarget(null)
     setActionError(null)
+    setTravelEditing(false)
   }
 
   function closeReturn() {
@@ -338,11 +398,14 @@ export default function CompletionReviewPage() {
         title="Approve completion"
         confirmLabel="Approve"
         loading={approveCompletion.isPending}
+        confirmDisabled={travelEditing}
+        alignTop
         message={
           <div className="space-y-3">
             <p>{approveTarget ? `Approve ${approveTarget.participantName}'s shift on ${unbroken(formatServiceDate(approveTarget.serviceDate))} for ${approveTarget.staffName}?` : ''}</p>
-            {detail && <WorkerAnswers c={detail} />}
+            {detail && <WorkerAnswers c={detail} canEditTravel={pricing?.claimProviderTravel === true} onTravelOpenChange={setTravelEditing} />}
             {detail && <IncidentsList incidents={detail.incidents} />}
+            {travelEditing && <p className="text-xs text-[var(--color-muted-foreground)]">Save or cancel the travel change first.</p>}
             {actionError && <p role="alert" className="text-xs text-[var(--color-destructive)]">{actionError}</p>}
           </div>
         }
@@ -369,8 +432,10 @@ export default function CompletionReviewPage() {
                 rows={2}
                 className="mt-1 w-full rounded-lg border border-[var(--color-border)] p-2 text-sm"
                 aria-required="true"
+                aria-describedby="return-reason-hint"
               />
             </label>
+            <p id="return-reason-hint" className="text-xs text-[var(--color-muted-foreground)]">The worker enters the shift details again, travel included.</p>
             {actionError && <p role="alert" className="text-xs text-[var(--color-destructive)]">{actionError}</p>}
           </div>
         }

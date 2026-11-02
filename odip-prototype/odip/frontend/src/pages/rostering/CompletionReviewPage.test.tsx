@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, within, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import CompletionReviewPage from './CompletionReviewPage'
@@ -8,7 +8,7 @@ import { emptyCompletionPackage } from '@/test/fixtures/shiftPackage'
 
 const {
   mockUseCompletions, mockUseCompletion, mockUseStaff,
-  mockApproveMutateAsync, mockReturnMutateAsync, mockApproveBatchMutateAsync,
+  mockApproveMutateAsync, mockReturnMutateAsync, mockApproveBatchMutateAsync, mockEditTravelMutateAsync, mockUsePricing,
 } = vi.hoisted(() => ({
   mockUseCompletions: vi.fn(),
   mockUseCompletion: vi.fn((): { data: ShiftCompletionDto | undefined } => ({ data: undefined })),
@@ -16,6 +16,8 @@ const {
   mockApproveMutateAsync: vi.fn(),
   mockReturnMutateAsync: vi.fn(),
   mockApproveBatchMutateAsync: vi.fn(),
+  mockEditTravelMutateAsync: vi.fn(),
+  mockUsePricing: vi.fn((): { data: { claimProviderTravel: boolean } | undefined } => ({ data: { claimProviderTravel: true } })),
 }))
 
 vi.mock('@/api/hooks', () => ({
@@ -25,6 +27,8 @@ vi.mock('@/api/hooks', () => ({
   useApproveCompletion: () => ({ mutateAsync: mockApproveMutateAsync, isPending: false }),
   useReturnCompletion: () => ({ mutateAsync: mockReturnMutateAsync, isPending: false }),
   useApproveCompletionsBatch: () => ({ mutateAsync: mockApproveBatchMutateAsync, isPending: false }),
+  useEditCompletionTravel: () => ({ mutateAsync: mockEditTravelMutateAsync, isPending: false }),
+  usePlanPricingSettings: mockUsePricing,
 }))
 
 function setUserRole(role: string) {
@@ -112,6 +116,8 @@ beforeEach(() => {
   mockApproveMutateAsync.mockReset().mockResolvedValue(makeCompletionDetail())
   mockReturnMutateAsync.mockReset().mockResolvedValue(makeCompletionDetail())
   mockApproveBatchMutateAsync.mockReset().mockResolvedValue([])
+  mockEditTravelMutateAsync.mockReset().mockResolvedValue(makeCompletionDetail())
+  mockUsePricing.mockReturnValue({ data: { claimProviderTravel: true } })
 })
 
 describe('CompletionReviewPage', () => {
@@ -375,5 +381,108 @@ describe('CompletionReviewPage: shifts sent back before (review CR-B Must 1)', (
     await user.click(screen.getByRole('button', { name: /^approve jack o'sullivan with liam okafor on /i }))
 
     expect(within(screen.getByRole('alertdialog')).getByText('Returned to the worker 1 time before.')).toBeInTheDocument()
+  })
+})
+
+describe('CompletionReviewPage: provider travel (travel PR-B)', () => {
+  const travelled = (over: Partial<ShiftCompletionDto> = {}) => makeCompletionDetail({
+    preShiftTravelMinutes: 25, preShiftTravelKilometres: 12.3, postShiftTravelMinutes: 20, postShiftTravelKilometres: 10, ...over,
+  })
+  async function openApprove(detail: ShiftCompletionDto) {
+    const user = userEvent.setup()
+    mockUseCompletions.mockReturnValue({ data: makePaged([makeQueueItem()]), isLoading: false, isError: false, refetch: vi.fn() })
+    mockUseCompletion.mockReturnValue({ data: detail })
+    renderPage()
+    await user.click(screen.getByRole('button', { name: /^approve jack o'sullivan with liam okafor on /i }))
+    return { user, dialog: screen.getByRole('alertdialog') }
+  }
+
+  it('says both trips in the review dialog, and leaves a trip out when both of its values are empty', async () => {
+    const { dialog } = await openApprove(travelled({ postShiftTravelMinutes: null, postShiftTravelKilometres: null }))
+    expect(within(dialog).getByText('Trip to the participant: 25 min, 12.3 km')).toBeInTheDocument()
+    expect(within(dialog).queryByText(/Trip after the shift/)).not.toBeInTheDocument()
+  })
+
+  it('saves all four values from Edit travel, then closes the editor and returns focus to the button', async () => {
+    const { user, dialog } = await openApprove(travelled())
+    await user.click(within(dialog).getByRole('button', { name: 'Edit travel' }))
+    const after = within(within(dialog).getByRole('group', { name: 'Trip after the shift' }))
+    await user.clear(after.getByLabelText('Minutes'))
+    await user.type(after.getByLabelText('Minutes'), '35')
+    await user.clear(after.getByLabelText('Kilometres'))
+    await user.click(within(dialog).getByRole('button', { name: 'Save travel' }))
+    expect(mockEditTravelMutateAsync).toHaveBeenCalledWith({
+      shiftId: 'shift-1',
+      data: { preShiftTravelMinutes: 25, preShiftTravelKilometres: 12.3, postShiftTravelMinutes: 35, postShiftTravelKilometres: null },
+    })
+    expect(within(dialog).queryByRole('group', { name: 'Trip after the shift' })).not.toBeInTheDocument()
+    // Focus returns on a setTimeout(0) after the editor closes.
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Edit travel' })).toHaveFocus())
+  })
+
+  it("shows the server's sentence in a warning when the shift is already on a claim, and keeps the editor open", async () => {
+    mockEditTravelMutateAsync.mockRejectedValue({ response: { status: 409, data: { message: 'This shift is on claim CLM-1. Change its travel on the claim, or cancel the claim first.', code: 'SHIFT_TRAVEL_ON_CLAIM' } } })
+    const { user, dialog } = await openApprove(travelled())
+    await user.click(within(dialog).getByRole('button', { name: 'Edit travel' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Save travel' }))
+    expect(await within(dialog).findByText(/This shift is on claim CLM-1/)).toBeInTheDocument()
+    expect(within(dialog).getByRole('group', { name: 'Trip to the participant' })).toBeInTheDocument()
+  })
+
+  it('Cancel leaves the values alone and returns focus to the button', async () => {
+    const { user, dialog } = await openApprove(travelled())
+    await user.click(within(dialog).getByRole('button', { name: 'Edit travel' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel travel edit' }))
+    expect(mockEditTravelMutateAsync).not.toHaveBeenCalled()
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Edit travel' })).toHaveFocus())
+  })
+
+  it('offers no Edit travel when the organisation does not claim travel, or the settings have not loaded', async () => {
+    mockUsePricing.mockReturnValue({ data: { claimProviderTravel: false } })
+    const { dialog } = await openApprove(travelled())
+    expect(within(dialog).queryByRole('button', { name: 'Edit travel' })).not.toBeInTheDocument()
+  })
+
+  it('offers no Edit travel while the settings have not loaded', async () => {
+    mockUsePricing.mockReturnValue({ data: undefined })
+    const { dialog } = await openApprove(travelled())
+    expect(within(dialog).queryByRole('button', { name: 'Edit travel' })).not.toBeInTheDocument()
+  })
+
+  it('holds Approve, with a hint, while the travel editor is open, and frees it after Cancel or Save', async () => {
+    const { user, dialog } = await openApprove(travelled())
+    const approve = () => within(dialog).getByRole('button', { name: 'Approve' })
+    expect(approve()).toBeEnabled()
+    await user.click(within(dialog).getByRole('button', { name: 'Edit travel' }))
+    expect(approve()).toBeDisabled()
+    expect(within(dialog).getByText('Save or cancel the travel change first.')).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel travel edit' }))
+    expect(approve()).toBeEnabled()
+    await user.click(within(dialog).getByRole('button', { name: 'Edit travel' }))
+    expect(approve()).toBeDisabled()
+    await user.click(within(dialog).getByRole('button', { name: 'Save travel' }))
+    await waitFor(() => expect(approve()).toBeEnabled())
+  })
+
+  it('refuses a malformed number with "Enter a number" instead of saving it as empty', async () => {
+    const { user, dialog } = await openApprove(travelled())
+    await user.click(within(dialog).getByRole('button', { name: 'Edit travel' }))
+    const minutes = within(within(dialog).getByRole('group', { name: 'Trip to the participant' })).getByLabelText('Minutes')
+    Object.defineProperty(minutes, 'validity', { value: { badInput: true }, configurable: true })
+    fireEvent.change(minutes, { target: { value: '' } })
+    expect(within(dialog).getByText('Enter a number')).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Save travel' })).toBeDisabled()
+    Object.defineProperty(minutes, 'validity', { value: { badInput: false }, configurable: true })
+    fireEvent.change(minutes, { target: { value: '30' } })
+    expect(within(dialog).queryByText('Enter a number')).not.toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Save travel' })).toBeEnabled()
+  })
+
+  it('tells the coordinator the worker re-enters travel when a shift is returned', async () => {
+    const user = userEvent.setup()
+    mockUseCompletions.mockReturnValue({ data: makePaged([makeQueueItem()]), isLoading: false, isError: false, refetch: vi.fn() })
+    renderPage()
+    await user.click(screen.getByRole('button', { name: /^return jack o'sullivan with liam okafor on /i }))
+    expect(within(screen.getByRole('alertdialog')).getByText(/The worker enters the shift details again, travel included\./)).toBeInTheDocument()
   })
 })
