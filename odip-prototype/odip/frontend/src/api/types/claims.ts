@@ -50,6 +50,8 @@ export interface ClaimLineItemDto {
   ndisNumber: string
   planType: PlanType
   supportItemCode: string
+  /** The catalogue unit of the line's support item on its delivery date ('H' hourly, 'E' each). Absent when the item is no longer in the catalogue. */
+  unit?: string
   dayType: ClaimDayType
   supportsDeliveredFrom: string
   supportsDeliveredTo: string

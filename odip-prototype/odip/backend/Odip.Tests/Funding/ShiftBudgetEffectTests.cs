@@ -1,4 +1,5 @@
 using Moq;
+using Odip.Domain.Billing.Services;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Funding;
@@ -127,7 +128,7 @@ public class ShiftBudgetEffectTests : IDisposable
         var stub = new Mock<IShiftCostSource>();
         stub.Setup(s => s.EstimateAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IReadOnlyList<ShiftSpec>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid _, Guid _, IReadOnlyList<ShiftSpec> specs, CancellationToken _) =>
-                specs.Select((_, i) => i % 2 == 0 ? (ShiftCostEstimate)new ShiftCostEstimate.NotPriced("unpriced") : new ShiftCostEstimate.Priced(480m, 4)).ToList());
+                specs.Select((s, i) => i % 2 == 0 ? (ShiftCostEstimate)new ShiftCostEstimate.NotPriced("unpriced") : new ShiftCostEstimate.Priced(new[] { new ShiftCostPart(s.ServiceDate, 4, 480m) })).ToList());
 
         var warning = Assert.Single(await Effect(stub.Object).ForShiftsAsync(_kit.TenantId, participant.Id, EightWeekdays(), default));
 

@@ -187,6 +187,9 @@ public static class BudgetLedgerCalculator
         return period is null ? new LedgerPlace(LedgerPlacement.OutsideThePlan, pool, null) : new LedgerPlace(LedgerPlacement.InPeriod, pool, period);
     }
 
+    /// <summary>The past, unresolved shifts among <paramref name="items"/>: a shift cut into parts has a row for each, and counts once.</summary>
+    private static int PastShiftCount(IEnumerable<LedgerItem> items) => items.Where(i => i.Kind == LedgerRowKind.PastShift).Select(i => i.ShiftId ?? i.Id).Distinct().Count();
+
     public static PlanLedger Compute(FundingPlan plan, DateOnly today, int approachingPercent, IEnumerable<LedgerItem> items)
     {
         var byPeriod = new Dictionary<FundingPeriod, List<LedgerItem>>(ReferenceEqualityComparer.Instance);
@@ -225,7 +228,7 @@ public static class BudgetLedgerCalculator
             var available = limit + carried;
             var used = claimed + pending;
             periods.Add(new PeriodLedger(
-                period, period.PeriodStart <= today && today <= period.PeriodEnd, limit, carried, claimed, pending, booked, held.Count(i => i.Kind == LedgerRowKind.PastShift),
+                period, period.PeriodStart <= today && today <= period.PeriodEnd, limit, carried, claimed, pending, booked, PastShiftCount(held),
                 held.Sum(i => i.UnpricedTripDayCount),
                 StatusOf(available, used, used + booked, approachingPercent), held,
                 // A booking priced in more than one category has an item for each: it is one trip however many parts it is split into.
@@ -239,7 +242,7 @@ public static class BudgetLedgerCalculator
         var totalPending = periods.Sum(p => p.Pending);
         var totalBooked = periods.Sum(p => p.BookedAhead);
         var total = new PoolTotals(
-            totalLimit, totalClaimed, totalPending, totalBooked, periods.Sum(p => p.PastUnresolvedCount), periods.Sum(p => p.UnpricedTripDayCount),
+            totalLimit, totalClaimed, totalPending, totalBooked, PastShiftCount(periods.SelectMany(p => p.Items)), periods.Sum(p => p.UnpricedTripDayCount),
             StatusOf(totalLimit, totalClaimed + totalPending, totalClaimed + totalPending + totalBooked, approachingPercent),
             periods.Sum(p => p.StartedUnclaimedTripCount),
             periods.Sum(p => p.UnpricedShiftCount));

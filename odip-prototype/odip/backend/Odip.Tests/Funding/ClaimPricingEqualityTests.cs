@@ -93,7 +93,7 @@ public class ClaimPricingEqualityTests
         var wed = new DateOnly(2026, 10, 7);
         kit.SeedShift(person, wed, ShiftStatus.Completed, 18, 2, endsNextDay: true);   // community access Wednesday 18:00 to Thursday 02:00: daytime, evening and night rows
 
-        var ledgerAmount = Assert.Single((await ItemsOf(kit, person)).Where(i => i.Kind == LedgerRowKind.CompletedShift)).Amount;
+        var ledgerAmount = (await ItemsOf(kit, person)).Where(i => i.Kind == LedgerRowKind.CompletedShift).Sum(i => i.Amount);   // a shift over midnight is one item for each date it bills on
         var estimate = Assert.IsType<ShiftCostEstimate.Priced>(Assert.Single(await new LedgerShiftCostSource(kit.Db, kit.Ledger).EstimateAsync(kit.TenantId, person.Id,
             new[] { new ShiftSpec(wed, new TimeOnly(18, 0), new TimeOnly(2, 0), true, SupportRatio.OneToOne, SleepoverType.None) }, Ct))).Amount;
         var claim = await new ShiftClaimGenerationService(kit.Db).GenerateDraftClaimAsync(person.Id, wed, wed, Ct);

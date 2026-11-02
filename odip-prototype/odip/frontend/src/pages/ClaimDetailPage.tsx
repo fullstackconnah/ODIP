@@ -21,7 +21,7 @@ import { Callout } from '@/components/Callout'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { FactBar } from '@/components/FactBar'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
-import { dayTypeLabel } from '@/components/GenerateClaimModal'
+import { dayTypeLabel, hasPartlyRejectedShift, isSleepoverLine, lineQuantity } from '@/lib/claimLines'
 import { ClaimBudgetBlock } from '@/components/ClaimBudgetBlock'
 import { retryingAfterError } from '@/lib/queryPhase'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
@@ -334,7 +334,7 @@ export default function ClaimDetailPage() {
               header: 'Day Type',
               sortable: true,
               render: (item: ClaimLineItemDto) => (
-                <span className="text-[var(--color-muted-foreground)]">{dayTypeLabel(item.dayType)}</span>
+                <span className="whitespace-nowrap text-[var(--color-muted-foreground)]">{isSleepoverLine(item) ? 'Sleepover' : dayTypeLabel(item.dayType)}</span>
               ),
             },
             {
@@ -355,7 +355,7 @@ export default function ClaimDetailPage() {
               header: 'Hours',
               align: 'right' as const,
               render: (item: ClaimLineItemDto) => (
-                <span className="tabular-nums text-[var(--color-muted-foreground)]">{item.hours}h</span>
+                <span className="whitespace-nowrap tabular-nums text-[var(--color-muted-foreground)]">{lineQuantity(item)}</span>
               ),
             },
             {
@@ -428,6 +428,12 @@ export default function ClaimDetailPage() {
           }
           className="overflow-x-auto"
         />
+        {/* A shift part-rejected by the NDIA stays held by its other lines, so a claim run skips it. The server's line edit leaves no Needs action entry, hence the status wording. Not on a rejected or cancelled claim, where nothing more is claimed. */}
+        {claim.status !== 'Rejected' && claim.status !== 'Cancelled' && hasPartlyRejectedShift(claim.lineItems ?? []) && (
+          <p data-testid="partial-rejection-note" className="px-[var(--card-pad)] py-3 text-sm text-[var(--color-muted-foreground)]">
+            Part of a shift on this claim was rejected. Its other lines still count, so a new claim run skips that shift. To claim the rejected hours, send that line again from Claims, Needs action.
+          </p>
+        )}
       </div>
       {noShowTarget && id && (
         <NoShowModal
