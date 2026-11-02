@@ -741,7 +741,7 @@ internal sealed class OccurrencePricer
         {
             var need = new ItemNeed(SupportFamily.ProviderTravel, null, null, rate.Row.RegistrationGroup ?? RegistrationGroupOf(block, _policy),
                 CategoryPrefix: rate.Row.ItemNumber.Split('_')[0]);
-            var dollars = PlanMoney.FloorToCent(travel.KmEachWay * legs * _policy.KmRateStandard / sharing);
+            var dollars = ProviderTravelRule.KmDollars(travel.KmEachWay * legs, _policy.KmRateStandard, sharing);
             AddDollarLine(occ, need, PlannedLineKind.ProviderTravelCosts, "Provider travel costs", dollars, flags & PlannedLineFlags.Provisional, questions,
                 new[] { "travel:km", "price:catalogue-by-service-date" },
                 $"Provider travel kilometres: {Number(travel.KmEachWay)} km {(legs == 2 ? "each way" : "one way")} at ${Money(_policy.KmRateStandard)} a kilometre{(sharing > 1 ? $", shared by {sharing} participants" : string.Empty)}, claimed in dollars on the non-labour item{(_policy.TravelRatesProvisional ? "; the rate is a 2025-26 value" : string.Empty)}");
@@ -822,12 +822,7 @@ internal sealed class OccurrencePricer
         });
     }
 
-    /// <summary>The travel time a provider may claim each way: 30 minutes in MM1-3, 60 in MM4-5, no cap in MM6-7 (2025-26 rules, NDIS-CODES 7). National with no level given is read as MM1-3, the stricter.</summary>
-    private static int? TravelCapMinutes(PlanLocation location) => location.Zone switch
-    {
-        PriceZone.National => location.Mm is 4 or 5 ? 60 : 30,
-        _ => null,
-    };
+    private static int? TravelCapMinutes(PlanLocation location) => ProviderTravelRule.CapMinutes(location);
 
     // ── Selection and text ────────────────────────────────────────────────────────
 

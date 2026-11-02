@@ -153,6 +153,10 @@ export interface ShiftClaimPreviewLineItemDto {
   hours: number
   unitPrice: number
   totalAmount: number
+  /** 'ProviderTravel' for the shift's travel time line (written TRAN in the file); the kilometre line is 'Standard'. */
+  claimType: ClaimType
+  /** The catalogue unit of the line's item ('H' hourly, 'E' each). */
+  unit?: string
   /** Something worth saying about a line that is priced but not worked out fully (an overnight shift: evening and night rates are not applied yet). Absent when there is nothing to say. */
   note?: string
 }

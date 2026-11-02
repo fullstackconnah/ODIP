@@ -21,7 +21,7 @@ import { Callout } from '@/components/Callout'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { FactBar } from '@/components/FactBar'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
-import { dayTypeLabel, hasPartlyRejectedShift, isSleepoverLine, lineQuantity } from '@/lib/claimLines'
+import { hasPartlyRejectedShift, lineKindLabel, lineQuantity } from '@/lib/claimLines'
 import { ClaimBudgetBlock } from '@/components/ClaimBudgetBlock'
 import { retryingAfterError } from '@/lib/queryPhase'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
@@ -334,7 +334,7 @@ export default function ClaimDetailPage() {
               header: 'Day Type',
               sortable: true,
               render: (item: ClaimLineItemDto) => (
-                <span className="whitespace-nowrap text-[var(--color-muted-foreground)]">{isSleepoverLine(item) ? 'Sleepover' : dayTypeLabel(item.dayType)}</span>
+                <span className="whitespace-nowrap text-[var(--color-muted-foreground)]">{lineKindLabel(item)}</span>
               ),
             },
             {

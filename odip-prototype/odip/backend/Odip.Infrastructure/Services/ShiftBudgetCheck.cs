@@ -12,7 +12,7 @@ using Odip.Infrastructure.Data;
 namespace Odip.Infrastructure.Services;
 
 /// <summary>One shift to be priced: when it is, how long, and the support it gives. Plain data, so a source of prices needs no entity.</summary>
-public sealed record ShiftSpec(DateOnly ServiceDate, TimeOnly StartTime, TimeOnly EndTime, bool EndsNextDay, SupportRatio Ratio, SleepoverType NightType, string? SupportGroupCode = null);
+public sealed record ShiftSpec(DateOnly ServiceDate, TimeOnly StartTime, TimeOnly EndTime, bool EndsNextDay, SupportRatio Ratio, SleepoverType NightType, string? SupportGroupCode = null, Guid? ShiftPatternId = null, Guid? ShiftId = null);
 
 /// <summary>What a shift is estimated to cost, or why it cannot be: nothing is ever invented for a shift the estimator cannot price.</summary>
 public abstract record ShiftCostEstimate
@@ -77,12 +77,16 @@ public sealed class LedgerShiftCostSource : IShiftCostSource
         // A shift on the last day runs past midnight into the next, so the holidays are read one day further.
         var holidays = PublicHolidayLoader.WholeDayCalendarOf(await PublicHolidayLoader.LoadAsync(_db, from, to.AddDays(1), includePartDay: false, ct));
         var state = ShiftPriceEstimator.StateFor(person.AddressState, providerState);
+        // Provider travel (travel plan D5): the submitted legs of a saved shift, else the forecast of its agreement block; a hand-made shift forecasts none. The same source the claim and the ledger read.
+        var travelPolicy = await ShiftTravelSource.PolicyAsync(_db, tenantId, ct);
+        var travelInputs = await ShiftTravelSource.ForShiftsAsync(_db, tenantId, travelPolicy, shifts.Select(s => new ShiftRef(s.ShiftId, s.ShiftPatternId)).ToList(), ct);
 
-        return shifts.Select(shift =>
+        return shifts.Select((shift, index) =>
         {
             var groupRows = rowsByGroup.GetValueOrDefault(shift.SupportGroupCode ?? CatalogueGroups.CommunityAccessGroupCode) ?? new List<SupportCatalogueItem>();
             var outcome = ShiftPriceEstimator.Price(new ShiftRateRows(groupRows, personalCareRows, sleepoverRows), shift.SupportGroupCode, shift.ServiceDate, shift.StartTime, shift.EndTime, shift.EndsNextDay, shift.Ratio, shift.NightType,
                 person.IsIntensiveSupport, state, holidays.For(state), zone);
+            if (outcome.IsPriced) outcome = ShiftTravelPricer.Apply(outcome, travelInputs[index], shift.ServiceDate, state, travelPolicy.KmRate, groupRows.Concat(personalCareRows).ToList(), travelPolicy.TravelRows);
             return outcome.IsPriced
                 ? (ShiftCostEstimate)new ShiftCostEstimate.Priced(ShiftPriceEstimator.PartsOf(outcome))
                 : new ShiftCostEstimate.NotPriced(outcome.NotPricedBecause ?? "the estimator has no price for it");
@@ -155,8 +159,8 @@ public sealed class ShiftBudgetCheck
 
         // The saved version only counts when it is this participant's and in the ledger (a Cancelled one is not).
         var oldCounts = saved is { Status: ShiftStatus.Draft or ShiftStatus.Published } s && s.ParticipantId == request.ParticipantId;
-        var specs = new List<ShiftSpec> { new(request.ServiceDate, request.StartTime, request.EndTime, request.EndsNextDay, request.Ratio, request.NightType, request.SupportGroupCode) };
-        if (oldCounts) specs.Add(new ShiftSpec(saved!.ServiceDate, saved.StartTime, saved.EndTime, saved.EndsNextDay, saved.Ratio, saved.NightType, saved.SupportGroupCode));
+        var specs = new List<ShiftSpec> { new(request.ServiceDate, request.StartTime, request.EndTime, request.EndsNextDay, request.Ratio, request.NightType, request.SupportGroupCode, oldCounts ? saved!.ShiftPatternId : null, oldCounts ? request.ExistingShiftId : null) };
+        if (oldCounts) specs.Add(new ShiftSpec(saved!.ServiceDate, saved.StartTime, saved.EndTime, saved.EndsNextDay, saved.Ratio, saved.NightType, saved.SupportGroupCode, saved.ShiftPatternId, request.ExistingShiftId));
         var estimates = await _costs.EstimateAsync(request.TenantId, request.ParticipantId, specs, ct);
 
         // A shift the estimator cannot price has no cost to check: no finding, never blocked, and the line says so.
