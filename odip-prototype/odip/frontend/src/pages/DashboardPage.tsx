@@ -281,7 +281,7 @@ export default function DashboardPage() {
       noun: 'unclaimed shifts',
       count: unclaimed.count,
       tone: 'warning',
-      detail: `Completed in the last 14 days and not yet claimed, across ${plural(unclaimed.participants, 'participant')}.`,
+      detail: `Last 14 days, across ${plural(unclaimed.participants, 'participant')}.`,
       action: { label: 'Claim shifts', to: '/claims?run=shifts' },
       to: '/claims',
       loading: unclaimed.loading,

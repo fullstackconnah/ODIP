@@ -17,7 +17,7 @@ describe('DashboardPage: Unclaimed shifts', () => {
 
     const tile = screen.getByRole('group', { name: 'Unclaimed shifts 6' })
     expect(within(tile).getByText('6')).toBeInTheDocument()
-    expect(within(tile).getByText('Completed in the last 14 days and not yet claimed, across 2 participants.')).toBeInTheDocument()
+    expect(within(tile).getByText('Last 14 days, across 2 participants.')).toBeInTheDocument()
     expect(within(tile).getByRole('link', { name: 'Claim shifts' })).toHaveAttribute('href', '/claims?run=shifts')
     expect(tile).toHaveAttribute('data-attention')
   })
@@ -26,7 +26,7 @@ describe('DashboardPage: Unclaimed shifts', () => {
     asRole('Admin')
     mockUseUnclaimedShifts.mockReturnValue(unclaimedShifts(1, 1))
     renderPage()
-    expect(screen.getByText('Completed in the last 14 days and not yet claimed, across 1 participant.')).toBeInTheDocument()
+    expect(screen.getByText('Last 14 days, across 1 participant.')).toBeInTheDocument()
   })
 
   it('sits after Shift completions among the warnings', () => {
