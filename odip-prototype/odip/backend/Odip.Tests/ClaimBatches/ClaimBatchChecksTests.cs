@@ -83,6 +83,26 @@ public class ClaimBatchChecksTests
         Assert.Equal(refused, Rules(Clean(line: l => { l.ClaimType = ClaimType.Cancellation; l.CancellationReason = reason; })).Contains("CancellationReason"));
 
     [Theory]
+    [InlineData(CatalogueClaimFlag.No, false, true)]
+    [InlineData(null, false, true)]
+    [InlineData(CatalogueClaimFlag.Yes, false, false)]
+    [InlineData(CatalogueClaimFlag.No, true, false)]   // a "_CA" twin in the price guide allows it whatever the flag says
+    public void D_A_cancellation_line_is_blocked_unless_the_item_allows_it(CatalogueClaimFlag? flag, bool hasTwin, bool blocked)
+    {
+        var row = Clean(line: l => { l.ClaimType = ClaimType.Cancellation; l.CancellationReason = "NSDH"; }, item: i => i.ShortNoticeCancellation = flag);
+        if (hasTwin) row = row with { CancelledItem = new SupportCatalogueItem { ItemNumber = row.Line.SupportItemCode + "_CA" } };
+
+        var problems = ClaimBatchChecks.For(row, new BatchContext { Today = Today });
+
+        Assert.Equal(blocked, problems.Any(p => p.Rule == "CancellationNotAllowed" && p.Severity == ClaimBatchChecks.Block));
+        if (blocked) Assert.Contains("04_104_0125_6_1 can't be claimed as a short-notice cancellation in the price guide.", problems.Single(p => p.Rule == "CancellationNotAllowed").Message);
+    }
+
+    [Fact]
+    public void A_standard_line_is_never_blocked_by_the_cancellation_rule() =>
+        Assert.DoesNotContain("CancellationNotAllowed", Rules(Clean(item: i => i.ShortNoticeCancellation = CatalogueClaimFlag.No)));
+
+    [Theory]
     [InlineData(ClaimType.Variation)]
     [InlineData(ClaimType.Adjustment)]
     public void ChangeType_is_refused(ClaimType type) => Assert.Contains("ChangeType", Rules(Clean(line: l => l.ClaimType = type)));

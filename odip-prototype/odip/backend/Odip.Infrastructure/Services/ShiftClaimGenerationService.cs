@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Odip.Application.DTOs;
 using Odip.Domain.Billing.Catalogue;
+using Odip.Domain.Billing.Pricing;
 using Odip.Domain.Billing.Services;
 using Odip.Domain.Entities;
 using Odip.Domain.Billing;
@@ -54,7 +55,12 @@ public partial class ShiftClaimGenerationService
         Guid participantId, DateOnly from, DateOnly to, CancellationToken ct = default)
     {
         var (lineItems, leftOut, participant) = await CalculateAsync(participantId, from, to, ct);
+        return await PreviewOfAsync(lineItems, leftOut, participant, ct);
+    }
 
+    /// <summary>The preview of priced lines: shared by the date-range preview and the cancellation preview, so both say the same things about the budget and the lines.</summary>
+    private async Task<ShiftClaimPreviewResponseDto> PreviewOfAsync(List<ShiftLineCalc> lineItems, List<ShiftClaimLeftOutDto> leftOut, Participant participant, CancellationToken ct)
+    {
         // The budget effect is worked out from the same lines the claim would have: each is the shift it replaces in the participant's "pending" (a completed shift nobody has claimed is already counted).
         // Under the CALLER's tenant, never the participant's own: a SuperAdmin with no organisation chosen resolves other organisations'
         // participants, and the participant's own id would hand out their whole funding position (budget security audit F-1).
@@ -101,7 +107,13 @@ public partial class ShiftClaimGenerationService
         await using var held = await RosterGenerationLock.AcquireAsync(_db, participantId, ct, scope: "claim-generate");
 
         var (lineItems, leftOut, participant) = await CalculateAsync(participantId, from, to, ct);
+        return await SaveClaimAsync(held, participant, lineItems, leftOut, from, to, cancellationReason: null, ct);
+    }
 
+    /// <summary>The claim and its lines for priced shifts, saved under the participant lock the caller holds. <paramref name="cancellationReason"/> is set on every line of a cancellation claim, null for a standard one.</summary>
+    private async Task<ShiftClaimGenerated> SaveClaimAsync(
+        RosterGenerationLock held, Participant participant, List<ShiftLineCalc> lineItems, List<ShiftClaimLeftOutDto> leftOut, DateOnly from, DateOnly to, string? cancellationReason, CancellationToken ct)
+    {
         var settings = ProviderSettingsGuard.Require(await _db.ProviderSettings.FirstOrDefaultAsync(s => s.TenantId == participant.TenantId, ct));
 
         // shortcut: no per-item GST flag; P1 only via legacy lines; add a catalogue GST flag if a taxable support appears
@@ -113,7 +125,7 @@ public partial class ShiftClaimGenerationService
             Id = claimId,
             TenantId = participant.TenantId,
             Kind = ClaimKind.Shift,
-            ParticipantId = participantId,
+            ParticipantId = participant.Id,
             PeriodFrom = from,
             // The header covers every line: a night part after midnight on the last day is dated the day after it.
             PeriodTo = lineItems.Max(l => l.Date) is var lastLine && lastLine > to ? lastLine : to,
@@ -140,6 +152,7 @@ public partial class ShiftClaimGenerationService
             TotalAmount = l.TotalAmount,
             GSTCode = gstCode,
             ClaimType = l.ClaimType,
+            CancellationReason = cancellationReason,
             Status = ClaimLineItemStatus.Draft
         }).ToList();
 
@@ -190,6 +203,18 @@ public partial class ShiftClaimGenerationService
 
         if (shifts.Count == 0)
             throw new InvalidOperationException("No completed, unclaimed shifts found in this date range.");
+
+        return await PriceShiftsAsync(participant, shifts, from, to, cancelToday: null, ct);
+    }
+
+    /// <summary>
+    /// Prices the shifts (all one participant's) into claim lines, leaving out those that cannot be claimed, with the reason. A non-null <paramref name="cancelToday"/> is a short-notice cancellation claim:
+    /// the shifts are cancelled ones, each must have been cancelled less than 7 days ahead (calendar days in the organisation's zone) and be over, its item must allow cancellation, and every line is a Cancellation line with no provider travel.
+    /// </summary>
+    private async Task<(List<ShiftLineCalc> LineItems, List<ShiftClaimLeftOutDto> LeftOut, Participant Participant)> PriceShiftsAsync(
+        Participant participant, List<Shift> shifts, DateOnly from, DateOnly to, DateOnly? cancelToday, CancellationToken ct)
+    {
+        var participantId = participant.Id;
 
         // A claim marked Rejected (or Cancelled) by hand keeps its lines Submitted, so these shifts look unclaimed but the unique index on the shift still holds them (a line that is not Rejected). They are listed,
         // here beside the query so a preview and a run agree, and say how to free them.
@@ -243,6 +268,10 @@ public partial class ShiftClaimGenerationService
         var personalCareRows = catalogueByGroup.GetValueOrDefault(CatalogueGroups.PersonalCareGroupCode) ?? new List<SupportCatalogueItem>();
         List<SupportCatalogueItem> RowsOf(Shift s) => catalogueByGroup.GetValueOrDefault(s.SupportGroupCode ?? CatalogueGroups.CommunityAccessGroupCode) ?? new List<SupportCatalogueItem>();
 
+        // The "_CA" twins (the NDIA's own cancellation items), read once: an item without the flag is still allowed when its twin is in the price guide, and the send check reads the same twin.
+        var twinCodes = cancelToday is null ? new List<string>() : loaded.Select(r => r.Item.ItemNumber + BprCsvService.CancellationSuffix).Distinct().ToList();
+        var twins = twinCodes.Count == 0 ? new List<SupportCatalogueItem>() : await _db.SupportCatalogueItems.AsNoTracking().Where(i => twinCodes.Contains(i.ItemNumber)).ToListAsync(ct);
+
         // The travel of every shift, read once inside the same lock as the shifts (the staff edit of the travel legs takes the same lock): the worker's submitted legs, else the agreement's forecast.
         var travelPolicy = await ShiftTravelSource.PolicyAsync(_db, participant.TenantId, ct);
         var travelInputs = await ShiftTravelSource.ForShiftsAsync(_db, participant.TenantId, travelPolicy, shifts.Select(s => new ShiftRef(s.Id, s.ShiftPatternId)).ToList(), ct);
@@ -269,6 +298,11 @@ public partial class ShiftClaimGenerationService
                 leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = $"{participant.FullName}: it is on {(heldClaim.ClaimStatus == TripClaimStatus.Cancelled ? "cancelled" : "rejected")} claim {heldClaim.ClaimReference}. Delete that claim, then claim this shift again." });
                 continue;
             }
+            if (cancelToday is { } today && NotClaimableCancellation(shift, today, zone) is { } notYet)
+            {
+                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = notYet });
+                continue;
+            }
             var catalogueItems = RowsOf(shift);
             // The one pricing rule, shared with the budget ledger so an estimate is exactly what this claim will say.
             var outcome = ShiftPriceEstimator.Price(
@@ -281,6 +315,13 @@ public partial class ShiftClaimGenerationService
                 {
                     ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = outcome.NotPricedSentence!,
                 });
+                continue;
+            }
+
+            // The item must allow a short-notice cancellation: the whole shift is left out when any of its lines does not.
+            if (cancelToday is not null && outcome.Lines.FirstOrDefault(l => !ShortNoticeCancellationRule.Allows(l.CatalogueItem, BprCsvService.CancellationTwin(twins, l.CatalogueItem.ItemNumber, l.Date))) is { } notAllowed)
+            {
+                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = ShortNoticeCancellationRule.NotAllowedSentence(notAllowed.CatalogueItem.ItemNumber) });
                 continue;
             }
 
@@ -303,13 +344,14 @@ public partial class ShiftClaimGenerationService
             }
 
             // Provider travel: one time line and one kilometre line, after the band lines, so they take the next parts of the shift.
-            outcome = ShiftTravelPricer.Apply(outcome, travelOf[shift.Id], shift.ServiceDate, state, travelPolicy.KmRate, catalogueItems.Concat(personalCareRows).ToList(), travelPolicy.TravelRows);
+            if (cancelToday is null) outcome = ShiftTravelPricer.Apply(outcome, travelOf[shift.Id], shift.ServiceDate, state, travelPolicy.KmRate, catalogueItems.Concat(personalCareRows).ToList(), travelPolicy.TravelRows);
 
             lineItems.AddRange(outcome.Lines.Select((price, part) => new ShiftLineCalc
             {
                 Shift = shift,
                 CatalogueItem = price.CatalogueItem,
-                ClaimType = price.ClaimType,
+                // shortcut: the line keeps the standard row's unit price; a "_CA" row priced differently would differ from the stored total, so revisit when "_CA" rows exist.
+                ClaimType = cancelToday is null ? price.ClaimType : ClaimType.Cancellation,
                 DayType = price.DayType,
                 Date = price.Date,
                 Part = part,
@@ -322,6 +364,8 @@ public partial class ShiftClaimGenerationService
 
         if (lineItems.Count == 0)
         {
+            // A cancellation is one shift (or a participant's few): its own reason is the refusal, not the date-range wording.
+            if (cancelToday is not null) throw new NothingClaimableException(leftOut.Count == 1 ? leftOut[0].Reason : NothingClaimable(leftOut), leftOut);
             // Nothing priced because no row of the group is valid on any of these dates (the catalogue starts after them): say so, the same way the trip engine does.
             if (leftOut.All(l => l.Reason == NoCatalogueRateSentence) && !shifts.Any(s => RowsOf(s).Any(i => EffectiveCatalogueResolver.IsValidOn(i, s.ServiceDate))))
                 throw new InvalidOperationException(FormattableString.Invariant(
@@ -331,6 +375,18 @@ public partial class ShiftClaimGenerationService
         }
 
         return (lineItems, leftOut, participant);
+    }
+
+    /// <summary>Why a cancelled shift is not (yet) claimable as a short-notice cancellation, or null when it is. Notice is whole calendar days in the organisation's zone.</summary>
+    private static string? NotClaimableCancellation(Shift shift, DateOnly today, TimeZoneInfo zone)
+    {
+        if (shift.CancelledAt is not { } cancelledAt) return "It was cancelled before Bunya Support kept cancel times, so its notice can't be checked.";
+        var cancelledOn = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(cancelledAt, DateTimeKind.Utc), zone));
+        var noticeDays = shift.ServiceDate.DayNumber - cancelledOn.DayNumber;
+        if (!PlanCancellation.IsShortNotice(noticeDays))
+            return FormattableString.Invariant($"Cancelled {noticeDays} days ahead. Only a cancellation less than {PlanCancellation.ShortNoticeDays} days before the shift can be claimed.");
+        if (shift.ServiceDate >= today) return FormattableString.Invariant($"You can claim this from {shift.ServiceDate.AddDays(1):d MMM yyyy}.");
+        return null;
     }
 
     /// <summary>The refusal when the unique index on a claim line's shift caught a concurrent claim. A claim run shows it as Skipped, not as a failure.</summary>
