@@ -2640,11 +2640,6 @@ const routes = [
       return budgetWarnings ? { ...week, budgetWarnings } : week
     }) }
   }],
-  ['participants/:id/service-agreement-drafts/:id/populate', (participantId, draftId, body) => {
-    const result = planApproval.populate(approvalStore, participantId, draftId, body)
-    if (result.status) return respond(result.status, failEnvelope(null, result.errors, result.code))
-    return result.result
-  }],
 
   // participants (paged list)
   // Honours the filters the Active participants tab sends (Active = isActive=true, Archived = isActive=false, both isDraft=false); the fixtures here have no drafts.
@@ -3033,6 +3028,11 @@ const postRoutes = [
     if (result.status === 409) return respond(409, failEnvelope({ currentVersion: result.currentVersion }, result.errors, 'draft-superseded'))
     if (result.status) return respond(result.status, failEnvelope(null, result.errors))
     return { ...result.draft, oldShiftsRemaining: result.oldShiftsRemaining }
+  }],
+  ['participants/:id/service-agreement-drafts/:id/populate', (participantId, draftId, body) => {
+    const result = planApproval.populate(approvalStore, participantId, draftId, body)
+    if (result.status) return respond(result.status, failEnvelope(null, result.errors, result.code))
+    return result.result
   }],
   // Start rostering (2026-10-16): the week's agreement shifts, once; a started week is the 409 roster-week-started, as the server answers. matchRoute reads only `:id` as a parameter: it is the week start.
   ['rostering/weeks/:id/start', (weekStart) => {
