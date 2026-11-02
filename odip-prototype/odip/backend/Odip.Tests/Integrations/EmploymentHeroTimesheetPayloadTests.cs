@@ -23,7 +23,7 @@ public class EmploymentHeroTimesheetPayloadTests
         Id = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"), ActualStart = new DateTime(2026, 10, 13, 22, 4, 31, DateTimeKind.Utc), ActualEnd = new DateTime(2026, 10, 14, 4, 10, 59, DateTimeKind.Utc), TimeZoneId = zone,
     };
 
-    private static ShiftBreak Break(DateTime from, double minutes) => new() { StartedAt = from, EndedAt = from.AddMinutes(minutes) };
+    private static ShiftBreak Break(DateTime from, double minutes, bool withParticipant = false) => new() { StartedAt = from, EndedAt = from.AddMinutes(minutes), WithParticipant = withParticipant };
 
     private static EhTimesheetLine Built(Shift s, ShiftCompletion c, IEnumerable<ShiftBreak>? breaks = null, string? payrollId = "42", EmploymentHeroTimesheets.TimesheetMapping? map = null)
     {
@@ -50,6 +50,19 @@ public class EmploymentHeroTimesheetPayloadTests
         var minutes = line.Breaks.Sum(b => (DateTime.Parse(b.EndTime) - DateTime.Parse(b.StartTime)).TotalMinutes);
         Assert.Equal(40, minutes);
         Assert.Equal(40, ShiftBreakRules.NetWorked(c.ActualStart, c.ActualEnd, c.ActualEnd!.Value, breaks).BreakMinutes);
+    }
+
+    [Fact]
+    public void IsPaidBreak_FollowsWithParticipant_AndTheHashIgnoresIt()   // [D] W9 S4: the wire field is camelCase isPaidBreak (WireJson = Web defaults)
+    {
+        var c = ACompletion();
+        var alone = EmploymentHeroTimesheets.Build(AShift(), c, [Break(c.ActualStart.AddHours(2), 30)], "42", Mapped, Sydney);
+        var shared = EmploymentHeroTimesheets.Build(AShift(), c, [Break(c.ActualStart.AddHours(2), 30, withParticipant: true)], "42", Mapped, Sydney);
+
+        Assert.False(Assert.Single(alone.Line!.Breaks).IsPaidBreak);
+        Assert.True(Assert.Single(shared.Line!.Breaks).IsPaidBreak);
+        Assert.Equal("EAD875F6C1DDA2DCFEF8363023A6B43CB68869FD44F23F4B8A55A27F2DF3B4EF", alone.Hash);   // pinned: the hash covers times only, so existing queued rows stay valid
+        Assert.Equal(alone.Hash, shared.Hash);
     }
 
     [Theory]

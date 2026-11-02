@@ -69,7 +69,7 @@ function GlanceStrip({ shift }: { shift: PortalShiftDetailDto }) {
   } else if ((shift.status === 'PendingReview' || shift.status === 'Completed') && c) {
     segments = [
       { label: 'Time worked', value: formatMinutesSpan(c.netWorkedMinutes) },
-      { label: 'Breaks', value: `${c.breakMinutes} min` },
+      { label: 'Breaks', value: `${c.breakMinutes} min unpaid` },
     ]
   }
   return segments.length ? <FactBar variant="glance" segments={segments} /> : null
@@ -115,7 +115,7 @@ function SubmittedSummary({ shift }: { shift: PortalShiftDetailDto }) {
         <dt className="text-[var(--color-muted-foreground)]">Variance</dt>
         <dd>{formatVarianceMinutes(c.varianceMinutesStart)} start / {formatVarianceMinutes(c.varianceMinutesEnd)} end</dd>
         <dt className="text-[var(--color-muted-foreground)]">Breaks</dt>
-        <dd>{c.breaks.length}, {c.breakMinutes} min</dd>
+        <dd>{c.breaks.length}, {c.breakMinutes} min unpaid</dd>
         <dt className="text-[var(--color-muted-foreground)]">Time worked</dt>
         <dd>{c.netWorkedMinutes} min</dd>
         {c.reviewedByName && (

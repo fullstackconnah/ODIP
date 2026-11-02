@@ -69,6 +69,16 @@ export const POSITION_LABELS: Record<Position, string> = {
   Other: 'Other',
 }
 
+// ── Employment type (set by an admin on the staff form; null = not set, which never triggers the casual fortnight warning) ──
+export const EMPLOYMENT_TYPES = ['FullTime', 'PartTime', 'Casual'] as const
+export type EmploymentType = typeof EMPLOYMENT_TYPES[number]
+
+export const EMPLOYMENT_TYPE_LABELS: Record<EmploymentType, string> = {
+  FullTime: 'Full-time',
+  PartTime: 'Part-time',
+  Casual: 'Casual',
+}
+
 // ── Availability Type ───────────────────────────────────
 export const AVAILABILITY_TYPES = ['Available', 'Unavailable', 'Leave', 'Training', 'Preferred', 'Tentative'] as const
 export type AvailabilityType = typeof AVAILABILITY_TYPES[number]

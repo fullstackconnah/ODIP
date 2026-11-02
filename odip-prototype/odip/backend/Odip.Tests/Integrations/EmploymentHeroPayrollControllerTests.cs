@@ -172,6 +172,20 @@ public class EmploymentHeroPayrollControllerTests
         Assert.Equal((30, 330), (shifts[1].BreakMinutes, shifts[1].PaidMinutes));   // 360 worked - 30 break
     }
 
+    [Fact]
+    public async Task The_check_pays_a_break_with_the_participant_and_shows_no_unpaid_break()   // [D] W9: Payroll and Reports read the same rule
+    {
+        var (db, tenant) = await OrgAsync();
+        await using var _ = db;
+        var sam = await EhTimesheetFixture.WorkerAsync(db, tenant, "42");
+        await EhTimesheetFixture.ApprovedShiftAsync(db, tenant, sam, new DateOnly(2026, 10, 15), Nine, Three, breaks: [(120, 30)], breaksWithParticipant: true);
+        await db.SaveChangesAsync();
+
+        var shift = Data(await Controller(db, tenant, new StubHttpHandler()).Check(From, To, CancellationToken.None)).Workers.Single().Shifts.Single();
+
+        Assert.Equal((0, 360), (shift.BreakMinutes, shift.PaidMinutes));   // the 30 minutes are worked, not deducted
+    }
+
     [Theory]
     [InlineData("2026-10-19", "2026-10-06")]
     [InlineData("2026-08-01", "2026-10-19")]

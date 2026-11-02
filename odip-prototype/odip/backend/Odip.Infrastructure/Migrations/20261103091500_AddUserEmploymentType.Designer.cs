@@ -13,8 +13,8 @@ using Odip.Infrastructure.Data;
 namespace Odip.Infrastructure.Migrations
 {
     [DbContext(typeof(OdipDbContext))]
-    [Migration("20261102193046_AddCompatibilityRank")]
-    partial class AddCompatibilityRank
+    [Migration("20261103091500_AddUserEmploymentType")]
+    partial class AddUserEmploymentType
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -5261,6 +5261,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateOnly?>("EmploymentStartDate")
                         .HasColumnType("date");
 
+                    b.Property<int?>("EmploymentType")
+                        .HasColumnType("integer");
+
                     b.Property<string>("ExternalPayrollId")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
@@ -6894,9 +6897,6 @@ namespace Odip.Infrastructure.Migrations
 
                     b.Property<Guid>("ParticipantId")
                         .HasColumnType("uuid");
-
-                    b.Property<int>("Rank")
-                        .HasColumnType("integer");
 
                     b.Property<string>("Reason")
                         .HasMaxLength(1000)

@@ -103,7 +103,8 @@ public record ShiftBreakDto(
     bool IsRunning,
     int Minutes,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] DateTime? EditedAt,
-    Guid CreatedByUserId);
+    Guid CreatedByUserId,
+    bool WithParticipant = false);
 
 /// <summary>
 /// PUT portal/shifts/{id}/breaks/{breakId} body: the corrected times, as UTC instants (ISO 8601 with a Z;
@@ -114,6 +115,15 @@ public record EditShiftBreakDto
 {
     public DateTime StartedAt { get; init; }
     public DateTime? EndedAt { get; init; }
+
+    /// <summary>Who the break was with. Null keeps the stored value, so a cached older client never flips it.</summary>
+    public bool? WithParticipant { get; init; }
+}
+
+/// <summary>PUT rostering/shifts/{id}/completion/breaks/{breakId}/kind body: a coordinator sets whether the worker ate with the participant.</summary>
+public record SetShiftBreakKindDto
+{
+    public bool WithParticipant { get; init; }
 }
 
 public record ShiftCompletionDto(
@@ -146,7 +156,7 @@ public record ShiftCompletionDto(
     // ── Shift package: breaks and net worked time. Billing stays on ROSTERED hours; these are a record. ──
     /// <summary>Breaks taken during this completion, oldest first.</summary>
     IReadOnlyList<ShiftBreakDto> Breaks,
-    /// <summary>Whole minutes spent on breaks (a running break counts up to now).</summary>
+    /// <summary>Whole minutes spent on UNPAID breaks, those the worker took on their own (a running break counts up to now). A break with the participant is paid and counts as worked.</summary>
     int BreakMinutes,
     /// <summary>Whole minutes worked: actual start to actual end (or now while in progress) minus breaks. Never negative.</summary>
     int NetWorkedMinutes,
@@ -236,7 +246,7 @@ public record CompletionQueueItemDto(
     /// WrongMedication all count as an outcome; a superseded record is history). Lets the review queue flag "doses without outcome" without
     /// opening each shift; the review (<c>GET rostering/shifts/{id}/completion/review</c>) lists them.</summary>
     int DosesWithoutOutcome,
-    /// <summary>Total minutes of breaks on the completion (the same figure as <c>ShiftCompletionDto.breakMinutes</c>).</summary>
+    /// <summary>Total minutes of UNPAID breaks on the completion (the same figure as <c>ShiftCompletionDto.breakMinutes</c>).</summary>
     int BreakMinutes,
     /// <summary>True when the worker never pressed Start and supplied the start time when finishing (the manual-start path). That path skips the
     /// dose checklist (a Published shift has no route to record a dose), so the queue can flag such a row for a closer look without opening it;

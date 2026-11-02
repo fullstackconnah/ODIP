@@ -65,9 +65,10 @@ public static class EmploymentHeroTimesheets
             {
                 var from = b.StartedAt < c.ActualStart ? c.ActualStart : b.StartedAt;
                 var until = b.EndedAt is { } e && e < to ? e : to;
-                if (until > from && Local(until) != Local(from)) { sent.Add(new EhBreak(Local(from), Local(until), false)); instants.AddRange([Minute(from), Minute(until)]); }   // a sub-minute break would go zero-length
+                if (until > from && Local(until) != Local(from)) { sent.Add(new EhBreak(Local(from), Local(until), b.WithParticipant)); instants.AddRange([Minute(from), Minute(until)]); }   // a sub-minute break would go zero-length
             }
         }
+        // The break kind (WithParticipant) is not hashed: it is frozen at Approve. Hash it if that ever changes.
         var hash = Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(new object[] { employeeId, s.NightType, instants }, EmploymentHeroClient.WireJson)));
         return new(new EhTimesheetLine(null, employeeId, start, end, sent, workTypeId, c.Id.ToString("D")), null, hash);
     }

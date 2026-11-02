@@ -83,6 +83,48 @@ public class ShiftBreakRulesTests
         Assert.Equal(435, net);
     }
 
+    private static ShiftBreak With(ShiftBreak b) { b.WithParticipant = true; return b; }
+
+    [Fact]
+    public void NetWorked_ABreakWithTheParticipantIsPaid_SoItIsNotDeducted()   // [D] W9
+    {
+        var (gross, breaks, net) = ShiftBreakRules.NetWorked(Start, Start.AddMinutes(60), Now, [With(B(10, 40))]);
+
+        Assert.Equal((60, 0, 60), (gross, breaks, net));
+    }
+
+    [Fact]
+    public void NetWorked_TheSameBreakOnYourOwnIsDeducted()   // [D] W9
+    {
+        var (gross, breaks, net) = ShiftBreakRules.NetWorked(Start, Start.AddMinutes(60), Now, [B(10, 40)]);
+
+        Assert.Equal((60, 30, 30), (gross, breaks, net));
+    }
+
+    [Fact]
+    public void ABreakWhoseFlagWasNeverSet_ReadsAsOnYourOwn()   // [D] W9: an old row
+    {
+        Assert.False(new ShiftBreak().WithParticipant);
+        Assert.Equal(30, ShiftBreakRules.NetWorked(Start, Start.AddMinutes(60), Now, [B(10, 40)]).BreakMinutes);
+    }
+
+    [Fact]
+    public void NetWorked_ARunningBreakWithTheParticipantIsNotDeducted_AndAMixedPairDeductsOnlyTheAloneOne()
+    {
+        Assert.Equal((115, 0, 115), ShiftBreakRules.NetWorked(Start, null, Now, [With(B(85, null))]));
+        Assert.Equal((115, 10, 105), ShiftBreakRules.NetWorked(Start, null, Now, [With(B(20, 50)), B(60, 70)]));
+    }
+
+    [Fact]
+    public void PaidMinutes_FollowTheSameRule()   // Payroll and Reports both read this
+    {
+        var shift = new Shift { StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(10, 0), NightType = SleepoverType.None };
+        var completion = new ShiftCompletion { ActualStart = Start, ActualEnd = Start.AddMinutes(60) };
+
+        Assert.Equal((60, 0, 60), ShiftBreakRules.PaidMinutes(shift, completion, Now, [With(B(10, 40))]));
+        Assert.Equal((60, 30, 30), ShiftBreakRules.PaidMinutes(shift, completion, Now, [B(10, 40)]));
+    }
+
     [Fact]
     public void NetWorked_InProgress_CountsUpToNow_AndARunningBreakCountsToo()
     {
@@ -258,6 +300,53 @@ public class PortalBreaksTests
     }
 
     [Fact]
+    public async Task Edit_WithParticipantNull_KeepsIt_AndTrueFlips_WithoutMarkingTheBreakEdited()   // [D] W9
+    {
+        var (f, id) = await WithEndedBreakAsync();
+        var b = await f.Db.ShiftBreaks.SingleAsync();
+
+        var kept = Detail(await f.Controller.EditBreak(f.Shift.Id, id, new EditShiftBreakDto { StartedAt = b.StartedAt, EndedAt = b.EndedAt }, default));
+        Assert.False(Assert.Single(kept.Breaks).WithParticipant);
+
+        var flipped = Detail(await f.Controller.EditBreak(f.Shift.Id, id, new EditShiftBreakDto { StartedAt = b.StartedAt, EndedAt = b.EndedAt, WithParticipant = true }, default));
+
+        var dto = Assert.Single(flipped.Breaks);
+        Assert.True(dto.WithParticipant);
+        Assert.Null(dto.EditedAt);   // a kind-only change is not "(edited)"
+        Assert.Equal(0, flipped.Completion!.BreakMinutes);
+        Assert.Equal(30, dto.Minutes);   // the real length stays on the row
+
+        var back = Detail(await f.Controller.EditBreak(f.Shift.Id, id, new EditShiftBreakDto { StartedAt = b.StartedAt, EndedAt = b.EndedAt, WithParticipant = null }, default));
+        Assert.True(Assert.Single(back.Breaks).WithParticipant);   // null keeps the stored value
+    }
+
+    [Fact]
+    public async Task Edit_ChangingTheTimesAndTheKind_StampsEditedAt()
+    {
+        var (f, id) = await WithEndedBreakAsync();
+
+        var detail = Detail(await f.Controller.EditBreak(f.Shift.Id, id,
+            new EditShiftBreakDto { StartedAt = NowUtc.AddMinutes(-50), EndedAt = NowUtc.AddMinutes(-20), WithParticipant = true }, default));
+
+        Assert.Equal(NowUtc, Assert.Single(detail.Breaks).EditedAt);
+    }
+
+    [Fact]
+    public async Task Edit_RunningWithParticipant_StaysRunning_AndIsNotDeducted()
+    {
+        var f = Create();
+        var started = NowUtc.AddMinutes(-20);
+        f.Db.ShiftBreaks.Add(new ShiftBreak { Id = Guid.NewGuid(), ShiftCompletionId = f.Completion!.Id, StartedAt = started, CreatedByUserId = f.Worker.Id });
+        await f.Db.SaveChangesAsync();
+        var id = (await f.Db.ShiftBreaks.SingleAsync()).Id;
+
+        var detail = Detail(await f.Controller.EditBreak(f.Shift.Id, id, new EditShiftBreakDto { StartedAt = started, EndedAt = null, WithParticipant = true }, default));
+
+        Assert.True(Assert.Single(detail.Breaks).IsRunning);
+        Assert.Equal(0, detail.Completion!.BreakMinutes);
+    }
+
+    [Fact]
     public async Task Edit_ARunningBreakWithNoEnd_StaysRunning()
     {
         var f = Create();
@@ -349,6 +438,7 @@ public class PortalBreaksTests
                      await f.Controller.StartBreak(f.Shift.Id, null, default),
                      await f.Controller.EndBreak(f.Shift.Id, anyId, null, default),
                      await f.Controller.EditBreak(f.Shift.Id, anyId, new EditShiftBreakDto { StartedAt = NowUtc, EndedAt = NowUtc.AddMinutes(5) }, default),
+                     await f.Controller.EditBreak(f.Shift.Id, anyId, new EditShiftBreakDto { StartedAt = NowUtc, EndedAt = NowUtc.AddMinutes(5), WithParticipant = true }, default),   // [D] W9: the kind locks at Finish too
                      await f.Controller.DeleteBreak(f.Shift.Id, anyId, default),
                  })
         {

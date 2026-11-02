@@ -36,15 +36,19 @@ export interface ShiftBreakDto {
   /** Set when the times were edited after the break was created. */
   editedAt: string | null
   createdByUserId: string
+  /** Ate with the participant: paid and counted as worked. False = on my own: unpaid and deducted. Old breaks read false. */
+  withParticipant: boolean
 }
 
 /**
  * PUT portal/shifts/{id}/breaks/{breakId} body — corrected times as UTC instants. `endedAt: null` keeps a
  * RUNNING break running; an ended break must keep an end. Only while the shift is in progress.
+ * `withParticipant` sets the break's kind; omit (or null) to keep it. A kind-only change does not mark the break edited.
  */
 export interface EditShiftBreakDto {
   startedAt: string
   endedAt: string | null
+  withParticipant?: boolean | null
 }
 
 // ── At a glance (need-to-know) ──────────────────────────────
