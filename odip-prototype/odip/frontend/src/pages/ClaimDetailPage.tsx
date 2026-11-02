@@ -49,6 +49,13 @@ export default function ClaimDetailPage() {
   const buildFile = useBuildClaimFile()
   const pageQuery = useClaim(id)
   const { data: claim, isLoading, isError, error, refetch } = pageQuery
+  // Claim again lands here: a screen-reader and keyboard user starts at the new claim's title, next to the success notice.
+  const claimLoaded = !!claim
+  useEffect(() => {
+    if (!claimedAgainFrom || !claimLoaded) return
+    const title = document.querySelector<HTMLElement>('h1')
+    if (title) { title.tabIndex = -1; title.focus() }
+  }, [claimedAgainFrom, claimLoaded])
   const updateClaim = useUpdateClaim()
   const updateLineItem = useUpdateClaimLineItem()
   const [noShowTarget, setNoShowTarget] = useState<ClaimLineItemDto | null>(null)

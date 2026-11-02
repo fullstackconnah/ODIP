@@ -266,6 +266,49 @@ public class ShiftClaimAgainTests
         Assert.True(await StillThere(kit, old));
     }
 
+private static async Task<(LedgerKit Kit, ShiftClaimGenerationService Engine, TripClaim Old, List<ClaimLineItem> Lines)> TwoLineShiftRejectedAsync()
+    {
+        var (kit, engine, _, person, _) = await RejectedAsync(1);
+        var evening = kit.SeedShift(person, Day1.AddDays(1), ShiftStatus.Completed, 14, 22);   // 2 h of it are evening: priced as two lines
+        var old = (await engine.GenerateAsync(person.Id, evening.ServiceDate, evening.ServiceDate, Ct)).Claim;
+        old.Status = TripClaimStatus.Rejected;
+        var lines = kit.Db.ClaimLineItems.Where(l => l.TripClaimId == old.Id).ToList();
+        foreach (var l in lines) l.Status = ClaimLineItemStatus.Submitted;
+        kit.Db.SaveChanges();
+        Assert.Equal(2, lines.Count);
+        return (kit, engine, old, lines);
+    }
+
+    [Fact]
+    public async Task D_ACompletedShiftWithSomeLinesFlippedByHand_Refuses_AndNothingIsDeleted()
+    {
+        var (kit, engine, old, lines) = await TwoLineShiftRejectedAsync();
+        using var _ = kit;
+        lines[0].ClaimType = ClaimType.Cancellation;
+        lines[0].CancellationReason = "NSDH";
+        kit.Db.SaveChanges();
+
+        var refused = await Assert.ThrowsAsync<ClaimAgainRefusedException>(() => engine.ClaimAgainAsync(old.Id, kit.TenantId, Now, Ct));
+
+        Assert.Equal("This claim has a line changed to a cancellation by hand. Change it back on the claim, then claim again.", refused.Message);
+        await Assert.ThrowsAsync<ClaimAgainRefusedException>(() => engine.PreviewClaimAgainAsync(old.Id, kit.TenantId, Now, Ct));
+        Assert.True(await StillThere(kit, old));
+    }
+
+    [Fact]
+    public async Task ACompletedShiftWithEveryLineFlippedByHand_StillComesBackAsCancellation()
+    {
+        var (kit, engine, old, lines) = await TwoLineShiftRejectedAsync();
+        using var _ = kit;
+        foreach (var l in lines) { l.ClaimType = ClaimType.Cancellation; l.CancellationReason = "NSDH"; }
+        kit.Db.SaveChanges();
+
+        var made = await engine.ClaimAgainAsync(old.Id, kit.TenantId, Now, Ct);
+
+        var again = await kit.Db.ClaimLineItems.AsNoTracking().Where(l => l.TripClaimId == made.Claim.Id).ToListAsync(Ct);
+        Assert.All(again, l => Assert.Equal((ClaimType.Cancellation, "NSDH"), (l.ClaimType, l.CancellationReason)));
+    }
+
     [Fact]
     public async Task AnotherOrganisationsClaim_IsNotFound_AndUntouched()
     {
@@ -274,7 +317,11 @@ public class ShiftClaimAgainTests
 
         var refused = await Assert.ThrowsAsync<ClaimAgainRefusedException>(() => engine.ClaimAgainAsync(old.Id, Guid.NewGuid(), Now, Ct));
 
-        Assert.True(refused.NotFound);
+        // The make answers the same 409 as a claim that has gone; the preview stays a 404.
+        Assert.True(refused.Conflict);
+        Assert.StartsWith("This claim has already been claimed again or deleted.", refused.Message);
+        var previewRefused = await Assert.ThrowsAsync<ClaimAgainRefusedException>(() => engine.PreviewClaimAgainAsync(old.Id, Guid.NewGuid(), Now, Ct));
+        Assert.True(previewRefused.NotFound);
         Assert.True(await StillThere(kit, old));
     }
 }

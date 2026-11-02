@@ -16,6 +16,7 @@ public partial class ShiftClaimGenerationService
 {
     private const string ClaimNotFound = "Claim not found.";
     private const string ClaimAlreadyGone = "This claim has already been claimed again or deleted. Refresh to see the new claim.";
+    private const string MixedHandFlip = "This claim has a line changed to a cancellation by hand. Change it back on the claim, then claim again.";
     private const string ClaimAgainShiftOnly = "Only a shift claim can be claimed again.";
     private const string ClaimAgainRejectedOnly = "Only a rejected claim can be claimed again.";
     private const string ClaimAgainPaid = "Part of this claim has been paid, so it can't be claimed again.";
@@ -23,7 +24,7 @@ public partial class ShiftClaimGenerationService
     /// <summary>What claiming this claim again would make, without deleting or saving anything. Refuses with the same sentences as <see cref="ClaimAgainAsync"/>.</summary>
     public async Task<ShiftClaimPreviewResponseDto> PreviewClaimAgainAsync(Guid claimId, Guid tenantId, DateOnly today, CancellationToken ct = default)
     {
-        await ParticipantOfAsync(claimId, tenantId, ct);
+        await ParticipantOfAsync(claimId, tenantId, gone: false, ct);
         var plan = await PlanClaimAgainAsync(claimId, tenantId, today, locked: false, ct);
         return await PreviewOfAsync(plan.Lines, plan.LeftOut, plan.Participant, ct);
     }
@@ -31,7 +32,7 @@ public partial class ShiftClaimGenerationService
     /// <summary>Deletes the rejected claim and makes one new draft claim for its shifts. A shift that cannot be claimed now is left out with why; when none can, nothing is deleted.</summary>
     public async Task<ShiftClaimGenerated> ClaimAgainAsync(Guid claimId, Guid tenantId, DateOnly today, CancellationToken ct = default)
     {
-        var participantId = await ParticipantOfAsync(claimId, tenantId, ct);
+        var participantId = await ParticipantOfAsync(claimId, tenantId, gone: true, ct);
         // The participant's lock first (a claim run for them waits), then the claim's own (an edit or delete of it waits); the second joins the transaction the first began.
         await using var held = await RosterGenerationLock.AcquireAsync(_db, participantId, ct, scope: "claim-generate");
         await using var editing = await RosterGenerationLock.AcquireAsync(_db, claimId, ct, scope: "claim-edit");
@@ -45,11 +46,11 @@ public partial class ShiftClaimGenerationService
         return await SaveClaimAsync(held, plan.Participant, plan.Lines, plan.LeftOut, from, to, cancellationReason: null, ct, notes: $"Claimed again from {plan.Claim.ClaimReference}.");
     }
 
-    /// <summary>The participant of the shift claim, read before the locks; 404 when the claim is not this organisation's, and the kind check needs no lock.</summary>
-    private async Task<Guid> ParticipantOfAsync(Guid claimId, Guid tenantId, CancellationToken ct)
+    /// <summary>The participant of the shift claim, read before the locks; 404 when the claim is not this organisation's (the make answers the same 409 as a claim that has gone), and the kind check needs no lock.</summary>
+    private async Task<Guid> ParticipantOfAsync(Guid claimId, Guid tenantId, bool gone, CancellationToken ct)
     {
         var head = await _db.TripClaims.AsNoTracking().Where(c => c.Id == claimId && c.TenantId == tenantId).Select(c => new { c.Kind, c.ParticipantId }).FirstOrDefaultAsync(ct)
-            ?? throw new ClaimAgainRefusedException(ClaimNotFound, notFound: true);
+            ?? (gone ? throw new ClaimAgainRefusedException(ClaimAlreadyGone, conflict: true) : throw new ClaimAgainRefusedException(ClaimNotFound, notFound: true));
         return head is { Kind: ClaimKind.Shift, ParticipantId: { } participantId } ? participantId : throw new ClaimAgainRefusedException(ClaimAgainShiftOnly);
     }
 
@@ -78,6 +79,9 @@ public partial class ShiftClaimGenerationService
 
         // Lines flipped to Cancellation (by hand, or a cancellation claim) come back as Cancellation with their own reason; S5 reuse: a flipped line has the same price either way.
         var cancelLines = claim.LineItems.Where(l => l.ShiftId != null && l.ClaimType == ClaimType.Cancellation).GroupBy(l => l.ShiftId!.Value).ToDictionary(g => g.Key, g => g.First().CancellationReason);
+        // A hand flip is per line: a Completed shift with some lines flipped and some not cannot come back as one thing, so it is refused (before anything is deleted).
+        var mixed = claim.LineItems.Where(l => l.ShiftId != null).GroupBy(l => l.ShiftId!.Value)
+            .Where(g => g.Any(l => l.ClaimType == ClaimType.Cancellation) && g.Any(l => l.ClaimType != ClaimType.Cancellation)).Select(g => g.Key).ToHashSet();
         var leftOut = new List<ShiftClaimLeftOutDto>();
         var completed = new List<Shift>();
         var cancelled = new List<Shift>();
@@ -88,6 +92,7 @@ public partial class ShiftClaimGenerationService
                 : shift.Status == ShiftStatus.Completed ? null
                 : shift.Status == ShiftStatus.Cancelled && cancelLines.ContainsKey(shift.Id) ? null
                 : $"{participant.FullName}: this shift changed since it was claimed ({shift.Status.ToString().ToLowerInvariant()} now), so it can't be claimed again.";
+            if (why is null && shift.Status == ShiftStatus.Completed && mixed.Contains(shift.Id)) throw new ClaimAgainRefusedException(MixedHandFlip);
             if (why is not null) leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = why });
             else (shift.Status == ShiftStatus.Cancelled ? cancelled : completed).Add(shift);
         }

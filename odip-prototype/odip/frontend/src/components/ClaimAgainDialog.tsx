@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { useClaimAgain, usePreviewClaimAgain } from '@/api/hooks'
 import { plural } from '@/lib/format'
+import { noBreakRefs } from '@/lib/noBreakRef'
 import { extractErrorMessage, formatCurrency, formatDateAu } from '@/lib/utils'
 import { Callout } from './Callout'
 import { ConfirmDialog } from './ConfirmDialog'
@@ -63,7 +64,7 @@ export function ClaimAgainDialog({ open, claimId, claimReference, claimStatus, o
       message={
         <div className="flex flex-col gap-3">
           {loading && <p role="status" className={LINE}>Working out the new claim…</p>}
-          {previewFailed && <Callout tone="danger">{extractErrorMessage(preview.error, "Couldn't work out the new claim. Please try again.")}</Callout>}
+          {previewFailed && <Callout tone="danger">{noBreakRefs(extractErrorMessage(preview.error, "Couldn't work out the new claim. Please try again."))}</Callout>}
           {empty && <p>Nothing on <span className="whitespace-nowrap">{claimReference}</span> can be claimed again.</p>}
           {data && !empty && (
             <>
@@ -75,7 +76,7 @@ export function ClaimAgainDialog({ open, claimId, claimReference, claimStatus, o
             </>
           )}
           {leftOut.length > 0 && <LeftOutCallout items={leftOut} heading={plural(leftOut.length, 'shift') + ' left out'} footer={SHIFT_LEFT_OUT_FOOTER} />}
-          {make.isError && <Callout tone="danger">{extractErrorMessage(make.error, "Couldn't claim again. Please try again.")}</Callout>}
+          {make.isError && <Callout tone="danger">{noBreakRefs(extractErrorMessage(make.error, "Could not claim this again. Try again."))}</Callout>}
         </div>
       }
     />

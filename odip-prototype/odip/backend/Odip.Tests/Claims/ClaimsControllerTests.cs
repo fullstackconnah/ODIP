@@ -796,7 +796,7 @@ public class ClaimsControllerTests
         var make = await controller.ClaimAgain(claim.Id, CancellationToken.None);
 
         Assert.Equal("Claim not found.", FailureOf(preview, 404));
-        Assert.Equal("Claim not found.", FailureOf(make, 404));
+        Assert.StartsWith("This claim has already been claimed again or deleted.", FailureOf(make, 409));   // the make answers the same 409 as a claim that has gone; the preview stays a 404
         Assert.Equal((TripClaimStatus.Rejected, 1), (kit.Db.TripClaims.IgnoreQueryFilters().Single().Status, kit.Db.ClaimLineItems.IgnoreQueryFilters().Count()));
 
         using var db = CreateDb();
@@ -819,7 +819,7 @@ public class ClaimsControllerTests
         Assert.Single(preview.LineItems);
         Assert.Equal((TripClaimStatus.Draft, preview.TotalAmount), (made.Status, made.TotalAmount));
         Assert.False(kit.Db.TripClaims.Any(c => c.Id == claim.Id));
-        Assert.Equal("Claim not found.", FailureOf(again, 404));
+        Assert.StartsWith("This claim has already been claimed again or deleted.", FailureOf(again, 409));
     }
 
     [Fact]

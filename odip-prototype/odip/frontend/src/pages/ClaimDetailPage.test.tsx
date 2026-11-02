@@ -245,6 +245,12 @@ describe('ClaimDetailPage — Invoices section (Xero PR1)', () => {
     expect(screen.getByText(/made\. TC-OLD-1 was deleted\./)).toBeInTheDocument()
   })
 
+  it('a claim made by Claim again puts the focus on the page title', async () => {
+    mockUseClaim.mockReturnValue({ data: shiftClaim([shiftLineItem()]), isLoading: false })
+    renderPage({ pathname: '/claims/claim-1', state: { claimedAgainFrom: 'TC-OLD-1' } })
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1 })).toHaveFocus())
+  })
+
   it('has no such notice on an ordinary visit', () => {
     mockUseClaim.mockReturnValue({ data: shiftClaim([shiftLineItem()]), isLoading: false })
     renderPage()
