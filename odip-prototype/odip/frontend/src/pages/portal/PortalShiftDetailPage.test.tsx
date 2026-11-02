@@ -1419,7 +1419,8 @@ describe('PortalShiftDetailPage: km and notes prompt at finish (W11)', () => {
   it('asks when neither km nor notes were given, names both, and sends nothing yet', () => {
     submit()
     expect(screen.getByRole('alertdialog', { name: 'No kilometres or notes added' })).toBeInTheDocument()
-    expect(dialog().getAllByRole('button').map(b => b.textContent).filter(Boolean))   // the close X has no text.toEqual(['Finish anyway', 'Add them'])
+    // the close X has no text
+    expect(dialog().getAllByRole('button').map(b => b.textContent).filter(Boolean)).toEqual(['Finish anyway', 'Add them'])
     expect(finishMutateAsync).not.toHaveBeenCalled()
   })
 
@@ -1427,13 +1428,15 @@ describe('PortalShiftDetailPage: km and notes prompt at finish (W11)', () => {
     mockUseShiftNotes.mockReturnValue({ data: [noteWith()] })
     submit()
     expect(screen.getByRole('alertdialog', { name: 'No kilometres added' })).toBeInTheDocument()
-    expect(dialog().getAllByRole('button').map(b => b.textContent).filter(Boolean))   // the close X has no text.toEqual(['Finish anyway', 'Add kilometres'])
+    // the close X has no text
+    expect(dialog().getAllByRole('button').map(b => b.textContent).filter(Boolean)).toEqual(['Finish anyway', 'Add kilometres'])
   })
 
   it('names only the notes when km was given', () => {
     submit('12.5')
     expect(screen.getByRole('alertdialog', { name: 'No notes added' })).toBeInTheDocument()
-    expect(dialog().getAllByRole('button').map(b => b.textContent).filter(Boolean))   // the close X has no text.toEqual(['Finish anyway', 'Add a note'])
+    // the close X has no text
+    expect(dialog().getAllByRole('button').map(b => b.textContent).filter(Boolean)).toEqual(['Finish anyway', 'Add a note'])
   })
 
   it("counts '0' km as answered: with a note, Submit goes straight through", async () => {
@@ -1491,5 +1494,15 @@ describe('PortalShiftDetailPage: km and notes prompt at finish (W11)', () => {
     forward('Try again')
     noDialog()
     await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledTimes(2))
+  })
+
+  it('Escape closes the prompt without finishing, and the next Submit asks again', () => {
+    submit()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    noDialog()
+    expect(finishMutateAsync).not.toHaveBeenCalled()
+    forward('Submit shift')
+    expect(screen.getByRole('alertdialog', { name: 'No kilometres or notes added' })).toBeInTheDocument()
+    expect(finishMutateAsync).not.toHaveBeenCalled()
   })
 })
