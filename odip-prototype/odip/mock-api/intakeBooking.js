@@ -29,13 +29,13 @@ function create({ respond, failEnvelope, enquiryFeed }) {
   // Enquiries the base feed does not have, one per booking state the finish review captures.
   const extraEnquiries = [
     // E1: a named main contact, the full address and a plan; booked with a failed invite, and Start intake enabled.
-    { id: 'inq-0101', participantId: null, firstName: 'Ari', lastName: 'Walsh', phone: '0412 555 061', email: 'sarah.walsh@example.com.au', source: 'Phone', provenance: 'Self-referral', createdAt: '2026-10-01T01:00:00Z',
+    { id: 'inq-0101', participantId: null, firstName: 'Ari', lastName: 'Walsh', phone: '0412 555 061', email: 'sarah.walsh@example.com.au', source: 'Phone', provenance: 'Self-referral', referralSourceId: 'rs-0003', createdAt: '2026-10-01T01:00:00Z',
       contactFirstName: 'Sarah', contactLastName: 'Walsh', contactRelationship: 'Mother', ...FULL_ADDRESS, dateOfBirth: '2014-03-12', planType: 'PlanManaged', planStartDate: '2026-07-01', planEndDate: '2027-06-30' },
     // N3: their own contact.
     { id: 'inq-0102', participantId: null, firstName: 'Grace', lastName: 'Liu', phone: null, email: 'grace.liu@example.com.au', source: 'Web', provenance: 'Website form, asked for a call back after 3 pm on weekdays because of school pick-up', createdAt: '2026-10-02T01:00:00Z', contactIsParticipant: true },
     { id: 'inq-0103', participantId: null, firstName: 'Omar', lastName: 'Haddad', phone: '0412 555 063', email: 'omar.haddad@example.com.au', source: 'Email', provenance: null, createdAt: '2026-09-30T01:00:00Z' },
     // E3: booked with no email, so no invite went out.
-    { id: 'inq-0104', participantId: null, firstName: 'Ruby', lastName: 'Chen', phone: '0412 555 064', email: null, source: 'Phone', provenance: 'GP referral', createdAt: '2026-10-03T01:00:00Z', contactFirstName: 'Wei', contactLastName: 'Chen' },
+    { id: 'inq-0104', participantId: null, firstName: 'Ruby', lastName: 'Chen', phone: '0412 555 064', email: null, source: 'Phone', provenance: 'GP referral', referralSourceId: 'rs-0004', createdAt: '2026-10-03T01:00:00Z', contactFirstName: 'Wei', contactLastName: 'Chen' },
     // The Closed view's sample (spec addendum E4); E6 with a named main contact and the address.
     { id: 'inq-0105', participantId: null, firstName: 'Ivy', lastName: 'Park', phone: '0412 555 065', email: 'ivy.park@example.com.au', source: 'Phone', provenance: null, createdAt: '2026-09-29T01:00:00Z',
       contactFirstName: 'Leo', contactLastName: 'Park', contactRelationship: 'Father', contactRole: 'Guardian', ...FULL_ADDRESS },
@@ -61,6 +61,24 @@ function create({ respond, failEnvelope, enquiryFeed }) {
     'inq-0109': booked(5, '13:00'),
   }
   const rows = () => [...enquiryFeed, ...extraEnquiries]
+  // The organisation's referral sources (Settings): active first, then by name, as GET /referral-sources returns them. rs-0004 is hidden but still on Ruby's enquiry.
+  const referralSources = [
+    { id: 'rs-0001', name: 'Support Coordinator', isActive: true }, { id: 'rs-0002', name: 'Hospital', isActive: true },
+    { id: 'rs-0003', name: 'Self-referral', isActive: true }, { id: 'rs-0004', name: 'Closed clinic', isActive: false },
+  ]
+  const referralList = () => [...referralSources].sort((a, b) => Number(b.isActive) - Number(a.isActive) || a.name.localeCompare(b.name))
+  const referralName = (id) => referralSources.find((x) => x.id === id)?.name ?? null
+  const sourceTaken = (name, exceptId) => referralSources.some((x) => x.id !== exceptId && x.name.toLowerCase() === name.toLowerCase())
+  const sourceProblem = (body) => {
+    const name = (body.name ?? '').trim()
+    if (!name) return respond(400, failEnvelope(null, ['Enter a name.']))
+    if (name.length > 100) return respond(400, failEnvelope(null, ['Use 100 characters or fewer.']))
+    return null
+  }
+  // The save rule: no source, an active one, or the one the enquiry already has.
+  const badSource = (body, row) => !!body.referralSourceId && body.referralSourceId !== row?.referralSourceId
+    && !referralSources.some((x) => x.id === body.referralSourceId && x.isActive)
+  const pickASource = () => problem({ referralSourceId: ['Pick a referral source from the list.'] })
   // Close and reopen (spec addendum): why and when, by enquiry id. withBooking spreads it, so every answer and the feed carry it.
   const closed = { 'inq-0105': { closedAt: sydneyInstant(-2, '11:00'), closeOutcome: 'NotGoingAhead', closeNote: 'Family chose a provider closer to home.' } }
   // The redesign's computed flags, as ParticipantInquiry has them: Start intake's two gates (the address, a named main contact). lastName "" when none (G6).
@@ -71,7 +89,7 @@ function create({ respond, failEnvelope, enquiryFeed }) {
     hasAddress: [r.addressStreet, r.addressSuburb, r.addressState, r.addressPostcode].every((v) => !blank(v)),
     contactNeedsName: hasMainContact(r) && (blank(r.contactFirstName) || blank(r.contactLastName)),
   })
-  const withBooking = (row) => ({ ...row, ...gates(row), timeZoneId: ZONE, ...(bookings[row.id] ?? {}), ...(closed[row.id] ?? {}) })
+  const withBooking = (row) => ({ ...row, referralSourceName: referralName(row.referralSourceId), ...gates(row), timeZoneId: ZONE, ...(bookings[row.id] ?? {}), ...(closed[row.id] ?? {}) })
   // L2: the participant details and the contact's role ride on GET /inquiries/{id} only, never the list.
   const DETAIL_ONLY = ['dateOfBirth', 'ndisNumber', 'addressStreet', 'addressSuburb', 'addressState', 'addressPostcode', 'planType', 'planStartDate', 'planEndDate', 'contactRole']
   const listRow = (row) => { const out = withBooking(row); for (const k of DETAIL_ONLY) delete out[k]; return out }
@@ -85,7 +103,7 @@ function create({ respond, failEnvelope, enquiryFeed }) {
   let made = 0
   const saveContacts = (id, list) => { if (Array.isArray(list)) contacts[id] = list }
   // What a save stores, as the API's Apply does: with "their own contact" ticked the contact's four fields are null whatever was sent; the NDIS number without spaces.
-  const own = (body) => ({ firstName: body.firstName, lastName: body.lastName?.trim() ?? '', source: body.source, provenance: body.provenance ?? null })
+  const own = (body) => ({ firstName: body.firstName, lastName: body.lastName?.trim() ?? '', source: body.source, provenance: body.provenance ?? null, referralSourceId: body.referralSourceId ?? null })
   const fields = (body) => {
     const self = !!body.contactIsParticipant
     return {
@@ -111,6 +129,7 @@ function create({ respond, failEnvelope, enquiryFeed }) {
   const stamp = (row) => { row.updatedAt = new Date().toISOString() }
 
   const get = [
+    ['referral-sources', () => referralList()],
     ['intake-visits', (params) => Object.entries(bookings)
       .filter(([, b]) => !params?.get('staffUserId') || b.intakeStaffUserId === params.get('staffUserId'))
       .filter(([, b]) => inRange(sydneyDay(b.intakeStartsAt), params))
@@ -145,6 +164,15 @@ function create({ respond, failEnvelope, enquiryFeed }) {
   ]
 
   const put = [
+    ['referral-sources/:id', (id, body) => {
+      const row = referralSources.find((x) => x.id === id)
+      if (!row) return respond(404, failEnvelope(null, ['Referral source not found']))
+      const bad = sourceProblem(body)
+      if (bad) return bad
+      if (sourceTaken(body.name.trim(), id)) return respond(409, failEnvelope(null, ['That source is already on the list.']))
+      Object.assign(row, { name: body.name.trim(), isActive: body.isActive !== false })
+      return { ...row }
+    }],
     ['inquiries/:id/intake-booking', (id, body) => {
       const row = find(id)
       if (!row) return respond(404, failEnvelope(null, ['Inquiry not found']))
@@ -170,10 +198,18 @@ function create({ respond, failEnvelope, enquiryFeed }) {
       return listRow(row)
     }],
     // Its 2 segments never match .../intake-booking.
-    ['inquiries/:id', (id, body) => { const row = find(id); if (!row) return notFound(); if (closed[id]) return closedRefusal(); if (stale(row, body)) return changedByOther(); stamp(row); Object.assign(row, row.participantId ? own(body) : fields(body)); saveContacts(id, body.contacts); return listRow(row) }],
+    ['inquiries/:id', (id, body) => { const row = find(id); if (!row) return notFound(); if (closed[id]) return closedRefusal(); if (stale(row, body)) return changedByOther(); if (badSource(body, row)) return pickASource(); stamp(row); Object.assign(row, row.participantId ? own(body) : fields(body)); saveContacts(id, body.contacts); return listRow(row) }],
   ]
 
   const post = [
+    ['referral-sources', (body) => {
+      const bad = sourceProblem(body)
+      if (bad) return bad
+      if (sourceTaken(body.name.trim())) return respond(409, failEnvelope(null, ['That source is already on the list.']))
+      const row = { id: `rs-new-${referralSources.length + 1}`, name: body.name.trim(), isActive: true }
+      referralSources.push(row)
+      return { ...row }
+    }],
     ['inquiries/:id/close', (id, body) => {
       const row = find(id)
       if (!row) return notFound()
@@ -217,7 +253,7 @@ function create({ respond, failEnvelope, enquiryFeed }) {
       }
       return listRow(row)
     }],
-    ['inquiries', (body) => { const row = { id: `inq-new-${++made}`, participantId: null, ...fields(body), createdAt: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z') }; extraEnquiries.push(row); saveContacts(row.id, body.contacts); return listRow(row) }],
+    ['inquiries', (body) => { if (badSource(body)) return pickASource(); const row = { id: `inq-new-${++made}`, participantId: null, ...fields(body), createdAt: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z') }; extraEnquiries.push(row); saveContacts(row.id, body.contacts); return listRow(row) }],
     ['inquiries/:id/intake-booking/confirm', (id, body) => {
       if (!bookings[id]) return notBooked()
       if (staleRequired(find(id), body)) return changedByOther()

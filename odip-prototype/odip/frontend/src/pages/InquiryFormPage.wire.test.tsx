@@ -42,7 +42,7 @@ const byId = (id: string) => document.getElementById(id) as HTMLInputElement
 const NO_DETAILS = {
   contactIsParticipant: false, contactFirstName: null, contactLastName: null, contactRelationship: null, contactRole: null,
   dateOfBirth: null, ndisNumber: null, addressStreet: null, addressSuburb: null, addressState: null, addressPostcode: null,
-  planType: 'PlanManaged', planStartDate: null, planEndDate: null,
+  planType: 'PlanManaged', planStartDate: null, planEndDate: null, referralSourceId: null,
 }
 
 /** The Enquiries tab, as far as the form can see: where it went, and the summary it carried there as router state. */
@@ -330,7 +330,7 @@ describe('InquiryFormPage (wire) — contacts', () => {
     })
   })
 
-  it('a converted enquiry shows its contact and details as one read-only card, links to the intake, and its PUT sends the names, source and provenance only', async () => {
+  it('a converted enquiry shows its contact and details as one read-only card, links to the intake, and its PUT sends the names, source, provenance and referral source only', async () => {
     serve({ '/inquiries/i1': detail({ participantId: 'p-1', updatedAt: 'v1', contactFirstName: 'Sarah', contactLastName: 'Walsh', contactRelationship: 'Mother', contactRole: 'Guardian', ndisNumber: '430123456' }) })
     const user = userEvent.setup()
     renderForm('/participants/new-inquiry?id=i1')
@@ -344,7 +344,7 @@ describe('InquiryFormPage (wire) — contacts', () => {
     await user.click(screen.getByRole('button', { name: 'Save enquiry' }))
 
     await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
-    expect(Object.keys(mockApiPut.mock.calls[0][1]).sort()).toEqual(['expectedUpdatedAt', 'firstName', 'lastName', 'provenance', 'source'])
+    expect(Object.keys(mockApiPut.mock.calls[0][1]).sort()).toEqual(['expectedUpdatedAt', 'firstName', 'lastName', 'provenance', 'referralSourceId', 'source'])
   })
 
   it('never mounts from a cached copy: it waits for this visit\'s own load, then shows those contacts (plan check S2)', async () => {
@@ -1008,5 +1008,103 @@ describe('InquiryFormPage (wire) — plan management default (O5)', () => {
     renderForm('/participants/new-inquiry?id=i2')
     await waitFor(() => expect(firstName()).toHaveValue('Rowan'))
     expect((document.getElementById('inquiry-plan-type') as HTMLSelectElement).value).toBe('')
+  })
+})
+
+describe('InquiryFormPage (wire) — Referred by (O2)', () => {
+  const SOURCES = [
+    { id: 'r-hosp', name: 'Hospital', isActive: true }, { id: 'r-gp', name: 'GP', isActive: true }, { id: 'r-old', name: 'Closed clinic', isActive: false },
+  ]
+  const select = () => document.getElementById('inquiry-referral-source') as HTMLSelectElement
+  const optionLabels = () => Array.from(select().options).map(o => o.textContent)
+
+  it('lists "Not recorded", then the active sources alphabetically; hidden ones are not offered', async () => {
+    serve({ '/referral-sources': SOURCES })
+    renderForm()
+    await waitFor(() => expect(select()).not.toBeDisabled())
+    expect(optionLabels()).toEqual(['Not recorded', 'GP', 'Hospital'])
+    expect(select()).toHaveValue('')
+  })
+
+  it('an enquiry saved with a since-hidden source shows it as the selected option', async () => {
+    serve({ '/referral-sources': SOURCES, '/inquiries/i1': detail({ referralSourceId: 'r-old', referralSourceName: 'Closed clinic' }) })
+    renderForm('/participants/new-inquiry?id=i1')
+    await waitFor(() => expect(firstName()).toHaveValue('Rowan'))
+    await waitFor(() => expect(optionLabels()).toContain('Closed clinic'))
+    expect(select()).toHaveValue('r-old')
+  })
+
+  it('sends referralSourceId on create, on update and on a converted update', async () => {
+    const user = userEvent.setup()
+    serve({ '/referral-sources': SOURCES })
+    renderForm()
+    await waitFor(() => expect(select()).not.toBeDisabled())
+    await user.type(firstName(), 'Ava')
+    await user.selectOptions(select(), 'r-hosp')
+    await user.click(screen.getByRole('button', { name: 'Capture enquiry' }))
+    await waitFor(() => expect(mockApiPost).toHaveBeenCalledTimes(1))
+    expect(mockApiPost.mock.calls[0][1]).toMatchObject({ referralSourceId: 'r-hosp' })
+    cleanup()
+
+    serve({ '/referral-sources': SOURCES, '/inquiries/i1': detail({ referralSourceId: 'r-hosp', updatedAt: 'v1' }) })
+    renderForm('/participants/new-inquiry?id=i1')
+    await waitFor(() => expect(select()).toHaveValue('r-hosp'))
+    await user.selectOptions(select(), '')
+    await user.click(screen.getByRole('button', { name: 'Save enquiry' }))
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
+    expect(mockApiPut.mock.calls[0][1]).toMatchObject({ referralSourceId: null })
+    cleanup()
+
+    serve({ '/referral-sources': SOURCES, '/inquiries/i1': detail({ participantId: 'p-1', updatedAt: 'v1' }) })
+    renderForm('/participants/new-inquiry?id=i1')
+    await waitFor(() => expect(select()).not.toBeDisabled())
+    await user.selectOptions(select(), 'r-gp')
+    await user.click(screen.getByRole('button', { name: 'Save enquiry' }))
+    await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(2))
+    expect(mockApiPut.mock.calls[1][1]).toMatchObject({ referralSourceId: 'r-gp' })
+  })
+
+  it('an empty list shows the Settings hint, linking to the Referral sources section', async () => {
+    serve({ '/referral-sources': [] })
+    renderForm()
+    const hint = await screen.findByText(/Add referral sources/)
+    expect(hint).toHaveTextContent('Add referral sources in Settings.')
+    expect(within(hint).getByRole('link', { name: 'in Settings' })).toHaveAttribute('href', expect.stringContaining('section=referral-sources'))
+  })
+
+  it("the server's 400 shows on the field", async () => {
+    const user = userEvent.setup()
+    serve({ '/referral-sources': SOURCES })
+    mockApiPost.mockRejectedValue(Object.assign(new Error('Request failed with status code 400'), { response: { status: 400, data: { errors: { referralSourceId: ['Pick a referral source from the list.'] } } } }))
+    renderForm()
+    await waitFor(() => expect(select()).not.toBeDisabled())
+    await user.type(firstName(), 'Ava')
+    await user.selectOptions(select(), 'r-gp')
+    await user.click(screen.getByRole('button', { name: 'Capture enquiry' }))
+    expect(await screen.findByText('Pick a referral source from the list.')).toBeInTheDocument()
+    expect(select()).toHaveAttribute('aria-invalid', 'true')
+  })
+
+  it('a closed enquiry shows Referred by when set, and no line when not', async () => {
+    const closed = { closedAt: '2026-10-16T01:00:00Z', closeOutcome: 'NotGoingAhead', updatedAt: 'v1' }
+    serve({ '/inquiries/i1': detail({ ...closed, referralSourceId: 'r-gp', referralSourceName: 'GP' }) })
+    renderForm('/participants/new-inquiry?id=i1')
+    expect(await screen.findByText('Referred by')).toBeInTheDocument()
+    expect(screen.getByText('GP')).toBeInTheDocument()
+    cleanup()
+    serve({ '/inquiries/i1': detail(closed) })
+    renderForm('/participants/new-inquiry?id=i1')
+    expect(await screen.findByText('Provenance')).toBeInTheDocument()
+    expect(screen.queryByText('Referred by')).toBeNull()
+  })
+
+  it('the list failing to load disables the select with a hint, and the form still saves', async () => {
+    const user = userEvent.setup()
+    renderForm()
+    expect(await screen.findByText("Couldn't load referral sources.")).toBeInTheDocument()
+    expect(select()).toBeDisabled()
+    await user.type(firstName(), 'Ava')
+    await user.click(screen.getByRole('button', { name: 'Capture enquiry' }))
+    await waitFor(() => expect(mockApiPost).toHaveBeenCalledTimes(1))
   })
 })

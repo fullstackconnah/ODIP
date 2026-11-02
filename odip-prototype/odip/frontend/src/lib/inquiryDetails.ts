@@ -52,11 +52,11 @@ export type InquiryField =
   | 'firstName' | 'phone' | 'email' | 'ndisNumber' | 'dateOfBirth'
   | 'addressState' | 'addressPostcode' | 'addressStreet' | 'addressSuburb'
   | 'planEndDate' | 'planType'
-  | 'contactRole' | 'contactFirstName' | 'contactLastName'
+  | 'contactRole' | 'contactFirstName' | 'contactLastName' | 'referralSourceId'
 export type InquiryErrors = Partial<Record<InquiryField, string>>
 
 const FIELDS: InquiryField[] = ['firstName', 'phone', 'email', 'ndisNumber', 'dateOfBirth', 'addressState', 'addressPostcode', 'addressStreet', 'addressSuburb',
-  'planEndDate', 'planType', 'contactRole', 'contactFirstName', 'contactLastName']
+  'planEndDate', 'planType', 'contactRole', 'contactFirstName', 'contactLastName', 'referralSourceId']
 
 /** The fields inside the Participant details fold: an error on one opens it. */
 export const DETAIL_FIELDS: InquiryField[] = ['addressStreet', 'addressSuburb', 'addressState', 'addressPostcode', 'dateOfBirth', 'ndisNumber', 'planType', 'planEndDate']
