@@ -19,6 +19,13 @@ function renderTab(entries: ReturnType<typeof entry>[]) {
 
 afterEach(() => vi.useRealTimers())
 
+it("renders each change as field, old and new", () => {
+  renderTab([{ ...entry("a", "Updated", "2026-10-28T01:00:00Z"), changes: [{ field: "LastName", old: "A", new: "B" }] }])
+  expect(screen.getByText("LastName")).toBeInTheDocument()
+  expect(screen.getByText("A")).toBeInTheDocument()
+  expect(screen.getByText("B")).toBeInTheDocument()
+})
+
 describe('AuditHistoryTab', () => {
   it('colours the action pill by the house tones: Created success, Updated info, Deleted danger', () => {
     renderTab([entry('a', 'Created', '2026-10-28T01:00:00Z'), entry('b', 'Updated', '2026-10-28T01:00:00Z'), entry('c', 'Deleted', '2026-10-28T01:00:00Z')])
