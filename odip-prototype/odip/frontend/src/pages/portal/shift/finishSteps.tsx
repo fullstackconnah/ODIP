@@ -246,8 +246,8 @@ export function TimesStep({ shift, online, now, draft, set, invalid, invalidMess
           </>
         )}
         <div className="space-y-1">
-        <label htmlFor="finish-km" className="text-sm font-medium">Kilometres driven with {first} (optional)</label>
-        <p id="finish-km-help" className={muted}>{shift.travelAsked ? `Only driving with ${first} during the shift.` : `Only driving with ${first}, not your trip to or from the shift.`}</p>
+        <label htmlFor="finish-km" className="text-sm font-medium">Kilometres driven with {first}</label>
+        <p id="finish-km-help" className={muted}>{shift.travelAsked ? `Only driving with ${first} during the shift. Enter 0 if you didn't drive.` : `Only driving with ${first}, not your trip to or from the shift. Enter 0 if you didn't drive.`}</p>
         <input
           id="finish-km" inputMode="decimal" className={fieldClass} aria-describedby="finish-km-help"
           aria-invalid={invalid === 'kilometres' || undefined} value={draft.kilometres} onChange={e => set({ kilometres: e.target.value })}
@@ -351,7 +351,7 @@ export function HandoverStep({ noteCount, draft, set, onEditNotes }: {
       <section aria-labelledby="finish-notes" className="space-y-2">
         <h3 id="finish-notes" className="text-sm font-semibold">Your notes</h3>
         <p className="text-sm">{noteCount > 0 ? `${plural(noteCount, 'note')} on this shift.` : 'No notes yet.'}</p>
-        <Button variant="secondary" size="md" onClick={onEditNotes}>Add or edit notes</Button>
+        <Button id="finish-add-notes" variant="secondary" size="md" onClick={onEditNotes}>Add or edit notes</Button>
         {noteCount === 0 && (
           <label className="flex items-center gap-2 text-sm min-h-[44px]">
             <input type="checkbox" checked={draft.nothingToNote} onChange={e => set({ nothingToNote: e.target.checked })} />
