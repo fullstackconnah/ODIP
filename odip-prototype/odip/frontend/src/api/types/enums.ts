@@ -9,6 +9,10 @@ export const PLAN_TYPE_LABELS: Record<PlanType, string> = {
   AgencyManaged: 'Agency Managed',
 }
 
+// ── My provider (whether the provider is recorded as the participant's my provider, per funding plan) ──
+export const MY_PROVIDER_RECORDS = ['Unknown', 'Requested', 'Recorded'] as const
+export type MyProviderRecord = typeof MY_PROVIDER_RECORDS[number]
+
 // ── Gender (participant identity, INTAKE-05) ────────────
 export const GENDERS = ['Male', 'Female', 'NonBinary', 'PreferNotToSay', 'Other'] as const
 export type Gender = typeof GENDERS[number]

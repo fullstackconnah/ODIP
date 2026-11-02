@@ -381,7 +381,8 @@ public class ClaimBatchFlowTests
 
         var inFile = hub.Ready.Single(r => r.LineId == a[0].Id);
         Assert.Contains(inFile.Problems, p => p.Rule == "AlreadyPending");
-        Assert.Empty(hub.Ready.Single(r => r.LineId == b[0].Id).Problems);
+        // The fixture records no funding plan, so its NDIA-managed lines carry the my-provider warning and nothing else.
+        Assert.Empty(hub.Ready.Single(r => r.LineId == b[0].Id).Problems.Where(p => p.Rule != "MyProvider"));
     }
 
     [Fact]

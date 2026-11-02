@@ -5668,6 +5668,16 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<int>("Evidence")
                         .HasColumnType("integer");
 
+                    b.Property<int>("MyProvider")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly?>("MyProviderOn")
+                        .HasColumnType("date");
+
+                    b.Property<string>("MyProviderSetBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("Notes")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");

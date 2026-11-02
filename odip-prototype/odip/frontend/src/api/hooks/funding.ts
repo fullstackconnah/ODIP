@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tansta
 import { apiGet, apiPost, apiPut } from '../client'
 import { refreshBudgetFigures, refreshBudgetWarnings } from './funding-ledger'
 import type {
-  ApplyPlanDatesResult, BudgetSettingsDto, FundingPlanDto, FundingPlansDto, PaceCategoryDto, SaveFundingPlanDto, UpdateBudgetSettingsDto,
+  ApplyPlanDatesResult, BudgetSettingsDto, FundingPlanDto, FundingPlansDto, PaceCategoryDto, SaveFundingPlanDto, SetMyProviderDto, UpdateBudgetSettingsDto,
 } from '../types'
 
 // A participant's NDIS plan budget (budget feature, phase 1). The plan record is saved through these endpoints and never through the participant's patch groups. Every plan write
@@ -60,6 +60,19 @@ export function useUpdateFundingPlan(participantId: string) {
       void queryClient.invalidateQueries({ queryKey: fundingKey(participantId) })
       refreshOnboarding(queryClient, participantId)
       refreshBudgetWarnings(queryClient)   // the limits themselves changed
+    },
+  })
+}
+
+/** Records whether the provider is recorded as the participant's my provider for one plan. Not a plan save: it carries no revision and leaves the plan's figures alone. */
+export function useSetMyProvider(participantId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ planId, body }: { planId: string; body: SetMyProviderDto }) => apiPut<FundingPlanDto>(`/participants/${participantId}/funding/plans/${planId}/my-provider`, body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: fundingKey(participantId) })
+      refreshOnboarding(queryClient, participantId)   // the checklist's "Recorded as my provider" item reads it
+      void queryClient.invalidateQueries({ queryKey: ['claim-hub'] })   // and the claims hub's warning
     },
   })
 }

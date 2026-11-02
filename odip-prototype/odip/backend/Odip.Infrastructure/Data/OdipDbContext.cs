@@ -1057,6 +1057,7 @@ public class OdipDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.ConfirmedByName).HasMaxLength(200);
+            entity.Property(e => e.MyProviderSetBy).HasMaxLength(100);
             entity.Property(e => e.Notes).HasMaxLength(2000);
             entity.Property(e => e.CreatedBy).HasMaxLength(100).IsRequired();
             entity.Property(e => e.UpdatedBy).HasMaxLength(100).IsRequired();
