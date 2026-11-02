@@ -110,6 +110,18 @@ describe('ContactsTab', () => {
     expect(screen.getByText('Active')).toBeInTheDocument()
   })
 
+  it("I3: a Key Worker row's second line is the organisation; an Other row's is the relationship", () => {
+    mockUseParticipantContactRoles.mockReturnValue({ data: [
+      makeRole({ id: 'r-kw', roleType: 'KeyWorker', organisationName: 'Bayside Disability Services', relationshipToParticipant: 'Key worker', isPrimary: false }),
+      makeRole({ id: 'r-ot', roleType: 'Other', relationshipToParticipant: 'Neighbour', isPrimary: false }),
+    ], isLoading: false })
+
+    render(<ContactsTab participantId="participant-1" />)
+
+    expect(screen.getByText('Bayside Disability Services')).toBeInTheDocument()
+    expect(screen.getByText('Neighbour')).toBeInTheDocument()
+  })
+
   it('hides Add/Edit/Remove actions for a ReadOnly user', () => {
     setUserRole('ReadOnly')
     mockUseParticipantContactRoles.mockReturnValue({ data: [makeRole()], isLoading: false })

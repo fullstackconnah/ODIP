@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { unionRelevantFields, CONTACT_ROLE_FIELD_MAP, planTypeComplianceWarning } from './contacts'
+import { unionRelevantFields, CONTACT_ROLE_FIELD_MAP, CONTACT_ROLE_TYPE_LABELS, planTypeComplianceWarning } from './contacts'
 
 /**
  * PF-5 (SPEC-02): unionRelevantFields dedups CONTACT_ROLE_FIELD_MAP entries across a multi-role
@@ -104,5 +104,17 @@ describe('planTypeComplianceWarning', () => {
   it('null/undefined planType never warns', () => {
     expect(planTypeComplianceWarning(null, [])).toBeNull()
     expect(planTypeComplianceWarning(undefined, [])).toBeNull()
+  })
+})
+
+describe('I3: Key Worker and Other', () => {
+  it('I3: KeyWorker shows organisationName only; Other shows no extra fields', () => {
+    expect(unionRelevantFields(['KeyWorker'])).toEqual(['organisationName'])
+    expect(unionRelevantFields(['Other'])).toEqual([])
+  })
+
+  it("I3: labels are 'Key Worker' and 'Other'", () => {
+    expect(CONTACT_ROLE_TYPE_LABELS.KeyWorker).toBe('Key Worker')
+    expect(CONTACT_ROLE_TYPE_LABELS.Other).toBe('Other')
   })
 })

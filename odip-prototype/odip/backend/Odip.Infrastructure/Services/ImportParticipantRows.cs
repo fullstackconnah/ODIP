@@ -32,6 +32,7 @@ public static class ImportParticipantRows
     {
         ["next of kin"] = ContactRoleType.NextOfKin, ["nok"] = ContactRoleType.NextOfKin, ["guardian"] = ContactRoleType.Guardian,
         ["plan nominee"] = ContactRoleType.PlanNominee, ["nominee"] = ContactRoleType.PlanNominee, ["plan manager"] = ContactRoleType.PlanManager,
+        ["key worker"] = ContactRoleType.KeyWorker, ["keyworker"] = ContactRoleType.KeyWorker, ["other"] = ContactRoleType.Other,
     };
 
     // The DTO properties whose [StringLength] the import checks itself. Postcode, phone and email format have their own validators below.
@@ -109,7 +110,7 @@ public static class ImportParticipantRows
             if (name.Length == 0) { reasons.Add($"Contact {n} needs a name."); continue; }
             if (!Relationships.TryGetValue(relationship, out var roleType))
             {
-                reasons.Add($"Contact {n} relationship must be next of kin, guardian, plan nominee or plan manager.");
+                reasons.Add($"Contact {n} relationship must be next of kin, guardian, plan nominee, plan manager, key worker or other.");
                 continue;
             }
             if (roleType == ContactRoleType.PlanManager && planType is null)

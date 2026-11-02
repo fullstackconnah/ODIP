@@ -41,6 +41,20 @@ const CAPTURE_VIEWER_ID = '00000000-0000-0000-0000-0000000000a1'
 // ── Sample data ──────────────────────────────────────────────
 
 // Participants (ParticipantListDto)
+/** ParticipantContactRoleDto rows for p-0001: every nullable field is null unless set. */
+const contactRoleFixtures = [
+  { roleType: 'KeyWorker', id: 'cr-0001', personFullName: 'Mia Tran', personMobile: '0412 345 678', organisationName: 'Bayside Disability Services', relationshipToParticipant: 'Key worker' },
+  { roleType: 'Other', id: 'cr-0002', personFullName: 'Sam Okafor', personMobile: '0412 345 679', relationshipToParticipant: 'Neighbour' },
+].map((row) => ({
+  participantId: 'p-0001', personId: 'pe-' + row.id, personPhone: null, personEmail: null, personOrganisation: null, isPrimary: false,
+  priorityOrder: null, authorisedForMedicalInfo: null, appointingTribunal: null, orderScopeDomains: [], orderStartDate: null, orderReviewDate: null,
+  nomineeScope: null, appointmentDate: null, reasonForAppointment: null, alternateRepresentativeName: null, fundingLineItemType: null,
+  organisationName: null, registrationNumber: null, lastVisitDate: null, consentToShare: null, discipline: null, frequencyOfContact: null,
+  websterPackFlag: null, roleTitle: null, registeredProviderFlag: null, scopeNotes: null, authorisationDocumentReference: null,
+  preferredLanguage: null, startDate: null, endDate: null, status: 'Active', notes: null,
+  createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z', ...row,
+}))
+
 const participants = [
   {
     id: 'p-0001', firstName: 'Liam', lastName: 'Okafor', preferredName: null,
@@ -2601,6 +2615,8 @@ const routes = [
   ['service-agreements/ending', () => agreementsEnding()],
   ['service-agreements/price-lists', () => agreementPriceLists],
   ['service-agreements', () => agreementsList()],
+  // I3: one Key Worker and one Other row, so the Contacts tab shows the new roles (organisation / relationship as the second line).
+  ['participants/:id/contact-roles', (id) => (id === 'p-0001' ? contactRoleFixtures : [])],
   // The newest revision in full, the older ones as summaries; one revision in full by id.
   ['participants/:id/service-agreement-drafts/:id', (participantId, draftId) => {
     const found = (serviceAgreementDrafts[participantId] || []).find((draft) => draft.id === draftId)
