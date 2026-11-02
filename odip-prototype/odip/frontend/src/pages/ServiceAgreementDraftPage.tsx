@@ -80,7 +80,10 @@ export default function ServiceAgreementDraftPage() {
 function DraftPage() {
   const { id: participantId } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const fromOnboarding = useSearchParams()[0].get('from') === 'onboarding'
+  const [searchParams] = useSearchParams()
+  const fromOnboarding = searchParams.get('from') === 'onboarding'
+  // The Agreements tab's New revision (D11): open the week step on a running approved agreement, as Start a new revision does.
+  const reviseRequested = searchParams.get('revise') === '1'
   // Close, Back and Cancel all leave to the same place: the checklist the wizard was opened from, else the participant.
   const backHref = fromOnboarding ? `/onboarding/${participantId}` : `/participants/${participantId}`
   const participant = useParticipant(participantId)
@@ -191,6 +194,17 @@ function DraftPage() {
   const daysLeft = locked && newest ? endingList.data?.find(row => row.draftId === newest.id)?.daysLeft ?? null : null
   const ending = newest && daysLeft !== null && daysLeft <= 60 ? `${endingWords(daysLeft, newest.agreementEndDate, null, newest.isOngoing)}.` : null
   const readOnly = !canEdit || locked
+  // Once the working copy is loaded, as the baseline above is (an adjustment while rendering, not an effect). An ended agreement cannot be revised: it stays on its callout, where Renew agreement waits.
+  const [reviseHandled, setReviseHandled] = useState(false)
+  if (!reviseHandled && reviseRequested && baseline !== null && newest) {
+    setReviseHandled(true)
+    if (canEdit && newest.approval && (newest.isOngoing || newest.agreementEndDate >= today)) {
+      setRevisingFrom(newest.id)
+      setSelected([])
+      setStep('week')
+      setVisited(current => new Set(current).add('week'))
+    }
+  }
   const plan = planDatesOf(details, recorded)
   // An Ongoing agreement runs to the NDIS plan end (the server saves it that way), so every date the page prices, checks or saves uses that end.
   const end = details.ongoing ? plan.end : details.agreementEndDate

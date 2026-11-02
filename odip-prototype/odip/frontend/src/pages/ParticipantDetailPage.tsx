@@ -28,7 +28,7 @@ import { formatDateAu, extractErrorMessage } from '@/lib/utils'
 import { copyText } from '@/lib/clipboard'
 import {
   MedicationsTab, NotesTab, RoutinesTab, RestrictivePracticesTab, RiskEntriesSection, ParticipantConsentsSection,
-  ParticipantHealthConditionsSection, ParticipantAdlAssessmentsSection, ContactsTab, ClaimsTab,
+  ParticipantHealthConditionsSection, ParticipantAdlAssessmentsSection, ContactsTab, ClaimsTab, AgreementsSection,
   RosteringTab, FundingTab, BookingsTab,
   ParticipantIdentitySection, ParticipantAddressLivingSection, ParticipantNdisFundingSection, ParticipantKeyIdentifiersSection,
   ParticipantCulturalBackgroundSection, ParticipantMedicalSection, ParticipantBehaviourCommunicationSection,
@@ -112,8 +112,8 @@ export default function ParticipantDetailPage() {
   // over an empty body. Funding is money (a participant's plan budget, the claims), so it has its own gates and never `canWrite`.
   const showFunding = canManageFunding || canAccessClaims
   const tabKeys = useMemo(
-    () => PARTICIPANT_TAB_KEYS.filter(key => key !== 'funding' || showFunding),
-    [showFunding],
+    () => PARTICIPANT_TAB_KEYS.filter(key => (key !== 'funding' || showFunding) && (key !== 'agreements' || canOpenAgreementDraft)),
+    [showFunding, canOpenAgreementDraft],
   )
   const [tab] = useTabParam(tabKeys, 'overview')
   const goTo = useParticipantGoTo(tabKeys)
@@ -273,12 +273,15 @@ export default function ParticipantDetailPage() {
     ), { wide: true, srHeading: true }),
     card('claims', 'Claims', true, <ClaimsTab participantId={id!} canWrite={canWrite} otherFunded={p.fundingSource === 'Other'} funder={p.fundingOrganisation} />, { wide: true, srHeading: true }),
   ]
+  const agreementsCards = [
+    card('agreements', 'Agreements', true, <AgreementsSection participantId={id!} />, { wide: true }),
+  ]
   const recordsCards = [
     card('notes', 'Notes', true, <NotesTab participantId={id} />, { wide: true, srHeading: true }),
     card('consents', 'Consents', true, <Card><ParticipantConsentsSection participantId={id} /></Card>, { wide: true }),
     card('history', 'History', true, <AuditHistoryTab entityType="Participant" entityId={String(p.id)} />, { wide: true, srHeading: true }),
   ]
-  const cards: Record<GroupedTabKey, ShortCard[]> = { about: aboutCards, health: healthCards, daily: dailyCards, people: peopleCards, funding: fundingCards, records: recordsCards }
+  const cards: Record<GroupedTabKey, ShortCard[]> = { about: aboutCards, health: healthCards, daily: dailyCards, people: peopleCards, funding: fundingCards, agreements: agreementsCards, records: recordsCards }
   // Counts ride on the four list rows: the numeral for sight, the spoken noun for a screen reader. An empty non-list section is a quiet chip.
   const subItems = (tab: GroupedTabKey, rows: readonly SubTab[], active: string | undefined) => rows.map(r => {
     const n = r.count ? counts[r.count] : undefined
@@ -537,7 +540,7 @@ function DocumentsMenu({
       icon: <span className={MENU_ITEM_ICON}><Download className="w-4 h-4" /></span>,
       disabled: d.mutation.isPending,
     })),
-    ...(canOpenAgreementDraft ? [{ value: 'agreement', label: 'Agreement draft', icon: <span className={MENU_ITEM_ICON}><FileText className="w-4 h-4" /></span> }] : []),
+    ...(canOpenAgreementDraft ? [{ value: 'agreement', label: 'Agreements', icon: <span className={MENU_ITEM_ICON}><FileText className="w-4 h-4" /></span> }] : []),
     ...caregiverLink.items,
   ]
 
@@ -547,7 +550,7 @@ function DocumentsMenu({
       download.mutation.mutate({ id: participantId, fileName: download.fileName })
       return
     }
-    if (value === 'agreement') navigate(`/participants/${participantId}/agreement-draft`)
+    if (value === 'agreement') navigate(`/participants/${participantId}?tab=agreements`)
     else caregiverLink.onSelect(value)
   }
 

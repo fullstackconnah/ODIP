@@ -3,8 +3,15 @@ import { OLD_KEY_TARGET, resolveTabKey, PARTICIPANT_TAB_KEYS, SUB_TABS, visibleS
 
 const all = PARTICIPANT_TAB_KEYS
 const noFunding = all.filter(k => k !== 'funding')
+const noAgreements = all.filter(k => k !== 'agreements')
 
 describe('resolveTabKey', () => {
+  it('puts Agreements after Funding, and reads it as Overview for a role without it', () => {
+    expect(all.indexOf('agreements')).toBe(all.indexOf('funding') + 1)
+    expect(resolveTabKey('agreements', all)).toEqual({ tab: 'agreements' })
+    expect(resolveTabKey('agreements', noAgreements)).toEqual({ tab: 'overview' })
+  })
+
   it('maps all 11 old keys to the old-keys table', () => {
     expect(Object.keys(OLD_KEY_TARGET)).toHaveLength(11)
     const expected: Record<string, string> = {
@@ -44,6 +51,7 @@ describe('visibleSubTabs', () => {
     expect(ids('records', { history: true })).toEqual(['notes', 'consents', 'history'])
     expect(ids('funding')).toEqual([])
     expect(ids('funding', { planBudget: true, claims: true })).toEqual(['plan-budget', 'claims'])
+    expect(ids('agreements')).toEqual(['agreements'])
     expect(ids('daily')).not.toContain('typical-day')
     expect(ids('daily', { communityStream: true })).toContain('typical-day')
     expect(ids('health')).not.toContain('community-access-risk')
