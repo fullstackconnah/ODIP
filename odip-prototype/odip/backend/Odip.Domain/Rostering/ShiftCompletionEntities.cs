@@ -90,6 +90,19 @@ public class ShiftCompletion : ITenantEntity
     /// <summary>Kilometres driven with the participant during the shift, 0 to 2,000 to one decimal place (owner decision 4); null when not given.</summary>
     public decimal? Kilometres { get; set; }
 
+    // Provider travel, recorded as two legs (travel PR-A1). Not Kilometres, which is driving WITH the participant. Null or 0 means no travel on that leg.
+    /// <summary>Minutes of the worker's trip TO the participant, before the shift: whole minutes, 0 to 480; null when not given.</summary>
+    public int? PreShiftTravelMinutes { get; set; }
+
+    /// <summary>Kilometres of the trip before the shift, 0 to 2,000 to one decimal place; null when not given. Not <see cref="Kilometres"/>.</summary>
+    public decimal? PreShiftTravelKilometres { get; set; }
+
+    /// <summary>Minutes of the trip AFTER the shift, to base or home: whole minutes, 0 to 480; null when not given.</summary>
+    public int? PostShiftTravelMinutes { get; set; }
+
+    /// <summary>Kilometres of the trip after the shift, 0 to 2,000 to one decimal place; null when not given. Not <see cref="Kilometres"/>.</summary>
+    public decimal? PostShiftTravelKilometres { get; set; }
+
     /// <summary>The worker's answer to "Anything to report?" at Finish: true, false, or null when skipped. Informational; it blocks nothing.</summary>
     public bool? AnythingToReport { get; set; }
 
