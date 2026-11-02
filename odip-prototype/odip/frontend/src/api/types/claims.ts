@@ -234,6 +234,14 @@ export interface ShiftClaimRunSkippedDto {
   failed: boolean
 }
 
+/** GET /claims/from-shifts/waiting: completed shifts in the claim run's window that no live claim line holds (a candidate count: the run's pricing may still leave some out). */
+export interface ShiftClaimWaitingDto {
+  from: string
+  to: string
+  shiftCount: number
+  participantCount: number
+}
+
 export interface ShiftClaimRunDto {
   from: string
   to: string

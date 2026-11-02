@@ -292,4 +292,76 @@ public class ShiftClaimRunTests
         Assert.Contains("Provider settings are not configured", refusal.Message);
         Assert.Equal(0, await kit.Db.TripClaims.CountAsync(Ct));
     }
+
+    // ── The dashboard cue: shifts waiting to be claimed ─────────────────────
+
+    [Fact]
+    public async Task CountWaitingAsync_IsThePreviewsShiftsPlusWhatItLeavesOut()
+    {
+        var kit = Arrange();
+        var (alex, blake) = (Person(kit, "Alex"), Person(kit, "Blake"));
+        Done(kit, alex, 1); Done(kit, alex, 2);
+        Done(kit, blake, 5, night: SleepoverType.Sleepover, start: 22, end: 6, overnight: true);   // priced out: no catalogue sleepover item (as in the sleepover test above)
+        kit.SeedShiftClaim(alex, TripClaimStatus.Draft, 480m, Done(kit, alex, 3));                   // still counts: not waiting
+        kit.SeedShift(alex, new DateOnly(2026, 10, 4), ShiftStatus.Published);                       // not completed
+        Done(kit, alex, 20);                                                                          // outside the window below
+
+        var window = (From: new DateOnly(2026, 10, 1), To: new DateOnly(2026, 10, 10));
+        var waiting = await Engine(kit).CountWaitingAsync(kit.TenantId, window.From, window.To, Ct);
+        var preview = await Engine(kit).PreviewRunAsync(kit.TenantId, window.From, window.To, Ct);
+
+        Assert.Single(preview.LeftOut);
+        Assert.Empty(preview.Skipped);
+        Assert.Equal(2, preview.ShiftCount);
+        Assert.Equal(3, waiting.ShiftCount);
+        Assert.Equal(preview.ShiftCount + preview.LeftOut.Count, waiting.ShiftCount);
+        Assert.Equal(2, waiting.ParticipantCount);
+        Assert.Equal(window, (waiting.From, waiting.To));
+    }
+
+    [Fact]
+    public async Task CountWaitingAsync_WhenEveryShiftPrices_EqualsThePreviewsShiftCount()
+    {
+        var kit = Arrange();
+        ThreePeople(kit);
+
+        var waiting = await Engine(kit).CountWaitingAsync(kit.TenantId, From, To, Ct);
+        var preview = await Engine(kit).PreviewRunAsync(kit.TenantId, From, To, Ct);
+
+        Assert.Empty(preview.LeftOut);
+        Assert.Equal(6, preview.ShiftCount);
+        Assert.Equal(preview.ShiftCount, waiting.ShiftCount);
+        Assert.Equal(3, waiting.ParticipantCount);
+    }
+
+    [Fact]
+    public async Task CountWaitingAsync_ARejectedOrCancelledClaimReleasesTheShift_ALiveOneHoldsIt()
+    {
+        var kit = Arrange();
+        var person = Person(kit, "Alex");
+        kit.SeedShiftClaim(person, TripClaimStatus.Draft, 480m, Done(kit, person, 1));
+        kit.SeedShiftClaim(person, TripClaimStatus.Rejected, 480m, Done(kit, person, 2));
+        kit.SeedShiftClaim(person, TripClaimStatus.Cancelled, 480m, Done(kit, person, 3));
+
+        var waiting = await Engine(kit).CountWaitingAsync(kit.TenantId, From, To, Ct);
+
+        Assert.Equal(2, waiting.ShiftCount);
+        Assert.Equal(1, waiting.ParticipantCount);
+    }
+
+    [Fact]
+    public async Task CountWaitingAsync_NeverCountsAnotherOrganisationsShifts()
+    {
+        var db = Guid.NewGuid().ToString();
+        var a = LedgerKit.Create(LedgerKit.TenantA, db);
+        var b = LedgerKit.Create(LedgerKit.TenantB, db);
+        Done(a, Person(a, "Alex"), 1); Done(a, Person(a, "Blake"), 2);
+        var bPeople = new[] { Person(b, "Casey"), Person(b, "Drew"), Person(b, "Eli") };
+        foreach (var (p, i) in bPeople.Select((p, i) => (p, i))) Done(b, p, 3 + i);
+
+        Assert.Equal(2, (await Engine(a).CountWaitingAsync(a.TenantId, From, To, Ct)).ShiftCount);
+        Assert.Equal(3, (await Engine(b).CountWaitingAsync(b.TenantId, From, To, Ct)).ShiftCount);
+        // B's context asked for A's tenant sees nothing of A's.
+        Assert.Equal(0, (await Engine(b).CountWaitingAsync(a.TenantId, From, To, Ct)).ShiftCount);
+    }
 }

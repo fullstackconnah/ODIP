@@ -7,7 +7,7 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import DashboardPage from '../DashboardPage'
 import {
-  mockUseDashboard, mockUseSettings, mockUseStaff, mockUseParticipantAlertsAggregate, mockUsePendingLeaveQueue, mockUsePendingCompletionQueue, mockUseDecisionGroups, mockUseModuleVisibility, mockUseSetupStatus, mockUseProviderSettings,
+  mockUseDashboard, mockUseSettings, mockUseStaff, mockUseParticipantAlertsAggregate, mockUsePendingLeaveQueue, mockUsePendingCompletionQueue, mockUseUnclaimedShifts, mockUseDecisionGroups, mockUseModuleVisibility, mockUseSetupStatus, mockUseProviderSettings,
 } from './dashboardHookMocks'
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -37,6 +37,7 @@ export function installDashboardDefaults() {
     mockUseParticipantAlertsAggregate.mockReturnValue({ data: [], isLoading: false })
     mockUsePendingLeaveQueue.mockReturnValue(pendingLeave(0))
     mockUsePendingCompletionQueue.mockReturnValue(pendingCompletions(0))
+    mockUseUnclaimedShifts.mockReturnValue(unclaimedShifts(0, 0))
     mockUseStaff.mockReturnValue({ data: [] })
     mockUseModuleVisibility.mockReturnValue({ data: { hiddenAccommodation: false, hiddenVehicles: false }, isError: false })
     // A finished organisation: its first week was published long ago, so the setup card is not drawn and no existing assertion moves.
@@ -51,6 +52,8 @@ export function installDashboardDefaults() {
 export const pendingLeave = (count: number, o: { loading?: boolean; error?: boolean } = {}) => ({ count, loading: false, error: false, ...o })
 // The shift completions awaiting review, read the same way (the nav badge on Staff & roster adds this queue to the leave queue).
 export const pendingCompletions = pendingLeave
+// The completed shifts nobody has claimed yet, read the same way (the claim run's window).
+export const unclaimedShifts = (count: number, participants: number, o: { loading?: boolean; error?: boolean } = {}) => ({ count, participants, loading: false, error: false, ...o })
 
 // ── Bolder dashboard: a greeting and the date as the title, and the needs-attention band as the peak ──
 

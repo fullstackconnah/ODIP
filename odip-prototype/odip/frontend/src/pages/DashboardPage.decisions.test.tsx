@@ -171,7 +171,7 @@ describe('DashboardPage — the whole page clear (SHAPE §6)', () => {
     renderPage()
 
     expect(screen.getByText('All clear. Nothing needs you right now.')).toBeInTheDocument()
-    expect(screen.getByText('Checked and at zero: shift completions, leave requests, open incidents, staff credentials to update, tasks due, critical participant alerts, trips missing accommodation, trips missing vehicles and trips missing staff.')).toBeInTheDocument()
+    expect(screen.getByText('Checked and at zero: shift completions, leave requests, open incidents, staff credentials to update, tasks due, critical participant alerts, trips missing accommodation, trips missing vehicles, trips missing staff and unclaimed shifts.')).toBeInTheDocument()
     expect(h2s()).toEqual(['Upcoming trips'])
   })
 
