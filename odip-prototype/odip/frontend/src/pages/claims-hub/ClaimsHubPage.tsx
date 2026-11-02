@@ -35,11 +35,19 @@ export default function ClaimsHubPage() {
   const [params, setParams] = useSearchParams()
   const openFile = params.get('file')
   const [how, setHow] = useState(false)
-  const [claimRun, setClaimRun] = useState(false)
   const [message, setMessage] = useState('')
   const [fileFilter, setFileFilter] = useState<string | undefined>()
   const lines = useHubLines()
   const batches = useClaimBatches()
+
+  // The claim run lives in the URL as well, so the dashboard's Unclaimed shifts tile can open it; closing it drops the param, and Back leaves the page.
+  const claimRun = hasOrganisation && params.get('run') === 'shifts'
+  const setClaimRun = (open: boolean) => setParams(p => {
+    const next = new URLSearchParams(p)
+    if (open) next.set('run', 'shifts')
+    else next.delete('run')
+    return next
+  }, { replace: true })
 
   // The open file lives in the URL, so a reload or a link lands on its next step; `replace` keeps Back leaving the page.
   const setFile = (id: string | null) => setParams(p => {

@@ -19,6 +19,7 @@ vi.mock('./dashboard/useDecisionGroups', () => ({ useDecisionGroups: () => [] })
 vi.mock('@/api/hooks', () => ({
   useModuleVisibility: () => ({ data: { hiddenAccommodation: false, hiddenVehicles: false }, isError: false }),
   useStaff: mockUseStaff,
+  useUnclaimedShifts: () => ({ count: 0, participants: 0, loading: false, error: false }),
   useSettings: mockUseSettings,
   useUpdateStaff: () => ({ mutate: mockMutate, isPending: mockPending.current }),
   useProviderSettings: () => ({ data: providerSettings.current }),
