@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useClaimBatches, useHubLines } from '@/api/hooks/claimHub'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
@@ -42,8 +42,6 @@ export default function ClaimsHubPage() {
   const [message, setMessage] = useState('')
   const [fileFilter, setFileFilter] = useState<string | undefined>()
   const [chooser, setChooser] = useState(false)
-  // What the chooser picked. The next modal opens in an effect, after the chooser has closed and given focus back to New claim, so that is where the next one returns focus to.
-  const [launch, setLaunch] = useState<'shifts' | TripDetailDto | null>(null)
   const [claimTrip, setClaimTrip] = useState<TripDetailDto | null>(null)
   const lines = useHubLines()
   const batches = useClaimBatches()
@@ -57,14 +55,12 @@ export default function ClaimsHubPage() {
     return next
   }, { replace: true }), [setParams])
 
-  const pick = useCallback((next: 'shifts' | TripDetailDto) => { setChooser(false); setLaunch(next) }, [])
+  // The next modal opens one tick after the chooser has closed and given focus back to New claim, so that is where the next one returns focus to (not to a chooser row that is gone).
+  const pick = useCallback((next: 'shifts' | TripDetailDto) => {
+    setChooser(false)
+    setTimeout(() => (next === 'shifts' ? setClaimRun(true) : setClaimTrip(next)), 0)
+  }, [setClaimRun])
   const pickShifts = useCallback(() => pick('shifts'), [pick])
-  useEffect(() => {
-    if (!launch) return
-    if (launch === 'shifts') setClaimRun(true)
-    else setClaimTrip(launch)
-    setLaunch(null)
-  }, [launch, setClaimRun])
 
   // The open file lives in the URL, so a reload or a link lands on its next step; `replace` keeps Back leaving the page.
   const setFile = (id: string | null) => setParams(p => {
