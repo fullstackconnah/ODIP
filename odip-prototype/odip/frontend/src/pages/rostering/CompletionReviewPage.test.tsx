@@ -416,7 +416,8 @@ describe('CompletionReviewPage: provider travel (travel PR-B)', () => {
       data: { preShiftTravelMinutes: 25, preShiftTravelKilometres: 12.3, postShiftTravelMinutes: 35, postShiftTravelKilometres: null },
     })
     expect(within(dialog).queryByRole('group', { name: 'Trip after the shift' })).not.toBeInTheDocument()
-    expect(within(dialog).getByRole('button', { name: 'Edit travel' })).toHaveFocus()
+    // Focus returns on a setTimeout(0) after the editor closes.
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Edit travel' })).toHaveFocus())
   })
 
   it("shows the server's sentence in a warning when the shift is already on a claim, and keeps the editor open", async () => {
@@ -433,7 +434,7 @@ describe('CompletionReviewPage: provider travel (travel PR-B)', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Edit travel' }))
     await user.click(within(dialog).getByRole('button', { name: 'Cancel travel edit' }))
     expect(mockEditTravelMutateAsync).not.toHaveBeenCalled()
-    expect(within(dialog).getByRole('button', { name: 'Edit travel' })).toHaveFocus()
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Edit travel' })).toHaveFocus())
   })
 
   it('offers no Edit travel when the organisation does not claim travel, or the settings have not loaded', async () => {
