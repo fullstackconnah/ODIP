@@ -18,6 +18,8 @@ export interface ServiceAgreementDraftDto {
   planEndDate: string
   agreementStartDate: string
   agreementEndDate: string
+  /** The end follows the NDIS plan end: the stored end is the plan end, shown as Ongoing. */
+  isOngoing?: boolean
   representative?: string
   /** The blocks the revision was priced from, in plan order. Empty on a hand-typed draft. */
   blocks: DraftBlock[]
@@ -209,6 +211,8 @@ export interface CreateServiceAgreementDraftDto {
   planEndDate: string
   agreementStartDate: string
   agreementEndDate: string
+  /** The server then saves the end as the plan end, whatever end is sent. */
+  isOngoing?: boolean
   state: AgreementState
   serviceTypes: string[]
   representative?: string
@@ -233,6 +237,7 @@ export interface AgreementEndingDto {
   draftId: string
   version: number
   agreementEndDate: string
+  isOngoing?: boolean
   /** Days from the provider's today; below 0 once it has ended. */
   daysLeft: number
   /** The renewal waiting for approval after an ended agreement, if any. */
