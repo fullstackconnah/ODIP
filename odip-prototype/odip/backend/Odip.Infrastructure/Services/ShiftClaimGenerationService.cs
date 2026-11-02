@@ -197,6 +197,16 @@ public partial class ShiftClaimGenerationService
                 .Select(l => new { ShiftId = l.ShiftId!.Value, l.TripClaim.ClaimReference, ClaimStatus = l.TripClaim.Status }).ToListAsync(ct))
             .GroupBy(l => l.ShiftId).ToDictionary(g => g.Key, g => (g.First().ClaimReference, g.First().ClaimStatus));
 
+        // A day is claimed once: a shift on a date the participant is on a live trip claim (the same rule as the ledger, so a Rejected or Cancelled claim frees the day) is left out and names that claim.
+        // shortcut: this reads once per run and does not lock against ClaimGenerationService, so a trip claim made at the same moment can still land; upgrade is the per-participant RosterGenerationLock taken in that engine too.
+        var tripClaimByDay = new Dictionary<DateOnly, string>();
+        foreach (var l in await _db.ClaimLineItems.AsNoTracking()
+                     .Where(BudgetLedgerService.ClaimLineStillCounts)
+                     .Where(l => l.ParticipantBooking != null && l.ParticipantBooking.ParticipantId == participantId && l.SupportsDeliveredFrom <= to && l.SupportsDeliveredTo >= from)
+                     .Select(l => new { l.SupportsDeliveredFrom, l.SupportsDeliveredTo, l.TripClaim.ClaimReference }).ToListAsync(ct))
+            for (var day = l.SupportsDeliveredFrom; day <= l.SupportsDeliveredTo; day = day.AddDays(1))
+                tripClaimByDay.TryAdd(day, l.ClaimReference);
+
         // Participant.AddressState with a fallback to ProviderSettings.State — the only
         // geographic signal that exists on the tenant today (Region is free-text prose).
         // ShiftPriceEstimator.StateFor normalises the case, so "Nsw" prices in NSW's column
@@ -250,6 +260,11 @@ public partial class ShiftClaimGenerationService
             if (heldBy.TryGetValue(shift.Id, out var heldClaim))
             {
                 leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = $"{participant.FullName}: it is on {(heldClaim.ClaimStatus == TripClaimStatus.Cancelled ? "cancelled" : "rejected")} claim {heldClaim.ClaimReference}. Delete that claim, then claim this shift again." });
+                continue;
+            }
+            if (tripClaimByDay.TryGetValue(shift.ServiceDate, out var tripClaimRef))
+            {
+                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = $"{participant.FullName}: {shift.ServiceDate:d MMM yyyy} is already on trip claim {tripClaimRef}. Reject or cancel that claim to claim this shift." });
                 continue;
             }
             var catalogueItems = RowsOf(shift);
