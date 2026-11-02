@@ -11,7 +11,7 @@ namespace Odip.Infrastructure.Services;
 public sealed record LineProblem(string Rule, string Severity, string Message);
 
 /// <summary>An NDIA-accepted line, kept so the same participant, item and dates are not sent twice.</summary>
-public sealed record AcceptedLine(string NdisNumber, string SupportNumber, DateOnly From, DateOnly To, string FileName);
+public sealed record AcceptedLine(string NdisNumber, string SupportNumber, DateOnly From, DateOnly To, string FileName, ClaimType ClaimType = ClaimType.Standard);
 
 /// <summary>
 /// What the checks need beyond the row itself, read once. The same context serves a build (blocks refuse it) and the hub list (problems shown inline), so the two never disagree.
@@ -84,7 +84,7 @@ public static partial class ClaimBatchChecks
         if (ctx.OtherFunded.TryGetValue(l.TripClaimId, out var other)) Add("OtherFunded", Block, other);
         if (ctx.PendingFiles.TryGetValue(l.Id, out var pendingFile))
             Add("AlreadyPending", Block, $"This line is already in {pendingFile}. Discard that file, or wait for its results.");
-        if (ctx.Accepted.FirstOrDefault(a => a.NdisNumber == ndis && a.SupportNumber == l.SupportItemCode && a.From == l.SupportsDeliveredFrom && a.To == l.SupportsDeliveredTo) is { } accepted)
+        if (ctx.Accepted.FirstOrDefault(a => a.NdisNumber == ndis && a.SupportNumber == l.SupportItemCode && a.ClaimType == l.ClaimType && a.From == l.SupportsDeliveredFrom && a.To == l.SupportsDeliveredTo) is { } accepted)
             Add("AlreadyAccepted", Block, $"The NDIA already accepted this participant, item and dates in {accepted.FileName}.");
         if (SentStatuses.Contains(l.Status)) Add("AlreadySent", Block, "This line has already been sent.");
         // A claim that is already out is only lodged again line by line, for a line the NDIA rejected.
@@ -102,7 +102,7 @@ public static partial class ClaimBatchChecks
         if (row.Participant is { } p && ctx.Plans.TryGetValue(p.Id, out var plans) && plans.Count > 0
             && !plans.Any(pl => pl.Start <= l.SupportsDeliveredFrom && l.SupportsDeliveredTo <= pl.End))
             Add("OutsidePlan", Warn, "These dates are outside the participant's plan.");
-        if (ctx.BuildRows.Any(o => o.Line.Id != l.Id && o.Participant?.NdisNumber?.Trim() == ndis && o.Line.SupportItemCode == l.SupportItemCode
+        if (ctx.BuildRows.Any(o => o.Line.Id != l.Id && o.Participant?.NdisNumber?.Trim() == ndis && o.Line.SupportItemCode == l.SupportItemCode && o.Line.ClaimType == l.ClaimType
                 && o.Line.SupportsDeliveredFrom == l.SupportsDeliveredFrom && o.Line.SupportsDeliveredTo == l.SupportsDeliveredTo))
             Add("DuplicateInFile", Warn, "Another line in this file has the same participant, item and dates. The NDIA may reject one as a duplicate.");
         if ((row.Item?.Unit ?? "H") == "H" && l.Hours * 60 != decimal.Truncate(l.Hours * 60))

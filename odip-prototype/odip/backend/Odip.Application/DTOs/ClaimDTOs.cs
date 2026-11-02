@@ -193,6 +193,10 @@ public record ShiftClaimPreviewLineItemDto
     public string DayTypeLabel { get; init; } = string.Empty;
     public ClaimDayType DayType { get; init; }
     public string SupportItemCode { get; init; } = string.Empty;
+    /// <summary>ProviderTravel for the travel time line (written TRAN in the file); Standard for every other line, the travel kilometres included.</summary>
+    public ClaimType ClaimType { get; init; }
+    /// <summary>The catalogue unit of the line: H hourly, E each (a sleepover night, or the travel kilometres in dollars).</summary>
+    public string? Unit { get; init; }
     public decimal Hours { get; init; }
     public decimal UnitPrice { get; init; }
     public decimal TotalAmount { get; init; }

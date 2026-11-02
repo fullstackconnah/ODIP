@@ -116,7 +116,7 @@ public class ShiftTravelClaimTests
         Assert.Equal(new[] { 0, 1, 2 }, lines.Select(l => l.ShiftPart));   // the band part, then travel n and n+1
         var time = Assert.Single(lines, l => l.ClaimType == ClaimType.ProviderTravel && l.SupportItemCode == BasisNumber);
         Assert.Equal(0.58m, time.Hours);                                    // 35 minutes
-        Assert.Equal(0.58m * Price, time.TotalAmount);
+        Assert.Equal(ClaimPricing.LineAmount(0.58m, Price), time.TotalAmount);   // hours as written to the file x price (C2-3)
         Assert.Equal(shift.Id, time.ShiftId);
         var km = Assert.Single(lines, l => l.SupportItemCode == KmNumber);
         Assert.Equal(ClaimType.Standard, km.ClaimType);   // blank in the file; only the time line is TRAN
@@ -292,5 +292,38 @@ public class ShiftTravelClaimTests
         Assert.Null(inputs[2]);   // the block's claim is off: no forecast
         Assert.Null(inputs[3]);   // a hand-made future shift forecasts none
         Assert.Equal((0, 0m, 0, 0m), (inputs[4]!.Pre.Minutes, inputs[4]!.Pre.Km, inputs[4]!.Post.Minutes, inputs[4]!.Post.Km));   // submitted and empty: zero legs, no fallback
+    }
+
+    [Fact]
+    public async Task T32_AHandMadeShiftWithOnlyTheAfterLeg_ClaimsOneTimeLineAndOneKmLine()
+    {
+        var fx = Fx.Create();
+        fx.Completion(fx.Shift(), postMin: 20, postKm: 8m);
+        var lines = await fx.Lines(await fx.Generate());
+        Assert.Equal(0.33m, Assert.Single(lines, l => l.ClaimType == ClaimType.ProviderTravel).Hours);
+        Assert.Equal(7.92m, Assert.Single(lines, l => l.SupportItemCode == KmNumber).Hours);   // floor(8 km x 0.99)
+    }
+
+    [Fact]
+    public async Task T32_AgreementShiftWithTheReturnBox_SumsBothLegsIntoOneLineEach_WithNoCaveat()
+    {
+        var fx = Fx.Create();
+        var pattern = fx.Pattern(new PlanProviderTravel { Claim = true, MinutesEachWay = 20, KmEachWay = 5m, ReturnToBase = true });
+        fx.Completion(fx.Shift(patternId: pattern.Id), preMin: 15, preKm: 5m, postMin: 15, postKm: 4m);
+        var generated = await fx.Generate();
+        var lines = await fx.Lines(generated);
+        Assert.Equal(0.5m, Assert.Single(lines, l => l.ClaimType == ClaimType.ProviderTravel).Hours);
+        Assert.Equal(8.91m, Assert.Single(lines, l => l.SupportItemCode == KmNumber).Hours);
+        Assert.DoesNotContain(generated.Flagged, f => f.Caveat.Contains("Travel"));
+    }
+
+    [Fact]
+    public async Task T32_AgreementShiftWithoutTheReturnBox_DropsTheAfterLegKmToo()
+    {
+        var fx = Fx.Create();
+        var pattern = fx.Pattern(new PlanProviderTravel { Claim = true, MinutesEachWay = 20, KmEachWay = 5m, ReturnToBase = false });
+        fx.Completion(fx.Shift(patternId: pattern.Id), preMin: 15, preKm: 5m, postMin: 15, postKm: 4m);
+        var lines = await fx.Lines(await fx.Generate());
+        Assert.Equal(4.95m, Assert.Single(lines, l => l.SupportItemCode == KmNumber).Hours);   // floor(5 km x 0.99): the 4 km back is not claimed
     }
 }

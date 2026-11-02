@@ -1430,7 +1430,11 @@ public class RosteringController : ControllerBase
         if (completion is null)
             return NotFound(ApiResponse<ShiftCompletionDto>.Fail("Completion not found."));
 
-        var claimReference = await _db.ClaimLineItems
+        // The claim generator reads this completion inside the same per-participant lock, so a claim is never made from travel that is half-changed (carry N1).
+        try
+        {
+            await using var held = await RosterGenerationLock.AcquireAsync(_db, shift.ParticipantId, ct, scope: "claim-generate");
+            var claimReference = await _db.ClaimLineItems
             .Where(l => l.ShiftId == id).Where(BudgetLedgerService.ClaimLineStillCounts)
             .Select(l => l.TripClaim.ClaimReference).FirstOrDefaultAsync(ct);
         if (claimReference is not null)
@@ -1443,7 +1447,13 @@ public class RosteringController : ControllerBase
         completion.PostShiftTravelKilometres = PortalController.TravelKm(dto.PostShiftTravelKilometres);
         completion.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
+        await held.CommitAsync(ct);
         return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, shift.ReturnCount, ct)));
+        }
+        catch (RosterBusyException)
+        {
+            return Conflict(ApiResponse<ShiftCompletionDto>.Fail(RosterGenerationLock.RosterBoardBusyMessage));
+        }
     }
 
     /// <summary>

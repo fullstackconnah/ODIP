@@ -326,7 +326,7 @@ export const CLAIM_DAY_TYPES = ['Weekday', 'Saturday', 'Sunday', 'Weekend', 'Pub
 export type ClaimDayType = typeof CLAIM_DAY_TYPES[number]
 
 // ── Claim Type ──────────────────────────────────────────
-export const CLAIM_TYPES = ['Standard', 'Cancellation', 'Variation', 'Adjustment'] as const
+export const CLAIM_TYPES = ['Standard', 'Cancellation', 'Variation', 'Adjustment', 'ProviderTravel'] as const
 export type ClaimType = typeof CLAIM_TYPES[number]
 
 // ── GST Code ────────────────────────────────────────────

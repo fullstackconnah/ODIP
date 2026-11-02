@@ -63,7 +63,7 @@ public class ProviderTravelRuleTests
         // 45 minutes shared by 2 is 22 whole minutes -> 0.37 h written to the file, and the line total is that Hours x the price. The agreement quote keeps 22.5 minutes (0.375 h) and floors
         // the dollars instead, so it differs from the claim by up to a cent per line: a known, accepted difference (amend C2-3).
         Assert.Equal(0.37m, line.Hours);
-        Assert.Equal(0.37m * Price, line.TotalAmount);
+        Assert.Equal(ClaimPricing.LineAmount(0.37m, Price), line.TotalAmount);   // 22.348 rounded to the cent, the way every claim line is
     }
 
     [Fact]

@@ -83,7 +83,7 @@ public class BprCsvService(OdipDbContext db)
             (row.Settings?.RegistrationNumber ?? "").Trim(), (row.Participant?.NdisNumber ?? "").Trim(), l.SupportsDeliveredFrom, l.SupportsDeliveredTo,
             useCancelItem ? row.CancelledItem!.ItemNumber : l.SupportItemCode, RowReference(l.Id, attempt),
             perHour ? null : l.Hours, perHour ? l.Hours : null, l.UnitPrice, MapGstCode(l.GSTCode),
-            isCancellation && !useCancelItem ? "CANC" : "",
+            l.ClaimType == ClaimType.ProviderTravel ? "TRAN" : isCancellation && !useCancelItem ? "CANC" : "",   // the travel time line is TRAN; its kilometre line is a Standard claim, blank
             isCancellation ? (l.CancellationReason ?? "").Trim().ToUpperInvariant() : "", "");
     }
 
