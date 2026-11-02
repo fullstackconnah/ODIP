@@ -45,6 +45,27 @@ public class DraftPdfScheduleTests
 
     private static string Row(params string[] cells) => string.Concat(cells.Select(Skeleton));
 
+    [Fact]
+    public void Ongoing_repeats_line_gives_the_plan_end_in_the_same_form_as_the_pdf_field()
+    {
+        var draft = new ServiceAgreementDraft { IsOngoing = true, AgreementStartDate = new DateOnly(2026, 10, 12), AgreementEndDate = new DateOnly(2026, 10, 18) };
+
+        Assert.Equal("Repeats every week from 12 Oct 2026, ongoing until the NDIS plan ends: plan end at this revision (18 Oct 2026).", AgreementSchedule.Repeats(draft));
+    }
+
+    [Fact]
+    public void Ongoing_pdf_prints_ongoing_and_plan_end()
+    {
+        var draft = Revision(MonWed());
+        draft.IsOngoing = true;
+        draft.PlanEndDate = draft.AgreementEndDate;
+        var text = TextOf(ServiceAgreementDraftPdfRenderer.Render(draft));
+
+        Assert.Contains(Skeleton("Ongoing. Reviewed with the NDIS plan; plan end at this revision (18 Oct 2026)"), text);
+        Assert.Contains(Skeleton("Repeats every week from 12 Oct 2026, ongoing until the NDIS plan ends: plan end at this revision (18 Oct 2026)."), text);
+        Assert.Contains(Skeleton("over the agreement period to the plan end"), text);
+    }
+
     // ── The table ─────────────────────────────────────────────────────────────────
 
     // The text comes back in lines, top to bottom and left to right, so a heading that wraps onto a second line ("Hours a" / "week") is split across the header row. A body row that does not wrap is

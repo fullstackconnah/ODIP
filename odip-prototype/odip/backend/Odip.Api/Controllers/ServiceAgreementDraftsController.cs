@@ -346,7 +346,7 @@ public class ServiceAgreementDraftsController : ControllerBase
         Status = ProvisionalAgreementTemplate.State, TemplateVersion = ProvisionalAgreementTemplate.Version,
         TemplateDocxSha256 = ProvisionalAgreementTemplate.DocxSha256, TemplatePdfSha256 = ProvisionalAgreementTemplate.PdfSha256,
         PlanStartDate = draft.PlanStartDate, PlanEndDate = draft.PlanEndDate, Representative = draft.Representative,
-        AgreementStartDate = draft.AgreementStartDate, AgreementEndDate = draft.AgreementEndDate,
+        AgreementStartDate = draft.AgreementStartDate, AgreementEndDate = draft.AgreementEndDate, IsOngoing = draft.IsOngoing,
         BlockCount = blockCount, LineCount = draft.Lines.Count, Total = draft.Lines.Sum(l => AgreementPriceLists.LineTotal(l)), PriceList = AgreementPriceLists.VersionOf(draft.Lines.Select(l => (l.CatalogueVersion, l.CatalogueEffectiveFrom))), Caveats = DraftPricingCaveats.For(draft).ToList(),
     };
 

@@ -2491,7 +2491,7 @@ function draftDto(participantId, version, body, quoteResult, lines) {
   return {
     id: `draft-${participantId}-v${version}`, participantId, version, status: 'UnapprovedDraft', templateVersion: 'ODIP-Service-Agreement-Blank-DRAFT-2026-09-27',
     templateDocxSha256: '9f2c1d0e', templatePdfSha256: '41ab77c3', state: body.state, planStartDate: body.planStartDate, planEndDate: body.planEndDate,
-    agreementStartDate: body.agreementStartDate, agreementEndDate: body.agreementEndDate, ...(body.representative ? { representative: body.representative } : {}),
+    agreementStartDate: body.agreementStartDate, agreementEndDate: body.isOngoing ? body.planEndDate : body.agreementEndDate, ...(body.isOngoing ? { isOngoing: true } : {}), ...(body.representative ? { representative: body.representative } : {}),
     blocks: (body.blocks || []).map((entry) => ({ block: entry.block, requirements: { workerGender: 'NoPreference', driver: false, skills: [], ...(entry.requirements || {}) } })),
     // The server's answer carries needsReview (PlanQuote.NeedsReview: an issue, or a line to review); the card reads it to say a plan is not ready before anybody presses Mark approved.
     ...(quoteResult ? { pricing: { ...quoteResult, lines: [], needsReview: (quoteResult.issues || []).length > 0 || ((quoteResult.totals && quoteResult.totals.reviewLines) || 0) > 0 } } : {}), lines,

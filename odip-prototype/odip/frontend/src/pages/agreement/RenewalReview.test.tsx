@@ -25,6 +25,11 @@ describe('RenewalReview', () => {
     expect(screen.getByText('Neither agreement has lines to compare.')).toBeInTheDocument()
   })
 
+  it('says an Ongoing renewal runs to the NDIS plan end', () => {
+    render(<RenewalReview renewal={{ ...revision(2, '2026-11-23', '2027-06-30', [line({})]), isOngoing: true }} renewedFrom={renewedFrom} oldLines={[]} oldFailed={false} onRetry={vi.fn()} />)
+    expect(screen.getByText(/v2 runs from Mon 23 Nov 2026, ongoing until the NDIS plan ends on Wed 30 Jun 2027, priced/)).toBeInTheDocument()
+  })
+
   it('sets the renewal beside the agreement it renews, line by line, with both totals', () => {
     render(<RenewalReview renewal={renewal} renewedFrom={renewedFrom} oldLines={oldLines} oldFailed={false} onRetry={vi.fn()} />)
 

@@ -36,6 +36,19 @@ public class AgreementPatternMapperTests
 
     private static IReadOnlyList<ShiftPattern> Map(PlanBlock block, ServiceAgreementDraft? draft = null) => Map(draft ?? Draft(), (block, null));
 
+    // Guards the null-EffectiveTo trap: an Ongoing draft stores the plan end as its end, so its patterns are bounded (PopulateStartedWeeksAsync skips a pattern with no end).
+    [Fact]
+    public void Ongoing_patterns_end_at_plan_end()
+    {
+        var draft = Draft();
+        draft.IsOngoing = true;
+        draft.AgreementEndDate = draft.PlanEndDate;
+
+        var patterns = Map(Block("community-weekdays", PlanSupportType.CommunityAccess, Weekdays, 9, 13), draft);
+
+        Assert.All(patterns, p => Assert.Equal(new DateOnly(2027, 6, 30), p.EffectiveTo));
+    }
+
     [Fact]
     public void A_weekday_daytime_one_to_one_block_is_one_pattern_for_each_listed_day_that_does_not_cross_midnight()
     {

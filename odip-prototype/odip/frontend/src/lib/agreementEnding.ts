@@ -4,8 +4,10 @@ import { formatServiceDate } from './format'
  * What the screens say of an approved agreement ending within 60 days or ended (agreement PR 2): the server's rule and words (AgreementEnding.Describe) with the house's dates. Only the
  * server keeps its ISO date: the participant banner shows the server's message, so it goes through houseEndingMessage.
  */
-export function endingWords(daysLeft: number, end: string, renewalVersion?: number | null): string {
-  const words = daysLeft < 0 ? `Agreement ended ${formatServiceDate(end)}: shifts stop after it`
+export function endingWords(daysLeft: number, end: string, renewalVersion?: number | null, ongoing = false): string {
+  // An Ongoing agreement runs to the NDIS plan end, so the plan is what ends (AgreementEnding.Describe on the server).
+  const words = ongoing ? (daysLeft < 0 ? `NDIS plan ended ${formatServiceDate(end)}: shifts stop after it. Renew with the new plan` : `NDIS plan ends ${formatServiceDate(end)}: renew with the new plan`)
+    : daysLeft < 0 ? `Agreement ended ${formatServiceDate(end)}: shifts stop after it`
     : daysLeft === 0 ? 'Agreement ends today'
     : daysLeft === 1 ? 'Agreement ends in 1 day'
     : `Agreement ends in ${daysLeft} days`
@@ -13,7 +15,8 @@ export function endingWords(daysLeft: number, end: string, renewalVersion?: numb
 }
 
 /** The Agreements page's status badge for an ending agreement: short, since the table has the dates. */
-export function endingBadgeWords(daysLeft: number): string {
+export function endingBadgeWords(daysLeft: number, ongoing = false): string {
+  if (ongoing) return daysLeft < 0 ? 'Plan ended' : daysLeft === 0 ? 'Plan ends today' : daysLeft === 1 ? 'Plan ends in 1 day' : `Plan ends in ${daysLeft} days`
   return daysLeft < 0 ? 'Ended' : daysLeft === 0 ? 'Ends today' : daysLeft === 1 ? 'Ends in 1 day' : `Ends in ${daysLeft} days`
 }
 

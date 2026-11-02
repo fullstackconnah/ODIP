@@ -18,7 +18,7 @@ describe('endingWords', () => {
 
 describe('endingBadgeWords', () => {
   it('words the badge short', () => {
-    expect([-3, 0, 1, 12].map(endingBadgeWords)).toEqual(['Ended', 'Ends today', 'Ends in 1 day', 'Ends in 12 days'])
+    expect([-3, 0, 1, 12].map(days => endingBadgeWords(days))).toEqual(['Ended', 'Ends today', 'Ends in 1 day', 'Ends in 12 days'])
   })
 })
 

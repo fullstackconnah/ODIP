@@ -4367,6 +4367,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateOnly?>("DateOfBirthSnapshot")
                         .HasColumnType("date");
 
+                    b.Property<bool>("IsOngoing")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("NdisNumberSnapshot")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");

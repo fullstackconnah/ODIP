@@ -9,11 +9,20 @@ import { useStickyOpen } from '@/hooks/useStickyOpen'
 import { formGrid, span } from '@/lib/formGrid'
 import { writtenDay, writtenSpan } from '@/lib/fundingPlan'
 import { STATES, ZONES, withoutControlCharacters, type Details } from '@/lib/agreementDetails'
-import { PRICING_FIRST_YEAR, PRICING_LAST_YEAR } from '@/lib/planQuote'
+import { parseDateOnly } from '@/lib/dateOnly'
+import { PRICING_FIRST_YEAR, PRICING_LAST_YEAR, addDays, addMonths } from '@/lib/planQuote'
 
 /** The years the pricing engine answers for, as the bounds of every date box (a box that is left to run takes a year with six digits). */
 const DATE_MIN = `${PRICING_FIRST_YEAR}-01-01`
 const DATE_MAX = `${PRICING_LAST_YEAR}-12-31`
+
+/** The lengths on offer. A preset ends the day before the same date N months on, the one rule the plan quote uses (planQuote.addMonths). */
+const PRESET_MONTHS = [1, 3, 6, 12] as const
+/** Starts, Length and Ends share one row from xl; Length is the widest so its longest option fits (the date span of 6 would not leave it room). */
+const startCol = 'md:col-span-1 xl:col-span-3', lengthCol = 'md:col-span-1 xl:col-span-5', endCol = 'md:col-span-1 xl:col-span-4'
+/** The pricing engine's longest period (PlanPricingEngine.MaxPeriodDays): Ongoing runs to the plan end, so a longer plan needs a chosen end. */
+const MAX_PERIOD_DAYS = 800
+const presetEnd = (start: string, months: number) => addDays(addMonths(start, months), -1)
 
 type AgreementStepProps = {
   details: Details
@@ -39,7 +48,7 @@ export function AgreementStep({ details, onEdit, recorded, plan, errors, readOnl
   if (readOnly) {
     return (
       <FactList items={[
-        { label: 'Agreement', value: `${writtenSpan(details.agreementStartDate, details.agreementEndDate)}, repeating every week` },
+        { label: 'Agreement', value: details.ongoing ? `${writtenDay(details.agreementStartDate)}, ongoing, repeating every week` : `${writtenSpan(details.agreementStartDate, details.agreementEndDate)}, repeating every week` },
         { label: 'NDIS plan', value: writtenSpan(plan.start, plan.end) },
         { label: 'State', value: details.state },
         { label: 'Price zone', value: ZONES.find(zone => zone.value === details.zone)?.label ?? details.zone },
@@ -47,15 +56,36 @@ export function AgreementStep({ details, onEdit, recorded, plan, errors, readOnl
       ]} />
     )
   }
+  const { agreementStartDate: start, agreementEndDate: end } = details
+  const canPreset = !!start && addMonths(start, 1) !== ''
+  const canOngoing = !!recorded || !!details.planOverride
+  const planTooLong = !!start && (parseDateOnly(plan.end) ?? 0) - (parseDateOnly(start) ?? 0) + 1 > MAX_PERIOD_DAYS
+  const length = details.ongoing ? 'ongoing' : PRESET_MONTHS.find(months => !!start && end === presetEnd(start, months))?.toString() ?? 'custom'
+  const chooseLength = (value: string) => {
+    if (value === 'ongoing') onEdit({ ongoing: true, agreementEndDate: plan.end })
+    else if (value === 'custom') onEdit({ ongoing: false, agreementEndDate: '' })
+    else onEdit({ ongoing: false, agreementEndDate: presetEnd(start, Number(value)) })
+  }
   const outside = !!details.agreementStartDate && !!details.agreementEndDate && (details.agreementStartDate < plan.start || details.agreementEndDate > plan.end)
   return (
     <div className="flex max-w-4xl flex-col gap-[var(--section-gap)]">
       <div className={formGrid}>
-        <FormField label="Agreement starts" className={span.date} error={errors.start}>
+        <FormField label="Agreement starts" className={startCol} error={errors.start}>
           <input type="date" min={DATE_MIN} max={DATE_MAX} value={details.agreementStartDate} onChange={event => onEdit({ agreementStartDate: event.target.value })} />
         </FormField>
-        <FormField label="Agreement ends" className={span.date} error={errors.end}>
-          <input type="date" min={DATE_MIN} max={DATE_MAX} value={details.agreementEndDate} onChange={event => onEdit({ agreementEndDate: event.target.value })} />
+        <FormField label="Length" className={lengthCol} hint={[!canPreset && 'Choose the start first.', !canOngoing && 'Add the NDIS plan dates to choose Ongoing.', canOngoing && planTooLong && 'This NDIS plan runs longer than 800 days from the agreement start. Choose an end date instead of Ongoing.'].filter(Boolean).join(' ') || undefined}>
+          <select value={length} onChange={event => chooseLength(event.target.value)}>
+            <option value="custom">Choose an end date</option>
+            {PRESET_MONTHS.map(months => <option key={months} value={months} disabled={!canPreset}>{months === 1 ? '1 month' : `${months} months`}</option>)}
+            <option value="ongoing" disabled={!canOngoing || planTooLong}>Ongoing (until the plan ends)</option>
+          </select>
+        </FormField>
+        <FormField label="Agreement ends" className={endCol} error={errors.end} hint={details.ongoing ? `Reviewed when the NDIS plan ends on ${writtenDay(plan.end)}. Shifts and totals run to then.` : undefined}>
+          {details.ongoing ? (
+            <p className="py-2 text-sm">Ongoing, to the plan end</p>
+          ) : (
+            <input type="date" min={DATE_MIN} max={DATE_MAX} value={details.agreementEndDate} onChange={event => onEdit({ agreementEndDate: event.target.value })} />
+          )}
         </FormField>
         <FormField label="State" className={span.short} hint="Where the supports are delivered.">
           <select value={details.state} onChange={event => onEdit({ state: event.target.value as AgreementState })}>{STATES.map(value => <option key={value} value={value}>{value}</option>)}</select>

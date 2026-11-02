@@ -153,6 +153,16 @@ describe('ServiceAgreementDraftPage: the wizard', () => {
     expect(JSON.stringify(request)).not.toMatch(/itemCode|unitPrice|"lines"|price/i)
   })
 
+  it('sends Ongoing with the plan end as the end, and asks for no end date', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    fireEvent.change(screen.getByLabelText('Length'), { target: { value: 'ongoing' } })
+    await toTheSaveStep(user)
+    await user.click(screen.getByRole('button', { name: 'Save agreement' }))
+    const [request] = createMutate.mock.calls[0]
+    expect(request.data).toMatchObject({ isOngoing: true, agreementEndDate: '2027-06-30' })
+  })
+
   it('files the plan under the dates the coordinator gave when they differ from the funding plan', async () => {
     const user = userEvent.setup()
     renderPage()
@@ -511,6 +521,13 @@ describe('ServiceAgreementDraftPage: renewing an agreement (agreement PR 2)', ()
     data: [{ participantId: 'p-1', participantName: 'Marcus Tran', draftId, version: 2, agreementEndDate, daysLeft, renewalVersion: null, status: '' }], isLoading: false, isError: false,
   })
   beforeEach(() => endsIn(20))
+
+  it('words an Ongoing ending as the plan ending', () => {
+    endsIn(20, '2026-11-01')
+    showing(draft({ approval, agreementStartDate: '2026-07-01', agreementEndDate: '2026-11-01', isOngoing: true }))
+    renderPage()
+    expect(screen.getByText(/NDIS plan ends Sun 1 Nov 2026: renew with the new plan/)).toBeInTheDocument()
+  })
 
   it('counts the days from the provider\u0027s today, not the browser\u0027s', () => {
     endsIn(19)                                                                            // the browser's date would say 20

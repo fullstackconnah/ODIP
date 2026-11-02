@@ -39,7 +39,7 @@ export function statusBadge(r: AgreementRow): { tone: Tone; label: string } {
     case 'NotApproved': return { tone: 'neutral', label: 'Not approved yet' }
     case 'DraftWaiting': return { tone: 'warning', label: 'Draft waiting' }
     case 'Ended': return { tone: 'danger', label: 'Ended' }
-    case 'Ending': return { tone: 'warning', label: endingBadgeWords(r.daysLeft ?? 0) }
+    case 'Ending': return { tone: 'warning', label: endingBadgeWords(r.daysLeft ?? 0, r.current?.isOngoing) }
     default: return { tone: 'success', label: 'Active' }
   }
 }
@@ -52,49 +52,55 @@ export function approveTargets(rows: readonly AgreementRow[], selected: Readonly
 export interface TermView { range: string; total: number; from: string | null; draftLine: string | null }
 
 /** What the Term and Total cells show: the approved term (from its first revision), or the unapproved draft when nothing is approved. */
+/** An Ongoing agreement has no end of its own: it runs to the NDIS plan end, so its list line says Ongoing instead of the stored date. */
+const rangeOf = (start: string, ref: { agreementEndDate: string; isOngoing?: boolean }) =>
+  ref.isOngoing ? `${formatDateRange(start, null)} – Ongoing` : formatDateRange(start, ref.agreementEndDate)
+
 export function termView(r: AgreementRow): TermView {
   const shown = r.current ?? r.waiting
   if (!shown) return { range: '', total: 0, from: null, draftLine: null }
   const start = r.current ? (r.termStart ?? r.current.agreementStartDate) : shown.agreementStartDate
   return {
-    range: formatDateRange(start, shown.agreementEndDate),
+    range: rangeOf(start, shown),
     total: shown.total,
     from: r.current && r.termStart && r.current.agreementStartDate > r.termStart ? r.current.agreementStartDate : null,
-    draftLine: !r.current ? `Draft v${shown.version}, never approved` : r.waiting ? `Draft v${r.waiting.version}: ${formatDateRange(r.waiting.agreementStartDate, r.waiting.agreementEndDate)}` : null,
+    draftLine: !r.current ? `Draft v${shown.version}, never approved` : r.waiting ? `Draft v${r.waiting.version}: ${rangeOf(r.waiting.agreementStartDate, r.waiting)}` : null,
   }
 }
 
 /** What the server will leave alone in a bulk run, each row counted once for the first reason (waiting draft, then ended, then already on the list). The server still decides per agreement. */
 function skipCounts(selected: readonly AgreementRow[], action: AgreementBulkAction, list?: PriceList | null) {
-  let waiting = 0, ended = 0, already = 0
+  let waiting = 0, ended = 0, already = 0, ongoing = 0
   for (const r of selected) {
     if (r.hasWaitingDraft) waiting++
+    else if (action === 'extend' && r.current?.isOngoing) ongoing++
     else if (action === 'reprice' && r.endingState === 'Ended') ended++
     else if (action === 'reprice' && list && r.priceList && r.priceList.start >= list.start) already++
   }
-  return { waiting, ended, already }
+  return { waiting, ended, already, ongoing }
 }
 
 /** How many ticked rows the run will skip: the button counts the rest. */
 export function bulkSkipCount(selected: readonly AgreementRow[], action: AgreementBulkAction, list?: PriceList | null): number {
-  const { waiting, ended, already } = skipCounts(selected, action, list)
-  return waiting + ended + already
+  const { waiting, ended, already, ongoing } = skipCounts(selected, action, list)
+  return waiting + ended + already + ongoing
 }
 
 /** One line per skip reason. */
 export function bulkSkipNotes(selected: readonly AgreementRow[], action: AgreementBulkAction, list?: PriceList | null): string[] {
-  const { waiting, ended, already } = skipCounts(selected, action, list)
+  const { waiting, ended, already, ongoing } = skipCounts(selected, action, list)
   const has = (n: number) => (n === 1 ? 'has' : 'have')
   return [
     waiting && `${waiting} ${has(waiting)} a draft waiting and will be skipped.`,
     ended && `${ended} ${has(ended)} ended and will be skipped.`,
+    ongoing && `${ongoing} ${ongoing === 1 ? 'is' : 'are'} Ongoing, following the NDIS plan, and will be skipped.`,
     already && `${already} ${already === 1 ? 'is' : 'are'} already on ${list!.version} or a newer price list and will be skipped.`,
   ].filter(Boolean) as string[]
 }
 
 /** The latest end among the ticked agreements that are approved: an extension must run past it. */
 export function latestEnd(selected: readonly AgreementRow[]): string | null {
-  return selected.reduce<string | null>((latest, r) => (r.current && (!latest || r.current.agreementEndDate > latest) ? r.current.agreementEndDate : latest), null)
+  return selected.reduce<string | null>((latest, r) => (r.current && !r.current.isOngoing && (!latest || r.current.agreementEndDate > latest) ? r.current.agreementEndDate : latest), null)
 }
 
 /** After minus before, signed: a rise is not good or bad, so it is plain ink, with a true minus sign. */
