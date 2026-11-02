@@ -239,4 +239,22 @@ public class ContactRoleRulesTests
         var roles = new[] { (ContactRoleType.ProviderContact, (bool?)true, ContactRoleStatus.Expired) };
         Assert.NotNull(ContactRoleRules.PlanTypeComplianceWarning(PlanType.AgencyManaged, roles));
     }
+
+    // ── I3: Key Worker and Other (meeting 2026-10-23) ────────────────────
+
+    [Theory]
+    [InlineData(ContactRoleType.KeyWorker)]
+    [InlineData(ContactRoleType.Other)]
+    public void KeyWorker_and_Other_have_no_gate_for_any_plan_type(ContactRoleType role)
+    {
+        foreach (var planType in Enum.GetValues<PlanType>())
+            Assert.Null(ContactRoleRules.Validate(role, planType, null, null));
+    }
+
+    [Fact]
+    public void KeyWorker_allows_several_active_rows()
+    {
+        var existing = new[] { (ContactRoleType.KeyWorker, false, ContactRoleStatus.Active) };
+        Assert.Null(ContactRoleRules.ValidateUniqueness(ContactRoleType.KeyWorker, false, ContactRoleStatus.Active, existing));
+    }
 }

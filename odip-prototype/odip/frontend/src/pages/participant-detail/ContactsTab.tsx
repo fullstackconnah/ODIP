@@ -42,6 +42,7 @@ function roleSummaryLine(role: ParticipantContactRoleDto): string {
     case 'Specialist':
     case 'Pharmacy':
     case 'ProviderContact':
+    case 'KeyWorker':
     case 'Interpreter':
       return role.organisationName || role.discipline || '—'
     default:

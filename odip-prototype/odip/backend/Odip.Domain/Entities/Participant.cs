@@ -101,8 +101,8 @@ public class Participant : ITenantEntity
     // brief this linkage is deliberately NOT made yet: these two fields stay free text, and no
     // data migration from here into a Person/ParticipantContactRole row is performed. A future
     // pass can replace MainSupportPersonName/Relationship with a FK to a ParticipantContactRole
-    // (there is no dedicated "family/other" role type in ContactRoleType — NextOfKin is the
-    // closest existing fit) instead of duplicating name/relationship as plain strings here.
+    // (ContactRoleType.Other covers a family member or anyone else with no
+    // dedicated role) instead of duplicating name/relationship as plain strings here.
     public string? MainSupportPersonName { get; set; }
     public string? MainSupportPersonRelationship { get; set; }
     public string? OthersLivingInAccommodation { get; set; }

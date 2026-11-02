@@ -267,6 +267,14 @@ describe('AddContactRoleForm', () => {
       expect(onSaved).toHaveBeenCalledTimes(1)
     })
 
+    it('I3: create shows Key Worker after Support Worker / Provider Contact, and Other last', () => {
+      render(<AddContactRoleForm participantId="participant-1" mode="create" onSaved={vi.fn()} onCancel={vi.fn()} />)
+      const chips = Object.values(CONTACT_ROLE_TYPE_LABELS) as (string | null | undefined)[]
+      const names = screen.getAllByRole('checkbox').map(c => c.closest('label')?.textContent).filter(n => chips.includes(n))
+      expect(names.indexOf('Key Worker')).toBe(names.indexOf('Support Worker / Provider Contact') + 1)
+      expect(names.at(-1)).toBe('Other')
+    })
+
     it('renders the union of the selected roles\' fields, each grouped under its own role heading', async () => {
       const user = userEvent.setup()
       render(<AddContactRoleForm participantId="participant-1" mode="create" onSaved={vi.fn()} onCancel={vi.fn()} />)
