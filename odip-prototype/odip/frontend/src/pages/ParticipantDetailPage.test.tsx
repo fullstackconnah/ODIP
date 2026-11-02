@@ -15,8 +15,11 @@ const {
   mockUseDownloadIntakeFormPdf, mockUseDownloadParticipantProfilePdf, mockUseDownloadClientOverviewPdf, mockUseDownloadWeeklySchedulePdf,
   mockPatchMutateAsync, mockUseStaff,
   mockUseGenerateCaregiverLink, mockUseRevokeCaregiverLink, mockUseCaregiverSubmissions,
-  mockDeleteMutate, mockNotes, mockRisks, realAdl, mockPersonWeek,
+  mockDeleteMutate, mockNotes, mockRisks, realAdl, mockPersonWeek, realAgreements, mockDrafts,
 } = vi.hoisted(() => ({
+  // The role test mounts the real Agreements section over this hook, to prove a role without the tab never asks for the list.
+  realAgreements: { on: false },
+  mockDrafts: vi.fn(() => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() })),
   mockPersonWeek: vi.fn(() => ({ data: undefined, isLoading: true, isError: false, isPlaceholderData: false, refetch: vi.fn() })),
   realAdl: { on: false },
   mockUseParticipant: vi.fn(),
@@ -55,6 +58,10 @@ const {
 // PortalShiftDetailPage.test.tsx's ShiftNotesSection stub" approach used there).
 vi.mock('@/api/hooks', () => ({
   useParticipant: mockUseParticipant,
+  useServiceAgreementDrafts: mockDrafts,
+  useDeleteServiceAgreementDraft: () => ({ mutate: vi.fn(), isPending: false }),
+  useEndAgreementEarly: () => ({ mutate: vi.fn(), isPending: false }),
+  useDownloadServiceAgreementDraftPdf: () => ({ mutate: vi.fn(), isPending: false }),
   useSupportProfile: mockUseSupportProfile,
   useUpdateSupportProfile: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useParticipantBookings: mockUseParticipantBookings,
@@ -111,7 +118,7 @@ vi.mock('./participant-detail', async () => {
     // have their own test file" approach as every other nested-CRUD section above.
     // Shift-completion design spec §4 — Claims tab has its own dedicated test file
     // (ClaimsTab.test.tsx); stubbed here for the same reason as every nested-CRUD tab above.
-    AgreementsSection: ({ participantId }: { participantId: string }) => <div data-testid="agreements-section" data-participant={participantId} />,
+    AgreementsSection: (props: { participantId: string }) => realAgreements.on ? <actual.AgreementsSection {...props} /> : <div data-testid="agreements-section" data-participant={props.participantId} />,
     ClaimsTab: ({ otherFunded, funder }: { otherFunded?: boolean; funder?: string | null }) => <div data-testid="claims-tab" data-other-funded={String(!!otherFunded)} data-funder={funder ?? ''} />,
     // Connection map item 12 — Rostering tab has its own dedicated test file
     // (RosteringTab.test.tsx); stubbed here for the same reason as every nested-CRUD tab above.
@@ -1496,13 +1503,17 @@ describe('ParticipantDetailPage — Agreements tab', () => {
   })
 
   it.each(['ReadOnly', 'SupportWorker'])('has no Agreements tab for %s, and reads ?tab=agreements as Overview with no section mounted', role => {
-    setUserRole(role)
-    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
-    renderAtTab('participant-1', 'agreements')
+    realAgreements.on = true
+    mockDrafts.mockClear()
+    try {
+      setUserRole(role)
+      mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+      renderAtTab('participant-1', 'agreements')
 
-    expect(screen.queryByRole('tab', { name: /^Agreements/ })).not.toBeInTheDocument()
-    expect(screen.queryByTestId('agreements-section')).not.toBeInTheDocument()
-    expect(selectedTab().map(t => t.textContent)).toEqual(['Overview'])
+      expect(screen.queryByRole('tab', { name: /^Agreements/ })).not.toBeInTheDocument()
+      expect(mockDrafts).not.toHaveBeenCalled()
+      expect(selectedTab().map(t => t.textContent)).toEqual(['Overview'])
+    } finally { realAgreements.on = false }
   })
 })
 

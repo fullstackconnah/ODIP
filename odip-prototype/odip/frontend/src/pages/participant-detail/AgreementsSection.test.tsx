@@ -53,6 +53,10 @@ describe('AgreementsSection: the table', () => {
     const heads = screen.getAllByRole('columnheader').map(h => h.textContent)
     expect(heads.slice(0, 5)).toEqual(['Version', 'Status', 'Term', 'Total', 'Approved'])
     expect(heads).toHaveLength(6)
+    // DataTable gives a blank header an sr-only name; nothing else is shown in that header.
+    const actionsHead = screen.getAllByRole('columnheader')[5]
+    expect(actionsHead.querySelector('.sr-only')?.textContent).toBe('Actions')
+    expect(actionsHead.textContent).toBe('Actions')
   })
 
   it('shows one badge per status, with the term and the approval line', () => {
@@ -62,6 +66,16 @@ describe('AgreementsSection: the table', () => {
     expect(within(row(2)).getByText('Ended')).toBeInTheDocument()
     expect(within(row(3)).getByText('20 Jun 2026 · Sam Lee')).toBeInTheDocument()
     expect(within(row(4)).getByText('—')).toBeInTheDocument()
+  })
+})
+
+describe('AgreementsSection: the ended-early term', () => {
+  it('mutes the was-date suffix and leaves the range in the body colour', () => {
+    listState = { data: [version(1, '2026-07-01', '2026-09-30', { originalAgreementEndDate: '2027-06-30' })] }
+    renderSection()
+    const suffix = within(row(1)).getByText(/· was 30 Jun 2027/)
+    expect(suffix).toHaveClass('text-[var(--color-muted-foreground)]')
+    expect(suffix.parentElement?.textContent).toMatch(/^1 Jul – 30 Sep 2026 · was 30 Jun 2027$/)
   })
 })
 

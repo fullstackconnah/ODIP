@@ -37,7 +37,7 @@ describe('versionRows: the status of each version, from the date', () => {
   it('stays Approved until the last day has passed, but the term already says what changed', () => {
     const [row] = versionRows([version(1, '2026-07-01', '2026-10-12', { originalAgreementEndDate: '2027-06-30' })], TODAY)
     expect(row.status).toBe('Approved')
-    expect(row.term).toContain('was 30 Jun 2027')
+    expect(row.was).toBe('30 Jun 2027')
   })
 
   it('Replaced: a newer approved revision started on or before its end, and that start has passed', () => {
@@ -69,9 +69,10 @@ describe('versionRows: the status of each version, from the date', () => {
     expect(row.term).toBe('1 Jul 2026 – Ongoing')
   })
 
-  it('the Term is one range, with the signed end after a dot when ended early', () => {
+  it('the Term is one range, with the signed end apart when ended early', () => {
     const [row] = versionRows([version(1, '2026-07-01', '2026-11-15', { originalAgreementEndDate: '2027-06-30' })], TODAY)
-    expect(row.term).toBe('1 Jul – 15 Nov 2026 · was 30 Jun 2027')
+    expect(row.term).toBe('1 Jul – 15 Nov 2026')
+    expect(row.was).toBe('30 Jun 2027')
   })
 
   it('reads "today" in the viewer zone: 11 Oct 23:30 UTC is already 12 Oct in Sydney, so an agreement ended on the 11th is Ended there and Approved in UTC', () => {

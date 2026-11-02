@@ -141,18 +141,19 @@ export function AgreementsSection({ participantId }: { participantId: string }) 
             columns={[
               { key: 'version', header: 'Version', mobile: 'primary', render: r => `Version ${r.version}` },
               { key: 'status', header: 'Status', mobile: 'status', render: r => <StatusBadge tone={TONE[r.status]} label={r.status} /> },
-              { key: 'term', header: 'Term', mobile: 'meta', render: r => <span className="whitespace-nowrap">{r.term}</span> },
+              { key: 'term', header: 'Term', mobile: 'meta', render: r => <span className="md:whitespace-nowrap max-md:overflow-visible! max-md:whitespace-normal!">{r.term}{r.was && <span className="text-[var(--color-muted-foreground)]"> · was {r.was}</span>}</span> },
               { key: 'total', header: 'Total', mobile: 'meta', align: 'right', render: r => <span className="tabular-nums">{formatCurrency(r.total)}</span> },
               { key: 'approved', header: 'Approved', mobile: 'meta', render: r => r.approvedLine },
               {
-                key: 'actions', header: 'Actions', mobile: 'trail', overlay: true,
+                key: 'actions', header: '', overlay: true, minWidth: 208,
                 render: r => {
                   const { visible, menu } = itemsFor(r)
                   return (
-                    <>
+                    // Its own positioned box, so the hover icons open into this column instead of over the Approved cell.
+                    <div className="relative ml-auto flex w-fit items-center">
                       <Button variant="ghost" size="sm" to={visible.to} onClick={visible.onClick}>{visible.label}</Button>
                       <RowMenu items={menu} name={`version ${r.version}`} />
-                    </>
+                    </div>
                   )
                 },
               },

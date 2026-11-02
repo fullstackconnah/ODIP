@@ -19,6 +19,8 @@ export interface VersionRow {
   start: string
   end: string
   original: string | null
+  /** The signed end an early end replaced, as a day; the section shows it muted after the term. */
+  was: string | null
 }
 
 const day = (iso: string) => formatDateRange(iso, iso)
@@ -46,7 +48,8 @@ export function versionRows(drafts: readonly ServiceAgreementDraftDto[], today: 
       status,
       endedEarly: !!original,
       newest: d.version === newestVersion,
-      term: `${status === 'Upcoming' ? 'from ' : ''}${range}${original ? ` · was ${day(original)}` : ''}`,
+      term: `${status === 'Upcoming' ? 'from ' : ''}${range}`,
+      was: original ? day(original) : null,
       total: d.total,
       approvedLine: d.approval ? `${day(localIsoDate(new Date(d.approval.approvedAt)))} · ${d.approval.approvedByName}` : '—',
       takesOverOn: takesOver,

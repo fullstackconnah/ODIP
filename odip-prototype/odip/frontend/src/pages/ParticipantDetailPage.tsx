@@ -274,7 +274,7 @@ export default function ParticipantDetailPage() {
     card('claims', 'Claims', true, <ClaimsTab participantId={id!} canWrite={canWrite} otherFunded={p.fundingSource === 'Other'} funder={p.fundingOrganisation} />, { wide: true, srHeading: true }),
   ]
   const agreementsCards = [
-    card('agreements', 'Agreements', true, <AgreementsSection participantId={id!} />, { wide: true }),
+    card('agreements', 'Agreements', true, <AgreementsSection participantId={id!} />, { wide: true, srHeading: true }),
   ]
   const recordsCards = [
     card('notes', 'Notes', true, <NotesTab participantId={id} />, { wide: true, srHeading: true }),
