@@ -1471,8 +1471,8 @@ public class RosteringController : ControllerBase
     /// <summary>
     /// Staff set whether one break was taken WITH the participant (paid, counted as worked) or on the worker's own (unpaid, deducted), while the shift is
     /// awaiting review (W9). 404 for a shift, or a break of that shift's active completion, that isn't there (another organisation's, an archived
-    /// completion's); 409 SHIFT_NOT_PENDING_REVIEW otherwise. The shift row lock is the one Approve takes, so the kind Employment Hero is sent is the kind the
-    /// approver saw. The audit interceptor records the change.
+    /// completion's); 409 SHIFT_NOT_PENDING_REVIEW otherwise. The shift row lock is the one Approve takes: it stops a lost edit and makes each side re-read the kind,
+    /// but it does not prove the approver saw the latest kind. The audit interceptor records the change.
     /// </summary>
     [HttpPut("shifts/{id:guid}/completion/breaks/{breakId:guid}/kind")]
     public async Task<ActionResult<ApiResponse<ShiftCompletionDto>>> SetCompletionBreakKind(Guid id, Guid breakId, [FromBody] SetShiftBreakKindDto dto, CancellationToken ct)

@@ -156,7 +156,7 @@ function BreaksBlock({ c, first, staffFirst, pendingKind, onChange }: {
 }) {
   const t = (iso: string) => formatWithTimeZone(iso, c.timeZoneId, { hour: 'numeric', minute: '2-digit' })
   return (
-    <div className="space-y-1">
+    <div className="space-y-1 pt-2">
       <ul className="space-y-1.5 text-xs">
         {c.breaks.map(b => (
           <li key={b.id} className="space-y-1">
