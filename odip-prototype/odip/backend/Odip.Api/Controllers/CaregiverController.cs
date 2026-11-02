@@ -83,12 +83,23 @@ public class CaregiverController : ControllerBase
             CaregiverRelationship = sub.CaregiverRelationship,
             ExpiresAt = sub.ExpiresAt,
             RejectionNote = sub.RejectionNote,
+            ProviderName = await ProviderNameAsync(sub.TenantId, ct),
             Current = await BuildProjectionAsync(p, ct),
             Editable = EditableFields(),
             Draft = sub.Payload is null ? null : JsonSerializer.Deserialize<PatchParticipantDto>(sub.Payload, Json),
             Base = sub.BasePayload is null ? null : JsonSerializer.Deserialize<PatchParticipantDto>(sub.BasePayload, Json),
         };
         return Ok(ApiResponse<CaregiverFormDto>.Ok(dto));
+    }
+
+    /// <summary>The link's own tenant only: no ambient tenant on this route, so the explicit TenantId filter is the scoping. One string leaves the server.</summary>
+    private async Task<string?> ProviderNameAsync(Guid tenantId, CancellationToken ct)
+    {
+        var settings = await _db.ProviderSettings.IgnoreQueryFilters([TenantFilter.Name])
+            .Where(s => s.TenantId == tenantId).Select(s => s.OrganisationName).FirstOrDefaultAsync(ct);
+        if (!string.IsNullOrWhiteSpace(settings)) return settings.Trim();
+        var tenant = await _db.Tenants.Where(t => t.Id == tenantId).Select(t => t.Name).FirstOrDefaultAsync(ct);
+        return string.IsNullOrWhiteSpace(tenant) ? null : tenant.Trim();
     }
 
     [HttpPut("{token}/draft")]

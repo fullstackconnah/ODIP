@@ -11,6 +11,8 @@ export type CaregiverFormDto = {
   caregiverRelationship: string | null
   expiresAt: string
   rejectionNote: string | null
+  /** The link's own organisation (settings name, else tenant name); null when neither is set. */
+  providerName: string | null
   current: Record<string, unknown>
   editable: string[]
   draft: PatchParticipantDto | null
