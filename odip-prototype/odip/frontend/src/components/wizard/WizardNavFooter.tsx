@@ -61,7 +61,8 @@ export function WizardNavFooter({
   // A router link (href = cancelTo), so the unsaved-changes blocker still asks before leaving.
   const groupRight = isReviewStep && reviewActionsRight
   // Below sm, on a non-review step, the secondary drops to its own full-width row so Back and Next stay together on row 1.
-  const stackSecondary = !isReviewStep && secondaryActions.length > 0
+  // With no Cancel and no Back (the caregiver link's first step) the secondary has nothing to stay apart from, so it shares row 1 with Next.
+  const stackSecondary = !isReviewStep && secondaryActions.length > 0 && (showBack || !hideCancel)
   const secondary = secondaryActions.map((action) => (
     <Button
       key={action.key}

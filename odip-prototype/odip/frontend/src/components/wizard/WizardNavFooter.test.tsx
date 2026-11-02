@@ -52,6 +52,15 @@ describe('WizardNavFooter', () => {
     expect(screen.getByRole('button', { name: 'Create Participant' })).toBeInTheDocument()
   })
 
+  it('with no Cancel and no Back the secondary shares the first row; with Back it still drops to its own row', () => {
+    const secondaryActions = [{ key: 'save', label: 'Save later', onClick: vi.fn() }]
+    const first = renderFooter({ hideCancel: true, secondaryActions })
+    expect(screen.getByRole('button', { name: 'Save later' }).className).not.toContain('max-sm:basis-full')
+    first.unmount()
+    renderFooter({ hideCancel: true, showBack: true, secondaryActions })
+    expect(screen.getByRole('button', { name: 'Save later' }).className).toContain('max-sm:basis-full')
+  })
+
   it('hides Back when showBack is false', () => {
     renderFooter({ showBack: false })
     expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument()
