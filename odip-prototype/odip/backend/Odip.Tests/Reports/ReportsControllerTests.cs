@@ -84,7 +84,7 @@ public class ReportsControllerTests
 
     /// <summary>A completion by <paramref name="worker"/> that ran <paramref name="minutes"/> from 08:00 UTC, with an optional break of <paramref name="breakMinutes"/>.</summary>
     private static ShiftCompletion AddCompletion(OdipDbContext db, Shift shift, User worker, int? minutes, ReviewOutcome? outcome = ReviewOutcome.Approved,
-        bool active = true, int breakMinutes = 0, Guid? tenant = null)
+        bool active = true, int breakMinutes = 0, Guid? tenant = null, bool breakWithParticipant = false)
     {
         var start = new DateTime(2026, 10, 20, 8, 0, 0, DateTimeKind.Utc);
         var c = new ShiftCompletion
@@ -96,7 +96,7 @@ public class ReportsControllerTests
         if (breakMinutes > 0)
             db.ShiftBreaks.Add(new ShiftBreak
             {
-                Id = Guid.NewGuid(), TenantId = tenant ?? TenantA, ShiftCompletionId = c.Id, StartedAt = start.AddMinutes(60), EndedAt = start.AddMinutes(60 + breakMinutes), CreatedByUserId = worker.Id,
+                Id = Guid.NewGuid(), TenantId = tenant ?? TenantA, ShiftCompletionId = c.Id, StartedAt = start.AddMinutes(60), EndedAt = start.AddMinutes(60 + breakMinutes), CreatedByUserId = worker.Id, WithParticipant = breakWithParticipant,
             });
         return c;
     }
@@ -131,6 +131,22 @@ public class ReportsControllerTests
         Assert.Equal(["adam Able", "Zoe Young"], rows.Select(r => r.WorkerName));
         Assert.Equal((2, 10.17m, 0m), (rows[0].ApprovedShifts, rows[0].ApprovedHours, rows[0].AwaitingApprovalHours));
         Assert.Equal((2, 6.33m, 0m), (rows[1].ApprovedShifts, rows[1].ApprovedHours, rows[1].AwaitingApprovalHours));
+    }
+
+    [Fact]
+    public async Task HoursByWorker_ABreakWithTheParticipantIsPaid_SoItIsNotDeducted()   // [D] W9: agrees with Payroll
+    {
+        using var db = TestDb.Create();
+        var ann = AddUser(db, "Ann", "Alone");
+        var wes = AddUser(db, "Wes", "With");
+        AddCompletion(db, AddShift(db, From, ShiftStatus.Completed, ann.Id), ann, 440, breakMinutes: 20);
+        AddCompletion(db, AddShift(db, From, ShiftStatus.Completed, wes.Id), wes, 440, breakMinutes: 20, breakWithParticipant: true);
+        await db.SaveChangesAsync();
+
+        var rows = Rows<HoursByWorkerRowDto>(await Call(Controller(db), "hours", From, To));
+
+        Assert.Equal(7.00m, rows.Single(r => r.WorkerName == "Ann Alone").ApprovedHours);   // 440 - 20
+        Assert.Equal(7.33m, rows.Single(r => r.WorkerName == "Wes With").ApprovedHours);    // 440
     }
 
     [Fact]

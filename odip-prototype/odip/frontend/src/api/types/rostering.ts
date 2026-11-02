@@ -227,7 +227,7 @@ export interface ShiftCompletionDto {
   // ── Shift package ──
   /** Breaks taken during this completion, oldest first. */
   breaks: ShiftBreakDto[]
-  /** Whole minutes spent on breaks (a running break counts up to now). */
+  /** Whole minutes of unpaid breaks, those on the worker's own (a running one counts up to now). A break with the participant is paid and not in this figure. */
   breakMinutes: number
   /** Whole minutes worked: actual start to actual end (or now while in progress) minus breaks. Never negative. Billing stays on
    * ROSTERED hours — this is a record, not a billing input. */
@@ -314,7 +314,7 @@ export interface CompletionQueueItemDto {
   /** Scheduled doses in the shift's ROSTERED window with no outcome recorded (any outcome counts; a superseded record is history). The review
    * (`GET rostering/shifts/{id}/completion/review`) lists them. */
   dosesWithoutOutcome: number
-  /** Total minutes of breaks on the completion (same figure as `ShiftCompletionDto.breakMinutes`). */
+  /** Unpaid break minutes on the completion, breaks on the worker's own (same figure as `ShiftCompletionDto.breakMinutes`). */
   breakMinutes: number
   /** True when the worker never pressed Start and supplied the start time at Finish (the manual-start path). That path skips the dose checklist,
    * so the queue can flag the row next to `dosesWithoutOutcome` without opening the shift. Same flag as `ShiftCompletionDto.startWasManual`. */

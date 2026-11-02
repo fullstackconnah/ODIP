@@ -1029,7 +1029,9 @@ const packageHistoryBreaks = {
     { id: 'brk-0001', startedAt: '2026-09-08T13:00:00Z', endedAt: '2026-09-08T13:30:00Z', editedAt: null, createdByUserId: 's-0003' },
   ],
   'shift-0002': [
-    { id: 'brk-0002', startedAt: '2026-09-10T22:00:00Z', endedAt: '2026-09-10T22:20:00Z', editedAt: '2026-09-10T22:40:00Z', createdByUserId: 's-0004' },
+    { id: 'brk-0002', startedAt: '2026-09-10T22:00:00Z', endedAt: '2026-09-10T22:20:00Z', editedAt: '2026-09-10T22:40:00Z', createdByUserId: 's-0004', withParticipant: false },
+    // W9: a meal break with the participant is paid, so it is not in breakMinutes.
+    { id: 'brk-0003', startedAt: '2026-09-11T01:00:00Z', endedAt: '2026-09-11T01:30:00Z', editedAt: null, createdByUserId: 's-0004', withParticipant: true },
   ],
 }
 
@@ -1066,6 +1068,7 @@ function breakDto(b, nowMs) {
   return {
     id: b.id, startedAt: b.startedAt, endedAt: b.endedAt, isRunning: !b.endedAt,
     minutes: Math.max(0, wholeMinutes(end - Date.parse(b.startedAt))), editedAt: b.editedAt, createdByUserId: b.createdByUserId,
+    withParticipant: !!b.withParticipant,
   }
 }
 
@@ -1077,6 +1080,7 @@ function withPackageFields(shiftId, completion) {
   const endMs = completion.actualEnd ? Date.parse(completion.actualEnd) : nowMs
   const gross = Math.max(0, wholeMinutes(endMs - startMs))
   const breakMinutes = breaks.reduce((sum, b) => {
+    if (b.withParticipant) return sum   // paid: counted as worked, not deducted
     const from = Math.max(Date.parse(b.startedAt), startMs)
     const to = Math.min(b.endedAt ? Date.parse(b.endedAt) : endMs, endMs)
     return sum + Math.max(0, to - from)
@@ -1463,8 +1467,11 @@ const packageRoutesPut = [
     const overlaps = st.breaks.some((o) => o.id !== b.id && start < (o.endedAt ? Date.parse(o.endedAt) : Infinity) && Date.parse(o.startedAt) < (end ?? Infinity))
     if (overlaps) return bad('This break overlaps another break.', 'SHIFT_BREAK_OVERLAP')
     b.startedAt = new Date(start).toISOString()
+    const timesChanged = b.startedAt !== new Date(start).toISOString() || (b.endedAt ?? null) !== (end == null ? null : new Date(end).toISOString())
+    b.startedAt = new Date(start).toISOString()
     b.endedAt = end == null ? null : new Date(end).toISOString()
-    b.editedAt = new Date().toISOString()
+    if (typeof body?.withParticipant === 'boolean') b.withParticipant = body.withParticipant
+    if (timesChanged) b.editedAt = new Date().toISOString()   // a kind-only change does not mark the break edited
     return buildPortalShiftDetail(id)
   }],
 ]
@@ -1581,7 +1588,7 @@ const completionQueueItems = Object.values(portalShiftBase)
       returnCount: completion.shiftReturnCount,
       // The same figures the server computes: scheduled doses in the window with no outcome, and the completion's break minutes.
       dosesWithoutOutcome: (packageDoses[base.id]?.slots || []).filter((slot) => !slot.recorded).length,
-      breakMinutes: (packageHistoryBreaks[base.id] || []).reduce((sum, b) => sum + Math.round((Date.parse(b.endedAt) - Date.parse(b.startedAt)) / 60000), 0),
+      breakMinutes: (packageHistoryBreaks[base.id] || []).filter((b) => !b.withParticipant).reduce((sum, b) => sum + Math.round((Date.parse(b.endedAt) - Date.parse(b.startedAt)) / 60000), 0),
       // True on the manual-start path (the worker never pressed Start and supplied the start time at Finish), which skips the dose checklist.
       startWasManual: !!completion.startWasManual,
       // True when the worker moved the start or end at Finish (the server derives it from the stored originals the same way).
@@ -3149,7 +3156,7 @@ const postRoutes = [
       const [message, code] = NOT_IN_PROGRESS[current] || NOT_IN_PROGRESS.Draft
       return respond(409, failEnvelope(null, [message], code))
     }
-    const now = new Date().toISOString()
+    const now = typeof body?.startedAt === 'string' ? body.startedAt : new Date().toISOString()   // mock-only: a back-dated Start, so the captures can have breaks of real length
     st.completion = {
       id: `sc-mock-${base.id}`, shiftId: base.id, actualStart: now, actualEnd: null,
       timeZoneId: 'Australia/Brisbane', geolocationDeclined: !!body?.geolocationDeclined, startWasManual: false,
@@ -3289,6 +3296,16 @@ const putRoutes = [
     return invoiceMock.settingsDto(providerSettingsRow)
   }],
   ...intake.put,
+  // W9: the coordinator sets who a break was with, while the shift awaits review (the server's 409 otherwise).
+  ['rostering/shifts/:id/completion/breaks/:id/kind', (id, breakId, body) => {
+    if (currentStatus(id) !== 'PendingReview') return respond(409, failEnvelope(null, ['This shift has already been reviewed.'], 'SHIFT_NOT_PENDING_REVIEW'))
+    const st = pkgState(id)
+    st.breaks = breaksFor(id)
+    const b = st.breaks.find((x) => x.id === breakId)
+    if (!b) return respond(404, failEnvelope(null, ['Break not found.'], 'SHIFT_BREAK_NOT_FOUND'))
+    b.withParticipant = body?.withParticipant === true
+    return withPackageFields(id, shiftCompletions.find((x) => x.shiftId === id) || shiftCompletions[0])
+  }],
   ['rostering/shifts/:id/completion/travel', (id, body) => {
     if (body?.postShiftTravelMinutes === 99) return respond(409, failEnvelope(null, ['This shift is on claim TC-0002. Change its travel on the claim, or cancel the claim first.'], 'SHIFT_TRAVEL_ON_CLAIM'))
     const row = shiftCompletions.find((x) => x.shiftId === id) || shiftCompletions[0]

@@ -148,7 +148,7 @@ public sealed class ShiftBreakService
     }
 
     public async Task<ShiftBreakResult> EditAsync(
-        ShiftCompletion completion, Guid breakId, DateTime startedAt, DateTime? endedAt, CancellationToken ct)
+        ShiftCompletion completion, Guid breakId, DateTime startedAt, DateTime? endedAt, CancellationToken ct, bool? withParticipant = null)
     {
         var breaks = await LoadAsync(completion.Id, ct);
         var target = breaks.FirstOrDefault(b => b.Id == breakId);
@@ -165,9 +165,10 @@ public sealed class ShiftBreakService
         var violation = ShiftBreakRules.Validate(start, end, completion.ActualStart, now, breaks.Where(b => b.Id != breakId));
         if (violation != ShiftBreakViolation.None) return new ShiftBreakResult(ShiftBreakOutcome.Invalid, target, violation);
 
+        if (target.StartedAt != start || target.EndedAt != end) target.EditedAt = now;   // a kind-only change is not an edit of the times
         target.StartedAt = start;
         target.EndedAt = end;
-        target.EditedAt = now;
+        if (withParticipant is { } kind) target.WithParticipant = kind;
         target.UpdatedAt = now;
         await _db.SaveChangesAsync(ct);
         return new ShiftBreakResult(ShiftBreakOutcome.Ok, target);

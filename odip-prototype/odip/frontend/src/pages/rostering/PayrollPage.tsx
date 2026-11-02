@@ -63,7 +63,7 @@ function shiftLine(s: PayrollShiftDto) {
   if (s.nightType === 'Sleepover') return `${rostered} · Sleepover: rostered times sent`
   const time = (iso: string | null) => keepAmPm(formatWithTimeZone(iso, s.timeZoneId, { hour: 'numeric', minute: '2-digit' }))
   const actual = s.actualEnd
-    ? `Actual ${time(s.actualStart)}${DASH}${time(s.actualEnd)}${s.breakMinutes > 0 ? `, ${s.breakMinutes} min break` : ''} (${hours(s.paidMinutes)})`
+    ? `Actual ${time(s.actualStart)}${DASH}${time(s.actualEnd)}${s.breakMinutes > 0 ? `, ${s.breakMinutes} min unpaid break` : ''} (${hours(s.paidMinutes)})`
     : 'Actual hours not recorded'
   const lead = s.nightType === 'ActiveNight' ? 'Active night · ' : s.nightType === 'PassiveNight' ? 'Passive night · ' : ''
   return `${lead}${rostered} · ${actual}`
