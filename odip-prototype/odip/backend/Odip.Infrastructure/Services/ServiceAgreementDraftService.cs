@@ -98,7 +98,7 @@ public sealed class ServiceAgreementDraftService
         if (draft.Draft is null) return draft;
         if (draft.Draft.Version - 1 != (request.BaseVersion ?? 0)) return DraftSaveResult.Conflicted(draft.Draft.Version - 1);
         // A save that keeps the end an End early set (the base is the newest revision, so it is the one that was ended) keeps the signed end too (M1, S3); a changed end is a new term.
-        if (await _db.ServiceAgreementDrafts.AsNoTracking().Where(x => x.ParticipantId == participantId && x.Version == request.BaseVersion).Select(x => new { x.AgreementEndDate, x.OriginalAgreementEndDate }).FirstOrDefaultAsync(ct) is { OriginalAgreementEndDate: not null } baseRev
+        if (await _db.ServiceAgreementDrafts.AsNoTracking().Where(x => x.TenantId == tenantId && x.ParticipantId == participantId && x.Version == request.BaseVersion).Select(x => new { x.AgreementEndDate, x.OriginalAgreementEndDate }).FirstOrDefaultAsync(ct) is { OriginalAgreementEndDate: not null } baseRev
             && baseRev.AgreementEndDate == draft.Draft.AgreementEndDate)
             draft.Draft.OriginalAgreementEndDate = baseRev.OriginalAgreementEndDate;
 

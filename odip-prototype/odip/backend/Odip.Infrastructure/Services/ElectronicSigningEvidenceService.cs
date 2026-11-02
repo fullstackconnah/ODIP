@@ -58,7 +58,7 @@ public sealed class ElectronicSigningEvidenceService
     /// </summary>
     public static string BuildDocument(ServiceAgreementDraft draft) => JsonSerializer.Serialize(new
     {
-        draft.Id, draft.Version, draft.ParticipantId, draft.ParticipantNameSnapshot, draft.PlanStartDate, draft.PlanEndDate, draft.AgreementStartDate, AgreementEndDate = draft.OriginalAgreementEndDate ?? draft.AgreementEndDate, draft.State, draft.ServiceTypesJson,
+        draft.Id, draft.Version, draft.ParticipantId, draft.ParticipantNameSnapshot, draft.PlanStartDate, draft.PlanEndDate, draft.AgreementStartDate, AgreementEndDate = draft.OriginalAgreementEndDate ?? draft.AgreementEndDate, EndedEarlyLastDay = draft.OriginalAgreementEndDate is null ? (DateOnly?)null : draft.AgreementEndDate, draft.State, draft.ServiceTypesJson,
         Lines = draft.Lines.OrderBy(x => x.Id).Select(x => new { x.ServiceType, x.ItemCode, x.Hours, x.UnitPrice, x.CatalogueVersion, x.CatalogueEffectiveFrom, x.CatalogueEffectiveTo, x.Unit, x.Band, x.Total, x.Occurrences, x.Flags, x.BlockKey }),
         BlocksHash = BlocksHash(draft),
         PricingHash = PricingHash(draft),
