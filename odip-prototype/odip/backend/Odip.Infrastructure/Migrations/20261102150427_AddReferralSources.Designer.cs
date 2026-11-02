@@ -6589,6 +6589,20 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateTime?>("OriginalActualStart")
                         .HasColumnType("timestamp without time zone");
 
+                    b.Property<decimal?>("PostShiftTravelKilometres")
+                        .HasPrecision(6, 1)
+                        .HasColumnType("numeric(6,1)");
+
+                    b.Property<int?>("PostShiftTravelMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("PreShiftTravelKilometres")
+                        .HasPrecision(6, 1)
+                        .HasColumnType("numeric(6,1)");
+
+                    b.Property<int?>("PreShiftTravelMinutes")
+                        .HasColumnType("integer");
+
                     b.Property<string>("ReturnReason")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
