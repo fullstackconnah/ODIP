@@ -216,6 +216,33 @@ describe('NewClaimModal: the cancellation step', () => {
     expect(screen.getByRole('button', { name: /^A cancellation/ })).toHaveFocus()
   })
 
+  it('closing from the cancellation step returns focus to the button that opened the chooser', async () => {
+    const opener = document.createElement('button')
+    document.body.appendChild(opener)
+    opener.focus()
+    const { onClose } = setup()
+    onClose.mockImplementation(() => cleanup())
+    await userEvent.click(screen.getByRole('button', { name: /^A cancellation/ }))
+    await userEvent.keyboard('{Escape}')
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(opener).toHaveFocus()
+    opener.remove()
+  })
+
+  it('closing the chooser after Back from the cancellation step returns focus to the opener', async () => {
+    const opener = document.createElement('button')
+    document.body.appendChild(opener)
+    opener.focus()
+    const { onClose } = setup()
+    onClose.mockImplementation(() => cleanup())
+    await userEvent.click(screen.getByRole('button', { name: /^A cancellation/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }))
+    await userEvent.keyboard('{Escape}')
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(opener).toHaveFocus()
+    opener.remove()
+  })
+
   it('hands the made claim to the page', async () => {
     const make = mutation()
     make.mutate.mockImplementation((_vars: unknown, options?: { onSuccess?: (created: { id: string }) => void }) => options?.onSuccess?.({ id: 'claim-9' }))

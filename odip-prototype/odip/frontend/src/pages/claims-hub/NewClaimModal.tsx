@@ -84,6 +84,10 @@ export function NewClaimModal({ onClose, onShifts, onTrip, onCancellationMade }:
   const trips = useTrips({ status: 'Completed', unclaimed: 'true' })
   const opened = useTrip(opening)
   const cancellations = useCancellationCandidates(true)
+  // The cancellation steps are a Modal of their own, and the chooser comes back as a new one after Back: each would take the row or Back button that opened it as its opener, which is gone by
+  // the time it closes. The button that opened the chooser is what gets focus back.
+  const [opener] = useState(() => document.activeElement as HTMLElement | null)
+  const close = () => { onClose(); opener?.focus() }
 
   useEffect(() => {
     if (opening && opened.data) onTrip(opened.data)
@@ -119,7 +123,7 @@ export function NewClaimModal({ onClose, onShifts, onTrip, onCancellationMade }:
 
   if (step === 'choose') {
     return (
-      <Modal open onClose={onClose} title="New claim" initialFocusRef={shiftsRow} footer={<Button variant="secondary" size="md" onClick={onClose}>Close</Button>}>
+      <Modal open onClose={close} title="New claim" initialFocusRef={shiftsRow} footer={<Button variant="secondary" size="md" onClick={close}>Close</Button>}>
         <p className="mb-3 text-[13px] text-[var(--color-muted-foreground)]">What are you claiming for?</p>
         <ul className="flex flex-col gap-2">
           {CHOICES.map(c => c.id === 'shifts' ? (
@@ -135,13 +139,13 @@ export function NewClaimModal({ onClose, onShifts, onTrip, onCancellationMade }:
   }
 
   if (step === 'cancellation') {
-    return <CancellationClaimSteps candidates={cancellations} onBack={() => setStep('choose')} onClose={onClose} onMade={onCancellationMade} />
+    return <CancellationClaimSteps candidates={cancellations} onBack={() => setStep('choose')} onClose={close} onMade={onCancellationMade} />
   }
 
   return (
     <Modal
       open
-      onClose={onClose}
+      onClose={close}
       title="Choose a trip"
       footer={
         <>
