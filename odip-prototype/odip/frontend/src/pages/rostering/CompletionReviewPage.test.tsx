@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, within, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import CompletionReviewPage from './CompletionReviewPage'
@@ -440,6 +440,41 @@ describe('CompletionReviewPage: provider travel (travel PR-B)', () => {
     mockUsePricing.mockReturnValue({ data: { claimProviderTravel: false } })
     const { dialog } = await openApprove(travelled())
     expect(within(dialog).queryByRole('button', { name: 'Edit travel' })).not.toBeInTheDocument()
+  })
+
+  it('offers no Edit travel while the settings have not loaded', async () => {
+    mockUsePricing.mockReturnValue({ data: undefined })
+    const { dialog } = await openApprove(travelled())
+    expect(within(dialog).queryByRole('button', { name: 'Edit travel' })).not.toBeInTheDocument()
+  })
+
+  it('holds Approve, with a hint, while the travel editor is open, and frees it after Cancel or Save', async () => {
+    const { user, dialog } = await openApprove(travelled())
+    const approve = () => within(dialog).getByRole('button', { name: 'Approve' })
+    expect(approve()).toBeEnabled()
+    await user.click(within(dialog).getByRole('button', { name: 'Edit travel' }))
+    expect(approve()).toBeDisabled()
+    expect(within(dialog).getByText('Save or cancel the travel change first.')).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel travel edit' }))
+    expect(approve()).toBeEnabled()
+    await user.click(within(dialog).getByRole('button', { name: 'Edit travel' }))
+    expect(approve()).toBeDisabled()
+    await user.click(within(dialog).getByRole('button', { name: 'Save travel' }))
+    await waitFor(() => expect(approve()).toBeEnabled())
+  })
+
+  it('refuses a malformed number with "Enter a number" instead of saving it as empty', async () => {
+    const { user, dialog } = await openApprove(travelled())
+    await user.click(within(dialog).getByRole('button', { name: 'Edit travel' }))
+    const minutes = within(within(dialog).getByRole('group', { name: 'Trip to the participant' })).getByLabelText('Minutes')
+    Object.defineProperty(minutes, 'validity', { value: { badInput: true }, configurable: true })
+    fireEvent.change(minutes, { target: { value: '' } })
+    expect(within(dialog).getByText('Enter a number')).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Save travel' })).toBeDisabled()
+    Object.defineProperty(minutes, 'validity', { value: { badInput: false }, configurable: true })
+    fireEvent.change(minutes, { target: { value: '30' } })
+    expect(within(dialog).queryByText('Enter a number')).not.toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Save travel' })).toBeEnabled()
   })
 
   it('tells the coordinator the worker re-enters travel when a shift is returned', async () => {

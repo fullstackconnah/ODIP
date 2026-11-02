@@ -1173,11 +1173,22 @@ describe('PortalShiftDetailPage: your times, kilometres and drift (Review Focus 
       open({ travelAsked: true })
       type(postLeg().getByLabelText('Minutes'), '481')
       forward('Confirm times')
-      expect(screen.getByRole('alert')).toHaveTextContent('Enter whole minutes from 0 to 480.')
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(screen.getAllByText('Enter whole minutes from 0 to 480.')).toHaveLength(1)
       expect(document.getElementById('finish-post-error')).toHaveTextContent('Enter whole minutes from 0 to 480.')
       expect(postLeg().getByLabelText('Minutes')).toHaveAttribute('aria-invalid', 'true')
       await waitFor(() => expect(postLeg().getByLabelText('Minutes')).toHaveFocus())
       expect(heading('Your times')).toBeInTheDocument()
+    })
+
+    it('names a bad kilometres entry under its field once, not in the bar', async () => {
+      open({ travelAsked: true })
+      type(preLeg().getByLabelText('Kilometres'), '2001')
+      forward('Confirm times')
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(screen.getAllByText('Enter kilometres from 0 to 2,000.')).toHaveLength(1)
+      expect(document.getElementById('finish-pre-error')).toHaveTextContent('Enter kilometres from 0 to 2,000.')
+      expect(preLeg().getByLabelText('Kilometres')).toHaveAttribute('aria-invalid', 'true')
     })
   })
 

@@ -3238,13 +3238,15 @@ const putRoutes = [
     return invoiceMock.settingsDto(providerSettingsRow)
   }],
   ...intake.put,
-  // A claim's status and notes, and, with a rejection, the NDIA's code (budget phase 2b: at most 10 characters, and only with a claim that is being marked Rejected). Kept in the fixture, so the next
-  // GET shows it. A claim that stops being rejected forgets the moment and the code, as the server's does.
   ['rostering/shifts/:id/completion/travel', (id, body) => {
     if (body?.postShiftTravelMinutes === 99) return respond(409, failEnvelope(null, ['This shift is on claim TC-0002. Change its travel on the claim, or cancel the claim first.'], 'SHIFT_TRAVEL_ON_CLAIM'))
-    const c = withPackageFields(id, shiftCompletions.find((x) => x.shiftId === id) || shiftCompletions[0])
-    return { ...c, ...body }
+    const row = shiftCompletions.find((x) => x.shiftId === id) || shiftCompletions[0]
+    // Kept in the fixture row, as the server persists them, so the next GET shows the edit.
+    for (const k of ['preShiftTravelMinutes', 'preShiftTravelKilometres', 'postShiftTravelMinutes', 'postShiftTravelKilometres']) row[k] = body?.[k] ?? null
+    return withPackageFields(id, row)
   }],
+  // A claim's status and notes, and, with a rejection, the NDIA's code (budget phase 2b: at most 10 characters, and only with a claim that is being marked Rejected). Kept in the fixture, so the next
+  // GET shows it. A claim that stops being rejected forgets the moment and the code, as the server's does.
   ['claims/:id', (id, body) => {
     const claim = claims.find((c) => c.id === id)
     if (!claim) return respond(404, failEnvelope(null, ['Claim not found']))

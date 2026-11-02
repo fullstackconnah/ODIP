@@ -279,7 +279,7 @@ export function FinishFlow({ shift, online, canAct, onRecord, onClose, onEditNot
       )}
       <ActionBar notice={step === 'submit' && blockedDoses.length > 0 ? (
         <div id="finish-blocked"><Callout tone="warning" polite title="Finish can't be saved yet">{blockedDoseMessage(blockedDoses)}</Callout></div>
-      ) : (error || networkError) && (
+      ) : ((error && !/^(pre|post)Travel/.test(error.field ?? '')) || networkError) && (
         <p role="alert" className="text-sm text-[var(--color-destructive)]">
           {error ? error.message : "Couldn't submit. Check your connection. Your entries are kept: try again."}
         </p>
