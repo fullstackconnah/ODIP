@@ -24,7 +24,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { z } from 'zod'
 import { usePublicCaregiverForm, useSaveCaregiverDraft, useSubmitCaregiverForm } from '@/api/hooks/caregiver'
 import {
-  useWizard, WizardStepRail, WizardNavFooter, WizardReviewStep, WizardStepHeading, REVIEW_STEP_KEY,
+  useWizard, WizardNavFooter, WizardReviewStep, WizardStepHeading, REVIEW_STEP_KEY,
   type WizardStepDef, type WizardValidate, type ReviewGroup,
 } from '@/components/wizard'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
@@ -50,6 +50,8 @@ import { AboutYouStep } from './steps/AboutYouStep'
 import { hydrateFormFromProjection, hydrateBase } from './hydrate'
 import { changedLeaves } from './changedLeaves'
 import { Callout } from '@/components/Callout'
+import { Wordmark } from '@/components/Wordmark'
+import { CaregiverProgress } from './CaregiverProgress'
 
 export type CaregiverFormData = ParticipantFormData & { caregiverName: string; caregiverRelationship?: string }
 
@@ -150,7 +152,7 @@ export default function CaregiverWizardPage() {
       return null
     } catch {
       setSaveError("We couldn't save your progress. Please check your connection and try again.")
-      return [{ path: step.fields[0] as string, message: 'Save failed — see the message above.', code: 'server' }]
+      return [{ path: step.fields[0] as string, message: 'Save failed — see the message below.', code: 'server' }]
     }
   }
 
@@ -195,38 +197,39 @@ export default function CaregiverWizardPage() {
     }
   }
 
-  if (form.isLoading) return <PublicShell><p>Loading…</p></PublicShell>
+  // A long step leaves the page scrolled down; the header and progress should be back in view after Next. Not on first render.
+  const stepKey = wizard.isReviewStep ? REVIEW_STEP_KEY : wizard.currentStep.key
+  const lastStepKey = useRef(stepKey)
+  useEffect(() => {
+    if (lastStepKey.current === stepKey) return
+    lastStepKey.current = stepKey
+    window.scrollTo(0, 0)
+  }, [stepKey])
+
+  if (form.isLoading) return <PublicShell><p role="status">Loading…</p></PublicShell>
   if (!form.data) return <InvalidLinkPage />
-  if (form.data.status === 'Submitted') return <SubmittedPage caregiverName={form.data.caregiverName} />
+  if (form.data.status === 'Submitted') return <SubmittedPage caregiverName={form.data.caregiverName} firstName={form.data.current.firstName} providerName={form.data.providerName} />
 
   const hidden = CAREGIVER_INTERNAL_FIELDS
   const readOnlyParticipant = form.data.current as unknown as ParticipantDetailDto
 
   return (
-    <PublicShell>
+    <PublicShell firstName={readOnlyParticipant.firstName} providerName={form.data.providerName} intro>
       {unsavedChangesDialog}
       {form.data.rejectionNote && (
         <Callout tone="warning" polite className="mb-4">
           <strong>Your previous submission was sent back with a note:</strong> {form.data.rejectionNote}
         </Callout>
       )}
-      {saveError && <p role="alert" className="mb-4 text-sm text-[var(--color-destructive)]">{saveError}</p>}
-      {/* Always mounted: screen readers announce a change inside a live region, not a region inserted already filled. */}
-      <p role="status" className={progressSaved ? 'mb-4 text-sm' : undefined}>{progressSaved ? 'Progress saved. Open this link again to carry on.' : ''}</p>
-
-      <WizardStepRail
-        steps={stepsForRail}
-        visitedSteps={wizard.visitedSteps}
-        currentKey={wizard.isReviewStep ? REVIEW_STEP_KEY : wizard.currentStep.key}
-        onSelect={wizard.goToStep}
-        ariaLabel="Caregiver form steps"
-      />
+      <CaregiverProgress steps={stepsForRail} visitedSteps={wizard.visitedSteps} currentKey={stepKey} onSelect={wizard.goToStep} />
 
       {/* "Progress saved" holds only until the caregiver changes something. */}
       <form onSubmit={(e) => { e.preventDefault(); void onSubmit() }} onChange={() => setProgressSaved(false)} noValidate>
+        {/* The progress row above already shows the step name; the heading stays for focus and the announcement. */}
         <WizardStepHeading
-          stepKey={wizard.isReviewStep ? REVIEW_STEP_KEY : wizard.currentStep.key}
+          stepKey={stepKey}
           label={wizard.isReviewStep ? 'Review' : wizard.currentStep.label}
+          className="sr-only"
         />
         {!wizard.isReviewStep && wizard.currentStep.key === 'aboutYou' && (
           <AboutYouStep register={register} errors={errors} />
@@ -259,9 +262,17 @@ export default function CaregiverWizardPage() {
           onBack={wizard.handleBack}
           onNext={wizard.handleNext}
           isReviewStep={wizard.isReviewStep}
-          secondaryActions={[{ key: 'saveLater', label: saveDraft.isPending ? 'Saving your progress…' : 'Save and continue later', onClick: saveForLater, disabled: saveDraft.isPending || submit.isPending }]}
+          secondaryActions={[{ key: 'saveLater', label: saveDraft.isPending ? 'Saving…' : 'Save and continue later', onClick: saveForLater, disabled: saveDraft.isPending || submit.isPending }]}
           cancelTo={`/caregiver/${token}`}
-          history={false}
+          hideCancel
+          summaryOwnRow={!!saveError}
+          summary={
+            <div className="text-sm">
+              {saveError && <p role="alert" className="text-[var(--color-destructive)]">{saveError}</p>}
+              {/* Always mounted: screen readers announce a change inside a live region, not a region inserted already filled. */}
+              <p role="status">{progressSaved ? 'Progress saved. Open this link again to carry on.' : ''}</p>
+            </div>
+          }
           submitReserve="Submit for review"
           submitLabel={submit.isPending ? 'Submitting…' : 'Submit for review'}
           isSubmitting={submit.isPending || wizard.isAdvancing || saveDraft.isPending}
@@ -271,15 +282,26 @@ export default function CaregiverWizardPage() {
   )
 }
 
-function PublicShell({ children }: { children: React.ReactNode }) {
+type ShellProps = { children: React.ReactNode; firstName?: unknown; providerName?: string | null; intro?: boolean }
+
+function PublicShell({ children, firstName, providerName, intro = false }: ShellProps) {
   // The footer sits beside main, not inside it, so it is the page's contentinfo landmark. No Support link: a carer contacts the
   // provider who sent the link, and a platform inbox would draw health information to the wrong place.
+  // --mobile-nav-h is the app shell's bottom-nav height; this page has no such nav, so the action bar sticks to the screen edge.
+  const first = typeof firstName === 'string' ? firstName.trim() : ''
+  const provider = providerName?.trim()
   return (
-    <div className="min-h-screen flex flex-col bg-[var(--color-background)] text-[var(--color-foreground)]">
+    <div className="min-h-screen flex flex-col bg-[var(--color-background)] text-[var(--color-foreground)] [--mobile-nav-h:0px]">
+      <header className="flex h-12 items-center">
+        <div className="mx-auto w-full max-w-3xl px-[var(--gutter)]"><Wordmark size={21} /></div>
+      </header>
       <main className="flex-1">
-        <div className="max-w-3xl mx-auto p-4 sm:p-8">
-          <h1 className="text-xl font-bold mb-1">Participant profile</h1>
-          <p className="text-sm text-[var(--color-muted-foreground)] mb-6">Please check the information below and update anything that is missing or out of date.</p>
+        <div className="max-w-3xl mx-auto px-[var(--gutter)] pb-8">
+          <div className="mb-[var(--section-gap)]">
+            {provider && <p className="text-sm text-[var(--color-muted-foreground)] mb-1">From {provider}</p>}
+            <h1 className="text-xl font-bold">{first ? `${first}'s profile` : 'Participant profile'}</h1>
+            {intro && <p className="text-sm text-[var(--color-muted-foreground)] mt-1">Please check the information below and update anything that is missing or out of date.</p>}
+          </div>
           {children}
         </div>
       </main>
@@ -299,9 +321,9 @@ function InvalidLinkPage() {
   )
 }
 
-function SubmittedPage({ caregiverName }: { caregiverName: string | null }) {
+function SubmittedPage({ caregiverName, firstName, providerName }: { caregiverName: string | null; firstName: unknown; providerName: string | null }) {
   return (
-    <PublicShell>
+    <PublicShell firstName={firstName} providerName={providerName}>
       <div role="status" className="p-4 rounded-[var(--radius-sm)] bg-[var(--color-accent)]">
         <p className="font-medium">Thank you{caregiverName ? `, ${caregiverName}` : ''} — your form has been submitted.</p>
         <p className="text-sm text-[var(--color-muted-foreground)] mt-1">It is now awaiting review. You&apos;ll be contacted if anything needs to be checked.</p>

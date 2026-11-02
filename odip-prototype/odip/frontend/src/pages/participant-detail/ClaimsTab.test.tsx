@@ -386,6 +386,7 @@ describe('ClaimsTab — long list (T10)', () => {
 it('points to the Claims page for NDIA-managed claims, but not for a participant funded another way', async () => {
   renderTab()
   expect(await screen.findByRole('link', { name: 'Go to Claims' })).toHaveAttribute('href', '/claims')
+  expect(screen.getByText(/You can also make claims on the Claims screen, where NDIA-managed claims are sent./)).toBeInTheDocument()
   cleanup()
   renderTab(true, { otherFunded: true })
   expect(screen.queryByRole('link', { name: 'Go to Claims' })).toBeNull()

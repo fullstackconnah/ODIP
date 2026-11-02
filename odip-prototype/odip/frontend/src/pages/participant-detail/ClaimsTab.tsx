@@ -74,7 +74,7 @@ export default function ClaimsTab({ participantId, canWrite, otherFunded = false
         ) : undefined
       }
     >
-      {!otherFunded && <div className="mb-3"><p className="text-[13px] text-[var(--color-muted-foreground)]">NDIA-managed claims are sent from Claims. <Link to="/claims" className={`${TAP_FLOOR} font-medium text-[var(--color-primary)] hover:underline`}>Go to Claims</Link></p></div>}
+      {!otherFunded && <div className="mb-3"><p className="text-[13px] text-[var(--color-muted-foreground)]">You can also make claims on the Claims screen, where NDIA-managed claims are sent. <Link to="/claims" className={`${TAP_FLOOR} font-medium text-[var(--color-primary)] hover:underline`}>Go to Claims</Link></p></div>}
       {phase === 'loading' ? (
         <PageState kind="loading" noun="claim list" />
       ) : phase === 'error' ? (

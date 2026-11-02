@@ -11,7 +11,7 @@ function makeDto(overrides: Partial<CaregiverFormDto> = {}): CaregiverFormDto {
     caregiverName: null,
     caregiverRelationship: null,
     expiresAt: '2026-09-17T00:00:00Z',
-    rejectionNote: null,
+    rejectionNote: null, providerName: null,
     current: {},
     editable: [],
     draft: null,

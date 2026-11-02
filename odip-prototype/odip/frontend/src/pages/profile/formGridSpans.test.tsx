@@ -205,7 +205,7 @@ describe('every Profile step in editable mode: no read-only field is left, and e
 
 function makeDto(): CaregiverFormDto {
   return {
-    status: 'Draft', caregiverName: null, caregiverRelationship: null, expiresAt: '2030-01-01T00:00:00Z', rejectionNote: null,
+    status: 'Draft', caregiverName: null, caregiverRelationship: null, expiresAt: '2030-01-01T00:00:00Z', rejectionNote: null, providerName: null,
     current: { firstName: 'Sophie', lastName: 'Rivers', ndisNumber: '431234567', mobilityAidWheelchair: true },
     editable: [], draft: null,
   }
@@ -222,8 +222,8 @@ describe('Caregiver wizard: no un-spanned child of a formGrid on any step', () =
     const router = createMemoryRouter([{ path: '/caregiver/:token', element: <CaregiverWizardPage /> }], { initialEntries: ['/caregiver/tok-1'] })
     const { container } = render(<RouterProvider router={router} />)
 
+    // About You stacks its two fields in one column (no formGrid), so the grid-count guard starts at Key Identifiers.
     await screen.findByLabelText(/^your name/i)
-    expect(formGridContainers(container).length).toBeGreaterThan(0)
     expect(unspannedChildren(container)).toEqual([])
 
     await user.type(screen.getByLabelText(/your name/i), 'Jane Doe')
@@ -233,14 +233,17 @@ describe('Caregiver wizard: no un-spanned child of a formGrid on any step', () =
     // recognised by a field only it has, so a slow Next never lets the loop assert against the previous step's DOM.
     const arrived = [/medicare number/i, /personal interests/i, /primary diagnosis/i, /mobility notes/i]
     const seenReadOnly: number[] = []
+    let sawGrid = false
     for (let i = 0; i < 6; i++) {
       await next()
       if (i < arrived.length) await screen.findByLabelText(arrived[i])
       else await screen.findByText(i === 4 ? /behaviour summary/i : /activities of daily living/i)
       seenReadOnly.push(container.querySelectorAll('[aria-readonly="true"]').length)
       expect(unspannedChildren(container), `step ${i + 2}`).toEqual([])
+      sawGrid ||= formGridContainers(container).length > 0
     }
     // The four read-only-heavy steps really were rendered on the way (16 + 9 + 1 + 9 + 4 read-only fields), so this was not vacuous.
+    expect(sawGrid).toBe(true)
     expect(seenReadOnly.reduce((a, b) => a + b, 0)).toBe(16 + 9 + 1 + 10 + 5)
   })
 })
