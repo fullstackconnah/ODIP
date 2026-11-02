@@ -2042,7 +2042,7 @@ const claimLineItemsByClaimId = {
     {
       id: 'cli-0003', tripClaimId: 'claim-0002', shiftId: 'sh-0002', participantId: 'p-0001',
       participantName: 'Liam Okafor', ndisNumber: '43•••••89', planType: 'PlanManaged',
-      supportItemCode: '01_002_0117_1_1', dayType: 'Weekday',
+      supportItemCode: '01_002_0117_1_1', dayType: 'WeekdayEvening',
       supportsDeliveredFrom: '2026-08-04', supportsDeliveredTo: '2026-08-04',
       hours: 8, unitPrice: 40, totalAmount: 320, gstCode: 'GST', claimType: 'Standard',
       cancellationReason: null, participantApproved: false, status: 'Draft',

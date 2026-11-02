@@ -149,7 +149,7 @@ public static class ShiftPriceEstimator
 
     /// <summary>The sentence a stretch with no rate is left out with: it names the band and the date.</summary>
     public static string NoBandRateBecause(string band, DateOnly date) =>
-        string.Create(CultureInfo.InvariantCulture, $"no catalogue rate covers its {band} hours on {date:d MMM yyyy}");
+        string.Create(CultureInfo.InvariantCulture, $"no catalogue rate covers its {(band == Odip.Domain.Billing.Pricing.DayBands.WeekdayDaytime ? "Weekday" : band)} hours on {date:d MMM yyyy}");
 
     /// <summary>How a ratio the engine cannot price is described, or null when it can (one-to-one, and two-to-one: two one-to-one shifts are the quote). An unknown ratio is not priced.</summary>
     private static string? UnpricedRatio(SupportRatio ratio) => ratio switch

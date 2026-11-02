@@ -466,6 +466,7 @@ public sealed class BudgetLedgerService
             Kind = completed ? LedgerRowKind.CompletedShift : past ? LedgerRowKind.PastShift : LedgerRowKind.FutureShift,
             Group = completed || past ? LedgerGroup.Pending : LedgerGroup.BookedAhead,
             Date = shift.ServiceDate, Amount = outcome.Total,
+            // shortcut: the whole shift is filed under its first line's category. Core total agrees; the per-category split is in the polish queue.
             PaceCategory = outcome.IsPriced ? PaceCategories.Of(outcome.Lines[0].CatalogueItem) : pricing.DefaultShiftCategory, PlanType = person.PlanType,
             Id = shift.Id, ShiftId = shift.Id,
             Description = string.Create(CultureInfo.InvariantCulture, $"Shift {shift.Start:HH:mm}–{shift.End:HH:mm} · {hours:0.##} h"),

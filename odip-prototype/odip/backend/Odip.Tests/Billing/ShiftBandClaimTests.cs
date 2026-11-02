@@ -418,6 +418,36 @@ public class ShiftBandClaimTests
     }
 
     [Fact]
+    public async Task AnActiveNightShift_IsTwoLines_EveningThenAPersonalCareNightDatedTheNextDay()   // S-3
+    {
+        var tenant = Guid.NewGuid();
+        using var db = NewDb(tenant);
+        SeedCommunityAccess(db); SeedGroupXWithPersonalCareNight(db);
+        var p = SeedParticipant(db, tenant);
+        SeedShift(db, tenant, p.Id, Wed, T(22), T(6), endsNextDay: true, night: SleepoverType.ActiveNight);
+        await db.SaveChangesAsync();
+
+        var made = await new ShiftClaimGenerationService(db).GenerateAsync(p.Id, Wed, Wed);
+        var lines = await db.ClaimLineItems.ToListAsync();
+
+        Assert.Equal("CA_Evening|WeekdayEvening|2|50|100|2026-10-07|2026-10-07\nPC_Night|WeekdayNight|6|120|720|2026-10-08|2026-10-08", Serialise(lines));
+        Assert.Empty(made.Flagged);
+    }
+
+    [Fact]
+    public async Task ADaytimeStretchWithNoRow_IsNamedWeekday_NotWeekdayDaytime()   // N1
+    {
+        var tenant = Guid.NewGuid();
+        using var db = NewDb(tenant);
+        Item(db, "GRP_Y", ClaimDayType.WeekdayEvening, false, 70m, "Y_Evening");
+        var p = SeedParticipant(db, tenant);
+        SeedShift(db, tenant, p.Id, Wed, T(15), T(23), group: "GRP_Y");
+        await db.SaveChangesAsync();
+
+        Assert.Equal("No catalogue rate covers its Weekday hours on 7 Oct 2026.", await LeftOutReasonAsync(db, p.Id, Wed, Wed));
+    }
+
+    [Fact]
     public async Task ASleepoverLine_AddsNoHoursToTheRun()
     {
         var tenant = Guid.NewGuid();

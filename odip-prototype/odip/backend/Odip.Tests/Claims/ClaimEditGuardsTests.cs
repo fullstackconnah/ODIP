@@ -488,6 +488,25 @@ public class ClaimEditGuardsTests
         return other;
     }
 
+    [Fact]
+    public async Task ARejectedPartOfAShift_CannotBeTakenBack_WhenAnotherClaimHoldsTheShift()   // S1, ruled: a shift over two bands is two parts of one shift
+    {
+        var (db, controller) = Create();
+        var (claim, part0, part1) = Seed(db, TripClaimStatus.Rejected);
+        part1.ShiftId = part0.ShiftId;
+        (part0.ShiftPart, part1.ShiftPart) = (0, 1);
+        part0.Status = part1.Status = ClaimLineItemStatus.Rejected;
+        db.SaveChanges();
+        var other = ReclaimOn(db, claim, part0);   // claim B, made after both parts were rejected
+
+        var result = await controller.UpdateLineItem(claim.Id, part1.Id, new UpdateClaimLineItemDto { Status = ClaimLineItemStatus.Draft }, Ct);
+
+        Assert.Equal(409, StatusOf(result));
+        Assert.Equal($"This line's shift is already on claim {other.ClaimReference}, so the line can't be taken back.", RefusalOf(result));
+        db.ChangeTracker.Clear();
+        Assert.Equal(ClaimLineItemStatus.Rejected, (await db.ClaimLineItems.AsNoTracking().SingleAsync(l => l.Id == part1.Id)).Status);
+    }
+
     [Theory]
     [InlineData(TripClaimStatus.Rejected, ClaimLineItemStatus.Draft)]
     [InlineData(TripClaimStatus.Draft, ClaimLineItemStatus.Rejected)]

@@ -81,6 +81,7 @@ public sealed class LedgerShiftCostSource : IShiftCostSource
             var outcome = ShiftPriceEstimator.Price(new ShiftRateRows(groupRows, personalCareRows, sleepoverRows), shift.SupportGroupCode, shift.ServiceDate, shift.StartTime, shift.EndTime, shift.EndsNextDay, shift.Ratio, shift.NightType,
                 person.IsIntensiveSupport, state, holidays.For(state), zone);
             return outcome.IsPriced
+                // shortcut: the whole shift is filed under its first line's category. Core total agrees; the per-category split is in the polish queue.
                 ? (ShiftCostEstimate)new ShiftCostEstimate.Priced(outcome.Total, PaceCategories.Of(outcome.Lines[0].CatalogueItem))
                 : new ShiftCostEstimate.NotPriced(outcome.NotPricedBecause ?? "the estimator has no price for it");
         }).ToList();
