@@ -13,6 +13,7 @@ import { useSettingsPerms } from '@/pages/settings/useSettingsPerms'
 import MicrosoftSignInSection from '@/pages/settings/MicrosoftSignInSection'
 import { PageState } from '@/components/PageState'
 import ActivityLibraryTab from '@/pages/settings/ActivityLibraryTab'
+import ReferralSourcesSection from '@/pages/settings/ReferralSourcesSection'
 import AdminNotificationsTab from '@/pages/settings/AdminNotificationsTab'
 import AlphaSignupsTab from '@/pages/settings/AlphaSignupsTab'
 import WhatsNewSection from '@/pages/settings/WhatsNewSection'
@@ -139,6 +140,7 @@ export default function SettingsPage() {
       case 'budgets': return <BudgetSettingsTab {...frame} />
       case 'templates': return framed(<EventTemplatesSection />)
       case 'activities': return framed(<ActivityLibraryTab />)
+      case 'referral-sources': return framed(<ReferralSourcesSection />)
       case 'holidays': return framed(<PublicHolidaysSection canEdit={perms.isSuperAdmin} />)
       case 'import': return framed(<ImportDataTab />)
       case 'export': return framed(<DataExportTab />)

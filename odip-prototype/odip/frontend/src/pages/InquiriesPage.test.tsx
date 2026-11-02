@@ -198,6 +198,18 @@ describe('InquiriesPage: the participant and the main contact (spec 2026-10-16 r
     expect(screen.queryByText('Dana Reyes')).not.toBeInTheDocument()
   })
 
+  it('O2: search finds an enquiry by its referral source name', async () => {
+    mocks.inquiries.mockReturnValue({ data: [
+      inquiry({ id: 'a', firstName: 'Ari', lastName: 'Walsh', referralSourceId: 'r1', referralSourceName: 'Closed clinic' }),
+      inquiry({ id: 'b', firstName: 'Dana', lastName: 'Reyes' }),
+    ], isLoading: false })
+    const user = userEvent.setup()
+    page()
+    await user.type(screen.getByRole('textbox', { name: /search enquiries/i }), 'closed clinic')
+    expect(screen.getByText('Ari Walsh')).toBeInTheDocument()
+    expect(screen.queryByText('Dana Reyes')).not.toBeInTheDocument()
+  })
+
   it('Start intake without the address is aria-disabled, described by a reason link to the address, and does nothing; with it, it is enabled', async () => {
     mocks.inquiries.mockReturnValue({ data: [inquiry({ hasAddress: false })], isLoading: false })
     const user = userEvent.setup()

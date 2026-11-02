@@ -246,4 +246,34 @@ public class ClaimPricingEqualityTests
         Assert.Null(noPlans.Budget);
         Assert.Equal(without.TotalAmount, noPlans.TotalAmount);
     }
+
+    [Fact]
+    public async Task T15_ACompletedShiftWithTravel_IsPricedAsTheGeneratedClaimIs_AndTheTravelLandsInTheSupportItemPool()
+    {
+        var kit = ArrangeKit("NSW");
+        kit.Item(ClaimDayType.Weekday).ProviderTravel = CatalogueClaimFlag.Yes;
+        kit.Item(ClaimDayType.Weekday).ItemNumber = "04_104_0125_6_1";
+        kit.Item(ClaimDayType.Weekday).RegistrationGroup = "0125";
+        var km = kit.SeedItem("04_799_0125_6_1", 4, "GRP_PROVIDER_TRAVEL", 1m);
+        km.Unit = "E"; km.RegistrationGroup = "0125";
+        var person = kit.SeedParticipant();
+        kit.SeedPlan(person, CoreQuarters());
+        var shift = kit.SeedShift(person, new DateOnly(2026, 10, 1), ShiftStatus.Completed);
+        kit.Db.ShiftCompletions.Add(new ShiftCompletion
+        {
+            Id = Guid.NewGuid(), TenantId = kit.TenantId, ShiftId = shift.Id, ActualStart = DateTime.UtcNow, ActualEnd = DateTime.UtcNow, TimeZoneId = "Australia/Sydney", SubmittedByUserId = Guid.NewGuid(),
+            StartedAt = DateTime.UtcNow, SubmittedAt = DateTime.UtcNow, IsActive = true, PreShiftTravelMinutes = 24, PreShiftTravelKilometres = 6m, PostShiftTravelMinutes = 12, PostShiftTravelKilometres = 3m,
+        });
+        kit.Db.SaveChanges();
+        var estimated = (await ItemsOf(kit, person)).Where(i => i.ShiftId == shift.Id).ToList();
+
+        var claim = await new ShiftClaimGenerationService(kit.Db).GenerateDraftClaimAsync(person.Id, new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 1), Ct);
+        var lines = await kit.Db.ClaimLineItems.Where(l => l.TripClaimId == claim.Id).ToListAsync(Ct);
+
+        Assert.Equal(3, lines.Count);   // the band line, one TRAN line and one km line
+        Assert.Equal(lines.Sum(l => l.TotalAmount), estimated.Sum(i => i.Amount));
+        Assert.Equal(lines.Sum(l => l.TotalAmount), claim.TotalAmount);
+        Assert.All(estimated, i => Assert.Equal(4, i.PaceCategory));   // time and km both sit in the support item PACE pool
+        Assert.Equal(PaceCategories.Of(kit.Item(ClaimDayType.Weekday)), PaceCategories.Of(km));
+    }
 }

@@ -478,7 +478,8 @@ public enum ClaimType
     Standard = 0,
     Cancellation = 1,
     Variation = 2,
-    Adjustment = 3
+    Adjustment = 3,
+    ProviderTravel = 4
 }
 
 public enum GSTCode

@@ -30,6 +30,7 @@ export function ClosedEnquiry({ row, onReopened }: {
         <FactList className={FACT_LIST_WRAP} items={[
           { label: 'Name', value: fullName(row.firstName, row.lastName) },
           { label: 'Source', value: row.source },
+          ...(row.referralSourceName ? [{ label: 'Referred by', value: row.referralSourceName }] : []),
           { label: 'Provenance', value: row.provenance },
         ]} />
       </Card>

@@ -225,7 +225,7 @@ function useInquiriesScreen() {
     const fields = view === 'closed'
       // The note only where it shows: the server withholds it from roles without lifecycle rights.
       ? [row.firstName, row.lastName, row.contactFirstName, row.contactLastName, row.phone, row.email, row.closeOutcome && CLOSE_OUTCOME_LABELS[row.closeOutcome], row.closeNote]
-      : [row.firstName, row.lastName, row.contactFirstName, row.contactLastName, row.phone, row.email, sourceLabel(row), row.provenance]
+      : [row.firstName, row.lastName, row.contactFirstName, row.contactLastName, row.phone, row.email, sourceLabel(row), row.referralSourceName, row.provenance]
     return fields.filter(Boolean).some(field => String(field).toLowerCase().includes(term))
   })
 

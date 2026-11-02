@@ -35,6 +35,9 @@ public class ParticipantInquiry : ITenantEntity
     public DateOnly? PlanEndDate { get; set; }
     public string Source { get; set; } = "Phone";
     public string? Provenance { get; set; }
+    /// <summary>Who referred them: a source on the organisation's list (Settings). Null is "not recorded". Sources are only hidden, never deleted, so the id stays valid.</summary>
+    public Guid? ReferralSourceId { get; set; }
+    public ReferralSource? ReferralSource { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     /// <summary>
     /// The enquiry's version as well as its last change: a concurrency token (OdipDbContext). Held in whole microseconds, as PostgreSQL stores it, so the

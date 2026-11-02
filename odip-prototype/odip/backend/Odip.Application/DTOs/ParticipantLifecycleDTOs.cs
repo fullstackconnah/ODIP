@@ -25,6 +25,9 @@ public record ParticipantInquiryDto
     public string? ContactRelationship { get; init; }
     public string Source { get; init; } = string.Empty;
     public string? Provenance { get; init; }
+    /// <summary>Who referred them, from the organisation's list (null: not recorded). The name is the source's current name, even when it has since been hidden.</summary>
+    public Guid? ReferralSourceId { get; init; }
+    public string? ReferralSourceName { get; init; }
     public DateTime CreatedAt { get; init; }
     /// <summary>The enquiry's version: an edit form sends back the one it loaded as UpdateParticipantInquiryDto.ExpectedUpdatedAt.</summary>
     public DateTime UpdatedAt { get; init; }
@@ -100,6 +103,8 @@ public record CreateParticipantInquiryDto
     public DateOnly? PlanEndDate { get; init; }
     [Required, RegularExpression("^(Web|Email|Phone)$")] public string Source { get; init; } = string.Empty;
     [StringLength(2000)] public string? Provenance { get; init; }
+    /// <summary>A source on this organisation's list: active, or the one the enquiry already has. Checked in the controller (it is the tenant check too).</summary>
+    public Guid? ReferralSourceId { get; init; }
     /// <summary>Saved in the enquiry's own save. On update a list replaces the stored ones; null (or left out) leaves them as they are.</summary>
     public List<InquiryContactDto>? Contacts { get; init; }
 }
@@ -298,4 +303,21 @@ public record ParticipantStatusResultDto
     public bool Changed { get; init; }
     /// <summary>Non-blocking consequences the screen should show after a success (upcoming shifts that still reference an archived participant, readiness gaps on activation).</summary>
     public List<string> Warnings { get; init; } = [];
+}
+
+/// <summary>One entry on the organisation's referral-source list (GET /referral-sources).</summary>
+public record ReferralSourceDto
+{
+    public Guid Id { get; init; }
+    public string Name { get; init; } = string.Empty;
+    public bool IsActive { get; init; }
+}
+
+public record CreateReferralSourceDto { public string Name { get; init; } = string.Empty; }
+
+public record UpdateReferralSourceDto
+{
+    /// <summary>Each field is applied only when sent; at least one is required.</summary>
+    public string? Name { get; init; }
+    public bool? IsActive { get; init; }
 }

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
-import { apiDeleteRaw, apiGet, apiPost, apiPut } from '../client'
+import { apiDeleteRaw, apiGet, apiPost, apiPostRaw, apiPut, apiPutRaw } from '../client'
 import { fetchPagedList } from './pagedList'
-import type { CancelIntakeBookingResultDto, CloseInquiryDto, CloseInquiryResultDto, CreateParticipantInquiryDto, IntakeVisitDto, OnboardingWorklistRow, ParticipantInquiryDetailDto, ParticipantInquiryDto, ParticipantOnboardingDto, RecordOnboardingAgreementDto, RecordOnboardingExplainedDto, SetIntakeBookingDto, UpdateParticipantInquiryDto } from '../types/inquiries'
+import type { CancelIntakeBookingResultDto, CloseInquiryDto, CloseInquiryResultDto, CreateParticipantInquiryDto, CreateReferralSourceDto, IntakeVisitDto, OnboardingWorklistRow, ParticipantInquiryDetailDto, ParticipantInquiryDto, ParticipantOnboardingDto, RecordOnboardingAgreementDto, ReferralSourceDto, RecordOnboardingExplainedDto, SetIntakeBookingDto, UpdateParticipantInquiryDto, UpdateReferralSourceDto } from '../types/inquiries'
 
 /** The Enquiries tab's rows: the open view (today's key and URL, so every existing caller is unchanged) or the closed one. */
 export function useParticipantInquiries(view: 'open' | 'closed' = 'open') {
@@ -147,4 +147,32 @@ export function useResendIntakeInvite() {
 /** Intake visits by provider-local date range. `staffUserId` filters to one person; the server lets only lifecycle roles leave it out. */
 export function useIntakeVisits(params: { from?: string; to?: string; staffUserId?: string }, enabled = true) {
   return useQuery({ queryKey: ['intake-visits', params], enabled, queryFn: () => apiGet<IntakeVisitDto[]>('/intake-visits', params) })
+}
+
+export function useReferralSources() {
+  return useQuery({
+    queryKey: ['referral-sources'],
+    queryFn: () => apiGet<ReferralSourceDto[]>('/referral-sources'),
+  })
+}
+
+export function useCreateReferralSource() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: CreateReferralSourceDto) => apiPostRaw<ReferralSourceDto>('/referral-sources', data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['referral-sources'] }),
+  })
+}
+
+/** There is no delete route: hiding a source is an update with isActive false. */
+export function useUpdateReferralSource() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: UpdateReferralSourceDto }) => apiPutRaw<ReferralSourceDto>(`/referral-sources/${id}`, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['referral-sources'] })
+      // A rename shows on every enquiry carrying the source.
+      qc.invalidateQueries({ queryKey: ['participant-inquiries'] })
+    },
+  })
 }
