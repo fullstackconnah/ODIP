@@ -43,6 +43,15 @@ describe('WizardNavFooter', () => {
     expect(screen.getByRole('button', { name: 'Create Participant' })).toBeInTheDocument()
   })
 
+  it('hideCancel drops Cancel on the first and the review step', () => {
+    const first = renderFooter({ hideCancel: true })
+    expect(screen.queryByRole('link', { name: 'Cancel' })).not.toBeInTheDocument()
+    first.unmount()
+    renderFooter({ isReviewStep: true, hideCancel: true })
+    expect(screen.queryByRole('link', { name: 'Cancel' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Create Participant' })).toBeInTheDocument()
+  })
+
   it('hides Back when showBack is false', () => {
     renderFooter({ showBack: false })
     expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument()

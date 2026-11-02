@@ -22,7 +22,7 @@ let puts: Body[]
 
 function makeDto(overrides: Partial<CaregiverFormDto> = {}): CaregiverFormDto {
   return {
-    status: 'Draft', caregiverName: null, caregiverRelationship: null, expiresAt: '2026-09-17T00:00:00Z', rejectionNote: null,
+    status: 'Draft', caregiverName: null, caregiverRelationship: null, expiresAt: '2026-09-17T00:00:00Z', rejectionNote: null, providerName: null,
     current: { firstName: 'Sophie', lastName: 'Rivers' }, editable: [], draft: null, ...overrides,
   }
 }
@@ -289,7 +289,7 @@ describe('CaregiverWizardPage - one save per click', () => {
     await user.dblClick(saveLater())
 
     expect(mockPut).toHaveBeenCalledTimes(1)
-    const saving = await screen.findByRole('button', { name: 'Saving your progress…' })
+    const saving = await screen.findByRole('button', { name: 'Saving…' })
     expect(saving).toHaveAttribute('aria-disabled', 'true')
 
     release()
@@ -304,7 +304,7 @@ describe('CaregiverWizardPage - one save per click', () => {
     const release = holdNextPut()
     saveLater().focus()
     await user.keyboard('{Enter}')
-    const saving = await screen.findByRole('button', { name: 'Saving your progress…' })
+    const saving = await screen.findByRole('button', { name: 'Saving…' })
     expect(document.activeElement).toBe(saving)
     await user.keyboard('{Enter}')
     await user.keyboard(' ')

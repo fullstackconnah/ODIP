@@ -205,7 +205,7 @@ describe('every Profile step in editable mode: no read-only field is left, and e
 
 function makeDto(): CaregiverFormDto {
   return {
-    status: 'Draft', caregiverName: null, caregiverRelationship: null, expiresAt: '2030-01-01T00:00:00Z', rejectionNote: null,
+    status: 'Draft', caregiverName: null, caregiverRelationship: null, expiresAt: '2030-01-01T00:00:00Z', rejectionNote: null, providerName: null,
     current: { firstName: 'Sophie', lastName: 'Rivers', ndisNumber: '431234567', mobilityAidWheelchair: true },
     editable: [], draft: null,
   }

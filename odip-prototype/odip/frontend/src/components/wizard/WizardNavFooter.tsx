@@ -19,6 +19,8 @@ export type WizardNavFooterProps = {
   cancelTo: string
   /** Default `true`. `false` pins Cancel to `cancelTo`: only for the public caregiver wizard, which is outside the app shell (no in-app history to go back to). */
   history?: boolean
+  /** Default `false`. `true` drops Cancel from the first and the review step: the public caregiver link has nowhere to cancel to. */
+  hideCancel?: boolean
   submitLabel: string
   /** The longest of the submit button's labels, for a caller whose label changes while submitting: the button holds that width, so Cancel does not slide under a second click. */
   submitReserve?: string
@@ -47,6 +49,7 @@ export function WizardNavFooter({
   secondaryActions,
   cancelTo,
   history = true,
+  hideCancel = false,
   submitLabel,
   submitReserve,
   isSubmitting,
@@ -78,7 +81,7 @@ export function WizardNavFooter({
         {/* The first step has no Back, so the way out takes its place (the review step has its own Cancel). */}
         {showBack ? (
           <Button type="button" variant="secondary" onClick={onBack}>Back</Button>
-        ) : !isReviewStep && (
+        ) : !isReviewStep && !hideCancel && (
           <Button variant="secondary" to={cancelTo} onClick={onCancelClick}>Cancel</Button>
         )}
         {!groupRight && secondary}
@@ -92,7 +95,7 @@ export function WizardNavFooter({
         {isReviewStep && (
           <>
             {groupRight && secondary}
-            <Button variant="secondary" to={cancelTo} onClick={onCancelClick}>Cancel</Button>
+            {!hideCancel && <Button variant="secondary" to={cancelTo} onClick={onCancelClick}>Cancel</Button>}
             <Button type="submit" aria-disabled={isSubmitting || undefined} onClick={(e) => { if (isSubmitting) e.preventDefault() }} className={`${BUSY_LOOK}${groupRight ? " max-sm:ml-auto" : ""}`}>
               {submitReserve ? (
                 // The longest label sits invisible in the same grid cell as the live one (drawn from an attribute, so it is not in the name or findable by text).

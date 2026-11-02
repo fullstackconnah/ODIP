@@ -6,7 +6,8 @@ import type { CaregiverFormDto } from '@/api/types/caregiver'
 import { ACKNOWLEDGEMENT_OF_COUNTRY } from '@/lib/platformFacts'
 import projection from '@/test/fixtures/golden/caregiver-projection.json'
 
-const { mockUsePublicCaregiverForm, mockSaveDraftMutateAsync, mockSubmitMutateAsync } = vi.hoisted(() => ({
+const { mockUsePublicCaregiverForm, mockSaveDraftMutateAsync, mockSubmitMutateAsync, saveState } = vi.hoisted(() => ({
+  saveState: { pending: false },
   mockUsePublicCaregiverForm: vi.fn(),
   mockSaveDraftMutateAsync: vi.fn(),
   mockSubmitMutateAsync: vi.fn(),
@@ -14,7 +15,7 @@ const { mockUsePublicCaregiverForm, mockSaveDraftMutateAsync, mockSubmitMutateAs
 
 vi.mock('@/api/hooks/caregiver', () => ({
   usePublicCaregiverForm: mockUsePublicCaregiverForm,
-  useSaveCaregiverDraft: () => ({ mutateAsync: mockSaveDraftMutateAsync, isPending: false }),
+  useSaveCaregiverDraft: () => ({ mutateAsync: mockSaveDraftMutateAsync, isPending: saveState.pending }),
   useSubmitCaregiverForm: () => ({ mutateAsync: mockSubmitMutateAsync, isPending: false }),
 }))
 
@@ -27,6 +28,7 @@ function makeDto(overrides: Partial<CaregiverFormDto> = {}): CaregiverFormDto {
     caregiverRelationship: null,
     expiresAt: '2026-09-17T00:00:00Z',
     rejectionNote: null,
+    providerName: 'Ability Options',
     current: { firstName: 'Sophie', lastName: 'Rivers', personalInterests: 'Reading' },
     editable: [],
     draft: null,
@@ -46,8 +48,14 @@ function stepNav() {
   return screen.getByRole('navigation')
 }
 
+// jsdom does not implement scrollTo; the page calls it after Next.
+const scrollTo = vi.fn()
+
 beforeEach(() => {
+  window.scrollTo = scrollTo as unknown as typeof window.scrollTo
+  scrollTo.mockClear()
   mockUsePublicCaregiverForm.mockReset()
+  saveState.pending = false
   mockSaveDraftMutateAsync.mockReset()
   mockSubmitMutateAsync.mockReset()
   mockSaveDraftMutateAsync.mockResolvedValue(undefined)
@@ -135,6 +143,7 @@ describe('CaregiverWizardPage — About You name gate', () => {
     mockUsePublicCaregiverForm.mockReturnValue({ isLoading: false, isError: false, data: makeDto() })
     renderCaregiverPage()
     await screen.findByLabelText(/^your name/i)
+    await userEvent.setup().click(screen.getByText(/^step 1 of 8/i))
     const keyIdentifiersPill = within(stepNav()).getByRole('button', { name: /key identifiers/i })
     expect(keyIdentifiersPill).toBeDisabled()
   })
@@ -412,5 +421,176 @@ describe('CaregiverWizardPage — sends the base it loaded', () => {
     expect(screen.getByLabelText(/pension card number/i)).toHaveValue('333333333')
     const saved = mockSaveDraftMutateAsync.mock.calls[0][0]
     expect(saved.base.keyIdentifiers).toMatchObject({ medicareNumber: '000000000' })
+  })
+})
+
+describe('CaregiverWizardPage — welcome header', () => {
+  it('holds the Bunya Support mark (not a link) and names the participant and the provider', async () => {
+    mockUsePublicCaregiverForm.mockReturnValue({ isLoading: false, isError: false, data: makeDto() })
+    renderCaregiverPage()
+    await screen.findByLabelText(/^your name/i)
+    const banner = screen.getByRole('banner')
+    expect(within(banner).getByText('Bunya Support')).toBeInTheDocument()
+    expect(within(banner).queryByRole('link')).toBeNull()
+    expect(screen.getByRole('heading', { level: 1, name: "Sophie's profile" })).toBeInTheDocument()
+    expect(screen.getByText('From Ability Options')).toBeInTheDocument()
+    expect(screen.getByText('Please check the information below and update anything that is missing or out of date.')).toBeInTheDocument()
+    expect(document.body.textContent).not.toMatch(/ODIP/)
+  })
+
+  it('falls back to Participant profile with no first name, and drops the From line with no provider', async () => {
+    mockUsePublicCaregiverForm.mockReturnValue({
+      isLoading: false, isError: false,
+      data: makeDto({ providerName: null, current: { firstName: '  ' } }),
+    })
+    renderCaregiverPage()
+    await screen.findByLabelText(/^your name/i)
+    expect(screen.getByRole('heading', { level: 1, name: 'Participant profile' })).toBeInTheDocument()
+    expect(screen.queryByText(/^From /)).toBeNull()
+  })
+
+  it('names no provider on the invalid page', async () => {
+    mockUsePublicCaregiverForm.mockReturnValue({ isLoading: false, isError: true, data: undefined })
+    renderCaregiverPage()
+    await screen.findByText(/this link is no longer valid/i)
+    expect(screen.getByRole('heading', { level: 1, name: 'Participant profile' })).toBeInTheDocument()
+    expect(screen.queryByText(/^From /)).toBeNull()
+  })
+
+  it('shows the provenance but no instruction line once submitted', async () => {
+    mockUsePublicCaregiverForm.mockReturnValue({ isLoading: false, isError: false, data: makeDto({ status: 'Submitted', caregiverName: 'Jane Doe' }) })
+    renderCaregiverPage()
+    await screen.findByText(/awaiting review/i)
+    expect(screen.getByText('From Ability Options')).toBeInTheDocument()
+    expect(screen.queryByText(/Please check the information below/)).toBeNull()
+  })
+
+  it('pins the action bar to the screen edge by zeroing the app shell bottom-nav height', async () => {
+    mockUsePublicCaregiverForm.mockReturnValue({ isLoading: false, isError: false, data: makeDto() })
+    const { container } = renderCaregiverPage()
+    await screen.findByLabelText(/^your name/i)
+    expect((container.firstChild as HTMLElement).className).toContain('[--mobile-nav-h:0px]')
+  })
+})
+
+describe('CaregiverWizardPage — compact progress', () => {
+  it('reads Step n of 8 and follows the wizard', async () => {
+    const user = userEvent.setup()
+    mockUsePublicCaregiverForm.mockReturnValue({ isLoading: false, isError: false, data: makeDto() })
+    renderCaregiverPage()
+    await screen.findByLabelText(/^your name/i)
+    expect(screen.getByText('Step 1 of 8 · About you')).toBeInTheDocument()
+    await user.type(screen.getByLabelText(/your name/i), 'Jane Doe')
+    await user.click(screen.getByRole('button', { name: /^next$/i }))
+    expect(await screen.findByText('Step 2 of 8 · Key Identifiers')).toBeInTheDocument()
+  })
+
+  it('lists all 8 steps with a check on finished ones, the current one marked, and later ones disabled', async () => {
+    const user = userEvent.setup()
+    mockUsePublicCaregiverForm.mockReturnValue({ isLoading: false, isError: false, data: makeDto() })
+    renderCaregiverPage()
+    await screen.findByLabelText(/^your name/i)
+    const list = within(stepNav())
+    expect(list.getAllByRole('button')).toHaveLength(8)
+    expect(list.getByRole('button', { name: /about you/i })).toHaveAttribute('aria-current', 'step')
+    expect(list.getByRole('button', { name: /review/i })).toBeDisabled()
+    expect(list.queryByTestId('step-done')).toBeNull()
+
+    await user.type(screen.getByLabelText(/your name/i), 'Jane Doe')
+    await user.click(screen.getByRole('button', { name: /^next$/i }))
+    await screen.findByText('Step 2 of 8 · Key Identifiers')
+    expect(list.getAllByTestId('step-done')).toHaveLength(1)
+    expect(list.getByRole('button', { name: /key identifiers/i })).toHaveAttribute('aria-current', 'step')
+  })
+
+  it('jumping back to a visited step changes the step, closes the list and keeps later unvisited steps disabled', async () => {
+    const user = userEvent.setup()
+    mockUsePublicCaregiverForm.mockReturnValue({ isLoading: false, isError: false, data: makeDto() })
+    renderCaregiverPage()
+    await screen.findByLabelText(/^your name/i)
+    await user.type(screen.getByLabelText(/your name/i), 'Jane Doe')
+    await user.click(screen.getByRole('button', { name: /^next$/i }))
+    await screen.findByText('Step 2 of 8 · Key Identifiers')
+
+    const details = document.querySelector('details') as HTMLDetailsElement
+    await user.click(screen.getByText(/^step 2 of 8/i))
+    expect(details.open).toBe(true)
+    await user.click(within(stepNav()).getByRole('button', { name: /about you/i }))
+    expect(await screen.findByText('Step 1 of 8 · About you')).toBeInTheDocument()
+    expect(details.open).toBe(false)
+    expect(within(stepNav()).getByRole('button', { name: /medical/i })).toBeDisabled()
+  })
+
+  it('keeps the step heading for focus and announcement, visually hidden', async () => {
+    const user = userEvent.setup()
+    mockUsePublicCaregiverForm.mockReturnValue({ isLoading: false, isError: false, data: makeDto() })
+    renderCaregiverPage()
+    await screen.findByLabelText(/^your name/i)
+    await user.type(screen.getByLabelText(/your name/i), 'Jane Doe')
+    await user.click(screen.getByRole('button', { name: /^next$/i }))
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Key Identifiers' })).toHaveFocus())
+    expect(screen.getByRole('heading', { name: 'Key Identifiers' })).toHaveClass('sr-only')
+  })
+
+  it('scrolls to the top after Next, and not on first render', async () => {
+    const user = userEvent.setup()
+    mockUsePublicCaregiverForm.mockReturnValue({ isLoading: false, isError: false, data: makeDto() })
+    renderCaregiverPage()
+    await screen.findByLabelText(/^your name/i)
+    expect(scrollTo).not.toHaveBeenCalled()
+    await user.type(screen.getByLabelText(/your name/i), 'Jane Doe')
+    await user.click(screen.getByRole('button', { name: /^next$/i }))
+    await screen.findByText('Step 2 of 8 · Key Identifiers')
+    expect(scrollTo).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('CaregiverWizardPage — action bar', () => {
+  it('has no Cancel on the first step or on Review', async () => {
+    const user = userEvent.setup()
+    mockUsePublicCaregiverForm.mockReturnValue({ isLoading: false, isError: false, data: makeDto() })
+    renderCaregiverPage()
+    await screen.findByLabelText(/^your name/i)
+    expect(screen.queryByRole('link', { name: 'Cancel' })).toBeNull()
+    await user.type(screen.getByLabelText(/your name/i), 'Jane Doe')
+    for (let i = 0; i < 7; i++) {
+      await user.click(screen.getByRole('button', { name: /^next$/i }))
+      await waitFor(() => expect(mockSaveDraftMutateAsync).toHaveBeenCalledTimes(i + 1))
+    }
+    await screen.findByRole('button', { name: /submit for review/i })
+    expect(screen.queryByRole('link', { name: 'Cancel' })).toBeNull()
+  })
+
+  it('shows a failed save in the bar, with the field message pointing down at it', async () => {
+    const user = userEvent.setup()
+    mockUsePublicCaregiverForm.mockReturnValue({ isLoading: false, isError: false, data: makeDto() })
+    renderCaregiverPage()
+    await screen.findByLabelText(/^your name/i)
+    mockSaveDraftMutateAsync.mockRejectedValue(new Error('boom'))
+    await user.type(screen.getByLabelText(/your name/i), 'Jane Doe')
+    await user.click(screen.getByRole('button', { name: /^next$/i }))
+    const message = await screen.findByText(/We couldn't save your progress/)
+    expect(message).toHaveAttribute('role', 'alert')
+    expect(message.closest('.sticky')).not.toBeNull()
+    expect(screen.getByText('Save failed — see the message below.')).toBeInTheDocument()
+  })
+
+  it('reads Saving… and is inert while the draft saves', async () => {
+    saveState.pending = true
+    mockUsePublicCaregiverForm.mockReturnValue({ isLoading: false, isError: false, data: makeDto() })
+    renderCaregiverPage()
+    const btn = await screen.findByRole('button', { name: 'Saving…' })
+    expect(btn).toHaveAttribute('aria-disabled', 'true')
+  })
+})
+
+// The owner saw "Please enter your name" on a fresh form; nothing validates on mount.
+describe('CaregiverWizardPage — first render', () => {
+  it('shows no error and no alert before the caregiver does anything', async () => {
+    mockUsePublicCaregiverForm.mockReturnValue({ isLoading: false, isError: false, data: makeDto() })
+    renderCaregiverPage()
+    await screen.findByLabelText(/^your name/i)
+    expect(screen.queryByText('Please enter your name')).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 })
