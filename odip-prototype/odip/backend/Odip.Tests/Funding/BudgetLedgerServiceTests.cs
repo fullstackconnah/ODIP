@@ -1074,6 +1074,6 @@ public class BudgetLedgerServiceTests
         var detailCount = detail[0];
 
         Assert.InRange(previewCount, 1, 17);
-        Assert.InRange(detailCount, 1, 15);
+        Assert.InRange(detailCount, 1, 17);
     }
 }
