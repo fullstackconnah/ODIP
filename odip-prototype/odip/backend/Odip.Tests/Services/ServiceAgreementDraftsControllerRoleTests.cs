@@ -29,6 +29,8 @@ public class ServiceAgreementDraftsControllerRoleTests
         nameof(ServiceAgreementDraftsController.Pdf),
         // The preview of approving a revision (phase D): its reasons repeat what the stored pricing flagged and its counts say what the plan makes, for the roles that may approve.
         nameof(ServiceAgreementDraftsController.ApprovalPreview),
+        // The preview of Populate roster (S11): per started week, the shifts it would add and the budget warnings, for the roles that may populate.
+        nameof(ServiceAgreementDraftsController.PopulatePreview),
     ];
 
     public static TheoryData<string> PriceReadActions
@@ -71,7 +73,7 @@ public class ServiceAgreementDraftsControllerRoleTests
         var gets = typeof(ServiceAgreementDraftsController).GetMethods()
             .Where(m => m.GetCustomAttributes(typeof(HttpGetAttribute), false).Length > 0).Select(m => m.Name).OrderBy(name => name).ToList();
 
-        // The four above are all of them: a new GET fails here until somebody has decided who may read what it returns.
+        // The five above are all of them: a new GET fails here until somebody has decided who may read what it returns.
         Assert.Equal(PriceReads.OrderBy(name => name), gets);
         foreach (var name in gets) Assert.False(Allows(name, "SupportWorker") || Allows(name, "ReadOnly"), name);
     }
