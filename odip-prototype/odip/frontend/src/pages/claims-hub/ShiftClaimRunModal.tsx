@@ -85,7 +85,7 @@ export function ShiftClaimRunModal({ open, onClose }: { open: boolean; onClose: 
   }
 
   return (
-    <Modal open={open} onClose={close} title={done ? 'Claims made' : 'Claim completed shifts'} size="lg" footer={footer} closeOnBackdrop={!pending} hideClose={pending}>
+    <Modal open={open} onClose={close} title={done ? 'Claims made' : 'Claim completed shifts'} size="lg" footer={footer} closeOnBackdrop={!pending} hideClose={pending} stickyFooter>
       <div className="flex flex-col gap-[var(--section-gap)]">
         {!done && (
           <p className="text-sm text-[var(--color-muted-foreground)]">
