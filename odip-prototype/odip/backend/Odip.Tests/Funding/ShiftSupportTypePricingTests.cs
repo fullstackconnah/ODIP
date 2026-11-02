@@ -111,11 +111,12 @@ public class ShiftSupportTypePricingTests
         var preview = await service.PreviewAsync(person.Id, Thu, Sat, Ct);
         var left = Assert.Single(preview.LeftOut);
         Assert.Equal(held.Id, left.ShiftId);
-        Assert.Contains($"it is on {word} claim TC-REJECTED-1. Delete that claim, then claim this shift again.", left.Reason);
+        Assert.Contains($"it is on {word} claim TC-REJECTED-1. Open that claim and choose Claim again.", left.Reason);
+        Assert.Equal((rejected.Id, "TC-REJECTED-1"), (left.HeldByClaimId, left.HeldByClaimReference));   // the screen links by these, never by the sentence
         Assert.Single(preview.LineItems);
 
         // The same shift again by the run (preview mode), where the reason lands in the run's left-out list.
         var run = await service.PreviewRunAsync(kit.TenantId, Thu, Sat, Ct);
-        Assert.Contains(run.LeftOut, l => l.ShiftId == held.Id && l.Reason.Contains("TC-REJECTED-1"));
+        Assert.Contains(run.LeftOut, l => l.ShiftId == held.Id && l.Reason.Contains("TC-REJECTED-1") && l.HeldByClaimId == rejected.Id && l.HeldByClaimReference == "TC-REJECTED-1");
     }
 }

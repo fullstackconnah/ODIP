@@ -169,6 +169,9 @@ export interface ShiftClaimLeftOutDto {
   description: string
   /** A sentence ("It is a sleepover, which shift claims do not price yet."). */
   reason: string
+  /** Set when a rejected or cancelled claim holds the shift: the screen links to it (and to Claim again) by this id, never by the sentence. */
+  heldByClaimId?: string | null
+  heldByClaimReference?: string | null
 }
 
 /**

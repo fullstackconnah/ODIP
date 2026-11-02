@@ -299,6 +299,43 @@ public class ClaimsController : ControllerBase
         }
     }
 
+    // POST /api/v1/claims/{claimId}/claim-again/preview: what claiming a rejected shift claim again would make. Nothing is deleted or saved.
+    // A SuperAdmin with no organisation chosen gets 400, as the other claim-making actions do: the claim is looked up by the caller's organisation, never by its id alone.
+    [HttpPost("claims/{claimId:guid}/claim-again/preview")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<ShiftClaimPreviewResponseDto>>> PreviewClaimAgain(Guid claimId, CancellationToken ct)
+    {
+        if (_tenant.TenantId is not { } tenantId) return BadRequest(ApiResponse<ShiftClaimPreviewResponseDto>.Fail("Choose an organisation first."));
+        try
+        {
+            var today = await ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct);
+            return Ok(ApiResponse<ShiftClaimPreviewResponseDto>.Ok(await _shiftGenerator.PreviewClaimAgainAsync(claimId, tenantId, today, ct)));
+        }
+        catch (InvalidOperationException ex) { return ClaimAgainFailure<ShiftClaimPreviewResponseDto>(ex); }
+    }
+
+    // POST /api/v1/claims/{claimId}/claim-again: deletes the rejected shift claim and makes one new draft claim for its shifts, in one transaction.
+    [HttpPost("claims/{claimId:guid}/claim-again")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<ShiftClaimGeneratedDto>>> ClaimAgain(Guid claimId, CancellationToken ct)
+    {
+        if (_tenant.TenantId is not { } tenantId) return BadRequest(ApiResponse<ShiftClaimGeneratedDto>.Fail("Choose an organisation first."));
+        try
+        {
+            var today = await ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct);
+            return Ok(ApiResponse<ShiftClaimGeneratedDto>.Ok(ToGeneratedDto(await _shiftGenerator.ClaimAgainAsync(claimId, tenantId, today, ct))));
+        }
+        catch (InvalidOperationException ex) { return ClaimAgainFailure<ShiftClaimGeneratedDto>(ex); }
+    }
+
+    private ActionResult<ApiResponse<T>> ClaimAgainFailure<T>(InvalidOperationException ex) => ex switch
+    {
+        RosterBusyException => Conflict(ApiResponse<T>.Fail(ClaimBusy)),
+        ClaimAgainRefusedException { NotFound: true } => NotFound(ApiResponse<T>.Fail(ex.Message)),
+        ClaimAgainRefusedException { Conflict: true } => Conflict(ApiResponse<T>.Fail(ex.Message)),
+        _ => BadRequest(ApiResponse<T>.Fail(ex.Message)),
+    };
+
     // GET /api/v1/claims/{claimId}
     [HttpGet("claims/{claimId:guid}")]
     public async Task<ActionResult<ApiResponse<TripClaimDetailDto>>> GetClaim(Guid claimId, CancellationToken ct)
@@ -543,40 +580,10 @@ public class ClaimsController : ControllerBase
 
         if (claim == null) return NotFound(ApiResponse<bool>.Fail("Claim not found"));
 
-        var lineIds = claim.LineItems.Select(l => l.Id).ToList();
-        var inFile = await _db.ClaimBatchLines.AsNoTracking()
-            .Where(b => b.ClaimLineItemId != null && lineIds.Contains(b.ClaimLineItemId.Value) && b.Outcome == ClaimBatchLineOutcome.Pending
-                && (b.Batch.Status == ClaimBatchStatus.Built || b.Batch.Status == ClaimBatchStatus.Uploaded))
-            .Select(b => b.Batch.FileName).FirstOrDefaultAsync(ct);
-        if (inFile != null) return Conflict(ApiResponse<bool>.Fail($"This claim is in {inFile}. Discard that file first."));
+        if (await ClaimDeletion.RefusalAsync(_db, claim, ct) is { } refusal)
+            return refusal.Conflict ? Conflict(ApiResponse<bool>.Fail(refusal.Message)) : BadRequest(ApiResponse<bool>.Fail(refusal.Message));
 
-        // A claim that has gone to the NDIA keeps its lines and payment record (deleting a paid or part-paid one makes supports already paid claimable again). Rejected stays deletable on purpose:
-        // its lines are locked and it cannot go back to Draft, so delete-and-regenerate is the only way to correct an NDIA rejection.
-        if (claim.Status is not (TripClaimStatus.Draft or TripClaimStatus.Ready or TripClaimStatus.Rejected or TripClaimStatus.Cancelled))
-            return BadRequest(ApiResponse<bool>.Fail("A claim that has gone to the NDIA can't be deleted unless it was rejected."));
-
-        // An invoice that stands must be voided first (Xero PR1, spec 5.5): its number never disappears. Voided and credited rows and credit notes stay after the delete, their claim link set null.
-        var live = await _db.Invoices.Where(i => i.TripClaimId == claimId && i.Kind == InvoiceKind.Invoice && i.Status == InvoiceStatus.Issued)
-            .OrderBy(i => i.Number).Select(i => i.DisplayNumber).ToListAsync(ct);
-        if (live.Count > 0) return Conflict(ApiResponse<bool>.Fail($"Void {JoinAnd(live)} first, then delete the claim."));
-
-        // Reset participant bookings back to unclaimed. Shift-completion design spec, delivery
-        // PR 3: Kind == Shift line items have ParticipantBookingId == null — filter those out
-        // rather than passing nulls into the ParticipantBookings lookup (a shift becomes
-        // unclaimed again simply by its ClaimLineItem row being removed below).
-        var bookingIds = claim.LineItems
-            .Where(l => l.ParticipantBookingId.HasValue)
-            .Select(l => l.ParticipantBookingId!.Value)
-            .Distinct()
-            .ToList();
-        var bookings = await _db.ParticipantBookings
-            .Where(b => bookingIds.Contains(b.Id))
-            .ToListAsync(ct);
-        foreach (var booking in bookings)
-            booking.ClaimStatus = ClaimStatus.NotClaimed;
-
-        _db.ClaimLineItems.RemoveRange(claim.LineItems);
-        _db.TripClaims.Remove(claim);
+        await ClaimDeletion.RemoveAsync(_db, claim, ct);
         await _db.SaveChangesAsync(ct);
         await held.CommitAsync(ct);
 
@@ -746,8 +753,4 @@ public class ClaimsController : ControllerBase
         : invoice.Status == InvoiceStatus.Voided ? $"{invoice.DisplayNumber} is already void."
         : invoice.Status == InvoiceStatus.Credited ? $"{invoice.DisplayNumber} is already credited."
         : null;
-
-    /// <summary>"A", "A and B", "A, B and C".</summary>
-    private static string JoinAnd(IReadOnlyList<string> items) =>
-        items.Count == 1 ? items[0] : $"{string.Join(", ", items.Take(items.Count - 1))} and {items[^1]}";
 }

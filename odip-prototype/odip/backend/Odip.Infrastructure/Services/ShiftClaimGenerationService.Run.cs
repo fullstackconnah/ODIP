@@ -114,5 +114,5 @@ public partial class ShiftClaimGenerationService
     }
 
     private static ShiftClaimRunLeftOutDto LeftOutOf(ShiftClaimLeftOutDto l, Guid participantId, string participantName) =>
-        new() { ShiftId = l.ShiftId, ServiceDate = l.ServiceDate, Description = l.Description, Reason = l.Reason, ParticipantId = participantId, ParticipantName = participantName };
+        new() { ShiftId = l.ShiftId, ServiceDate = l.ServiceDate, Description = l.Description, Reason = l.Reason, HeldByClaimId = l.HeldByClaimId, HeldByClaimReference = l.HeldByClaimReference, ParticipantId = participantId, ParticipantName = participantName };
 }

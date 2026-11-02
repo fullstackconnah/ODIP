@@ -751,4 +751,87 @@ public class ClaimsControllerTests
         Assert.Equal(TripClaimStatus.Draft, made.Status);
         Assert.Equal("NSDT", (await kit.Db.ClaimLineItems.FirstAsync(l => l.TripClaimId == made.Id)).CancellationReason);
     }
+
+    // ── Claim again (claims PR3) ───────────────────────────────────────────
+
+    private static (LedgerKit Kit, TripClaim Claim) RejectedClaimKit(Guid? tenantOfClaim = null)
+    {
+        var kit = LedgerKit.Create();
+        kit.SeedProvider("NSW").TimeZoneId = "Australia/Sydney";
+        kit.EnsureCommunityAccessCatalogue();
+        var person = kit.SeedParticipant(tenantId: tenantOfClaim);
+        var shift = kit.SeedShift(person, new DateOnly(2026, 10, 5), ShiftStatus.Completed);
+        return (kit, kit.SeedShiftClaim(person, TripClaimStatus.Rejected, 400m, shift, reference: "TC-REJECTED-9"));
+    }
+
+    private static string FailureOf<T>(ActionResult<ApiResponse<T>> r, int status)
+    {
+        var result = Assert.IsAssignableFrom<ObjectResult>(r.Result);
+        Assert.Equal(status, result.StatusCode);
+        return Assert.IsType<ApiResponse<T>>(result.Value).Errors!.Single();
+    }
+
+    [Fact]
+    public void D_ClaimAgain_BothActions_HaveTheRolesOfDelete_AndTheirRoutes()
+    {
+        string RolesOf(string action) => typeof(ClaimsController).GetMethod(action)!.GetCustomAttribute<AuthorizeAttribute>()?.Roles ?? "";
+        string RouteOf(string action) => typeof(ClaimsController).GetMethod(action)!.GetCustomAttributes<Microsoft.AspNetCore.Mvc.Routing.HttpMethodAttribute>().Single().Template!;
+        var expected = RolesOf(nameof(ClaimsController.DeleteClaim));
+
+        Assert.NotEmpty(expected);
+        Assert.Equal(expected, RolesOf(nameof(ClaimsController.ClaimAgain)));
+        Assert.Equal(expected, RolesOf(nameof(ClaimsController.PreviewClaimAgain)));
+        Assert.Equal("claims/{claimId:guid}/claim-again", RouteOf(nameof(ClaimsController.ClaimAgain)));
+        Assert.Equal("claims/{claimId:guid}/claim-again/preview", RouteOf(nameof(ClaimsController.PreviewClaimAgain)));
+    }
+
+    [Fact]
+    public async Task D_ClaimAgain_AnotherOrganisationsClaim_IsNotFound_AndUntouched_AndWithNoOrganisationChosenItAsksForOne()
+    {
+        var (kit, claim) = RejectedClaimKit(tenantOfClaim: Guid.NewGuid());
+        using var _ = kit;
+        var controller = RunController(kit, new FixedClock(CancelNow));
+
+        var preview = await controller.PreviewClaimAgain(claim.Id, CancellationToken.None);
+        var make = await controller.ClaimAgain(claim.Id, CancellationToken.None);
+
+        Assert.Equal("Claim not found.", FailureOf(preview, 404));
+        Assert.StartsWith("This claim has already been claimed again or deleted.", FailureOf(make, 409));   // the make answers the same 409 as a claim that has gone; the preview stays a 404
+        Assert.Equal((TripClaimStatus.Rejected, 1), (kit.Db.TripClaims.IgnoreQueryFilters().Single().Status, kit.Db.ClaimLineItems.IgnoreQueryFilters().Count()));
+
+        using var db = CreateDb();
+        var none = CreateController(db);
+        Assert.Equal("Choose an organisation first.", FailureOf(await none.PreviewClaimAgain(claim.Id, CancellationToken.None), 400));
+        Assert.Equal("Choose an organisation first.", FailureOf(await none.ClaimAgain(claim.Id, CancellationToken.None), 400));
+    }
+
+    [Fact]
+    public async Task ClaimAgain_PreviewThenMake_ReplacesTheClaim_AndTheOldClaimIsGoneAfterwards()
+    {
+        var (kit, claim) = RejectedClaimKit();
+        using var _ = kit;
+        var controller = RunController(kit, new FixedClock(CancelNow));
+
+        var preview = Body(await controller.PreviewClaimAgain(claim.Id, CancellationToken.None));
+        var made = Body(await controller.ClaimAgain(claim.Id, CancellationToken.None));
+        var again = await controller.ClaimAgain(claim.Id, CancellationToken.None);
+
+        Assert.Single(preview.LineItems);
+        Assert.Equal((TripClaimStatus.Draft, preview.TotalAmount), (made.Status, made.TotalAmount));
+        Assert.False(kit.Db.TripClaims.Any(c => c.Id == claim.Id));
+        Assert.StartsWith("This claim has already been claimed again or deleted.", FailureOf(again, 409));
+    }
+
+    [Fact]
+    public async Task ClaimAgain_ADraftClaim_IsA400_WithTheStatusSentence()
+    {
+        var (kit, claim) = RejectedClaimKit();
+        using var _ = kit;
+        claim.Status = TripClaimStatus.Draft;
+        kit.Db.SaveChanges();
+
+        var refused = await RunController(kit, new FixedClock(CancelNow)).ClaimAgain(claim.Id, CancellationToken.None);
+
+        Assert.Equal("Only a rejected claim can be claimed again.", FailureOf(refused, 400));
+    }
 }
