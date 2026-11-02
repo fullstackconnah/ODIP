@@ -133,6 +133,8 @@ export const CONTACT_ROLE_TYPE_LABELS: Record<ContactRoleType, string> = {
   // FinancialAdministrator is now its own distinct role type below.
   Solicitor: 'Solicitor',
   FinancialAdministrator: 'Financial Administrator',
+  KeyWorker: 'Key Worker',
+  Other: 'Other',
 }
 
 export const NOMINEE_SCOPE_LABELS: Record<NomineeScope, string> = {
@@ -301,6 +303,9 @@ export const CONTACT_ROLE_FIELD_MAP: Record<ContactRoleType, ContactRoleFieldKey
   Solicitor: ['organisationName', 'scopeNotes', 'authorisationDocumentReference'],
   // PF-10.2: same field shape as Solicitor — both are professional/authority contacts.
   FinancialAdministrator: ['organisationName', 'scopeNotes', 'authorisationDocumentReference'],
+  // I3: a key worker belongs to a provider; Other is described by the relationship text alone.
+  KeyWorker: ['organisationName'],
+  Other: [],
 }
 
 export const GUARDIAN_ORDER_SCOPE_DOMAINS = ['Health', 'Accommodation', 'Lifestyle', 'Legal', 'Financial', 'Plenary'] as const
