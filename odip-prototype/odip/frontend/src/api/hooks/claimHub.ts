@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tansta
 import { apiClient, apiGet, apiPost } from '../client'
 import { readText, serverSentence } from './data-export'
 import { awaitsData } from '@/lib/queryPhase'
-import type { BatchDetailDto, BatchDto, BatchLineDto, BuildBatchRequestDto, BuildProblemDto, HubLinesDto, MarkPaidRequestDto, PipelineDto, ResultsImportDto, ShiftClaimWaitingDto } from '../types'
+import { refreshBudgetWarnings, refreshLedgers } from './funding-ledger'
+import type { BatchDetailDto, BatchDto, BatchLineDto, BuildBatchRequestDto, BuildProblemDto, CancellationCandidatesDto, HubLinesDto, MarkPaidRequestDto, PipelineDto, ResultsImportDto, ShiftClaimGeneratedDto, ShiftClaimPreviewResponseDto, ShiftClaimWaitingDto } from '../types'
 
 // The NDIA claims hub: the claimable lines, the bulk payment request files built from them, and what comes back.
 
@@ -25,6 +26,29 @@ export const UNCLAIMED_SHIFTS_KEY = ['claim-hub', 'unclaimed-shifts'] as const
 export function useUnclaimedShifts(enabled: boolean): { count: number; participants: number; loading: boolean; error: boolean } {
   const q = useQuery({ queryKey: UNCLAIMED_SHIFTS_KEY, queryFn: () => apiGet<ShiftClaimWaitingDto>('/claims/from-shifts/waiting'), enabled })
   return { count: q.data?.shiftCount ?? 0, participants: q.data?.participantCount ?? 0, loading: enabled && awaitsData(q), error: q.isError }
+}
+
+export const CANCELLATION_CANDIDATES_KEY = ['claim-hub', 'cancellations'] as const
+/** The cancelled shifts that can be claimed as a short-notice cancellation, and the recent ones that cannot with why. Under the claim-hub key, so a claim made (or a shift reopened) refreshes it. */
+export function useCancellationCandidates(enabled: boolean) {
+  return useQuery({ queryKey: CANCELLATION_CANDIDATES_KEY, queryFn: () => apiGet<CancellationCandidatesDto>('/claims/cancellations'), enabled })
+}
+
+export function usePreviewCancellationClaim() {
+  return useMutation({ mutationFn: (shiftId: string) => apiPost<ShiftClaimPreviewResponseDto>('/claims/cancellations/preview', { shiftId }) })
+}
+
+/** Makes the claim for one cancelled shift. Refreshes what the shift claim run refreshes: the claim lists, the shift queues, the participant's ledger and the budget warnings. */
+export function useMakeCancellationClaim() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ shiftId, cancellationReason }: { shiftId: string; cancellationReason: string }) => apiPost<ShiftClaimGeneratedDto>('/claims/cancellations', { shiftId, cancellationReason }),
+    onSettled: (created) => {
+      for (const key of ['claims', 'trip-claims', 'participant-claims', 'rostering-completions', 'roster-board', 'claim-hub', 'claim-batches']) qc.invalidateQueries({ queryKey: [key] })
+      refreshLedgers(qc, created?.participantId ? [created.participantId] : [])
+      refreshBudgetWarnings(qc)
+    },
+  })
 }
 
 export function useClaimBatches() {

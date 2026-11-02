@@ -24,6 +24,7 @@ internal static class OlderSchemaSeeds
         ("ProviderSettings", "Website", "character varying(500)"),
         ("ServiceAgreementDrafts", "IsOngoing", "boolean"),
         ("ServiceAgreementDrafts", "OriginalAgreementEndDate", "date"),
+        ("Shifts", "CancelledAt", "timestamp without time zone"),
     ];
 
     public static async Task SaveWithLaterColumnsAsync(DbContext db)

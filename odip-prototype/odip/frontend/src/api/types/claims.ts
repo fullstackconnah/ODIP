@@ -376,3 +376,28 @@ export interface InvoiceRegisterRowDto {
   total: number
   organisationName: string
 }
+
+/** A cancelled shift the Claims screen offers for a short-notice cancellation claim, with what the claim would be worth. */
+export interface CancellationCandidateDto {
+  shiftId: string
+  participantId: string
+  participantName: string
+  serviceDate: string
+  startTime: string
+  endTime: string
+  endsNextDay: boolean
+  /** When the shift was cancelled (an instant, UTC). */
+  cancelledAt: string
+  totalAmount: number
+}
+
+/** A cancelled shift the screen does not offer, and why (a sentence a coordinator can act on). */
+export interface CancellationLeftOutDto extends ShiftClaimLeftOutDto {
+  participantName: string
+}
+
+/** GET /claims/cancellations: the cancelled shifts that can be claimed now (newest first) and the recent ones that cannot. */
+export interface CancellationCandidatesDto {
+  shifts: CancellationCandidateDto[]
+  leftOut: CancellationLeftOutDto[]
+}

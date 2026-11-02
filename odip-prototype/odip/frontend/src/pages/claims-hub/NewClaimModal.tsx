@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import { ChevronRight, MapPin } from 'lucide-react'
-import { useUnclaimedShifts } from '@/api/hooks/claimHub'
+import { useCancellationCandidates, useUnclaimedShifts } from '@/api/hooks/claimHub'
 import { useTrip, useTrips } from '@/api/hooks/trips'
 import type { TripDetailDto } from '@/api/types'
 import { Button } from '@/components/Button'
@@ -12,15 +12,17 @@ import { Modal } from '@/components/Modal'
 import { PageState } from '@/components/PageState'
 import { formatDateRange } from '@/lib/dateRange'
 import { plural } from '@/lib/format'
+import { CancellationClaimSteps } from './CancellationClaimSteps'
 
 const TRIP_FIELD_ID = 'new-claim-trip'
 
-type ChoiceId = 'shifts' | 'trip'
+type ChoiceId = 'shifts' | 'trip' | 'cancellation'
 
-/** One row of the chooser. A later claim kind (a cancellation, a one-off) is one more entry here and one more handler. */
+/** One row of the chooser. A later claim kind (a one-off) is one more entry here and one more handler. */
 const CHOICES: { id: ChoiceId; title: string; hint: string }[] = [
   { id: 'shifts', title: 'Shifts', hint: 'Completed shifts in a date range' },
   { id: 'trip', title: 'A trip', hint: 'A completed trip with no claim' },
+  { id: 'cancellation', title: 'A cancellation', hint: 'A cancelled shift at short notice' },
 ]
 
 /** `count` undefined draws nothing; null draws the loading pulse. A disabled row keeps its focus but does nothing. */
@@ -62,14 +64,18 @@ function ChoiceRow({ title, hint, count, disabled, onClick, rowRef }: {
  * The launcher for "New claim": pick what is being claimed. Shifts and a trip each open their own existing modal (the caller does that once this has closed, so
  * the opener of the next modal is the page's button, not a row that is gone); a trip is picked on a second step here.
  */
-export function NewClaimModal({ onClose, onShifts, onTrip }: {
+export function NewClaimModal({ onClose, onShifts, onTrip, onCancellationMade }: {
   onClose: () => void
   onShifts: () => void
   onTrip: (trip: TripDetailDto) => void
+  /** A cancellation claim was made on its second step: the page closes the chooser and opens the claim. */
+  onCancellationMade: (claimId: string) => void
 }) {
-  const [step, setStep] = useState<'choose' | 'trip'>('choose')
+  const [step, setStep] = useState<'choose' | 'trip' | 'cancellation'>('choose')
   const shiftsRow = useRef<HTMLButtonElement>(null)
   const tripRow = useRef<HTMLButtonElement>(null)
+  const cancellationRow = useRef<HTMLButtonElement>(null)
+  const lastRow = useRef<RefObject<HTMLButtonElement | null> | null>(null)   // the row that opened the step being left, so Back lands on it
   const [chosen, setChosen] = useState('')
   const [opening, setOpening] = useState<string | undefined>()
 
@@ -77,6 +83,11 @@ export function NewClaimModal({ onClose, onShifts, onTrip }: {
   // shortcut: the list shows the first 200 completed, unclaimed trips (useTrips' ceiling); add server search if a tenant reaches it.
   const trips = useTrips({ status: 'Completed', unclaimed: 'true' })
   const opened = useTrip(opening)
+  const cancellations = useCancellationCandidates(true)
+  // The cancellation steps are a Modal of their own, and the chooser comes back as a new one after Back: each would take the row or Back button that opened it as its opener, which is gone by
+  // the time it closes. The button that opened the chooser is what gets focus back.
+  const [opener] = useState(() => document.activeElement as HTMLElement | null)
+  const close = () => { onClose(); opener?.focus() }
 
   useEffect(() => {
     if (opening && opened.data) onTrip(opened.data)
@@ -88,12 +99,15 @@ export function NewClaimModal({ onClose, onShifts, onTrip }: {
     if (shown.current === step) return
     shown.current = step
     if (step === 'trip') document.getElementById(TRIP_FIELD_ID)?.focus()
-    else tripRow.current?.focus()
+    else if (step === 'choose') lastRow.current?.current?.focus()
   }, [step])
 
   const tripCount = trips.data?.length
   const noTrips = !trips.isLoading && !trips.isError && tripCount === 0
+  const cancellationCount = cancellations.data?.shifts.length
+  const noCancellations = !cancellations.isLoading && !cancellations.isError && cancellationCount === 0
   const count = (c: ChoiceId) => {
+    if (c === 'cancellation') return cancellations.isLoading ? null : cancellations.isError || !cancellationCount ? undefined : `${cancellationCount} waiting`
     if (c === 'shifts') return waiting.loading ? null : waiting.error ? undefined : waiting.count === 0 ? 'None waiting' : `${waiting.count} waiting`
     return trips.isLoading ? null : trips.isError || tripCount === undefined || tripCount === 0 ? undefined : `${tripCount} waiting`
   }
@@ -109,23 +123,29 @@ export function NewClaimModal({ onClose, onShifts, onTrip }: {
 
   if (step === 'choose') {
     return (
-      <Modal open onClose={onClose} title="New claim" initialFocusRef={shiftsRow} footer={<Button variant="secondary" size="md" onClick={onClose}>Close</Button>}>
+      <Modal open onClose={close} title="New claim" initialFocusRef={shiftsRow} footer={<Button variant="secondary" size="md" onClick={close}>Close</Button>}>
         <p className="mb-3 text-[13px] text-[var(--color-muted-foreground)]">What are you claiming for?</p>
         <ul className="flex flex-col gap-2">
           {CHOICES.map(c => c.id === 'shifts' ? (
             <ChoiceRow key={c.id} title={c.title} hint={c.hint} count={count('shifts')} onClick={onShifts} rowRef={shiftsRow} />
+          ) : c.id === 'trip' ? (
+            <ChoiceRow key={c.id} title={c.title} hint={noTrips ? 'No completed trips are waiting' : c.hint} count={count('trip')} disabled={noTrips} onClick={() => { lastRow.current = tripRow; setStep('trip') }} rowRef={tripRow} />
           ) : (
-            <ChoiceRow key={c.id} title={c.title} hint={noTrips ? 'No completed trips are waiting' : c.hint} count={count('trip')} disabled={noTrips} onClick={() => setStep('trip')} rowRef={tripRow} />
+            <ChoiceRow key={c.id} title={c.title} hint={noCancellations ? 'No short-notice cancellations to claim' : c.hint} count={count('cancellation')} disabled={noCancellations} onClick={() => { lastRow.current = cancellationRow; setStep('cancellation') }} rowRef={cancellationRow} />
           ))}
         </ul>
       </Modal>
     )
   }
 
+  if (step === 'cancellation') {
+    return <CancellationClaimSteps candidates={cancellations} onBack={() => setStep('choose')} onClose={close} onMade={onCancellationMade} />
+  }
+
   return (
     <Modal
       open
-      onClose={onClose}
+      onClose={close}
       title="Choose a trip"
       footer={
         <>

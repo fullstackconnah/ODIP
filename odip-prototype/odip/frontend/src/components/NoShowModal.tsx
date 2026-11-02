@@ -3,16 +3,9 @@ import { Dropdown } from './Dropdown'
 import { Modal } from '@/components/Modal'
 import { useUpdateClaimLineItem } from '@/api/hooks'
 import type { ClaimLineItemDto } from '@/api/types'
-import type { DropdownItem } from './Dropdown'
 import { Button } from '@/components/Button'
+import { CANCELLATION_REASONS } from '@/lib/cancellationReasons'
 import { extractErrorMessage } from '@/lib/utils'
-
-const CANCELLATION_REASONS: DropdownItem[] = [
-  { value: 'NSDH', label: 'No show – health reason' },
-  { value: 'NSDF', label: 'No show – family issues' },
-  { value: 'NSDT', label: 'No show – transport unavailable' },
-  { value: 'NSDO', label: 'Other' },
-]
 
 interface NoShowModalProps {
   claimId: string

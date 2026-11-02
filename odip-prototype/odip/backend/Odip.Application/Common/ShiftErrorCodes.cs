@@ -26,6 +26,7 @@ public static class ShiftErrorCodes
     public const string ShiftBoardChanged = "SHIFT_BOARD_CHANGED";
     public const string ShiftStatusLocked = "SHIFT_STATUS_LOCKED";
     public const string ShiftTimesLocked = "SHIFT_TIMES_LOCKED";
+    public const string ShiftClaimLocked = "SHIFT_CLAIM_LOCKED";
     public const string ShiftBatchSizeInvalid = "SHIFT_BATCH_SIZE_INVALID";
     public const string ShiftCompletionNotFound = "SHIFT_COMPLETION_NOT_FOUND";
     public const string ShiftAlreadyClaimed = "SHIFT_ALREADY_CLAIMED";

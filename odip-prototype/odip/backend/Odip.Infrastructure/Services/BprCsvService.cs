@@ -57,7 +57,7 @@ public class BprCsvService(OdipDbContext db)
                 ? ShiftPriceEstimator.StateFor(participant?.AddressState, settings?.State)
                 : HolidayCalendar.Normalise(settings?.State) is { Length: > 0 } s ? s : "VIC";
             return new BprRow(l, l.TripClaim, participant, planType,
-                RowFor(catalogue, l.SupportItemCode, l.SupportsDeliveredFrom), RowFor(catalogue, l.SupportItemCode + CancellationSuffix, l.SupportsDeliveredFrom), state, settings);
+                RowFor(catalogue, l.SupportItemCode, l.SupportsDeliveredFrom), CancellationTwin(catalogue, l.SupportItemCode, l.SupportsDeliveredFrom), state, settings);
         }).ToList();
     }
 
@@ -67,6 +67,9 @@ public class BprCsvService(OdipDbContext db)
         var valid = catalogue.Where(i => i.ItemNumber == code && EffectiveCatalogueResolver.IsValidOn(i, on)).ToList();
         return EffectiveCatalogueResolver.NewestVersion(valid).FirstOrDefault();
     }
+
+    /// <summary>The "_CA" twin of an item valid on a date, or null. The one selection the file writer, the send check and the cancellation claim all use.</summary>
+    public static SupportCatalogueItem? CancellationTwin(List<SupportCatalogueItem> catalogue, string code, DateOnly on) => RowFor(catalogue, code + CancellationSuffix, on);
 
     /// <summary>{20 hex of the line id}A{attempt}: the NDIA echoes it back in the results file, so a resubmission gets a new one.</summary>
     public static string RowReference(Guid lineId, int attempt) => lineId.ToString("N")[..20] + "A" + attempt.ToString(CultureInfo.InvariantCulture);

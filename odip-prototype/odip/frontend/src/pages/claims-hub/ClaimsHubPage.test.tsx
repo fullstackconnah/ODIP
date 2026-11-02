@@ -12,7 +12,7 @@ import ClaimsHubPage from './ClaimsHubPage'
 const m = vi.hoisted(() => ({
   lines: vi.fn(), batches: vi.fn(), batch: vi.fn(), fetchClaimFile: vi.fn(), preview: vi.fn(),
   uploaded: vi.fn(), discard: vi.fn(), importResults: vi.fn(), paid: vi.fn(), dismiss: vi.fn(), pipeline: vi.fn(),
-  unclaimed: vi.fn(), trips: vi.fn(), trip: vi.fn(),
+  unclaimed: vi.fn(), trips: vi.fn(), trip: vi.fn(), cancellations: vi.fn(), previewCancellation: vi.fn(), makeCancellation: vi.fn(),
 }))
 vi.mock('@/api/hooks/claimHub', async () => {
   const actual = await vi.importActual<typeof import('@/api/hooks/claimHub')>('@/api/hooks/claimHub')
@@ -22,6 +22,7 @@ vi.mock('@/api/hooks/claimHub', async () => {
     useHubLines: m.lines, useClaimBatches: m.batches, useClaimPipeline: m.pipeline, useClaimBatch: m.batch, fetchClaimFile: m.fetchClaimFile, useBuildClaimFile: () => m.fetchClaimFile,
     useMarkBatchUploaded: mutation(m.uploaded), useDiscardBatch: mutation(m.discard), useImportResults: mutation(m.importResults),
     useMarkBatchPaid: mutation(m.paid), useDismissBatchLine: mutation(m.dismiss), useUnclaimedShifts: m.unclaimed,
+    useCancellationCandidates: m.cancellations, usePreviewCancellationClaim: m.previewCancellation, useMakeCancellationClaim: m.makeCancellation,
   }
 })
 vi.mock('@/api/hooks/claims', () => ({ useSubmitPreviewChunks: m.preview }))
@@ -88,6 +89,15 @@ beforeEach(() => {
   m.pipeline.mockReturnValue(query(pipeline()))
   m.batch.mockReturnValue({ ...query(undefined), isLoading: false })
   m.unclaimed.mockReturnValue({ count: 12, participants: 3, loading: false, error: false })
+  m.cancellations.mockReturnValue({
+    data: { shifts: [{ shiftId: 'sh-1', participantId: 'p-1', participantName: 'Sam Lee', serviceDate: '2026-10-20', startTime: '09:00:00', endTime: '17:00:00', endsNextDay: false, cancelledAt: '2026-10-17T01:30:00Z', totalAmount: 480 }], leftOut: [] },
+    isLoading: false, isError: false, refetch: vi.fn(),
+  })
+  m.previewCancellation.mockReturnValue({ mutate: vi.fn(), reset: vi.fn(), data: { totalAmount: 480, lineItems: [], leftOut: [] }, error: null, isPending: false, isError: false })
+  m.makeCancellation.mockReturnValue({
+    mutate: (_vars: unknown, options?: { onSuccess?: (c: { id: string }) => void }) => options?.onSuccess?.({ id: 'claim-9' }),
+    reset: vi.fn(), data: undefined, error: null, isPending: false, isError: false,
+  })
   m.trips.mockReturnValue({ data: [{ id: 't-1', tripName: 'Byron Bay Weekend', startDate: '2026-10-09', endDate: '2026-10-11', currentParticipantCount: 4 }], isLoading: false, isError: false, refetch: vi.fn() })
   m.trip.mockImplementation((id?: string) => ({ data: id ? { id, tripName: 'Byron Bay Weekend' } : undefined, isLoading: false, isError: false, refetch: vi.fn() }))
   m.preview.mockReturnValue({ invoiceCount: 2, isLoading: false, isError: false, refetch: vi.fn() })
@@ -531,12 +541,13 @@ describe('ClaimsHubPage: New claim', () => {
     expect(screen.queryByRole('button', { name: 'Claim shifts' })).toBeNull()
   })
 
-  it('opens the chooser with Shifts and A trip, and what is waiting', async () => {
+  it('opens the chooser with Shifts, A trip and A cancellation, and what is waiting', async () => {
     renderPage()
     await userEvent.click(screen.getByRole('button', { name: 'New claim' }))
     expect(screen.getByRole('dialog', { name: 'New claim' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^Shifts.*12 waiting$/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^A trip/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^A cancellation.*1 waiting$/ })).toBeInTheDocument()
   })
 
   it('Shifts puts run=shifts in the URL and opens the run; closing it returns focus to New claim', async () => {
@@ -586,6 +597,19 @@ describe('ClaimsHubPage: New claim', () => {
     await userEvent.click(await screen.findByRole('option', { name: /Byron Bay Weekend/ }))
     await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Make trip claim' }))
+    expect(await screen.findByTestId('detail')).toBeInTheDocument()
+  })
+
+  it('a made cancellation claim opens its claim page', async () => {
+    renderPage()
+    await userEvent.click(screen.getByRole('button', { name: 'New claim' }))
+    await userEvent.click(screen.getByRole('button', { name: /^A cancellation/ }))
+    await userEvent.click(screen.getByLabelText('Cancelled shift'))
+    await userEvent.click(await screen.findByRole('option', { name: /Sam Lee/ }))
+    await userEvent.click(screen.getByLabelText('Why did the participant cancel?'))
+    await userEvent.click(await screen.findByRole('option', { name: 'Other' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Preview' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Make claim' }))
     expect(await screen.findByTestId('detail')).toBeInTheDocument()
   })
 
