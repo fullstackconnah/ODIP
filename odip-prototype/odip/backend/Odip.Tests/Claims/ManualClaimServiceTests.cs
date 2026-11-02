@@ -183,10 +183,25 @@ public class ManualClaimServiceTests
         Assert.Equal(ManualClaimService.ParticipantNotFound, (await Assert.ThrowsAsync<KeyNotFoundException>(() => service.PreviewAsync(kit.TenantId, Req(other, item.ItemNumber, 1m, 50m)))).Message);
         Assert.Empty(kit.Db.TripClaims);
 
-        // Even a caller whose context has no tenant filter is held to the organisation it names.
+        // The claim is saved under the organisation the caller names.
         var made = await service.MakeAsync(kit.TenantId, Req(own, item.ItemNumber, 1m, 50m));
         Assert.Equal(own.TenantId, made.Claim.TenantId);
         Assert.Equal(own.TenantId, kit.Db.ClaimLineItems.Single().TenantId);
+    }
+
+    [Fact]
+    public async Task AParticipantFundedAnotherWay_IsRefusedAtCreate_AsTheShiftEngineDoes()
+    {
+        using var kit = LedgerKit.Create();
+        kit.SeedProvider("VIC");
+        var item = Capped(kit);
+        var person = kit.SeedParticipant();
+        person.FundingSource = ParticipantFundingSource.Other;
+        kit.Db.SaveChanges();
+        var service = Service(kit);
+
+        Assert.Equal($"{person.FullName}: Funded another way, so not claimed to the NDIS. Invoice them directly.", await Refusal(() => service.MakeAsync(kit.TenantId, Req(person, item.ItemNumber, 1m, 50m))));
+        Assert.Empty(kit.Db.TripClaims);
     }
 
     [Fact]

@@ -28,7 +28,7 @@ public class BprCsvService(OdipDbContext db)
     public const string CancellationSuffix = "_CA";
 
     /// <summary>
-    /// Loads the lines of ONE organisation, with their claim, participant (a trip line's through its booking, a shift line's through its shift), catalogue rows and settings. A line of another
+    /// Loads the lines of ONE organisation, with their claim, participant (a trip line's through its booking, a shift line's through its shift, a manual line's through its claim), catalogue rows and settings. A line of another
     /// organisation is simply not returned, so the caller can compare the counts. A line is scoped by its own TenantId (its claim's).
     /// </summary>
     public async Task<List<BprRow>> LoadRowsAsync(Guid tenantId, IReadOnlyCollection<Guid> lineIds, CancellationToken ct)

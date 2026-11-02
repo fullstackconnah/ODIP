@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Odip.Application.DTOs;
+using Odip.Domain.Billing;
 using Odip.Domain.Billing.Services;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
@@ -112,7 +113,7 @@ public class ManualClaimService
 
     // shortcut: one line per claim (owner, 2026-11-02); the request carries a list so several lines need no API change.
     // shortcut: the price cap is by the participant's state, as the send gate's PriceLimit is (no remote or very remote columns), until a participant region exists.
-    // shortcut: a possible double claim is a warning only, and the trip and shift cross-guards read only shift and booking lines, so they do not see manual lines; the send gate's AlreadyAccepted is the backstop.
+    // shortcut: a possible double claim is a warning only, and the trip and shift cross-guards read only shift and booking lines, so they do not see manual lines; the send gate's DoubleClaimAcrossFiles warning and AlreadyAccepted block are the backstop.
     // shortcut: the bounds below (24 h, $100,000 a unit and in total) hold at create only; the line PATCH is unchanged and the send gate's PriceLimit block is the backstop for price.
     private async Task<Planned> PlanManualAsync(Guid tenantId, ManualClaimRequestDto request, CancellationToken ct)
     {
@@ -121,6 +122,7 @@ public class ManualClaimService
 
         var participant = await _db.Participants.FirstOrDefaultAsync(x => x.Id == request.ParticipantId && x.TenantId == tenantId, ct)
             ?? throw new KeyNotFoundException(ParticipantNotFound);
+        if (ClaimFunding.IsOtherFunded(participant)) throw new InvalidOperationException($"{participant.FullName}: {ClaimFunding.OtherFundedNotClaimed}");
 
         var notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim();
         if (notes is { Length: > MaxNotesLength }) throw new InvalidOperationException($"The note can be at most {MaxNotesLength} characters.");

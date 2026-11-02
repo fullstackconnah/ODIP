@@ -65,18 +65,20 @@ public class ManualClaimPostgresTests : IClassFixture<PostgresFixture>
         RequirePostgres();
         var (kit, person, claim) = await SeedAsync();
         using var _ = kit;
+        // Read before the claim is rejected: a rejected claim stops counting, so the manual branch is only seen while it is open.
+        kit.SeedPlan(person, LedgerKit.Core(PlanType.AgencyManaged, LedgerKit.Q(2, 5000m)));
+        var all = await kit.Ledger.ComputeAsync(kit.TenantId, [person.Id], Ct);
+        var budget = await kit.Ledger.ForClaimAsync(kit.TenantId, claim.Id, Ct);
         await kit.Db.TripClaims.Where(c => c.Id == claim.Id)
             .ExecuteUpdateAsync(s => s.SetProperty(c => c.Status, TripClaimStatus.Rejected).SetProperty(c => c.RejectionCode, "V17").SetProperty(c => c.RejectedDate, DateTime.UtcNow), Ct);
         var lineId = await kit.Db.ClaimLineItems.Where(l => l.TripClaimId == claim.Id).Select(l => l.Id).SingleAsync(Ct);
 
         var rejected = await new NdiaRejectionReader(kit.Db, kit.Clock).RejectedLinesQuery(kit.TenantId, [person.Id]).ToListAsync(Ct);
-        var all = await kit.Ledger.ComputeAsync(kit.TenantId, [person.Id], Ct);
-        var budget = await kit.Ledger.ForClaimAsync(kit.TenantId, claim.Id, Ct);
         var rows = await new BprCsvService(kit.Db).LoadRowsAsync(kit.TenantId, [lineId], Ct);
 
         Assert.Equal(person.Id, Assert.Single(rejected).ParticipantId);
-        Assert.True(all.ContainsKey(person.Id));
-        Assert.Null(budget);   // no plan on file, so no budget block
+        Assert.Contains(all[person.Id].Items, i => i.ClaimId == claim.Id && i.Amount == 50m);
+        Assert.NotNull(budget);
         var row = Assert.Single(rows);
         Assert.Equal(person.NdisNumber, row.Participant?.NdisNumber);
         Assert.Equal("NSW", row.State);   // the participant's state, not the organisation's VIC

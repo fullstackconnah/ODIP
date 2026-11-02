@@ -28,6 +28,8 @@ public sealed class BatchContext
     public IReadOnlyDictionary<Guid, string> OtherFunded { get; init; } = new Dictionary<Guid, string>();
     /// <summary>Claim id to the reference of the other claim that holds the same shift.</summary>
     public IReadOnlyDictionary<Guid, string> HeldBy { get; init; } = new Dictionary<Guid, string>();
+    /// <summary>Line id to the references of the other claims that already count for the same participant, item and an overlapping date.</summary>
+    public IReadOnlyDictionary<Guid, string> DoubleClaimed { get; init; } = new Dictionary<Guid, string>();
     /// <summary>Line id to the code of its last rejection, for a resubmit.</summary>
     public IReadOnlyDictionary<Guid, string> LastRejectCode { get; init; } = new Dictionary<Guid, string>();
     public IReadOnlySet<Guid> ConfirmedLineIds { get; init; } = new HashSet<Guid>();
@@ -124,6 +126,8 @@ public static partial class ClaimBatchChecks
         if (ctx.BuildRows.Any(o => o.Line.Id != l.Id && o.Participant?.NdisNumber?.Trim() == ndis && o.Line.SupportItemCode == l.SupportItemCode && (o.Line.ClaimType == ClaimType.ProviderTravel) == (l.ClaimType == ClaimType.ProviderTravel)
                 && o.Line.SupportsDeliveredFrom == l.SupportsDeliveredFrom && o.Line.SupportsDeliveredTo == l.SupportsDeliveredTo))
             Add("DuplicateInFile", Warn, "Another line in this file has the same participant, item and dates. The NDIA may reject one as a duplicate.");
+        if (ctx.DoubleClaimed.TryGetValue(l.Id, out var others))
+            Add("DoubleClaimAcrossFiles", Warn, $"{others} already claims this participant, item and dates, so the NDIA may reject one as a duplicate. Check before you send both.");
         if ((row.Item?.Unit ?? "H") == "H" && l.Hours * 60 != decimal.Truncate(l.Hours * 60))
             Add("HoursNotWholeMinutes", Warn, $"{l.Hours.ToString("0.####", CultureInfo.InvariantCulture)} hours isn't a whole number of minutes. The file rounds it to {BprCsvService.FormatHours(l.Hours)}.");
 
