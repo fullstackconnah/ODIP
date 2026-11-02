@@ -494,7 +494,7 @@ export type HidpaSupportCategory = typeof HIDPA_SUPPORT_CATEGORIES[number]
 export const CONTACT_ROLE_TYPES = [
   'NextOfKin', 'EmergencyContact', 'Guardian', 'PlanNominee', 'ChildRepresentative',
   'SupportCoordinator', 'PlanManager', 'Gp', 'Specialist', 'Pharmacy', 'ProviderContact',
-  'Advocate', 'Interpreter', 'Solicitor', 'FinancialAdministrator',
+  'KeyWorker', 'Advocate', 'Interpreter', 'Solicitor', 'FinancialAdministrator', 'Other',
 ] as const
 export type ContactRoleType = typeof CONTACT_ROLE_TYPES[number]
 

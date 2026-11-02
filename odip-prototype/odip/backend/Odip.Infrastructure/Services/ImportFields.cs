@@ -121,7 +121,7 @@ public static class ImportFields
         for (var n = 1; n <= 3; n++)
         {
             fields.Add(new($"contact{n}Name", $"Contact {n} name", false, [], "First and last name."));
-            fields.Add(new($"contact{n}Relationship", $"Contact {n} relationship", false, [], "Next of kin, Guardian, Plan nominee or Plan manager."));
+            fields.Add(new($"contact{n}Relationship", $"Contact {n} relationship", false, [], "Next of kin, Guardian, Plan nominee, Plan manager, Key worker or Other."));
             fields.Add(new($"contact{n}Phone", $"Contact {n} phone", false, [], "Their phone number."));
             fields.Add(new($"contact{n}Email", $"Contact {n} email", false, [], "Their email address."));
         }
