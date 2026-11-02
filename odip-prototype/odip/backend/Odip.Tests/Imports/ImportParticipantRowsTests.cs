@@ -175,4 +175,23 @@ public class ImportParticipantRowsTests
         var plans = ImportParticipantRows.Build(table, ImportFields.AutoMatch(ImportKind.Participants, headers), new DateOnly(2026, 10, 13));
         Assert.All(plans, p => Assert.StartsWith("Plan start: this column has month-first dates", p.Reasons.Single()));
     }
+
+    [Theory]
+    [InlineData("Key worker", ContactRoleType.KeyWorker)]
+    [InlineData("keyworker", ContactRoleType.KeyWorker)]
+    [InlineData("Other", ContactRoleType.Other)]
+    public void Contact_relationship_key_worker_and_other_map_to_their_roles(string relationship, ContactRoleType expected)
+    {
+        var plan = Build(["Ava", "Stone", "", "", "", "", "", "Mia Tran", relationship]).Single();
+
+        Assert.Equal(ImportRowStatus.Ready, plan.Status);
+        Assert.Equal(expected, Assert.Single(plan.Participant!.ContactRoles).RoleType);
+    }
+
+    [Fact]
+    public void Unknown_relationship_sentence_lists_six_values()
+    {
+        var plan = Build(["Ava", "Stone", "", "", "", "", "", "Mia Tran", "Neighbour"]).Single();
+        Assert.Equal("Contact 1 relationship must be next of kin, guardian, plan nominee, plan manager, key worker or other.", plan.Reasons.Single());
+    }
 }

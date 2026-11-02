@@ -519,4 +519,45 @@ public class ParticipantContactRolesControllerTests
         Assert.Null(body.Data.OrganisationName);
         Assert.Null(body.Data.ScopeNotes);
     }
+
+    // ── I3: Key Worker and Other ───────────────────────────────────────────
+
+    [Fact]
+    public async Task Create_KeyWorker_RoundTripsWithOrganisation()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new ParticipantContactRolesController(db);
+
+        var created = await controller.Create(participant.Id, new CreateParticipantContactRoleDto
+        {
+            NewPersonFirstName = "Mia", NewPersonLastName = "Tran", RoleType = ContactRoleType.KeyWorker, OrganisationName = "Bayside Disability Services",
+        }, CancellationToken.None);
+        Assert.Equal(ContactRoleType.KeyWorker, Assert.IsType<ApiResponse<ParticipantContactRoleDto>>(Assert.IsType<OkObjectResult>(created.Result).Value).Data!.RoleType);
+
+        var read = await controller.GetForParticipant(participant.Id, CancellationToken.None);
+        var body = Assert.IsType<ApiResponse<List<ParticipantContactRoleDto>>>(Assert.IsType<OkObjectResult>(read.Result).Value);
+        Assert.Equal("Bayside Disability Services", Assert.Single(body.Data!, r => r.RoleType == ContactRoleType.KeyWorker).OrganisationName);
+    }
+
+    /// <summary>Pins the field map: Other has no extra fields, so the organisation a Key Worker had is cleared.</summary>
+    [Fact]
+    public async Task Update_KeyWorkerToOther_ClearsOrganisationName()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var participant = SeedParticipant(db);
+        var controller = new ParticipantContactRolesController(db);
+        var created = await controller.Create(participant.Id, new CreateParticipantContactRoleDto
+        {
+            NewPersonFirstName = "Mia", NewPersonLastName = "Tran", RoleType = ContactRoleType.KeyWorker, OrganisationName = "Bayside Disability Services",
+        }, CancellationToken.None);
+        var id = Assert.IsType<ApiResponse<ParticipantContactRoleDto>>(Assert.IsType<OkObjectResult>(created.Result).Value).Data!.Id;
+
+        var updated = await controller.Update(id, new UpdateParticipantContactRoleDto { RoleType = ContactRoleType.Other, Status = ContactRoleStatus.Active, RelationshipToParticipant = "Neighbour" }, CancellationToken.None);
+
+        var data = Assert.IsType<ApiResponse<ParticipantContactRoleDto>>(Assert.IsType<OkObjectResult>(updated.Result).Value).Data!;
+        Assert.Equal(ContactRoleType.Other, data.RoleType);
+        Assert.Null(data.OrganisationName);
+        Assert.Equal("Neighbour", data.RelationshipToParticipant);
+    }
 }
