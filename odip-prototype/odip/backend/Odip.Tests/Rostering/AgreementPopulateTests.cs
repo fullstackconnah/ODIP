@@ -56,6 +56,20 @@ public class AgreementPopulateTests
     }
 
     [Fact]
+    public async Task Populate_never_adds_a_shift_before_today_for_an_agreement_that_started_earlier()
+    {
+        await using var f = await SetUpAsync();
+        var draft = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, start: new DateOnly(2026, 10, 5));
+        Assert.Equal(ApprovalStatus.Approved, (await f.Service.ApproveAsync(TenantA, f.ParticipantId, draft.Id, false, Admin, default)).Status);
+
+        await PopulateAllAsync(f.Service, f.ParticipantId, draft.Id);
+
+        var shifts = await f.Db.Shifts.AsNoTracking().ToListAsync();
+        Assert.NotEmpty(shifts);
+        Assert.All(shifts, s => Assert.True(s.ServiceDate >= Today, $"{s.ServiceDate} is before today"));      // the week of 5 October is started, but 5 to 9 October are past
+    }
+
+    [Fact]
     public async Task Populate_makes_the_shifts_the_pattern_describes()
     {
         await using var f = await SetUpAsync();

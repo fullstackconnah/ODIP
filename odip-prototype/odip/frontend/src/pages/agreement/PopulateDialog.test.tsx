@@ -58,7 +58,7 @@ describe('PopulateDialog: one started week at a time', () => {
     setUp()
 
     expect(screen.getByRole('combobox', { name: 'Week' })).toHaveValue('2026-10-12')
-    expect(screen.getByText('Adds 5 unfilled shifts to the week of Mon 12 Oct 2026. 0 are already there.')).toBeInTheDocument()
+    expect(screen.getByText('Adds 5 unfilled shifts to the week of Mon 12 Oct 2026. None are already there.')).toBeInTheDocument()
   })
 
   it('defaults to the first started week when none is missing shifts, and says Nothing to add with Populate off', () => {

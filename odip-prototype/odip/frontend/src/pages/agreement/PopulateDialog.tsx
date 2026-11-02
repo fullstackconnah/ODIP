@@ -90,7 +90,7 @@ export function PopulateDialog({ open, participantId, draftId, onClose, onPopula
             />
             <p className="font-medium">{week.toAdd === 0
               ? `Nothing to add. All ${plural(week.alreadyThere, 'shift')} of this week ${week.alreadyThere === 1 ? 'is' : 'are'} already there.`
-              : `Adds ${plural(week.toAdd, 'unfilled shift')} to the week of ${formatServiceDate(week.weekStart)}. ${week.alreadyThere} ${week.alreadyThere === 1 ? 'is' : 'are'} already there.`}</p>
+              : `Adds ${plural(week.toAdd, 'unfilled shift')} to the week of ${formatServiceDate(week.weekStart)}. ${week.alreadyThere === 0 ? 'None' : week.alreadyThere} ${week.alreadyThere === 1 ? 'is' : 'are'} already there.`}</p>
             <BudgetWarnings warnings={week.budgetWarnings} note="This is a warning only. Populating is not blocked." announce={false} />
           </>
         )}

@@ -850,8 +850,8 @@ public sealed class ServiceAgreementApprovalService
                 && _db.ServiceAgreementDraftApprovals.Any(a => a.DraftId == p.SourceDraftId))
             .ToListAsync(ct);
         // Commit the tracked lifecycle transition while the board lock is still held even when
-        // approval has not produced patterns yet. A concurrent approval then observes the
-        // participant as eligible and fills its started weeks itself.
+        // approval has not produced patterns yet. Approval fills no shifts since S11: Populate roster
+        // adds them, and it finds the participant already in its new state.
         if (patterns.Count == 0)
         {
             await _db.SaveChangesAsync(ct);
