@@ -12,7 +12,7 @@ import { Dropdown } from '@/components/Dropdown'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import {
   useCompletions, useCompletion, useApproveCompletion, useReturnCompletion, useApproveCompletionsBatch, useStaff,
-  useEditCompletionTravel, usePlanPricingSettings,
+  useEditCompletionTravel, usePlanPricingSettings, useSetBreakKind,
 } from '@/api/hooks'
 import type { CompletionQueueItemDto, ShiftStatus, ShiftCompletionDto, ApproveBatchResultDto } from '@/api/types'
 import { formatDateAu, formatWithTimeZone, extractErrorMessage } from '@/lib/utils'
@@ -20,6 +20,8 @@ import { formatVarianceMinutes } from './lib/roster'
 import { formatServiceDate, plural } from '@/lib/format'
 import { unbroken } from '@/lib/intakeBooking'
 import { Button } from '@/components/Button'
+import { ToggleGroup } from '@/components/ToggleGroup'
+import { firstNameOf as firstName } from '@/lib/greeting'
 import { TONE } from '@/lib/tone'
 import { NumberField } from '@/components/NumberField'
 import { apiErrorCode } from '@/lib/shiftPackageErrors'
@@ -27,6 +29,7 @@ import { SHIFT_PACKAGE_ERROR_CODES as C } from '@/api/types'
 import { travelLabel } from '@/pages/portal/shift/checklist'
 
 const PAGE_SIZE = 50
+const DASH = '–'
 
 const STATUS_FILTER_ITEMS: { value: ShiftStatus; label: string }[] = [
   { value: 'PendingReview', label: 'Pending review' },
@@ -144,8 +147,41 @@ function TravelEditor({ c, onOpenChange }: { c: ShiftCompletionDto; onOpenChange
   )
 }
 
+/**
+ * The breaks the worker took, one line each. In the Approve dialog (`onChange` given) each line has a ToggleGroup that saves at once; elsewhere the kind
+ * reads as text. `first` is the participant's first name, `staffFirst` the worker's.
+ */
+function BreaksBlock({ c, first, staffFirst, pendingKind, onChange }: {
+  c: ShiftCompletionDto; first: string; staffFirst: string; pendingKind?: boolean; onChange?: (breakId: string, withParticipant: boolean) => void
+}) {
+  const t = (iso: string) => formatWithTimeZone(iso, c.timeZoneId, { hour: 'numeric', minute: '2-digit' })
+  return (
+    <div className="space-y-1">
+      <ul className="space-y-1.5 text-xs">
+        {c.breaks.map(b => (
+          <li key={b.id} className="space-y-1">
+            <span>{t(b.startedAt)}{DASH}{b.endedAt ? t(b.endedAt) : 'now'}, {b.minutes} min{onChange ? '' : `, ${b.withParticipant ? `with ${first}` : 'on my own'}`}</span>
+            {onChange && (
+              <ToggleGroup
+                ariaLabel={`Who was ${staffFirst}'s break with?`}
+                value={b.withParticipant ? 'with' : 'alone'}
+                onChange={key => onChange(b.id, key === 'with')}
+                disabled={pendingKind}
+                options={[{ key: 'alone', label: 'On my own' }, { key: 'with', label: `With ${first}` }]}
+              />
+            )}
+          </li>
+        ))}
+      </ul>
+      <p className="text-xs font-medium">Unpaid breaks {c.breakMinutes} min</p>
+    </div>
+  )
+}
+
 /** What the worker confirmed at Finish (My shifts redesign): moved times with the stamps they replaced, the reason, kilometres, the report answer. */
-function WorkerAnswers({ c, canEditTravel = false, onTravelOpenChange = () => {} }: { c: ShiftCompletionDto; canEditTravel?: boolean; onTravelOpenChange?: (open: boolean) => void }) {
+function WorkerAnswers({ c, canEditTravel = false, onTravelOpenChange = () => {}, breaks }: {
+  c: ShiftCompletionDto; canEditTravel?: boolean; onTravelOpenChange?: (open: boolean) => void; breaks?: { first: string; staffFirst: string; pendingKind?: boolean; onChange?: (breakId: string, withParticipant: boolean) => void }
+}) {
   const t = (iso: string) => formatWithTimeZone(iso, c.timeZoneId, { hour: 'numeric', minute: '2-digit' })
   const lines = [
     c.originalActualStart && `Start ${t(c.originalActualStart)}, changed to ${t(c.actualStart)}.`,
@@ -157,7 +193,8 @@ function WorkerAnswers({ c, canEditTravel = false, onTravelOpenChange = () => {}
     c.anythingToReport && 'The worker said there was something to report.',
     c.shiftReturnCount > 0 && `Returned to the worker ${plural(c.shiftReturnCount, 'time')} before.`,
   ].filter((line): line is string => typeof line === 'string')
-  if (lines.length === 0 && !c.sentFromOffline && !canEditTravel) return null
+  const hasBreaks = !!breaks && c.breaks.length > 0
+  if (lines.length === 0 && !c.sentFromOffline && !canEditTravel && !hasBreaks) return null
   return (
     <div className="space-y-1">
       {c.sentFromOffline && (
@@ -167,6 +204,7 @@ function WorkerAnswers({ c, canEditTravel = false, onTravelOpenChange = () => {}
         </div>
       )}
       {lines.length > 0 && <ul className="space-y-0.5 text-xs">{lines.map(line => <li key={line}>{line}</li>)}</ul>}
+      {hasBreaks && <BreaksBlock c={c} {...breaks} />}
       {canEditTravel && <TravelEditor c={c} onOpenChange={onTravelOpenChange} />}
     </div>
   )
@@ -208,6 +246,7 @@ export default function CompletionReviewPage() {
   const [actionError, setActionError] = useState<string | null>(null)
   const [batchConfirmOpen, setBatchConfirmOpen] = useState(false)
   const [travelEditing, setTravelEditing] = useState(false)
+  const [kindError, setKindError] = useState(false)
   const [batchResults, setBatchResults] = useState<ApproveBatchResultDto[] | null>(null)
 
   const detailShiftId = approveTarget?.shiftId ?? returnTarget?.shiftId
@@ -215,10 +254,20 @@ export default function CompletionReviewPage() {
 
   const { data: pricing } = usePlanPricingSettings(canReviewCompletions)
   const approveCompletion = useApproveCompletion()
+  const setBreakKind = useSetBreakKind()
   const returnCompletion = useReturnCompletion()
   const approveBatch = useApproveCompletionsBatch()
 
+  // A tap saves at once (the server only allows it while the shift awaits review); Approve waits for the save.
+  async function changeKind(breakId: string, withParticipant: boolean) {
+    if (!approveTarget) return
+    setKindError(false)
+    try { await setBreakKind.mutateAsync({ shiftId: approveTarget.shiftId, breakId, withParticipant }) }
+    catch { setKindError(true) }
+  }
+
   function closeApprove() {
+    setKindError(false)
     setApproveTarget(null)
     setActionError(null)
     setTravelEditing(false)
@@ -398,12 +447,16 @@ export default function CompletionReviewPage() {
         title="Approve completion"
         confirmLabel="Approve"
         loading={approveCompletion.isPending}
-        confirmDisabled={travelEditing}
+        confirmDisabled={travelEditing || setBreakKind.isPending}
         alignTop
         message={
           <div className="space-y-3">
             <p>{approveTarget ? `Approve ${approveTarget.participantName}'s shift on ${unbroken(formatServiceDate(approveTarget.serviceDate))} for ${approveTarget.staffName}?` : ''}</p>
-            {detail && <WorkerAnswers c={detail} canEditTravel={pricing?.claimProviderTravel === true} onTravelOpenChange={setTravelEditing} />}
+            {detail && approveTarget && (
+              <WorkerAnswers c={detail} canEditTravel={pricing?.claimProviderTravel === true} onTravelOpenChange={setTravelEditing}
+                breaks={{ first: firstName(approveTarget.participantName), staffFirst: firstName(approveTarget.staffName), pendingKind: setBreakKind.isPending, onChange: changeKind }} />
+            )}
+            {kindError && <p role="alert" className="text-xs text-[var(--color-destructive)]">Couldn't change the break. Try again.</p>}
             {detail && <IncidentsList incidents={detail.incidents} />}
             {travelEditing && <p className="text-xs text-[var(--color-muted-foreground)]">Save or cancel the travel change first.</p>}
             {actionError && <p role="alert" className="text-xs text-[var(--color-destructive)]">{actionError}</p>}
@@ -422,7 +475,7 @@ export default function CompletionReviewPage() {
         message={
           <div className="space-y-3">
             <p>{returnTarget ? `Return ${returnTarget.participantName}'s shift on ${unbroken(formatServiceDate(returnTarget.serviceDate))} to ${returnTarget.staffName} for correction?` : ''}</p>
-            {detail && <WorkerAnswers c={detail} />}
+            {detail && returnTarget && <WorkerAnswers c={detail} breaks={{ first: firstName(returnTarget.participantName), staffFirst: firstName(returnTarget.staffName) }} />}
             {detail && <IncidentsList incidents={detail.incidents} />}
             <label className="block text-sm text-[var(--color-foreground)]">
               Reason (required)

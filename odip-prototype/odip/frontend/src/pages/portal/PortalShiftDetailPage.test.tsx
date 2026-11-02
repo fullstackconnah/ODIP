@@ -485,7 +485,7 @@ describe('PortalShiftDetailPage: During', () => {
   })
 
   it('shows the elapsed time and the break state in the header', () => {
-    show(inProgress({ breaks: [{ id: 'b1', startedAt: '2026-08-17T10:00:00Z', endedAt: null, isRunning: true, minutes: 12, editedAt: null, createdByUserId: 'u' }] }))
+    show(inProgress({ breaks: [{ id: 'b1', startedAt: '2026-08-17T10:00:00Z', endedAt: null, isRunning: true, minutes: 12, editedAt: null, createdByUserId: 'u', withParticipant: false }] }))
     expect(screen.getByLabelText('Time on shift')).toBeInTheDocument()
     expect(screen.getByText(/^On a break since \d/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'End break' })).toBeInTheDocument()
@@ -503,7 +503,7 @@ describe('PortalShiftDetailPage: During', () => {
   })
 
   it('ends the running break', async () => {
-    show(inProgress({ breaks: [{ id: 'b1', startedAt: '2026-08-17T10:00:00Z', endedAt: null, isRunning: true, minutes: 12, editedAt: null, createdByUserId: 'u' }] }))
+    show(inProgress({ breaks: [{ id: 'b1', startedAt: '2026-08-17T10:00:00Z', endedAt: null, isRunning: true, minutes: 12, editedAt: null, createdByUserId: 'u', withParticipant: false }] }))
     fireEvent.click(screen.getByRole('button', { name: 'End break' }))
     await waitFor(() => expect(endBreakMutateAsync).toHaveBeenCalledWith({ id: 'shift-1', breakId: 'b1' }))
   })
@@ -601,7 +601,7 @@ describe('PortalShiftDetailPage: the five-step finish (SHAPE §4)', () => {
 
 
   it('step 1 stops only on a running break, names it, and focuses its End break', async () => {
-    show(inProgress({ breaks: [{ id: 'b1', startedAt: '2026-08-17T02:00:00Z', endedAt: null, isRunning: true, minutes: 12, editedAt: null, createdByUserId: 'u' }] }))
+    show(inProgress({ breaks: [{ id: 'b1', startedAt: '2026-08-17T02:00:00Z', endedAt: null, isRunning: true, minutes: 12, editedAt: null, createdByUserId: 'u', withParticipant: false }] }))
     endShift()
     forward('Confirm times')
     // In the sticky bar, above its buttons, so a refusal is on screen however long the step is (fix round 1 captures).
@@ -612,7 +612,7 @@ describe('PortalShiftDetailPage: the five-step finish (SHAPE §4)', () => {
   })
 
   it('edits a break on step 1 with provider-zone digits sent as UTC instants with Z', async () => {
-    show(inProgress({ breaks: [{ id: 'b1', startedAt: '2026-08-17T02:00:00Z', endedAt: '2026-08-17T02:30:00Z', isRunning: false, minutes: 30, editedAt: null, createdByUserId: 'u' }] }))
+    show(inProgress({ breaks: [{ id: 'b1', startedAt: '2026-08-17T02:00:00Z', endedAt: '2026-08-17T02:30:00Z', isRunning: false, minutes: 30, editedAt: null, createdByUserId: 'u', withParticipant: false }] }))
     endShift()
     fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
     expect(screen.getByLabelText('Break started')).toHaveValue('2026-08-17T12:00')   // Brisbane, UTC+10
@@ -930,7 +930,7 @@ describe('PortalShiftDetailPage: header, glance and segments (SHAPE §3)', () =>
   it('after submitting: Time worked and Breaks', () => {
     show(makeDetail({ status: 'PendingReview', completion: makeCompletion({ actualEnd: '2026-08-17T17:00:00Z', breakMinutes: 30, netWorkedMinutes: 450 } as never) }))
     expect(screen.getByText('7h 30m')).toBeInTheDocument()
-    expect(screen.getByText('30 min')).toBeInTheDocument()
+    expect(screen.getByText('30 min unpaid')).toBeInTheDocument()   // only breaks on my own come off
   })
 
 
@@ -1200,7 +1200,7 @@ describe('PortalShiftDetailPage: your times, kilometres and drift (Review Focus 
   })
 
   it("refuses moved times that leave a break outside, focusing that break's Edit", async () => {
-    open({ breaks: [{ id: 'b1', startedAt: '2026-08-17T06:40:00Z', endedAt: '2026-08-17T06:52:00Z', isRunning: false, minutes: 12, editedAt: null, createdByUserId: 'u' }] })
+    open({ breaks: [{ id: 'b1', startedAt: '2026-08-17T06:40:00Z', endedAt: '2026-08-17T06:52:00Z', isRunning: false, minutes: 12, editedAt: null, createdByUserId: 'u', withParticipant: false }] })
     moveFinish('2026-08-17T16:50')
     forward('Confirm times')
     expect(screen.getByRole('alert')).toHaveTextContent('Your times must include your breaks. Change the break first, or your times.')

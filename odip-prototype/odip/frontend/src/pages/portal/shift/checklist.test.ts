@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  breaksSignature, buildChecklist, clockLabel,
+  breaksSignature, buildChecklist, clockLabel, unpaidBreakMinutes,
   FINISH_STEPS, breaksLabel, dueDoseKeys, foldDueList, handoverForward, stepForCode, dosesSummary, timeBounds, timesError, movedTimes, parseKilometres, parseTravelMinutes, travelLabel, type TimesInput,
 } from './checklist'
 import type { PortalDoseSlotDto, PortalShiftRoutineDto } from '@/api/types'
@@ -54,6 +54,17 @@ describe('wording and break signature', () => {
     const a = [{ id: 'b', startedAt: '2026-10-05T01:00:00Z', endedAt: null }]
     expect(breaksSignature(a)).not.toBe(breaksSignature([{ ...a[0], endedAt: '2026-10-05T01:30:00Z' }]))
     expect(breaksSignature(a)).not.toBe(breaksSignature([]))
+  })
+  it('changes the break signature when only the kind changes (worked time follows it)', () => {
+    const a = [{ id: 'b', startedAt: '2026-10-05T01:00:00Z', endedAt: '2026-10-05T01:30:00Z', withParticipant: false }]
+    expect(breaksSignature(a)).not.toBe(breaksSignature([{ ...a[0], withParticipant: true }]))
+  })
+})
+
+describe('unpaid break minutes (W9)', () => {
+  it('adds up only the breaks on my own; a break with the participant is worked time', () => {
+    expect(unpaidBreakMinutes([])).toBe(0)
+    expect(unpaidBreakMinutes([{ minutes: 30, withParticipant: true }, { minutes: 12, withParticipant: false }, { minutes: 5, withParticipant: false }])).toBe(17)
   })
 })
 
@@ -199,6 +210,8 @@ describe('the finish flow: the Breaks row (finish review fix 6)', () => {
     expect(breaksLabel(0, 0)).toBe('No breaks')
     expect(breaksLabel(1, 0)).toBe('1 break, 0 min')
     expect(breaksLabel(2, 15)).toBe('2 breaks, 15 min')
+    expect(breaksLabel(2, 45, 30, 'Alexandra')).toBe('2 breaks, 45 min, 30 min with Alexandra')
+    expect(breaksLabel(1, 30, 0, 'Alexandra')).toBe('1 break, 30 min')
   })
 })
 

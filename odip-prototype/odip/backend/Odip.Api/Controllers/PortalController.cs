@@ -888,7 +888,7 @@ public class PortalController : ControllerBase
         var (shift, completion, error) = await ResolveInProgressShiftAsync(id, ct);
         if (error is not null) return error;
 
-        return await ToBreakResponseAsync(shift!, await _breaks.EditAsync(completion!, breakId, dto.StartedAt, dto.EndedAt, ct), ct);
+        return await ToBreakResponseAsync(shift!, await _breaks.EditAsync(completion!, breakId, dto.StartedAt, dto.EndedAt, ct, dto.WithParticipant), ct);
     }
 
     /// <summary>Removes a break before Finish (the delete is audited).</summary>

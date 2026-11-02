@@ -341,6 +341,19 @@ export function useEditCompletionTravel() {
   })
 }
 
+/** Staff set whether one break was with the participant (paid) or on the worker's own (unpaid), while the shift awaits review. */
+export function useSetBreakKind() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ shiftId, breakId, withParticipant }: { shiftId: string; breakId: string; withParticipant: boolean }) =>
+      apiPut<ShiftCompletionDto>(`/rostering/shifts/${shiftId}/completion/breaks/${breakId}/kind`, { withParticipant }),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['rostering-completion', vars.shiftId] })
+      qc.invalidateQueries({ queryKey: ['rostering-completion-review', vars.shiftId] })
+    },
+  })
+}
+
 export function useReturnCompletion() {
   const qc = useQueryClient()
   return useMutation({

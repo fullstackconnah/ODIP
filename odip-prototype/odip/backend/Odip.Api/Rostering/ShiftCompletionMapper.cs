@@ -230,6 +230,6 @@ public static class ShiftCompletionMapper
         var minutes = end > b.StartedAt ? ShiftBreakRules.WholeMinutes(end - b.StartedAt) : 0;
         return new ShiftBreakDto(
             b.Id, ProviderLocalTime.AsUtc(b.StartedAt), ProviderLocalTime.AsUtc(b.EndedAt), b.IsRunning, minutes,
-            ProviderLocalTime.AsUtc(b.EditedAt), b.CreatedByUserId);
+            ProviderLocalTime.AsUtc(b.EditedAt), b.CreatedByUserId, b.WithParticipant);
     }
 }

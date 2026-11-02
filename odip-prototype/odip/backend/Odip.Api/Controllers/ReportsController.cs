@@ -75,7 +75,7 @@ public class ReportsController : ControllerBase
         var ids = completions.Select(c => c.Id).ToList();
         var breaks = (await _db.ShiftBreaks.AsNoTracking()
             .Where(b => b.TenantId == tid && ids.Contains(b.ShiftCompletionId))
-            .Select(b => new { b.ShiftCompletionId, b.StartedAt, b.EndedAt })
+            .Select(b => new { b.ShiftCompletionId, b.StartedAt, b.EndedAt, b.WithParticipant })
             .ToListAsync(ct))
             .ToLookup(b => b.ShiftCompletionId);
 
@@ -85,7 +85,7 @@ public class ReportsController : ControllerBase
         {
             var shift = new Shift { StartTime = c.StartTime, EndTime = c.EndTime, EndsNextDay = c.EndsNextDay, NightType = c.NightType };
             var completion = new ShiftCompletion { ActualStart = c.ActualStart, ActualEnd = c.ActualEnd };
-            var shiftBreaks = breaks[c.Id].Select(b => new ShiftBreak { StartedAt = b.StartedAt, EndedAt = b.EndedAt });
+            var shiftBreaks = breaks[c.Id].Select(b => new ShiftBreak { StartedAt = b.StartedAt, EndedAt = b.EndedAt, WithParticipant = b.WithParticipant });
             var paid = ShiftBreakRules.PaidMinutes(shift, completion, now, shiftBreaks).PaidMinutes;
             var cur = perWorker.GetValueOrDefault(c.SubmittedByUserId);
             perWorker[c.SubmittedByUserId] = c.Awaiting
