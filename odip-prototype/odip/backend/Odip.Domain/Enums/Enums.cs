@@ -144,6 +144,14 @@ public enum Position
     Other
 }
 
+/// <summary>How a worker is employed, set by an admin on the staff form. Only <see cref="Casual"/> workers get the fortnight-hours roster warning.</summary>
+public enum EmploymentType
+{
+    FullTime,
+    PartTime,
+    Casual
+}
+
 public enum AvailabilityType
 {
     Available,

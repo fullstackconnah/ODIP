@@ -27,6 +27,7 @@ import { Callout } from '@/components/Callout'
 import { PageState } from '@/components/PageState'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { retryingAfterError } from '@/lib/queryPhase'
+import { EMPLOYMENT_TYPES, EMPLOYMENT_TYPE_LABELS } from '@/api/types/enums'
 
 const POSITION_ITEMS: DropdownItem[] = [
   { value: 'SupportWorker', label: 'Support Worker' },
@@ -36,10 +37,16 @@ const POSITION_ITEMS: DropdownItem[] = [
   { value: 'Other', label: 'Other' },
 ]
 
+const EMPLOYMENT_TYPE_ITEMS: DropdownItem[] = [
+  { value: '', label: 'Not set' },
+  ...EMPLOYMENT_TYPES.map(value => ({ value, label: EMPLOYMENT_TYPE_LABELS[value] })),
+]
+
 const staffSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
   lastName: z.string().min(1, 'Last name is required'),
   position: z.string().min(1, 'Position is required'),
+  employmentType: z.string().nullable().optional(),
   role: z.string().min(1, 'Account role is required'),
   email: z.string().min(1, 'Email is required').email('Enter a valid email address'),
   mobile: z.string().optional(),
@@ -140,6 +147,7 @@ export default function StaffCreatePage() {
     resolver: zodResolver(staffSchema),
     defaultValues: {
       position: 'SupportWorker',
+      employmentType: '',
       role: 'SupportWorker',
       isDriverEligible: false,
       isFirstAidQualified: false,
@@ -156,6 +164,7 @@ export default function StaffCreatePage() {
       firstName: record.firstName ?? '',
       lastName: record.lastName ?? '',
       position: record.position ?? 'SupportWorker',
+      employmentType: record.employmentType ?? null,
       role: record.role ?? 'SupportWorker',
       email: record.email ?? '',
       mobile: record.mobile ?? '',
@@ -320,6 +329,22 @@ export default function StaffCreatePage() {
                     onChange={field.onChange}
                     onBlur={field.onBlur}
                     items={POSITION_ITEMS}
+                  />
+                )}
+              />
+            </FormField>
+
+            <FormField label="Employment type" hint="Casual workers get a roster warning past 76 hours a fortnight." className={span.medium}>
+              <Controller
+                control={control}
+                name="employmentType"
+                render={({ field }) => (
+                  <Dropdown
+                    variant="form"
+                    value={field.value ?? ''}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    items={EMPLOYMENT_TYPE_ITEMS}
                   />
                 )}
               />
