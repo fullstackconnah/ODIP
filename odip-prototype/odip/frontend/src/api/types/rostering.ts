@@ -331,6 +331,15 @@ export interface ReturnCompletionDto {
   reason: string
 }
 
+/** PUT rostering/shifts/{id}/completion/travel body: replaces all four values; null clears one. Minutes are whole, 0 to 480; kilometres 0 to 2,000.
+ * 409 SHIFT_TRAVEL_ON_CLAIM when the shift is already on a claim. */
+export interface EditCompletionTravelDto {
+  preShiftTravelMinutes: number | null
+  preShiftTravelKilometres: number | null
+  postShiftTravelMinutes: number | null
+  postShiftTravelKilometres: number | null
+}
+
 /** POST rostering/completions/approve-batch body — 1-100 shift ids (400 SHIFT_BATCH_SIZE_INVALID
  * outside that range). */
 export interface ApproveBatchDto {

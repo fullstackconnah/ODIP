@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   breaksSignature, buildChecklist, clockLabel,
-  FINISH_STEPS, breaksLabel, dueDoseKeys, foldDueList, handoverForward, stepForCode, dosesSummary, timeBounds, timesError, movedTimes, parseKilometres, type TimesInput,
+  FINISH_STEPS, breaksLabel, dueDoseKeys, foldDueList, handoverForward, stepForCode, dosesSummary, timeBounds, timesError, movedTimes, parseKilometres, parseTravelMinutes, travelLabel, type TimesInput,
 } from './checklist'
 import type { PortalDoseSlotDto, PortalShiftRoutineDto } from '@/api/types'
 
@@ -73,7 +73,8 @@ describe('the finish flow: steps and step 4', () => {
   })
   it('sends a refused submit to the step that can fix it', () => {
     for (const code of ['BREAK_RUNNING', 'SHIFT_TIME_ADJUSTMENT_TOO_LARGE', 'SHIFT_TIME_ADJUSTMENT_REASON_REQUIRED', 'SHIFT_TIME_ADJUSTMENT_REASON_TOO_LONG',
-      'SHIFT_ACTUAL_END_IN_FUTURE', 'SHIFT_START_NOT_BEFORE_END', 'SHIFT_BREAK_OUTSIDE_TIMES', 'SHIFT_KILOMETRES_OUT_OF_RANGE']) {
+      'SHIFT_ACTUAL_END_IN_FUTURE', 'SHIFT_START_NOT_BEFORE_END', 'SHIFT_BREAK_OUTSIDE_TIMES', 'SHIFT_KILOMETRES_OUT_OF_RANGE',
+      'SHIFT_TRAVEL_MINUTES_OUT_OF_RANGE', 'SHIFT_TRAVEL_KILOMETRES_OUT_OF_RANGE']) {
       expect(stepForCode(code)).toBe('times')
     }
     expect(stepForCode('DOSE_OUTCOME_MISSING')).toBe('doses')
@@ -165,6 +166,31 @@ describe('the finish flow: kilometres (Review Focus 5)', () => {
       now: new Date('2026-08-17T07:00:30Z'),
     }
     expect(timesError(base)).toEqual({ field: 'kilometres', message: 'Enter kilometres from 0 to 2,000.' })
+  })
+})
+
+describe('the finish flow: provider travel', () => {
+  it.each([['', null], [' ', null], ['0', 0], ['25', 25], ['480', 480]] as const)('reads minutes %j as %j', (raw, value) => {
+    expect(parseTravelMinutes(raw)).toBe(value)
+  })
+  it.each(['481', '12.5', '-1', '1e2', 'abc', '1,5', '04800'])('refuses minutes %j', raw => {
+    expect(parseTravelMinutes(raw)).toBe('invalid')
+  })
+  const base: TimesInput = {
+    tz: 'Australia/Brisbane', stampedStart: '2026-08-16T23:05:40Z', startOverride: null, endOverride: null, reason: '', kilometres: '', breaks: [],
+    now: new Date('2026-08-17T07:00:30Z'),
+  }
+  it('names the first bad travel field on step 1, in screen order', () => {
+    expect(timesError({ ...base, postTravelMinutes: '481', preTravelKilometres: '2000.1' })).toEqual({ field: 'preTravelKilometres', message: 'Enter kilometres from 0 to 2,000.' })
+    expect(timesError({ ...base, postTravelMinutes: '481' })).toEqual({ field: 'postTravelMinutes', message: 'Enter whole minutes from 0 to 480.' })
+    expect(timesError({ ...base, preTravelMinutes: '12.5', kilometres: 'x' })?.field).toBe('preTravelMinutes')
+    expect(timesError({ ...base, preTravelMinutes: '25', preTravelKilometres: '12.3', postTravelMinutes: '480', postTravelKilometres: '2000' })).toBeNull()
+  })
+  it('says what was entered, or None', () => {
+    expect(travelLabel(25, 12.3)).toBe('25 min, 12.3 km')
+    expect(travelLabel(25, null)).toBe('25 min')
+    expect(travelLabel(null, 8)).toBe('8 km')
+    expect(travelLabel(null, null)).toBe('None')
   })
 })
 

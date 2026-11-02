@@ -24,6 +24,8 @@ export type ModalProps = {
   initialFocusRef?: RefObject<HTMLElement | null>
   /** No close button: for a dialog that cannot be dismissed while a write is in flight (the caller also makes `onClose` do nothing). */
   hideClose?: boolean
+  /** Pins the dialog near the top instead of centring it, for a dialog whose body grows in place (an editor opening) and must not move under the pointer. */
+  alignTop?: boolean
 }
 
 const SIZE_MAP = {
@@ -33,7 +35,7 @@ const SIZE_MAP = {
   xl: 'max-w-4xl',
 }
 
-export function Modal({ open, onClose, title, size = 'md', footer, children, className, closeOnBackdrop = true, stickyFooter = false, role = 'dialog', initialFocusRef, hideClose = false }: ModalProps) {
+export function Modal({ open, onClose, title, size = 'md', footer, children, className, closeOnBackdrop = true, stickyFooter = false, role = 'dialog', initialFocusRef, hideClose = false, alignTop = false }: ModalProps) {
   const titleId = useId()
   const descriptionId = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
@@ -46,7 +48,7 @@ export function Modal({ open, onClose, title, size = 'md', footer, children, cla
 
   return (
     // Below lg the fixed bottom nav (AppLayout, z-50, later in the DOM) covers the screen foot: the bottom padding centres the dialog in what is left.
-    <div className="modal-scrim fixed inset-0 z-50 flex items-center justify-center bg-black/50 pb-[var(--mobile-nav-h)] lg:pb-0" onClick={closeOnBackdrop ? onClose : undefined}>
+    <div className={`modal-scrim fixed inset-0 z-50 flex justify-center bg-black/50 ${alignTop ? 'items-start pt-[8vh]' : 'items-center'} pb-[var(--mobile-nav-h)] lg:pb-0`} onClick={closeOnBackdrop ? onClose : undefined}>
       <div
         ref={dialogRef}
         role={role}

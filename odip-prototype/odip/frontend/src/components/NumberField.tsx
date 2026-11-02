@@ -16,6 +16,8 @@ type NumberFieldProps = {
   disabled?: boolean
   /** A locked settings form shows its values readable, as its text fields do. */
   readOnly?: boolean
+  /** Opt-in: told on every edit whether the box holds text that is not a number ("1.2.3", "-"), which the browser reads as empty. */
+  onBadInput?: (bad: boolean) => void
 }
 
 /**
@@ -23,7 +25,7 @@ type NumberFieldProps = {
  * NaN, which the block's own checks call "enter a number") instead of snapping to 0 under the cursor, and a value changed from outside (a template, a toggle)
  * is shown as soon as it arrives.
  */
-export function NumberField({ label, value, onChange, inputMode = 'numeric', ...rest }: NumberFieldProps) {
+export function NumberField({ label, value, onChange, inputMode = 'numeric', onBadInput, ...rest }: NumberFieldProps) {
   const [text, setText] = useState(() => (Number.isNaN(value) ? '' : String(value)))
   const [seen, setSeen] = useState(value)
   if (!Object.is(seen, value)) {
@@ -42,6 +44,7 @@ export function NumberField({ label, value, onChange, inputMode = 'numeric', ...
       onChange={event => {
         const next = event.target.value
         setText(next)
+        onBadInput?.(event.target.validity.badInput)
         const parsed = next.trim() === '' ? Number.NaN : Number(next)
         setSeen(parsed)
         onChange(parsed)

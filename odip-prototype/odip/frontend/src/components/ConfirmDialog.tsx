@@ -26,11 +26,13 @@ export type ConfirmDialogProps = {
   footer?: ReactNode
   /** Focus the default cancel button on open, so Enter and Space choose the safe answer (unsaved-changes prompts). Ignored with a custom `footer`. */
   focusCancel?: boolean
+  /** Top-aligned instead of centred: for a message that grows in place. */
+  alignTop?: boolean
 }
 
 export function ConfirmDialog({
   open, onConfirm, onCancel, title, message,
-  confirmLabel = 'Confirm', cancelLabel = 'Cancel', variant = 'default', loading, confirmDisabled, footer, confirmAriaLabel, focusCancel,
+  confirmLabel = 'Confirm', cancelLabel = 'Cancel', variant = 'default', loading, confirmDisabled, footer, confirmAriaLabel, focusCancel, alignTop,
 }: ConfirmDialogProps) {
   const cancelRef = useRef<HTMLButtonElement>(null)
   return (
@@ -40,6 +42,7 @@ export function ConfirmDialog({
       onClose={onCancel}
       title={title}
       size="sm"
+      alignTop={alignTop}
       role="alertdialog"
       footer={
         footer ?? (

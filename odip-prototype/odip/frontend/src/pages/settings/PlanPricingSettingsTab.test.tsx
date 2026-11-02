@@ -108,6 +108,11 @@ describe('Plan pricing settings', () => {
     expect(screen.getByText(/the higher-priced part applies to all of it, claimed on the day it starts\. Never across a sleepover/)).toBeInTheDocument()
   })
 
+  it('says the travel switch also governs shift claims and what workers are asked', () => {
+    setUp()
+    expect(screen.getByText("Off, no agreement or shift claim includes travel, and workers aren't asked for it.")).toBeInTheDocument()
+  })
+
   it('sends only what changed, so a stale form cannot undo a setting somebody else just made', async () => {
     const user = userEvent.setup()
     setUp()

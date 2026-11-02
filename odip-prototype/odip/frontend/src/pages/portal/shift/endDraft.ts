@@ -14,6 +14,11 @@ export interface EndDraft {
   adjustmentReason: string
   /** The kilometre field as typed. */
   kilometres: string
+  /** The four provider-travel fields as typed: the trip to the participant, then the trip after the shift. */
+  preTravelMinutes: string
+  preTravelKilometres: string
+  postTravelMinutes: string
+  postTravelKilometres: string
   anythingToReport: 'yes' | 'no' | null
   handoverText: string
   nothingToNote: boolean
@@ -24,6 +29,7 @@ export interface EndDraft {
 
 export const EMPTY_END_DRAFT: EndDraft = {
   step: null, reached: 'times', startOverride: null, endOverride: null, adjustmentReason: '', kilometres: '',
+  preTravelMinutes: '', preTravelKilometres: '', postTravelMinutes: '', postTravelKilometres: '',
   anythingToReport: null, handoverText: '', nothingToNote: false, nothingToHandOver: false, timesSig: null,
 }
 
@@ -44,6 +50,10 @@ export function loadEndDraft(shiftId: string): EndDraft | null {
       endOverride: textOrNull(d.endOverride),
       adjustmentReason: text(d.adjustmentReason),
       kilometres: text(d.kilometres),
+      preTravelMinutes: text(d.preTravelMinutes),
+      preTravelKilometres: text(d.preTravelKilometres),
+      postTravelMinutes: text(d.postTravelMinutes),
+      postTravelKilometres: text(d.postTravelKilometres),
       anythingToReport: d.anythingToReport === 'yes' || d.anythingToReport === 'no' ? d.anythingToReport : null,
       handoverText: text(d.handoverText),
       nothingToNote: d.nothingToNote === true,

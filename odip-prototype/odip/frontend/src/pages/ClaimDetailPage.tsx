@@ -334,7 +334,7 @@ export default function ClaimDetailPage() {
               header: 'Day Type',
               sortable: true,
               render: (item: ClaimLineItemDto) => (
-                <span className="whitespace-nowrap text-[var(--color-muted-foreground)]">{lineKindLabel(item)}</span>
+                <span className="whitespace-nowrap text-[var(--color-muted-foreground)]">{lineKindLabel(item)}{item.claimType === 'ProviderTravel' && <>{' '}<span className="text-xs font-mono">TRAN</span></>}</span>
               ),
             },
             {
@@ -352,7 +352,7 @@ export default function ClaimDetailPage() {
             },
             {
               key: 'hours',
-              header: 'Hours',
+              header: 'Quantity',
               align: 'right' as const,
               render: (item: ClaimLineItemDto) => (
                 <span className="whitespace-nowrap tabular-nums text-[var(--color-muted-foreground)]">{lineQuantity(item)}</span>

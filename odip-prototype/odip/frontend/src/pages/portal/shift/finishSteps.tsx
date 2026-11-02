@@ -13,7 +13,7 @@ import { apiErrorMessages } from '@/lib/shiftPackageErrors'
 import { formatFlaggedCategoryList, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 import { formatMinutesSpan } from '@/pages/rostering/lib/roster'
 import { rosteredInstants } from '../lib/portal'
-import { breaksLabel, clockLabel, FINISH_STEPS, dosesSummary, REASON_MAX, timeBounds, type FinishStepKey, type TimesField } from './checklist'
+import { breaksLabel, clockLabel, FINISH_STEPS, dosesSummary, REASON_MAX, timeBounds, travelLabel, type FinishStepKey, type TimesField, type TravelField } from './checklist'
 import { PrnRow, RoutineRow } from './DuringSection'
 import { minutesBetween, providerLocalToUtcInstant, utcInstantToProviderLocal } from './shiftTime'
 import { Fold, WaitingToSend } from './ui'
@@ -149,9 +149,45 @@ function TimeField({ label, figure, sub, rostered, tz, id, name, value, bounds, 
   )
 }
 
+/** One leg of provider travel on step 1: minutes and kilometres side by side under a legend. The unit sits inside the field, clear of the typed value. */
+function TravelLeg({ id, legend, help, draft, set, invalid, message }: {
+  id: 'pre' | 'post'; legend: string; help: string; draft: EndDraft; set: (patch: Partial<EndDraft>) => void; invalid?: TimesField; message?: string
+}) {
+  const inputs = [
+    { part: 'min', label: 'Minutes', unit: 'min', mode: 'numeric', field: `${id}TravelMinutes` },
+    { part: 'km', label: 'Kilometres', unit: 'km', mode: 'decimal', field: `${id}TravelKilometres` },
+  ] as const
+  const bad = inputs.some(x => invalid === x.field)
+  return (
+    <fieldset className="space-y-1">
+      <legend className="text-sm font-medium">{legend}</legend>
+      <p id={`finish-${id}-help`} className="text-xs text-[var(--color-muted-foreground)]">{help}</p>
+      <div className="grid grid-cols-2 gap-3">
+        {inputs.map(x => {
+          const mine = invalid === x.field
+          return (
+            <div key={x.part}>
+              <label htmlFor={`finish-${id}-${x.part}`} className="text-xs text-[var(--color-muted-foreground)]">{x.label}</label>
+              <div className="relative">
+                <input
+                  id={`finish-${id}-${x.part}`} inputMode={x.mode} className={`${fieldClass} pr-12`} value={draft[x.field]}
+                  aria-describedby={mine ? `finish-${id}-help finish-${id}-error` : `finish-${id}-help`} aria-invalid={mine || undefined}
+                  onChange={e => set({ [x.field]: e.target.value })}
+                />
+                <span aria-hidden className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-[var(--color-muted-foreground)]">{x.unit}</span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      {bad && message && <p id={`finish-${id}-error`} className="text-xs text-[var(--color-destructive)]">{message}</p>}
+    </fieldset>
+  )
+}
+
 /** Step 1, Your times (SHAPE §4): change either time by up to 15 minutes with a reason, correct the breaks, add kilometres. */
-export function TimesStep({ shift, online, now, draft, set, invalid }: {
-  shift: PortalShiftDetailDto; online: boolean; now: Date; draft: EndDraft; set: (patch: Partial<EndDraft>) => void; invalid?: TimesField
+export function TimesStep({ shift, online, now, draft, set, invalid, invalidMessage }: {
+  shift: PortalShiftDetailDto; online: boolean; now: Date; draft: EndDraft; set: (patch: Partial<EndDraft>) => void; invalid?: TimesField; invalidMessage?: string
 }) {
   const tz = shift.timeZoneId
   const c = shift.completion
@@ -201,14 +237,22 @@ export function TimesStep({ shift, online, now, draft, set, invalid }: {
           : <ul className="space-y-2">{shift.breaks.map(x => <BreakRow key={x.id} shift={shift} brk={x} online={online} />)}</ul>}
       </section>
       <p className="text-sm">Time worked <span className="font-semibold tabular-nums">{formatMinutesSpan(worked)}</span></p>
-      <section aria-labelledby="finish-travel" className="space-y-1">
+      <section aria-labelledby="finish-travel" className="space-y-3">
         <h3 id="finish-travel" className="text-sm font-semibold">Travel</h3>
+        {shift.travelAsked && (
+          <>
+            <TravelLeg id="pre" legend={`Your trip to ${first} (optional)`} help="From wherever you were before this shift." draft={draft} set={set} invalid={invalid} message={invalidMessage} />
+            <TravelLeg id="post" legend="Your trip after the shift (optional)" help="To your base or home. If you're going straight to another shift, leave this empty and add the trip on that shift." draft={draft} set={set} invalid={invalid} message={invalidMessage} />
+          </>
+        )}
+        <div className="space-y-1">
         <label htmlFor="finish-km" className="text-sm font-medium">Kilometres driven with {first} (optional)</label>
-        <p id="finish-km-help" className={muted}>Only driving with {first}, not your trip to or from the shift.</p>
+        <p id="finish-km-help" className={muted}>{shift.travelAsked ? `Only driving with ${first} during the shift.` : `Only driving with ${first}, not your trip to or from the shift.`}</p>
         <input
           id="finish-km" inputMode="decimal" className={fieldClass} aria-describedby="finish-km-help"
           aria-invalid={invalid === 'kilometres' || undefined} value={draft.kilometres} onChange={e => set({ kilometres: e.target.value })}
         />
+        </div>
       </section>
     </div>
   )
@@ -333,15 +377,16 @@ export function HandoverStep({ noteCount, draft, set, onEditNotes }: {
 }
 
 /** Step 5, Check and submit (SHAPE §4): what will be sent, grouped by step with a way back to each, then the server's answer if it refused. */
-export function SubmitStep({ shift, draft, noteCount, now, refusals, go, moved, kilometres, drifted, onUseSubmitTime, onChangeTimes }: {
+export function SubmitStep({ shift, draft, noteCount, now, refusals, go, moved, kilometres, travel, drifted, onUseSubmitTime, onChangeTimes }: {
   shift: PortalShiftDetailDto; draft: EndDraft; noteCount: number; now: Date; refusals: Refusal[]; go: (step: FinishStepKey) => void
-  moved: { start: string | null; end: string | null }; kilometres: number | null; drifted: boolean; onUseSubmitTime: () => void; onChangeTimes: () => void
+  moved: { start: string | null; end: string | null }; kilometres: number | null; travel: Record<TravelField, number | null>; drifted: boolean; onUseSubmitTime: () => void; onChangeTimes: () => void
 }) {
   const tz = shift.timeZoneId
   const c = shift.completion
   const breakMinutes = shift.breaks.reduce((sum, b) => sum + b.minutes, 0)
   const worked = c ? Math.max(0, minutesBetween(moved.start ?? c.actualStart, moved.end ?? now.toISOString()) - breakMinutes) : 0
   const handover = draft.handoverText.trim()
+  const first = shift.participant.fullName.split(' ')[0]
   const groups: { step: FinishStepKey; title: string; items: FactListItem[] }[] = [
     { step: 'times', title: 'Times', items: [
       { label: 'Started', value: c ? (moved.start ? `${clock(moved.start, tz)} (changed from ${clock(c.actualStart, tz)})` : clock(c.actualStart, tz)) : null },
@@ -349,6 +394,10 @@ export function SubmitStep({ shift, draft, noteCount, now, refusals, go, moved, 
       ...(moved.start || moved.end ? [{ label: 'Reason', value: draft.adjustmentReason.trim() }] : []),
       { label: 'Breaks', value: breaksLabel(shift.breaks.length, breakMinutes) },
       { label: 'Time worked', value: formatMinutesSpan(worked) },
+      ...(shift.travelAsked ? [
+        { label: `Trip to ${first}`, value: travelLabel(travel.preTravelMinutes, travel.preTravelKilometres) },
+        { label: 'Trip after the shift', value: travelLabel(travel.postTravelMinutes, travel.postTravelKilometres) },
+      ] : []),
       { label: 'Kilometres', value: kilometres === null ? 'None' : `${kilometres} km` },
     ] },
     { step: 'doses', title: 'Doses and routines', items: [{ label: 'Recorded', value: dosesSummary(shift.medicationsDue, shift.shiftRoutines) || 'Nothing due' }] },
