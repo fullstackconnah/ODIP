@@ -13,7 +13,7 @@ using Odip.Infrastructure.Data;
 namespace Odip.Infrastructure.Migrations
 {
     [DbContext(typeof(OdipDbContext))]
-    [Migration("20261102151000_AddShiftCancelledAt")]
+    [Migration("20261102153000_AddShiftCancelledAt")]
     partial class AddShiftCancelledAt
     {
         /// <inheritdoc />
@@ -4369,6 +4369,9 @@ namespace Odip.Infrastructure.Migrations
 
                     b.Property<DateOnly?>("DateOfBirthSnapshot")
                         .HasColumnType("date");
+
+                    b.Property<bool>("IsOngoing")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("NdisNumberSnapshot")
                         .HasMaxLength(100)
