@@ -40,7 +40,7 @@ beforeEach(() => {
 // ClaimDetailPage calls useUnsavedChangesWarning, which uses react-router 7's useBlocker — that
 // throws under a plain declarative <MemoryRouter>/<Routes>, so tests need a data router (same
 // requirement IncidentCreatePage.test.tsx documents).
-function renderPage(initialEntry = '/claims/claim-1') {
+function renderPage(initialEntry: string | { pathname: string; state?: unknown } = '/claims/claim-1') {
   const router = createMemoryRouter(
     [
       { path: '/claims/:id', element: <ClaimDetailPage /> },
@@ -228,6 +228,33 @@ describe('ClaimDetailPage — Invoices section (Xero PR1)', () => {
     mockUseClaim.mockReturnValue({ data: { ...baseClaim([baseLineItem()]), status }, isLoading: false })
     renderPage()
     expect(screen.getByRole('button', { name: 'Mark as Submitted' })).toBeInTheDocument()
+  })
+
+  it.each([['Shift', 'Rejected', true], ['Shift', 'Cancelled', true], ['Shift', 'Draft', false], ['Shift', 'Submitted', false], ['Trip', 'Rejected', false]] as const)(
+    'Claim again is offered on a %s claim that is %s: %s (shift claims only, rejected or cancelled only)',
+    (kind, status, offered) => {
+      mockUseClaim.mockReturnValue({ data: kind === 'Shift' ? shiftClaim([shiftLineItem()], { status }) : { ...baseClaim([baseLineItem()]), status }, isLoading: false })
+      renderPage()
+      expect(screen.queryByRole('button', { name: 'Claim again…' }) !== null).toBe(offered)
+    },
+  )
+
+  it('a claim made by Claim again says it replaced the old one, from the router state', () => {
+    mockUseClaim.mockReturnValue({ data: shiftClaim([shiftLineItem()]), isLoading: false })
+    renderPage({ pathname: '/claims/claim-1', state: { claimedAgainFrom: 'TC-OLD-1' } })
+    expect(screen.getByText(/made\. TC-OLD-1 was deleted\./)).toBeInTheDocument()
+  })
+
+  it('a claim made by Claim again puts the focus on the page title', async () => {
+    mockUseClaim.mockReturnValue({ data: shiftClaim([shiftLineItem()]), isLoading: false })
+    renderPage({ pathname: '/claims/claim-1', state: { claimedAgainFrom: 'TC-OLD-1' } })
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1 })).toHaveFocus())
+  })
+
+  it('has no such notice on an ordinary visit', () => {
+    mockUseClaim.mockReturnValue({ data: shiftClaim([shiftLineItem()]), isLoading: false })
+    renderPage()
+    expect(screen.queryByText(/was deleted/)).not.toBeInTheDocument()
   })
 
   it.each(['Submitted', 'Paid'] as const)('does not offer Mark as Submitted on a %s claim', status => {

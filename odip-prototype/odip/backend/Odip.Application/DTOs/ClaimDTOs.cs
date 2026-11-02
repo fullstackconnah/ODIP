@@ -213,6 +213,9 @@ public record ShiftClaimLeftOutDto
     public string Description { get; init; } = string.Empty;
     /// <summary>Why, as a sentence ("It is a sleepover, which shift claims do not price yet.").</summary>
     public string Reason { get; init; } = string.Empty;
+    /// <summary>Set when the shift is held by a rejected or cancelled claim: the screen links to it (and to "Claim again") by this id, never by the sentence.</summary>
+    public Guid? HeldByClaimId { get; init; }
+    public string? HeldByClaimReference { get; init; }
 }
 
 /// <summary>

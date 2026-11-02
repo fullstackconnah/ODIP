@@ -255,4 +255,24 @@ public class ShiftClaimLeftOutTests
 
         Assert.Equal(preview.TotalAmount, q2.Pending);   // one estimator: the estimate and the claim made from it are the same figure
     }
+
+    [Fact]
+    public async Task ACancelledShiftHeldByARejectedClaim_CarriesTheClaimLink_InTheCancellationChoosersLeftOutList()
+    {
+        var kit = LedgerKit.Create();
+        kit.SeedProvider("NSW").TimeZoneId = "Australia/Sydney";
+        kit.EnsureCommunityAccessCatalogue();
+        foreach (var item in kit.Db.SupportCatalogueItems) item.ShortNoticeCancellation = CatalogueClaimFlag.Yes;
+        var person = kit.SeedParticipant();
+        var shift = kit.SeedShift(person, new DateOnly(2026, 10, 20), ShiftStatus.Cancelled);
+        shift.CancelledAt = new DateTime(2026, 10, 16, 1, 0, 0, DateTimeKind.Utc);
+        kit.Db.SaveChanges();
+        var rejected = kit.SeedShiftClaim(person, TripClaimStatus.Rejected, 400m, shift, reference: "TC-REJECTED-2");
+
+        var candidates = await Engine(kit).CancellationCandidatesAsync(kit.TenantId, new DateOnly(2026, 10, 22), Ct);
+
+        var left = Assert.Single(candidates.LeftOut);
+        Assert.Equal((rejected.Id, "TC-REJECTED-2"), (left.HeldByClaimId, left.HeldByClaimReference));
+        Assert.Contains("Open that claim and choose Claim again.", left.Reason);
+    }
 }

@@ -9,6 +9,7 @@ import { DataTable } from '@/components/DataTable'
 import { FlaggedShifts } from '@/components/FlaggedShifts'
 import { FormField } from '@/components/FormField'
 import { LeftOutCallout, SHIFT_LEFT_OUT_FOOTER } from '@/components/LeftOutCallout'
+import { heldClaimLink } from '@/components/heldClaimLink'
 import { Modal } from '@/components/Modal'
 import { TAP_FLOOR } from '@/components/tapArea'
 import { plural } from '@/lib/format'
@@ -128,7 +129,7 @@ function RunBody({ run, made, preview }: { run: ShiftClaimRunDto; made: boolean;
   const rows = run.participants
   const failed = run.skipped.filter(s => s.failed)
   const leftOut = [
-    ...run.leftOut.map(l => ({ key: `${l.participantId}-${l.shiftId}`, lead: <><span>{l.participantName}</span> · <span className="tabular-nums">{formatDateAu(l.serviceDate)}</span></>, description: l.description, reason: l.reason })),
+    ...run.leftOut.map(l => ({ key: `${l.participantId}-${l.shiftId}`, lead: <><span>{l.participantName}</span> · <span className="tabular-nums">{formatDateAu(l.serviceDate)}</span></>, description: l.description, reason: l.reason, action: heldClaimLink(l) })),
     ...run.skipped.filter(s => !s.failed).map(s => ({ key: `skip-${s.participantId}`, lead: <span>{s.participantName}</span>, description: 'Every shift in this period', reason: s.reason })),
   ]
   const leftOutCount = run.leftOut.length + run.skipped.filter(s => !s.failed).length

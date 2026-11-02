@@ -56,7 +56,7 @@ public partial class ShiftClaimGenerationService
                         EndsNextDay = shift.EndsNextDay, CancelledAt = DateTime.SpecifyKind(shift.CancelledAt!.Value, DateTimeKind.Utc), TotalAmount = own.Sum(l => l.TotalAmount),
                     });
             }
-            notOffered.AddRange(leftOut.Select(l => new CancellationLeftOutDto { ShiftId = l.ShiftId, ServiceDate = l.ServiceDate, Description = l.Description, Reason = l.Reason, ParticipantName = participant.FullName }));
+            notOffered.AddRange(leftOut.Select(l => new CancellationLeftOutDto { ShiftId = l.ShiftId, ServiceDate = l.ServiceDate, Description = l.Description, Reason = l.Reason, HeldByClaimId = l.HeldByClaimId, HeldByClaimReference = l.HeldByClaimReference, ParticipantName = participant.FullName }));
         }
 
         return new CancellationCandidatesDto

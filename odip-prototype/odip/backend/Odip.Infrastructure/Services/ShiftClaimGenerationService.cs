@@ -112,7 +112,7 @@ public partial class ShiftClaimGenerationService
 
     /// <summary>The claim and its lines for priced shifts, saved under the participant lock the caller holds. <paramref name="cancellationReason"/> is set on every line of a cancellation claim, null for a standard one.</summary>
     private async Task<ShiftClaimGenerated> SaveClaimAsync(
-        RosterGenerationLock held, Participant participant, List<ShiftLineCalc> lineItems, List<ShiftClaimLeftOutDto> leftOut, DateOnly from, DateOnly to, string? cancellationReason, CancellationToken ct)
+        RosterGenerationLock held, Participant participant, List<ShiftLineCalc> lineItems, List<ShiftClaimLeftOutDto> leftOut, DateOnly from, DateOnly to, string? cancellationReason, CancellationToken ct, string? notes = null)
     {
         var settings = ProviderSettingsGuard.Require(await _db.ProviderSettings.FirstOrDefaultAsync(s => s.TenantId == participant.TenantId, ct));
 
@@ -130,6 +130,7 @@ public partial class ShiftClaimGenerationService
             // The header covers every line: a night part after midnight on the last day is dated the day after it.
             PeriodTo = lineItems.Max(l => l.Date) is var lastLine && lastLine > to ? lastLine : to,
             Status = TripClaimStatus.Draft,
+            Notes = notes,
             ClaimReference = BuildClaimReference(participant, claimId),
             CreatedAt = DateTime.UtcNow
         };
@@ -152,7 +153,7 @@ public partial class ShiftClaimGenerationService
             TotalAmount = l.TotalAmount,
             GSTCode = gstCode,
             ClaimType = l.ClaimType,
-            CancellationReason = cancellationReason,
+            CancellationReason = l.CancellationReason ?? cancellationReason,
             Status = ClaimLineItemStatus.Draft
         }).ToList();
 
@@ -212,7 +213,7 @@ public partial class ShiftClaimGenerationService
     /// the shifts are cancelled ones, each must have been cancelled less than 7 days ahead (calendar days in the organisation's zone) and be over, its item must allow cancellation, and every line is a Cancellation line with no provider travel.
     /// </summary>
     private async Task<(List<ShiftLineCalc> LineItems, List<ShiftClaimLeftOutDto> LeftOut, Participant Participant)> PriceShiftsAsync(
-        Participant participant, List<Shift> shifts, DateOnly from, DateOnly to, DateOnly? cancelToday, CancellationToken ct)
+        Participant participant, List<Shift> shifts, DateOnly from, DateOnly to, DateOnly? cancelToday, CancellationToken ct, Guid? replacing = null)
     {
         var participantId = participant.Id;
 
@@ -220,9 +221,10 @@ public partial class ShiftClaimGenerationService
         // here beside the query so a preview and a run agree, and say how to free them.
         var heldIds = shifts.Select(s => s.Id).ToList();
         var heldBy = (await _db.ClaimLineItems.AsNoTracking()
-                .Where(l => l.ShiftId != null && heldIds.Contains(l.ShiftId.Value) && l.Status != ClaimLineItemStatus.Rejected && (l.TripClaim.Status == TripClaimStatus.Rejected || l.TripClaim.Status == TripClaimStatus.Cancelled))
-                .Select(l => new { ShiftId = l.ShiftId!.Value, l.TripClaim.ClaimReference, ClaimStatus = l.TripClaim.Status }).ToListAsync(ct))
-            .GroupBy(l => l.ShiftId).ToDictionary(g => g.Key, g => (g.First().ClaimReference, g.First().ClaimStatus));
+                .Where(l => l.ShiftId != null && heldIds.Contains(l.ShiftId.Value) && l.Status != ClaimLineItemStatus.Rejected && (l.TripClaim.Status == TripClaimStatus.Rejected || l.TripClaim.Status == TripClaimStatus.Cancelled)
+                    && (replacing == null || l.TripClaimId != replacing.Value))
+                .Select(l => new { ShiftId = l.ShiftId!.Value, l.TripClaimId, l.TripClaim.ClaimReference, ClaimStatus = l.TripClaim.Status }).ToListAsync(ct))
+            .GroupBy(l => l.ShiftId).ToDictionary(g => g.Key, g => (g.First().TripClaimId, g.First().ClaimReference, g.First().ClaimStatus));
 
         // A day is claimed once: a shift on a date the participant is on a live trip claim (the same rule as the ledger, so a Rejected or Cancelled claim frees the day) is left out and names that claim.
         // shortcut: this reads once per run and does not lock against ClaimGenerationService, so a trip claim made at the same moment can still land; upgrade is the per-participant RosterGenerationLock taken in that engine too.
@@ -295,7 +297,7 @@ public partial class ShiftClaimGenerationService
             }
             if (heldBy.TryGetValue(shift.Id, out var heldClaim))
             {
-                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = $"{participant.FullName}: it is on {(heldClaim.ClaimStatus == TripClaimStatus.Cancelled ? "cancelled" : "rejected")} claim {heldClaim.ClaimReference}. Delete that claim, then claim this shift again." });
+                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = $"{participant.FullName}: it is on {(heldClaim.ClaimStatus == TripClaimStatus.Cancelled ? "cancelled" : "rejected")} claim {heldClaim.ClaimReference}. Open that claim and choose Claim again.", HeldByClaimId = heldClaim.TripClaimId, HeldByClaimReference = heldClaim.ClaimReference });
                 continue;
             }
             if (cancelToday is { } today && NotClaimableCancellation(shift, today, zone) is { } notYet)
@@ -444,6 +446,8 @@ public partial class ShiftClaimGenerationService
         public decimal Hours { get; set; }
         public decimal UnitPrice { get; set; }
         public decimal TotalAmount { get; set; }
+        /// <summary>A reason this line carries by itself (a line flipped to Cancellation by hand, claimed again); null takes the claim's.</summary>
+        public string? CancellationReason { get; set; }
         /// <summary>Something worth saying about the line (the estimator's caveat), or null.</summary>
         public string? Caveat { get; set; }
     }
