@@ -23,7 +23,7 @@ import { defaultReportRange, reportRangeError } from './reportRange'
 const STRIP = 'min-h-[60px] flex items-center justify-center px-[var(--card-pad)] py-2 text-center text-sm text-[var(--color-muted-foreground)]'
 // The range error wraps under its field instead of widening it: it adds nothing to the field's natural width but fills it.
 const ERROR_UNDER_FIELD = '[&>[role=alert]]:w-0 [&>[role=alert]]:min-w-full'
-const CSV_FAILED ="Couldn't create the CSV. Try again."
+const CSV_FAILED = "Couldn't create the CSV. Try again."
 const NUMBER = 'tabular-nums whitespace-nowrap'
 
 const byText = (a: string, b: string) => a.localeCompare(b, 'en-AU')
@@ -140,7 +140,7 @@ function ReportSection<T extends object>({
             className="overflow-x-auto"
           />
         </div>
-        {showAll.button && <div className="px-[var(--card-pad)] pb-2">{showAll.button}</div>}
+        {showAll.button && <div className="px-[var(--card-pad)] pb-2 md:pl-1">{showAll.button}</div>}
       </>
     )
   }

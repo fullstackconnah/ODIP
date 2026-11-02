@@ -224,6 +224,10 @@
     flex-direction: column;
     gap: 0.75rem;
   }
+  /* A footer (the total) sits one card gap below the last card, so its rule never touches the card's border. */
+  .mobile-card-table tbody:has(+ tfoot) {
+    padding-bottom: 0.75rem;
+  }
   .mobile-card-table tbody tr {
     display: flex;
     flex-wrap: wrap;

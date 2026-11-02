@@ -172,6 +172,8 @@ describe('Modal sticky footer', () => {
 
     const strip = screen.getByRole('button', { name: 'Approve' }).parentElement!
     expect(strip).toHaveClass('sticky', 'bottom-0', '-mx-4', 'mt-4', 'border-t')
+    // Above DataTable's pinned columns (md:z-[2], md:z-[3]) so they don't show through the strip; z-[4] is the smallest value that clears them.
+    expect(strip).toHaveClass('z-[4]')
     // Not pulled out of the bottom padding: that is what lifted it off the edge.
     expect(strip.className).not.toMatch(/-mb-/)
     const dialog = screen.getByRole('dialog')
