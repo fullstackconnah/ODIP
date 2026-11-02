@@ -31,7 +31,7 @@ public class ParticipantInquiriesController : ControllerBase
     [HttpGet("closed")]
     public async Task<ActionResult<ApiResponse<PagedResult<ParticipantInquiryDto>>>> GetClosed(CancellationToken ct)
     {
-        var query = _db.ParticipantInquiries.Where(x => _tenant.TenantId == null || x.TenantId == _tenant.TenantId).Where(x => x.ClosedAt != null);
+        var query = _db.ParticipantInquiries.Include(x => x.ReferralSource).Where(x => _tenant.TenantId == null || x.TenantId == _tenant.TenantId).Where(x => x.ClosedAt != null);
         var inquiries = await query.OrderByDescending(x => x.ClosedAt).ThenByDescending(x => x.Id).Take(ClosedListCap).ToListAsync(ct);
         var (rows, _) = await ToRows(inquiries, ct);
         return Ok(ApiResponse<PagedResult<ParticipantInquiryDto>>.Ok(new PagedResult<ParticipantInquiryDto> { Items = rows, TotalCount = await query.CountAsync(ct), Page = 1, PageSize = ClosedListCap }));
@@ -75,7 +75,7 @@ public class ParticipantInquiriesController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<ApiResponse<List<ParticipantInquiryDto>>>> GetAll(CancellationToken ct)
     {
-        var inquiries = await _db.ParticipantInquiries.Where(x => _tenant.TenantId == null || x.TenantId == _tenant.TenantId)
+        var inquiries = await _db.ParticipantInquiries.Include(x => x.ReferralSource).Where(x => _tenant.TenantId == null || x.TenantId == _tenant.TenantId)
             .Where(x => x.ClosedAt == null).OrderByDescending(x => x.CreatedAt).ToListAsync(ct);
         var (rows, zoneId) = await ToRows(inquiries, ct);
 
@@ -193,7 +193,7 @@ public class ParticipantInquiriesController : ControllerBase
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ParticipantInquiryDto>>> Convert(Guid id, ConvertParticipantInquiryDto dto, CancellationToken ct)
     {
-        var inquiry = await _db.ParticipantInquiries.FirstOrDefaultAsync(x => x.Id == id && (_tenant.TenantId == null || x.TenantId == _tenant.TenantId), ct);
+        var inquiry = await _db.ParticipantInquiries.Include(x => x.ReferralSource).FirstOrDefaultAsync(x => x.Id == id && (_tenant.TenantId == null || x.TenantId == _tenant.TenantId), ct);
         if (inquiry == null) return NotFound(ApiResponse<ParticipantInquiryDto>.Fail("Inquiry not found"));
         if (inquiry.ClosedAt is not null) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(IntakeBookingsController.ClosedRefusal, IntakeBookingsController.ClosedCode));
         if (inquiry.ParticipantId is null)
@@ -484,6 +484,10 @@ public class ParticipantInquiriesController : ControllerBase
         var dob = legacy ? stored!.DateOfBirth : dto.DateOfBirth;
         var errors = converted ? new Dictionary<string, string[]>() : ContactErrors(dto.Contacts, plan, dob, today);
         if (Blank(dto.FirstName) is null) errors["firstName"] = ["Add the participant's first name."];
+        // An id in this organisation's list and active, or the one already saved on this enquiry (it may have been hidden since). The tenant check is explicit: a SuperAdmin has no query filter.
+        if (dto.ReferralSourceId is Guid sourceId && sourceId != stored?.ReferralSourceId
+            && !await _db.ReferralSources.AnyAsync(s => s.Id == sourceId && s.TenantId == tenantId && s.IsActive, ct))
+            errors["referralSourceId"] = ["Pick a referral source from the list."];
         if (converted) return errors;
         var recheck = stored is null || (dto.ContactIsParticipant == true && !stored.ContactIsParticipant);
         if (Blank(dto.Phone) is { } phone && (recheck || phone != stored!.Phone) && !PhonePattern.IsMatch(phone)) errors["phone"] = ["Enter a phone number, like 0412 345 678."];
@@ -515,7 +519,7 @@ public class ParticipantInquiriesController : ControllerBase
     /// <summary>Writes a validated save onto the enquiry. Blanks are stored as null; with "their own contact" ticked the contact's names, relationship and role are null whatever was sent (L4).</summary>
     private static void Apply(ParticipantInquiry x, CreateParticipantInquiryDto dto, bool converted)
     {
-        x.FirstName = Blank(dto.FirstName)!; x.Source = dto.Source; x.Provenance = Blank(dto.Provenance);
+        x.FirstName = Blank(dto.FirstName)!; x.Source = dto.Source; x.Provenance = Blank(dto.Provenance); x.ReferralSourceId = dto.ReferralSourceId;
         // "" not null: a rollback to the previous image reads the column as required. A later release may store null.
         x.LastName = Blank(dto.LastName) ?? string.Empty;
         // D7: the main contact and details are the participant's record now; omitted by the form, ignored if sent.
@@ -564,6 +568,7 @@ public class ParticipantInquiriesController : ControllerBase
     private async Task<ParticipantInquiryDto> FullDtoAsync(ParticipantInquiry x, CancellationToken ct)
     {
         // Keyed on the enquiry's organisation: a SuperAdmin's context has no query filter.
+        if (x.ReferralSourceId is not null) await _db.Entry(x).Reference(r => r.ReferralSource).LoadAsync(ct);
         var staff = x.IntakeStaffUserId is Guid staffId ? await _db.Users.IgnoreQueryFilters([TenantFilter.Name]).FirstOrDefaultAsync(u => u.Id == staffId && u.TenantId == x.TenantId, ct) : null;
         return ToDto(x, staff, (await ProviderTimeZoneResolver.ResolveAsync(_db, x.TenantId, ct)).Id);
     }
@@ -593,7 +598,7 @@ public class ParticipantInquiriesController : ControllerBase
         Id = x.Id, ParticipantId = x.ParticipantId, FirstName = x.FirstName, LastName = x.LastName ?? string.Empty, Phone = x.Phone, Email = x.Email, Source = x.Source,
         ContactIsParticipant = x.ContactIsParticipant, HasAddress = x.HasFullAddress, ContactNeedsName = x.ContactNeedsName,
         ContactFirstName = x.ContactFirstName, ContactLastName = x.ContactLastName, ContactRelationship = x.ContactRelationship,
-        Provenance = x.Provenance, CreatedAt = x.CreatedAt, UpdatedAt = x.UpdatedAt, ClosedAt = x.ClosedAt, CloseOutcome = x.CloseOutcome, CloseNote = x.CloseNote,
+        Provenance = x.Provenance, ReferralSourceId = x.ReferralSourceId, ReferralSourceName = x.ReferralSource?.Name, CreatedAt = x.CreatedAt, UpdatedAt = x.UpdatedAt, ClosedAt = x.ClosedAt, CloseOutcome = x.CloseOutcome, CloseNote = x.CloseNote,
         IntakeStartsAt = x.IntakeStartsAt, IntakeDurationMinutes = x.IntakeDurationMinutes, IntakeLocation = x.IntakeLocation,
         IntakeStaffUserId = x.IntakeStaffUserId, IntakeStaffFirstName = staff?.FirstName, IntakeStaffName = staff?.FullName, IntakeNotes = x.IntakeNotes,
         IntakeInviteSentAt = x.IntakeInviteSentAt, IntakeInviteError = x.IntakeInviteError, IntakeConfirmedAt = x.IntakeConfirmedAt, TimeZoneId = timeZoneId,

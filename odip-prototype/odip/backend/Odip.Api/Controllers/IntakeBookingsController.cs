@@ -60,7 +60,7 @@ public class IntakeBookingsController : ControllerBase
     public async Task<ActionResult<ApiResponse<ParticipantInquiryDto>>> Set(Guid id, SetIntakeBookingDto dto, CancellationToken ct)
     {
         if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<ParticipantInquiryDto>.Fail("A tenant context is required."));
-        var inquiry = await _db.ParticipantInquiries.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId, ct);
+        var inquiry = await _db.ParticipantInquiries.Include(x => x.ReferralSource).FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId, ct);
         if (inquiry == null) return NotFound(ApiResponse<ParticipantInquiryDto>.Fail("Inquiry not found"));
         if (inquiry.ClosedAt is not null) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(ClosedRefusal, ClosedCode));
         // The version the panel holds is required, and checked before anything is raised, sent or saved: a stale or missing one is a 409.
@@ -182,7 +182,7 @@ public class IntakeBookingsController : ControllerBase
     public async Task<ActionResult<ApiResponse<CancelIntakeBookingResultDto>>> Cancel(Guid id, CancellationToken ct, [FromQuery] DateTime? expectedUpdatedAt = null)
     {
         if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<CancelIntakeBookingResultDto>.Fail("A tenant context is required."));
-        var inquiry = await _db.ParticipantInquiries.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId, ct);
+        var inquiry = await _db.ParticipantInquiries.Include(x => x.ReferralSource).FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId, ct);
         if (inquiry is null || inquiry.IntakeStartsAt is not DateTime start) return NotFound(ApiResponse<CancelIntakeBookingResultDto>.Fail("No intake visit is booked for this enquiry."));
         // A visit that has happened stays on the enquiry as its record; it can be rescheduled, not cancelled.
         if (ProviderLocalTime.AsUtc(start).AddMinutes(inquiry.IntakeDurationMinutes ?? DefaultDuration) <= NowUtc)
@@ -242,7 +242,7 @@ public class IntakeBookingsController : ControllerBase
     public async Task<ActionResult<ApiResponse<CloseInquiryResultDto>>> Close(Guid id, CloseInquiryDto dto, CancellationToken ct)
     {
         if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<CloseInquiryResultDto>.Fail("A tenant context is required."));
-        var inquiry = await _db.ParticipantInquiries.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId, ct);
+        var inquiry = await _db.ParticipantInquiries.Include(x => x.ReferralSource).FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId, ct);
         if (inquiry is null) return NotFound(ApiResponse<CloseInquiryResultDto>.Fail("Inquiry not found"));
         var note = Blank(dto.Note);
         var errors = new Dictionary<string, string[]>();
@@ -275,7 +275,7 @@ public class IntakeBookingsController : ControllerBase
     public async Task<ActionResult<ApiResponse<ParticipantInquiryDto>>> Reopen(Guid id, CancellationToken ct, [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] InquiryVersionDto? dto = null)
     {
         if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<ParticipantInquiryDto>.Fail("A tenant context is required."));
-        var inquiry = await _db.ParticipantInquiries.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId, ct);
+        var inquiry = await _db.ParticipantInquiries.Include(x => x.ReferralSource).FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId, ct);
         if (inquiry is null) return NotFound(ApiResponse<ParticipantInquiryDto>.Fail("Inquiry not found"));
         if (inquiry.ClosedAt is null) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail("This enquiry is already open.", "inquiry-open"));
         if (dto?.ExpectedUpdatedAt is DateTime expected) _db.Entry(inquiry).Property(x => x.UpdatedAt).OriginalValue = expected;
@@ -292,7 +292,7 @@ public class IntakeBookingsController : ControllerBase
     public async Task<ActionResult<ApiResponse<ParticipantInquiryDto>>> Confirm(Guid id, ConfirmIntakeBookingDto dto, CancellationToken ct)
     {
         if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<ParticipantInquiryDto>.Fail("A tenant context is required."));
-        var inquiry = await _db.ParticipantInquiries.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId, ct);
+        var inquiry = await _db.ParticipantInquiries.Include(x => x.ReferralSource).FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId, ct);
         if (inquiry is null || inquiry.IntakeStartsAt is null) return NotFound(ApiResponse<ParticipantInquiryDto>.Fail("No intake visit is booked for this enquiry."));
         // A closed enquiry keeps a past visit as its record; it is not marked confirmed after the fact (verify C2).
         if (inquiry.ClosedAt is not null) return Conflict(ApiResponse<ParticipantInquiryDto>.Fail(ClosedRefusal, ClosedCode));
@@ -310,7 +310,7 @@ public class IntakeBookingsController : ControllerBase
     public async Task<ActionResult<ApiResponse<ParticipantInquiryDto>>> Resend(Guid id, CancellationToken ct, [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] InquiryVersionDto? dto = null)
     {
         if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<ParticipantInquiryDto>.Fail("A tenant context is required."));
-        var inquiry = await _db.ParticipantInquiries.FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId, ct);
+        var inquiry = await _db.ParticipantInquiries.Include(x => x.ReferralSource).FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId, ct);
         if (inquiry is null || inquiry.IntakeStartsAt is not DateTime start) return NotFound(ApiResponse<ParticipantInquiryDto>.Fail("No intake visit is booked for this enquiry."));
         if (ProviderLocalTime.AsUtc(start).AddMinutes(inquiry.IntakeDurationMinutes ?? DefaultDuration) <= NowUtc)
             return Conflict(ApiResponse<ParticipantInquiryDto>.Fail("This visit has already happened, so there's no invite to send."));

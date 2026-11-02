@@ -3156,6 +3156,9 @@ namespace Odip.Infrastructure.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
 
+                    b.Property<Guid?>("ReferralSourceId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Source")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -3177,6 +3180,8 @@ namespace Odip.Infrastructure.Migrations
                     b.HasIndex("IntakeStaffUserId");
 
                     b.HasIndex("ParticipantId");
+
+                    b.HasIndex("ReferralSourceId");
 
                     b.HasIndex("TenantId", "CreatedAt");
 
@@ -4144,6 +4149,39 @@ namespace Odip.Infrastructure.Migrations
                             StartTime = new TimeOnly(19, 0, 0),
                             State = "SA"
                         });
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.ReferralSource", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("ReferralSources");
                 });
 
             modelBuilder.Entity("Odip.Domain.Entities.RestrictivePractice", b =>
@@ -7534,6 +7572,11 @@ namespace Odip.Infrastructure.Migrations
                         .HasForeignKey("ParticipantId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("Odip.Domain.Entities.ReferralSource", "ReferralSource")
+                        .WithMany()
+                        .HasForeignKey("ReferralSourceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Odip.Domain.Entities.Tenant", "Tenant")
                         .WithMany()
                         .HasForeignKey("TenantId")
@@ -7545,6 +7588,8 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("IntakeStaffUser");
 
                     b.Navigation("Participant");
+
+                    b.Navigation("ReferralSource");
 
                     b.Navigation("Tenant");
                 });
@@ -7681,6 +7726,17 @@ namespace Odip.Infrastructure.Migrations
                 });
 
             modelBuilder.Entity("Odip.Domain.Entities.ProviderSettings", b =>
+                {
+                    b.HasOne("Odip.Domain.Entities.Tenant", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("Odip.Domain.Entities.ReferralSource", b =>
                 {
                     b.HasOne("Odip.Domain.Entities.Tenant", "Tenant")
                         .WithMany()
