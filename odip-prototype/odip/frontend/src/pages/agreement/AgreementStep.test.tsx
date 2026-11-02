@@ -83,6 +83,12 @@ describe('AgreementStep: Length presets and Ongoing', () => {
     expect(screen.getByText('Add the NDIS plan dates to choose Ongoing.')).toBeTruthy()
   })
 
+  it('Ongoing is disabled, with the reason, when the plan runs more than 800 days past the start', () => {
+    render(<MemoryRouter><Harness initial={{ ...base, planOverride: { start: '2026-10-01', end: '2029-09-30' } }} /></MemoryRouter>)
+    expect((screen.getByRole('option', { name: /^Ongoing/ }) as HTMLOptionElement).disabled).toBe(true)
+    expect(screen.getByText('This NDIS plan runs longer than 800 days from the agreement start. Choose an end date instead of Ongoing.')).toBeTruthy()
+  })
+
   it('the read-only list says ongoing', () => {
     render(<AgreementStep details={{ ...base, ongoing: true }} onEdit={() => {}} recorded={null} plan={{ start: '2026-10-01', end: '2027-09-30' }} errors={{}} readOnly fundingTab="/funding" />)
     expect(screen.getByText(/ongoing, repeating every week/)).toBeTruthy()

@@ -40,7 +40,7 @@ public sealed record AgreementSchedule(IReadOnlyList<ScheduleRow> Rows, int Unre
 
     /// <summary>The sentence above the table: the routine is weekly, from the agreement's first day to its last.</summary>
     public static string Repeats(ServiceAgreementDraft draft) => draft.IsOngoing
-        ? string.Create(CultureInfo.InvariantCulture, $"Repeats every week from {draft.AgreementStartDate:dd MMM yyyy}, ongoing until the NDIS plan ends (plan end at this revision {draft.AgreementEndDate:dd MMM yyyy}).")
+        ? string.Create(CultureInfo.InvariantCulture, $"Repeats every week from {draft.AgreementStartDate:dd MMM yyyy}, ongoing until the NDIS plan ends: plan end at this revision ({draft.AgreementEndDate:dd MMM yyyy}).")
         : string.Create(CultureInfo.InvariantCulture, $"Repeats every week from {draft.AgreementStartDate:dd MMM yyyy} to {draft.AgreementEndDate:dd MMM yyyy}.");
 
     /// <summary>"Mon, Wed, Fri"; a run of three or more days is a range ("Mon to Fri"), a shorter one is listed; all seven are "Every day". Monday first, as the week is drawn on the screen.</summary>

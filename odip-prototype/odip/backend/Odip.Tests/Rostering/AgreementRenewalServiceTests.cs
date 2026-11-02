@@ -62,6 +62,21 @@ public class AgreementRenewalServiceTests
     }
 
     [Fact]
+    public async Task Renewal_of_ongoing_into_a_plan_past_the_period_cap_falls_back_to_a_dated_end()
+    {
+        var (f, v1) = await ApprovedV1Async(withPlan: false);
+        await using var _ = f;
+        v1.IsOngoing = true;
+        await PlanAsync(f, PlanStart, Nov23.AddDays(800));
+
+        var outcome = await RenewAsync(f, v1);
+
+        var v2 = await StoredAsync(f, outcome.Draft!.Id);
+        Assert.False(v2.IsOngoing);
+        Assert.True(v2.AgreementEndDate <= Nov23.AddDays(799));
+    }
+
+    [Fact]
     public async Task Renewing_copies_the_blocks_from_the_day_after_the_end_for_the_same_length_priced_now_never_at_the_old_price()
     {
         var (f, v1) = await ApprovedV1Async();

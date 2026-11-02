@@ -58,8 +58,10 @@ public sealed class ServiceAgreementDraftService
         // Ongoing follows the NDIS plan: the end is the plan end whatever the client sent, so every bounded reader (totals, patterns, fill windows, the readiness gate) keeps a real date.
         if (request.IsOngoing)
         {
-            if (request.PlanEndDate == default) return DraftSaveResult.Refused("Add the NDIS plan dates to choose Ongoing.");
+            if (request.PlanEndDate == default || request.PlanStartDate == default) return DraftSaveResult.Refused("Add the NDIS plan dates to choose Ongoing.");
             if (request.PlanEndDate < request.AgreementStartDate) return DraftSaveResult.Refused("The NDIS plan ends before this agreement starts.");
+            if (request.PlanEndDate.DayNumber - request.AgreementStartDate.DayNumber + 1 > PlanPricingEngine.MaxPeriodDays)
+                return DraftSaveResult.Refused(string.Create(CultureInfo.InvariantCulture, $"This NDIS plan runs longer than {PlanPricingEngine.MaxPeriodDays} days from the agreement start. Choose an end date instead of Ongoing."));
             request = request with { AgreementEndDate = request.PlanEndDate };
         }
         if (request.PlanEndDate < request.PlanStartDate || request.AgreementEndDate < request.AgreementStartDate)

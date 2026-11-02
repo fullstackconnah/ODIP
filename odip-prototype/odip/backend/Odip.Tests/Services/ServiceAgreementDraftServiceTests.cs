@@ -99,6 +99,25 @@ public class ServiceAgreementDraftServiceTests
     }
 
     [Fact]
+    public async Task Ongoing_refused_without_plan_start()
+    {
+        var (draft, error) = await SaveAsync(Request() with { IsOngoing = true, PlanStartDate = default });
+
+        Assert.Null(draft);
+        Assert.Equal("Add the NDIS plan dates to choose Ongoing.", error);
+    }
+
+    [Fact]
+    public async Task Ongoing_refused_when_plan_runs_past_the_period_cap()
+    {
+        var request = Request();
+        var (draft, error) = await SaveAsync(request with { IsOngoing = true, PlanEndDate = request.AgreementStartDate.AddDays(800) });
+
+        Assert.Null(draft);
+        Assert.Equal("This NDIS plan runs longer than 800 days from the agreement start. Choose an end date instead of Ongoing.", error);
+    }
+
+    [Fact]
     public async Task Non_ongoing_save_unchanged()
     {
         var (draft, error) = await SaveAsync(Request() with { AgreementEndDate = new DateOnly(2025, 9, 30) });
