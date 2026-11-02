@@ -44,7 +44,7 @@ export function StaffRow({ row, days, canWrite, onOpen, onAssignTo, onUnassign, 
       <div className="sticky left-0 z-10 flex min-h-[var(--row-h)] flex-col justify-center border-b border-r border-border bg-card px-2">
         <Link
           to={staffWeekHref(row.staffId, days[0])}
-          className="block truncate rounded-sm font-display text-sm font-semibold leading-4 text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="block truncate -my-px py-px font-display text-sm font-semibold leading-4 text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           title={`${row.fullName} — ${row.role}`}
         >
           {row.fullName}
