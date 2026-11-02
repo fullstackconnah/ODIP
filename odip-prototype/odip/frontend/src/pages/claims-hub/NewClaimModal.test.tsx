@@ -6,8 +6,13 @@ import { NewClaimModal } from './NewClaimModal'
 
 // The "New claim" chooser: what each row says, and how a trip is picked. The two modals it launches have their own tests.
 
-const m = vi.hoisted(() => ({ waiting: vi.fn(), trips: vi.fn(), trip: vi.fn() }))
-vi.mock('@/api/hooks/claimHub', () => ({ useUnclaimedShifts: m.waiting }))
+const m = vi.hoisted(() => ({ waiting: vi.fn(), trips: vi.fn(), trip: vi.fn(), cancellations: vi.fn(), previewCancellation: vi.fn(), makeCancellation: vi.fn() }))
+vi.mock('@/api/hooks/claimHub', () => ({
+  useUnclaimedShifts: m.waiting,
+  useCancellationCandidates: m.cancellations,
+  usePreviewCancellationClaim: m.previewCancellation,
+  useMakeCancellationClaim: m.makeCancellation,
+}))
 vi.mock('@/api/hooks/trips', () => ({ useTrips: m.trips, useTrip: m.trip }))
 
 const trip = (over: Partial<TripListDto> = {}): TripListDto => ({
@@ -17,8 +22,20 @@ const trip = (over: Partial<TripListDto> = {}): TripListDto => ({
 const list = (data: TripListDto[] | undefined, over: object = {}) => ({ data, isLoading: false, isError: false, refetch: vi.fn(), ...over })
 const one = (data?: object, over: object = {}) => ({ data, isLoading: false, isError: false, refetch: vi.fn(), ...over })
 
+const cancelled = (n: number) => ({
+  data: {
+    shifts: Array.from({ length: n }, (_, i) => ({
+      shiftId: `sh-${i}`, participantId: 'p-1', participantName: i === 0 ? 'Sam Lee' : `Jo Park ${i}`, serviceDate: '2026-10-20', startTime: '09:00:00', endTime: '17:00:00', endsNextDay: false,
+      cancelledAt: '2026-10-17T01:30:00Z', totalAmount: 480,
+    })),
+    leftOut: [],
+  },
+  isLoading: false, isError: false, refetch: vi.fn(),
+})
+const mutation = () => ({ mutate: vi.fn(), reset: vi.fn(), data: undefined, error: null, isPending: false, isError: false })
+
 function setup() {
-  const props = { onShifts: vi.fn(), onTrip: vi.fn<(t: TripDetailDto) => void>(), onClose: vi.fn() }
+  const props = { onShifts: vi.fn(), onTrip: vi.fn<(t: TripDetailDto) => void>(), onCancellationMade: vi.fn(), onClose: vi.fn() }
   const view = render(<NewClaimModal {...props} />)
   return { ...props, view }
 }
@@ -33,6 +50,9 @@ beforeEach(() => {
   m.waiting.mockReturnValue({ count: 12, participants: 3, loading: false, error: false })
   m.trips.mockReturnValue(list([trip(), trip({ id: 't-2', tripName: 'Gold Coast Day', startDate: '2026-10-02', endDate: '2026-10-02', durationDays: 1, currentParticipantCount: 1 })]))
   m.trip.mockReturnValue(one())
+  m.cancellations.mockReturnValue(cancelled(3))
+  m.previewCancellation.mockReturnValue(mutation())
+  m.makeCancellation.mockReturnValue(mutation())
 })
 afterEach(() => {
   cleanup()
@@ -40,11 +60,38 @@ afterEach(() => {
 })
 
 describe('NewClaimModal: the chooser', () => {
-  it('offers Shifts and A trip with their hints and what is waiting', () => {
+  it('offers Shifts, A trip and A cancellation with their hints and what is waiting', () => {
     setup()
     expect(screen.getByRole('dialog', { name: 'New claim' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Shifts Completed shifts in a date range 12 waiting' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'A trip A completed trip with no claim 2 waiting' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'A cancellation A cancelled shift at short notice 3 waiting' })).toBeInTheDocument()
+  })
+
+  it('disables the cancellation row when none is waiting: focusable, with its reason, and activating it does nothing', async () => {
+    m.cancellations.mockReturnValue(cancelled(0))
+    setup()
+    const row = screen.getByRole('button', { name: 'A cancellation No short-notice cancellations to claim' })
+    expect(row).toHaveAttribute('aria-disabled', 'true')
+    row.focus()
+    expect(row).toHaveFocus()
+    await userEvent.click(row)
+    expect(screen.getByRole('dialog', { name: 'New claim' })).toBeInTheDocument()
+  })
+
+  it('draws no cancellation count while the list loads or has failed, and the row still opens the step', async () => {
+    m.cancellations.mockReturnValue({ ...cancelled(0), data: undefined, isLoading: true })
+    const first = setup()
+    expect(screen.getByRole('button', { name: /^A cancellation/ })).not.toHaveAttribute('aria-disabled')
+    expect(screen.getByRole('button', { name: /^A cancellation/ })).not.toHaveTextContent('waiting')
+    first.view.unmount()
+
+    m.cancellations.mockReturnValue({ ...cancelled(0), data: undefined, isError: true })
+    setup()
+    const row = screen.getByRole('button', { name: /^A cancellation/ })
+    expect(row).not.toHaveAttribute('aria-disabled')
+    await userEvent.click(row)
+    expect(screen.getByRole('dialog', { name: 'Choose a cancelled shift' })).toBeInTheDocument()
   })
 
   it('puts focus on the first row', () => {
@@ -151,5 +198,37 @@ describe('NewClaimModal: the trip step', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Back' }))
     expect(screen.getByRole('dialog', { name: 'New claim' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^A trip/ })).toHaveFocus()
+  })
+})
+
+describe('NewClaimModal: the cancellation step', () => {
+  it('opens the cancelled-shift step from the A cancellation row', async () => {
+    setup()
+    await userEvent.click(screen.getByRole('button', { name: /^A cancellation/ }))
+    expect(screen.getByRole('dialog', { name: 'Choose a cancelled shift' })).toBeInTheDocument()
+  })
+
+  it('Back returns to the chooser with focus on the A cancellation row', async () => {
+    setup()
+    await userEvent.click(screen.getByRole('button', { name: /^A cancellation/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }))
+    expect(screen.getByRole('dialog', { name: 'New claim' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^A cancellation/ })).toHaveFocus()
+  })
+
+  it('hands the made claim to the page', async () => {
+    const make = mutation()
+    make.mutate.mockImplementation((_vars: unknown, options?: { onSuccess?: (created: { id: string }) => void }) => options?.onSuccess?.({ id: 'claim-9' }))
+    m.makeCancellation.mockReturnValue(make)
+    m.previewCancellation.mockReturnValue({ ...mutation(), data: { totalAmount: 480, lineItems: [], leftOut: [] } })
+    const { onCancellationMade } = setup()
+    await userEvent.click(screen.getByRole('button', { name: /^A cancellation/ }))
+    await userEvent.click(screen.getByLabelText('Cancelled shift'))
+    await userEvent.click(await screen.findByRole('option', { name: /Sam Lee/ }))
+    await userEvent.click(screen.getByLabelText('Why did the participant cancel?'))
+    await userEvent.click(await screen.findByRole('option', { name: 'Other' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Preview' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Make claim' }))
+    expect(onCancellationMade).toHaveBeenCalledWith('claim-9')
   })
 })

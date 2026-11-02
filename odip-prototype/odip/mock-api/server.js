@@ -2119,6 +2119,32 @@ function shiftClaimRun(body, make) {
   }
 }
 
+/**
+ * Short-notice cancellations (claims PR2): cancelled shifts carrying cancelledAt, as the server stamps it. One is inside the 7-day window (offered), one has a participant whose name is
+ * too long for one line (offered), one was cancelled 12 days ahead (outside it) and one is on an item that does not allow cancellation: those two are listed as not offered, with the
+ * server's sentences. The shots reach the empty, error and none-waiting states by overriding this route's answer, so no second fixture is needed.
+ */
+const cancelledShiftFixtures = [
+  { shiftId: 'sh-cancel-1', participantId: 'p-sam', participantName: 'Sam Lee', serviceDate: '2026-10-20', startTime: '09:00:00', endTime: '17:00:00', endsNextDay: false, cancelledAt: '2026-10-17T01:30:00Z', totalAmount: 480 },
+  { shiftId: 'sh-cancel-2', participantId: 'p-long', participantName: 'Wolfeschlegelsteinhausenbergerdorff Alexandra', serviceDate: '2026-10-21', startTime: '10:00:00', endTime: '14:00:00', endsNextDay: false, cancelledAt: '2026-10-19T22:00:00Z', totalAmount: 240 },
+]
+const cancelledShiftsNotOffered = [
+  { shiftId: 'sh-cancel-3', participantName: 'Sophie Brown', serviceDate: '2026-10-19', description: 'Shift 09:00–17:00 · 8 h', reason: 'Cancelled 12 days ahead. Only a cancellation less than 7 days before the shift can be claimed.' },
+  { shiftId: 'sh-cancel-4', participantName: 'Jo Park', serviceDate: '2026-10-18', description: 'Shift 13:00–16:00 · 3 h', reason: "04_104_0125_6_1 can't be claimed as a short-notice cancellation in the price guide." },
+]
+function cancellationCandidates() {
+  return { shifts: cancelledShiftFixtures, leftOut: cancelledShiftsNotOffered }
+}
+function cancellationPreview(shiftId) {
+  const shift = cancelledShiftFixtures.find((c) => c.shiftId === shiftId) ?? cancelledShiftFixtures[0]
+  const hours = shift.totalAmount / 60
+  return {
+    totalAmount: shift.totalAmount,
+    lineItems: [{ shiftId: shift.shiftId, serviceDate: shift.serviceDate, dayTypeLabel: 'Weekday', dayType: 'Weekday', supportItemCode: '04_104_0125_6_1', claimType: 'Cancellation', unit: 'H', hours, unitPrice: 60, totalAmount: shift.totalAmount }],
+    leftOut: [],
+  }
+}
+
 /** ShiftClaimPreviewResponseDto for POST participants/:id/claims/from-shifts/preview — stateless
  * like every other POST here (see withDecision above): always the same plausible preview
  * regardless of the from/to body, rather than actually filtering portalShiftBase by date range.
@@ -2614,6 +2640,7 @@ const routes = [
   ['dashboard/summary', () => dashboardSummary],
   // The dashboard cue: shiftClaimRun's default fixture, 5 claimable plus the sleepover it leaves out, for 2 participants.
   ['claims/from-shifts/waiting', () => ({ from: '2026-10-19', to: '2026-11-01', shiftCount: 6, participantCount: 2 })],
+  ['claims/cancellations', () => cancellationCandidates()],
   ['dashboard/setup', () => dashboardSetup],
   ['plan-pricing/settings', () => planPricingSettings],
   ['service-agreements/ending', () => agreementsEnding()],
@@ -3185,6 +3212,11 @@ const postRoutes = [
 
   // The claim run (shift billing PR1): every participant at once. Stateless like the rest. The fixture is three participants (one with a long name, one with a sleepover left out) and,
   // when made, one that fails; a From in 2020 is the empty answer and a From in 2021 is "everything left out", so the shots reach every state without a second fixture.
+  ['claims/cancellations/preview', body => cancellationPreview(body?.shiftId)],
+  ['claims/cancellations', body => ({
+    id: 'claim-mock-cancel-1', kind: 'Shift', participantId: 'p-sam', periodFrom: '2026-10-20', periodTo: '2026-10-20', tripName: '', status: 'Draft',
+    claimReference: 'TC-MOCK-CANC-1', totalAmount: cancellationPreview(body?.shiftId).totalAmount, createdAt: new Date().toISOString(), leftOut: [], flagged: [],
+  })],
   ['claims/from-shifts/preview', body => shiftClaimRun(body, false)],
   ['claims/from-shifts', body => shiftClaimRun(body, true)],
 
