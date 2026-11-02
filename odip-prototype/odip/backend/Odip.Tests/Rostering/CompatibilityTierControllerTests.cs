@@ -240,6 +240,9 @@ public class CompatibilityTierControllerTests
         var (pa, pb) = (Participant(seed, tenantA), Participant(seed, tenantB));
         Row(seed, a1, pa, CompatibilityLevel.Backup, 1); Row(seed, a2, pa, CompatibilityLevel.Backup, 2);
         Row(seed, b1, pb, CompatibilityLevel.Backup, 1); Row(seed, b2, pb, CompatibilityLevel.Backup, 2);
+        // A tenant B row that names tenant A's participant: the sibling query must not pull it into A's renumber.
+        var stray = new StaffParticipantCompatibility { Id = Guid.NewGuid(), TenantId = tenantB, UserId = b1.Id, ParticipantId = pa.Id, Level = CompatibilityLevel.Backup, Rank = 1 };
+        seed.StaffParticipantCompatibilities.Add(stray); seed.SaveChanges();
 
         using (var asA = TestDb.ForTenant(name, tenantA))
             await Put(asA, a2.Id, pa.Id, CompatibilityLevel.Backup, rank: 1);
@@ -247,8 +250,9 @@ public class CompatibilityTierControllerTests
         var all = await seed.StaffParticipantCompatibilities.AsNoTracking().IgnoreQueryFilters().ToListAsync();
         Assert.Equal(2, all.Single(r => r.UserId == a1.Id).Rank);
         Assert.Equal(1, all.Single(r => r.UserId == a2.Id).Rank);
-        Assert.Equal(1, all.Single(r => r.UserId == b1.Id).Rank);
+        Assert.Equal(1, all.Single(r => r.UserId == b1.Id && r.ParticipantId == pb.Id).Rank);
         Assert.Equal(2, all.Single(r => r.UserId == b2.Id).Rank);
+        Assert.Equal(1, all.Single(r => r.Id == stray.Id).Rank);
     }
 
     [Fact]
