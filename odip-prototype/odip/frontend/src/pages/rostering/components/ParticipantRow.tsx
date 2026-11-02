@@ -61,7 +61,7 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
         <div className="flex min-w-0 items-center gap-1">
           <Link
             to={participantWeekHref(row.participantId, days[0])}
-            className="block min-w-0 truncate rounded-sm font-display text-sm font-semibold leading-4 text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="block min-w-0 truncate -my-px py-px font-display text-sm font-semibold leading-4 text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             title={row.fullName}
           >
             {row.fullName}
