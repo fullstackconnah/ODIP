@@ -740,6 +740,7 @@ const shiftCompletions = [
     timeZoneId: 'Australia/Brisbane', geolocationDeclined: false, startWasManual: true,
     originalActualEnd: '2026-09-11T00:02:00Z', timeAdjustmentReason: 'Left at ten to midnight; tapped Finish at home.',
     kilometres: 12.5, anythingToReport: true,
+    preShiftTravelMinutes: 25, preShiftTravelKilometres: 12.3, postShiftTravelMinutes: 20, postShiftTravelKilometres: 10,
     submittedByUserId: 's-0004', submittedByName: 'Mei Zhang',
     startedAt: '2026-09-10T19:32:00Z', submittedAt: '2026-09-10T23:50:00Z',
     reviewedByUserId: null, reviewedByName: null, reviewedAt: null,
@@ -1538,6 +1539,7 @@ function buildPortalShiftDetail(shiftId, overrides = {}) {
     id: base.id, serviceDate: base.serviceDate, startTime: base.startTime, endTime: base.endTime,
     endsNextDay: base.endsNextDay, durationHours: base.durationHours, ratio: base.ratio, nightType: base.nightType,
     status, notes: base.notes,
+    travelAsked: planPricingSettings.claimProviderTravel === true,
     participant: portalParticipantSummary(base.participantId),
     routines, riskEntries: [], medications,
     completion,
@@ -2054,6 +2056,24 @@ const claimLineItemsByClaimId = {
       rejectionReason: null, paidAmount: null,
     },
     {
+      id: 'cli-0002t', tripClaimId: 'claim-0002', shiftId: 'sh-0001', participantId: 'p-0001',
+      participantName: 'Liam Okafor', ndisNumber: '43•••••89', planType: 'PlanManaged',
+      supportItemCode: '01_002_0117_1_1', dayType: 'Weekday', unit: 'H',
+      supportsDeliveredFrom: '2026-07-28', supportsDeliveredTo: '2026-07-28',
+      hours: 0.42, unitPrice: 40, totalAmount: 16.8, gstCode: 'GST', claimType: 'ProviderTravel',
+      cancellationReason: null, participantApproved: false, status: 'Draft',
+      rejectionReason: null, paidAmount: null,
+    },
+    {
+      id: 'cli-0002k', tripClaimId: 'claim-0002', shiftId: 'sh-0001', participantId: 'p-0001',
+      participantName: 'Liam Okafor', ndisNumber: '43•••••89', planType: 'PlanManaged',
+      supportItemCode: '04_799_0125_6_1', dayType: 'Weekday', unit: 'E',
+      supportsDeliveredFrom: '2026-07-28', supportsDeliveredTo: '2026-07-28',
+      hours: 12.87, unitPrice: 1, totalAmount: 12.87, gstCode: 'GST', claimType: 'Standard',
+      cancellationReason: null, participantApproved: false, status: 'Draft',
+      rejectionReason: null, paidAmount: null,
+    },
+    {
       id: 'cli-0003', tripClaimId: 'claim-0002', shiftId: 'sh-0002', participantId: 'p-0001',
       participantName: 'Liam Okafor', ndisNumber: '43•••••89', planType: 'PlanManaged',
       supportItemCode: '01_002_0117_1_1', dayType: 'WeekdayEvening',
@@ -2125,11 +2145,20 @@ function shiftClaimRun(body, make) {
  * vitest suite (mock-api isn't in that test's path), not by manual/dev-preview testing. */
 function shiftClaimPreview() {
   return {
-    totalAmount: 640,
+    totalAmount: 669.67,
     lineItems: [
       {
         shiftId: 'sh-mock-1', serviceDate: '2026-08-10', dayTypeLabel: 'Weekday', dayType: 'Weekday',
         supportItemCode: '01_002_0117_1_1', hours: 8, unitPrice: 40, totalAmount: 320,
+      },
+      // Provider travel on the first shift: the time line (TRAN in the file) and the kilometre line (dollars, unit E).
+      {
+        shiftId: 'sh-mock-1', serviceDate: '2026-08-10', dayTypeLabel: 'Provider travel', dayType: 'Weekday', claimType: 'ProviderTravel', unit: 'H',
+        supportItemCode: '01_002_0117_1_1', hours: 0.42, unitPrice: 40, totalAmount: 16.8,
+      },
+      {
+        shiftId: 'sh-mock-1', serviceDate: '2026-08-10', dayTypeLabel: 'Provider travel costs', dayType: 'Weekday', claimType: 'Standard', unit: 'E',
+        supportItemCode: '04_799_0125_6_1', hours: 12.87, unitPrice: 1, totalAmount: 12.87,
       },
       // An overnight shift is priced as hours at one day rate and says so on its line (evening and night rates are not applied yet).
       {
@@ -3211,6 +3240,11 @@ const putRoutes = [
   ...intake.put,
   // A claim's status and notes, and, with a rejection, the NDIA's code (budget phase 2b: at most 10 characters, and only with a claim that is being marked Rejected). Kept in the fixture, so the next
   // GET shows it. A claim that stops being rejected forgets the moment and the code, as the server's does.
+  ['rostering/shifts/:id/completion/travel', (id, body) => {
+    if (body?.postShiftTravelMinutes === 99) return respond(409, failEnvelope(null, ['This shift is on claim TC-0002. Change its travel on the claim, or cancel the claim first.'], 'SHIFT_TRAVEL_ON_CLAIM'))
+    const c = withPackageFields(id, shiftCompletions.find((x) => x.shiftId === id) || shiftCompletions[0])
+    return { ...c, ...body }
+  }],
   ['claims/:id', (id, body) => {
     const claim = claims.find((c) => c.id === id)
     if (!claim) return respond(404, failEnvelope(null, ['Claim not found']))

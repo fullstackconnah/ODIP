@@ -156,7 +156,7 @@ export default function PlanPricingSettingsTab(frame: SectionFrame) {
 
             <section className="flex flex-col gap-[var(--field-gap-y)] border-t border-[var(--color-border)] pt-[var(--section-gap)]" aria-labelledby="pricing-travel-heading">
               <h3 id="pricing-travel-heading" className="font-semibold">Provider travel</h3>
-              <CheckboxField label="Claim provider travel" hint="Off, no block is priced with a travel line, whatever it asks for." checked={current.claimProviderTravel} onChange={event => edit({ claimProviderTravel: event.target.checked })} />
+              <CheckboxField label="Claim provider travel" hint="Off, no agreement or shift claim includes travel, and workers aren't asked for it." checked={current.claimProviderTravel} onChange={event => edit({ claimProviderTravel: event.target.checked })} />
               <div className={formGrid}>
                 <NumberField label="Standard vehicle, $ a kilometre" className={span.medium} value={current.travelKmRateStandard} min={0} max={MAX_KM_RATE} step={0.01} inputMode="decimal" error={rateError(current.travelKmRateStandard)} onChange={value => edit({ travelKmRateStandard: value })} />
                 <NumberField label="Accessible vehicle or bus, $ a kilometre" className={span.medium} value={current.travelKmRateAccessible} min={0} max={MAX_KM_RATE} step={0.01} inputMode="decimal" error={rateError(current.travelKmRateAccessible)} onChange={value => edit({ travelKmRateAccessible: value })} />

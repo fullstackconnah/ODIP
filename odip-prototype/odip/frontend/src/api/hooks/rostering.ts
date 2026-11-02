@@ -28,6 +28,7 @@ import type {
   ShiftStatus,
   ShiftCompletionDto,
   ShiftCompletionReviewDto,
+  EditCompletionTravelDto,
   CompletionQueueItemDto,
   ReturnCompletionDto,
   ApproveBatchResultDto,
@@ -323,6 +324,19 @@ export function useApproveCompletion({ requireClean = false }: { requireClean?: 
       qc.invalidateQueries({ queryKey: ['roster-board'] })
       qc.invalidateQueries({ queryKey: UNCLAIMED_SHIFTS_KEY })   // an approved completion is a completed shift the claim run can now take
       refreshBudgetFigures(qc)   // an approved completion is a completed shift: booked ahead becomes pending
+    },
+  })
+}
+
+/** Staff set the four travel values on a shift's active completion (hand-made shift, or the worker's after-shift estimate). */
+export function useEditCompletionTravel() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ shiftId, data }: { shiftId: string; data: EditCompletionTravelDto }) =>
+      apiPut<ShiftCompletionDto>(`/rostering/shifts/${shiftId}/completion/travel`, data),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['rostering-completion', vars.shiftId] })
+      qc.invalidateQueries({ queryKey: ['rostering-completion-review', vars.shiftId] })
     },
   })
 }

@@ -11,7 +11,7 @@ import type { WizardStepDef } from '@/components/wizard/types'
 import { apiErrorCode, apiErrorMessages, apiErrorStatus, finishBlockersFromError, shiftDetailFromError } from '@/lib/shiftPackageErrors'
 import type { ShiftIncidentPrefillState, ShiftNoteIncidentPrefillState } from '@/lib/incidentPrefill'
 import type { ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
-import { breaksSignature, clockLabel, FINISH_STEPS, handoverForward, movedTimes, offlineDueDoses, parseKilometres, stepForCode, timesError, type FinishStepKey, type TimesField, type TimesInput } from './checklist'
+import { breaksSignature, clockLabel, FINISH_STEPS, handoverForward, movedTimes, offlineDueDoses, parseKilometres, parseTravelMinutes, stepForCode, timesError, type FinishStepKey, type TimesField, type TimesInput, type TravelField } from './checklist'
 import { clearEndDraft, EMPTY_END_DRAFT, loadEndDraft, saveEndDraft, type EndDraft } from './endDraft'
 import { DosesStep, HandoverStep, ReportStep, SubmitStep, TimesStep, type Refusal } from './finishSteps'
 import { requestGeolocation } from './geolocation'
@@ -25,6 +25,10 @@ import type { PortalShiftDetailDto, ShiftNoteDto } from '@/api/types'
 const RAIL: WizardStepDef<Record<string, never>>[] = FINISH_STEPS.map(s => ({ key: s.key, label: s.label, fields: [] }))
 const index = (k: FinishStepKey) => FINISH_STEPS.findIndex(s => s.key === k)
 const later = (a: FinishStepKey, b: FinishStepKey) => (index(a) >= index(b) ? a : b)
+/** The element to focus for a refused field whose id is not `finish-<field>`. */
+const FOCUS_ID: Partial<Record<TimesField, string>> = {
+  kilometres: 'finish-km', preTravelMinutes: 'finish-pre-min', preTravelKilometres: 'finish-pre-km', postTravelMinutes: 'finish-post-min', postTravelKilometres: 'finish-post-km',
+}
 
 /** The draft to open with: at its saved step, or step 1; back at step 1 when the breaks changed after the times were confirmed. */
 function openDraft(shift: PortalShiftDetailDto): { draft: EndDraft; breaksChanged: boolean } {
@@ -78,16 +82,20 @@ export function FinishFlow({ shift, online, canAct, onRecord, onClose, onEditNot
   const timesInput = (at: Date): TimesInput | null => shift.completion ? {
     tz: shift.timeZoneId, stampedStart: shift.completion.actualStart, startOverride: d.startOverride, endOverride: d.endOverride,
     reason: d.adjustmentReason, kilometres: d.kilometres, breaks: shift.breaks, now: at,
+    // Travel is checked only when the organisation asks for it; a stale draft value is never sent or blocking.
+    ...(shift.travelAsked && { preTravelMinutes: d.preTravelMinutes, preTravelKilometres: d.preTravelKilometres, postTravelMinutes: d.postTravelMinutes, postTravelKilometres: d.postTravelKilometres }),
   } : null
   const live = timesInput(tick)
   const moved = live ? movedTimes(live) : { start: null, end: null }
   const km = parseKilometres(d.kilometres)
+  const readTravel = (field: TravelField) => { const v = (field.endsWith('Minutes') ? parseTravelMinutes : parseKilometres)(d[field]); return v === 'invalid' ? null : v }
+  const travel = Object.fromEntries((['preTravelMinutes', 'preTravelKilometres', 'postTravelMinutes', 'postTravelKilometres'] as const).map(f => [f, readTravel(f)])) as Record<TravelField, number | null>
   const drifted = step === 'submit' && !!live && timesError(live)?.field === 'end'
   /** The element to fix for a step-1 refusal: the field, or the break (its End break while it runs, else its Edit). */
   const focusFor = (p: { field: TimesField; breakId?: string }) =>
     p.field === 'break'
       ? (shift.breaks.find(x => x.id === p.breakId)?.isRunning ? `brk-end-now-${p.breakId}` : `brk-edit-${p.breakId}`)
-      : p.field === 'kilometres' ? 'finish-km' : `finish-${p.field}`
+      : (FOCUS_ID[p.field] ?? `finish-${p.field}`)
 
   useEffect(() => { saveEndDraft(shift.id, d) }, [shift.id, d])
   // WizardStepHeading moves focus on a step change but skips its first mount, so opening (or resuming) the flow focuses the heading here.
@@ -177,6 +185,10 @@ export function FinishFlow({ shift, online, canAct, onRecord, onClose, onEditNot
           actualEnd: sent.end,
           timeAdjustmentReason: sent.start || sent.end ? d.adjustmentReason.trim() : null,
           kilometres: km === 'invalid' ? null : km,
+          ...(shift.travelAsked && {
+            preShiftTravelMinutes: travel.preTravelMinutes, preShiftTravelKilometres: travel.preTravelKilometres,
+            postShiftTravelMinutes: travel.postTravelMinutes, postShiftTravelKilometres: travel.postTravelKilometres,
+          }),
           anythingToReport: d.anythingToReport === null ? null : d.anythingToReport === 'yes',
           handoverText: d.nothingToHandOver ? null : d.handoverText.trim() || null,
           nothingToHandOver: d.nothingToHandOver,
@@ -247,7 +259,7 @@ export function FinishFlow({ shift, online, canAct, onRecord, onClose, onEditNot
         </div>
       </div>
       {opened.breaksChanged && step === 'times' && <Callout tone="info">Your breaks changed. Check your times again.</Callout>}
-      {step === 'times' && <TimesStep shift={shift} online={online} now={tick} draft={d} set={set} invalid={error?.field} />}
+      {step === 'times' && <TimesStep shift={shift} online={online} now={tick} draft={d} set={set} invalid={error?.field} invalidMessage={error?.message} />}
       {step === 'doses' && <DosesStep shift={shift} online={online} canAct={canAct} onRecord={onRecord} />}
       {step === 'report' && (
         <ReportStep
@@ -261,7 +273,7 @@ export function FinishFlow({ shift, online, canAct, onRecord, onClose, onEditNot
       {step === 'submit' && (
         <SubmitStep
           shift={shift} draft={d} noteCount={noteCount} now={tick} refusals={refusals} go={go}
-          moved={moved} kilometres={km === 'invalid' ? null : km} drifted={drifted}
+          moved={moved} kilometres={km === 'invalid' ? null : km} travel={travel} drifted={drifted}
           onUseSubmitTime={() => set({ endOverride: null })} onChangeTimes={() => go('times')}
         />
       )}
