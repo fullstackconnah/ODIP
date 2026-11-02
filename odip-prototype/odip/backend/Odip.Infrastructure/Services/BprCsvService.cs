@@ -38,7 +38,7 @@ public class BprCsvService(OdipDbContext db)
             .Where(l => lineIds.Contains(l.Id) && l.TenantId == tenantId)
             .ToListAsync(ct);
 
-        var participantIds = lines.Select(l => l.ParticipantBooking?.ParticipantId ?? l.Shift?.ParticipantId).OfType<Guid>().Distinct().ToList();
+        var participantIds = lines.Select(l => l.ParticipantBooking?.ParticipantId ?? l.Shift?.ParticipantId ?? l.TripClaim.ParticipantId).OfType<Guid>().Distinct().ToList();
         var participants = await db.Participants.AsNoTracking().Where(p => p.TenantId == tenantId && participantIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, ct);
         var settings = await db.ProviderSettings.AsNoTracking().FirstOrDefaultAsync(s => s.TenantId == tenantId, ct);
 
@@ -48,12 +48,12 @@ public class BprCsvService(OdipDbContext db)
 
         return lines.Select(l =>
         {
-            var participantId = l.ParticipantBooking?.ParticipantId ?? l.Shift?.ParticipantId;
+            var participantId = l.ParticipantBooking?.ParticipantId ?? l.Shift?.ParticipantId ?? l.TripClaim.ParticipantId;
             var participant = participantId is { } id && participants.TryGetValue(id, out var p) ? p : null;
             // A trip line follows its booking's plan type, else the participant's; a shift has no override.
             PlanType? planType = participant is null ? null : l.ParticipantBooking?.PlanTypeOverride ?? participant.PlanType;
-            // Each engine priced its line in its own state, so the limit is read in the same one.
-            var state = l.ShiftId != null
+            // Each engine priced its line in its own state, so the limit is read in the same one (a manual line, with no booking, in its participant's, as the create-time cap does).
+            var state = l.ParticipantBookingId == null
                 ? ShiftPriceEstimator.StateFor(participant?.AddressState, settings?.State)
                 : HolidayCalendar.Normalise(settings?.State) is { Length: > 0 } s ? s : "VIC";
             return new BprRow(l, l.TripClaim, participant, planType,

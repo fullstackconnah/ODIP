@@ -86,7 +86,7 @@ public class InvoiceService
     /// <summary>Every payer of the claim, agency-managed ones included, in participant-name order: one per booking (trip claim) or the claim's participant (shift claim).</summary>
     public static List<PayerGroup> GroupsOf(TripClaim claim)
     {
-        if (claim.Kind == ClaimKind.Shift)
+        if (claim.Kind is ClaimKind.Shift or ClaimKind.Manual)
             // A claim with no lines has no payer to bill.
             return claim.Participant is { } p && claim.LineItems.Count > 0 ? [new PayerGroup(p.Id, null, p, p.PlanType, claim.LineItems.ToList())] : [];
 
@@ -122,7 +122,7 @@ public class InvoiceService
             TripClaimId = claim.Id, ClaimReference = claim.ClaimReference,
             ParticipantBookingId = group.BookingId, ParticipantId = participant.Id, ParticipantName = participant.FullName,
             NdisNumber = string.IsNullOrWhiteSpace(participant.NdisNumber) ? null : participant.NdisNumber,
-            ServiceReference = claim.Kind == ClaimKind.Shift
+            ServiceReference = claim.Kind is ClaimKind.Shift or ClaimKind.Manual
                 ? string.Create(CultureInfo.InvariantCulture, $"Period: {claim.PeriodFrom:dd MMM yyyy} – {claim.PeriodTo:dd MMM yyyy}")
                 : $"Trip: {claim.TripInstance?.TripName}",
             PayerKind = group.PlanType,

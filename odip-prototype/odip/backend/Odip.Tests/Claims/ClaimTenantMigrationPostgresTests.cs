@@ -42,7 +42,7 @@ public class ClaimTenantMigrationPostgresTests : IClassFixture<PostgresFixture>
         return participant;
     }
 
-    /// <summary>A line must hang on a booking or a shift (CK_ClaimLineItem_ExactlyOneParent): this is a shift of a participant of an organisation of its own, which the migration never reads.</summary>
+    /// <summary>A line hangs on at most one of a booking and a shift (CK_ClaimLineItem_AtMostOneParent): this is a shift of a participant of an organisation of its own, which the migration never reads.</summary>
     private static async Task<Guid> PlantShiftAsync(NpgsqlConnection conn)
     {
         var shift = Guid.NewGuid();
