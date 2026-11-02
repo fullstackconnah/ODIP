@@ -15,6 +15,14 @@ public class ImportFieldsTests
     }
 
     [Fact]
+    public void Contact_relationship_hint_lists_every_role_word()
+    {
+        var hint = ImportFields.For(ImportKind.Participants).Single(f => f.Key == "contact1Relationship").Hint;
+        foreach (var word in new[] { "Next of kin", "Guardian", "Plan nominee", "Plan manager", "Key worker", "Other" })
+            Assert.Contains(word, hint);
+    }
+
+    [Fact]
     public void AutoMatch_gives_a_field_to_the_first_column_that_names_it() =>
         Assert.Equal(new string?[] { "phone", null }, ImportFields.AutoMatch(ImportKind.Participants, ["Phone", "Mobile"]));
 

@@ -48,6 +48,18 @@ public enum ContactRoleType
     /// post-deploy.
     /// </summary>
     FinancialAdministrator = 14,
+
+    /// <summary>
+    /// Meeting 2026-10-23 I3 — an outside contact (a provider's or service's key worker); additive,
+    /// no renumbering, like <see cref="FinancialAdministrator"/>. No uniqueness rule and no gate.
+    /// </summary>
+    KeyWorker = 15,
+
+    /// <summary>
+    /// Meeting 2026-10-23 I3 — anyone who fits no other role; the relationship text says who they
+    /// are. Additive, no uniqueness rule and no gate.
+    /// </summary>
+    Other = 16,
 }
 
 /// <summary>See <see cref="ContactRoleType.PlanNominee"/>'s doc — captures which of the two NDIA
@@ -255,6 +267,9 @@ public static class ContactRoleFieldRules
         // PF-10.2: same field shape as Solicitor — both are professional/authority contacts that
         // record an organisation, a scope-of-authority note, and a supporting document reference.
         [ContactRoleType.FinancialAdministrator] = new() { nameof(ParticipantContactRole.OrganisationName), nameof(ParticipantContactRole.ScopeNotes), nameof(ParticipantContactRole.AuthorisationDocumentReference) },
+        // I3: a key worker belongs to a provider; Other is described by the relationship text alone.
+        [ContactRoleType.KeyWorker] = new() { nameof(ParticipantContactRole.OrganisationName) },
+        [ContactRoleType.Other] = NoExtraFields,
     };
 
     /// <summary>
