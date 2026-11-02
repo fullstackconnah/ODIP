@@ -2700,7 +2700,10 @@ const routes = [
   }],
 
   // trips (paged list)
-  ['trips', () => paged(trips)],
+  // ?status= and ?unclaimed=true narrow the list as the server does (unclaimed: no claim on the trip that is not Rejected).
+  ['trips', (searchParams) => paged(trips.filter((t) =>
+    (!searchParams?.get('status') || t.status === searchParams.get('status'))
+    && (searchParams?.get('unclaimed') !== 'true' || !claims.some((c) => c.tripInstanceId === t.id && c.status !== 'Rejected'))))],
   ['trips/:id/bookings', (id) => bookings.filter((b) => b.tripInstanceId === id)],
   ['trips/:id/tasks', (id) => tasks.filter((t) => t.tripInstanceId === id)],
   ['trips/:id/staff', (id) => tripStaffAssignments[id] || []],

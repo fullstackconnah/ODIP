@@ -12,6 +12,7 @@ import ClaimsHubPage from './ClaimsHubPage'
 const m = vi.hoisted(() => ({
   lines: vi.fn(), batches: vi.fn(), batch: vi.fn(), fetchClaimFile: vi.fn(), preview: vi.fn(),
   uploaded: vi.fn(), discard: vi.fn(), importResults: vi.fn(), paid: vi.fn(), dismiss: vi.fn(), pipeline: vi.fn(),
+  unclaimed: vi.fn(), trips: vi.fn(), trip: vi.fn(),
 }))
 vi.mock('@/api/hooks/claimHub', async () => {
   const actual = await vi.importActual<typeof import('@/api/hooks/claimHub')>('@/api/hooks/claimHub')
@@ -20,12 +21,25 @@ vi.mock('@/api/hooks/claimHub', async () => {
     ClaimFileError: actual.ClaimFileError,
     useHubLines: m.lines, useClaimBatches: m.batches, useClaimPipeline: m.pipeline, useClaimBatch: m.batch, fetchClaimFile: m.fetchClaimFile, useBuildClaimFile: () => m.fetchClaimFile,
     useMarkBatchUploaded: mutation(m.uploaded), useDiscardBatch: mutation(m.discard), useImportResults: mutation(m.importResults),
-    useMarkBatchPaid: mutation(m.paid), useDismissBatchLine: mutation(m.dismiss),
+    useMarkBatchPaid: mutation(m.paid), useDismissBatchLine: mutation(m.dismiss), useUnclaimedShifts: m.unclaimed,
   }
 })
 vi.mock('@/api/hooks/claims', () => ({ useSubmitPreviewChunks: m.preview }))
-// The run's own behaviour is ShiftClaimRunModal.test; here only whether the page opens and closes it.
-vi.mock('./ShiftClaimRunModal', () => ({ ShiftClaimRunModal: ({ onClose }: { onClose: () => void }) => <div role="dialog" aria-label="Claim run"><button onClick={onClose}>Close run</button></div> }))
+vi.mock('@/api/hooks/trips', () => ({ useTrips: m.trips, useTrip: m.trip }))
+// The two modals the hub launches are stood in for by the real Modal, so their focus return (what the New claim button gets back) is the real behaviour. Their own
+// behaviour is GenerateClaimModal.test and ShiftClaimRunModal.test; here only that the hub opens them, closes them and follows a trip claim's success.
+vi.mock('@/components/GenerateClaimModal', async () => {
+  const { Modal } = await import('@/components/Modal')
+  return {
+    default: ({ trip, onClose, onSuccess }: { trip: { tripName: string }; onClose: () => void; onSuccess: (c: { id: string }) => void }) => (
+      <Modal open onClose={onClose} title="Trip claim">{trip.tripName}<button onClick={onClose}>Close trip claim</button><button onClick={() => onSuccess({ id: 'claim-9' })}>Make trip claim</button></Modal>
+    ),
+  }
+})
+vi.mock('./ShiftClaimRunModal', async () => {
+  const { Modal } = await import('@/components/Modal')
+  return { ShiftClaimRunModal: ({ onClose }: { onClose: () => void }) => <Modal open onClose={onClose} title="Claim run"><button onClick={onClose}>Close run</button></Modal> }
+})
 
 const query = <T,>(data: T) => ({ data, isLoading: false, isError: false, error: null, refetch: vi.fn() })
 
@@ -59,7 +73,10 @@ function Where() {
 function renderPage(entry = '/claims') {
   return render(
     <MemoryRouter initialEntries={[entry]}>
-      <Routes><Route path="/claims" element={<><ClaimsHubPage /><Where /></>} /></Routes>
+      <Routes>
+        <Route path="/claims" element={<><ClaimsHubPage /><Where /></>} />
+        <Route path="/claims/:id" element={<output data-testid="detail">claim detail</output>} />
+      </Routes>
     </MemoryRouter>,
   )
 }
@@ -70,6 +87,9 @@ beforeEach(() => {
   m.batches.mockReturnValue(query([]))
   m.pipeline.mockReturnValue(query(pipeline()))
   m.batch.mockReturnValue({ ...query(undefined), isLoading: false })
+  m.unclaimed.mockReturnValue({ count: 12, participants: 3, loading: false, error: false })
+  m.trips.mockReturnValue({ data: [{ id: 't-1', tripName: 'Byron Bay Weekend', startDate: '2026-10-09', endDate: '2026-10-11', currentParticipantCount: 4 }], isLoading: false, isError: false, refetch: vi.fn() })
+  m.trip.mockImplementation((id?: string) => ({ data: id ? { id, tripName: 'Byron Bay Weekend' } : undefined, isLoading: false, isError: false, refetch: vi.fn() }))
   m.preview.mockReturnValue({ invoiceCount: 2, isLoading: false, isError: false, refetch: vi.fn() })
 })
 afterEach(() => {
@@ -495,17 +515,46 @@ describe('ClaimsHubPage: no organisation', () => {
   })
 })
 
-describe('ClaimsHubPage: Claim shifts', () => {
-  it.each(['Admin', 'Coordinator'])('offers the claim run to a %s', role => {
+describe('ClaimsHubPage: New claim', () => {
+  it.each(['Admin', 'Coordinator'])('offers New claim to a %s, and no longer a Claim shifts button', role => {
     localStorage.setItem('odip_user', JSON.stringify({ role }))
     renderPage()
-    expect(screen.getByRole('button', { name: 'Claim shifts' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'New claim' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Claim shifts' })).toBeNull()
     expect(screen.getByRole('button', { name: 'How claiming works' })).toBeInTheDocument()
   })
 
-  it('opens the run from ?run=shifts (the dashboard cue), and closing it removes the param', async () => {
+  it('draws no New claim for a ReadOnly user', () => {
+    localStorage.setItem('odip_user', JSON.stringify({ role: 'ReadOnly' }))
+    renderPage()
+    expect(screen.queryByRole('button', { name: 'New claim' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Claim shifts' })).toBeNull()
+  })
+
+  it('opens the chooser with Shifts and A trip, and what is waiting', async () => {
+    renderPage()
+    await userEvent.click(screen.getByRole('button', { name: 'New claim' }))
+    expect(screen.getByRole('dialog', { name: 'New claim' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Shifts.*12 waiting$/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^A trip/ })).toBeInTheDocument()
+  })
+
+  it('Shifts puts run=shifts in the URL and opens the run; closing it returns focus to New claim', async () => {
+    renderPage()
+    await userEvent.click(screen.getByRole('button', { name: 'New claim' }))
+    await userEvent.click(screen.getByRole('button', { name: /^Shifts/ }))
+    expect(screen.queryByRole('dialog', { name: 'New claim' })).toBeNull()
+    expect(screen.getByTestId('where')).toHaveTextContent('run=shifts')
+    expect(screen.getByRole('dialog', { name: 'Claim run' })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close run' }))
+    expect(screen.getByRole('button', { name: 'New claim' })).toHaveFocus()
+  })
+
+  it('opens the run straight from ?run=shifts (the dashboard cue), with no chooser, and closing it removes the param', async () => {
     renderPage('/claims?run=shifts&tab=action')
     expect(screen.getByRole('dialog', { name: 'Claim run' })).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'New claim' })).toBeNull()
 
     await userEvent.click(screen.getByRole('button', { name: 'Close run' }))
 
@@ -513,11 +562,30 @@ describe('ClaimsHubPage: Claim shifts', () => {
     expect(screen.getByTestId('where')).toHaveTextContent('?tab=action')
   })
 
-  it('the header button opens it by putting run=shifts in the URL', async () => {
+  it('a trip: choose it, Continue opens the trip claim; closing returns focus to New claim', async () => {
     renderPage()
-    await userEvent.click(screen.getByRole('button', { name: 'Claim shifts' }))
-    expect(screen.getByTestId('where')).toHaveTextContent('run=shifts')
-    expect(screen.getByRole('dialog', { name: 'Claim run' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'New claim' }))
+    await userEvent.click(screen.getByRole('button', { name: /^A trip/ }))
+    await userEvent.click(screen.getByLabelText('Trip'))
+    await userEvent.click(await screen.findByRole('option', { name: /Byron Bay Weekend/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+
+    expect(await screen.findByRole('dialog', { name: 'Trip claim' })).toHaveTextContent('Byron Bay Weekend')
+    expect(screen.queryByRole('dialog', { name: /Choose a trip|New claim/ })).toBeNull()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close trip claim' }))
+    expect(screen.getByRole('button', { name: 'New claim' })).toHaveFocus()
+  })
+
+  it('a made trip claim opens its claim page', async () => {
+    renderPage()
+    await userEvent.click(screen.getByRole('button', { name: 'New claim' }))
+    await userEvent.click(screen.getByRole('button', { name: /^A trip/ }))
+    await userEvent.click(screen.getByLabelText('Trip'))
+    await userEvent.click(await screen.findByRole('option', { name: /Byron Bay Weekend/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Make trip claim' }))
+    expect(await screen.findByTestId('detail')).toBeInTheDocument()
   })
 
   it('does not open for a SuperAdmin with no organisation, even from the URL', () => {

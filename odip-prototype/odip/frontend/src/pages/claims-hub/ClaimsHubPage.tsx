@@ -1,19 +1,22 @@
-import { useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useCallback, useEffect, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useClaimBatches, useHubLines } from '@/api/hooks/claimHub'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { Button } from '@/components/Button'
+import GenerateClaimModal from '@/components/GenerateClaimModal'
 import { Modal } from '@/components/Modal'
 import { PageHeader } from '@/components/PageHeader'
 import { Tabs } from '@/components/Tabs'
 import { useTabParam } from '@/hooks/useTabParam'
 import { plural } from '@/lib/format'
 import { usePermissions } from '@/lib/permissions'
+import type { TripDetailDto } from '@/api/types'
 import { ClaimsPipelineCard } from './ClaimsPipelineCard'
 import { FilePanel } from './FilePanel'
 import { FilesPanel, FilesStrip } from './FilesPanel'
 import { OtherPanel, PaidPanel } from './HistoryPanels'
 import { NeedsActionPanel } from './NeedsActionPanel'
+import { NewClaimModal } from './NewClaimModal'
 import { ReadyPanel } from './ReadyPanel'
 import { ShiftClaimRunModal } from './ShiftClaimRunModal'
 import { isUnfinished } from './claimHubSteps'
@@ -30,24 +33,38 @@ const HOW_STEPS = [
 
 /** The NDIA claims hub: lines ready to send, the bulk payment request files built from them, and what the NDIA sent back. */
 export default function ClaimsHubPage() {
-  const { hasOrganisation, canEditProviderSettings } = usePermissions()
+  const { hasOrganisation, canEditProviderSettings, canWrite } = usePermissions()
+  const navigate = useNavigate()
   const [tab, setTab] = useTabParam(TAB_KEYS, 'ready')
   const [params, setParams] = useSearchParams()
   const openFile = params.get('file')
   const [how, setHow] = useState(false)
   const [message, setMessage] = useState('')
   const [fileFilter, setFileFilter] = useState<string | undefined>()
+  const [chooser, setChooser] = useState(false)
+  // What the chooser picked. The next modal opens in an effect, after the chooser has closed and given focus back to New claim, so that is where the next one returns focus to.
+  const [launch, setLaunch] = useState<'shifts' | TripDetailDto | null>(null)
+  const [claimTrip, setClaimTrip] = useState<TripDetailDto | null>(null)
   const lines = useHubLines()
   const batches = useClaimBatches()
 
   // The claim run lives in the URL as well, so the dashboard's Unclaimed shifts tile can open it; closing it drops the param, and Back leaves the page.
   const claimRun = hasOrganisation && params.get('run') === 'shifts'
-  const setClaimRun = (open: boolean) => setParams(p => {
+  const setClaimRun = useCallback((open: boolean) => setParams(p => {
     const next = new URLSearchParams(p)
     if (open) next.set('run', 'shifts')
     else next.delete('run')
     return next
-  }, { replace: true })
+  }, { replace: true }), [setParams])
+
+  const pick = useCallback((next: 'shifts' | TripDetailDto) => { setChooser(false); setLaunch(next) }, [])
+  const pickShifts = useCallback(() => pick('shifts'), [pick])
+  useEffect(() => {
+    if (!launch) return
+    if (launch === 'shifts') setClaimRun(true)
+    else setClaimTrip(launch)
+    setLaunch(null)
+  }, [launch, setClaimRun])
 
   // The open file lives in the URL, so a reload or a link lands on its next step; `replace` keeps Back leaving the page.
   const setFile = (id: string | null) => setParams(p => {
@@ -69,7 +86,7 @@ export default function ClaimsHubPage() {
       action={
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" size="md" onClick={() => setHow(true)}>How claiming works</Button>
-          {hasOrganisation && <Button size="md" onClick={() => setClaimRun(true)}>Claim shifts</Button>}
+          {hasOrganisation && canWrite && <Button size="md" onClick={() => setChooser(true)}>New claim</Button>}
         </div>
       }
     />
@@ -136,6 +153,10 @@ export default function ClaimsHubPage() {
       />
       {howModal}
       {claimRun && <ShiftClaimRunModal open onClose={() => setClaimRun(false)} />}
+      {chooser && <NewClaimModal onClose={() => setChooser(false)} onShifts={pickShifts} onTrip={pick} />}
+      {claimTrip && (
+        <GenerateClaimModal tripId={claimTrip.id} trip={claimTrip} onClose={() => setClaimTrip(null)} onSuccess={created => { setClaimTrip(null); navigate(`/claims/${created.id}`) }} />
+      )}
     </div>
   )
 }

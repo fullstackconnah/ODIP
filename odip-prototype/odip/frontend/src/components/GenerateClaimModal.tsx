@@ -4,7 +4,7 @@ import { Modal } from '@/components/Modal'
 import { DataTable } from '@/components/DataTable'
 import { ClaimBudgetBlock } from '@/components/ClaimBudgetBlock'
 import { LeftOutCallout } from '@/components/LeftOutCallout'
-import type { TripDetailDto, ClaimPreviewResponseDto, ClaimPreviewLineItemDto } from '@/api/types'
+import type { TripClaimListDto, TripDetailDto, ClaimPreviewResponseDto, ClaimPreviewLineItemDto } from '@/api/types'
 import { plural } from '@/lib/format'
 import { dayTypeLabel } from '@/lib/claimLines'
 import { extractErrorMessage, formatCurrency, formatDateAu } from '@/lib/utils'
@@ -16,7 +16,7 @@ interface GenerateClaimModalProps {
   tripId: string
   trip: TripDetailDto
   onClose: () => void
-  onSuccess: () => void
+  onSuccess: (created: TripClaimListDto) => void
 }
 
 export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }: GenerateClaimModalProps) {
@@ -55,7 +55,7 @@ export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }:
     generateClaim.mutate(
       { tripId, data: { departureTime, returnTime, activeHoursPerDay } },
       {
-        onSuccess: () => onSuccess(),
+        onSuccess: created => onSuccess(created),
         onError: (err: unknown) => setError(extractErrorMessage(err, 'Failed to generate claim.')),
       },
     )
