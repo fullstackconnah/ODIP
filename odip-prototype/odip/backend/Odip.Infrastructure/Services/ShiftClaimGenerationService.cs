@@ -77,6 +77,8 @@ public partial class ShiftClaimGenerationService
                 DayTypeLabel = DayTypeLabelOf(l),
                 DayType = l.DayType,
                 SupportItemCode = l.CatalogueItem.ItemNumber,
+                ClaimType = l.ClaimType,
+                Unit = l.CatalogueItem.Unit,
                 Hours = l.Hours,
                 UnitPrice = l.UnitPrice,
                 TotalAmount = l.TotalAmount,
@@ -137,7 +139,7 @@ public partial class ShiftClaimGenerationService
             UnitPrice = l.UnitPrice,
             TotalAmount = l.TotalAmount,
             GSTCode = gstCode,
-            ClaimType = ClaimType.Standard,
+            ClaimType = l.ClaimType,
             Status = ClaimLineItemStatus.Draft
         }).ToList();
 
@@ -241,6 +243,11 @@ public partial class ShiftClaimGenerationService
         var personalCareRows = catalogueByGroup.GetValueOrDefault(CatalogueGroups.PersonalCareGroupCode) ?? new List<SupportCatalogueItem>();
         List<SupportCatalogueItem> RowsOf(Shift s) => catalogueByGroup.GetValueOrDefault(s.SupportGroupCode ?? CatalogueGroups.CommunityAccessGroupCode) ?? new List<SupportCatalogueItem>();
 
+        // The travel of every shift, read once inside the same lock as the shifts (the staff edit of the travel legs takes the same lock): the worker's submitted legs, else the agreement's forecast.
+        var travelPolicy = await ShiftTravelSource.PolicyAsync(_db, participant.TenantId, ct);
+        var travelInputs = await ShiftTravelSource.ForShiftsAsync(_db, participant.TenantId, travelPolicy, shifts.Select(s => new ShiftRef(s.Id, s.ShiftPatternId)).ToList(), ct);
+        var travelOf = shifts.Select((s, i) => (s.Id, Input: travelInputs[i])).ToDictionary(t => t.Id, t => t.Input);
+
         var lineItems = new List<ShiftLineCalc>();
         var leftOut = new List<ShiftClaimLeftOutDto>();
         // No line for an NDIS-funded participant without an NDIS number: services can begin before the profile is complete, so this is reachable. The
@@ -295,10 +302,14 @@ public partial class ShiftClaimGenerationService
                 continue;
             }
 
+            // Provider travel: one time line and one kilometre line, after the band lines, so they take the next parts of the shift.
+            outcome = ShiftTravelPricer.Apply(outcome, travelOf[shift.Id], shift.ServiceDate, state, travelPolicy.KmRate, catalogueItems.Concat(personalCareRows).ToList(), travelPolicy.TravelRows);
+
             lineItems.AddRange(outcome.Lines.Select((price, part) => new ShiftLineCalc
             {
                 Shift = shift,
                 CatalogueItem = price.CatalogueItem,
+                ClaimType = price.ClaimType,
                 DayType = price.DayType,
                 Date = price.Date,
                 Part = part,
@@ -348,7 +359,9 @@ public partial class ShiftClaimGenerationService
         TripClaim.ReferenceFor(!string.IsNullOrWhiteSpace(participant.NdisNumber) ? participant.NdisNumber : participant.Id.ToString("N")[..8].ToUpper(), claimId);
 
     /// <summary>The label a shift claim line reads as ("Weekday Evening", not "WeekdayEvening"); a sleepover is its own line.</summary>
-    private static string DayTypeLabelOf(ShiftLineCalc l) => l.CatalogueItem.Unit == "E" ? "Sleepover" : l.DayType switch
+    private static string DayTypeLabelOf(ShiftLineCalc l) => l.ClaimType == ClaimType.ProviderTravel ? "Provider travel"
+        : l.CatalogueItem.ItemNumber.Contains(ShiftTravelPricer.KmItemMarker, StringComparison.Ordinal) ? "Provider travel costs"
+        : l.CatalogueItem.Unit == "E" ? "Sleepover" : l.DayType switch
     {
         ClaimDayType.Weekday => "Weekday",
         ClaimDayType.Saturday => "Saturday",
@@ -360,12 +373,13 @@ public partial class ShiftClaimGenerationService
     };
 
     /// <summary>The hours of the hourly lines; a sleepover line's quantity of 1 is a night, not an hour.</summary>
-    private static decimal HourlyHours(IEnumerable<ShiftLineCalc> lines) => lines.Where(l => l.CatalogueItem.Unit == "H").Sum(l => l.Hours);
+    private static decimal HourlyHours(IEnumerable<ShiftLineCalc> lines) => lines.Where(l => l.CatalogueItem.Unit == "H" && l.ClaimType == ClaimType.Standard).Sum(l => l.Hours);   // travel time is not a support hour (F-5)
 
     private class ShiftLineCalc
     {
         public Shift Shift { get; set; } = null!;
         public SupportCatalogueItem CatalogueItem { get; set; } = null!;
+        public ClaimType ClaimType { get; set; }
         public ClaimDayType DayType { get; set; }
         /// <summary>The date the line is delivered: the shift's, or the next day for a stretch after midnight.</summary>
         public DateOnly Date { get; set; }

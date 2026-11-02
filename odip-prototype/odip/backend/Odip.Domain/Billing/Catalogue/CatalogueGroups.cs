@@ -16,6 +16,7 @@ public static class CatalogueGroups
     public const string CommunityAccessGroupCode = "GRP_COMMUNITY_ACCESS";
     public const string PersonalCareGroupCode = "GRP_PERSONAL_CARE";
     public const string SleepoverGroupCode = "GRP_SLEEPOVER";
+    public const string ProviderTravelGroupCode = "GRP_PROVIDER_TRAVEL";
 
     /// <summary>Every short-term accommodation group starts with this; a shift in one is a sleepover in short-term accommodation (RG 0115).</summary>
     public const string StaGroupPrefix = "GRP_STA_";
@@ -30,7 +31,7 @@ public static class CatalogueGroups
     private static readonly CatalogueGroupDefinition StaSupport = new("GRP_STA_SUPPORT", "Short-Term Accommodation - Support Hours", 1);
     private static readonly CatalogueGroupDefinition StaAccommodation = new("GRP_STA_ACCOMMODATION", "Short-Term Accommodation - Overnight Stays", 1);
     private static readonly CatalogueGroupDefinition Sleepover = new(SleepoverGroupCode, "Sleepover", 1);
-    private static readonly CatalogueGroupDefinition ProviderTravel = new("GRP_PROVIDER_TRAVEL", "Provider Travel (non-labour costs)", 1);
+    private static readonly CatalogueGroupDefinition ProviderTravel = new(ProviderTravelGroupCode, "Provider Travel (non-labour costs)", 1);
     private static readonly CatalogueGroupDefinition ActivityBasedTransport = new("GRP_ACTIVITY_BASED_TRANSPORT", "Activity Based Transport", 4);
     private static readonly CatalogueGroupDefinition CentreCapital = new("GRP_CENTRE_CAPITAL", "Centre Capital Cost", 4);
     private static readonly CatalogueGroupDefinition Other = new("GRP_OTHER", "Other Supports", 0);

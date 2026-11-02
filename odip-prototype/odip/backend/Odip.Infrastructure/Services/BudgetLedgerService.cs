@@ -121,11 +121,14 @@ public sealed class BudgetLedgerService
         var holidays = await LoadHolidaysAsync(shiftRows.Count + bookingRows.Count == 0 ? null : (from.AddDays(-1), to), ct);
 
         var pricing = new Pricing(catalogue, holidays, providerState, providerZone.Zone);
+        // Provider travel (travel plan D5): the worker's submitted legs, else the agreement's forecast, read once for every shift, the same source the claim reads.
+        var travelPolicy = await ShiftTravelSource.PolicyAsync(_db, tenantId, ct);
+        var travelInputs = await ShiftTravelSource.ForShiftsAsync(_db, tenantId, travelPolicy, shiftRows.Select(s => new ShiftRef(s.Id, s.ShiftPatternId)).ToList(), ct);
         var itemsByPerson = withPlan.ToDictionary(p => p.Id, _ => new List<LedgerItem>());
         var peopleById = withPlan.ToDictionary(p => p.Id);
 
         foreach (var line in lineRows) itemsByPerson[line.ParticipantId].Add(ClaimLineItemOf(line, peopleById[line.ParticipantId], pricing));
-        foreach (var shift in shiftRows) itemsByPerson[shift.ParticipantId].AddRange(ShiftItemsOf(shift, peopleById[shift.ParticipantId], today, pricing));
+        for (var i = 0; i < shiftRows.Count; i++) itemsByPerson[shiftRows[i].ParticipantId].AddRange(ShiftItemsOf(shiftRows[i], peopleById[shiftRows[i].ParticipantId], today, pricing, travelInputs[i], travelPolicy));
         AddBookingItems(bookingRows, tripDays, peopleById, today, pricing, itemsByPerson);
 
         foreach (var person in withPlan)
@@ -289,7 +292,7 @@ public sealed class BudgetLedgerService
         Guid Id, Guid ClaimId, string ClaimReference, TripClaimStatus ClaimStatus, ClaimLineItemStatus Status, string ItemCode, DateOnly From, decimal Hours, decimal TotalAmount, decimal? PaidAmount,
         Guid? ShiftId, Guid? BookingId, Guid ParticipantId, PlanType? BookingPlanType);
 
-    public sealed record ShiftRow(Guid Id, Guid ParticipantId, DateOnly ServiceDate, TimeOnly Start, TimeOnly End, bool EndsNextDay, ShiftStatus Status, SupportRatio Ratio, SleepoverType NightType, string? SupportGroupCode = null);
+    public sealed record ShiftRow(Guid Id, Guid ParticipantId, DateOnly ServiceDate, TimeOnly Start, TimeOnly End, bool EndsNextDay, ShiftStatus Status, SupportRatio Ratio, SleepoverType NightType, string? SupportGroupCode = null, Guid? ShiftPatternId = null);
 
     public sealed record BookingRow(
         Guid Id, Guid ParticipantId, PlanType? PlanTypeOverride, Guid TripId, string TripName, DateOnly StartDate, int DurationDays, TimeOnly? DepartureTime, TimeOnly? ReturnTime,
@@ -328,7 +331,7 @@ public sealed class BudgetLedgerService
             .Where(s => s.TenantId == tenantId && participantIds.Contains(s.ParticipantId) && s.ServiceDate >= from && s.ServiceDate <= to
                 && (s.Status == ShiftStatus.Draft || s.Status == ShiftStatus.Published || s.Status == ShiftStatus.InProgress || s.Status == ShiftStatus.PendingReview
                     || (s.Status == ShiftStatus.Completed && !_db.ClaimLineItems.Where(ClaimLineStillCounts).Any(l => l.ShiftId == s.Id))))
-            .Select(s => new ShiftRow(s.Id, s.ParticipantId, s.ServiceDate, s.StartTime, s.EndTime, s.EndsNextDay, s.Status, s.Ratio, s.NightType, s.SupportGroupCode));
+            .Select(s => new ShiftRow(s.Id, s.ParticipantId, s.ServiceDate, s.StartTime, s.EndTime, s.EndsNextDay, s.Status, s.Ratio, s.NightType, s.SupportGroupCode, s.ShiftPatternId));
 
     /// <summary>
     /// Confirmed bookings of trips that start between <paramref name="from"/> and <paramref name="to"/> and have not been cancelled, and that no claim line has already taken over. The lower
@@ -460,15 +463,17 @@ public sealed class BudgetLedgerService
     /// The ledger items of a shift: one for each part of it, a date and a PACE category (<see cref="ShiftPriceEstimator.PartsOf"/>), so the ledger counts the shift exactly as the claim lines it becomes are filed. Kind and group come
     /// from the shift (completed, past or ahead); only the part's own date places it in a period. A shift with no price is one $0 item that says why.
     /// </summary>
-    private static IEnumerable<LedgerItem> ShiftItemsOf(ShiftRow shift, PersonRow person, DateOnly today, Pricing pricing)
+    private static IEnumerable<LedgerItem> ShiftItemsOf(ShiftRow shift, PersonRow person, DateOnly today, Pricing pricing, ShiftTravelInput? travel, ShiftTravelPolicy travelPolicy)
     {
         var state = ShiftPriceEstimator.StateFor(person.AddressState, pricing.ProviderState);
         var hours = Shift.HoursBetween(shift.Start, shift.End, shift.EndsNextDay);
         var outcome = ShiftPriceEstimator.Price(pricing.ShiftRates(shift.SupportGroupCode), shift.SupportGroupCode, shift.ServiceDate, shift.Start, shift.End, shift.EndsNextDay, shift.Ratio, shift.NightType, person.IsIntensive, state, pricing.Holidays.For(state), pricing.Zone);
+        // The travel counts in the shift's pool like the claim lines it becomes; its caveat is for the claim, not a ledger note, so the note below is the estimator's own.
+        var counted = outcome.IsPriced ? ShiftTravelPricer.Apply(outcome, travel, shift.ServiceDate, state, travelPolicy.KmRate, pricing.ShiftRows(shift.SupportGroupCode).Concat(pricing.PersonalCare).ToList(), travelPolicy.TravelRows) : outcome;
 
         var completed = shift.Status == ShiftStatus.Completed;
         var past = !completed && shift.ServiceDate < today;
-        var parts = outcome.IsPriced ? ShiftPriceEstimator.PartsOf(outcome) : new[] { new ShiftCostPart(shift.ServiceDate, pricing.DefaultShiftCategory, 0m) };
+        var parts = outcome.IsPriced ? ShiftPriceEstimator.PartsOf(counted) : new[] { new ShiftCostPart(shift.ServiceDate, pricing.DefaultShiftCategory, 0m) };
         foreach (var part in parts)
         {
             // One part keeps the shift's own wording (its elapsed hours, or the night of a sleepover); a shift cut into parts says what each part holds.

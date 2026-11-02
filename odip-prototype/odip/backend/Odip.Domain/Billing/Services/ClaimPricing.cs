@@ -84,7 +84,14 @@ public sealed record ShiftCostPart(DateOnly Date, int? PaceCategory, decimal Amo
 /// One line of a priced shift: the catalogue row, the day type, the date the stretch falls on (a night part after midnight is dated the next day), the hours and the price.
 /// <see cref="TotalAmount"/> is the rounded hours x unit price to the cent, as the claim line carries it. A sleepover is one "Each" item: Hours is its quantity, 1.
 /// </summary>
-public sealed record ShiftPrice(SupportCatalogueItem CatalogueItem, ClaimDayType DayType, decimal Hours, decimal UnitPrice, decimal TotalAmount, DateOnly Date);
+public sealed record ShiftPrice(SupportCatalogueItem CatalogueItem, ClaimDayType DayType, decimal Hours, decimal UnitPrice, decimal TotalAmount, DateOnly Date, ClaimType ClaimType = ClaimType.Standard)
+{
+    /// <summary>The kilometre item of provider travel (the _799_ item, in dollars): the one "each" line that is neither a night nor an hour.</summary>
+    public bool IsTravelKm => CatalogueItem.ItemNumber.Contains(ShiftTravelPricer.KmItemMarker, StringComparison.Ordinal);
+
+    /// <summary>True for either provider travel line: the time (claim type TRAN) or the kilometres.</summary>
+    public bool IsTravel => ClaimType == ClaimType.ProviderTravel || IsTravelKm;
+}
 
 /// <summary>
 /// The rows a shift is priced from, loaded by the caller: the hourly rows of the shift's own group (history included, each part is priced by the row valid on ITS date), the hourly rows of the
@@ -133,7 +140,7 @@ public static class ShiftPriceEstimator
     /// <summary>The shift's lines grouped by (date, PACE category), in line order: the one definition the claim, the ledger and the roster estimate count a shift by (a community access evening and the personal care night after midnight are two parts).</summary>
     public static IReadOnlyList<ShiftCostPart> PartsOf(ShiftPriceOutcome outcome) =>
         outcome.Lines.GroupBy(l => (l.Date, Category: PaceCategories.Of(l.CatalogueItem)))
-            .Select(g => new ShiftCostPart(g.Key.Date, g.Key.Category, g.Sum(l => l.TotalAmount), g.Where(l => l.CatalogueItem.Unit != "E").Sum(l => l.Hours), g.Where(l => l.CatalogueItem.Unit == "E").Sum(l => l.Hours)))
+            .Select(g => new ShiftCostPart(g.Key.Date, g.Key.Category, g.Sum(l => l.TotalAmount), g.Where(l => l.CatalogueItem.Unit != "E" && l.ClaimType != ClaimType.ProviderTravel).Sum(l => l.Hours), g.Where(l => l.CatalogueItem.Unit == "E" && !l.IsTravelKm).Sum(l => l.Hours)))
             .ToList();
 
     /// <summary>Why a shift has no price when no row of the group is valid on its date for its day type.</summary>
