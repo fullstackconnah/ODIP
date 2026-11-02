@@ -2629,8 +2629,16 @@ const routes = [
   ['participants/:id/service-agreement-drafts/:id/approval-preview', (participantId, draftId) => {
     const result = planApproval.preview(approvalStore, participantId, draftId)
     if (result.status) return respond(result.status, failEnvelope(null, result.errors))
-    const budgetWarnings = result.preview.canApprove ? rosterBudget.sampleWarnings('shift', result.preview.shiftsToCreate || 0) : null
-    return budgetWarnings ? { ...result.preview, budgetWarnings } : result.preview
+    return result.preview
+  }],
+  // Populate roster (S11): what each started week is missing, then one week at a time.
+  ['participants/:id/service-agreement-drafts/:id/populate-preview', (participantId, draftId) => {
+    const result = planApproval.populatePreview(approvalStore, participantId, draftId)
+    if (result.status) return respond(result.status, failEnvelope(null, result.errors))
+    return { ...result.preview, weeks: result.preview.weeks.map((week) => {
+      const budgetWarnings = rosterBudget.sampleWarnings('shift', week.toAdd)
+      return budgetWarnings ? { ...week, budgetWarnings } : week
+    }) }
   }],
 
   // participants (paged list)
@@ -3020,6 +3028,11 @@ const postRoutes = [
     if (result.status === 409) return respond(409, failEnvelope({ currentVersion: result.currentVersion }, result.errors, 'draft-superseded'))
     if (result.status) return respond(result.status, failEnvelope(null, result.errors))
     return { ...result.draft, oldShiftsRemaining: result.oldShiftsRemaining }
+  }],
+  ['participants/:id/service-agreement-drafts/:id/populate', (participantId, draftId, body) => {
+    const result = planApproval.populate(approvalStore, participantId, draftId, body)
+    if (result.status) return respond(result.status, failEnvelope(null, result.errors, result.code))
+    return result.result
   }],
   // Start rostering (2026-10-16): the week's agreement shifts, once; a started week is the 409 roster-week-started, as the server answers. matchRoute reads only `:id` as a parameter: it is the week start.
   ['rostering/weeks/:id/start', (weekStart) => {

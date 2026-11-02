@@ -7,9 +7,9 @@ import { noBudgetCheck } from '@/test/fixtures/budgets'
 import { budgetOf, draftBlock, mondayWednesday, settings as makeSettings } from '@/test/fixtures/planPricing'
 import ServiceAgreementDraftPage from './ServiceAgreementDraftPage'
 
-const { createMutate, downloadMutate, drafts, participant, plans, budget, check, refetchDrafts, previewFor, editor, renewMutate, oldDraft, pricingSettings, endingRows, approveMutate } = vi.hoisted(() => ({
+const { createMutate, downloadMutate, drafts, participant, plans, budget, check, refetchDrafts, previewFor, editor, renewMutate, oldDraft, pricingSettings, endingRows, approveMutate, populateMutate } = vi.hoisted(() => ({
   editor: vi.fn(), createMutate: vi.fn(), downloadMutate: vi.fn(), drafts: vi.fn(), participant: vi.fn(), plans: vi.fn(), budget: vi.fn(), check: vi.fn(), refetchDrafts: vi.fn(), previewFor: vi.fn(),
-  renewMutate: vi.fn(), oldDraft: vi.fn(), pricingSettings: vi.fn(), endingRows: vi.fn(), approveMutate: vi.fn(),
+  renewMutate: vi.fn(), oldDraft: vi.fn(), pricingSettings: vi.fn(), endingRows: vi.fn(), approveMutate: vi.fn(), populateMutate: vi.fn(),
 }))
 vi.mock('@/api/hooks', () => ({
   useParticipant: () => participant(),
@@ -19,6 +19,8 @@ vi.mock('@/api/hooks', () => ({
   useFundingPlans: () => plans(),
   useApprovalPreview: (_participantId: string, draftId: string) => previewFor(draftId) ?? { data: undefined, isLoading: true, isError: false, error: null, refetch: vi.fn() },
   useApproveServiceAgreementDraft: () => ({ mutate: approveMutate, isPending: false }),
+  usePopulatePreview: () => ({ data: { weeks: [{ weekStart: '2026-10-12', toAdd: 5, alreadyThere: 0 }] }, isLoading: false, isError: false, error: null, refetch: vi.fn() }),
+  usePopulateRoster: () => ({ mutate: populateMutate, isPending: false }),
   usePlanPricingSettings: () => ({ data: pricingSettings() }),
   useRenewAgreement: () => ({ mutate: renewMutate, isPending: false }),
   useServiceAgreementDraft: () => oldDraft(),
@@ -46,7 +48,7 @@ const draft = (changes: Partial<ServiceAgreementDraftDto> = {}): ServiceAgreemen
   blocks: [draftBlock(mondayWednesday('b1', { onPublicHoliday: 'Charge' }))], lines: [], isSummary: false, blockCount: 1, lineCount: 0, total: 0, caveats: [], ...changes,
 }) as ServiceAgreementDraftDto
 
-const approval = { approvedAt: '2026-10-03T01:00:00Z', approvedByName: 'Alex', patternsCreated: 2, patternsEnded: 0, shiftsCreated: 8 }
+const approval = { approvedAt: '2026-10-03T01:00:00Z', approvedByName: 'Alex', patternsCreated: 2, patternsEnded: 0, shiftsCreated: 0 }
 
 const agreementCheck = (overBy: number): AgreementCheck => ({
   hasBudget: true, asOf: '2026-10-12', periodFrom: '2026-10-01', periodTo: '2027-06-30', agreementCost: 30610.28, notInARecordedPool: 0, outsideThePlan: 0,
@@ -232,6 +234,24 @@ describe('ServiceAgreementDraftPage: the words and the saved agreement', () => {
     expect(screen.getByRole('dialog', { name: 'Approve this agreement for rostering?' })).toBeInTheDocument()
   })
 
+  it('offers Populate roster once the newest save is approved, and says what it added; an unapproved save offers approval instead', async () => {
+    drafts.mockReturnValue({ data: [draft({ approval })], isLoading: false, isError: false, refetch: refetchDrafts })
+    populateMutate.mockImplementation((_vars, options) => options.onSuccess({ created: 5, alreadyThere: 0, weeks: [] }))
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(stepButton('Save'))
+
+    expect(screen.getByText(/^Approved for rostering by Alex on 3 Oct 2026\./)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Mark approved for rostering' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Populate roster' }))
+    const dialog = screen.getByRole('dialog', { name: 'Populate roster' })
+    await user.click(within(dialog).getByRole('button', { name: 'Populate roster' }))
+
+    expect(populateMutate).toHaveBeenCalledWith({ participantId: 'p-1', draftId: expect.any(String), weekStart: '2026-10-12' }, expect.anything())
+    expect(screen.queryByRole('dialog', { name: 'Populate roster' })).not.toBeInTheDocument()
+    expect(screen.getByText('Added 5 unfilled shifts.')).toBeInTheDocument()
+  })
+
   it('locks an approved agreement until a new revision is started', async () => {
     drafts.mockReturnValue({ data: [draft({ approval })], isLoading: false, isError: false, refetch: refetchDrafts })
     const user = userEvent.setup()
@@ -292,7 +312,7 @@ describe('ServiceAgreementDraftPage: the words and the saved agreement', () => {
     drafts.mockReturnValue({ data: [draft()], isLoading: false, isError: false, refetch: refetchDrafts })
     const user = userEvent.setup()
     renderPage()
-    expect(screen.getByText(/Draft only:/).closest('p')).toHaveTextContent("Draft only: not approved for signing or use. It can't activate the participant, invoice or claim. Approving a revision for rostering is separate: it only makes that revision's weekly patterns and unfilled shifts.")
+    expect(screen.getByText(/Draft only:/).closest('p')).toHaveTextContent("Draft only: not approved for signing or use. It can't activate the participant, invoice or claim. Approving a revision for rostering is separate: it only makes that revision's weekly patterns; Populate roster adds the shifts.")
     const identifiers = screen.getByText(/Participant identifiers come from the participant record/).closest('p') as HTMLElement
     expect(identifiers).toHaveTextContent('NDIS number: Not recorded on participant; date of birth: Not recorded on participant.')
     expect(identifiers).toHaveTextContent('A snapshot of both is stored with this draft and printed on its PDF, which Admins and Coordinators can open; a later change to the record does not change an existing draft.')
@@ -333,7 +353,7 @@ describe('ServiceAgreementDraftPage: the words and the saved agreement', () => {
     const saturday = mondayWednesday('b3', { onPublicHoliday: 'Charge', days: ['Saturday'], start: '09:00:00', end: '15:00:00' })
     drafts.mockReturnValue({ data: [draft({ blocks: [draftBlock(mondayWednesday('b1', { onPublicHoliday: 'Charge' })), draftBlock(saturday)] })], isLoading: false, isError: false, refetch: refetchDrafts })
     previewFor.mockReturnValue({
-      data: { canApprove: false, alreadyApproved: false, reasons: [{ code: 'NoItem', message: "Block 'b3': no item for the night.", blockId: 'b3', count: 1 }], patternsToCreate: 0, patternsToEnd: 0, shiftsToCreate: 0, horizonEnd: '2026-12-05', oldShiftsRemaining: { open: 0, assigned: 0 }, overlappingPatterns: [] },
+      data: { canApprove: false, alreadyApproved: false, reasons: [{ code: 'NoItem', message: "Block 'b3': no item for the night.", blockId: 'b3', count: 1 }], patternsToCreate: 0, patternsToEnd: 0, shiftsOnApproval: false, oldShiftsRemaining: { open: 0, assigned: 0 }, overlappingPatterns: [] },
       isLoading: false, isError: false, error: null, refetch: vi.fn(),
     })
     const user = userEvent.setup()
@@ -683,7 +703,7 @@ describe('ServiceAgreementDraftPage: renewing an agreement (agreement PR 2)', ()
 })
 
 describe('Approving can move the participant to Active', () => {
-  const readyPreview = { data: { canApprove: true, alreadyApproved: false, reasons: [], patternsToCreate: 1, patternsToEnd: 0, shiftsToCreate: 0, horizonEnd: '2026-12-05', oldShiftsRemaining: { open: 0, assigned: 0 }, overlappingPatterns: [] }, isLoading: false, isError: false, error: null, refetch: vi.fn() }
+  const readyPreview = { data: { canApprove: true, alreadyApproved: false, reasons: [], patternsToCreate: 1, patternsToEnd: 0, shiftsOnApproval: false, oldShiftsRemaining: { open: 0, assigned: 0 }, overlappingPatterns: [] }, isLoading: false, isError: false, error: null, refetch: vi.fn() }
   const onboarding = { data: { id: 'p-1', fullName: 'Marcus Tran', firstName: 'Marcus', isDraft: true, addressState: 'VIC', planType: 'PlanManaged' }, isLoading: false, isError: false, refetch: vi.fn() }
 
   async function approveWith(activation: unknown) {
@@ -747,6 +767,6 @@ describe('Approving can move the participant to Active', () => {
     pricingSettings.mockReturnValue(makeSettings({ approvalActivatesParticipant: true }))
     drafts.mockReturnValue({ data: [draft()], isLoading: false, isError: false, refetch: refetchDrafts })
     renderPage()
-    expect(screen.getByText(/Draft only:/).closest('p')).toHaveTextContent("Draft only: not approved for signing or use. It can't invoice or claim. Approving a revision for rostering is separate: it only makes that revision's weekly patterns and unfilled shifts. Approving also moves them to Active if they're ready.")
+    expect(screen.getByText(/Draft only:/).closest('p')).toHaveTextContent("Draft only: not approved for signing or use. It can't invoice or claim. Approving a revision for rostering is separate: it only makes that revision's weekly patterns; Populate roster adds the shifts. Approving also moves them to Active if they're ready.")
   })
 })

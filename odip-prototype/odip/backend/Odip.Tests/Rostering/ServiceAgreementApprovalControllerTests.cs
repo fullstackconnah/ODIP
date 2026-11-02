@@ -129,12 +129,12 @@ public class ServiceAgreementApprovalControllerTests
         var dto = Value(result);
         Assert.Equal((draft.Id, 1, "UnapprovedDraft"), (dto.Id, dto.Version, dto.Status));            // approval is not the template's status
         var approval = dto.Approval!;
-        Assert.Equal(("Alex Admin", 5, 0, 40), (approval.ApprovedByName, approval.PatternsCreated, approval.PatternsEnded, approval.ShiftsCreated));
-        Assert.Equal((new DateOnly(2026, 12, 6), (DateOnly?)new DateOnly(2026, 10, 12)), (approval.HorizonEnd, approval.FirstShiftDate));
+        Assert.Equal(("Alex Admin", 5, 0, 0), (approval.ApprovedByName, approval.PatternsCreated, approval.PatternsEnded, approval.ShiftsCreated));      // approval makes the patterns only (S11)
+        Assert.Equal(((DateOnly?)null, (DateOnly?)null), (approval.HorizonEnd, approval.FirstShiftDate));
         Assert.Equal((0, 0), (dto.OldShiftsRemaining!.Open, dto.OldShiftsRemaining.Assigned));
         Assert.Single(dto.Blocks);
         var json = JsonSerializer.Serialize(Assert.IsType<ApiResponse<ServiceAgreementDraftDto>>(Assert.IsType<OkObjectResult>(result.Result).Value), ApiOptions());
-        Assert.Contains("\"approval\":{\"approvedAt\":\"2026-10-10T02:00:00Z\",\"approvedByName\":\"Alex Admin\",\"patternsCreated\":5,\"patternsEnded\":0,\"shiftsCreated\":40,\"horizonEnd\":\"2026-12-06\",\"firstShiftDate\":\"2026-10-12\"}", json);
+        Assert.Contains("\"approval\":{\"approvedAt\":\"2026-10-10T02:00:00Z\",\"approvedByName\":\"Alex Admin\",\"patternsCreated\":5,\"patternsEnded\":0,\"shiftsCreated\":0", json);
         Assert.Contains("\"oldShiftsRemaining\":{\"open\":0,\"assigned\":0,\"removed\":0,\"carried\":0,\"shifts\":[]}", json);
     }
 
@@ -208,11 +208,11 @@ public class ServiceAgreementApprovalControllerTests
         var result = await Controller(f).ApprovalPreview(f.ParticipantId, draft.Id, CancellationToken.None);
 
         var preview = Value(result);
-        Assert.Equal((true, 5, 0, 40, new DateOnly(2026, 12, 6)), (preview.CanApprove, preview.PatternsToCreate, preview.PatternsToEnd, preview.ShiftsToCreate, preview.HorizonEnd));
+        Assert.Equal((true, 5, 0, false), (preview.CanApprove, preview.PatternsToCreate, preview.PatternsToEnd, preview.ShiftsOnApproval));
         var json = JsonSerializer.Serialize(Assert.IsType<ApiResponse<DraftApprovalPreviewDto>>(Assert.IsType<OkObjectResult>(result.Result).Value), ApiOptions());
         Assert.Contains("\"canApprove\":true", json);
         Assert.Contains("\"patternsToCreate\":5", json);
-        Assert.Contains("\"horizonEnd\":\"2026-12-06\"", json);
+        Assert.Contains("\"shiftsOnApproval\":false", json);
         Assert.Empty(await f.Db.ServiceAgreementDraftApprovals.ToListAsync());
     }
 
@@ -226,7 +226,7 @@ public class ServiceAgreementApprovalControllerTests
         var approved = Value(await controller.Approve(f.ParticipantId, draft.Id, new ApproveDraftDto(), CancellationToken.None));
         var listed = Value(await controller.List(f.ParticipantId, CancellationToken.None)).Single();
 
-        Assert.Equal(40, preview.ShiftsToCreate);
+        Assert.False(preview.ShiftsOnApproval);
         Assert.DoesNotContain("topUpEnabled", JsonSerializer.Serialize(new ApiResponse<DraftApprovalPreviewDto> { Success = true, Data = preview }, ApiOptions()));
         Assert.DoesNotContain("topUpEnabled", JsonSerializer.Serialize(approved, ApiOptions()));
         Assert.DoesNotContain("topUpEnabled", JsonSerializer.Serialize(listed, ApiOptions()));
@@ -433,13 +433,18 @@ public class ServiceAgreementApprovalControllerTests
         await OnboardingAsync(on, active: true, servicesStarted: started);
         await SettingAsync(on, on: true);
 
-        await ApproveAsync(off, await AddRevisionAsync(off, 1, new[] { WeekdayBlock() }));
-        var dto = await ApproveAsync(on, await AddRevisionAsync(on, 1, new[] { WeekdayBlock() }));
+        var offDraft = await AddRevisionAsync(off, 1, new[] { WeekdayBlock() });
+        var onDraft = await AddRevisionAsync(on, 1, new[] { WeekdayBlock() });
+        await ApproveAsync(off, offDraft);
+        var dto = await ApproveAsync(on, onDraft);
 
         Assert.Equal(ActivationResults.Activated, dto.Activation!.Result);
         Assert.False((await StoredAsync(on)).IsDraft);
+        Assert.Equal(0, await ShiftCountAsync(off));                                                  // approval alone makes no shifts (S11)
+        await PopulateAllAsync(off.Service, off.ParticipantId, offDraft.Id);
         Assert.True(await ShiftCountAsync(off) > 0);
-        Assert.Equal(await ShiftCountAsync(off), await ShiftCountAsync(on));
+        Assert.Equal(await ShiftCountAsync(off), await ShiftCountAsync(on));                          // activation made exactly what Populate makes
+        Assert.Equal(0, (await PopulateAllAsync(on.Service, on.ParticipantId, onDraft.Id)).Created);   // so Populate has nothing left to add: none twice
     }
 
     /// <summary>Throws a busy roster on the save that finalises the participant, as a held roster lock would on Postgres.</summary>
@@ -472,4 +477,83 @@ public class ServiceAgreementApprovalControllerTests
     [Fact]
     public void Activation_waits_three_seconds_for_the_roster_not_the_ten_of_Make_active() =>
         Assert.Equal((TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(10)), (ServiceAgreementApprovalService.ActivationLockWait, RosterGenerationLock.DefaultWait));
+
+    // ── Populate roster (S11) ─────────────────────────────────────────────────────
+
+    [Fact]
+    public void Populate_and_its_preview_are_for_admins_coordinators_and_super_admins_only_and_populate_is_rate_limited_and_size_capped()
+    {
+        var populate = typeof(ServiceAgreementDraftsController).GetMethod(nameof(ServiceAgreementDraftsController.Populate))!;
+        var preview = typeof(ServiceAgreementDraftsController).GetMethod(nameof(ServiceAgreementDraftsController.PopulatePreview))!;
+
+        // A Worker is not in the list, so the role gate answers it 403 before any of this code runs.
+        Assert.Equal("Admin,Coordinator,SuperAdmin", populate.GetCustomAttribute<AuthorizeAttribute>()?.Roles);
+        Assert.Equal("Admin,Coordinator,SuperAdmin", preview.GetCustomAttribute<AuthorizeAttribute>()?.Roles);
+        Assert.DoesNotContain("SupportWorker", populate.GetCustomAttribute<AuthorizeAttribute>()!.Roles!);
+        Assert.Equal("api", populate.GetCustomAttribute<EnableRateLimitingAttribute>()?.PolicyName);
+        Assert.NotNull(populate.GetCustomAttribute<RequestSizeLimitAttribute>());
+        Assert.Equal("{id:guid}/populate", populate.GetCustomAttribute<HttpPostAttribute>()!.Template);
+        Assert.Equal("{id:guid}/populate-preview", preview.GetCustomAttribute<HttpGetAttribute>()!.Template);
+    }
+
+    [Fact]
+    public async Task Another_organisations_revision_is_a_404_on_populate_and_its_preview_and_nothing_is_made()
+    {
+        await using var f = await SetUpAsync();
+        var draft = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
+        await ApproveAsync(f, draft);
+        var other = Controller(f, tenantId: TenantB);
+
+        Assert.IsType<NotFoundObjectResult>((await other.Populate(f.ParticipantId, draft.Id, new PopulateDraftDto(), CancellationToken.None)).Result);
+        Assert.IsType<NotFoundObjectResult>((await other.PopulatePreview(f.ParticipantId, draft.Id, CancellationToken.None)).Result);
+        Assert.Empty(await f.Db.Shifts.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Populate_answers_200_with_what_it_added_and_a_week_that_is_not_started_is_a_400_and_an_unapproved_revision_a_409()
+    {
+        await using var f = await SetUpAsync();
+        var draft = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
+        var controller = Controller(f);
+
+        var unapproved = Assert.IsType<ConflictObjectResult>((await controller.Populate(f.ParticipantId, draft.Id, new PopulateDraftDto(), CancellationToken.None)).Result);
+        Assert.Equal("populate-refused", Assert.IsType<ApiResponse<PopulateResultDto>>(unapproved.Value).Code);
+        await ApproveAsync(f, draft);
+        Assert.IsType<BadRequestObjectResult>((await controller.Populate(f.ParticipantId, draft.Id, new PopulateDraftDto { WeekStart = new DateOnly(2027, 3, 1) }, CancellationToken.None)).Result);
+
+        var result = await controller.Populate(f.ParticipantId, draft.Id, new PopulateDraftDto { WeekStart = new DateOnly(2026, 10, 14) }, CancellationToken.None);   // any day of the week names it
+
+        var dto = Value(result);
+        Assert.Equal((5, 0), (dto.Created, dto.AlreadyThere));
+        Assert.Equal(new DateOnly(2026, 10, 12), Assert.Single(dto.Weeks).WeekStart);
+        var json = JsonSerializer.Serialize(Assert.IsType<ApiResponse<PopulateResultDto>>(Assert.IsType<OkObjectResult>(result.Result).Value), ApiOptions());
+        Assert.Contains("\"created\":5,\"alreadyThere\":0,\"weeks\":[{\"weekStart\":\"2026-10-12\",\"created\":5,\"alreadyThere\":0}]", json);
+        Assert.Equal(5, await f.Db.Shifts.CountAsync());
+    }
+
+    /// <summary>Throws a busy roster on the save that adds shifts, as a held roster lock would on Postgres.</summary>
+    private sealed class BusyOnShiftsAdded : SaveChangesInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken ct = default)
+        {
+            if (eventData.Context!.ChangeTracker.Entries<Shift>().Any(e => e.State == EntityState.Added)) throw new RosterBusyException();
+            return base.SavingChangesAsync(eventData, result, ct);
+        }
+    }
+
+    [Fact]
+    public async Task When_the_roster_is_busy_populate_is_a_409_roster_busy_and_nothing_is_made()
+    {
+        await using var seed = await SetUpAsync();
+        var draft = await AddRevisionAsync(seed, 1, new[] { WeekdayBlock() });
+        await ApproveAsync(seed, draft);
+        await using var f = new Fixture { DbName = seed.DbName, Db = NewDb(seed.DbName, false, new BusyOnShiftsAdded()), ParticipantId = seed.ParticipantId };
+
+        var result = await Controller(f).Populate(f.ParticipantId, draft.Id, new PopulateDraftDto { WeekStart = new DateOnly(2026, 10, 12) }, CancellationToken.None);
+
+        var busy = Assert.IsType<ConflictObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<PopulateResultDto>>(busy.Value);
+        Assert.Equal(("roster-busy", RosterBusyException.Words), (body.Code, Assert.Single(body.Errors!)));
+        Assert.Empty(await seed.Db.Shifts.ToListAsync());
+    }
 }

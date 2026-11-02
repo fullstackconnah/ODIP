@@ -7,7 +7,6 @@ import { REASON_COPY } from '@/lib/planQuote'
 import { draftBlock, mondayWednesday } from '@/test/fixtures/planPricing'
 import { ApprovalDialog } from './ApprovalDialog'
 import { BUDGET_WARNINGS_TITLE } from '@/components/BudgetWarnings'
-import { SERVER_PERIOD, asWritten } from '@/test/fixtures/budgets'
 
 const { previewCall, previewState, approveMutate, approveState } = vi.hoisted(() => ({
   previewCall: vi.fn(),
@@ -29,7 +28,7 @@ const draft = (): ServiceAgreementDraftDto => ({
 })
 
 const preview = (changes: Partial<DraftApprovalPreviewDto> = {}): DraftApprovalPreviewDto => ({
-  canApprove: true, alreadyApproved: false, reasons: [], patternsToCreate: 5, patternsToEnd: 0, shiftsToCreate: 40, horizonEnd: '2026-12-05',
+  canApprove: true, alreadyApproved: false, reasons: [], patternsToCreate: 5, patternsToEnd: 0, shiftsOnApproval: false,
   oldShiftsRemaining: { open: 0, assigned: 0 }, overlappingPatterns: [], ...changes,
 })
 
@@ -59,43 +58,43 @@ describe('ApprovalDialog: what approving does, said plainly', () => {
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
   })
 
-  it('names the version, says what it makes and up to when, how later weeks get theirs, that it is not signing, and that it cannot be undone', () => {
+  it('names the version, says what it makes, that it is not signing, and that it cannot be undone', () => {
     setUp()
 
     const dialog = screen.getByRole('dialog', { name: 'Approve this agreement for rostering?' })
     // A short line for each fact, so it scans: the patterns, the shifts, (below) what ends.
     expect(within(dialog).getByText('Creates 5 weekly patterns, Mon 2 Nov 2026 to Wed 31 Mar 2027.')).toBeInTheDocument()
-    expect(within(dialog).getByText('Makes 40 unfilled shifts up to Sat 5 Dec 2026. Later weeks get theirs when each week is started on the roster.')).toBeInTheDocument()
+    expect(within(dialog).queryByText(/^Makes /)).not.toBeInTheDocument()
     expect(within(dialog).getByText(/separate from signing: nothing is signed or sent/)).toBeInTheDocument()
     expect(within(dialog).getByText("You can't undo an approval. To change the roster later, save a new revision and approve that.")).toBeInTheDocument()
     expect(previewCall).toHaveBeenCalledWith('p-1', 'd-2', true)
   })
 
-  it('says each fact on a line of its own: what it creates, the shifts it makes, and what ends', () => {
+  it('says each fact on a line of its own: what it creates and what ends', () => {
     ready(preview({ patternsToEnd: 5, endsFromVersion: 1, endsOn: '2026-11-01' }))
     setUp()
 
     const lines = screen.getByText('Creates 5 weekly patterns, Mon 2 Nov 2026 to Wed 31 Mar 2027.').parentElement!
     expect([...lines.children].map(line => line.textContent)).toEqual([
       'Creates 5 weekly patterns, Mon 2 Nov 2026 to Wed 31 Mar 2027.',
-      'Makes 40 unfilled shifts up to Sat 5 Dec 2026. Later weeks get theirs when each week is started on the roster.',
       'Ends 5 patterns from the agreement it replaces the day before Mon 2 Nov 2026.',
     ])
   })
 
-  it('promises nothing past the agreement, and says how weeks get their shifts when none are made', () => {
-    ready(preview({ horizonEnd: '2027-03-31' }))
-    const { unmount } = render(<MemoryRouter><ApprovalDialog open participantId="p-1" draft={draft()} onClose={vi.fn()} onApproved={vi.fn()} /></MemoryRouter>)
+  it('says no shifts are added yet and to populate the roster after approving, when approval makes none', () => {
+    ready(preview({ shiftsOnApproval: false }))
+    setUp()
 
-    expect(screen.getByText('Makes 40 unfilled shifts up to Wed 31 Mar 2027.')).toBeInTheDocument()
-    expect(screen.queryByText(/Later weeks/)).not.toBeInTheDocument()
-    expect(screen.queryByText(/added each day/)).not.toBeInTheDocument()
-    unmount()
+    expect(screen.getByText('No shifts are added yet. Populate the roster after approving.')).toBeInTheDocument()
+    expect(screen.queryByText(/are made on approval/)).not.toBeInTheDocument()
+  })
 
-    ready(preview({ shiftsToCreate: 0, horizonEnd: undefined }))
-    render(<MemoryRouter><ApprovalDialog open participantId="p-1" draft={draft()} onClose={vi.fn()} onApproved={vi.fn()} /></MemoryRouter>)
-    expect(screen.getByText('No unfilled shifts are made now. Each week gets its shifts when it is started on the roster.')).toBeInTheDocument()
-    expect(screen.queryByText(/added each day/)).not.toBeInTheDocument()
+  it('says the started weeks get their shifts on approval when approving makes the participant active', () => {
+    ready(preview({ shiftsOnApproval: true }))
+    setUp()
+
+    expect(screen.getByText('Shifts for the weeks already started are made on approval, because approving makes the participant active.')).toBeInTheDocument()
+    expect(screen.queryByText(/No shifts are added yet/)).not.toBeInTheDocument()
   })
 
   it('never mentions a daily top-up', () => {
@@ -147,11 +146,10 @@ describe('ApprovalDialog: what approving does, said plainly', () => {
   })
 
   it('agrees its nouns with its counts', () => {
-    ready(preview({ patternsToCreate: 1, shiftsToCreate: 1, patternsToEnd: 1, endsFromVersion: 3, endsOn: '2026-11-01' }))
+    ready(preview({ patternsToCreate: 1, patternsToEnd: 1, endsFromVersion: 3, endsOn: '2026-11-01' }))
     setUp()
 
     expect(screen.getByText('Creates 1 weekly pattern, Mon 2 Nov 2026 to Wed 31 Mar 2027.')).toBeInTheDocument()
-    expect(screen.getByText(/Makes 1 unfilled shift up to Sat 5 Dec 2026\./)).toBeInTheDocument()
     expect(screen.getByText(/Ends 1 pattern from the agreement it replaces the day before Mon 2 Nov 2026\./)).toBeInTheDocument()
   })
 
@@ -211,22 +209,6 @@ describe('ApprovalDialog: what approving does, said plainly', () => {
     expect(screen.queryByRole('link', { name: /on the roster/ })).not.toBeInTheDocument()
   })
 
-  it('says when shifts will come for a participant who is not active yet, and makes only the patterns', () => {
-    ready(preview({ shiftsToCreate: 0, horizonEnd: '2026-12-05', shiftsNote: 'Unfilled shifts are created once Jordan is active.' }))
-    setUp()
-
-    expect(screen.getByText('Creates 5 weekly patterns, Mon 2 Nov 2026 to Wed 31 Mar 2027.')).toBeInTheDocument()
-    expect(screen.queryByText(/^Makes /)).not.toBeInTheDocument()
-    expect(screen.getByText('Unfilled shifts are created once Jordan is active.')).toBeInTheDocument()
-  })
-
-  it('says when no shifts are due yet because the agreement starts beyond the horizon, without a number of weeks', () => {
-    ready(preview({ shiftsToCreate: 0, horizonEnd: undefined }))
-    setUp()
-
-    expect(screen.getByText('No unfilled shifts are made now. Each week gets its shifts when it is started on the roster.')).toBeInTheDocument()
-    expect(screen.queryByText(/weeks/)).not.toBeInTheDocument()
-  })
 })
 
 describe('ApprovalDialog: hand-made patterns that overlap', () => {
@@ -435,7 +417,7 @@ describe('ApprovalDialog: when it cannot be approved yet', () => {
   ]
 
   it('lists each reason in the words of the block numbers the screen uses, and offers no Approve', () => {
-    ready(preview({ canApprove: false, reasons, patternsToCreate: 0, shiftsToCreate: 0 }))
+    ready(preview({ canApprove: false, reasons, patternsToCreate: 0 }))
     setUp()
 
     const dialog = screen.getByRole('dialog', { name: 'Not ready to approve' })
@@ -575,34 +557,8 @@ describe('ApprovalDialog: loading and failing', () => {
   })
 })
 
-describe('ApprovalDialog: what the shifts would do to the budget (budget phase 3)', () => {
-  const warning = {
-    poolName: 'Core (flexible)', periodStart: '2026-10-01', periodEnd: '2026-12-31', available: 1000, used: 0, forecast: 9600, added: 9600, overBy: 8600, count: 40,
-    message: `These 40 shifts take Core (flexible) to $9,600.00 of $1,000.00 for ${SERVER_PERIOD}.`,
-  }
-
-  it('shows the server\u2019s warning for each pool and period as a warning only, and still lets the revision be approved', async () => {
-    const user = userEvent.setup()
-    ready(preview({ budgetWarnings: [warning] }))
-    const handlers = setUp()
-
-    const dialog = screen.getByRole('dialog', { name: 'Approve this agreement for rostering?' })
-    expect(within(dialog).getByText(`These 40 shifts take Core (flexible) to $9,600.00 of $1,000.00 for ${SERVER_PERIOD}.`, { normalizer: asWritten })).toBeInTheDocument()
-    expect(within(dialog).getByText('This is a warning only. Approving is not blocked.')).toBeInTheDocument()
-    await user.click(within(dialog).getByRole('button', { name: 'Approve' }))
-
-    expect(approveMutate).toHaveBeenCalledWith({ participantId: 'p-1', draftId: 'd-2', acknowledgeOverlaps: false }, expect.anything())
-    expect(handlers.onClose).not.toHaveBeenCalled()
-  })
-
-  it('says nothing about a budget when the server sent no warning', () => {
-    setUp()
-
-    expect(screen.queryByText(BUDGET_WARNINGS_TITLE)).not.toBeInTheDocument()
-  })
-
-  it('is not part of a refusal: a revision that cannot be approved lists its reasons and no budget warning', () => {
-    ready(preview({ canApprove: false, reasons: [{ code: 'HandTyped', message: 'Rebuild it from blocks.' }], budgetWarnings: [warning] }))
+describe('ApprovalDialog: the budget is not part of approving (S11)', () => {
+  it('says nothing about a budget: the shifts, and so their budget warnings, come with Populate roster', () => {
     setUp()
 
     expect(screen.queryByText(BUDGET_WARNINGS_TITLE)).not.toBeInTheDocument()

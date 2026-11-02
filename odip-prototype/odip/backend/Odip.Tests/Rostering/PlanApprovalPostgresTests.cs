@@ -81,6 +81,20 @@ public class PlanApprovalPostgresTests : IClassFixture<PostgresFixture>
         return await new ServiceAgreementApprovalService(db, new RosterPlacementGate(), new RosterShiftGenerator(lockWait), clock: clock).ApproveAsync(tenantId, participantId, draftId, false, caller ?? Admin, CancellationToken.None);
     }
 
+    /// <summary>Populate roster for every started week, one week at a time as the dialog does (S11): what approval used to do by itself.</summary>
+    private static async Task<PopulateResultDto> PopulateEveryWeekAsync(string connectionString, Guid tenantId, Guid participantId, Guid draftId, FakeClock clock)
+    {
+        await using var db = Open(connectionString, tenantId);
+        return await ApprovalTestSupport.PopulateAllAsync(new ServiceAgreementApprovalService(db, new RosterPlacementGate(), new RosterShiftGenerator(), clock: clock), participantId, draftId, tenantId);
+    }
+
+    private static async Task<ApprovalOutcome> ApproveAndPopulateAsync(string connectionString, Guid tenantId, Guid participantId, Guid draftId, FakeClock clock)
+    {
+        var outcome = await ApproveAsync(connectionString, tenantId, participantId, draftId, clock);
+        await PopulateEveryWeekAsync(connectionString, tenantId, participantId, draftId, clock);
+        return outcome;
+    }
+
     private static async Task ExecuteAsync(string connectionString, string sql)
     {
         await using var connection = new NpgsqlConnection(connectionString);
@@ -196,7 +210,7 @@ public class PlanApprovalPostgresTests : IClassFixture<PostgresFixture>
     // ── Approval ──────────────────────────────────────────────────────────────────
 
     [SkippableFact]
-    public async Task ApprovingOnPostgres_MakesThePatternsTheShiftsAndTheApproval_AndTheStoredPricingAndBlocksReadBack()
+    public async Task ApprovingOnPostgres_MakesThePatternsAndTheApprovalButNoShifts_PopulatingMakesTheShifts_AndTheStoredPricingAndBlocksReadBack()
     {
         RequirePostgres();
         var (cs, tenantId, participantId) = await SetUpAsync();
@@ -208,17 +222,21 @@ public class PlanApprovalPostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal(ApprovalStatus.Approved, outcome.Status);
         await using var read = Open(cs, tenantId);
         var approval = await read.ServiceAgreementDraftApprovals.AsNoTracking().SingleAsync();
-        Assert.Equal((draft.Id, 1, "Alex Admin", 5, 0, 40), (approval.DraftId, approval.DraftVersion, approval.ApprovedByName, approval.PatternsCreated, approval.PatternsEnded, approval.ShiftsCreated));
+        Assert.Equal((draft.Id, 1, "Alex Admin", 5, 0, 0), (approval.DraftId, approval.DraftVersion, approval.ApprovedByName, approval.PatternsCreated, approval.PatternsEnded, approval.ShiftsCreated));
         Assert.Equal(new DateTime(2026, 10, 10, 2, 0, 0), approval.ApprovedAt);
         Assert.Equal(5, await read.ShiftPatterns.CountAsync(p => p.SourceDraftId == draft.Id));
-        Assert.All(await read.ShiftPatterns.AsNoTracking().ToListAsync(), p => Assert.Equal(new DateOnly(2026, 12, 6), p.GeneratedThrough));      // how far shifts were made, in a real date column
-        Assert.Equal(40, await read.Shifts.CountAsync());
+        Assert.Empty(await read.Shifts.ToListAsync());                                                                                         // approval makes the patterns only
+        var populated = await PopulateEveryWeekAsync(cs, tenantId, participantId, draft.Id, clock);
+        Assert.Equal((40, 0), (populated.Created, populated.AlreadyThere));
+        await using var after = Open(cs, tenantId);
+        Assert.All(await after.ShiftPatterns.AsNoTracking().ToListAsync(), p => Assert.Equal(new DateOnly(2026, 12, 6), p.GeneratedThrough));      // how far shifts were made, in a real date column
+        Assert.Equal(40, await after.Shifts.CountAsync());
         var again = await ApproveAsync(cs, tenantId, participantId, draft.Id, clock, Coordinator);
         Assert.Equal((ApprovalStatus.AlreadyApproved, "Alex Admin"), (again.Status, again.Approval!.ApprovedByName));
     }
 
     [SkippableFact]
-    public async Task AFirstApproval_WaitsForAStartInFlight_AndFillsTheWeekItStarted()   // R6: approval takes the organisation's board lock before the participant's
+    public async Task AFirstApproval_WaitsForAStartInFlight_AndPopulatingFillsTheWeekItStarted()   // R6: approval takes the organisation's board lock before the participant's
     {
         RequirePostgres();
         var (cs, tenantId, participantId) = await SetUpAsync(weeksStarted: false);
@@ -237,6 +255,7 @@ public class PlanApprovalPostgresTests : IClassFixture<PostgresFixture>
         var outcome = await approving;
 
         Assert.Equal(ApprovalStatus.Approved, outcome.Status);
+        await PopulateEveryWeekAsync(cs, tenantId, participantId, draft.Id, clock);
         await using var read = Open(cs, tenantId);
         Assert.Equal(Enumerable.Range(0, 5).Select(i => new DateOnly(2026, 10, 19).AddDays(i)), await read.Shifts.Select(s => s.ServiceDate).OrderBy(d => d).ToListAsync());
     }
@@ -257,7 +276,7 @@ public class PlanApprovalPostgresTests : IClassFixture<PostgresFixture>
         await using var read = Open(cs, tenantId);
         Assert.Equal(1, await read.ServiceAgreementDraftApprovals.CountAsync());
         Assert.Equal(5, await read.ShiftPatterns.CountAsync());
-        Assert.Equal(40, await read.Shifts.CountAsync());
+        Assert.Empty(await read.Shifts.ToListAsync());                                            // approval makes no shifts
     }
 
     /// <summary>On the first save that holds an approval to write, lets another request finish first (the save that replaces the revision), then lets this save run against what that request left.</summary>
@@ -315,7 +334,7 @@ public class PlanApprovalPostgresTests : IClassFixture<PostgresFixture>
         var (cs, tenantId, participantId) = await SetUpAsync();
         var clock = FakeClock.AtUtc(2026, 10, 10, 2, 0);
         var v1 = await StoreAsync(cs, tenantId, participantId, 1);
-        await ApproveAsync(cs, tenantId, participantId, v1.Id, clock);
+        await ApproveAndPopulateAsync(cs, tenantId, participantId, v1.Id, clock);
         var v2 = await StoreAsync(cs, tenantId, participantId, 2, start: new DateOnly(2026, 11, 2), end: new DateOnly(2026, 12, 20), blocks: new[] { WeekdayBlock(change: b => b with { End = T(14) }) });
 
         var outcome = await ApproveAsync(cs, tenantId, participantId, v2.Id, clock);
@@ -337,7 +356,7 @@ public class PlanApprovalPostgresTests : IClassFixture<PostgresFixture>
         var (cs, tenantId, participantId) = await SetUpAsync();
         var clock = FakeClock.AtUtc(2026, 10, 10, 2, 0);
         var v1 = await StoreAsync(cs, tenantId, participantId, 1);
-        await ApproveAsync(cs, tenantId, participantId, v1.Id, clock);
+        await ApproveAndPopulateAsync(cs, tenantId, participantId, v1.Id, clock);
         Guid noted;
         await using (var db = Open(cs, tenantId))
         {
@@ -367,7 +386,7 @@ public class PlanApprovalPostgresTests : IClassFixture<PostgresFixture>
         var (cs, tenantId, participantId) = await SetUpAsync();
         var clock = FakeClock.AtUtc(2026, 10, 10, 2, 0);
         var v1 = await StoreAsync(cs, tenantId, participantId, 1);
-        await ApproveAsync(cs, tenantId, participantId, v1.Id, clock);
+        await ApproveAndPopulateAsync(cs, tenantId, participantId, v1.Id, clock);
         var v2 = await StoreAsync(cs, tenantId, participantId, 2, start: new DateOnly(2026, 11, 2), blocks: new[] { WeekdayBlock(change: b => b with { End = T(14) }) });
         var staff = Guid.NewGuid();
         Guid target;
@@ -409,7 +428,7 @@ public class PlanApprovalPostgresTests : IClassFixture<PostgresFixture>
         var clock = FakeClock.AtUtc(2026, 10, 10, 2, 0);
         var holiday = new[] { new HolidayEntry(new DateOnly(2026, 11, 9), "NSW", "Test holiday", null, null, "test") };          // Monday 9 November
         var v1 = await StoreAsync(cs, tenantId, participantId, 1, blocks: new[] { WeekdayBlock(change: b => b with { OnPublicHoliday = HolidayDecision.Charge }) }, holidays: holiday);
-        await ApproveAsync(cs, tenantId, participantId, v1.Id, clock);
+        await ApproveAndPopulateAsync(cs, tenantId, participantId, v1.Id, clock);
         // The same support, but the 9th is skipped: that day's shift is not carried, so it is one approval may remove.
         var v2 = await StoreAsync(cs, tenantId, participantId, 2, start: new DateOnly(2026, 11, 2), blocks: new[] { WeekdayBlock(change: b => b with { OnPublicHoliday = HolidayDecision.Skip }) }, holidays: holiday);
         var staff = Guid.NewGuid();
@@ -452,7 +471,7 @@ public class PlanApprovalPostgresTests : IClassFixture<PostgresFixture>
         var (cs, tenantId, participantId) = await SetUpAsync();
         var clock = FakeClock.AtUtc(2026, 10, 10, 2, 0);
         var v1 = await StoreAsync(cs, tenantId, participantId, 1);
-        await ApproveAsync(cs, tenantId, participantId, v1.Id, clock);
+        await ApproveAndPopulateAsync(cs, tenantId, participantId, v1.Id, clock);
         var v2 = await StoreAsync(cs, tenantId, participantId, 2, start: new DateOnly(2026, 11, 2), blocks: new[] { WeekdayBlock(change: b => b with { End = T(14) }) });
         Guid target;
         await using (var db = Open(cs, tenantId)) target = await db.Shifts.Where(s => s.ServiceDate == new DateOnly(2026, 11, 4)).Select(s => s.Id).SingleAsync();
@@ -492,7 +511,7 @@ public class PlanApprovalPostgresTests : IClassFixture<PostgresFixture>
         var (cs, tenantId, participantId) = await SetUpAsync();
         var clock = FakeClock.AtUtc(2026, 10, 10, 2, 0);
         var v1 = await StoreAsync(cs, tenantId, participantId, 1);
-        await ApproveAsync(cs, tenantId, participantId, v1.Id, clock);
+        await ApproveAndPopulateAsync(cs, tenantId, participantId, v1.Id, clock);
         // What a longer Monday from 2 November saves: the weekday block keeps Tuesday to Friday, and Monday is a block of its own.
         var v2 = await StoreAsync(cs, tenantId, participantId, 2, start: new DateOnly(2026, 11, 2), end: new DateOnly(2026, 12, 20), blocks: new[]
         {
@@ -501,7 +520,8 @@ public class PlanApprovalPostgresTests : IClassFixture<PostgresFixture>
 
         var outcome = await ApproveAsync(cs, tenantId, participantId, v2.Id, clock);
 
-        Assert.Equal((ApprovalStatus.Approved, 5, 20, 5), (outcome.Status, outcome.Approval!.ShiftsCreated, outcome.OldShifts!.Carried, outcome.OldShifts.Removed));
+        Assert.Equal((ApprovalStatus.Approved, 0, 20, 5), (outcome.Status, outcome.Approval!.ShiftsCreated, outcome.OldShifts!.Carried, outcome.OldShifts.Removed));
+        Assert.Equal(5, (await PopulateEveryWeekAsync(cs, tenantId, participantId, v2.Id, clock)).Created);                         // the five new Mondays
         await using var read = Open(cs, tenantId);
         var keys = await read.ShiftPatterns.AsNoTracking().Where(p => p.SourceDraftId == v2.Id).OrderBy(p => p.DayOfWeek).Select(p => p.SourceBlockKey).ToListAsync();
         Assert.Equal(new[] { "weekdays-mon", "weekdays", "weekdays", "weekdays", "weekdays" }, keys);
@@ -603,5 +623,29 @@ public class PlanApprovalPostgresTests : IClassFixture<PostgresFixture>
         var shifts = await read.Shifts.AsNoTracking().ToListAsync();
         Assert.Equal(8, shifts.Count);
         Assert.Equal(8, shifts.Select(s => (s.ShiftPatternId, s.ServiceDate)).Distinct().Count());
+    }
+
+    [SkippableFact]
+    public async Task TwoPopulatesAtOnce_ForOneWeek_NeverMakeAShiftTwice()   // S11 F2: both locks first, then the reads
+    {
+        RequirePostgres();
+        var (cs, tenantId, participantId) = await SetUpAsync();
+        var draft = await StoreAsync(cs, tenantId, participantId, 1);
+        var clock = FakeClock.AtUtc(2026, 10, 10, 2, 0);
+        await ApproveAsync(cs, tenantId, participantId, draft.Id, clock);
+
+        var outcomes = await Task.WhenAll(Enumerable.Range(0, 4).Select(async _ =>
+        {
+            await using var db = Open(cs, tenantId);
+            return await new ServiceAgreementApprovalService(db, new RosterPlacementGate(), new RosterShiftGenerator(TimeSpan.FromSeconds(20)), clock: clock)
+                .PopulateAsync(tenantId, participantId, draft.Id, new DateOnly(2026, 10, 12), CancellationToken.None);
+        }));
+
+        Assert.All(outcomes, o => Assert.Equal(ServiceAgreementApprovalService.PopulateStatus.Populated, o.Status));
+        Assert.Equal(5, outcomes.Sum(o => o.Result!.Created));                                           // whoever got there first made the week; nobody made a shift that was there
+        await using var read = Open(cs, tenantId);
+        var shifts = await read.Shifts.AsNoTracking().ToListAsync();
+        Assert.Equal(5, shifts.Count);
+        Assert.Equal(5, shifts.Select(x => (x.ShiftPatternId, x.ServiceDate)).Distinct().Count());
     }
 }

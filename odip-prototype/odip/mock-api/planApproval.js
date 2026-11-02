@@ -2,9 +2,10 @@
 // AgreementPatternMapper, RosterShiftGenerator), kept in memory so the patterns page and the roster board show what an approval made. Plain functions over the stores server.js owns.
 //
 //   preview(...)  GET  participants/:id/service-agreement-drafts/:id/approval-preview   what approving would do, nothing done
-//   approve(...)  POST participants/:id/service-agreement-drafts/:id/approve            records it, makes the patterns, ends the old ones, generates unfilled shifts
+//   approve(...)  POST participants/:id/service-agreement-drafts/:id/approve            records it, makes the patterns, ends the old ones (no shifts: populate makes them)
+//   populatePreview(...) / populate(...)  GET .../populate-preview, POST .../populate  the unfilled shifts of one started week (S11)
 //
-// "Today" is the provider's calendar date (Sydney), never the UTC date. An approval makes shifts only in the weeks already started (store.startedWeeks), as the server does.
+// "Today" is the provider's calendar date (Sydney), never the UTC date. Populate makes shifts only in the weeks already started (store.startedWeeks), as the server does.
 
 const MAX_PATTERNS = 100
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -23,8 +24,6 @@ const earlier = (a, b) => (a < b ? a : b)
 const later = (a, b) => (a > b ? a : b)
 
 const mondayOf = (iso) => addDays(iso, -((weekday(iso) + 6) % 7))
-/** Start rostering (2026-10-16): an approval makes shifts only in weeks already started, as the server does (RosterWeek rows); store.startedWeeks holds their Mondays. */
-const inStartedWeek = (store, date) => store.startedWeeks.has(mondayOf(date))
 
 /** The provider's calendar date now. MOCK_TODAY pins it for a screenshot or a test. */
 function providerToday() {
@@ -156,7 +155,7 @@ function oldShifts(store, draft) {
 function plan(store, participant, draft) {
   const today = providerToday()
   const newest = Math.max(...(store.drafts[draft.participantId] || []).map((d) => d.version))
-  const result = { reasons: [], newPatterns: [], toEnd: [], overlapping: [], shiftsToCreate: 0, shiftsNote: undefined, from: later(today, draft.agreementStartDate), horizonEnd: undefined, ready: false }
+  const result = { reasons: [], newPatterns: [], toEnd: [], overlapping: [], from: later(today, draft.agreementStartDate), ready: false }
   if (draft.approval) { result.reasons.push({ code: 'AlreadyApproved', message: `This revision was approved for rostering by ${draft.approval.approvedByName} on ${draft.approval.approvedAt.slice(0, 10)}.` }); return result }
   if (draft.version < newest) { result.superseded = newest; result.reasons.push({ code: 'Superseded', message: SUPERSEDED }); return result }
   if (!draft.blocks || draft.blocks.length === 0 || !draft.pricing) result.reasons.push({ code: 'HandTyped', message: HAND_TYPED })
@@ -176,14 +175,7 @@ function plan(store, participant, draft) {
   result.endsOn = endsOn
   result.overlapping = store.patterns.filter((p) => p.participantId === draft.participantId && !p.sourceDraftId && p.isActive && result.newPatterns.some((made) => overlaps(p, made)))
   result.oldShifts = oldShifts(store, draft)
-  const lastStarted = [...store.startedWeeks].map((monday) => addDays(monday, 6)).filter((sunday) => sunday >= result.from).sort().pop()
-  result.horizonEnd = lastStarted ? earlier(draft.agreementEndDate, lastStarted) : undefined
   result.ready = !!participant && participant.isActive !== false && !participant.isDraft
-  if (!result.ready) {
-    const who = participant ? participant.firstName : 'the participant'
-    result.shiftsNote = `No shifts are made now, because ${who} is not active yet. Once they are, each week started on the roster includes them; use Generate on their shift patterns for weeks already started.`
-  }
-  else if (result.horizonEnd && result.from <= result.horizonEnd) result.shiftsToCreate = countShifts(draft, result.newPatterns, result.from, result.horizonEnd, (date) => inStartedWeek(store, date))
   return result
 }
 
@@ -198,11 +190,6 @@ function datesOf(pattern, from, to) {
   return dates
 }
 
-function countShifts(draft, patterns, from, to, keep = () => true) {
-  const skipped = skippedDays(draft)
-  return patterns.reduce((sum, pattern) => sum + datesOf(pattern, from, to).filter(keep).filter((date) => !skipped.has(`${pattern.sourceBlockKey}|${date}`)).length, 0)
-}
-
 // ── Preview ─────────────────────────────────────────────────────────────────
 
 function previewOf(planned, draft) {
@@ -213,9 +200,9 @@ function previewOf(planned, draft) {
     // shortcut: the mock does not match supports (no carry-over), so when patterns end every new one counts as changed; the server counts only the unmatched ones.
     changedPatterns: planned.toEnd.length > 0 ? planned.newPatterns.length : 0,
     ...(planned.toEnd.length > 0 ? { endsFromVersion: planned.endsFromVersion, endsOn: planned.endsOn } : {}),
-    shiftsToCreate: planned.shiftsToCreate, ...(planned.shiftsNote ? { shiftsNote: planned.shiftsNote } : {}), oldShiftsRemaining: old,
+    // S11: approving makes the patterns only, so the mock never says shifts come with it.
+    shiftsOnApproval: false, oldShiftsRemaining: old,
     overlappingPatterns: planned.overlapping.map((p) => ({ id: p.id, dayOfWeek: p.dayOfWeek, startTime: p.startTime, endTime: p.endTime, endsNextDay: p.endsNextDay, effectiveFrom: p.effectiveFrom, ...(p.effectiveTo ? { effectiveTo: p.effectiveTo } : {}), ...(p.notes ? { notes: p.notes } : {}) })),
-    ...(planned.horizonEnd ? { horizonEnd: planned.horizonEnd } : {}),
   }
 }
 
@@ -252,22 +239,69 @@ function approve(store, participantId, draftId, body, caller) {
   const gone = new Set(standingOf(store, draft).filter(unfilled).map((s) => s.id))
   for (let i = store.shifts.length - 1; i >= 0; i--) if (gone.has(store.shifts[i].id)) store.shifts.splice(i, 1)
   store.patterns.push(...made)
-  const created = []
-  if (planned.ready && planned.horizonEnd && planned.from <= planned.horizonEnd) {
-    const skipped = skippedDays(draft)
-    for (const pattern of made) {
-      for (const date of datesOf(pattern, planned.from, planned.horizonEnd)) {
-        if (skipped.has(`${pattern.sourceBlockKey}|${date}`) || !inStartedWeek(store, date)) continue
-        created.push(shiftOf(store, pattern, date))
-      }
-    }
-    store.shifts.push(...created)
-  }
+  // S11: approving makes the patterns only; Populate roster (below) makes the shifts, one started week at a time.
   draft.approval = {
-    approvedAt: new Date().toISOString(), approvedByName: (caller && caller.name) || 'Demo Coordinator', patternsCreated: made.length, patternsEnded: planned.toEnd.length, shiftsCreated: created.length,
-    ...(created.length > 0 ? { horizonEnd: planned.horizonEnd, firstShiftDate: created.map((s) => s.serviceDate).sort()[0] } : {}),
+    approvedAt: new Date().toISOString(), approvedByName: (caller && caller.name) || 'Demo Coordinator', patternsCreated: made.length, patternsEnded: planned.toEnd.length, shiftsCreated: 0,
   }
   return { draft, oldShiftsRemaining: planned.oldShifts || { open: 0, assigned: 0, removed: 0, shifts: [] } }
+}
+
+// ── Populate roster (S11) ───────────────────────────────────────────────────
+
+/** The shifts of this revision's patterns in one week that are not there yet, and how many are: as the server counts them (a shift of any status counts as there). */
+function weekOf(store, draft, monday) {
+  const skipped = skippedDays(draft)
+  const patterns = store.patterns.filter((p) => p.sourceDraftId === draft.id && p.isActive)
+  const missing = []
+  let alreadyThere = 0
+  for (const pattern of patterns) {
+    for (const date of datesOf(pattern, monday, addDays(monday, 6))) {
+      if (skipped.has(`${pattern.sourceBlockKey}|${date}`)) continue
+      if (store.shifts.some((s) => s.shiftPatternId === pattern.id && s.serviceDate === date)) alreadyThere++
+      else missing.push({ pattern, date })
+    }
+  }
+  return { missing, alreadyThere }
+}
+
+/** Why this revision cannot be populated at all, or null. */
+function populateRefusal(store, participant, draft) {
+  if (!draft.approval) return 'This revision has not been approved for rostering yet. Approve it first.'
+  const newest = Math.max(...(store.drafts[draft.participantId] || []).map((d) => d.version))
+  if (draft.version < newest) return 'A newer revision of this agreement is approved or saved. Populate that one instead.'
+  if (draft.agreementEndDate < providerToday()) return `This agreement ended on ${draft.agreementEndDate}: there is nothing left to roster.`
+  if (!participant || participant.isActive === false || participant.isDraft) return `No shifts are made now, because ${participant ? participant.firstName : 'the participant'} is not active yet.`
+  return null
+}
+
+/** The started weeks from today (or the agreement's start) to its end. */
+function startedWeeksOf(store, draft) {
+  const from = mondayOf(later(providerToday(), draft.agreementStartDate))
+  return [...store.startedWeeks].filter((monday) => monday >= from && monday <= draft.agreementEndDate).sort()
+}
+
+function populatePreview(store, participantId, draftId) {
+  const found = find(store, participantId, draftId)
+  if (!found) return { status: 404, errors: ['Draft not found.'] }
+  const refusal = populateRefusal(store, found.participant, found.draft)
+  if (refusal) return { preview: { weeks: [], note: refusal } }
+  return { preview: { weeks: startedWeeksOf(store, found.draft).map((monday) => {
+    const { missing, alreadyThere } = weekOf(store, found.draft, monday)
+    return { weekStart: monday, toAdd: missing.length, alreadyThere }
+  }) } }
+}
+
+function populate(store, participantId, draftId, body) {
+  const found = find(store, participantId, draftId)
+  if (!found) return { status: 404, errors: ['Draft not found.'] }
+  const refusal = populateRefusal(store, found.participant, found.draft)
+  if (refusal) return { status: 409, errors: [refusal], code: 'populate-refused' }
+  const monday = body && body.weekStart ? mondayOf(body.weekStart) : null
+  if (!monday || !startedWeeksOf(store, found.draft).includes(monday)) return { status: 400, errors: ['That week has not been started on the roster, so shifts are not added to it.'] }
+  const { missing, alreadyThere } = weekOf(store, found.draft, monday)
+  const made = missing.map(({ pattern, date }) => shiftOf(store, pattern, date))
+  store.shifts.push(...made)
+  return { result: { created: made.length, alreadyThere, weeks: [{ weekStart: monday, created: made.length, alreadyThere }] } }
 }
 
 /**
@@ -305,4 +339,4 @@ function durationOf(pattern) {
   return Math.round(((end - start) / 60) * 100) / 100
 }
 
-module.exports = { preview, approve, generateWeek, mondayOf, providerToday, addDays, weekday, durationOf, DAYS }
+module.exports = { preview, approve, populatePreview, populate, generateWeek, mondayOf, providerToday, addDays, weekday, durationOf, DAYS }

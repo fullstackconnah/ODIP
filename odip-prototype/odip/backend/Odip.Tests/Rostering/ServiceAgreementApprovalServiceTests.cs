@@ -34,6 +34,20 @@ public class ServiceAgreementApprovalServiceTests
     private static async Task<ApprovalOutcome> PreviewAsync(Fixture f, ServiceAgreementDraft draft, ApprovalCaller? caller = null) =>
         await f.Service.PreviewAsync(TenantA, f.ParticipantId, draft.Id, caller ?? Admin, CancellationToken.None);
 
+    /// <summary>Approval makes the patterns only (S11). This approves and then populates every started week, so a test that reads the shifts finds them as it did when approval made them.</summary>
+    private static async Task<ApprovalOutcome> ApproveAndPopulateAsync(Fixture f, ServiceAgreementDraft draft, ApprovalCaller? caller = null)
+    {
+        var outcome = await ApproveAsync(f, draft, caller);
+        await PopulateAllAsync(f.Service, f.ParticipantId, draft.Id);
+        return outcome;
+    }
+
+    private static async Task<(ApprovalOutcome Outcome, PopulateResultDto Populated)> ApproveThenPopulateAsync(Fixture f, ServiceAgreementDraft draft)
+    {
+        var outcome = await ApproveAsync(f, draft);
+        return (outcome, await PopulateAllAsync(f.Service, f.ParticipantId, draft.Id));
+    }
+
     // ── The preview changes nothing ───────────────────────────────────────────────
 
     [Fact]
@@ -47,11 +61,9 @@ public class ServiceAgreementApprovalServiceTests
 
         Assert.Equal(ApprovalStatus.Previewed, outcome.Status);
         var preview = outcome.Preview!;
-        Assert.Equal((true, false, 0, 5, 0, 40), (preview.CanApprove, preview.AlreadyApproved, preview.Reasons.Count, preview.PatternsToCreate, preview.PatternsToEnd, preview.ShiftsToCreate));
-        Assert.Equal(HorizonEnd, preview.HorizonEnd);                                  // today + 56 days
+        Assert.Equal((true, false, 0, 5, 0, false), (preview.CanApprove, preview.AlreadyApproved, preview.Reasons.Count, preview.PatternsToCreate, preview.PatternsToEnd, preview.ShiftsOnApproval));
         Assert.Empty(preview.OverlappingPatterns);
         Assert.Equal((0, 0, null, null), (preview.OldShiftsRemaining.Open, preview.OldShiftsRemaining.Assigned, preview.OldShiftsRemaining.FirstDate, preview.OldShiftsRemaining.FromVersion));
-        Assert.Null(preview.ShiftsNote);
         Assert.Equal(rowsBefore, (await f.Db.ShiftPatterns.CountAsync(), await f.Db.Shifts.CountAsync(), await f.Db.ServiceAgreementDraftApprovals.CountAsync(), await f.Db.AuditLogs.CountAsync()));
     }
 
@@ -72,7 +84,7 @@ public class ServiceAgreementApprovalServiceTests
     // ── Approving ─────────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Approving_a_clean_plan_records_who_and_when_makes_the_patterns_and_forty_open_shifts_and_nothing_else()
+    public async Task Approve_creates_patterns_but_no_shifts()
     {
         await using var f = await SetUpAsync();
         var draft = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, requirements: new DraftBlockRequirementsDto { WorkerGender = "Female", Driver = true, Skills = new List<string> { "FirstAid" } });
@@ -84,7 +96,7 @@ public class ServiceAgreementApprovalServiceTests
         Assert.Equal(approval.Id, outcome.Approval!.Id);
         Assert.Equal((draft.Id, f.ParticipantId, 1, TenantA), (approval.DraftId, approval.ParticipantId, approval.DraftVersion, approval.TenantId));
         Assert.Equal((Admin.UserId, "Alex Admin", new DateTime(2026, 10, 10, 2, 0, 0, DateTimeKind.Utc)), (approval.ApprovedByUserId, approval.ApprovedByName, approval.ApprovedAt));
-        Assert.Equal((5, 0, 40, (DateOnly?)new DateOnly(2026, 10, 12), (DateOnly?)HorizonEnd), (approval.PatternsCreated, approval.PatternsEnded, approval.ShiftsCreated, approval.FirstShiftDate, approval.HorizonEnd));
+        Assert.Equal((5, 0, 0, (DateOnly?)null, (DateOnly?)null), (approval.PatternsCreated, approval.PatternsEnded, approval.ShiftsCreated, approval.FirstShiftDate, approval.HorizonEnd));
 
         var patterns = await f.Db.ShiftPatterns.OrderBy(p => p.DayOfWeek).ToListAsync();
         Assert.Equal(5, patterns.Count);
@@ -94,16 +106,7 @@ public class ServiceAgreementApprovalServiceTests
             Assert.Equal((Start, (DateOnly?)draft.AgreementEndDate, true, (Guid?)null), (p.EffectiveFrom, p.EffectiveTo, p.IsActive, p.DefaultUserId));
         });
 
-        var shifts = await f.Db.Shifts.ToListAsync();
-        Assert.Equal(40, shifts.Count);
-        Assert.All(shifts, s =>
-        {
-            Assert.Equal((ShiftStatus.Draft, (Guid?)null, f.ParticipantId, TenantA), (s.Status, s.UserId, s.ParticipantId, s.TenantId));
-            Assert.Equal("""{"workerGender":"Female","driver":true,"skills":["FirstAid"]}""", s.RequirementsJson);
-            Assert.InRange(s.ServiceDate, Start, HorizonEnd);
-            Assert.Contains(s.ServiceDate.DayOfWeek, ApprovalTestSupport.Weekdays);
-        });
-        Assert.Equal(shifts.Count, shifts.Select(s => (s.ShiftPatternId, s.ServiceDate)).Distinct().Count());     // each pattern has each day once
+        Assert.Empty(await f.Db.Shifts.ToListAsync());                                                            // approval makes the patterns only: Populate roster makes the shifts
         Assert.Equal(draft.Id, (await f.Db.ServiceAgreementDrafts.SingleAsync()).Id);                             // the revision itself is not touched
     }
 
@@ -124,7 +127,7 @@ public class ServiceAgreementApprovalServiceTests
     }
 
     [Fact]
-    public async Task Approval_is_audited_one_row_for_the_approval_one_for_each_pattern_and_one_for_each_shift_by_the_person_who_approved()
+    public async Task Approval_is_audited_one_row_for_the_approval_one_for_each_pattern_by_the_person_who_approved_and_populating_audits_each_shift()
     {
         await using var f = await SetUpAsync(audited: true);
         var draft = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
@@ -134,8 +137,11 @@ public class ServiceAgreementApprovalServiceTests
         var logs = await f.Db.AuditLogs.ToListAsync();
         Assert.Equal(1, logs.Count(l => l.EntityType == "ServiceAgreementDraftApproval" && l.Action == AuditAction.Created));
         Assert.Equal(5, logs.Count(l => l.EntityType == "ShiftPattern" && l.Action == AuditAction.Created));
-        Assert.Equal(40, logs.Count(l => l.EntityType == "Shift" && l.Action == AuditAction.Created));
+        Assert.Equal(0, logs.Count(l => l.EntityType == "Shift"));                                    // approval makes no shifts
         Assert.All(logs.Where(l => l.EntityType is "ServiceAgreementDraftApproval" or "ShiftPattern"), l => Assert.Equal(("Alex Admin", Admin.UserId), (l.ChangedByName, l.ChangedById)));
+
+        await PopulateAllAsync(f.Service, f.ParticipantId, draft.Id);
+        Assert.Equal(40, await f.Db.AuditLogs.CountAsync(l => l.EntityType == "Shift" && l.Action == AuditAction.Created));
     }
 
     // ── What stops it ─────────────────────────────────────────────────────────────
@@ -448,7 +454,7 @@ public class ServiceAgreementApprovalServiceTests
     {
         await using var f = await SetUpAsync(audited: true);
         var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
-        await ApproveAsync(f, v1);                                                                          // 40 shifts, 12 October to 4 December
+        await ApproveAndPopulateAsync(f, v1);                                                                          // 40 shifts, 12 October to 4 December
         var staff = Guid.NewGuid();
         f.Db.Users.Add(new User { Id = staff, TenantId = TenantA, FirstName = "Ben", LastName = "Turner", Username = "ben", Email = "ben@example.com", Role = UserRole.SupportWorker, IsActive = true });
         var assigned = await f.Db.Shifts.Where(s => s.ServiceDate >= new DateOnly(2026, 11, 2)).OrderBy(s => s.ServiceDate).Take(2).ToListAsync();      // Monday 2 and Tuesday 3 November
@@ -459,10 +465,10 @@ public class ServiceAgreementApprovalServiceTests
         // v2 changes the support (an hour longer), so no shift of v1 is a shift of v2
         var v2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock(change: b => b with { End = T(14) }) }, start: new DateOnly(2026, 11, 2), end: new DateOnly(2027, 2, 28));
 
-        var outcome = await ApproveAsync(f, v2);
+        var (outcome, populated) = await ApproveThenPopulateAsync(f, v2);
 
 
-        Assert.Equal((ApprovalStatus.Approved, 5, 25), (outcome.Status, outcome.Approval!.PatternsEnded, outcome.Approval.ShiftsCreated));
+        Assert.Equal((ApprovalStatus.Approved, 5, 0, 25), (outcome.Status, outcome.Approval!.PatternsEnded, outcome.Approval.ShiftsCreated, populated.Created));
         Assert.All(await f.Db.ShiftPatterns.Where(p => p.SourceDraftId == v1.Id).ToListAsync(), p => Assert.Equal((new DateOnly(2026, 11, 1), true), (p.EffectiveTo!.Value, p.IsActive)));
         var v1Ids = await f.Db.ShiftPatterns.Where(p => p.SourceDraftId == v1.Id).Select(p => p.Id).ToListAsync();
         var v1Shifts = await f.Db.Shifts.AsNoTracking().Where(s => s.ShiftPatternId != null && v1Ids.Contains(s.ShiftPatternId.Value)).ToListAsync();
@@ -484,7 +490,7 @@ public class ServiceAgreementApprovalServiceTests
     {
         await using var f = await SetUpAsync();
         var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
-        await ApproveAsync(f, v1);                                                       // 40 shifts, 12 Oct to 4 Dec
+        await ApproveAndPopulateAsync(f, v1);                                                       // 40 shifts, 12 Oct to 4 Dec
         var staff = Guid.NewGuid();
         f.Db.Users.Add(new User { Id = staff, TenantId = TenantA, FirstName = "Ben", LastName = "Turner", Username = "ben", Email = "ben@example.com", Role = UserRole.SupportWorker, IsActive = true });
         var onOrAfter = await f.Db.Shifts.Where(s => s.ServiceDate >= new DateOnly(2026, 11, 2)).OrderBy(s => s.ServiceDate).ThenBy(s => s.Id).ToListAsync();
@@ -508,7 +514,7 @@ public class ServiceAgreementApprovalServiceTests
     {
         await using var f = await SetUpAsync();
         var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
-        await ApproveAsync(f, v1);                                                                         // 40 shifts, 12 October to 4 December
+        await ApproveAndPopulateAsync(f, v1);                                                                         // 40 shifts, 12 October to 4 December
         var noted = await f.Db.Shifts.SingleAsync(s => s.ServiceDate == new DateOnly(2026, 11, 4));       // Wednesday 4 November, unfilled
         noted.Notes = "Bring the hoist";
         await f.Db.SaveChangesAsync();
@@ -526,7 +532,7 @@ public class ServiceAgreementApprovalServiceTests
     {
         await using var f = await SetUpAsync();
         var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
-        await ApproveAsync(f, v1);                                                                         // 40 shifts, 12 October to 4 December
+        await ApproveAndPopulateAsync(f, v1);                                                                         // 40 shifts, 12 October to 4 December
         var staff = Guid.NewGuid();
         f.Db.Users.Add(new User { Id = staff, TenantId = TenantA, FirstName = "Ben", LastName = "Turner", Username = "ben", Email = "ben@example.com", Role = UserRole.SupportWorker, IsActive = true });
         var later = await f.Db.Shifts.Where(s => s.ServiceDate >= new DateOnly(2026, 11, 2)).OrderBy(s => s.ServiceDate).ToListAsync();      // 25, one a day
@@ -536,11 +542,11 @@ public class ServiceAgreementApprovalServiceTests
         var v2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock() }, start: new DateOnly(2026, 11, 2), end: new DateOnly(2027, 2, 28));
 
         var preview = (await PreviewAsync(f, v2)).Preview!;
-        var outcome = await ApproveAsync(f, v2);
+        var (outcome, populated) = await ApproveThenPopulateAsync(f, v2);
 
         var counted = preview.OldShiftsRemaining;
-        Assert.Equal((25, 0, 0, 0, 0), (counted.Carried, counted.Removed, counted.Open, counted.Assigned, preview.ShiftsToCreate));
-        Assert.Equal((0, 25, 0), (outcome.Approval!.ShiftsCreated, outcome.OldShifts!.Carried, preview.ChangedPatterns));     // the same support on every day: nothing is a changed pattern
+        Assert.Equal((25, 0, 0, 0), (counted.Carried, counted.Removed, counted.Open, counted.Assigned));
+        Assert.Equal((0, 25, 0, 0, 25), (outcome.Approval!.ShiftsCreated, outcome.OldShifts!.Carried, preview.ChangedPatterns, populated.Created, populated.AlreadyThere));     // the same support on every day: nothing is a changed pattern, nothing is made, all 25 are there
         Assert.Equal(40, await f.Db.Shifts.CountAsync());                                                  // nothing removed, nothing made twice
         var v2Ids = await f.Db.ShiftPatterns.Where(p => p.SourceDraftId == v2.Id).Select(p => p.Id).ToListAsync();
         var moved = await f.Db.Shifts.AsNoTracking().Where(s => s.ShiftPatternId != null && v2Ids.Contains(s.ShiftPatternId.Value)).OrderBy(s => s.ServiceDate).ToListAsync();
@@ -557,7 +563,7 @@ public class ServiceAgreementApprovalServiceTests
         await using var f = await SetUpAsync();
         var saturday = Block("sat", PlanSupportType.CommunityAccess, DayOfWeek.Saturday, T(10), T(12));
         var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock(), saturday });
-        await ApproveAsync(f, v1);                                                                         // 40 weekday and 8 Saturday shifts, 12 October to 5 December
+        await ApproveAndPopulateAsync(f, v1);                                                                         // 40 weekday and 8 Saturday shifts, 12 October to 5 December
         var staff = Guid.NewGuid();
         f.Db.Users.Add(new User { Id = staff, TenantId = TenantA, FirstName = "Ben", LastName = "Turner", Username = "ben", Email = "ben@example.com", Role = UserRole.SupportWorker, IsActive = true });
         (await f.Db.Shifts.SingleAsync(s => s.ServiceDate == new DateOnly(2026, 11, 9))).UserId = staff;  // Monday 9 November has a worker
@@ -575,12 +581,12 @@ public class ServiceAgreementApprovalServiceTests
         }, start: new DateOnly(2026, 11, 2));
 
         var preview = (await PreviewAsync(f, v2)).Preview!;
-        var outcome = await ApproveAsync(f, v2);
+        var (outcome, populated) = await ApproveThenPopulateAsync(f, v2);
 
         var old = outcome.OldShifts!;
         Assert.Equal((25, 4, 1, 0), (old.Carried, old.Removed, old.Assigned, old.Open));                  // Tuesday to Saturday carried; four unfilled Mondays removed; the one with a worker kept
         Assert.Equal(new DateOnly(2026, 11, 9), Assert.Single(old.Shifts).ServiceDate);
-        Assert.Equal(5, outcome.Approval!.ShiftsCreated);                                                  // the five new Mondays, 09:00 to 14:00
+        Assert.Equal((0, 5), (outcome.Approval!.ShiftsCreated, populated.Created));                              // approval makes none; Populate makes the five new Mondays, 09:00 to 14:00
         Assert.Equal(48 - 4 + 5, await f.Db.Shifts.CountAsync());
         Assert.All(await f.Db.Shifts.Where(s => s.ServiceDate >= new DateOnly(2026, 11, 2) && s.ServiceDate.DayOfWeek == DayOfWeek.Monday && s.UserId == null).ToListAsync(),
             s => Assert.Equal(T(14), s.EndTime));
@@ -597,12 +603,12 @@ public class ServiceAgreementApprovalServiceTests
         await using var f = await SetUpAsync();
         var holiday = new HolidayEntry(new DateOnly(2026, 11, 9), "NSW", "Test holiday", null, null, "test");         // Monday 9 November
         var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock(change: b => b with { OnPublicHoliday = HolidayDecision.Charge }) }, holidays: new[] { holiday });
-        await ApproveAsync(f, v1);                                                                         // charged: the 9th has its shift like any Monday
+        await ApproveAndPopulateAsync(f, v1);                                                                         // charged: the 9th has its shift like any Monday
         var v2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock(change: b => b with { OnPublicHoliday = HolidayDecision.Skip }) }, start: new DateOnly(2026, 11, 2), end: new DateOnly(2027, 2, 28), holidays: new[] { holiday });
 
-        var outcome = await ApproveAsync(f, v2);
+        var (outcome, populated) = await ApproveThenPopulateAsync(f, v2);
 
-        Assert.Equal((24, 1, 0), (outcome.OldShifts!.Carried, outcome.OldShifts.Removed, outcome.Approval!.ShiftsCreated));     // the same support otherwise; the 9th is neither carried nor made
+        Assert.Equal((24, 1, 0), (outcome.OldShifts!.Carried, outcome.OldShifts.Removed, populated.Created));     // the same support otherwise; the 9th is neither carried nor made
         Assert.False(await f.Db.Shifts.AnyAsync(s => s.ServiceDate == new DateOnly(2026, 11, 9)));
     }
 
@@ -614,17 +620,17 @@ public class ServiceAgreementApprovalServiceTests
         f.Db.Users.Add(new User { Id = older, TenantId = TenantA, FirstName = "Olga", LastName = "Older", Username = "olga", Email = "olga@example.com", Role = UserRole.SupportWorker, IsActive = true });
         f.Db.Users.Add(new User { Id = newer, TenantId = TenantA, FirstName = "Nina", LastName = "Newer", Username = "nina", Email = "nina@example.com", Role = UserRole.SupportWorker, IsActive = true });
         var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
-        await ApproveAsync(f, v1);
+        await ApproveAndPopulateAsync(f, v1);
         (await f.Db.ShiftPatterns.SingleAsync(p => p.SourceDraftId == v1.Id && p.DayOfWeek == DayOfWeek.Tuesday)).DefaultUserId = older;
         await f.Db.SaveChangesAsync();
         var v2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock() }, start: new DateOnly(2026, 11, 2));
-        await ApproveAsync(f, v2);                                                                         // v1's patterns now end on 1 November
+        await ApproveAndPopulateAsync(f, v2);                                                                         // v1's patterns now end on 1 November
         (await f.Db.ShiftPatterns.SingleAsync(p => p.SourceDraftId == v2.Id && p.DayOfWeek == DayOfWeek.Tuesday)).DefaultUserId = newer;
         await f.Db.SaveChangesAsync();
         // v3 starts before v2 does: both v1's and v2's patterns end the day before it, and both are the same support as v3's.
         var v3 = await AddRevisionAsync(f, 3, new[] { WeekdayBlock() }, start: new DateOnly(2026, 10, 19));
 
-        await ApproveAsync(f, v3);
+        await ApproveAndPopulateAsync(f, v3);
 
         // In-memory reads come back in the order rows were written, so this pins the rule (oldest first, the newest wins) rather than reproducing an unordered PostgreSQL read.
         Assert.Equal((Guid?)newer, (await f.Db.ShiftPatterns.SingleAsync(p => p.SourceDraftId == v3.Id && p.DayOfWeek == DayOfWeek.Tuesday)).DefaultUserId);
@@ -634,7 +640,7 @@ public class ServiceAgreementApprovalServiceTests
     {
         await using var f = await SetUpAsync();
         var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
-        await ApproveAsync(f, v1);                                                                         // 40 shifts, 12 October to 4 December
+        await ApproveAndPopulateAsync(f, v1);                                                                         // 40 shifts, 12 October to 4 December
         var staff = Guid.NewGuid();
         f.Db.Users.Add(new User { Id = staff, TenantId = TenantA, FirstName = "Ben", LastName = "Turner", Username = "ben", Email = "ben@example.com", Role = UserRole.SupportWorker, IsActive = true });
         // The coordinator switched Wednesday off (the server refuses its delete and says to) and cleared its shifts from 2 November.
@@ -650,11 +656,11 @@ public class ServiceAgreementApprovalServiceTests
         }, start: new DateOnly(2026, 11, 2), end: new DateOnly(2027, 2, 28));
 
         var preview = (await PreviewAsync(f, v2)).Preview!;
-        var outcome = await ApproveAsync(f, v2);
+        var (outcome, populated) = await ApproveThenPopulateAsync(f, v2);
 
         Assert.False((await f.Db.ShiftPatterns.SingleAsync(p => p.SourceDraftId == v2.Id && p.DayOfWeek == DayOfWeek.Wednesday)).IsActive);
         Assert.False(await f.Db.Shifts.AnyAsync(s => s.ServiceDate >= new DateOnly(2026, 11, 2) && s.ServiceDate.DayOfWeek == DayOfWeek.Wednesday));
-        Assert.Equal((5, 5), (preview.ShiftsToCreate, outcome.Approval!.ShiftsCreated));                  // the five new Mondays only
+        Assert.Equal((0, 5), (outcome.Approval!.ShiftsCreated, populated.Created));                  // the five new Mondays only, made by Populate
     }
 
     [Fact]
@@ -662,14 +668,14 @@ public class ServiceAgreementApprovalServiceTests
     {
         await using var f = await SetUpAsync();
         var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
-        await ApproveAsync(f, v1);                                                                         // 40 shifts, 12 October to 4 December
+        await ApproveAndPopulateAsync(f, v1);                                                                         // 40 shifts, 12 October to 4 December
         // The agreement builder names its blocks b1, b2, ... on every save: the same support under another id.
         var v2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock("b1") }, start: new DateOnly(2026, 11, 2), end: new DateOnly(2027, 2, 28));
 
         var preview = (await PreviewAsync(f, v2)).Preview!;
-        var outcome = await ApproveAsync(f, v2);
+        var (outcome, populated) = await ApproveThenPopulateAsync(f, v2);
 
-        Assert.Equal((25, 0, 0), (outcome.OldShifts!.Carried, outcome.OldShifts.Removed, outcome.Approval!.ShiftsCreated));
+        Assert.Equal((25, 0, 0), (outcome.OldShifts!.Carried, outcome.OldShifts.Removed, populated.Created));
         Assert.Equal(0, preview.ChangedPatterns);
         Assert.Equal(40, await f.Db.Shifts.CountAsync());                                                  // nothing made twice
     }
@@ -679,7 +685,7 @@ public class ServiceAgreementApprovalServiceTests
         await using var f = await SetUpAsync();
         var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
         var first = (await PreviewAsync(f, v1)).Preview!;
-        await ApproveAsync(f, v1);
+        await ApproveAndPopulateAsync(f, v1);
         // Before agreement PR 1 a coordinator could move an agreement pattern by hand: Thursday now runs 10:00 to 14:00, while its block still says 09:00 to 13:00.
         var thursday = await f.Db.ShiftPatterns.SingleAsync(p => p.SourceDraftId == v1.Id && p.DayOfWeek == DayOfWeek.Thursday);
         (thursday.StartTime, thursday.EndTime) = (T(10), T(14));
@@ -700,10 +706,10 @@ public class ServiceAgreementApprovalServiceTests
     {
         await using var f = await SetUpAsync();
         var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, start: new DateOnly(2026, 10, 19), end: new DateOnly(2026, 12, 20));
-        await ApproveAsync(f, v1);
+        await ApproveAndPopulateAsync(f, v1);
         var v2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock() }, start: new DateOnly(2026, 10, 19), end: new DateOnly(2026, 12, 20));     // starts the same day: its day-before is before v1's first day
 
-        await ApproveAsync(f, v2);
+        await ApproveAndPopulateAsync(f, v2);
 
         var old = await f.Db.ShiftPatterns.Where(p => p.SourceDraftId == v1.Id).ToListAsync();
         Assert.All(old, p => Assert.Equal((new DateOnly(2026, 10, 18), false), (p.EffectiveTo!.Value, p.IsActive)));
@@ -714,7 +720,7 @@ public class ServiceAgreementApprovalServiceTests
     {
         await using var f = await SetUpAsync();
         var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, start: new DateOnly(2026, 9, 1), end: new DateOnly(2026, 10, 11));    // its patterns already end the day before v2 starts
-        await ApproveAsync(f, v1);
+        await ApproveAndPopulateAsync(f, v1);
         var handMade = new ShiftPattern { Id = Guid.NewGuid(), TenantId = TenantA, ParticipantId = f.ParticipantId, DayOfWeek = DayOfWeek.Saturday, StartTime = T(9), EndTime = T(12), EffectiveFrom = new DateOnly(2026, 1, 1), IsActive = true };
         f.Db.ShiftPatterns.Add(handMade);
         await f.Db.SaveChangesAsync();
@@ -740,11 +746,13 @@ public class ServiceAgreementApprovalServiceTests
         var preview = (await PreviewAsync(f, draft)).Preview!;
         var outcome = await ApproveAsync(f, draft);
 
-        Assert.Equal((true, 5, 0, "No shifts are made now, because Jordan is not active yet. Once they are, each week started on the roster includes them; use Generate on their shift patterns for weeks already started."), (preview.CanApprove, preview.PatternsToCreate, preview.ShiftsToCreate, preview.ShiftsNote));
+        Assert.Equal((true, 5, false), (preview.CanApprove, preview.PatternsToCreate, preview.ShiftsOnApproval));
         Assert.Equal(ApprovalStatus.Approved, outcome.Status);
         Assert.Equal((5, 0, (DateOnly?)null, (DateOnly?)null), (outcome.Approval!.PatternsCreated, outcome.Approval.ShiftsCreated, outcome.Approval.FirstShiftDate, outcome.Approval.HorizonEnd));
         Assert.Equal(5, await f.Db.ShiftPatterns.CountAsync());
         Assert.Empty(await f.Db.Shifts.ToListAsync());
+        Assert.Equal("No shifts are made now, because Jordan is not active yet. Once they are, each week started on the roster includes them; use Generate on their shift patterns for weeks already started.",
+            (await f.Service.PopulatePreviewAsync(TenantA, f.ParticipantId, draft.Id, default))!.Note);
     }
 
     [Fact]
@@ -753,7 +761,8 @@ public class ServiceAgreementApprovalServiceTests
         await using var f = await SetUpAsync(active: false, firstName: "Jordan");
         var draft = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
 
-        var note = (await PreviewAsync(f, draft)).Preview!.ShiftsNote;
+        await MarkApprovedAsync(f.Db, draft);
+        var note = (await f.Service.PopulatePreviewAsync(TenantA, f.ParticipantId, draft.Id, default))!.Note;
 
         Assert.Contains("Generate", note);
         Assert.DoesNotContain("daily", note);
@@ -767,11 +776,11 @@ public class ServiceAgreementApprovalServiceTests
         await using var f = await SetUpAsync();
         var draft = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, start: new DateOnly(2026, 9, 1), end: new DateOnly(2026, 12, 20));
 
-        var outcome = await ApproveAsync(f, draft);
+        await ApproveThenPopulateAsync(f, draft);
 
         Assert.All(await f.Db.ShiftPatterns.ToListAsync(), p => Assert.Equal(new DateOnly(2026, 9, 1), p.EffectiveFrom));
         Assert.Equal(new DateOnly(2026, 10, 12), (await f.Db.Shifts.MinAsync(s => s.ServiceDate)));          // today is Saturday 10th: the first weekday is Monday the 12th, never a past day
-        Assert.Equal((new DateOnly(2026, 10, 12), HorizonEnd), (outcome.Approval!.FirstShiftDate, outcome.Approval.HorizonEnd));
+        Assert.Equal(new DateOnly(2026, 12, 4), await f.Db.Shifts.MaxAsync(s => s.ServiceDate));            // the last weekday of the last started week
     }
 
     [Fact]
@@ -780,11 +789,8 @@ public class ServiceAgreementApprovalServiceTests
         await using var f = await SetUpAsync();
         var draft = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, end: new DateOnly(2026, 11, 1));
 
-        var preview = (await PreviewAsync(f, draft)).Preview!;
-        var outcome = await ApproveAsync(f, draft);
+        await ApproveThenPopulateAsync(f, draft);
 
-        Assert.Equal(new DateOnly(2026, 11, 1), preview.HorizonEnd);
-        Assert.Equal(new DateOnly(2026, 11, 1), outcome.Approval!.HorizonEnd);
         Assert.Equal(new DateOnly(2026, 10, 30), await f.Db.Shifts.MaxAsync(s => s.ServiceDate));            // the last weekday on or before the 1st
     }
 
@@ -794,9 +800,9 @@ public class ServiceAgreementApprovalServiceTests
         await using var f = await SetUpAsync();
         var draft = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, start: new DateOnly(2027, 1, 4), end: new DateOnly(2027, 3, 28));
 
-        var outcome = await ApproveAsync(f, draft);
+        var (outcome, populated) = await ApproveThenPopulateAsync(f, draft);
 
-        Assert.Equal((5, 0), (outcome.Approval!.PatternsCreated, outcome.Approval.ShiftsCreated));
+        Assert.Equal((5, 0, 0), (outcome.Approval!.PatternsCreated, outcome.Approval.ShiftsCreated, populated.Created));
         Assert.Empty(await f.Db.Shifts.ToListAsync());
     }
 
@@ -809,12 +815,12 @@ public class ServiceAgreementApprovalServiceTests
         await f.Db.SaveChangesAsync();
         f.Clock.Set(new DateTimeOffset(2026, 10, 2, 2, 0, 0, TimeSpan.Zero));                      // today is Friday 2 October: the window takes in Labour Day, Monday 5 October
 
-        var preview = (await PreviewAsync(f, draft)).Preview!;
-        var outcome = await ApproveAsync(f, draft);
+        var (outcome, populated) = await ApproveThenPopulateAsync(f, draft);
 
         Assert.Empty(await f.Db.Shifts.Where(s => s.ServiceDate == new DateOnly(2026, 10, 5)).ToListAsync());
         Assert.NotEmpty(await f.Db.Shifts.Where(s => s.ServiceDate == new DateOnly(2026, 10, 6)).ToListAsync());
-        Assert.Equal(outcome.Approval!.ShiftsCreated, preview.ShiftsToCreate);
+        Assert.Equal(0, outcome.Approval!.ShiftsCreated);
+        Assert.True(populated.Created > 0);
     }
 
     // ── Hand-made patterns that overlap ───────────────────────────────────────────
@@ -928,9 +934,9 @@ public class ServiceAgreementApprovalServiceTests
         await using var later = await SetUpAsync();
         var beyond = await AddRevisionAsync(later, 1, new[] { WeekdayBlock() }, start: new DateOnly(2027, 1, 4), end: new DateOnly(2027, 3, 28));
 
-        await ApproveAsync(f, draft);
-        await ApproveAsync(notActive, onboarding);
-        await ApproveAsync(later, beyond);
+        await ApproveAndPopulateAsync(f, draft);
+        await ApproveAndPopulateAsync(notActive, onboarding);
+        await ApproveAndPopulateAsync(later, beyond);
 
         Assert.All(await f.Db.ShiftPatterns.AsNoTracking().ToListAsync(), p => Assert.Equal(HorizonEnd, p.GeneratedThrough));      // today + 56 days, inside the agreement
         Assert.All(await notActive.Db.ShiftPatterns.AsNoTracking().ToListAsync(), p => Assert.Null(p.GeneratedThrough));           // nothing was made: the top-up starts from today
@@ -962,7 +968,7 @@ public class ServiceAgreementApprovalServiceTests
     {
         await using var f = await SetUpAsync();
         var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, start: new DateOnly(2026, 10, 1), end: new DateOnly(2026, 12, 20));
-        await ApproveAsync(f, v1);                                                                                // 40 shifts, 12 October to 4 December
+        await ApproveAndPopulateAsync(f, v1);                                                                                // 40 shifts, 12 October to 4 December
         var pattern = await f.Db.ShiftPatterns.FirstAsync(p => p.SourceDraftId == v1.Id);
         // a shift of v1 on a day that is already past (Thursday 8 October) and four on later days in each status
         f.Db.Shifts.Add(new Shift { Id = Guid.NewGuid(), TenantId = TenantA, ParticipantId = f.ParticipantId, ShiftPatternId = pattern.Id, ServiceDate = new DateOnly(2026, 10, 8), StartTime = T(9), EndTime = T(13), Status = ShiftStatus.Draft });
@@ -996,10 +1002,11 @@ public class ServiceAgreementApprovalServiceTests
 
         var preview = (await PreviewAsync(f, draft)).Preview!;
         var outcome = await ApproveAsync(f, draft);
+        await PopulateAllAsync(f.Service, f.ParticipantId, draft.Id);
 
         Assert.True(preview.CanApprove);                                                                          // Perth's zone would refuse a New South Wales agreement
         Assert.Equal(ApprovalStatus.Approved, outcome.Status);
-        Assert.Equal(new DateOnly(2026, 10, 12), outcome.Approval!.FirstShiftDate);                               // Sydney's today is Saturday the 10th; Perth's Friday the 9th would give a shift that day
+        Assert.Equal(new DateOnly(2026, 10, 12), await f.Db.Shifts.MinAsync(s => s.ServiceDate));                // Sydney's today is Saturday the 10th; Perth's Friday the 9th would give a shift that day
     }
 
     // ── Concurrency ───────────────────────────────────────────────────────────────
@@ -1038,7 +1045,7 @@ public class ServiceAgreementApprovalServiceTests
         Assert.Equal("Casey Coordinator", loser.Approval!.ApprovedByName);                                         // the winner's
         Assert.Equal(1, await f.Db.ServiceAgreementDraftApprovals.CountAsync());
         Assert.Equal(5, await f.Db.ShiftPatterns.CountAsync());
-        Assert.Equal(40, await f.Db.Shifts.CountAsync());
+        Assert.Empty(await f.Db.Shifts.ToListAsync());                                                          // approval makes no shifts
     }
 
     /// <summary>Deletes, from another context, the first shift this save moves to a new pattern: the carry's UPDATE then finds no row.</summary>
@@ -1063,7 +1070,7 @@ public class ServiceAgreementApprovalServiceTests
     {
         await using var f = await SetUpAsync();
         var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() });
-        await ApproveAsync(f, v1);
+        await ApproveAndPopulateAsync(f, v1);
         var v2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock() }, start: new DateOnly(2026, 11, 2), end: new DateOnly(2027, 2, 28));
         await using var racing = NewDb(f.DbName, false, new CarriedShiftDeletedInterceptor(f.DbName));
 

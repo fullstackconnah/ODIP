@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useApprovalPreview, useApproveServiceAgreementDraft } from '@/api/hooks'
 import type { ApprovalActivationDto, ApprovalReasonDto, DraftApprovalPreviewDto, OverlappingPatternDto, ServiceAgreementDraftDto } from '@/api/types'
-import { BudgetWarnings } from '@/components/BudgetWarnings'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { CheckboxField } from '@/components/CheckboxField'
@@ -79,7 +78,7 @@ type ApprovalDialogProps = {
 
 /**
  * The confirm screen of "Mark approved". It is built from the server's preview (nothing is done until Approve is pressed): when the revision can be approved it says plainly what approval does, the
- * patterns it makes and the unfilled shifts it generates up to when (only into weeks already started on the roster), the patterns of the revision before it that end the day before this
+ * patterns it makes (and, only when approval makes the participant active, the shifts of the weeks already started; otherwise Populate roster adds them later), the patterns of the revision before it that end the day before this
  * one starts, what it removes and carries of the old version's shifts, and the ones it leaves, listed (with a link to them, in a new tab so the person can look and come back), the hand-made patterns that overlap (which are never changed, and
  * need a box ticked), and that an approval cannot be undone; when it cannot be approved, it lists every reason, each with the block it is about and what to do. It does not sign anything. While the
  * approval is on its way nothing closes it: the request has been sent, and Cancel would only hide a dialog the approval goes on behind. That hold ends when the request does: an answer, or the time limit
@@ -163,10 +162,6 @@ function WhatItDoes({ participantId, draft, preview, activatesName, acknowledged
   const start = formatServiceDate(draft.agreementStartDate)
   const patterns = plural(preview.patternsToCreate, 'weekly pattern')
   const range = `${start} to ${formatServiceDate(draft.agreementEndDate)}`
-  // The shifts are made to the horizon the server gives (the organisation's setting, never a number said here); when the agreement ends before it, everything is made now and nothing is added later.
-  // Start rostering (2026-10-16): the server makes shifts only in weeks already started on the roster, so later weeks get theirs when each is started.
-  const keepsGoing = !!preview.horizonEnd && preview.horizonEnd < draft.agreementEndDate
-  const makesShifts = preview.shiftsToCreate > 0 && !!preview.horizonEnd
   const ends = preview.patternsToEnd > 0 && preview.endsFromVersion !== undefined
     ? `Ends ${plural(preview.patternsToEnd, 'pattern')} from the agreement it replaces the day before ${start}.`
     : null
@@ -187,7 +182,6 @@ function WhatItDoes({ participantId, draft, preview, activatesName, acknowledged
       {/* What it does, a short line for each fact: the patterns, the shifts, what ends. */}
       <div className="flex flex-col gap-1 font-medium">
         <p>{`Creates ${patterns}, ${range}.`}</p>
-        {makesShifts && <p>{`Makes ${plural(preview.shiftsToCreate, 'unfilled shift')} up to ${formatServiceDate(preview.horizonEnd!)}.${keepsGoing ? ' Later weeks get theirs when each week is started on the roster.' : ''}`}</p>}
         {ends && <p>{ends}</p>}
         {removed > 0 && old.firstDate && <p>{`Removes ${plural(removed, 'unfilled shift')} of the agreement it replaces, from ${formatServiceDate(old.firstDate)} on.`}</p>}
         {carried > 0 && <p>{carried === 1 ? "Carries over 1 shift that doesn't change." : `Carries over ${carried} shifts that don't change.`}</p>}
@@ -195,9 +189,10 @@ function WhatItDoes({ participantId, draft, preview, activatesName, acknowledged
         {(preview.changedPatterns ?? 0) > 0 && <p>{preview.changedPatterns === 1 ? 'The changed pattern starts with no default staff.' : 'The changed patterns start with no default staff.'}</p>}
         {(preview.handEditedPatterns ?? 0) > 0 && <p>{preview.handEditedPatterns === 1 ? "1 pattern edited by hand goes back to the agreement's times." : `${preview.handEditedPatterns} patterns edited by hand go back to the agreement's times.`}</p>}
       </div>
-      {preview.shiftsToCreate === 0 && <p>{preview.shiftsNote ?? 'No unfilled shifts are made now. Each week gets its shifts when it is started on the roster.'}</p>}
-      {/* Budget phase 3: where the shifts approval would make take a pool past its funding. Read in order with the rest of what approval does, so it does not announce itself; and never a reason to refuse. */}
-      <BudgetWarnings warnings={preview.budgetWarnings} note="This is a warning only. Approving is not blocked." announce={false} />
+      {/* S11: approving makes the patterns only. Shifts come with it just when approval also makes the participant active (the organisation's setting), which fills the weeks already started. */}
+      <p>{preview.shiftsOnApproval
+        ? 'Shifts for the weeks already started are made on approval, because approving makes the participant active.'
+        : 'No shifts are added yet. Populate the roster after approving.'}</p>
       {keptCount > 0 && (
         <section aria-labelledby="kept-heading" className="flex flex-col gap-2 rounded-[var(--radius-md)] border border-[var(--color-border)] p-[var(--card-pad)]">
           <h4 id="kept-heading" className="font-semibold">{`${plural(keptCount, 'shift')} of the agreement it replaces ${oneKept ? 'stays' : 'stay'} on the roster`}</h4>

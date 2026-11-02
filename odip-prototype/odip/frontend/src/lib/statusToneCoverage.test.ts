@@ -66,6 +66,7 @@ const NOT_A_PILL: Record<string, string> = {
   DemoTickStatus: 'the outcome of one demo-data top-up tick, read from logs and tests; no API sends it and no screen shows it',
   DemoFixtureStatus: 'the result of the operator-run Demo participant fixture seeder CLI; no API sends it and no screen shows it',
   ApprovalStatus: 'what a call to approve (or preview) an agreement revision came to, between the service and its controller; the controller turns it into an HTTP status and the screen reads the reasons, never this word',
+  PopulateStatus: 'what a call to Populate roster came to, between the service and its controller; the controller turns it into an HTTP status and the dialog shows the sentence the server gives, never this word',
   EmploymentHeroOutboxStatus: 'never printed: the payroll check prints PayrollShiftStatus, derived from it',
   BudgetChartStatus: 'whether the budget graph can be drawn; BudgetTrackCard picks the chart, the no-pricing line or nothing from it, never prints the word',
   BudgetExpectedStatus: 'whether the budget graph has an expected line; the chart picks a footnote from it, never prints the word',

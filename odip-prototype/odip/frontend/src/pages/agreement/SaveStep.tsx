@@ -26,6 +26,8 @@ type SaveStepProps = {
   downloadFailed: boolean
   /** Undefined when the agreement cannot be approved from here (nothing saved, already approved, a role that may not). */
   approval?: { mayApprove: boolean; approverRoles?: string[]; notReady: boolean; onOpen: () => void }
+  /** Once the newest save is approved (S11): who and when, the way into Populate roster, and what the last populate said. Undefined when it cannot be populated from here. */
+  populate?: { approvedLine: string; onOpen: () => void; result: string | null }
 }
 
 const SECTION = 'flex flex-col gap-2'
@@ -34,7 +36,7 @@ const SECTION = 'flex flex-col gap-2'
  * Step 4: save, get the one PDF, hand the agreement to rostering. The footer holds Save; this step says what saving did and what comes next. Approval is "Mark approved for rostering" (its
  * dialog carries the budget warnings of phase 3); it needs a saved agreement with no unsaved changes. Nothing here signs anything.
  */
-export function SaveStep({ readOnly, locked, hasSaved, dirty, notices, saved, blocking, onGoToCheck, history, onDownload, downloading, downloadFailed, approval }: SaveStepProps) {
+export function SaveStep({ readOnly, locked, hasSaved, dirty, notices, saved, blocking, onGoToCheck, history, onDownload, downloading, downloadFailed, approval, populate }: SaveStepProps) {
   return (
     <div className="flex max-w-4xl flex-col gap-[var(--section-gap)]">
       {notices}
@@ -73,11 +75,23 @@ export function SaveStep({ readOnly, locked, hasSaved, dirty, notices, saved, bl
                 ? null
                 : approval.notReady
                   ? <p className="text-sm text-[var(--color-on-warning-container)]">Not ready yet: some lines need fixing or a decision. Select to see which.</p>
-                  : <p className="text-[13px] text-[var(--color-muted-foreground)]">Makes this schedule&apos;s weekly roster patterns and unfilled shifts. Separate from signing.</p>}
+                  : <p className="text-[13px] text-[var(--color-muted-foreground)]">Makes this schedule&apos;s weekly roster patterns. Separate from signing and from populating the roster.</p>}
             </div>
           ) : approval.approverRoles && (
             <p className="text-sm text-[var(--color-muted-foreground)]">Your organisation lets only {joinList(approval.approverRoles)} approve agreements.</p>
           )}
+        </section>
+      )}
+
+      {populate && (
+        <section aria-labelledby="save-populate" className={SECTION}>
+          <h3 id="save-populate" className="text-sm font-semibold">Rostering</h3>
+          <p className="text-sm">{populate.approvedLine}</p>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button onClick={populate.onOpen}>Populate roster</Button>
+            <p className="text-[13px] text-[var(--color-muted-foreground)]">Adds the open shifts of this schedule to a week that has been started, one week at a time. Safe to repeat.</p>
+          </div>
+          <p role="status" className="text-sm font-medium empty:hidden">{populate.result}</p>
         </section>
       )}
 
