@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import type { CancellationCandidateDto, CancellationCandidatesDto, ShiftClaimPreviewResponseDto } from '@/api/types'
 import { CancellationClaimSteps } from './CancellationClaimSteps'
 
@@ -101,6 +102,12 @@ describe('CancellationClaimSteps: choose the shift', () => {
     const rows = screen.getAllByRole('listitem').map(li => li.textContent)
     expect(rows[0]).toBe('Mon 19 Oct 2026 · Sophie Brown · Shift 09:00–⁠17:00 · 8 h · Cancelled 12 days ahead. Only a cancellation less than 7 days before the shift can be claimed.')
     expect(rows[1]).toBe('Sun 18 Oct 2026 · Jo Park · Shift 13:00–⁠16:00 · 3 h · NDIS number missing.')   // U+2060 after the dash: the range never breaks there
+  })
+
+  it('links a not-offered shift held by a rejected claim to that claim', () => {
+    const held = { shiftId: 'x-3', serviceDate: '2026-10-19', participantName: 'Sophie Brown', description: 'Shift 09:00–17:00 · 8 h', reason: 'It is held by rejected claim TC-7.', heldByClaimId: 'c7', heldByClaimReference: 'TC-7' }
+    render(<MemoryRouter><CancellationClaimSteps candidates={query(data({ leftOut: [held] }))} onBack={vi.fn()} onClose={vi.fn()} onMade={vi.fn()} /></MemoryRouter>)
+    expect(screen.getByRole('link', { name: 'Open TC-7' })).toHaveAttribute('href', '/claims/c7')
   })
 
   it('says nothing is waiting when no shift can be claimed, and still lists why', () => {

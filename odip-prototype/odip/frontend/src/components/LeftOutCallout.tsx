@@ -7,6 +7,8 @@ export interface LeftOutItem {
   lead?: ReactNode
   description: string
   reason: string
+  /** What the row offers beside its reason (a link to the claim holding the shift). */
+  action?: ReactNode
 }
 
 /** The footer of a shift claim's left-out list: the shifts stay waiting. */
@@ -20,7 +22,7 @@ export function LeftOutCallout({ items, heading, footer }: { items: LeftOutItem[
       <ul className="mt-2 flex flex-col gap-1 text-sm">
         {items.map(item => (
           <li key={item.key} className="break-words">
-            {item.lead != null && <>{item.lead} · </>}{item.description} · {item.reason}
+            {item.lead != null && <>{item.lead} · </>}{item.description} · {item.reason}{item.action != null && <> · {item.action}</>}
           </li>
         ))}
       </ul>

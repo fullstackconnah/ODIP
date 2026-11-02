@@ -3,7 +3,7 @@ import { keepPreviousData, useQueries, useQuery, useMutation, useQueryClient, ty
 import { apiGet, apiPost, apiPutRaw, apiPatchRaw, apiDeleteRaw } from '../client'
 import { fetchPagedList } from './pagedList'
 import { refreshBudgetWarnings, refreshLedgers } from './funding-ledger'
-import { CLAIM_PIPELINE_KEY, UNCLAIMED_SHIFTS_KEY } from './claimHub'
+import { CLAIM_PIPELINE_KEY, UNCLAIMED_SHIFTS_KEY, refreshClaimHub } from './claimHub'
 import type {
   TripClaimListDto,
   TripClaimDetailDto,
@@ -153,6 +153,36 @@ export function useDeleteClaim() {
       qc.invalidateQueries({ queryKey: ['claim-invoices', claimId] })
       qc.invalidateQueries({ queryKey: ['invoice-register'] })
       refreshLedgers(qc, participants)
+      refreshBudgetWarnings(qc)
+    },
+  })
+}
+
+/** POST /claims/{id}/claim-again/preview: what claiming a rejected shift claim again would make. A read; gcTime 0 so each open of the dialog asks again. */
+export function usePreviewClaimAgain(claimId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['claim-again-preview', claimId],
+    queryFn: () => apiPost<ShiftClaimPreviewResponseDto>(`/claims/${claimId}/claim-again/preview`, {}),
+    enabled,
+    gcTime: 0,
+    staleTime: 0,
+    retry: false,
+  })
+}
+
+/** POST /claims/{id}/claim-again: deletes the rejected claim and makes one new draft claim for its shifts. */
+export function useClaimAgain() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (claimId: string) => apiPost<ShiftClaimGeneratedDto>(`/claims/${claimId}/claim-again`, {}),
+    onSuccess: (made, claimId) => {
+      const participants = claimParticipantIds(cachedClaim(qc, claimId))
+      qc.removeQueries({ queryKey: ['claim', claimId] })   // the old claim is gone: a refetch would only 404
+      qc.invalidateQueries({ queryKey: ['trip-claims'] })
+      qc.invalidateQueries({ queryKey: UNCLAIMED_SHIFTS_KEY })
+      qc.invalidateQueries({ queryKey: CLAIM_PIPELINE_KEY })
+      refreshClaimHub(qc)
+      refreshLedgers(qc, [...new Set([...participants, ...claimParticipantIds(made)])])
       refreshBudgetWarnings(qc)
     },
   })

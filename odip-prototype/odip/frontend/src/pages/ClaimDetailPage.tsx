@@ -1,14 +1,15 @@
-import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useParams, Link, useLocation, useNavigate } from 'react-router-dom'
 import { useClaim, useUpdateClaim, useUpdateClaimLineItem } from '@/api/hooks'
 import type { TripClaimStatus, ClaimLineItemDto } from '@/api/types'
 import { PLAN_TYPE_LABELS, type PlanType } from '@/api/types/enums'
-import { Download, Check, DollarSign, XCircle } from 'lucide-react'
+import { Download, Check, DollarSign, RotateCcw, XCircle } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { NoShowModal } from '@/components/NoShowModal'
 import { DataTable } from '@/components/DataTable'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { SubmitClaimDialog } from '@/components/SubmitClaimDialog'
 import { RejectClaimDialog } from '@/components/RejectClaimDialog'
+import { ClaimAgainDialog } from '@/components/ClaimAgainDialog'
 import { ndiaCodeMeaning } from '@/lib/ndiaCodes'
 import { extractErrorMessage, formatCurrency, formatDateAu } from '@/lib/utils'
 import { formatInstantDateAu } from '@/lib/format'
@@ -43,6 +44,8 @@ function refusalOf(err: unknown): string {
 export default function ClaimDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  // Set by Claim again on the old claim's page: this claim replaced a rejected one.
+  const claimedAgainFrom = (useLocation().state as { claimedAgainFrom?: string } | null)?.claimedAgainFrom
   const buildFile = useBuildClaimFile()
   const pageQuery = useClaim(id)
   const { data: claim, isLoading, isError, error, refetch } = pageQuery
@@ -62,6 +65,7 @@ export default function ClaimDetailPage() {
   const [announcement, setAnnouncement] = useState('')
   const invoicesHeadingRef = useRef<HTMLHeadingElement>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [claimingAgain, setClaimingAgain] = useState(false)
   // After a submit the Invoices heading takes focus, once the dialog has gone (its own cleanup hands focus back to the opener first).
   // A ref, not state: the submit's own setSubmitting(false) is the render this waits for (react-hooks/set-state-in-effect).
   const focusInvoices = useRef(false)
@@ -149,6 +153,7 @@ export default function ClaimDetailPage() {
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <AnnouncementRegion message={announcement} />
+      {claimedAgainFrom && <Callout tone="success">Claim <span className="whitespace-nowrap font-medium">{claim.claimReference}</span> made. {claimedAgainFrom} was deleted.</Callout>}
       {/* Breadcrumb — for Kind === 'Shift' claims there is no trip to link to (design spec §1/§2,
           PR 3: tripInstanceId is unset), so the period stands in place of the trip link. */}
       <div className="flex items-center gap-2 text-sm text-[var(--color-muted-foreground)]">
@@ -211,6 +216,13 @@ export default function ClaimDetailPage() {
                   >
                     <Check className="w-4 h-4" />
                     Mark as Submitted
+                  </Button>
+                )}
+                {/* A rejected (or cancelled) shift claim is made again as one new draft; the dialog says what it makes and what it leaves out. */}
+                {claim.kind === 'Shift' && (claim.status === 'Rejected' || claim.status === 'Cancelled') && (
+                  <Button variant="secondary" size="md" onClick={() => setClaimingAgain(true)}>
+                    <RotateCcw className="w-4 h-4" />
+                    Claim again…
                   </Button>
                 )}
                 {claim.status === 'Submitted' && (
@@ -451,6 +463,9 @@ export default function ClaimDetailPage() {
           onCancel={() => { if (!updateClaim.isPending) setStatusConfirmTarget(null) }}
           onConfirm={code => handleStatusChange('Rejected', code)}
         />
+      )}
+      {claimingAgain && id && (claim.status === 'Rejected' || claim.status === 'Cancelled') && (
+        <ClaimAgainDialog open claimId={id} claimReference={claim.claimReference} claimStatus={claim.status} onCancel={() => setClaimingAgain(false)} />
       )}
       {submitting && id && (
         <SubmitClaimDialog

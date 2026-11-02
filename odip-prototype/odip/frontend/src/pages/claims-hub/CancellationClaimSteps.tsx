@@ -9,6 +9,7 @@ import { Dropdown } from '@/components/Dropdown'
 import { EmptyState } from '@/components/EmptyState'
 import { FormField } from '@/components/FormField'
 import { LeftOutCallout } from '@/components/LeftOutCallout'
+import { heldClaimLink } from '@/components/heldClaimLink'
 import { Modal } from '@/components/Modal'
 import { PageState } from '@/components/PageState'
 import { CANCELLATION_REASONS } from '@/lib/cancellationReasons'
@@ -32,6 +33,7 @@ const leftOutItems = (items: CancellationLeftOutDto[]) =>
     lead: <span className="tabular-nums">{formatServiceDate(l.serviceDate)}</span>,
     description: `${l.participantName} · ${l.description.replace(/–(?=\d)/g, `–${WORD_JOINER}`)}`,
     reason: l.reason.startsWith(`${l.participantName}: `) ? l.reason.slice(l.participantName.length + 2) : l.reason,
+    action: heldClaimLink(l),
   }))
 
 /**

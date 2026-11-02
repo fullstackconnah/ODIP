@@ -77,6 +77,14 @@ describe('ShiftClaimRunModal', () => {
     expect(screen.queryByRole('button', { name: /Make/ })).toBeNull()
   })
 
+  it('links a left-out shift held by a rejected claim to that claim, and only that one', () => {
+    answer(m.preview, { ...base, leftOut: [...base.leftOut, { participantId: 'p1', participantName: 'Sam Lee', shiftId: 's10', serviceDate: '2026-10-21', description: 'Shift 09:00–11:00 · 2 h', reason: 'Sam Lee: it is held by rejected claim TC-7.', heldByClaimId: 'c7', heldByClaimReference: 'TC-7' }] })
+    open()
+
+    expect(screen.getByRole('link', { name: 'Open TC-7' })).toHaveAttribute('href', '/claims/c7')
+    expect(screen.getAllByRole('link', { name: /^Open / })).toHaveLength(1)
+  })
+
   it('says nothing can be claimed yet when every shift is left out', () => {
     answer(m.preview, { ...base, participants: [], shiftCount: 0, hours: 0, totalAmount: 0 })
     open()

@@ -7,6 +7,7 @@ import { Callout } from '@/components/Callout'
 import { lineQuantity } from '@/lib/claimLines'
 import { FlaggedShifts } from '@/components/FlaggedShifts'
 import { LeftOutCallout, SHIFT_LEFT_OUT_FOOTER } from '@/components/LeftOutCallout'
+import { heldClaimLink } from '@/components/heldClaimLink'
 import { PageState } from '@/components/PageState'
 import { queryPhase } from '@/lib/queryPhase'
 import { Card } from '@/components/Card'
@@ -342,4 +343,4 @@ function GenerateShiftClaimModal({ participantId, onClose }: { participantId: st
 
 /** The completed shifts a shift claim leaves out: each with its date, what it is and why. */
 const shiftItems = (shifts: ShiftClaimLeftOutDto[]) =>
-  shifts.map(s => ({ key: s.shiftId, lead: <span className="tabular-nums">{formatDateAu(s.serviceDate)}</span>, description: s.description, reason: s.reason }))
+  shifts.map(s => ({ key: s.shiftId, lead: <span className="tabular-nums">{formatDateAu(s.serviceDate)}</span>, description: s.description, reason: s.reason, action: heldClaimLink(s) }))
