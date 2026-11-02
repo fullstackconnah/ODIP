@@ -6,6 +6,7 @@ import { ClaimBudgetBlock } from '@/components/ClaimBudgetBlock'
 import { LeftOutCallout } from '@/components/LeftOutCallout'
 import type { TripDetailDto, ClaimPreviewResponseDto, ClaimPreviewLineItemDto } from '@/api/types'
 import { plural } from '@/lib/format'
+import { dayTypeLabel } from '@/lib/claimLines'
 import { extractErrorMessage, formatCurrency, formatDateAu } from '@/lib/utils'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
@@ -16,18 +17,6 @@ interface GenerateClaimModalProps {
   trip: TripDetailDto
   onClose: () => void
   onSuccess: () => void
-}
-
-export const dayTypeLabel = (dt: string) => {
-  switch (dt) {
-    case 'Weekday': return 'Weekday'
-    case 'WeekdayEvening': return 'Weekday Evening'
-    case 'WeekdayNight': return 'Weekday Night'
-    case 'Saturday': return 'Saturday'
-    case 'Sunday': return 'Sunday'
-    case 'PublicHoliday': return 'Public Holiday'
-    default: return dt
-  }
 }
 
 export default function GenerateClaimModal({ tripId, trip, onClose, onSuccess }: GenerateClaimModalProps) {

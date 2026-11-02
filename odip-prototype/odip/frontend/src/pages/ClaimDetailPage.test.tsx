@@ -671,3 +671,43 @@ describe("ClaimDetailPage: the claim's own NDIA file (G9)", () => {
     expect(screen.queryByText('BPR CSV')).toBeNull()
   })
 })
+
+describe('ClaimDetailPage, shift billing PR4 words', () => {
+  const NOTE = /Part of a shift on this claim was rejected/
+  const sleepover = () => shiftLineItem({ id: 'li-s', shiftId: 'sh-1', unit: 'E', hours: 1, dayType: 'Weekday', supportItemCode: '01_010_0107_1_1' })
+  const partlyRejected = () => [
+    shiftLineItem({ id: 'li-a', shiftId: 'sh-2', status: 'Rejected', rejectionReason: 'V17' }),
+    shiftLineItem({ id: 'li-b', shiftId: 'sh-2', status: 'Submitted' }),
+  ]
+
+  it('reads a sleepover line as Sleepover and 1 night, and an hourly line as its day type and hours', () => {
+    mockUseClaim.mockReturnValue({ data: shiftClaim([sleepover(), shiftLineItem({ id: 'li-h', shiftId: 'sh-3', unit: 'H', hours: 8, dayType: 'WeekdayNight' })]), isLoading: false })
+    renderPage('/claims/claim-2')
+
+    expect(screen.getByText('Sleepover')).toBeInTheDocument()
+    expect(screen.getByText('1 night')).toBeInTheDocument()
+    expect(screen.getByText('Weekday Night')).toBeInTheDocument()
+    expect(screen.getByText('8h')).toBeInTheDocument()
+  })
+
+  it('shows the take-back note once for a part-rejected shift, however many shifts qualify', () => {
+    const second = [shiftLineItem({ id: 'li-c', shiftId: 'sh-4', status: 'Rejected' }), shiftLineItem({ id: 'li-d', shiftId: 'sh-4', status: 'Paid' })]
+    mockUseClaim.mockReturnValue({ data: shiftClaim([...partlyRejected(), ...second], { status: 'PartiallyPaid' }), isLoading: false })
+    renderPage('/claims/claim-2')
+
+    expect(screen.getAllByText(NOTE)).toHaveLength(1)
+    expect(screen.getByText(/change that line's status back and include it in the next file/)).toBeInTheDocument()
+  })
+
+  it('shows no note when no shift is part-rejected', () => {
+    mockUseClaim.mockReturnValue({ data: shiftClaim([shiftLineItem({ shiftId: 'sh-5', status: 'Submitted' })], { status: 'Submitted' }), isLoading: false })
+    renderPage('/claims/claim-2')
+    expect(screen.queryByText(NOTE)).toBeNull()
+  })
+
+  it.each(['Rejected', 'Cancelled'] as const)('shows no note on a %s claim', status => {
+    mockUseClaim.mockReturnValue({ data: shiftClaim(partlyRejected(), { status }), isLoading: false })
+    renderPage('/claims/claim-2')
+    expect(screen.queryByText(NOTE)).toBeNull()
+  })
+})
