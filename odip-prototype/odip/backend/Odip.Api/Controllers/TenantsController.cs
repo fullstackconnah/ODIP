@@ -126,6 +126,7 @@ public class TenantsController : ControllerBase
         _db.Tenants.Add(tenant);
         // The activity library is per organisation and nothing in the app writes one, so the new organisation starts with the generic activities instead of an empty picker.
         _db.Activities.AddRange(StarterActivities.For(tenant.Id));
+        _db.ReferralSources.AddRange(StarterReferralSources.For(tenant.Id));
         await _db.SaveChangesAsync();
 
         // Always made, so the state is a stored choice and the organisation's name has somewhere to live; a blank name falls back to the tenant's.

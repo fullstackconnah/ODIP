@@ -126,15 +126,20 @@ public class AuditController : ControllerBase
         });
     }
 
-    private static JsonElement DeserializeChanges(string json)
+    private static readonly JsonSerializerOptions StoredOptions = new() { PropertyNameCaseInsensitive = true };
+
+    // Stored as {"Field","Old","New"}; a typed list lets MVC re-case them to field/old/new. JsonElement keeps a non-string value readable.
+    private static List<AuditChangeDto> DeserializeChanges(string json)
     {
         try
         {
-            return JsonSerializer.Deserialize<JsonElement>(json);
+            return JsonSerializer.Deserialize<List<AuditChangeDto>>(json, StoredOptions) ?? [];
         }
         catch (JsonException)
         {
-            return JsonSerializer.Deserialize<JsonElement>("[]");
+            return [];
         }
     }
+
+    private sealed record AuditChangeDto(string? Field, JsonElement? Old, JsonElement? New);
 }

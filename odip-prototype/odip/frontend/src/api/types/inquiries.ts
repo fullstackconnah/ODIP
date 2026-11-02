@@ -2,6 +2,17 @@ import type { ContactRoleType, PlanType } from './enums'
 
 export type InquirySource = 'Web' | 'Email' | 'Phone'
 
+/** One entry on the organisation's referral-source list (GET /referral-sources): active first, then by name. Sources are hidden (`isActive` false), never deleted. */
+export interface ReferralSourceDto {
+  id: string
+  name: string
+  isActive: boolean
+}
+
+export interface CreateReferralSourceDto { name: string }
+
+export interface UpdateReferralSourceDto { name?: string; isActive?: boolean }
+
 export interface ParticipantInquiryDto {
   id: string
   participantId?: string | null
@@ -23,6 +34,9 @@ export interface ParticipantInquiryDto {
   /** Empty for a direct intake (see `isDirectIntake`): no enquiry was captured, so there is no source. */
   source: InquirySource | ''
   provenance?: string | null
+  /** Who referred them, from the organisation's list in Settings (null: not recorded). The name is the source's current name, even when it has since been hidden. */
+  referralSourceId?: string | null
+  referralSourceName?: string | null
   createdAt: string
   /** The enquiry's version: the edit form sends it back as `expectedUpdatedAt`. */
   updatedAt?: string
@@ -138,6 +152,8 @@ export interface CreateParticipantInquiryDto extends InquiryDetails {
   email?: string | null
   source: InquirySource
   provenance?: string | null
+  /** A source on the list: an active one, or the one the enquiry already has. Null clears it. */
+  referralSourceId?: string | null
   contactFirstName?: string | null
   contactLastName?: string | null
   contactRelationship?: string | null

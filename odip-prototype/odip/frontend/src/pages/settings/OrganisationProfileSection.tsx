@@ -70,7 +70,7 @@ export default function OrganisationProfileSection(frame: SectionFrame) {
             </SettingsGroup>
             <SettingsGroup title="Address and time zone">
               <div className={formGrid}>
-                <TextField label="Address" hint={p.hint('address')} className={span.long} value={p.form.address} readOnly={readOnly} onChange={e => p.edit({ address: e.target.value })} />
+                <TextField label="Registered business address" hint={p.hint('address', 'Printed on invoices and agreements.')} className={span.long} value={p.form.address} readOnly={readOnly} onChange={e => p.edit({ address: e.target.value })} />
                 <FormField label="State" required hint={p.hint('state')} error={p.dirty && !p.form.state ? "Choose the organisation's state." : undefined} className={span.medium}>
                   <ToggleGroup className="flex-wrap" options={STATES} value={p.form.state} onChange={pickState} disabled={readOnly} />
                 </FormField>

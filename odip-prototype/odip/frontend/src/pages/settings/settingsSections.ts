@@ -17,7 +17,7 @@ export type SectionKey =
   | 'profile' | 'notifications' | 'appearance'
   | 'setup' | 'workspace-visibility' | 'organisation' | 'microsoft' | 'billing' | 'safety' | 'alerts' | 'rostering' | 'security'
   | 'pricing' | 'budgets'
-  | 'templates' | 'activities' | 'holidays'
+  | 'templates' | 'activities' | 'referral-sources' | 'holidays'
   | 'import' | 'export' | 'integrations' | 'failed-sends'
   | 'tenants' | 'users' | 'catalogue' | 'alpha-signups' | 'whats-new'
 
@@ -64,6 +64,7 @@ export const SECTIONS: SectionDef[] = [
   { key: 'budgets', label: 'Budgets', group: 'Pricing and budgets', visible: managesOrganisation, description: 'What the roster does when a one-off shift would put a participant over budget, and when a participant counts as approaching it.' },
   { key: 'templates', label: 'Event templates', group: 'Content', wide: true, visible: withOrganisation, description: 'Starting points for new trips: destination, region, length and accommodation notes. Used by everyone who creates a trip.' },
   { key: 'activities', label: 'Activity library', group: 'Content', wide: true, visible: withOrganisation, description: 'The activities your coordinators pick from when planning a trip.' },
+  { key: 'referral-sources', label: 'Referral sources', group: 'Content', visible: withOrganisation, description: 'Who sends you enquiries. Coordinators pick one on each enquiry.' },
   { key: 'holidays', label: 'Public holidays', group: 'Content', wide: true, visible: p => !p.isSuperAdmin && p.hasOrganisation, description: HOLIDAYS },
   { key: 'import', label: 'Import data', group: 'Data', wide: true, visible: p => p.canImportData, description: 'Bring participants and staff in from a spreadsheet, and undo an import that went wrong.' },
   // Data export (#243): the same gate as Import data. DataExportController admits an Admin, or a SuperAdmin viewing an organisation.
