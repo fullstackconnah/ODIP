@@ -2,7 +2,8 @@ import { isAxiosError } from 'axios'
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { apiClient, apiGet, apiPost } from '../client'
 import { readText, serverSentence } from './data-export'
-import type { BatchDetailDto, BatchDto, BatchLineDto, BuildBatchRequestDto, BuildProblemDto, HubLinesDto, MarkPaidRequestDto, PipelineDto, ResultsImportDto } from '../types'
+import { awaitsData } from '@/lib/queryPhase'
+import type { BatchDetailDto, BatchDto, BatchLineDto, BuildBatchRequestDto, BuildProblemDto, HubLinesDto, MarkPaidRequestDto, PipelineDto, ResultsImportDto, ShiftClaimWaitingDto } from '../types'
 
 // The NDIA claims hub: the claimable lines, the bulk payment request files built from them, and what comes back.
 
@@ -14,6 +15,16 @@ export const CLAIM_PIPELINE_KEY = ['claim-hub', 'pipeline'] as const
 /** Dollars sent and paid by week (under the claim-hub key, so every hub write refreshes it). */
 export function useClaimPipeline() {
   return useQuery({ queryKey: CLAIM_PIPELINE_KEY, queryFn: () => apiGet<PipelineDto>('/claim-hub/pipeline') })
+}
+
+export const UNCLAIMED_SHIFTS_KEY = ['claim-hub', 'unclaimed-shifts'] as const
+/**
+ * The dashboard cue: completed shifts the claim run would look at that no live claim has taken. `loading` is a request in flight or paused (`awaitsData`) and `error` a failed one, so a caller can tell
+ * "nothing is waiting" from "we do not know yet" (the count is 0 in both). Under the claim-hub key, so the claim run refreshes it; the writes that release or add shifts do the same by this key.
+ */
+export function useUnclaimedShifts(enabled: boolean): { count: number; participants: number; loading: boolean; error: boolean } {
+  const q = useQuery({ queryKey: UNCLAIMED_SHIFTS_KEY, queryFn: () => apiGet<ShiftClaimWaitingDto>('/claims/from-shifts/waiting'), enabled })
+  return { count: q.data?.shiftCount ?? 0, participants: q.data?.participantCount ?? 0, loading: enabled && awaitsData(q), error: q.isError }
 }
 
 export function useClaimBatches() {

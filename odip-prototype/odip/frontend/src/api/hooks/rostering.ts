@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiGet, apiPost, apiPostRaw, apiPut, apiDelete } from '../client'
 import { refreshBudgetFigures } from './funding-ledger'
+import { UNCLAIMED_SHIFTS_KEY } from './claimHub'
 import { awaitsData } from '@/lib/queryPhase'
 import { providerSettingsQuery } from './catalogue'
 import type {
@@ -320,6 +321,7 @@ export function useApproveCompletion({ requireClean = false }: { requireClean?: 
       qc.invalidateQueries({ queryKey: ['rostering-completion', shiftId] })
       qc.invalidateQueries({ queryKey: ['rostering-completion-review', shiftId] })
       qc.invalidateQueries({ queryKey: ['roster-board'] })
+      qc.invalidateQueries({ queryKey: UNCLAIMED_SHIFTS_KEY })   // an approved completion is a completed shift the claim run can now take
       refreshBudgetFigures(qc)   // an approved completion is a completed shift: booked ahead becomes pending
     },
   })
@@ -351,6 +353,7 @@ export function useApproveCompletionsBatch({ cleanOnly = false }: { cleanOnly?: 
       // Any open review is now stale: a batch names many shifts, and the prefix key covers every one of them.
       qc.invalidateQueries({ queryKey: ['rostering-completion-review'] })
       qc.invalidateQueries({ queryKey: ['roster-board'] })
+      qc.invalidateQueries({ queryKey: UNCLAIMED_SHIFTS_KEY })
       refreshBudgetFigures(qc)   // each approved completion moves its shift from booked ahead to pending
     },
   })
