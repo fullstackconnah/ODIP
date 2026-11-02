@@ -61,8 +61,8 @@ public class DraftPdfTitleTests
         return pdf!.Content;
     }
 
-    private static ProviderSettings Provider(string name = "", string abn = "", string registration = "", string state = "NSW") =>
-        new() { OrganisationName = name, ABN = abn, RegistrationNumber = registration, State = state };
+    private static ProviderSettings Provider(string name = "", string abn = "", string registration = "", string state = "NSW", string address = "") =>
+        new() { OrganisationName = name, ABN = abn, RegistrationNumber = registration, State = state, Address = address };
 
     // ── The block ─────────────────────────────────────────────────────────────────
 
@@ -90,6 +90,33 @@ public class DraftPdfTitleTests
         var text = TextOf(await PdfAsync(Provider(name, abn, registration)));
 
         Assert.Contains(Skeleton("Service agreement") + Skeleton(expected) + Skeleton("Prepared 06 Oct 2026"), text);
+    }
+
+    [Fact]
+    public async Task Pdf_title_prints_registered_address_under_provider_line()
+    {
+        var text = TextOf(await PdfAsync(Provider("Oassist", "12345678901", "4-ABC-123", address: "  1 Example Street, Sydney NSW 2000 ")));
+
+        Assert.Contains(Skeleton("Service agreement") + Skeleton("Oassist · ABN 12 345 678 901 · NDIS registration 4-ABC-123") + Skeleton("1 Example Street, Sydney NSW 2000") + Skeleton("Prepared 06 Oct 2026"), text);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Pdf_title_omits_address_line_when_unset(string address)
+    {
+        Assert.Null(AgreementProvider.From(Provider("Oassist", address: address)).Address);
+        var text = TextOf(await PdfAsync(Provider("Oassist", address: address)));
+
+        Assert.Contains(Skeleton("Service agreement") + Skeleton("Oassist") + Skeleton("Prepared 06 Oct 2026"), text);
+    }
+
+    [Fact]
+    public async Task Pdf_title_prints_the_address_when_it_is_the_only_provider_detail()
+    {
+        var text = TextOf(await PdfAsync(Provider(address: "1 Example Street")));
+
+        Assert.Contains(Skeleton("Service agreement") + Skeleton("1 Example Street") + Skeleton("Prepared 06 Oct 2026"), text);
     }
 
     [Fact]
