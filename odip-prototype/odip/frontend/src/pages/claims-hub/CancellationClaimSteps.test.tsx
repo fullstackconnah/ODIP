@@ -20,6 +20,7 @@ const previewOf = (over: Partial<ShiftClaimPreviewResponseDto> = {}): ShiftClaim
   lineItems: [{ shiftId: 'sh-1', serviceDate: '2026-10-20', dayTypeLabel: 'Weekday', dayType: 'Weekday', supportItemCode: '04_104_0125_6_1', claimType: 'Cancellation', unit: 'H', hours: 8, unitPrice: 60, totalAmount: 480 }],
   leftOut: [], ...over,
 })
+const budgetOf = () => ({ participants: [{ participantId: 'p-1', participantName: 'Sam Lee', rows: [{ placement: 'Pool' as const, poolName: 'Core (flexible)', periodStart: '2026-07-01', periodEnd: '2026-12-31', thisClaim: 480, leftAfter: 13320 }] }] })
 const refused = (message: string) => ({ response: { data: { errors: [message] } } })
 const mutation = (over: object = {}) => ({ mutate: vi.fn(), reset: vi.fn(), data: undefined, error: null, isPending: false, isError: false, ...over })
 
@@ -98,8 +99,8 @@ describe('CancellationClaimSteps: choose the shift', () => {
     })))
     expect(screen.getByText('2 cancelled shifts not offered')).toBeInTheDocument()
     const rows = screen.getAllByRole('listitem').map(li => li.textContent)
-    expect(rows[0]).toBe('Mon 19 Oct 2026 · Sophie Brown · Shift 09:00–17:00 · 8 h · Cancelled 12 days ahead. Only a cancellation less than 7 days before the shift can be claimed.')
-    expect(rows[1]).toBe('Sun 18 Oct 2026 · Jo Park · Shift 13:00–16:00 · 3 h · NDIS number missing.')
+    expect(rows[0]).toBe('Mon 19 Oct 2026 · Sophie Brown · Shift 09:00–⁠17:00 · 8 h · Cancelled 12 days ahead. Only a cancellation less than 7 days before the shift can be claimed.')
+    expect(rows[1]).toBe('Sun 18 Oct 2026 · Jo Park · Shift 13:00–⁠16:00 · 3 h · NDIS number missing.')   // U+2060 after the dash: the range never breaks there
   })
 
   it('says nothing is waiting when no shift can be claimed, and still lists why', () => {
@@ -114,6 +115,7 @@ describe('CancellationClaimSteps: choose the shift', () => {
     setup(candidates)
     await userEvent.click(screen.getByRole('button', { name: /try again|retry/i }))
     expect(candidates.refetch).toHaveBeenCalledTimes(1)
+    expect(screen.getByText(/Couldn't load this list of cancelled shifts./)).toBeInTheDocument()
     expect(screen.queryByLabelText('Cancelled shift')).not.toBeInTheDocument()
   })
 })
@@ -136,12 +138,15 @@ describe('CancellationClaimSteps: check the claim', () => {
     expect(screen.getByRole('button', { name: 'Make claim' })).toBeDisabled()
   })
 
-  it('shows the shift, the reason, the total and the lines in the order Item, Day type, Hours, Rate, Total', async () => {
-    await toCheck({ data: previewOf() })
+  it('shows the shift, the reason, the total after the lines, and the budget effect', async () => {
+    await toCheck({ data: previewOf({ budget: budgetOf() }) })
     expect(screen.getByText(/Sam Lee · Tue 20 Oct 2026 · 9am–⁠5pm · No show – family issues/)).toBeInTheDocument()
     expect(screen.getAllByText('$480.00').length).toBeGreaterThan(0)
-    expect(screen.getAllByRole('columnheader').map(h => h.textContent)).toEqual(['Item', 'Day type', 'Hours', 'Rate', 'Total'])
-    expect(screen.getByText('04_104_0125_6_1')).toBeInTheDocument()
+    expect(screen.getAllByRole('columnheader').map(h => h.textContent)).toEqual(['Item', 'Hours', 'Rate', 'Total'])
+    expect(screen.getByRole('cell', { name: /04_104_0125_6_1/ })).toHaveTextContent('04_104_0125_6_1Weekday')   // the day type is the second line of the item cell
+    const total = screen.getByText('Total', { selector: 'span' })
+    expect(screen.getByRole('table').compareDocumentPosition(total) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Budget' })).toHaveTextContent('Uses $480 of Core (flexible)')
   })
 
   it('makes the claim with the shift and the reason code, then hands the new claim to the page', async () => {
@@ -170,10 +175,17 @@ describe('CancellationClaimSteps: check the claim', () => {
     expect(screen.getByRole('button', { name: 'Make claim' })).toBeEnabled()
   })
 
-  it('names why the preview failed and offers Try again, which asks again', async () => {
-    const { preview } = await toCheck({ isError: true, error: refused('Cancelled 8 days ahead.') })
+  it('names the rule that refused the preview and offers only Back, since asking again cannot pass', async () => {
+    await toCheck({ isError: true, error: refused('Cancelled 8 days ahead.') })
     expect(screen.getByRole('alert')).toHaveTextContent('Cancelled 8 days ahead.')
     expect(screen.queryByRole('button', { name: 'Make claim' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Back' })).toBeEnabled()
+  })
+
+  it('offers Try again when the preview failed to load at all, which asks again', async () => {
+    const { preview } = await toCheck({ isError: true, error: new Error('Network Error') })
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load the preview.")
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
     expect(preview.mutate).toHaveBeenLastCalledWith('sh-1')
   })

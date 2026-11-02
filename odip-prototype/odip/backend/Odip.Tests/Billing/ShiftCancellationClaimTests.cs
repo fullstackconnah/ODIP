@@ -182,7 +182,7 @@ public class ShiftCancellationClaimTests
         var result = await engine.CancellationCandidatesAsync(kit.TenantId, Service, Ct);   // "today" is the service date itself
 
         Assert.Empty(result.Shifts);
-        Assert.Contains("cancelled before Bunya Support kept cancel times", result.LeftOut.Single(l => l.ShiftId == legacy.Id).Reason);
+        Assert.Contains("It wasn't published when it was cancelled, or it was cancelled before Bunya Support kept cancel times, so it can't be claimed.", result.LeftOut.Single(l => l.ShiftId == legacy.Id).Reason);
         Assert.Contains("You can claim this from 21 Oct 2026", result.LeftOut.Single(l => l.ShiftId == sameDay.Id).Reason);
     }
 
@@ -203,7 +203,7 @@ public class ShiftCancellationClaimTests
     }
 
     [Fact]
-    public async Task ADraftCancel_IsNotOffered_ButAPublishedCancelIs()
+    public async Task AShiftWithNoCancelStamp_IsNotOffered_ButAStampedOneIs()
     {
         var (kit, engine) = NewKit();
         using var _ = kit;

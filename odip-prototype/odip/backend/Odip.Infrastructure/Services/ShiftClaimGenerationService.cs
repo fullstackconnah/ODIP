@@ -380,7 +380,7 @@ public partial class ShiftClaimGenerationService
     /// <summary>Why a cancelled shift is not (yet) claimable as a short-notice cancellation, or null when it is. Notice is whole calendar days in the organisation's zone.</summary>
     private static string? NotClaimableCancellation(Shift shift, DateOnly today, TimeZoneInfo zone)
     {
-        if (shift.CancelledAt is not { } cancelledAt) return "It was cancelled before Bunya Support kept cancel times, so its notice can't be checked.";
+        if (shift.CancelledAt is not { } cancelledAt) return "It wasn't published when it was cancelled, or it was cancelled before Bunya Support kept cancel times, so it can't be claimed.";
         var cancelledOn = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(cancelledAt, DateTimeKind.Utc), zone));
         var noticeDays = shift.ServiceDate.DayNumber - cancelledOn.DayNumber;
         if (!PlanCancellation.IsShortNotice(noticeDays))

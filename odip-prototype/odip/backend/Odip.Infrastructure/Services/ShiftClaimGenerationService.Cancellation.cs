@@ -76,6 +76,8 @@ public partial class ShiftClaimGenerationService
         return await PreviewOfAsync(lineItems, leftOut, participant, ct);
     }
 
+    public const string ShiftChangedMessage = "This shift changed while the claim was being made. Try again.";
+
     /// <summary>The draft cancellation claim for one cancelled shift, with the reason the participant gave on every line (the NDIA's four codes, any case).</summary>
     public async Task<ShiftClaimGenerated> GenerateCancellationAsync(Guid shiftId, string reason, DateOnly today, CancellationToken ct = default)
     {
@@ -88,6 +90,8 @@ public partial class ShiftClaimGenerationService
         await using var held = await RosterGenerationLock.AcquireAsync(_db, participantId, ct, scope: "claim-generate");
 
         var shift = await _db.Shifts.FirstAsync(s => s.Id == shiftId, ct);
+        // The lock is on the participant read above; a move to another participant while this waited would bill the wrong plan.
+        if (shift.ParticipantId != participantId) throw new InvalidOperationException(ShiftChangedMessage);
         await RequireClaimableCancelledShiftAsync(shift, ct);
         var participant = await _db.Participants.FirstOrDefaultAsync(p => p.Id == participantId, ct) ?? throw new InvalidOperationException("Participant not found.");
         var (lineItems, leftOut, _) = await PriceShiftsAsync(participant, new List<Shift> { shift }, shift.ServiceDate, shift.ServiceDate, today, ct);

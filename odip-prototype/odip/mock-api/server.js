@@ -2150,7 +2150,7 @@ const cancelledShiftFixtures = [
 ]
 const cancelledShiftsNotOffered = [
   { shiftId: 'sh-cancel-3', participantName: 'Sophie Brown', serviceDate: '2026-10-19', description: 'Shift 09:00–17:00 · 8 h', reason: 'Cancelled 12 days ahead. Only a cancellation less than 7 days before the shift can be claimed.' },
-  { shiftId: 'sh-cancel-4', participantName: 'Jo Park', serviceDate: '2026-10-18', description: 'Shift 13:00–16:00 · 3 h', reason: "04_104_0125_6_1 can't be claimed as a short-notice cancellation in the price guide." },
+  { shiftId: 'sh-cancel-4', participantName: 'Jo Park', serviceDate: '2026-10-18', description: 'Shift 13:00–16:00 · 3 h', reason: "04_104_0125_6_1 can't be claimed as a short-notice cancellation in the price guide. Check the short-notice setting for this item in the price guide." },
 ]
 function cancellationCandidates() {
   return { shifts: cancelledShiftFixtures, leftOut: cancelledShiftsNotOffered }
@@ -2162,6 +2162,7 @@ function cancellationPreview(shiftId) {
     totalAmount: shift.totalAmount,
     lineItems: [{ shiftId: shift.shiftId, serviceDate: shift.serviceDate, dayTypeLabel: 'Weekday', dayType: 'Weekday', supportItemCode: '04_104_0125_6_1', claimType: 'Cancellation', unit: 'H', hours, unitPrice: 60, totalAmount: shift.totalAmount }],
     leftOut: [],
+    budget: { participants: [{ participantId: shift.participantId, participantName: shift.participantName, rows: [{ placement: 'Pool', poolName: 'Core (flexible)', periodStart: '2026-07-01', periodEnd: '2026-12-31', available: 20000, usedBefore: 6200, thisClaim: shift.totalAmount, usedAfter: 6200 + shift.totalAmount, leftAfter: 20000 - 6200 - shift.totalAmount, statusAfter: 'OnTrack' }] }] },
   }
 }
 

@@ -107,4 +107,25 @@ public class ShiftCancellationClaimPostgresTests : IClassFixture<PostgresFixture
         Assert.IsType<ConflictObjectResult>(result.Result);
         Assert.Equal(ShiftStatus.Cancelled, (await kit.Db.Shifts.AsNoTracking().SingleAsync(s => s.Id == shift.Id, Ct)).Status);
     }
+    [SkippableFact(DisplayName = "Postgres: a claim that waited on the lock refuses when the shift moved to another participant meanwhile")]
+    public async Task AClaimThatWaitedOnTheLock_RefusesWhenTheShiftMovedToAnotherParticipant()
+    {
+        RequirePostgres();
+        var (kit, person, shift) = await KitAsync();
+        using var _ = kit;
+        var other = kit.SeedParticipant(first: "Bea", last: "Moved");
+        var tenant = TenantOf(kit.TenantId);
+        await using var holder = PostgresFixture.NewContext(_pg.ConnectionString!, tenant.Object);
+        var held = await RosterGenerationLock.AcquireAsync(holder, person.Id, Ct, scope: "claim-generate");
+        await using var db = PostgresFixture.NewContext(_pg.ConnectionString!, tenant.Object);
+        var claim = new ShiftClaimGenerationService(db).GenerateCancellationAsync(shift.Id, "NSDH", Now, Ct);   // read the participant, now waits on the lock
+        await Task.Delay(1500, Ct);
+
+        await kit.Db.Shifts.Where(s => s.Id == shift.Id).ExecuteUpdateAsync(s => s.SetProperty(x => x.ParticipantId, other.Id), Ct);
+        await held.DisposeAsync();
+        var refused = await Assert.ThrowsAsync<InvalidOperationException>(() => claim);
+
+        Assert.Equal(ShiftClaimGenerationService.ShiftChangedMessage, refused.Message);
+        Assert.Equal(0, await kit.Db.TripClaims.CountAsync(c => c.ParticipantId == person.Id || c.ParticipantId == other.Id, Ct));
+    }
 }

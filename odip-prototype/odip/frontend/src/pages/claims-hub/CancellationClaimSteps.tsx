@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { CalendarX } from 'lucide-react'
 import { useMakeCancellationClaim, usePreviewCancellationClaim } from '@/api/hooks/claimHub'
-import type { CancellationCandidateDto, CancellationCandidatesDto, CancellationLeftOutDto, ShiftClaimPreviewLineItemDto } from '@/api/types'
+import type { CancellationCandidateDto, CancellationCandidatesDto, CancellationLeftOutDto } from '@/api/types'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { ClaimBudgetBlock } from '@/components/ClaimBudgetBlock'
-import { DataTable } from '@/components/DataTable'
 import { Dropdown } from '@/components/Dropdown'
 import { EmptyState } from '@/components/EmptyState'
 import { FormField } from '@/components/FormField'
@@ -31,7 +30,7 @@ const leftOutItems = (items: CancellationLeftOutDto[]) =>
   items.map(l => ({
     key: l.shiftId,
     lead: <span className="tabular-nums">{formatServiceDate(l.serviceDate)}</span>,
-    description: `${l.participantName} · ${l.description}`,
+    description: `${l.participantName} · ${l.description.replace(/–(?=\d)/g, `–${WORD_JOINER}`)}`,
     reason: l.reason.startsWith(`${l.participantName}: `) ? l.reason.slice(l.participantName.length + 2) : l.reason,
   }))
 
@@ -98,7 +97,7 @@ export function CancellationClaimSteps({ candidates, onBack, onClose, onMade }: 
         }
       >
         {candidates.isError ? (
-          <PageState kind="error" noun="cancelled shifts" onRetry={() => candidates.refetch()} />
+          <PageState kind="error" noun="list of cancelled shifts" onRetry={() => candidates.refetch()} />
         ) : none ? (
           <EmptyState size="inline" icon={CalendarX} title="No short-notice cancellations to claim" description="A shift shows here when it was cancelled less than 7 days before it started." />
         ) : (
@@ -132,6 +131,8 @@ export function CancellationClaimSteps({ candidates, onBack, onClose, onMade }: 
 
   const chosen = shifts.find(s => s.shiftId === shiftId)
   const lineFailed = preview.isError
+  // A rule sentence from the server ("Cancelled 8 days ahead...") can never pass on a retry; only a failed request (no server sentence) can.
+  const ruleRefused = lineFailed && !!extractErrorMessage(preview.error, '')
   return (
     <Modal
       open
@@ -141,7 +142,7 @@ export function CancellationClaimSteps({ candidates, onBack, onClose, onMade }: 
       footer={
         <>
           <Button variant="secondary" size="md" onClick={() => setStep('pick')} disabled={making}>Back</Button>
-          {lineFailed
+          {ruleRefused ? null : lineFailed
             ? <Button size="md" onClick={() => preview.mutate(shiftId)}>Try again</Button>
             : <Button ref={makeButton} size="md" onClick={makeClaim} disabled={!previewed || previewing} aria-busy={making || undefined}>{making ? 'Making claim…' : 'Make claim'}</Button>}
         </>
@@ -157,28 +158,33 @@ export function CancellationClaimSteps({ candidates, onBack, onClose, onMade }: 
               {chosen.participantName} · {formatServiceDate(chosen.serviceDate)} · {timeRange(chosen)} · {CANCELLATION_REASONS.find(r => r.value === reason)?.label}
             </p>
           )}
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-[var(--color-muted-foreground)]">
+                <th className="py-1.5 pr-2 font-medium">Item</th>
+                <th className="py-1.5 px-2 text-right font-medium">Hours</th>
+                <th className="py-1.5 px-2 text-right font-medium">Rate</th>
+                <th className="py-1.5 pl-2 text-right font-medium">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {previewed.lineItems.map((l, i) => (
+                <tr key={i} className="border-t border-[var(--color-border)] align-top">
+                  <td className="py-2 pr-2">
+                    <span className="block break-all font-mono text-xs">{l.supportItemCode}</span>
+                    <span className="block text-xs text-[var(--color-muted-foreground)]">{l.dayTypeLabel}</span>
+                  </td>
+                  <td className="py-2 px-2 text-right tabular-nums">{l.hours}</td>
+                  <td className="py-2 px-2 text-right tabular-nums">{formatCurrency(l.unitPrice)}</td>
+                  <td className="py-2 pl-2 text-right font-medium tabular-nums">{formatCurrency(l.totalAmount)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
           <div className="flex items-baseline justify-between rounded-xl bg-[var(--color-surface)] p-4">
             <span className="text-sm text-[var(--color-muted-foreground)]">Total</span>
             <span className="tabular-nums text-xl font-semibold">{formatCurrency(previewed.totalAmount)}</span>
           </div>
-          <DataTable
-            data={previewed.lineItems.map((l, i) => ({ ...l, _idx: i }))}
-            keyField="_idx"
-            columns={[
-              { key: 'supportItemCode', header: 'Item', className: 'font-mono text-xs' },
-              { key: 'dayTypeLabel', header: 'Day type' },
-              { key: 'hours', header: 'Hours', align: 'right', className: 'tabular-nums' },
-              { key: 'unitPrice', header: 'Rate', type: 'currency', align: 'right', className: 'tabular-nums' },
-              {
-                key: 'totalAmount',
-                header: 'Total',
-                type: 'currency',
-                align: 'right',
-                className: 'tabular-nums font-medium',
-                render: (l: ShiftClaimPreviewLineItemDto & { _idx: number }) => formatCurrency(l.totalAmount),
-              },
-            ]}
-          />
           <ClaimBudgetBlock budget={previewed.budget} />
         </div>
       )}
