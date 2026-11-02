@@ -8,7 +8,7 @@ namespace Odip.Infrastructure.Services;
 public static class ClaimSubmission
 {
     /// <summary>The unique index that lets one line per shift count; the guards below read the claim's status, the index reads the line's, so a hand-rejected claim can pass a guard and still hit it.</summary>
-    public const string ShiftIndexName = "IX_ClaimLineItems_ShiftId_Counting";
+    public const string ShiftIndexName = "IX_ClaimLineItems_ShiftId_ShiftPart_Counting";
     public const string ShiftHeldMessage = "Another claim holds one of these shifts, so this can't be done. Delete that claim, or reject its line, then try again.";
 
     public static bool IsShiftIndexViolation(DbUpdateException e) =>

@@ -17,7 +17,7 @@ using Xunit;
 namespace Odip.Tests.Postgres;
 
 /// <summary>
-/// Shift billing PR2 fix 1 on a real PostgreSQL: the unique index IX_ClaimLineItems_ShiftId_Counting refuses a second counting line for a shift, and each place that can hit it says so in a sentence
+/// Shift billing PR2 fix 1 on a real PostgreSQL: the unique index IX_ClaimLineItems_ShiftId_ShiftPart_Counting refuses a second counting line for a shift part, and each place that can hit it says so in a sentence
 /// instead of a 500 or a raw database error. Skipped, never failed, without POSTGRES_CONNECTION_STRING.
 /// </summary>
 public class ShiftHeldPostgresFacts : IClassFixture<PostgresFixture>

@@ -104,7 +104,7 @@ public class ShiftClaimRunTests
         var (a, b) = (Person(kit, "Alex"), Person(kit, "Blake"));
         Done(kit, a, 1);
         Done(kit, a, 2, night: SleepoverType.Sleepover, start: 22, end: 6, overnight: true);
-        Done(kit, b, 3, night: SleepoverType.Sleepover, start: 22, end: 6, overnight: true);
+        Done(kit, b, 5, night: SleepoverType.Sleepover, start: 22, end: 6, overnight: true);   // not 3 Oct: the clocks go forward that night, so it is 7 elapsed hours
 
         var run = await Engine(kit).RunAsync(kit.TenantId, From, To, Ct);
 
@@ -113,23 +113,22 @@ public class ShiftClaimRunTests
         Assert.Equal(1, row.ShiftCount);
         Assert.Equal(1, await kit.Db.ClaimLineItems.CountAsync(l => l.TripClaimId == row.ClaimId, Ct));
         Assert.Equal(["Alex Tester", "Blake Tester"], run.LeftOut.Select(l => l.ParticipantName));
-        Assert.All(run.LeftOut, l => Assert.Equal("It is a sleepover, which shift claims do not price yet.", l.Reason));
+        Assert.All(run.LeftOut, l => Assert.Equal("No catalogue sleepover item covers this date.", l.Reason));   // the kit catalogue has no sleepover item
         Assert.Equal(0, await kit.Db.TripClaims.CountAsync(c => c.ParticipantId == b.Id, Ct));
         Assert.Empty(run.Skipped);   // Blake is the NothingClaimable path: left out, not failed
     }
 
     [Fact]
-    public async Task RunAsync_AnOvernightShift_IsClaimedAndFlaggedWithTheParticipantName()
+    public async Task RunAsync_AnActiveNightShift_IsClaimedAndFlagsNothing_ItIsSplitByBandLikeAnyOther()
     {
         var kit = Arrange();
         var a = Person(kit, "Alex");
-        Done(kit, a, 6, night: SleepoverType.ActiveNight, start: 18, end: 2, overnight: true);
+        Done(kit, a, 6, night: SleepoverType.ActiveNight, start: 14, end: 22);   // 2 h of it are evening: two lines, none flagged (the kit has no night row, so no overnight shift)
 
         var run = await Engine(kit).RunAsync(kit.TenantId, From, To, Ct);
 
-        var flagged = Assert.Single(run.Flagged);
-        Assert.Equal("Alex Tester", flagged.ParticipantName);
-        Assert.Equal(a.Id, flagged.ParticipantId);
+        Assert.Empty(run.Flagged);
+        Assert.Equal(a.Id, Assert.Single(run.Participants).ParticipantId);
     }
 
     /// <summary>For one participant it adds a claim of theirs to the shared context, then fails: what a failed save leaves behind in the change tracker.</summary>
@@ -277,7 +276,7 @@ public class ShiftClaimRunTests
 
         var refusal = await Assert.ThrowsAsync<NothingClaimableException>(() => Engine(kit).GenerateAsync(person.Id, From, To, Ct));
 
-        Assert.Equal("Nothing in this date range could be claimed: 1 completed, unclaimed shift was left out. It is a sleepover, which shift claims do not price yet.", refusal.Message);
+        Assert.Equal("Nothing in this date range could be claimed: 1 completed, unclaimed shift was left out. No catalogue sleepover item covers this date.", refusal.Message);
         Assert.Single(refusal.LeftOut);
     }
 

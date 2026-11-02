@@ -899,7 +899,7 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => e.ParticipantBookingId);
             entity.HasIndex(e => e.ShiftId);
             // The database backstop for one counting line per shift. Line status only: a partial index cannot read TripClaim, so a shift on a claim rejected by hand (its lines still Submitted) stays held until that claim is deleted.
-            entity.HasIndex(e => e.ShiftId, "IX_ClaimLineItems_ShiftId_Counting").IsUnique().HasFilter("\"ShiftId\" IS NOT NULL AND \"Status\" <> 5");
+            entity.HasIndex(e => new { e.ShiftId, e.ShiftPart }, "IX_ClaimLineItems_ShiftId_ShiftPart_Counting").IsUnique().HasFilter("\"ShiftId\" IS NOT NULL AND \"Status\" <> 5");
             entity.HasIndex(e => e.Status);
         });
 

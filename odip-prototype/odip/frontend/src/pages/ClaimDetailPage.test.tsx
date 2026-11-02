@@ -303,6 +303,14 @@ describe('ClaimDetailPage — Kind === Shift claim', () => {
     expect(screen.queryByRole('button', { name: 'Invoice' })).not.toBeInTheDocument()
   })
 
+  it('shows the day type as its label, not the raw enum', () => {
+    mockUseClaim.mockReturnValue({ data: shiftClaim([shiftLineItem({ dayType: 'WeekdayEvening' })]), isLoading: false })
+    renderPage('/claims/claim-2')
+
+    expect(screen.getByText('Weekday Evening')).toBeInTheDocument()
+    expect(screen.queryByText('WeekdayEvening')).not.toBeInTheDocument()
+  })
+
   it('still links the participant cell for a shift-kind line (batch 1 behaviour is unchanged)', () => {
     mockUseClaim.mockReturnValue({ data: shiftClaim([shiftLineItem({ participantId: 'p-9', participantName: 'Priya Nair' })]), isLoading: false })
     renderPage('/claims/claim-2')

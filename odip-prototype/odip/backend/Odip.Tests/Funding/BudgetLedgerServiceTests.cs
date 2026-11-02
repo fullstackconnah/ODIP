@@ -233,7 +233,7 @@ public class BudgetLedgerServiceTests
         Assert.Equal(480m, periods[0].Pending);
         Assert.Equal(480m, periods[1].Pending);
         Assert.Equal(480m, periods[1].BookedAhead);
-        Assert.Equal(8m * 60m, periods[2].BookedAhead);                                                // 22:00 to 06:00 is 8 h; 1 Jan 2027 is a Friday
+        Assert.Equal(2m * 66m + 6m * 84m, periods[2].BookedAhead);                                      // Fri 22:00 to Sat 06:00 is 2 h of Friday evening and 6 h of Saturday (NSW rates 66 and 84); the whole shift stays in the period of the day it starts
         Assert.Equal(0m, periods[3].Forecast);
     }
 

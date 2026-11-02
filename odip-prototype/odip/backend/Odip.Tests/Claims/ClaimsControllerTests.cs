@@ -478,19 +478,19 @@ public class ClaimsControllerTests
         Assert.Equal(320m, body.Data!.TotalAmount);                                   // the plain shift only: the sleepover is not billed as eight hours of community access
         var left = Assert.Single(body.Data.LeftOut);
         Assert.Equal(sleepover.Id, left.ShiftId);
-        Assert.Equal("It is a sleepover, which shift claims do not price yet.", left.Reason);
+        Assert.Equal("No catalogue sleepover item covers this date.", left.Reason);
         Assert.Equal(1, await db.ClaimLineItems.CountAsync());
     }
 
     [Fact]
-    public async Task GenerateShiftClaim_EchoesTheShiftsItPricedWithACaveat()
+    public async Task GenerateShiftClaim_AnActiveNightIsPricedAndFlagsNothing()
     {
         using var db = CreateDb();
         var participant = SeedParticipantWithCompletedShift(db, Guid.NewGuid(), out var shift);
         var overnight = new Shift
         {
-            Id = Guid.NewGuid(), TenantId = shift.TenantId, ParticipantId = participant.Id, ServiceDate = new DateOnly(2026, 9, 8), StartTime = new TimeOnly(18, 0), EndTime = new TimeOnly(2, 0),
-            EndsNextDay = true, Ratio = SupportRatio.OneToOne, NightType = SleepoverType.ActiveNight, Status = ShiftStatus.Completed,
+            Id = Guid.NewGuid(), TenantId = shift.TenantId, ParticipantId = participant.Id, ServiceDate = new DateOnly(2026, 9, 8), StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0),
+            EndsNextDay = false, Ratio = SupportRatio.OneToOne, NightType = SleepoverType.ActiveNight, Status = ShiftStatus.Completed,
         };
         db.Shifts.Add(overnight);
         db.SaveChanges();
@@ -501,8 +501,7 @@ public class ClaimsControllerTests
 
         var body = Assert.IsType<ApiResponse<ShiftClaimGeneratedDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
         Assert.Equal(640m, body.Data!.TotalAmount);                                   // both shifts are in the claim, 8 h each at $40
-        var flagged = Assert.Single(body.Data.Flagged);
-        Assert.Equal((overnight.Id, "Evening and night rates are not applied yet."), (flagged.ShiftId, flagged.Caveat));
+        Assert.Empty(body.Data.Flagged);
         Assert.Empty(body.Data.LeftOut);
     }
 

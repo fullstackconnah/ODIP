@@ -86,7 +86,8 @@ public sealed class BudgetLedgerService
 
         var today = await ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct);
         var providerState = await ProviderStateAsync(tenantId, ct);
-        var timeBasis = (await ProviderTimeZoneResolver.ResolveAsync(_db, tenantId, ct)).Id;
+        var providerZone = await ProviderTimeZoneResolver.ResolveAsync(_db, tenantId, ct);
+        var timeBasis = providerZone.Id;
         var approaching = await _db.BudgetSettings.AsNoTracking().Where(s => s.TenantId == tenantId).Select(s => (int?)s.ApproachingPercent).FirstOrDefaultAsync(ct)
             ?? BudgetSettings.DefaultApproachingPercent;
 
@@ -118,7 +119,7 @@ public sealed class BudgetLedgerService
         var catalogue = await LoadCatalogueAsync(lineRows, bookingRows, shiftRows, ct);
         var holidays = await LoadHolidaysAsync(shiftRows.Count + bookingRows.Count == 0 ? null : (from, to), ct);
 
-        var pricing = new Pricing(catalogue, holidays, providerState);
+        var pricing = new Pricing(catalogue, holidays, providerState, providerZone.Zone);
         var itemsByPerson = withPlan.ToDictionary(p => p.Id, _ => new List<LedgerItem>());
         var peopleById = withPlan.ToDictionary(p => p.Id);
 
@@ -362,6 +363,8 @@ public sealed class BudgetLedgerService
     private async Task<List<CatalogueRow>> LoadCatalogueAsync(List<LineRow> lines, List<BookingRow> bookings, List<ShiftRow> shifts, CancellationToken ct)
     {
         var groupCodes = shifts.Where(s => s.SupportGroupCode != null).Select(s => s.SupportGroupCode!).Distinct().ToList();
+        // A shift is priced from its own group, its night hours from personal care when the group has no night row, and a sleepover from the sleepover group.
+        if (shifts.Count > 0) groupCodes.AddRange(new[] { CatalogueGroups.PersonalCareGroupCode, CatalogueGroups.SleepoverGroupCode });
         var codes = lines.Select(l => l.ItemCode).Distinct().ToList();
         var groupIds = bookings.Where(b => b.ActivityGroupId is not null).Select(b => b.ActivityGroupId!.Value).Distinct().ToList();
         return await CatalogueQuery(groupIds, codes, groupCodes).ToListAsync(ct);
@@ -378,7 +381,8 @@ public sealed class BudgetLedgerService
     {
         if (window is not { } w) return new HolidayCalendar(Array.Empty<(DateOnly, string?)>());
         // The shared loader, as the claim engines read it: the synced feed and the whole-day override rows, so an estimate prices a day as the claim made from it will.
-        return PublicHolidayLoader.WholeDayCalendarOf(await PublicHolidayLoader.LoadAsync(_db, w.From, w.To, includePartDay: false, ct));
+        // One day past the window: the last shift of it runs past midnight into the next day, which can be a holiday (the shift claim does the same).
+        return PublicHolidayLoader.WholeDayCalendarOf(await PublicHolidayLoader.LoadAsync(_db, w.From, w.To.AddDays(1), includePartDay: false, ct));
     }
 
     // ── Turning records into ledger items ───────────────────────────────────
@@ -390,10 +394,13 @@ public sealed class BudgetLedgerService
         private readonly Dictionary<Guid, List<SupportCatalogueItem>> _byGroup;
         private readonly Dictionary<string, List<SupportCatalogueItem>> _byGroupCode;
 
-        public Pricing(List<CatalogueRow> catalogue, HolidayCalendar holidays, string? providerState)
+        public Pricing(List<CatalogueRow> catalogue, HolidayCalendar holidays, string? providerState, TimeZoneInfo zone)
         {
             Holidays = holidays;
             ProviderState = providerState;
+            Zone = zone;
+            PersonalCare = catalogue.Where(c => c.GroupCode == CatalogueGroups.PersonalCareGroupCode && c.Item.Unit == "H").Select(c => c.Item).ToList();
+            Sleepover = catalogue.Where(c => c.GroupCode == CatalogueGroups.SleepoverGroupCode && c.Item.Unit == "E").Select(c => c.Item).ToList();
             CommunityAccess = catalogue.Where(c => c.GroupCode == CatalogueGroups.CommunityAccessGroupCode).Select(c => c.Item).ToList();
             _byCode = catalogue.GroupBy(c => c.Item.ItemNumber, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.Select(c => c.Item).ToList(), StringComparer.Ordinal);
             _byGroup = catalogue.GroupBy(c => c.Item.ActivityGroupId).ToDictionary(g => g.Key, g => g.Select(c => c.Item).ToList());
@@ -404,6 +411,9 @@ public sealed class BudgetLedgerService
 
         public HolidayCalendar Holidays { get; }
         public string? ProviderState { get; }
+        public TimeZoneInfo Zone { get; }
+        public List<SupportCatalogueItem> PersonalCare { get; }
+        public List<SupportCatalogueItem> Sleepover { get; }
         public List<SupportCatalogueItem> CommunityAccess { get; }
         public int? DefaultShiftCategory { get; }
 
@@ -411,6 +421,9 @@ public sealed class BudgetLedgerService
         /// <summary>The hourly rows of a shift's support type (community access when it has none, or when its group is not loaded).</summary>
         public List<SupportCatalogueItem> ShiftRows(string? groupCode) =>
             groupCode is not null && _byGroupCode.TryGetValue(groupCode, out var rows) ? rows : CommunityAccess;
+
+        /// <summary>Everything a shift of this support type is priced from (see <see cref="ShiftRateRows"/>).</summary>
+        public ShiftRateRows ShiftRates(string? groupCode) => new(ShiftRows(groupCode), PersonalCare, Sleepover);
 
         public IReadOnlyList<SupportCatalogueItem> GroupRows(Guid? groupId) =>
             groupId is { } id && _byGroup.TryGetValue(id, out var rows) ? rows : CommunityAccess;
@@ -444,8 +457,7 @@ public sealed class BudgetLedgerService
     {
         var state = ShiftPriceEstimator.StateFor(person.AddressState, pricing.ProviderState);
         var hours = Shift.HoursBetween(shift.Start, shift.End, shift.EndsNextDay);
-        var outcome = ShiftPriceEstimator.Price(pricing.ShiftRows(shift.SupportGroupCode), shift.ServiceDate, hours, shift.Ratio, shift.NightType, person.IsIntensive, state, pricing.Holidays.For(state));
-        var price = outcome.Price;
+        var outcome = ShiftPriceEstimator.Price(pricing.ShiftRates(shift.SupportGroupCode), shift.SupportGroupCode, shift.ServiceDate, shift.Start, shift.End, shift.EndsNextDay, shift.Ratio, shift.NightType, person.IsIntensive, state, pricing.Holidays.For(state), pricing.Zone);
 
         var completed = shift.Status == ShiftStatus.Completed;
         var past = !completed && shift.ServiceDate < today;
@@ -453,13 +465,14 @@ public sealed class BudgetLedgerService
         {
             Kind = completed ? LedgerRowKind.CompletedShift : past ? LedgerRowKind.PastShift : LedgerRowKind.FutureShift,
             Group = completed || past ? LedgerGroup.Pending : LedgerGroup.BookedAhead,
-            Date = shift.ServiceDate, Amount = price?.TotalAmount ?? 0m,
-            PaceCategory = price is null ? pricing.DefaultShiftCategory : PaceCategories.Of(price.CatalogueItem), PlanType = person.PlanType,
+            Date = shift.ServiceDate, Amount = outcome.Total,
+            // shortcut: the whole shift is filed under its first line's category. Core total agrees; the per-category split is in the polish queue.
+            PaceCategory = outcome.IsPriced ? PaceCategories.Of(outcome.Lines[0].CatalogueItem) : pricing.DefaultShiftCategory, PlanType = person.PlanType,
             Id = shift.Id, ShiftId = shift.Id,
             Description = string.Create(CultureInfo.InvariantCulture, $"Shift {shift.Start:HH:mm}–{shift.End:HH:mm} · {hours:0.##} h"),
             Status = shift.Status.ToString(), Link = string.Create(CultureInfo.InvariantCulture, $"/rostering?date={shift.ServiceDate:yyyy-MM-dd}"),
             // A shift with no price is counted as $0 and says why (a sleepover or a group shift the shift claim does not price yet, or no catalogue rate); one that is priced but not
-            // worked out fully (an overnight shift: evening and night rates are not applied yet) carries the estimator's caveat.
+            // worked out fully (no shift is flagged now that every band is priced; kept for a future caveat) carries the estimator's caveat.
             Note = outcome.NotPricedBecause is { } because ? NotCountedNote(because) : outcome.Caveat,
             // The marker the period counts: a shift the estimator refused is $0 in every figure, so the figures say how many they leave out and why.
             NotPricedKinds = outcome.NotPricedKinds,

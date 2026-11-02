@@ -42,13 +42,13 @@ public class ShiftClaimLeftOutTests
 
     private static ShiftClaimGenerationService Engine(LedgerKit kit) => new(kit.Db, kit.Ledger, kit.Tenant);
 
-    /// <summary>One plain shift, a sleepover, a 1:3 group shift, a two-to-one shift and an overnight active night, on five days of October 2026.</summary>
+    /// <summary>One plain shift, a sleepover, a 1:3 group shift, a two-to-one shift and an active night, on five days of October 2026.</summary>
     private static (Shift Plain, Shift Sleepover, Shift Group, Shift TwoToOne, Shift ActiveNight) FiveShifts(LedgerKit kit, Participant person) => (
         Completed(kit, person, new DateOnly(2026, 10, 1)),                                                                                  // Thu: $480
         Completed(kit, person, new DateOnly(2026, 10, 2), night: SleepoverType.Sleepover, start: 22, end: 6, overnight: true),              // Fri night: a sleepover
         Completed(kit, person, new DateOnly(2026, 10, 3), ratio: SupportRatio.OneToThree, start: 9, end: 15),                               // Sat: a 1:3 group shift
         Completed(kit, person, new DateOnly(2026, 10, 5), ratio: SupportRatio.TwoToOne),                                                    // Mon: two-to-one, $480
-        Completed(kit, person, new DateOnly(2026, 10, 6), night: SleepoverType.ActiveNight, start: 18, end: 2, overnight: true));          // Tue evening into Wed: an active night, $480
+        Completed(kit, person, new DateOnly(2026, 10, 6), night: SleepoverType.ActiveNight));                                              // Tue: an active night, priced like any other shift, $480
 
     [Fact]
     public async Task APreviewPricesWhatItCanAndListsEachShiftItLeavesOutWithTheReason()
@@ -62,21 +62,21 @@ public class ShiftClaimLeftOutTests
         Assert.Equal(1440m, preview.TotalAmount);                                   // three shifts at $480: not five, and not the sleepover or the group shift at the one-to-one rate
         Assert.Equal(new[] { sleepover.Id, group.Id }, preview.LeftOut.Select(l => l.ShiftId));
         Assert.Equal(
-            new[] { "It is a sleepover, which shift claims do not price yet.", "It is a 1:3 group shift, which shift claims do not price yet." },
+            new[] { "No catalogue sleepover item covers this date.", "It is a 1:3 group shift, which shift claims do not price yet." },
             preview.LeftOut.Select(l => l.Reason));
         Assert.Equal(new[] { new DateOnly(2026, 10, 2), new DateOnly(2026, 10, 3) }, preview.LeftOut.Select(l => l.ServiceDate));
         Assert.Equal(new[] { "Shift 22:00–06:00 · 8 h", "Shift 09:00–15:00 · 6 h" }, preview.LeftOut.Select(l => l.Description));
     }
 
     [Fact]
-    public async Task APreviewFlagsAnActiveNightLineButNotThePlainOnes()
+    public async Task APreviewCarriesNoNoteOnAnyLine_AnActiveNightIsPricedLikeAnyOther()
     {
         var (kit, person) = Arrange();
         var (plain, _, _, twoToOne, activeNight) = FiveShifts(kit, person);
 
         var preview = await Engine(kit).PreviewAsync(person.Id, From, To, Ct);
 
-        Assert.Equal("Evening and night rates are not applied yet.", preview.LineItems.Single(l => l.ShiftId == activeNight.Id).Note);
+        Assert.Null(preview.LineItems.Single(l => l.ShiftId == activeNight.Id).Note);
         Assert.Null(preview.LineItems.Single(l => l.ShiftId == plain.Id).Note);
         Assert.Null(preview.LineItems.Single(l => l.ShiftId == twoToOne.Id).Note);
     }
@@ -93,7 +93,7 @@ public class ShiftClaimLeftOutTests
         Assert.Equal(new[] { plain.Id, twoToOne.Id, activeNight.Id }.OrderBy(id => id), lines.Select(l => l.ShiftId!.Value).OrderBy(id => id));
         Assert.Equal(1440m, generated.Claim.TotalAmount);
         Assert.Equal(new[] { sleepover.Id, group.Id }, generated.LeftOut.Select(l => l.ShiftId));
-        Assert.All(generated.LeftOut, l => Assert.Contains("which shift claims do not price yet", l.Reason));
+        Assert.Equal(new[] { "No catalogue sleepover item covers this date.", "It is a 1:3 group shift, which shift claims do not price yet." }, generated.LeftOut.Select(l => l.Reason));
         foreach (var left in new[] { sleepover, group })
         {
             Assert.Equal(ShiftStatus.Completed, kit.Db.Shifts.Single(s => s.Id == left.Id).Status);
@@ -101,23 +101,18 @@ public class ShiftClaimLeftOutTests
         }
     }
 
-    // ── The caveat does not live on the claim line, so the generate response echoes it (round 1b, review F2) ──
+    // ── No shift carries a caveat since the band split; the generate response still echoes any a future caveat sets ──
 
     [Fact]
-    public async Task TheGeneratedClaimEchoesTheShiftsItPricedWithACaveat_BecauseTheLineHasNowhereToKeepIt()
+    public async Task TheGeneratedClaimFlagsNothingNow_BecauseNoShiftIsPricedWithACaveat()
     {
         var (kit, person) = Arrange();
-        var (plain, _, _, twoToOne, activeNight) = FiveShifts(kit, person);
+        var (_, _, _, _, activeNight) = FiveShifts(kit, person);
 
         var generated = await Engine(kit).GenerateAsync(person.Id, From, To, Ct);
 
-        var flagged = Assert.Single(generated.Flagged);                                       // the active night, and only it: the plain and two-to-one lines carry no caveat
-        Assert.Equal(activeNight.Id, flagged.ShiftId);
-        Assert.Equal(new DateOnly(2026, 10, 6), flagged.ServiceDate);
-        Assert.Equal("Shift 18:00–02:00 · 8 h", flagged.Description);
-        Assert.Equal("Evening and night rates are not applied yet.", flagged.Caveat);
-        Assert.DoesNotContain(generated.Flagged, f => f.ShiftId == plain.Id || f.ShiftId == twoToOne.Id);
-        Assert.True(kit.Db.ClaimLineItems.Any(l => l.ShiftId == activeNight.Id));            // it IS in the claim, priced; the flag is about the price
+        Assert.Empty(generated.Flagged);                                                      // the active night is split by band like any shift: nothing is left unworked-out
+        Assert.True(kit.Db.ClaimLineItems.Any(l => l.ShiftId == activeNight.Id));
     }
 
     [Fact]
@@ -171,7 +166,7 @@ public class ShiftClaimLeftOutTests
         var preview = await Assert.ThrowsAnyAsync<InvalidOperationException>(() => Engine(kit).PreviewAsync(person.Id, From, To, Ct));
         var generate = await Assert.ThrowsAnyAsync<InvalidOperationException>(() => Engine(kit).GenerateAsync(person.Id, From, To, Ct));
 
-        const string expected = "Nothing in this date range could be claimed: 1 completed, unclaimed shift was left out. It is a sleepover, which shift claims do not price yet.";
+        const string expected = "Nothing in this date range could be claimed: 1 completed, unclaimed shift was left out. No catalogue sleepover item covers this date.";
         Assert.Equal(expected, preview.Message);
         Assert.Equal(expected, generate.Message);
         Assert.Empty(kit.Db.TripClaims);   // nothing was saved
@@ -189,7 +184,7 @@ public class ShiftClaimLeftOutTests
 
         Assert.Equal(
             "Nothing in this date range could be claimed: 3 completed, unclaimed shifts were left out. "
-            + "It is a sleepover, which shift claims do not price yet (2 shifts). It is a 1:3 group shift, which shift claims do not price yet (1 shift).",
+            + "No catalogue sleepover item covers this date (2 shifts). It is a 1:3 group shift, which shift claims do not price yet (1 shift).",
             refusal.Message);
     }
 
@@ -222,14 +217,14 @@ public class ShiftClaimLeftOutTests
         Assert.Equal(1440m, q2.Pending);   // the three shifts the claim prices; it was 5 shifts' worth at the one-to-one rate
         var byShift = q2.Items.ToDictionary(i => i.ShiftId!.Value);
         Assert.Equal(0m, byShift[sleepover.Id].Amount);
-        Assert.Equal("It is a sleepover, which shift claims do not price yet, so it is counted as $0.", byShift[sleepover.Id].Note);
+        Assert.Equal("No catalogue sleepover item covers this date, so it is counted as $0.", byShift[sleepover.Id].Note);
         Assert.Equal(0m, byShift[group.Id].Amount);
         Assert.Equal("It is a 1:3 group shift, which shift claims do not price yet, so it is counted as $0.", byShift[group.Id].Note);
         Assert.Equal(480m, byShift[twoToOne.Id].Amount);
         Assert.Null(byShift[twoToOne.Id].Note);
         Assert.Equal(480m, byShift[plain.Id].Amount);
         Assert.Equal(480m, byShift[activeNight.Id].Amount);
-        Assert.Equal("Evening and night rates are not applied yet.", byShift[activeNight.Id].Note);
+        Assert.Null(byShift[activeNight.Id].Note);
     }
 
     [Fact]

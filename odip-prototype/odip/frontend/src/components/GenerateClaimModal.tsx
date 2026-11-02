@@ -18,7 +18,7 @@ interface GenerateClaimModalProps {
   onSuccess: () => void
 }
 
-const dayTypeLabel = (dt: string) => {
+export const dayTypeLabel = (dt: string) => {
   switch (dt) {
     case 'Weekday': return 'Weekday'
     case 'WeekdayEvening': return 'Weekday Evening'

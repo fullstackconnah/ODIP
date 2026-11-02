@@ -54,7 +54,7 @@ public class ClaimPricingEqualityTests
             kit.SeedShift(person, new DateOnly(2026, 10, 3), ShiftStatus.Completed, 8, 12);         // Saturday, 4 h
             kit.SeedShift(person, new DateOnly(2026, 10, 4), ShiftStatus.Completed, 10, 14);        // Sunday, 4 h
             kit.SeedShift(person, new DateOnly(2026, 10, 5), ShiftStatus.Completed, 9, 17);         // the holiday
-            kit.SeedShift(person, new DateOnly(2026, 10, 6), ShiftStatus.Completed, 22, 6, endsNextDay: true);   // an overnight shift: 8 h
+            kit.SeedShift(person, new DateOnly(2026, 10, 6), ShiftStatus.Completed, 20, 23);        // Tuesday evening, 3 h: its own rate band (a shift over two bands is the same figure, see ShiftBandClaimTests)
         }
         var estimated = (await ItemsOf(kit, people)).Where(i => i.Kind == LedgerRowKind.CompletedShift).ToList();
         Assert.Equal(15, estimated.Count);
@@ -75,6 +75,33 @@ public class ClaimPricingEqualityTests
                 Assert.Equal(PaceCategories.Of(kit.Item(line.DayType, person.IsIntensiveSupport)), estimate.PaceCategory);
             }
         }
+    }
+
+    [Fact]
+    public async Task AShiftOverThreeBandsAcrossMidnight_IsTheSameFigureInTheClaimTheLedgerAndTheCreateTimeEstimate()   // G12
+    {
+        var kit = ArrangeKit("NSW");
+        var personalCare = kit.SeedGroup(Odip.Domain.Billing.Catalogue.CatalogueGroups.PersonalCareGroupCode, "Personal Care", 1);
+        kit.Db.SupportCatalogueItems.Add(new SupportCatalogueItem
+        {
+            Id = Guid.NewGuid(), ActivityGroupId = personalCare.Id, ItemNumber = "PC_Night", Description = "Personal care night", Unit = "H", DayType = ClaimDayType.WeekdayNight, IsIntensive = false,
+            PriceLimit_VIC = 60m, PriceLimit_NSW = 72m, CatalogueVersion = "2026-27", EffectiveFrom = new DateOnly(2026, 7, 1), IsActive = true, PaceSupportCategoryNumber = 1, SupportCategoryNumber = 1,
+        });
+        kit.Db.SaveChanges();
+        var person = kit.SeedParticipant(addressState: null);
+        kit.SeedPlan(person, CoreQuarters());
+        var wed = new DateOnly(2026, 10, 7);
+        kit.SeedShift(person, wed, ShiftStatus.Completed, 18, 2, endsNextDay: true);   // community access Wednesday 18:00 to Thursday 02:00: daytime, evening and night rows
+
+        var ledgerAmount = Assert.Single((await ItemsOf(kit, person)).Where(i => i.Kind == LedgerRowKind.CompletedShift)).Amount;
+        var estimate = Assert.IsType<ShiftCostEstimate.Priced>(Assert.Single(await new LedgerShiftCostSource(kit.Db, kit.Ledger).EstimateAsync(kit.TenantId, person.Id,
+            new[] { new ShiftSpec(wed, new TimeOnly(18, 0), new TimeOnly(2, 0), true, SupportRatio.OneToOne, SleepoverType.None) }, Ct))).Amount;
+        var claim = await new ShiftClaimGenerationService(kit.Db).GenerateDraftClaimAsync(person.Id, wed, wed, Ct);
+        var lines = await kit.Db.ClaimLineItems.Where(l => l.TripClaimId == claim.Id).ToListAsync(Ct);
+
+        Assert.Equal(3, lines.Count);
+        Assert.Equal(lines.Sum(l => l.TotalAmount), ledgerAmount);
+        Assert.Equal(ledgerAmount, estimate);
     }
 
     [Fact]

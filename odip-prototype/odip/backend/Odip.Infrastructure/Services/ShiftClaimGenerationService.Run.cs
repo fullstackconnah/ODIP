@@ -52,17 +52,17 @@ public partial class ShiftClaimGenerationService
                 if (make)
                 {
                     var made = await GenerateAsync(id, from, to, ct);
-                    rows.Add(new() { ParticipantId = id, ParticipantName = name, ShiftCount = made.LineCount, Hours = made.Hours, TotalAmount = made.Claim.TotalAmount, ClaimId = made.Claim.Id, ClaimReference = made.Claim.ClaimReference });
+                    rows.Add(new() { ParticipantId = id, ParticipantName = name, ShiftCount = made.ShiftCount, Hours = made.Hours, TotalAmount = made.Claim.TotalAmount, ClaimId = made.Claim.Id, ClaimReference = made.Claim.ClaimReference });
                     leftOut.AddRange(made.LeftOut.Select(l => LeftOutOf(l, id, name)));
                     flagged.AddRange(made.Flagged.Select(f => new ShiftClaimRunFlaggedDto { ShiftId = f.ShiftId, ServiceDate = f.ServiceDate, Description = f.Description, Caveat = f.Caveat, ParticipantId = id, ParticipantName = name }));
                 }
                 else
                 {
                     var (lines, left, _) = await CalculateAsync(id, from, to, ct);
-                    rows.Add(new() { ParticipantId = id, ParticipantName = name, ShiftCount = lines.Count, Hours = lines.Sum(l => l.Hours), TotalAmount = lines.Sum(l => l.TotalAmount) });
+                    rows.Add(new() { ParticipantId = id, ParticipantName = name, ShiftCount = lines.Select(l => l.Shift.Id).Distinct().Count(), Hours = HourlyHours(lines), TotalAmount = lines.Sum(l => l.TotalAmount) });
                     leftOut.AddRange(left.Select(l => LeftOutOf(l, id, name)));
                     flagged.AddRange(lines.Where(l => l.Caveat is not null).Select(l => new ShiftClaimRunFlaggedDto { ShiftId = l.Shift.Id, ServiceDate = l.Shift.ServiceDate, Description = Describe(l.Shift), Caveat = l.Caveat!, ParticipantId = id, ParticipantName = name }));
-                    effectLines.AddRange(lines.Select(l => new ClaimEffectLine(id, l.Shift.ServiceDate, PaceCategories.Of(l.CatalogueItem), planType, l.TotalAmount, ShiftId: l.Shift.Id, BookingId: null)));
+                    effectLines.AddRange(lines.Select(l => new ClaimEffectLine(id, l.Date, PaceCategories.Of(l.CatalogueItem), planType, l.TotalAmount, ShiftId: l.Shift.Id, BookingId: null)));
                 }
             }
             catch (NothingClaimableException e)
