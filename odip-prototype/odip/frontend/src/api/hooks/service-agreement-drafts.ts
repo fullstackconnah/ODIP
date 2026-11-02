@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiClient, apiGet, apiPost } from '../client'
 import { refreshBudgetFigures } from './funding-ledger'
-import type { AgreementEndingDto, ApproveDraftDto, CreateServiceAgreementDraftDto, DraftApprovalPreviewDto, PatternChangeDto, PatternChangeResultDto, ServiceAgreementDraftDto } from '../types'
+import type { AgreementEndingDto, ApproveDraftDto, CreateServiceAgreementDraftDto, DraftApprovalPreviewDto, PatternChangeDto, PatternChangeResultDto, PopulateDraftDto, PopulatePreviewDto, PopulateResultDto, ServiceAgreementDraftDto } from '../types'
 
 const path = (participantId: string) => `/participants/${participantId}/service-agreement-drafts`
 
@@ -117,7 +117,7 @@ export function useApprovalPreview(participantId: string | undefined, id: string
 export const APPROVE_TIMEOUT_MS = 30_000
 
 /**
- * Approves the newest revision for rostering: the server records who and when, makes the weekly roster patterns and the unfilled shifts, and ends the patterns of the revision before. It changes what
+ * Approves the newest revision for rostering: the server records who and when, makes the weekly roster patterns (no shifts: Populate roster makes those), and ends the patterns of the revision before. It changes what
  * the revisions list, the patterns page, the roster board and the participant's rostering tab show, so each is refreshed; with the organisation's setting on it may also move the participant to Active, so
  * the participant, their checklist and the onboarding list are refreshed too. A refusal (a newer revision exists, something the preview did not know) refreshes
  * only the revisions and the preview: nothing on the roster changed.
@@ -147,6 +147,41 @@ export function useApproveServiceAgreementDraft() {
       queryClient.invalidateQueries({ queryKey: ['service-agreement-drafts', participantId] }),
       queryClient.invalidateQueries({ queryKey: previewKey(participantId, draftId) }),
     ]),
+  })
+}
+
+const populatePreviewKey = (participantId: string | undefined, id: string | undefined) => ['service-agreement-populate-preview', participantId, id] as const
+
+/**
+ * What Populate roster would add to each started week (S11). Like the approval preview it is read again each time the dialog opens and kept no longer: shifts and started weeks change under it.
+ */
+export function usePopulatePreview(participantId: string | undefined, id: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: populatePreviewKey(participantId, id),
+    queryFn: () => apiGet<PopulatePreviewDto>(`${path(participantId!)}/${id}/populate-preview`),
+    enabled: enabled && !!participantId && !!id,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: 'always',
+  })
+}
+
+/**
+ * Populate roster: adds the open shifts of an approved revision to ONE started week. Safe to repeat (shifts already there are skipped). It changes the roster board, the participant's
+ * rostering tab and the budget figures (the shifts are booked ahead), so each is refreshed.
+ */
+export function usePopulateRoster() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ participantId, draftId, weekStart }: { participantId: string; draftId: string } & PopulateDraftDto) =>
+      apiPost<PopulateResultDto>(`${path(participantId)}/${draftId}/populate`, { weekStart }, { timeout: APPROVE_TIMEOUT_MS }),
+    onSuccess: (_, { participantId }) => Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['roster-board'] }),
+      queryClient.invalidateQueries({ queryKey: ['roster-patterns'] }),
+      queryClient.invalidateQueries({ queryKey: ['participant-rostering', participantId] }),
+      refreshBudgetFigures(queryClient, [participantId]),
+    ]),
+    onError: (_, { participantId, draftId }) => queryClient.invalidateQueries({ queryKey: populatePreviewKey(participantId, draftId) }),
   })
 }
 

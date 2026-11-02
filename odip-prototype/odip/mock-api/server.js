@@ -2629,8 +2629,21 @@ const routes = [
   ['participants/:id/service-agreement-drafts/:id/approval-preview', (participantId, draftId) => {
     const result = planApproval.preview(approvalStore, participantId, draftId)
     if (result.status) return respond(result.status, failEnvelope(null, result.errors))
-    const budgetWarnings = result.preview.canApprove ? rosterBudget.sampleWarnings('shift', result.preview.shiftsToCreate || 0) : null
-    return budgetWarnings ? { ...result.preview, budgetWarnings } : result.preview
+    return result.preview
+  }],
+  // Populate roster (S11): what each started week is missing, then one week at a time.
+  ['participants/:id/service-agreement-drafts/:id/populate-preview', (participantId, draftId) => {
+    const result = planApproval.populatePreview(approvalStore, participantId, draftId)
+    if (result.status) return respond(result.status, failEnvelope(null, result.errors))
+    return { ...result.preview, weeks: result.preview.weeks.map((week) => {
+      const budgetWarnings = rosterBudget.sampleWarnings('shift', week.toAdd)
+      return budgetWarnings ? { ...week, budgetWarnings } : week
+    }) }
+  }],
+  ['participants/:id/service-agreement-drafts/:id/populate', (participantId, draftId, body) => {
+    const result = planApproval.populate(approvalStore, participantId, draftId, body)
+    if (result.status) return respond(result.status, failEnvelope(null, result.errors, result.code))
+    return result.result
   }],
 
   // participants (paged list)

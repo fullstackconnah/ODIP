@@ -59,11 +59,11 @@ export interface DraftApprovalDto {
   approvedByName: string
   patternsCreated: number
   patternsEnded: number
-  /** The unfilled shifts generated at once; none for a participant who was not active yet. */
+  /** Always 0 for a new approval: approving makes the patterns only, and Populate roster makes the shifts (S11). Older approvals keep what they made. */
   shiftsCreated: number
-  /** The last day shifts were generated to; absent when none were. */
+  /** The last day shifts were generated to; absent on a new approval. */
   horizonEnd?: string
-  /** The first day it made a shift for; absent when it made none. */
+  /** The first day it made a shift for; absent on a new approval. */
   firstShiftDate?: string
 }
 
@@ -132,15 +132,45 @@ export interface DraftApprovalPreviewDto {
   /** The version whose patterns would end, and the day they would end (the day before this revision starts). */
   endsFromVersion?: number
   endsOn?: string
-  /** The unfilled shifts approval would generate at once: none while the participant is not active, and then `shiftsNote` says when they will come. */
-  shiftsToCreate: number
-  shiftsNote?: string
+  /** True when approving also makes the participant active (the organisation's setting), and that adds their shifts to the weeks already started. Otherwise approving adds no shifts: Populate roster does. */
+  shiftsOnApproval: boolean
   oldShiftsRemaining: OldShiftsRemainingDto
   overlappingPatterns: OverlappingPatternDto[]
-  /** The provider's today plus the horizon (56 days), held to the end of the agreement. */
-  horizonEnd?: string
-  /** Where the shifts approval would make take a pool past its funding for a period (budget phase 3), one entry for each pool and period. A warning only: approving is never refused for a budget. Omitted when there is nothing to say. */
+}
+
+/** One started week in the Populate roster preview (`GET .../populate-preview`). */
+export interface PopulateWeekDto {
+  /** The Monday. */
+  weekStart: string
+  /** Shifts Populate would add this week. */
+  toAdd: number
+  /** Shifts of this agreement already there this week, cancelled ones included. */
+  alreadyThere: number
+  /** Where the shifts it would add take a pool past its funding (budget phase 3). A warning only. Omitted when there is nothing to say. */
   budgetWarnings?: BudgetWarningDto[]
+}
+
+/** What Populate roster would do, one entry for each week already started from today; `note` is why it cannot be done at all. */
+export interface PopulatePreviewDto {
+  weeks: PopulateWeekDto[]
+  note?: string
+}
+
+/** The body of `POST .../populate`: one started week at a time (any day of it names it). */
+export interface PopulateDraftDto {
+  weekStart: string
+}
+
+export interface PopulateWeekResultDto {
+  weekStart: string
+  created: number
+  alreadyThere: number
+}
+
+export interface PopulateResultDto {
+  created: number
+  alreadyThere: number
+  weeks: PopulateWeekResultDto[]
 }
 
 /** The body of `POST .../approve`. */
