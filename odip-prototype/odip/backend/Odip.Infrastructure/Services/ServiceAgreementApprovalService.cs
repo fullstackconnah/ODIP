@@ -44,8 +44,8 @@ public sealed record ApprovalOutcome(
 
 /// <summary>
 /// "Mark approved" (plan builder, phase D). Approving the NEWEST revision of an agreement draft, for a caller whose role the organisation lets approve, in one transaction: records who and when,
-/// makes the weekly roster patterns of the revision's blocks (<see cref="AgreementPatternMapper"/>), ends the patterns of the revisions approved before it the day before this one starts, and, when the
-/// participant may be rostered, generates open shifts into the weeks already started on the roster (RosterWeek rows), from the provider's today, through <see cref="RosterShiftGenerator"/>. The
+/// makes the weekly roster patterns of the revision's blocks (<see cref="AgreementPatternMapper"/>) and ends the patterns of the revisions approved before it the day before this one starts. It makes no shifts
+/// (S11): <see cref="PopulateAsync"/> adds them to the started weeks, one week at a time, through <see cref="RosterShiftGenerator"/>. The
 /// revisions before it keep their shifts up to the day before this one starts; from that day (or today) their unfilled Draft shifts are removed in the same transaction, unless something is
 /// recorded against one, and the rest (a worker on them, published, or recorded against) stay and are listed for a coordinator to move or cancel. No other shift is changed. There is no un-approving: a change is a new revision, approved in its turn.
 /// <para>
@@ -69,7 +69,6 @@ public sealed class ServiceAgreementApprovalService
     private readonly PlanPricingService _pricing;
     private readonly TimeProvider _clock;
     private readonly RosterAvailability _availability;
-    private readonly ShiftPatternExpander _expander = new();
     // Budget phase 3: what the shifts approval would make do to the participant's budget, shown in the preview as a warning (never a reason to refuse).
     private readonly ShiftBudgetEffect _budget;
     private readonly ILogger<ServiceAgreementApprovalService>? _logger;
@@ -98,8 +97,9 @@ public sealed class ServiceAgreementApprovalService
         if (!await MayApproveAsync(_pricing, tenantId, caller, ct)) return NotAnApprover();
 
         var (draft, participant) = found.Value;
-        var plan = await PlanAsync(tenantId, draft, participant, ct, includeBudget: true);
-        return new ApprovalOutcome(ApprovalStatus.Previewed, draft, plan.Existing, Preview: plan.ToPreview(), NewestVersion: plan.NewestVersion);
+        var plan = await PlanAsync(tenantId, draft, participant, ct);
+        var preview = plan.ToPreview() with { ShiftsOnApproval = await ActivationMakesShiftsAsync(tenantId, participant, ct) };
+        return new ApprovalOutcome(ApprovalStatus.Previewed, draft, plan.Existing, Preview: preview, NewestVersion: plan.NewestVersion);
     }
 
     // ── Approve ───────────────────────────────────────────────────────────────────
@@ -145,6 +145,123 @@ public sealed class ServiceAgreementApprovalService
             throw;
         }
     }
+
+    // ── Populate roster (S11) ─────────────────────────────────────────────────────
+    // Approval makes the patterns; this adds their open shifts, one started week at a time and as often as asked. Safe to repeat: the generator skips any (pattern, day) that has a shift of any status,
+    // a cancelled one included. Only STARTED weeks (StartedWeeks) are filled: a week nobody has started goes through Start, which adds every participant's shifts, so this never starts one (#478).
+
+    public const string NotApprovedMessage = "Approve this agreement first.";
+    public const string NewerApprovedMessage = "A newer revision is approved. Populate from that one.";
+    public const string WeekNotStartedMessage = "Start this week on the roster first. Start adds every participant's shifts.";
+
+    public enum PopulateStatus { Populated, NotFound, Refused, BadWeek, Busy }
+
+    public sealed record PopulateOutcome(PopulateStatus Status, PopulateResultDto? Result = null, string? Error = null);
+
+    /// <summary>Why Populate cannot be done for this revision, null when it can, and the patterns it fills (tracked when <paramref name="track"/>: the generation records how far it reached on them).</summary>
+    private async Task<(string? Refusal, DateOnly Today, List<ShiftPattern> Patterns)> PopulateGroundsAsync(Guid tenantId, ServiceAgreementDraft draft, Participant participant, bool track, CancellationToken ct)
+    {
+        var today = await ProviderTodayAsync(tenantId, ct);
+        var versions = await _db.ServiceAgreementDraftApprovals.AsNoTracking()
+            .Where(a => a.TenantId == tenantId && a.ParticipantId == draft.ParticipantId && a.DraftVersion >= draft.Version).Select(a => a.DraftVersion).ToListAsync(ct);
+        string? refusal = null;
+        if (!versions.Contains(draft.Version)) refusal = NotApprovedMessage;
+        else if (versions.Any(v => v > draft.Version)) refusal = NewerApprovedMessage;
+        else if (draft.AgreementEndDate < today) refusal = string.Create(CultureInfo.InvariantCulture, $"This agreement ended on {draft.AgreementEndDate:yyyy-MM-dd}, before today ({today:yyyy-MM-dd}): there is nothing left to roster.");
+        else if (!await _gate.MayPlaceAsync(_db, draft.ParticipantId, ct))
+        {
+            var who = string.IsNullOrWhiteSpace(participant.FirstName) ? "the participant" : participant.FirstName;
+            refusal = $"No shifts are made now, because {who} is not active yet. Once they are, each week started on the roster includes them; use Generate on their shift patterns for weeks already started.";
+        }
+
+        if (refusal is not null) return (refusal, today, new());
+        var patterns = _db.ShiftPatterns.Where(p => p.TenantId == tenantId && p.ParticipantId == draft.ParticipantId && p.SourceDraftId == draft.Id && p.IsActive);
+        return (null, today, await (track ? patterns : patterns.AsNoTracking()).ToListAsync(ct));
+    }
+
+    /// <summary>The started weeks from the provider's today (or the agreement's start, when later) to the agreement's end, as approval used to fill them.</summary>
+    private Task<List<(DateOnly From, DateOnly To)>> PopulateWindowsAsync(Guid tenantId, ServiceAgreementDraft draft, DateOnly today, CancellationToken ct) =>
+        StartedWindowsAsync(tenantId, draft.AgreementStartDate > today ? draft.AgreementStartDate : today, draft.AgreementEndDate, ct);
+
+    /// <summary>What Populate would do, with nothing done. Null for another organisation's participant or revision.</summary>
+    public async Task<PopulatePreviewDto?> PopulatePreviewAsync(Guid tenantId, Guid participantId, Guid draftId, CancellationToken ct)
+    {
+        if (await FindAsync(tenantId, participantId, draftId, ct) is not { } found) return null;
+        var (refusal, today, patterns) = await PopulateGroundsAsync(tenantId, found.Draft, found.Participant, track: false, ct);
+        if (refusal is not null) return new PopulatePreviewDto { Note = refusal };
+
+        var weeks = new List<PopulateWeekDto>();
+        foreach (var (from, to) in await PopulateWindowsAsync(tenantId, found.Draft, today, ct))
+        {
+            var week = await _generator.AddAsync(_db, patterns, from, to, ct, dryRun: true);
+            weeks.Add(new PopulateWeekDto { WeekStart = RosterWeek.MondayOf(from), ToAdd = week.Created, AlreadyThere = week.AlreadyThere, BudgetWarnings = await BudgetWarningsAsync(tenantId, participantId, week, ct) });
+        }
+        return new PopulatePreviewDto { Weeks = weeks };
+    }
+
+    /// <summary>Where the shifts a week would add take a pool past its funding (a warning only: a failure to work it out says nothing rather than stop the preview).</summary>
+    private async Task<List<BudgetWarningDto>?> BudgetWarningsAsync(Guid tenantId, Guid participantId, ShiftGeneration week, CancellationToken ct)
+    {
+        if (week.Created == 0) return null;
+        try
+        {
+            var planned = week.MadeShifts.Select(s => new PlannedShift(null, s.ServiceDate, s.StartTime, s.EndTime, s.EndsNextDay, s.Ratio, s.NightType, s.SupportGroupCode)).ToList();
+            return await _budget.ForShiftsAsync(tenantId, participantId, planned, ct) is { Count: > 0 } warnings ? warnings : null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger?.LogWarning(ex, "The budget warnings for the populate preview of participant {ParticipantId} could not be worked out; the preview is shown without them", participantId);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Adds the open shifts of the revision's patterns to the started weeks from today: just <paramref name="weekStart"/>'s week when given. Holds the organisation's board lock and then the participant's
+    /// (Approve's order), and reads the approval, patterns, windows and existing shifts only once it holds both, so two at once take turns and the second finds the first's shifts.
+    /// </summary>
+    public async Task<PopulateOutcome> PopulateAsync(Guid tenantId, Guid participantId, Guid draftId, DateOnly? weekStart, CancellationToken ct)
+    {
+        if (await FindAsync(tenantId, participantId, draftId, ct) is not { } found) return new PopulateOutcome(PopulateStatus.NotFound, Error: "Draft not found.");
+        try
+        {
+            await using var board = await RosterGenerationLock.AcquireAsync(_db, tenantId, ct, _generator.LockWait, scope: "roster-board");
+            await using var held = await RosterGenerationLock.AcquireAsync(_db, participantId, ct, _generator.LockWait);
+
+            var (refusal, today, patterns) = await PopulateGroundsAsync(tenantId, found.Draft, found.Participant, track: true, ct);
+            if (refusal is not null) return new PopulateOutcome(PopulateStatus.Refused, Error: refusal);
+            var windows = await PopulateWindowsAsync(tenantId, found.Draft, today, ct);
+            if (weekStart is { } asked)
+            {
+                var monday = RosterWeek.MondayOf(asked);
+                windows = windows.Where(w => RosterWeek.MondayOf(w.From) == monday).ToList();
+                if (windows.Count == 0) return new PopulateOutcome(PopulateStatus.BadWeek, Error: WeekNotStartedMessage);
+            }
+
+            var made = new List<Shift>();
+            var weeks = new List<PopulateWeekResultDto>();
+            foreach (var (from, to) in windows)
+            {
+                var week = await _generator.AddAsync(_db, patterns, from, to, ct);
+                made.AddRange(week.MadeShifts);
+                weeks.Add(new PopulateWeekResultDto { WeekStart = RosterWeek.MondayOf(from), Created = week.Created, AlreadyThere = week.AlreadyThere });
+            }
+            await _availability.MarkRegularsAwayAsync(made, ct);
+            await _db.SaveChangesAsync(ct);
+            await held.CommitAsync(ct);
+            await board.CommitAsync(ct);
+            return new PopulateOutcome(PopulateStatus.Populated, new PopulateResultDto { Created = made.Count, AlreadyThere = weeks.Sum(w => w.AlreadyThere), Weeks = weeks });
+        }
+        catch (RosterBusyException busy)
+        {
+            return new PopulateOutcome(PopulateStatus.Busy, Error: busy.Message);
+        }
+    }
+
+    /// <summary>Approving this participant's revision will also make them active (the organisation's setting, a finished intake, nothing blocking), and that adds their shifts to the weeks already started.</summary>
+    private async Task<bool> ActivationMakesShiftsAsync(Guid tenantId, Participant participant, CancellationToken ct) =>
+        participant.IsDraft && participant.IntakeCompletedAt.HasValue
+        && PlanPricingPolicy.From(await _pricing.FindSettingsAsync(tenantId, ct)).ApprovalActivatesParticipant
+        && (participant.IsActive && participant.ServicesStartedAt == null || await ParticipantReadiness.ActivationBlockAsync(_db, participant, _clock, ct) == ActivationBlock.None);
 
     // ── A revision that is not there ──────────────────────────────────────────────
 
@@ -217,17 +334,6 @@ public sealed class ServiceAgreementApprovalService
             shift.ShiftPatternId = made.Id;
         }
 
-        if (plan.Ready && plan.Windows.Count > 0)
-        {
-            var made = new List<Shift>();
-            foreach (var (from, to) in plan.Windows)
-                made.AddRange((await _generator.AddAsync(_db, plan.NewPatterns, from, to, ct, carried: plan.Carried)).MadeShifts);
-            await _availability.MarkRegularsAwayAsync(made, ct);
-            approval.ShiftsCreated = made.Count;
-            approval.FirstShiftDate = made.Count > 0 ? made.Min(s => s.ServiceDate) : null;
-            approval.HorizonEnd = plan.HorizonEnd;
-        }
-
         _db.ServiceAgreementDraftApprovals.Add(approval);
         await _db.SaveChangesAsync(ct);
         // The board lock began the transaction and the participant's joined it: committing it commits both.
@@ -260,21 +366,8 @@ public sealed class ServiceAgreementApprovalService
         public HashSet<ShiftPattern> HandedOn { get; } = new();
         /// <summary>The shifts that move (tracked: the approval's own save moves them).</summary>
         public List<Shift> ToCarry { get; set; } = new();
-        /// <summary>The (new pattern, day) pairs the moved shifts cover: generation makes nothing there.</summary>
-        public HashSet<(Guid PatternId, DateOnly Date)> Carried { get; set; } = new();
         /// <summary>Ended patterns edited by hand that approving puts back to the agreement's times (preview only).</summary>
         public int HandEdited { get; set; }
-        public bool Ready { get; set; }
-        public DateOnly From { get; set; }
-        /// <summary>The last day of the started weeks it fills; null when it fills none.</summary>
-        public DateOnly? HorizonEnd { get; set; }
-        /// <summary>The started weeks from <see cref="From"/> to the agreement's end, each held to them (L6): where an approval generates.</summary>
-        public List<(DateOnly From, DateOnly To)> Windows { get; set; } = new();
-        public int ShiftsToCreate { get; set; }
-        public string? ShiftsNote { get; set; }
-        /// <summary>Where the shifts this approval would make take a pool past its funding (preview only; null when there are none to say).</summary>
-        public List<BudgetWarningDto>? BudgetWarnings { get; set; }
-
         public DraftApprovalPreviewDto ToPreview() => new()
         {
             CanApprove = Existing is null && !Superseded && Reasons.Count == 0,
@@ -284,18 +377,15 @@ public sealed class ServiceAgreementApprovalService
             // A new pattern no ended one matches, or for a renewal no pattern ending the day before it (D12), is a changed support: it starts with no default staff. A first approval has none to count.
             ChangedPatterns = ToEnd.Count > 0 || HandedOn.Count > 0 ? NewPatterns.Count - CarryTo.Values.Union(HandedOn).Count() : 0,
             HandEditedPatterns = HandEdited,
-            ShiftsToCreate = ShiftsToCreate, ShiftsNote = ShiftsNote,
             OldShiftsRemaining = OldShifts,
             OverlappingPatterns = Overlaps.OrderBy(p => p.DayOfWeek).ThenBy(p => p.StartTime).Select(p => new OverlappingPatternDto
             {
                 Id = p.Id, DayOfWeek = p.DayOfWeek, StartTime = p.StartTime, EndTime = p.EndTime, EndsNextDay = p.EndsNextDay, EffectiveFrom = p.EffectiveFrom, EffectiveTo = p.EffectiveTo, Notes = p.Notes,
             }).ToList(),
-            HorizonEnd = HorizonEnd,
-            BudgetWarnings = BudgetWarnings is { Count: > 0 } ? BudgetWarnings : null,
         };
     }
 
-    private async Task<Plan> PlanAsync(Guid tenantId, ServiceAgreementDraft draft, Participant participant, CancellationToken ct, bool includeBudget = false, bool approving = false)
+    private async Task<Plan> PlanAsync(Guid tenantId, ServiceAgreementDraft draft, Participant participant, CancellationToken ct, bool approving = false)
     {
         var plan = new Plan { Draft = draft, EndsOn = draft.AgreementStartDate.AddDays(-1) };
 
@@ -303,10 +393,6 @@ public sealed class ServiceAgreementApprovalService
         var provider = await ProviderTimeZoneResolver.ResolveAsync(_db, tenantId, ct);
         var today = ProviderLocalTime.TodayIn(_clock.GetUtcNow().UtcDateTime, provider.Zone);
         plan.Today = today;
-        plan.From = draft.AgreementStartDate > today ? draft.AgreementStartDate : today;
-        // Start rostering (2026-10-16, L6): approval fills only the weeks already started; the others get their shifts when someone starts them.
-        plan.Windows = await StartedWindowsAsync(tenantId, plan.From, draft.AgreementEndDate, ct);
-        plan.HorizonEnd = plan.Windows.Count > 0 ? plan.Windows[^1].To : null;
 
         plan.Existing = await _db.ServiceAgreementDraftApprovals.AsNoTracking().FirstOrDefaultAsync(a => a.DraftId == draft.Id, ct);
         plan.NewestVersion = await _db.ServiceAgreementDrafts.Where(x => x.TenantId == tenantId && x.ParticipantId == draft.ParticipantId).MaxAsync(x => (int?)x.Version, ct) ?? draft.Version;
@@ -382,39 +468,6 @@ public sealed class ServiceAgreementApprovalService
         }
 
         await ReadRosterAsync(tenantId, draft, plan, ct, approving);
-
-        plan.Ready = await _gate.MayPlaceAsync(_db, draft.ParticipantId, ct);
-        if (!plan.Ready)
-        {
-            var who = string.IsNullOrWhiteSpace(participant.FirstName) ? "the participant" : participant.FirstName;
-            plan.ShiftsNote = $"No shifts are made now, because {who} is not active yet. Once they are, each week started on the roster includes them; use Generate on their shift patterns for weeks already started.";
-        }
-        else if (quote is not null && plan.Windows.Count > 0)
-        {
-            var skipped = quote.HolidayOccurrences.Where(h => h.Skipped).Select(h => (h.BlockId, h.Date)).ToHashSet();
-            var occurrences = plan.NewPatterns
-                .SelectMany(pattern => plan.Windows.SelectMany(w => _expander.Occurrences(pattern, w.From, w.To))
-                    .Where(date => !skipped.Contains((pattern.SourceBlockKey!, date)) && !plan.Carried.Contains((pattern.Id, date)))
-                    .Select(date => (Pattern: pattern, Date: date)))
-                .ToList();
-            plan.ShiftsToCreate = occurrences.Count;
-
-            // Budget phase 3: what those shifts do to the participant's budget, as a warning on the preview. Only the preview asks (an approval does not need it), and a failure to work it out
-            // must never stop the preview, so it says nothing rather than fail.
-            if (includeBudget && occurrences.Count > 0)
-            {
-                try
-                {
-                    var planned = occurrences.Select(o => new PlannedShift(null, o.Date, o.Pattern.StartTime, o.Pattern.EndTime, o.Pattern.EndsNextDay, o.Pattern.Ratio, o.Pattern.NightType, o.Pattern.SupportGroupCode)).ToList();
-                    plan.BudgetWarnings = await _budget.ForShiftsAsync(tenantId, draft.ParticipantId, planned, ct);
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    _logger?.LogWarning(ex, "The budget warnings for the approval preview of draft {DraftId} could not be worked out; the preview is shown without them", draft.Id);
-                    plan.BudgetWarnings = null;
-                }
-            }
-        }
 
         return plan;
     }
@@ -522,7 +575,6 @@ public sealed class ServiceAgreementApprovalService
             .Where(s => s.ShiftPatternId != null && carriedFrom.Contains(s.ShiftPatternId.Value) && s.ServiceDate >= from && s.ServiceDate <= draft.AgreementEndDate)
             .ToListAsync(ct))
             .Where(s => !skipped.Contains((plan.CarryTo[s.ShiftPatternId!.Value].SourceBlockKey!, s.ServiceDate))).ToList();
-        plan.Carried = plan.ToCarry.Select(s => (plan.CarryTo[s.ShiftPatternId!.Value].Id, s.ServiceDate)).ToHashSet();
     }
 
     /// <summary>The default workers of these patterns who are active users: a default worker is handed on only while that user is (an archived one leaves the support with none).</summary>

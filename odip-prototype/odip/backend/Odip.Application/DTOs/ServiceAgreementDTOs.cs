@@ -209,7 +209,7 @@ public record DraftApprovalDto
     public int PatternsCreated { get; init; }
     /// <summary>The patterns of earlier approved revisions it ended the day before this revision starts.</summary>
     public int PatternsEnded { get; init; }
-    /// <summary>The open shifts it generated at once (none for a participant who is not active yet).</summary>
+    /// <summary>The open shifts it generated at once: 0 on every approval since Populate roster became its own step (S11); older approvals keep what they made.</summary>
     public int ShiftsCreated { get; init; }
     /// <summary>The last day of the started weeks it fills; absent when it filled none (no week started yet, or the participant was not active yet).</summary>
     public DateOnly? HorizonEnd { get; init; }
@@ -295,18 +295,46 @@ public record DraftApprovalPreviewDto
     public int? EndsFromVersion { get; init; }
     /// <summary>The day they would end: the day before this revision starts.</summary>
     public DateOnly? EndsOn { get; init; }
-    /// <summary>The open shifts approval would generate at once, in the weeks already started on the roster: none while the participant is not active, and then <see cref="ShiftsNote"/> says why.</summary>
-    public int ShiftsToCreate { get; init; }
-    public string? ShiftsNote { get; init; }
+    /// <summary>Approving makes shifts at once, because the organisation's setting makes the participant active on approval and they can be (S11): approval itself adds none. False: Populate roster adds them afterwards.</summary>
+    public bool ShiftsOnApproval { get; init; }
     public OldShiftsRemainingDto OldShiftsRemaining { get; init; } = new();
     public List<OverlappingPatternDto> OverlappingPatterns { get; init; } = [];
-    /// <summary>The last day of the started weeks it fills, held to the end of the agreement; absent when it fills none.</summary>
-    public DateOnly? HorizonEnd { get; init; }
-    /// <summary>
-    /// Where the shifts approval would make take a pool past its funding for a period (budget phase 3), one entry for each pool and period. A warning only, in every mode: approving is never refused for a
-    /// budget. Omitted when nothing is past its funding, no shifts would be made, or the participant has no budget recorded.
-    /// </summary>
+}
+
+/// <summary>The body of POST .../populate. No week: every started week from today.</summary>
+public record PopulateDraftDto
+{
+    public DateOnly? WeekStart { get; init; }
+}
+
+/// <summary>One started week in a Populate preview: the shifts it would add, the ones already there, and where those would take a pool past its funding (a warning only).</summary>
+public record PopulateWeekDto
+{
+    public DateOnly WeekStart { get; init; }
+    public int ToAdd { get; init; }
+    public int AlreadyThere { get; init; }
     public List<BudgetWarningDto>? BudgetWarnings { get; init; }
+}
+
+/// <summary>What Populate roster would do, with nothing done: one row for each week already started on the roster from today. <see cref="Note"/> says why it cannot be done at all.</summary>
+public record PopulatePreviewDto
+{
+    public List<PopulateWeekDto> Weeks { get; init; } = [];
+    public string? Note { get; init; }
+}
+
+public record PopulateWeekResultDto
+{
+    public DateOnly WeekStart { get; init; }
+    public int Created { get; init; }
+    public int AlreadyThere { get; init; }
+}
+
+public record PopulateResultDto
+{
+    public int Created { get; init; }
+    public int AlreadyThere { get; init; }
+    public List<PopulateWeekResultDto> Weeks { get; init; } = [];
 }
 
 public record ServiceAgreementDraftLineDto

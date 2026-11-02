@@ -50,6 +50,7 @@ public class AgreementApprovalSupportTypeTests
         await f.Db.SaveChangesAsync();
 
         Assert.Equal(ApprovalStatus.Approved, (await f.Service.ApproveAsync(TenantA, f.ParticipantId, v1.Id, false, Admin, CancellationToken.None)).Status);
+        await ApprovalTestSupport.PopulateAllAsync(f.Service, f.ParticipantId, v1.Id);
 
         var made = await f.Db.ShiftPatterns.AsNoTracking().Where(p => p.SourceDraftId == v1.Id).ToListAsync();
         Assert.All(made.Where(p => p.SourceBlockKey == "weekdays"), p => Assert.Equal("GRP_X", p.SupportGroupCode));
@@ -65,6 +66,7 @@ public class AgreementApprovalSupportTypeTests
         await f.Db.SaveChangesAsync();
 
         await f.Service.ApproveAsync(TenantA, f.ParticipantId, v1.Id, false, Admin, CancellationToken.None);
+        await ApprovalTestSupport.PopulateAllAsync(f.Service, f.ParticipantId, v1.Id);
 
         Assert.All(await CodesAsync(f, v1.Id), code => Assert.Null(code));
     }
@@ -78,12 +80,14 @@ public class AgreementApprovalSupportTypeTests
         AddRow(f, "GRP_Y", "Y_WD");
         await f.Db.SaveChangesAsync();
         await f.Service.ApproveAsync(TenantA, f.ParticipantId, v1.Id, false, Admin, CancellationToken.None);
+        await ApprovalTestSupport.PopulateAllAsync(f.Service, f.ParticipantId, v1.Id);
         Assert.All(await CodesAsync(f, v1.Id), code => Assert.Equal("GRP_X", code));
 
         // The same support from 2 November, whose lines name no catalogue row: the patterns keep GRP_X. It is not part of what makes two patterns the same support, so all five are carried.
         var v2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock() }, start: new DateOnly(2026, 11, 2), end: Nov22);
         await SetLineCodeAsync(f, v2, "ZZ_NONE");
         var outcome = await f.Service.ApproveAsync(TenantA, f.ParticipantId, v2.Id, false, Admin, CancellationToken.None);
+        await ApprovalTestSupport.PopulateAllAsync(f.Service, f.ParticipantId, v2.Id);
         Assert.Equal(5, outcome.Approval!.PatternsEnded);
         Assert.All(await CodesAsync(f, v2.Id), code => Assert.Equal("GRP_X", code));
 
@@ -96,6 +100,7 @@ public class AgreementApprovalSupportTypeTests
         handSet.SupportGroupCode = "GRP_Z";
         await f.Db.SaveChangesAsync();
         await f.Service.ApproveAsync(TenantA, f.ParticipantId, v3.Id, false, Admin, CancellationToken.None);
+        await ApprovalTestSupport.PopulateAllAsync(f.Service, f.ParticipantId, v3.Id);
         Assert.All(await CodesAsync(f, v3.Id), code => Assert.Equal("GRP_Y", code));
         var v3Patterns = await f.Db.ShiftPatterns.Where(p => p.SourceDraftId == v3.Id).Select(p => p.Id).ToListAsync();
         var carried = await f.Db.Shifts.AsNoTracking().Where(s => s.ShiftPatternId != null && v3Patterns.Contains(s.ShiftPatternId.Value) && s.Status == ShiftStatus.Draft).ToListAsync();
@@ -112,10 +117,12 @@ public class AgreementApprovalSupportTypeTests
         AddRow(f, "GRP_X", await FirstCodeAsync(f, v1.Id, "weekdays"));
         await f.Db.SaveChangesAsync();
         await f.Service.ApproveAsync(TenantA, f.ParticipantId, v1.Id, false, Admin, CancellationToken.None);
+        await ApprovalTestSupport.PopulateAllAsync(f.Service, f.ParticipantId, v1.Id);
 
         var renewal = await AddRevisionAsync(f, 2, new[] { WeekdayBlock() }, start: Nov23, end: Jan3);
         await SetLineCodeAsync(f, renewal, "ZZ_NONE");
         await f.Service.ApproveAsync(TenantA, f.ParticipantId, renewal.Id, false, Admin, CancellationToken.None);
+        await ApprovalTestSupport.PopulateAllAsync(f.Service, f.ParticipantId, renewal.Id);
 
         Assert.All(await CodesAsync(f, renewal.Id), code => Assert.Equal("GRP_X", code));
     }

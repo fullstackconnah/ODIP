@@ -169,6 +169,43 @@ public class ServiceAgreementDraftsController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// What Populate roster would do (S11), with nothing done: one row for each week already started on the roster from today, with the shifts it would add and the ones already there, and where those
+    /// would take a pool past its funding. <c>note</c> says why it cannot be done at all (not approved, a newer revision, the participant is not active, the agreement ended). 404 for a revision that is
+    /// not the caller's. The rostering write roles, not the organisation's approver rule.
+    /// </summary>
+    [HttpGet("{id:guid}/populate-preview")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<PopulatePreviewDto>>> PopulatePreview(Guid participantId, Guid id, CancellationToken ct)
+    {
+        if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<PopulatePreviewDto>.Fail("A tenant context is required."));
+        var preview = await _approval.PopulatePreviewAsync(tenantId, participantId, id, ct);
+        return preview is null ? NotFound(ApiResponse<PopulatePreviewDto>.Fail("Draft not found.")) : Ok(ApiResponse<PopulatePreviewDto>.Ok(preview));
+    }
+
+    /// <summary>
+    /// Populate roster (S11): adds the approved revision's open shifts to the weeks already started on the roster, from today, just <c>weekStart</c>'s week when given. Safe to repeat: shifts already
+    /// there, cancelled ones included, are skipped. 200 with what was added; 400 for a week that is not started; 404 for a revision that is not the caller's; 409 when it cannot be done (not approved,
+    /// a newer revision is approved, the participant is not active, the agreement ended) or another change to the roster was still running (<c>roster-busy</c>; nothing was changed, try again).
+    /// </summary>
+    [HttpPost("{id:guid}/populate")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    [RequestSizeLimit(4_096)]
+    [EnableRateLimiting("api")]
+    public async Task<ActionResult<ApiResponse<PopulateResultDto>>> Populate(Guid participantId, Guid id, PopulateDraftDto? dto, CancellationToken ct)
+    {
+        if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<PopulateResultDto>.Fail("A tenant context is required."));
+        var outcome = await _approval.PopulateAsync(tenantId, participantId, id, dto?.WeekStart, ct);
+        return outcome.Status switch
+        {
+            ServiceAgreementApprovalService.PopulateStatus.NotFound => NotFound(ApiResponse<PopulateResultDto>.Fail(outcome.Error!)),
+            ServiceAgreementApprovalService.PopulateStatus.BadWeek => BadRequest(ApiResponse<PopulateResultDto>.Fail(outcome.Error!)),
+            ServiceAgreementApprovalService.PopulateStatus.Refused => Conflict(new ApiResponse<PopulateResultDto> { Success = false, Errors = [outcome.Error!], Code = "populate-refused" }),
+            ServiceAgreementApprovalService.PopulateStatus.Busy => Conflict(new ApiResponse<PopulateResultDto> { Success = false, Errors = [outcome.Error!], Code = "roster-busy" }),
+            _ => Ok(ApiResponse<PopulateResultDto>.Ok(outcome.Result!)),
+        };
+    }
+
     private Task<ApprovalActivationDto> ActivateAsync(Guid tenantId, Guid participantId, CancellationToken ct)
     {
         // The interceptor writes the participant's one audit row; the reason rides on it (as ParticipantsController does).
