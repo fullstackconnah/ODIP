@@ -56,6 +56,8 @@ public record ClaimLineItemDto
     public string NdisNumber { get; init; } = string.Empty;
     public PlanType PlanType { get; init; }
     public string SupportItemCode { get; init; } = string.Empty;
+    /// <summary>The catalogue unit of the line's item on its service date: "H" for an hourly item, "E" for the flat "Each" item (a sleepover night, quantity 1). Omitted when no catalogue row covers the date.</summary>
+    public string? Unit { get; init; }
     public ClaimDayType DayType { get; init; }
     public DateOnly SupportsDeliveredFrom { get; init; }
     public DateOnly SupportsDeliveredTo { get; init; }

@@ -251,6 +251,12 @@ public class ClaimsController : ControllerBase
         // participants, so a claim reached by its id alone shows no budget of another organisation; a SuperAdmin who has not chosen an organisation to view as gets none.
         var budget = _tenant.TenantId is { } tenantId ? await _ledger.ForClaimAsync(tenantId, c.Id, ct) : null;
 
+        // The unit of each line's catalogue item (a sleepover night is "Each"), read once for the claim: the row valid on the line's service date, the newest version, as the claim engines pick it.
+        var codes = c.LineItems.Select(l => l.SupportItemCode).Distinct().ToList();
+        var catalogueRows = await _db.SupportCatalogueItems.AsNoTracking().Where(i => codes.Contains(i.ItemNumber)).ToListAsync(ct);
+        string? UnitOf(ClaimLineItem l) =>
+            EffectiveCatalogueResolver.NewestVersion(catalogueRows.Where(r => r.ItemNumber == l.SupportItemCode && EffectiveCatalogueResolver.IsValidOn(r, l.SupportsDeliveredFrom)).ToList()).FirstOrDefault()?.Unit;
+
         return Ok(ApiResponse<TripClaimDetailDto>.Ok(new TripClaimDetailDto
         {
             Budget = budget,
@@ -278,7 +284,7 @@ public class ClaimsController : ControllerBase
                     PlanType = l.ParticipantBooking != null
                         ? l.ParticipantBooking.PlanTypeOverride ?? l.ParticipantBooking.Participant?.PlanType ?? default
                         : participant?.PlanType ?? default,
-                    SupportItemCode = l.SupportItemCode, DayType = l.DayType,
+                    SupportItemCode = l.SupportItemCode, Unit = UnitOf(l), DayType = l.DayType,
                     SupportsDeliveredFrom = l.SupportsDeliveredFrom, SupportsDeliveredTo = l.SupportsDeliveredTo,
                     Hours = l.Hours, UnitPrice = l.UnitPrice, TotalAmount = l.TotalAmount,
                     GSTCode = l.GSTCode, ClaimType = l.ClaimType, ParticipantApproved = l.ParticipantApproved,

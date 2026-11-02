@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Moq;
+using Odip.Domain.Billing.Services;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Funding;
@@ -448,7 +449,7 @@ public class ShiftBudgetCheckTests : IDisposable
             {
                 calls++;
                 // The first spec is the new version: priced. The second, the saved one: not priced.
-                return specs.Select((_, i) => i == 0 ? new ShiftCostEstimate.Priced(480m, 4) : (ShiftCostEstimate)new ShiftCostEstimate.NotPriced("unpriced")).ToList();
+                return specs.Select((s, i) => i == 0 ? new ShiftCostEstimate.Priced(new[] { new ShiftCostPart(s.ServiceDate, 4, 480m) }) : (ShiftCostEstimate)new ShiftCostEstimate.NotPriced("unpriced")).ToList();
             });
 
         var outcome = await Service(stub.Object).CheckAsync(Request(participant, Mon12Oct, shiftId: shift.Id), default);

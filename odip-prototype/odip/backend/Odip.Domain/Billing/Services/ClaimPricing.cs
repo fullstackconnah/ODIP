@@ -2,6 +2,7 @@ using System.Globalization;
 using Odip.Domain.Billing.Catalogue;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Funding;
 using Odip.Domain.Rostering;
 using ShiftBands = Odip.Domain.Billing.Pricing.ShiftBands;
 
@@ -67,7 +68,17 @@ public static class ClaimPricing
 
     /// <summary>A line's amount: its rounded hours x unit price, to the cent half away from zero (owner rule, 2026-10-29).</summary>
     public static decimal LineAmount(decimal hours, decimal unitPrice) => decimal.Round(LineHours(hours) * unitPrice, 2, MidpointRounding.AwayFromZero);
+
+    /// <summary>A line's quantity in words: "1 night" or "2 nights" for a sleepover (the flat "Each" item), else "7.5 h".</summary>
+    public static string Quantity(decimal hours, bool sleepover) =>
+        sleepover ? (hours == 1m ? "1 night" : string.Create(CultureInfo.InvariantCulture, $"{hours:0.##} nights")) : string.Create(CultureInfo.InvariantCulture, $"{hours:0.##} h");
 }
+
+/// <summary>
+/// What part of a priced shift falls on one date in one PACE category: the unit the claim files its lines under and the budget ledger and the roster estimate count. <see cref="Hours"/> are the hourly
+/// hours and <see cref="Nights"/> the sleepover nights in it, for a ledger row's description. The parts of a shift sum to its total.
+/// </summary>
+public sealed record ShiftCostPart(DateOnly Date, int? PaceCategory, decimal Amount, decimal Hours = 0m, decimal Nights = 0m);
 
 /// <summary>
 /// One line of a priced shift: the catalogue row, the day type, the date the stretch falls on (a night part after midnight is dated the next day), the hours and the price.
@@ -119,6 +130,12 @@ public sealed record ShiftPriceOutcome(IReadOnlyList<ShiftPrice> Lines, string? 
 /// </summary>
 public static class ShiftPriceEstimator
 {
+    /// <summary>The shift's lines grouped by (date, PACE category), in line order: the one definition the claim, the ledger and the roster estimate count a shift by (a community access evening and the personal care night after midnight are two parts).</summary>
+    public static IReadOnlyList<ShiftCostPart> PartsOf(ShiftPriceOutcome outcome) =>
+        outcome.Lines.GroupBy(l => (l.Date, Category: PaceCategories.Of(l.CatalogueItem)))
+            .Select(g => new ShiftCostPart(g.Key.Date, g.Key.Category, g.Sum(l => l.TotalAmount), g.Where(l => l.CatalogueItem.Unit != "E").Sum(l => l.Hours), g.Where(l => l.CatalogueItem.Unit == "E").Sum(l => l.Hours)))
+            .ToList();
+
     /// <summary>Why a shift has no price when no row of the group is valid on its date for its day type.</summary>
     public const string NoCatalogueRateBecause = "no catalogue rate covers this date";
 
