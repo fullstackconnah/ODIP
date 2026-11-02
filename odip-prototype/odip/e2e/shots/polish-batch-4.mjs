@@ -108,7 +108,7 @@ const hideTabBar = (page) => page.addStyleTag({ content: 'nav.fixed.bottom-0 { d
 async function reports(page, vp, scheme) {
   const tag = `A2 ${vp.name} ${scheme}`
   await gotoReady(page, '/reports', scheme === 'dark')
-  const button = page.getByRole('button', { name: /^Show all \d+$/ })
+  const button = page.getByRole('button', { name: /^Show (all \d+|fewer)$/ }) // the label flips when expanded
   await button.waitFor({ state: 'visible', timeout: 60_000 })
   const section = page.locator('section').filter({ has: button })
   const measure = () => button.evaluate((el) => {
