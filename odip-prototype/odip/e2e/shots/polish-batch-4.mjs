@@ -126,7 +126,8 @@ async function reports(page, vp, scheme) {
   } else {
     check(`${tag}: wrapper padding-left equals main (the card pad, = its padding-right and the header's)`, m.pl === m.pr && m.pl === m.headerPl, { pl: m.pl, pr: m.pr, header: m.headerPl })
   }
-  if (scheme === 'light') await shoot(page, `reports-showall-${vp.name}-light`, section)
+  // The crop is the button and the row above it, scrolled into view: the whole section is taller than the viewport and clipped to its top.
+  if (scheme === 'light') await shoot(page, `reports-showall-${vp.name}-light`, [section.locator('tbody tr').last(), button], 24)
   if (vp.width >= 768 && scheme === 'light') {
     const found = await tabTo(page, button)
     const f = await button.evaluate((el) => { const cs = getComputedStyle(el); return { style: cs.outlineStyle, width: parseFloat(cs.outlineWidth), offset: parseFloat(cs.outlineOffset), left: el.getBoundingClientRect().left, secLeft: el.closest('section').getBoundingClientRect().left, focusVisible: el.matches(':focus-visible') } })
@@ -177,6 +178,25 @@ async function runModal(page, vp, scheme) {
   if (vp.touch) check(`A4 ${tag}: tfoot top - last card bottom is 12+-1`, gap !== null && within(gap, 12, 1), { gap })
   else check(`A4 ${tag}: tfoot top - last row bottom is 0+-1 (unchanged)`, gap !== null && within(gap, 0, 1), { gap })
   if (vp.touch) await hideTabBar(page)
+  if (!vp.touch) {
+    // F1: with the body scrolled so table rows run under the sticky footer, the Close button is still the topmost thing at its own centre.
+    const f1 = await dialog.evaluate((panel) => {
+      const btn = [...panel.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Close' && b.closest('.sticky'))
+      const r = btn.getBoundingClientRect()
+      const hit = (row) => { const b = row.getBoundingClientRect(); return b.bottom > r.top && b.top < r.bottom }
+      // Scroll each row in turn to the footer's height; the last rows can't get there (the footer ends the scroll), the early ones can.
+      let under = false
+      for (const row of panel.querySelectorAll('tbody tr')) {
+        const b = row.getBoundingClientRect()
+        panel.scrollTop += b.top + b.height / 2 - (r.top + r.height / 2)
+        if (hit(row)) { under = true; break }
+      }
+      const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
+      return { rowsUnderFooter: under, topIsClose: top === btn || btn.contains(top), top: top ? top.tagName + '.' + String(top.className).slice(0, 60) : null }
+    })
+    check(`F1 ${tag}: table rows run under the footer (not vacuous)`, f1.rowsUnderFooter, f1)
+    check(`F1 ${tag}: elementFromPoint at the Close centre is the button`, f1.topIsClose, f1)
+  }
   const wide = vp.touch ? '390' : '1280x842'
   await shoot(page, `runmodal-preview-${wide}-${scheme}`, dialog)
   if (vp.touch) {
@@ -207,6 +227,21 @@ async function runModal(page, vp, scheme) {
       check(`A4 ${tag} done: tfoot top - last card bottom is 12+-1 (null when the result has no table)`, doneGap === null || within(doneGap, 12, 1), { gap: doneGap })
     }
   }
+}
+
+// A4 reach: participant-detail/ClaimsTab:300, the claim preview modal's DataTable footer (the mock serves the preview).
+async function participantPreview(page, vp) {
+  await gotoReady(page, '/participants/p-0001?tab=funding#claims', false)
+  await page.getByRole('button', { name: 'Generate from shifts' }).click({ timeout: 60_000 })
+  const dialog = page.getByRole('dialog')
+  await dialog.getByRole('button', { name: /^Preview/ }).click()
+  await dialog.locator('tfoot').waitFor({ state: 'attached', timeout: 30_000 })
+  await quiet(page)
+  const gap = await cardGap(dialog)
+  check(`A4 participant preview ${vp.name}: tfoot top - last card bottom is 12+-1`, gap !== null && within(gap, 12, 1), { gap })
+  await hideTabBar(page)
+  await dialog.locator('tfoot').scrollIntoViewIfNeeded()
+  await shoot(page, 'cardfoot-claimstab-390-light', [dialog.locator('tbody tr').last(), dialog.locator('tfoot')], 24)
 }
 
 // A4 reach: ClaimDetailPage:422 is a DataTable footer, so it gets the same check.
@@ -276,6 +311,7 @@ try {
     if (scheme === 'light') await safe(`A2 ${vp.name}`, () => reports(page, vp, scheme))
     if (vp.width !== 768) await safe(`A3/A4 ${vp.name} ${scheme}`, () => runModal(page, vp, scheme))
     if (vp.width !== 768 && scheme === 'light') await safe(`A4 claimdetail ${vp.name}`, () => claimDetail(page, vp))
+    if (vp.touch && scheme === 'light') await safe(`A4 participant preview ${vp.name}`, () => participantPreview(page, vp))
     if (vp.name === '1280') {
       await safe(`C1 settings ${scheme}`, () => settingsRail(page, scheme))
       if (scheme === 'light') await safe('C1 incidents', () => incidentsHover(page))

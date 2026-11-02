@@ -71,7 +71,7 @@ export function Modal({ open, onClose, title, size = 'md', footer, children, cla
         {footer && (
           stickyFooter
             // Pulled out sideways over the dialog's own padding so its background covers the edge-to-edge strip it sticks as; the border says the body goes on under it.
-            ? <div className="sticky bottom-0 -mx-4 mt-4 flex justify-end gap-3 rounded-b-[var(--radius-lg)] border-t border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3">{footer}</div>
+            ? <div className="sticky bottom-0 z-[4] -mx-4 mt-4 flex justify-end gap-3 rounded-b-[var(--radius-lg)] border-t border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3">{footer}</div>
             : <div className="flex justify-end gap-3 mt-4">{footer}</div>
         )}
       </div>
