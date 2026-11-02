@@ -53,6 +53,42 @@ public class DraftPdfScheduleTests
         Assert.Equal("Repeats every week from 12 Oct 2026, ongoing until the NDIS plan ends: plan end at this revision (18 Oct 2026).", AgreementSchedule.Repeats(draft));
     }
 
+    /// <summary>D8: an agreement ended early still prints the term that was signed under "Agreement dates", and says when support stops. The signing document keeps the signed term as its AgreementEndDate.</summary>
+    [Fact]
+    public void Ended_early_pdf_prints_the_signed_end_and_the_last_day_of_support_and_the_signing_document_keeps_the_signed_term()
+    {
+        var draft = Revision(MonWed());
+        var endBefore = SigningDoc(draft).GetProperty("AgreementEndDate").GetString();
+        draft.OriginalAgreementEndDate = draft.AgreementEndDate;
+        draft.AgreementEndDate = new DateOnly(2026, 10, 14);
+        var text = TextOf(ServiceAgreementDraftPdfRenderer.Render(draft));
+
+        Assert.Contains(Skeleton("12 Oct 2026 — 18 Oct 2026"), text);
+        Assert.Contains(Skeleton("Ended early: last day of support 14 Oct 2026."), text);
+        Assert.Equal(endBefore, SigningDoc(draft).GetProperty("AgreementEndDate").GetString());
+    }
+
+    private static System.Text.Json.JsonElement SigningDoc(ServiceAgreementDraft draft) => System.Text.Json.JsonDocument.Parse(ElectronicSigningEvidenceService.BuildDocument(draft)).RootElement.Clone();
+
+    /// <summary>R1: a later revision that keeps the shortened end carries the original end in AgreementEndDate (v1 stays stable) and the real last day in EndedEarlyLastDay, as its PDF does; a revision never ended early has none.</summary>
+    [Fact]
+    public void Signing_document_of_an_ended_early_revision_records_the_real_last_day_and_one_never_ended_early_records_none()
+    {
+        var v2 = Revision(MonWed());
+        v2.OriginalAgreementEndDate = v2.AgreementEndDate;
+        v2.AgreementEndDate = new DateOnly(2026, 10, 14);
+
+        Assert.Equal("2026-10-18", SigningDoc(v2).GetProperty("AgreementEndDate").GetString());
+        Assert.Equal("2026-10-14", SigningDoc(v2).GetProperty("EndedEarlyLastDay").GetString());
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, SigningDoc(Revision(MonWed())).GetProperty("EndedEarlyLastDay").ValueKind);
+    }
+
+    [Fact]
+    public void A_pdf_of_an_agreement_not_ended_early_has_no_ended_early_line()
+    {
+        Assert.DoesNotContain(Skeleton("Ended early"), TextOf(ServiceAgreementDraftPdfRenderer.Render(Revision(MonWed()))));
+    }
+
     [Fact]
     public void Ongoing_pdf_prints_ongoing_and_plan_end()
     {

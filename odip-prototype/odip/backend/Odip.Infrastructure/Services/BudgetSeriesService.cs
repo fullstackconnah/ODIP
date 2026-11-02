@@ -134,7 +134,7 @@ public sealed class BudgetSeriesService
         {
             foreach (var (draft, days) in segments)
             {
-                var key = ("budget-series-quote", tenantId, draft.Id, priceStamp);
+                var key = ("budget-series-quote", tenantId, draft.Id, draft.AgreementEndDate, priceStamp);
                 if (!_cache.TryGetValue(key, out QuoteReduction? reduction) || reduction is null)
                 {
                     // One permit for the whole request, taken on the first miss.

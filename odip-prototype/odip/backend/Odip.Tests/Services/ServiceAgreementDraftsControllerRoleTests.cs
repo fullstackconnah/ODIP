@@ -59,6 +59,21 @@ public class ServiceAgreementDraftsControllerRoleTests
         Assert.False(Allows(action, "ReadOnly"));
     }
 
+    public static TheoryData<string> AgreementWriteActions => new()
+    {
+        nameof(ServiceAgreementDraftsController.Delete),
+        nameof(ServiceAgreementDraftsController.EndEarly),
+    };
+
+    /// <summary>Delete draft and End early change saved agreements and their rosters: the same writers as the signing writes, and nobody else.</summary>
+    [Theory, MemberData(nameof(AgreementWriteActions))]
+    public void DeleteAndEndEarly_AreRestrictedToAdminCoordinatorSuperAdmin(string action)
+    {
+        foreach (var role in Writers) Assert.True(Allows(action, role), role);
+        Assert.False(Allows(action, "SupportWorker"));
+        Assert.False(Allows(action, "ReadOnly"));
+    }
+
     [Theory, MemberData(nameof(PriceReadActions))]
     public void ReadsOfPrices_AreRestrictedToAdminCoordinatorSuperAdmin(string action)
     {

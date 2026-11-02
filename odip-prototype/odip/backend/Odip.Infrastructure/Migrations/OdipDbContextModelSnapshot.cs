@@ -4374,6 +4374,9 @@ namespace Odip.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<DateOnly?>("OriginalAgreementEndDate")
+                        .HasColumnType("date");
+
                     b.Property<Guid>("ParticipantId")
                         .HasColumnType("uuid");
 
