@@ -5,6 +5,7 @@ import { useFinishShift, useShiftNotes } from '@/api/hooks'
 import { usePermissions } from '@/lib/permissions'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { WizardStepHeading } from '@/components/wizard/WizardStepHeading'
 import { WizardStepRail } from '@/components/wizard/WizardStepRail'
 import type { WizardStepDef } from '@/components/wizard/types'
@@ -75,6 +76,10 @@ export function FinishFlow({ shift, online, canAct, onRecord, onClose, onEditNot
   const [networkError, setNetworkError] = useState(false)
   // Set from the tap, through the location wait (up to 5 s), to the answer: one Finish per tap (plan check S5).
   const [submitting, setSubmitting] = useState(false)
+  // The km-and-notes prompt (W11): open at the final Finish when either is missing; `asked` once the worker chose Finish anyway, so a retry never asks again.
+  const [prompt, setPrompt] = useState(false)
+  const [asked, setAsked] = useState(false)
+  const focusAfterStep = useRef<string | null>(null)
   const topRef = useRef<HTMLDivElement>(null)
   const step = d.step ?? 'times'
   // Render reads the flow's clock (`tick`, refreshed on every step change and every 30 s); the step-1 gate and submit read the clock at the tap,
@@ -100,6 +105,8 @@ export function FinishFlow({ shift, online, canAct, onRecord, onClose, onEditNot
   useEffect(() => { saveEndDraft(shift.id, d) }, [shift.id, d])
   // WizardStepHeading moves focus on a step change but skips its first mount, so opening (or resuming) the flow focuses the heading here.
   useEffect(() => { topRef.current?.querySelector<HTMLElement>('h2')?.focus() }, [])
+  // "Add ..." on the prompt: the step changes first (its heading takes focus), then the field the worker was asked for.
+  useEffect(() => { if (focusAfterStep.current) { document.getElementById(focusAfterStep.current)?.focus(); focusAfterStep.current = null } }, [step])
   useEffect(() => { if (error?.focus) document.getElementById(error.focus)?.focus() }, [error])
   // A server refusal is listed under the summary; focus brings it on screen, however long the summary is.
   useEffect(() => {
@@ -160,7 +167,20 @@ export function FinishFlow({ shift, online, canAct, onRecord, onClose, onEditNot
         nothingToHandOver: d.nothingToHandOver || !d.handoverText.trim(),
       })
     }
+    if (!asked && (km === null || noteCount === 0)) return setPrompt(true)
     void submit()
+  }
+
+  function finishAnyway() {
+    setPrompt(false)
+    setAsked(true)
+    void submit()
+  }
+
+  function addMissing() {
+    setPrompt(false)
+    focusAfterStep.current = km === null ? 'finish-km' : 'finish-add-notes'
+    go(km === null ? 'times' : 'handover')
   }
 
   async function submit() {
@@ -238,6 +258,8 @@ export function FinishFlow({ shift, online, canAct, onRecord, onClose, onEditNot
     : 'Next'
 
   const current = FINISH_STEPS[index(step)]
+  const askFor = km === null && noteCount === 0 ? 'them' : km === null ? 'kilometres' : 'a note'
+  const first = shift.participant.fullName.split(' ')[0]
   const blockedDoses = online ? [] : offlineDueDoses(shift)
   return (
     <div id="finish" className="space-y-4">
@@ -277,6 +299,12 @@ export function FinishFlow({ shift, online, canAct, onRecord, onClose, onEditNot
           onUseSubmitTime={() => set({ endOverride: null })} onChangeTimes={() => go('times')}
         />
       )}
+      <ConfirmDialog
+        open={prompt} onCancel={() => setPrompt(false)}
+        title={km === null && noteCount === 0 ? 'No kilometres or notes added' : km === null ? 'No kilometres added' : 'No notes added'}
+        message={<p>{km === null && noteCount === 0 ? 'You can add them now, or finish without them.' : km === null ? `Add the kilometres you drove with ${first}, or finish without them.` : 'Add a note about the shift, or finish without one.'}</p>}
+        footer={<><Button size="lg" variant="secondary" onClick={finishAnyway}>Finish anyway</Button><Button size="lg" onClick={addMissing}>{`Add ${askFor}`}</Button></>}
+      />
       <ActionBar notice={step === 'submit' && blockedDoses.length > 0 ? (
         <div id="finish-blocked"><Callout tone="warning" polite title="Finish can't be saved yet">{blockedDoseMessage(blockedDoses)}</Callout></div>
       ) : ((error && !/^(pre|post)Travel/.test(error.field ?? '')) || networkError) && (
