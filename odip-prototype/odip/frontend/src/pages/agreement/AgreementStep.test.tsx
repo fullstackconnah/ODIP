@@ -73,7 +73,8 @@ describe('AgreementStep: Length presets and Ongoing', () => {
     render(<Harness initial={base} />)
     await userEvent.selectOptions(length(), 'ongoing')
     expect(screen.queryByLabelText('Agreement ends')?.tagName).not.toBe('INPUT')
-    expect(screen.getByText(/Ongoing, reviewed when the NDIS plan ends on/)).toBeTruthy()
+    expect(screen.getByText('Ongoing, to the plan end')).toBeTruthy()
+    expect(screen.getByText(/Reviewed when the NDIS plan ends on .*2027/)).toBeTruthy()
   })
 
   it('Ongoing is disabled with no NDIS plan dates', () => {

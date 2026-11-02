@@ -69,16 +69,16 @@ export function AgreementStep({ details, onEdit, recorded, plan, errors, readOnl
         <FormField label="Agreement starts" className={third} error={errors.start}>
           <input type="date" min={DATE_MIN} max={DATE_MAX} value={details.agreementStartDate} onChange={event => onEdit({ agreementStartDate: event.target.value })} />
         </FormField>
-        <FormField label="Length" className={third} hint={!canPreset ? 'Choose the start first.' : !canOngoing ? 'Add the NDIS plan dates to choose Ongoing.' : undefined}>
+        <FormField label="Length" className={third} hint={[!canPreset && 'Choose the start first.', !canOngoing && 'Add the NDIS plan dates to choose Ongoing.'].filter(Boolean).join(' ') || undefined}>
           <select value={length} onChange={event => chooseLength(event.target.value)}>
             <option value="custom">Choose an end date</option>
             {PRESET_MONTHS.map(months => <option key={months} value={months} disabled={!canPreset}>{months === 1 ? '1 month' : `${months} months`}</option>)}
             <option value="ongoing" disabled={!canOngoing}>Ongoing (until the plan ends)</option>
           </select>
         </FormField>
-        <FormField label="Agreement ends" className={third} error={errors.end} hint={details.ongoing ? 'Shifts and totals run to the plan end.' : undefined}>
+        <FormField label="Agreement ends" className={third} error={errors.end} hint={details.ongoing ? `Reviewed when the NDIS plan ends on ${writtenDay(plan.end)}. Shifts and totals run to then.` : undefined}>
           {details.ongoing ? (
-            <p className="py-2 text-sm">Ongoing, reviewed when the NDIS plan ends on {writtenDay(plan.end)}</p>
+            <p className="py-2 text-sm">Ongoing, to the plan end</p>
           ) : (
             <input type="date" min={DATE_MIN} max={DATE_MAX} value={details.agreementEndDate} onChange={event => onEdit({ agreementEndDate: event.target.value })} />
           )}
