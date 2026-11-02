@@ -41,6 +41,7 @@ public sealed record PublicHolidayRef(DateOnly Date, string Name);
 /// <see cref="RosterConflictService.Check"/> to fire <see cref="RosterConflictService.PublicHoliday"/>.
 /// Last positional parameter so existing callers keep compiling; null and an empty list are both
 /// treated as "no holidays" — see <see cref="RosterConflictService.Check"/>.</param>
+/// <param name="StaffShiftsInFortnight">This staff member's other shifts in the candidate's fortnight (<see cref="RosterFortnight"/>), excluding the candidate itself; only a casual worker's are loaded. Null skips <c>CASUAL_FORTNIGHT_HOURS</c> (trips, LiveCaster, anything that does not load them). Last positional parameter so existing callers keep compiling.</param>
 /// <param name="CallerIsAdmin">Who is making the write, for the rules that only an admin may override (DOUBLE_BOOKED_SHIFT, 2026-10-27). Null (the board display, the generator, Publish week, the import, trips) keeps a plain Warning; false makes it Blocking; true makes it a Warning that needs a reason. Last positional parameter so existing callers keep compiling.</param>
 public sealed record RosterCheckContext(
     User Staff,
@@ -52,7 +53,8 @@ public sealed record RosterCheckContext(
     CompatibilityLevel Compatibility,
     decimal WeeklyHoursThreshold,
     IReadOnlyList<PublicHolidayRef>? PublicHolidays = null,
-    bool? CallerIsAdmin = null);
+    bool? CallerIsAdmin = null,
+    IReadOnlyList<Shift>? StaffShiftsInFortnight = null);
 
 /// <summary>One other (non-cancelled) trip window this vehicle already covers, used by
 /// <see cref="RosterConflictService.CheckVehicleAssignment"/> to detect an overlap. AssignmentId
@@ -103,6 +105,10 @@ public sealed class RosterConflictService
     public const string CompetencyMissing = "COMPETENCY_MISSING";
     public const string RatioShortfall = "RATIO_SHORTFALL";
     public const string OverHours = "OVER_HOURS";
+    public const string CasualFortnightHours = "CASUAL_FORTNIGHT_HOURS";
+
+    /// <summary>Rostered hours in a fortnight above which a casual worker gets <c>CASUAL_FORTNIGHT_HOURS</c>. Fixed, not an org setting (R6).</summary>
+    public const decimal CasualFortnightHoursCap = 76m;
     public const string VehicleDoubleBooked = "VEHICLE_DOUBLE_BOOKED";
     public const string VehicleOverSeats = "VEHICLE_OVER_SEATS";
     public const string VehicleOverWheelchair = "VEHICLE_OVER_WHEELCHAIR";
@@ -127,6 +133,7 @@ public sealed class RosterConflictService
         CheckCompetencyMissing(candidate, ctx, findings);
         CheckRatioShortfall(candidate, ctx, findings);
         CheckOverHours(candidate, ctx, findings);
+        CheckCasualFortnightHours(candidate, ctx, findings);
         CheckPublicHoliday(candidate, ctx, findings);
 
         return findings;
@@ -464,11 +471,29 @@ public sealed class RosterConflictService
     {
         // StaffShiftsInWeek also carries the Sunday before and the Monday after (for the overlap check), so count only the candidate's own Monday to Sunday.
         var monday = candidate.ServiceDate.AddDays(-(((int)candidate.ServiceDate.DayOfWeek + 6) % 7));
-        var total = ctx.StaffShiftsInWeek.Where(s => s.ServiceDate >= monday && s.ServiceDate <= monday.AddDays(6)).Sum(s => s.DurationHours) + candidate.DurationHours;
+        var total = ctx.StaffShiftsInWeek.Where(s => s.Status != ShiftStatus.Cancelled && s.ServiceDate >= monday && s.ServiceDate <= monday.AddDays(6)).Sum(s => s.DurationHours) + candidate.DurationHours;
         if (total > ctx.WeeklyHoursThreshold)
         {
             findings.Add(new RosterFinding(OverHours, RosterFindingSeverity.Warning,
                 $"{ctx.Staff.FullName}'s rostered hours for the week ({total:0.##}h) exceed the {ctx.WeeklyHoursThreshold:0.##}h threshold."));
+        }
+    }
+
+    /// <summary>
+    /// A warning, never a block and no reason asked: a casual worker whose rostered hours in the candidate's fortnight, candidate included, are above <see cref="CasualFortnightHoursCap"/>.
+    /// Cancelled shifts do not count; a worker who is not casual, or has no employment type set, never fires.
+    /// </summary>
+    private static void CheckCasualFortnightHours(Shift candidate, RosterCheckContext ctx, List<RosterFinding> findings)
+    {
+        if (ctx.Staff.EmploymentType != EmploymentType.Casual || ctx.StaffShiftsInFortnight is null) return;
+        var start = RosterFortnight.StartOf(candidate.ServiceDate);
+        var end = start.AddDays(13);
+        var total = ctx.StaffShiftsInFortnight.Where(s => s.Status != ShiftStatus.Cancelled && s.ServiceDate >= start && s.ServiceDate <= end).Sum(s => s.DurationHours) + candidate.DurationHours;
+        if (total > CasualFortnightHoursCap)
+        {
+            var inv = CultureInfo.InvariantCulture;
+            findings.Add(new RosterFinding(CasualFortnightHours, RosterFindingSeverity.Warning,
+                $"{ctx.Staff.FullName} is casual and would have {total.ToString("0.##", inv)}h in the fortnight {start.ToString("d MMM", inv)} to {end.ToString("d MMM yyyy", inv)}, over the 76h limit."));
         }
     }
 
