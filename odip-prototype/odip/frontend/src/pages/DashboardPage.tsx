@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
-import { useDashboard, useSettings, useStaff, useParticipantAlertsAggregate, usePendingLeaveQueue, usePendingCompletionQueue, useModuleVisibility, useSetupStatus, useProviderSettings } from '@/api/hooks'
+import { useDashboard, useSettings, useStaff, useParticipantAlertsAggregate, usePendingLeaveQueue, usePendingCompletionQueue, useUnclaimedShifts, useModuleVisibility, useSetupStatus, useProviderSettings } from '@/api/hooks'
 import { formatDateAu } from '@/lib/utils'
 import { TRIP_STATUS_LABELS } from '@/lib/tone'
 import type { TripStatus } from '@/api/types'
@@ -79,7 +79,7 @@ export default function DashboardPage() {
   const permissions = usePermissions()
   const visibility = useModuleVisibility()
   const platform = platformNavigation(permissions, visibility.isError ? undefined : visibility.data)
-  const { canViewAlerts, canApproveLeave, canReviewCompletions, canAccessPage, isReadOnly, fullName, id, isAdmin, isSuperAdmin, canImportData } = permissions
+  const { canViewAlerts, canApproveLeave, canReviewCompletions, canAccessPage, isReadOnly, fullName, id, isAdmin, isSuperAdmin, canImportData, hasOrganisation } = permissions
   // The viewer's clock, ticking every minute. The title reads it, and so does the one figure that depends on the day (the qualification count below), so the page never
   // advertises a new date beside a count that still belongs to yesterday.
   const now = useNow()
@@ -107,6 +107,9 @@ export default function DashboardPage() {
   // A queue is counted in the band only where its group is not shown (call 6); a viewer with the group reads the same requests there.
   const pendingLeave = usePendingLeaveQueue(canApproveLeave && !gates.leave)
   const pendingCompletions = usePendingCompletionQueue(canReviewCompletions && !gates.completions)
+  // The claim run is Admin and Coordinator work (the Claims page, which the nav hides from a ReadOnly viewer), and it needs an organisation: without one the request would only be refused.
+  const canClaimShifts = canAccessPage('claims') && hasOrganisation
+  const unclaimed = useUnclaimedShifts(canClaimShifts)
 
   // The same rule as the Qualifications list (lib/credentials.ts), so this figure is the sum of that page's issue counts: a credential
   // needs action when it has no date, is expired, is due today or is due within the warning window. Counted against `today`, and recounted when the day turns over
@@ -269,6 +272,20 @@ export default function DashboardPage() {
       to: '/rostering/completions',
       loading: pendingCompletions.loading,
       error: pendingCompletions.error,
+    })
+  }
+  // Completed, then claimed: the band reads in the order the work goes.
+  if (canClaimShifts) {
+    attentionItems.push({
+      label: 'Unclaimed shifts',
+      noun: 'unclaimed shifts',
+      count: unclaimed.count,
+      tone: 'warning',
+      detail: `Completed in the last 14 days and not yet claimed, across ${plural(unclaimed.participants, 'participant')}.`,
+      action: { label: 'Claim shifts', to: '/claims?run=shifts' },
+      to: '/claims',
+      loading: unclaimed.loading,
+      error: unclaimed.error,
     })
   }
   // Every item has data and is at zero: the band is clear.

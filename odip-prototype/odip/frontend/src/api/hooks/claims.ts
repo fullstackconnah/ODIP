@@ -3,7 +3,7 @@ import { keepPreviousData, useQueries, useQuery, useMutation, useQueryClient, ty
 import { apiGet, apiPost, apiPutRaw, apiPatchRaw, apiDeleteRaw } from '../client'
 import { fetchPagedList } from './pagedList'
 import { refreshBudgetWarnings, refreshLedgers } from './funding-ledger'
-import { CLAIM_PIPELINE_KEY } from './claimHub'
+import { CLAIM_PIPELINE_KEY, UNCLAIMED_SHIFTS_KEY } from './claimHub'
 import type {
   TripClaimListDto,
   TripClaimDetailDto,
@@ -105,6 +105,7 @@ export function useUpdateClaim() {
       qc.invalidateQueries({ queryKey: ['claim-invoices', claimId] })
       qc.invalidateQueries({ queryKey: ['invoice-register'] })
       refreshLedgers(qc, participants)
+      qc.invalidateQueries({ queryKey: UNCLAIMED_SHIFTS_KEY })   // a rejected or cancelled claim gives its shifts back to the run
       // Marking a claim Rejected (with the NDIA's code, which starts the "funds ran out" signal), Paid or back to Draft moves what the alerts, the dashboard's tile and the Budgets list say.
       refreshBudgetWarnings(qc)
     },
@@ -129,6 +130,7 @@ export function useUpdateClaimLineItem() {
       const participants = item?.participantId ? [item.participantId] : claimParticipantIds(claim)
       qc.invalidateQueries({ queryKey: ['claim', claimId] })
       qc.invalidateQueries({ queryKey: CLAIM_PIPELINE_KEY }) // a line moved into or out of Paid changes the chart
+      qc.invalidateQueries({ queryKey: UNCLAIMED_SHIFTS_KEY }) // a rejected line frees its shift
       refreshLedgers(qc, participants)
       refreshBudgetWarnings(qc)
     },
@@ -145,6 +147,7 @@ export function useDeleteClaim() {
       // covered, so the same pre-invalidation read supplies who they were.
       const participants = claimParticipantIds(cachedClaim(qc, claimId))
       qc.invalidateQueries({ queryKey: ['trip-claims'] })
+      qc.invalidateQueries({ queryKey: UNCLAIMED_SHIFTS_KEY })   // its shifts are unclaimed again
       qc.invalidateQueries({ queryKey: ['claim-invoices', claimId] })
       qc.invalidateQueries({ queryKey: ['invoice-register'] })
       refreshLedgers(qc, participants)
@@ -256,6 +259,7 @@ export function useGenerateShiftClaim() {
       qc.invalidateQueries({ queryKey: ['trip-claims'] })
       qc.invalidateQueries({ queryKey: ['rostering-completions'] })
       qc.invalidateQueries({ queryKey: ['roster-board'] })
+      qc.invalidateQueries({ queryKey: UNCLAIMED_SHIFTS_KEY })
       refreshLedgers(qc, [participantId])
       refreshBudgetWarnings(qc)
     },
