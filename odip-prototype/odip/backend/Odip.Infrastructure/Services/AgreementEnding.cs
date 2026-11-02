@@ -21,7 +21,7 @@ public static class AgreementEnding
         var ids = participantIds.ToList();
         var revisions = await db.ServiceAgreementDrafts.AsNoTracking()
             .Where(d => ids.Contains(d.ParticipantId))
-            .Select(d => new { d.ParticipantId, d.Id, d.Version, d.AgreementStartDate, d.AgreementEndDate, d.IsOngoing, Approved = db.ServiceAgreementDraftApprovals.Any(a => a.DraftId == d.Id) })
+            .Select(d => new { d.ParticipantId, d.Id, d.Version, d.AgreementStartDate, d.AgreementEndDate, d.OriginalAgreementEndDate, d.IsOngoing, Approved = db.ServiceAgreementDraftApprovals.Any(a => a.DraftId == d.Id) })
             .ToListAsync(ct);
 
         var rows = new List<AgreementEndingRow>();
@@ -29,6 +29,8 @@ public static class AgreementEnding
         {
             var approved = revisionsOfOne.Where(r => r.Approved).MaxBy(r => r.Version);
             if (approved is null) continue;
+            // An agreement ended early was ended on purpose: it is neither ending soon nor ended, so it raises no alert (D15). It is the newest approved revision that decides, not any earlier one.
+            if (approved.OriginalAgreementEndDate != null) continue;
             var daysLeft = approved.AgreementEndDate.DayNumber - today.DayNumber;
             if (daysLeft > WarningDays) continue;
             var renewal = revisionsOfOne.Where(r => r.Version > approved.Version && r.AgreementStartDate > approved.AgreementEndDate).MaxBy(r => r.Version);

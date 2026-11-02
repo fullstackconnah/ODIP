@@ -37,7 +37,10 @@ public static class ServiceAgreementDraftPdfRenderer
                 Field(column, "Date of birth", draft.DateOfBirthSnapshot is { } birth ? Date(birth) : "Not recorded");
                 Field(column, "Representative", draft.Representative ?? "Not recorded");
                 Field(column, "Plan dates", $"{Date(draft.PlanStartDate)} — {Date(draft.PlanEndDate)}");
-                Field(column, "Agreement dates", draft.IsOngoing ? $"{Date(draft.AgreementStartDate)} — Ongoing. Reviewed with the NDIS plan; plan end at this revision ({Date(draft.AgreementEndDate)})" : $"{Date(draft.AgreementStartDate)} — {Date(draft.AgreementEndDate)}");
+                // An agreement ended early still prints the term that was signed, and says when support actually stops (D8).
+                var signedEnd = draft.OriginalAgreementEndDate ?? draft.AgreementEndDate;
+                Field(column, "Agreement dates", draft.IsOngoing ? $"{Date(draft.AgreementStartDate)} — Ongoing. Reviewed with the NDIS plan; plan end at this revision ({Date(draft.AgreementEndDate)})" : $"{Date(draft.AgreementStartDate)} — {Date(signedEnd)}");
+                if (draft.OriginalAgreementEndDate is not null) column.Item().PaddingBottom(4).Text($"Ended early: last day of support {Date(draft.AgreementEndDate)}.");
                 Field(column, "Service types", ServiceTypesText(draft.ServiceTypesJson));
                 Schedule(column, draft);
                 column.Item().PaddingTop(16).EnsureSpace(90).Text("Cost detail (NDIS catalogue prices)").Bold().FontSize(12);

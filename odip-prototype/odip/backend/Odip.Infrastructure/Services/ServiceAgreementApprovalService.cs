@@ -6,8 +6,10 @@ using Odip.Application.DTOs;
 using Odip.Domain.Billing.Pricing;
 using Odip.Domain.Billing.Services;
 using Odip.Domain.Entities;
+using Odip.Domain.Enums;
 using Odip.Domain.Rostering;
 using Odip.Domain.Rostering.Services;
+using Odip.Infrastructure.Audit;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Rostering;
 
@@ -37,6 +39,11 @@ public enum ApprovalStatus
     /// <summary>Another change to the participant's roster held its lock for too long: nothing was changed, and trying again is right.</summary>
     Busy,
 }
+
+public enum EndEarlyStatus { Ended, NotFound, Refused, BadDate, Busy }
+
+/// <summary>What End early came to: the revision as it now stands with its approval and the shifts after the new last day that stay on the roster, or the one reason it was refused.</summary>
+public sealed record EndEarlyOutcome(EndEarlyStatus Status, ServiceAgreementDraft? Draft = null, ServiceAgreementDraftApproval? Approval = null, OldShiftsRemainingDto? OldShifts = null, string? Error = null);
 
 public sealed record ApprovalOutcome(
     ApprovalStatus Status, ServiceAgreementDraft? Draft = null, ServiceAgreementDraftApproval? Approval = null, OldShiftsRemainingDto? OldShifts = null,
@@ -653,7 +660,15 @@ public sealed class ServiceAgreementApprovalService
         var earlierIds = earlier.Select(a => a.DraftId).ToList();
         var patternIds = await _db.ShiftPatterns.AsNoTracking().Where(p => p.TenantId == tenantId && p.ParticipantId == draft.ParticipantId && p.SourceDraftId != null && earlierIds.Contains(p.SourceDraftId.Value)).Select(p => p.Id).ToListAsync(ct);
         // What a coordinator can still tidy by hand: a shift nobody has started, handed in or finished, on a day that is not past. (The new revision may start in the past.)
-        var from = draft.AgreementStartDate > today ? draft.AgreementStartDate : today;
+        return await TidyShiftsAsync(patternIds, draft.AgreementStartDate > today ? draft.AgreementStartDate : today, earlier.Max(a => a.DraftVersion), ct, carried);
+    }
+
+    /// <summary>
+    /// The tidy-up approving a revision (the shifts of the revisions before it) and End early (the ended revision's own) share: the Draft and Published shifts of <paramref name="patternIds"/> dated from
+    /// <paramref name="from"/> on, split into the unfilled ones to remove and the rest to keep and list. <paramref name="fromVersion"/> is the revision they came from. Tracked.
+    /// </summary>
+    private async Task<(OldShiftsRemainingDto Remaining, List<Shift> Removable)> TidyShiftsAsync(IReadOnlyCollection<Guid> patternIds, DateOnly from, int fromVersion, CancellationToken ct, IReadOnlySet<Guid>? carried = null)
+    {
         var shifts = patternIds.Count == 0 ? new List<Shift>() : await _db.Shifts.Include(s => s.User)
             .Where(s => s.ShiftPatternId != null && patternIds.Contains(s.ShiftPatternId.Value) && s.ServiceDate >= from && (s.Status == ShiftStatus.Draft || s.Status == ShiftStatus.Published))
             .ToListAsync(ct);
@@ -665,7 +680,7 @@ public sealed class ServiceAgreementApprovalService
         return (new OldShiftsRemainingDto
         {
             Open = kept.Count(s => s.UserId is null), Assigned = kept.Count(s => s.UserId is not null), Removed = removable.Count,
-            FirstDate = shifts.Count == 0 ? null : shifts.Min(s => s.ServiceDate), FromVersion = earlier.Max(a => a.DraftVersion),
+            FirstDate = shifts.Count == 0 ? null : shifts.Min(s => s.ServiceDate), FromVersion = fromVersion,
             Shifts = kept.Take(OldShiftsRemainingDto.MaxListed).Select(s => new OldShiftDto
             {
                 Id = s.Id, ServiceDate = s.ServiceDate, StartTime = s.StartTime, EndTime = s.EndTime, EndsNextDay = s.EndsNextDay, Status = s.Status, WorkerName = s.User?.FullName,
@@ -761,6 +776,84 @@ public sealed class ServiceAgreementApprovalService
         var fresh = await _db.ServiceAgreementDrafts.AsNoTracking().Include(x => x.Lines).Include(x => x.Blocks).AsSplitQuery().FirstAsync(x => x.Id == draft.Id, ct);
         var approval = await _db.ServiceAgreementDraftApprovals.AsNoTracking().FirstAsync(a => a.DraftId == draft.Id, ct);
         return new ApprovalOutcome(status, fresh, approval, oldShifts ?? (await OldShiftsAsync(tenantId, draft, await ProviderTodayAsync(tenantId, ct), ct)).Remaining);
+    }
+
+    // ── End early ─────────────────────────────────────────────────────────────────
+
+    /// <summary>The statuses of a shift somebody has worked, is working or has handed in for review: ending the agreement before such a shift would orphan paid work (M2).</summary>
+    private static readonly ShiftStatus[] WorkedStatuses = { ShiftStatus.Completed, ShiftStatus.InProgress, ShiftStatus.PendingReview };
+
+    private static string Day(DateOnly date) => date.ToString("d MMM yyyy", CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// Ends an approved revision on <paramref name="lastDay"/> (D6): the signed end is kept in <c>OriginalAgreementEndDate</c> (first time only), the end moves up, <c>IsOngoing</c> is cleared (the save rule
+    /// would snap an Ongoing end back to the plan end), the revision's roster patterns stop at the last day, and the unfilled Draft shifts after it go while the rest are kept and listed. All in one save,
+    /// holding the same locks in the same order as Approve (the board, then the participant, then the old shifts). Refused, in this order: not approved, replaced by a newer approved revision that starts
+    /// on or before this one's end, a last day outside the agreement, a newer revision waiting, and worked shifts after the last day (M2).
+    /// The "a newer revision waiting" refusal (OPEN-2) is advisory: saving a draft does not take the roster lock (ServiceAgreementDraftService.SaveAsync), so a draft saved a moment after this check can still land.
+    /// </summary>
+    public async Task<EndEarlyOutcome> EndEarlyAsync(Guid tenantId, Guid participantId, Guid draftId, DateOnly lastDay, ApprovalCaller caller, CancellationToken ct)
+    {
+        if (await FindAsync(tenantId, participantId, draftId, ct) is null) return new EndEarlyOutcome(EndEarlyStatus.NotFound);
+        try
+        {
+            await using var board = await RosterGenerationLock.AcquireAsync(_db, tenantId, ct, _generator.LockWait, scope: "roster-board");
+            await using var held = await RosterGenerationLock.AcquireAsync(_db, participantId, ct, _generator.LockWait);
+
+            var draft = await _db.ServiceAgreementDrafts.FirstOrDefaultAsync(x => x.Id == draftId && x.TenantId == tenantId && x.ParticipantId == participantId, ct);
+            if (draft is null) return new EndEarlyOutcome(EndEarlyStatus.NotFound);
+            var approval = await _db.ServiceAgreementDraftApprovals.FirstOrDefaultAsync(a => a.DraftId == draftId, ct);
+            if (approval is null) return new EndEarlyOutcome(EndEarlyStatus.Refused, Error: "Only an approved agreement can be ended early. Delete a draft instead.");
+
+            var newer = await _db.ServiceAgreementDrafts.AsNoTracking()
+                .Where(x => x.TenantId == tenantId && x.ParticipantId == participantId && x.Version > draft.Version)
+                .Select(x => new { x.Version, x.AgreementStartDate, Approved = _db.ServiceAgreementDraftApprovals.Any(a => a.DraftId == x.Id) })
+                .OrderBy(x => x.Version).ToListAsync(ct);
+            if (newer.FirstOrDefault(x => x.Approved && x.AgreementStartDate <= draft.AgreementEndDate) is { } takesOver)
+                return new EndEarlyOutcome(EndEarlyStatus.Refused, Error: $"Version {takesOver.Version} takes over on {Day(takesOver.AgreementStartDate)}. End that version instead.");
+            if (lastDay < draft.AgreementStartDate || lastDay >= draft.AgreementEndDate)
+                return new EndEarlyOutcome(EndEarlyStatus.BadDate, Error: $"Choose a last day from {Day(draft.AgreementStartDate)} to {Day(draft.AgreementEndDate.AddDays(-1))}.");
+            if (newer.FirstOrDefault(x => !x.Approved) is { } waiting)
+                return new EndEarlyOutcome(EndEarlyStatus.Refused, Error: $"Version {waiting.Version} is waiting. Approve or delete it first.");
+
+            var patterns = await _db.ShiftPatterns.Where(p => p.TenantId == tenantId && p.ParticipantId == participantId && p.SourceDraftId == draftId).ToListAsync(ct);
+            var patternIds = patterns.Select(p => p.Id).ToArray();
+            var afterEnd = lastDay.AddDays(1);
+            await LockOldShiftsAsync(patternIds, afterEnd, ct);
+            var after = _db.Shifts.AsNoTracking().Where(s => s.ShiftPatternId != null && patternIds.Contains(s.ShiftPatternId.Value) && s.ServiceDate >= afterEnd);
+            var afterIds = await after.Select(s => s.Id).ToListAsync(ct);
+            // M2: worked shifts, or any shift with a claim line in any claim status (a Cancelled claim still holds its line), stop the end.
+            var worked = await after.AnyAsync(s => WorkedStatuses.Contains(s.Status), ct)
+                || await _db.ClaimLineItems.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(l => l.ShiftId != null && afterIds.Contains(l.ShiftId.Value), ct);
+            if (worked)
+                return new EndEarlyOutcome(EndEarlyStatus.Refused, Error: $"Shifts after {Day(lastDay)} have been worked or claimed, so this agreement can't end before them.");
+
+            var today = await ProviderTodayAsync(tenantId, ct);
+            var (remaining, removable) = await TidyShiftsAsync(patternIds, afterEnd > today ? afterEnd : today, draft.Version, ct);
+
+            draft.OriginalAgreementEndDate ??= draft.AgreementEndDate;
+            draft.AgreementEndDate = lastDay;
+            draft.IsOngoing = false;
+            foreach (var pattern in patterns)
+                if (pattern.EffectiveTo is null || pattern.EffectiveTo > lastDay) pattern.EffectiveTo = lastDay;
+            _db.Shifts.RemoveRange(removable);
+            _db.AuditLogs.Add(AgreementAudit.Row(draftId, AuditAction.Updated, $"Ended early: last day {Day(lastDay)}", caller, _clock.GetUtcNow()));
+            await _db.SaveChangesAsync(ct);
+            await board.CommitAsync(ct);
+
+            var fresh = await _db.ServiceAgreementDrafts.AsNoTracking().Include(x => x.Lines).Include(x => x.Blocks).AsSplitQuery().FirstAsync(x => x.Id == draftId, ct);
+            return new EndEarlyOutcome(EndEarlyStatus.Ended, fresh, approval, remaining);
+        }
+        catch (RosterBusyException busy)
+        {
+            return new EndEarlyOutcome(EndEarlyStatus.Busy, Error: busy.Message);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // A shift this end meant to remove was removed or changed by someone else first; nothing of ours was saved.
+            _db.ChangeTracker.Clear();
+            return new EndEarlyOutcome(EndEarlyStatus.Busy, Error: RosterBusyException.Words);
+        }
     }
 
     // ── Small rules ───────────────────────────────────────────────────────────────

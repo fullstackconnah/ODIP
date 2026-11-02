@@ -85,4 +85,33 @@ public class AgreementEndingTests
         Assert.Empty(await AgreementEnding.FindAsync(f.Db, Array.Empty<Guid>(), Today, CancellationToken.None));
         Assert.Equal(notAsked, Assert.Single(await FindAsync(f, notAsked)).ParticipantId);
     }
+
+    /// <summary>M1 (D15): an agreement ended early was ended on purpose, so it is neither ending nor ended. It is the NEWEST approved revision that decides: v2 has ended, and v3, which followed it, was ended early.</summary>
+    [Fact]
+    public async Task An_agreement_ended_early_raises_no_alert_and_the_older_ended_revision_before_it_does_not_either()
+    {
+        await using var f = await SetUpAsync();
+        var participant = await ParticipantAsync(f, "EndedEarly");
+        await RevisionAsync(f, participant, 1, new DateOnly(2026, 9, 30), approved: true);
+        await RevisionAsync(f, participant, 2, new DateOnly(2026, 10, 5), approved: true, start: new DateOnly(2026, 10, 1));
+        var v3 = await RevisionAsync(f, participant, 3, new DateOnly(2026, 10, 8), approved: true, start: new DateOnly(2026, 10, 6));
+        Assert.Single(await FindAsync(f, participant));                       // before it is ended early, v3 has ended and is flagged
+        v3.OriginalAgreementEndDate = new DateOnly(2026, 11, 30);
+        await f.Db.SaveChangesAsync();
+
+        Assert.Empty(await FindAsync(f, participant));
+    }
+
+    [Fact]
+    public async Task An_agreement_that_was_not_ended_early_is_still_listed_when_an_older_revision_was()
+    {
+        await using var f = await SetUpAsync();
+        var participant = await ParticipantAsync(f, "OlderEndedEarly");
+        var v1 = await RevisionAsync(f, participant, 1, new DateOnly(2026, 9, 30), approved: true);
+        v1.OriginalAgreementEndDate = new DateOnly(2026, 11, 30);
+        await RevisionAsync(f, participant, 2, new DateOnly(2026, 10, 20), approved: true, start: new DateOnly(2026, 10, 1));
+        await f.Db.SaveChangesAsync();
+
+        Assert.Equal(2, Assert.Single(await FindAsync(f, participant)).Version);
+    }
 }

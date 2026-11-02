@@ -430,4 +430,25 @@ public class BudgetSeriesServiceTests
         using var fresh = new Arrangement(a.Kit, a.Person);
         Assert.Equal(0, (await fresh.GetAsync())!.Expected.UnpricedLineCount);
     }
+
+    /// <summary>S4: End early shortens an approved revision's window. The committed budget quotes the shortened window (the quote is cached, so its key holds the end date), and the series says where the agreement ends.</summary>
+    [Fact]
+    public async Task AnAgreementEndedEarlyIsQuotedAgainForTheShortenedWindow_NotServedFromTheCache()
+    {
+        using var a = Arrange();
+        YearPlan(a);
+        var v1 = Revision(a, 1, PlanStart, D(2027, 3, 31));
+        var quotedTo = new List<DateOnly>();
+        a.DuringQuote = (_, to) => { quotedTo.Add(to); return Task.CompletedTask; };
+        var before = (await a.GetAsync())!;
+
+        v1.OriginalAgreementEndDate = v1.AgreementEndDate;
+        v1.AgreementEndDate = D(2026, 10, 31);
+        a.Kit.Db.SaveChanges();
+        var after = (await a.GetAsync())!;
+
+        Assert.Equal(new[] { D(2027, 3, 31), D(2026, 10, 31) }, quotedTo);
+        Assert.Equal(D(2026, 10, 31), after.Expected.EndsOn);
+        Assert.True(after.Scopes[0].Summary.ExpectedEnd < before.Scopes[0].Summary.ExpectedEnd);
+    }
 }
