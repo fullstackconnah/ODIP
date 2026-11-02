@@ -248,6 +248,13 @@ function desktop() {
   vi.stubGlobal('matchMedia', (query: string) => ({ matches: query === '(min-width: 64rem)', media: query, addEventListener: () => {}, removeEventListener: () => {} }))
 }
 
+/** Submit shift, and Finish anyway when the km-and-notes prompt (W11) asks: for tests that are about something else. */
+function submitAnyway() {
+  fireEvent.click(within(screen.getByRole('toolbar', { name: 'Shift actions' })).getByRole('button', { name: 'Submit shift' }))
+  const anyway = screen.queryByRole('button', { name: 'Finish anyway' })
+  if (anyway) fireEvent.click(anyway)
+}
+
 /** A glance cell: the label's line, then the cell that holds it (FactBar glance markup). */
 const glanceCell = (label: string) => screen.getByText(label).parentElement!.parentElement!
 
@@ -559,7 +566,7 @@ describe('PortalShiftDetailPage: the five-step finish (SHAPE §4)', () => {
     show(inProgress())
     toSubmit()
     expect(heading('Check and submit')).toBeInTheDocument()
-    forward('Submit shift')
+    submitAnyway()
     await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledWith({
       id: 'shift-1',
       data: {
@@ -582,7 +589,7 @@ describe('PortalShiftDetailPage: the five-step finish (SHAPE §4)', () => {
     expect(box).toHaveAttribute('maxlength', '2000')
     fireEvent.change(box, { target: { value: '  All settled.  ' } })
     forward('Next')
-    forward('Submit shift')
+    submitAnyway()
     await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledWith({
       id: 'shift-1',
       data: {
@@ -754,7 +761,7 @@ describe('PortalShiftDetailPage: the five-step finish (SHAPE §4)', () => {
     })
     show(inProgress())
     toSubmit()
-    forward('Submit shift')
+    submitAnyway()
     await waitFor(() => expect(screen.getByText("You can't submit yet")).toBeInTheDocument())
     expect(screen.getByText('Paracetamol at 12:00 needs an outcome before you finish.')).toBeInTheDocument()
     await waitFor(() => expect(document.getElementById('finish-refusals')).toHaveFocus())   // brought on screen below a long summary
@@ -773,7 +780,7 @@ describe('PortalShiftDetailPage: the five-step finish (SHAPE §4)', () => {
     forward('Skip')
     fireEvent.change(screen.getByLabelText('Your handover note'), { target: { value: 'Keep me' } })
     forward('Next')
-    forward('Submit shift')
+    submitAnyway()
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent("Couldn't submit. Check your connection. Your entries are kept: try again."))
     expect(bar().getByRole('button', { name: 'Try again' })).toBeInTheDocument()
     expect(JSON.parse(sessionStorage.getItem(key)!)).toMatchObject({ step: 'submit', handoverText: 'Keep me' })
@@ -820,7 +827,7 @@ describe('PortalShiftDetailPage: the five-step finish (SHAPE §4)', () => {
     finishMutateAsync.mockReturnValueOnce(new Promise(() => {}))
     show(inProgress())
     toSubmit()
-    forward('Submit shift')
+    submitAnyway()
     await waitFor(() => expect(bar().getByRole('button', { name: 'Submitting…' })).toBeDisabled())
     fireEvent.click(bar().getByRole('button', { name: 'Submitting…' }))
     expect(finishMutateAsync).toHaveBeenCalledTimes(1)
@@ -829,7 +836,7 @@ describe('PortalShiftDetailPage: the five-step finish (SHAPE §4)', () => {
   it('clears the draft and leaves the flow on success', async () => {
     show(inProgress())
     toSubmit()
-    forward('Submit shift')
+    submitAnyway()
     await waitFor(() => expect(sessionStorage.getItem(key)).toBeNull())
     expect(screen.queryByRole('navigation', { name: 'Finish shift steps' })).not.toBeInTheDocument()
   })
@@ -1068,11 +1075,11 @@ describe('PortalShiftDetailPage: your times, kilometres and drift (Review Focus 
     fireEvent.click(screen.getByRole('button', { name: 'Change your start time' }))
     change('Your start time', '2026-08-17T08:55')
     moveFinish('2026-08-17T16:50', '  Arrived early, left at ten to five.  ')
-    change('Kilometres driven with Mia (optional)', '12.5')
+    change('Kilometres driven with Mia', '12.5')
     toStepFive()
     expect(screen.getByText(/^8:55\s?am \(changed from 9:05\s?am\)$/i)).toBeInTheDocument()
     expect(screen.getByText('12.5 km')).toBeInTheDocument()
-    forward('Submit shift')
+    submitAnyway()
     await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledWith({
       id: 'shift-1',
       data: {
@@ -1087,9 +1094,9 @@ describe('PortalShiftDetailPage: your times, kilometres and drift (Review Focus 
     open()
     fireEvent.click(screen.getByRole('button', { name: 'Change your start time' }))
     fireEvent.click(screen.getByRole('button', { name: 'Change your finish time' }))
-    change('Kilometres driven with Mia (optional)', '0')
+    change('Kilometres driven with Mia', '0')
     toStepFive()
-    forward('Submit shift')
+    submitAnyway()
     await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledWith({
       id: 'shift-1',
       data: {
@@ -1101,19 +1108,19 @@ describe('PortalShiftDetailPage: your times, kilometres and drift (Review Focus 
 
   it('clears a refusal once the worker edits, so a fixed value is never shown as still wrong', () => {
     open()
-    change('Kilometres driven with Mia (optional)', '12,5')
+    change('Kilometres driven with Mia', '12,5')
     forward('Confirm times')
     expect(screen.getByRole('alert')).toHaveTextContent('Enter kilometres from 0 to 2,000.')
-    change('Kilometres driven with Mia (optional)', '12.5')
+    change('Kilometres driven with Mia', '12.5')
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it("refuses kilometres it can't read, on step 1 with focus on the field", async () => {
     open()
-    change('Kilometres driven with Mia (optional)', '12,5')
+    change('Kilometres driven with Mia', '12,5')
     forward('Confirm times')
     expect(screen.getByRole('alert')).toHaveTextContent('Enter kilometres from 0 to 2,000.')
-    await waitFor(() => expect(screen.getByLabelText('Kilometres driven with Mia (optional)')).toHaveFocus())
+    await waitFor(() => expect(screen.getByLabelText('Kilometres driven with Mia')).toHaveFocus())
   })
 
   describe('provider travel (travel PR-B)', () => {
@@ -1128,16 +1135,16 @@ describe('PortalShiftDetailPage: your times, kilometres and drift (Review Focus 
       expect(screen.getByText(/To your base or home\. If you.re going straight to another shift, leave this empty and add the trip on that shift\./)).toBeInTheDocument()
       expect(preLeg().getByLabelText('Minutes')).toHaveValue('')
       expect(postLeg().getByLabelText('Kilometres')).toHaveAttribute('inputmode', 'decimal')
-      expect(screen.getByText('Only driving with Mia during the shift.')).toBeInTheDocument()
+      expect(screen.getByText("Only driving with Mia during the shift. Enter 0 if you didn't drive.")).toBeInTheDocument()
     })
 
     it('asks for nothing when the shift detail has no travelAsked (cached before the deploy, carry N5)', async () => {
       open()
       expect(screen.queryByRole('group', { name: /trip/i })).not.toBeInTheDocument()
-      expect(screen.getByText('Only driving with Mia, not your trip to or from the shift.')).toBeInTheDocument()
+      expect(screen.getByText("Only driving with Mia, not your trip to or from the shift. Enter 0 if you didn't drive.")).toBeInTheDocument()
       toStepFive()
       expect(screen.queryByText('Trip after the shift')).not.toBeInTheDocument()
-      forward('Submit shift')
+      submitAnyway()
       await waitFor(() => expect(finishMutateAsync).toHaveBeenCalled())
       expect(finishMutateAsync.mock.calls[0][0].data).not.toHaveProperty('preShiftTravelMinutes')
     })
@@ -1151,7 +1158,7 @@ describe('PortalShiftDetailPage: your times, kilometres and drift (Review Focus 
       toStepFive()
       expect(screen.getByText('25 min, 12.3 km')).toBeInTheDocument()
       expect(screen.getByText('20 min, 10 km')).toBeInTheDocument()
-      forward('Submit shift')
+      submitAnyway()
       await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledWith({
         id: 'shift-1',
         data: expect.objectContaining({ preShiftTravelMinutes: 25, preShiftTravelKilometres: 12.3, postShiftTravelMinutes: 20, postShiftTravelKilometres: 10 }),
@@ -1162,7 +1169,7 @@ describe('PortalShiftDetailPage: your times, kilometres and drift (Review Focus 
       open({ travelAsked: true })
       toStepFive()
       expect(screen.getAllByText('None').length).toBeGreaterThanOrEqual(2)
-      forward('Submit shift')
+      submitAnyway()
       await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledWith({
         id: 'shift-1',
         data: expect.objectContaining({ preShiftTravelMinutes: null, preShiftTravelKilometres: null, postShiftTravelMinutes: null, postShiftTravelKilometres: null }),
@@ -1212,7 +1219,7 @@ describe('PortalShiftDetailPage: your times, kilometres and drift (Review Focus 
     expect(screen.getByText('Your finish time is now more than 15 minutes ago.')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Use the time I submit' }))
     expect(screen.queryByText('Your finish time is now more than 15 minutes ago.')).not.toBeInTheDocument()
-    forward('Submit shift')
+    submitAnyway()
     await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledWith({
       id: 'shift-1',
       data: expect.objectContaining({ actualEnd: null, timeAdjustmentReason: null }),
@@ -1225,7 +1232,7 @@ describe('PortalShiftDetailPage: your times, kilometres and drift (Review Focus 
     toStepFive()
     expect(screen.queryByText('Your finish time is now more than 15 minutes ago.')).not.toBeInTheDocument()
     vi.setSystemTime(new Date('2026-08-17T07:06:30Z'))
-    forward('Submit shift')
+    submitAnyway()
     expect(heading('Your times')).toBeInTheDocument()
     expect(screen.getByRole('alert')).toHaveTextContent('Choose a time no more than 15 minutes before now.')
     expect(finishMutateAsync).not.toHaveBeenCalled()
@@ -1238,7 +1245,7 @@ describe('PortalShiftDetailPage: your times, kilometres and drift (Review Focus 
     open()
     moveFinish('2026-08-17T16:50')
     toStepFive()
-    forward('Submit shift')
+    submitAnyway()
     await waitFor(() => expect(screen.getByText('You can change your times by up to 15 minutes.')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: 'Go to Times' }))
     expect(heading('Your times')).toBeInTheDocument()
@@ -1257,7 +1264,7 @@ describe('PortalShiftDetailPage: submitted (SHAPE §4)', () => {
     forward('Next')
     forward('Skip')
     forward('Nothing to note or hand over')
-    forward('Submit shift')
+    submitAnyway()
 
     await waitFor(() => expect(screen.getByText('Shift submitted')).toHaveFocus())
     expect(screen.getByText('Shift submitted').closest('[role="status"],[role="alert"]')).toBeNull()   // the callout itself is quiet
@@ -1386,5 +1393,116 @@ describe('PortalShiftDetailPage: offline (SHAPE 3, 5)', () => {
     localStorage.setItem('odip_offline:u1:already:shift-1', JSON.stringify({ savedAt: Date.now(), data: true }))
     show(makeDetail({ status: 'PendingReview', completion: makeCompletion() }))
     expect(screen.getByText(/already submitted before this phone sent its Finish, so the details entered here \(times, travel, kilometres, handover\) weren.t added/)).toBeInTheDocument()
+  })
+})
+
+describe('PortalShiftDetailPage: km and notes prompt at finish (W11)', () => {
+  const inProgress = () => makeDetail({ status: 'InProgress', completion: makeCompletion({ actualStart: '2026-08-16T23:05:40Z' }) })
+  const bar = () => within(screen.getByRole('toolbar', { name: 'Shift actions' }))
+  const forward = (name: string | RegExp) => fireEvent.click(bar().getByRole('button', { name }))
+  const km = (value: string) => fireEvent.change(screen.getByLabelText('Kilometres driven with Mia'), { target: { value } })
+  const toSubmit = () => { forward('Confirm times'); forward('Next'); forward('Skip'); forward(/^(Nothing to note or hand over|Nothing to hand over|Nothing to note|Next)$/) }
+  /** End shift, optionally enter km, walk to step 5 and tap Submit shift. */
+  const submit = (kilometres?: string) => {
+    show(inProgress())
+    fireEvent.click(screen.getByRole('button', { name: 'End shift' }))
+    if (kilometres !== undefined) km(kilometres)
+    toSubmit()
+    forward('Submit shift')
+  }
+  const dialog = () => within(screen.getByRole('alertdialog'))
+  const noDialog = () => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-08-17T07:00:30Z')) })
+  afterEach(() => vi.useRealTimers())
+
+  it('asks when neither km nor notes were given, names both, and sends nothing yet', () => {
+    submit()
+    expect(screen.getByRole('alertdialog', { name: 'No kilometres or notes added' })).toBeInTheDocument()
+    // the close X has no text
+    expect(dialog().getAllByRole('button').map(b => b.textContent).filter(Boolean)).toEqual(['Finish anyway', 'Add them'])
+    expect(finishMutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('names only the kilometres when notes exist', () => {
+    mockUseShiftNotes.mockReturnValue({ data: [noteWith()] })
+    submit()
+    expect(screen.getByRole('alertdialog', { name: 'No kilometres added' })).toBeInTheDocument()
+    // the close X has no text
+    expect(dialog().getAllByRole('button').map(b => b.textContent).filter(Boolean)).toEqual(['Finish anyway', 'Add kilometres'])
+  })
+
+  it('names only the notes when km was given', () => {
+    submit('12.5')
+    expect(screen.getByRole('alertdialog', { name: 'No notes added' })).toBeInTheDocument()
+    // the close X has no text
+    expect(dialog().getAllByRole('button').map(b => b.textContent).filter(Boolean)).toEqual(['Finish anyway', 'Add a note'])
+  })
+
+  it("counts '0' km as answered: with a note, Submit goes straight through", async () => {
+    mockUseShiftNotes.mockReturnValue({ data: [noteWith()] })
+    submit('0')
+    noDialog()
+    await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ kilometres: 0 }) })))
+  })
+
+  it('does not ask when both are given', async () => {
+    mockUseShiftNotes.mockReturnValue({ data: [noteWith()] })
+    submit('12.5')
+    noDialog()
+    await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledTimes(1))
+  })
+
+  it('Finish anyway sends the same request as without the prompt', async () => {
+    grantGeolocation()
+    submit()
+    fireEvent.click(dialog().getByRole('button', { name: 'Finish anyway' }))
+    noDialog()
+    await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledWith({
+      id: 'shift-1',
+      data: {
+        latitude: -27.5, longitude: 153.02, geolocationDeclined: false,
+        actualStart: null, actualEnd: null, timeAdjustmentReason: null, kilometres: null, anythingToReport: null,
+        handoverText: null, nothingToHandOver: true, nothingToNote: true,
+      },
+    }))
+  })
+
+  it('Add kilometres goes back to step 1 with the field focused', async () => {
+    mockUseShiftNotes.mockReturnValue({ data: [noteWith()] })
+    submit()
+    fireEvent.click(dialog().getByRole('button', { name: 'Add kilometres' }))
+    noDialog()
+    expect(screen.getByRole('heading', { level: 2, name: 'Your times' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByLabelText('Kilometres driven with Mia')).toHaveFocus())
+    expect(finishMutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('Add a note goes to step 4 with Add or edit notes focused', async () => {
+    submit('3')
+    fireEvent.click(dialog().getByRole('button', { name: 'Add a note' }))
+    noDialog()
+    expect(screen.getByRole('heading', { level: 2, name: 'Note & handover' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add or edit notes' })).toHaveFocus())
+  })
+
+  it('does not ask twice once the worker chose Finish anyway', async () => {
+    finishMutateAsync.mockRejectedValueOnce(new Error('network'))
+    submit()
+    fireEvent.click(dialog().getByRole('button', { name: 'Finish anyway' }))
+    await waitFor(() => expect(bar().getByRole('button', { name: 'Try again' })).toBeInTheDocument())
+    forward('Try again')
+    noDialog()
+    await waitFor(() => expect(finishMutateAsync).toHaveBeenCalledTimes(2))
+  })
+
+  it('Escape closes the prompt without finishing, and the next Submit asks again', () => {
+    submit()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    noDialog()
+    expect(finishMutateAsync).not.toHaveBeenCalled()
+    forward('Submit shift')
+    expect(screen.getByRole('alertdialog', { name: 'No kilometres or notes added' })).toBeInTheDocument()
+    expect(finishMutateAsync).not.toHaveBeenCalled()
   })
 })

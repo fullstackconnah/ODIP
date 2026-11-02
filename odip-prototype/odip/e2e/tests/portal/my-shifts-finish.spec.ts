@@ -77,6 +77,8 @@ test('a support worker finishes a shift through all five steps on a phone, and t
   await expect(page.getByText('12.5 km')).toBeVisible()
   await shot('e2e-03-check')
   await bar.getByRole('button', { name: 'Submit shift' }).tap()
+  // km was given, notes were not: the prompt asks once, and Finish anyway sends the same request.
+  await page.getByRole('button', { name: 'Finish anyway' }).tap()
   await expect(page.getByText('Shift submitted', { exact: true })).toBeFocused()
   await shot('e2e-04-submitted')
 
