@@ -274,6 +274,20 @@ describe('ServiceAgreementDraftPage: the words and the saved agreement', () => {
     expect(screen.getAllByRole('button', { name: /Add a shift on/ })).toHaveLength(7)
   })
 
+  it('?revise=1 opens the week step on a running approved agreement, as Start a new revision does', async () => {
+    drafts.mockReturnValue({ data: [draft({ approval })], isLoading: false, isError: false, refetch: refetchDrafts })
+    renderPage('/participants/p-1/agreement-draft?revise=1')
+    expect(await screen.findAllByRole('button', { name: /Add a shift on/ })).toHaveLength(7)
+    expect(screen.queryByText('Approved for rostering')).not.toBeInTheDocument()
+  })
+
+  it('?revise=1 is ignored on an agreement that has ended: it stays locked, with Start a new revision waiting', () => {
+    drafts.mockReturnValue({ data: [draft({ approval, agreementEndDate: '2026-10-05' })], isLoading: false, isError: false, refetch: refetchDrafts })
+    renderPage('/participants/p-1/agreement-draft?revise=1')
+    expect(screen.getByText('Approved for rostering')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Add a shift on/ })).not.toBeInTheDocument()
+  })
+
   it('names a save by somebody else, keeps what is on screen, and offers theirs', async () => {
     createMutate.mockImplementation((_request, options) => options.onError({ response: { status: 409, data: { code: 'draft-version-conflict', data: { currentVersion: 3 } } } }))
     const user = userEvent.setup()

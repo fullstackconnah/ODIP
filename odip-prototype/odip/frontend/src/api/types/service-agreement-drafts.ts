@@ -18,6 +18,8 @@ export interface ServiceAgreementDraftDto {
   planEndDate: string
   agreementStartDate: string
   agreementEndDate: string
+  /** Set once the agreement was ended early: the end it was signed with (`agreementEndDate` is then the last day of support). */
+  originalAgreementEndDate?: string | null
   /** The end follows the NDIS plan end: the stored end is the plan end, shown as Ongoing. */
   isOngoing?: boolean
   representative?: string

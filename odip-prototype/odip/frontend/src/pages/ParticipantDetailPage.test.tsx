@@ -15,8 +15,11 @@ const {
   mockUseDownloadIntakeFormPdf, mockUseDownloadParticipantProfilePdf, mockUseDownloadClientOverviewPdf, mockUseDownloadWeeklySchedulePdf,
   mockPatchMutateAsync, mockUseStaff,
   mockUseGenerateCaregiverLink, mockUseRevokeCaregiverLink, mockUseCaregiverSubmissions,
-  mockDeleteMutate, mockNotes, mockRisks, realAdl, mockPersonWeek,
+  mockDeleteMutate, mockNotes, mockRisks, realAdl, mockPersonWeek, realAgreements, mockDrafts,
 } = vi.hoisted(() => ({
+  // The role test mounts the real Agreements section over this hook, to prove a role without the tab never asks for the list.
+  realAgreements: { on: false },
+  mockDrafts: vi.fn(() => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() })),
   mockPersonWeek: vi.fn(() => ({ data: undefined, isLoading: true, isError: false, isPlaceholderData: false, refetch: vi.fn() })),
   realAdl: { on: false },
   mockUseParticipant: vi.fn(),
@@ -55,6 +58,10 @@ const {
 // PortalShiftDetailPage.test.tsx's ShiftNotesSection stub" approach used there).
 vi.mock('@/api/hooks', () => ({
   useParticipant: mockUseParticipant,
+  useServiceAgreementDrafts: mockDrafts,
+  useDeleteServiceAgreementDraft: () => ({ mutate: vi.fn(), isPending: false }),
+  useEndAgreementEarly: () => ({ mutate: vi.fn(), isPending: false }),
+  useDownloadServiceAgreementDraftPdf: () => ({ mutate: vi.fn(), isPending: false }),
   useSupportProfile: mockUseSupportProfile,
   useUpdateSupportProfile: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useParticipantBookings: mockUseParticipantBookings,
@@ -111,6 +118,7 @@ vi.mock('./participant-detail', async () => {
     // have their own test file" approach as every other nested-CRUD section above.
     // Shift-completion design spec §4 — Claims tab has its own dedicated test file
     // (ClaimsTab.test.tsx); stubbed here for the same reason as every nested-CRUD tab above.
+    AgreementsSection: (props: { participantId: string }) => realAgreements.on ? <actual.AgreementsSection {...props} /> : <div data-testid="agreements-section" data-participant={props.participantId} />,
     ClaimsTab: ({ otherFunded, funder }: { otherFunded?: boolean; funder?: string | null }) => <div data-testid="claims-tab" data-other-funded={String(!!otherFunded)} data-funder={funder ?? ''} />,
     // Connection map item 12 — Rostering tab has its own dedicated test file
     // (RosteringTab.test.tsx); stubbed here for the same reason as every nested-CRUD tab above.
@@ -948,7 +956,7 @@ describe('ParticipantDetailPage — Week section', () => {
   })
 })
 
-// VISUAL-1 V2 — the header carried seven controls at 1440 (three PDFs, Agreement draft, the caregiver link and Revoke, Edit). The
+// VISUAL-1 V2 — the header carried seven controls at 1440 (three PDFs, Agreements, the caregiver link and Revoke, Edit). The
 // Documents menu (the shared Dropdown "menu" variant, secondary look) holds all but Edit at every width, and Edit is the one primary.
 describe('ParticipantDetailPage — Documents menu', () => {
   const ERROR_COPY = /couldn't download the file/i
@@ -972,7 +980,7 @@ describe('ParticipantDetailPage — Documents menu', () => {
   }
 
   beforeEach(() => {
-    // Admin: canWrite (Edit + Agreement draft) and canWriteParticipantDetails (caregiver control).
+    // Admin: canWrite (Edit + Agreements) and canWriteParticipantDetails (caregiver control).
     setUserRole('Admin')
     idleDownloads()
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
@@ -982,7 +990,7 @@ describe('ParticipantDetailPage — Documents menu', () => {
     idleDownloads()
   })
 
-  it('holds the PDFs, Agreement draft and the caregiver link in one secondary-look menu, beside a secondary More actions menu (no filled primary)', () => {
+  it('holds the PDFs, Agreements and the caregiver link in one secondary-look menu, beside a secondary More actions menu (no filled primary)', () => {
     renderAt('participant-1')
 
     expect(screen.getByRole('button', { name: 'Documents' })).toHaveClass('bg-[var(--color-card)]', 'border')
@@ -996,28 +1004,28 @@ describe('ParticipantDetailPage — Documents menu', () => {
   })
 
   // Round 1b (review F18, decided): an agreement draft carries money, which is never visible to ReadOnly or SupportWorker (the API refuses them its GETs). ReadOnly satisfies canWrite, so it was offered the page.
-  it.each(['ReadOnly', 'SupportWorker'])('does not offer Agreement draft to %s, and still offers the PDFs', async role => {
+  it.each(['ReadOnly', 'SupportWorker'])('does not offer Agreements to %s, and still offers the PDFs', async role => {
     setUserRole(role)
     renderAt('participant-1')
     await openDocuments()
     expect(screen.getByRole('option', { name: 'Intake Form PDF' })).toBeInTheDocument()
-    expect(screen.queryByRole('option', { name: 'Agreement draft' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Agreements' })).not.toBeInTheDocument()
   })
 
-  it.each(['SuperAdmin', 'Admin', 'Coordinator'])('offers Agreement draft to %s', async role => {
+  it.each(['SuperAdmin', 'Admin', 'Coordinator'])('offers Agreements to %s', async role => {
     setUserRole(role)
     renderAt('participant-1')
     await openDocuments()
-    expect(screen.getByRole('option', { name: 'Agreement draft' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Agreements' })).toBeInTheDocument()
   })
 
-  it('lists the three PDFs, Agreement draft and the caregiver link when the menu opens', async () => {
+  it('lists the three PDFs, Agreements and the caregiver link when the menu opens', async () => {
     renderAt('participant-1')
 
     await openDocuments()
 
     expect(screen.getAllByRole('option').map(o => o.textContent)).toEqual([
-      'Intake Form PDF', 'Participant Profile PDF', 'Client Overview PDF', 'Weekly Schedule PDF', 'Agreement draft', 'Generate caregiver link',
+      'Intake Form PDF', 'Participant Profile PDF', 'Client Overview PDF', 'Weekly Schedule PDF', 'Agreements', 'Generate caregiver link',
     ])
   })
 
@@ -1037,7 +1045,7 @@ describe('ParticipantDetailPage — Documents menu', () => {
     }
   })
 
-  it('omits Agreement draft (and Edit) for a role without canWrite, like the wide layout does', async () => {
+  it('omits Agreements (and Edit) for a role without canWrite, like the wide layout does', async () => {
     setUserRole('SupportWorker')
     const user = userEvent.setup()
     renderAt('participant-1')
@@ -1069,14 +1077,14 @@ describe('ParticipantDetailPage — Documents menu', () => {
     expect(screen.queryByRole('option')).not.toBeInTheDocument()
   })
 
-  it('choosing Agreement draft navigates to the agreement-draft page', async () => {
+  it('choosing Agreements opens the Agreements tab', async () => {
     const user = userEvent.setup()
     renderWithAgreementRoute()
 
     await user.click(screen.getByRole('button', { name: 'Documents' }))
-    await user.click(screen.getByRole('option', { name: 'Agreement draft' }))
+    await user.click(screen.getByRole('option', { name: 'Agreements' }))
 
-    expect(screen.getByTestId('agreement-draft-route')).toBeInTheDocument()
+    expect(screen.getByTestId('agreements-section')).toBeInTheDocument()
   })
 
   it('shows "Preparing…" on the trigger and disables only the option whose download is pending', async () => {
@@ -1481,6 +1489,34 @@ describe('ParticipantDetailPage — Funding & claims tab', () => {
   })
 })
 
+describe('ParticipantDetailPage — Agreements tab', () => {
+  const selectedTab = () => within(screen.getByRole('tablist', { name: 'Participant sections' })).getAllByRole('tab').filter(tab => tab.getAttribute('aria-selected') === 'true')
+
+  it.each(['Coordinator', 'Admin', 'SuperAdmin'])('shows Agreements to a %s, and opens it from ?tab=agreements with the participant', role => {
+    setUserRole(role)
+    mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+    renderAtTab('participant-1', 'agreements')
+
+    expect(within(screen.getByRole('tablist', { name: 'Participant sections' })).getByRole('tab', { name: 'Agreements' })).toBeInTheDocument()
+    expect(selectedTab().map(t => t.textContent)).toEqual(['Agreements'])
+    expect(screen.getByTestId('agreements-section')).toHaveAttribute('data-participant', 'participant-1')
+  })
+
+  it.each(['ReadOnly', 'SupportWorker'])('has no Agreements tab for %s, and reads ?tab=agreements as Overview with no section mounted', role => {
+    realAgreements.on = true
+    mockDrafts.mockClear()
+    try {
+      setUserRole(role)
+      mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
+      renderAtTab('participant-1', 'agreements')
+
+      expect(screen.queryByRole('tab', { name: /^Agreements/ })).not.toBeInTheDocument()
+      expect(mockDrafts).not.toHaveBeenCalled()
+      expect(selectedTab().map(t => t.textContent)).toEqual(['Overview'])
+    } finally { realAgreements.on = false }
+  })
+})
+
 // L5-07: "Copy" on the caregiver link called navigator.clipboard.writeText straight away. navigator.clipboard is undefined on a non-secure origin
 // (the plain-http LAN address this app is served from), so the click threw an uncaught TypeError and copied nothing.
 describe('ParticipantDetailPage — copying the caregiver link on a page that is not a secure context', () => {
@@ -1548,12 +1584,12 @@ describe('ParticipantDetailPage — a refused caregiver link Generate', () => {
 // VD1 design review: a one-row scrolling strip hid Funding, Rostering and History at 1440 with no cue on macOS or iPad. From md up
 // the strip wraps, so every tab stays on screen; below md it is the default one scrolling row.
 describe('ParticipantDetailPage — every tab visible from md up', () => {
-  it('renders all seven tabs for an Admin in one row that scrolls sideways, never wrapping to a second row', () => {
+  it('renders all eight tabs for an Admin in one row that scrolls sideways, never wrapping to a second row', () => {
     setUserRole('Admin')
     mockUseParticipant.mockReturnValue({ data: makeParticipant(), isLoading: false })
     renderAt('participant-1')
     expect(screen.getAllByRole('tab').map(t => t.textContent?.replace(/d+$/, '').trim())).toEqual([
-      'Overview', 'About', 'Health & safety', 'Daily support', 'People & roster', 'Funding & claims', 'Notes & records',
+      'Overview', 'About', 'Health & safety', 'Daily support', 'People & roster', 'Funding & claims', 'Agreements', 'Notes & records',
     ])
     expect(screen.getByRole('tablist', { name: 'Participant sections' })).not.toHaveClass('md:flex-wrap')
   })
@@ -1735,12 +1771,12 @@ describe('ParticipantDetailPage — seven tabs (slice 1)', () => {
     expect(probe().path).not.toContain('tab=')
   })
 
-  it('T9: the strip has seven icon-free tabs in order, a count noun and badge only when the count is above zero, six for a Support Worker', () => {
+  it('T9: the strip has eight icon-free tabs in order, a count noun and badge only when the count is above zero, six for a Support Worker', () => {
     setUserRole('SuperAdmin')
     mockNotes.mockReturnValue({ data: [{ isArchived: false }, { isArchived: false }, { isArchived: false }, { isArchived: true }] })
     renderAt('participant-1')
     const tabs = screen.getAllByRole('tab')
-    expect(tabs).toHaveLength(7)
+    expect(tabs).toHaveLength(8)
     for (const t of tabs) expect(t.querySelector('svg')).toBeNull()
     expect(screen.getByRole('tab', { name: /Notes & records +, 3 notes/ })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Health & safety' })).toBeInTheDocument()

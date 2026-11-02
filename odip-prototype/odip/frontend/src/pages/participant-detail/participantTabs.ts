@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 
-export const PARTICIPANT_TAB_KEYS = ['overview', 'about', 'health', 'daily', 'people', 'funding', 'records'] as const
+export const PARTICIPANT_TAB_KEYS = ['overview', 'about', 'health', 'daily', 'people', 'funding', 'agreements', 'records'] as const
 export type ParticipantTabKey = typeof PARTICIPANT_TAB_KEYS[number]
 
 /** The strip, in order. `noun` names a badge count for assistive tech (the badge itself is aria-hidden); `short` is the fallback label if the full ones overflow. */
@@ -13,6 +13,7 @@ export const NEW_TABS: readonly { id: ParticipantTabKey; label: string; short: s
   { id: 'daily', label: 'Daily support', short: 'Daily', noun: ['routine', 'routines'] },
   { id: 'people', label: 'People & roster', short: 'People', noun: ['contact', 'contacts'] },
   { id: 'funding', label: 'Funding & claims', short: 'Funding' },
+  { id: 'agreements', label: 'Agreements', short: 'Agreements' },
   { id: 'records', label: 'Notes & records', short: 'Records', noun: ['note', 'notes'] },
 ]
 
@@ -61,6 +62,7 @@ export const SUB_TABS: Record<GroupedTabKey, readonly SubTab[]> = {
     { id: 'trips', label: 'Bookings', list: true },
   ],
   funding: [{ id: 'plan-budget', label: 'Plan budget', gate: 'planBudget' }, { id: 'claims', label: 'Claims', list: true, gate: 'claims' }],
+  agreements: [{ id: 'agreements', label: 'Agreements', list: true }],
   records: [
     { id: 'notes', label: 'Notes', list: true, count: 'records' }, { id: 'consents', label: 'Consents', list: true },
     { id: 'history', label: 'History', list: true, gate: 'history' },

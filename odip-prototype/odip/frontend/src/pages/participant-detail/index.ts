@@ -8,6 +8,7 @@ export { default as ParticipantHealthConditionsSection } from './ParticipantHeal
 export { default as ParticipantAdlAssessmentsSection } from './ParticipantAdlAssessmentsSection'
 export { default as ContactsTab } from './ContactsTab'
 export { default as ClaimsTab } from './ClaimsTab'
+export { AgreementsSection } from './AgreementsSection'
 export { default as RosteringTab } from './RosteringTab'
 export { default as BookingsTab } from './BookingsTab'
 export { default as FundingTab } from './FundingTab'

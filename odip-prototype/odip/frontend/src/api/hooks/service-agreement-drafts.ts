@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiClient, apiGet, apiPost } from '../client'
+import { apiClient, apiDelete, apiGet, apiPost } from '../client'
 import { refreshBudgetFigures } from './funding-ledger'
 import type { AgreementEndingDto, ApproveDraftDto, CreateServiceAgreementDraftDto, DraftApprovalPreviewDto, PatternChangeDto, PatternChangeResultDto, PopulateDraftDto, PopulatePreviewDto, PopulateResultDto, ServiceAgreementDraftDto } from '../types'
 
@@ -89,6 +89,46 @@ export function useRenewAgreement() {
       queryClient.invalidateQueries({ queryKey: AGREEMENTS_KEY }),
       queryClient.invalidateQueries({ queryKey: ['participant-alerts', participantId] }),
       queryClient.invalidateQueries({ queryKey: ['participant-alerts-aggregate'] }),
+    ]),
+  })
+}
+
+/** What a draft going or an agreement ending early changes on the participant: the revisions, the ending list, the alerts, and the checklists that read the newest revision. */
+const refreshAgreements = (queryClient: ReturnType<typeof useQueryClient>, participantId: string) => [
+  queryClient.invalidateQueries({ queryKey: ['service-agreement-drafts', participantId] }),
+  queryClient.invalidateQueries({ queryKey: ['service-agreement-draft', participantId] }),
+  queryClient.invalidateQueries({ queryKey: ['onboarding', participantId] }),
+  queryClient.invalidateQueries({ queryKey: ['participant-onboarding-worklist'] }),
+  queryClient.invalidateQueries({ queryKey: AGREEMENTS_ENDING_KEY }),
+  queryClient.invalidateQueries({ queryKey: AGREEMENTS_KEY }),
+  queryClient.invalidateQueries({ queryKey: ['participant-alerts', participantId] }),
+  queryClient.invalidateQueries({ queryKey: ['participant-alerts-aggregate'] }),
+]
+
+/** Deletes the newest draft that was never approved (a 409 says why not, in the server's words). */
+export function useDeleteServiceAgreementDraft() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ participantId, draftId }: { participantId: string; draftId: string }) => apiDelete(`${path(participantId)}/${draftId}`),
+    onSuccess: (_, { participantId }) => Promise.all(refreshAgreements(queryClient, participantId)),
+  })
+}
+
+/**
+ * Ends an approved agreement on its last day of support. The server moves the end up, trims the patterns and removes the unfilled Draft shifts after it, so the roster, the patterns, the
+ * participant's rostering and the budget figures are read again too. A refusal (409, in the server's words) changes nothing, so nothing is refreshed.
+ */
+export function useEndAgreementEarly() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ participantId, draftId, lastDay }: { participantId: string; draftId: string; lastDay: string }) =>
+      apiPost<ServiceAgreementDraftDto>(`${path(participantId)}/${draftId}/end-early`, { lastDay }),
+    onSuccess: (_, { participantId }) => Promise.all([
+      ...refreshAgreements(queryClient, participantId),
+      queryClient.invalidateQueries({ queryKey: ['roster-board'] }),
+      queryClient.invalidateQueries({ queryKey: ['roster-patterns'] }),
+      queryClient.invalidateQueries({ queryKey: ['participant-rostering', participantId] }),
+      refreshBudgetFigures(queryClient, [participantId]),
     ]),
   })
 }
