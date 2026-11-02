@@ -213,7 +213,7 @@ function GenerateShiftClaimModal({ participantId, onClose }: { participantId: st
       open
       onClose={onClose}
       title={step === 'input' ? 'Generate claim from shifts' : step === 'preview' ? 'Claim preview' : 'Claim generated'}
-      size="lg"
+      size={step === 'preview' ? 'xl' : 'lg'}
       footer={
         step === 'done' && generated ? (
           <div className="flex w-full justify-end gap-3">
@@ -287,15 +287,15 @@ function GenerateShiftClaimModal({ participantId, onClose }: { participantId: st
                   </span>
                 ),
               },
-              { key: 'supportItemCode', header: 'Item', className: 'font-mono text-xs max-w-[9rem] truncate' },
-              { key: 'hours', header: 'Quantity', align: 'right', className: 'whitespace-nowrap', render: (l: ShiftClaimPreviewLineItemDto & { _idx: number }) => lineQuantity({ ...l, unit: l.unit ?? 'H' }) },
-              { key: 'unitPrice', header: 'Unit price', type: 'currency', align: 'right', className: 'whitespace-nowrap' },
+              { key: 'supportItemCode', header: 'Item', className: 'font-mono text-xs' },
+              { key: 'hours', header: 'Quantity', align: 'right', render: (l: ShiftClaimPreviewLineItemDto & { _idx: number }) => lineQuantity({ ...l, unit: l.unit ?? 'H' }) },
+              { key: 'unitPrice', header: 'Unit price', type: 'currency', align: 'right' },
               {
                 key: 'totalAmount',
                 header: 'Total',
                 type: 'currency',
                 align: 'right',
-                className: 'tabular-nums font-medium whitespace-nowrap',
+                className: 'tabular-nums font-medium',
               },
             ]}
             footer={
