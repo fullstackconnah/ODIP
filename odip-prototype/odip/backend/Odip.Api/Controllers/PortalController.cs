@@ -9,6 +9,7 @@ using Odip.Api.Rostering;
 using Odip.Api.Services;
 using Odip.Application.Common;
 using Odip.Application.DTOs;
+using Odip.Domain.Billing.Pricing;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
@@ -224,6 +225,9 @@ public class PortalController : ControllerBase
             .Select(c => c.ReturnReason)
             .FirstOrDefaultAsync(ct);
 
+        // The organisation switch only: the portal knows no agreement block. No settings row is the policy default (on).
+        var travelAsked = PlanPricingPolicy.From(await _db.PlanPricingSettings.AsNoTracking().FirstOrDefaultAsync(s => s.TenantId == shift.TenantId, ct)).ClaimProviderTravel;
+
         return new PortalShiftDetailDto(
             shift.Id, shift.ServiceDate, shift.StartTime, shift.EndTime, shift.EndsNextDay, shift.DurationHours,
             shift.Ratio, shift.NightType, shift.Status, shift.Notes,
@@ -247,7 +251,8 @@ public class PortalController : ControllerBase
             access.CanRecord,
             access.Reason,
             access.Code,
-            sensitiveWithheldReason);
+            sensitiveWithheldReason,
+            travelAsked);
     }
 
     /// <summary>Why the participant's handover, emergency contacts and address are not shown for this shift right now (plain language), or null when they are:
@@ -301,6 +306,22 @@ public class PortalController : ControllerBase
 
     /// <summary>Kilometres driven with the participant: 0 to this (owner decision 4).</summary>
     public const decimal MaxKilometres = 2000m;
+
+    /// <summary>Provider travel (travel PR-A1): minutes per leg, whole, 0 to this.</summary>
+    public const int MaxTravelMinutes = 480;
+
+    /// <summary>The coded refusal for the four travel legs, or null when they are all fine. One rule for Finish and the staff edit; each value is checked on its own.</summary>
+    public static (string Message, string Code)? CheckTravel(double? preMinutes, double? preKm, double? postMinutes, double? postKm)
+    {
+        if (new[] { preMinutes, postMinutes }.Any(m => m is { } v && (v < 0d || v > MaxTravelMinutes || v != Math.Floor(v))))
+            return ("Enter whole minutes from 0 to 480.", ShiftErrorCodes.ShiftTravelMinutesOutOfRange);
+        if (new[] { preKm, postKm }.Any(k => k is < 0d or > (double)MaxKilometres))
+            return ("Enter kilometres from 0 to 2,000.", ShiftErrorCodes.ShiftTravelKilometresOutOfRange);
+        return null;
+    }
+
+    public static decimal? TravelKm(double? km) => km is { } v ? Math.Round((decimal)v, 1, MidpointRounding.AwayFromZero) : null;
+    public static int? TravelMinutes(double? minutes) => minutes is { } v ? (int)v : null;
 
     private static DateTime TruncateToMinute(DateTime t) => new(t.Ticks - t.Ticks % TimeSpan.TicksPerMinute, DateTimeKind.Utc);
 
@@ -470,6 +491,8 @@ public class PortalController : ControllerBase
         if (dto.Kilometres is < 0d or > (double)MaxKilometres)
             return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(
                 "Enter kilometres from 0 to 2,000.", ShiftErrorCodes.ShiftKilometresOutOfRange));
+        if (CheckTravel(dto.PreShiftTravelMinutes, dto.PreShiftTravelKilometres, dto.PostShiftTravelMinutes, dto.PostShiftTravelKilometres) is { } badTravel)
+            return BadRequest(ApiResponse<PortalShiftDetailDto>.Fail(badTravel.Message, badTravel.Code));
 
         // The End checklist, ENFORCED: every dose that has come due in the rostered window needs an outcome (or a "not given this
         // shift" reason, which is a Missed record) and no break may still be running. 422 carries the list, and the current
@@ -608,6 +631,10 @@ public class PortalController : ControllerBase
         completion.ActualEnd = actualEnd;
         completion.TimeAdjustmentReason = startMoved || endMoved ? reason : null;
         completion.Kilometres = dto.Kilometres is { } kmIn ? Math.Round((decimal)kmIn, 1, MidpointRounding.AwayFromZero) : null;
+        completion.PreShiftTravelMinutes = TravelMinutes(dto.PreShiftTravelMinutes);
+        completion.PreShiftTravelKilometres = TravelKm(dto.PreShiftTravelKilometres);
+        completion.PostShiftTravelMinutes = TravelMinutes(dto.PostShiftTravelMinutes);
+        completion.PostShiftTravelKilometres = TravelKm(dto.PostShiftTravelKilometres);
         completion.AnythingToReport = dto.AnythingToReport;
         completion.SubmittedAt = now;
         completion.SentFromOffline |= dto.FinishedAt is not null;
