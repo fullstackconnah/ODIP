@@ -632,7 +632,8 @@ public static class DbSeeder
             starter[7],
         };
         context.Activities.AddRange(activities);
-        context.ReferralSources.AddRange(StarterReferralSources.For(demoTenantId));   // the list "Referred by" picks from, as tenant set-up gives it
+        // shortcut: skips when the tenant has any source (the migration seeds existing databases), so a hand-cleared half-seed is not topped up.
+        if (!await context.ReferralSources.IgnoreQueryFilters([TenantFilter.Name]).AnyAsync(r => r.TenantId == demoTenantId, ct)) context.ReferralSources.AddRange(StarterReferralSources.For(demoTenantId));   // the list "Referred by" picks from, as tenant set-up gives it
 
         // ── Trip Days + Scheduled Activities (Trips 1, 2, 3) ─────
         var tripDays = new List<TripDay>();

@@ -11,7 +11,7 @@ export interface ReferralSourceDto {
 
 export interface CreateReferralSourceDto { name: string }
 
-export interface UpdateReferralSourceDto { name: string; isActive: boolean }
+export interface UpdateReferralSourceDto { name?: string; isActive?: boolean }
 
 export interface ParticipantInquiryDto {
   id: string

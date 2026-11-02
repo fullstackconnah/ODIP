@@ -151,6 +151,31 @@ public class ReferralSourcesControllerTests
     }
 
     [Fact]
+    public async Task Update_applies_only_the_fields_sent_so_a_stale_hide_keeps_a_rename()
+    {
+        var row = Seed(_tenantId, "Hospital");
+        await Controller(_tenantId).Update(row.Id, new UpdateReferralSourceDto { Name = "Royal Brisbane Hospital" }, CancellationToken.None);
+
+        var stale = await Controller(_tenantId).Update(row.Id, new UpdateReferralSourceDto { IsActive = false }, CancellationToken.None);
+
+        var dto = Data<ReferralSourceDto>(stale.Result);
+        Assert.Equal(("Royal Brisbane Hospital", false), (dto.Name, dto.IsActive));
+        var stored = Assert.Single(Db().ReferralSources);
+        Assert.Equal(("Royal Brisbane Hospital", false), (stored.Name, stored.IsActive));
+    }
+
+    [Fact]
+    public async Task Update_with_neither_field_is_400_and_changes_nothing()
+    {
+        var row = Seed(_tenantId, "Hospital");
+
+        var result = await Controller(_tenantId).Update(row.Id, new UpdateReferralSourceDto(), CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Equal(("Hospital", true), (Db().ReferralSources.Single().Name, Db().ReferralSources.Single().IsActive));
+    }
+
+    [Fact]
     public async Task Update_to_the_name_of_another_source_is_409_but_to_its_own_name_in_another_case_is_fine()
     {
         var row = Seed(_tenantId, "Hospital"); Seed(_tenantId, "GP");

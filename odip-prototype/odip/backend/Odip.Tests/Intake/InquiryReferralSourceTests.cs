@@ -160,6 +160,20 @@ public class InquiryReferralSourceTests
     }
 
     [Fact]
+    public async Task Update_from_a_tab_that_sends_no_source_keeps_the_stored_one_but_an_explicit_null_clears_it()
+    {
+        var hospital = Source(_tenantId, "Hospital");
+        var inquiry = Inquiry(x => x.ReferralSourceId = hospital.Id);
+        var old = new UpdateParticipantInquiryDto { FirstName = inquiry.FirstName, LastName = inquiry.LastName, Source = inquiry.Source, Provenance = "Rang twice" };
+
+        await Controller().Update(inquiry.Id, old, CancellationToken.None);
+        Assert.Equal(hospital.Id, Stored(inquiry.Id).ReferralSourceId);
+
+        await Controller().Update(inquiry.Id, Echo(inquiry, null), CancellationToken.None);
+        Assert.Null(Stored(inquiry.Id).ReferralSourceId);
+    }
+
+    [Fact]
     public async Task Update_with_another_tenants_source_is_400_for_a_SuperAdmin_viewing_as_this_tenant()
     {
         var theirs = Source(_otherTenantId, "Their source");

@@ -56,10 +56,17 @@ public class ReferralSourcesController : ControllerBase
         if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<ReferralSourceDto>.Fail("A tenant context is required."));
         var row = await _db.ReferralSources.FirstOrDefaultAsync(s => s.Id == id && s.TenantId == tenantId, ct);
         if (row == null) return NotFound(ApiResponse<ReferralSourceDto>.Fail("Referral source not found"));
-        if (NameError(dto.Name) is { } error) return BadRequest(ApiResponse<ReferralSourceDto>.Fail(error));
-        var name = dto.Name.Trim();
-        if (await TakenAsync(tenantId, name, id, ct)) return Conflict(ApiResponse<ReferralSourceDto>.Fail(Duplicate));
-        row.Name = name; row.IsActive = dto.IsActive; row.UpdatedAt = DateTime.UtcNow;
+        // Only the fields sent are applied, so a stale tab hiding a row cannot undo another user's rename (and the reverse).
+        if (dto.Name is null && dto.IsActive is null) return BadRequest(ApiResponse<ReferralSourceDto>.Fail("Send a name or isActive."));
+        if (dto.Name is not null)
+        {
+            if (NameError(dto.Name) is { } error) return BadRequest(ApiResponse<ReferralSourceDto>.Fail(error));
+            var name = dto.Name.Trim();
+            if (await TakenAsync(tenantId, name, id, ct)) return Conflict(ApiResponse<ReferralSourceDto>.Fail(Duplicate));
+            row.Name = name;
+        }
+        if (dto.IsActive is { } active) row.IsActive = active;
+        row.UpdatedAt = DateTime.UtcNow;
         if (!await SavedAsync(ct)) return Conflict(ApiResponse<ReferralSourceDto>.Fail(Duplicate));
         return Ok(ApiResponse<ReferralSourceDto>.Ok(ToDto(row)));
     }

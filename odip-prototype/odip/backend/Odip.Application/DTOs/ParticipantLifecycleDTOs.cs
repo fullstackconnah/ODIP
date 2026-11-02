@@ -317,6 +317,7 @@ public record CreateReferralSourceDto { public string Name { get; init; } = stri
 
 public record UpdateReferralSourceDto
 {
-    public string Name { get; init; } = string.Empty;
-    public bool IsActive { get; init; } = true;
+    /// <summary>Each field is applied only when sent; at least one is required.</summary>
+    public string? Name { get; init; }
+    public bool? IsActive { get; init; }
 }

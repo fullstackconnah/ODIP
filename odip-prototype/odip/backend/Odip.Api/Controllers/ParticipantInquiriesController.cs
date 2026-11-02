@@ -519,7 +519,9 @@ public class ParticipantInquiriesController : ControllerBase
     /// <summary>Writes a validated save onto the enquiry. Blanks are stored as null; with "their own contact" ticked the contact's names, relationship and role are null whatever was sent (L4).</summary>
     private static void Apply(ParticipantInquiry x, CreateParticipantInquiryDto dto, bool converted)
     {
-        x.FirstName = Blank(dto.FirstName)!; x.Source = dto.Source; x.Provenance = Blank(dto.Provenance); x.ReferralSourceId = dto.ReferralSourceId;
+        x.FirstName = Blank(dto.FirstName)!; x.Source = dto.Source; x.Provenance = Blank(dto.Provenance);
+        // A tab on the old bundle sends neither contactIsParticipant nor referralSourceId, so it leaves the stored source as it is; the new form always sends the field (null clears).
+        if (dto.ReferralSourceId is not null || dto.ContactIsParticipant is not null) x.ReferralSourceId = dto.ReferralSourceId;
         // "" not null: a rollback to the previous image reads the column as required. A later release may store null.
         x.LastName = Blank(dto.LastName) ?? string.Empty;
         // D7: the main contact and details are the participant's record now; omitted by the form, ignored if sent.

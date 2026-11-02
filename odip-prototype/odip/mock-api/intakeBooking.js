@@ -167,10 +167,14 @@ function create({ respond, failEnvelope, enquiryFeed }) {
     ['referral-sources/:id', (id, body) => {
       const row = referralSources.find((x) => x.id === id)
       if (!row) return respond(404, failEnvelope(null, ['Referral source not found']))
-      const bad = sourceProblem(body)
-      if (bad) return bad
-      if (sourceTaken(body.name.trim(), id)) return respond(409, failEnvelope(null, ['That source is already on the list.']))
-      Object.assign(row, { name: body.name.trim(), isActive: body.isActive !== false })
+      if (body.name === undefined && body.isActive === undefined) return respond(400, failEnvelope(null, ['Send a name or isActive.']))
+      if (body.name !== undefined) {
+        const bad = sourceProblem(body)
+        if (bad) return bad
+        if (sourceTaken(body.name.trim(), id)) return respond(409, failEnvelope(null, ['That source is already on the list.']))
+        row.name = body.name.trim()
+      }
+      if (body.isActive !== undefined) row.isActive = body.isActive !== false
       return { ...row }
     }],
     ['inquiries/:id/intake-booking', (id, body) => {

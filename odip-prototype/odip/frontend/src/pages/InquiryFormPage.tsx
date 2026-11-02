@@ -452,7 +452,7 @@ function InquiryFormBody({ initial, focus, onCreated, onReopened, onDone }: {
                 hint={sourcesQuery.isError ? "Couldn't load referral sources." : undefined}
               />
               {sourcesQuery.isSuccess && sourcesQuery.data.length === 0 && canEditSources && (
-                <p className="text-xs text-[var(--color-muted-foreground)] -mt-1">
+                <p className="text-xs text-[var(--color-muted-foreground)] mt-1">
                   Add referral sources <Link to="/settings?section=referral-sources" className="underline">in Settings</Link>.
                 </p>
               )}

@@ -42,7 +42,7 @@ export default function ReferralSourcesSection() {
     if (!name) { setError('Enter a name.'); return }
     setError(undefined)
     try {
-      if (editing.id) await update.mutateAsync({ id: editing.id, data: { name, isActive: sources.find(s => s.id === editing.id)?.isActive ?? true } })
+      if (editing.id) await update.mutateAsync({ id: editing.id, data: { name } })
       else await create.mutateAsync({ name })
       close()
     } catch (err) {
@@ -53,7 +53,7 @@ export default function ReferralSourcesSection() {
   async function setActive(source: ReferralSourceDto, isActive: boolean) {
     setError(undefined)
     try {
-      await update.mutateAsync({ id: source.id, data: { name: source.name, isActive } })
+      await update.mutateAsync({ id: source.id, data: { isActive } })
     } catch (err) {
       setError(extractErrorMessage(err, 'Could not change the source. Try again.'))
     }
@@ -65,14 +65,14 @@ export default function ReferralSourcesSection() {
       <input
         autoFocus
         aria-label="Source name"
-        className={`${inputClass} flex-1 min-w-48`}
+        className={`${inputClass} basis-full sm:basis-0 sm:flex-1 sm:min-w-48`}
         maxLength={100}
         value={editing?.name ?? ''}
         onChange={e => { setEditing(cur => cur && { ...cur, name: e.target.value }); setError(undefined) }}
         onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); save() } else if (e.key === 'Escape') close() }}
       />
-      <Button size="sm" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button>
-      <Button size="sm" variant="secondary" onClick={close}>Cancel</Button>
+      <Button size="sm" className={TAP_AREA} onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button>
+      <Button size="sm" variant="secondary" className={TAP_AREA} onClick={close}>Cancel</Button>
     </div>
   )
 

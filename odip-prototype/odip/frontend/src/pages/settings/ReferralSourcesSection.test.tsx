@@ -70,13 +70,13 @@ describe('ReferralSourcesSection', () => {
     expect(screen.getByLabelText('Source name')).toHaveValue('hospital')
   })
 
-  it('Hide and Show flip isActive and keep the name', async () => {
+  it('Hide and Show send isActive only', async () => {
     const user = userEvent.setup()
     render(<ReferralSourcesSection />)
     await user.click(screen.getByRole('button', { name: 'Hide: Hospital' }))
-    expect(update).toHaveBeenLastCalledWith({ id: 'r1', data: { name: 'Hospital', isActive: false } })
+    expect(update).toHaveBeenLastCalledWith({ id: 'r1', data: { isActive: false } })
     await user.click(screen.getByRole('button', { name: 'Show: Closed clinic' }))
-    expect(update).toHaveBeenLastCalledWith({ id: 'r3', data: { name: 'Closed clinic', isActive: true } })
+    expect(update).toHaveBeenLastCalledWith({ id: 'r3', data: { isActive: true } })
   })
 
   it('renames a source in its row', async () => {
@@ -87,7 +87,7 @@ describe('ReferralSourcesSection', () => {
     await user.clear(box)
     await user.type(box, 'GP or nurse')
     await user.click(screen.getByRole('button', { name: 'Save' }))
-    expect(update).toHaveBeenCalledWith({ id: 'r2', data: { name: 'GP or nurse', isActive: true } })
+    expect(update).toHaveBeenCalledWith({ id: 'r2', data: { name: 'GP or nurse' } })
   })
 
   it('is read-only for staff: no Add, Rename, Hide or Show, and a note says why', () => {
