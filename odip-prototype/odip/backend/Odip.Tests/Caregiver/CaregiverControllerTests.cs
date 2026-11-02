@@ -75,7 +75,7 @@ public class CaregiverControllerTests
         Assert.Equal(s.ExpiresAt, body.Data.ExpiresAt);
     }
 
-private static void SeedOrg(OdipDbContext db, Guid tenantId, string? tenantName, string? settingsName)
+    private static void SeedOrg(OdipDbContext db, Guid tenantId, string? tenantName, string? settingsName)
     {
         db.Tenants.Add(new Tenant { Id = tenantId, Name = tenantName ?? "" });
         if (settingsName != null)

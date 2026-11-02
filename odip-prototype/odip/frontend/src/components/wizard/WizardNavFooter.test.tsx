@@ -52,13 +52,24 @@ describe('WizardNavFooter', () => {
     expect(screen.getByRole('button', { name: 'Create Participant' })).toBeInTheDocument()
   })
 
-  it('with no Cancel and no Back the secondary shares the first row; with Back it still drops to its own row', () => {
+  it('with hideCancel the secondary shares the button row, with or without Back; with Cancel it still drops to its own row', () => {
     const secondaryActions = [{ key: 'save', label: 'Save later', onClick: vi.fn() }]
     const first = renderFooter({ hideCancel: true, secondaryActions })
     expect(screen.getByRole('button', { name: 'Save later' }).className).not.toContain('max-sm:basis-full')
     first.unmount()
-    renderFooter({ hideCancel: true, showBack: true, secondaryActions })
+    const withBack = renderFooter({ hideCancel: true, showBack: true, secondaryActions })
+    expect(screen.getByRole('button', { name: 'Save later' }).className).not.toContain('max-sm:basis-full')
+    withBack.unmount()
+    renderFooter({ showBack: true, secondaryActions })
     expect(screen.getByRole('button', { name: 'Save later' }).className).toContain('max-sm:basis-full')
+  })
+
+  it('summaryOwnRow keeps the summary on its own full-width row from sm up', () => {
+    const own = renderFooter({ summary: <p>Save failed</p>, summaryOwnRow: true })
+    expect(screen.getByText('Save failed').parentElement!.className).not.toContain('sm:basis-auto')
+    own.unmount()
+    renderFooter({ summary: <p>Total</p> })
+    expect(screen.getByText('Total').parentElement!.className).toContain('sm:basis-auto')
   })
 
   it('hides Back when showBack is false', () => {

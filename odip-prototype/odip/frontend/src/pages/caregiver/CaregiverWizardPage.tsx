@@ -265,6 +265,7 @@ export default function CaregiverWizardPage() {
           secondaryActions={[{ key: 'saveLater', label: saveDraft.isPending ? 'Saving…' : 'Save and continue later', onClick: saveForLater, disabled: saveDraft.isPending || submit.isPending }]}
           cancelTo={`/caregiver/${token}`}
           hideCancel
+          summaryOwnRow={!!saveError}
           summary={
             <div className="text-sm">
               {saveError && <p role="alert" className="text-[var(--color-destructive)]">{saveError}</p>}
