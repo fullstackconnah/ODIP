@@ -25,7 +25,7 @@ export type ShiftBlockProps = {
 
 // The chip's name-link styles (ShiftChip.tsx LABEL_LINK), kept private there, copied here.
 const LABEL_LINK =
-  'min-w-0 flex-1 pointer-coarse:flex-initial truncate rounded-sm pointer-coarse:leading-[var(--tap-min)] text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring'
+  'min-w-0 flex-1 pointer-coarse:flex-initial truncate pointer-coarse:leading-[var(--tap-min)] text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring'
 
 const DASHED = 'color-mix(in srgb, var(--color-muted-foreground) 60%, transparent)'
 
