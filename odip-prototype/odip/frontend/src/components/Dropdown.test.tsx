@@ -316,3 +316,13 @@ describe('Dropdown — menu trigger width', () => {
     expect(screen.getByRole('button', { name: 'Export' })).toHaveClass('sm:min-w-[9.75rem]')
   })
 })
+
+describe('Dropdown — truncateLabel', () => {
+  it('keeps a long chosen label on one line, left-aligned, only when truncateLabel is set', () => {
+    const long = [{ value: 'a', label: 'A very long trip name that would otherwise wrap onto a second line' }]
+    const { rerender } = render(<Dropdown variant="form" value="a" onChange={() => {}} label="Pick" items={long} truncateLabel />)
+    expect(screen.getByText(long[0].label)).toHaveClass('truncate', 'text-left', 'min-w-0')
+    rerender(<Dropdown variant="form" value="a" onChange={() => {}} label="Pick" items={long} />)
+    expect(screen.getByText(long[0].label)).not.toHaveClass('truncate')
+  })
+})
