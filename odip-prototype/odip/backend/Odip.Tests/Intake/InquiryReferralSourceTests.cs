@@ -198,6 +198,17 @@ public class InquiryReferralSourceTests
     }
 
     [Fact]
+    public async Task Update_of_a_converted_enquiry_clears_the_source_when_the_form_sends_null_with_contactIsParticipant()
+    {
+        var hospital = Source(_tenantId, "Hospital");
+        var inquiry = Inquiry(x => { x.ParticipantId = Guid.NewGuid(); x.ReferralSourceId = hospital.Id; });
+
+        await Controller().Update(inquiry.Id, Echo(inquiry, null) with { ContactIsParticipant = false }, CancellationToken.None);
+
+        Assert.Null(Stored(inquiry.Id).ReferralSourceId);
+    }
+
+    [Fact]
     public async Task The_list_and_the_closed_view_carry_the_source_name()
     {
         var hospital = Source(_tenantId, "Hospital");

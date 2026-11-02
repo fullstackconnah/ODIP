@@ -103,11 +103,12 @@ function create({ respond, failEnvelope, enquiryFeed }) {
   let made = 0
   const saveContacts = (id, list) => { if (Array.isArray(list)) contacts[id] = list }
   // What a save stores, as the API's Apply does: with "their own contact" ticked the contact's four fields are null whatever was sent; the NDIS number without spaces.
-  const own = (body) => ({ firstName: body.firstName, lastName: body.lastName?.trim() ?? '', source: body.source, provenance: body.provenance ?? null, referralSourceId: body.referralSourceId ?? null })
-  const fields = (body) => {
+  // Like the API: a body with neither referralSourceId nor contactIsParticipant (an old tab) keeps the stored source.
+  const own = (body, row) => ({ firstName: body.firstName, lastName: body.lastName?.trim() ?? '', source: body.source, provenance: body.provenance ?? null, referralSourceId: body.referralSourceId != null || body.contactIsParticipant != null ? body.referralSourceId ?? null : row?.referralSourceId ?? null })
+  const fields = (body, row) => {
     const self = !!body.contactIsParticipant
     return {
-      ...own(body), phone: body.phone ?? null, email: body.email ?? null, contactIsParticipant: self,
+      ...own(body, row), phone: body.phone ?? null, email: body.email ?? null, contactIsParticipant: self,
       contactFirstName: self ? null : body.contactFirstName ?? null, contactLastName: self ? null : body.contactLastName ?? null,
       contactRelationship: self ? null : body.contactRelationship ?? null, contactRole: self ? null : body.contactRole ?? null,
       dateOfBirth: body.dateOfBirth ?? null, ndisNumber: body.ndisNumber ? String(body.ndisNumber).replace(/\s/g, '') : null,
@@ -174,7 +175,7 @@ function create({ respond, failEnvelope, enquiryFeed }) {
         if (sourceTaken(body.name.trim(), id)) return respond(409, failEnvelope(null, ['That source is already on the list.']))
         row.name = body.name.trim()
       }
-      if (body.isActive !== undefined) row.isActive = body.isActive !== false
+      if (typeof body.isActive === 'boolean') row.isActive = body.isActive
       return { ...row }
     }],
     ['inquiries/:id/intake-booking', (id, body) => {
@@ -202,7 +203,7 @@ function create({ respond, failEnvelope, enquiryFeed }) {
       return listRow(row)
     }],
     // Its 2 segments never match .../intake-booking.
-    ['inquiries/:id', (id, body) => { const row = find(id); if (!row) return notFound(); if (closed[id]) return closedRefusal(); if (stale(row, body)) return changedByOther(); if (badSource(body, row)) return pickASource(); stamp(row); Object.assign(row, row.participantId ? own(body) : fields(body)); saveContacts(id, body.contacts); return listRow(row) }],
+    ['inquiries/:id', (id, body) => { const row = find(id); if (!row) return notFound(); if (closed[id]) return closedRefusal(); if (stale(row, body)) return changedByOther(); if (badSource(body, row)) return pickASource(); stamp(row); Object.assign(row, row.participantId ? own(body, row) : fields(body, row)); saveContacts(id, body.contacts); return listRow(row) }],
   ]
 
   const post = [

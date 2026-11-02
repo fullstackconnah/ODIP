@@ -76,7 +76,8 @@ const orNull = (value: string) => value.trim() || null
  */
 const toPayload = (form: FormState, contacts?: InquiryContactDto[], converted = false): CreateParticipantInquiryDto => {
   const own = { firstName: form.firstName.trim(), lastName: orNull(form.lastName), source: form.source, provenance: orNull(form.provenance), referralSourceId: form.referralSourceId || null }
-  if (converted) return own
+  // contactIsParticipant tells the API this is the current form (not an old tab), so a cleared source is stored; the API ignores it for a converted enquiry.
+  if (converted) return { ...own, contactIsParticipant: form.contactIsParticipant }
   const self = form.contactIsParticipant
   return {
     ...own,

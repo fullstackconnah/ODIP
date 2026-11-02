@@ -165,13 +165,25 @@ public class ReferralSourcesControllerTests
     }
 
     [Fact]
+    public async Task Update_applies_only_the_fields_sent_so_a_stale_rename_keeps_a_hide()
+    {
+        var row = Seed(_tenantId, "Hospital");
+        await Controller(_tenantId).Update(row.Id, new UpdateReferralSourceDto { IsActive = false }, CancellationToken.None);
+
+        await Controller(_tenantId).Update(row.Id, new UpdateReferralSourceDto { Name = "X" }, CancellationToken.None);
+
+        var stored = Assert.Single(Db().ReferralSources);
+        Assert.Equal(("X", false), (stored.Name, stored.IsActive));
+    }
+
+    [Fact]
     public async Task Update_with_neither_field_is_400_and_changes_nothing()
     {
         var row = Seed(_tenantId, "Hospital");
 
         var result = await Controller(_tenantId).Update(row.Id, new UpdateReferralSourceDto(), CancellationToken.None);
 
-        Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Equal("Send a name or isActive.", Refusal<ReferralSourceDto>(Assert.IsType<BadRequestObjectResult>(result.Result)));
         Assert.Equal(("Hospital", true), (Db().ReferralSources.Single().Name, Db().ReferralSources.Single().IsActive));
     }
 

@@ -330,7 +330,7 @@ describe('InquiryFormPage (wire) — contacts', () => {
     })
   })
 
-  it('a converted enquiry shows its contact and details as one read-only card, links to the intake, and its PUT sends the names, source, provenance and referral source only', async () => {
+  it('a converted enquiry shows its contact and details as one read-only card, links to the intake, and its PUT sends the names, source, provenance and referral source only (plus contactIsParticipant, so a cleared source sticks)', async () => {
     serve({ '/inquiries/i1': detail({ participantId: 'p-1', updatedAt: 'v1', contactFirstName: 'Sarah', contactLastName: 'Walsh', contactRelationship: 'Mother', contactRole: 'Guardian', ndisNumber: '430123456' }) })
     const user = userEvent.setup()
     renderForm('/participants/new-inquiry?id=i1')
@@ -344,7 +344,7 @@ describe('InquiryFormPage (wire) — contacts', () => {
     await user.click(screen.getByRole('button', { name: 'Save enquiry' }))
 
     await waitFor(() => expect(mockApiPut).toHaveBeenCalledTimes(1))
-    expect(Object.keys(mockApiPut.mock.calls[0][1]).sort()).toEqual(['expectedUpdatedAt', 'firstName', 'lastName', 'provenance', 'referralSourceId', 'source'])
+    expect(Object.keys(mockApiPut.mock.calls[0][1]).sort()).toEqual(['contactIsParticipant', 'expectedUpdatedAt', 'firstName', 'lastName', 'provenance', 'referralSourceId', 'source'])
   })
 
   it('never mounts from a cached copy: it waits for this visit\'s own load, then shows those contacts (plan check S2)', async () => {
