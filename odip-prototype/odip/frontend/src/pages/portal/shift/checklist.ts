@@ -149,6 +149,11 @@ export interface TimesInput {
   endOverride: string | null
   reason: string
   kilometres: string
+  /** The four provider-travel fields as typed. Left out when the organisation does not ask for travel. */
+  preTravelMinutes?: string
+  preTravelKilometres?: string
+  postTravelMinutes?: string
+  postTravelKilometres?: string
   breaks: { id: string; startedAt: string; endedAt: string | null; isRunning: boolean }[]
   now: Date
 }
@@ -162,7 +167,8 @@ export function movedTimes(i: TimesInput): { start: string | null; end: string |
   }
 }
 
-export type TimesField = 'start' | 'end' | 'reason' | 'kilometres' | 'break'
+export type TravelField = 'preTravelMinutes' | 'preTravelKilometres' | 'postTravelMinutes' | 'postTravelKilometres'
+export type TimesField = 'start' | 'end' | 'reason' | 'kilometres' | 'break' | TravelField
 
 
 /** Step 1's gate: the server's rules for the times, the breaks and the kilometres, so a refusal is named on step 1 (SHAPE §4). Null lets it go on. */
@@ -190,8 +196,34 @@ export function timesError(i: TimesInput): { field: TimesField; message: string;
     const outside = i.breaks.find(x => parseApiDate(x.startedAt).getTime() < start || (x.endedAt ? parseApiDate(x.endedAt).getTime() : end) > end)
     if (outside) return { field: 'break', breakId: outside.id, message: 'Your times must include your breaks. Change the break first, or your times.' }
   }
+  // Screen order: the trip to the participant, the trip after, then the kilometres driven with them.
+  for (const [field, parse, message] of TRAVEL_CHECKS) {
+    if (parse(i[field] ?? '') === 'invalid') return { field, message }
+  }
   if (parseKilometres(i.kilometres) === 'invalid') return { field: 'kilometres', message: 'Enter kilometres from 0 to 2,000.' }
   return null
+}
+
+const MINUTES_MESSAGE = 'Enter whole minutes from 0 to 480.'
+const KM_MESSAGE = 'Enter kilometres from 0 to 2,000.'
+
+/** A travel minutes field: blank is null; a whole number from 0 to 480; anything else is 'invalid'. */
+export function parseTravelMinutes(raw: string): number | null | 'invalid' {
+  const t = raw.trim()
+  if (!t) return null
+  if (!/^[0-9]{1,3}$/.test(t)) return 'invalid'
+  const n = Number(t)
+  return n <= 480 ? n : 'invalid'
+}
+
+const TRAVEL_CHECKS = [
+  ['preTravelMinutes', parseTravelMinutes, MINUTES_MESSAGE], ['preTravelKilometres', parseKilometres, KM_MESSAGE],
+  ['postTravelMinutes', parseTravelMinutes, MINUTES_MESSAGE], ['postTravelKilometres', parseKilometres, KM_MESSAGE],
+] as const
+
+/** One trip as the summary says it: "25 min, 12.3 km", either half alone, or "None". */
+export function travelLabel(minutes: number | null, km: number | null): string {
+  return [minutes !== null && `${minutes} min`, km !== null && `${km} km`].filter(Boolean).join(', ') || 'None'
 }
 
 /** The kilometre field (SHAPE §4): blank is null; a number from 0 to 2,000 with at most one decimal place; anything else is 'invalid'. */
@@ -216,6 +248,7 @@ export function handoverForward(noteCount: number, nothingToNote: boolean, hando
 const TIMES_CODES: readonly string[] = [
   'BREAK_RUNNING', C.timeAdjustmentTooLarge, C.timeAdjustmentReasonRequired, C.timeAdjustmentReasonTooLong,
   C.actualEndInFuture, C.startNotBeforeEnd, C.breakOutsideTimes, C.kilometresOutOfRange,
+  C.travelMinutesOutOfRange, C.travelKilometresOutOfRange,
 ]
 
 /** Where a refused submit sends the worker (SHAPE §4, step 5): times, breaks and kilometres to step 1, a dose to step 2, the note to step 4. */

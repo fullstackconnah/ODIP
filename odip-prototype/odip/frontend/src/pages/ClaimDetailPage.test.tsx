@@ -311,6 +311,24 @@ describe('ClaimDetailPage — Kind === Shift claim', () => {
     expect(screen.queryByText('WeekdayEvening')).not.toBeInTheDocument()
   })
 
+  it('marks the travel time line TRAN beside its label, and not the kilometre line or a plain line', () => {
+    mockUseClaim.mockReturnValue({
+      data: shiftClaim([
+        shiftLineItem({ id: 'li-t', claimType: 'ProviderTravel', supportItemCode: '04_104_0125_6_1', hours: 0.42, unit: 'H' }),
+        shiftLineItem({ id: 'li-k', supportItemCode: '04_799_0125_6_1', hours: 12.87, unit: 'E' }),
+        shiftLineItem({ id: 'li-s' }),
+      ]),
+      isLoading: false,
+    })
+    renderPage('/claims/claim-2')
+
+    expect(screen.getAllByText('TRAN')).toHaveLength(1)
+    expect(screen.getByText('Provider travel')).toBeInTheDocument()
+    expect(screen.getByText('Provider travel costs')).toBeInTheDocument()
+    expect(screen.getByText('0.42h')).toBeInTheDocument()
+    expect(screen.getByText('$12.87')).toBeInTheDocument()
+  })
+
   it('still links the participant cell for a shift-kind line (batch 1 behaviour is unchanged)', () => {
     mockUseClaim.mockReturnValue({ data: shiftClaim([shiftLineItem({ participantId: 'p-9', participantName: 'Priya Nair' })]), isLoading: false })
     renderPage('/claims/claim-2')

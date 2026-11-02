@@ -24,6 +24,9 @@ public record CaregiverFormDto
     public DateTime ExpiresAt { get; init; }
     public string? RejectionNote { get; init; }
 
+    /// <summary>The link's own organisation: its provider-settings name, else the tenant name; null when both are blank.</summary>
+    public string? ProviderName { get; init; }
+
     /// <summary>Caregiver-visible current values, keyed by ParticipantDetailDto JSON property name.</summary>
     public System.Text.Json.Nodes.JsonObject Current { get; init; } = new();
 

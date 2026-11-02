@@ -183,6 +183,26 @@ describe('ClaimsTab — generate from shifts', () => {
     expect(await screen.findByText('Claim detail page')).toBeInTheDocument()
   })
 
+  it('shows travel in the preview: TRAN on the time line, hours and dollars in a Quantity column', async () => {
+    const user = await openModal()
+    const base = { shiftId: 'sh-1', serviceDate: '2026-02-03', dayType: 'Weekday', unitPrice: 40, claimType: 'Standard' }
+    mockPreviewMutate.mockImplementation((_vars, { onSuccess }) => onSuccess({
+      totalAmount: 345.87,
+      lineItems: [
+        { ...base, dayTypeLabel: 'Weekday', supportItemCode: '01_002_0117_1_1', hours: 8, totalAmount: 320 },
+        { ...base, dayTypeLabel: 'Provider travel', claimType: 'ProviderTravel', supportItemCode: '04_104_0125_6_1', hours: 0.42, unit: 'H', totalAmount: 13 },
+        { ...base, dayTypeLabel: 'Provider travel costs', supportItemCode: '04_799_0125_6_1', hours: 12.87, unit: 'E', totalAmount: 13.5 },
+      ],
+    }))
+    await user.click(screen.getByRole('button', { name: /preview/i }))
+
+    expect(screen.getByRole('columnheader', { name: /^Quantity$/ })).toBeInTheDocument()
+    expect(screen.getAllByText('TRAN')).toHaveLength(1)
+    expect(screen.getByText('0.42h')).toBeInTheDocument()
+    expect(screen.getByText('$12.87')).toBeInTheDocument()
+    expect(screen.getByText('8h')).toBeInTheDocument()
+  })
+
   it('shows the server message inline when the preview 400s on an empty range', async () => {
     const user = await openModal()
 

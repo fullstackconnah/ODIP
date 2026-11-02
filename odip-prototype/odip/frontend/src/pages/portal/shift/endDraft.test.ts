@@ -5,6 +5,7 @@ afterEach(() => { sessionStorage.clear(); vi.restoreAllMocks() })
 
 const full: EndDraft = {
   step: 'report', reached: 'report', startOverride: null, endOverride: '2026-08-17T16:50', adjustmentReason: 'Left early', kilometres: '12.5',
+  preTravelMinutes: '25', preTravelKilometres: '12.3', postTravelMinutes: '20', postTravelKilometres: '10',
   anythingToReport: 'yes', handoverText: 'hi', nothingToNote: true, nothingToHandOver: false, timesSig: 'x',
 }
 
@@ -15,6 +16,10 @@ describe('endDraft', () => {
     expect(loadEndDraft('s2')).toBeNull()
     clearEndDraft('s1')
     expect(loadEndDraft('s1')).toBeNull()
+  })
+  it('loads a draft saved before travel with the four travel fields empty', () => {
+    sessionStorage.setItem('odip-shift-end-draft:s1', JSON.stringify({ kilometres: '5', preTravelMinutes: 25, postTravelKilometres: '10' }))
+    expect(loadEndDraft('s1')).toEqual({ ...EMPTY_END_DRAFT, kilometres: '5', postTravelKilometres: '10' })
   })
   it('survives storage that throws', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked') })

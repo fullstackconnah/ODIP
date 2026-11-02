@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { FileText } from 'lucide-react'
 import { useParticipantClaims, usePreviewShiftClaim, useGenerateShiftClaim } from '@/api/hooks'
 import { Callout } from '@/components/Callout'
+import { lineQuantity } from '@/lib/claimLines'
 import { FlaggedShifts } from '@/components/FlaggedShifts'
 import { LeftOutCallout, SHIFT_LEFT_OUT_FOOTER } from '@/components/LeftOutCallout'
 import { PageState } from '@/components/PageState'
@@ -212,7 +213,7 @@ function GenerateShiftClaimModal({ participantId, onClose }: { participantId: st
       open
       onClose={onClose}
       title={step === 'input' ? 'Generate claim from shifts' : step === 'preview' ? 'Claim preview' : 'Claim generated'}
-      size="lg"
+      size={step === 'preview' ? 'xl' : 'lg'}
       footer={
         step === 'done' && generated ? (
           <div className="flex w-full justify-end gap-3">
@@ -281,13 +282,13 @@ function GenerateShiftClaimModal({ participantId, onClose }: { participantId: st
                 // A line that is priced but not worked out fully says so beside its day type (an overnight shift: evening and night rates are not applied yet).
                 render: (l: ShiftClaimPreviewLineItemDto & { _idx: number }) => (
                   <span>
-                    {l.dayTypeLabel}
+                    {l.dayTypeLabel}{l.claimType === 'ProviderTravel' && <>{' '}<span className="text-xs font-mono">TRAN</span></>}
                     {l.note && <span className="block text-xs text-[var(--color-on-warning-container)]">{l.note}</span>}
                   </span>
                 ),
               },
               { key: 'supportItemCode', header: 'Item', className: 'font-mono text-xs' },
-              { key: 'hours', header: 'Hours', align: 'right' },
+              { key: 'hours', header: 'Quantity', align: 'right', render: (l: ShiftClaimPreviewLineItemDto & { _idx: number }) => lineQuantity({ ...l, unit: l.unit ?? 'H' }) },
               { key: 'unitPrice', header: 'Unit price', type: 'currency', align: 'right' },
               {
                 key: 'totalAmount',

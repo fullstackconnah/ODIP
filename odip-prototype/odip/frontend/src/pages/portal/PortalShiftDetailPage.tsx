@@ -264,7 +264,7 @@ export default function PortalShiftDetailPage() {
         </Callout>
       )}
       {alreadySubmitted && (
-        <Callout tone="info" polite>This shift was already submitted before this phone sent its Finish, so the details entered here (times, kilometres, handover) weren&rsquo;t added. Tell your coordinator if they differ.</Callout>
+        <Callout tone="info" polite>This shift was already submitted before this phone sent its Finish, so the details entered here (times, travel, kilometres, handover) weren&rsquo;t added. Tell your coordinator if they differ.</Callout>
       )}
       {submitted && (
         <Callout

@@ -17,14 +17,16 @@ export type WizardNavFooterProps = {
   secondaryActions: WizardSecondaryAction[]
   /** Where "Cancel" goes (the Review step's, and the first step's, where Back would be) when there is no earlier in-app page. Otherwise Cancel goes back, like the page's header Back. */
   cancelTo: string
-  /** Default `true`. `false` pins Cancel to `cancelTo`: only for the public caregiver wizard, which is outside the app shell (no in-app history to go back to). */
-  history?: boolean
+  /** Default `false`. `true` drops Cancel from the first and the review step: the public caregiver link has nowhere to cancel to. */
+  hideCancel?: boolean
   submitLabel: string
   /** The longest of the submit button's labels, for a caller whose label changes while submitting: the button holds that width, so Cancel does not slide under a second click. */
   submitReserve?: string
   isSubmitting: boolean
   /** Shown between the actions (above them on a phone): the agreement wizard's running total. */
   summary?: ReactNode
+  /** Default `false`. `true` keeps the summary on its own full-width row above the actions at every width (the caregiver link's save error), not between them from sm up. */
+  summaryOwnRow?: boolean
   /** Review step only: Back stays left; the secondary actions (Save as draft), Cancel and the submit group on the right, submit last. */
   reviewActionsRight?: boolean
 }
@@ -46,19 +48,20 @@ export function WizardNavFooter({
   isReviewStep,
   secondaryActions,
   cancelTo,
-  history = true,
+  hideCancel = false,
   submitLabel,
   submitReserve,
   isSubmitting,
   summary,
+  summaryOwnRow = false,
   reviewActionsRight = false,
 }: WizardNavFooterProps) {
   const back = useBackTarget(cancelTo)
-  const onCancelClick = history ? back.onLinkClick : undefined
   // A router link (href = cancelTo), so the unsaved-changes blocker still asks before leaving.
   const groupRight = isReviewStep && reviewActionsRight
   // Below sm, on a non-review step, the secondary drops to its own full-width row so Back and Next stay together on row 1.
-  const stackSecondary = !isReviewStep && secondaryActions.length > 0
+  // With no Cancel (the caregiver link), Back, the secondary and Next fit one row, so it never stacks.
+  const stackSecondary = !isReviewStep && secondaryActions.length > 0 && !hideCancel
   const secondary = secondaryActions.map((action) => (
     <Button
       key={action.key}
@@ -78,12 +81,12 @@ export function WizardNavFooter({
         {/* The first step has no Back, so the way out takes its place (the review step has its own Cancel). */}
         {showBack ? (
           <Button type="button" variant="secondary" onClick={onBack}>Back</Button>
-        ) : !isReviewStep && (
-          <Button variant="secondary" to={cancelTo} onClick={onCancelClick}>Cancel</Button>
+        ) : !isReviewStep && !hideCancel && (
+          <Button variant="secondary" to={cancelTo} onClick={back.onLinkClick}>Cancel</Button>
         )}
         {!groupRight && secondary}
       </div>
-      {summary && <div className="order-first basis-full min-w-0 sm:order-none sm:basis-auto sm:flex-1 sm:px-3">{summary}</div>}
+      {summary && <div className={`order-first basis-full min-w-0${summaryOwnRow ? '' : ' sm:order-none sm:basis-auto sm:flex-1 sm:px-3'}`}>{summary}</div>}
       {/* Review step: below sm the right group dissolves into the outer wrap row, so Back, Save as draft and Cancel share row 1 and Submit sits alone, right, on row 2. */}
       <div className={`flex min-w-0 flex-wrap justify-end gap-3${groupRight ? ' max-sm:contents' : ''}`}>
         {!isReviewStep && (
@@ -92,7 +95,7 @@ export function WizardNavFooter({
         {isReviewStep && (
           <>
             {groupRight && secondary}
-            <Button variant="secondary" to={cancelTo} onClick={onCancelClick}>Cancel</Button>
+            {!hideCancel && <Button variant="secondary" to={cancelTo} onClick={back.onLinkClick}>Cancel</Button>}
             <Button type="submit" aria-disabled={isSubmitting || undefined} onClick={(e) => { if (isSubmitting) e.preventDefault() }} className={`${BUSY_LOOK}${groupRight ? " max-sm:ml-auto" : ""}`}>
               {submitReserve ? (
                 // The longest label sits invisible in the same grid cell as the live one (drawn from an attribute, so it is not in the name or findable by text).
