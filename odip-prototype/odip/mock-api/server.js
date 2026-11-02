@@ -2101,6 +2101,8 @@ function claimDetail(c) {
 function shiftClaimRun(body, make) {
   const from = body?.from ?? '2026-10-19', to = body?.to ?? '2026-11-01'
   const sleepover = { participantId: 'p-sam', participantName: 'Sam Lee', shiftId: 's-sleep', serviceDate: '2026-10-21', description: 'Shift 22:00–06:00 · 8 h', reason: 'It is a sleepover, which shift claims do not price yet.' }
+  // The trip cross-guard: the reason does not repeat the name, the row's lead already carries it.
+  const tripClaimGuard = { participantId: 'p-sophie', participantName: 'Sophie Brown', shiftId: 's-guard', serviceDate: '2026-10-10', description: 'Shift 09:00–17:00 · 8 h', reason: '10/10/2026 is already on trip claim TC-43100000-20261010-A1B2C3. Reject or cancel that claim to claim this shift.' }
   const rows = [
     { participantId: 'p-sam', participantName: 'Sam Lee', shiftCount: 2, hours: 12, totalAmount: 612.4 },
     { participantId: 'p-long', participantName: 'Wolfeschlegelsteinhausenbergerdorff Alexandra', shiftCount: 3, hours: 18.5, totalAmount: 1042.75 },
@@ -2111,7 +2113,7 @@ function shiftClaimRun(body, make) {
   return {
     from, to, claimsMade: make ? participants.length : 0,
     shiftCount: participants.reduce((n, r) => n + r.shiftCount, 0), hours: participants.reduce((n, r) => n + r.hours, 0), totalAmount: participants.reduce((n, r) => n + r.totalAmount, 0),
-    participants, leftOut: empty ? [] : [sleepover],
+    participants, leftOut: empty ? [] : [sleepover, tripClaimGuard],
     flagged: participants.length ? [{ participantId: 'p-long', participantName: 'Wolfeschlegelsteinhausenbergerdorff Alexandra', shiftId: 's-night', serviceDate: '2026-10-24', description: 'Shift 20:00–04:00 · 8 h', caveat: 'Evening and night rates are not applied yet.' }] : [],
     skipped: make && participants.length ? [failed] : [],
   }
@@ -2629,8 +2631,16 @@ const routes = [
   ['participants/:id/service-agreement-drafts/:id/approval-preview', (participantId, draftId) => {
     const result = planApproval.preview(approvalStore, participantId, draftId)
     if (result.status) return respond(result.status, failEnvelope(null, result.errors))
-    const budgetWarnings = result.preview.canApprove ? rosterBudget.sampleWarnings('shift', result.preview.shiftsToCreate || 0) : null
-    return budgetWarnings ? { ...result.preview, budgetWarnings } : result.preview
+    return result.preview
+  }],
+  // Populate roster (S11): what each started week is missing, then one week at a time.
+  ['participants/:id/service-agreement-drafts/:id/populate-preview', (participantId, draftId) => {
+    const result = planApproval.populatePreview(approvalStore, participantId, draftId)
+    if (result.status) return respond(result.status, failEnvelope(null, result.errors))
+    return { ...result.preview, weeks: result.preview.weeks.map((week) => {
+      const budgetWarnings = rosterBudget.sampleWarnings('shift', week.toAdd)
+      return budgetWarnings ? { ...week, budgetWarnings } : week
+    }) }
   }],
 
   // participants (paged list)
@@ -2716,7 +2726,10 @@ const routes = [
   }],
 
   // trips (paged list)
-  ['trips', () => paged(trips)],
+  // ?status= and ?unclaimed=true narrow the list as the server does (unclaimed: no claim on the trip that is not Rejected).
+  ['trips', (searchParams) => paged(trips.filter((t) =>
+    (!searchParams?.get('status') || t.status === searchParams.get('status'))
+    && (searchParams?.get('unclaimed') !== 'true' || !claims.some((c) => c.tripInstanceId === t.id && c.status !== 'Rejected'))))],
   ['trips/:id/bookings', (id) => bookings.filter((b) => b.tripInstanceId === id)],
   ['trips/:id/tasks', (id) => tasks.filter((t) => t.tripInstanceId === id)],
   ['trips/:id/staff', (id) => tripStaffAssignments[id] || []],
@@ -3020,6 +3033,11 @@ const postRoutes = [
     if (result.status === 409) return respond(409, failEnvelope({ currentVersion: result.currentVersion }, result.errors, 'draft-superseded'))
     if (result.status) return respond(result.status, failEnvelope(null, result.errors))
     return { ...result.draft, oldShiftsRemaining: result.oldShiftsRemaining }
+  }],
+  ['participants/:id/service-agreement-drafts/:id/populate', (participantId, draftId, body) => {
+    const result = planApproval.populate(approvalStore, participantId, draftId, body)
+    if (result.status) return respond(result.status, failEnvelope(null, result.errors, result.code))
+    return result.result
   }],
   // Start rostering (2026-10-16): the week's agreement shifts, once; a started week is the 409 roster-week-started, as the server answers. matchRoute reads only `:id` as a parameter: it is the week start.
   ['rostering/weeks/:id/start', (weekStart) => {

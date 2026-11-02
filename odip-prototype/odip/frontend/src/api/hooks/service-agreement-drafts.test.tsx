@@ -12,28 +12,28 @@ vi.mock('../client', async () => {
 })
 
 import { apiClient } from '../client'
-import { APPROVE_TIMEOUT_MS, fileNameFromDisposition, useApprovalPreview, useApproveServiceAgreementDraft, useCreateServiceAgreementDraft, useDownloadServiceAgreementDraftPdf } from './service-agreement-drafts'
+import { APPROVE_TIMEOUT_MS, fileNameFromDisposition, useApprovalPreview, useApproveServiceAgreementDraft, useCreateServiceAgreementDraft, useDownloadServiceAgreementDraftPdf, usePopulatePreview, usePopulateRoster } from './service-agreement-drafts'
 
 const wrapper = (client: QueryClient) => function Wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>
 }
 
 const preview = (changes: Partial<DraftApprovalPreviewDto> = {}): DraftApprovalPreviewDto => ({
-  canApprove: true, alreadyApproved: false, reasons: [], patternsToCreate: 5, patternsToEnd: 0, shiftsToCreate: 40, oldShiftsRemaining: { open: 0, assigned: 0 }, overlappingPatterns: [], ...changes,
+  canApprove: true, alreadyApproved: false, reasons: [], patternsToCreate: 5, patternsToEnd: 0, shiftsOnApproval: false, oldShiftsRemaining: { open: 0, assigned: 0 }, overlappingPatterns: [], ...changes,
 })
 
 beforeEach(() => { apiGet.mockReset(); apiPost.mockReset() })
 
 describe('useApprovalPreview', () => {
   it('reads what approving would do from the preview endpoint of that revision, and nothing is posted', async () => {
-    apiGet.mockResolvedValue(preview({ horizonEnd: '2026-12-05' }))
+    apiGet.mockResolvedValue(preview({ shiftsOnApproval: true }))
     const { result } = renderHook(() => useApprovalPreview('p1', 'd1'), { wrapper: wrapper(new QueryClient()) })
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
     expect(apiGet).toHaveBeenCalledWith('/participants/p1/service-agreement-drafts/d1/approval-preview')
     expect(apiPost).not.toHaveBeenCalled()
-    expect(result.current.data?.horizonEnd).toBe('2026-12-05')
+    expect(result.current.data?.shiftsOnApproval).toBe(true)
   })
 
   it('asks nothing until it is wanted (the confirm dialog is open) or for a revision that is not there', () => {
@@ -55,6 +55,46 @@ describe('useApprovalPreview', () => {
     renderHook(() => useApprovalPreview('p1', 'd1'), { wrapper: wrapper(client) })
 
     await waitFor(() => expect(apiGet).toHaveBeenCalledTimes(2))
+  })
+})
+
+describe('usePopulatePreview and usePopulateRoster (S11)', () => {
+  it('reads what each started week is missing from the populate-preview endpoint of that revision, only while wanted', async () => {
+    apiGet.mockResolvedValue({ weeks: [{ weekStart: '2026-10-12', toAdd: 5, alreadyThere: 0 }] })
+    const client = new QueryClient()
+    renderHook(() => usePopulatePreview('p1', 'd1', false), { wrapper: wrapper(client) })
+    expect(apiGet).not.toHaveBeenCalled()
+
+    const { result } = renderHook(() => usePopulatePreview('p1', 'd1'), { wrapper: wrapper(client) })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    expect(apiGet).toHaveBeenCalledWith('/participants/p1/service-agreement-drafts/d1/populate-preview')
+    expect(result.current.data?.weeks[0].toAdd).toBe(5)
+  })
+
+  it('posts the week to the populate endpoint with the approval time limit, and refreshes the roster, the patterns and the participant\'s rostering', async () => {
+    apiPost.mockResolvedValue({ created: 5, alreadyThere: 0, weeks: [] })
+    const client = new QueryClient()
+    const invalidate = vi.spyOn(client, 'invalidateQueries')
+    const { result } = renderHook(() => usePopulateRoster(), { wrapper: wrapper(client) })
+
+    await act(async () => { await result.current.mutateAsync({ participantId: 'p1', draftId: 'd1', weekStart: '2026-10-12' }) })
+
+    expect(apiPost).toHaveBeenCalledWith('/participants/p1/service-agreement-drafts/d1/populate', { weekStart: '2026-10-12' }, { timeout: 30_000 })
+    const keys = invalidate.mock.calls.map(([filters]) => filters?.queryKey)
+    expect(keys).toEqual(expect.arrayContaining([['roster-board'], ['roster-patterns'], ['participant-rostering', 'p1']]))
+  })
+
+  it('reads the preview again when it is refused (the roster may have changed under it) and leaves the roster alone', async () => {
+    apiPost.mockRejectedValue({ response: { status: 409, data: { success: false, code: 'populate-refused', errors: ['This revision is not approved yet.'] } } })
+    const client = new QueryClient()
+    const invalidate = vi.spyOn(client, 'invalidateQueries')
+    const { result } = renderHook(() => usePopulateRoster(), { wrapper: wrapper(client) })
+
+    await act(async () => { await result.current.mutateAsync({ participantId: 'p1', draftId: 'd1', weekStart: '2026-10-12' }).catch(() => undefined) })
+
+    const keys = invalidate.mock.calls.map(([filters]) => filters?.queryKey)
+    expect(keys).toEqual([['service-agreement-populate-preview', 'p1', 'd1']])
   })
 })
 

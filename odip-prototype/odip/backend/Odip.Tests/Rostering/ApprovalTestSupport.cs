@@ -14,6 +14,7 @@ using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Rostering;
 using Odip.Infrastructure.Services;
 using Odip.Tests.Medications;
+using Xunit;
 using static Odip.Tests.PlanPricing.PlanPricingTestSupport;
 
 namespace Odip.Tests.Rostering;
@@ -95,6 +96,21 @@ internal static class ApprovalTestSupport
         f.Db.ServiceAgreementDrafts.Add(draft);
         await f.Db.SaveChangesAsync();
         return draft;
+    }
+
+    /// <summary>Populate roster for every started week of an approved revision, one week at a time as the dialog does (S11): what approval used to do by itself. The totals.</summary>
+    public static async Task<PopulateResultDto> PopulateAllAsync(ServiceAgreementApprovalService service, Guid participantId, Guid draftId, Guid? tenantId = null)
+    {
+        var tenant = tenantId ?? TenantA;
+        var weeks = (await service.PopulatePreviewAsync(tenant, participantId, draftId, default))!.Weeks;
+        var results = new List<PopulateWeekResultDto>();
+        foreach (var week in weeks)
+        {
+            var outcome = await service.PopulateAsync(tenant, participantId, draftId, week.WeekStart, default);
+            Assert.Equal(ServiceAgreementApprovalService.PopulateStatus.Populated, outcome.Status);
+            results.AddRange(outcome.Result!.Weeks);
+        }
+        return new PopulateResultDto { Created = results.Sum(w => w.Created), AlreadyThere = results.Sum(w => w.AlreadyThere), Weeks = results };
     }
 
     /// <summary>Marks a stored revision approved by its approval row alone, as the approval writes it. The ending rule and the renewal read approvals, not patterns (agreement PR 2).</summary>
