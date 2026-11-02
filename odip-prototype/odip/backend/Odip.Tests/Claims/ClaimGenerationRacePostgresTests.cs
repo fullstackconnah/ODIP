@@ -131,4 +131,32 @@ public class ClaimGenerationRacePostgresTests : IClassFixture<PostgresFixture>
         Assert.IsType<ConflictObjectResult>(result.Result);
         Assert.Equal(0, await kit.Db.TripClaims.CountAsync(c => c.TripInstanceId == trip.Id, Ct));
     }
+
+    [SkippableFact(DisplayName = "Postgres: editing a completion's travel waits on the claim-generate lock, so generation never reads half an edit (travel carry N1)")]
+    public async Task EditingTravel_TakesTheClaimGenerateLock_AndIsRefusedWhileAGenerationHoldsIt()
+    {
+        RequirePostgres();
+        using var kit = await KitAsync();
+        var person = kit.SeedParticipant();
+        var shift = kit.SeedShift(person, new DateOnly(2026, 10, 1), ShiftStatus.PendingReview);
+        kit.Db.ShiftCompletions.Add(new ShiftCompletion
+        {
+            Id = Guid.NewGuid(), TenantId = kit.TenantId, ShiftId = shift.Id, ActualStart = DateTime.UtcNow, ActualEnd = DateTime.UtcNow, TimeZoneId = "Australia/Sydney",
+            SubmittedByUserId = Guid.NewGuid(), StartedAt = DateTime.UtcNow, SubmittedAt = DateTime.UtcNow, IsActive = true, PreShiftTravelMinutes = 10,
+        });
+        kit.Db.SaveChanges();
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns(kit.TenantId);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(false);
+        await using var holder = PostgresFixture.NewContext(_pg.ConnectionString!, tenant.Object);
+        await using var held = await RosterGenerationLock.AcquireAsync(holder, person.Id, Ct, scope: "claim-generate");   // a claim generation for this participant, still running
+        await using var db = PostgresFixture.NewContext(_pg.ConnectionString!, tenant.Object);
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+
+        var result = await controller.EditCompletionTravel(shift.Id, new Odip.Application.DTOs.EditCompletionTravelDto { PreShiftTravelMinutes = 25 }, Ct);   // waits the lock's 10 s, then gives up
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal(RosterBusyException.Words, Assert.Single(Assert.IsType<Odip.Application.Common.ApiResponse<Odip.Application.DTOs.ShiftCompletionDto>>(conflict.Value).Errors!));   // the participant words, not the roster board's
+        Assert.Equal(10, (await kit.Db.ShiftCompletions.AsNoTracking().SingleAsync(c => c.ShiftId == shift.Id, Ct)).PreShiftTravelMinutes);
+    }
 }

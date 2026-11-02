@@ -178,7 +178,7 @@ public sealed partial class ClaimBatchService(OdipDbContext db, BprCsvService bp
         var ndisNumbers = selected.Select(r => r.Participant?.NdisNumber?.Trim()).Where(n => !string.IsNullOrEmpty(n)).Distinct().ToList();
         var accepted = await db.ClaimBatchLines.AsNoTracking()
             .Where(b => b.TenantId == t && b.Outcome == ClaimBatchLineOutcome.Successful && b.NdisNumber != null && ndisNumbers.Contains(b.NdisNumber))
-            .Select(b => new AcceptedLine(b.NdisNumber!, b.SupportNumber, b.SupportsDeliveredFrom, b.SupportsDeliveredTo, b.Batch.FileName)).ToListAsync(ct);
+            .Select(b => new AcceptedLine(b.NdisNumber!, b.SupportNumber, b.SupportsDeliveredFrom, b.SupportsDeliveredTo, b.Batch.FileName, b.ClaimLineItem != null ? b.ClaimLineItem.ClaimType : ClaimType.Standard)).ToListAsync(ct);
 
         var otherFunded = new Dictionary<Guid, string>();
         var heldBy = new Dictionary<Guid, string>();

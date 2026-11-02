@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { dayTypeLabel, hasPartlyRejectedShift, lineQuantity } from './claimLines'
+import { dayTypeLabel, hasPartlyRejectedShift, isSleepoverLine, lineKindLabel, lineQuantity } from './claimLines'
 
 describe('lineQuantity', () => {
   it('reads a sleepover shift line in nights', () => {
@@ -28,5 +28,22 @@ describe('hasPartlyRejectedShift', () => {
   it('is false when the whole shift is rejected, or the rejected line is another shift or a trip', () => {
     expect(hasPartlyRejectedShift([line('a', 'Rejected'), line('a', 'Rejected')])).toBe(false)
     expect(hasPartlyRejectedShift([line('a', 'Rejected'), line('b', 'Submitted'), line(undefined, 'Submitted')])).toBe(false)
+  })
+})
+
+describe('provider travel lines (travel plan T31)', () => {
+  const km = { unit: 'E', shiftId: 's', hours: 12.87, supportItemCode: '04_799_0125_6_1' }
+  it('reads the kilometre line as dollars, not nights, and is not a sleepover', () => {
+    expect(isSleepoverLine(km)).toBe(false)
+    expect(lineQuantity(km)).toBe('$12.87')
+  })
+  it('keeps a real sleepover line in nights', () => {
+    expect(lineQuantity({ unit: 'E', shiftId: 's', hours: 1, supportItemCode: '04_103_0125_6_1' })).toBe('1 night')
+  })
+  it('labels the time line and the kilometre line', () => {
+    expect(lineKindLabel({ ...km, claimType: 'ProviderTravel', dayType: 'Weekday' })).toBe('Provider travel')
+    expect(lineKindLabel({ ...km, claimType: 'Standard', dayType: 'Weekday' })).toBe('Provider travel costs')
+    expect(lineKindLabel({ unit: 'H', shiftId: 's', hours: 8, supportItemCode: '04_104_0125_6_1', claimType: 'Standard', dayType: 'Weekday' })).toBe('Weekday')
+    expect(lineKindLabel({ unit: 'E', shiftId: 's', hours: 1, supportItemCode: '04_103_0125_6_1', claimType: 'Standard', dayType: 'Weekday' })).toBe('Sleepover')
   })
 })

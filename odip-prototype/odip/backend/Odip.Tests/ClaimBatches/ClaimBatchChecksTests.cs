@@ -229,4 +229,61 @@ public class ClaimBatchChecksTests
     [InlineData("v04", true)]
     [InlineData("XX1", true)]
     public void Reject_code_kinds(string code, bool needsDecision) => Assert.Equal(needsDecision, NdiaRejectCodes.For(code).NeedsDecision);
+
+    // ── Provider travel (travel plan A2, T21 and T22) ──
+
+    [Fact]
+    public void T21_ATravelLine_BesideItsBandLine_IsNotADuplicate_AndIsNotAlreadyAccepted()
+    {
+        var band = Clean();
+        var travel = Clean(line: l => l.ClaimType = ClaimType.ProviderTravel) with { Participant = band.Participant };
+        var ctx = new BatchContext { Today = Today, BuildRows = [band, travel], Accepted = [new AcceptedLine("430000001", band.Line.SupportItemCode, band.Line.SupportsDeliveredFrom, band.Line.SupportsDeliveredTo, "BPR1.csv", ClaimType.Standard)] };
+        Assert.DoesNotContain("DuplicateInFile", Rules(travel, ctx));
+        Assert.DoesNotContain("AlreadyAccepted", Rules(travel, ctx));
+        Assert.Contains("AlreadyAccepted", Rules(band, ctx));   // (b) the same type, item and dates still blocks
+    }
+
+    [Fact]
+    public void T21_TwoTravelLines_OfTheSameItemAndDates_StillWarn()
+    {
+        var a = Clean(line: l => l.ClaimType = ClaimType.ProviderTravel);
+        var b = Clean(line: l => l.ClaimType = ClaimType.ProviderTravel) with { Participant = a.Participant };
+        b.Line.SupportsDeliveredFrom = a.Line.SupportsDeliveredFrom; b.Line.SupportsDeliveredTo = a.Line.SupportsDeliveredTo;
+        Assert.Contains("DuplicateInFile", Rules(a, new BatchContext { Today = Today, BuildRows = [a, b] }));
+    }
+
+    [Theory]
+    [InlineData(ClaimType.ProviderTravel, "04_104_0125_6_1", "TRAN")]
+    [InlineData(ClaimType.Standard, "04_799_0125_6_1", "")]
+    [InlineData(ClaimType.Standard, "04_104_0125_6_1", "")]
+    public void T22_TheClaimTypeColumn_IsTRANForProviderTravel_AndBlankForTheKmItemAndAnOldRow(ClaimType type, string item, string expected)
+    {
+        var row = Clean(line: l => { l.ClaimType = type; l.SupportItemCode = item; });
+        Assert.Equal(expected, BprCsvService.ToOut(row, 1).ClaimType);
+    }
+
+    [Fact]
+    public void T22_ACancellation_StillWritesCANC()
+    {
+        var row = Clean(line: l => { l.ClaimType = ClaimType.Cancellation; l.CancellationReason = "nsdh"; });
+        Assert.Equal("CANC", BprCsvService.ToOut(row, 1).ClaimType);
+    }
+
+    [Fact]
+    public void F2_AnAcceptedStandardLine_StillBlocksACancellationLineOfTheSameItemAndDates()
+    {
+        var accepted = Clean();
+        var cancel = Clean(line: l => l.ClaimType = ClaimType.Cancellation) with { Participant = accepted.Participant };
+        var ctx = new BatchContext { Today = Today, BuildRows = [accepted, cancel], Accepted = [new AcceptedLine("430000001", accepted.Line.SupportItemCode, accepted.Line.SupportsDeliveredFrom, accepted.Line.SupportsDeliveredTo, "BPR1.csv", ClaimType.Standard)] };
+        Assert.Contains("AlreadyAccepted", Rules(cancel, ctx));
+        Assert.Contains("DuplicateInFile", Rules(cancel, ctx));
+    }
+
+    [Fact]
+    public void N3_ATravelKmRow_WritesTheDollarsInQuantity_AndLeavesHoursEmpty()
+    {
+        var row = Clean(line: l => { l.SupportItemCode = "04_799_0125_6_1"; l.Hours = 8.91m; l.UnitPrice = 1m; l.TotalAmount = 8.91m; }, item: i => { i.ItemNumber = "04_799_0125_6_1"; i.Unit = "E"; });
+        var o = BprCsvService.ToOut(row, 1);
+        Assert.Equal((8.91m, (decimal?)null, ""), (o.Quantity, o.Hours, o.ClaimType));
+    }
 }
