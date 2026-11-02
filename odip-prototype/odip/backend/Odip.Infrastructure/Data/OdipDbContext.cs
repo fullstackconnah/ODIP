@@ -73,6 +73,7 @@ public class OdipDbContext : DbContext
     public DbSet<TripDay> TripDays => Set<TripDay>();
     public DbSet<ScheduledActivity> ScheduledActivities => Set<ScheduledActivity>();
     public DbSet<Activity> Activities => Set<Activity>();
+    public DbSet<ReferralSource> ReferralSources => Set<ReferralSource>();
     public DbSet<BookingTask> BookingTasks => Set<BookingTask>();
     public DbSet<TripDocument> TripDocuments => Set<TripDocument>();
     public DbSet<User> Users => Set<User>();
@@ -559,6 +560,16 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.ProviderWebsite).HasMaxLength(500);
             entity.Property(e => e.EstimatedCost).HasPrecision(18, 2);
             entity.HasIndex(e => e.Status);
+        });
+
+        // ── ReferralSource ───────────────────────────────────────
+        modelBuilder.Entity<ReferralSource>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).HasMaxLength(100).IsRequired();
+            entity.HasOne(e => e.Tenant).WithMany().HasForeignKey(e => e.TenantId).OnDelete(DeleteBehavior.Cascade);
+            // One name once per organisation. The controller also compares case-insensitively; this is the backstop for a race.
+            entity.HasIndex(e => new { e.TenantId, e.Name }).IsUnique();
         });
 
         // ── Activity ─────────────────────────────────────────────
@@ -1691,6 +1702,9 @@ public class OdipDbContext : DbContext
             // Restrict: a staff member booked for a visit is never deleted out from under it (ImportUntouched.StaffBlockersAsync lists it).
             entity.HasOne(e => e.IntakeStaffUser).WithMany().HasForeignKey(e => e.IntakeStaffUserId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(e => e.IntakeBookedByUser).WithMany().HasForeignKey(e => e.IntakeBookedByUserId).OnDelete(DeleteBehavior.Restrict);
+            // Restrict: a source is only ever hidden, never deleted, so no enquiry loses its label.
+            entity.HasOne(e => e.ReferralSource).WithMany().HasForeignKey(e => e.ReferralSourceId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => e.ReferralSourceId);
             // The schedule views read visits by organisation and start.
             entity.HasIndex(e => new { e.TenantId, e.IntakeStartsAt });
         });
@@ -2184,6 +2198,11 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<Activity>()
             .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<Activity>()
+            .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<ReferralSource>()
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<ReferralSource>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<TripInstance>()

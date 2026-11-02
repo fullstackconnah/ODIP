@@ -25,4 +25,16 @@ public class DbSeederActivitiesTests
         var generic = activities.Where(a => a.EventTemplateId is null).Select(a => (a.Id, a.ActivityName)).Order().ToList();
         Assert.Equal(StarterActivities.For(DemoTenantId, keepSeedIds: true).Select(a => (a.Id, a.ActivityName)).Order().ToList(), generic);
     }
+
+    [Fact]
+    public async Task TheSeed_AddsTheNineReferralSourcesOnlyWhenTheDemoOrganisationHasNone()
+    {
+        using var db = TestDb.Create();
+        db.ReferralSources.Add(new Odip.Domain.Entities.ReferralSource { Id = Guid.NewGuid(), TenantId = DemoTenantId, Name = "Hospital" });
+        await db.SaveChangesAsync();
+
+        await DbSeeder.SeedAsync(db, CancellationToken.None);
+
+        Assert.Equal(["Hospital"], await db.ReferralSources.IgnoreQueryFilters().Select(r => r.Name).ToListAsync());
+    }
 }

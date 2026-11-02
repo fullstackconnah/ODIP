@@ -116,7 +116,7 @@ try {
   }
   await d.context.close()
   const n = await open({ role: 'Admin', width: 1280, height: 900, scheme: 'light', initial: {} })
-  await n.page.getByRole('textbox', { name: 'Address' }).fill('2 Example Street, Melbourne VIC 3000')
+  await n.page.getByRole('textbox', { name: 'Registered business address' }).fill('2 Example Street, Melbourne VIC 3000')
   await n.save.click()
   await n.foot.getByRole('status').filter({ hasText: /^Saved$/ }).waitFor({ timeout: 10_000 })
   const nb = n.state.bodies[0]
