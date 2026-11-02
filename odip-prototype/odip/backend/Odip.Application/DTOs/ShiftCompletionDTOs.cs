@@ -75,6 +75,16 @@ public record FinishShiftDto
     /// so any number in the body binds and an out-of-range one gets the action's coded refusal, never an uncoded model-binding 400.</summary>
     public double? Kilometres { get; init; }
 
+    // Provider travel (travel PR-A1): optional, doubles for the same reason as Kilometres. Minutes are whole, 0 to 480; kilometres 0 to 2,000, stored to one decimal place.
+    /// <summary>Minutes of the trip to the participant, before the shift.</summary>
+    public double? PreShiftTravelMinutes { get; init; }
+    /// <summary>Kilometres of the trip before the shift.</summary>
+    public double? PreShiftTravelKilometres { get; init; }
+    /// <summary>Minutes of the trip after the shift.</summary>
+    public double? PostShiftTravelMinutes { get; init; }
+    /// <summary>Kilometres of the trip after the shift.</summary>
+    public double? PostShiftTravelKilometres { get; init; }
+
     /// <summary>"Anything to report?": true, false, or null when skipped. Informational only.</summary>
     public bool? AnythingToReport { get; init; }
 
@@ -158,6 +168,12 @@ public record ShiftCompletionDto(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? TimeAdjustmentReason,
     /// <summary>Kilometres driven with the participant, one decimal place; null when not given.</summary>
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] decimal? Kilometres,
+    /// <summary>Provider travel before the shift: whole minutes and kilometres (one decimal place); null when not given. Not <see cref="Kilometres"/>.</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] int? PreShiftTravelMinutes,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] decimal? PreShiftTravelKilometres,
+    /// <summary>Provider travel after the shift, to base or home; null when not given.</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] int? PostShiftTravelMinutes,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] decimal? PostShiftTravelKilometres,
     /// <summary>"Anything to report?" at Finish: true, false, or null when skipped.</summary>
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] bool? AnythingToReport,
     /// <summary>The worker sent a time recorded offline; the review page marks it.</summary>
@@ -231,6 +247,16 @@ public record CompletionQueueItemDto(
     /// <summary>How many active incidents are linked to the shift: the rows the completion review's <c>incidents</c> list shows (ShiftId and IsActive), so a row the
     /// queue calls clean is one whose review lists no incident. No default value: an unknown count must never read as "no incident".</summary>
     int IncidentCount);
+
+/// <summary>Body of PUT rostering/shifts/{id}/completion/travel: replaces all four travel values (an omitted one is cleared). Doubles, so an out-of-range
+/// number gets the action's coded refusal, never an uncoded model-binding 400 (the FinishShiftDto precedent).</summary>
+public record EditCompletionTravelDto
+{
+    public double? PreShiftTravelMinutes { get; init; }
+    public double? PreShiftTravelKilometres { get; init; }
+    public double? PostShiftTravelMinutes { get; init; }
+    public double? PostShiftTravelKilometres { get; init; }
+}
 
 public record ReturnCompletionDto
 {

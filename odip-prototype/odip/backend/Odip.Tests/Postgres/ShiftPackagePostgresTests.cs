@@ -246,6 +246,44 @@ public class ShiftPackagePostgresTests : IClassFixture<PostgresFixture>
     }
 
     [SkippableFact]
+    public async Task TheTravelMigration_AddsFourNullableColumns_AndAnExistingCompletionReadsBackNull()
+    {
+        // Travel PR-A1: expand-only. A completion made before the migration is untouched, and the columns have no default.
+        RequirePostgres();
+        var connectionString = await _pg.CreateDatabaseAsync();
+        await using var db = PostgresFixture.NewContext(connectionString);
+        var migrator = db.GetService<IMigrator>();
+        await migrator.MigrateAsync("20261102140000_AddClaimLineShiftPart");
+
+        var tenantId = Guid.NewGuid();
+        var participantId = Guid.NewGuid();
+        var shiftId = Guid.NewGuid();
+        var completionId = Guid.NewGuid();
+        await using (var conn = new NpgsqlConnection(connectionString))
+        {
+            await conn.OpenAsync();
+            await InsertMinimalRowAsync(conn, "Tenants", new() { ["Id"] = tenantId, ["Name"] = "Test Provider", ["EmailDomain"] = $"{tenantId:N}.example.com" });
+            await InsertMinimalRowAsync(conn, "Participants", new() { ["Id"] = participantId, ["TenantId"] = tenantId, ["FirstName"] = "Sophie", ["LastName"] = "Brown" });
+            await InsertMinimalRowAsync(conn, "Shifts", new() { ["Id"] = shiftId, ["TenantId"] = tenantId, ["ParticipantId"] = participantId });
+            await InsertMinimalRowAsync(conn, "ShiftCompletions", new() { ["Id"] = completionId, ["TenantId"] = tenantId, ["ShiftId"] = shiftId });
+        }
+
+        await migrator.MigrateAsync();
+
+        await using var after = new NpgsqlConnection(connectionString);
+        await after.OpenAsync();
+        await using (var columns = new NpgsqlCommand(
+            "SELECT count(*) FROM information_schema.columns WHERE table_name = 'ShiftCompletions' AND is_nullable = 'YES' AND column_default IS NULL " +
+            "AND column_name IN ('PreShiftTravelMinutes','PreShiftTravelKilometres','PostShiftTravelMinutes','PostShiftTravelKilometres')", after))
+            Assert.Equal(4L, await columns.ExecuteScalarAsync());
+        await using var read = new NpgsqlCommand(
+            "SELECT count(*) FROM \"ShiftCompletions\" WHERE \"Id\" = @id AND \"PreShiftTravelMinutes\" IS NULL AND \"PreShiftTravelKilometres\" IS NULL " +
+            "AND \"PostShiftTravelMinutes\" IS NULL AND \"PostShiftTravelKilometres\" IS NULL", after);
+        read.Parameters.AddWithValue("id", completionId);
+        Assert.Equal(1L, await read.ExecuteScalarAsync());
+    }
+
+    [SkippableFact]
     public async Task EveryMigration_IsApplied_AndNothingIsPending()
     {
         RequirePostgres();

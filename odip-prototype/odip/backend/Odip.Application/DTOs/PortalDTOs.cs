@@ -204,7 +204,10 @@ public record PortalShiftDetailDto(
     /// <c>atAGlance.address</c> are explicit null (and <c>handoverTrail</c> is empty), and this says why in plain language - for a Published shift, from
     /// when they will show - so the UI can explain instead of showing an unexplained gap. Null when nothing is withheld. The other at-a-glance care
     /// facts (allergies, diet, communication, behaviour, HIDPA) are unaffected.</summary>
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? SensitiveInfoWithheldReason);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? SensitiveInfoWithheldReason,
+    /// <summary>Whether the organisation claims provider travel (the organisation switch, on when there is no settings row). The portal shows the four
+    /// travel fields at Finish only when this is true. Derived on the server, never trusted from the client.</summary>
+    bool TravelAsked);
 
 // ── At a glance (need-to-know critical facts) ─────────────────────────────
 

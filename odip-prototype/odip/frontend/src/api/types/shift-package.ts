@@ -348,5 +348,10 @@ export const SHIFT_PACKAGE_ERROR_CODES = {
   startNotBeforeEnd: 'SHIFT_START_NOT_BEFORE_END',
   breakOutsideTimes: 'SHIFT_BREAK_OUTSIDE_TIMES',
   kilometresOutOfRange: 'SHIFT_KILOMETRES_OUT_OF_RANGE',
+  /** 400 on Finish and on the staff travel edit: a travel leg out of range. */
+  travelMinutesOutOfRange: 'SHIFT_TRAVEL_MINUTES_OUT_OF_RANGE',
+  travelKilometresOutOfRange: 'SHIFT_TRAVEL_KILOMETRES_OUT_OF_RANGE',
+  /** 409 on the staff travel edit: the shift is on a claim that still counts. */
+  travelOnClaim: 'SHIFT_TRAVEL_ON_CLAIM',
 } as const
 export type ShiftPackageErrorCode = typeof SHIFT_PACKAGE_ERROR_CODES[keyof typeof SHIFT_PACKAGE_ERROR_CODES]

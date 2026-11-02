@@ -59,6 +59,12 @@ public static class ShiftErrorCodes
     public const string ShiftBreakOutsideTimes = "SHIFT_BREAK_OUTSIDE_TIMES";
     public const string ShiftKilometresOutOfRange = "SHIFT_KILOMETRES_OUT_OF_RANGE";
 
+    // Provider travel (travel PR-A1): the four optional legs at Finish and on the staff edit.
+    public const string ShiftTravelMinutesOutOfRange = "SHIFT_TRAVEL_MINUTES_OUT_OF_RANGE";
+    public const string ShiftTravelKilometresOutOfRange = "SHIFT_TRAVEL_KILOMETRES_OUT_OF_RANGE";
+    /// <summary>409 on a staff travel edit while the shift is on a claim that still counts.</summary>
+    public const string ShiftTravelOnClaim = "SHIFT_TRAVEL_ON_CLAIM";
+
     // Late (offline-queued) writes: a client-recorded time outside the bounds, or an idempotency id that belongs to someone else's row.
     public const string ShiftClientTimeInFuture = "SHIFT_CLIENT_TIME_IN_FUTURE";
     public const string ShiftClientTimeTooOld = "SHIFT_CLIENT_TIME_TOO_OLD";
