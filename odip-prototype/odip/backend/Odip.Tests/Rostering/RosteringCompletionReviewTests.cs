@@ -1619,7 +1619,7 @@ public class RosteringCompletionReviewTests
         var body = Refusal(await MakeController(db).EditCompletionTravel(shift.Id, TravelEdit(preMin: 15), CancellationToken.None), 409);
 
         Assert.Equal(ShiftErrorCodes.ShiftTravelOnClaim, body.Code);
-        Assert.Contains("TC-LIVE-1", body.Message);
+        Assert.Contains("TC-LIVE-1", Assert.Single(body.Errors!));
         Assert.Null((await db.ShiftCompletions.SingleAsync()).PreShiftTravelMinutes);
     }
 
