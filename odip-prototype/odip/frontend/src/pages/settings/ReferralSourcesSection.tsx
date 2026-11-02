@@ -6,6 +6,7 @@ import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { DataTable } from '@/components/DataTable'
 import { inputClass } from '@/components/FormField'
+import { TAP_AREA } from '@/components/tapArea'
 import { usePermissions } from '@/lib/permissions'
 import { retryingAfterError } from '@/lib/queryPhase'
 import { extractErrorMessage } from '@/lib/utils'
@@ -86,8 +87,8 @@ export default function ReferralSourcesSection() {
       key: 'actions', header: 'Actions',
       render: (s: ReferralSourceDto) => editing?.id === s.id ? null : (
         <div className="flex gap-2">
-          <Button variant="secondary" size="sm" onClick={() => open({ id: s.id, name: s.name })} aria-label={`Rename: ${s.name}`}>Rename</Button>
-          <Button variant="ghost" size="sm" disabled={busy} onClick={() => setActive(s, hiddenRows)} aria-label={`${hiddenRows ? 'Show' : 'Hide'}: ${s.name}`}>{hiddenRows ? 'Show' : 'Hide'}</Button>
+          <Button variant="secondary" size="sm" className={TAP_AREA} onClick={() => open({ id: s.id, name: s.name })} aria-label={`Rename: ${s.name}`}>Rename</Button>
+          <Button variant="ghost" size="sm" className={TAP_AREA} disabled={busy} onClick={() => setActive(s, hiddenRows)} aria-label={`${hiddenRows ? 'Show' : 'Hide'}: ${s.name}`}>{hiddenRows ? 'Show' : 'Hide'}</Button>
         </div>
       ),
     }] : []),
