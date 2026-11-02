@@ -2,12 +2,16 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Moq;
+using Odip.Api.Controllers;
+using Odip.Application.DTOs;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Interfaces;
 using Odip.Domain.Rostering;
 using Odip.Infrastructure.Audit;
 using Odip.Infrastructure.Data;
+using Odip.Infrastructure.Rostering;
+using Odip.Infrastructure.Services;
 using Xunit;
 
 namespace Odip.Tests.Rostering;
@@ -227,5 +231,31 @@ public class RosteringAuditTests
             .Single();
         Assert.Contains("Excluded", updateLog.Changes);
         Assert.Contains("Participant reported a safeguarding concern.", updateLog.Changes);
+    }
+
+    [Fact]
+    public async Task ReorderThroughTheWriter_AuditsEveryRenumberedSibling_WithItsRankChange()
+    {
+        using var db = CreateDb(Guid.NewGuid());
+        var participant = NewParticipant();
+        var (a, b, c) = (NewStaff("Aa"), NewStaff("Bb"), NewStaff("Cc"));
+        db.Participants.Add(participant);
+        db.Users.AddRange(a, b, c);
+        await db.SaveChangesAsync();
+        var rows = new[] { a, b, c }.Select((s, i) => new StaffParticipantCompatibility
+        {
+            Id = Guid.NewGuid(), TenantId = TenantId, UserId = s.Id, ParticipantId = participant.Id, Level = CompatibilityLevel.Backup, Rank = i + 1,
+        }).ToList();
+        db.StaffParticipantCompatibilities.AddRange(rows);
+        await db.SaveChangesAsync();
+
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+        await controller.UpsertCompatibility(new UpsertCompatibilityDto { StaffId = c.Id, ParticipantId = participant.Id, Level = CompatibilityLevel.Backup, Rank = 1 }, CancellationToken.None);
+
+        foreach (var row in rows)
+        {
+            var log = db.AuditLogs.Single(l => l.EntityType == nameof(StaffParticipantCompatibility) && l.EntityId == row.Id && l.Action == AuditAction.Updated);
+            Assert.Contains("Rank", log.Changes);
+        }
     }
 }

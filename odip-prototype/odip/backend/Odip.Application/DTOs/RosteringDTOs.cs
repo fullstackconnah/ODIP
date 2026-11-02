@@ -560,6 +560,7 @@ public record CompatibilityRowDto
     public Guid ParticipantId { get; init; }
     public string ParticipantName { get; init; } = string.Empty;
     public CompatibilityLevel Level { get; init; }
+    public int Rank { get; init; }
     public string? Reason { get; init; }
     public DateTime UpdatedAt { get; init; }
 }
@@ -570,6 +571,8 @@ public record UpsertCompatibilityDto
     public Guid ParticipantId { get; init; }
     public CompatibilityLevel Level { get; init; }
     public string? Reason { get; init; }
+    /// <summary>Target 1-based position in the tier. Null: a new or moved row goes last, an unmoved row keeps its place.</summary>
+    public int? Rank { get; init; }
 }
 
 // ── Roster fill (how full the coming weeks are) ──────────────────
