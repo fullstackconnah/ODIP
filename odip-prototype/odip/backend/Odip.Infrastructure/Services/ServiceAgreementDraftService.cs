@@ -337,7 +337,7 @@ public sealed class ServiceAgreementDraftService
 
     /// <summary>
     /// The PACE category number of each cost line, by (item code, catalogue version), for the PDF's category rows: the row of the line's own catalogue version, else the newest row of the item.
-    /// A line whose item has no row, or a row with no category, is left out.
+    /// A line whose item has no row, or a row with no category, has no entry here and prints under "Not in the support catalogue".
     /// shortcut: read from the catalogue when the PDF is made, not snapshotted on the line, so a re-import that rewrites a version's rows in place (a changed PACE number on a matched row) would
     /// change an old agreement's PDF; snapshot the number on the line if that ever happens.
     /// </summary>

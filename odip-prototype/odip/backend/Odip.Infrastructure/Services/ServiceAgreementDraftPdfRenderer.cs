@@ -43,17 +43,13 @@ public static class ServiceAgreementDraftPdfRenderer
                 column.Item().PaddingTop(16).EnsureSpace(90).Text("Cost detail (NDIS catalogue prices)").Bold().FontSize(12);
                 column.Item().PaddingTop(6).Table(table =>
                 {
-                    table.ColumnsDefinition(columns => { columns.RelativeColumn(2); columns.RelativeColumn(); columns.RelativeColumn(); columns.RelativeColumn(); });
+                    table.ColumnsDefinition(CostColumns);
                     table.Header(header => { header.Cell().Background(Colors.Grey.Lighten2).Padding(4).Text("Support type").Bold(); header.Cell().Background(Colors.Grey.Lighten2).Padding(4).Text("Hours").Bold(); header.Cell().Background(Colors.Grey.Lighten2).Padding(4).Text("Catalogue code").Bold(); header.Cell().Background(Colors.Grey.Lighten2).Padding(4).Text("Server price / provenance").Bold(); });
                     foreach (var (category, line) in CostRows(draft, categories))
                     {
-                        if (category is not null) table.Cell().ColumnSpan(4).Background(Colors.Grey.Lighten3).Padding(4).Text(category).Bold();
-                        // A line the pricing engine generated from a block says its band, its unit and what it totals over the agreement; a hand-typed line prints exactly as it always did.
-                        table.Cell().Padding(4).Text(line.Band is null ? line.ServiceType : $"{line.ServiceType} — {line.Band}");
-                        table.Cell().Padding(4).Text(line.Hours.ToString("0.##", CultureInfo.InvariantCulture) + (line.Unit switch { "E" => " each", "D" => line.Hours == 1m ? " night" : " nights", _ => string.Empty }));
-                        table.Cell().Padding(4).Text(line.ItemCode);
-                        table.Cell().Padding(4).Text($"{line.UnitPrice.ToString("0.00", CultureInfo.InvariantCulture)} ({line.CatalogueVersion}, {Date(line.CatalogueEffectiveFrom)})"
-                            + (line.Total is { } total ? $" — {total.ToString("0.00", CultureInfo.InvariantCulture)} for {line.Occurrences} {(line.Occurrences == 1 ? "shift" : "shifts")}" : string.Empty));
+                        // A group heading and its first line are one table row (the line is a table inside the heading's cell), so a heading is never left alone at the end of a page; ShowEntire keeps the row from splitting.
+                        if (category is null) CostCells(table, line);
+                        else table.Cell().ColumnSpan(4).ShowEntire().Column(group => { group.Item().Background(Colors.Grey.Lighten3).Padding(4).Text(category).Bold(); group.Item().Table(first => { first.ColumnsDefinition(CostColumns); CostCells(first, line); }); });
                     }
                 });
                 if (draft.Lines.Any(x => x.Total is not null))
@@ -77,6 +73,18 @@ public static class ServiceAgreementDraftPdfRenderer
             });
             page.Footer().AlignCenter().Text(text => { text.Span("Page "); text.CurrentPageNumber(); });
         }));
+    }
+
+    private static void CostColumns(TableColumnsDefinitionDescriptor columns) { columns.RelativeColumn(2); columns.RelativeColumn(); columns.RelativeColumn(); columns.RelativeColumn(); }
+
+    private static void CostCells(TableDescriptor table, ServiceAgreementDraftLine line)
+    {
+        // A line the pricing engine generated from a block says its band, its unit and what it totals over the agreement; a hand-typed line prints exactly as it always did.
+        table.Cell().Padding(4).Text(line.Band is null ? line.ServiceType : $"{line.ServiceType} — {line.Band}");
+        table.Cell().Padding(4).Text(line.Hours.ToString("0.##", CultureInfo.InvariantCulture) + (line.Unit switch { "E" => " each", "D" => line.Hours == 1m ? " night" : " nights", _ => string.Empty }));
+        table.Cell().Padding(4).Text(line.ItemCode);
+        table.Cell().Padding(4).Text($"{line.UnitPrice.ToString("0.00", CultureInfo.InvariantCulture)} ({line.CatalogueVersion}, {Date(line.CatalogueEffectiveFrom)})"
+            + (line.Total is { } total ? $" — {total.ToString("0.00", CultureInfo.InvariantCulture)} for {line.Occurrences} {(line.Occurrences == 1 ? "shift" : "shifts")}" : string.Empty));
     }
 
     /// <summary>

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Moq;
 using Odip.Domain.Billing.Pricing;
 using Odip.Domain.Entities;
+using Odip.Domain.Funding;
 using Odip.Domain.Interfaces;
 using Odip.Infrastructure.Data;
 using Odip.Infrastructure.Services;
@@ -129,17 +130,47 @@ public class DraftPdfCategoryTests
     }
 
     [Fact]
-    public void The_table_keeps_its_four_header_cells_and_the_page_count_of_the_plain_table()
+    public void The_table_has_one_header_and_one_group_heading_per_category()
     {
         var draft = Revision(Line("Out and about", "04_A", 0), Line("Morning routine", "01_A", 1));
         var map = new Dictionary<(string, string), int> { [("04_A", "2026-27")] = 4, [("01_A", "2026-27")] = 1 };
 
         using var grouped = PdfDocument.Open(ServiceAgreementDraftPdfRenderer.Compose(draft, null, map).GeneratePdf());
-        using var plain = PdfDocument.Open(ServiceAgreementDraftPdfRenderer.Compose(draft, null, null).GeneratePdf());
+        var text = TextWith(draft, map);
 
-        Assert.Equal(plain.NumberOfPages, grouped.NumberOfPages);
-        Assert.Equal(HeaderWords(plain), HeaderWords(grouped));
         Assert.Equal(1, HeaderWords(grouped));
+        Assert.Equal(1, Count(text, Social));
+        Assert.Equal(1, Count(text, DailyLife));
+    }
+
+    [Fact]
+    public void A_group_heading_is_never_left_alone_at_the_end_of_a_page()
+    {
+        // Sweep the lines per category so some heading falls at a page end; each heading must share its page with the first line of its group.
+        var checkedHeadings = 0;
+        foreach (var perGroup in new[] { 1, 2, 3, 4, 5, 6, 7 })
+        {
+            var lines = new List<ServiceAgreementDraftLine>();
+            var map = new Dictionary<(string, string), int>();
+            for (var category = 1; category <= 8; category++)
+                for (var i = 0; i < perGroup; i++)
+                {
+                    var code = $"C{category}_{i}";
+                    lines.Add(Line($"Qq{category}x{i}", code, lines.Count));
+                    map[(code, "2026-27")] = category;
+                }
+
+            using var pdf = PdfDocument.Open(ServiceAgreementDraftPdfRenderer.Compose(Revision(lines.ToArray()), null, map).GeneratePdf());
+            var pages = pdf.GetPages().Select(p => Skeleton(p.Text)).ToList();
+            for (var category = 1; category <= 8; category++)
+            {
+                var page = pages.FindIndex(p => p.Contains(Skeleton($"{category:00} {PaceCategories.NameOf(category)}")));
+                Assert.True(page >= 0, $"heading {category} missing with {perGroup} per group");
+                Assert.Contains(Skeleton($"Qq{category}x0"), pages[page]);
+                checkedHeadings++;
+            }
+        }
+        Assert.Equal(56, checkedHeadings);
     }
 
     // "Server price / provenance" is the one header that only the cost table has, so counting its first word counts the cost table's header rows.

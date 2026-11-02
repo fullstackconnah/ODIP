@@ -105,6 +105,7 @@ public class DraftPdfTitleTests
     [InlineData("   ")]
     public async Task Pdf_title_omits_address_line_when_unset(string address)
     {
+        Assert.Null(AgreementProvider.From(Provider("Oassist", address: address)).Address);
         var text = TextOf(await PdfAsync(Provider("Oassist", address: address)));
 
         Assert.Contains(Skeleton("Service agreement") + Skeleton("Oassist") + Skeleton("Prepared 06 Oct 2026"), text);
