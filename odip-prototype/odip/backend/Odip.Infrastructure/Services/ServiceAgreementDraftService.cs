@@ -97,6 +97,10 @@ public sealed class ServiceAgreementDraftService
             : await BuildFromLinesAsync(tenantId, participant, request, actor, ct);
         if (draft.Draft is null) return draft;
         if (draft.Draft.Version - 1 != (request.BaseVersion ?? 0)) return DraftSaveResult.Conflicted(draft.Draft.Version - 1);
+        // A save that keeps the end an End early set (the base is the newest revision, so it is the one that was ended) keeps the signed end too (M1, S3); a changed end is a new term.
+        if (await _db.ServiceAgreementDrafts.AsNoTracking().Where(x => x.ParticipantId == participantId && x.Version == request.BaseVersion).Select(x => new { x.AgreementEndDate, x.OriginalAgreementEndDate }).FirstOrDefaultAsync(ct) is { OriginalAgreementEndDate: not null } baseRev
+            && baseRev.AgreementEndDate == draft.Draft.AgreementEndDate)
+            draft.Draft.OriginalAgreementEndDate = baseRev.OriginalAgreementEndDate;
 
         // The new revision and the removal of the ones it replaces are one SaveChanges, so one transaction: a save that fails, or loses a race for its version number, takes nothing with it.
         _db.ServiceAgreementDrafts.Add(draft.Draft);
@@ -160,7 +164,7 @@ public sealed class ServiceAgreementDraftService
         if (draft is null) return new DraftDeleteOutcome(DraftDeleteStatus.NotFound);
         if (await _db.ServiceAgreementDraftApprovals.AnyAsync(a => a.DraftId == draftId, ct)) return new DraftDeleteOutcome(DraftDeleteStatus.Refused, ApprovedCantBeDeleted);
         if (await _db.ShiftPatterns.AnyAsync(p => p.SourceDraftId == draftId, ct)) return new DraftDeleteOutcome(DraftDeleteStatus.Refused, PatternsStayInHistory);
-        // shortcut: a signing snapshot taken between this check and the delete is caught by its foreign key (409), not by a lock; upgrade: have signing and delete share a lock
+        // shortcut: a signing snapshot taken between this check and the delete is not caught (no FK) and is left pointing at a deleted draft; upgrade: have signing and delete share a lock, or add a Restrict FK after checking live for orphans.
         if (await _db.ElectronicSigningSnapshots.AnyAsync(s => s.DraftId == draftId && s.DraftVersion == draft.Version, ct)) return new DraftDeleteOutcome(DraftDeleteStatus.Refused, SigningStaysInHistory);
 
         _db.ServiceAgreementDrafts.Remove(draft);          // its blocks and lines are tracked with it and go too

@@ -819,6 +819,7 @@ public sealed class ServiceAgreementApprovalService
             var patterns = await _db.ShiftPatterns.Where(p => p.TenantId == tenantId && p.ParticipantId == participantId && p.SourceDraftId == draftId).ToListAsync(ct);
             var patternIds = patterns.Select(p => p.Id).ToArray();
             var afterEnd = lastDay.AddDays(1);
+            await LockOldShiftsAsync(patternIds, afterEnd, ct);
             var after = _db.Shifts.AsNoTracking().Where(s => s.ShiftPatternId != null && patternIds.Contains(s.ShiftPatternId.Value) && s.ServiceDate >= afterEnd);
             var afterIds = await after.Select(s => s.Id).ToListAsync(ct);
             // M2: worked shifts, or any shift with a claim line in any claim status (a Cancelled claim still holds its line), stop the end.
@@ -828,7 +829,6 @@ public sealed class ServiceAgreementApprovalService
                 return new EndEarlyOutcome(EndEarlyStatus.Refused, Error: $"Shifts after {Day(lastDay)} have been worked or claimed, so this agreement can't end before them.");
 
             var today = await ProviderTodayAsync(tenantId, ct);
-            await LockOldShiftsAsync(patternIds, afterEnd, ct);
             var (remaining, removable) = await TidyShiftsAsync(patternIds, afterEnd > today ? afterEnd : today, draft.Version, ct);
 
             draft.OriginalAgreementEndDate ??= draft.AgreementEndDate;

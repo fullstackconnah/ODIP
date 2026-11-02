@@ -263,4 +263,34 @@ public class AgreementRenewalServiceTests
         Assert.Equal((new DateOnly(2026, 11, 14), new DateOnly(2026, 12, 25)), (outcome.Draft!.AgreementStartDate, outcome.Draft.AgreementEndDate));
         Assert.Equal(AgreementRenewalService.SameLengthEnd(new DateOnly(2026, 10, 12), Nov22, new DateOnly(2026, 11, 14)), outcome.Draft.AgreementEndDate);
     }
+
+    /// <summary>F3: a pattern change saved after End early keeps the end End early set and the signed end. It stays not Ongoing, raises no ending alert (M1), and renews from the day after the shortened end for the original term (S3).</summary>
+    [Fact]
+    public async Task A_save_after_End_early_keeps_the_early_end_and_the_signed_end_through_approval_the_alert_and_renewal()
+    {
+        var (f, v1) = await ApprovedV1Async();
+        await using var owner = f;
+        v1 = await f.Db.ServiceAgreementDrafts.SingleAsync(d => d.Id == v1.Id);
+        v1.IsOngoing = true;
+        await f.Db.SaveChangesAsync();
+        var lastDay = new DateOnly(2026, 11, 13);
+        Assert.Equal(EndEarlyStatus.Ended, (await f.Service.EndEarlyAsync(TenantA, f.ParticipantId, v1.Id, lastDay, Admin, CancellationToken.None)).Status);
+        var request = new CreateServiceAgreementDraftDto
+        {
+            PlanStartDate = PlanStart, PlanEndDate = PlanEnd, AgreementStartDate = Nov2, AgreementEndDate = lastDay, State = "NSW", BaseVersion = 1,
+            Blocks = [new DraftBlockDto { Block = WeekdayBlock(), Requirements = new DraftBlockRequirementsDto() }],
+        };
+
+        var saved = await new ServiceAgreementDraftService(f.Db).SaveAsync(TenantA, f.ParticipantId, request, "actor", CancellationToken.None);
+
+        Assert.Empty(saved.Errors ?? Array.Empty<string>());
+        var v2 = saved.Draft!;
+        Assert.Equal(ApprovalStatus.Approved, (await f.Service.ApproveAsync(TenantA, f.ParticipantId, v2.Id, true, Admin, CancellationToken.None)).Status);
+        var stored = await StoredAsync(f, v2.Id);
+        Assert.Equal((lastDay, false, Nov22), (stored.AgreementEndDate, stored.IsOngoing, stored.OriginalAgreementEndDate));
+        Assert.Empty(await AgreementEnding.FindAsync(f.Db, new[] { f.ParticipantId }, ApprovalTestSupport.Today, CancellationToken.None));
+        var outcome = await RenewAsync(f, stored);
+        Assert.Empty(outcome.Errors ?? Array.Empty<string>());
+        Assert.Equal((new DateOnly(2026, 11, 14), AgreementRenewalService.SameLengthEnd(new DateOnly(2026, 10, 12), Nov22, new DateOnly(2026, 11, 14))), (outcome.Draft!.AgreementStartDate, outcome.Draft.AgreementEndDate));
+    }
 }

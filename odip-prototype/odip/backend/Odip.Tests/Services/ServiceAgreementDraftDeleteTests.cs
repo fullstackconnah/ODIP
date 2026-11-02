@@ -131,6 +131,7 @@ public class ServiceAgreementDraftDeleteTests
         await MarkApprovedAsync(f.Db, v1);
         var v2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock() }, new DateOnly(2026, 12, 21), new DateOnly(2027, 3, 1));
 
+        Assert.IsType<BadRequestObjectResult>(await Controller(f, null).Delete(f.ParticipantId, v2.Id, CancellationToken.None));
         Assert.IsType<NotFoundObjectResult>(await Controller(f, TenantB).Delete(f.ParticipantId, v2.Id, CancellationToken.None));
         Assert.IsType<NotFoundObjectResult>(await Controller(f, TenantA).Delete(Guid.NewGuid(), v2.Id, CancellationToken.None));
         Assert.IsType<ConflictObjectResult>(await Controller(f, TenantA).Delete(f.ParticipantId, v1.Id, CancellationToken.None));
