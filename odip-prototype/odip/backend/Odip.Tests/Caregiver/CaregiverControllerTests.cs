@@ -75,6 +75,58 @@ public class CaregiverControllerTests
         Assert.Equal(s.ExpiresAt, body.Data.ExpiresAt);
     }
 
+private static void SeedOrg(OdipDbContext db, Guid tenantId, string? tenantName, string? settingsName)
+    {
+        db.Tenants.Add(new Tenant { Id = tenantId, Name = tenantName ?? "" });
+        if (settingsName != null)
+            db.ProviderSettings.Add(new ProviderSettings { Id = Guid.NewGuid(), TenantId = tenantId, RegistrationNumber = "PR001", ABN = "12345678901", OrganisationName = settingsName, Address = "1 Test St", State = "QLD" });
+        db.SaveChanges();
+    }
+
+    private static async Task<string?> GetProviderName(OdipDbContext db, string raw)
+    {
+        var result = await MakeController(db).Get(raw, CancellationToken.None);
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        return Assert.IsType<ApiResponse<CaregiverFormDto>>(ok.Value).Data!.ProviderName;
+    }
+
+    [Fact]
+    public async Task Get_ReturnsProviderName_FromTheLinksTenant()
+    {
+        using var db = CreateDb();
+        var other = Guid.NewGuid();
+        SeedOrg(db, other, "Other Org Tenant", "Other Org Settings");
+        var tid = Guid.NewGuid();
+        SeedOrg(db, tid, "Sign-up Name", " Ability Options ");
+        var (_, _, raw) = Seed(db, tenantId: tid);
+        Assert.Equal("Ability Options", await GetProviderName(db, raw));
+    }
+
+    [Fact]
+    public async Task Get_ProviderName_FallsBackToTenantName()
+    {
+        using var db = CreateDb();
+        var noRow = Guid.NewGuid();
+        SeedOrg(db, noRow, "Tenant Only", null);
+        var (_, _, rawA) = Seed(db, tenantId: noRow);
+        Assert.Equal("Tenant Only", await GetProviderName(db, rawA));
+
+        var blankRow = Guid.NewGuid();
+        SeedOrg(db, blankRow, "Blank Settings Tenant", "   ");
+        var (_, _, rawB) = Seed(db, tenantId: blankRow);
+        Assert.Equal("Blank Settings Tenant", await GetProviderName(db, rawB));
+    }
+
+    [Fact]
+    public async Task Get_ProviderName_NullWhenBothBlank()
+    {
+        using var db = CreateDb();
+        var tid = Guid.NewGuid();
+        SeedOrg(db, tid, " ", "");
+        var (_, _, raw) = Seed(db, tenantId: tid);
+        Assert.Null(await GetProviderName(db, raw));
+    }
+
     [Fact]
     public async Task Get_UnknownToken_Returns404()
     {
