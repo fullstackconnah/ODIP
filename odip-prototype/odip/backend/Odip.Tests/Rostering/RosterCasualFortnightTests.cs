@@ -163,6 +163,7 @@ public class RosterCasualFortnightTests
 
         var body = Assert.IsType<ApiResponse<ShiftDto>>(Assert.IsType<OkObjectResult>(result.Result).Value).Data!;
         var warning = Assert.Single(body.Findings, f => f.Code == RosterConflictService.CasualFortnightHours);
+        Assert.Equal(RosterFindingSeverity.Warning, warning.Severity);
         Assert.False(warning.RequiresReason);
         Assert.Equal("Sam Lee is casual and would have 78h in the fortnight 26 Oct to 8 Nov 2026, over the 76h limit.", warning.Message);
         Assert.Equal(sam.Id, (await db.Shifts.SingleAsync(s => s.Id == open.Id)).UserId);
