@@ -92,7 +92,7 @@ public sealed class AgreementRenewalService
     /// <summary>The source's supports as the next revision over a new term: its state and representative, based on the source's version so a newer edit is caught by the save.</summary>
     internal static CreateServiceAgreementDraftDto CopyOf(ServiceAgreementDraft source, List<DraftBlockDto> blocks, DateOnly start, DateOnly end, DateOnly planStart, DateOnly planEnd) => new()
     {
-        PlanStartDate = planStart, PlanEndDate = planEnd, AgreementStartDate = start, AgreementEndDate = end, State = source.State,
+        PlanStartDate = planStart, PlanEndDate = planEnd, AgreementStartDate = start, AgreementEndDate = end, IsOngoing = source.IsOngoing, State = source.State,
         Representative = source.Representative, Blocks = blocks, BaseVersion = source.Version,
     };
 

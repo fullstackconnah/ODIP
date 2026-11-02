@@ -89,6 +89,20 @@ public class AgreementBulkServiceTests
     }
 
     [Fact]
+    public async Task Bulk_extend_skips_ongoing()
+    {
+        await using var f = await NewAsync();
+        var a = await AgreementAsync(f, null, Start, Nov22);
+        a.V1.IsOngoing = true;
+        await f.Db.SaveChangesAsync();
+
+        var item = Assert.Single(await RunAsync(f, "extend", new[] { a.Id }, end: new DateOnly(2026, 11, 29)));
+
+        Assert.Equal(("Skipped", "Ongoing, it follows the NDIS plan"), (item.Outcome, item.Reason));
+        Assert.Equal(1, await RevisionCountAsync(f, a.Id));
+    }
+
+    [Fact]
     public async Task Extend_adds_a_revision_from_the_day_after_the_end_to_the_chosen_date()
     {
         await using var f = await NewAsync();

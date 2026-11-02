@@ -80,6 +80,22 @@ public class AgreementPatternChangeServiceTests
     }
 
     [Fact]
+    public async Task Pattern_change_keeps_ongoing()
+    {
+        var (f, v1, monday) = await ApprovedAsync();
+        await using var _ = f;
+        v1.IsOngoing = true;
+        v1.PlanEndDate = Nov22;                                                   // an Ongoing revision always ends on its plan end
+        await f.Db.SaveChangesAsync();
+
+        var result = (await ChangeAsync(f, v1, Keep(monday) with { EndTime = T(14), FromDate = Oct19 })).Result!;
+
+        var v2 = await f.Db.ServiceAgreementDrafts.AsNoTracking().SingleAsync(d => d.Id == result.DraftId);
+        Assert.True(v2.IsOngoing);
+        Assert.Equal(Nov22, v2.AgreementEndDate);
+    }
+
+    [Fact]
     public async Task A_preview_answers_what_the_save_then_saves_and_writes_nothing()
     {
         var (f, v1, monday) = await ApprovedAsync();

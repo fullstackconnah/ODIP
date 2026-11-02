@@ -47,6 +47,21 @@ public class AgreementRenewalServiceTests
     private static Task<int> RevisionCountAsync(Fixture f) => f.Db.ServiceAgreementDrafts.CountAsync(d => d.ParticipantId == f.ParticipantId);
 
     [Fact]
+    public async Task Renewal_of_ongoing_stays_ongoing_to_new_plan_end()
+    {
+        var (f, v1) = await ApprovedV1Async();
+        await using var _ = f;
+        v1.IsOngoing = true;
+        await f.Db.SaveChangesAsync();
+
+        var outcome = await RenewAsync(f, v1);
+
+        var v2 = await StoredAsync(f, outcome.Draft!.Id);
+        Assert.True(v2.IsOngoing);
+        Assert.Equal(PlanEnd, v2.AgreementEndDate);
+    }
+
+    [Fact]
     public async Task Renewing_copies_the_blocks_from_the_day_after_the_end_for_the_same_length_priced_now_never_at_the_old_price()
     {
         var (f, v1) = await ApprovedV1Async();

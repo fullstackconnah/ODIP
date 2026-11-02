@@ -56,7 +56,7 @@ public static class AgreementRevisions
         var ids = participantIds.ToList();
         var revisions = await db.ServiceAgreementDrafts.AsNoTracking()
             .Where(d => d.TenantId == tenantId && ids.Contains(d.ParticipantId))
-            .Select(d => new { d.ParticipantId, d.Id, d.Version, d.AgreementStartDate, d.AgreementEndDate, Approved = db.ServiceAgreementDraftApprovals.Any(a => a.DraftId == d.Id) })
+            .Select(d => new { d.ParticipantId, d.Id, d.Version, d.AgreementStartDate, d.AgreementEndDate, d.IsOngoing, Approved = db.ServiceAgreementDraftApprovals.Any(a => a.DraftId == d.Id) })
             .ToListAsync(ct);
 
         // Current = the approved revision with the highest version; waiting = the newest revision when it is unapproved.
@@ -82,7 +82,7 @@ public static class AgreementRevisions
                 var r = one.First(x => x.Id == draftId);
                 return new AgreementRevisionRefDto
                 {
-                    DraftId = r.Id, Version = r.Version, AgreementStartDate = r.AgreementStartDate, AgreementEndDate = r.AgreementEndDate,
+                    DraftId = r.Id, Version = r.Version, AgreementStartDate = r.AgreementStartDate, AgreementEndDate = r.AgreementEndDate, IsOngoing = r.IsOngoing,
                     Total = byDraft.TryGetValue(r.Id, out var t) ? t.Total : 0m,
                 };
             }
