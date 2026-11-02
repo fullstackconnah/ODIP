@@ -142,6 +142,12 @@ describe('PayrollPage', () => {
     expect(document.body.textContent).not.toMatch(/\d:\d\d[ \u202F][ap]m/)
   })
 
+  it('says the break minutes are unpaid ones (a break with the participant is not deducted)', async () => {
+    setup(check())
+    await userEvent.click(screen.getByRole('button', { name: 'Show shifts: Sam Support' }))
+    expect(document.body.textContent).toMatch(/30 min unpaid break/)
+  })
+
   it('puts the Rostered and Actual prefixes on the phone card only', () => {
     setup(check())
     const prefixes = [...document.querySelectorAll('td span[class~="md:hidden"]')].map(e => e.textContent?.trim())

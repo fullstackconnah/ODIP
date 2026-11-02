@@ -13,7 +13,8 @@ import { apiErrorMessages } from '@/lib/shiftPackageErrors'
 import { formatFlaggedCategoryList, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 import { formatMinutesSpan } from '@/pages/rostering/lib/roster'
 import { rosteredInstants } from '../lib/portal'
-import { breaksLabel, clockLabel, FINISH_STEPS, dosesSummary, REASON_MAX, timeBounds, travelLabel, type FinishStepKey, type TimesField, type TravelField } from './checklist'
+import { ToggleGroup } from '@/components/ToggleGroup'
+import { breaksLabel, clockLabel, FINISH_STEPS, unpaidBreakMinutes, dosesSummary, REASON_MAX, timeBounds, travelLabel, type FinishStepKey, type TimesField, type TravelField } from './checklist'
 import { PrnRow, RoutineRow } from './DuringSection'
 import { minutesBetween, providerLocalToUtcInstant, utcInstantToProviderLocal } from './shiftTime'
 import { Fold, WaitingToSend } from './ui'
@@ -64,6 +65,13 @@ export function BreakRow({ shift, brk, online }: { shift: PortalShiftDetailDto; 
     }
   }
 
+  // A tap saves at once with the break's own times (a running break sends no end, which keeps it running).
+  async function setKind(key: string) {
+    setError(null)
+    try { await edit.mutateAsync({ id: shift.id, breakId: brk.id, data: { startedAt: brk.startedAt, endedAt: brk.endedAt, withParticipant: key === 'with' } }) }
+    catch (err) { setError(apiErrorMessages(err)[0] ?? "Couldn't change the break. Try again.") }
+  }
+
   async function remove() {
     setError(null)
     try { await del.mutateAsync({ id: shift.id, breakId: brk.id }) }
@@ -102,6 +110,14 @@ export function BreakRow({ shift, brk, online }: { shift: PortalShiftDetailDto; 
             <Button id={`brk-edit-${brk.id}`} size="lg" variant="secondary" onClick={open} disabled={locked}>Edit</Button>
             <Button size="lg" variant="ghost-danger" onClick={remove} disabled={del.isPending || locked}>Remove</Button>
           </div>
+          <ToggleGroup
+            className="w-full"
+            ariaLabel="Who was your break with?"
+            value={brk.withParticipant ? 'with' : 'alone'}
+            onChange={setKind}
+            disabled={locked || edit.isPending}
+            options={[{ key: 'alone', label: 'On my own' }, { key: 'with', label: `With ${shift.participant.fullName.split(' ')[0]}` }]}
+          />
         </div>
       )}
       {locked && !editing && <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">Editing a break needs a connection.</p>}
@@ -197,7 +213,7 @@ export function TimesStep({ shift, online, now, draft, set, invalid, invalidMess
   const instant = (local: string | null) => (local ? providerLocalToUtcInstant(local, tz) : null)
   const startIso = instant(draft.startOverride) ?? c?.actualStart ?? null
   const endIso = instant(draft.endOverride) ?? now.toISOString()
-  const breakMinutes = shift.breaks.reduce((sum, x) => sum + x.minutes, 0)
+  const breakMinutes = unpaidBreakMinutes(shift.breaks)
   const worked = startIso ? Math.max(0, minutesBetween(startIso, endIso) - breakMinutes) : 0
   const say = (local: string) => clockLabel(`${local}:00`)
   const muted = 'text-xs text-[var(--color-muted-foreground)]'
@@ -237,6 +253,7 @@ export function TimesStep({ shift, online, now, draft, set, invalid, invalidMess
           : <ul className="space-y-2">{shift.breaks.map(x => <BreakRow key={x.id} shift={shift} brk={x} online={online} />)}</ul>}
       </section>
       <p className="text-sm">Time worked <span className="font-semibold tabular-nums">{formatMinutesSpan(worked)}</span></p>
+      {shift.breaks.some(x => x.withParticipant) && <p className={muted}>Breaks with {first} count as time worked.</p>}
       <section aria-labelledby="finish-travel" className="space-y-3">
         <h3 id="finish-travel" className="text-sm font-semibold">Travel</h3>
         {shift.travelAsked && (
@@ -383,7 +400,8 @@ export function SubmitStep({ shift, draft, noteCount, now, refusals, go, moved, 
 }) {
   const tz = shift.timeZoneId
   const c = shift.completion
-  const breakMinutes = shift.breaks.reduce((sum, b) => sum + b.minutes, 0)
+  const breakMinutes = unpaidBreakMinutes(shift.breaks)
+  const withMinutes = shift.breaks.reduce((sum, b) => sum + (b.withParticipant ? b.minutes : 0), 0)
   const worked = c ? Math.max(0, minutesBetween(moved.start ?? c.actualStart, moved.end ?? now.toISOString()) - breakMinutes) : 0
   const handover = draft.handoverText.trim()
   const first = shift.participant.fullName.split(' ')[0]
@@ -392,7 +410,7 @@ export function SubmitStep({ shift, draft, noteCount, now, refusals, go, moved, 
       { label: 'Started', value: c ? (moved.start ? `${clock(moved.start, tz)} (changed from ${clock(c.actualStart, tz)})` : clock(c.actualStart, tz)) : null },
       { label: 'Finishing', value: moved.end ? clock(moved.end, tz) : 'When you submit' },
       ...(moved.start || moved.end ? [{ label: 'Reason', value: draft.adjustmentReason.trim() }] : []),
-      { label: 'Breaks', value: breaksLabel(shift.breaks.length, breakMinutes) },
+      { label: 'Breaks', value: breaksLabel(shift.breaks.length, breakMinutes + withMinutes, withMinutes, first) },
       { label: 'Time worked', value: formatMinutesSpan(worked) },
       ...(shift.travelAsked ? [
         { label: `Trip to ${first}`, value: travelLabel(travel.preTravelMinutes, travel.preTravelKilometres) },

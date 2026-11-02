@@ -8,8 +8,10 @@ import { emptyCompletionPackage } from '@/test/fixtures/shiftPackage'
 
 const {
   mockUseCompletions, mockUseCompletion, mockUseStaff,
-  mockApproveMutateAsync, mockReturnMutateAsync, mockApproveBatchMutateAsync, mockEditTravelMutateAsync, mockUsePricing,
+  mockApproveMutateAsync, mockReturnMutateAsync, mockApproveBatchMutateAsync, mockEditTravelMutateAsync, mockUsePricing, mockSetKindMutateAsync, kindState,
 } = vi.hoisted(() => ({
+  mockSetKindMutateAsync: vi.fn(),
+  kindState: { pending: false },
   mockUseCompletions: vi.fn(),
   mockUseCompletion: vi.fn((): { data: ShiftCompletionDto | undefined } => ({ data: undefined })),
   mockUseStaff: vi.fn(() => ({ data: [{ id: 'staff-1', fullName: 'Jack O\'Sullivan' }, { id: 'staff-2', fullName: 'Mei Zhang' }] as StaffListDto[] })),
@@ -28,6 +30,7 @@ vi.mock('@/api/hooks', () => ({
   useReturnCompletion: () => ({ mutateAsync: mockReturnMutateAsync, isPending: false }),
   useApproveCompletionsBatch: () => ({ mutateAsync: mockApproveBatchMutateAsync, isPending: false }),
   useEditCompletionTravel: () => ({ mutateAsync: mockEditTravelMutateAsync, isPending: false }),
+  useSetBreakKind: () => ({ mutateAsync: mockSetKindMutateAsync, isPending: kindState.pending }),
   usePlanPricingSettings: mockUsePricing,
 }))
 
@@ -484,5 +487,67 @@ describe('CompletionReviewPage: provider travel (travel PR-B)', () => {
     renderPage()
     await user.click(screen.getByRole('button', { name: /^return jack o'sullivan with liam okafor on /i }))
     expect(within(screen.getByRole('alertdialog')).getByText(/The worker enters the shift details again, travel included\./)).toBeInTheDocument()
+  })
+})
+
+describe('CompletionReviewPage: breaks with the participant (W9)', () => {
+  const brk = (id: string, startedAt: string, endedAt: string, minutes: number, withParticipant: boolean) =>
+    ({ id, startedAt, endedAt, isRunning: false, minutes, editedAt: null, createdByUserId: 'staff-1', withParticipant })
+  const twoBreaks = (over: Partial<ShiftCompletionDto> = {}) => makeCompletionDetail({
+    breaks: [brk('b1', '2026-09-08T02:00:00Z', '2026-09-08T02:30:00Z', 30, false), brk('b2', '2026-09-08T05:00:00Z', '2026-09-08T05:15:00Z', 15, true)],
+    breakMinutes: 30, ...over,
+  })
+  async function openDialog(detail: ShiftCompletionDto, which: 'approve' | 'return') {
+    const user = userEvent.setup()
+    mockUseCompletions.mockReturnValue({ data: makePaged([makeQueueItem()]), isLoading: false, isError: false, refetch: vi.fn() })
+    mockUseCompletion.mockReturnValue({ data: detail })
+    renderPage()
+    await user.click(screen.getByRole('button', { name: new RegExp(`^${which} jack o'sullivan with liam okafor on `, 'i') }))
+    return { user, dialog: screen.getByRole('alertdialog') }
+  }
+  beforeEach(() => { kindState.pending = false; mockSetKindMutateAsync.mockReset().mockResolvedValue(twoBreaks()) })
+
+  it('Approve: one toggle per break, On my own then With {first}, the saved kind selected, and an Unpaid breaks total', async () => {
+    const { dialog } = await openDialog(twoBreaks(), 'approve')
+    const groups = within(dialog).getAllByRole('radiogroup', { name: "Who was Jack's break with?" })
+    expect(groups).toHaveLength(2)
+    expect(within(groups[0]).getAllByRole('radio').map(r => r.textContent)).toEqual(['On my own', 'With Liam'])
+    expect(within(groups[0]).getByRole('radio', { name: 'On my own' })).toHaveAttribute('aria-checked', 'true')
+    expect(within(groups[1]).getByRole('radio', { name: 'With Liam' })).toHaveAttribute('aria-checked', 'true')
+    expect(within(dialog).getByText('Unpaid breaks 30 min')).toBeInTheDocument()
+  })
+
+  it('Approve: a tap saves that break at once through the kind endpoint', async () => {
+    const { user, dialog } = await openDialog(twoBreaks(), 'approve')
+    await user.click(within(within(dialog).getAllByRole('radiogroup')[0]).getByRole('radio', { name: 'With Liam' }))
+    expect(mockSetKindMutateAsync).toHaveBeenCalledWith({ shiftId: 'shift-1', breakId: 'b1', withParticipant: true })
+  })
+
+  it('Approve is disabled, and the groups locked, while a toggle is saving', async () => {
+    kindState.pending = true
+    const { dialog } = await openDialog(twoBreaks(), 'approve')
+    expect(within(dialog).getByRole('button', { name: 'Approve' })).toBeDisabled()
+    for (const r of within(dialog).getAllByRole('radio')) expect(r).toBeDisabled()
+  })
+
+  it('Approve: a failed toggle says so inline and leaves Approve usable', async () => {
+    mockSetKindMutateAsync.mockRejectedValue(new Error('x'))
+    const { user, dialog } = await openDialog(twoBreaks(), 'approve')
+    await user.click(within(within(dialog).getAllByRole('radiogroup')[0]).getByRole('radio', { name: 'With Liam' }))
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent("Couldn't change the break. Try again.")
+    expect(within(dialog).getByRole('button', { name: 'Approve' })).toBeEnabled()
+  })
+
+  it('Return: the breaks are read-only text, with no toggles', async () => {
+    const { dialog } = await openDialog(twoBreaks(), 'return')
+    expect(within(dialog).queryByRole('radiogroup')).not.toBeInTheDocument()
+    expect(within(dialog).getByText(/30 min, on my own/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/15 min, with Liam/)).toBeInTheDocument()
+  })
+
+  it('shows no breaks block when the completion has no breaks', async () => {
+    const { dialog } = await openDialog(makeCompletionDetail(), 'approve')
+    expect(within(dialog).queryByText(/Unpaid breaks/)).not.toBeInTheDocument()
+    expect(within(dialog).queryByRole('radiogroup')).not.toBeInTheDocument()
   })
 })

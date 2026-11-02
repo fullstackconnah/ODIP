@@ -24,6 +24,7 @@ internal static class OlderSchemaSeeds
         ("ProviderSettings", "Website", "character varying(500)"),
         ("ServiceAgreementDrafts", "IsOngoing", "boolean"),
         ("ServiceAgreementDrafts", "OriginalAgreementEndDate", "date"),
+        ("ShiftBreaks", "WithParticipant", "boolean"),
         ("Shifts", "CancelledAt", "timestamp without time zone"),
     ];
 

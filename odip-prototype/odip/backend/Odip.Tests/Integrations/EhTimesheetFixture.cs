@@ -23,7 +23,7 @@ internal static class EhTimesheetFixture
     /// A break is (minutes after the start, length in minutes).
     /// </summary>
     public static async Task<(Shift Shift, ShiftCompletion Completion)> ApprovedShiftAsync(OdipDbContext db, Guid tenantId, User worker, DateOnly date, TimeOnly start, TimeOnly end,
-        SleepoverType night = SleepoverType.None, (int After, int Length)[]? breaks = null, ShiftStatus status = ShiftStatus.Completed, ReviewOutcome outcome = ReviewOutcome.Approved)
+        SleepoverType night = SleepoverType.None, (int After, int Length)[]? breaks = null, ShiftStatus status = ShiftStatus.Completed, ReviewOutcome outcome = ReviewOutcome.Approved, bool breaksWithParticipant = false)
     {
         var participant = new Participant { Id = Guid.NewGuid(), TenantId = tenantId, FirstName = "Jane", LastName = "Park", IsActive = true };
         var shift = new Shift
@@ -40,7 +40,7 @@ internal static class EhTimesheetFixture
         };
         db.AddRange(participant, shift, completion);
         foreach (var (after, length) in breaks ?? [])
-            db.ShiftBreaks.Add(new ShiftBreak { Id = Guid.NewGuid(), TenantId = tenantId, ShiftCompletionId = completion.Id, StartedAt = from.AddMinutes(after), EndedAt = from.AddMinutes(after + length), CreatedByUserId = worker.Id });
+            db.ShiftBreaks.Add(new ShiftBreak { Id = Guid.NewGuid(), TenantId = tenantId, ShiftCompletionId = completion.Id, StartedAt = from.AddMinutes(after), EndedAt = from.AddMinutes(after + length), CreatedByUserId = worker.Id, WithParticipant = breaksWithParticipant });
         await db.SaveChangesAsync();
         return (shift, completion);
     }

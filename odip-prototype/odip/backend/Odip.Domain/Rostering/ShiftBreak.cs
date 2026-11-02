@@ -7,10 +7,9 @@ namespace Odip.Domain.Rostering;
 /// One break a worker took during a shift, recorded against the shift's ACTIVE <see cref="ShiftCompletion"/>
 /// (so a Return, which archives the completion, archives its breaks with it). Times are UTC instants.
 ///
-/// Breaks are an honest record of what happened, NOT a billing input: claims still use ROSTERED hours
-/// (<c>ShiftClaimGenerationService</c>) and paid/unpaid break rules and payroll output are out of scope.
-/// Net worked minutes (<see cref="ShiftBreakRules.NetWorked"/>) are reported on the completion so the
-/// coordinator can see them.
+/// A break is either paid (<see cref="WithParticipant"/>: ate with the participant, counted as worked) or unpaid
+/// (on my own: deducted from pay by <see cref="ShiftBreakRules.NetWorked"/>, the one rule Payroll, Reports and the
+/// completion record all read). Claims still use ROSTERED hours (<c>ShiftClaimGenerationService</c>); that is a later change.
 ///
 /// At most ONE break per completion may be running (<see cref="EndedAt"/> null); a partial unique index
 /// (<see cref="OneRunningIndexName"/>) enforces it in the database, the service checks it first so the worker
@@ -38,6 +37,11 @@ public class ShiftBreak : ITenantEntity
 
     /// <summary>Set when the times were edited after creation (PUT), so a coordinator can see a break was adjusted.</summary>
     public DateTime? EditedAt { get; set; }
+
+    /// <summary>Ate with the participant: paid, counted as worked (and, from the claims PR, claimed). False = on my own: unpaid and
+    /// deducted from pay. Old rows read as false, which is what they were paid as before this column existed. Changing it is not an
+    /// "edit" of the times, so it leaves <see cref="EditedAt"/> alone.</summary>
+    public bool WithParticipant { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
@@ -113,7 +117,8 @@ public static class ShiftBreakRules
 
     /// <summary>
     /// Worked minutes for a completion: the span from the actual start to the actual end (or <paramref name="nowUtc"/>
-    /// while the shift is still in progress) minus the time spent on breaks. A running break counts up to now; every
+    /// while the shift is still in progress) minus the time spent on breaks ON MY OWN (a break <see cref="ShiftBreak.WithParticipant"/>
+    /// is paid and counts as worked, so <c>BreakMinutes</c> is unpaid minutes only). A running break counts up to now; every
     /// break is clamped to the worked span. Whole minutes, rounded half away from zero, with
     /// <c>Net = Gross - Break</c> exactly so the three numbers always add up on screen.
     /// </summary>
@@ -124,7 +129,7 @@ public static class ShiftBreakRules
         if (end < actualStartUtc) end = actualStartUtc;
 
         var breakSpan = TimeSpan.Zero;
-        foreach (var b in breaks)
+        foreach (var b in breaks.Where(b => !b.WithParticipant))   // a break with the participant is paid, so it is not deducted
         {
             var from = b.StartedAt < actualStartUtc ? actualStartUtc : b.StartedAt;
             var to = b.EndedAt ?? end;
