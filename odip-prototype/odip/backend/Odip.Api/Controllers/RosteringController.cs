@@ -675,6 +675,12 @@ public class RosteringController : ControllerBase
         // Reopening a cancelled shift is somebody setting it live again: the same times must not bring a shift with no length back to life (phase 3 review, N1).
         var timesChanged = dto.StartTime != shift.StartTime || dto.EndTime != shift.EndTime || dto.EndsNextDay != shift.EndsNextDay;
         var reopening = shift.Status == ShiftStatus.Cancelled && dto.Status != ShiftStatus.Cancelled;
+        // A cancelled shift can be on a short-notice cancellation claim. Reopening or moving it would change what that claim bills, so it waits for a claim being made (the same per-participant lock the claim takes,
+        // so a claim made at this moment is either seen here or waits for this save) and is then refused while the claim still counts.
+        await using var claimLock = shift.Status == ShiftStatus.Cancelled && (reopening || timesChanged || dto.ServiceDate != shift.ServiceDate || dto.ParticipantId != shift.ParticipantId)
+            ? await RosterGenerationLock.AcquireAsync(_db, shift.ParticipantId, ct, scope: "claim-generate") : null;
+        if (claimLock is not null && (await ClaimReferencesAsync(new[] { shift.Id }, ct)).TryGetValue(shift.Id, out var cancelClaim))
+            return Conflict(ApiResponse<ShiftDto>.Fail($"This shift is on claim {cancelClaim}, so it can't be reopened or moved. Delete that claim first.", ShiftErrorCodes.ShiftClaimLocked));
         if ((timesChanged || reopening) && dto.Status != ShiftStatus.Cancelled && Shift.HoursBetween(dto.StartTime, dto.EndTime, dto.EndsNextDay) <= 0m)
             return BadRequest(ApiResponse<ShiftDto>.Fail(ShiftEndsBeforeItStartsMessage, ShiftNoLengthCode));
 
@@ -756,6 +762,9 @@ public class RosteringController : ControllerBase
         shift.EndsNextDay = dto.EndsNextDay; shift.Ratio = dto.Ratio; shift.NightType = dto.NightType;
         // The saved pattern link stays as the server set it: an edit never cuts a pattern shift loose from its pattern, and a link a request names is never stored (C3).
         shift.Notes = dto.Notes; shift.Status = dto.Status;
+        // The cancel time is the notice a short-notice cancellation claim measures. Only a shift that was Published had been promised to anyone; a Draft cancel stays null, and an edit of a cancelled shift keeps its time.
+        if (dto.Status != ShiftStatus.Cancelled) shift.CancelledAt = null;
+        else if (previousStatus == ShiftStatus.Published) shift.CancelledAt = _clock.GetUtcNow().UtcDateTime;
         if (dto.HasLocation) shift.Location = location;
         shift.SupportGroupCode = supportCode;
         shift.UpdatedAt = DateTime.UtcNow;

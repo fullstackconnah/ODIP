@@ -39,7 +39,7 @@ public static partial class ClaimBatchChecks
 {
     public const string Block = "block";
     public const string Warn = "warn";
-    private static readonly string[] CancellationReasons = ["NSDH", "NSDF", "NSDT", "NSDO"];
+    public static readonly string[] CancellationReasons = ["NSDH", "NSDF", "NSDT", "NSDO"];
     private static readonly ClaimLineItemStatus[] SentStatuses =
         [ClaimLineItemStatus.Submitted, ClaimLineItemStatus.Approved, ClaimLineItemStatus.Paid, ClaimLineItemStatus.PartiallyPaid];
 
@@ -77,6 +77,9 @@ public static partial class ClaimBatchChecks
         if (l.GSTCode is not (GSTCode.P1 or GSTCode.P2 or GSTCode.P5)) Add("GstCode", Block, "The GST code must be P1, P2 or P5.");
         if (l.ClaimType == ClaimType.Cancellation && !CancellationReasons.Contains((l.CancellationReason ?? "").Trim().ToUpperInvariant()))
             Add("CancellationReason", Block, "Choose why the participant cancelled: health, family, transport or other.");
+        // Old no-show lines too: an item that does not allow a short-notice cancellation is refused at the NDIA, so it is stopped here.
+        if (l.ClaimType == ClaimType.Cancellation && row.Item is not null && !ShortNoticeCancellationRule.Allows(row.Item, row.CancelledItem))
+            Add("CancellationNotAllowed", Block, ShortNoticeCancellationRule.NotAllowedSentence(l.SupportItemCode));
         if (l.ClaimType is ClaimType.Variation or ClaimType.Adjustment)
             Add("ChangeType", Block, "Change a lodged claim by cancelling it in the portal and lodging a new one.");
         if (row.PlanType != PlanType.AgencyManaged)

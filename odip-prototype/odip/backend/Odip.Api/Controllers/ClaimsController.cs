@@ -177,16 +177,7 @@ public class ClaimsController : ControllerBase
         {
             // The claim summary, plus the completed shifts in the range it left out and why (a sleepover or group shift, a shift no catalogue rate covers): never dropped silently.
             var generated = await _shiftGenerator.GenerateAsync(participantId, dto.From, dto.To, ct);
-            var claim = generated.Claim;
-            return Ok(ApiResponse<ShiftClaimGeneratedDto>.Ok(new ShiftClaimGeneratedDto
-            {
-                Id = claim.Id, Kind = claim.Kind, TripInstanceId = claim.TripInstanceId, TripName = string.Empty,
-                ParticipantId = claim.ParticipantId, PeriodFrom = claim.PeriodFrom, PeriodTo = claim.PeriodTo,
-                Status = claim.Status, ClaimReference = claim.ClaimReference,
-                TotalAmount = claim.TotalAmount, CreatedAt = claim.CreatedAt, SubmittedDate = claim.SubmittedDate,
-                LeftOut = generated.LeftOut.ToList(),
-                Flagged = generated.Flagged.ToList(),
-            }));
+            return Ok(ApiResponse<ShiftClaimGeneratedDto>.Ok(ToGeneratedDto(generated)));
         }
         catch (RosterBusyException)
         {
@@ -244,6 +235,68 @@ public class ClaimsController : ControllerBase
     {
         var today = await ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct);
         return (today.AddDays(-14), today.AddDays(-1));
+    }
+
+    private static ShiftClaimGeneratedDto ToGeneratedDto(ShiftClaimGenerated generated)
+    {
+        var claim = generated.Claim;
+        return new ShiftClaimGeneratedDto
+        {
+            Id = claim.Id, Kind = claim.Kind, TripInstanceId = claim.TripInstanceId, TripName = string.Empty,
+            ParticipantId = claim.ParticipantId, PeriodFrom = claim.PeriodFrom, PeriodTo = claim.PeriodTo,
+            Status = claim.Status, ClaimReference = claim.ClaimReference,
+            TotalAmount = claim.TotalAmount, CreatedAt = claim.CreatedAt, SubmittedDate = claim.SubmittedDate,
+            LeftOut = generated.LeftOut.ToList(),
+            Flagged = generated.Flagged.ToList(),
+        };
+    }
+
+    // GET /api/v1/claims/cancellations: the cancelled shifts the Claims screen offers for a short-notice cancellation claim, and the recent ones it does not, with why.
+    [HttpGet("claims/cancellations")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<CancellationCandidatesDto>>> GetCancellationCandidates(CancellationToken ct)
+    {
+        if (_tenant.TenantId is not { } tenantId) return BadRequest(ApiResponse<CancellationCandidatesDto>.Fail("Choose an organisation first."));
+        var today = await ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct);
+        return Ok(ApiResponse<CancellationCandidatesDto>.Ok(await _shiftGenerator.CancellationCandidatesAsync(tenantId, today, ct)));
+    }
+
+    // POST /api/v1/claims/cancellations/preview: what the claim for one cancelled shift would be.
+    [HttpPost("claims/cancellations/preview")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<ShiftClaimPreviewResponseDto>>> PreviewCancellationClaim([FromBody] PreviewCancellationClaimRequestDto dto, CancellationToken ct)
+    {
+        if (_tenant.TenantId is not { } tenantId) return BadRequest(ApiResponse<ShiftClaimPreviewResponseDto>.Fail("Choose an organisation first."));
+        try
+        {
+            var today = await ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct);
+            return Ok(ApiResponse<ShiftClaimPreviewResponseDto>.Ok(await _shiftGenerator.PreviewCancellationAsync(dto.ShiftId, today, ct)));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ApiResponse<ShiftClaimPreviewResponseDto>.Fail(ex.Message));
+        }
+    }
+
+    // POST /api/v1/claims/cancellations: the draft claim for one cancelled shift, with the participant's reason on every line.
+    [HttpPost("claims/cancellations")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<ShiftClaimGeneratedDto>>> MakeCancellationClaim([FromBody] MakeCancellationClaimRequestDto dto, CancellationToken ct)
+    {
+        if (_tenant.TenantId is not { } tenantId) return BadRequest(ApiResponse<ShiftClaimGeneratedDto>.Fail("Choose an organisation first."));
+        try
+        {
+            var today = await ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct);
+            return Ok(ApiResponse<ShiftClaimGeneratedDto>.Ok(ToGeneratedDto(await _shiftGenerator.GenerateCancellationAsync(dto.ShiftId, dto.CancellationReason ?? string.Empty, today, ct))));
+        }
+        catch (RosterBusyException)
+        {
+            return Conflict(ApiResponse<ShiftClaimGeneratedDto>.Fail(ClaimBusy));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ApiResponse<ShiftClaimGeneratedDto>.Fail(ex.Message));
+        }
     }
 
     // GET /api/v1/claims/{claimId}

@@ -657,4 +657,98 @@ public class ClaimsControllerTests
         Assert.Equal(1, waiting.ParticipantCount);
         Assert.Equal((preview.From, preview.To), (waiting.From, waiting.To));
     }
+
+    // ── Short-notice cancellation claim (claims PR2) ───────────────────────
+
+    private static readonly DateTimeOffset CancelNow = new(2026, 10, 22, 1, 0, 0, TimeSpan.Zero);   // 12:00 on 22 Oct in Sydney
+
+    private static (LedgerKit Kit, Shift Shift) CancelledShiftKit(Guid? tenantOfShift = null)
+    {
+        var kit = LedgerKit.Create();
+        kit.SeedProvider("NSW").TimeZoneId = "Australia/Sydney";
+        kit.EnsureCommunityAccessCatalogue();
+        foreach (var item in kit.Db.SupportCatalogueItems) item.ShortNoticeCancellation = CatalogueClaimFlag.Yes;
+        var person = kit.SeedParticipant(tenantId: tenantOfShift);
+        var shift = kit.SeedShift(person, new DateOnly(2026, 10, 20), ShiftStatus.Cancelled);
+        shift.CancelledAt = new DateTime(2026, 10, 16, 1, 0, 0, DateTimeKind.Utc);
+        kit.Db.SaveChanges();
+        return (kit, shift);
+    }
+
+    private static string MessageOf<T>(ActionResult<ApiResponse<T>> r) => Assert.IsType<ApiResponse<T>>(Assert.IsType<BadRequestObjectResult>(r.Result).Value).Errors!.Single();
+
+    [Fact]
+    public void CancellationClaim_ThreeActions_HaveTheRolesOfTheClaimRun_AndTheirRoutes()
+    {
+        string RolesOf(string action) => typeof(ClaimsController).GetMethod(action)!.GetCustomAttribute<AuthorizeAttribute>()?.Roles ?? "";
+        string RouteOf(string action) => typeof(ClaimsController).GetMethod(action)!.GetCustomAttributes<Microsoft.AspNetCore.Mvc.Routing.HttpMethodAttribute>().Single().Template!;
+        var expected = RolesOf(nameof(ClaimsController.RunShiftClaims));
+
+        Assert.NotEmpty(expected);
+        Assert.Equal(expected, RolesOf(nameof(ClaimsController.GetCancellationCandidates)));
+        Assert.Equal(expected, RolesOf(nameof(ClaimsController.PreviewCancellationClaim)));
+        Assert.Equal(expected, RolesOf(nameof(ClaimsController.MakeCancellationClaim)));
+        Assert.Equal("claims/cancellations", RouteOf(nameof(ClaimsController.GetCancellationCandidates)));
+        Assert.Equal("claims/cancellations/preview", RouteOf(nameof(ClaimsController.PreviewCancellationClaim)));
+        Assert.Equal("claims/cancellations", RouteOf(nameof(ClaimsController.MakeCancellationClaim)));
+    }
+
+    [Fact]
+    public async Task CancellationClaim_WithNoOrganisationChosen_AsksForOne_OnEveryAction()
+    {
+        using var db = CreateDb();
+        var controller = CreateController(db);
+
+        var list = await controller.GetCancellationCandidates(CancellationToken.None);
+        var preview = await controller.PreviewCancellationClaim(new PreviewCancellationClaimRequestDto { ShiftId = Guid.NewGuid() }, CancellationToken.None);
+        var make = await controller.MakeCancellationClaim(new MakeCancellationClaimRequestDto { ShiftId = Guid.NewGuid(), CancellationReason = "NSDH" }, CancellationToken.None);
+
+        Assert.Equal("Choose an organisation first.", MessageOf(list));
+        Assert.Equal("Choose an organisation first.", MessageOf(preview));
+        Assert.Equal("Choose an organisation first.", MessageOf(make));
+    }
+
+    [Fact]
+    public async Task CancellationClaim_AnotherOrganisationsShift_IsNotFound_OnPreviewAndMake()
+    {
+        var (kit, shift) = CancelledShiftKit(tenantOfShift: Guid.NewGuid());
+        using var _ = kit;
+        var controller = RunController(kit, new FixedClock(CancelNow));
+
+        var preview = await controller.PreviewCancellationClaim(new PreviewCancellationClaimRequestDto { ShiftId = shift.Id }, CancellationToken.None);
+        var make = await controller.MakeCancellationClaim(new MakeCancellationClaimRequestDto { ShiftId = shift.Id, CancellationReason = "NSDH" }, CancellationToken.None);
+
+        Assert.Equal("Shift not found.", MessageOf(preview));
+        Assert.Equal("Shift not found.", MessageOf(make));
+        Assert.Empty(kit.Db.TripClaims.IgnoreQueryFilters());
+    }
+
+    [Fact]
+    public async Task CancellationClaim_ReasonOutsideTheFour_IsRefused_WithTheSendChecksSentence()
+    {
+        var (kit, shift) = CancelledShiftKit();
+        using var _ = kit;
+
+        var result = await RunController(kit, new FixedClock(CancelNow)).MakeCancellationClaim(new MakeCancellationClaimRequestDto { ShiftId = shift.Id, CancellationReason = "XYZ" }, CancellationToken.None);
+
+        Assert.Equal("Choose why the participant cancelled: health, family, transport or other.", MessageOf(result));
+        Assert.Empty(kit.Db.TripClaims);
+    }
+
+    [Fact]
+    public async Task CancellationClaim_ListPreviewAndMake_WorkEndToEnd_OnTheOrganisationsCalendar()
+    {
+        var (kit, shift) = CancelledShiftKit();
+        using var _ = kit;
+        var controller = RunController(kit, new FixedClock(CancelNow));
+
+        var list = Body(await controller.GetCancellationCandidates(CancellationToken.None));
+        var preview = Body(await controller.PreviewCancellationClaim(new PreviewCancellationClaimRequestDto { ShiftId = shift.Id }, CancellationToken.None));
+        var made = Body(await controller.MakeCancellationClaim(new MakeCancellationClaimRequestDto { ShiftId = shift.Id, CancellationReason = "NSDT" }, CancellationToken.None));
+
+        Assert.Equal(shift.Id, Assert.Single(list.Shifts).ShiftId);
+        Assert.Equal(preview.TotalAmount, made.TotalAmount);
+        Assert.Equal(TripClaimStatus.Draft, made.Status);
+        Assert.Equal("NSDT", (await kit.Db.ClaimLineItems.FirstAsync(l => l.TripClaimId == made.Id)).CancellationReason);
+    }
 }

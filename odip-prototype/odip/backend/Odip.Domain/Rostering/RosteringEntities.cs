@@ -103,6 +103,8 @@ public class Shift : ITenantEntity
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    /// <summary>When a Published shift was cancelled (UTC). Null for a Draft cancel and for shifts cancelled before this was kept; the short-notice cancellation claim reads it.</summary>
+    public DateTime? CancelledAt { get; set; }
 
     /// <summary>Length of the shift in hours, accounting for <see cref="EndsNextDay"/>.</summary>
     public decimal DurationHours => HoursBetween(StartTime, EndTime, EndsNextDay);

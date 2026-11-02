@@ -251,10 +251,13 @@ public static class PlanCancellation
 {
     public const int ShortNoticeDays = 7;
 
+    /// <summary>True when the notice given is short enough to claim: less than <see cref="ShortNoticeDays"/> days.</summary>
+    public static bool IsShortNotice(int noticeDays) => noticeDays < ShortNoticeDays;
+
     public static decimal MaximumClaim(PlannedLine line, int noticeDays, bool programOfSupport = false)
     {
         ArgumentNullException.ThrowIfNull(line);
-        return !programOfSupport && line.IsPriced && line.ShortNoticeCancellationAllowed && noticeDays < ShortNoticeDays ? line.Total : 0m;
+        return !programOfSupport && line.IsPriced && line.ShortNoticeCancellationAllowed && IsShortNotice(noticeDays) ? line.Total : 0m;
     }
 }
 

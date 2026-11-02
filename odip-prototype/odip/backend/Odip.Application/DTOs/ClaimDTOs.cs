@@ -237,6 +237,45 @@ public record ShiftClaimGeneratedDto : TripClaimListDto
     public List<ShiftClaimFlaggedDto> Flagged { get; init; } = new();
 }
 
+/// <summary>One cancelled shift the Claims screen offers for a short-notice cancellation claim, with what the claim would be worth.</summary>
+public record CancellationCandidateDto
+{
+    public Guid ShiftId { get; init; }
+    public Guid ParticipantId { get; init; }
+    public string ParticipantName { get; init; } = string.Empty;
+    public DateOnly ServiceDate { get; init; }
+    public TimeOnly StartTime { get; init; }
+    public TimeOnly EndTime { get; init; }
+    public bool EndsNextDay { get; init; }
+    /// <summary>When the shift was cancelled (UTC).</summary>
+    public DateTime CancelledAt { get; init; }
+    public decimal TotalAmount { get; init; }
+}
+
+/// <summary>A cancelled shift the screen does not offer, and why; <see cref="ShiftClaimLeftOutDto.Reason"/> is a sentence a coordinator can act on.</summary>
+public record CancellationLeftOutDto : ShiftClaimLeftOutDto
+{
+    public string ParticipantName { get; init; } = string.Empty;
+}
+
+public record CancellationCandidatesDto
+{
+    public List<CancellationCandidateDto> Shifts { get; init; } = new();
+    public List<CancellationLeftOutDto> LeftOut { get; init; } = new();
+}
+
+public record PreviewCancellationClaimRequestDto
+{
+    public Guid ShiftId { get; init; }
+}
+
+public record MakeCancellationClaimRequestDto
+{
+    public Guid ShiftId { get; init; }
+    /// <summary>Why the participant cancelled: NSDH health, NSDF family, NSDT transport, NSDO other.</summary>
+    public string? CancellationReason { get; init; }
+}
+
 /// <summary>The claim run: dates are optional, and the server fills the missing ones with the last 14 days up to yesterday in the organisation's time zone.</summary>
 public record ShiftClaimRunRequestDto
 {

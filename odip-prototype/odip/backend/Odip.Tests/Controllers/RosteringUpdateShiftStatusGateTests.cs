@@ -143,4 +143,90 @@ public class RosteringUpdateShiftStatusGateTests
         var saved = await db.Shifts.SingleAsync(s => s.Id == shift.Id);
         Assert.Equal("Updated coordinator note.", saved.Notes);
     }
+
+    // ── Cancel time and the claim lock (claims PR2) ────────────────────────
+
+    private static async Task<Shift> UpdateAsync(OdipDbContext db, Shift shift, UpdateShiftDto dto)
+    {
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+        var result = await controller.UpdateShift(shift.Id, dto, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(result.Result);
+        return await db.Shifts.AsNoTracking().SingleAsync(s => s.Id == shift.Id);
+    }
+
+    private static ClaimLineItem ClaimOn(OdipDbContext db, Shift shift, ClaimLineItemStatus lineStatus = ClaimLineItemStatus.Draft)
+    {
+        var claim = new TripClaim { Id = Guid.NewGuid(), Kind = ClaimKind.Shift, ParticipantId = shift.ParticipantId, Status = TripClaimStatus.Draft, ClaimReference = "TC-CANC-0001", TotalAmount = 100m };
+        var line = new ClaimLineItem
+        {
+            Id = Guid.NewGuid(), TripClaimId = claim.Id, ShiftId = shift.Id, SupportItemCode = "04_Weekday_STD", DayType = ClaimDayType.Weekday, SupportsDeliveredFrom = shift.ServiceDate,
+            SupportsDeliveredTo = shift.ServiceDate, Hours = 8m, UnitPrice = 12.5m, TotalAmount = 100m, ClaimType = ClaimType.Cancellation, Status = lineStatus,
+        };
+        db.TripClaims.Add(claim);
+        db.ClaimLineItems.Add(line);
+        db.SaveChanges();
+        return line;
+    }
+
+    [Fact]
+    public async Task D_CancellingAPublishedShift_StampsTheCancelTime_ButADraftCancelDoesNot()
+    {
+        using var db = CreateDb();
+        var participant = SeedParticipant(db);
+        var published = SeedShift(db, participant.Id, ShiftStatus.Published);
+        var draft = SeedShift(db, participant.Id, ShiftStatus.Draft);
+        var before = DateTime.UtcNow;
+
+        var cancelledPublished = await UpdateAsync(db, published, DtoFor(published, ShiftStatus.Cancelled));
+        var cancelledDraft = await UpdateAsync(db, draft, DtoFor(draft, ShiftStatus.Cancelled));
+
+        Assert.InRange(cancelledPublished.CancelledAt!.Value, before, DateTime.UtcNow);
+        Assert.Equal(DateTimeKind.Utc, cancelledPublished.CancelledAt!.Value.Kind);
+        Assert.Null(cancelledDraft.CancelledAt);   // a draft was never promised to anyone: no notice to measure
+    }
+
+    [Fact]
+    public async Task ReopeningClearsTheCancelTime_AndEditingACancelledShiftKeepsIt()
+    {
+        using var db = CreateDb();
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, ShiftStatus.Cancelled);
+        var stamp = new DateTime(2026, 9, 1, 3, 0, 0, DateTimeKind.Utc);
+        shift.CancelledAt = stamp;
+        db.SaveChanges();
+
+        var edited = await UpdateAsync(db, shift, DtoFor(shift, ShiftStatus.Cancelled) with { Notes = "Family called." });
+        Assert.Equal(stamp, edited.CancelledAt);
+
+        var reopened = await UpdateAsync(db, shift, DtoFor(shift, ShiftStatus.Published));
+        Assert.Null(reopened.CancelledAt);
+    }
+
+    [Fact]
+    public async Task D_ACancelledShiftOnALiveClaim_CannotBeReopenedOrMoved_UntilTheClaimIsGone()
+    {
+        using var db = CreateDb();
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, ShiftStatus.Cancelled);
+        var line = ClaimOn(db, shift);
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+
+        var reopen = await controller.UpdateShift(shift.Id, DtoFor(shift, ShiftStatus.Published), CancellationToken.None);
+        var move = await controller.UpdateShift(shift.Id, DtoFor(shift, ShiftStatus.Cancelled) with { ServiceDate = shift.ServiceDate.AddDays(1) }, CancellationToken.None);
+
+        foreach (var result in new[] { reopen, move })
+        {
+            var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+            var body = Assert.IsType<ApiResponse<ShiftDto>>(conflict.Value);
+            Assert.Equal(ShiftErrorCodes.ShiftClaimLocked, body.Code);
+            Assert.Contains("TC-CANC-0001", body.Errors!.Single());
+        }
+        var saved = await db.Shifts.AsNoTracking().SingleAsync(s => s.Id == shift.Id);
+        Assert.Equal((ShiftStatus.Cancelled, shift.ServiceDate), (saved.Status, saved.ServiceDate));   // a refused write must not persist
+
+        line.Status = ClaimLineItemStatus.Rejected;   // the NDIA rejected the CANC line: the claim no longer counts
+        db.SaveChanges();
+        var reopened = await UpdateAsync(db, shift, DtoFor(shift, ShiftStatus.Published));
+        Assert.Equal(ShiftStatus.Published, reopened.Status);
+    }
 }
