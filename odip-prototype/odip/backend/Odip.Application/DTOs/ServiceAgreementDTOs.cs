@@ -141,6 +141,12 @@ public record CreateServiceAgreementDraftLineDto
     [Range(typeof(decimal), "0.01", "100000")] public decimal Hours { get; init; }
 }
 
+/// <summary>End early: the last day of support. The answer reuses <see cref="ServiceAgreementDraftDto"/> with <c>OldShiftsRemaining</c>.</summary>
+public record EndAgreementEarlyDto
+{
+    [Required] public DateOnly LastDay { get; init; }
+}
+
 public record ServiceAgreementDraftDto
 {
     public Guid Id { get; init; }
@@ -155,6 +161,8 @@ public record ServiceAgreementDraftDto
     public DateOnly PlanEndDate { get; init; }
     public DateOnly AgreementStartDate { get; init; }
     public DateOnly AgreementEndDate { get; init; }
+    /// <summary>The signed end, when End early shortened the agreement; absent otherwise.</summary>
+    public DateOnly? OriginalAgreementEndDate { get; init; }
     public bool IsOngoing { get; init; }
     public string? Representative { get; init; }
     /// <summary>The blocks the revision was priced from, in plan order; empty on a draft whose lines were typed by hand.</summary>

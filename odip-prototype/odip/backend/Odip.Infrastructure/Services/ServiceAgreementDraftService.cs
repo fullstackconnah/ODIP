@@ -7,6 +7,8 @@ using Odip.Domain.Billing.Pricing;
 using Odip.Domain.Billing.Services;
 using Odip.Domain.Entities;
 using Odip.Domain.Funding;
+using Odip.Domain.Enums;
+using Odip.Infrastructure.Audit;
 using Odip.Infrastructure.Data;
 
 namespace Odip.Infrastructure.Services;
@@ -22,6 +24,10 @@ public sealed record DraftSaveResult(ServiceAgreementDraft? Draft, IReadOnlyList
         new[] { string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Version {newestVersion} was saved after the version this plan started from. Load version {newestVersion} to see what changed, then make your changes again.") },
         ConflictVersion: newestVersion);
 }
+
+public enum DraftDeleteStatus { Deleted, NotFound, Refused }
+
+public sealed record DraftDeleteOutcome(DraftDeleteStatus Status, string? Error = null);
 
 /// <summary>Creates quote-only snapshots. This service never produces billable events or signed status.</summary>
 public sealed class ServiceAgreementDraftService
@@ -130,12 +136,50 @@ public sealed class ServiceAgreementDraftService
     /// tenant and the participant here, because the query filter lets a SuperAdmin see every tenant.
     /// </summary>
     private Task<List<ServiceAgreementDraft>> ReplacedRevisionsAsync(Guid tenantId, Guid participantId, int version, CancellationToken ct) =>
+        UnusedRevisions(tenantId, participantId).Where(x => x.Version < version).ToListAsync(ct);
+
+    /// <summary>The participant's revisions nothing points at: no approval, no roster pattern and no signing snapshot. A save replaces the older ones; Delete refuses a revision that is not one of these.</summary>
+    private IQueryable<ServiceAgreementDraft> UnusedRevisions(Guid tenantId, Guid participantId) =>
         _db.ServiceAgreementDrafts.Include(x => x.Blocks).Include(x => x.Lines).AsSplitQuery()
-            .Where(x => x.TenantId == tenantId && x.ParticipantId == participantId && x.Version < version
+            .Where(x => x.TenantId == tenantId && x.ParticipantId == participantId
                 && !_db.ServiceAgreementDraftApprovals.Any(a => a.DraftId == x.Id)
                 && !_db.ShiftPatterns.Any(p => p.SourceDraftId == x.Id)
-                && !_db.ElectronicSigningSnapshots.Any(s => s.DraftId == x.Id && s.DraftVersion == x.Version))
-            .ToListAsync(ct);
+                && !_db.ElectronicSigningSnapshots.Any(s => s.DraftId == x.Id && s.DraftVersion == x.Version));
+
+    public const string ApprovedCantBeDeleted = "An approved agreement can't be deleted. End it early instead.";
+    public const string PatternsStayInHistory = "This version has roster patterns, so it stays in the history.";
+    public const string SigningStaysInHistory = "This version has signing records, so it stays in the history.";
+
+    /// <summary>
+    /// Deletes a revision nothing points at (D7), with its blocks and lines and an audit row. Refused in words when it is approved, has roster patterns or has a signing snapshot. An approval that lands
+    /// between the check and the delete meets the restricting key, which is the same refusal and not a server error.
+    /// </summary>
+    public async Task<DraftDeleteOutcome> DeleteAsync(Guid tenantId, Guid participantId, Guid draftId, ApprovalCaller caller, CancellationToken ct)
+    {
+        var draft = await FindForDeleteAsync(tenantId, participantId, draftId, ct);
+        if (draft is null) return new DraftDeleteOutcome(DraftDeleteStatus.NotFound);
+        if (await _db.ServiceAgreementDraftApprovals.AnyAsync(a => a.DraftId == draftId, ct)) return new DraftDeleteOutcome(DraftDeleteStatus.Refused, ApprovedCantBeDeleted);
+        if (await _db.ShiftPatterns.AnyAsync(p => p.SourceDraftId == draftId, ct)) return new DraftDeleteOutcome(DraftDeleteStatus.Refused, PatternsStayInHistory);
+        // shortcut: a signing snapshot taken between this check and the delete is caught by its foreign key (409), not by a lock; upgrade: have signing and delete share a lock
+        if (await _db.ElectronicSigningSnapshots.AnyAsync(s => s.DraftId == draftId && s.DraftVersion == draft.Version, ct)) return new DraftDeleteOutcome(DraftDeleteStatus.Refused, SigningStaysInHistory);
+
+        _db.ServiceAgreementDrafts.Remove(draft);          // its blocks and lines are tracked with it and go too
+        _db.AuditLogs.Add(AgreementAudit.Row(draftId, AuditAction.Deleted, $"Draft version {draft.Version} deleted", caller, _clock.GetUtcNow()));
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (IsForeignKeyViolation(ex))
+        {
+            _db.ChangeTracker.Clear();
+            return new DraftDeleteOutcome(DraftDeleteStatus.Refused, ApprovedCantBeDeleted);
+        }
+        return new DraftDeleteOutcome(DraftDeleteStatus.Deleted);
+    }
+
+    private Task<ServiceAgreementDraft?> FindForDeleteAsync(Guid tenantId, Guid participantId, Guid draftId, CancellationToken ct) =>
+        _db.ServiceAgreementDrafts.Include(x => x.Blocks).Include(x => x.Lines).AsSplitQuery()
+            .FirstOrDefaultAsync(x => x.Id == draftId && x.TenantId == tenantId && x.ParticipantId == participantId, ct);
 
     /// <summary>A foreign key refused the write: the delete of a revision that something now points at.</summary>
     private static bool IsForeignKeyViolation(DbUpdateException ex) =>

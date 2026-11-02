@@ -206,6 +206,43 @@ public class ServiceAgreementDraftsController : ControllerBase
         };
     }
 
+    /// <summary>
+    /// Deletes the newest unapproved revision (D7). 404 for a revision that is not the caller's; 409 when it is approved, has roster patterns or has signing records (they stay in the history).
+    /// </summary>
+    [HttpDelete("{id:guid}")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<IActionResult> Delete(Guid participantId, Guid id, CancellationToken ct)
+    {
+        if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<object>.Fail("A tenant context is required."));
+        var outcome = await _service.DeleteAsync(tenantId, participantId, id, Caller(), ct);
+        return outcome.Status switch
+        {
+            DraftDeleteStatus.NotFound => NotFound(ApiResponse<object>.Fail("Draft not found.")),
+            DraftDeleteStatus.Refused => Conflict(ApiResponse<object>.Fail(outcome.Error!)),
+            _ => NoContent(),
+        };
+    }
+
+    /// <summary>
+    /// Ends an approved agreement on <c>lastDay</c> (D6): its end date moves up, its roster patterns stop there and its unfilled Draft shifts after it go; the rest are kept and listed. 404 not the
+    /// caller's, 400 a last day outside the agreement, 409 for a revision that cannot be ended (not approved, replaced, a newer one waiting, worked shifts) or a busy roster (<c>roster-busy</c>).
+    /// </summary>
+    [HttpPost("{id:guid}/end-early")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<ServiceAgreementDraftDto>>> EndEarly(Guid participantId, Guid id, EndAgreementEarlyDto dto, CancellationToken ct)
+    {
+        if (_tenant.TenantId is not Guid tenantId) return BadRequest(ApiResponse<ServiceAgreementDraftDto>.Fail("A tenant context is required."));
+        var outcome = await _approval.EndEarlyAsync(tenantId, participantId, id, dto.LastDay, Caller(), ct);
+        return outcome.Status switch
+        {
+            EndEarlyStatus.NotFound => NotFound(ApiResponse<ServiceAgreementDraftDto>.Fail("Draft not found.")),
+            EndEarlyStatus.BadDate => BadRequest(ApiResponse<ServiceAgreementDraftDto>.Fail(outcome.Error!)),
+            EndEarlyStatus.Refused => Conflict(ApiResponse<ServiceAgreementDraftDto>.Fail(outcome.Error!)),
+            EndEarlyStatus.Busy => Conflict(new ApiResponse<ServiceAgreementDraftDto> { Success = false, Errors = [outcome.Error!], Code = "roster-busy" }),
+            _ => Ok(ApiResponse<ServiceAgreementDraftDto>.Ok(ToDto(outcome.Draft!) with { Approval = ApprovalOf(outcome.Approval), OldShiftsRemaining = outcome.OldShifts })),
+        };
+    }
+
     private Task<ApprovalActivationDto> ActivateAsync(Guid tenantId, Guid participantId, CancellationToken ct)
     {
         // The interceptor writes the participant's one audit row; the reason rides on it (as ParticipantsController does).
@@ -346,7 +383,7 @@ public class ServiceAgreementDraftsController : ControllerBase
         Status = ProvisionalAgreementTemplate.State, TemplateVersion = ProvisionalAgreementTemplate.Version,
         TemplateDocxSha256 = ProvisionalAgreementTemplate.DocxSha256, TemplatePdfSha256 = ProvisionalAgreementTemplate.PdfSha256,
         PlanStartDate = draft.PlanStartDate, PlanEndDate = draft.PlanEndDate, Representative = draft.Representative,
-        AgreementStartDate = draft.AgreementStartDate, AgreementEndDate = draft.AgreementEndDate, IsOngoing = draft.IsOngoing,
+        AgreementStartDate = draft.AgreementStartDate, AgreementEndDate = draft.AgreementEndDate, OriginalAgreementEndDate = draft.OriginalAgreementEndDate, IsOngoing = draft.IsOngoing,
         BlockCount = blockCount, LineCount = draft.Lines.Count, Total = draft.Lines.Sum(l => AgreementPriceLists.LineTotal(l)), PriceList = AgreementPriceLists.VersionOf(draft.Lines.Select(l => (l.CatalogueVersion, l.CatalogueEffectiveFrom))), Caveats = DraftPricingCaveats.For(draft).ToList(),
     };
 

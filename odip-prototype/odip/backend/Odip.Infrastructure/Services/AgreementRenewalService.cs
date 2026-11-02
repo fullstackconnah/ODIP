@@ -44,7 +44,7 @@ public sealed class AgreementRenewalService
         if (source is null) return new RenewalOutcome(null, new[] { "Agreement not found." }, NotFound: true);
 
         var revisions = await _db.ServiceAgreementDrafts.AsNoTracking().Where(x => x.TenantId == tenantId && x.ParticipantId == participantId)
-            .Select(x => new { x.Version, x.AgreementStartDate, x.AgreementEndDate, Approved = _db.ServiceAgreementDraftApprovals.Any(a => a.DraftId == x.Id) })
+            .Select(x => new { x.Version, x.AgreementStartDate, x.AgreementEndDate, x.OriginalAgreementEndDate, Approved = _db.ServiceAgreementDraftApprovals.Any(a => a.DraftId == x.Id) })
             .ToListAsync(ct);
         var approved = revisions.Where(r => r.Approved).MaxBy(r => r.Version);
         if (approved?.Version != source.Version)
@@ -59,9 +59,11 @@ public sealed class AgreementRenewalService
             return new RenewalOutcome(null, new[] { string.Create(CultureInfo.InvariantCulture, $"This agreement has a newer revision, v{newest}. Load it first: a renewal would replace it.") }, ConflictVersion: newest);
 
         // The term (D2): a change saved as a revision covers only its last weeks and keeps the end, so the term starts at the earliest approved revision ending on that day.
-        var termStartOf = revisions.Where(r => r.Approved).GroupBy(r => r.AgreementEndDate).ToDictionary(g => g.Key, g => g.Min(r => r.AgreementStartDate));
+        var termStartOf = revisions.Where(r => r.Approved).GroupBy(r => r.OriginalAgreementEndDate ?? r.AgreementEndDate).ToDictionary(g => g.Key, g => g.Min(r => r.AgreementStartDate));
         // A renewal of a renewal runs for the first term's length, walking back while an approved term ends the day before: a renewal the plan cut short does not shorten every later one (fix round 1, deep S4).
-        var (termStart, termEnd) = (termStartOf[source.AgreementEndDate], source.AgreementEndDate);
+        // An agreement ended early renews for its original term (the NDIS plan length), not the shortened one; the renewal still starts the day after the shortened end.
+        var signedEnd = source.OriginalAgreementEndDate ?? source.AgreementEndDate;
+        var (termStart, termEnd) = (termStartOf[signedEnd], signedEnd);
         while (termStartOf.TryGetValue(termStart.AddDays(-1), out var earlier)) (termStart, termEnd) = (earlier, termStart.AddDays(-1));
         var start = source.AgreementEndDate.AddDays(1);
 

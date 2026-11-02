@@ -50,7 +50,7 @@ public class AgreementRenewalServiceTests
     public async Task Renewal_of_ongoing_stays_ongoing_to_new_plan_end()
     {
         var (f, v1) = await ApprovedV1Async();
-        await using var _ = f;
+        await using var owner = f;
         v1.IsOngoing = true;
         await f.Db.SaveChangesAsync();
 
@@ -65,7 +65,7 @@ public class AgreementRenewalServiceTests
     public async Task Renewal_of_ongoing_into_a_plan_past_the_period_cap_falls_back_to_a_dated_end()
     {
         var (f, v1) = await ApprovedV1Async(withPlan: false);
-        await using var _ = f;
+        await using var owner = f;
         v1.IsOngoing = true;
         await PlanAsync(f, PlanStart, Nov23.AddDays(800));
 
@@ -80,7 +80,7 @@ public class AgreementRenewalServiceTests
     public async Task Renewing_copies_the_blocks_from_the_day_after_the_end_for_the_same_length_priced_now_never_at_the_old_price()
     {
         var (f, v1) = await ApprovedV1Async();
-        await using var _ = f;
+        await using var owner = f;
         foreach (var line in v1.Lines) line.UnitPrice = 1m;                       // a price nobody should see again: lines are priced now, never copied
         await f.Db.SaveChangesAsync();
 
@@ -116,7 +116,7 @@ public class AgreementRenewalServiceTests
     public async Task With_no_plan_covering_the_day_after_the_end_it_says_record_the_new_plan_first_and_saves_nothing()
     {
         var (f, v1) = await ApprovedV1Async(withPlan: false);
-        await using var _ = f;
+        await using var owner = f;
         await PlanAsync(f, PlanStart, Nov22);                                        // the plan ends the day the agreement does
 
         var refused = await RenewAsync(f, v1);
@@ -135,7 +135,7 @@ public class AgreementRenewalServiceTests
     public async Task The_renewal_stops_at_the_end_of_a_plan_that_ends_sooner_than_the_term()
     {
         var (f, v1) = await ApprovedV1Async(withPlan: false);
-        await using var _ = f;
+        await using var owner = f;
         await PlanAsync(f, PlanStart, new DateOnly(2026, 12, 31));
 
         var v2 = await StoredAsync(f, (await RenewAsync(f, v1)).Draft!.Id);
@@ -147,7 +147,7 @@ public class AgreementRenewalServiceTests
     public async Task A_renewal_while_a_newer_revision_waits_is_a_409_and_the_waiting_one_survives()
     {
         var (f, v1) = await ApprovedV1Async();
-        await using var _ = f;
+        await using var owner = f;
         var waiting = await AddRevisionAsync(f, 2, new[] { WeekdayBlock() }, start: Nov2, end: Nov22);   // a change nobody has approved yet
 
         var refused = await RenewAsync(f, v1);
@@ -164,7 +164,7 @@ public class AgreementRenewalServiceTests
     public async Task An_item_missing_from_the_new_price_list_is_saved_as_an_issue_and_blocks_approval()
     {
         var (f, v1) = await ApprovedV1Async();
-        await using var _ = f;
+        await using var owner = f;
         // The price list withdraws the item from 23 November: every row of it ends the day before.
         foreach (var row in await f.Db.SupportCatalogueItems.Where(i => i.ItemNumber == "04_104_0125_6_1").ToListAsync()) row.EffectiveTo = Nov22;
         await f.Db.SaveChangesAsync();
@@ -182,7 +182,7 @@ public class AgreementRenewalServiceTests
     public async Task Approving_the_renewal_ends_nothing_and_leaves_v1s_patterns_as_they_were()
     {
         var (f, v1) = await ApprovedV1Async();
-        await using var _ = f;
+        await using var owner = f;
         var v1Patterns = await PatternRowsAsync(f, v1.Id);
         var v2 = (await RenewAsync(f, v1)).Draft!;
 
@@ -201,7 +201,7 @@ public class AgreementRenewalServiceTests
     public async Task Only_an_approver_renews_and_only_the_newest_approved_revision_of_their_own_organisation()
     {
         var (f, v1) = await ApprovedV1Async();
-        await using var _ = f;
+        await using var owner = f;
         f.Db.PlanPricingSettings.Add(new PlanPricingSettings { Id = Guid.NewGuid(), TenantId = TenantA, ApproverRoles = "Admin" });
         await f.Db.SaveChangesAsync();
 
@@ -225,7 +225,7 @@ public class AgreementRenewalServiceTests
     public async Task A_renewal_of_a_plan_capped_renewal_runs_for_the_original_terms_length()
     {
         var (f, v1) = await ApprovedV1Async(withPlan: false);
-        await using var _ = f;
+        await using var owner = f;
         await PlanAsync(f, PlanStart, new DateOnly(2026, 12, 31));
         var v2 = (await RenewAsync(f, v1)).Draft!;                                       // 23 Nov to 31 Dec: 39 days, cut at the plan's end
         await MarkApprovedAsync(f.Db, v2);
@@ -245,4 +245,22 @@ public class AgreementRenewalServiceTests
     [InlineData("2028-01-31", "2028-02-29", "2028-03-01", "2028-03-30")]   // 30 days that only look like a month: days
     public void A_term_of_whole_months_renews_for_the_same_months_and_any_other_for_the_same_days(string termStart, string termEnd, string start, string expected) =>
         Assert.Equal(DateOnly.Parse(expected), AgreementRenewalService.SameLengthEnd(DateOnly.Parse(termStart), DateOnly.Parse(termEnd), DateOnly.Parse(start)));
+
+    /// <summary>S3: a term whose last revision was a pattern change (v2, 2 to 22 Nov) is ended early on 13 Nov and then renewed. The renewal starts the day after the shortened end (14 Nov) and runs for the original term's length (v1's 42 days from 12 Oct), not for v2's 12 days.</summary>
+    [Fact]
+    public async Task Renewing_an_agreement_ended_early_uses_the_original_term_length_and_starts_after_the_shortened_end()
+    {
+        var (f, _) = await ApprovedV1Async();
+        await using var owner = f;
+        var v2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock() }, start: Nov2, end: Nov22);
+        Assert.Equal(ApprovalStatus.Approved, (await f.Service.ApproveAsync(TenantA, f.ParticipantId, v2.Id, true, Admin, CancellationToken.None)).Status);
+        var lastDay = new DateOnly(2026, 11, 13);
+        Assert.Equal(EndEarlyStatus.Ended, (await f.Service.EndEarlyAsync(TenantA, f.ParticipantId, v2.Id, lastDay, Admin, CancellationToken.None)).Status);
+
+        var outcome = await RenewAsync(f, v2);
+
+        Assert.Empty(outcome.Errors ?? Array.Empty<string>());
+        Assert.Equal((new DateOnly(2026, 11, 14), new DateOnly(2026, 12, 25)), (outcome.Draft!.AgreementStartDate, outcome.Draft.AgreementEndDate));
+        Assert.Equal(AgreementRenewalService.SameLengthEnd(new DateOnly(2026, 10, 12), Nov22, new DateOnly(2026, 11, 14)), outcome.Draft.AgreementEndDate);
+    }
 }
