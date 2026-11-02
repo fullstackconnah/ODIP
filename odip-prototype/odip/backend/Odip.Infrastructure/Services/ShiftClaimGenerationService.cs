@@ -202,7 +202,7 @@ public partial class ShiftClaimGenerationService
         var tripClaimByDay = new Dictionary<DateOnly, string>();
         foreach (var l in await _db.ClaimLineItems.AsNoTracking()
                      .Where(BudgetLedgerService.ClaimLineStillCounts)
-                     .Where(l => l.ParticipantBooking != null && l.ParticipantBooking.ParticipantId == participantId && l.SupportsDeliveredFrom <= to && l.SupportsDeliveredTo >= from)
+                     .Where(l => l.ParticipantBooking != null && l.ParticipantBooking.ParticipantId == participantId && l.SupportsDeliveredFrom <= to.AddDays(1) && l.SupportsDeliveredTo >= from)
                      .Select(l => new { l.SupportsDeliveredFrom, l.SupportsDeliveredTo, l.TripClaim.ClaimReference }).ToListAsync(ct))
             for (var day = l.SupportsDeliveredFrom; day <= l.SupportsDeliveredTo; day = day.AddDays(1))
                 tripClaimByDay.TryAdd(day, l.ClaimReference);
@@ -262,11 +262,6 @@ public partial class ShiftClaimGenerationService
                 leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = $"{participant.FullName}: it is on {(heldClaim.ClaimStatus == TripClaimStatus.Cancelled ? "cancelled" : "rejected")} claim {heldClaim.ClaimReference}. Delete that claim, then claim this shift again." });
                 continue;
             }
-            if (tripClaimByDay.TryGetValue(shift.ServiceDate, out var tripClaimRef))
-            {
-                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = $"{participant.FullName}: {shift.ServiceDate:d MMM yyyy} is already on trip claim {tripClaimRef}. Reject or cancel that claim to claim this shift." });
-                continue;
-            }
             var catalogueItems = RowsOf(shift);
             // The one pricing rule, shared with the budget ledger so an estimate is exactly what this claim will say.
             var outcome = ShiftPriceEstimator.Price(
@@ -279,6 +274,14 @@ public partial class ShiftClaimGenerationService
                 {
                     ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = outcome.NotPricedSentence!,
                 });
+                continue;
+            }
+
+            // Checked on the priced line dates, the ones the trip engine reads: an overnight shift's after-midnight part is dated the next day, which can be a trip-claim day.
+            var clash = outcome.Lines.FirstOrDefault(l => tripClaimByDay.ContainsKey(l.Date));
+            if (clash is not null)
+            {
+                leftOut.Add(new ShiftClaimLeftOutDto { ShiftId = shift.Id, ServiceDate = shift.ServiceDate, Description = Describe(shift), Reason = FormattableString.Invariant($"{clash.Date:dd/MM/yyyy} is already on trip claim {tripClaimByDay[clash.Date]}. Reject or cancel that claim to claim this shift.") });
                 continue;
             }
 

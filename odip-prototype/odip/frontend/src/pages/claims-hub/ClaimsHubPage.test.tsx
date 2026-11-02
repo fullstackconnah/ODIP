@@ -543,9 +543,10 @@ describe('ClaimsHubPage: New claim', () => {
     renderPage()
     await userEvent.click(screen.getByRole('button', { name: 'New claim' }))
     await userEvent.click(screen.getByRole('button', { name: /^Shifts/ }))
+    // the chooser hands over on the next tick, so wait for the run rather than read the URL at once
+    expect(await screen.findByRole('dialog', { name: 'Claim run' })).toBeInTheDocument()
     expect(screen.queryByRole('dialog', { name: 'New claim' })).toBeNull()
     expect(screen.getByTestId('where')).toHaveTextContent('run=shifts')
-    expect(screen.getByRole('dialog', { name: 'Claim run' })).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Close run' }))
     expect(screen.getByRole('button', { name: 'New claim' })).toHaveFocus()

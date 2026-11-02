@@ -145,6 +145,7 @@ export function NewClaimModal({ onClose, onShifts, onTrip }: {
             id={TRIP_FIELD_ID}
             variant="form"
             searchable
+            truncateLabel
             loading={trips.isLoading}
             label="Choose a trip"
             value={chosen}

@@ -37,6 +37,8 @@ type DropdownProps = {
   colorClass?: string       // Tailwind color classes for pill trigger background
   /** Icon variant: replaces the small icon-button look, so a header icon can match its neighbours' size. Menu variant: added to the trigger (a min-width that holds across a changing label). */
   triggerClassName?: string
+  /** Form variant: a long chosen label stays on one line, cut with an ellipsis and left-aligned (default: it wraps). */
+  truncateLabel?: boolean
   disabled?: boolean        // caller controls — not auto-applied on empty items
   loading?: boolean
   /** Panel height cap in px (default 320). A tall list passes a larger cap; the room on screen then limits it, and an overflowing list is trimmed to end on half a row so the cut says it scrolls. */
@@ -69,6 +71,7 @@ export function Dropdown({
   triggerVariant = 'primary',
   colorClass = '',
   triggerClassName,
+  truncateLabel,
   disabled = false,
   loading = false,
   maxPanelHeight,
@@ -444,7 +447,7 @@ export function Dropdown({
           onKeyDown={handleKeyDown}
           className={`flex items-center justify-between h-[var(--control-h)] w-full text-sm disabled:pointer-events-none ${fieldSurface}`}
         >
-          <span className={selectedLabel ? '' : 'opacity-50 text-[var(--color-muted-foreground)]'}>
+          <span className={`${truncateLabel ? 'min-w-0 flex-1 truncate text-left ' : ''}${selectedLabel ? '' : 'opacity-50 text-[var(--color-muted-foreground)]'}`}>
             {selectedLabel ?? label ?? 'Select…'}
           </span>
           {chevron}

@@ -2101,6 +2101,8 @@ function claimDetail(c) {
 function shiftClaimRun(body, make) {
   const from = body?.from ?? '2026-10-19', to = body?.to ?? '2026-11-01'
   const sleepover = { participantId: 'p-sam', participantName: 'Sam Lee', shiftId: 's-sleep', serviceDate: '2026-10-21', description: 'Shift 22:00–06:00 · 8 h', reason: 'It is a sleepover, which shift claims do not price yet.' }
+  // The trip cross-guard: the reason does not repeat the name, the row's lead already carries it.
+  const tripClaimGuard = { participantId: 'p-sophie', participantName: 'Sophie Brown', shiftId: 's-guard', serviceDate: '2026-10-10', description: 'Shift 09:00–17:00 · 8 h', reason: '10/10/2026 is already on trip claim TC-43100000-20261010-A1B2C3. Reject or cancel that claim to claim this shift.' }
   const rows = [
     { participantId: 'p-sam', participantName: 'Sam Lee', shiftCount: 2, hours: 12, totalAmount: 612.4 },
     { participantId: 'p-long', participantName: 'Wolfeschlegelsteinhausenbergerdorff Alexandra', shiftCount: 3, hours: 18.5, totalAmount: 1042.75 },
@@ -2111,7 +2113,7 @@ function shiftClaimRun(body, make) {
   return {
     from, to, claimsMade: make ? participants.length : 0,
     shiftCount: participants.reduce((n, r) => n + r.shiftCount, 0), hours: participants.reduce((n, r) => n + r.hours, 0), totalAmount: participants.reduce((n, r) => n + r.totalAmount, 0),
-    participants, leftOut: empty ? [] : [sleepover],
+    participants, leftOut: empty ? [] : [sleepover, tripClaimGuard],
     flagged: participants.length ? [{ participantId: 'p-long', participantName: 'Wolfeschlegelsteinhausenbergerdorff Alexandra', shiftId: 's-night', serviceDate: '2026-10-24', description: 'Shift 20:00–04:00 · 8 h', caveat: 'Evening and night rates are not applied yet.' }] : [],
     skipped: make && participants.length ? [failed] : [],
   }
