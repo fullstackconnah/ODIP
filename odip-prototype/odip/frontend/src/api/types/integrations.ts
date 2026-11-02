@@ -90,6 +90,7 @@ export interface PayrollShiftDto {
   actualStart: string
   actualEnd: string | null
   timeZoneId: string
+  /** Unpaid break minutes: breaks on the worker's own. A break with the participant is paid and not in this figure. */
   breakMinutes: number
   paidMinutes: number
   nightType: SleepoverType

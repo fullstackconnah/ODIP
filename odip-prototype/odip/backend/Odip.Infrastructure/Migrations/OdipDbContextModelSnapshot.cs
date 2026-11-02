@@ -5258,6 +5258,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateOnly?>("EmploymentStartDate")
                         .HasColumnType("date");
 
+                    b.Property<int?>("EmploymentType")
+                        .HasColumnType("integer");
+
                     b.Property<string>("ExternalPayrollId")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
@@ -6530,6 +6533,9 @@ namespace Odip.Infrastructure.Migrations
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp without time zone");
+
+                    b.Property<bool>("WithParticipant")
+                        .HasColumnType("boolean");
 
                     b.HasKey("Id");
 

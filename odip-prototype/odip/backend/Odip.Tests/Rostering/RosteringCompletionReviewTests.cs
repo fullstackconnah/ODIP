@@ -1740,6 +1740,177 @@ public class RosteringCompletionReviewTests
         Assert.Null(typeof(RosteringController).GetMethod(nameof(RosteringController.EditCompletionTravel))!.GetCustomAttribute<AuthorizeAttribute>());
     }
 
+    // ── Staff set whether a break was with the participant (W9) ─────────
+
+    private static ShiftBreak SeedBreak(OdipDbContext db, ShiftCompletion c, Guid staffId, int afterStartMinutes, int minutes, bool withParticipant = false) => Seed(db, new ShiftBreak
+    {
+        Id = Guid.NewGuid(), TenantId = c.TenantId, ShiftCompletionId = c.Id, CreatedByUserId = staffId,
+        StartedAt = c.ActualStart.AddMinutes(afterStartMinutes), EndedAt = c.ActualStart.AddMinutes(afterStartMinutes + minutes), WithParticipant = withParticipant,
+    });
+
+    private static async Task<ShiftCompletionDto> Kind(RosteringController controller, Guid shiftId, Guid breakId, bool withParticipant) =>
+        Assert.IsType<ApiResponse<ShiftCompletionDto>>(Assert.IsType<OkObjectResult>(
+            (await controller.SetCompletionBreakKind(shiftId, breakId, new SetShiftBreakKindDto { WithParticipant = withParticipant }, CancellationToken.None)).Result).Value).Data!;
+
+    [Fact]
+    public async Task SetBreakKind_PendingReview_ACoordinatorSetsIt_AndTheDtoAndBreakMinutesFollow()   // [D] W9
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, staff.Id, ShiftStatus.PendingReview);
+        var completion = SeedCompletion(db, shift.Id, staff.Id);
+        var brk = SeedBreak(db, completion, staff.Id, 120, 30);
+
+        var dto = await Kind(MakeController(db), shift.Id, brk.Id, true);
+
+        var b = Assert.Single(dto.Breaks);
+        Assert.True(b.WithParticipant);
+        Assert.Equal(30, b.Minutes);
+        Assert.Equal(0, dto.BreakMinutes);
+        Assert.Equal(480, dto.NetWorkedMinutes);
+        var stored = await db.ShiftBreaks.SingleAsync();
+        Assert.True(stored.WithParticipant);
+        Assert.Null(stored.EditedAt);   // a kind change is not an edit of the times
+        Assert.Equal(ShiftStatus.PendingReview, (await db.Shifts.SingleAsync()).Status);   // not a review
+
+        Assert.False((await Kind(MakeController(db), shift.Id, brk.Id, false)).Breaks.Single().WithParticipant);   // and back
+    }
+
+    [Fact]
+    public async Task SetBreakKind_CompletedShift_Is409NotPendingReview_AndTheFlagIsUnchanged()   // [D] W9
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, staff.Id, ShiftStatus.Completed);
+        var brk = SeedBreak(db, SeedCompletion(db, shift.Id, staff.Id), staff.Id, 120, 30);
+
+        var body = Refusal(await MakeController(db).SetCompletionBreakKind(shift.Id, brk.Id, new SetShiftBreakKindDto { WithParticipant = true }, CancellationToken.None), 409);
+
+        Assert.Equal(ShiftErrorCodes.ShiftNotPendingReview, body.Code);
+        Assert.False((await db.ShiftBreaks.SingleAsync()).WithParticipant);
+    }
+
+    [Fact]
+    public async Task SetBreakKind_AfterApprove_Is409_AndAfterReturn_Is409()   // M1/S2: the sequential half of the race; the locked half is the Postgres class
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, staff.Id, ShiftStatus.PendingReview);
+        var brk = SeedBreak(db, SeedCompletion(db, shift.Id, staff.Id), staff.Id, 120, 30);
+        var controller = MakeController(db);
+
+        await controller.ApproveCompletion(shift.Id, CancellationToken.None);
+        Assert.Equal(ShiftErrorCodes.ShiftNotPendingReview, Refusal(await controller.SetCompletionBreakKind(shift.Id, brk.Id, new SetShiftBreakKindDto { WithParticipant = true }, CancellationToken.None), 409).Code);
+
+        var returned = SeedShift(db, SeedParticipant(db).Id, staff.Id, ShiftStatus.PendingReview);
+        var returnedBreak = SeedBreak(db, SeedCompletion(db, returned.Id, staff.Id), staff.Id, 120, 30);
+        await controller.ReturnCompletion(returned.Id, new ReturnCompletionDto { Reason = "Please recheck." }, CancellationToken.None);
+        Refusal(await controller.SetCompletionBreakKind(returned.Id, returnedBreak.Id, new SetShiftBreakKindDto { WithParticipant = true }, CancellationToken.None), 409);
+        Assert.All(await db.ShiftBreaks.ToListAsync(), b => Assert.False(b.WithParticipant));
+    }
+
+    [Fact]
+    public async Task SetBreakKind_ABreakOfAnArchivedCompletion_OrOfAnotherShift_Is404()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        var archived = SeedCompletion(db, shift.Id, staff.Id, isActive: false);
+        var archivedBreak = SeedBreak(db, archived, staff.Id, 120, 30);
+        SeedCompletion(db, shift.Id, staff.Id);
+        var other = SeedShift(db, participant.Id, staff.Id, ShiftStatus.PendingReview);
+        var otherBreak = SeedBreak(db, SeedCompletion(db, other.Id, staff.Id), staff.Id, 120, 30);
+        var controller = MakeController(db);
+
+        Refusal(await controller.SetCompletionBreakKind(shift.Id, archivedBreak.Id, new SetShiftBreakKindDto { WithParticipant = true }, CancellationToken.None), 404);
+        Refusal(await controller.SetCompletionBreakKind(shift.Id, otherBreak.Id, new SetShiftBreakKindDto { WithParticipant = true }, CancellationToken.None), 404);
+        Refusal(await controller.SetCompletionBreakKind(shift.Id, Guid.NewGuid(), new SetShiftBreakKindDto { WithParticipant = true }, CancellationToken.None), 404);
+        Refusal(await controller.SetCompletionBreakKind(Guid.NewGuid(), otherBreak.Id, new SetShiftBreakKindDto { WithParticipant = true }, CancellationToken.None), 404);
+        Assert.All(await db.ShiftBreaks.ToListAsync(), b => Assert.False(b.WithParticipant));
+    }
+
+    [Fact]
+    public async Task SetBreakKind_AnotherOrganisationsShift_Is404()   // [D] W9
+    {
+        var (tenantA, tenantB) = (Guid.NewGuid(), Guid.NewGuid());
+        var options = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+        Mock<ICurrentTenant> TenantOf(Guid id) { var t = new Mock<ICurrentTenant>(); t.Setup(x => x.TenantId).Returns(id); t.Setup(x => x.IsSuperAdmin).Returns(false); return t; }
+        Guid shiftId, breakId;
+        using (var seed = new OdipDbContext(options, TenantOf(tenantB).Object))
+        {
+            var staff = SeedStaff(seed); staff.TenantId = tenantB;
+            var participant = SeedParticipant(seed); participant.TenantId = tenantB;
+            var shift = SeedShift(seed, participant.Id, staff.Id, ShiftStatus.PendingReview); shift.TenantId = tenantB;
+            var completion = SeedCompletion(seed, shift.Id, staff.Id); completion.TenantId = tenantB;
+            var brk = SeedBreak(seed, completion, staff.Id, 120, 30);
+            seed.SaveChanges();
+            (shiftId, breakId) = (shift.Id, brk.Id);
+        }
+
+        using var db = new OdipDbContext(options, TenantOf(tenantA).Object);
+        Refusal(await MakeController(db).SetCompletionBreakKind(shiftId, breakId, new SetShiftBreakKindDto { WithParticipant = true }, CancellationToken.None), 404);
+
+        using var asB = new OdipDbContext(options, TenantOf(tenantB).Object);
+        Assert.False((await asB.ShiftBreaks.SingleAsync()).WithParticipant);
+    }
+
+    [Fact]
+    public void SetBreakKind_HasNoOwnAuthorize_SoItCarriesTheClassRoles_TheSameAsApproveCompletion()   // N2
+    {
+        var method = typeof(RosteringController).GetMethod(nameof(RosteringController.SetCompletionBreakKind))!;
+        Assert.Null(method.GetCustomAttribute<AuthorizeAttribute>());
+        Assert.Null(method.GetCustomAttribute<AllowAnonymousAttribute>());
+        Assert.Null(typeof(RosteringController).GetMethod(nameof(RosteringController.ApproveCompletion))!.GetCustomAttribute<AuthorizeAttribute>());
+        var roles = typeof(RosteringController).GetCustomAttribute<AuthorizeAttribute>()!.Roles!.Split(',');
+        Assert.Equal(["SuperAdmin", "Admin", "Coordinator"], roles);
+    }
+
+    [Fact]
+    public async Task TheQueueRow_AndTheDetail_AgreeOnUnpaidBreakMinutes_WithOnePaidAndOneAloneBreak()   // S3
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, staff.Id, ShiftStatus.PendingReview);
+        var completion = SeedCompletion(db, shift.Id, staff.Id);
+        SeedBreak(db, completion, staff.Id, 60, 20, withParticipant: true);
+        SeedBreak(db, completion, staff.Id, 200, 30);
+        var controller = MakeController(db);
+
+        var queue = Assert.Single(await QueueAsync(db));
+        var detail = Assert.IsType<ApiResponse<ShiftCompletionDto>>(Assert.IsType<OkObjectResult>((await controller.GetShiftCompletion(shift.Id, CancellationToken.None)).Result).Value).Data!;
+
+        Assert.Equal(30, queue.BreakMinutes);
+        Assert.Equal(queue.BreakMinutes, detail.BreakMinutes);
+        Assert.Equal(480 - 30, detail.NetWorkedMinutes);
+    }
+
+    [Fact]
+    public async Task SetBreakKind_WritesAnAuditRowNamingTheChangedField()
+    {
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
+        var identity = new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, ReviewerId.ToString()), new Claim("fullName", "Jane Coordinator")], "Test");
+        var accessor = new Mock<IHttpContextAccessor>();
+        accessor.Setup(a => a.HttpContext).Returns(new DefaultHttpContext { User = new ClaimsPrincipal(identity) });
+        var options = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .AddInterceptors(new AuditInterceptor(accessor.Object)).Options;
+        using var db = new OdipDbContext(options, tenant.Object);
+        var staff = SeedStaff(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, staff.Id, ShiftStatus.PendingReview);
+        var brk = SeedBreak(db, SeedCompletion(db, shift.Id, staff.Id), staff.Id, 120, 30);
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db))
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) } }
+        };
+
+        await Kind(controller, shift.Id, brk.Id, true);
+
+        Assert.Contains(db.AuditLogs.Where(a => a.EntityType == nameof(ShiftBreak) && a.Action == AuditAction.Updated && a.EntityId == brk.Id).ToList(),
+            a => a.Changes.Contains("WithParticipant"));
+    }
+
     [Fact]
     public async Task EditCompletionTravel_WritesAnAuditRowNamingTheChangedField()
     {

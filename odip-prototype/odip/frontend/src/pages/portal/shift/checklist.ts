@@ -95,8 +95,13 @@ export function foldDueList(groups: ChecklistGroup[], counted: ReadonlySet<strin
 }
 
 /** Changes whenever a break is added, removed, ended or edited, so the finish flow can send the worker back to step 1 when the breaks change. */
-export function breaksSignature(breaks: { id: string; startedAt: string; endedAt: string | null }[]): string {
-  return breaks.map(b => `${b.id}|${b.startedAt}|${b.endedAt ?? ''}`).join(';')
+export function breaksSignature(breaks: { id: string; startedAt: string; endedAt: string | null; withParticipant?: boolean }[]): string {
+  return breaks.map(b => `${b.id}|${b.startedAt}|${b.endedAt ?? ''}|${b.withParticipant ? 'with' : 'alone'}`).join(';')   // the kind changes worked time too
+}
+
+/** Minutes of breaks on my own: the only ones taken off worked time and pay (a break with the participant counts as worked). */
+export function unpaidBreakMinutes(breaks: { minutes: number; withParticipant?: boolean }[]): number {
+  return breaks.reduce((sum, b) => sum + (b.withParticipant ? 0 : b.minutes), 0)
 }
 
 // ── The five-step finish (My shifts redesign, SHAPE §4). The server stays the floor: these name a refusal on its step, they add none. ──
@@ -273,9 +278,9 @@ export function dosesSummary(doses: PortalDoseSlotDto[], routines: PortalShiftRo
   return parts.join(' · ')
 }
 
-/** Step 5's Breaks row: "No breaks", "1 break, 0 min", "2 breaks, 15 min". */
-export function breaksLabel(count: number, minutes: number): string {
-  return count === 0 ? 'No breaks' : `${plural(count, 'break')}, ${minutes} min`
+/** Step 5's Breaks row: "No breaks", "1 break, 0 min", "2 breaks, 15 min", "2 breaks, 45 min, 30 min with Alexandra". */
+export function breaksLabel(count: number, minutes: number, withMinutes = 0, first = ''): string {
+  return count === 0 ? 'No breaks' : `${plural(count, 'break')}, ${minutes} min${withMinutes > 0 ? `, ${withMinutes} min with ${first}` : ''}`
 }
 
 /** The doses still due with no outcome: recording one needs a connection, so with no signal Finish waits for them (SHAPE 5). */

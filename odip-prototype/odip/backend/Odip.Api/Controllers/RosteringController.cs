@@ -139,6 +139,14 @@ public class RosteringController : ControllerBase
         var staffIds = activeStaff.Select(s => s.Id).ToList();
         var staffById = activeStaff.ToDictionary(s => s.Id);
 
+        // CASUAL_FORTNIGHT_HOURS: the casuals' shifts in the other week of this fortnight, so a chip can warn about hours that sit outside the week on screen (the board display and weekly meters never see them).
+        var fortnightStart = RosterFortnight.StartOf(start);
+        var casualIds = activeStaff.Where(s => s.EmploymentType == EmploymentType.Casual).Select(s => s.Id).ToList();
+        var otherWeekShifts = casualIds.Count == 0 ? new List<Shift>() : await _db.Shifts
+            .Where(s => s.UserId != null && casualIds.Contains(s.UserId.Value) && s.Status != ShiftStatus.Cancelled
+                        && s.ServiceDate >= fortnightStart && s.ServiceDate <= fortnightStart.AddDays(13) && (s.ServiceDate < start || s.ServiceDate > end))
+            .ToListAsync(ct);
+
         var weekTripAssignments = await _db.StaffAssignments
             .Include(a => a.TripInstance)
             .Where(a => staffIds.Contains(a.UserId) && a.Status != AssignmentStatus.Cancelled
@@ -196,7 +204,7 @@ public class RosteringController : ControllerBase
             .ToDictionaryAsync(c => (c.UserId, c.ParticipantId), c => c.Level, ct);
 
         var weeklyHours = await RosterAvailability.WeeklyHoursAsync(_db, activeStaff.Select(u => u.TenantId), ct);
-        var availability = new RosterAvailability.Snapshot(activeStaff, participantById.Values, weekShifts, weekTripAssignments, weekWindows, compatByPair, weekPublicHolidays, weeklyHours);
+        var availability = new RosterAvailability.Snapshot(activeStaff, participantById.Values, weekShifts, weekTripAssignments, weekWindows, compatByPair, weekPublicHolidays, weeklyHours, otherWeekShifts);
 
         List<RosterFinding> FindingsFor(Shift shift)
         {
@@ -1396,6 +1404,8 @@ public class RosteringController : ControllerBase
             return Unauthorized(ApiResponse<ShiftCompletionDto>.Fail(
                 "Your session is missing a user identity. Sign in again.", "AUTH_USER_MISSING"));
 
+        // The shift row is held from here to the save, so a coordinator's break toggle (same lock) is either already in what we read or waits and is refused.
+        await using var rowLock = await ShiftRowLock.AcquireAsync(_db, id, ct);
         var (shift, completion, error) = await ResolvePendingReviewCompletionAsync(id, ct);
         if (error is not null) return error;
         // The dashboard's one tap asks for this: a flag that appeared since its queue read refuses rather than approves. The Completions page approves
@@ -1414,6 +1424,7 @@ public class RosteringController : ControllerBase
 
         await EmploymentHeroTimesheets.EnqueueAsync(_db, shift.TenantId, [(shift, completion)], now, ct);
         await _db.SaveChangesAsync(ct);
+        await rowLock.CommitAsync(ct);
         return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, shift.ReturnCount, ct)));
     }
 
@@ -1463,6 +1474,37 @@ public class RosteringController : ControllerBase
         {
             return Conflict(ApiResponse<ShiftCompletionDto>.Fail(busy.Message));
         }
+    }
+
+    /// <summary>
+    /// Staff set whether one break was taken WITH the participant (paid, counted as worked) or on the worker's own (unpaid, deducted), while the shift is
+    /// awaiting review (W9). 404 for a shift, or a break of that shift's active completion, that isn't there (another organisation's, an archived
+    /// completion's); 409 SHIFT_NOT_PENDING_REVIEW otherwise. The shift row lock is the one Approve takes: it stops a lost edit and makes each side re-read the kind,
+    /// but it does not prove the approver saw the latest kind. The audit interceptor records the change.
+    /// </summary>
+    [HttpPut("shifts/{id:guid}/completion/breaks/{breakId:guid}/kind")]
+    public async Task<ActionResult<ApiResponse<ShiftCompletionDto>>> SetCompletionBreakKind(Guid id, Guid breakId, [FromBody] SetShiftBreakKindDto dto, CancellationToken ct)
+    {
+        await using var rowLock = await ShiftRowLock.AcquireAsync(_db, id, ct);
+        var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == id, ct);
+        if (shift is null)
+            return NotFound(ApiResponse<ShiftCompletionDto>.Fail("Shift not found."));
+        if (shift.Status != ShiftStatus.PendingReview)
+            return Conflict(ApiResponse<ShiftCompletionDto>.Fail(
+                "A break can be changed only while a shift is awaiting review.", ShiftErrorCodes.ShiftNotPendingReview));
+
+        var completion = await _db.ShiftCompletions.FirstOrDefaultAsync(c => c.ShiftId == id && c.IsActive, ct);
+        if (completion is null)
+            return NotFound(ApiResponse<ShiftCompletionDto>.Fail("Completion not found."));
+        var brk = await _db.ShiftBreaks.FirstOrDefaultAsync(b => b.Id == breakId && b.ShiftCompletionId == completion.Id, ct);
+        if (brk is null)
+            return NotFound(ApiResponse<ShiftCompletionDto>.Fail("Break not found."));
+
+        brk.WithParticipant = dto.WithParticipant;
+        brk.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+        await rowLock.CommitAsync(ct);
+        return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, shift.ReturnCount, ct)));
     }
 
     /// <summary>
@@ -1568,6 +1610,10 @@ public class RosteringController : ControllerBase
         // De-dup: EF identity resolution would hand the second occurrence the already-approved tracked entity and report a false SHIFT_NOT_PENDING_REVIEW.
         var distinctIds = dto.ShiftIds.Distinct().ToList();
 
+        // Hold every shift row (sorted, so two batches cannot deadlock) from before the reads to the save: the first lock opens the transaction, the rest join it.
+        await using var rowLock = await ShiftRowLock.AcquireAsync(_db, distinctIds.Min(), ct);
+        foreach (var lockedId in distinctIds.Order().Skip(1)) await ShiftRowLock.AcquireAsync(_db, lockedId, ct);
+
         // Two bulk queries instead of up to 2N round-trips (critique M3). completionsByShiftId is
         // a superset of what every id actually needs (it doesn't pre-filter on shift status), but
         // that's cheaper than querying per id and doesn't change the outcome below.
@@ -1619,6 +1665,7 @@ public class RosteringController : ControllerBase
         foreach (var group in approved.GroupBy(p => p.Shift.TenantId))
             await EmploymentHeroTimesheets.EnqueueAsync(_db, group.Key, group.ToList(), now, ct);
         await _db.SaveChangesAsync(ct);
+        await rowLock.CommitAsync(ct);
         return Ok(ApiResponse<List<ApproveBatchResultDto>>.Ok(results));
     }
 

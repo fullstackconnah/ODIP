@@ -73,7 +73,8 @@ public class RosterConflictServiceTests
         IReadOnlyList<UnavailabilityWindow>? availability = null,
         CompatibilityLevel compatibility = CompatibilityLevel.Allowed,
         decimal weeklyHoursThreshold = RosterConflictService.DefaultWeeklyHoursThreshold,
-        IReadOnlyList<PublicHolidayRef>? publicHolidays = null) => new(
+        IReadOnlyList<PublicHolidayRef>? publicHolidays = null,
+        IReadOnlyList<Shift>? staffShiftsInFortnight = null) => new(
         Staff: staff,
         Participant: participant,
         StaffShiftsInWeek: staffShiftsInWeek ?? Array.Empty<Shift>(),
@@ -82,7 +83,8 @@ public class RosterConflictServiceTests
         Availability: availability ?? Array.Empty<UnavailabilityWindow>(),
         Compatibility: compatibility,
         WeeklyHoursThreshold: weeklyHoursThreshold,
-        PublicHolidays: publicHolidays);
+        PublicHolidays: publicHolidays,
+        StaffShiftsInFortnight: staffShiftsInFortnight);
 
     private static bool HasCode(IReadOnlyList<RosterFinding> findings, string code) =>
         findings.Any(f => f.Code == code);
@@ -697,6 +699,133 @@ public class RosterConflictServiceTests
             CompliantContext(staff, participant, weeklyHoursThreshold: 8m)); // the rule is a strict ">"
 
         Assert.False(HasCode(findings, RosterConflictService.OverHours));
+    }
+
+    // ── CASUAL_FORTNIGHT_HOURS (R6) ──────────────────────────
+    // The fortnight is 26 Oct to 8 Nov 2026; the candidate is Monday 2 Nov. Every "other" shift is 17h (00:00 to 17:00), so four of them are 68h.
+
+    private static readonly DateOnly FortnightDay = new(2026, 11, 2);
+
+    private static User Casual(EmploymentType? type = EmploymentType.Casual)
+    {
+        var staff = CompliantStaff();
+        staff.FirstName = "Sam";
+        staff.LastName = "Lee";
+        staff.EmploymentType = type;
+        return staff;
+    }
+
+    private static Shift Long(User staff, Participant participant, DateOnly day, ShiftStatus status = ShiftStatus.Draft)
+    {
+        var shift = CandidateShift(staff, participant, serviceDate: day, start: new TimeOnly(0, 0), end: new TimeOnly(17, 0));
+        shift.Status = status;
+        return shift;
+    }
+
+    private static Shift[] SixtyEight(User staff, Participant participant) =>
+        Enumerable.Range(0, 4).Select(i => Long(staff, participant, new DateOnly(2026, 10, 26).AddDays(i))).ToArray();
+
+    private static IReadOnlyList<RosterFinding> FortnightCheck(User staff, Participant participant, Shift candidate, IReadOnlyList<Shift>? fortnight) =>
+        new RosterConflictService().Check(candidate, CompliantContext(staff, participant, staffShiftsInFortnight: fortnight));
+
+    [Fact]
+    public void Casual_at_exactly_76_hours_in_the_fortnight_does_not_warn()
+    {
+        var staff = Casual();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, serviceDate: FortnightDay);   // 8h, so 68 + 8 = 76
+
+        Assert.False(HasCode(FortnightCheck(staff, participant, candidate, SixtyEight(staff, participant)), RosterConflictService.CasualFortnightHours));
+    }
+
+    [Fact]
+    public void Casual_over_76_hours_gets_one_warning_that_needs_no_reason_with_the_pinned_copy()
+    {
+        var staff = Casual();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, serviceDate: FortnightDay, end: new TimeOnly(17, 15));   // 8h15, so 76h15
+
+        var finding = Assert.Single(FortnightCheck(staff, participant, candidate, SixtyEight(staff, participant)), f => f.Code == RosterConflictService.CasualFortnightHours);
+
+        Assert.Equal(RosterFindingSeverity.Warning, finding.Severity);
+        Assert.False(finding.RequiresReason);
+        Assert.Equal("Sam Lee is casual and would have 76.25h in the fortnight 26 Oct to 8 Nov 2026, over the 76h limit.", finding.Message);
+    }
+
+    [Theory]
+    [InlineData(EmploymentType.FullTime)]
+    [InlineData(EmploymentType.PartTime)]
+    [InlineData(null)]
+    public void A_worker_who_is_not_casual_never_gets_the_fortnight_warning(EmploymentType? type)
+    {
+        var staff = Casual(type);
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, serviceDate: FortnightDay);
+
+        Assert.False(HasCode(FortnightCheck(staff, participant, candidate, SixtyEight(staff, participant).Append(Long(staff, participant, new DateOnly(2026, 11, 3))).ToArray()),
+            RosterConflictService.CasualFortnightHours));
+    }
+
+    [Fact]
+    public void The_Sunday_ending_the_previous_fortnight_is_not_counted_but_the_first_Monday_is()
+    {
+        var staff = Casual();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, serviceDate: FortnightDay);
+        var sunday = CandidateShift(staff, participant, serviceDate: new DateOnly(2026, 10, 25), start: new TimeOnly(0, 0), end: new TimeOnly(10, 0));   // 10h, last fortnight
+        var monday = CandidateShift(staff, participant, serviceDate: new DateOnly(2026, 10, 26), start: new TimeOnly(0, 0), end: new TimeOnly(10, 0));   // 10h, this fortnight
+
+        Assert.True(HasCode(FortnightCheck(staff, participant, candidate, SixtyEight(staff, participant).Append(monday).ToArray()), RosterConflictService.CasualFortnightHours));   // 78
+        Assert.False(HasCode(FortnightCheck(staff, participant, candidate, SixtyEight(staff, participant).Append(sunday).ToArray()), RosterConflictService.CasualFortnightHours));   // 76: the Sunday is out
+    }
+
+    [Fact]
+    public void An_overnight_shift_starting_on_the_last_Sunday_counts_wholly_to_that_fortnight()
+    {
+        var staff = Casual();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, serviceDate: FortnightDay);   // 8h
+        var overnight = CandidateShift(staff, participant, serviceDate: new DateOnly(2026, 11, 8), start: new TimeOnly(22, 0), end: new TimeOnly(6, 0), endsNextDay: true);   // 8h on the Sunday
+
+        Assert.False(HasCode(FortnightCheck(staff, participant, candidate, SixtyEight(staff, participant)), RosterConflictService.CasualFortnightHours));   // 76
+        Assert.True(HasCode(FortnightCheck(staff, participant, candidate, SixtyEight(staff, participant).Append(overnight).ToArray()), RosterConflictService.CasualFortnightHours));   // 84
+    }
+
+    [Fact]
+    public void Cancelled_shifts_are_not_counted_in_the_fortnight()
+    {
+        var staff = Casual();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, serviceDate: FortnightDay);
+        var cancelled = Long(staff, participant, new DateOnly(2026, 11, 4), ShiftStatus.Cancelled);
+
+        Assert.False(HasCode(FortnightCheck(staff, participant, candidate, SixtyEight(staff, participant).Append(cancelled).ToArray()), RosterConflictService.CasualFortnightHours));
+    }
+
+    [Fact]
+    public void No_fortnight_shifts_loaded_skips_the_rule()
+    {
+        var staff = Casual();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, serviceDate: FortnightDay, start: new TimeOnly(0, 0), end: new TimeOnly(23, 0));
+
+        Assert.False(HasCode(FortnightCheck(staff, participant, candidate, null), RosterConflictService.CasualFortnightHours));
+    }
+
+    [Fact]
+    public void Over_hours_does_not_count_cancelled_shifts()
+    {
+        var staff = CompliantStaff();
+        var participant = CompliantParticipant();
+        var candidate = CandidateShift(staff, participant, start: new TimeOnly(9, 0), end: new TimeOnly(17, 0)); // 8h
+        var cancelled = CandidateShift(staff, participant, serviceDate: ServiceDate.AddDays(1), start: new TimeOnly(9, 0), end: new TimeOnly(19, 0)); // 10h
+        cancelled.Status = ShiftStatus.Cancelled;
+
+        var findings = new RosterConflictService().Check(
+            candidate,
+            CompliantContext(staff, participant, staffShiftsInWeek: new[] { cancelled }, weeklyHoursThreshold: 15m));
+
+        Assert.False(HasCode(findings, RosterConflictService.OverHours)); // 8h live; the cancelled 10h would have made 18h
     }
 
     [Fact]

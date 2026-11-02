@@ -44,7 +44,7 @@ export function applyQueued(detail: PortalShiftDetailDto, records: readonly Queu
         if (out.handover) out = { ...out, handover: { ...out.handover, isRead: true, readAt: r.clientTime } }
         break
       case 'breakStart': {
-        const b: ShiftBreakDto = { id: r.id, startedAt: r.clientTime, endedAt: null, isRunning: true, minutes: 0, editedAt: null, createdByUserId: r.userId }
+        const b: ShiftBreakDto = { id: r.id, startedAt: r.clientTime, endedAt: null, isRunning: true, minutes: 0, editedAt: null, createdByUserId: r.userId, withParticipant: false }
         out = { ...out, breaks: [...out.breaks, b] }
         break
       }
