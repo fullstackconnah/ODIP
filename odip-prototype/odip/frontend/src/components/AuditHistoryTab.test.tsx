@@ -2,14 +2,15 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import AuditHistoryTab from './AuditHistoryTab'
 import { TONE } from '@/lib/tone'
+import type { AuditChange } from '../api/hooks'
 
 const { mockUseAuditHistory } = vi.hoisted(() => ({ mockUseAuditHistory: vi.fn() }))
 vi.mock('../api/hooks', () => ({ useAuditHistory: mockUseAuditHistory }))
 
 const NOW = new Date('2026-10-28T02:00:00Z')
 
-function entry(id: string, action: string, changedAt: string) {
-  return { id, action, changedAt, changedByName: 'Pat Admin', changes: [] }
+function entry(id: string, action: string, changedAt: string, changes: AuditChange[] = []) {
+  return { id, action, changedAt, changedByName: 'Pat Admin', changes }
 }
 
 function renderTab(entries: ReturnType<typeof entry>[]) {
@@ -18,6 +19,13 @@ function renderTab(entries: ReturnType<typeof entry>[]) {
 }
 
 afterEach(() => vi.useRealTimers())
+
+it("renders each change as field, old and new", () => {
+  renderTab([entry("a", "Updated", "2026-10-28T01:00:00Z", [{ field: "LastName", old: "A", new: "B" }])])
+  expect(screen.getByText("LastName")).toBeInTheDocument()
+  expect(screen.getByText("A")).toBeInTheDocument()
+  expect(screen.getByText("B")).toBeInTheDocument()
+})
 
 describe('AuditHistoryTab', () => {
   it('colours the action pill by the house tones: Created success, Updated info, Deleted danger', () => {
