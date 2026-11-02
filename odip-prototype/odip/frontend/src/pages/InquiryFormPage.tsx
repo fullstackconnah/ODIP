@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Callout } from '@/components/Callout'
 import { Card } from '@/components/Card'
 import { Button } from '@/components/Button'
@@ -10,9 +10,10 @@ import { TextAreaField } from '@/components/TextAreaField'
 import { SelectField } from '@/components/SelectField'
 import { PageHeader } from '@/components/PageHeader'
 import { PageState } from '@/components/PageState'
-import { useCreateParticipantInquiry, useParticipantInquiries, useParticipantInquiry, useResendIntakeInvite, useSetIntakeBooking, useUpdateParticipantInquiry } from '@/api/hooks'
+import { useCreateParticipantInquiry, useParticipantInquiries, useParticipantInquiry, useReferralSources, useResendIntakeInvite, useSetIntakeBooking, useUpdateParticipantInquiry } from '@/api/hooks'
 import type { ContactRoleType, PlanType } from '@/api/types/enums'
-import type { CreateParticipantInquiryDto, InquiryContactDto, InquirySource, ParticipantInquiryDetailDto, ParticipantInquiryDto } from '@/api/types/inquiries'
+import type { CreateParticipantInquiryDto, InquiryContactDto, InquirySource, ParticipantInquiryDetailDto, ParticipantInquiryDto, ReferralSourceDto } from '@/api/types/inquiries'
+import type { SelectFieldOption } from '@/components/SelectField'
 import { fieldErrors } from '@/lib/fieldErrors'
 import { formGrid, span } from '@/lib/formGrid'
 import { isNotFoundError } from '@/lib/httpStatus'
@@ -23,6 +24,7 @@ import {
   serverBookingErrors, validateBooking, type BookingErrors, type BookingField, type BookingForm, type EnquiryNotice,
 } from '@/lib/intakeBooking'
 import { extractErrorMessage } from '@/lib/utils'
+import { usePermissions } from '@/lib/permissions'
 import { utcInstantToProviderLocal } from '@/pages/portal/shift/shiftTime'
 import { BookingFields } from './inquiries/BookingFields'
 import { closedNotice } from '@/lib/inquiryClose'
@@ -43,20 +45,22 @@ import { retryingAfterError } from '@/lib/queryPhase'
  */
 type FormState = {
   firstName: string; lastName: string; phone: string; email: string; source: InquirySource; provenance: string
+  /** The chosen referral source's id, '' for not recorded. */
+  referralSourceId: string
   contactIsParticipant: boolean; contactFirstName: string; contactLastName: string; contactRelationship: string; contactRole: ContactRoleType | ''
   dateOfBirth: string; ndisNumber: string; addressStreet: string; addressSuburb: string; addressState: string; addressPostcode: string
   planType: PlanType | ''; planStartDate: string; planEndDate: string
 }
 
 const blank = (): FormState => ({
-  firstName: '', lastName: '', phone: '', email: '', source: 'Phone', provenance: '',
+  firstName: '', lastName: '', phone: '', email: '', source: 'Phone', provenance: '', referralSourceId: '',
   contactIsParticipant: false, contactFirstName: '', contactLastName: '', contactRelationship: '', contactRole: '',
   dateOfBirth: '', ndisNumber: '', addressStreet: '', addressSuburb: '', addressState: '', addressPostcode: '', planType: 'PlanManaged', planStartDate: '', planEndDate: '',
 })
 
 const fromInquiry = (row: ParticipantInquiryDetailDto): FormState => ({
   // A real enquiry always has a source; only a direct intake (never edited here) has none.
-  firstName: row.firstName, lastName: row.lastName, phone: row.phone ?? '', email: row.email ?? '', source: row.source || 'Phone', provenance: row.provenance ?? '',
+  firstName: row.firstName, lastName: row.lastName, phone: row.phone ?? '', email: row.email ?? '', source: row.source || 'Phone', provenance: row.provenance ?? '', referralSourceId: row.referralSourceId ?? '',
   contactIsParticipant: !!row.contactIsParticipant, contactFirstName: row.contactFirstName ?? '', contactLastName: row.contactLastName ?? '',
   contactRelationship: row.contactRelationship ?? '', contactRole: row.contactRole ?? '',
   dateOfBirth: row.dateOfBirth ?? '', ndisNumber: row.ndisNumber ?? '', addressStreet: row.addressStreet ?? '', addressSuburb: row.addressSuburb ?? '',
@@ -67,12 +71,13 @@ const orNull = (value: string) => value.trim() || null
 
 /**
  * What goes on the wire. A field left blank is sent as null, never "": the API rejects "" as a bad email address, and as a date. `contacts` only when
- * given. A converted enquiry sends its names, source and provenance only (D7): its contact and details are the participant's record now.
+ * given. A converted enquiry sends its names, source, provenance and referral source only (D7): its contact and details are the participant's record now.
  * With "their own contact" ticked the contact's names, relationship and role go as null, though what was typed stays in the form.
  */
 const toPayload = (form: FormState, contacts?: InquiryContactDto[], converted = false): CreateParticipantInquiryDto => {
-  const own = { firstName: form.firstName.trim(), lastName: orNull(form.lastName), source: form.source, provenance: orNull(form.provenance) }
-  if (converted) return own
+  const own = { firstName: form.firstName.trim(), lastName: orNull(form.lastName), source: form.source, provenance: orNull(form.provenance), referralSourceId: form.referralSourceId || null }
+  // contactIsParticipant tells the API this is the current form (not an old tab), so a cleared source is stored; the API ignores it for a converted enquiry.
+  if (converted) return { ...own, contactIsParticipant: form.contactIsParticipant }
   const self = form.contactIsParticipant
   return {
     ...own,
@@ -168,6 +173,19 @@ export default function InquiryFormPage() {
 }
 
 
+/**
+ * "Referred by" choices: not recorded, then the active sources by name. The enquiry's stored source stays on the list while it is hidden (the server
+ * keeps accepting it), so an old enquiry never shows an empty box.
+ */
+function referralSourceOptions(sources: ReferralSourceDto[], stored: ParticipantInquiryDto | null, selected: string): SelectFieldOption[] {
+  const active = sources.filter(s => s.isActive).sort((a, b) => a.name.localeCompare(b.name)).map(s => ({ value: s.id, label: s.name }))
+  const keep = stored?.referralSourceId ?? (selected || null)
+  const hidden = keep && !active.some(o => o.value === keep)
+    ? [{ value: keep, label: sources.find(s => s.id === keep)?.name ?? stored?.referralSourceName ?? 'Hidden source' }]
+    : []
+  return [{ value: '', label: 'Not recorded' }, ...active, ...hidden]
+}
+
 function InquiryFormBody({ initial, focus, onCreated, onReopened, onDone }: {
   initial: ParticipantInquiryDetailDto | null
   /** ?focus=: 'address' opens the details and focuses Street; 'contact' focuses the main contact's First name. */
@@ -203,6 +221,9 @@ function InquiryFormBody({ initial, focus, onCreated, onReopened, onDone }: {
     JSON.stringify(toPayload(initial ? fromInquiry(initial) : blank(), contactsPayload((initial?.contacts ?? []).map(contactRowOf)), !!initial?.participantId)))
   const create = useCreateParticipantInquiry()
   const update = useUpdateParticipantInquiry()
+  const sourcesQuery = useReferralSources()
+  const { canManageParticipantLifecycle: canEditSources } = usePermissions()
+  const referralOptions = referralSourceOptions(sourcesQuery.data ?? [], row, form.referralSourceId)
   const setVisit = useSetIntakeBooking()
   const resend = useResendIntakeInvite()
   const staff = useBookingStaff(row)
@@ -420,6 +441,23 @@ function InquiryFormBody({ initial, focus, onCreated, onReopened, onDone }: {
               onChange={e => setField('source', e.target.value as InquirySource)}
               options={[{ value: 'Web', label: 'Web' }, { value: 'Email', label: 'Email' }, { value: 'Phone', label: 'Phone' }]}
             />
+            <div className={span.medium}>
+              <SelectField
+                id="inquiry-referral-source"
+                label="Referred by"
+                value={form.referralSourceId}
+                onChange={e => setField('referralSourceId', e.target.value)}
+                options={referralOptions}
+                disabled={sourcesQuery.isLoading || sourcesQuery.isError}
+                error={errors.referralSourceId}
+                hint={sourcesQuery.isError ? "Couldn't load referral sources." : undefined}
+              />
+              {sourcesQuery.isSuccess && sourcesQuery.data.length === 0 && canEditSources && (
+                <p className="text-xs text-[var(--color-muted-foreground)] mt-1">
+                  Add referral sources <Link to="/settings?section=referral-sources" className="underline">in Settings</Link>.
+                </p>
+              )}
+            </div>
             <TextAreaField
               id="inquiry-provenance"
               className={span.long}
