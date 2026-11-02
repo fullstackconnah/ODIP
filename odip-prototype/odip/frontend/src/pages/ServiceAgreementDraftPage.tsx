@@ -20,11 +20,14 @@ import { approvalHistory } from '@/lib/agreementHistory'
 import { blocksToShifts, chargeHolidaysByDefault, engineLimits, shiftIdsOfBlock, type Shift } from '@/lib/agreementShifts'
 import { localIsoDate } from '@/lib/dateOnly'
 import { currentPlanOf, planStatus } from '@/lib/fundingPlan'
+import { plural } from '@/lib/format'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { usePermissions } from '@/lib/permissions'
+import { formatWithTimeZone } from '@/lib/utils'
 import { SUPPORT_LABEL, normaliseBlock, stampLocation } from '@/lib/planBlocks'
 import { PRICING_FIRST_YEAR, PRICING_LAST_YEAR, addDays, conflictVersionOf, describeRenewError, describeSaveError, friendlyMessage, isPricingDate, planNeededMessageOf, type SaveFailure } from '@/lib/planQuote'
 import { ApprovalDialog } from './agreement/ApprovalDialog'
+import { PopulateDialog } from './agreement/PopulateDialog'
 import { movedWords, notMovedWords } from './agreements/outcomeWords'
 import { STATES, planDatesOf, type Details } from '@/lib/agreementDetails'
 import { AgreementStep } from './agreement/AgreementStep'
@@ -106,6 +109,9 @@ function DraftPage() {
   const [confirmingLoad, setConfirmingLoad] = useState(false)
   const [loadingNewest, setLoadingNewest] = useState(false)
   const [approving, setApproving] = useState(false)
+  // Populate roster (S11): the dialog, and what the last populate said (for the revision it was run on).
+  const [populating, setPopulating] = useState(false)
+  const [populated, setPopulated] = useState<{ draftId: string; text: string } | null>(null)
   // The save whose "Start a new revision" was pressed: an approved agreement is what the roster was made from, so it is read only until somebody says they mean to change it.
   const [revisingFrom, setRevisingFrom] = useState<string | null>(null)
   const renew = useRenewAgreement()
@@ -353,6 +359,8 @@ function DraftPage() {
   const approverRoles = pricing.settings?.approverRoles
   const mayApprove = isSuperAdmin || !approverRoles || (isAdmin && approverRoles.includes('Admin')) || (isCoordinator && approverRoles.includes('Coordinator'))
   const approvable = canEdit && !!onScreen && onScreen.blocks.length > 0 && !onScreen.approval && unreadableVersion === null
+  // Populate roster: the newest save, once approved. The server refuses an older approved revision.
+  const populatable = canEdit && !!onScreen?.approval && onScreen.id === newest?.id
   const submit = (event: FormEvent) => {
     event.preventDefault()
     if (step !== 'save') next()
@@ -382,6 +390,18 @@ function DraftPage() {
         activatesName={pricing.settings?.approvalActivatesParticipant && participant.data?.isDraft ? participant.data.firstName : undefined}
         onGoToShifts={blockId => { go('week', true); setSelected(shiftIdsOfBlock(onScreen.blocks, blockId)) }}
         onSuperseded={superseded}
+      />
+    )}
+    {populatable && onScreen && (
+      <PopulateDialog
+        open={populating}
+        participantId={participantId}
+        draftId={onScreen.id}
+        onClose={() => setPopulating(false)}
+        onPopulated={result => {
+          setPopulating(false)
+          setPopulated({ draftId: onScreen.id, text: result.created === 0 ? 'Nothing to add: those shifts were already there.' : `Added ${plural(result.created, 'unfilled shift')}.` })
+        }}
       />
     )}
     {unsavedChangesDialog}
@@ -454,8 +474,8 @@ function DraftPage() {
               <Callout tone="info" announce={false} className="max-w-prose">
                 {/* With the organisation's setting on, approving may move them to Active, so the notice no longer says it cannot. */}
                 {pricing.settings?.approvalActivatesParticipant
-                  ? <p><strong>Draft only:</strong> not approved for signing or use. It can&apos;t invoice or claim. Approving a revision for rostering is separate: it only makes that revision&apos;s weekly patterns and unfilled shifts. Approving also moves them to Active if they&apos;re ready.</p>
-                  : <p><strong>Draft only:</strong> not approved for signing or use. It can&apos;t activate the participant, invoice or claim. Approving a revision for rostering is separate: it only makes that revision&apos;s weekly patterns and unfilled shifts.</p>}
+                  ? <p><strong>Draft only:</strong> not approved for signing or use. It can&apos;t invoice or claim. Approving a revision for rostering is separate: it only makes that revision&apos;s weekly patterns; Populate roster adds the shifts. Approving also moves them to Active if they&apos;re ready.</p>
+                  : <p><strong>Draft only:</strong> not approved for signing or use. It can&apos;t activate the participant, invoice or claim. Approving a revision for rostering is separate: it only makes that revision&apos;s weekly patterns; Populate roster adds the shifts.</p>}
                 <p className="mt-2"><strong>Participant identifiers come from the participant record.</strong> NDIS number: {canonicalIdentifiers.ndis}; date of birth: {canonicalIdentifiers.dob}. <Link className="underline font-medium" to={`/participants/${participantId}/profile`}>View or edit participant details</Link>. A snapshot of both is stored with this draft and printed on its PDF, which Admins and Coordinators can open; a later change to the record does not change an existing draft.</p>
               </Callout>
               <AgreementStep
@@ -490,6 +510,11 @@ function DraftPage() {
               history={approvalHistory(drafts.data ?? [])}
               onDownload={() => { if (onScreen) download.mutate({ participantId, id: onScreen.id }) }}
               downloading={download.isPending} downloadFailed={download.isError}
+              populate={populatable && onScreen?.approval ? {
+                approvedLine: `Approved for rostering by ${onScreen.approval.approvedByName} on ${formatWithTimeZone(onScreen.approval.approvedAt, undefined, { day: 'numeric', month: 'short', year: 'numeric' })}.`,
+                onOpen: () => { setPopulated(null); setPopulating(true) },
+                result: populated?.draftId === onScreen.id ? populated.text : null,
+              } : undefined}
               approval={approvable ? { mayApprove, approverRoles, notReady: onScreen?.pricing?.needsReview === true, onOpen: () => { setActivationNotice(null); setApproving(true) } } : undefined}
             />
           )}

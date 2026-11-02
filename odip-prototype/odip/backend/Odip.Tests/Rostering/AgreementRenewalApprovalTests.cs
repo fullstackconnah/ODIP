@@ -38,6 +38,7 @@ public class AgreementRenewalApprovalTests
         await using var f = await SetUpAsync();
         var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, end: Nov22);
         Assert.Equal(ApprovalStatus.Approved, (await f.Service.ApproveAsync(TenantA, f.ParticipantId, v1.Id, false, Admin, CancellationToken.None)).Status);
+        await ApprovalTestSupport.PopulateAllAsync(f.Service, f.ParticipantId, v1.Id);
         var ben = await UserAsync(f, "Ben", active: true);
         var gus = await UserAsync(f, "Gus", active: false);                                                // archived: his default is not handed on
         foreach (var pattern in await f.Db.ShiftPatterns.Where(p => p.SourceDraftId == v1.Id).ToListAsync())
@@ -53,6 +54,7 @@ public class AgreementRenewalApprovalTests
         var preview = (await f.Service.PreviewAsync(TenantA, f.ParticipantId, renewal.Id, Admin, CancellationToken.None)).Preview!;
 
         var outcome = await f.Service.ApproveAsync(TenantA, f.ParticipantId, renewal.Id, false, Admin, CancellationToken.None);
+        await ApprovalTestSupport.PopulateAllAsync(f.Service, f.ParticipantId, renewal.Id);
 
         Assert.Equal((ApprovalStatus.Approved, 0), (outcome.Status, outcome.Approval!.PatternsEnded));
         var made = await f.Db.ShiftPatterns.AsNoTracking().Where(p => p.SourceDraftId == renewal.Id).ToDictionaryAsync(p => p.DayOfWeek, p => (p.DefaultUserId, p.IsActive));
@@ -71,6 +73,7 @@ public class AgreementRenewalApprovalTests
         await using var f = await SetUpAsync();
         var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, end: Nov22);
         await f.Service.ApproveAsync(TenantA, f.ParticipantId, v1.Id, false, Admin, CancellationToken.None);
+        await ApprovalTestSupport.PopulateAllAsync(f.Service, f.ParticipantId, v1.Id);
         var ben = await UserAsync(f, "Ben", active: true);
         foreach (var pattern in await f.Db.ShiftPatterns.Where(p => p.SourceDraftId == v1.Id).ToListAsync()) pattern.DefaultUserId = ben;
         await f.Db.SaveChangesAsync();
@@ -82,6 +85,7 @@ public class AgreementRenewalApprovalTests
         var preview = (await f.Service.PreviewAsync(TenantA, f.ParticipantId, change.Id, Admin, CancellationToken.None)).Preview!;
 
         var outcome = await f.Service.ApproveAsync(TenantA, f.ParticipantId, change.Id, false, Admin, CancellationToken.None);
+        await ApprovalTestSupport.PopulateAllAsync(f.Service, f.ParticipantId, change.Id);
 
         Assert.Equal((5, 1), (outcome.Approval!.PatternsEnded, preview.ChangedPatterns));
         var made = await f.Db.ShiftPatterns.AsNoTracking().Where(p => p.SourceDraftId == change.Id).ToDictionaryAsync(p => p.DayOfWeek, p => p.DefaultUserId);
@@ -100,16 +104,19 @@ public class AgreementRenewalApprovalTests
         await using var f = await SetUpAsync();
         var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, end: Nov22);
         await f.Service.ApproveAsync(TenantA, f.ParticipantId, v1.Id, false, Admin, CancellationToken.None);
+        await ApprovalTestSupport.PopulateAllAsync(f.Service, f.ParticipantId, v1.Id);
         var (ben, ann) = (await UserAsync(f, "Ben", active: true), await UserAsync(f, "Ann", active: true));
         foreach (var pattern in await f.Db.ShiftPatterns.Where(p => p.SourceDraftId == v1.Id).ToListAsync()) pattern.DefaultUserId = ben;
         await f.Db.SaveChangesAsync();
         var change = await AddRevisionAsync(f, 2, new[] { WeekdayBlock() }, start: new DateOnly(2026, 11, 2), end: Nov22);
         Assert.Equal(5, (await f.Service.ApproveAsync(TenantA, f.ParticipantId, change.Id, false, Admin, CancellationToken.None)).Approval!.PatternsEnded);
+        await ApprovalTestSupport.PopulateAllAsync(f.Service, f.ParticipantId, change.Id);
         (await f.Db.ShiftPatterns.SingleAsync(p => p.SourceDraftId == change.Id && p.DayOfWeek == DayOfWeek.Tuesday)).DefaultUserId = ann;
         await f.Db.SaveChangesAsync();
         var renewal = await AddRevisionAsync(f, 3, new[] { WeekdayBlock() }, start: Nov23, end: Jan3);
 
         var outcome = await f.Service.ApproveAsync(TenantA, f.ParticipantId, renewal.Id, false, Admin, CancellationToken.None);
+        await ApprovalTestSupport.PopulateAllAsync(f.Service, f.ParticipantId, renewal.Id);
 
         Assert.Equal(0, outcome.Approval!.PatternsEnded);
         var made = await f.Db.ShiftPatterns.AsNoTracking().Where(p => p.SourceDraftId == renewal.Id).ToDictionaryAsync(p => p.DayOfWeek, p => p.DefaultUserId);
@@ -126,6 +133,7 @@ public class AgreementRenewalApprovalTests
         await using var f = await SetUpAsync();
         var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, end: Nov22);
         await f.Service.ApproveAsync(TenantA, f.ParticipantId, v1.Id, false, Admin, CancellationToken.None);
+        await ApprovalTestSupport.PopulateAllAsync(f.Service, f.ParticipantId, v1.Id);
         var ben = await UserAsync(f, "Ben", active: true);
         foreach (var pattern in await f.Db.ShiftPatterns.Where(p => p.SourceDraftId == v1.Id).ToListAsync()) pattern.DefaultUserId = ben;
         (await f.Db.ShiftPatterns.SingleAsync(p => p.SourceDraftId == v1.Id && p.DayOfWeek == DayOfWeek.Monday)).EffectiveTo = null;
@@ -133,6 +141,7 @@ public class AgreementRenewalApprovalTests
         var renewal = await AddRevisionAsync(f, 2, new[] { WeekdayBlock() }, start: Nov23, end: Jan3);
 
         var outcome = await f.Service.ApproveAsync(TenantA, f.ParticipantId, renewal.Id, false, Admin, CancellationToken.None);
+        await ApprovalTestSupport.PopulateAllAsync(f.Service, f.ParticipantId, renewal.Id);
 
         Assert.Equal(1, outcome.Approval!.PatternsEnded);                                                  // the open Monday, ended the day before
         var made = await f.Db.ShiftPatterns.AsNoTracking().Where(p => p.SourceDraftId == renewal.Id).ToDictionaryAsync(p => p.DayOfWeek, p => p.DefaultUserId);
@@ -150,6 +159,7 @@ public class AgreementRenewalApprovalTests
         await using var f = await SetUpAsync();
         var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, end: Nov22);
         await f.Service.ApproveAsync(TenantA, f.ParticipantId, v1.Id, false, Admin, CancellationToken.None);
+        await ApprovalTestSupport.PopulateAllAsync(f.Service, f.ParticipantId, v1.Id);
         var (ben, ann) = (await UserAsync(f, "Ben", active: true), await UserAsync(f, "Ann", active: true));
         foreach (var pattern in await f.Db.ShiftPatterns.Where(p => p.SourceDraftId == v1.Id).ToListAsync()) pattern.DefaultUserId = ben;
         await f.Db.SaveChangesAsync();
@@ -159,6 +169,7 @@ public class AgreementRenewalApprovalTests
             WeekdayBlock(change: b => b with { Days = ApprovalTestSupport.Weekdays.Skip(1).ToArray() }), WeekdayBlock("weekdays-mon", b => b with { Days = new[] { DayOfWeek.Monday }, End = T(14) }),
         }, end: Nov22);
         Assert.Equal(5, (await f.Service.ApproveAsync(TenantA, f.ParticipantId, v2.Id, false, Admin, CancellationToken.None)).Approval!.PatternsEnded);
+        await ApprovalTestSupport.PopulateAllAsync(f.Service, f.ParticipantId, v2.Id);
         foreach (var pattern in await f.Db.ShiftPatterns.Where(p => p.SourceDraftId == v2.Id).ToListAsync()) (pattern.EffectiveTo, pattern.DefaultUserId) = (null, ann);
         await f.Db.SaveChangesAsync();
         // The same start again, Monday back to v1's 09:00 to 13:00.
@@ -166,6 +177,7 @@ public class AgreementRenewalApprovalTests
         var preview = (await f.Service.PreviewAsync(TenantA, f.ParticipantId, v3.Id, Admin, CancellationToken.None)).Preview!;
 
         var outcome = await f.Service.ApproveAsync(TenantA, f.ParticipantId, v3.Id, false, Admin, CancellationToken.None);
+        await ApprovalTestSupport.PopulateAllAsync(f.Service, f.ParticipantId, v3.Id);
 
         Assert.Equal((ApprovalStatus.Approved, 5, 1), (outcome.Status, outcome.Approval!.PatternsEnded, preview.ChangedPatterns));
         var made = await f.Db.ShiftPatterns.AsNoTracking().Where(p => p.SourceDraftId == v3.Id).ToDictionaryAsync(p => p.DayOfWeek, p => (p.Id, p.DefaultUserId));
@@ -182,10 +194,12 @@ public class AgreementRenewalApprovalTests
         await using var f = await SetUpAsync(weeksStarted: false);
         var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, end: Nov22);
         await f.Service.ApproveAsync(TenantA, f.ParticipantId, v1.Id, false, Admin, CancellationToken.None);
+        await ApprovalTestSupport.PopulateAllAsync(f.Service, f.ParticipantId, v1.Id);
         var ben = await UserAsync(f, "Ben", active: true);
         foreach (var pattern in await f.Db.ShiftPatterns.Where(p => p.SourceDraftId == v1.Id).ToListAsync()) pattern.DefaultUserId = ben;
         var renewal = await AddRevisionAsync(f, 2, new[] { WeekdayBlock() }, start: Nov23, end: Jan3);
         await f.Service.ApproveAsync(TenantA, f.ParticipantId, renewal.Id, false, Admin, CancellationToken.None);
+        await ApprovalTestSupport.PopulateAllAsync(f.Service, f.ParticipantId, renewal.Id);
         var old = await f.Db.ShiftPatterns.SingleAsync(p => p.SourceDraftId == v1.Id && p.DayOfWeek == DayOfWeek.Monday);
         Assert.Equal(ben, (await f.Db.ShiftPatterns.SingleAsync(p => p.SourceDraftId == renewal.Id && p.DayOfWeek == DayOfWeek.Monday)).DefaultUserId);   // the copy approval made
         var chip = f.Db.Shifts.Add(new Shift

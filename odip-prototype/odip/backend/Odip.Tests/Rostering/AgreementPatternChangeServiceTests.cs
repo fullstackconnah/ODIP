@@ -29,6 +29,7 @@ public class AgreementPatternChangeServiceTests
         await CatalogueImportTestSupport.ImportAsync(f.Db, CatalogueFixtures.File2026_27);
         var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, start: start, end: Nov22, requirements: requirements);
         await f.Service.ApproveAsync(TenantA, f.ParticipantId, v1.Id, false, Admin, CancellationToken.None);
+        await ApprovalTestSupport.PopulateAllAsync(f.Service, f.ParticipantId, v1.Id);
         return (f, v1, await f.Db.ShiftPatterns.AsNoTracking().SingleAsync(p => p.SourceDraftId == v1.Id && p.DayOfWeek == DayOfWeek.Monday));
     }
 
@@ -208,6 +209,7 @@ public class AgreementPatternChangeServiceTests
 
         var approved = await f.Service.ApproveAsync(TenantA, f.ParticipantId, result.DraftId!.Value, false, Admin, CancellationToken.None);
 
+        var populated = await ApprovalTestSupport.PopulateAllAsync(f.Service, f.ParticipantId, result.DraftId!.Value);
         Assert.Equal(ApprovalStatus.Approved, approved.Status);
         Assert.All(await f.Db.ShiftPatterns.AsNoTracking().Where(p => p.SourceDraftId == v1.Id).ToListAsync(), p => Assert.Equal(new DateOnly(2026, 10, 18), p.EffectiveTo));
         var made = await f.Db.ShiftPatterns.AsNoTracking().Where(p => p.SourceDraftId == result.DraftId).OrderBy(p => p.DayOfWeek).ToListAsync();
@@ -216,7 +218,7 @@ public class AgreementPatternChangeServiceTests
         Assert.All(made, p => Assert.Equal((Oct19, (DateOnly?)Nov22), (p.EffectiveFrom, p.EffectiveTo)));
         // The real chain: a change saved by SaveAsync, then approved. The requirements went through save, read-back and the mapper and still match as text, so the unchanged days carry over with their default worker.
         var old = approved.OldShifts!;
-        Assert.Equal((20, 5, 5), (old.Carried, old.Removed, approved.Approval!.ShiftsCreated));     // Tuesday to Friday, 20 October to 20 November, carried; the five unfilled Mondays from the 19th removed; five new Mondays
+        Assert.Equal((20, 5, 0, 5), (old.Carried, old.Removed, approved.Approval!.ShiftsCreated, populated.Created));     // Tuesday to Friday, 20 October to 20 November, carried; the five unfilled Mondays from the 19th removed; approval makes none and Populate makes the five new Mondays
         Assert.Equal(30, await f.Db.Shifts.CountAsync());                                             // 30 - 5 + 5
         Assert.Equal((Guid?)staff, made.Single(p => p.DayOfWeek == DayOfWeek.Tuesday).DefaultUserId);
     }

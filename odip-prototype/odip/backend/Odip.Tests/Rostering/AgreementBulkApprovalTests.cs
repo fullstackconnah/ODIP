@@ -18,6 +18,7 @@ public class AgreementBulkApprovalTests
         var s = Today.AddDays(-20);
         var v1 = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, start: s, end: new DateOnly(2026, 12, 20));
         await f.Service.ApproveAsync(TenantA, f.ParticipantId, v1.Id, false, Admin, CancellationToken.None);
+        await ApprovalTestSupport.PopulateAllAsync(f.Service, f.ParticipantId, v1.Id);
         var pattern = await f.Db.ShiftPatterns.FirstAsync(p => p.SourceDraftId == v1.Id);
 
         Shift Done(DateOnly day) => new() { Id = Guid.NewGuid(), TenantId = TenantA, ParticipantId = f.ParticipantId, ShiftPatternId = pattern.Id, ServiceDate = day, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(13, 0), Status = ShiftStatus.Completed };
@@ -32,6 +33,7 @@ public class AgreementBulkApprovalTests
 
         var v2 = await AddRevisionAsync(f, 2, new[] { WeekdayBlock() }, start: s, end: new DateOnly(2026, 12, 20));
         var outcome = await f.Service.ApproveAsync(TenantA, f.ParticipantId, v2.Id, true, Admin, CancellationToken.None);
+        await ApprovalTestSupport.PopulateAllAsync(f.Service, f.ParticipantId, v2.Id);
 
         Assert.Equal(ApprovalStatus.Approved, outcome.Status);
         Assert.Equal(before, await f.Db.Shifts.AsNoTracking().Where(x => x.Id == claimed.Id || x.Id == unclaimed.Id).OrderBy(x => x.ServiceDate).Select(x => new { x.Id, x.Status, x.ShiftPatternId }).ToListAsync());

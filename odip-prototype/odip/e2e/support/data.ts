@@ -143,10 +143,22 @@ export async function startWeek(coord: Session, date: string) {
   await expectStatus('start week', 200, res);
 }
 
+/** Populate roster (S11): makes the shifts of an approved revision in every started week that is missing some, a week at a time as the dialog does. Weeks not started are not offered, so nothing is made there. */
+export async function populateDraft(coord: Session, participantId: string, draftId: string) {
+  const base = `/participants/${participantId}/service-agreement-drafts/${draftId}`;
+  const preview = await expectStatus('populate preview', 200, await call(coord, 'GET', `${base}/populate-preview`));
+  for (const week of preview.data.weeks.filter((w: { toAdd: number }) => w.toAdd > 0)) {
+    await expectStatus('populate ' + week.weekStart, 200, await call(coord, 'POST', `${base}/populate`, { weekStart: week.weekStart }));
+  }
+}
+
+/** Approves a revision and populates the started weeks, which is what approving did by itself before S11. */
 export async function approveDraft(coord: Session, participantId: string, draftId: string) {
   const preview = await expectStatus('approval preview', 200, await call(coord, 'GET', `/participants/${participantId}/service-agreement-drafts/${draftId}/approval-preview`));
   if (!preview.data.canApprove) throw new Error(`the draft cannot be approved: ${JSON.stringify(preview.data.reasons)}`);
-  return expectStatus('approve draft', 200, await call(coord, 'POST', `/participants/${participantId}/service-agreement-drafts/${draftId}/approve`, {}));
+  const approved = await expectStatus('approve draft', 200, await call(coord, 'POST', `/participants/${participantId}/service-agreement-drafts/${draftId}/approve`, {}));
+  await populateDraft(coord, participantId, draftId);
+  return approved;
 }
 
 /**

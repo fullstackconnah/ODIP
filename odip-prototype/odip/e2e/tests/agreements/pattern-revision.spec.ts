@@ -1,6 +1,6 @@
 import { test, expect, call } from '../../support/fixtures';
 import { expectStatus, type Session } from '../../support/api';
-import { makeParticipant, makeStaff, assignShift, startWeek } from '../../support/data';
+import { makeParticipant, makeStaff, assignShift, startWeek, populateDraft } from '../../support/data';
 import { addDays, nextWednesday, sydneyToday } from '../../support/dates';
 
 // Real API + PostgreSQL: setup alone uses direct calls. Preview, revision creation and
@@ -43,6 +43,7 @@ for (const allDays of [false, true]) {
     await startWeek(session, start);
     await startWeek(session, addDays(start, 7));
     await expectStatus('approve initial agreement', 200, await call(session, 'POST', `${base}/${v1.id}/approve`, { acknowledgeOverlaps: false }));
+    await populateDraft(session, participant.id, v1.id);
     const originalPatterns = await patterns();
     expect(originalPatterns).toHaveLength(2);
     const originalShifts = await shifts();
@@ -153,6 +154,10 @@ for (const allDays of [false, true]) {
       expect(p.effectiveFrom).toBe(start);
       expect(p.endTime).toBe(allDays || p.dayOfWeek === 'Wednesday' ? '14:00:00' : '13:00:00');
     }
+    // S11: approving made the patterns and cleared the old unfilled shifts, and no new shift; Populate roster makes them, one started week at a time.
+    expect(result.approval.shiftsCreated).toBe(0);
+    expect((await shifts()).filter(s => !before.some(old => old.shiftId === s.shiftId))).toEqual([]);
+    await populateDraft(session, participant.id, saved.draftId);
     const after = await shifts();
     // Assigned old work is retained verbatim; unfilled changed work is replaced, and
     // unchanged Thursday work retains its identity. Assertions are by ID, not just count.
@@ -168,7 +173,6 @@ for (const allDays of [false, true]) {
     expect(fresh.map(s => s.serviceDate).sort()).toEqual(
       (allDays ? [start, addDays(start, 1), addDays(start, 7), end] : [start, addDays(start, 7)]).sort(),
     );
-    expect(result.approval.shiftsCreated).toBe(fresh.length);
     expect(fresh.every(s => s.startTime === '09:00:00' && s.endTime === '14:00:00' && s.endsNextDay === false && !s.staffId && s.status === 'Draft')).toBe(true);
     // Repeated approval is idempotent at the real persistence boundary.
     await expectStatus('repeat approval', 200, await call(session, 'POST', `${base}/${saved.draftId}/approve`, { acknowledgeOverlaps: false }));

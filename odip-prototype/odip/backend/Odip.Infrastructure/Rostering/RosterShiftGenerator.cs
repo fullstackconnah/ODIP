@@ -68,12 +68,13 @@ public sealed class RosterShiftGenerator
     /// <summary>
     /// Adds the shifts of <paramref name="patterns"/> over [from, to] to <paramref name="db"/> and saves nothing: the caller saves them with its own work, in a transaction that holds the
     /// participant's <see cref="RosterGenerationLock"/> (an approval, whose patterns are not saved yet and so have no shifts to look for).
+    /// <paramref name="dryRun"/>: counts and builds the shifts a preview needs, adds nothing to the context and records nothing on the patterns.
     /// <paramref name="carried"/>: days a shift already covers that is not saved under the pattern yet (an approval's carried shifts): counted as there and never made again.
     /// </summary>
     public async Task<ShiftGeneration> AddAsync(OdipDbContext db, IReadOnlyCollection<ShiftPattern> patterns, DateOnly from, DateOnly to, CancellationToken ct, bool onlyWhenContiguous = false, DateOnly? providerToday = null,
-        IReadOnlySet<(Guid PatternId, DateOnly Date)>? carried = null)
+        IReadOnlySet<(Guid PatternId, DateOnly Date)>? carried = null, bool dryRun = false)
     {
-        foreach (var pattern in patterns) Cover(pattern, from, to, onlyWhenContiguous, providerToday);
+        if (!dryRun) foreach (var pattern in patterns) Cover(pattern, from, to, onlyWhenContiguous, providerToday);
 
         var occurrences = patterns.Select(pattern => (Pattern: pattern, Dates: _expander.Occurrences(pattern, from, to))).Where(x => x.Dates.Count > 0).ToList();
         if (occurrences.Count == 0) return ShiftGeneration.None;
@@ -100,7 +101,7 @@ public sealed class RosterShiftGenerator
                     Ratio = pattern.Ratio, NightType = pattern.NightType, SupportGroupCode = pattern.SupportGroupCode, Status = ShiftStatus.Draft, ShiftPatternId = pattern.Id,
                     RequirementsJson = pattern.RequirementsJson,
                 };
-                db.Shifts.Add(shift);
+                if (!dryRun) db.Shifts.Add(shift);
                 made.Add(shift);
                 created++;
                 if (first is null || date < first) first = date;
