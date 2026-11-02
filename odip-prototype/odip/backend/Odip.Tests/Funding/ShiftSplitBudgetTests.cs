@@ -44,11 +44,11 @@ public class ShiftSplitBudgetTests : IDisposable
         Row(kit, GroupX, "X_Evening", ClaimDayType.WeekdayEvening, 55m, 15);
     }
 
-    private static void Row(LedgerKit kit, string group, string number, ClaimDayType dayType, decimal price, int category)
+    private static void Row(LedgerKit kit, string group, string number, ClaimDayType dayType, decimal price, int category, string unit = "H")
     {
         kit.Db.SupportCatalogueItems.Add(new SupportCatalogueItem
         {
-            Id = Guid.NewGuid(), ActivityGroupId = kit.SeedGroup(group, group, category).Id, ItemNumber = number, Description = number, DayType = dayType, IsIntensive = false, Unit = "H",
+            Id = Guid.NewGuid(), ActivityGroupId = kit.SeedGroup(group, group, category).Id, ItemNumber = number, Description = number, DayType = dayType, IsIntensive = false, Unit = unit,
             PriceLimit_VIC = price, PriceLimit_NSW = price, PriceLimit_ACT = price, PriceLimit_NT = price, PriceLimit_QLD = price, PriceLimit_SA = price, PriceLimit_TAS = price, PriceLimit_WA = price,
             PriceLimit_Remote = price, PriceLimit_VeryRemote = price, CatalogueVersion = "2026-27", EffectiveFrom = new DateOnly(2026, 7, 1), IsActive = true,
             PaceSupportCategoryNumber = category, SupportCategoryNumber = category,
@@ -123,6 +123,23 @@ public class ShiftSplitBudgetTests : IDisposable
 
         Assert.Equal(expected, claimed);
         Assert.Equal(before, PendingByPool((await LedgerOf(_kit, person)).Ledger!));
+    }
+
+    [Fact]
+    public async Task ASleepoverShiftOutsideCategories1To4_IsLedgeredPerDateAndCategory_AsTheClaimLinesAre()
+    {
+        var person = _kit.SeedParticipant();
+        _kit.SeedPlan(person, Core(PlanType.PlanManaged, Q(1, 100000m)), Stated(15, PlanType.PlanManaged, Q(1, 100000m)));
+        if (!_kit.Db.SupportCatalogueItems.Any(i => i.ItemNumber == "01_010_0107_1_1")) Row(_kit, CatalogueGroups.SleepoverGroupCode, "01_010_0107_1_1", ClaimDayType.Weekday, 150m, 1, "E");
+        var shift = _kit.SeedShift(person, Wed, ShiftStatus.Completed, 22, 8, endsNextDay: true);
+        shift.SupportGroupCode = GroupX;
+        shift.NightType = SleepoverType.Sleepover;
+        _kit.Db.SaveChanges();
+
+        var items = (await LedgerOf(_kit, person)).Items.Where(i => i.ShiftId == shift.Id).ToList();
+        var claimed = await ClaimByDateAndCategory(_kit, person, Wed, Wed);
+
+        Assert.Equal(ByDateAndCategory(items), claimed);   // to the cent, by (date, category)
     }
 
     // ── T2 / T4: the roster check places each part ──

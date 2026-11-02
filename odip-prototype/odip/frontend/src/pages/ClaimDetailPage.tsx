@@ -431,7 +431,7 @@ export default function ClaimDetailPage() {
         {/* A shift part-rejected by the NDIA stays held by its other lines, so a claim run skips it. The server's line edit leaves no Needs action entry, hence the status wording. Not on a rejected or cancelled claim, where nothing more is claimed. */}
         {claim.status !== 'Rejected' && claim.status !== 'Cancelled' && hasPartlyRejectedShift(claim.lineItems ?? []) && (
           <p data-testid="partial-rejection-note" className="px-[var(--card-pad)] py-3 text-sm text-[var(--color-muted-foreground)]">
-            Part of a shift on this claim was rejected. Its other lines still count, so a new claim run skips that shift. To claim the rejected hours, change that line's status back and include it in the next file.
+            Part of a shift on this claim was rejected. Its other lines still count, so a new claim run skips that shift. To claim the rejected hours, send that line again from Claims, Needs action.
           </p>
         )}
       </div>

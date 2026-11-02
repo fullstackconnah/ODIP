@@ -696,7 +696,7 @@ describe('ClaimDetailPage, shift billing PR4 words', () => {
     renderPage('/claims/claim-2')
 
     expect(screen.getAllByText(NOTE)).toHaveLength(1)
-    expect(screen.getByText(/change that line's status back and include it in the next file/)).toBeInTheDocument()
+    expect(screen.getByText(/send that line again from Claims, Needs action/)).toBeInTheDocument()
   })
 
   it('shows no note when no shift is part-rejected', () => {
