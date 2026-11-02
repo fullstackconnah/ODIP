@@ -119,11 +119,11 @@ public class ShiftClaimRunTests
     }
 
     [Fact]
-    public async Task RunAsync_AnOvernightActiveShift_IsClaimedAndFlagsNothing_ItIsSplitByBandLikeAnyOther()
+    public async Task RunAsync_AnActiveNightShift_IsClaimedAndFlagsNothing_ItIsSplitByBandLikeAnyOther()
     {
         var kit = Arrange();
         var a = Person(kit, "Alex");
-        Done(kit, a, 6, night: SleepoverType.ActiveNight, start: 18, end: 2, overnight: true);
+        Done(kit, a, 6, night: SleepoverType.ActiveNight, start: 14, end: 22);   // 2 h of it are evening: two lines, none flagged (the kit has no night row, so no overnight shift)
 
         var run = await Engine(kit).RunAsync(kit.TenantId, From, To, Ct);
 
