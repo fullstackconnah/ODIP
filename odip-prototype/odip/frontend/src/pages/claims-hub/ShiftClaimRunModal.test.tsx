@@ -166,4 +166,11 @@ describe('ShiftClaimRunModal', () => {
     expect(screen.getByRole('button', { name: 'Claiming…' })).toBeDisabled()
     expect(screen.getByRole('status')).toHaveTextContent('Making 2 claims…')
   })
+
+  it('keeps Make in a sticky footer, so a long list never pushes it below the fold', () => {
+    answer(m.preview, base)
+    open()
+
+    expect(screen.getByRole('button', { name: 'Make 2 claims' }).closest('.sticky')).not.toBeNull()
+  })
 })
