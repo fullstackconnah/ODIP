@@ -155,7 +155,8 @@ public class ClaimGenerationRacePostgresTests : IClassFixture<PostgresFixture>
 
         var result = await controller.EditCompletionTravel(shift.Id, new Odip.Application.DTOs.EditCompletionTravelDto { PreShiftTravelMinutes = 25 }, Ct);   // waits the lock's 10 s, then gives up
 
-        Assert.IsType<ConflictObjectResult>(result.Result);
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal(RosterBusyException.Words, Assert.IsType<Odip.Application.Common.ApiResponse<Odip.Application.DTOs.ShiftCompletionDto>>(conflict.Value).Message);   // the participant words, not the roster board's
         Assert.Equal(10, (await kit.Db.ShiftCompletions.AsNoTracking().SingleAsync(c => c.ShiftId == shift.Id, Ct)).PreShiftTravelMinutes);
     }
 }

@@ -1450,9 +1450,9 @@ public class RosteringController : ControllerBase
         await held.CommitAsync(ct);
         return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, shift.ReturnCount, ct)));
         }
-        catch (RosterBusyException)
+        catch (RosterBusyException busy)
         {
-            return Conflict(ApiResponse<ShiftCompletionDto>.Fail(RosterGenerationLock.RosterBoardBusyMessage));
+            return Conflict(ApiResponse<ShiftCompletionDto>.Fail(busy.Message));
         }
     }
 

@@ -327,4 +327,39 @@ public class ShiftTravelClaimTests
         var lines = await fx.Lines(await fx.Generate());
         Assert.Equal(4.95m, Assert.Single(lines, l => l.SupportItemCode == KmNumber).Hours);   // floor(5 km x 0.99): the 4 km back is not claimed
     }
+
+    [Fact]
+    public async Task F1_AShiftOnAStaffMadePattern_IsGatedByTheOrganisationSwitchOnly_ClaimsBothLines_NoCaveat()
+    {
+        var fx = Fx.Create();
+        var pattern = new ShiftPattern { Id = Guid.NewGuid(), TenantId = fx.TenantId, ParticipantId = fx.Participant.Id, DayOfWeek = DayOfWeek.Monday, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(11, 0), EffectiveFrom = Monday };   // no SourceDraftId
+        fx.Db.ShiftPatterns.Add(pattern);
+        fx.Completion(fx.Shift(patternId: pattern.Id), preMin: 20, preKm: 5m, postMin: 15, postKm: 4m);
+        var generated = await fx.Generate();
+        var lines = await fx.Lines(generated);
+        Assert.Single(lines, l => l.ClaimType == ClaimType.ProviderTravel);
+        Assert.Single(lines, l => l.SupportItemCode == KmNumber);
+        Assert.DoesNotContain(generated.Flagged, f => f.Caveat.Contains("Travel") || f.Caveat.Contains("agreement"));
+    }
+
+    [Fact]
+    public async Task N1_ABasisItemWithNoRegistrationGroup_StillMatchesTheKmItem()
+    {
+        var fx = Fx.Create();
+        fx.Db.SupportCatalogueItems.Local.First(i => i.ItemNumber == BasisNumber).RegistrationGroup = null;
+        fx.Completion(fx.Shift(), preMin: 20, preKm: 5m);
+        Assert.Single(await fx.Lines(await fx.Generate()), l => l.SupportItemCode == KmNumber);
+    }
+
+    [Fact]
+    public async Task N4_AnOrgAPatternAndDraft_AskedForAsOrgB_GivesNoForecast()
+    {
+        var a = Fx.Create();
+        var pattern = a.Pattern(new PlanProviderTravel { Claim = true, MinutesEachWay = 30, KmEachWay = 5m, ReturnToBase = true });
+        await a.Db.SaveChangesAsync();
+        var otherTenant = Guid.NewGuid();
+        var policy = await ShiftTravelSource.PolicyAsync(a.Db, otherTenant, default);
+        Assert.Null(Assert.Single(await ShiftTravelSource.ForShiftsAsync(a.Db, otherTenant, policy, new[] { new ShiftRef(null, pattern.Id) }, default)));
+        Assert.NotNull(Assert.Single(await ShiftTravelSource.ForShiftsAsync(a.Db, a.TenantId, await ShiftTravelSource.PolicyAsync(a.Db, a.TenantId, default), new[] { new ShiftRef(null, pattern.Id) }, default)));
+    }
 }

@@ -268,4 +268,22 @@ public class ClaimBatchChecksTests
         var row = Clean(line: l => { l.ClaimType = ClaimType.Cancellation; l.CancellationReason = "nsdh"; });
         Assert.Equal("CANC", BprCsvService.ToOut(row, 1).ClaimType);
     }
+
+    [Fact]
+    public void F2_AnAcceptedStandardLine_StillBlocksACancellationLineOfTheSameItemAndDates()
+    {
+        var accepted = Clean();
+        var cancel = Clean(line: l => l.ClaimType = ClaimType.Cancellation) with { Participant = accepted.Participant };
+        var ctx = new BatchContext { Today = Today, BuildRows = [accepted, cancel], Accepted = [new AcceptedLine("430000001", accepted.Line.SupportItemCode, accepted.Line.SupportsDeliveredFrom, accepted.Line.SupportsDeliveredTo, "BPR1.csv", ClaimType.Standard)] };
+        Assert.Contains("AlreadyAccepted", Rules(cancel, ctx));
+        Assert.Contains("DuplicateInFile", Rules(cancel, ctx));
+    }
+
+    [Fact]
+    public void N3_ATravelKmRow_WritesTheDollarsInQuantity_AndLeavesHoursEmpty()
+    {
+        var row = Clean(line: l => { l.SupportItemCode = "04_799_0125_6_1"; l.Hours = 8.91m; l.UnitPrice = 1m; l.TotalAmount = 8.91m; }, item: i => { i.ItemNumber = "04_799_0125_6_1"; i.Unit = "E"; });
+        var o = BprCsvService.ToOut(row, 1);
+        Assert.Equal((8.91m, (decimal?)null, ""), (o.Quantity, o.Hours, o.ClaimType));
+    }
 }

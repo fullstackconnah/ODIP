@@ -45,12 +45,12 @@ public static class ShiftTravelSource
                 .GroupBy(c => c.ShiftId).ToDictionary(g => g.Key, g => g.First());
 
         var patternIds = refs.Where(r => r.ShiftPatternId is not null).Select(r => r.ShiftPatternId!.Value).Distinct().ToList();
-        var blocks = await BlocksAsync(db, tenantId, patternIds, ct);
+        var (blocks, agreementIds) = await BlocksAsync(db, tenantId, patternIds, ct);
 
         return refs.Select(r =>
         {
             blocks.TryGetValue(r.ShiftPatternId ?? Guid.Empty, out var block);
-            var named = r.ShiftPatternId is not null;   // a pattern whose block cannot be read is not a hand-made shift: it claims nothing, never everything
+            var named = agreementIds.Contains(r.ShiftPatternId ?? Guid.Empty);   // only an agreement pattern is gated by its block; one whose block cannot be read claims nothing, never everything
             if (r.ShiftId is { } id && actuals.TryGetValue(id, out var actual))
             {
                 var travel = block?.Travel;
@@ -67,29 +67,31 @@ public static class ShiftTravelSource
     private static int SharingOf(PlanBlock? block) => block is null ? 1 : Math.Max(1, block.Travel?.ParticipantsSharing ?? block.ParticipantsPresent);
 
     /// <summary>The agreement block each pattern was made from, read only through the caller's own patterns and drafts.</summary>
-    private static async Task<Dictionary<Guid, PlanBlock>> BlocksAsync(OdipDbContext db, Guid tenantId, List<Guid> patternIds, CancellationToken ct)
+    private static async Task<(Dictionary<Guid, PlanBlock> Blocks, HashSet<Guid> AgreementIds)> BlocksAsync(OdipDbContext db, Guid tenantId, List<Guid> patternIds, CancellationToken ct)
     {
         var result = new Dictionary<Guid, PlanBlock>();
-        if (patternIds.Count == 0) return result;
+        if (patternIds.Count == 0) return (result, new HashSet<Guid>());
 
         var patterns = await db.ShiftPatterns.AsNoTracking()
-            .Where(p => p.TenantId == tenantId && patternIds.Contains(p.Id) && p.SourceDraftId != null && p.SourceBlockKey != null)
-            .Select(p => new { p.Id, DraftId = p.SourceDraftId!.Value, Key = p.SourceBlockKey! }).ToListAsync(ct);
-        if (patterns.Count == 0) return result;
+            .Where(p => p.TenantId == tenantId && patternIds.Contains(p.Id))
+            .Select(p => new { p.Id, p.SourceDraftId, p.SourceBlockKey }).ToListAsync(ct);
+        var agreementIds = patterns.Where(p => p.SourceDraftId != null).Select(p => p.Id).ToHashSet();
+        var agreement = patterns.Where(p => p.SourceDraftId != null && p.SourceBlockKey != null).Select(p => new { p.Id, DraftId = p.SourceDraftId!.Value, Key = p.SourceBlockKey! }).ToList();
+        if (agreement.Count == 0) return (result, agreementIds);
 
-        var draftIds = patterns.Select(p => p.DraftId).Distinct().ToList();
+        var draftIds = agreement.Select(p => p.DraftId).Distinct().ToList();
         var json = await (from b in db.ServiceAgreementDraftBlocks.AsNoTracking()
                           join d in db.ServiceAgreementDrafts.AsNoTracking() on b.DraftId equals d.Id
                           where d.TenantId == tenantId && draftIds.Contains(d.Id)
                           select new { b.DraftId, b.BlockKey, b.BlockJson }).ToListAsync(ct);
         var byKey = json.GroupBy(b => (b.DraftId, b.BlockKey)).ToDictionary(g => g.Key, g => g.First().BlockJson);
-        foreach (var p in patterns)
+        foreach (var p in agreement)
         {
             if (!byKey.TryGetValue((p.DraftId, p.Key), out var text)) continue;
             try { result[p.Id] = DraftJson.ReadBlock(text); }
             catch (System.Text.Json.JsonException) { /* an unreadable block claims nothing */ }
         }
-        return result;
+        return (result, agreementIds);
     }
 
     private sealed record ShiftCompletionTravel(Guid ShiftId, int? PreMinutes, decimal? PreKm, int? PostMinutes, decimal? PostKm);

@@ -86,7 +86,7 @@ public static class ShiftTravelPricer
         {
             var prefix = basis.ItemNumber.Split('_')[0];
             var kmRows = EffectiveCatalogueResolver.NewestVersion(travelRows.Where(r => r.Unit == "E" && r.ItemNumber.StartsWith($"{prefix}{KmItemMarker}", StringComparison.Ordinal)
-                && r.RegistrationGroup == basis.RegistrationGroup && EffectiveCatalogueResolver.IsValidOn(r, serviceDate)).ToList());
+                && (basis.RegistrationGroup == null || r.RegistrationGroup == basis.RegistrationGroup) && EffectiveCatalogueResolver.IsValidOn(r, serviceDate)).ToList());
             if (kmRows.Count != 1)
                 notes.Add($"Travel kilometres not claimed: no {prefix}{KmItemMarker.TrimEnd('_')} item is in the catalogue for {serviceDate.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)}.");
             else
