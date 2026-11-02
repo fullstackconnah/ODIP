@@ -228,6 +228,22 @@ public class ShiftSplitBudgetTests : IDisposable
     }
 
     [Fact]
+    public async Task AShiftOverMidnightIntoTheSameCategoryOnTheLastDay_KeepsItsTwoDatesApart()   // T3d
+    {
+        var person = _kit.SeedParticipant();
+        var fri = new DateOnly(2026, 10, 9);
+        _kit.SeedPlan(person, new DateOnly(2026, 7, 1), fri, Core(PlanType.PlanManaged, new PeriodSpec(new DateOnly(2026, 7, 1), fri, 100000m)));
+        // Friday 18:00 to Saturday 02:00 at community access: $320 on Friday, then 2 h of the Saturday band ($140), both category 4.
+        var shift = Overnight(_kit, person, fri, ShiftStatus.Published);
+
+        var ledger = (await LedgerOf(_kit, person)).Ledger!;
+
+        Assert.Equal(320m, PeriodOf(ledger, FundingPoolKind.CoreFlexible, fri).BookedAhead);
+        var outside = Assert.Single(ledger.OutsideThePlan);
+        Assert.Equal((fri.AddDays(1), 140m, shift.Id), (outside.Date, outside.Amount, outside.ShiftId));
+    }
+
+    [Fact]
     public async Task TheNextPlan_ShowsTheAfterMidnightPartOfAShiftTheDayBeforeItStarts()   // T3b
     {
         var person = SeedTwoPlans(_kit);
