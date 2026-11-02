@@ -615,4 +615,46 @@ public class ClaimsControllerTests
         Assert.IsType<BadRequestObjectResult>(result.Result);
         Assert.Empty(kit.Db.TripClaims);
     }
+
+    // ── Shifts waiting to be claimed (the dashboard cue) ───────────────────
+
+    [Fact]
+    public void ShiftClaimsWaiting_HasTheSameRolesAsTheRun()
+    {
+        string RolesOf(string action) => typeof(ClaimsController).GetMethod(action)!.GetCustomAttribute<AuthorizeAttribute>()!.Roles!;
+
+        Assert.Equal(RolesOf(nameof(ClaimsController.RunShiftClaims)), RolesOf(nameof(ClaimsController.GetShiftClaimsWaiting)));
+        Assert.Equal("claims/from-shifts/waiting", typeof(ClaimsController).GetMethod(nameof(ClaimsController.GetShiftClaimsWaiting))!.GetCustomAttribute<HttpGetAttribute>()!.Template);
+    }
+
+    [Fact]
+    public async Task ShiftClaimsWaiting_WithNoOrganisation_IsRefused()
+    {
+        using var db = CreateDb();
+
+        var result = await CreateController(db).GetShiftClaimsWaiting(CancellationToken.None);
+
+        var bad = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Equal("Choose an organisation first.", Assert.Single(Assert.IsType<ApiResponse<ShiftClaimWaitingDto>>(bad.Value).Errors!));
+    }
+
+    [Fact]
+    public async Task ShiftClaimsWaiting_UsesTheRunsWindow_InTheOrganisationsZone()
+    {
+        using var kit = LedgerKit.Create();
+        kit.SeedProvider("NSW").TimeZoneId = "Australia/Sydney";
+        kit.Db.SaveChanges();
+        var person = kit.SeedParticipant();
+        // 01 Nov 13:30 UTC is 02 Nov in Sydney: the window is 19 Oct to 01 Nov. The 18th and the 2nd are out; both ends are in.
+        foreach (var d in new[] { new DateOnly(2026, 10, 18), new DateOnly(2026, 10, 19), new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 2) })
+            kit.SeedShift(person, d, ShiftStatus.Completed);
+        var controller = RunController(kit, new FixedClock(new DateTimeOffset(2026, 11, 1, 13, 30, 0, TimeSpan.Zero)));
+
+        var waiting = Body(await controller.GetShiftClaimsWaiting(CancellationToken.None));
+        var preview = Body(await controller.PreviewShiftClaimRun(new ShiftClaimRunRequestDto(), CancellationToken.None));
+
+        Assert.Equal(2, waiting.ShiftCount);
+        Assert.Equal(1, waiting.ParticipantCount);
+        Assert.Equal((preview.From, preview.To), (waiting.From, waiting.To));
+    }
 }

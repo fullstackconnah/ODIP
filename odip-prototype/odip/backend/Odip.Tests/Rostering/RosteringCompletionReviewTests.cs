@@ -1526,4 +1526,243 @@ public class RosteringCompletionReviewTests
 
         Assert.Equal(1, item.DosesWithoutOutcome);
     }
+
+    // ── Staff edit of the travel legs (travel PR-A1) ─────────────────
+
+    private static EditCompletionTravelDto TravelEdit(double? preMin = null, double? preKm = null, double? postMin = null, double? postKm = null) =>
+        new() { PreShiftTravelMinutes = preMin, PreShiftTravelKilometres = preKm, PostShiftTravelMinutes = postMin, PostShiftTravelKilometres = postKm };
+
+    private static TripClaim SeedTravelClaim(OdipDbContext db, Shift shift, TripClaimStatus status, string reference = "TC-TRAVEL-1")
+    {
+        var claim = Seed(db, new TripClaim
+        {
+            TenantId = shift.TenantId, Id = Guid.NewGuid(), Kind = ClaimKind.Shift, ParticipantId = shift.ParticipantId,
+            PeriodFrom = shift.ServiceDate, PeriodTo = shift.ServiceDate, ClaimReference = reference, Status = status,
+        });
+        Seed(db, new ClaimLineItem
+        {
+            TenantId = shift.TenantId, Id = Guid.NewGuid(), TripClaimId = claim.Id, ShiftId = shift.Id,
+            SupportItemCode = "04_104_0125_6_1", DayType = ClaimDayType.Weekday,
+            SupportsDeliveredFrom = shift.ServiceDate, SupportsDeliveredTo = shift.ServiceDate, Hours = 8m, UnitPrice = 40m, TotalAmount = 320m,
+        });
+        return claim;
+    }
+
+    private static async Task<ShiftCompletionDto> Edited(RosteringController controller, Guid shiftId, EditCompletionTravelDto dto) =>
+        Assert.IsType<ApiResponse<ShiftCompletionDto>>(Assert.IsType<OkObjectResult>((await controller.EditCompletionTravel(shiftId, dto, CancellationToken.None)).Result).Value).Data!;
+
+    private static ApiResponse<ShiftCompletionDto> Refusal(ActionResult<ApiResponse<ShiftCompletionDto>> result, int status)
+    {
+        var obj = Assert.IsAssignableFrom<ObjectResult>(result.Result);
+        Assert.Equal(status, obj.StatusCode);
+        return Assert.IsType<ApiResponse<ShiftCompletionDto>>(obj.Value);
+    }
+
+    [Fact]
+    public async Task EditCompletionTravel_PendingReview_ReplacesAllFourValues_AndReturnsThem()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, staff.Id, ShiftStatus.PendingReview);
+        var completion = SeedCompletion(db, shift.Id, staff.Id);
+        completion.PreShiftTravelMinutes = 30; completion.PostShiftTravelKilometres = 9m;
+        db.SaveChanges();
+
+        var dto = await Edited(MakeController(db), shift.Id, TravelEdit(preMin: 25, preKm: 12.34, postMin: 20, postKm: 10));
+
+        Assert.Equal((25, 12.3m, 20, 10.0m), (dto.PreShiftTravelMinutes, dto.PreShiftTravelKilometres, dto.PostShiftTravelMinutes, dto.PostShiftTravelKilometres));
+        var stored = await db.ShiftCompletions.SingleAsync();
+        Assert.Equal((25, 12.3m, 20, 10.0m), (stored.PreShiftTravelMinutes, stored.PreShiftTravelKilometres, stored.PostShiftTravelMinutes, stored.PostShiftTravelKilometres));
+        Assert.Equal(ShiftStatus.PendingReview, (await db.Shifts.SingleAsync()).Status);   // an edit is not a review
+    }
+
+    [Fact]
+    public async Task EditCompletionTravel_BodyReplacesAll_SoOmittedValuesAreCleared()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, staff.Id, ShiftStatus.PendingReview);
+        var completion = SeedCompletion(db, shift.Id, staff.Id);
+        completion.PreShiftTravelMinutes = 30; completion.PreShiftTravelKilometres = 5m;
+        db.SaveChanges();
+
+        await Edited(MakeController(db), shift.Id, TravelEdit(postMin: 20));
+
+        var stored = await db.ShiftCompletions.SingleAsync();
+        Assert.Null(stored.PreShiftTravelMinutes);
+        Assert.Null(stored.PreShiftTravelKilometres);
+        Assert.Equal(20, stored.PostShiftTravelMinutes);
+    }
+
+    [Fact]
+    public async Task EditCompletionTravel_CompletedAndUnclaimed_Saves()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, staff.Id, ShiftStatus.Completed);
+        SeedCompletion(db, shift.Id, staff.Id);
+
+        await Edited(MakeController(db), shift.Id, TravelEdit(preMin: 15, preKm: 4));
+
+        Assert.Equal(15, (await db.ShiftCompletions.SingleAsync()).PreShiftTravelMinutes);
+    }
+
+    [Fact]
+    public async Task EditCompletionTravel_OnAStillCountingClaim_Is409WithTheClaimReference_AndChangesNothing()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, staff.Id, ShiftStatus.Completed);
+        SeedCompletion(db, shift.Id, staff.Id);
+        SeedTravelClaim(db, shift, TripClaimStatus.Submitted, "TC-LIVE-1");
+
+        var body = Refusal(await MakeController(db).EditCompletionTravel(shift.Id, TravelEdit(preMin: 15), CancellationToken.None), 409);
+
+        Assert.Equal(ShiftErrorCodes.ShiftTravelOnClaim, body.Code);
+        Assert.Contains("TC-LIVE-1", Assert.Single(body.Errors!));
+        Assert.Null((await db.ShiftCompletions.SingleAsync()).PreShiftTravelMinutes);
+    }
+
+    [Theory]
+    [InlineData(TripClaimStatus.Rejected)]
+    [InlineData(TripClaimStatus.Cancelled)]
+    public async Task EditCompletionTravel_AfterTheClaimIsRejectedOrCancelled_IsAllowedAgain(TripClaimStatus status)
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, staff.Id, ShiftStatus.Completed);
+        SeedCompletion(db, shift.Id, staff.Id);
+        SeedTravelClaim(db, shift, status);
+
+        await Edited(MakeController(db), shift.Id, TravelEdit(preMin: 15));
+
+        Assert.Equal(15, (await db.ShiftCompletions.SingleAsync()).PreShiftTravelMinutes);
+    }
+
+    [Fact]
+    public async Task EditCompletionTravel_OnAReturnedRowAlone_Is404_AndNeverTouchesTheInactiveRow()
+    {
+        // C2-1: a returned (inactive) completion is history. The shift is back with the worker, so there is no active completion to edit.
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, staff.Id, ShiftStatus.PendingReview);
+        var returned = SeedCompletion(db, shift.Id, staff.Id, isActive: false);
+        returned.PreShiftTravelMinutes = 40;
+        db.SaveChanges();
+
+        Refusal(await MakeController(db).EditCompletionTravel(shift.Id, TravelEdit(preMin: 15), CancellationToken.None), 404);
+
+        Assert.Equal(40, (await db.ShiftCompletions.SingleAsync()).PreShiftTravelMinutes);
+    }
+
+    [Fact]
+    public async Task EditCompletionTravel_WithAReturnedRowAndAnActiveOne_EditsOnlyTheActiveOne()
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, staff.Id, ShiftStatus.PendingReview);
+        var returned = SeedCompletion(db, shift.Id, staff.Id, isActive: false);
+        returned.PreShiftTravelMinutes = 40;
+        var active = SeedCompletion(db, shift.Id, staff.Id);
+        db.SaveChanges();
+
+        await Edited(MakeController(db), shift.Id, TravelEdit(postMin: 20));
+
+        Assert.Equal(40, (await db.ShiftCompletions.SingleAsync(c => c.Id == returned.Id)).PreShiftTravelMinutes);
+        Assert.Null((await db.ShiftCompletions.SingleAsync(c => c.Id == returned.Id)).PostShiftTravelMinutes);
+        Assert.Equal(20, (await db.ShiftCompletions.SingleAsync(c => c.Id == active.Id)).PostShiftTravelMinutes);
+    }
+
+    [Theory]
+    [InlineData(ShiftStatus.Published)]
+    [InlineData(ShiftStatus.InProgress)]
+    [InlineData(ShiftStatus.Cancelled)]
+    public async Task EditCompletionTravel_OnAShiftThatIsNeitherAwaitingReviewNorCompleted_Is409(ShiftStatus status)
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, staff.Id, status);
+        SeedCompletion(db, shift.Id, staff.Id);
+
+        Refusal(await MakeController(db).EditCompletionTravel(shift.Id, TravelEdit(preMin: 15), CancellationToken.None), 409);
+
+        Assert.Null((await db.ShiftCompletions.SingleAsync()).PreShiftTravelMinutes);
+    }
+
+    [Theory]
+    [InlineData(481d, null, null, null, "SHIFT_TRAVEL_MINUTES_OUT_OF_RANGE")]
+    [InlineData(null, null, 12.5d, null, "SHIFT_TRAVEL_MINUTES_OUT_OF_RANGE")]
+    [InlineData(null, 2000.1d, null, null, "SHIFT_TRAVEL_KILOMETRES_OUT_OF_RANGE")]
+    [InlineData(null, null, null, 2000.1d, "SHIFT_TRAVEL_KILOMETRES_OUT_OF_RANGE")]
+    public async Task EditCompletionTravel_OutOfRange_Is400WithTheCode_AndSavesNothing(double? preMin, double? preKm, double? postMin, double? postKm, string code)
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, staff.Id, ShiftStatus.PendingReview);
+        SeedCompletion(db, shift.Id, staff.Id);
+
+        var body = Refusal(await MakeController(db).EditCompletionTravel(shift.Id, TravelEdit(preMin, preKm, postMin, postKm), CancellationToken.None), 400);
+
+        Assert.Equal(code, body.Code);
+        Assert.Null((await db.ShiftCompletions.SingleAsync()).PreShiftTravelMinutes);
+    }
+
+    [Fact]
+    public async Task EditCompletionTravel_AnotherOrganisationsShift_Is404()
+    {
+        var (tenantA, tenantB) = (Guid.NewGuid(), Guid.NewGuid());
+        var options = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+        Mock<ICurrentTenant> TenantOf(Guid id) { var t = new Mock<ICurrentTenant>(); t.Setup(x => x.TenantId).Returns(id); t.Setup(x => x.IsSuperAdmin).Returns(false); return t; }
+        Guid shiftId;
+        using (var seed = new OdipDbContext(options, TenantOf(tenantB).Object))
+        {
+            var staff = SeedStaff(seed); staff.TenantId = tenantB;
+            var participant = SeedParticipant(seed); participant.TenantId = tenantB;
+            var shift = SeedShift(seed, participant.Id, staff.Id, ShiftStatus.PendingReview); shift.TenantId = tenantB;
+            var completion = SeedCompletion(seed, shift.Id, staff.Id); completion.TenantId = tenantB;
+            seed.SaveChanges();
+            shiftId = shift.Id;
+        }
+
+        using var db = new OdipDbContext(options, TenantOf(tenantA).Object);
+        Refusal(await MakeController(db).EditCompletionTravel(shiftId, TravelEdit(preMin: 15), CancellationToken.None), 404);
+
+        using var asB = new OdipDbContext(options, TenantOf(tenantB).Object);
+        Assert.Null((await asB.ShiftCompletions.SingleAsync()).PreShiftTravelMinutes);
+    }
+
+    [Fact]
+    public void EditCompletionTravel_IsStaffOnly_ClassGateExcludesWorkerAndReadOnly_AndTheActionAddsNoOverride()
+    {
+        var roles = typeof(RosteringController).GetCustomAttribute<AuthorizeAttribute>()!.Roles!.Split(',');
+        Assert.DoesNotContain(nameof(UserRole.SupportWorker), roles);
+        Assert.DoesNotContain(nameof(UserRole.ReadOnly), roles);
+        Assert.Null(typeof(RosteringController).GetMethod(nameof(RosteringController.EditCompletionTravel))!.GetCustomAttribute<AuthorizeAttribute>());
+    }
+
+    [Fact]
+    public async Task EditCompletionTravel_WritesAnAuditRowNamingTheChangedField()
+    {
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns((Guid?)null);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(true);
+        var identity = new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, ReviewerId.ToString()), new Claim("fullName", "Jane Coordinator")], "Test");
+        var accessor = new Mock<IHttpContextAccessor>();
+        accessor.Setup(a => a.HttpContext).Returns(new DefaultHttpContext { User = new ClaimsPrincipal(identity) });
+        var options = new DbContextOptionsBuilder<OdipDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .AddInterceptors(new AuditInterceptor(accessor.Object)).Options;
+        using var db = new OdipDbContext(options, tenant.Object);
+        var staff = SeedStaff(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, staff.Id, ShiftStatus.PendingReview);
+        var completion = SeedCompletion(db, shift.Id, staff.Id);
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db))
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) } }
+        };
+
+        await Edited(controller, shift.Id, TravelEdit(preMin: 25));
+
+        Assert.Contains(db.AuditLogs.Where(a => a.EntityType == nameof(ShiftCompletion) && a.Action == AuditAction.Updated && a.EntityId == completion.Id).ToList(),
+            a => a.Changes.Contains("PreShiftTravelMinutes"));
+    }
 }

@@ -194,6 +194,8 @@ export interface PortalShiftDetailDto {
    * shift (PendingReview) no longer carries them. Acknowledging a handover that is not shown is 404 SHIFT_HANDOVER_NOT_FOUND.
    */
   sensitiveInfoWithheldReason: string | null
+  /** The organisation claims provider travel: show the four travel fields at Finish only when true. Derived on the server. Optional until the Finish UI reads it. */
+  travelAsked?: boolean
 }
 
 // ── Shift completion write bodies (design spec §2) ───────
@@ -220,6 +222,12 @@ export interface FinishShiftDto {
   timeAdjustmentReason?: string | null
   /** Kilometres driven with the participant, 0 to 2,000, one decimal place. Null when not given. */
   kilometres?: number | null
+  /** Provider travel, two optional legs (not `kilometres`): whole minutes 0 to 480, kilometres 0 to 2,000 to one decimal place. Null when not given.
+   * Out of range is 400 SHIFT_TRAVEL_MINUTES_OUT_OF_RANGE or SHIFT_TRAVEL_KILOMETRES_OUT_OF_RANGE. */
+  preShiftTravelMinutes?: number | null
+  preShiftTravelKilometres?: number | null
+  postShiftTravelMinutes?: number | null
+  postShiftTravelKilometres?: number | null
   /** "Anything to report?": true, false, or null when skipped. Informational only. */
   anythingToReport?: boolean | null
   /** The handover note for the next worker (max 2000 chars). Blank is allowed — it is prompted but optional. The Finish form should set

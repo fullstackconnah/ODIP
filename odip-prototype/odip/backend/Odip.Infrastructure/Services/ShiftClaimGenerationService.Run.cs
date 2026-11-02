@@ -23,16 +23,25 @@ public partial class ShiftClaimGenerationService
 
     public Task<ShiftClaimRunDto> RunAsync(Guid tenantId, DateOnly from, DateOnly to, CancellationToken ct = default) => RunCoreAsync(tenantId, from, to, make: true, ct);
 
+    /// <summary>How many shifts the run would look at over the dates, for the dashboard. Counted before pricing, so it can be higher than what a preview claims.</summary>
+    public async Task<ShiftClaimWaitingDto> CountWaitingAsync(Guid tenantId, DateOnly from, DateOnly to, CancellationToken ct = default)
+    {
+        var people = await UnclaimedCompletedShifts(tenantId, from, to).Select(s => s.ParticipantId).ToListAsync(ct);   // distinct in memory: Npgsql and Distinct
+        return new() { From = from, To = to, ShiftCount = people.Count, ParticipantCount = people.Distinct().Count() };
+    }
+
+    // The run's candidates; the predicate is CalculateAsync's. The tenant is named explicitly on top of the global filter: a SuperAdmin viewing an organisation has no filter, and the run writes money.
+    private IQueryable<Shift> UnclaimedCompletedShifts(Guid tenantId, DateOnly from, DateOnly to) =>
+        _db.Shifts.Where(s => s.TenantId == tenantId && s.Status == ShiftStatus.Completed && s.ServiceDate >= from && s.ServiceDate <= to
+            && !_db.ClaimLineItems.Where(BudgetLedgerService.ClaimLineStillCounts).Any(l => l.ShiftId == s.Id));
+
     private async Task<ShiftClaimRunDto> RunCoreAsync(Guid tenantId, DateOnly from, DateOnly to, bool make, CancellationToken ct)
     {
         // A missing profile is one refusal for the whole run, not a failed row per participant.
         ProviderSettingsGuard.Require(await _db.ProviderSettings.FirstOrDefaultAsync(s => s.TenantId == tenantId, ct));
 
-        // Driven from the shifts, active or not: a participant who left mid-fortnight still has delivered, completed shifts to bill. The predicate is CalculateAsync's.
-        // The tenant is named explicitly on top of the global filter: a SuperAdmin viewing an organisation has no filter, and this writes money.
-        var ids = await _db.Shifts
-            .Where(s => s.TenantId == tenantId && s.Status == ShiftStatus.Completed && s.ServiceDate >= from && s.ServiceDate <= to
-                && !_db.ClaimLineItems.Where(BudgetLedgerService.ClaimLineStillCounts).Any(l => l.ShiftId == s.Id))
+        // Driven from the shifts, active or not: a participant who left mid-fortnight still has delivered, completed shifts to bill.
+        var ids = await UnclaimedCompletedShifts(tenantId, from, to)
             .Select(s => s.ParticipantId).Distinct().ToListAsync(ct);   // no OrderBy before Distinct: Npgsql drops it, so the order is set in memory
         var people = (await _db.Participants.AsNoTracking().Where(p => p.TenantId == tenantId && ids.Contains(p.Id)).ToListAsync(ct))
             .OrderBy(p => p.FullName, StringComparer.OrdinalIgnoreCase).ThenBy(p => p.Id)

@@ -254,6 +254,104 @@ public class PortalFinishTimesTests
         Assert.Equal(ShiftErrorCodes.ShiftKilometresOutOfRange, await Refused(Create(), dto));
     }
 
+    // ── Provider travel (travel PR-A1): two optional legs, separate from Kilometres ──
+
+    private static FinishShiftDto TravelDto(double? preMin = null, double? preKm = null, double? postMin = null, double? postKm = null, double? km = null) =>
+        new() { NothingToNote = true, Kilometres = km, PreShiftTravelMinutes = preMin, PreShiftTravelKilometres = preKm, PostShiftTravelMinutes = postMin, PostShiftTravelKilometres = postKm };
+
+    [Fact]
+    public async Task TheTravelLegs_AreStored_MinutesWhole_KilometresToOneDecimalPlace_AndKilometresIsUnchanged()
+    {
+        var c = await Finish(Create(), TravelDto(preMin: 25, preKm: 12.34, postMin: 20, postKm: 10, km: 3.5));
+
+        Assert.Equal(25, c.PreShiftTravelMinutes);
+        Assert.Equal(12.3m, c.PreShiftTravelKilometres);
+        Assert.Equal(20, c.PostShiftTravelMinutes);
+        Assert.Equal(10.0m, c.PostShiftTravelKilometres);
+        Assert.Equal(3.5m, c.Kilometres);
+    }
+
+    [Fact]
+    public async Task NoTravelGiven_StoresNull_NotZero()
+    {
+        var c = await Finish(Create(), TravelDto());
+
+        Assert.Null(c.PreShiftTravelMinutes);
+        Assert.Null(c.PreShiftTravelKilometres);
+        Assert.Null(c.PostShiftTravelMinutes);
+        Assert.Null(c.PostShiftTravelKilometres);
+    }
+
+    [Fact]
+    public async Task OneLegAlone_IsStored_AndTheOtherStaysNull()
+    {
+        var c = await Finish(Create(), TravelDto(postMin: 20, postKm: 8));
+
+        Assert.Null(c.PreShiftTravelMinutes);
+        Assert.Null(c.PreShiftTravelKilometres);
+        Assert.Equal(20, c.PostShiftTravelMinutes);
+        Assert.Equal(8.0m, c.PostShiftTravelKilometres);
+    }
+
+    [Theory]
+    [InlineData(481d, null, null, null)]
+    [InlineData(12.5d, null, null, null)]
+    [InlineData(-1d, null, null, null)]
+    [InlineData(null, null, 481d, null)]
+    [InlineData(null, null, 12.5d, null)]
+    [InlineData(null, null, -1d, null)]
+    public async Task TravelMinutes_NotWholeFrom0To480_AreRefusedOnEitherLeg(double? preMin, double? preKm, double? postMin, double? postKm)
+    {
+        Assert.Equal(ShiftErrorCodes.ShiftTravelMinutesOutOfRange, await Refused(Create(), TravelDto(preMin, preKm, postMin, postKm)));
+    }
+
+    [Theory]
+    [InlineData(null, 2000.1d, null, null)]
+    [InlineData(null, -0.1d, null, null)]
+    [InlineData(null, null, null, 2000.1d)]
+    [InlineData(null, null, null, -0.1d)]
+    public async Task TravelKilometres_Outside0To2000_AreRefusedOnEitherLeg(double? preMin, double? preKm, double? postMin, double? postKm)
+    {
+        Assert.Equal(ShiftErrorCodes.ShiftTravelKilometresOutOfRange, await Refused(Create(), TravelDto(preMin, preKm, postMin, postKm)));
+    }
+
+    [Theory]
+    [InlineData(0d, 0d)]
+    [InlineData(480d, 2000d)]
+    public async Task TheTravelBounds_AreInclusive(double minutes, double km)
+    {
+        var c = await Finish(Create(), TravelDto(preMin: minutes, preKm: km, postMin: minutes, postKm: km));
+
+        Assert.Equal((int)minutes, c.PostShiftTravelMinutes);
+        Assert.Equal((decimal)km, c.PreShiftTravelKilometres);
+    }
+
+    [Fact]
+    public async Task TravelKilometresTooBigForADecimal_StillGetTheCodedRefusal()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        Odip.Api.Serialization.ApiJsonOptions.Configure(options);
+        var dto = JsonSerializer.Deserialize<FinishShiftDto>("{\"nothingToNote\":true,\"postShiftTravelKilometres\":1e30}", options)!;
+
+        Assert.Equal(ShiftErrorCodes.ShiftTravelKilometresOutOfRange, await Refused(Create(), dto));
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    [InlineData(null, true)]   // no settings row: the policy default
+    public async Task TravelAsked_FollowsTheOrganisationSwitch_AndDefaultsToTrueWithNoSettingsRow(bool? claimTravel, bool expected)
+    {
+        var f = Create();
+        if (claimTravel is { } on)
+        {
+            f.Db.PlanPricingSettings.Add(new Odip.Domain.Entities.PlanPricingSettings { Id = Guid.NewGuid(), TenantId = f.Shift.TenantId, ClaimProviderTravel = on });
+            f.Db.SaveChanges();
+        }
+
+        Assert.Equal(expected, Detail(await f.Controller.GetShiftDetail(f.Shift.Id, default)).TravelAsked);
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
