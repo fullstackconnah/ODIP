@@ -112,19 +112,20 @@ public sealed class BudgetLedgerService
         var planIds = withPlan.Select(p => p.Id).ToList();
 
         var lineRows = await LoadClaimLinesAsync(tenantId, planIds, from, to, ct);
-        var shiftRows = await LoadShiftsAsync(tenantId, planIds, from, to, ct);
+        // One day back: a shift on the day before a plan starts has its after-midnight part on the plan's first day (the part is dated the next day, as the claim line is).
+        var shiftRows = await LoadShiftsAsync(tenantId, planIds, from.AddDays(-1), to, ct);
         // Bookings are read from the same start as everything else: a trip that has already started and has no claim yet is pending (see AddBookingItems), so it must be loaded as well.
         var bookingRows = await LoadBookingsAsync(tenantId, planIds, from, to, ct);
         var tripDays = await LoadTripDaysAsync(bookingRows, ct);
         var catalogue = await LoadCatalogueAsync(lineRows, bookingRows, shiftRows, ct);
-        var holidays = await LoadHolidaysAsync(shiftRows.Count + bookingRows.Count == 0 ? null : (from, to), ct);
+        var holidays = await LoadHolidaysAsync(shiftRows.Count + bookingRows.Count == 0 ? null : (from.AddDays(-1), to), ct);
 
         var pricing = new Pricing(catalogue, holidays, providerState, providerZone.Zone);
         var itemsByPerson = withPlan.ToDictionary(p => p.Id, _ => new List<LedgerItem>());
         var peopleById = withPlan.ToDictionary(p => p.Id);
 
         foreach (var line in lineRows) itemsByPerson[line.ParticipantId].Add(ClaimLineItemOf(line, peopleById[line.ParticipantId], pricing));
-        foreach (var shift in shiftRows) itemsByPerson[shift.ParticipantId].Add(ShiftItemOf(shift, peopleById[shift.ParticipantId], today, pricing));
+        foreach (var shift in shiftRows) itemsByPerson[shift.ParticipantId].AddRange(ShiftItemsOf(shift, peopleById[shift.ParticipantId], today, pricing));
         AddBookingItems(bookingRows, tripDays, peopleById, today, pricing, itemsByPerson);
 
         foreach (var person in withPlan)
@@ -429,13 +430,15 @@ public sealed class BudgetLedgerService
             groupId is { } id && _byGroup.TryGetValue(id, out var rows) ? rows : CommunityAccess;
 
         /// <summary>The PACE category of the catalogue row a claim line's item code names on its service date: the row valid that day (the newest version when two overlap), else none.</summary>
-        public int? CategoryOf(string itemCode, DateOnly date)
-        {
-            if (!_byCode.TryGetValue(itemCode, out var rows)) return null;
-            var row = rows.Where(r => EffectiveCatalogueResolver.IsValidOn(r, date))
-                .OrderByDescending(r => r.EffectiveFrom).ThenByDescending(r => r.IsActive).ThenBy(r => r.Id).FirstOrDefault();
-            return row is null ? null : PaceCategories.Of(row);
-        }
+        public int? CategoryOf(string itemCode, DateOnly date) => RowOn(itemCode, date) is { } row ? PaceCategories.Of(row) : null;
+
+        /// <summary>Whether the catalogue row a claim line's item code names on its service date is the flat sleepover item (unit "Each").</summary>
+        public bool IsSleepover(string itemCode, DateOnly date) => RowOn(itemCode, date)?.Unit == "E";
+
+        private SupportCatalogueItem? RowOn(string itemCode, DateOnly date) =>
+            _byCode.TryGetValue(itemCode, out var rows)
+                ? rows.Where(r => EffectiveCatalogueResolver.IsValidOn(r, date)).OrderByDescending(r => r.EffectiveFrom).ThenByDescending(r => r.IsActive).ThenBy(r => r.Id).FirstOrDefault()
+                : null;
     }
 
     private static LedgerItem ClaimLineItemOf(LineRow line, PersonRow person, Pricing pricing)
@@ -448,12 +451,16 @@ public sealed class BudgetLedgerService
             Kind = LedgerRowKind.ClaimLine, Group = pending ? LedgerGroup.Pending : LedgerGroup.Claimed, Date = line.From, Amount = paid ? line.PaidAmount!.Value : line.TotalAmount,
             PaceCategory = pricing.CategoryOf(line.ItemCode, line.From), PlanType = line.BookingPlanType ?? person.PlanType,
             Id = line.Id, ClaimId = line.ClaimId, ShiftId = line.ShiftId, BookingId = line.BookingId,
-            Description = string.Create(CultureInfo.InvariantCulture, $"{line.ClaimReference} · {line.ItemCode} · {line.Hours:0.##} h"),
+            Description = string.Create(CultureInfo.InvariantCulture, $"{line.ClaimReference} · {line.ItemCode} · {ClaimPricing.Quantity(line.Hours, line.ShiftId is not null && pricing.IsSleepover(line.ItemCode, line.From))}"),
             Status = line.ClaimStatus.ToString(), Link = $"/claims/{line.ClaimId}",
         };
     }
 
-    private static LedgerItem ShiftItemOf(ShiftRow shift, PersonRow person, DateOnly today, Pricing pricing)
+    /// <summary>
+    /// The ledger items of a shift: one for each part of it, a date and a PACE category (<see cref="ShiftPriceEstimator.PartsOf"/>), so the ledger counts the shift exactly as the claim lines it becomes are filed. Kind and group come
+    /// from the shift (completed, past or ahead); only the part's own date places it in a period. A shift with no price is one $0 item that says why.
+    /// </summary>
+    private static IEnumerable<LedgerItem> ShiftItemsOf(ShiftRow shift, PersonRow person, DateOnly today, Pricing pricing)
     {
         var state = ShiftPriceEstimator.StateFor(person.AddressState, pricing.ProviderState);
         var hours = Shift.HoursBetween(shift.Start, shift.End, shift.EndsNextDay);
@@ -461,22 +468,28 @@ public sealed class BudgetLedgerService
 
         var completed = shift.Status == ShiftStatus.Completed;
         var past = !completed && shift.ServiceDate < today;
-        return new LedgerItem
+        var parts = outcome.IsPriced ? ShiftPriceEstimator.PartsOf(outcome) : new[] { new ShiftCostPart(shift.ServiceDate, pricing.DefaultShiftCategory, 0m) };
+        foreach (var part in parts)
         {
-            Kind = completed ? LedgerRowKind.CompletedShift : past ? LedgerRowKind.PastShift : LedgerRowKind.FutureShift,
-            Group = completed || past ? LedgerGroup.Pending : LedgerGroup.BookedAhead,
-            Date = shift.ServiceDate, Amount = outcome.Total,
-            // shortcut: the whole shift is filed under its first line's category. Core total agrees; the per-category split is in the polish queue.
-            PaceCategory = outcome.IsPriced ? PaceCategories.Of(outcome.Lines[0].CatalogueItem) : pricing.DefaultShiftCategory, PlanType = person.PlanType,
-            Id = shift.Id, ShiftId = shift.Id,
-            Description = string.Create(CultureInfo.InvariantCulture, $"Shift {shift.Start:HH:mm}–{shift.End:HH:mm} · {hours:0.##} h"),
-            Status = shift.Status.ToString(), Link = string.Create(CultureInfo.InvariantCulture, $"/rostering?date={shift.ServiceDate:yyyy-MM-dd}"),
-            // A shift with no price is counted as $0 and says why (a sleepover or a group shift the shift claim does not price yet, or no catalogue rate); one that is priced but not
-            // worked out fully (no shift is flagged now that every band is priced; kept for a future caveat) carries the estimator's caveat.
-            Note = outcome.NotPricedBecause is { } because ? NotCountedNote(because) : outcome.Caveat,
-            // The marker the period counts: a shift the estimator refused is $0 in every figure, so the figures say how many they leave out and why.
-            NotPricedKinds = outcome.NotPricedKinds,
-        };
+            // One part keeps the shift's own wording (its elapsed hours, or the night of a sleepover); a shift cut into parts says what each part holds.
+            var quantity = part.Nights > 0
+                ? (part.Hours > 0 ? string.Create(CultureInfo.InvariantCulture, $"{part.Hours:0.##} h + {ClaimPricing.Quantity(part.Nights, true)}") : ClaimPricing.Quantity(part.Nights, true))
+                : ClaimPricing.Quantity(parts.Count == 1 ? hours : part.Hours, false);
+            yield return new LedgerItem
+            {
+                Kind = completed ? LedgerRowKind.CompletedShift : past ? LedgerRowKind.PastShift : LedgerRowKind.FutureShift,
+                Group = completed || past ? LedgerGroup.Pending : LedgerGroup.BookedAhead,
+                Date = part.Date, Amount = part.Amount, PaceCategory = part.PaceCategory, PlanType = person.PlanType,
+                Id = shift.Id, ShiftId = shift.Id,
+                Description = string.Create(CultureInfo.InvariantCulture, $"Shift {shift.Start:HH:mm}–{shift.End:HH:mm} · {quantity}"),
+                Status = shift.Status.ToString(), Link = string.Create(CultureInfo.InvariantCulture, $"/rostering?date={shift.ServiceDate:yyyy-MM-dd}"),
+                // A shift with no price is counted as $0 and says why (a sleepover or a group shift the shift claim does not price yet, or no catalogue rate); one that is priced but not
+                // worked out fully (no shift is flagged now that every band is priced; kept for a future caveat) carries the estimator's caveat.
+                Note = outcome.NotPricedBecause is { } because ? NotCountedNote(because) : outcome.Caveat,
+                // The marker the period counts: a shift the estimator refused is $0 in every figure, so the figures say how many they leave out and why.
+                NotPricedKinds = outcome.NotPricedKinds,
+            };
+        }
     }
 
     /// <summary>The ledger's note for a shift or booking that has no price: the reason, then what the ledger does about it ("No catalogue rate covers this date, so it is counted as $0.").</summary>
@@ -575,9 +588,10 @@ public sealed class BudgetLedgerService
     }
 
     /// <summary>A claim day type as the catalogue and the claim speak of it, with spaces ("weekday evening") rather than as the enum's name.</summary>
-    private static string DescribeDayType(ClaimDayType dayType) => dayType switch
+    internal static string DescribeDayType(ClaimDayType dayType) => dayType switch
     {
         ClaimDayType.Weekday => "weekday",
+        ClaimDayType.WeekdayNight => "weekday night",
         ClaimDayType.WeekdayEvening => "weekday evening",
         ClaimDayType.Saturday => "Saturday",
         ClaimDayType.Sunday => "Sunday",

@@ -53,12 +53,7 @@ public sealed class ShiftBudgetEffect
         for (var i = 0; i < planned.Count; i++)
         {
             if (estimates[i] is not ShiftCostEstimate.Priced priced) continue;   // nothing to count, nothing to say
-            var past = planned[i].ServiceDate < participantLedger.Today;
-            added.Add(new LedgerItem
-            {
-                Kind = past ? LedgerRowKind.PastShift : LedgerRowKind.FutureShift, Group = past ? LedgerGroup.Pending : LedgerGroup.BookedAhead, Date = planned[i].ServiceDate, Amount = priced.Amount,
-                PaceCategory = priced.PaceCategory, PlanType = planType, Id = planned[i].ShiftId ?? Guid.Empty, ShiftId = planned[i].ShiftId, Description = "A new shift", Status = ShiftStatus.Draft.ToString(),
-            });
+            added.AddRange(ShiftBudgetCheck.ItemsFor(planned[i].ServiceDate, priced, planType, planned[i].ShiftId, ShiftStatus.Draft, participantLedger.Today, "A new shift"));
         }
         if (added.Count == 0) return new List<BudgetWarningDto>();
 

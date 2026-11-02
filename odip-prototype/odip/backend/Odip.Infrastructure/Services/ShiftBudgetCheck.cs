@@ -17,8 +17,11 @@ public sealed record ShiftSpec(DateOnly ServiceDate, TimeOnly StartTime, TimeOnl
 /// <summary>What a shift is estimated to cost, or why it cannot be: nothing is ever invented for a shift the estimator cannot price.</summary>
 public abstract record ShiftCostEstimate
 {
-    /// <summary>Priced the way ODIP will claim it, in dollars, with the PACE category it is billed under (null when the row carries none).</summary>
-    public sealed record Priced(decimal Amount, int? PaceCategory) : ShiftCostEstimate;
+    /// <summary>Priced the way ODIP will claim it: the shift's parts, one for each date and PACE category it is billed under (<see cref="ShiftPriceEstimator.PartsOf"/>), which sum to <see cref="Amount"/>.</summary>
+    public sealed record Priced(IReadOnlyList<ShiftCostPart> Parts) : ShiftCostEstimate
+    {
+        public decimal Amount => Parts.Sum(p => p.Amount);
+    }
 
     /// <summary>The estimator cannot price this shift. <see cref="Reason"/> reads after "Budget not checked:" so it starts in lower case and has no full stop.</summary>
     public sealed record NotPriced(string Reason) : ShiftCostEstimate;
@@ -81,8 +84,7 @@ public sealed class LedgerShiftCostSource : IShiftCostSource
             var outcome = ShiftPriceEstimator.Price(new ShiftRateRows(groupRows, personalCareRows, sleepoverRows), shift.SupportGroupCode, shift.ServiceDate, shift.StartTime, shift.EndTime, shift.EndsNextDay, shift.Ratio, shift.NightType,
                 person.IsIntensiveSupport, state, holidays.For(state), zone);
             return outcome.IsPriced
-                // shortcut: the whole shift is filed under its first line's category. Core total agrees; the per-category split is in the polish queue.
-                ? (ShiftCostEstimate)new ShiftCostEstimate.Priced(outcome.Total, PaceCategories.Of(outcome.Lines[0].CatalogueItem))
+                ? (ShiftCostEstimate)new ShiftCostEstimate.Priced(ShiftPriceEstimator.PartsOf(outcome))
                 : new ShiftCostEstimate.NotPriced(outcome.NotPricedBecause ?? "the estimator has no price for it");
         }).ToList();
     }
@@ -161,30 +163,34 @@ public sealed class ShiftBudgetCheck
         if (estimates[0] is not ShiftCostEstimate.Priced priced) return new ShiftBudgetOutcome(Array.Empty<RosterFinding>(), ((ShiftCostEstimate.NotPriced)estimates[0]).Reason);
 
         var planType = await _db.Participants.AsNoTracking().Where(p => p.TenantId == request.TenantId && p.Id == request.ParticipantId).Select(p => p.PlanType).FirstAsync(ct);
-        var newItem = ItemFor(request.ServiceDate, priced, planType, request.ExistingShiftId, target, participantLedger.Today);
-        var place = BudgetLedgerCalculator.Place(plan, newItem);
-        if (place.Placement != LedgerPlacement.InPeriod) return ShiftBudgetOutcome.Quiet;   // no recorded pool, or outside the plan's dates: nothing to check against
+        var newItems = ItemsFor(request.ServiceDate, priced, planType, request.ExistingShiftId, target, participantLedger.Today, "This shift");
+        // The place checked is the largest part that lands in a period of a recorded pool (the first on a tie); a part outside the plan's dates is the claim's to flag, not a reason to skip the part inside them.
+        var places = newItems.Select(item => BudgetLedgerCalculator.Place(plan, item)).ToList();
+        var checkedAt = -1;
+        for (var i = 0; i < newItems.Count; i++)
+            if (places[i].Placement == LedgerPlacement.InPeriod && (checkedAt < 0 || newItems[i].Amount > newItems[checkedAt].Amount)) checkedAt = i;
+        if (checkedAt < 0) return ShiftBudgetOutcome.Quiet;   // no recorded pool, or outside the plan's dates: nothing to check against
+        var place = places[checkedAt];
+        // This shift's cost in the checked pool and period: its parts that land there.
+        var thisShift = Enumerable.Range(0, newItems.Count).Where(i => SamePlace(places[i], place)).Sum(i => newItems[i].Amount);
 
         // What the saved version already put into THIS pool and period (an unpriced saved version put nothing the new one can be measured against).
         var oldInPlace = 0m;
         if (oldCounts && estimates[1] is ShiftCostEstimate.Priced oldPriced)
-        {
-            var oldPlace = BudgetLedgerCalculator.Place(plan, ItemFor(saved!.ServiceDate, oldPriced, planType, request.ExistingShiftId, saved.Status, participantLedger.Today));
-            if (oldPlace.Placement == LedgerPlacement.InPeriod && oldPlace.Pool!.Id == place.Pool!.Id && oldPlace.Period!.Id == place.Period!.Id) oldInPlace = oldPriced.Amount;
-        }
-        var raises = priced.Amount > oldInPlace;
+            oldInPlace = ItemsFor(saved!.ServiceDate, oldPriced, planType, request.ExistingShiftId, saved.Status, participantLedger.Today, "This shift").Where(item => SamePlace(BudgetLedgerCalculator.Place(plan, item), place)).Sum(item => item.Amount);
+        var raises = thisShift > oldInPlace;
 
-        // The ledger with the change: the saved version's own item out (the ledger priced it, whatever the estimate above says), the new one in.
+        // The ledger with the change: the saved version's own items out (the ledger priced them, whatever the estimate above says), the new ones in.
         var without = participantLedger.Items.Where(i => request.ExistingShiftId is null || i.ShiftId != request.ExistingShiftId).ToList();
-        var after = BudgetLedgerCalculator.Compute(plan, participantLedger.Today, participantLedger.ApproachingPercent, without.Append(newItem));
+        var after = BudgetLedgerCalculator.Compute(plan, participantLedger.Today, participantLedger.ApproachingPercent, without.Concat(newItems));
         var period = after.Pools.First(p => p.Pool.Id == place.Pool!.Id).Periods.First(p => p.Period.Id == place.Period!.Id);
-        // Booked ahead BEFORE this shift (the new item is booked ahead when its day is today or later), so used + booked ahead + this shift is the forecast the panel prints.
-        var bookedAheadBefore = period.BookedAhead - (newItem.Group == LedgerGroup.BookedAhead ? priced.Amount : 0m);
+        // Booked ahead BEFORE this shift (its parts are booked ahead when its day is today or later), so used + booked ahead + this shift is the forecast the panel prints.
+        var bookedAheadBefore = period.BookedAhead - (newItems[checkedAt].Group == LedgerGroup.BookedAhead ? thisShift : 0m);
         // Used BEFORE this shift too: a shift dated before today is Pending, so the ledger's Used already holds it. Without this the rows repeat it ("This shift" beside a Used that includes it) and "already over" can
         // read true for a period that only this shift took over (phase 3 review, N3).
-        var usedBefore = period.Used - (newItem.Group == LedgerGroup.Pending ? priced.Amount : 0m);
+        var usedBefore = period.Used - (newItems[checkedAt].Group == LedgerGroup.Pending ? thisShift : 0m);
         var figures = new BudgetFindingFigures(
-            place.Pool!.Name, period.Period.PeriodStart, period.Period.PeriodEnd, period.Available, usedBefore, period.Forecast, priced.Amount, bookedAheadBefore, period.UnpricedShiftCount);
+            place.Pool!.Name, period.Period.PeriodStart, period.Period.PeriodEnd, period.Available, usedBefore, period.Forecast, thisShift, bookedAheadBefore, period.UnpricedShiftCount);
 
         var mode = await _db.BudgetSettings.AsNoTracking().Where(b => b.TenantId == request.TenantId).Select(b => (BudgetLimitMode?)b.Mode).FirstOrDefaultAsync(ct) ?? BudgetSettings.DefaultMode;
         var oneOff = !await IsRoutineAsync(request, saved?.ShiftPatternId, ct);
@@ -209,15 +215,18 @@ public sealed class ShiftBudgetCheck
         for (var i = 0; i < shifts.Count; i++)
         {
             if (estimates[i] is not ShiftCostEstimate.Priced priced) continue;
-            var item = ItemFor(shifts[i].ServiceDate, priced, planType, null, ShiftStatus.Draft, ledger.Today);
-            var place = BudgetLedgerCalculator.Place(plan, item);
-            if (place.Placement == LedgerPlacement.InPeriod) placed.Add((i, item, place));
+            foreach (var item in ItemsFor(shifts[i].ServiceDate, priced, planType, null, ShiftStatus.Draft, ledger.Today, "This shift"))
+            {
+                var place = BudgetLedgerCalculator.Place(plan, item);
+                if (place.Placement == LedgerPlacement.InPeriod) placed.Add((i, item, place));
+            }
         }
         if (placed.Count == 0) return result;
 
         var after = BudgetLedgerCalculator.Compute(plan, ledger.Today, ledger.ApproachingPercent, ledger.Items.Concat(placed.Select(p => p.Item)));
         foreach (var (index, _, place) in placed)
         {
+            if (result[index] is not null) continue;   // a shift is flagged by its first part that forecasts over
             var period = after.Pools.First(p => p.Pool.Id == place.Pool!.Id).Periods.First(p => p.Period.Id == place.Period!.Id);
             if (period.Forecast <= period.Available) continue;
             var added = placed.Where(p => p.Place.Period!.Id == place.Period!.Id).Sum(p => p.Item.Amount);
@@ -234,14 +243,21 @@ public sealed class ShiftBudgetCheck
         request.ExistingShiftId is not null && savedPatternId is { } pattern
         && await _db.ShiftPatterns.AsNoTracking().AnyAsync(p => p.Id == pattern && p.ParticipantId == request.ParticipantId, ct);
 
-    /// <summary>The ledger item a shift is, as <see cref="BudgetLedgerService"/> would make it: booked ahead from today, or pending once its day has passed unresolved.</summary>
-    private static LedgerItem ItemFor(DateOnly date, ShiftCostEstimate.Priced price, PlanType planType, Guid? shiftId, ShiftStatus status, DateOnly today)
+    private static bool SamePlace(LedgerPlace a, LedgerPlace b) =>
+        a.Placement == LedgerPlacement.InPeriod && b.Placement == LedgerPlacement.InPeriod && a.Pool!.Id == b.Pool!.Id && a.Period!.Id == b.Period!.Id;
+
+    /// <summary>
+    /// The ledger items a shift is, as <see cref="BudgetLedgerService"/> would make them: one for each part of it (date and PACE category), booked ahead from today or pending once the shift's day has passed unresolved.
+    /// Kind and group come from the shift's service date; only the part's own date places it in a period. The parts share one key (the saved shift's, else one made here) so a shift counts once wherever it is counted.
+    /// </summary>
+    internal static List<LedgerItem> ItemsFor(DateOnly serviceDate, ShiftCostEstimate.Priced price, PlanType planType, Guid? shiftId, ShiftStatus status, DateOnly today, string description)
     {
-        var past = date < today;
-        return new LedgerItem
+        var past = serviceDate < today;
+        var key = shiftId ?? Guid.NewGuid();
+        return price.Parts.Select(part => new LedgerItem
         {
-            Kind = past ? LedgerRowKind.PastShift : LedgerRowKind.FutureShift, Group = past ? LedgerGroup.Pending : LedgerGroup.BookedAhead, Date = date, Amount = price.Amount,
-            PaceCategory = price.PaceCategory, PlanType = planType, Id = shiftId ?? Guid.Empty, ShiftId = shiftId, Description = "This shift", Status = status.ToString(),
-        };
+            Kind = past ? LedgerRowKind.PastShift : LedgerRowKind.FutureShift, Group = past ? LedgerGroup.Pending : LedgerGroup.BookedAhead, Date = part.Date, Amount = part.Amount,
+            PaceCategory = part.PaceCategory, PlanType = planType, Id = key, ShiftId = key, Description = description, Status = status.ToString(),
+        }).ToList();
     }
 }
