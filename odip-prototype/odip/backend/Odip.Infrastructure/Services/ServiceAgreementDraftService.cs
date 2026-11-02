@@ -6,6 +6,7 @@ using Odip.Domain.Billing.Catalogue;
 using Odip.Domain.Billing.Pricing;
 using Odip.Domain.Billing.Services;
 using Odip.Domain.Entities;
+using Odip.Domain.Funding;
 using Odip.Infrastructure.Data;
 
 namespace Odip.Infrastructure.Services;
@@ -331,7 +332,27 @@ public sealed class ServiceAgreementDraftService
         if (draft == null) return (null, "Draft not found.");
         // Who it is from: the organisation's own settings, named by tenant (a SuperAdmin's context has no query filter, so it could hand back another organisation's).
         var provider = AgreementProvider.From(await _db.ProviderSettings.AsNoTracking().FirstOrDefaultAsync(x => x.TenantId == tenantId, ct));
-        return (new AgreementPdf(ServiceAgreementDraftPdfRenderer.Render(draft, provider), ServiceAgreementDraftPdfRenderer.FileName(draft)), null);
+        return (new AgreementPdf(ServiceAgreementDraftPdfRenderer.Render(draft, provider, await CategoriesAsync(draft, ct)), ServiceAgreementDraftPdfRenderer.FileName(draft)), null);
+    }
+
+    /// <summary>
+    /// The PACE category number of each cost line, by (item code, catalogue version), for the PDF's category rows: the row of the line's own catalogue version, else the newest row of the item.
+    /// A line whose item has no row, or a row with no category, is left out.
+    /// shortcut: read from the catalogue when the PDF is made, not snapshotted on the line, so a re-import that rewrites a version's rows in place (a changed PACE number on a matched row) would
+    /// change an old agreement's PDF; snapshot the number on the line if that ever happens.
+    /// </summary>
+    private async Task<Dictionary<(string ItemCode, string Version), int>> CategoriesAsync(ServiceAgreementDraft draft, CancellationToken ct)
+    {
+        var codes = draft.Lines.Select(x => x.ItemCode).Distinct().ToList();
+        var rows = await _db.SupportCatalogueItems.AsNoTracking().Where(x => codes.Contains(x.ItemNumber)).ToListAsync(ct);
+        var categories = new Dictionary<(string ItemCode, string Version), int>();
+        foreach (var line in draft.Lines)
+        {
+            var own = rows.Where(x => x.ItemNumber == line.ItemCode).OrderByDescending(x => x.EffectiveFrom).ToList();
+            var row = own.FirstOrDefault(x => x.CatalogueVersion == line.CatalogueVersion) ?? own.FirstOrDefault();
+            if (row is not null && PaceCategories.Of(row) is { } number) categories[(line.ItemCode, line.CatalogueVersion)] = number;
+        }
+        return categories;
     }
 
     private static decimal PriceForState(SupportCatalogueItem item, string state) => state switch

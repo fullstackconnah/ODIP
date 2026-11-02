@@ -5,6 +5,7 @@ using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
 using Odip.Domain.Entities;
+using Odip.Domain.Funding;
 using Odip.Domain.Rostering;
 
 namespace Odip.Infrastructure.Services;
@@ -16,10 +17,10 @@ namespace Odip.Infrastructure.Services;
 /// </summary>
 public static class ServiceAgreementDraftPdfRenderer
 {
-    public static byte[] Render(ServiceAgreementDraft draft, AgreementProvider? provider = null) => Compose(draft, provider).GeneratePdf();
+    public static byte[] Render(ServiceAgreementDraft draft, AgreementProvider? provider = null, IReadOnlyDictionary<(string ItemCode, string Version), int>? categories = null) => Compose(draft, provider, categories).GeneratePdf();
 
     /// <summary>The document before it is written out, so a test can draw its pages as images and look at them. With no <paramref name="provider"/> the title has no provider line.</summary>
-    public static Document Compose(ServiceAgreementDraft draft, AgreementProvider? provider = null)
+    public static Document Compose(ServiceAgreementDraft draft, AgreementProvider? provider = null, IReadOnlyDictionary<(string ItemCode, string Version), int>? categories = null)
     {
         QuestPDF.Settings.License = LicenseType.Community;
         provider ??= AgreementProvider.From(null);
@@ -44,8 +45,9 @@ public static class ServiceAgreementDraftPdfRenderer
                 {
                     table.ColumnsDefinition(columns => { columns.RelativeColumn(2); columns.RelativeColumn(); columns.RelativeColumn(); columns.RelativeColumn(); });
                     table.Header(header => { header.Cell().Background(Colors.Grey.Lighten2).Padding(4).Text("Support type").Bold(); header.Cell().Background(Colors.Grey.Lighten2).Padding(4).Text("Hours").Bold(); header.Cell().Background(Colors.Grey.Lighten2).Padding(4).Text("Catalogue code").Bold(); header.Cell().Background(Colors.Grey.Lighten2).Padding(4).Text("Server price / provenance").Bold(); });
-                    foreach (var line in draft.Lines.OrderBy(x => x.Position))
+                    foreach (var (category, line) in CostRows(draft, categories))
                     {
+                        if (category is not null) table.Cell().ColumnSpan(4).Background(Colors.Grey.Lighten3).Padding(4).Text(category).Bold();
                         // A line the pricing engine generated from a block says its band, its unit and what it totals over the agreement; a hand-typed line prints exactly as it always did.
                         table.Cell().Padding(4).Text(line.Band is null ? line.ServiceType : $"{line.ServiceType} — {line.Band}");
                         table.Cell().Padding(4).Text(line.Hours.ToString("0.##", CultureInfo.InvariantCulture) + (line.Unit switch { "E" => " each", "D" => line.Hours == 1m ? " night" : " nights", _ => string.Empty }));
@@ -108,9 +110,28 @@ public static class ServiceAgreementDraftPdfRenderer
     {
         column.Item().Text("Service agreement").Bold().FontSize(16);
         if (provider.Line is { } line) column.Item().PaddingTop(2).Text(line).FontColor(Colors.Grey.Darken1);
+        if (provider.Address is { } address) column.Item().PaddingTop(2).Text(address).FontColor(Colors.Grey.Darken1);
         column.Item().PaddingTop(2).Text($"Prepared {Date(ProviderLocalTime.TodayIn(draft.CreatedAt, provider.Zone))}").FontColor(Colors.Grey.Darken1);
         column.Item().Height(8);
     }
+
+    /// <summary>
+    /// The cost table's lines in the order they print, each with the category row that opens its group (null on every other line). With no <paramref name="categories"/> the table is plain, in
+    /// <see cref="ServiceAgreementDraftLine.Position"/> order. With them the lines are grouped by PACE category number, a group keeps its lines in Position order, and the lines the catalogue did
+    /// not answer for come last under "Not in the support catalogue".
+    /// </summary>
+    private static IEnumerable<(string? Category, ServiceAgreementDraftLine Line)> CostRows(ServiceAgreementDraft draft, IReadOnlyDictionary<(string ItemCode, string Version), int>? categories)
+    {
+        var lines = draft.Lines.OrderBy(x => x.Position).ToList();
+        if (categories is null) return lines.Select(line => ((string?)null, line));
+        return lines.GroupBy(line => categories.TryGetValue((line.ItemCode, line.CatalogueVersion), out var number) ? number : (int?)null)
+            .OrderBy(group => group.Key ?? int.MaxValue)
+            .SelectMany(group => group.Select((line, index) => (index == 0 ? CategoryTitle(group.Key) : null, line)));
+    }
+
+    /// <summary>"01 Assistance with Daily Life": the number in two digits, then the PACE name. A number that is not a category is printed alone.</summary>
+    private static string CategoryTitle(int? number) =>
+        number is not { } n ? "Not in the support catalogue" : PaceCategories.NameOf(n) is { } name ? $"{n:00} {name}" : n.ToString("00", CultureInfo.InvariantCulture);
 
     /// <summary>A date as the PDF writes it, "12 Oct 2026", whatever culture the machine has (a culture that spells July out in full would make the same PDF differ from host to host).</summary>
     private static string Date(DateOnly date) => date.ToString("dd MMM yyyy", CultureInfo.InvariantCulture);
