@@ -37,7 +37,7 @@ public static class ServiceAgreementDraftPdfRenderer
                 Field(column, "Date of birth", draft.DateOfBirthSnapshot is { } birth ? Date(birth) : "Not recorded");
                 Field(column, "Representative", draft.Representative ?? "Not recorded");
                 Field(column, "Plan dates", $"{Date(draft.PlanStartDate)} — {Date(draft.PlanEndDate)}");
-                Field(column, "Agreement dates", $"{Date(draft.AgreementStartDate)} — {Date(draft.AgreementEndDate)}");
+                Field(column, "Agreement dates", draft.IsOngoing ? $"{Date(draft.AgreementStartDate)} — Ongoing. Reviewed with the NDIS plan; plan end at this revision ({Date(draft.AgreementEndDate)})" : $"{Date(draft.AgreementStartDate)} — {Date(draft.AgreementEndDate)}");
                 Field(column, "Service types", ServiceTypesText(draft.ServiceTypesJson));
                 Schedule(column, draft);
                 column.Item().PaddingTop(16).EnsureSpace(90).Text("Cost detail (NDIS catalogue prices)").Bold().FontSize(12);
@@ -53,7 +53,7 @@ public static class ServiceAgreementDraftPdfRenderer
                     }
                 });
                 if (draft.Lines.Any(x => x.Total is not null))
-                    column.Item().PaddingTop(6).Text($"Total of the priced lines over the agreement period: {draft.Lines.Sum(x => x.Total ?? 0m).ToString("0.00", CultureInfo.InvariantCulture)}. Prices are the catalogue maximums on each service date and are not a quote.").FontColor(Colors.Grey.Darken1);
+                    column.Item().PaddingTop(6).Text($"Total of the priced lines over the agreement period{(draft.IsOngoing ? " to the plan end" : "")}: {draft.Lines.Sum(x => x.Total ?? 0m).ToString("0.00", CultureInfo.InvariantCulture)}. Prices are the catalogue maximums on each service date and are not a quote.").FontColor(Colors.Grey.Darken1);
                 // A total that leaves work out says so beside the total: what was not priced, what a person has to look at and what rests on a rate nobody has confirmed.
                 var caveats = DraftPricingCaveats.For(draft);
                 if (caveats.Count > 0)

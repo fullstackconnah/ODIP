@@ -161,7 +161,7 @@ export function ApprovalDialog({ open, participantId, draft, onClose, onApproved
 function WhatItDoes({ participantId, draft, preview, activatesName, acknowledged, onAcknowledge }: { participantId: string; draft: ServiceAgreementDraftDto; preview: DraftApprovalPreviewDto; activatesName?: string; acknowledged: boolean; onAcknowledge: (value: boolean) => void }) {
   const start = formatServiceDate(draft.agreementStartDate)
   const patterns = plural(preview.patternsToCreate, 'weekly pattern')
-  const range = `${start} to ${formatServiceDate(draft.agreementEndDate)}`
+  const range = draft.isOngoing ? `from ${start}, ongoing until the NDIS plan ends on ${formatServiceDate(draft.agreementEndDate)}` : `${start} to ${formatServiceDate(draft.agreementEndDate)}`
   const ends = preview.patternsToEnd > 0 && preview.endsFromVersion !== undefined
     ? `Ends ${plural(preview.patternsToEnd, 'pattern')} from the agreement it replaces the day before ${start}.`
     : null

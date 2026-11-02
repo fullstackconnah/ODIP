@@ -95,3 +95,18 @@ describe('latestEnd', () => {
     expect(latestEnd([rows[4]])).toBeNull()
   })
 })
+
+describe('Ongoing agreements', () => {
+  const ongoing = row({ participantName: 'Gus Hay', current: { ...rev(1, '2026-01-01', '2026-12-31'), isOngoing: true } })
+  it('says Ongoing instead of the stored plan end', () => {
+    expect(termView(ongoing).range).toBe('1 Jan 2026 – Ongoing')
+  })
+  it('words the badge by the plan, not the agreement', () => {
+    expect(statusBadge({ ...ongoing, status: 'Ending', daysLeft: 12 }).label).toBe('Plan ends in 12 days')
+  })
+  it('skips Ongoing rows on extend and leaves them out of the latest end', () => {
+    expect(bulkSkipNotes([ongoing], 'extend')).toEqual(['1 is Ongoing, following the NDIS plan, and will be skipped.'])
+    expect(bulkSkipCount([ongoing, rows[0]], 'extend')).toBe(1)
+    expect(latestEnd([ongoing])).toBeNull()
+  })
+})

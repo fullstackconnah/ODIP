@@ -19,6 +19,8 @@ public class ServiceAgreementDraft : ITenantEntity
     public DateOnly PlanEndDate { get; set; }
     public DateOnly AgreementStartDate { get; set; }
     public DateOnly AgreementEndDate { get; set; }
+    /// <summary>The agreement follows the NDIS plan: <see cref="AgreementEndDate"/> is always the plan end (the save enforces it), and only the display and list readers say "ongoing".</summary>
+    public bool IsOngoing { get; set; }
     public string State { get; set; } = string.Empty;
     public string ServiceTypesJson { get; set; } = "[]";
     public string? Representative { get; set; }

@@ -5,7 +5,7 @@ using Odip.Infrastructure.Data;
 namespace Odip.Infrastructure.Services;
 
 /// <summary>A participant's newest approved revision that ends within <see cref="AgreementEnding.WarningDays"/> days or has ended. <see cref="DaysLeft"/> is below 0 once it has ended; <see cref="RenewalVersion"/> is the renewal waiting after it.</summary>
-public sealed record AgreementEndingRow(Guid ParticipantId, Guid DraftId, int Version, DateOnly AgreementEndDate, int DaysLeft, int? RenewalVersion);
+public sealed record AgreementEndingRow(Guid ParticipantId, Guid DraftId, int Version, DateOnly AgreementEndDate, int DaysLeft, int? RenewalVersion, bool IsOngoing = false);
 
 /// <summary>
 /// Agreement PR 2: the one rule for "ending soon" and "ended" (spec Part B, D5), read by the participant alerts and the Agreements ending list.
@@ -21,7 +21,7 @@ public static class AgreementEnding
         var ids = participantIds.ToList();
         var revisions = await db.ServiceAgreementDrafts.AsNoTracking()
             .Where(d => ids.Contains(d.ParticipantId))
-            .Select(d => new { d.ParticipantId, d.Id, d.Version, d.AgreementStartDate, d.AgreementEndDate, Approved = db.ServiceAgreementDraftApprovals.Any(a => a.DraftId == d.Id) })
+            .Select(d => new { d.ParticipantId, d.Id, d.Version, d.AgreementStartDate, d.AgreementEndDate, d.IsOngoing, Approved = db.ServiceAgreementDraftApprovals.Any(a => a.DraftId == d.Id) })
             .ToListAsync(ct);
 
         var rows = new List<AgreementEndingRow>();
@@ -33,7 +33,7 @@ public static class AgreementEnding
             if (daysLeft > WarningDays) continue;
             var renewal = revisionsOfOne.Where(r => r.Version > approved.Version && r.AgreementStartDate > approved.AgreementEndDate).MaxBy(r => r.Version);
             if (renewal is not null && daysLeft >= 0) continue;
-            rows.Add(new AgreementEndingRow(revisionsOfOne.Key, approved.Id, approved.Version, approved.AgreementEndDate, daysLeft, renewal?.Version));
+            rows.Add(new AgreementEndingRow(revisionsOfOne.Key, approved.Id, approved.Version, approved.AgreementEndDate, daysLeft, renewal?.Version, approved.IsOngoing));
         }
 
         return rows.OrderBy(r => r.AgreementEndDate).ThenBy(r => r.ParticipantId).ToList();
@@ -42,7 +42,10 @@ public static class AgreementEnding
     /// <summary>The words the alert and the Agreements ending list share (the agreement page says the same as a sentence). No full stop, like every other alert message.</summary>
     public static string Describe(AgreementEndingRow row)
     {
-        var words = row.DaysLeft switch
+        // An Ongoing agreement stores the plan end as its end (OPEN-1): it is the plan that ends, and the next plan is what it waits for.
+        var words = row.IsOngoing ? (row.DaysLeft < 0
+            ? string.Create(CultureInfo.InvariantCulture, $"NDIS plan ended {row.AgreementEndDate:yyyy-MM-dd}: shifts stop after it. Renew with the new plan")
+            : string.Create(CultureInfo.InvariantCulture, $"NDIS plan ends {row.AgreementEndDate:yyyy-MM-dd}: renew with the new plan")) : row.DaysLeft switch
         {
             < 0 => string.Create(CultureInfo.InvariantCulture, $"Agreement ended {row.AgreementEndDate:yyyy-MM-dd}: shifts stop after it"),
             0 => "Agreement ends today",

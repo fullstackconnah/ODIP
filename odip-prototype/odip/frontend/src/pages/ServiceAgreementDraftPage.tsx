@@ -48,7 +48,7 @@ const STEPS: WizardStepDef<Details>[] = [
   { key: 'save', label: 'Save', fields: [] },
 ]
 
-const EMPTY_DETAILS: Details = { state: 'NSW', zone: 'National', agreementStartDate: '', agreementEndDate: '', representative: '', planOverride: null }
+const EMPTY_DETAILS: Details = { state: 'NSW', zone: 'National', agreementStartDate: '', agreementEndDate: '', ongoing: false, representative: '', planOverride: null }
 const snapshotOf = (details: Details, shifts: readonly Shift[]) => JSON.stringify({ details, shifts })
 
 /** The problems with the dates, each said next to the box that has it and once more for the Check and Save steps. */
@@ -57,7 +57,8 @@ function dateProblems(details: Details, plan: { start: string; end: string }): {
   const real = (value: string) => isPricingDate(value)
   if (!details.agreementStartDate) found.start = 'Enter the day the agreement starts.'
   else if (!real(details.agreementStartDate)) found.start = `Use a real date, in a year from ${PRICING_FIRST_YEAR} to ${PRICING_LAST_YEAR}.`
-  if (!details.agreementEndDate) found.end = 'Enter the day the agreement ends.'
+  if (details.ongoing) { if (!found.start && plan.end < details.agreementStartDate) found.end = 'The NDIS plan ends before this agreement starts.' }
+  else if (!details.agreementEndDate) found.end = 'Enter the day the agreement ends.'
   else if (!real(details.agreementEndDate)) found.end = `Use a real date, in a year from ${PRICING_FIRST_YEAR} to ${PRICING_LAST_YEAR}.`
   else if (!found.start && details.agreementEndDate < details.agreementStartDate) found.end = 'The end cannot come before the start.'
   if (!real(plan.start) || !real(plan.end) || plan.end < plan.start) found.plan = 'The NDIS plan needs a start and an end, and cannot end before it starts.'
@@ -163,7 +164,7 @@ function DraftPage() {
       const loadedPlan = { start: newest.planStartDate, end: newest.planEndDate }
       const derived = recorded ?? { start: newest.agreementStartDate, end: newest.agreementEndDate }
       const next: Details = {
-        state: newest.state, zone: newest.blocks[0].block.location.zone, agreementStartDate: newest.agreementStartDate, agreementEndDate: newest.agreementEndDate,
+        state: newest.state, zone: newest.blocks[0].block.location.zone, agreementStartDate: newest.agreementStartDate, agreementEndDate: newest.agreementEndDate, ongoing: !!newest.isOngoing,
         representative: newest.representative ?? '', planOverride: loadedPlan.start === derived.start && loadedPlan.end === derived.end ? null : loadedPlan,
       }
       const storedShifts = blocksToShifts(newest.blocks)
@@ -188,16 +189,18 @@ function DraftPage() {
   // The list is an organisation's: a SuperAdmin with none would get a 400 every time, so it is not asked for and the page says to choose one (follow-ups, N14).
   const endingList = useAgreementsEnding(locked && hasOrganisation)
   const daysLeft = locked && newest ? endingList.data?.find(row => row.draftId === newest.id)?.daysLeft ?? null : null
-  const ending = newest && daysLeft !== null && daysLeft <= 60 ? `${endingWords(daysLeft, newest.agreementEndDate)}.` : null
+  const ending = newest && daysLeft !== null && daysLeft <= 60 ? `${endingWords(daysLeft, newest.agreementEndDate, null, newest.isOngoing)}.` : null
   const readOnly = !canEdit || locked
   const plan = planDatesOf(details, recorded)
+  // An Ongoing agreement runs to the NDIS plan end (the server saves it that way), so every date the page prices, checks or saves uses that end.
+  const end = details.ongoing ? plan.end : details.agreementEndDate
   const dates = dateProblems(details, plan)
   const dirty = baseline !== null && (shifts.length > 0 || !!newest) && snapshotOf(details, shifts) !== baseline
   const { dialog: unsavedChangesDialog } = useUnsavedChangesWarning(dirty)
   const limits = useMemo(() => engineLimits(shifts), [shifts])
 
   const pricing = useAgreementPricing({
-    participantId: participantId ?? '', shifts, state: details.state, zone: details.zone, from: details.agreementStartDate, to: details.agreementEndDate,
+    participantId: participantId ?? '', shifts, state: details.state, zone: details.zone, from: details.agreementStartDate, to: end,
     canQuote: canEdit, stored: newest?.pricing ? { period: newest.pricing, weekly: null, week: null } : undefined, onRecordBudget: recordBudget?.onSelect,
   })
   const issues = useMemo<AgreementIssue[]>(() => {
@@ -205,8 +208,8 @@ function DraftPage() {
     const dateText = [dates.start, dates.end, dates.plan].filter((text): text is string => !!text)
     if (dateText.length > 0) list.push({ key: 'dates', tone: 'fix', title: dateText.join(' '), shiftIds: [], step: 'agreement' })
     if (shifts.length === 0) list.push({ key: 'no-shifts', tone: 'fix', title: 'Add at least one shift to the week.', shiftIds: [], step: 'week' })
-    return [...list, ...agreementIssues({ shifts, groups: pricing.groups, quoteIssues: pricing.issues, limits, to: details.agreementEndDate, settings: pricing.settings })]
-  }, [dates.start, dates.end, dates.plan, shifts, pricing.groups, pricing.issues, pricing.settings, limits, details.agreementEndDate])
+    return [...list, ...agreementIssues({ shifts, groups: pricing.groups, quoteIssues: pricing.issues, limits, to: end, settings: pricing.settings })]
+  }, [dates.start, dates.end, dates.plan, shifts, pricing.groups, pricing.issues, pricing.settings, limits, end])
   const blocking = issues.filter(issue => issue.tone === 'fix')
   const flagged = useMemo(() => new Set(issues.filter(issue => issue.step === 'week').flatMap(issue => issue.shiftIds)), [issues])
 
@@ -261,7 +264,7 @@ function DraftPage() {
     setSaved(false)
     const blocks = pricing.groups.map(group => ({ block: stampLocation(normaliseBlock(group.entry.block), details.state, details.zone), requirements: group.entry.requirements }))
     const data: CreateServiceAgreementDraftDto = {
-      planStartDate: plan.start, planEndDate: plan.end, agreementStartDate: details.agreementStartDate, agreementEndDate: details.agreementEndDate,
+      planStartDate: plan.start, planEndDate: plan.end, agreementStartDate: details.agreementStartDate, agreementEndDate: end, isOngoing: details.ongoing || undefined,
       state: details.state, serviceTypes: [...new Set(blocks.map(entry => SUPPORT_LABEL[entry.block.supportType]))], representative: details.representative.trim() || undefined, baseVersion, blocks,
     }
     create.mutate({ participantId, data }, {
@@ -488,7 +491,7 @@ function DraftPage() {
             <div className="flex flex-col gap-[var(--section-gap)]">
               <WeekStep
                 shifts={shifts} onChange={changeShifts} selected={selected} onSelect={setSelected} state={details.state} zone={details.zone} settings={pricing.settings}
-                flagged={flagged} from={details.agreementStartDate} to={details.agreementEndDate} readOnly={readOnly} limits={limits}
+                flagged={flagged} from={details.agreementStartDate} to={end} readOnly={readOnly} limits={limits}
               />
               {weekEmpty && <Callout tone="warning" className="max-w-prose">Add at least one shift to go on.</Callout>}
             </div>

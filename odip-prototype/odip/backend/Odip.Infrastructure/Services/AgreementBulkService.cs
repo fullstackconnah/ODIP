@@ -105,6 +105,7 @@ public sealed class AgreementBulkService
         DateOnly start, end, planStart, planEnd;
         if (action == "extend")
         {
+            if (current.IsOngoing) return item("Skipped", "Ongoing, it follows the NDIS plan", current.DraftId);
             if (endDate is not { } target || target <= current.AgreementEndDate)
                 return item("Failed", string.Create(CultureInfo.InvariantCulture, $"Choose a date after {current.AgreementEndDate:d MMM yyyy}."), current.DraftId);
             (start, end) = (current.AgreementEndDate.AddDays(1), target);

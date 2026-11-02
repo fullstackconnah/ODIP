@@ -77,7 +77,7 @@ public sealed class AgreementPatternChangeService
 
         var saved = await _drafts.SaveAsync(tenantId, participantId, new CreateServiceAgreementDraftDto
         {
-            PlanStartDate = source.PlanStartDate, PlanEndDate = source.PlanEndDate, AgreementStartDate = from, AgreementEndDate = end, State = source.State,
+            PlanStartDate = source.PlanStartDate, PlanEndDate = source.PlanEndDate, AgreementStartDate = from, AgreementEndDate = end, IsOngoing = source.IsOngoing, State = source.State,
             Representative = source.Representative, Blocks = changed, BaseVersion = source.Version,
         }, actor, ct);
         if (saved.Draft is not { } draft) return new PatternChangeOutcome(null, saved.Errors, saved.NotFound, saved.ConflictVersion);

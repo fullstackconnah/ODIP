@@ -18,6 +18,8 @@ export type Details = {
   zone: PlanPriceZone
   agreementStartDate: string
   agreementEndDate: string
+  /** Ongoing: the end follows the NDIS plan end, so the agreement runs until the plan is renewed. */
+  ongoing: boolean
   representative: string
   /** Set only when the coordinator says the NDIS plan has other dates than the participant's recorded funding plan. */
   planOverride: { start: string; end: string } | null

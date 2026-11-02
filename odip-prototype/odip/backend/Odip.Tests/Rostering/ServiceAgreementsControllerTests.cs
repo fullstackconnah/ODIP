@@ -45,6 +45,36 @@ public class ServiceAgreementsControllerTests
     }
 
 
+
+    private static async Task OngoingEndingAsync(Fixture f, Guid participantId, DateOnly planEnd)
+    {
+        var draft = await AddRevisionAsync(f, 1, new[] { WeekdayBlock() }, start: planEnd.AddDays(-27), end: planEnd, participantId: participantId);
+        draft.IsOngoing = true;
+        await f.Db.SaveChangesAsync();
+        await MarkApprovedAsync(f.Db, draft);
+    }
+
+    // OPEN-1: an Ongoing agreement is listed within the warning days as the plan ending, never as the agreement ending.
+    [Fact]
+    public async Task Ongoing_is_listed_as_the_plan_ending_and_never_as_the_agreement_ending()
+    {
+        await using var f = await SetUpAsync();
+        await OngoingEndingAsync(f, f.ParticipantId, Today.AddDays(20));
+        var ben = await ParticipantAsync(f, "Ben", TenantA);
+        await OngoingEndingAsync(f, ben, Today.AddDays(-3));
+        var far = await ParticipantAsync(f, "Far", TenantA);
+        await OngoingEndingAsync(f, far, Today.AddDays(90));
+
+        var rows = await EndingAsync(f.Db, f);
+
+        Assert.Equal(new[]
+        {
+            (ben, true, "NDIS plan ended 2026-10-07: shifts stop after it. Renew with the new plan"),
+            (f.ParticipantId, true, "NDIS plan ends 2026-10-30: renew with the new plan"),
+        }, rows.Select(r => (r.ParticipantId, r.IsOngoing, r.Status)));
+        Assert.DoesNotContain(rows, r => r.Status.StartsWith("Agreement", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task It_lists_active_participants_agreements_ending_or_ended_soonest_first_in_the_alerts_words()
     {

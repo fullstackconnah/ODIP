@@ -61,7 +61,7 @@ public class ServiceAgreementsController : ControllerBase
         return Ok(ApiResponse<List<AgreementEndingDto>>.Ok(rows.Select(r => new AgreementEndingDto
         {
             ParticipantId = r.ParticipantId, ParticipantName = participants[r.ParticipantId].FullName, DraftId = r.DraftId, Version = r.Version,
-            AgreementEndDate = r.AgreementEndDate, DaysLeft = r.DaysLeft, RenewalVersion = r.RenewalVersion, Status = AgreementEnding.Describe(r),
+            AgreementEndDate = r.AgreementEndDate, IsOngoing = r.IsOngoing, DaysLeft = r.DaysLeft, RenewalVersion = r.RenewalVersion, Status = AgreementEnding.Describe(r),
         }).ToList()));
     }
 

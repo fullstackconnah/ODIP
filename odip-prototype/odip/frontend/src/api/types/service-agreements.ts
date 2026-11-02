@@ -7,6 +7,7 @@ export interface AgreementRevisionRef {
   version: number
   agreementStartDate: string
   agreementEndDate: string
+  isOngoing?: boolean
   total: number
 }
 

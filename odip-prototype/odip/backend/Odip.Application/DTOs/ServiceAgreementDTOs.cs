@@ -9,6 +9,8 @@ public record CreateServiceAgreementDraftDto
     public DateOnly PlanEndDate { get; init; }
     public DateOnly AgreementStartDate { get; init; }
     public DateOnly AgreementEndDate { get; init; }
+    /// <summary>The agreement follows the NDIS plan: the server saves <see cref="AgreementEndDate"/> as the plan end whatever the caller sent, so every bounded reader keeps a real date.</summary>
+    public bool IsOngoing { get; init; }
     [Required, RegularExpression("^(ACT|NSW|NT|QLD|SA|TAS|VIC|WA)$")] public string State { get; init; } = string.Empty;
     public List<string> ServiceTypes { get; init; } = [];
     [StringLength(500)] public string? Representative { get; init; }
@@ -51,6 +53,8 @@ public record AgreementEndingDto
     public Guid DraftId { get; init; }
     public int Version { get; init; }
     public DateOnly AgreementEndDate { get; init; }
+    /// <summary>The agreement is Ongoing: <see cref="AgreementEndDate"/> is the NDIS plan end, and the row reads as the plan ending.</summary>
+    public bool IsOngoing { get; init; }
     /// <summary>Days from the provider's today to the end; below 0 once it has ended.</summary>
     public int DaysLeft { get; init; }
     /// <summary>The renewal waiting for approval after an ended agreement, if any.</summary>
@@ -151,6 +155,7 @@ public record ServiceAgreementDraftDto
     public DateOnly PlanEndDate { get; init; }
     public DateOnly AgreementStartDate { get; init; }
     public DateOnly AgreementEndDate { get; init; }
+    public bool IsOngoing { get; init; }
     public string? Representative { get; init; }
     /// <summary>The blocks the revision was priced from, in plan order; empty on a draft whose lines were typed by hand.</summary>
     public List<DraftBlockDto> Blocks { get; init; } = [];
@@ -366,7 +371,7 @@ public record ServiceAgreementDraftLineDto
 public record DemoJourneySimulationDto(string Banner, string Signing, string Activation, string Booking, string RateLabel);
 
 public record PriceListDto { public string Version { get; init; } = ""; public DateOnly Start { get; init; } }
-public record AgreementRevisionRefDto { public Guid DraftId { get; init; } public int Version { get; init; } public DateOnly AgreementStartDate { get; init; } public DateOnly AgreementEndDate { get; init; } public decimal Total { get; init; } }
+public record AgreementRevisionRefDto { public Guid DraftId { get; init; } public int Version { get; init; } public DateOnly AgreementStartDate { get; init; } public DateOnly AgreementEndDate { get; init; } public bool IsOngoing { get; init; } public decimal Total { get; init; } }
 public record AgreementRowDto
 {
     public Guid ParticipantId { get; init; }
