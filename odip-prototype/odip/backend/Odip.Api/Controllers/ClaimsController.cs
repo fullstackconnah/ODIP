@@ -213,10 +213,9 @@ public class ClaimsController : ControllerBase
     private async Task<ActionResult<ApiResponse<ShiftClaimRunDto>>> ShiftClaimRunAsync(ShiftClaimRunRequestDto dto, bool make, CancellationToken ct)
     {
         if (_tenant.TenantId is not { } tenantId) return BadRequest(ApiResponse<ShiftClaimRunDto>.Fail("Choose an organisation first."));
-        // The organisation's calendar, never the server's: late in the evening UTC it is already tomorrow in Sydney.
-        var today = await ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct);
-        var from = dto.From ?? today.AddDays(-14);
-        var to = dto.To ?? today.AddDays(-1);
+        var (defaultFrom, defaultTo) = await DefaultRunWindowAsync(tenantId, ct);
+        var from = dto.From ?? defaultFrom;
+        var to = dto.To ?? defaultTo;
         if (from > to) return BadRequest(ApiResponse<ShiftClaimRunDto>.Fail("The From date must be on or before the To date."));
         try
         {
@@ -228,6 +227,23 @@ public class ClaimsController : ControllerBase
             // The whole-run refusal (provider settings not configured); a participant that fails is a row in the response, never this.
             return BadRequest(ApiResponse<ShiftClaimRunDto>.Fail(ex.Message));
         }
+    }
+
+    // GET /api/v1/claims/from-shifts/waiting: how many completed shifts the claim run's default window holds that no live claim has taken (the dashboard cue).
+    [HttpGet("claims/from-shifts/waiting")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<ShiftClaimWaitingDto>>> GetShiftClaimsWaiting(CancellationToken ct)
+    {
+        if (_tenant.TenantId is not { } tenantId) return BadRequest(ApiResponse<ShiftClaimWaitingDto>.Fail("Choose an organisation first."));
+        var (from, to) = await DefaultRunWindowAsync(tenantId, ct);
+        return Ok(ApiResponse<ShiftClaimWaitingDto>.Ok(await _shiftGenerator.CountWaitingAsync(tenantId, from, to, ct)));
+    }
+
+    // The last 14 days up to yesterday on the organisation's calendar, never the server's: late in the evening UTC it is already tomorrow in Sydney.
+    private async Task<(DateOnly From, DateOnly To)> DefaultRunWindowAsync(Guid tenantId, CancellationToken ct)
+    {
+        var today = await ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct);
+        return (today.AddDays(-14), today.AddDays(-1));
     }
 
     // GET /api/v1/claims/{claimId}
