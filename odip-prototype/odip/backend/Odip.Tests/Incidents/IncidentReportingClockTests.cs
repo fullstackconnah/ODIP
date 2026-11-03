@@ -42,6 +42,7 @@ public class IncidentReportingClockTests
     [Theory]
     [InlineData(IncidentSeverity.Critical, IncidentType.PropertyDamage, null, null, ReportableClass.Within24h)]
     [InlineData(IncidentSeverity.Low, IncidentType.Abuse, null, null, ReportableClass.Within24h)]
+    [InlineData(IncidentSeverity.Low, IncidentType.SexualAbuse, null, null, ReportableClass.Within24h)]
     [InlineData(IncidentSeverity.Low, IncidentType.Neglect, null, null, ReportableClass.Within24h)]
     [InlineData(IncidentSeverity.Low, IncidentType.Death, null, null, ReportableClass.Within24h)]
     [InlineData(IncidentSeverity.Low, IncidentType.MissingPerson, null, null, ReportableClass.Within24h)]

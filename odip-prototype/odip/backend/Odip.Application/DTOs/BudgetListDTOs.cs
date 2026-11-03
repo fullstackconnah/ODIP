@@ -37,6 +37,8 @@ public record BudgetListRowDto
     /// <summary>Used plus booked ahead.</summary>
     public decimal Forecast { get; init; }
     public BudgetStatus Status { get; init; }
+    /// <summary>The one word the list prints for this row, set once by the server so a row never shows two pills: <see cref="Status"/> with the NDIA's refusal and the pace warning folded in. <see cref="Status"/> itself is unchanged.</summary>
+    public BudgetListStatus ListStatus { get; init; }
     /// <summary>The date the money runs out at the pace so far, when that is before the period ends; not a status, so filters and counts ignore it. Left out when null.</summary>
     public DateOnly? PaceRunsOutOn { get; init; }
     /// <summary>
@@ -49,6 +51,17 @@ public record BudgetListRowDto
     /// has none. ODIP's arithmetic can say On track while the NDIA has refused a claim for want of funds, and the list must not be silent about it. The same shape and rule as the Funding tab's note.
     /// </summary>
     public NdiaRejectionDto? NdiaRejection { get; init; }
+}
+
+/// <summary>The list's one word per row, in the order of risk (the order is the rank): Over, then the NDIA's refusal (as Critical as Over, whatever the ledger says), then the ledger's Forecast over and Approaching, then On track at a pace that runs out, then On track.</summary>
+public enum BudgetListStatus
+{
+    Over = 0,
+    FundsRanOut = 1,
+    ForecastOver = 2,
+    Approaching = 3,
+    SpendingFast = 4,
+    OnTrack = 5,
 }
 
 /// <summary>Why an NDIS-funded participant has no row, and (agreement check only) that a participant funded another way has no NDIS budget.</summary>

@@ -71,6 +71,7 @@ type PracticeFormState = {
   authorisedBy: string
   authorisationDate: string
   authorisationEndDate: string
+  commissionReference: string
   useKind: RestrictivePracticeUseKind
   firstUsedOn: string
   interimBspDate: string
@@ -85,7 +86,7 @@ type PracticeFormState = {
 }
 
 const EMPTY_FORM: PracticeFormState = {
-  type: 'Unclassified', description: '', authorisedBy: '', authorisationDate: '', authorisationEndDate: '', useKind: 'Routine',
+  type: 'Unclassified', description: '', authorisedBy: '', authorisationDate: '', authorisationEndDate: '', commissionReference: '', useKind: 'Routine',
   firstUsedOn: '', interimBspDate: '', comprehensiveBspDate: '', reviewDate: '',
   relatedMedicationId: '', isActive: true, requiresReporting: null, authorised: false,
 }
@@ -162,6 +163,7 @@ function PracticeCard({ practice, canWrite, onEdit, onDelete }: {
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs text-[var(--color-muted-foreground)]">
         <span>{USE_KIND_LABELS[practice.useKind]}</span>
         {practice.authorisedBy && <span>Authorised by {practice.authorisedBy}</span>}
+        {practice.commissionReference && <span>Commission ref {practice.commissionReference}</span>}
         {practice.authorisationDate && (
           <span>
             Authorised {formatDateAu(practice.authorisationDate)}
@@ -259,6 +261,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
       authorisedBy: practice.authorisedBy ?? '',
       authorisationDate: practice.authorisationDate ? practice.authorisationDate.split('T')[0] : '',
       authorisationEndDate: practice.authorisationEndDate ? practice.authorisationEndDate.split('T')[0] : '',
+      commissionReference: practice.commissionReference ?? '',
       useKind: practice.useKind,
       firstUsedOn: practice.firstUsedOn ? practice.firstUsedOn.split('T')[0] : '',
       interimBspDate: practice.interimBspDate ? practice.interimBspDate.split('T')[0] : '',
@@ -309,6 +312,7 @@ export default function RestrictivePracticesTab({ participantId }: { participant
       interimBspDate: form.interimBspDate || null,
       comprehensiveBspDate: form.comprehensiveBspDate || null,
       reviewDate: form.reviewDate || null,
+      commissionReference: form.commissionReference.trim(),
       relatedMedicationId: form.type === 'ChemicalRestraint' ? (form.relatedMedicationId || null) : null,
       isActive: form.isActive,
       requiresReporting: form.authorised ? null : form.requiresReporting,
@@ -540,6 +544,13 @@ export default function RestrictivePracticesTab({ participantId }: { participant
               </FormField>
             </>
           )}
+          <FormField label="NDIS Commission reference" hint="The ID the NDIS Commission portal gave this practice or its behaviour support plan.">
+            <input
+              value={form.commissionReference}
+              maxLength={50}
+              onChange={e => setForm(f => ({ ...f, commissionReference: e.target.value }))}
+            />
+          </FormField>
           {!form.authorised && (
             <FormField label="Does this need to be reported to the NDIS Commission?">
               <ToggleGroup
