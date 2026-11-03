@@ -241,12 +241,17 @@ export interface ShiftClaimRunSkippedDto {
   failed: boolean
 }
 
-/** GET /claims/from-shifts/waiting: completed shifts in the claim run's window that no live claim line holds (a candidate count: the run's pricing may still leave some out). */
+/** GET /claims/from-shifts/waiting: completed shifts that no live claim line holds (a candidate count: the run's pricing may still leave some out). The shift and participant counts are the run's window; the older ones go back two years. */
 export interface ShiftClaimWaitingDto {
   from: string
   to: string
   shiftCount: number
   participantCount: number
+  olderShiftCount: number
+  /** Of the older ones, those more than 90 days old. */
+  overdueShiftCount: number
+  /** The earliest older service date; null when there are none. */
+  oldestDate: string | null
 }
 
 export interface ShiftClaimRunDto {

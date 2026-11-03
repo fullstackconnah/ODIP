@@ -13,6 +13,7 @@ import { heldClaimLink } from '@/components/heldClaimLink'
 import { Modal } from '@/components/Modal'
 import { TAP_FLOOR } from '@/components/tapArea'
 import { plural } from '@/lib/format'
+import { addDays } from '@/lib/planQuote'
 import { extractErrorMessage, formatCurrency, formatDateAu } from '@/lib/utils'
 
 const PREVIEW_FAILED = "Couldn't load the preview. Check your connection and try again."
@@ -20,8 +21,8 @@ const RUN_FAILED = "Couldn't make the claims. Check your connection, then open t
 
 type Failure = { kind: 'preview' | 'run'; message: string }
 
-/** The claim run: one draft claim for every participant with completed shifts that haven't been claimed yet, previewed first. */
-export function ShiftClaimRunModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+/** The claim run: one draft claim for every participant with completed shifts that haven't been claimed yet, previewed first. `from` starts it earlier than the default window (the dashboard's older shifts). */
+export function ShiftClaimRunModal({ open, from: openFrom, onClose }: { open: boolean; from?: string; onClose: () => void }) {
   const previewRun = usePreviewShiftClaimRun()
   const run = useRunShiftClaims()
   const [preview, setPreview] = useState<ShiftClaimRunDto | null>(null)
@@ -31,7 +32,7 @@ export function ShiftClaimRunModal({ open, onClose }: { open: boolean; onClose: 
   const [to, setTo] = useState('')
   const started = useRef(false)
 
-  // No dates on the first request: the server picks the period (the last 14 days to yesterday, in the organisation's time zone) and sends it back.
+  // No dates on the first request unless a start was given: the server picks the period (the last 14 days to yesterday, in the organisation's time zone) and fills what is missing.
   const load = (dates: { from?: string; to?: string }) => {
     setFailure(null)
     previewRun.mutate(dates, {
@@ -49,7 +50,7 @@ export function ShiftClaimRunModal({ open, onClose }: { open: boolean; onClose: 
   useEffect(() => {
     if (!open || started.current) return
     started.current = true
-    load({})
+    load(openFrom ? { from: openFrom } : {})
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per open
   }, [open])
 
@@ -93,6 +94,12 @@ export function ShiftClaimRunModal({ open, onClose }: { open: boolean; onClose: 
             Bunya Support makes one claim for each participant with completed shifts that haven't been claimed yet. NDIA-managed claims go to Ready to send; plan- and self-managed ones are listed under Plan- and self-managed.
           </p>
         )}
+        {!done && preview && preview.from < addDays(preview.to, -89) && (
+          // shortcut: measured from the preview's To, so a To edited earlier can hide it; use the server's today if that matters.
+          <Callout tone="warning">
+            Some of these dates are more than 90 days ago. The NDIA does extra checks on claims made more than 90 days after a support. From December 2026, claims must be made within 90 days.
+          </Callout>
+        )}
         {failure && <Callout tone="danger">{failure.message}</Callout>}
         {loading && <p role="status" className="text-sm text-[var(--color-muted-foreground)]">Finding completed shifts…</p>}
         {!done && (preview || loading) && (
@@ -107,7 +114,7 @@ export function ShiftClaimRunModal({ open, onClose }: { open: boolean; onClose: 
             </div>
             <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
               <p className="text-[13px] text-[var(--color-muted-foreground)]">
-                {edited ? 'Update the preview to claim these dates.' : 'The last 14 days up to yesterday, unless you change it.'}
+                {edited ? 'Update the preview to claim these dates.' : openFrom ? 'From your oldest unclaimed shift up to yesterday, unless you change it.' : 'The last 14 days up to yesterday, unless you change it.'}
               </p>
               {edited && (
                 <Button variant="secondary" size="md" onClick={() => load({ from, to })} disabled={previewRun.isPending}>

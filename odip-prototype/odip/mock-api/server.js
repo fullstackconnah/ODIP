@@ -2683,7 +2683,7 @@ const routes = [
   ['provider-settings', () => invoiceMock.settingsDto(providerSettingsRow)],
   ['dashboard/summary', () => dashboardSummary],
   // The dashboard cue: shiftClaimRun's default fixture, 5 claimable plus the sleepover it leaves out, for 2 participants.
-  ['claims/from-shifts/waiting', () => ({ from: '2026-10-19', to: '2026-11-01', shiftCount: 6, participantCount: 2 })],
+  ['claims/from-shifts/waiting', () => ({ from: '2026-10-19', to: '2026-11-01', shiftCount: 6, participantCount: 2, olderShiftCount: 0, overdueShiftCount: 0, oldestDate: null })],
   ['claims/cancellations', () => cancellationCandidates()],
   ['dashboard/setup', () => dashboardSetup],
   ['plan-pricing/settings', () => planPricingSettings],
