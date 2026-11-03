@@ -106,4 +106,148 @@ public class AutoRosterControllerTests
         Assert.Contains("Coordinator", roles);
         Assert.DoesNotContain("SupportWorker", roles);
     }
+
+    private static RosteringController AsRole(RosteringController c, string role)
+    {
+        c.ControllerContext = new ControllerContext { HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext { User = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity([new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, role)], "test")) } };
+        return c;
+    }
+
+    private static AutoRosterApplyDto Rows(params (Guid Shift, Guid Staff)[] rows) => new() { Rows = rows.Select(r => new AutoRosterApplyRowDto { ShiftId = r.Shift, StaffId = r.Staff }).ToList() };
+
+    private static AutoRosterApplyResultDto Result(ActionResult<ApiResponse<AutoRosterApplyResultDto>> r) =>
+        Assert.IsType<ApiResponse<AutoRosterApplyResultDto>>(Assert.IsType<OkObjectResult>(r.Result).Value).Data!;
+
+    [Theory]
+    [InlineData("Coordinator")]
+    [InlineData("Admin")]
+    public async Task AutoRosterApply_AFreshDraftAppliedAtOnce_SkipsNothing(string role)   // draft and apply agree: any gap between the draft checks and the apply gate fails here
+    {
+        using var db = TestDb.Create();
+        var pat = Staff(db, "Pat", TenantA);
+        var (_, shift) = OpenShift(db, "Mia", TenantA);
+        await db.SaveChangesAsync();
+        var c = AsRole(Controller(db, TenantA), role);
+        var draft = Assert.IsType<ApiResponse<AutoRosterDraftDto>>(Assert.IsType<OkObjectResult>((await c.AutoRoster(Monday, default)).Result).Value).Data!;
+
+        var result = Result(await c.AutoRosterApply(Monday, Rows(draft.Changes.Select(x => (x.ShiftId, x.StaffId)).ToArray()), default));
+
+        Assert.Empty(result.Skipped);
+        Assert.Equal([shift.Id], result.Applied);
+        Assert.Equal(pat.Id, (await db.Shifts.AsNoTracking().SingleAsync(s => s.Id == shift.Id)).UserId);
+    }
+
+    [Fact]
+    public async Task AutoRosterApply_AShiftFilledSinceTheDraft_IsSkippedWithTheBoardChangedMessage_AndTheOthersApply()
+    {
+        using var db = TestDb.Create();
+        var pat = Staff(db, "Pat", TenantA);
+        var lee = Staff(db, "Lee", TenantA);
+        var (_, taken) = OpenShift(db, "Mia", TenantA);
+        var (_, open) = OpenShift(db, "Zoe", TenantA);
+        taken.UserId = lee.Id;
+        await db.SaveChangesAsync();
+
+        var result = Result(await Controller(db, TenantA).AutoRosterApply(Monday, Rows((taken.Id, pat.Id), (open.Id, pat.Id)), default));
+
+        Assert.Equal([open.Id], result.Applied);
+        var skipped = Assert.Single(result.Skipped);
+        Assert.Equal(taken.Id, skipped.ShiftId);
+        Assert.Equal("This shift changed after the board was loaded. Refresh the board and try again.", skipped.Message);
+        Assert.Equal(lee.Id, (await db.Shifts.AsNoTracking().SingleAsync(s => s.Id == taken.Id)).UserId);
+    }
+
+    [Fact]
+    public async Task AutoRosterApply_ARowTheGateNowBlocks_IsSkipped_AndNothingOfItIsSaved()
+    {
+        using var db = TestDb.Create();
+        var pat = Staff(db, "Pat", TenantA);
+        var (_, first) = OpenShift(db, "Mia", TenantA);
+        var (_, second) = OpenShift(db, "Zoe", TenantA);   // the same hours: Pat cannot take both
+        await db.SaveChangesAsync();
+
+        var result = Result(await Controller(db, TenantA).AutoRosterApply(Monday, Rows((first.Id, pat.Id), (second.Id, pat.Id)), default));
+
+        Assert.Equal([first.Id], result.Applied);
+        Assert.Equal(second.Id, Assert.Single(result.Skipped).ShiftId);
+        Assert.Null((await db.Shifts.AsNoTracking().SingleAsync(s => s.Id == second.Id)).UserId);
+    }
+
+    [Fact]
+    public async Task AutoRosterApply_NeverTouchesAnotherOrganisation()   // TestDb has no tenant filter: only the controller keeps the organisations apart
+    {
+        using var db = TestDb.Create();
+        var a = Staff(db, "Ava", TenantA);
+        var b = Staff(db, "Ben", TenantB);
+        var (_, mine) = OpenShift(db, "Mia", TenantA);
+        var (_, theirs) = OpenShift(db, "Zoe", TenantB);
+        await db.SaveChangesAsync();
+
+        var result = Result(await Controller(db, TenantA).AutoRosterApply(Monday, Rows((theirs.Id, a.Id), (mine.Id, b.Id)), default));
+
+        Assert.Empty(result.Applied);
+        Assert.Equal(2, result.Skipped.Count);
+        Assert.All(await db.Shifts.AsNoTracking().ToListAsync(), s => Assert.Null(s.UserId));
+    }
+
+    [Fact]
+    public async Task AutoRosterApply_AShiftOutsideTheWeek_IsSkipped()
+    {
+        using var db = TestDb.Create();
+        var pat = Staff(db, "Pat", TenantA);
+        var (_, shift) = OpenShift(db, "Mia", TenantA);
+        await db.SaveChangesAsync();
+
+        var result = Result(await Controller(db, TenantA).AutoRosterApply(Monday.AddDays(7), Rows((shift.Id, pat.Id)), default));
+
+        Assert.Empty(result.Applied);
+        Assert.Single(result.Skipped);
+    }
+
+    [Fact]
+    public async Task AutoRosterApply_OverFiveHundredRows_Is400()
+    {
+        using var db = TestDb.Create();
+        var rows = Enumerable.Range(0, 501).Select(_ => (Guid.NewGuid(), Guid.NewGuid())).ToArray();
+
+        Assert.IsType<BadRequestObjectResult>((await Controller(db, TenantA).AutoRosterApply(Monday, Rows(rows), default)).Result);
+    }
+
+    [Fact]
+    public async Task AutoRosterApply_WithNoOrganisationOnTheRequest_Is400()
+    {
+        using var db = TestDb.Create();
+
+        Assert.IsType<BadRequestObjectResult>((await Controller(db, null).AutoRosterApply(Monday, Rows(), default)).Result);
+    }
+
+    [Fact]
+    public async Task AutoRosterApply_ToAPublishedShiftNotifiesTheWorker_AndToADraftShiftDoesNot()
+    {
+        using var db = TestDb.Create();
+        var pat = Staff(db, "Pat", TenantA);
+        var (_, published) = OpenShift(db, "Mia", TenantA);
+        var (_, draft) = OpenShift(db, "Zoe", TenantA);
+        published.Status = ShiftStatus.Published;
+        published.StartTime = new TimeOnly(14, 0); published.EndTime = new TimeOnly(16, 0);   // clear of the draft shift, so Pat can take both
+        await db.SaveChangesAsync();
+
+        Result(await Controller(db, TenantA).AutoRosterApply(Monday, Rows((draft.Id, pat.Id)), default));
+        Assert.Empty(await db.NotificationOutbox.ToListAsync());
+        Result(await Controller(db, TenantA).AutoRosterApply(Monday, Rows((published.Id, pat.Id)), default));
+        Assert.Contains(await db.NotificationOutbox.ToListAsync(), o => o.EntityId == published.Id);
+    }
+
+    [Fact]
+    public void AutoRosterApply_IsAPost_UnderTheCoordinatorAndAboveClassPolicy()
+    {
+        var action = typeof(RosteringController).GetMethod(nameof(RosteringController.AutoRosterApply))!;
+
+        Assert.Equal("weeks/{weekStart}/auto-roster/apply", action.GetCustomAttribute<HttpPostAttribute>()!.Template);
+        Assert.Null(action.GetCustomAttribute<AllowAnonymousAttribute>());
+        Assert.Null(action.GetCustomAttribute<AuthorizeAttribute>());
+        var roles = typeof(RosteringController).GetCustomAttribute<AuthorizeAttribute>()!.Roles!;
+        Assert.Contains("Coordinator", roles);
+        Assert.DoesNotContain("SupportWorker", roles);
+    }
 }
