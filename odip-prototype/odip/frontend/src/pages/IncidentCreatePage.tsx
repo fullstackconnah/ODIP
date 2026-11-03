@@ -13,6 +13,7 @@ import type { CreateIncidentDto, UpdateIncidentDto, IncidentDetailDto } from '@/
 import type { IncidentType, IncidentSeverity, IncidentStatus, QscReportingStatus, ReportableClass } from '@/api/types/enums'
 import { SERVICE_STREAMS, INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS, INCIDENT_STATUS_LABELS, REPORTABLE_CLASS_LABELS, BODY_REGION_LABELS, INJURY_TYPE_LABELS } from '@/api/types/enums'
 import type { BodyRegion, InjuryType } from '@/api/types/enums'
+import { parseEmergencyServices, emergencyServiceEntries } from './incidents/emergencyServices'
 import { RESTRICTIVE_PRACTICE_TYPE_LABELS } from '@/api/types/restrictive-practices'
 import { usePermissions } from '@/lib/permissions'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
@@ -134,6 +135,13 @@ function buildDefaultValues(isEdit: boolean, existingIncident: IncidentDetailDto
       immediateActionsTaken: i.immediateActionsTaken ?? '',
       wereEmergencyServicesCalled: i.wereEmergencyServicesCalled ?? false,
       emergencyServicesDetails: i.emergencyServicesDetails ?? '',
+      emergencyServices: parseEmergencyServices(i.emergencyServices),
+      policeOfficerName: i.policeOfficerName ?? '',
+      policeReference: i.policeReference ?? '',
+      ambulanceOfficerName: i.ambulanceOfficerName ?? '',
+      ambulanceReference: i.ambulanceReference ?? '',
+      fireOfficerName: i.fireOfficerName ?? '',
+      fireReference: i.fireReference ?? '',
       injuries: (i.injuries ?? []).map((inj) => ({ region: inj.region, injuryType: inj.injuryType, description: inj.description })),
       // IN-7: existingId carries the persisted witness id forward so Update can match rows by id
       // and preserve an already-Approved/Declined row's status — see incidentFormSchema's doc
@@ -161,11 +169,12 @@ function buildDefaultValues(isEdit: boolean, existingIncident: IncidentDetailDto
   }
   return {
     serviceType: 'None',
-    severity: 'Medium',
-    incidentType: 'Other',
+    severity: '',
+    incidentType: '',
     status: 'Draft',
     qscReportingStatus: 'NotRequired',
     wereEmergencyServicesCalled: false,
+    emergencyServices: [],
     familyNotified: false,
     supportCoordinatorNotified: false,
     injuries: [],
@@ -258,6 +267,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
   const severity = useWatch({ control, name: 'severity' })
   const tripInstanceId = useWatch({ control, name: 'tripInstanceId' })
   const wereEmergencyCalled = useWatch({ control, name: 'wereEmergencyServicesCalled' })
+  const emergencyServices = useWatch({ control, name: 'emergencyServices' })
   const familyNotified = useWatch({ control, name: 'familyNotified' })
   const supportCoordinatorNotified = useWatch({ control, name: 'supportCoordinatorNotified' })
   const involvedParticipantId = useWatch({ control, name: 'involvedParticipantId' })
@@ -366,11 +376,11 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
     reset({
       serviceType: 'None',
       incidentType: suggestedIncidentTypeForShiftNote(shiftNotePrefill),
-      severity: 'Medium',
       title: buildShiftNoteIncidentTitleSkeleton(shiftNotePrefill),
       description: buildShiftNoteIncidentDescriptionSkeleton(shiftNotePrefill),
       involvedParticipantId: shiftNotePrefill.participantId,
       reportedByStaffId: lockedReporterId ?? shiftNotePrefill.reportedByUserId ?? '',
+      severity: '',
       incidentDateTime: buildShiftNoteIncidentDateTime(shiftNotePrefill),
       status: 'Draft',
       qscReportingStatus: 'NotRequired',
@@ -456,6 +466,14 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
       immediateActionsTaken: data.immediateActionsTaken || undefined,
       wereEmergencyServicesCalled: data.wereEmergencyServicesCalled ?? false,
       emergencyServicesDetails: data.emergencyServicesDetails || undefined,
+      emergencyServices: data.wereEmergencyServicesCalled && data.emergencyServices?.length ? data.emergencyServices.join(', ') : 'None',
+      // The server nulls a service's fields while it is unticked; a blank is simply not sent.
+      policeOfficerName: data.policeOfficerName?.trim() || undefined,
+      policeReference: data.policeReference?.trim() || undefined,
+      ambulanceOfficerName: data.ambulanceOfficerName?.trim() || undefined,
+      ambulanceReference: data.ambulanceReference?.trim() || undefined,
+      fireOfficerName: data.fireOfficerName?.trim() || undefined,
+      fireReference: data.fireReference?.trim() || undefined,
       injuries: data.incidentType === 'Injury' ? (data.injuries as CreateIncidentDto['injuries']) : [],
       // IN-7: existingId (set only for a row echoed back from a persisted incident) becomes the
       // wire-format `id` the backend matches on to preserve an already-Approved/Declined row —
@@ -580,7 +598,12 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
         { label: 'Location', value: getValues('location') || '—' },
         { label: 'Description', value: getValues('description') || '—' },
         { label: 'Immediate Actions Taken', value: getValues('immediateActionsTaken') || '—' },
-        { label: 'Emergency Services Called', value: wereEmergencyCalled ? 'Yes' : 'No' },
+        { label: 'Emergency Services Called', value: wereEmergencyCalled && emergencyServices?.length ? `Yes: ${emergencyServices.join(', ')}` : wereEmergencyCalled ? 'Yes' : 'No' },
+        ...(wereEmergencyCalled ? emergencyServiceEntries(emergencyServices ?? [], {
+          policeOfficerName: getValues('policeOfficerName'), policeReference: getValues('policeReference'),
+          ambulanceOfficerName: getValues('ambulanceOfficerName'), ambulanceReference: getValues('ambulanceReference'),
+          fireOfficerName: getValues('fireOfficerName'), fireReference: getValues('fireReference'),
+        }).filter((e) => e.name || e.ref).map((e) => ({ label: e.service, value: [e.name, e.ref && `ref ${e.ref}`].filter(Boolean).join(', ') })) : []),
         ...(incidentType === 'Injury' ? [{
           label: 'Injuries',
           value: (getValues('injuries') ?? []).map((inj) => `${BODY_REGION_LABELS[inj.region as BodyRegion] ?? inj.region} (${INJURY_TYPE_LABELS[inj.injuryType as InjuryType] ?? inj.injuryType})`).join('; ') || 'None recorded',
@@ -729,9 +752,11 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
           <IncidentDetailsStep
             register={register}
             control={control}
+            setValue={setValue}
             errors={errors}
             incidentType={incidentType}
             wereEmergencyServicesCalled={wereEmergencyCalled}
+            emergencyServices={emergencyServices}
           />
         )}
 

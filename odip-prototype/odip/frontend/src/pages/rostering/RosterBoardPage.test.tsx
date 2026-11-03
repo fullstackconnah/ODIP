@@ -559,7 +559,7 @@ describe('RosterBoardPage — ?participant= and ?unfilled= open the board alread
     expect(shown('Ben Ito')).toBe(true)
     expect(shown('Amy Ng')).toBe(false)
 
-    await user.click(screen.getAllByRole('button').find(button => button.getAttribute('aria-haspopup') === 'listbox')!)     // the toolbar's own filter still works
+    await user.click(screen.getAllByRole('button').find(button => button.getAttribute('aria-haspopup') === 'listbox' && button.textContent !== 'New')!)     // the toolbar's own filter still works
     await user.click(await screen.findByRole('option', { name: 'All participants' }))
     expect(shown('Amy Ng')).toBe(true)
   })
@@ -697,5 +697,38 @@ describe('RosterBoardPage — ?shift= opens a shift, and the week stays in the a
     expect(params.get('participant')).toBe('p-1')
     expect(router.state.historyAction).toBe('REPLACE')
     expect(mockUseRosterBoard.mock.calls.at(-1)?.[0]).toBe('2026-08-24')
+  })
+})
+
+// Roster declutter (2026-11-03): one create control in the title row, a menu, where "New shift" used to be.
+describe('RosterBoardPage: the New menu', () => {
+  const openMenu = async (user: ReturnType<typeof userEvent.setup>) => {
+    mockUseRosterBoard.mockReturnValue({ data: makeParticipantBoard(), isLoading: false, isError: false, refetch: vi.fn() })
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const router = createMemoryRouter([{ path: '/rostering', element: <RosterBoardPage /> }, { path: '/trips/new', element: <p>Trip form</p> }], { initialEntries: ['/rostering'] })
+    render(<QueryClientProvider client={queryClient}><RouterProvider router={router} /></QueryClientProvider>)
+    await user.click(screen.getByRole('button', { name: 'New' }))
+    return router
+  }
+
+  it('is the only create control: no New shift button, and the menu lists Shift first, then Trip', async () => {
+    const user = userEvent.setup()
+    await openMenu(user)
+    expect(screen.queryByRole('button', { name: 'New shift' })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('option').map(o => o.textContent)).toEqual(['Shift', 'Trip'])
+  })
+
+  it('Shift opens the create panel on the week shown', async () => {
+    const user = userEvent.setup()
+    await openMenu(user)
+    await user.click(screen.getByRole('option', { name: 'Shift' }))
+    expect(await screen.findByRole('dialog', { name: 'New shift' })).toBeInTheDocument()
+  })
+
+  it('Trip goes to the trip create page', async () => {
+    const user = userEvent.setup()
+    const router = await openMenu(user)
+    await user.click(screen.getByRole('option', { name: 'Trip' }))
+    expect(router.state.location.pathname).toBe('/trips/new')
   })
 })

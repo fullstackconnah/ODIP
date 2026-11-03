@@ -1363,6 +1363,7 @@ public record StaffListDto
     /// <summary>Display-only staff position/title — separate from and unrelated to <see cref="Role"/>.</summary>
     public Position Position { get; init; }
     public EmploymentType? EmploymentType { get; init; }
+    public decimal? GoalWeeklyHours { get; init; }
     public string? Email { get; init; }
     public string? Mobile { get; init; }
     public string? Region { get; init; }
@@ -1469,6 +1470,11 @@ public record CreateStaffDto
     public UserRole Role { get; init; } = UserRole.SupportWorker;
     public Position Position { get; init; }
     public EmploymentType? EmploymentType { get; init; }
+    /// <summary>Hours a week this person aims to work: 0 to 80 in half-hours, null to use the default for their employment type.</summary>
+    public decimal? GoalWeeklyHours { get; init; }
+    /// <summary>The 400 message for a goal outside 0 to 80 or off the half-hour, else null. Checked in the controller (not an attribute) so a direct call is refused too.</summary>
+    public string? GoalHoursError() =>
+        GoalWeeklyHours is { } hours && (hours < 0 || hours > 80 || hours % 0.5m != 0) ? "Goal hours a week must be from 0 to 80, in half-hours." : null;
     [StringLength(50)]
     public string? Mobile { get; init; }
     [StringLength(100)]
@@ -2198,6 +2204,13 @@ public record IncidentDetailDto : IncidentListDto
     public string? ImmediateActionsTaken { get; init; }
     public bool WereEmergencyServicesCalled { get; init; }
     public string? EmergencyServicesDetails { get; init; }
+    public EmergencyService EmergencyServices { get; init; }
+    public string? PoliceOfficerName { get; init; }
+    public string? AmbulanceOfficerName { get; init; }
+    public string? FireOfficerName { get; init; }
+    public string? PoliceReference { get; init; }
+    public string? AmbulanceReference { get; init; }
+    public string? FireReference { get; init; }
     public string? WitnessNames { get; init; }
     public string? WitnessStatements { get; init; }
     /// <summary>IN-5: recorded injuries, populated only when <see cref="IncidentListDto.IncidentType"/> is <see cref="IncidentType.Injury"/> (empty list otherwise).</summary>
@@ -2329,6 +2342,20 @@ public record CreateIncidentDto
     public bool WereEmergencyServicesCalled { get; init; }
     [StringLength(2000)]
     public string? EmergencyServicesDetails { get; init; }
+    /// <summary>Null = not sent (a client from before services existed): Update leaves the stored services and their names and references alone.</summary>
+    public EmergencyService? EmergencyServices { get; init; }
+    [StringLength(100)]
+    public string? PoliceOfficerName { get; init; }
+    [StringLength(100)]
+    public string? AmbulanceOfficerName { get; init; }
+    [StringLength(100)]
+    public string? FireOfficerName { get; init; }
+    [StringLength(50)]
+    public string? PoliceReference { get; init; }
+    [StringLength(50)]
+    public string? AmbulanceReference { get; init; }
+    [StringLength(50)]
+    public string? FireReference { get; init; }
     [StringLength(1000)]
     public string? WitnessNames { get; init; }
     [StringLength(4000)]

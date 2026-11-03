@@ -1364,6 +1364,14 @@ namespace Odip.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AmbulanceOfficerName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("AmbulanceReference")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
                     b.Property<DateTime?>("AwareAt")
                         .HasColumnType("timestamp without time zone");
 
@@ -1392,6 +1400,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<bool>("DueCountedWithoutHolidays")
                         .HasColumnType("boolean");
 
+                    b.Property<int>("EmergencyServices")
+                        .HasColumnType("integer");
+
                     b.Property<string>("EmergencyServicesDetails")
                         .HasColumnType("text");
 
@@ -1400,6 +1411,14 @@ namespace Odip.Infrastructure.Migrations
 
                     b.Property<DateTime?>("FamilyNotifiedAt")
                         .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("FireOfficerName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("FireReference")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<string>("ImmediateActionsTaken")
                         .HasColumnType("text");
@@ -1436,6 +1455,14 @@ namespace Odip.Infrastructure.Migrations
 
                     b.Property<Guid?>("ParticipantBookingId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("PoliceOfficerName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("PoliceReference")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<string>("QscReferenceNumber")
                         .HasColumnType("text");
@@ -4288,6 +4315,10 @@ namespace Odip.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<string>("CommissionReference")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
                     b.Property<DateOnly?>("ComprehensiveBspDate")
                         .HasColumnType("date");
 
@@ -5360,6 +5391,9 @@ namespace Odip.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<decimal?>("GoalWeeklyHours")
+                        .HasColumnType("numeric");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");

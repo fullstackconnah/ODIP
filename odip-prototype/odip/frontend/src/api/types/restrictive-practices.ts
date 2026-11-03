@@ -68,6 +68,8 @@ export interface RestrictivePracticeDto {
   relatedMedicationStatus?: MedicationStatus | null
   /** Whether this needs reporting to the NDIS Commission; null until someone answers. */
   requiresReporting?: boolean | null
+  /** The ID the NDIS Commission portal gave this practice or its behaviour support plan. */
+  commissionReference?: string | null
   isActive: boolean
   /** The server's one "Authorised" verdict (active, who and when recorded, dated on or before the organisation's today). Show it; never recompute it. */
   isAuthorised: boolean
@@ -92,6 +94,8 @@ export interface UpdateRestrictivePracticeDto {
   relatedMedicationId?: string | null
   /** null or absent leaves the stored answer as it is. */
   requiresReporting?: boolean | null
+  /** Absent leaves the stored value; a blank string clears it. */
+  commissionReference?: string
   isActive: boolean
   /** The version the form loaded: the server answers 409 if the entry changed since. */
   expectedUpdatedAt?: string

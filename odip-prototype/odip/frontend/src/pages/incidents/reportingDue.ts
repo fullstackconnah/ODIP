@@ -2,7 +2,7 @@ import type { IncidentSeverity, IncidentType, QscReportingStatus, ReportableClas
 import { toDatetimeInputValue } from '@/lib/wallClock'
 
 // Mirrors QscReporting.DefaultClass on the server: a critical incident, one of these types, an unauthorised restrictive practice, or a restrictive practice use that was not both authorised and used as set out in the plan is due within 24 hours.
-const REQUIRED_TYPES: readonly IncidentType[] = ['Abuse', 'Neglect', 'Death', 'MissingPerson']
+const REQUIRED_TYPES: readonly IncidentType[] = ['SexualAbuse', 'Abuse', 'Neglect', 'Death', 'MissingPerson']
 
 export function defaultReportableClass(
   severity: IncidentSeverity | string | undefined,

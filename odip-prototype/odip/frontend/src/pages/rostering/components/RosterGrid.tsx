@@ -1,3 +1,4 @@
+import { useRef, type ReactNode, type RefObject } from 'react'
 import type { RosterBoardDto, ShiftDto } from '@/api/types'
 import { UnfilledLane } from './UnfilledLane'
 import { StaffRow } from './StaffRow'
@@ -18,8 +19,10 @@ export type RosterGridProps = {
   onDeleteShift: (shift: ShiftDto) => void
   onAddParticipantShift: (participantId: string, participantName: string, day: string) => void
   onAddStaffShift: (staffId: string, day: string) => void
-  /** Roster drag and drop: the Participant view's rows get grips and drop targets, and the frame makes room for the staff strip the page shows above it. */
+  /** Roster drag and drop: the Participant view's rows get grips and drop targets. */
   draggable?: boolean
+  /** The staff strip: rendered inside the sticky band, above the day header, so it stays in view through a drag. */
+  strip?: ReactNode
 }
 
 /**
@@ -49,22 +52,44 @@ const STICKY_COL = `var(--roster-sticky-col, ${ROSTER_STICKY_COL_WIDTH}px)`
 const GRID_TEMPLATE = { gridTemplateColumns: `${STICKY_COL} repeat(7, minmax(${ROSTER_DAY_COL_MIN}, 1fr))` }
 
 /**
- * The board's scroll frame. From md up it is height-capped so the board scrolls INSIDE it and the day
- * header row genuinely stays pinned: a sticky header only sticks to its nearest scroller, and this
- * wrapper used to be one with no height limit, so `top-0` never engaged. The sticky first column pins
- * horizontally in the same frame. 11.5rem is the page chrome above the board (app bar, header, toolbar)
- * plus the bottom gutter; the 20rem floor keeps a short window usable. `min-[1500px]:[--roster-sticky-col:280px]`
- * is the wide-screen column width (see STICKY_COL).
+ * The week is the page (roster declutter, 2026-11-03): the WINDOW scrolls, never the board. The body frame has no height cap and scrolls sideways only (the Column Rule: a table wider than its box scrolls
+ * sideways inside its own box). A sticky header only sticks to its nearest scroller and any overflow-x ancestor is one, so the day header is split off into its own band that sticks under the app bar,
+ * with the staff strip above it; the two scrollers share one scrollLeft (Frames). `min-[1500px]:[--roster-sticky-col:280px]` is the wide-screen column width (see STICKY_COL), set on the root so both read it.
  */
-const FRAME = 'overflow-auto scroll-pt-9 rounded-[var(--radius-md)] border border-border min-[1500px]:[--roster-sticky-col:280px]'
-// The page reports what the fixed 11.5rem cannot know, so nothing above the board pushes the frame past one screen: --roster-notice-h, an error notice's height
-// (finish review fix 5), and --roster-toolbar-extra, the toolbar's height past one row of controls when it wraps (two rows at 1280).
-const BOARD_FRAME = `${FRAME} md:max-h-[max(20rem,calc(100dvh_-_11.5rem_-_var(--roster-notice-h,0px)_-_var(--roster-fill-h,0px)_-_var(--roster-toolbar-extra,0px)))]`
-// With the staff strip above it (StaffStrip: two --control-h rows and a 0.5rem gap, --card-pad top and bottom, a 1px border each side) and the page's --section-gap between them, the
-// chrome allowance grows by exactly that: strip and grid share one viewport, the page never scrolls, and the strip stays in view through a drag.
-const BOARD_FRAME_WITH_STRIP = `${FRAME} md:max-h-[max(20rem,calc(100dvh_-_11.5rem_-_2*var(--control-h)_-_0.5rem_-_2*var(--card-pad)_-_2px_-_var(--section-gap)_-_var(--roster-notice-h,0px)_-_var(--roster-fill-h,0px)_-_var(--roster-toolbar-extra,0px)))]`
+const ROOT = 'min-[1500px]:[--roster-sticky-col:280px]'
+// 3rem is the app bar (AppLayout), 9rem = that + the band (strip 52 + header 34, rounded up): a keyboard-focused chip never rests under the band.
+const BAND = 'sticky top-[calc(3rem+var(--safe-top))] z-20 bg-[var(--color-background)]'
+const HEAD_FRAME = 'overflow-x-auto overflow-y-hidden [scrollbar-width:none] rounded-t-[var(--radius-md)] border border-b-0 border-border'
+const BODY_FRAME = 'overflow-x-auto overflow-y-hidden rounded-b-[var(--radius-md)] border border-t-0 border-border [&_:is(button,a,[tabindex])]:scroll-mt-36'
 // Keeps a keyboard-focused chip from scrolling to rest underneath the pinned first column.
 const BOARD_FRAME_STYLE = { scrollPaddingLeft: STICKY_COL }
+
+type Scroller = RefObject<HTMLDivElement | null>
+/** Copies one scroller's scrollLeft to the other only when they differ, so the pair never loops. */
+const follow = (from: Scroller, to: Scroller) => {
+  const a = from.current
+  const b = to.current
+  if (a && b && a.scrollLeft !== b.scrollLeft) b.scrollLeft = a.scrollLeft
+}
+
+/** The sticky band (strip + day header) over the uncapped body, shared by the board and its skeleton. */
+function Frames({ strip, header, hidden, children }: { strip?: ReactNode; header: ReactNode; hidden?: boolean; children: ReactNode }) {
+  const headRef = useRef<HTMLDivElement>(null)
+  const bodyRef = useRef<HTMLDivElement>(null)
+  return (
+    <div className={ROOT} aria-hidden={hidden || undefined}>
+      <div className={BAND}>
+        {strip}
+        <div ref={headRef} onScroll={() => follow(headRef, bodyRef)} className={HEAD_FRAME} style={BOARD_FRAME_STYLE}>
+          <div className="grid" style={GRID_TEMPLATE}>{header}</div>
+        </div>
+      </div>
+      <div ref={bodyRef} onScroll={() => follow(bodyRef, headRef)} className={BODY_FRAME} style={BOARD_FRAME_STYLE}>
+        <div className="grid" style={GRID_TEMPLATE}>{children}</div>
+      </div>
+    </div>
+  )
+}
 
 // Opaque tints on purpose: the header row is sticky, so anything scrolling underneath must not show
 // through it. (`bg-primary/5` alone is translucent, and stacked with bg-surface-container-low the two
@@ -78,27 +103,29 @@ const HEADER_BG_TODAY = 'bg-[color-mix(in_srgb,var(--color-primary)_6%,var(--col
  * Never swap this out for an empty state; guidance for a first-time/empty week belongs in a
  * dismissible hint the caller renders above this component.
  */
-export function RosterGrid({ board, canWrite, unfilledOnly, weekHasNoShifts, onOpenShift, onAssignTo, onUnassign, onSetRegular, onDeleteShift, onAddParticipantShift, onAddStaffShift, draggable }: RosterGridProps) {
+export function RosterGrid({ board, canWrite, unfilledOnly, weekHasNoShifts, onOpenShift, onAssignTo, onUnassign, onSetRegular, onDeleteShift, onAddParticipantShift, onAddStaffShift, draggable, strip }: RosterGridProps) {
   const { days } = board
 
-  return (
-    <div className={draggable ? BOARD_FRAME_WITH_STRIP : BOARD_FRAME} style={BOARD_FRAME_STYLE}>
-      <div className="grid" style={GRID_TEMPLATE}>
-        {/* Header row */}
-        <div className={`sticky left-0 top-0 z-30 border-b border-r border-border ${HEADER_BG}`} />
+  const header = (
+    <>
+      <div className={`sticky left-0 z-30 border-b border-r border-border ${HEADER_BG}`} />
+      {/* The rows' own strip (gap-x-1 px-1), so each day's header sits exactly over that day's cells. */}
+      <div className={`grid gap-x-1 border-b border-border px-1 ${HEADER_BG}`} style={{ gridColumn: '2 / -1', gridTemplateColumns: rosterDayColumnsTemplate(7) }}>
         {days.map(day => {
           const { weekday, day: dayNum } = formatDayHeader(day)
           return (
-            <div
-              key={day}
-              className={`sticky top-0 z-20 flex items-baseline gap-1.5 border-b border-border px-3 py-1.5 ${isToday(day) ? HEADER_BG_TODAY : HEADER_BG}`}
-            >
+            <div key={day} className={`flex items-baseline gap-1.5 rounded-sm px-2 py-1.5 ${isToday(day) ? HEADER_BG_TODAY : ''}`}>
               <span className="text-sm font-semibold leading-5 text-foreground">{weekday}</span>
               <span className="text-[13px] tabular-nums text-muted-foreground">{dayNum}</span>
             </div>
           )
         })}
+      </div>
+    </>
+  )
 
+  return (
+    <Frames strip={strip} header={header}>
         {board.groupBy === 'Participant' ? (
           board.participantRows.map(row => (
             <ParticipantRow
@@ -144,8 +171,7 @@ export function RosterGrid({ board, canWrite, unfilledOnly, weekHasNoShifts, onO
             ))}
           </>
         )}
-      </div>
-    </div>
+    </Frames>
   )
 }
 
@@ -155,14 +181,18 @@ export function RosterGrid({ board, canWrite, unfilledOnly, weekHasNoShifts, onO
  */
 export function RosterGridSkeleton({ days }: { days: string[] }) {
   return (
-    <div className={BOARD_FRAME} style={BOARD_FRAME_STYLE} aria-hidden="true">
-      <div className="grid" style={GRID_TEMPLATE}>
-        <div className={`sticky left-0 top-0 z-30 border-b border-r border-border ${HEADER_BG}`} />
-        {days.map(day => (
-          <div key={day} className={`sticky top-0 z-20 flex items-center border-b border-border px-3 py-1.5 ${HEADER_BG}`}>
-            <div className="h-5 w-16 animate-pulse rounded-sm bg-muted" />
-          </div>
-        ))}
+    <Frames hidden header={(
+      <>
+        <div className={`sticky left-0 z-30 border-b border-r border-border ${HEADER_BG}`} />
+        <div className={`grid gap-x-1 border-b border-border px-1 ${HEADER_BG}`} style={{ gridColumn: '2 / -1', gridTemplateColumns: rosterDayColumnsTemplate(7) }}>
+          {days.map(day => (
+            <div key={day} className="flex items-center px-2 py-1.5">
+              <div className="h-5 w-16 animate-pulse rounded-sm bg-muted" />
+            </div>
+          ))}
+        </div>
+      </>
+    )}>
 
         {Array.from({ length: 5 }, (_, rowIdx) => (
           <div key={rowIdx} className="contents">
@@ -179,7 +209,6 @@ export function RosterGridSkeleton({ days }: { days: string[] }) {
             </div>
           </div>
         ))}
-      </div>
-    </div>
+    </Frames>
   )
 }

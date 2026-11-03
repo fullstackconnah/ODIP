@@ -18,9 +18,9 @@ export const incidentBaseSchema = z.object({
   involvedStaffId: z.string().optional(),
   serviceType: z.string().optional(),
   tripInstanceId: z.string().optional(),
-  incidentType: z.string().min(1, 'Incident type is required'),
+  incidentType: z.string().min(1, 'Choose an incident type.'),
   otherTypeSpecify: z.string().optional(),
-  severity: z.string().min(1, 'Severity is required'),
+  severity: z.string().min(1, 'Choose a severity level.'),
 
   // Step 1 — Restrictive Practice (IN-4), conditional (incidentType === 'RestrictivePracticeUse')
   restrictivePracticeType: z.string().optional(),
@@ -41,6 +41,14 @@ export const incidentBaseSchema = z.object({
   immediateActionsTaken: z.string().optional(),
   wereEmergencyServicesCalled: z.boolean().optional(),
   emergencyServicesDetails: z.string().optional(),
+  /** Which services attended, in the order Police, Ambulance, Fire. Each ticked one may carry an officer name and a reference. */
+  emergencyServices: z.array(z.enum(['Police', 'Ambulance', 'Fire'])).optional(),
+  policeOfficerName: z.string().max(100, 'Keep this under 100 characters.').optional(),
+  policeReference: z.string().max(50, 'Keep this under 50 characters.').optional(),
+  ambulanceOfficerName: z.string().max(100, 'Keep this under 100 characters.').optional(),
+  ambulanceReference: z.string().max(50, 'Keep this under 50 characters.').optional(),
+  fireOfficerName: z.string().max(100, 'Keep this under 100 characters.').optional(),
+  fireReference: z.string().max(50, 'Keep this under 50 characters.').optional(),
   injuries: z.array(z.object({
     region: z.string().min(1, 'Region is required'),
     injuryType: z.string().min(1, 'Injury type is required'),
@@ -105,7 +113,8 @@ export const STEP_RESTRICTIVE_PRACTICE_FIELDS = [
 
 export const STEP_DETAILS_FIELDS = [
   'incidentDateTime', 'location', 'description', 'immediateActionsTaken',
-  'wereEmergencyServicesCalled', 'emergencyServicesDetails', 'injuries',
+  'wereEmergencyServicesCalled', 'emergencyServicesDetails', 'emergencyServices',
+  'policeOfficerName', 'policeReference', 'ambulanceOfficerName', 'ambulanceReference', 'fireOfficerName', 'fireReference', 'injuries',
 ] as const satisfies readonly (keyof IncidentFormData)[]
 
 export const STEP_WITNESSES_FIELDS = [

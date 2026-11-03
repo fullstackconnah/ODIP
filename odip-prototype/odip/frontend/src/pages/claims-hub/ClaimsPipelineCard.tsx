@@ -11,22 +11,22 @@ import { TAP_AREA } from '@/components/tapArea'
 import { retryingAfterError } from '@/lib/queryPhase'
 import { ClaimsPipelineChart } from './ClaimsPipelineChart'
 import {
-  FOOTNOTE_SAMPLE, PIPELINE_ERROR, PIPELINE_LOADING, PIPELINE_SCOPE, PIPELINE_STALE, PIPELINE_TITLE, SENTENCE_SAMPLE, pipelineSentence, rejectedLink, undatedFootnote, weeksEmpty,
+  FOOTNOTE_SAMPLE, PIPELINE_ERROR, PIPELINE_LOADING, PIPELINE_SCOPE, PIPELINE_STALE, PIPELINE_TITLE, SENTENCE_SAMPLE, pipelineSentence, undatedFootnote, weeksEmpty,
 } from './claimsPipeline'
 
-// Above the claims hub's files strip: dollars sent to the NDIA and paid in each of the last 12 weeks, and where the money stands today (shape brief 2026-11-01).
+// Below the claims hub's To do strip: dollars sent to the NDIA and paid in each of the last 12 weeks, and where the money stands today (shape brief 2026-11-01).
 // Its own request, loading and failure, and each says the rest of the page is unaffected. The hide choice is remembered per device.
 
 const HIDDEN_KEY = 'odip.claims.pipelineHidden'
 
-export function ClaimsPipelineCard({ rejectedCount, onShowRejected }: { rejectedCount: number; onShowRejected: () => void }) {
+export function ClaimsPipelineCard() {
   const query = useClaimPipeline()
   const [measuredPlot, plotBoxRef] = useElementWidth()
   const plotWidth = measuredPlot ?? 0
   const [stored, setStored] = useState<boolean | null>(() => readHidden(HIDDEN_KEY))
   const bodyId = useId()
   const sentenceId = useId()
-  const hidden = stored ?? false
+  const hidden = stored ?? true
   const toggle = () => { writeHidden(HIDDEN_KEY, !hidden); setStored(!hidden) }
 
   const titleRow = (toggleButton: boolean) => (
@@ -73,9 +73,6 @@ export function ClaimsPipelineCard({ rejectedCount, onShowRejected }: { rejected
   }
 
   const data = query.data
-  const link = rejectedCount > 0 && (
-    <button type="button" className={`${TAP_AREA} mt-1 text-sm font-medium text-[var(--color-primary)] hover:underline`} onClick={onShowRejected}>{rejectedLink(rejectedCount)}</button>
-  )
 
   if (weeksEmpty(data)) {
     return (
@@ -83,7 +80,6 @@ export function ClaimsPipelineCard({ rejectedCount, onShowRejected }: { rejected
         <Card>
           {titleRow(false)}
           <p className="mt-2 max-w-prose text-sm">{pipelineSentence(data)}</p>
-          {link}
           {data.undatedPaid > 0 && <p className="mt-2 text-[13px] text-[var(--color-muted-foreground)]">{undatedFootnote(data.undatedPaid)}</p>}
         </Card>
       </div>
@@ -95,7 +91,6 @@ export function ClaimsPipelineCard({ rejectedCount, onShowRejected }: { rejected
       <Card>
         {titleRow(true)}
         <p id={sentenceId} className="mt-2 max-w-prose text-sm text-[var(--color-foreground)]">{pipelineSentence(data)}</p>
-        {link}
         <div id={bodyId} hidden={hidden}>
           <div data-legend className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
             <span className="flex whitespace-nowrap"><ChartKey mark="sent" label="Sent" /></span>

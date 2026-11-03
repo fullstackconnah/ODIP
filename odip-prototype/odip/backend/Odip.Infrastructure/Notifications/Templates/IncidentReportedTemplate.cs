@@ -12,11 +12,16 @@ public record IncidentReportedPayload(string RecipientEmail, string ReportedByNa
 
 public static class IncidentReportedTemplate
 {
-    public static NotificationMessage Render(IncidentReportedPayload p, string baseUrl) => new(
-        RecipientAddress: p.RecipientEmail,
-        Subject: $"Incident reported: {p.IncidentType} ({p.Severity})",
-        PlainTextBody: $"{p.ReportedByName} reported a {p.Severity} {p.IncidentType} incident.\n\n" +
-                       $"Review it: {baseUrl}/incidents",
-        HtmlBody: $"<p>{Html.E(p.ReportedByName)} reported a {Html.E(p.Severity)} {Html.E(p.IncidentType)} incident.</p>" +
-                  $"<p><a href=\"{Html.Attr(baseUrl)}/incidents\">Review it</a></p>");
+    // The payload carries the enum name; the email reads it in words ("sexual abuse", not "SexualAbuse"), as the in-app text does.
+    public static NotificationMessage Render(IncidentReportedPayload p, string baseUrl)
+    {
+        var type = InAppNotificationText.Words(p.IncidentType);
+        return new(
+            RecipientAddress: p.RecipientEmail,
+            Subject: $"Incident reported: {type} ({p.Severity})",
+            PlainTextBody: $"{p.ReportedByName} reported a {p.Severity} {type} incident.\n\n" +
+                           $"Review it: {baseUrl}/incidents",
+            HtmlBody: $"<p>{Html.E(p.ReportedByName)} reported a {Html.E(p.Severity)} {Html.E(type)} incident.</p>" +
+                      $"<p><a href=\"{Html.Attr(baseUrl)}/incidents\">Review it</a></p>");
+    }
 }

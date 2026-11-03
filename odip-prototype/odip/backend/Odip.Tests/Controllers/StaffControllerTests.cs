@@ -128,6 +128,43 @@ public class StaffControllerTests
         Assert.Equal(new DateOnly(2028, 1, 15), reloaded.WorkerScreeningExpiryDate);
     }
 
+    private static UpdateStaffDto GoalDto(decimal? goal) => new()
+    {
+        FirstName = "Gail", LastName = "Hours", Email = "gail.hours@example.com", Position = Position.SupportWorker, IsActive = true, GoalWeeklyHours = goal,
+    };
+
+    [Fact]
+    public async Task GoalWeeklyHours_IsSavedReadAndCleared_OnCreateAndUpdate()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString(), Guid.NewGuid());
+        var controller = new StaffController(db) { ControllerContext = AdminContext() };
+        var created = Assert.IsType<ApiResponse<StaffDetailDto>>(Assert.IsType<CreatedAtActionResult>((await controller.Create(GoalDto(24.5m), default)).Result).Value);
+        Assert.Equal(24.5m, created.Data!.GoalWeeklyHours);
+
+        var saved = Assert.IsType<ApiResponse<StaffDetailDto>>(Assert.IsType<OkObjectResult>((await controller.Update(created.Data.Id, GoalDto(38m), default)).Result).Value);
+        Assert.Equal(38m, saved.Data!.GoalWeeklyHours);
+        Assert.Equal(38m, (await db.Users.SingleAsync(s => s.Id == created.Data.Id)).GoalWeeklyHours);
+
+        var cleared = Assert.IsType<ApiResponse<StaffDetailDto>>(Assert.IsType<OkObjectResult>((await controller.Update(created.Data.Id, GoalDto(null), default)).Result).Value);
+        Assert.Null(cleared.Data!.GoalWeeklyHours);
+        Assert.Null((await db.Users.SingleAsync(s => s.Id == created.Data.Id)).GoalWeeklyHours);
+    }
+
+    [Theory]
+    [InlineData(81)]
+    [InlineData(-1)]
+    [InlineData(20.25)]
+    public async Task GoalWeeklyHours_OutsideZeroToEightyInHalfHours_Is400_AndChangesNothing(double goal)
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString(), Guid.NewGuid());
+        var controller = new StaffController(db) { ControllerContext = AdminContext() };
+        var created = Assert.IsType<ApiResponse<StaffDetailDto>>(Assert.IsType<CreatedAtActionResult>((await controller.Create(GoalDto(30m), default)).Result).Value);
+
+        Assert.IsType<BadRequestObjectResult>((await controller.Update(created.Data!.Id, GoalDto((decimal)goal), default)).Result);
+        Assert.IsType<BadRequestObjectResult>((await controller.Create(GoalDto((decimal)goal), default)).Result);
+        Assert.Equal(30m, (await db.Users.SingleAsync(s => s.Id == created.Data.Id)).GoalWeeklyHours);
+    }
+
     [Fact]
     public async Task Update_LeavesTheEmploymentHeroStartDateAlone_AndEveryStaffResponseShowsIt()
     {

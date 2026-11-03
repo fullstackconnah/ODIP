@@ -1,6 +1,5 @@
 import { AlertCircle } from 'lucide-react'
 import type { ParticipantInquiryDto } from '@/api/types/inquiries'
-import { Button } from '@/components/Button'
 import { StatusBadge } from '@/components/StatusBadge'
 import { TAP_AREA } from '@/components/tapArea'
 import { DEFAULT_DURATION, FALLBACK_ZONE, inviteLine, isPastVisit, unbroken, visitWhen } from '@/lib/intakeBooking'
@@ -13,19 +12,14 @@ type IntakeCellProps = { row: ParticipantInquiryDto; canManage: boolean; onOpen:
  * The enquiry table's Intake cell (SHAPE.md section 1):
  * - line 1 is the booking ("Fri 16 Oct, 10:00 am · Sam"), which opens the panel;
  * - line 2 is the reply badge (Not confirmed, Confirmed or Past), then what the latest invite did;
- * - Book intake when there is no booking; a dash for a direct intake (no enquiry) and for a read-only viewer's empty cell.
- * Each control carries `data-intake-control` (the enquiry id): the page focuses it after the panel closes, a cancel, or a dismissed notice.
+ * - muted "Not booked" when there is no booking; a dash for a direct intake (no enquiry).
+ * Each control carries `data-intake-control` (the enquiry id; the visit button here, else the row's Next step button): the page focuses it after the panel closes, a cancel, or a dismissed notice.
  */
 export function IntakeCell({ row, canManage, onOpen, now = new Date() }: IntakeCellProps) {
   const name = fullName(row.firstName, row.lastName)
   if (row.isDirectIntake) return <span>—</span>
-  if (!row.intakeStartsAt) {
-    return canManage ? (
-      <Button size="sm" variant="secondary" data-intake-control={row.id} className="max-md:min-h-11" onClick={() => onOpen(row)}>
-        Book intake<span className="sr-only"> for {name}</span>
-      </Button>
-    ) : <span>—</span>
-  }
+  // Booking it is the row's Next step (or its menu), not a button here.
+  if (!row.intakeStartsAt) return <span className="text-[var(--color-muted-foreground)]">Not booked</span>
   const past = isPastVisit(row.intakeStartsAt, row.intakeDurationMinutes ?? DEFAULT_DURATION, now)
   const when = visitWhen(row.intakeStartsAt, row.timeZoneId || FALLBACK_ZONE, now)
   const label = [when, row.intakeStaffFirstName].filter(Boolean).join(' · ')
