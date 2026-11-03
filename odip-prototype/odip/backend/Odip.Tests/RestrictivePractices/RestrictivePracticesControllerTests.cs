@@ -349,6 +349,29 @@ public class RestrictivePracticesControllerTests
     }
 
     [Fact]
+    public async Task Update_CommissionReference_RoundTrips_TrimsAndClearsOnBlank_AndNullLeavesIt()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var practice = SeedDatedEntry(db, SeedParticipant(db).Id);
+        var controller = new RestrictivePracticesController(db, new SafetyNoteSyncService(db));
+        UpdateRestrictivePracticeDto Dto(string? reference) => new()
+        {
+            Type = RestrictivePracticeType.PhysicalRestraint, Description = "d", AuthorisedBy = "Dr. Nguyen", AuthorisationDate = new DateOnly(2026, 1, 1), IsActive = true,
+            CommissionReference = reference,
+        };
+
+        var ok = Assert.IsType<OkObjectResult>((await controller.Update(practice.Id, Dto("  QA-123 "), CancellationToken.None)).Result);
+        Assert.Equal("QA-123", Assert.IsType<ApiResponse<RestrictivePracticeDto>>(ok.Value).Data!.CommissionReference);
+        Assert.Equal("QA-123", (await db.RestrictivePractices.SingleAsync()).CommissionReference);
+
+        await controller.Update(practice.Id, Dto(null), CancellationToken.None);
+        Assert.Equal("QA-123", (await db.RestrictivePractices.SingleAsync()).CommissionReference);
+
+        await controller.Update(practice.Id, Dto("  "), CancellationToken.None);
+        Assert.Null((await db.RestrictivePractices.SingleAsync()).CommissionReference);
+    }
+
+    [Fact]
     public async Task Update_WithDatesIncluded_AppliesTheDatesAsSent_SoNullClearsAField()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());

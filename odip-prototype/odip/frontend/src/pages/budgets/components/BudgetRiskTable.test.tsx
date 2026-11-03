@@ -235,62 +235,81 @@ describe('BudgetRiskTable: a real row', () => {
     expect(screen.queryByText(ROLLED_OVER_LEGEND)).not.toBeInTheDocument()
   })
 
-  // ODIP's arithmetic can say On track while the NDIA has just refused a claim for want of funds, and the list is where the dashboard sends people: the row says the NDIA's word in a pill of its own.
-  it('says the NDIA word in a danger pill beside the status, even when our own status is On track', () => {
-    renderTable(readyTable([
-      riskRow({ id: 'a', participantLabel: 'Refused Person', status: 'OnTrack', ndiaWord: { date: '2026-10-08', code: 'V27' } }),
-      riskRow({ id: 'b', participantLabel: 'Quiet Person', status: 'OnTrack' }),
-    ]))
+  // ODIP's arithmetic can say On track while the NDIA has just refused a claim for want of funds, and the list is where the dashboard sends people: the server's one word for the row is "Funds ran out",
+  // with the day under it and nothing about what is left (the NDIA says the money is gone).
+  const refusedRow = (overrides: Partial<BudgetRiskRow> = {}) => riskRow({ id: 'a', participantLabel: 'Refused Person', status: 'FundsRanOut', ndiaWord: { date: '2026-10-08', code: 'V27' }, ...overrides })
 
-    const pill = within(cellOf('Refused Person', 'Status')).getByText('NDIA says the funds ran out')
+  it('says Funds ran out in one danger pill with the day the NDIA refused under it, and no On track pill and no amount left', () => {
+    renderTable(readyTable([refusedRow(), riskRow({ id: 'b', participantLabel: 'Quiet Person', status: 'OnTrack' })]))
+
+    const status = cellOf('Refused Person', 'Status')
+    const pill = within(status).getByText('Funds ran out')
     expect(pill.className).toContain('bg-[var(--color-error-container)]')
-    expect(within(cellOf('Refused Person', 'Status')).getByText('On track')).toBeInTheDocument()
-    expect(within(cellOf('Quiet Person', 'Status')).queryByText('NDIA says the funds ran out')).not.toBeInTheDocument()
+    expect(within(status).queryByText('On track')).not.toBeInTheDocument()
+    expect(status.querySelectorAll('[data-status-badge]')).toHaveLength(1)
+    expect(status).toHaveTextContent('Funds ran outNDIA refused 8 Oct')
+    expect(status).not.toHaveTextContent(/left/)
+    expect(within(cellOf('Quiet Person', 'Status')).queryByText('Funds ran out')).not.toBeInTheDocument()
   })
 
-  // Pace is not a status: the pill sits beside the status word, carries dates not money, and the row keeps its tone.
+  it('names the NDIA claim date and code to a pointer and a screen reader, and carries no money', () => {
+    renderTable(readyTable([refusedRow()]))
+
+    const note = screen.getByText('NDIA refused 8 Oct')
+    expect(note.getAttribute('title')?.replace(/\s/g, ' ')).toBe('NDIA rejected a claim on 8 Oct 2026 (V27)')
+    expect(within(note).getByText(/NDIA rejected a claim on/)).toHaveClass('sr-only')
+    expect(figuresIn(note)).toEqual([])
+  })
+
+  it('draws Available muted on a Funds ran out row, and says it is by our records', () => {
+    renderTable(readyTable([refusedRow({ available: 40000, used: 1101, remaining: 38899 }), riskRow({ id: 'b', participantLabel: 'Quiet Person', status: 'OnTrack', available: 8000 })]))
+
+    const available = within(cellOf('Refused Person', 'Available')).getByText('$40,000.00').closest('span[title]') as HTMLElement
+    expect(available.className).toContain('text-[var(--color-muted-foreground)]')
+    expect(available.getAttribute('title')?.replace(/\s/g, ' ')).toBe('$40,000.00 by our records; the NDIA refused a claim for lack of funds on 8 Oct 2026')
+    expect(within(cellOf('Refused Person', 'Available')).getByText(/by our records; the NDIA refused a claim for lack of funds on/)).toHaveClass('sr-only')
+    expect(cellOf('Quiet Person', 'Available').querySelector('[title]')).toBeNull()
+    expect(cellOf('Quiet Person', 'Available').innerHTML).not.toContain('text-[var(--color-muted-foreground)]')
+  })
+
+  it('tints a Funds ran out row like an Over row', () => {
+    renderTable(readyTable([refusedRow()]))
+
+    expect(rowFor('Refused Person').className).toContain('bg-[var(--color-error-container)]/10')
+  })
+
+  // Pace is the server's word too: an On track pool paced to run out is "Spending fast" (a warning pill), with the day under it and no "On track" beside it.
   const SPENDING_FAST = 'Spending fast'
   const PACE_SENTENCE = 'At this rate the budget runs out around 8 Dec, before the period ends on 31 Dec.'
-  const pacedRow = (overrides: Partial<BudgetRiskRow> = {}) => riskRow({ participantLabel: 'Paced Person', periodEnd: '2026-12-31', paceRunsOutOn: '2026-12-08', ...overrides })
+  const pacedRow = (overrides: Partial<BudgetRiskRow> = {}) => riskRow({ participantLabel: 'Paced Person', status: 'SpendingFast', periodEnd: '2026-12-31', paceRunsOutOn: '2026-12-08', ...overrides })
 
-  it('says Spending fast in a warning pill beside the status, with the sentence as its title and as hidden text', () => {
+  it('says Spending fast in one warning pill with the day it runs out under it, the sentence as its title and as hidden text, and no On track', () => {
     renderTable(readyTable([pacedRow(), riskRow({ id: 'q', participantLabel: 'Quiet Person' })]))
 
     const status = cellOf('Paced Person', 'Status')
     const pill = within(status).getByText(SPENDING_FAST)
     expect(pill.className).toContain('bg-[var(--color-warning-container)]')
-    expect(pill.closest('[title]')?.getAttribute('title')).toBe(PACE_SENTENCE)
-    expect(within(status).getByText(PACE_SENTENCE)).toHaveClass('sr-only')
-    expect(within(status).getByText('On track')).toBeInTheDocument()
+    const note = within(status).getByText('Runs out 8 Dec')
+    expect(note.getAttribute('title')).toBe(PACE_SENTENCE)
+    expect(within(note).getByText(/At this rate the budget runs out around 8 Dec/)).toHaveClass('sr-only')
+    expect(within(status).queryByText('On track')).not.toBeInTheDocument()
     expect(within(cellOf('Quiet Person', 'Status')).queryByText(SPENDING_FAST)).not.toBeInTheDocument()
   })
 
-  it('shows beside the NDIA pill when both apply', () => {
-    renderTable(readyTable([pacedRow({ ndiaWord: { date: '2026-10-08', code: 'V27' } })]))
+  it('still shows to a viewer who may not see the money, with no figure in the row', () => {
+    renderTable(readyTable([hiddenRow({ participantLabel: 'Paced Person', status: 'SpendingFast', periodEnd: '2026-12-31', paceRunsOutOn: '2026-12-08' })]))
 
     const status = cellOf('Paced Person', 'Status')
     expect(within(status).getByText(SPENDING_FAST)).toBeInTheDocument()
-    expect(within(status).getByText('NDIA says the funds ran out')).toBeInTheDocument()
-  })
-
-  it('still shows to a viewer who may not see the money, with no figure in the row', () => {
-    renderTable(readyTable([hiddenRow({ participantLabel: 'Paced Person', periodEnd: '2026-12-31', paceRunsOutOn: '2026-12-08' })]))
-
-    expect(within(cellOf('Paced Person', 'Status')).getByText(SPENDING_FAST)).toBeInTheDocument()
+    expect(within(status).getByText('Runs out 8 Dec')).toBeInTheDocument()
     expect(figuresIn(rowFor('Paced Person'))).toEqual([])
   })
 
-  it('ranks a paced On track row between Approaching and On track', () => {
+  it('ranks a paced row between Approaching and On track, and Funds ran out between Over and Forecast over', () => {
     expect(budgetRiskRank(riskRow({ status: 'Approaching' }))).toBeLessThan(budgetRiskRank(pacedRow()))
     expect(budgetRiskRank(pacedRow())).toBeLessThan(budgetRiskRank(riskRow({ status: 'OnTrack' })))
-  })
-
-  it('names the NDIA claim date and code to a pointer and a screen reader, and carries no money', () => {
-    renderTable(readyTable([riskRow({ ndiaWord: { date: '2026-10-08', code: 'V27' } })]))
-
-    const pill = screen.getByText('NDIA says the funds ran out')
-    expect(pill.closest('[title]')?.getAttribute('title')?.replace(/\s/g, ' ')).toBe('NDIA rejected a claim on 8 Oct 2026 (V27)')
-    expect(figuresIn(pill.parentElement!)).toEqual([])
+    expect(budgetRiskRank(riskRow({ status: 'Over' }))).toBeLessThan(budgetRiskRank(refusedRow()))
+    expect(budgetRiskRank(refusedRow())).toBeLessThan(budgetRiskRank(riskRow({ status: 'ForecastOver' })))
   })
 
   it('leaves the row order exactly as the server sent it, and never re-ranks it by risk itself', () => {
@@ -655,12 +674,12 @@ describe('BudgetRiskTable: sorting by risk', () => {
     expect(labelsNow()).toEqual(['Amy', 'Zoe'])
   })
 
-  // The server lists a pool the NDIA has refused for want of funds straight after Over (its word outranks ODIP's forecast: BudgetListService.Rank). The header's sort says the same, or one click on it
-  // drops that pool into the On track group, where ODIP's own status alone would put it, and away from where the list had it.
+  // The server lists a pool the NDIA has refused for want of funds straight after Over (its word outranks ODIP's forecast: BudgetListService.ListStatusOf). The row's status is that word, so the header's sort
+  // puts it there too, and one click on it never drops that pool into the On track group.
   const refused = { date: '2026-10-08', code: 'V27' }
 
   it('puts a pool the NDIA has refused straight after Over, as the list does, and not among On track', async () => {
-    const fay = riskRow({ id: 'f', participantLabel: 'Fay', status: 'OnTrack', ndiaWord: refused })
+    const fay = riskRow({ id: 'f', participantLabel: 'Fay', status: 'FundsRanOut', ndiaWord: refused })
     renderTable(readyTable([...oneEach(), fay]))
 
     await userEvent.click(statusHeader())
@@ -669,9 +688,9 @@ describe('BudgetRiskTable: sorting by risk', () => {
   })
 
   it('ranks Over before the NDIA’s word when a pool has both, and the NDIA’s word before Forecast over, ties by name', async () => {
-    const fay = riskRow({ id: 'f', participantLabel: 'Fay', status: 'OnTrack', ndiaWord: refused })
+    const fay = riskRow({ id: 'f', participantLabel: 'Fay', status: 'FundsRanOut', ndiaWord: refused })
     const gus = riskRow({ id: 'g', participantLabel: 'Gus', status: 'Over', ndiaWord: refused })
-    const hal = riskRow({ id: 'h', participantLabel: 'Hal', status: 'ForecastOver', ndiaWord: refused })
+    const hal = riskRow({ id: 'h', participantLabel: 'Hal', status: 'FundsRanOut', ndiaWord: refused })
     renderTable(readyTable([...oneEach(), hal, gus, fay]))
 
     await userEvent.click(statusHeader())
@@ -680,7 +699,7 @@ describe('BudgetRiskTable: sorting by risk', () => {
   })
 
   it('runs the same order in reverse, the NDIA’s word included', async () => {
-    const fay = riskRow({ id: 'f', participantLabel: 'Fay', status: 'OnTrack', ndiaWord: refused })
+    const fay = riskRow({ id: 'f', participantLabel: 'Fay', status: 'FundsRanOut', ndiaWord: refused })
     renderTable(readyTable([...oneEach(), fay]))
 
     await userEvent.click(statusHeader())

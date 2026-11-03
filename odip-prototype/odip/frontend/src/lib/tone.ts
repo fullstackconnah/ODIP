@@ -129,6 +129,9 @@ export const STATUS_TONE: Record<string, Tone> = {
   approaching: 'warning',
   forecastover: 'warning',
   over: 'danger',
+  // The Budgets list's own words (BudgetListStatus): the NDIA's refusal is as red as over, and a pace that runs out is a warning.
+  fundsranout: 'danger',
+  spendingfast: 'warning',
   archived: 'neutral',
   cancelled: 'danger',
   unavailable: 'danger',

@@ -1,267 +1,214 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import type { CompatibilityRowDto } from '@/api/types'
 import CompatibilityPage from './CompatibilityPage'
 
-const { mockUpsertMutate, mockByKey } = vi.hoisted(() => ({ mockUpsertMutate: vi.fn(), mockByKey: new Map<string, unknown>() }))
+const { mockApiGet, mockApiPut, perms } = vi.hoisted(() => ({ mockApiGet: vi.fn(), mockApiPut: vi.fn(), perms: { canWrite: true } }))
 
-vi.mock('@/lib/permissions', () => ({
-  usePermissions: () => ({ canWrite: true }),
-}))
+vi.mock('@/lib/permissions', () => ({ usePermissions: () => perms }))
+vi.mock('@/api/client', async orig => ({ ...(await orig<object>()), apiGet: mockApiGet, apiPut: mockApiPut }))
 
-vi.mock('@/api/hooks', () => ({
-  useParticipants: () => ({
-    data: [
-      { id: 'p1', fullName: 'Alex Rivera' },
-      { id: 'p2', fullName: 'Jamie Chen' },
-    ],
-    isLoading: false,
-    isError: false,
-    refetch: vi.fn(),
-  }),
+const PARTICIPANTS = [
+  { id: 'p1', fullName: 'Alex Rivera', firstName: 'Alex', lastName: 'Rivera' },
+  { id: 'p2', fullName: 'Jamie Chen', firstName: 'Jamie', lastName: 'Chen' },
+]
+vi.mock('@/api/hooks', async orig => ({
+  ...(await orig<object>()),
+  useParticipants: () => ({ data: PARTICIPANTS, isLoading: false, isError: false, refetch: vi.fn() }),
   useStaff: () => ({
     data: [
-      { id: 's1', fullName: 'Sam Taylor' },
-      { id: 's2', fullName: 'Morgan Lee' },
+      { id: 's1', fullName: 'Sam Taylor', isActive: true },
+      { id: 's2', fullName: 'Morgan Lee', isActive: true },
+      { id: 's3', fullName: 'Gone Person', isActive: false },
+      { id: 's4', fullName: 'Casey Wong', isActive: true },
+      { id: 's5', fullName: 'Robin Hall', isActive: true },
     ],
     isLoading: false,
     isError: false,
     refetch: vi.fn(),
   }),
-  useUpsertCompatibility: () => ({ mutate: mockUpsertMutate }),
 }))
 
-vi.mock('./lib/useCompatibilityMatrix', () => ({
-  useCompatibilityMatrix: () => ({
-    byKey: mockByKey,
-    isLoading: false,
-    isError: false,
-    refetchAll: vi.fn(),
-  }),
-}))
+function row(staffId: string, staffName: string, participantId: string, participantName: string, level: CompatibilityRowDto['level'], reason: string | null = null): CompatibilityRowDto {
+  return { staffId, staffName, participantId, participantName, level, rank: 0, reason, updatedAt: '2026-10-01T00:00:00Z' }
+}
 
-describe('CompatibilityPage — PP-53 staff/participant filters', () => {
-  it('filters staff rows by the staff filter text', async () => {
-    const user = userEvent.setup()
-    render(<CompatibilityPage />)
+let rows: CompatibilityRowDto[]
 
-    expect(screen.getByText('Sam Taylor')).toBeInTheDocument()
-    expect(screen.getByText('Morgan Lee')).toBeInTheDocument()
+function renderPage(url = '/rostering/compatibility') {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(
+    <QueryClientProvider client={qc}>
+      <MemoryRouter initialEntries={[url]}><CompatibilityPage /></MemoryRouter>
+    </QueryClientProvider>,
+  )
+}
 
-    await user.type(screen.getByLabelText('Filter staff'), 'Sam')
-
-    expect(screen.getByText('Sam Taylor')).toBeInTheDocument()
-    expect(screen.queryByText('Morgan Lee')).not.toBeInTheDocument()
-  })
-
-  it('filters participant columns by the participant filter text', async () => {
-    const user = userEvent.setup()
-    render(<CompatibilityPage />)
-
-    expect(screen.getByText('Alex Rivera')).toBeInTheDocument()
-    expect(screen.getByText('Jamie Chen')).toBeInTheDocument()
-
-    await user.type(screen.getByLabelText('Filter participants'), 'Jamie')
-
-    expect(screen.queryByText('Alex Rivera')).not.toBeInTheDocument()
-    expect(screen.getByText('Jamie Chen')).toBeInTheDocument()
+beforeEach(() => {
+  perms.canWrite = true
+  rows = [
+    row('s1', 'Sam Taylor', 'p1', 'Alex Rivera', 'Preferred', 'Knows the routine'),
+    row('s2', 'Morgan Lee', 'p1', 'Alex Rivera', 'Excluded', 'Past conflict'),
+    row('s1', 'Sam Taylor', 'p2', 'Jamie Chen', 'Allowed'),
+    row('s2', 'Morgan Lee', 'p2', 'Jamie Chen', 'Backup'),
+    row('s3', 'Gone Person', 'p2', 'Jamie Chen', 'Excluded', 'Left'),
+    row('s1', 'Sam Taylor', 'p9', 'Exited Person', 'Preferred'),
+  ]
+  mockApiGet.mockReset().mockImplementation(async () => rows)
+  mockApiPut.mockReset().mockImplementation(async (_url: string, body: { staffId: string; participantId: string; level: CompatibilityRowDto['level']; reason: string | null }) => {
+    const i = rows.findIndex(r => r.staffId === body.staffId && r.participantId === body.participantId)
+    const next = row(body.staffId, body.staffId === 's1' ? 'Sam Taylor' : 'Morgan Lee', body.participantId, body.participantId === 'p1' ? 'Alex Rivera' : 'Jamie Chen', body.level, body.reason)
+    if (i >= 0) rows[i] = next
+    else rows.push(next)
+    return next
   })
 })
 
-// ── The server's refusal (readiness Enforce mode) ────────────────────────────────────────────────────────────────────
-// A refused cell edit rolled back and showed only a 4-second icon: the server's reason was dropped. In Enforce mode that reason is
-// "Participant is not ready for booking or rostering."; it has to be on screen, and stay there until dismissed or the next edit.
-const NOT_READY_MESSAGE = 'Participant is not ready for booking or rostering.'
-const GENERIC_SAVE_ERROR = "Couldn't save that change. Please try again."
+const dataRows = () => screen.getAllByRole('row').slice(1)
 
-/** What axios rejects with for a 400 carrying the API's ApiResponse envelope. */
-function badRequest(...errors: string[]) {
-  return { response: { status: 400, data: { success: false, errors } } }
-}
+describe('CompatibilityPage: the exceptions list', () => {
+  it('lists only pairings that differ from the default, in scope, one badge each', async () => {
+    renderPage()
+    await screen.findByText('Knows the routine')
 
-/** Makes the next upsert fail the way the real hook would: mutate's own onError gets the thrown error. */
-function failNextUpsertWith(err: unknown) {
-  mockUpsertMutate.mockImplementationOnce((_vars: unknown, opts?: { onError?: (e: unknown) => void }) => opts?.onError?.(err))
-}
-
-describe('CompatibilityPage — the server\'s refusal reaches the user', () => {
-  beforeEach(() => {
-    mockUpsertMutate.mockReset()
-  })
-
-  it('shows the server\'s own message, not the generic line, rolls the cell back, and sent the full body', async () => {
-    const user = userEvent.setup()
-    failNextUpsertWith(badRequest(NOT_READY_MESSAGE))
-    render(<CompatibilityPage />)
-
-    await user.selectOptions(screen.getByLabelText('Sam Taylor with Alex Rivera: Allowed'), 'Preferred')
-
-    expect(mockUpsertMutate).toHaveBeenCalledTimes(1)
-    expect(mockUpsertMutate).toHaveBeenCalledWith(
-      { staffId: 's1', participantId: 'p1', level: 'Preferred', reason: null },
-      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) }),
-    )
-    const message = await screen.findByText(NOT_READY_MESSAGE)
-    expect(message.closest('[role="alert"]')).not.toBeNull()
-    expect(screen.queryByText(GENERIC_SAVE_ERROR)).not.toBeInTheDocument()
-    // The optimistic change is rolled back to what the server last confirmed.
-    expect(screen.getByLabelText('Sam Taylor with Alex Rivera: Allowed')).toHaveValue('Allowed')
-    expect(screen.queryByLabelText('Sam Taylor with Alex Rivera: Preferred')).not.toBeInTheDocument()
-  })
-
-  it('falls back to the generic line when the failure carries no message', async () => {
-    const user = userEvent.setup()
-    failNextUpsertWith(new Error('Network Error'))
-    render(<CompatibilityPage />)
-
-    await user.selectOptions(screen.getByLabelText('Morgan Lee with Jamie Chen: Allowed'), 'Preferred')
-
-    expect(await screen.findByText(GENERIC_SAVE_ERROR)).toBeInTheDocument()
-    expect(screen.queryByText(NOT_READY_MESSAGE)).not.toBeInTheDocument()
-  })
-
-  it('stays until dismissed, and is cleared when the next edit starts', async () => {
-    const user = userEvent.setup()
-    failNextUpsertWith(badRequest(NOT_READY_MESSAGE))
-    render(<CompatibilityPage />)
-
-    await user.selectOptions(screen.getByLabelText('Sam Taylor with Alex Rivera: Allowed'), 'Preferred')
-    expect(await screen.findByText(NOT_READY_MESSAGE)).toBeInTheDocument()
-
-    // Dismissible.
-    await user.click(screen.getByRole('button', { name: 'Dismiss error' }))
-    expect(screen.queryByText(NOT_READY_MESSAGE)).not.toBeInTheDocument()
-
-    // And a fresh refusal is cleared the moment the next edit begins (the mock does not fail this one).
-    failNextUpsertWith(badRequest(NOT_READY_MESSAGE))
-    await user.selectOptions(screen.getByLabelText('Sam Taylor with Alex Rivera: Allowed'), 'Preferred')
-    expect(await screen.findByText(NOT_READY_MESSAGE)).toBeInTheDocument()
-    await user.selectOptions(screen.getByLabelText('Morgan Lee with Alex Rivera: Allowed'), 'Preferred')
-    expect(screen.queryByText(NOT_READY_MESSAGE)).not.toBeInTheDocument()
-    expect(mockUpsertMutate).toHaveBeenCalledTimes(3)
-  })
-
-  it('exclusion dialog says the worker cannot be rostered and what happens to shifts already rostered', async () => {
-    const user = userEvent.setup()
-    render(<CompatibilityPage />)
-
-    await user.selectOptions(screen.getByLabelText('Sam Taylor with Jamie Chen: Allowed'), 'Excluded')
-
-    const dialog = screen.getByRole('alertdialog')
-    expect(dialog).toHaveTextContent('Mark as No for this participant')
-    expect(dialog).toHaveTextContent('Sam Taylor cannot be rostered for Jamie Chen’s shifts. Shifts already rostered stay as they are, but cannot be edited until the worker is replaced or the shift is unassigned or cancelled.')
-    expect(screen.getAllByRole('option', { name: 'No' })[0]).toHaveAttribute('value', 'Excluded')
-  })
-
-  it('offers the five levels, and the No dialog says Mark as No with no "Exclude" wording', async () => {
-    const user = userEvent.setup()
-    render(<CompatibilityPage />)
-
-    const select = screen.getByLabelText('Sam Taylor with Jamie Chen: Allowed')
-    expect(Array.from(select.querySelectorAll('option')).map(o => [o.textContent, o.getAttribute('value')])).toEqual([
-      ['Preferred', 'Preferred'], ['Backup', 'Backup'], ['Emergency', 'Emergency'], ['Allowed', 'Allowed'], ['No', 'Excluded'],
-    ])
-
-    await user.selectOptions(select, 'Excluded')
-    expect(screen.getByPlaceholderText('Why can’t they work together?')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Mark as No' })).toBeDisabled()
-    expect(screen.queryByRole('button', { name: /^exclude$/i })).not.toBeInTheDocument()
-    expect(screen.queryByPlaceholderText(/exclude/i)).not.toBeInTheDocument()
-    expect(screen.getByText('Stored with this choice and visible in audit.')).toBeInTheDocument()
-    expect(screen.queryByText(/exclusion/i)).not.toBeInTheDocument()
-  })
-
-  it('sends a Backup pick without a rank, so the server appends it', async () => {
-    const user = userEvent.setup()
-    render(<CompatibilityPage />)
-
-    await user.selectOptions(screen.getByLabelText('Sam Taylor with Jamie Chen: Allowed'), 'Backup')
-
-    expect(mockUpsertMutate).toHaveBeenCalledWith({ staffId: 's1', participantId: 'p2', level: 'Backup', reason: null }, expect.anything())
-  })
-
-  it('shows Backup and Emergency as labelled chips on their cells', () => {
-    const row = (staffId: string, participantId: string, level: string) =>
-      [`${staffId}:${participantId}`, { staffId, participantId, level, rank: 1, reason: null }] as const
-    for (const [k, v] of [row('s1', 'p1', 'Backup'), row('s2', 'p1', 'Emergency')]) mockByKey.set(k, v)
-    try {
-      render(<CompatibilityPage />)
-
-      expect(screen.getByLabelText('Sam Taylor with Alex Rivera: Backup')).toHaveValue('Backup')
-      expect(screen.getByLabelText('Morgan Lee with Alex Rivera: Emergency')).toHaveValue('Emergency')
-      expect(screen.getAllByText('Backup', { selector: 'span' }).length).toBe(1)
-      expect(screen.getAllByText('Emergency', { selector: 'span' }).length).toBe(1)
-    } finally {
-      mockByKey.clear()
+    // Allowed, the inactive staff member and the participant outside the loaded list are not rendered.
+    expect(dataRows()).toHaveLength(3)
+    expect(screen.queryByText('Gone Person')).not.toBeInTheDocument()
+    expect(screen.queryByText('Exited Person')).not.toBeInTheDocument()
+    expect(screen.queryByText('Allowed')).not.toBeInTheDocument()
+    for (const r of dataRows()) {
+      expect(within(r).getAllByText(/^(Preferred|Backup|Emergency|No)$/)).toHaveLength(1)
     }
+    expect(screen.getByRole('radio', { name: 'All 3' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'No 1' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Preferences 2' })).toBeInTheDocument()
+    // No grid controls.
+    expect(document.querySelectorAll('table select')).toHaveLength(0)
   })
 
-  it('exclusion: sends the reason with the full body and shows the refusal', async () => {
+  it('filters by the No / Preferences toggle and the search, and opens on ?q=', async () => {
     const user = userEvent.setup()
-    failNextUpsertWith(badRequest(NOT_READY_MESSAGE))
-    render(<CompatibilityPage />)
+    renderPage('/rostering/compatibility?q=Jamie')
+    await screen.findByText('Morgan Lee')
+    expect(dataRows()).toHaveLength(1)
 
-    await user.selectOptions(screen.getByLabelText('Sam Taylor with Jamie Chen: Allowed'), 'Excluded')
-    await user.type(screen.getByLabelText(/reason/i), 'Personality clash')
+    await user.clear(screen.getByLabelText('Search staff or participants'))
+    await user.click(screen.getByRole('radio', { name: 'No 1' }))
+    expect(dataRows()).toHaveLength(1)
+    expect(screen.getByText('Past conflict')).toBeInTheDocument()
+  })
+
+  it('refetches the list after Mark as No and shows the new row', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('Knows the routine')
+
     await user.click(screen.getByRole('button', { name: 'Mark as No' }))
+    const dialog = await screen.findByRole('alertdialog')
+    await user.click(within(dialog).getByLabelText(/^Staff/))
+    await user.click(await screen.findByRole('option', { name: 'Sam Taylor' }))
+    await user.click(within(dialog).getByLabelText(/^Participant/))
+    await user.click(await screen.findByRole('option', { name: 'Jamie Chen' }))
+    await user.type(within(dialog).getByLabelText(/Reason/), 'Not a fit')
+    await user.click(within(dialog).getByRole('button', { name: 'Mark as No' }))
 
-    expect(mockUpsertMutate).toHaveBeenCalledTimes(1)
-    expect(mockUpsertMutate).toHaveBeenCalledWith(
-      { staffId: 's1', participantId: 'p2', level: 'Excluded', reason: 'Personality clash' },
-      expect.anything(),
-    )
-    expect(await screen.findByText(NOT_READY_MESSAGE)).toBeInTheDocument()
-    expect(screen.queryByText(GENERIC_SAVE_ERROR)).not.toBeInTheDocument()
-  })
-})
-
-// A refused edit leaves a warning icon on its cell for four seconds, one timer per cell. Those timers were bare setTimeouts: one left running past
-// the page fired setFailedKeys into a tree that was gone, and past the end of the test environment it threw "window is not defined", which fails
-// the whole run even though every test passed. Only setTimeout/clearTimeout are faked, and the tests use fireEvent and read the DOM straight away.
-describe('CompatibilityPage — the failed-cell icon timers', () => {
-  const FAILED_ICON = "Couldn't save — try again."
-  const SAM_WITH_ALEX = 'Sam Taylor with Alex Rivera: Allowed'
-  const MORGAN_WITH_JAMIE = 'Morgan Lee with Jamie Chen: Allowed'
-
-  beforeEach(() => {
-    mockUpsertMutate.mockReset()
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-  })
-  afterEach(() => {
-    vi.useRealTimers()
+    expect(mockApiPut).toHaveBeenCalledWith('/rostering/compatibility', { staffId: 's1', participantId: 'p2', level: 'Excluded', reason: 'Not a fit' })
+    expect(await screen.findByText('Not a fit')).toBeInTheDocument()
+    expect(dataRows()).toHaveLength(4)
+    expect(screen.queryByRole('button', { name: /show all/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'No 2' })).toBeInTheDocument()
   })
 
-  const refuse = (label: string) => fireEvent.change(screen.getByLabelText(label), { target: { value: 'Preferred' } })
-  const elapse = (ms: number) => act(() => { vi.advanceTimersByTime(ms) })
-
-  it('leaves nothing pending when the page unmounts while icons are still showing', () => {
-    failNextUpsertWith(badRequest(NOT_READY_MESSAGE))
-    failNextUpsertWith(badRequest(NOT_READY_MESSAGE))
-    const { unmount } = render(<CompatibilityPage />)
-
-    refuse(SAM_WITH_ALEX)
-    refuse(MORGAN_WITH_JAMIE)
-    expect(screen.getAllByTitle(FAILED_ICON)).toHaveLength(2)
-    expect(vi.getTimerCount()).toBe(2)
-
-    elapse(1000)
-    unmount()
-    expect(vi.getTimerCount()).toBe(0)
+  it('shows every pairing in the default view, with no Show all', async () => {
+    const staffNames = [['s1', 'Sam Taylor'], ['s2', 'Morgan Lee'], ['s4', 'Casey Wong']]
+    rows = [
+      ...staffNames.map(([id, name]) => row(id, name, 'p1', 'Alex Rivera', 'Preferred')),
+      ...staffNames.map(([id, name]) => row(id, name, 'p2', 'Jamie Chen', 'Preferred')),
+      row('s5', 'Robin Hall', 'p1', 'Alex Rivera', 'Excluded', 'Past conflict'),
+      row('s5', 'Robin Hall', 'p2', 'Jamie Chen', 'Excluded', 'Left the team'),
+    ]
+    renderPage()
+    await screen.findByText('Left the team')
+    expect(dataRows()).toHaveLength(8)
+    expect(screen.queryByRole('button', { name: /show all/i })).not.toBeInTheDocument()
   })
 
-  it('gives a cell that is refused again a fresh four seconds, instead of letting its first timer take the icon away early', () => {
-    failNextUpsertWith(badRequest(NOT_READY_MESSAGE))
-    failNextUpsertWith(badRequest(NOT_READY_MESSAGE))
-    render(<CompatibilityPage />)
+  it('keeps the reason when only the reason is edited, and sends the new one', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('Past conflict')
 
-    refuse(SAM_WITH_ALEX)                       // icon up, first timer due at 4000
-    elapse(3000)
-    refuse(SAM_WITH_ALEX)                       // the same cell refused again, second timer due at 7000
-    expect(vi.getTimerCount()).toBe(1)
+    await user.click(screen.getByRole('button', { name: 'Edit reason' }))
+    const dialog = await screen.findByRole('alertdialog')
+    const box = within(dialog).getByLabelText(/Reason/)
+    expect(box).toHaveValue('Past conflict')
+    await user.clear(box)
+    await user.type(box, 'Updated reason')
+    await user.click(within(dialog).getByRole('button', { name: 'Save reason' }))
 
-    elapse(2000)                                // 5000: past the first timer, inside the second
-    expect(screen.getAllByTitle(FAILED_ICON)).toHaveLength(1)
-    elapse(2000)                                // 7000
-    expect(screen.queryByTitle(FAILED_ICON)).not.toBeInTheDocument()
+    expect(mockApiPut).toHaveBeenCalledWith('/rostering/compatibility', { staffId: 's2', participantId: 'p1', level: 'Excluded', reason: 'Updated reason' })
+    expect(await screen.findByText('Updated reason')).toBeInTheDocument()
+  })
+
+  it('removes a No by saving Allowed with no reason, and the row drops out', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('Past conflict')
+
+    await user.click(screen.getByRole('button', { name: 'Remove No' }))
+    const dialog = await screen.findByRole('alertdialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Remove No' }))
+
+    expect(mockApiPut).toHaveBeenCalledWith('/rostering/compatibility', { staffId: 's2', participantId: 'p1', level: 'Allowed', reason: null })
+    await screen.findByRole('radio', { name: 'No 0' })
+    expect(screen.queryByText('Past conflict')).not.toBeInTheDocument()
+  })
+
+  it('shows the server\'s refusal inside the dialog and keeps the typed reason', async () => {
+    const user = userEvent.setup()
+    mockApiPut.mockRejectedValueOnce({ response: { status: 400, data: { success: false, errors: ['Participant is not ready for booking or rostering.'] } } })
+    renderPage()
+    await screen.findByText('Past conflict')
+
+    await user.click(screen.getByRole('button', { name: 'Edit reason' }))
+    const dialog = await screen.findByRole('alertdialog')
+    await user.type(within(dialog).getByLabelText(/Reason/), ' more')
+    await user.click(within(dialog).getByRole('button', { name: 'Save reason' }))
+
+    expect(await within(dialog).findByText('Participant is not ready for booking or rostering.')).toBeInTheDocument()
+    expect(within(dialog).getByLabelText(/Reason/)).toHaveValue('Past conflict more')
+  })
+
+  it('tells the user a tier will be replaced when the chosen pair already holds one', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('Knows the routine')
+
+    await user.click(screen.getByRole('button', { name: 'Mark as No' }))
+    const dialog = await screen.findByRole('alertdialog')
+    await user.click(within(dialog).getByLabelText(/^Staff/))
+    await user.click(await screen.findByRole('option', { name: 'Sam Taylor' }))
+    await user.click(within(dialog).getByLabelText(/^Participant/))
+    await user.click(await screen.findByRole('option', { name: 'Alex Rivera' }))
+
+    expect(within(dialog).getByText(/Sam Taylor is listed as Preferred for Alex Rivera\. Marking No takes them off that list/)).toBeInTheDocument()
+  })
+
+  it('has no write controls for a reader', async () => {
+    perms.canWrite = false
+    renderPage()
+    await screen.findByText('Knows the routine')
+    expect(screen.queryByRole('button', { name: 'Mark as No' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit reason' })).not.toBeInTheDocument()
+  })
+
+  it('says so when nothing differs from the default', async () => {
+    rows = []
+    renderPage()
+    expect(await screen.findByText('No pairings marked yet')).toBeInTheDocument()
+    expect(screen.getByText(/can’t be rostered|can't be rostered/)).toBeInTheDocument()
   })
 })

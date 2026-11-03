@@ -538,6 +538,137 @@ public class IncidentsControllerTests
         Assert.True(body.Data.IsRestrictivePracticeAuthorised);
     }
 
+    // ── Incident type and emergency services (IC1, IC2) ──────────────────────
+
+    /// <summary>IncidentType is an int column: a new value is appended, so every saved row keeps its meaning.</summary>
+    [Fact]
+    public void IncidentType_IsAppendOnly_SoSavedRowsKeepTheirMeaning()
+    {
+        var expected = new[] { "Injury", "Illness", "MedicationError", "BehaviourOfConcern", "RestrictivePracticeUse", "PropertyDamage", "MissingPerson", "Abuse", "Neglect", "Death", "Other", "SexualAbuse" };
+        for (var n = 0; n < expected.Length; n++) Assert.Equal(expected[n], ((IncidentType)n).ToString());
+    }
+
+    private static CreateIncidentDto EmergencyDto(Guid reporterId, bool called, EmergencyService services, string? details = null) => CreateDto(reporterId, incidentType: IncidentType.PropertyDamage, rpType: null) with
+    {
+        WereEmergencyServicesCalled = called, EmergencyServices = services, EmergencyServicesDetails = details,
+        PoliceOfficerName = "  Sgt Jane Doe ", PoliceReference = "2611-0042", AmbulanceOfficerName = "Paramedic Sam", AmbulanceReference = "AV-1",
+        FireOfficerName = "Capt Lee", FireReference = "   ",
+    };
+
+    private static UpdateIncidentDto AsUpdate(CreateIncidentDto c) => new()
+    {
+        ReportedByStaffId = c.ReportedByStaffId, IncidentType = c.IncidentType, RestrictivePracticeType = c.RestrictivePracticeType, Severity = c.Severity,
+        Title = c.Title, Description = c.Description, IncidentDateTime = c.IncidentDateTime, Status = IncidentStatus.Draft, QscReportingStatus = QscReportingStatus.Required,
+        WereEmergencyServicesCalled = c.WereEmergencyServicesCalled, EmergencyServices = c.EmergencyServices, EmergencyServicesDetails = c.EmergencyServicesDetails,
+        PoliceOfficerName = c.PoliceOfficerName, PoliceReference = c.PoliceReference, AmbulanceOfficerName = c.AmbulanceOfficerName, AmbulanceReference = c.AmbulanceReference,
+        FireOfficerName = c.FireOfficerName, FireReference = c.FireReference,
+    };
+
+    [Fact]
+    public async Task Create_PoliceAndFire_StoresTheTrimmedNamesAndRefs_AndNullsTheServiceNotTicked()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var controller = new IncidentsController(db);
+
+        var created = await controller.Create(EmergencyDto(reporter.Id, true, EmergencyService.Police | EmergencyService.Fire, "Road closed."), CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(created.Result);
+        var id = (await db.IncidentReports.SingleAsync()).Id;
+        var detail = Assert.IsType<ApiResponse<IncidentDetailDto>>(Assert.IsType<OkObjectResult>((await controller.GetById(id, CancellationToken.None)).Result).Value).Data!;
+        Assert.True(detail.WereEmergencyServicesCalled);
+        Assert.Equal(EmergencyService.Police | EmergencyService.Fire, detail.EmergencyServices);
+        Assert.Equal("Sgt Jane Doe", detail.PoliceOfficerName);
+        Assert.Equal("2611-0042", detail.PoliceReference);
+        Assert.Equal("Capt Lee", detail.FireOfficerName);
+        Assert.Null(detail.FireReference); // blank becomes null
+        Assert.Null(detail.AmbulanceOfficerName); // Ambulance was sent but not ticked
+        Assert.Null(detail.AmbulanceReference);
+        Assert.Equal("Road closed.", detail.EmergencyServicesDetails);
+    }
+
+    [Fact]
+    public async Task Create_GateFalse_WithPoliceAndANameSent_StoresNoneAndNoName()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+
+        await new IncidentsController(db).Create(EmergencyDto(reporter.Id, false, EmergencyService.Police), CancellationToken.None);
+
+        var saved = await db.IncidentReports.SingleAsync();
+        Assert.False(saved.WereEmergencyServicesCalled);
+        Assert.Equal(EmergencyService.None, saved.EmergencyServices);
+        Assert.Null(saved.PoliceOfficerName);
+        Assert.Null(saved.PoliceReference);
+    }
+
+    [Fact]
+    public async Task Update_DroppingFire_ClearsItsNameAndRef_AndALegacyCalledRowKeepsItsDetails()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var controller = new IncidentsController(db);
+        await controller.Create(EmergencyDto(reporter.Id, true, EmergencyService.Police | EmergencyService.Fire), CancellationToken.None);
+        var id = (await db.IncidentReports.SingleAsync()).Id;
+
+        await controller.Update(id, AsUpdate(EmergencyDto(reporter.Id, true, EmergencyService.Police)), CancellationToken.None);
+
+        var saved = await db.IncidentReports.SingleAsync();
+        Assert.Equal(EmergencyService.Police, saved.EmergencyServices);
+        Assert.Equal("Sgt Jane Doe", saved.PoliceOfficerName);
+        Assert.Null(saved.FireOfficerName);
+        Assert.Null(saved.FireReference);
+
+        // A row saved before services existed: ticked, no services, just the details text.
+        saved.EmergencyServices = EmergencyService.None;
+        saved.PoliceOfficerName = null;
+        saved.PoliceReference = null;
+        saved.EmergencyServicesDetails = "Rang 000.";
+        await db.SaveChangesAsync();
+        var legacy = EmergencyDto(reporter.Id, true, EmergencyService.None, "Rang 000.") with { PoliceOfficerName = null, PoliceReference = null };
+        Assert.IsType<OkObjectResult>((await controller.Update(id, AsUpdate(legacy), CancellationToken.None)).Result);
+        var after = await db.IncidentReports.SingleAsync();
+        Assert.True(after.WereEmergencyServicesCalled);
+        Assert.Equal(EmergencyService.None, after.EmergencyServices);
+        Assert.Equal("Rang 000.", after.EmergencyServicesDetails);
+    }
+
+    [Fact]
+    public async Task Update_FromAClientThatOmitsEmergencyServices_KeepsTheSavedServicesNamesAndReferences()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var controller = new IncidentsController(db);
+        await controller.Create(EmergencyDto(reporter.Id, true, EmergencyService.Police), CancellationToken.None);
+        var id = (await db.IncidentReports.SingleAsync()).Id;
+
+        var stale = AsUpdate(EmergencyDto(reporter.Id, true, EmergencyService.Police)) with
+        {
+            EmergencyServices = null, PoliceOfficerName = null, PoliceReference = null,
+        };
+        Assert.IsType<OkObjectResult>((await controller.Update(id, stale, CancellationToken.None)).Result);
+
+        var saved = await db.IncidentReports.SingleAsync();
+        Assert.Equal(EmergencyService.Police, saved.EmergencyServices);
+        Assert.Equal("Sgt Jane Doe", saved.PoliceOfficerName);
+        Assert.Equal("2611-0042", saved.PoliceReference);
+    }
+
+    [Fact]
+    public async Task Create_AnUnknownEmergencyServiceFlagOrIncidentType_ReturnsBadRequest()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var controller = new IncidentsController(db);
+
+        var flag = await controller.Create(EmergencyDto(reporter.Id, true, (EmergencyService)8), CancellationToken.None);
+        var type = await controller.Create(EmergencyDto(reporter.Id, true, EmergencyService.Fire) with { IncidentType = (IncidentType)99 }, CancellationToken.None);
+
+        Assert.Contains("Unknown emergency service.", Assert.IsType<ApiResponse<IncidentListDto>>(Assert.IsType<BadRequestObjectResult>(flag.Result).Value).Errors!);
+        Assert.Contains("Unknown incident type.", Assert.IsType<ApiResponse<IncidentListDto>>(Assert.IsType<BadRequestObjectResult>(type.Result).Value).Errors!);
+        Assert.Empty(db.IncidentReports);
+    }
+
     // ── Update: determination frozen at creation ─────────────────────────────
 
     [Fact]

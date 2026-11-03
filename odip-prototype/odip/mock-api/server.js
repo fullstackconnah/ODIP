@@ -223,7 +223,7 @@ const trips = [
     id: 't-0001', tripName: 'Sunshine Coast Beach Escape', tripCode: 'SCB-2608',
     destination: 'Caloundra QLD', region: 'Sunshine Coast',
     startDate: '2026-08-14', endDate: '2026-08-17', durationDays: 4,
-    status: 'Confirmed', maxParticipants: 6, currentParticipantCount: 5,
+    status: 'Confirmed', maxParticipants: 6, currentParticipantCount: 2,
     waitlistCount: 1, leadCoordinatorName: 'Priya Nadarajah',
   },
   {
@@ -255,9 +255,9 @@ const tripDetailExtras = {
     leadCoordinatorId: 's-0002', minParticipants: 4, requiredWheelchairCapacity: 1,
     requiredBeds: 8, requiredBedrooms: 5, minStaffRequired: 3, calculatedStaffRequired: 3,
     notes: 'Beachfront house confirmed. Check hoist availability for Sienna.',
-    highSupportCount: 2, wheelchairCount: 1, overnightSupportCount: 2,
+    highSupportCount: 1, wheelchairCount: 1, overnightSupportCount: 1,
     staffAssignedCount: 3, outstandingTaskCount: 2,
-    insuranceConfirmedCount: 4, insuranceOutstandingCount: 1,
+    insuranceConfirmedCount: 1, insuranceOutstandingCount: 1,
     departureTime: '09:00', returnTime: '15:30',
   },
   't-0002': {
@@ -2490,6 +2490,25 @@ function scheduleAvailabilityForStaff(id) {
 let planPricingSettings = planPricing.defaultSettings()
 const serviceAgreementDrafts = {}
 
+// Staff/participant compatibility (the Compatibility page): shaped like CompatibilityPack.cs, kept so a Mark as No or Remove No shows on the next GET. One Allowed row (the server keeps those) and one No for
+// a participant who is not in the list (the page's scope filter hides it), so the list shows 8 of the 10 rows.
+const compatibilityRows = [
+  ['s-0001', 'p-0001', 'Preferred', 1, 'Knows the insulin routine and the morning handover.'],
+  ['s-0002', 'p-0001', 'Backup', 2, null],
+  ['s-0003', 'p-0001', 'Excluded', 0, 'Past incident on a community access shift; kept apart on advice.'],
+  ['s-0004', 'p-0002', 'Preferred', 1, 'Long-standing relationship and the same cultural background.'],
+  ['s-0005', 'p-0002', 'Emergency', 1, null],
+  ['s-0001', 'p-0003', 'Preferred', 1, 'Trained in the transfer hoist.'],
+  ['s-0002', 'p-0004', 'Preferred', 1, null],
+  ['s-0003', 'p-0004', 'Excluded', 0, 'Participant asked not to be rostered with this worker.'],
+  ['s-0004', 'p-0009', 'Excluded', 0, 'Participant no longer receives services.'],
+  ['s-0002', 'p-0006', 'Allowed', 0, null],
+].map(([staffId, participantId, level, rank, reason]) => ({
+  staffId, staffName: (staff.find((x) => x.id === staffId) || {}).fullName || staffId,
+  participantId, participantName: (participants.find((x) => x.id === participantId) || {}).fullName || 'Former participant',
+  level, rank, reason, updatedAt: '2026-10-20T00:00:00Z',
+}))
+
 // Plan builder phase D: the roster patterns and shifts an approval makes (planApproval.js), kept so the Patterns page and the roster board show them. Two hand-made patterns are seeded: p-0004 has a
 // Wednesday 12:00 to 15:00 one that overlaps the seeded plan's Wednesday block (so the confirm dialog lists it and asks for the box to be ticked), and p-0001 has an ordinary weekly one.
 const rosterPatterns = [
@@ -2949,6 +2968,8 @@ const routes = [
 
   // Roster board (item 5/2 — assigneeOnApprovedLeave) — see rosterBoard()'s own comment.
   ['rostering/board', (searchParams) => rosterBoard(searchParams)],
+  // Without participantId, every pairing (the Compatibility page); with it, that participant's.
+  ['rostering/compatibility', (searchParams) => compatibilityRows.filter((r) => !searchParams.get('participantId') || r.participantId === searchParams.get('participantId'))],
   // How full the next 8 weeks are (mock-roster-fill.js). `?fixture=` picks a state for the captures; the screen never sends it.
   ['rostering/fill', (searchParams) => {
     const name = (searchParams && searchParams.get('fixture')) || 'mixed'
@@ -3297,6 +3318,17 @@ const postRoutes = [
 // echo fallback, per this task's "existing PUT /staff-availability/{id} unchanged" note.
 const putRoutes = [
   ...packageRoutesPut,
+  // The upsert never deletes: a row set back to Allowed stays, as on the server.
+  ['rostering/compatibility', (body) => {
+    const staffRow = staff.find((x) => x.id === body.staffId)
+    const participantRow = participants.find((x) => x.id === body.participantId)
+    if (!staffRow || !participantRow) return respond(400, failEnvelope(null, ['Staff member not found.']))
+    const next = { staffId: body.staffId, staffName: staffRow.fullName, participantId: body.participantId, participantName: participantRow.fullName, level: body.level, rank: 0, reason: body.reason ?? null, updatedAt: new Date().toISOString() }
+    const i = compatibilityRows.findIndex((r) => r.staffId === body.staffId && r.participantId === body.participantId)
+    if (i >= 0) compatibilityRows[i] = next
+    else compatibilityRows.push(next)
+    return next
+  }],
   ['admin/whats-new/:id', (id, body) => { const row = whatsNewRows.find((r) => r.id === id); return row ? { ...whatsNewSave(row, body) } : null }],
   ...funding.put,
   ['provider-settings', (body) => {

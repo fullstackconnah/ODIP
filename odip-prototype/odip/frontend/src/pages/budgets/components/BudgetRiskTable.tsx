@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { useId, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { AlertTriangle, ChevronDown, ChevronRight, CornerDownRight } from 'lucide-react'
 import { Button } from '@/components/Button'
@@ -7,11 +7,12 @@ import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { TONE } from '@/lib/tone'
 import { paceSentence } from '@/lib/budgetLedger'
+import { formatDayMonth } from '@/lib/dateRange'
 import { writtenDay, writtenSpan } from '@/lib/fundingPlan'
 import { formatCurrency } from '@/lib/utils'
 import { BUDGET_RISK_STATUS, budgetRiskRank, type BudgetAttentionAction, type BudgetRiskRow, type BudgetRiskTableState, type NoBudgetEntry } from './viewModel'
 import { BudgetFigure } from './BudgetFigure'
-import { NDIA_FUNDS_RAN_OUT, NOTHING_TRACKED, NO_BUDGET_REASON, NO_FIGURE, ROLLED_OVER_LEGEND, UNPRICED_LEGEND, configuredZero, noBudgetHiddenLabel, noBudgetNote, noBudgetNoteUpcoming, rolledOverLabel, unavailableFigure, unpricedForecastLabel } from './wording'
+import { NOTHING_TRACKED, NO_BUDGET_REASON, NO_FIGURE, ROLLED_OVER_LEGEND, UNPRICED_LEGEND, availableByOurRecords, configuredZero, ndiaRefusedNote, ndiaRefusedSentence, noBudgetHiddenLabel, noBudgetNote, noBudgetNoteUpcoming, rolledOverLabel, runsOutNote, unavailableFigure, unpricedForecastLabel } from './wording'
 
 // The Budgets list's body: one row per participant and pool for the current funding period, in the DataTable idiom, with the server's own status and figures and nothing of its own invented.
 //
@@ -54,33 +55,33 @@ function RiskPill({ status }: { status: BudgetRiskRow['status'] }) {
 }
 
 /**
- * The Status cell: ODIP's own word; then, when the NDIA has refused a claim of this pool for want of funds, the NDIA's word in a danger pill beside it (ODIP's arithmetic can say On track while the
- * NDIA says the funds ran out, and a list that showed only the first would be silent about the case this feature exists to catch); then, in the Funding sentence's own words, how far over the
- * period already is or what is left. The server works that out and sends it: nothing here subtracts. A viewer who may not see money sees the words and no amount.
+ * The Status cell: the row's one word (the server's: it already folds in the NDIA's refusal and the pace warning, so no green pill sits beside a red one) and one note line under it. The note is the
+ * first that applies: how far over (Over), the day the NDIA refused a claim (Funds ran out; the row claims no money the NDIA says is gone), the day the money runs out at this pace, or what is left.
+ * The server works the amounts out and sends them: nothing here subtracts. A viewer who may not see money gets no amount; the two dates still show. The NDIA's refusal and the pace sentence
+ * are also in `title` and hidden text, because `title` does not exist on touch.
  */
 function StatusCell({ row }: { row: BudgetRiskRow }) {
-  const { remaining, ndiaWord } = row
+  const { remaining, ndiaWord, paceRunsOutOn, status } = row
+  const ndiaSentence = ndiaWord ? ndiaRefusedSentence(writtenDay(ndiaWord.date), ndiaWord.code) : null
+  let note: { ink: string; text: ReactNode; sentence?: string } | null = null
+  if (status === 'Over') {
+    if (row.figures.visible && remaining !== null) note = { ink: TONE.danger.ink, text: <><BudgetFigure figures={row.figures} amount={Math.abs(remaining)} /> over</>, sentence: ndiaSentence ?? undefined }
+  } else if (status === 'FundsRanOut' && ndiaWord && ndiaSentence) {
+    note = { ink: TONE.danger.ink, text: ndiaRefusedNote(formatDayMonth(ndiaWord.date)), sentence: ndiaSentence }
+  } else if (paceRunsOutOn) {
+    const sentence = paceSentence(paceRunsOutOn, row.periodEnd)
+    // Across a year boundary "8 Dec" would read as the period's own year, so the date carries its year (as the sentence does).
+    note = { ink: TONE.warning.ink, text: runsOutNote(paceRunsOutOn.slice(0, 4) === row.periodEnd.slice(0, 4) ? formatDayMonth(paceRunsOutOn) : writtenDay(paceRunsOutOn)), sentence }
+  } else if (row.figures.visible && remaining !== null) {
+    note = { ink: 'text-[var(--color-muted-foreground)]', text: remaining < 0 ? <><BudgetFigure figures={row.figures} amount={-remaining} /> over</> : <><BudgetFigure figures={row.figures} amount={remaining} /> left</> }
+  }
   return (
     <span className="flex flex-col items-start gap-0.5">
-      <span className="flex flex-wrap items-center gap-1">
-        <RiskPill status={row.status} />
-        {ndiaWord && (
-          // Two short lines, not one long one: the Status column is the one the table can least afford to widen, and Forecast must stay on screen at 1366 and 1440.
-          <span title={`NDIA rejected a claim on ${writtenDay(ndiaWord.date)} (${ndiaWord.code})`} className="max-w-[6.5rem] whitespace-normal leading-tight">
-            <StatusBadge tone="danger" label={NDIA_FUNDS_RAN_OUT} className="inline-block" />
-          </span>
-        )}
-      </span>
-      {row.paceRunsOutOn && (
-        // On its own line, under the status words: beside them it widened the Status column, and Forecast must stay on screen at 1366 and 1440. The sentence is dates only, so it shows to a viewer who may not see money. `title` does not exist on touch and is read unreliably, so the sentence is also in the pill's hidden text.
-        <span title={paceSentence(row.paceRunsOutOn, row.periodEnd)} className="max-w-[6.5rem] whitespace-normal leading-tight">
-          <StatusBadge tone="warning" label="Spending fast" className="inline-block" />
-          <span className="sr-only">{paceSentence(row.paceRunsOutOn, row.periodEnd)}</span>
-        </span>
-      )}
-      {row.figures.visible && remaining !== null && (
-        <span className="text-xs text-[var(--color-muted-foreground)]">
-          {remaining < 0 ? <><BudgetFigure figures={row.figures} amount={-remaining} /> over</> : <><BudgetFigure figures={row.figures} amount={remaining} /> left</>}
+      <RiskPill status={status} />
+      {note && (
+        <span title={note.sentence} className={`max-w-[8rem] whitespace-nowrap text-xs ${note.ink}`}>
+          {note.text}
+          {note.sentence && <span className="sr-only">. {note.sentence}</span>}
         </span>
       )}
     </span>
@@ -175,7 +176,11 @@ function columnsFor(): Column<BudgetRiskRow>[] {
       align: 'right',
       minWidth: '6.5rem',
       render: row => (
-        <span className="max-md:text-left">
+        // On a "Funds ran out" row the figure is ours and the NDIA says the money is gone: muted, and it says "by our records" to a pointer and a screen reader.
+        <span
+          className={`max-md:text-left ${row.status === 'FundsRanOut' && row.figures.visible ? 'text-[var(--color-muted-foreground)]' : ''}`.trim()}
+          title={row.status === 'FundsRanOut' && row.figures.visible && row.available !== null && row.ndiaWord ? `${formatCurrency(row.available)} ${availableByOurRecords(writtenDay(row.ndiaWord.date))}` : undefined}
+        >
           {/* Available includes money rolled over from earlier periods, which the Funding tab labels "not confirmed" (somebody else may have used it): a row that is on track by it says so, by a mark. The mark
               is BEFORE the figure: in a right-aligned money column a mark after it pushes the digits left of an unmarked row's, and the column no longer lines up on the decimal point. */}
           {row.figures.visible && row.carried !== null && row.carried > 0 && <RolledOverMark amount={row.carried} />}
@@ -184,7 +189,7 @@ function columnsFor(): Column<BudgetRiskRow>[] {
             amount={row.available}
             reason={row.unavailableReason ?? unavailableFigure()}
             // A configured zero is a real answer and says so, so nobody reads it as a missing figure.
-            srNote={row.available === 0 && row.figures.visible ? configuredZero : undefined}
+            srNote={row.status === 'FundsRanOut' && row.ndiaWord ? availableByOurRecords(writtenDay(row.ndiaWord.date)) : row.available === 0 && row.figures.visible ? configuredZero : undefined}
           />
         </span>
       ),
@@ -304,8 +309,8 @@ export function BudgetRiskTable({ state, caption }: { state: BudgetRiskTableStat
         // code. The Status column is the one that carries risk order.
         sortable
         emptyMessage={NOTHING_TRACKED}
-        // The same weak wash for both, as the Qualifications table tints overdue and due soon: a stronger tint on the milder status ranked severity backwards, and the pill carries the status.
-        rowClassName={row => (row.status === 'Over' ? 'bg-[var(--color-error-container)]/10' : row.status === 'ForecastOver' ? 'bg-[var(--color-warning-container)]/10' : '')}
+        // The same weak wash for Over and Funds ran out (the NDIA's word is as red as Over), a warning one for Forecast over, as the Qualifications table tints overdue and due soon: a stronger tint on the milder status ranked severity backwards, and the pill carries the status.
+        rowClassName={row => (row.status === 'Over' || row.status === 'FundsRanOut' ? 'bg-[var(--color-error-container)]/10' : row.status === 'ForecastOver' ? 'bg-[var(--color-warning-container)]/10' : '')}
       />
       {state.rows.some(row => row.figures.visible && (row.unpricedShifts ?? 0) > 0) && (
         <p className="flex items-start gap-1 text-[13px] text-[var(--color-muted-foreground)]">

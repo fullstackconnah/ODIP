@@ -7,52 +7,51 @@
 // Money is in WHOLE DOLLARS, the shape the funding endpoints already serve (`FundingPeriodDto.planAmount: number`). A display string is never accepted from the server: the components format the
 // number themselves, so one figure cannot be spelled two ways.
 
+import type { BudgetListStatus } from '@/api/types'
 import type { Tone } from '@/lib/tone'
 
 // ── The one status vocabulary these surfaces share ──────────────────────────────────────────────────────────────────────
 
 /**
- * How a pool stands against its budget for the current funding period. The three the owner named, plus `OnTrack` and `NoBudget` so a surface can be honest about the two facts that are not risk.
+ * The one word a pool is printed as for the current funding period: the server's `ListStatus` (the ledger's status with the NDIA's refusal and the pace warning folded in, so a row never shows two
+ * words), plus `NoBudget` so a surface can be honest about the one fact that is not risk.
  *
  * The server is the authority: a component never decides a status, never compares two figures to make one, and never reorders or re-ranks rows. `NoBudget` is the "no budget recorded" state
  * (SHAPE-BRIEF §5): nothing ever warns or blocks on it, so it renders quietly.
  */
-export type BudgetRiskStatus = 'Over' | 'ForecastOver' | 'Approaching' | 'OnTrack' | 'NoBudget'
+export type BudgetRiskStatus = BudgetListStatus | 'NoBudget'
 
 /** The word a status is printed as, and the tone it is printed in. A `Record`, so a status added without a row fails to compile. */
 export const BUDGET_RISK_STATUS: Record<BudgetRiskStatus, { label: string; tone: Tone }> = {
   Over: { label: 'Over', tone: 'danger' },
+  FundsRanOut: { label: 'Funds ran out', tone: 'danger' },
   ForecastOver: { label: 'Forecast over', tone: 'warning' },
   Approaching: { label: 'Approaching', tone: 'warning' },
+  SpendingFast: { label: 'Spending fast', tone: 'warning' },
   OnTrack: { label: 'On track', tone: 'success' },
   NoBudget: { label: 'No budget recorded', tone: 'neutral' },
 }
 
 /**
- * The one risk order, stated once: Over, then Forecast over, then Approaching, then On track, then no budget recorded (SPEC-P2B item 3). It is an index, not a label, so a status cannot be added
- * to the vocabulary without being placed in it.
+ * The one risk order, stated once: Over, the NDIA's word (Funds ran out), Forecast over, Approaching, Spending fast, On track, then no budget recorded (SPEC-P2B item 3). It is the server's own
+ * (`BudgetListStatus`, whose members are in this order) as an index, so a status cannot be added to the vocabulary without being placed in it.
  *
- * The table's Status column sorts on `budgetRiskRank`, which is built from this. Nothing else re-derives it: the server's own ordering still arrives as `rows` in the order the server sent, and this rank only decides where a
+ * The table's Status column sorts on `budgetRiskRank`, which is built from this. The server's own ordering still arrives as `rows` in the order the server sent, and this rank only decides where a
  * user-placed sort puts things.
  */
 export const BUDGET_RISK_ORDER: Record<BudgetRiskStatus, number> = {
   Over: 0,
-  ForecastOver: 1,
-  Approaching: 2,
-  OnTrack: 3,
-  NoBudget: 4,
+  FundsRanOut: 1,
+  ForecastOver: 2,
+  Approaching: 3,
+  SpendingFast: 4,
+  OnTrack: 5,
+  NoBudget: 6,
 }
 
-/**
- * Where a ROW stands in the one risk order, for the Status column's sort: the same rule the server ranks the list by (`BudgetListService.Rank`). Over is first; a pool the NDIA has refused for want of
- * funds comes straight after it (the NDIA's word outranks ODIP's forecast and approaching, and ODIP's own status can say On track beside it); then Forecast over, Approaching, On track, and no budget
- * recorded last. An On track pool with a pace warning sits between Approaching and On track (the server's `Rank` says the same). Declared here, once, so the header's sort and the list's own order cannot drift apart.
- */
-export function budgetRiskRank(row: Pick<BudgetRiskRow, 'status' | 'ndiaWord' | 'paceRunsOutOn'>): number {
-  if (row.status === 'Over') return 0
-  if (row.ndiaWord) return 1
-  if (row.status === 'OnTrack' && row.paceRunsOutOn) return BUDGET_RISK_ORDER.Approaching + 1.5
-  return BUDGET_RISK_ORDER[row.status] + 1
+/** Where a ROW stands in the one risk order, for the Status column's sort: its own status's place. Nothing is worked out here: the server already folded the NDIA's word and the pace into the status. */
+export function budgetRiskRank(row: Pick<BudgetRiskRow, 'status'>): number {
+  return BUDGET_RISK_ORDER[row.status]
 }
 
 // ── Null semantics, stated once, honoured by every component ───────────────────────────────────────────────────────────
@@ -117,11 +116,11 @@ export type BudgetRiskRow = {
   /** How many shifts of this period the forecast leaves out because no price can be worked out for them yet (a sleepover, a passive night, a group shift). Omitted when there are none: the figures are then complete. */
   unpricedShifts?: number
   /**
-   * The NDIA's own word that this pool's funds ran out (a claim of the pool refused for want of funds, V17, V18, V27 or V28), the day it was refused and the code. ODIP's own status can say On track
-   * beside it, so the row says it in its own pill. Omitted when the NDIA has said nothing.
+   * The NDIA's own word that this pool's funds ran out (a claim of the pool refused for want of funds, V17, V18, V27 or V28), the day it was refused and the code. The status already says it
+   * (`FundsRanOut`); this is the date the row's note and the Available figure's explanation give. Omitted when the NDIA has said nothing.
    */
   ndiaWord?: { date: string; code: string }
-  /** The date the money runs out at the pace so far, before the period ends, when the server found one; omitted otherwise. A projection, not a status: it shows as its own pill. */
+  /** The date the money runs out at the pace so far, before the period ends, when the server found one; omitted otherwise. A projection: the row's note says it, never a second pill. */
   paceRunsOutOn?: string
   /** Why a figure or the forecast is missing, in the server's words. Shown beside the dash; never a generic "error". */
   unavailableReason?: string
