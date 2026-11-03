@@ -1,16 +1,15 @@
 import { useEffect, useState } from 'react'
-import { useTrips, usePatchTrip, useTrip } from '@/api/hooks'
-import { TRIP_STATUSES, type TripStatus, type TripListDto } from '@/api/types'
+import { useTrips, useTrip } from '@/api/hooks'
+import { type TripStatus, type TripListDto } from '@/api/types'
 import { formatDateAu } from '@/lib/utils'
 import { formatRatio, plural } from '@/lib/format'
-import { TRIP_STATUS_LABELS, statusClass, statusItems } from '@/lib/tone'
+import { TRIP_STATUS_LABELS, statusItems } from '@/lib/tone'
 import { Link, useNavigate } from 'react-router-dom'
 import { Plus, Pencil, MapPin } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
 import { PageState } from '@/components/PageState'
 import { Button } from '@/components/Button'
-import { Callout } from '@/components/Callout'
 import { Dropdown } from '@/components/Dropdown'
 import { StatusBadge } from '@/components/StatusBadge'
 import { CellText, DataTable, RowMenu, type Column } from '@/components/DataTable'
@@ -18,7 +17,6 @@ import { SearchInput } from '@/components/SearchInput'
 import { TAP_AREA } from '@/components/tapArea'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { usePermissions } from '@/lib/permissions'
-import { extractErrorMessage } from '@/pages/intake/intakeFormat'
 import { EditTripModal } from './trip-detail'
 import { retryingAfterError } from '@/lib/queryPhase'
 
@@ -26,8 +24,6 @@ type Tab = 'active' | 'completed'
 type TripsView = 'table' | 'cards'
 
 const activeStatuses: TripStatus[] = ['Draft', 'Planning', 'OpenForBookings', 'Confirmed', 'InProgress']
-
-const TRIP_STATUS_ITEMS = statusItems(TRIP_STATUSES, TRIP_STATUS_LABELS)
 
 const VIEW_STORAGE_KEY = 'odip.trips.view'
 const WIDE_QUERY = '(min-width: 1280px)'
@@ -86,7 +82,6 @@ export default function TripsPage() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [editingTripId, setEditingTripId] = useState<string | null>(null)
-  const [statusChangeError, setStatusChangeError] = useState<{ tripName: string; message: string } | null>(null)
 
   const isWideScreen = useMinWidth(WIDE_QUERY)
   const [storedView, setStoredView] = useState<TripsView | null>(() => readStoredView())
@@ -111,7 +106,6 @@ export default function TripsPage() {
   // PP-63: the exact data EditTripModal needs — TripsPage already fetched it for the old
   // hand-rolled modal, so this stays even though the modal itself moved to trip-detail/.
   const { data: tripDetail } = useTrip(editingTripId ?? undefined)
-  const patchTrip = usePatchTrip()
 
   const trips = tab === 'active' && !statusFilter
     ? allTrips.filter((t: TripListDto) => activeStatuses.includes(t.status))
@@ -134,18 +128,6 @@ export default function TripsPage() {
 
   const handleCloseEdit = () => {
     setEditingTripId(null)
-  }
-
-  const handleStatusChange = (trip: TripListDto, status: TripStatus) => {
-    setStatusChangeError(null)
-    patchTrip.mutate({ id: trip.id, data: { status } }, {
-      onError: (err) => {
-        setStatusChangeError({
-          tripName: trip.tripName,
-          message: extractErrorMessage(err, "Couldn't update the trip status. Please try again."),
-        })
-      },
-    })
   }
 
   // Every row is exactly --row-h from 1280 up: cells never wrap (DataTable), so a narrower window
@@ -185,21 +167,7 @@ export default function TripsPage() {
       key: 'status',
       header: 'Status',
       mobile: 'status',
-      // "Open For Bookings" is the widest label: 104px of text + 10 left / 24 right padding for the
-      // caret in the pill + 24 of cell padding = 162px. Reserved up front so the column doesn't jump
-      // when a trip's status changes to it.
-      minWidth: '10.25rem',
-      render: (t) => canWrite ? (
-        <span onClick={e => e.stopPropagation()} className="inline-flex items-center">
-          <Dropdown
-            variant="pill"
-            value={t.status}
-            onChange={val => handleStatusChange(t, val as TripStatus)}
-            colorClass={`${statusClass(t.status)} h-[var(--control-h-sm)] whitespace-nowrap`}
-            items={TRIP_STATUS_ITEMS}
-          />
-        </span>
-      ) : <StatusBadge status={t.status} label={TRIP_STATUS_LABELS[t.status] ?? t.status} />,
+      render: (t) => <StatusBadge status={t.status} label={TRIP_STATUS_LABELS[t.status] ?? t.status} />,
     },
     {
       key: 'startDate',
@@ -305,12 +273,6 @@ export default function TripsPage() {
         </PageHeader>
       </div>
 
-      {statusChangeError && (
-        <Callout tone="error">
-          <strong>Couldn't update {statusChangeError.tripName}.</strong> {statusChangeError.message}
-        </Callout>
-      )}
-
       {/* Trips list */}
       {isLoading && !retryingAfterError(pageQuery) ? (
         <PageState kind="loading" noun="trips" />
@@ -391,15 +353,7 @@ export default function TripsPage() {
                       </button>
                     </div>
                   )}
-                  {canWrite ? (
-                    <Dropdown
-                      variant="pill"
-                      value={t.status}
-                      onChange={val => handleStatusChange(t, val as TripStatus)}
-                      colorClass={statusClass(t.status)}
-                      items={TRIP_STATUS_ITEMS}
-                    />
-                  ) : <StatusBadge status={t.status} label={TRIP_STATUS_LABELS[t.status] ?? t.status} />}
+                  <StatusBadge status={t.status} label={TRIP_STATUS_LABELS[t.status] ?? t.status} />
                 </div>
                 <div className="flex items-center gap-2 text-sm text-[var(--color-muted-foreground)]">
                   <span className="inline-flex items-center gap-1"><span className="material-symbols-outlined text-base leading-none">person</span> {t.currentParticipantCount}/{t.maxParticipants || '—'}</span>

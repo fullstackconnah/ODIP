@@ -1,10 +1,8 @@
 import { useStaff, useDeleteStaff, useUpdateStaff, useProviderSettings } from '@/api/hooks'
 import { DataTable, RowMenu, type Column, type RowMenuItem } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
-import { Dropdown } from '@/components/Dropdown'
 import { EmptyState, type EmptyStateAction } from '@/components/EmptyState'
 import { StatusBadge } from '@/components/StatusBadge'
-import { statusClass } from '@/lib/tone'
 import { SearchInput } from '@/components/SearchInput'
 import { Tabs } from '@/components/Tabs'
 import { CHIP_CLASS } from '@/components/ServiceStreamBadges'
@@ -14,7 +12,7 @@ import { Callout } from '@/components/Callout'
 import { extractErrorMessage } from '@/lib/utils'
 import { useArchiveRestore } from '@/hooks/useArchiveRestore'
 import { Link } from 'react-router-dom'
-import { Plus, UserCog, CalendarOff, Pencil, Archive, ArchiveRestore } from 'lucide-react'
+import { Plus, UserCog, CalendarOff, Pencil, Archive, ArchiveRestore, UserX, UserCheck } from 'lucide-react'
 import { useState } from 'react'
 import { useTabParam } from '@/hooks/useTabParam'
 import { usePermissions } from '@/lib/permissions'
@@ -28,11 +26,6 @@ const positionLabel = (s: StaffListDto) => POSITION_LABELS[s.position] ?? s.posi
 
 // A worker screening is expired once its expiry day has passed (expiring today is not yet expired): lib/deadline.ts, a calendar-day compare.
 const isExpired = (date: string) => deadlineState(date, { warnDays: 0 }).status === 'overdue'
-
-const ACTIVE_STATUS_ITEMS = [
-  { value: 'Active', label: 'Active' },
-  { value: 'Inactive', label: 'Inactive' },
-]
 
 // What a staff member holds, as chips, and nothing for what they do not: the eight caps-labelled flag columns this replaces made a phone
 // card ten labels long and a desktop row a run of ticks and blanks. An expired worker screening is the one flag shown as a problem.
@@ -119,9 +112,9 @@ export default function StaffPage() {
     })
   }
 
-  function handleStatusChange(s: StaffListDto, val: string) {
-    const data = toUpdateStaffDto(s, { isActive: val === 'Active' })
-    if (val === 'Inactive') {
+  function handleStatusChange(s: StaffListDto, active: boolean) {
+    const data = toUpdateStaffDto(s, { isActive: active })
+    if (!active) {
       setConfirmDeactivate({ id: s.id, name: s.fullName, data })
     } else {
       saveStatus(s.id, s.fullName, data)
@@ -133,6 +126,10 @@ export default function StaffPage() {
     ...(canAccessLeaveApprovals ? [{ label: 'Leave & availability', icon: <CalendarOff className="w-4 h-4" />, to: `/rostering/leave?userId=${s.id}` }] : []),
     ...(canWrite ? [
       { label: 'Edit', icon: <Pencil className="w-4 h-4" />, to: `/staff/${s.id}/edit` },
+      // The only place active status changes: the row shows it as a badge. Deactivating asks first (it takes them off rostering).
+      s.isActive
+        ? { label: 'Deactivate', icon: <UserX className="w-4 h-4" />, onSelect: () => handleStatusChange(s, false) }
+        : { label: 'Reactivate', icon: <UserCheck className="w-4 h-4" />, onSelect: () => handleStatusChange(s, true) },
       showArchived
         ? { label: 'Restore', icon: <ArchiveRestore className="w-4 h-4" />, onSelect: () => requestRestore(s) }
         : { label: 'Archive', icon: <Archive className="w-4 h-4" />, onSelect: () => requestArchive(s) },
@@ -160,19 +157,7 @@ export default function StaffPage() {
       header: 'Status',
       sortable: true,
       mobile: 'status',
-      render: (s) => {
-        const current = s.isActive ? 'Active' : 'Inactive'
-        // A role that cannot write reads the status: no pill it cannot change.
-        return canWrite ? (
-          <Dropdown
-            variant="pill"
-            value={current}
-            onChange={val => handleStatusChange(s, val)}
-            colorClass={`${statusClass(current)} h-[var(--control-h-sm)]`}
-            items={ACTIVE_STATUS_ITEMS}
-          />
-        ) : <StatusBadge status={current} />
-      },
+      render: (s) => <StatusBadge status={s.isActive ? 'Active' : 'Inactive'} />,
     },
     // Every flag is on the row (Manual and Overnight were once deleted below 1536, L3-04), as chips; on the card it follows Position and Region.
     { key: 'qualifications', header: 'Qualifications', mobile: 'meta', className: 'max-md:basis-full max-md:max-w-none! max-md:order-0! max-md:pr-9!', render: (s: StaffListDto) => <Qualifications staff={s} /> },
@@ -262,9 +247,9 @@ export default function StaffPage() {
         }}
         variant="danger"
         loading={updateStaff.isPending}
-        title="Mark staff member as inactive?"
-        confirmLabel="Mark inactive"
-        message={<p>Mark <strong>{confirmDeactivate?.name || 'this staff member'}</strong> as inactive?</p>}
+        title={`Deactivate ${confirmDeactivate?.name || 'this staff member'}?`}
+        confirmLabel="Deactivate"
+        message={<p>Deactivate <strong>{confirmDeactivate?.name || 'this staff member'}</strong>? They can't be rostered or assigned until you reactivate them.</p>}
       />
     </div>
   )

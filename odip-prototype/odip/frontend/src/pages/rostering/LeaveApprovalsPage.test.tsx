@@ -795,9 +795,18 @@ describe('LeaveApprovalsPage — Employment Hero leave', () => {
 
   it('says how many hours EH has for a row, and when they were the default', () => {
     mockUseLeaveRequests.mockReturnValue({ data: rows().slice(1), isLoading: false, isError: false, refetch: vi.fn() })
-    renderPage()
+    renderPage('/rostering/leave?userId=x')
     expect(screen.getByText("In Employment Hero \u00b7 22.8 h (7.6 h a day: our default)")).toBeInTheDocument()
     expect(screen.getByText('In Employment Hero \u00b7 36 h')).toBeInTheDocument()
+  })
+
+  it('drops the Status column while the filter shows only Pending, and brings it back for All', () => {
+    mockUseLeaveRequests.mockReturnValue({ data: [makeLeaveRequest()], isLoading: false, isError: false, refetch: vi.fn() })
+    const { unmount } = renderPage()
+    expect(screen.queryByRole('columnheader', { name: 'Status' })).toBeNull()
+    unmount()
+    renderPage('/rostering/leave?userId=x')
+    expect(screen.getByRole('columnheader', { name: 'Status' })).toBeInTheDocument()
   })
 
   // The table squeezes wrapping columns before it scrolls, so no text ends up under the pinned buttons (approvals-1024).
@@ -830,7 +839,7 @@ describe('LeaveApprovalsPage — between md and xl (1024): Staff over Type, Date
 
   it('stacks the pairs under two headers', () => {
     mockUseLeaveRequests.mockReturnValue(ok([makeLeaveRequest()]))
-    renderPage()
+    renderPage('/rostering/leave?userId=x')
     expect(screen.getAllByRole('columnheader').map(h => h.textContent)).toEqual(['Staff · Type', 'Dates · Requested', 'Status', 'Actions'])
   })
 
@@ -892,7 +901,7 @@ describe('LeaveApprovalsPage — between md and xl (1024): Staff over Type, Date
       makeLeaveRequest({ id: 'd', userFullName: 'Dee Declined', status: 'Declined', decisionNote: 'Short-staffed that day.' }),
       makeLeaveRequest({ id: 's', userFullName: 'Sam Sent', status: 'Approved', sentHours: 36, sentHoursDefaulted: false }),
     ]))
-    renderPage()
+    renderPage('/rostering/leave?userId=x')
     expect(screen.getByText('Short-staffed that day.').className).toContain('md:max-w-[10rem]')
     expect(screen.getByText('In Employment Hero · 36 h').className).toContain('md:min-w-[10rem]')
   })
@@ -923,7 +932,7 @@ describe('LeaveApprovalsPage — between md and xl (1024): Staff over Type, Date
 describe('LeaveApprovalsPage — xl and phones', () => {
   it('keeps the six columns at xl+ and on phones', () => {
     mockUseLeaveRequests.mockReturnValue({ data: [makeLeaveRequest()], isLoading: false, isError: false, refetch: vi.fn() })
-    renderPage()
+    renderPage('/rostering/leave?userId=x')
     expect(screen.getAllByRole('columnheader').map(h => h.textContent)).toEqual(['Staff', 'Type', 'Dates', 'Requested', 'Status', 'Actions'])
   })
 
@@ -933,7 +942,7 @@ describe('LeaveApprovalsPage — xl and phones', () => {
     })) as unknown as typeof window.matchMedia
     try {
       mockUseLeaveRequests.mockReturnValue({ data: [makeLeaveRequest()], isLoading: false, isError: false, refetch: vi.fn() })
-      renderPage()
+      renderPage('/rostering/leave?userId=x')
       expect(screen.getAllByRole('columnheader').map(h => h.textContent)).toEqual(['Staff', 'Type', 'Dates', 'Requested', 'Status', 'Actions'])
       const type = screen.getAllByRole('cell').find(c => c.getAttribute('data-label') === 'Type')!
       expect(type).toHaveTextContent('Leave — Annual')

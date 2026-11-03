@@ -5,6 +5,7 @@ import { INCIDENT_SEVERITY_LABELS, INCIDENT_STATUS_LABELS, INCIDENT_TYPE_LABELS,
 import { DataTable, RowMenu, ROW_LINK, CROSS_LINK, type Column, type RowMenuItem } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
+import { SeverityWord } from '@/components/SeverityWord'
 import { EmptyState } from '@/components/EmptyState'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { Tabs } from '@/components/Tabs'
@@ -280,29 +281,14 @@ export default function IncidentsPage() {
       ),
     },
     { key: 'status', header: 'Status', mobile: 'status', render: (i) => <StatusBadge status={i.status} label={INCIDENT_STATUS_LABELS[i.status as IncidentStatus] ?? i.status} /> },
-    { key: 'severity', header: 'Severity', mobile: 'meta', className: 'max-md:order-0!', render: (i) => <StatusBadge status={i.severity} label={INCIDENT_SEVERITY_LABELS[i.severity as IncidentSeverity]} /> },
+    { key: 'severity', header: 'Severity', mobile: 'meta', className: 'max-md:order-0!', render: (i) => <SeverityWord value={i.severity} label={INCIDENT_SEVERITY_LABELS[i.severity as IncidentSeverity]} /> },
     { key: 'incidentDateTime', header: 'Date', type: 'date', mobile: 'meta', className: 'max-md:-order-1!' },
     { key: 'incidentType', header: 'Type', maxWidth: '9rem', mobile: 'meta', className: 'max-md:order-2!', render: (i) => INCIDENT_TYPE_LABELS[i.incidentType as IncidentType] ?? i.incidentType },
-    {
-      key: 'tripName',
-      header: 'Trip',
-      mobile: 'meta',
-      className: 'max-md:order-3!',
-      render: (i) => i.tripInstanceId && i.tripName ? (
-        <Link
-          to={`/trips/${i.tripInstanceId}`}
-          title={i.tripName}
-          className={`inline-block align-middle max-md:max-w-[9rem] max-md:truncate md:truncate md:max-[1792px]:max-w-[11rem] min-[1792px]:max-w-[13rem] ${CROSS_LINK} ${TAP_TRUNCATED_LINK}`}
-        >
-          {i.tripName}
-        </Link>
-      ) : (i.tripName ?? '—'),
-    },
     {
       key: 'involvedParticipantName',
       header: 'Participant',
       mobile: 'meta',
-      className: 'max-md:order-4!',
+      className: 'max-md:order-3!',
       render: (i) => i.involvedParticipantId && i.involvedParticipantName ? (
         <Link
           to={`/participants/${i.involvedParticipantId}`}
@@ -313,7 +299,6 @@ export default function IncidentsPage() {
         </Link>
       ) : (i.involvedParticipantName ?? '—'),
     },
-    { key: 'reportedByName', header: 'Reported By', maxWidth: '9rem', mobile: 'hidden' },
     { key: 'actions', header: '', overlay: true, mobile: 'trail', render: (i) => <RowMenu name={i.title ?? 'incident'} items={rowItems(i)} /> },
   ]
 

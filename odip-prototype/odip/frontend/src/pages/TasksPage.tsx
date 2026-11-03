@@ -3,6 +3,7 @@ import { TASK_TYPE_LABELS, type TaskItemStatus } from '@/api/types'
 import { CellText, DataTable, RowMenu, ROW_LINK, CROSS_LINK, type Column, type RowMenuItem } from '@/components/DataTable'
 import { PageHeader } from '@/components/PageHeader'
 import { StatusBadge } from '@/components/StatusBadge'
+import { SeverityWord } from '@/components/SeverityWord'
 import { Dropdown } from '@/components/Dropdown'
 import { EmptyState } from '@/components/EmptyState'
 import { Button } from '@/components/Button'
@@ -162,7 +163,7 @@ export default function TasksPage() {
       key: 'priority',
       header: 'Priority',
       mobile: 'meta',
-      render: (t) => <StatusBadge status={t.priority} />,
+      render: (t) => <SeverityWord value={t.priority} />,
     },
     {
       key: 'tripName',

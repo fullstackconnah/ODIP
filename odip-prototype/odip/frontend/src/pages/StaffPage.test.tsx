@@ -113,22 +113,22 @@ describe('StaffPage — staff detail link', () => {
   })
 })
 
-// PP-46 — the Active -> Inactive transition on the status dropdown is staged behind a
-// ConfirmDialog; Active (re-activation) still fires immediately.
+// PP-46 — Deactivate (the row menu is the only place status changes) is staged behind a
+// ConfirmDialog; Reactivate still fires immediately.
 describe('StaffPage — PP-46 deactivate confirm', () => {
   it('does not call the mutation until the Inactive transition is confirmed', async () => {
     const user = userEvent.setup()
     renderPage()
 
     const row = screen.getByText('Alex Rivera').closest('tr') as HTMLElement
-    await user.click(within(row).getByRole('button', { name: /^active$/i }))
-    await user.click(await screen.findByRole('option', { name: /inactive/i }))
+    await user.click(within(row).getAllByRole('button', { name: 'Deactivate' })[0])
 
     expect(mockUpdateMutate).not.toHaveBeenCalled()
     const dialog = await screen.findByRole('alertdialog')
-    expect(within(dialog).getByRole('heading', { name: /mark staff member as inactive/i })).toBeInTheDocument()
+    expect(within(dialog).getByRole('heading', { name: 'Deactivate Alex Rivera?' })).toBeInTheDocument()
+    expect(within(dialog).getByText(/can't be rostered or assigned until you reactivate them/i)).toBeInTheDocument()
 
-    await user.click(within(dialog).getByRole('button', { name: /mark inactive/i }))
+    await user.click(within(dialog).getByRole('button', { name: 'Deactivate' }))
     expect(mockUpdateMutate).toHaveBeenCalledWith(
       expect.objectContaining({ id: 's1', data: expect.objectContaining({ isActive: false }) }),
       expect.anything(),
@@ -140,8 +140,7 @@ describe('StaffPage — PP-46 deactivate confirm', () => {
     renderPage()
 
     const row = screen.getByText('Alex Rivera').closest('tr') as HTMLElement
-    await user.click(within(row).getByRole('button', { name: /^active$/i }))
-    await user.click(await screen.findByRole('option', { name: /inactive/i }))
+    await user.click(within(row).getAllByRole('button', { name: 'Deactivate' })[0])
 
     const dialog = await screen.findByRole('alertdialog')
     await user.click(within(dialog).getByRole('button', { name: /cancel/i }))
@@ -159,8 +158,7 @@ describe('StaffPage — PP-46 deactivate confirm', () => {
     renderPage()
 
     const row = screen.getByText('Jamie Fox').closest('tr') as HTMLElement
-    await user.click(within(row).getByRole('button', { name: /^inactive$/i }))
-    await user.click(await screen.findByRole('option', { name: /^active$/i }))
+    await user.click(within(row).getAllByRole('button', { name: 'Reactivate' })[0])
 
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     expect(mockUpdateMutate).toHaveBeenCalledWith(
@@ -229,12 +227,13 @@ describe('StaffPage — cross-domain links', () => {
 // Density review — table rows land on --row-h only if nothing inside them is taller than 24px:
 // the row actions and the status pill are all --control-h-sm, and the actions appear on hover/focus.
 describe('StaffPage — density row actions', () => {
-  it('pins the Active/Inactive status pill to the 24px --control-h-sm token and keeps it always visible', () => {
+  it('shows the status as a read-only badge, always visible, with nothing in it to open', () => {
     renderPage()
 
     const row = screen.getByText('Alex Rivera').closest('tr') as HTMLElement
-    const pill = within(row).getByRole('button', { name: /^active$/i })
-    expect(pill).toHaveClass('h-[var(--control-h-sm)]')
+    expect(within(row).queryByRole('button', { name: /^active$/i })).toBeNull()
+    expect(within(row).getByText('Active').closest('td')?.querySelector('[aria-haspopup]')).toBeNull()
+    const pill = within(row).getByText('Active')
     // A status is information, not an action: nothing above it in the row fades it out.
     expect(pill.closest('[class*="group-hover/row:opacity-100"]')).toBeNull()
   })
@@ -253,6 +252,7 @@ describe('StaffPage — density row actions', () => {
     // The archive-flow Edit/Archive icons are in the same cluster, so they reveal together.
     expect(within(cluster).getByRole('link', { name: 'Edit' })).toHaveAttribute('href', '/staff/s1/edit')
     expect(within(cluster).getByRole('button', { name: 'Archive' })).toBeInTheDocument()
+    expect(within(cluster).getByRole('button', { name: 'Deactivate' })).toBeInTheDocument()
   })
 
   it('keeps the title row and the filter row in one block-flow wrapper so the header is 72px, not gap-spaced', () => {
@@ -376,16 +376,17 @@ describe('StaffPage — write controls by role', () => {
     const row = screen.getByText('Alex Rivera').closest('tr') as HTMLElement
     expect(within(row).getByText('Active')).toBeInTheDocument()
     expect(within(row).queryByRole('button', { name: /Active/ })).not.toBeInTheDocument()
+    expect(within(row).queryByRole('button', { name: /Deactivate|Reactivate/ })).not.toBeInTheDocument()
     expect(within(row).queryByRole('link', { name: /Edit/ })).not.toBeInTheDocument()
     expect(within(row).queryByRole('button', { name: /Archive/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /New staff member/ })).not.toBeInTheDocument()
   })
 
-  it.each(['Admin', 'Coordinator'])('offers %s the status pill and New Staff', role => {
+  it.each(['Admin', 'Coordinator'])('offers %s Deactivate and New Staff', role => {
     setUserRole(role)
     renderPage()
     const row = screen.getByText('Alex Rivera').closest('tr') as HTMLElement
-    expect(within(row).getByRole('button', { name: /Active/ })).toBeEnabled()
+    expect(within(row).getAllByRole('button', { name: 'Deactivate' })[0]).toBeEnabled()
     expect(screen.getByRole('link', { name: /New staff member/ })).toBeInTheDocument()
   })
 })
@@ -396,15 +397,14 @@ describe('StaffPage — refused writes are shown', () => {
   type Callbacks = { onError?: (e: unknown) => void; onSettled?: () => void }
   const refuse = (mutate: typeof mockUpdateMutate) => mutate.mockImplementation((_v: unknown, o?: Callbacks) => { o?.onError?.(refused); o?.onSettled?.() })
 
-  it('closes the Mark inactive confirm and shows the server message when the change fails', async () => {
+  it('closes the Deactivate confirm and shows the server message when the change fails', async () => {
     const user = userEvent.setup()
     refuse(mockUpdateMutate)
     renderPage()
 
     const row = screen.getByText('Alex Rivera').closest('tr') as HTMLElement
-    await user.click(within(row).getByRole('button', { name: /^active$/i }))
-    await user.click(await screen.findByRole('option', { name: /inactive/i }))
-    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: /mark inactive/i }))
+    await user.click(within(row).getAllByRole('button', { name: 'Deactivate' })[0])
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Deactivate' }))
 
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     expect(screen.getByText('You do not have permission to do that.')).toBeInTheDocument()
@@ -417,8 +417,7 @@ describe('StaffPage — refused writes are shown', () => {
     renderPage()
 
     const row = screen.getByText('Jamie Fox').closest('tr') as HTMLElement
-    await user.click(within(row).getByRole('button', { name: /^inactive$/i }))
-    await user.click(await screen.findByRole('option', { name: /^active$/i }))
+    await user.click(within(row).getAllByRole('button', { name: 'Reactivate' })[0])
 
     expect(screen.getByText('You do not have permission to do that.')).toBeInTheDocument()
   })
@@ -503,7 +502,7 @@ describe('StaffPage — Qualifications chips and the phone card', () => {
     renderPage()
 
     expect(screen.getByRole('link', { name: 'Alex Rivera' }).closest('td')).toHaveAttribute('data-card', 'primary')
-    expect(screen.getByRole('button', { name: /^active$/i }).closest('td')).toHaveAttribute('data-card', 'status')
+    expect(within(screen.getByText('Alex Rivera').closest('tr') as HTMLElement).getByText('Active').closest('td')).toHaveAttribute('data-card', 'status')
     for (const text of ['Support worker', 'North', 'Driver']) expect(screen.getByText(text).closest('td'), text).toHaveAttribute('data-card', 'meta')
     // VC design review fix 2: the chips take a line of their own under the muted text.
     expect(screen.getByText('Driver').closest('td')).toHaveClass('max-md:basis-full', 'max-md:max-w-none!')
@@ -578,8 +577,8 @@ describe('StaffPage — status tones', () => {
     })
     renderPage()
 
-    const active = within(screen.getByText('Alex Rivera').closest('tr') as HTMLElement).getByRole('button', { name: /^active$/i })
-    const inactive = within(screen.getByText('Jamie Fox').closest('tr') as HTMLElement).getByRole('button', { name: /^inactive$/i })
+    const active = within(screen.getByText('Alex Rivera').closest('tr') as HTMLElement).getByText('Active')
+    const inactive = within(screen.getByText('Jamie Fox').closest('tr') as HTMLElement).getByText('Inactive')
     expect(active).toHaveClass(...TONE.success.solid.split(' '))
     expect(inactive).toHaveClass(...TONE.danger.solid.split(' '))
   })

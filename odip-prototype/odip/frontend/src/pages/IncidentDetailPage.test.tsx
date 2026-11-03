@@ -65,6 +65,17 @@ describe('IncidentDetailPage — Context panel', () => {
     expect(screen.getByText('Incident not found')).toBeInTheDocument()
   })
 
+  it('names the trip, linked, once the list no longer carries it, and shows no Trip line for a non-trip incident', () => {
+    mockUseIncident.mockReturnValue({ data: baseIncident({ tripInstanceId: 'trip-1', tripName: 'Beach Day' }), isLoading: false })
+    const { unmount } = renderPage()
+    expect(screen.getByRole('link', { name: 'Beach Day' })).toHaveAttribute('href', '/trips/trip-1')
+    unmount()
+
+    mockUseIncident.mockReturnValue({ data: baseIncident(), isLoading: false })
+    renderPage()
+    expect(screen.queryByText('Trip')).not.toBeInTheDocument()
+  })
+
   it('renders no Context panel when medication/shift/shiftNote are all null', () => {
     mockUseIncident.mockReturnValue({ data: baseIncident(), isLoading: false })
     renderPage()

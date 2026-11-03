@@ -3,7 +3,7 @@ import { CalendarClock, Pencil, Plus, Power, Repeat, X } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
-import { DataTable, type Column } from '@/components/DataTable'
+import { DataTable, RowMenu, type Column, type RowMenuItem } from '@/components/DataTable'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
@@ -35,54 +35,23 @@ function toPayload(p: ShiftPatternDto): CreateShiftPatternDto {
   }
 }
 
-function PatternRowActions({
-  pattern, onEdit, onGenerate, onToggleActive,
-}: {
-  pattern: ShiftPatternDto
-  onEdit: () => void
-  onGenerate: () => void
-  onToggleActive: () => void
-}) {
+function patternRowItems(
+  pattern: ShiftPatternDto, onEdit: () => void, onGenerate: () => void, onToggleActive: () => void,
+): { name: string; items: RowMenuItem[] } {
   // The time is in the name as well as the day, and for the pair a 2:1 agreement makes (the same day, times and dates) which worker it is: a button heard on its own has to be told apart.
   const worker = workerOfPairLabel(pattern)
   const which = `${pattern.participantName}'s ${pattern.dayOfWeek} ${formatShiftRange(pattern.startTime, pattern.endTime, pattern.endsNextDay)} pattern${worker ? ` (${worker})` : ''}`
-  return (
-    <div className="flex items-center justify-end gap-1 pointer-coarse:gap-2">
-      <Button
-        variant="ghost"
-        size="sm"
-        iconOnly
-        onClick={onEdit}
-        title="Edit pattern"
-        aria-label={`Edit ${which}`}
-      >
-        <Pencil className="h-4 w-4" />
-      </Button>
-      <Button
-        variant="ghost"
-        size="sm"
-        iconOnly
-        onClick={onGenerate}
-        disabled={!pattern.isActive}
-        title={pattern.isActive ? 'Generate shifts' : 'Inactive patterns generate nothing'}
-        aria-label={`Generate shifts for ${which}`}
-      >
-        <Repeat className="h-4 w-4" />
-      </Button>
-      <Button
-        variant="ghost"
-        size="sm"
-        iconOnly
-        onClick={onToggleActive}
-        title={pattern.isActive ? 'Deactivate pattern' : 'Activate pattern'}
-        aria-label={`${pattern.isActive ? 'Deactivate' : 'Activate'} ${which}`}
-      >
-        <Power className="h-4 w-4" />
-      </Button>
-    </div>
-  )
+  const verb = pattern.isActive ? 'Deactivate' : 'Activate'
+  return {
+    name: which,
+    items: [
+      { label: 'Edit pattern', ariaLabel: `Edit ${which}`, icon: <Pencil className="h-4 w-4" />, onSelect: onEdit },
+      // Stays in the menu, disabled with its reason, so a coordinator sees why an inactive pattern cannot generate.
+      { label: 'Generate shifts', ariaLabel: `Generate shifts for ${which}`, icon: <Repeat className="h-4 w-4" />, onSelect: onGenerate, disabled: !pattern.isActive, description: 'Inactive patterns generate nothing' },
+      { label: `${verb} pattern`, ariaLabel: `${verb} ${which}`, icon: <Power className="h-4 w-4" />, onSelect: onToggleActive },
+    ],
+  }
 }
-
 /** Loading state — a skeleton matching the final table's shape, no spinner. */
 function PatternsSkeleton() {
   const { prefs } = useUiPreferences()
@@ -184,7 +153,8 @@ export default function PatternsPage() {
     { key: 'defaultStaffName', header: 'Regular', render: p => p.defaultStaffName ?? 'Unassigned' },
     { key: 'effectiveRange', header: 'Effective range', render: p => formatEffectiveRange(p.effectiveFrom, p.effectiveTo) },
     // Plan builder phase D: a pattern an approved agreement made says which version, and what the agreement asks of a worker. Information only.
-    { key: 'source', header: 'Source', wrap: true, render: p => <PatternSource pattern={p} /> },
+    // Keyed on the agreement id (null for a hand-made pattern), so the column goes while no pattern here came from an agreement.
+    { key: 'sourceDraftId', header: 'Source', wrap: true, hideWhenEmpty: true, render: p => <PatternSource pattern={p} /> },
     { key: 'isActive', header: 'Status', render: p => <StatusBadge status={p.isActive ? 'Active' : 'Inactive'} /> },
   ]
 
@@ -192,14 +162,12 @@ export default function PatternsPage() {
     columns.push({
       key: 'actions',
       header: '',
-      render: p => (
-        <PatternRowActions
-          pattern={p}
-          onEdit={() => setSlideOverTarget({ mode: 'edit', pattern: p })}
-          onGenerate={() => setGenerateTarget(p)}
-          onToggleActive={() => handleToggleActive(p)}
-        />
-      ),
+      overlay: true,
+      mobile: 'trail',
+      render: p => {
+        const { name, items } = patternRowItems(p, () => setSlideOverTarget({ mode: 'edit', pattern: p }), () => setGenerateTarget(p), () => handleToggleActive(p))
+        return <RowMenu name={name} items={items} />
+      },
     })
   }
 
