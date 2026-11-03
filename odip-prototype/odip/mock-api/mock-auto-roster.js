@@ -1,4 +1,4 @@
-// POST rostering/weeks/:weekStart/auto-roster and .../auto-roster/apply for the mock API: the happy path only (the captures use page.route for a slow run, a 500, a 409 and a partial apply).
+// POST rostering/weeks/:id/auto-roster and .../auto-roster/apply for the mock API: the happy path only (the captures use page.route for a slow run, a 500, a 409 and a partial apply).
 // `?fixture=full` on the request gives a draft with nothing uncovered (applying it fills the week); the screen never sends it. Every name and figure is fictional.
 
 const DAY = 86_400_000
@@ -43,8 +43,8 @@ function draftFor(weekStart, name) {
 }
 
 const post = [
-  ['rostering/weeks/:weekStart/auto-roster', (weekStart, _body, searchParams) => draftFor(weekStart, searchParams && searchParams.get('fixture'))],
-  ['rostering/weeks/:weekStart/auto-roster/apply', (_weekStart, body) => ({ applied: ((body && body.rows) || []).map((r) => r.shiftId), skipped: [] })],
+  ['rostering/weeks/:id/auto-roster', (weekStart, _body, searchParams) => draftFor(weekStart, searchParams && searchParams.get('fixture'))],
+  ['rostering/weeks/:id/auto-roster/apply', (_weekStart, body) => ({ applied: ((body && body.rows) || []).map((r) => r.shiftId), skipped: [] })],
 ]
 
 module.exports = { post, draftFor }
