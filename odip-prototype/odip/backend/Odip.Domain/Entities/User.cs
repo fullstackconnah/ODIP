@@ -26,6 +26,9 @@ public class User : ITenantEntity
 
     /// <summary>Full-time, part-time or casual; null = not set, which never triggers the casual fortnight warning.</summary>
     public EmploymentType? EmploymentType { get; set; }
+
+    /// <summary>The hours a week this person aims to work (0 to 80), which auto-roster balances towards. Null = the default for their employment type (<see cref="Odip.Domain.Rostering.AutoRosterRules.GoalFor"/>).</summary>
+    public decimal? GoalWeeklyHours { get; set; }
     public string? Mobile { get; set; }
     public string? Region { get; set; }
     public bool IsDriverEligible { get; set; }

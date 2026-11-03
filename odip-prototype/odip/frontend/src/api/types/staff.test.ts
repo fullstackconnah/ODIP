@@ -22,6 +22,10 @@ describe('toUpdateStaffDto', () => {
     })
   })
 
+  it('keeps the goal hours, so a status click does not clear them', () => {
+    expect(toUpdateStaffDto({ ...row, goalWeeklyHours: 30 }, { isActive: false }).goalWeeklyHours).toBe(30)
+  })
+
   it('leaves out the list-only fields, sends nothing for what is empty on the row, and keeps an email the row lacks as an empty string', () => {
     const dto = toUpdateStaffDto({ ...row, email: null }, { firstAidExpiryDate: undefined })
 
