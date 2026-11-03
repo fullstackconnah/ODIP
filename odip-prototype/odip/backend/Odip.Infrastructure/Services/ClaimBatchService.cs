@@ -199,8 +199,8 @@ public sealed partial class ClaimBatchService(OdipDbContext db, BprCsvService bp
 
         var participantIds = selected.Select(r => r.Participant?.Id).OfType<Guid>().Distinct().ToList();
         var plans = (await db.FundingPlans.AsNoTracking().Where(p => p.TenantId == t && participantIds.Contains(p.ParticipantId))
-                .Select(p => new { p.ParticipantId, p.PlanStart, p.PlanEnd }).ToListAsync(ct))
-            .GroupBy(p => p.ParticipantId).ToDictionary(g => g.Key, g => (IReadOnlyList<(DateOnly Start, DateOnly End)>)g.Select(p => (p.PlanStart, p.PlanEnd)).ToList());
+                .Select(p => new { p.ParticipantId, p.PlanStart, p.PlanEnd, p.MyProvider, p.MyProviderOn }).ToListAsync(ct))
+            .GroupBy(p => p.ParticipantId).ToDictionary(g => g.Key, g => (IReadOnlyList<PlanSpan>)g.Select(p => new PlanSpan(p.PlanStart, p.PlanEnd, p.MyProvider, p.MyProviderOn)).ToList());
 
         var doubleClaimed = await DoubleClaimedAsync(t, selected, ct);
 

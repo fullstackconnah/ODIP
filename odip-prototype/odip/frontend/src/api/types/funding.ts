@@ -1,5 +1,5 @@
 import type { PlanBlock } from './plan-pricing'
-import type { PlanType } from './enums'
+import type { MyProviderRecord, PlanType } from './enums'
 
 // A participant's NDIS plan budget (budget feature, phase 1): the wire shapes of api/v1/participants/{id}/funding and api/v1/funding. Enums travel as their names, dates as
 // "YYYY-MM-DD" (calendar days, inclusive), money as dollars. A null member is left out, so every optional member is genuinely absent when it has no value. Money is on these
@@ -69,11 +69,17 @@ export interface FundingPlanDto {
   confirmedOn?: string
   confirmedByName?: string
   notes?: string
+  /** Whether the provider is recorded as the participant's my provider for this plan (absent reads as Unknown). The date is the request date (Requested) or the start of the record (Recorded); absent for Unknown. */
+  myProvider?: MyProviderRecord
+  myProviderOn?: string
   revision: number
   createdAt: string
   updatedAt: string
   pools: FundingPoolDto[]
 }
+
+/** PUT .../funding/plans/{planId}/my-provider. Unknown takes no date. */
+export interface SetMyProviderDto { myProvider: MyProviderRecord; myProviderOn?: string | null }
 
 export interface FundingPlansDto {
   /** Newest first. */

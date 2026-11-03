@@ -104,6 +104,58 @@ public class OnboardingChecklistTests
         Assert.True(d.Items[0].Done);
     }
 
+    [Theory]
+    [InlineData(PlanType.AgencyManaged)]
+    [InlineData(PlanType.PlanManaged)]
+    public async Task AnNdisParticipantWhoseFundsAreNotSelfManaged_HasAMyProviderItemLast_DoneOnlyWhenTheCurrentPlanIsRecorded(PlanType managed)
+    {
+        using var db = Db();
+        var p = InOnboarding(db, x => x.PlanType = managed);
+        var plan = new FundingPlan { Id = Guid.NewGuid(), TenantId = Tenant, ParticipantId = p.Id, PlanStart = new DateOnly(2026, 7, 1), PlanEnd = new DateOnly(2027, 6, 30) };
+        db.FundingPlans.Add(plan);
+        db.SaveChanges();
+
+        var open = (await Checklist(db, p)).Items;
+        Assert.Equal(["profile", "serviceNeeds", "agreement", "complaints", "rights", "funding", "myProvider"], open.Select(i => i.Key));
+        var item = open[^1];
+        Assert.Equal(("Recorded as my provider", false, "Record on the Funding tab that you're this participant's my provider."), (item.Label, item.Done, item.Missing));
+
+        plan.MyProvider = MyProviderRecord.Requested;
+        db.SaveChanges();
+        Assert.False((await Checklist(db, p)).Items[^1].Done);
+
+        plan.MyProvider = MyProviderRecord.Recorded;
+        db.SaveChanges();
+        Assert.True((await Checklist(db, p)).Items[^1].Done);
+    }
+
+    [Fact]
+    public async Task TheMyProviderItem_ReadsTheCurrentPlan_NotAnEndedOne_AndNeverAnotherTenantsPlan()
+    {
+        using var db = Db();
+        var p = InOnboarding(db, x => x.PlanType = PlanType.AgencyManaged);
+        // An ended plan that was Recorded, the plan that runs today that is not: the current one decides.
+        db.FundingPlans.Add(new FundingPlan { Id = Guid.NewGuid(), TenantId = Tenant, ParticipantId = p.Id, PlanStart = new DateOnly(2025, 7, 1), PlanEnd = new DateOnly(2026, 6, 30), MyProvider = MyProviderRecord.Recorded });
+        db.FundingPlans.Add(new FundingPlan { Id = Guid.NewGuid(), TenantId = Tenant, ParticipantId = p.Id, PlanStart = new DateOnly(2026, 7, 1), PlanEnd = new DateOnly(2027, 6, 30) });
+        db.FundingPlans.Add(new FundingPlan { Id = Guid.NewGuid(), TenantId = Guid.NewGuid(), ParticipantId = p.Id, PlanStart = new DateOnly(2026, 7, 1), PlanEnd = new DateOnly(2027, 6, 30), MyProvider = MyProviderRecord.Recorded });
+        db.SaveChanges();
+
+        Assert.False((await Checklist(db, p)).Items.Single(i => i.Key == "myProvider").Done);
+        var row = Ok(await Controller(db).GetOnboardingWorklist(CancellationToken.None)).Single(r => r.ParticipantId == p.Id);
+        Assert.Equal(7, row.TotalSteps);
+    }
+
+    [Fact]
+    public async Task TheMyProviderItem_IsAbsentForSelfManagedAndForAnotherFundingSource()
+    {
+        using var db = Db();
+        var self = InOnboarding(db);
+        var other = InOnboarding(db, x => { x.FundingSource = ParticipantFundingSource.Other; x.NdisNumber = null; x.PlanType = PlanType.AgencyManaged; });
+
+        Assert.DoesNotContain((await Checklist(db, self)).Items, i => i.Key == "myProvider");
+        Assert.DoesNotContain((await Checklist(db, other)).Items, i => i.Key == "myProvider");
+    }
+
     [Fact]
     public async Task ProfileDetails_SaysWhatIsMissing_InOneLine()
     {

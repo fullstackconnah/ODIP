@@ -46,6 +46,13 @@ public record FundingPoolDto
     public List<FundingPeriodDto> Periods { get; init; } = new();
 }
 
+/// <summary><c>PUT .../funding/plans/{planId}/my-provider</c>: whether we are recorded as the participant's my provider for the plan, and the date (the request date, or the start of the record). Unknown takes no date.</summary>
+public record SetMyProviderDto
+{
+    public MyProviderRecord? MyProvider { get; init; }
+    public DateOnly? MyProviderOn { get; init; }
+}
+
 public record FundingPlanDto
 {
     public Guid Id { get; init; }
@@ -59,6 +66,8 @@ public record FundingPlanDto
     public DateOnly? ConfirmedOn { get; init; }
     public string? ConfirmedByName { get; init; }
     public string? Notes { get; init; }
+    public MyProviderRecord MyProvider { get; init; }
+    public DateOnly? MyProviderOn { get; init; }
     public int Revision { get; init; }
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
