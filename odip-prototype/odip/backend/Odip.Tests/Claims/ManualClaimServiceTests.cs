@@ -205,6 +205,19 @@ public class ManualClaimServiceTests
     }
 
     [Fact]
+    public async Task AParticipantFundedAnotherWay_IsRefusedAtPreview_Too()
+    {
+        using var kit = LedgerKit.Create();
+        kit.SeedProvider("VIC");
+        var item = Capped(kit);
+        var person = kit.SeedParticipant();
+        person.FundingSource = ParticipantFundingSource.Other;
+        kit.Db.SaveChanges();
+
+        Assert.Equal($"{person.FullName}: Funded another way, so not claimed to the NDIS. Invoice them directly.", await Refusal(() => Service(kit).PreviewAsync(kit.TenantId, Req(person, item.ItemNumber, 1m, 50m))));
+    }
+
+    [Fact]
     public async Task ADoubleClaim_WarnsInThePreview_AndNeverBlocksTheMake_ARejectedClaimDoesNotWarn()
     {
         using var kit = LedgerKit.Create();

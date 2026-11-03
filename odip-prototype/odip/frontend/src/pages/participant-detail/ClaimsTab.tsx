@@ -16,6 +16,7 @@ import { Modal } from '@/components/Modal'
 import { StatusBadge } from '@/components/StatusBadge'
 import { EmptyState } from '@/components/EmptyState'
 import { FormField } from '@/components/FormField'
+import { formatDateRange } from '@/lib/dateRange'
 import { plural } from '@/lib/format'
 import { extractErrorMessage, formatCurrency, formatDateAu } from '@/lib/utils'
 import type { TripClaimListDto, ShiftClaimGeneratedDto, ShiftClaimLeftOutDto, ShiftClaimPreviewLineItemDto, ShiftClaimPreviewResponseDto } from '@/api/types'
@@ -32,6 +33,7 @@ import { TAP_FLOOR } from '@/components/tapArea'
 const KIND_COLOR_MAP: Record<string, Tone> = {
   trip: 'info',
   shift: 'accessible',
+  manual: 'neutral',
 }
 
 /** yyyy-MM-dd in the viewer's local time — never UTC, which can silently shift the date near
@@ -108,9 +110,9 @@ export default function ClaimsTab({ participantId, canWrite, otherFunded = false
               key: 'tripName',
               header: 'Trip / Period',
               render: (c: TripClaimListDto) =>
-                c.kind === 'Shift' ? (
+                c.kind !== 'Trip' ? (
                   <span className="text-[var(--color-muted-foreground)]">
-                    {formatDateAu(c.periodFrom)} – {formatDateAu(c.periodTo)}
+                    {c.kind === 'Manual' ? formatDateRange(c.periodFrom, c.periodTo) : `${formatDateAu(c.periodFrom)} – ${formatDateAu(c.periodTo)}`}
                   </span>
                 ) : c.tripInstanceId ? (
                   <Link to={`/trips/${c.tripInstanceId}`} className="text-[var(--color-primary)] hover:underline">

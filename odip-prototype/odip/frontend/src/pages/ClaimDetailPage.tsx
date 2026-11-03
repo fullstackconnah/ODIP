@@ -11,6 +11,7 @@ import { SubmitClaimDialog } from '@/components/SubmitClaimDialog'
 import { RejectClaimDialog } from '@/components/RejectClaimDialog'
 import { ClaimAgainDialog } from '@/components/ClaimAgainDialog'
 import { ndiaCodeMeaning } from '@/lib/ndiaCodes'
+import { formatDateRange } from '@/lib/dateRange'
 import { extractErrorMessage, formatCurrency, formatDateAu } from '@/lib/utils'
 import { formatInstantDateAu } from '@/lib/format'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -41,6 +42,8 @@ function planTypeLabel(planType: string) {
 function refusalOf(err: unknown): string {
   return extractErrorMessage(err, "Couldn't update the claim status. Please try again.")
 }
+
+const KIND_LABEL = { Trip: 'Trip claim', Shift: 'Shift claim', Manual: 'One-off claim' } as const
 
 export default function ClaimDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -110,6 +113,7 @@ export default function ClaimDetailPage() {
       : <PageState kind="not-found" noun="claim" backTo="/trips" backLabel="trips" />
   }
 
+  const periodText = claim.kind === 'Manual' ? formatDateRange(claim.periodFrom, claim.periodTo) : `${formatDateAu(claim.periodFrom)} – ${formatDateAu(claim.periodTo)}`
   const totalAmount = (claim.lineItems ?? []).reduce((sum: number, l: ClaimLineItemDto) => sum + (l.totalAmount ?? 0), 0)
 
   function handleSaveNotes() {
@@ -167,9 +171,9 @@ export default function ClaimDetailPage() {
       <div className="flex items-center gap-2 text-sm text-[var(--color-muted-foreground)]">
         <Link to="/trips" className="hover:text-[var(--color-primary)]">Trips</Link>
         <span>/</span>
-        {claim.kind === 'Shift' ? (
+        {claim.kind !== 'Trip' ? (
           <>
-            <span>{formatDateAu(claim.periodFrom)} – {formatDateAu(claim.periodTo)}</span>
+            <span>{periodText}</span>
             <span>/</span>
           </>
         ) : (
@@ -192,7 +196,7 @@ export default function ClaimDetailPage() {
               <div className="flex flex-wrap items-center gap-3">
                 <StatusBadge status={claim.status} />
                 <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-surface-container-low)] text-[var(--color-muted-foreground)] font-medium">
-                  {claim.kind === 'Shift' ? 'Shift claim' : 'Trip claim'}
+                  {KIND_LABEL[claim.kind]}
                 </span>
               </div>
             }
@@ -267,8 +271,8 @@ export default function ClaimDetailPage() {
       <FactBar
         segments={[
           { label: 'Total Amount', value: <span className="tabular-nums">{formatCurrency(totalAmount)}</span> },
-          claim.kind === 'Shift'
-            ? { label: 'Period', value: <span className="tabular-nums">{`${formatDateAu(claim.periodFrom)} – ${formatDateAu(claim.periodTo)}`}</span> }
+          claim.kind !== 'Trip'
+            ? { label: 'Period', value: <span className="tabular-nums">{periodText}</span> }
             : { label: 'Trip', value: claim.tripName || '—' },
           { label: 'Created', value: <span className="tabular-nums">{formatInstantDateAu(claim.createdAt)}</span> },
           { label: 'Submitted', value: <span className="tabular-nums">{formatInstantDateAu(claim.submittedDate)}</span> },
@@ -366,7 +370,7 @@ export default function ClaimDetailPage() {
               // so show it once rather than as a redundant "date – same date" range.
               render: (item: ClaimLineItemDto) => (
                 <span className="text-sm tabular-nums text-[var(--color-muted-foreground)] whitespace-nowrap">
-                  {item.shiftId ? item.supportsDeliveredFrom : `${item.supportsDeliveredFrom} – ${item.supportsDeliveredTo}`}
+                  {item.shiftId || claim.kind === 'Manual' ? item.supportsDeliveredFrom : `${item.supportsDeliveredFrom} – ${item.supportsDeliveredTo}`}
                 </span>
               ),
             },
@@ -407,8 +411,8 @@ export default function ClaimDetailPage() {
               // by bookingId (invoice export is explicitly out of scope for shift claims) — none
               // of that applies here, so show a plain "Shift" label instead.
               render: (item: ClaimLineItemDto) =>
-                item.shiftId ? (
-                  <span className="text-xs text-[var(--color-muted-foreground)]">Shift</span>
+                item.shiftId || claim.kind === 'Manual' ? (
+                  <span className="text-xs text-[var(--color-muted-foreground)]">{item.shiftId ? 'Shift' : 'One-off'}</span>
                 ) : (
                   <div className="flex flex-col gap-1.5 items-start">
                     {item.claimType === 'Cancellation' ? (

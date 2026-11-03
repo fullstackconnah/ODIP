@@ -404,3 +404,36 @@ export interface CancellationCandidatesDto {
   shifts: CancellationCandidateDto[]
   leftOut: CancellationLeftOutDto[]
 }
+
+// ── A one-off claim (Claims PR4): POST claims/manual/preview and claims/manual. The server works the total out; there is no total in the request. ──
+
+export interface ManualClaimRequestDto {
+  participantId: string
+  lines: { supportItemCode: string; serviceDate: string; quantity: number; unitPrice: number }[]
+  notes?: string
+}
+
+export interface ManualClaimPreviewLineDto {
+  code: string
+  name: string
+  unit: string
+  date: string
+  dayType: ClaimDayType
+  quantity: number
+  unitPrice: number
+  total: number
+  /** The price guide limit in `state`; absent when the item has none. */
+  limit?: number
+  state: string
+}
+
+export interface ManualClaimPreviewDto {
+  participantName: string
+  lines: ManualClaimPreviewLineDto[]
+  total: number
+  /** The funding plan covering the service date; absent when the participant has none on file. */
+  plan?: { start: string; end: string }
+  budget?: ClaimBudgetDto
+  /** Never block: a possible double claim, over 90 days, no price limit. */
+  warnings: string[]
+}

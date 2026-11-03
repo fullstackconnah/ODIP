@@ -391,3 +391,16 @@ it('points to the Claims page for NDIA-managed claims, but not for a participant
   renderTab(true, { otherFunded: true })
   expect(screen.queryByRole('link', { name: 'Go to Claims' })).toBeNull()
 })
+
+describe('ClaimsTab: a one-off claim', () => {
+  it('shows the Manual kind chip and its period, not a trip link', () => {
+    mockUseParticipantClaims.mockReturnValue({
+      data: [shiftClaim({ id: 'claim-manual-1', kind: 'Manual', claimReference: 'CLM-003', periodFrom: '2026-01-05', periodTo: '2026-01-05' })],
+      isLoading: false,
+    })
+    renderTab()
+    expect(screen.getByText('Manual')).toBeInTheDocument()
+    expect(screen.getByText('5 Jan 2026')).toBeInTheDocument()
+    expect(screen.queryByText('—')).not.toBeInTheDocument()
+  })
+})

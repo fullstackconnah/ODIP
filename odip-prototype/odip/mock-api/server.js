@@ -2162,6 +2162,13 @@ const cancelledShiftsNotOffered = [
 function cancellationCandidates() {
   return { shifts: cancelledShiftFixtures, leftOut: cancelledShiftsNotOffered }
 }
+/** ManualClaimPreviewDto for POST claims/manual/preview: stateless like the cancellation preview. Always answers with the no-plan warning the server gives (the refusals are covered by the server tests); the client checks a future date and a zero quantity itself. */
+function manualClaimPreview(body) {
+  const lines = body?.lines ?? []
+  const out = lines.map((l) => ({ code: l.supportItemCode, name: 'Support item ' + l.supportItemCode, unit: 'H', date: l.serviceDate, dayType: 'Weekday', quantity: l.quantity, unitPrice: l.unitPrice, total: Math.round(l.quantity * l.unitPrice * 100) / 100, limit: null, state: 'Ok' }))
+  return { participantName: 'Sam Rivera', lines: out, total: out.reduce((n, l) => n + l.total, 0), plan: null, budget: null, warnings: ["No plan on file, so the budget isn't checked."] }
+}
+
 function cancellationPreview(shiftId) {
   const shift = cancelledShiftFixtures.find((c) => c.shiftId === shiftId) ?? cancelledShiftFixtures[0]
   const hours = shift.totalAmount / 60
@@ -3254,6 +3261,8 @@ const postRoutes = [
     id: 'claim-mock-cancel-1', kind: 'Shift', participantId: 'p-sam', periodFrom: '2026-10-20', periodTo: '2026-10-20', tripName: '', status: 'Draft',
     claimReference: 'TC-MOCK-CANC-1', totalAmount: cancellationPreview(body?.shiftId).totalAmount, createdAt: new Date().toISOString(), leftOut: [], flagged: [],
   })],
+  ['claims/manual/preview', body => manualClaimPreview(body)],
+  ['claims/manual', body => { const p = manualClaimPreview(body); return { id: 'claim-mock-manual-1', kind: 'Manual', participantId: body.participantId, periodFrom: p.lines[0].date, periodTo: p.lines[0].date, tripName: '', status: 'Draft', claimReference: 'TC-MOCK-MAN-1', totalAmount: p.total, createdAt: new Date().toISOString(), leftOut: [], flagged: [] } }],
   ['claims/from-shifts/preview', body => shiftClaimRun(body, false)],
   ['claims/from-shifts', body => shiftClaimRun(body, true)],
 
