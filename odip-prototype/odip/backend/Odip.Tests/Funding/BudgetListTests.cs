@@ -283,6 +283,38 @@ public class BudgetListTests
         Assert.Equal(new[] { BudgetStatus.Over, BudgetStatus.Over, BudgetStatus.OnTrack, BudgetStatus.ForecastOver, BudgetStatus.Approaching, BudgetStatus.OnTrack }, rows.Select(r => r.Status));
     }
 
+    // One word per row, set on the server: the NDIA outranks the ledger's Forecast over and On track, Over still wins, and a paced On track pool is Spending fast (the list never shows two pills).
+    [Fact]
+    public async Task EachRowCarriesOneListStatus_TheNdiaOutranksTheLedgerExceptOver_AndAPacedOnTrackPoolIsSpendingFast()
+    {
+        using var kit = Arrange(new DateTimeOffset(2026, 11, 4, 3, 0, 0, TimeSpan.Zero));
+        var onTrack = kit.SeedParticipant(first: "Alma", last: "Fine");
+        var refused = kit.SeedParticipant(first: "Rae", last: "Refused");
+        var overAndRefused = kit.SeedParticipant(first: "Olive", last: "Both");
+        var forecastAndRefused = kit.SeedParticipant(first: "Ford", last: "Cast");
+        var approaching = kit.SeedParticipant(first: "Appa", last: "Roach");
+        var paced = kit.SeedParticipant(first: "Pace", last: "Setter");
+        foreach (var p in new[] { onTrack, refused, overAndRefused, forecastAndRefused, approaching, paced }) RecordedInSeptember(OctoberPlan(kit, p, 1000m), kit);
+        Claim(kit, onTrack, 100m);
+        Claim(kit, overAndRefused, 1100m);
+        Claim(kit, approaching, 850m);
+        Claim(kit, paced, 400m);
+        RejectedClaim(kit, refused);
+        RejectedClaim(kit, overAndRefused);
+        RejectedClaim(kit, forecastAndRefused);
+        kit.SeedShift(forecastAndRefused, D(2026, 11, 5)); kit.SeedShift(forecastAndRefused, D(2026, 11, 6)); kit.SeedShift(forecastAndRefused, D(2026, 11, 7));
+
+        var rows = Body(await ListAsync(kit)).Rows.ToDictionary(r => r.ParticipantName);
+
+        Assert.Equal(BudgetStatus.OnTrack, rows["Rae Refused"].Status);                    // the ledger's own word is untouched
+        Assert.Equal(BudgetListStatus.FundsRanOut, rows["Rae Refused"].ListStatus);        // the NDIA's refusal outranks On track
+        Assert.Equal(BudgetListStatus.Over, rows["Olive Both"].ListStatus);                // Over still wins
+        Assert.Equal(BudgetListStatus.FundsRanOut, rows["Ford Cast"].ListStatus);          // and outranks Forecast over
+        Assert.Equal(BudgetListStatus.Approaching, rows["Appa Roach"].ListStatus);
+        Assert.Equal(BudgetListStatus.SpendingFast, rows["Pace Setter"].ListStatus);
+        Assert.Equal(BudgetListStatus.OnTrack, rows["Alma Fine"].ListStatus);
+    }
+
     [Fact]
     public async Task ARowSaysWhatIsLeftOrHowFarOver_AndHowMuchOfWhatIsAvailableIsRolledOver()
     {

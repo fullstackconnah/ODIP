@@ -20,8 +20,8 @@ export function budgetRow(overrides: Partial<BudgetListRow> = {}): BudgetListRow
     participantId: 'p-0002', participantName: 'Sienna Williams', poolId: 'pool-core', poolName: 'Core', kind: 'CoreFlexible' as const, managementType: 'AgencyManaged' as const,
     periodStart: '2026-10-01', periodEnd: '2026-12-31', available: 9000, carried: 0, used: 3180, bookedAhead: 960, forecast: 4140, status: 'OnTrack' as const, unpricedShiftCount: 0, ...overrides,
   }
-  // The server sends what is left (or how far over); a fixture that did not say gets it from its own two figures, rounded to the cent.
-  return { ...row, remaining: overrides.remaining ?? Math.round((row.available - row.used) * 100) / 100 }
+  // The server sends what is left (or how far over); a fixture that did not say gets it from its own two figures, rounded to the cent. Its list status is the ledger's word unless the test says the NDIA or the pace changed it.
+  return { ...row, listStatus: overrides.listStatus ?? (row.status === 'None' ? 'OnTrack' as const : row.status), remaining: overrides.remaining ?? Math.round((row.available - row.used) * 100) / 100 }
 }
 
 export function noBudget(overrides: Partial<BudgetListNoBudget> = {}): BudgetListNoBudget {

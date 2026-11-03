@@ -94,7 +94,7 @@ beforeEach(() => {
 // Platform review Q4b follow-up: a tab whose list failed to load said "none" (its empty state). It says the load failed, with a retry.
 describe('TripDetailPage — a tab list that fails to load', () => {
   it.each([
-    ['bookings', 'booking list'], ['accommodation', 'accommodation list'], ['vehicles', 'vehicle list'], ['staff', 'staff list'],
+    ['bookings', 'booking list'], ['staff', 'staff list'],
     ['tasks', 'task list'], ['activities', 'activity schedule'], ['claims', 'claim list'], ['incidents', 'incident list'],
   ])(
     '%s shows the error and a retry, not the tab body',
@@ -113,9 +113,41 @@ describe('TripDetailPage — a tab list that fails to load', () => {
 
   it('leaves the other tabs alone', () => {
     failedLists.add('bookings')
-    renderPage('/trips/trip-1?tab=vehicles')
+    renderPage('/trips/trip-1?tab=stay')
     expect(screen.getByText('Vehicles panel')).toBeInTheDocument()
     expect(screen.queryByText(/couldn't load/i)).not.toBeInTheDocument()
+  })
+})
+
+// Stay and transport holds two lists, so each section decides alone (the page-level rule is for single-list tabs).
+describe('TripDetailPage — Stay and transport sections', () => {
+  it('stacks Accommodation and Vehicles under an h2 each', () => {
+    renderPage('/trips/trip-1?tab=stay')
+    const panel = screen.getByRole('tabpanel')
+    expect(within(panel).getAllByRole('heading', { level: 2 }).map(h => h.textContent)).toEqual(['Accommodation', 'Vehicles'])
+    expect(within(panel).getByText('Accommodation panel')).toBeInTheDocument()
+    expect(within(panel).getByText('Vehicles panel')).toBeInTheDocument()
+  })
+
+  it.each([
+    ['accommodation', 'accommodation list', 'Vehicles panel', 'Accommodation panel'],
+    ['vehicles', 'vehicle list', 'Accommodation panel', 'Vehicles panel'],
+  ])('a failed %s list shows its own error and retry; the other section still renders', async (failed, noun, stillThere, gone) => {
+    failedLists.add(failed)
+    const user = userEvent.setup()
+    renderPage('/trips/trip-1?tab=stay')
+    const panel = screen.getByRole('tabpanel')
+
+    expect(within(panel).getByText(`Couldn't load this ${noun}. Check your connection and try again.`)).toBeInTheDocument()
+    expect(within(panel).getByText(stillThere)).toBeInTheDocument()
+    expect(within(panel).queryByText(gone)).not.toBeInTheDocument()
+    await user.click(within(panel).getByRole('button', { name: 'Try again' }))
+    expect(listRefetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('carries no count badge', () => {
+    renderPage()
+    expect(screen.getByRole('tab', { name: 'Stay and transport' })).toHaveTextContent(/^Stay and transport$/)
   })
 })
 
@@ -133,9 +165,18 @@ describe('TripDetailPage — PP-60 URL-synced tabs', () => {
   })
 
   it('reads the initial tab from the URL on load', () => {
-    renderPage('/trips/trip-1?tab=vehicles')
+    renderPage('/trips/trip-1?tab=stay')
 
     expect(screen.getByText('Vehicles panel')).toBeInTheDocument()
+  })
+
+  // Old links: Accommodation and Vehicles became Stay and transport. The key is rewritten with replace, other params kept.
+  it.each(['vehicles', 'accommodation'])('opens Stay and transport from the old ?tab=%s and rewrites the URL', (old) => {
+    const { router } = renderPage(`/trips/trip-1?tab=${old}&x=1`)
+
+    expect(screen.getByRole('tab', { selected: true })).toHaveTextContent(/^Stay and transport/)
+    expect(screen.getByText('Vehicles panel')).toBeInTheDocument()
+    expect(router.state.location.search).toBe('?tab=stay&x=1')
   })
 })
 
@@ -204,29 +245,26 @@ describe('TripDetailPage — Claims tab by role', () => {
 })
 
 describe('TripDetailPage — fact bar category icons', () => {
-  it('gives each of the four facts its category icon (people, checklist, wheelchair, shield)', () => {
+  it('gives each of the four facts its category icon (people, badge, shield, checklist)', () => {
+    trip = withTrip({ maxParticipants: 6, staffRequired: 4 })
     renderPage()
 
     const facts: Array<[label: string, glyph: string]> = [
-      ['Participants / Staff', 'groups'],
-      ['Outstanding Tasks', 'checklist'],
-      ['High Support / Overnight', 'accessible'],
-      ['Insurance', 'health_and_safety'],
+      ['Places booked', 'groups'],
+      ['Staff assigned', 'badge'],
+      ['Insurance confirmed', 'health_and_safety'],
+      ['Open tasks', 'checklist'],
     ]
-    for (const [label, glyph] of facts) {
-      // label span -> label/value column -> segment
-      const segment = screen.getByText(label).closest('div')!.parentElement!
-      expect(within(segment).getByText(glyph)).toBeInTheDocument()
-    }
+    for (const [label, glyph] of facts) expect(within(cellOf(label)).getByText(glyph)).toBeInTheDocument()
   })
 })
 
 // Every count that drives a chip and its tint. `attention` is a trip that needs a coordinator; `calm` is one that does not.
 const attentionCounts = {
-  currentParticipantCount: 5, staffAssignedCount: 3, waitlistCount: 2, outstandingTaskCount: 2,
+  currentParticipantCount: 5, maxParticipants: 6, staffAssignedCount: 3, staffRequired: 4, waitlistCount: 2, outstandingTaskCount: 2,
   highSupportCount: 2, overnightSupportCount: 2, wheelchairCount: 1, insuranceConfirmedCount: 4, insuranceOutstandingCount: 1,
 }
-const calmCounts = { ...attentionCounts, waitlistCount: 0, outstandingTaskCount: 0, insuranceConfirmedCount: 5, insuranceOutstandingCount: 0 }
+const calmCounts = { ...attentionCounts, waitlistCount: 0, staffAssignedCount: 4, outstandingTaskCount: 0, insuranceConfirmedCount: 5, insuranceOutstandingCount: 0 }
 const withTrip = (over: Record<string, unknown>) => ({ ...baseTrip, ...over }) as unknown as TripDetailDto
 
 // label span -> label row -> the glance cell (the same walk the icon test above uses)
@@ -330,113 +368,136 @@ describe('TripDetailPage — detail header (the bolder header pattern)', () => {
 })
 
 describe('TripDetailPage — glance strip', () => {
-  it('opts the four facts into the glance variant: a clipped grid of display-step tabular figures', () => {
+  it('is four buttons in the glance variant: a clipped grid of display-step tabular figures, one noun per figure', () => {
     trip = withTrip(attentionCounts)
     renderPage()
 
-    const strip = cellOf('Insurance').parentElement!
+    const strip = cellOf('Places booked').parentElement!
     expect(strip).toHaveClass('grid', 'grid-cols-2', 'md:grid-flow-col', 'overflow-hidden')
     expect(strip.children).toHaveLength(4)
-    for (const figure of ['5 / 3', '2', '2 / 2', '4 / 5']) {
+    for (const tile of Array.from(strip.children)) expect(tile.tagName).toBe('BUTTON')
+    for (const figure of ['5 / 6', '3 / 4', '4 / 5', '2']) {
       expect(screen.getByText(figure)).toHaveClass('text-display', 'tabular-nums')
+    }
+    // No label mixes units, and the jargon is gone.
+    for (const label of Array.from(strip.querySelectorAll('.order-2'))) expect(label.textContent).not.toContain('/')
+    expect(screen.queryByText(/\bWC\b|Participants \/ Staff|High Support|Action Needed|Outstanding/)).not.toBeInTheDocument()
+  })
+
+  it('names each tile by label, figure and chip in source order', () => {
+    trip = withTrip(attentionCounts)
+    renderPage()
+
+    expect(screen.getByRole('button', { name: /Staff assigned.*3 \/ 4.*1 short/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Places booked.*5 \/ 6.*2 on waitlist/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Insurance confirmed.*4 \/ 5.*1 to confirm/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Open tasks.*2.*To do/ })).toBeInTheDocument()
+  })
+
+  it('spells every ratio the same way, " / " with a space each side, including two digits', () => {
+    trip = withTrip({ ...attentionCounts, currentParticipantCount: 12, maxParticipants: 14, staffAssignedCount: 10, staffRequired: 12, insuranceConfirmedCount: 12, insuranceOutstandingCount: 2 })
+    renderPage()
+
+    const figures = Array.from(cellOf('Places booked').parentElement!.querySelectorAll('span.text-display')).map(f => f.textContent ?? '')
+    expect(figures).toEqual(['12 / 14', '10 / 12', '12 / 14', '2'])
+  })
+
+  it('shows the count alone when there is no target: no maximum, no staff requirement, no insurance rows', () => {
+    trip = withTrip({ ...attentionCounts, maxParticipants: null, staffRequired: null, insuranceConfirmedCount: 0, insuranceOutstandingCount: 0 })
+    renderPage()
+
+    expect(within(cellOf('Participants booked')).getByText('5')).toHaveClass('text-display')
+    expect(within(cellOf('Staff assigned')).getByText('3')).toHaveClass('text-display')
+    expect(within(cellOf('Staff assigned')).queryByText(/short/)).not.toBeInTheDocument()
+    expect(within(cellOf('Insurance confirmed')).getByText('0')).toHaveClass('text-display')
+    expect(screen.queryByText('Places booked')).not.toBeInTheDocument()
+  })
+
+  it('tints the tiles whose chip signals a gap: waitlist warning; short, to confirm and to do error', () => {
+    trip = withTrip(attentionCounts)
+    renderPage()
+
+    const places = cellOf('Places booked')
+    expect(places).toHaveAttribute('data-attention', 'warning')
+    expect(places).toHaveClass('bg-[var(--color-warning-container)]', 'text-[var(--color-on-warning-container)]')
+    expect(within(places).getByText('2 on waitlist')).toBeInTheDocument()
+
+    for (const [label, chip] of [['Staff assigned', '1 short'], ['Insurance confirmed', '1 to confirm'], ['Open tasks', 'To do']]) {
+      const cell = cellOf(label)
+      expect(cell, label).toHaveAttribute('data-attention', 'error')
+      expect(cell, label).toHaveClass('bg-[var(--color-error-container)]', 'text-[var(--color-on-error-container)]')
+      expect(within(cell).getByText(chip), label).toHaveClass('bg-[var(--color-card)]')
     }
   })
 
-  it('spells every ratio figure the same way, " / " with a space each side, including a two-digit Insurance', () => {
-    // 12 confirmed + 2 outstanding = "12 / 14". The strip once rendered this one as "12/14" beside "12 / 10".
-    trip = withTrip({ ...attentionCounts, currentParticipantCount: 12, staffAssignedCount: 10, insuranceConfirmedCount: 12, insuranceOutstandingCount: 2 })
-    renderPage()
-
-    expect(screen.getByText('12 / 10')).toBeInTheDocument()
-    expect(screen.getByText('2 / 2')).toBeInTheDocument()
-    expect(screen.getByText('12 / 14')).toBeInTheDocument()
-
-    // No figure anywhere in the strip is squeezed ("12/14") or otherwise off the "x / y" pattern.
-    const strip = cellOf('Insurance').parentElement!
-    const figures = Array.from(strip.querySelectorAll('span.text-display')).map(f => f.textContent ?? '')
-    expect(figures).toHaveLength(4)
-    for (const figure of figures.filter(f => f.includes('/'))) expect(figure).toMatch(/^\d+ \/ \d+$/)
-    expect(figures).not.toContain('12/14')
-  })
-
-  it('keeps a zero insurance ratio in the same form, and the chip follows the outstanding count', () => {
-    trip = withTrip({ ...attentionCounts, insuranceConfirmedCount: 0, insuranceOutstandingCount: 0 })
-    renderPage()
-
-    expect(screen.getByText('0 / 0')).toHaveClass('text-display')
-    expect(within(cellOf('Insurance')).queryByText('Covered')).not.toBeInTheDocument()
-    expect(cellOf('Insurance')).not.toHaveAttribute('data-attention')
-  })
-
-  it('tints the segments whose badge signals attention: Waitlist warning, Action Needed and Outstanding error', () => {
-    trip = withTrip(attentionCounts)
-    renderPage()
-
-    const participants = cellOf('Participants / Staff')
-    expect(participants).toHaveAttribute('data-attention', 'warning')
-    expect(participants).toHaveClass('bg-[var(--color-warning-container)]', 'text-[var(--color-on-warning-container)]')
-    expect(within(participants).getByText('Waitlist')).toBeInTheDocument()
-
-    const tasks = cellOf('Outstanding Tasks')
-    expect(tasks).toHaveAttribute('data-attention', 'error')
-    expect(tasks).toHaveClass('bg-[var(--color-error-container)]', 'text-[var(--color-on-error-container)]')
-    expect(within(tasks).getByText('Action Needed')).toBeInTheDocument()
-
-    const insurance = cellOf('Insurance')
-    expect(insurance).toHaveAttribute('data-attention', 'error')
-    expect(insurance).toHaveClass('bg-[var(--color-error-container)]')
-    expect(within(insurance).getByText('Outstanding')).toBeInTheDocument()
-  })
-
-  it('keeps the High Support / Overnight segment quiet even when its neighbours are tinted (a wheelchair count is not a problem)', () => {
-    trip = withTrip(attentionCounts)
-    renderPage()
-
-    const support = cellOf('High Support / Overnight')
-    expect(support).not.toHaveAttribute('data-attention')
-    expect(support.className).not.toMatch(/container/)
-    expect(within(support).getByText('1 WC')).toHaveClass('bg-[var(--color-input)]')
-  })
-
-  it('leaves every segment plain when nothing needs attention: no Active, On Track or Covered pill, silence is the all-clear', () => {
+  it('leaves every tile plain when nothing is short: silence is the all-clear', () => {
     trip = withTrip(calmCounts)
     renderPage()
 
-    for (const label of ['Participants / Staff', 'Outstanding Tasks', 'High Support / Overnight', 'Insurance']) {
+    for (const label of ['Places booked', 'Staff assigned', 'Insurance confirmed', 'Open tasks']) {
       const cell = cellOf(label)
-      expect(cell).not.toHaveAttribute('data-attention')
-      expect(cell.className).not.toMatch(/bg-\[/)
+      expect(cell, label).not.toHaveAttribute('data-attention')
+      expect(cell.className, label).not.toMatch(/bg-\[var\(--color-(warning|error)/)
     }
-    for (const word of ['Active', 'On Track', 'Covered']) expect(screen.queryByText(word)).not.toBeInTheDocument()
+    expect(screen.queryByText(/short|to confirm|waitlist|To do/)).not.toBeInTheDocument()
   })
 
-  it('cannot tint a segment against its own badge: a tinted cell holds a white-pill chip, a quiet one its own tone', () => {
-    trip = withTrip(attentionCounts)
-    renderPage()
-
-    expect(screen.getByText('Waitlist')).toHaveClass('bg-[var(--color-card)]', 'text-[var(--color-on-warning-container)]')
-    expect(screen.getByText('Action Needed')).toHaveClass('bg-[var(--color-card)]', 'text-[var(--color-on-error-container)]')
-    expect(screen.getByText('1 WC')).not.toHaveClass('bg-[var(--color-card)]')
-  })
-
-  it('flips a tint away when the count clears: no waitlist, no outstanding tasks', () => {
+  it('flips a tint away when the gap closes', () => {
     trip = withTrip({ ...attentionCounts, waitlistCount: 0, outstandingTaskCount: 0 })
     renderPage()
 
-    expect(cellOf('Participants / Staff')).not.toHaveAttribute('data-attention')
-    expect(cellOf('Outstanding Tasks')).not.toHaveAttribute('data-attention')
-    // Insurance is still outstanding, so it keeps its tint.
-    expect(cellOf('Insurance')).toHaveAttribute('data-attention', 'error')
+    expect(cellOf('Places booked')).not.toHaveAttribute('data-attention')
+    expect(cellOf('Open tasks')).not.toHaveAttribute('data-attention')
+    expect(cellOf('Insurance confirmed')).toHaveAttribute('data-attention', 'error')
   })
 
-  it('reads a trip with no counts as quiet, not broken (missing counts default to zero)', () => {
-    // baseTrip has no counts at all.
+  it('reads a trip with no counts as quiet, not broken', () => {
     renderPage()
 
-    expect(cellOf('Outstanding Tasks')).not.toHaveAttribute('data-attention')
-    expect(cellOf('Insurance')).not.toHaveAttribute('data-attention')
-    expect(screen.queryByText('On Track')).not.toBeInTheDocument()
+    expect(cellOf('Open tasks')).not.toHaveAttribute('data-attention')
+    expect(cellOf('Insurance confirmed')).not.toHaveAttribute('data-attention')
     expect(screen.queryByText('Covered')).not.toBeInTheDocument()
+  })
+
+  it.each(['Cancelled', 'Archived'])('goes quiet on a %s trip: the figures stay, the chips and tints go', (status) => {
+    trip = withTrip({ ...attentionCounts, status })
+    renderPage()
+
+    expect(screen.getByText('3 / 4')).toBeInTheDocument()
+    expect(screen.queryByText(/short|to confirm|waitlist|To do/)).not.toBeInTheDocument()
+    for (const label of ['Places booked', 'Staff assigned', 'Insurance confirmed', 'Open tasks']) expect(cellOf(label), label).not.toHaveAttribute('data-attention')
+  })
+
+  it('keeps the chips on a Completed trip: post-trip tasks are still live', () => {
+    trip = withTrip({ ...attentionCounts, status: 'Completed' })
+    renderPage()
+
+    expect(screen.getByText('To do')).toBeInTheDocument()
+  })
+
+  it.each([
+    ['Places booked', 'tab=bookings', 'Bookings panel'],
+    ['Staff assigned', 'tab=staff', 'Staff panel'],
+    ['Insurance confirmed', 'tab=bookings', 'Bookings panel'],
+    ['Open tasks', 'tab=tasks', 'Tasks panel'],
+  ])('the %s tile opens the tab that fixes it (%s)', async (label, query, panel) => {
+    trip = withTrip(attentionCounts)
+    const user = userEvent.setup()
+    const { router } = renderPage()
+
+    await user.click(within(cellOf(label).parentElement!).getByText(label))
+
+    expect(router.state.location.search).toContain(query)
+    expect(screen.getByText(panel)).toBeInTheDocument()
+  })
+
+  it('still opens tabs for a read-only user: reading is allowed', async () => {
+    canWrite = false
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByText('Open tasks'))
+    expect(screen.getByText('Tasks panel')).toBeInTheDocument()
   })
 })
 
@@ -448,7 +509,7 @@ describe('TripDetailPage — loading and not-found states', () => {
 
     expect(screen.getByRole('status')).toHaveTextContent('Loading trip…')
     expect(screen.queryByRole('heading', { level: 1 })).toBeNull()
-    expect(screen.queryByText('Participants / Staff')).toBeNull()
+    expect(screen.queryByText('Places booked')).toBeNull()
   })
 
   it('shows "Trip not found", with no header or strip, when the trip does not exist', () => {
@@ -547,7 +608,7 @@ describe('TripDetailPage — the tabpanel is named by its tab', () => {
   })
 
   it('points the selected tab aria-controls at the panel that is really there', () => {
-    renderPage('/trips/trip-1?tab=vehicles')
+    renderPage('/trips/trip-1?tab=stay')
 
     const selected = screen.getByRole('tab', { selected: true })
     expect(document.getElementById(selected.getAttribute('aria-controls') as string)).toBe(screen.getByRole('tabpanel'))
@@ -557,10 +618,12 @@ describe('TripDetailPage — the tabpanel is named by its tab', () => {
 // VD1 design review: a one-row scrolling strip hid History at 1440 with no cue on macOS or iPad (no drawn scrollbar). From md up the
 // strip wraps, so every tab stays on screen; below md it is the default one scrolling row.
 describe('TripDetailPage — every tab visible from md up', () => {
-  it('renders all ten tabs in a strip that wraps from md up', () => {
+  it('renders the nine Admin tabs in ONE row: the strip scrolls with the house fade instead of wrapping', () => {
     isAdmin = true
     renderPage()
-    expect(screen.getAllByRole('tab')).toHaveLength(10)
-    expect(screen.getByRole('tablist', { name: 'Trip detail sections' })).toHaveClass('md:flex-wrap')
+    expect(screen.getAllByRole('tab')).toHaveLength(9)
+    const strip = screen.getByRole('tablist', { name: 'Trip detail sections' })
+    expect(strip).not.toHaveClass('md:flex-wrap')
+    expect(strip.className).toMatch(/mask-image/)
   })
 })

@@ -13,7 +13,7 @@ import {
 import { LEAVE_STATUSES, LEAVE_STATUS_COLORS } from '@/api/types/leave'
 import { NOTIFICATION_OUTBOX_STATUSES, NOTIFICATION_STATUS_COLORS } from '@/api/types/notifications'
 import { CAREGIVER_SUBMISSION_STATUSES } from '@/api/types/caregiver'
-import { BUDGET_STATUSES } from '@/api/types/funding'
+import { BUDGET_LIST_STATUSES, BUDGET_STATUSES } from '@/api/types/funding'
 
 /**
  * L3-02 guard: every status word the API can send has a deliberate tone, and a status nobody listed falls back to NEUTRAL, never to
@@ -55,6 +55,7 @@ const STATUS_ENUMS: Record<string, readonly string[]> = {
   NotificationOutboxStatus: NOTIFICATION_OUTBOX_STATUSES,
   CaregiverSubmissionStatus: CAREGIVER_SUBMISSION_STATUSES,
   BudgetStatus: BUDGET_STATUSES,
+  BudgetListStatus: BUDGET_LIST_STATUSES,
   PayrollShiftStatus: PAYROLL_SHIFT_STATUSES,
 }
 

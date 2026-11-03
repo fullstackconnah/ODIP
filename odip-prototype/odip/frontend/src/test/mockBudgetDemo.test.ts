@@ -134,7 +134,9 @@ describe.skipIf(!existsSync(FUNDING))('the mock API serves the budget warnings (
     ])
     expect(rows.map(row => row.ndiaRejection)).toEqual([undefined, { date: '2026-10-08', code: 'V27', claimId: 'claim-0003', claimReference: 'TC-43000412-20261008' }, undefined, undefined, undefined])
     // What is left, or how far over (available minus used), and how much of what is available was rolled over.
-    expect(rows.map(row => [row.remaining, row.carried])).toEqual([[-1563.21, 0], [38899, 0], [1541.32, 448.66], [108.22, 864.86], [1740.44, 1008.22]])
+    expect(rows.map(row => [row.remaining, row.carried])).toEqual([[-1563.21, 0], [38899, 0], [1541.32, 448.66], [108.22, 864.86], [516.44, 1008.22]])
+    // The row's one word (BudgetListService.ListStatusOf): Gracie's refusal makes her Funds ran out. (Dylan's second pool is paced to run out later in the quarter; a week in it is too early for a pace.)
+    expect(rows.map(row => row.listStatus)).toEqual(['Over', 'FundsRanOut', 'ForecastOver', 'Approaching', 'OnTrack'])
     expect(rows.map(row => row.unpricedShiftCount)).toEqual([0, 0, 1, 0, 0])   // only Sienna's Core, which has the sleepover
     expect(noBudget).toEqual([
       { participantId: 'p-0001', participantName: 'Liam Okafor', reason: 'NotRecorded' },

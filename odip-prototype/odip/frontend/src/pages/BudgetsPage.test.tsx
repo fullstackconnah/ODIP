@@ -107,29 +107,71 @@ describe('BudgetsPage: filtering by status', () => {
   it('offers each status with how many rows it holds, and All', () => {
     renderPage()
 
-    for (const label of [/^All \(4\)$/, /^Over \(1\)$/, /^Forecast over \(1\)$/, /^Approaching \(1\)$/, /^On track \(1\)$/]) expect(filter(label)).toBeInTheDocument()
+    for (const label of [/^All \(4\)$/, /^Needs attention \(3\)$/, /^On track \(1\)$/]) expect(filter(label)).toBeInTheDocument()
+    expect(screen.getAllByRole('radio')).toHaveLength(3)
     expect(filter(/^All/)).toHaveAttribute('aria-checked', 'true')
   })
 
   it('shows only the rows of the status chosen, and puts it in the address so the list can be shared', async () => {
     renderPage()
 
-    await userEvent.click(filter(/^Over \(1\)/))
+    await userEvent.click(filter(/^Needs attention \(3\)/))
 
-    expect(participants()).toEqual(['Olive Over'])
-    expect(screen.getByTestId('where')).toHaveTextContent('/budgets?status=Over')
+    expect(participants()).toEqual(['Olive Over', 'Ford Cast', 'Appa Roach'])
+    expect(screen.getByTestId('where')).toHaveTextContent('/budgets?status=attention')
     await userEvent.click(filter(/^All/))
     expect(participants()).toHaveLength(4)
     expect(screen.getByTestId('where')).toHaveTextContent(/^\/budgets$/)
   })
 
   it('starts on the status in the address, and treats anything that is not a status as All', () => {
-    const { unmount } = renderPage('/budgets?status=Approaching')
-    expect(participants()).toEqual(['Appa Roach'])
+    const { unmount } = renderPage('/budgets?status=attention')
+    expect(participants()).toEqual(['Olive Over', 'Ford Cast', 'Appa Roach'])
     unmount()
+
+    const { unmount: unmountOld } = renderPage('/budgets?status=Over')   // a value from before the three chips is All now
+    expect(participants()).toHaveLength(4)
+    unmountOld()
 
     renderPage('/budgets?status=Nonsense')
     expect(participants()).toHaveLength(4)
+  })
+})
+
+// The NDIA's refusal makes an On track pool a "Funds ran out" row. It is one word in the list (the server's), so the page files it under Needs attention, never calls it On track and never says what is left.
+const ndiaList = () => {
+  const [over, ...rest] = budgetList().rows
+  const refused = budgetRow({
+    participantId: 'p-0014', participantName: 'Gracie Palmer', poolId: 'pool-e', available: 40000, used: 1101, bookedAhead: 0, forecast: 1101, status: 'OnTrack', listStatus: 'FundsRanOut',
+    ndiaRejection: { date: '2026-10-28', code: 'V27', claimId: 'claim-3', claimReference: 'TC-3' },
+  })
+  return budgetList({ rows: [over, refused, ...rest] })
+}
+
+describe('BudgetsPage: a refusal by the NDIA', () => {
+  it('files an On track pool the NDIA refused under Needs attention, not On track, and says nothing is left', async () => {
+    mockUseBudgetList.mockReturnValue(ready(ndiaList()))
+    renderPage()
+
+    expect(filter(/^Needs attention \(4\)$/)).toBeInTheDocument()
+    expect(filter(/^On track \(1\)$/)).toBeInTheDocument()
+    const row = screen.getByText('Gracie Palmer').closest('tr')!
+    expect(within(row).getByText('Funds ran out')).toBeInTheDocument()
+    expect(within(row).queryByText('On track')).not.toBeInTheDocument()
+    expect(within(row).queryByText(/left/)).not.toBeInTheDocument()
+    await userEvent.click(filter(/^On track/))
+    expect(participants()).toEqual(['Alma Fine'])
+    await userEvent.click(filter(/^Needs attention/))
+    expect(participants()).toContain('Gracie Palmer')
+  })
+
+  it('says every budget is on track when nothing needs attention', async () => {
+    mockUseBudgetList.mockReturnValue(ready(budgetList({ rows: budgetList().rows.slice(3) })))
+    renderPage('/budgets?status=attention')
+
+    expect(screen.getByText('No pool needs attention. Every budget is on track.')).toBeInTheDocument()
+    await userEvent.type(screen.getByRole('textbox', { name: 'Search participants' }), 'zzz')
+    expect(screen.getByText('No budgets match these filters.')).toBeInTheDocument()
   })
 })
 
@@ -147,12 +189,12 @@ describe('BudgetsPage: searching for a participant', () => {
     renderPage()
     await userEvent.type(screen.getByRole('textbox', { name: 'Search participants' }), 'ford')
 
-    for (const label of [/^All \(1\)$/, /^Over \(0\)$/, /^Forecast over \(1\)$/, /^Approaching \(0\)$/, /^On track \(0\)$/]) expect(filter(label)).toBeInTheDocument()
+    for (const label of [/^All \(1\)$/, /^Needs attention \(1\)$/, /^On track \(0\)$/]) expect(filter(label)).toBeInTheDocument()
   })
 
   it('combines with the status, and says so plainly when nothing matches, with a way back', async () => {
     renderPage()
-    await userEvent.click(filter(/^Over \(1\)/))
+    await userEvent.click(filter(/^On track \(1\)/))
     await userEvent.type(screen.getByRole('textbox', { name: 'Search participants' }), 'ford')
 
     expect(screen.getByText('No budgets match these filters.')).toBeInTheDocument()
@@ -208,7 +250,7 @@ describe('BudgetsPage: the participants with no budget in force', () => {
   it('is part of All only: a participant with no budget has no status to filter by', async () => {
     renderPage()
 
-    await userEvent.click(filter(/^Over \(1\)/))
+    await userEvent.click(filter(/^Needs attention \(3\)/))
 
     expect(screen.queryByRole('button', { name: /no budget recorded/ })).not.toBeInTheDocument()
   })
