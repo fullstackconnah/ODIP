@@ -19,6 +19,9 @@ type MoveTarget = { staffId: string; dir: 'up' | 'down' }
 
 const lower = (level: string) => level.toLowerCase()
 
+// The house select look (as on the compatibility matrix): --control-h is 32px on a mouse and 44px on touch.
+const SELECT_CLASS = 'h-[var(--control-h)] w-auto rounded-[var(--radius-sm)] border border-border bg-card px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+
 /**
  * R8b: who this participant works best with, in order. Preferred, Backup and Emergency are each a ranked list; the shift
  * panel's staff picker and (later) auto-rostering read the same order. Moving, re-tiering and adding all go through the
@@ -138,7 +141,7 @@ export function StaffPreferencesCard({ participantId }: { participantId: string 
                         {row.reason && <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">{row.reason}</p>}
                       </div>
                       {canWrite && (
-                        <div className="flex items-center gap-2 pointer-coarse:gap-3">
+                        <div className="flex items-center gap-2 pointer-coarse:gap-4">
                           <Button
                             variant="ghost" size="sm" iconOnly data-move={`${row.staffId}:up`}
                             aria-label={`Move ${row.staffName} up in ${level}`}
@@ -160,7 +163,7 @@ export function StaffPreferencesCard({ participantId }: { participantId: string 
                             value={row.level}
                             disabled={busy}
                             onChange={e => retier(row, e.target.value as CompatibilityRowDto['level'])}
-                            className="w-auto"
+                            className={SELECT_CLASS}
                           >
                             {RANKED_LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
                             <option value="Allowed">Remove from list</option>
@@ -179,11 +182,11 @@ export function StaffPreferencesCard({ participantId }: { participantId: string 
           <div>
             <p className="mb-1 text-xs font-semibold text-muted-foreground">Add staff</p>
             <div className="flex flex-wrap items-center gap-2 pointer-coarse:gap-3">
-              <select aria-label="Staff to add" value={addStaffId} disabled={busy} onChange={e => setAddStaffId(e.target.value)} className="w-auto min-w-0 max-w-full">
+              <select aria-label="Staff to add" value={addStaffId} disabled={busy} onChange={e => setAddStaffId(e.target.value)} className={`${SELECT_CLASS} min-w-0 max-w-full`}>
                 <option value="">Choose staff</option>
                 {addable.map(s => <option key={s.id} value={s.id}>{s.fullName}</option>)}
               </select>
-              <select aria-label="Tier to add to" value={addTier} disabled={busy} onChange={e => setAddTier(e.target.value as RankedLevel)} className="w-auto">
+              <select aria-label="Tier to add to" value={addTier} disabled={busy} onChange={e => setAddTier(e.target.value as RankedLevel)} className={SELECT_CLASS}>
                 {RANKED_LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
               </select>
               <Button variant="secondary" disabled={busy || !addStaffId} onClick={add}>Add</Button>
