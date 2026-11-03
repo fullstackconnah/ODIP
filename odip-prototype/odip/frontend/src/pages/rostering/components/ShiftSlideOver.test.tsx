@@ -67,6 +67,7 @@ function makeCompatibilityRow(overrides: Partial<CompatibilityRowDto> = {}): Com
     participantId: 'participant-1',
     participantName: 'Mia Chen',
     level: 'Preferred',
+    rank: 0,
     reason: null,
     updatedAt: '2026-01-01T00:00:00Z',
     ...overrides,
@@ -739,6 +740,67 @@ describe('ShiftSlideOver staff compatibility (task 6d)', () => {
     for (const id of describedBy!.split(' ')) {
       expect(document.getElementById(id)).not.toBeNull()
     }
+  })
+})
+
+describe('ShiftSlideOver staff tiers (R8b)', () => {
+  const staffSix = [
+    { value: 's-none', label: 'Nia None' },
+    { value: 's-no', label: 'Nora No' },
+    { value: 's-em', label: 'Eli Emergency' },
+    { value: 's-bk', label: 'Bea Backup' },
+    { value: 's-p2', label: 'Pat Preferred Two' },
+    { value: 's-p1', label: 'Paul Preferred One' },
+  ]
+  const rows = [
+    makeCompatibilityRow({ staffId: 's-no', staffName: 'Nora No', level: 'Excluded', rank: 0 }),
+    makeCompatibilityRow({ staffId: 's-em', staffName: 'Eli Emergency', level: 'Emergency', rank: 1 }),
+    makeCompatibilityRow({ staffId: 's-bk', staffName: 'Bea Backup', level: 'Backup', rank: 1 }),
+    makeCompatibilityRow({ staffId: 's-p2', staffName: 'Pat Preferred Two', level: 'Preferred', rank: 2 }),
+    makeCompatibilityRow({ staffId: 's-p1', staffName: 'Paul Preferred One', level: 'Preferred', rank: 1 }),
+  ]
+
+  function renderPicker(selected: string | null = null) {
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'edit', shift: makeShift({ staffId: selected, findings: [] }) }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={staffSix}
+      />,
+    )
+  }
+
+  it('lists Preferred by rank, Backup, Emergency, unlisted, then No last, with the place in each description', async () => {
+    const user = userEvent.setup()
+    mockUseCompatibility.mockReturnValue({ data: rows })
+    renderPicker()
+
+    await user.click(screen.getByLabelText('Staff'))
+
+    const labels = screen.getAllByRole('option').map(o => o.textContent ?? '')
+    const names = ['Paul Preferred One', 'Pat Preferred Two', 'Bea Backup', 'Eli Emergency', 'Nia None', 'Nora No']
+    expect(names.map(n => labels.findIndex(l => l.includes(n)))).toEqual([1, 2, 3, 4, 5, 6])
+    expect(screen.getByText('Preferred #1 for this participant')).toBeInTheDocument()
+    expect(screen.getByText('Preferred #2 for this participant')).toBeInTheDocument()
+    expect(screen.getByText('Backup #1 for this participant')).toBeInTheDocument()
+    expect(screen.getByText('Emergency #1 for this participant')).toBeInTheDocument()
+  })
+
+  it('notes a selected Backup worker in the muted style and links the note to the field', () => {
+    mockUseCompatibility.mockReturnValue({ data: rows })
+    renderPicker('s-bk')
+
+    const note = screen.getByText('Bea Backup is backup #1 for this participant.')
+    expect(screen.getByRole('combobox', { name: 'Staff' }).getAttribute('aria-describedby')).toContain(note.id)
+  })
+
+  it('notes a selected Emergency worker too', () => {
+    mockUseCompatibility.mockReturnValue({ data: rows })
+    renderPicker('s-em')
+
+    expect(screen.getByText('Eli Emergency is emergency #1 for this participant.')).toBeInTheDocument()
   })
 })
 

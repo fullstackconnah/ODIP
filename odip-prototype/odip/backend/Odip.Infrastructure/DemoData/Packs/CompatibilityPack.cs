@@ -20,17 +20,20 @@ public sealed class CompatibilityPack : IDemoPack
 
     private const string AutoLinkReason = "Auto-linked from the participant's preferred-staff selection.";
 
-    private sealed record Cell(string Staff, string Participant, CompatibilityLevel Level, string Reason, bool AutoLinked = false);
+    private sealed record Cell(string Staff, string Participant, CompatibilityLevel Level, string Reason, bool AutoLinked = false, int Rank = 0);
 
     private static readonly Cell[] Cells =
     {
-        new("james", "sophie", CompatibilityLevel.Preferred, "Settled routine: has supported Sophie for two years."),
-        new("james", "harrison", CompatibilityLevel.Preferred, "Knows the insulin routine and the signs of a low."),
-        new("james", "liam", CompatibilityLevel.Preferred, AutoLinkReason, AutoLinked: true),
-        new("marcus", "olivia", CompatibilityLevel.Preferred, "Experienced with hoist transfers."),
-        new("daniel", "ethan", CompatibilityLevel.Preferred, "Shared interests; easy rapport."),
-        new("priya", "thomas", CompatibilityLevel.Preferred, "Thomas asked for Priya."),
-        new("emily", "grace", CompatibilityLevel.Preferred, "Long-standing arrangement that works well."),
+        new("james", "sophie", CompatibilityLevel.Preferred, "Settled routine: has supported Sophie for two years.", Rank: 1),
+        // Sophie's story for the Staff preferences card: a Preferred, a Backup and an Emergency, in that order.
+        new("priya", "sophie", CompatibilityLevel.Backup, "Knows the morning routine; covers when James is away.", Rank: 1),
+        new("marcus", "sophie", CompatibilityLevel.Emergency, "Has met Sophie; call only when nobody else is free.", Rank: 1),
+        new("james", "harrison", CompatibilityLevel.Preferred, "Knows the insulin routine and the signs of a low.", Rank: 1),
+        new("james", "liam", CompatibilityLevel.Preferred, AutoLinkReason, AutoLinked: true, Rank: 1),
+        new("marcus", "olivia", CompatibilityLevel.Preferred, "Experienced with hoist transfers.", Rank: 1),
+        new("daniel", "ethan", CompatibilityLevel.Preferred, "Shared interests; easy rapport.", Rank: 1),
+        new("priya", "thomas", CompatibilityLevel.Preferred, "Thomas asked for Priya.", Rank: 1),
+        new("emily", "grace", CompatibilityLevel.Preferred, "Long-standing arrangement that works well.", Rank: 1),
         new("emily", "ryan", CompatibilityLevel.Excluded, "Escalation on 12 Sep; see the behaviour support plan before any roster."),
         new("lachlan", "charlotte", CompatibilityLevel.Excluded, "Incident in August; do not roster together until it has been reviewed."),
         new("daniel", "isabella", CompatibilityLevel.Excluded, "Isabella's family asked for a change; review at the next plan meeting."),
@@ -56,8 +59,7 @@ public sealed class CompatibilityPack : IDemoPack
                 UserId = staff.Id,
                 ParticipantId = participant.Id,
                 Level = cell.Level,
-                // Each demo participant has at most one Preferred cell, so it is #1 of its tier.
-                Rank = cell.Level == CompatibilityLevel.Preferred ? 1 : 0,
+                Rank = cell.Rank,
                 Reason = cell.Reason,
                 AutoLinked = cell.AutoLinked,
                 UpdatedAt = run.NowUtc,

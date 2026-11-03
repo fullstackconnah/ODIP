@@ -380,7 +380,7 @@ export const CLAIM_KINDS = ['Trip', 'Shift'] as const
 export type ClaimKind = typeof CLAIM_KINDS[number]
 
 // ── Compatibility Level ──────────────────────────────────
-export const COMPATIBILITY_LEVELS = ['Preferred', 'Allowed', 'Excluded'] as const
+export const COMPATIBILITY_LEVELS = ['Preferred', 'Backup', 'Emergency', 'Allowed', 'Excluded'] as const
 export type CompatibilityLevel = typeof COMPATIBILITY_LEVELS[number]
 
 // ── Roster Finding Severity ──────────────────────────────

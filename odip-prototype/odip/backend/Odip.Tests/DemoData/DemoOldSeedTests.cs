@@ -126,7 +126,7 @@ public class DemoOldSeedTests
         Assert.True(await read.Shifts.IgnoreQueryFilters().CountAsync() > 80);
         Assert.True(await read.ShiftCompletions.CountAsync() > 15);
         Assert.True(await read.LeaveRequests.CountAsync() >= 10);
-        Assert.Equal(10, await read.StaffParticipantCompatibilities.CountAsync());
+        Assert.Equal(12, await read.StaffParticipantCompatibilities.CountAsync());
         Assert.Equal(2, await read.BookingTasks.CountAsync(t => t.TaskType == TaskType.LeaveCoverage));       // Priya's Thursday in each of the two pack weeks
     }
 

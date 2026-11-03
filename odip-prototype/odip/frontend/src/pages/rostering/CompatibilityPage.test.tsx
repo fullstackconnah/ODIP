@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import CompatibilityPage from './CompatibilityPage'
 
-const { mockUpsertMutate } = vi.hoisted(() => ({ mockUpsertMutate: vi.fn() }))
+const { mockUpsertMutate, mockByKey } = vi.hoisted(() => ({ mockUpsertMutate: vi.fn(), mockByKey: new Map<string, unknown>() }))
 
 vi.mock('@/lib/permissions', () => ({
   usePermissions: () => ({ canWrite: true }),
@@ -33,7 +33,7 @@ vi.mock('@/api/hooks', () => ({
 
 vi.mock('./lib/useCompatibilityMatrix', () => ({
   useCompatibilityMatrix: () => ({
-    byKey: new Map(),
+    byKey: mockByKey,
     isLoading: false,
     isError: false,
     refetchAll: vi.fn(),
@@ -153,6 +153,47 @@ describe('CompatibilityPage — the server\'s refusal reaches the user', () => {
     expect(screen.getAllByRole('option', { name: 'No' })[0]).toHaveAttribute('value', 'Excluded')
   })
 
+  it('offers the five levels, and the No dialog says Mark as No with no "Exclude" wording', async () => {
+    const user = userEvent.setup()
+    render(<CompatibilityPage />)
+
+    const select = screen.getByLabelText('Sam Taylor with Jamie Chen: Allowed')
+    expect(Array.from(select.querySelectorAll('option')).map(o => [o.textContent, o.getAttribute('value')])).toEqual([
+      ['Preferred', 'Preferred'], ['Backup', 'Backup'], ['Emergency', 'Emergency'], ['Allowed', 'Allowed'], ['No', 'Excluded'],
+    ])
+
+    await user.selectOptions(select, 'Excluded')
+    expect(screen.getByPlaceholderText('Why can’t they work together?')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Mark as No' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: /^exclude$/i })).not.toBeInTheDocument()
+    expect(screen.queryByPlaceholderText(/exclude/i)).not.toBeInTheDocument()
+  })
+
+  it('sends a Backup pick without a rank, so the server appends it', async () => {
+    const user = userEvent.setup()
+    render(<CompatibilityPage />)
+
+    await user.selectOptions(screen.getByLabelText('Sam Taylor with Jamie Chen: Allowed'), 'Backup')
+
+    expect(mockUpsertMutate).toHaveBeenCalledWith({ staffId: 's1', participantId: 'p2', level: 'Backup', reason: null }, expect.anything())
+  })
+
+  it('shows Backup and Emergency as labelled chips on their cells', () => {
+    const row = (staffId: string, participantId: string, level: string) =>
+      [`${staffId}:${participantId}`, { staffId, participantId, level, rank: 1, reason: null }] as const
+    for (const [k, v] of [row('s1', 'p1', 'Backup'), row('s2', 'p1', 'Emergency')]) mockByKey.set(k, v)
+    try {
+      render(<CompatibilityPage />)
+
+      expect(screen.getByLabelText('Sam Taylor with Alex Rivera: Backup')).toHaveValue('Backup')
+      expect(screen.getByLabelText('Morgan Lee with Alex Rivera: Emergency')).toHaveValue('Emergency')
+      expect(screen.getAllByText('Backup', { selector: 'span' }).length).toBe(1)
+      expect(screen.getAllByText('Emergency', { selector: 'span' }).length).toBe(1)
+    } finally {
+      mockByKey.clear()
+    }
+  })
+
   it('exclusion: sends the reason with the full body and shows the refusal', async () => {
     const user = userEvent.setup()
     failNextUpsertWith(badRequest(NOT_READY_MESSAGE))
@@ -160,7 +201,7 @@ describe('CompatibilityPage — the server\'s refusal reaches the user', () => {
 
     await user.selectOptions(screen.getByLabelText('Sam Taylor with Jamie Chen: Allowed'), 'Excluded')
     await user.type(screen.getByLabelText(/reason/i), 'Personality clash')
-    await user.click(screen.getByRole('button', { name: 'Exclude' }))
+    await user.click(screen.getByRole('button', { name: 'Mark as No' }))
 
     expect(mockUpsertMutate).toHaveBeenCalledTimes(1)
     expect(mockUpsertMutate).toHaveBeenCalledWith(

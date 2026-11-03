@@ -664,6 +664,8 @@ export interface CompatibilityRowDto {
   participantId: string
   participantName: string
   level: CompatibilityLevel
+  /** 1-based place inside a Preferred, Backup or Emergency tier; 0 for Allowed and No. */
+  rank: number
   reason: string | null
   updatedAt: string
 }
@@ -673,4 +675,6 @@ export interface UpsertCompatibilityDto {
   participantId: string
   level: CompatibilityLevel
   reason?: string | null
+  /** 1-based target place in the tier; leave out to keep the row where it is (or append on a tier change). */
+  rank?: number
 }
