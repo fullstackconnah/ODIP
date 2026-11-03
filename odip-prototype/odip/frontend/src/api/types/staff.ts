@@ -17,6 +17,8 @@ export interface StaffListDto {
   position: Position
   /** Null when an admin has not set it. */
   employmentType?: EmploymentType | null
+  /** Weekly hours auto-roster aims for. Null when not set: it then uses the default for their employment type. */
+  goalWeeklyHours?: number | null
   email: string | null
   mobile: string | null
   region: string | null
@@ -70,6 +72,7 @@ export interface CreateStaffDto {
   manualHandlingExpiryDate?: string
   medicationCompetencyExpiryDate?: string
   workerScreeningNumber?: string
+  goalWeeklyHours?: number | null
   workerScreeningExpiryDate?: string
 }
 

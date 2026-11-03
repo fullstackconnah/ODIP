@@ -145,7 +145,7 @@ export default function StaffDetailPage() {
   ]
   // Join only the parts that exist: an empty position used to leave the row starting with a
   // stray " · " separator.
-  const positionAndRegion = [POSITION_LABELS[staff.position] ?? staff.position, staff.employmentType && EMPLOYMENT_TYPE_LABELS[staff.employmentType], staff.region || 'No region'].filter(Boolean).join(' · ')
+  const positionAndRegion = [POSITION_LABELS[staff.position] ?? staff.position, staff.employmentType && EMPLOYMENT_TYPE_LABELS[staff.employmentType], staff.goalWeeklyHours != null && `${staff.goalWeeklyHours} h a week goal`, staff.region || 'No region'].filter(Boolean).join(' · ')
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
