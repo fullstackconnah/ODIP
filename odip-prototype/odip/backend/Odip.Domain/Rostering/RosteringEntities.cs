@@ -17,14 +17,18 @@ public enum ShiftStatus
 }
 
 /// <summary>
-/// A staff-participant pairing preference. Three states, not a score — the absence of a
-/// <see cref="StaffParticipantCompatibility"/> row for a pair means Allowed.
+/// A staff-participant pairing preference. Preferred, Backup and Emergency are ordered tiers (see
+/// <see cref="StaffParticipantCompatibility.Rank"/>); Excluded is the hard "No". The absence of a
+/// <see cref="StaffParticipantCompatibility"/> row for a pair means Allowed. Values are appended, never renumbered:
+/// ordering goes through <see cref="CompatibilityOrder"/>, never the stored int.
 /// </summary>
 public enum CompatibilityLevel
 {
     Preferred = 0,
     Allowed = 1,
-    Excluded = 2
+    Excluded = 2,
+    Backup = 3,
+    Emergency = 4
 }
 
 /// <summary>
@@ -230,6 +234,10 @@ public class StaffParticipantCompatibility : ITenantEntity
     public CompatibilityLevel Level { get; set; }
     public string? Reason { get; set; }
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>1-based position inside this participant's Preferred, Backup or Emergency tier; 0 for Allowed and Excluded.
+    /// Every write renumbers the whole tier, so it is 1..n; two concurrent writes may leave a duplicate that the next write heals.</summary>
+    public int Rank { get; set; }
 
     /// <summary>
     /// Origin marker (task 6d): true iff this row was created/is still owned by
