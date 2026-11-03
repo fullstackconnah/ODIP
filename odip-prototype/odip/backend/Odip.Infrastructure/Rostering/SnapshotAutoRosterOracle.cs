@@ -14,4 +14,6 @@ public sealed class SnapshotAutoRosterOracle(RosterAvailability.Snapshot snapsho
     public bool NeedsOverride(IReadOnlyList<RosterFinding> findings) => RosterGate.EvaluateFindings(findings.ToList(), null) is not null;
 
     public void Book(Shift probe) => snapshot.Add(probe);
+
+    public IReadOnlyList<(TimeOnly Start, TimeOnly End)> FreeSegments(Shift probe) => snapshot.FreeSegments(probe);
 }

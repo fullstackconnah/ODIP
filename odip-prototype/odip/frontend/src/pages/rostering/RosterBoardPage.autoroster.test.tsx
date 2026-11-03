@@ -95,7 +95,7 @@ describe('the run', () => {
 
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    answer({ weekStart: '2026-08-17', generatedAt: '2026-08-14T00:00:00Z', changes: [], hours: [], uncovered: [] })
+    answer({ weekStart: '2026-08-17', generatedAt: '2026-08-14T00:00:00Z', changes: [], hours: [], uncovered: [], splits: [] })
     await Promise.resolve()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })

@@ -13,6 +13,9 @@ public enum UncoveredReason { ParticipantNotReady, NoStaff, OnlyNoStaff, HoursCa
 /// <summary>The fixed rules of auto-roster (R7): which findings never stop a draft row, and what a person's weekly goal is.</summary>
 public static class AutoRosterRules
 {
+    /// <summary>D9: the shortest part of a split shift, in hours. A split part under this is not proposed.</summary>
+    public const decimal MinSplitSegmentHours = 2m;
+
     /// <summary>
     /// An allow-list of shift-level findings that ride along as warnings on a draft row. Anything else disqualifies an ordinary candidate (OVER_HOURS, the casual fortnight cap,
     /// competency, credential, screening, pending leave), and a worker-level code added to the engine later disqualifies by default.

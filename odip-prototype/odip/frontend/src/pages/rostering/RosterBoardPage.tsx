@@ -1010,7 +1010,7 @@ export default function RosterBoardPage() {
         description={participantFilter || regionFilter || unfilledOnly ? `${formatWeekRange(days)}. Covers every participant, not just the filtered view.` : formatWeekRange(days)}
         run={autoRun}
         onRetryRun={runAutoRoster}
-        onApply={rows => applyAuto.mutateAsync({ weekStart: autoWeek.current, rows })}
+        onApply={(rows, splits) => applyAuto.mutateAsync({ weekStart: autoWeek.current, rows, splits })}
         onApplied={autoRosterApplied}
         onArmedChange={setAutoArmed}
       />

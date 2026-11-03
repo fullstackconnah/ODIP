@@ -277,6 +277,82 @@ public class AutoRosterControllerTests
         Assert.Contains(await db.NotificationOutbox.ToListAsync(), o => o.EntityId == published.Id);
     }
 
+    private static AutoRosterApplyDto OneSplit(Shift shift, double cutHour, Guid first, Guid second) => new()
+    {
+        Splits = [new() { ShiftId = shift.Id, StartTime = shift.StartTime, EndTime = shift.EndTime, CutAt = TimeOnly.FromTimeSpan(TimeSpan.FromHours(cutHour)), FirstStaffId = first, SecondStaffId = second }],
+    };
+
+    [Fact] // [D]
+    public async Task AutoRosterApply_ASplit_CutsTheShift_MakesTheOtherHalf_AndKeepsHoursAndThePatternLink_AndAFreshDraftFindsNothingOpen()
+    {
+        using var db = TestDb.Create();
+        var pat = Staff(db, "Pat", TenantA);
+        var quinn = Staff(db, "Quinn", TenantA);
+        var (person, shift) = OpenShift(db, "Mia", TenantA);
+        shift.EndTime = new TimeOnly(17, 0);
+        var pattern = shift.ShiftPatternId;
+        await db.SaveChangesAsync();
+
+        var result = Result(await Controller(db, TenantA).AutoRosterApply(Monday, OneSplit(shift, 13, pat.Id, quinn.Id), default));
+
+        Assert.Equal(new[] { shift.Id }, result.Applied);
+        Assert.Empty(result.Skipped);
+        var halves = await db.Shifts.AsNoTracking().Where(s => s.ParticipantId == person.Id).OrderBy(s => s.StartTime).ToListAsync();
+        Assert.Equal(2, halves.Count);
+        Assert.Equal((new TimeOnly(9, 0), new TimeOnly(13, 0), pat.Id), (halves[0].StartTime, halves[0].EndTime, halves[0].UserId));
+        Assert.Equal((new TimeOnly(13, 0), new TimeOnly(17, 0), quinn.Id), (halves[1].StartTime, halves[1].EndTime, halves[1].UserId));
+        Assert.Equal(8m, halves.Sum(h => h.DurationHours));
+        Assert.All(halves, h => Assert.Equal((pattern, ShiftStatus.Draft, SupportRatio.OneToOne), (h.ShiftPatternId, h.Status, h.Ratio)));
+
+        var draft = Assert.IsType<ApiResponse<AutoRosterDraftDto>>(Assert.IsType<OkObjectResult>((await Controller(db, TenantA).AutoRoster(Monday, default)).Result).Value).Data!;
+        Assert.Empty(draft.Changes);
+        Assert.Empty(draft.Splits);
+        Assert.Empty(draft.Uncovered);
+    }
+
+    [Fact] // [D]
+    public async Task AutoRosterApply_ASplitOfAnotherOrganisationsShift_IsSkipped_AndNothingIsWritten()
+    {
+        using var db = TestDb.Create();
+        var pat = Staff(db, "Pat", TenantA);
+        var quinn = Staff(db, "Quinn", TenantA);
+        var theirStaff = Staff(db, "Zed", TenantB);
+        var (_, theirs) = OpenShift(db, "Zoe", TenantB);
+        theirs.EndTime = new TimeOnly(17, 0);
+        await db.SaveChangesAsync();
+        var c = Controller(db, TenantA);
+
+        var shiftNotFound = Result(await c.AutoRosterApply(Monday, OneSplit(theirs, 13, pat.Id, quinn.Id), default));
+        var staffNotFound = Result(await c.AutoRosterApply(Monday, OneSplit(theirs, 13, pat.Id, theirStaff.Id), default));
+
+        Assert.Empty(shiftNotFound.Applied);
+        Assert.Equal(theirs.Id, Assert.Single(shiftNotFound.Skipped).ShiftId);
+        Assert.Empty(staffNotFound.Applied);
+        Assert.Single(staffNotFound.Skipped);
+        var rows = await db.Shifts.AsNoTracking().ToListAsync();
+        Assert.Equal((theirs.Id, new TimeOnly(17, 0), (Guid?)null), (Assert.Single(rows).Id, rows[0].EndTime, rows[0].UserId));
+    }
+
+    [Fact]
+    public async Task AutoRosterApply_ASplitOfAShiftEditedSinceTheDraft_IsSkippedAndLeftAsItIs()
+    {
+        using var db = TestDb.Create();
+        var pat = Staff(db, "Pat", TenantA);
+        var quinn = Staff(db, "Quinn", TenantA);
+        var (_, shift) = OpenShift(db, "Mia", TenantA);
+        shift.EndTime = new TimeOnly(17, 0);
+        await db.SaveChangesAsync();
+        var asDrafted = OneSplit(shift, 13, pat.Id, quinn.Id);
+        shift.EndTime = new TimeOnly(15, 0);   // edited after the draft was made
+        await db.SaveChangesAsync();
+
+        var result = Result(await Controller(db, TenantA).AutoRosterApply(Monday, asDrafted, default));
+
+        Assert.Empty(result.Applied);
+        Assert.Equal(shift.Id, Assert.Single(result.Skipped).ShiftId);
+        Assert.Equal(new TimeOnly(15, 0), Assert.Single(await db.Shifts.AsNoTracking().ToListAsync()).EndTime);
+    }
+
     [Fact]
     public void AutoRosterApply_IsAPost_UnderTheCoordinatorAndAboveClassPolicy()
     {

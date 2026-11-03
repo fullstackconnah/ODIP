@@ -10,7 +10,7 @@ const change = (o: Partial<AutoRosterChangeDto>): AutoRosterChangeDto => ({
   staffId: 'ava', staffName: 'Ava Nguyen', pick: 'Regular', rank: null, underGoal: false, regularAway: null, warnings: [], alternates: [], ...o,
 })
 const DRAFT: AutoRosterDraftDto = {
-  weekStart: '2026-09-07', generatedAt: '2026-09-04T00:00:00Z',
+  weekStart: '2026-09-07', generatedAt: '2026-09-04T00:00:00Z', splits: [],
   changes: [
     change({ shiftId: 's1', alternates: [{ staffId: 'sam', staffName: 'Sam Lee', pick: 'Preferred', rank: 1 }, { staffId: 'jo', staffName: 'Jo Park', pick: 'Backup' }] }),
     change({ shiftId: 's2', participantId: 'p2', participantName: 'Dan Osei', staffId: 'sam', staffName: 'Sam Lee', pick: 'Preferred', rank: 2, underGoal: true, startTime: '10:00:00', endTime: '14:00:00',
@@ -38,6 +38,51 @@ function setup(over: Partial<AutoRosterPanelProps> = {}, draft: AutoRosterDraftD
   return { props, user: userEvent.setup(), ...render(<AutoRosterPanel {...props} />) }
 }
 const applyButton = () => screen.getByRole('button', { name: /^Apply/ })
+
+// Wednesday: Dan Osei 9am-5pm split at 1pm, Eli Brooks until 1pm, Jo Park after.
+const SPLIT = {
+  shiftId: 'x1', participantId: 'p2', participantName: 'Dan Osei', serviceDate: '2026-09-09', startTime: '09:00:00', endTime: '17:00:00', cutAt: '13:00:00',
+  first: { staffId: 'eli', staffName: 'Eli Brooks' }, second: { staffId: 'jo', staffName: 'Jo Park' },
+}
+const WITH_SPLIT: AutoRosterDraftDto = { ...DRAFT, splits: [SPLIT] }
+
+describe('a split in the draft roster panel', () => {
+  it('is one row with both names, each with their part, the cut time, Leave open and no Change', () => {
+    setup({}, WITH_SPLIT)
+    const row = screen.getByText('Eli Brooks').closest('li')!
+    expect(within(row).getByText('Jo Park')).toBeInTheDocument()
+    expect(within(row).getByText('9am–\u20601pm')).toBeInTheDocument()
+    expect(within(row).getByText('1pm–\u20605pm')).toBeInTheDocument()
+    expect(within(row).getByText('Split at 1pm')).toBeInTheDocument()
+    expect(within(row).getByRole('button', { name: 'Leave Dan Osei 9am–5pm open' })).toBeInTheDocument()
+    expect(within(row).queryByRole('button', { name: 'Change' })).not.toBeInTheDocument()
+    expect(applyButton()).toHaveTextContent('Apply 4 changes')
+  })
+
+  it('apply sends it as a split with the cut and both people, and Leave open then Undo moves it out of the disclosure and back', async () => {
+    const { user, props } = setup({}, WITH_SPLIT)
+    await user.click(screen.getByRole('button', { name: 'Leave Dan Osei 9am–5pm open' }))
+    expect(applyButton()).toHaveTextContent('Apply 3 changes')
+    await user.click(screen.getByRole('button', { name: 'Left open (1)' }))
+    await user.click(screen.getByRole('button', { name: 'Put the split of Dan Osei 9am–5pm back' }))
+    expect(applyButton()).toHaveTextContent('Apply 4 changes')
+    await user.click(applyButton())
+    expect(props.onApply).toHaveBeenCalledWith(expect.any(Array), [
+      { shiftId: 'x1', startTime: '09:00:00', endTime: '17:00:00', cutAt: '13:00:00', firstStaffId: 'eli', secondStaffId: 'jo' },
+    ])
+  })
+
+  it('never offers a person who has a half at an overlapping time, and counts each half’s own hours', async () => {
+    const row = change({ shiftId: 's9', serviceDate: '2026-09-09', startTime: '10:00:00', endTime: '12:00:00', alternates: [{ staffId: 'eli', staffName: 'Eli Brooks', pick: 'Backup' }, { staffId: 'zed', staffName: 'Zed Unused', pick: 'Allowed' }] })
+    const { user } = setup({}, { ...WITH_SPLIT, changes: [row] })
+    await user.click(screen.getByRole('button', { name: 'Change' }))
+    expect(await screen.findByRole('option', { name: /Zed Unused/ })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /Eli Brooks/ })).not.toBeInTheDocument()   // Eli has the 9am to 1pm half
+    await user.keyboard('{Escape}')
+    await user.click(screen.getByRole('tab', { name: 'Hours' }))
+    expect(screen.getAllByText('0 + 4 h')).toHaveLength(2)             // Eli's 9am to 1pm half is the same length, and is not in the pool list so gets its own row
+  })
+})
 
 describe('the draft roster panel', () => {
   it('shows the Changes tab by day with the pick, under goal, away and warning lines, and counts the changes on the button', () => {
@@ -72,7 +117,7 @@ describe('the draft roster panel', () => {
     await user.click(applyButton())
     expect(props.onApply).toHaveBeenCalledWith([
       { shiftId: 's1', staffId: 'jo' }, { shiftId: 's2', staffId: 'sam' }, { shiftId: 's3', staffId: 'jo' },
-    ])
+    ], [])
   })
 
   it('never offers a person who is on another kept row at an overlapping time', async () => {

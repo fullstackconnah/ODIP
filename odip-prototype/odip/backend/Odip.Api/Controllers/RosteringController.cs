@@ -593,7 +593,7 @@ public class RosteringController : ControllerBase
     private const string LocationTooLongMessage = "Keep the location to 200 characters or fewer.";
 
     /// <summary>The body of <see cref="CreateShift"/>. With <paramref name="movingFrom"/> (already locked and checked) the person leaves it in the same save.</summary>
-    private async Task<ActionResult<ApiResponse<ShiftDto>>> CreateShiftCoreAsync(CreateShiftDto dto, Shift? movingFrom, CancellationToken ct)
+    private async Task<ActionResult<ApiResponse<ShiftDto>>> CreateShiftCoreAsync(CreateShiftDto dto, Shift? movingFrom, CancellationToken ct, Shift? copyFrom = null)
     {
         var location = TidyLocation(dto.Location);
         if (location?.Length > LocationMaxLength) return BadRequest(ApiResponse<ShiftDto>.Fail(LocationTooLongMessage));
@@ -608,7 +608,9 @@ public class RosteringController : ControllerBase
         {
             Id = Guid.NewGuid(), ParticipantId = dto.ParticipantId, UserId = dto.StaffId,
             ServiceDate = dto.ServiceDate, StartTime = dto.StartTime, EndTime = dto.EndTime, EndsNextDay = dto.EndsNextDay,
-            // No ShiftPatternId: a pattern link is the server's (the generator sets it). One a request names is dropped, or a hand-made shift could call itself routine and walk round the hard limit (C3).
+            // No ShiftPatternId from the request: a pattern link is the server's (the generator sets it). One a request names is dropped, or a hand-made shift could call itself routine and walk round the hard limit (C3).
+            // Only the server's own split of a shift (copyFrom, R7 auto-roster) carries the link and requirements of the shift it was cut from.
+            ShiftPatternId = copyFrom?.ShiftPatternId, RequirementsJson = copyFrom?.RequirementsJson,
             Ratio = dto.Ratio, NightType = dto.NightType, Notes = dto.Notes, Location = location, SupportGroupCode = supportCode,
             Status = ShiftStatus.Draft
         };
@@ -1110,11 +1112,12 @@ public class RosteringController : ControllerBase
     {
         if (_tenant?.TenantId is not { } tenantId) return BadRequest(ApiResponse<AutoRosterApplyResultDto>.Fail("Choose an organisation to auto-roster its week."));
         if (dto?.Rows is null) return BadRequest(ApiResponse<AutoRosterApplyResultDto>.Fail("Choose the shifts to apply."));
-        if (dto.Rows.Count > AutoRosterApplyMaxRows) return BadRequest(ApiResponse<AutoRosterApplyResultDto>.Fail($"Apply at most {AutoRosterApplyMaxRows} shifts at a time."));
+        var splits = dto.Splits ?? [];
+        if (dto.Rows.Count + splits.Count > AutoRosterApplyMaxRows) return BadRequest(ApiResponse<AutoRosterApplyResultDto>.Fail($"Apply at most {AutoRosterApplyMaxRows} shifts at a time."));
         var start = WeekStart(weekStart);
         var end = start.AddDays(6);
-        var shiftIds = dto.Rows.Select(r => r.ShiftId).Distinct().ToList();
-        var staffIds = dto.Rows.Select(r => r.StaffId).Distinct().ToList();
+        var shiftIds = dto.Rows.Select(r => r.ShiftId).Concat(splits.Select(x => x.ShiftId)).Distinct().ToList();
+        var staffIds = dto.Rows.Select(r => r.StaffId).Concat(splits.SelectMany(x => new[] { x.FirstStaffId, x.SecondStaffId })).Distinct().ToList();
         try
         {
             await using var held = await RosterBoardLockAsync(ct);
@@ -1135,6 +1138,15 @@ public class RosteringController : ControllerBase
                 if (assigned.Result is OkObjectResult) result.Applied.Add(row.ShiftId);
                 else result.Skipped.Add(new() { ShiftId = row.ShiftId, Message = AssignRefusalMessage(assigned.Result) });
             }
+
+            foreach (var split in splits)
+            {
+                if (!seen.Add(split.ShiftId)) { result.Skipped.Add(new() { ShiftId = split.ShiftId, Message = "Listed twice." }); continue; }
+                if (!shiftsHere.Contains(split.ShiftId)) { result.Skipped.Add(new() { ShiftId = split.ShiftId, Message = "Shift not found." }); continue; }
+                if (!staffHere.Contains(split.FirstStaffId) || !staffHere.Contains(split.SecondStaffId)) { result.Skipped.Add(new() { ShiftId = split.ShiftId, Message = "Staff member not found." }); continue; }
+                if (await ApplySplitAsync(split, ct) is { } refused) result.Skipped.Add(new() { ShiftId = split.ShiftId, Message = refused });
+                else result.Applied.Add(split.ShiftId);
+            }
             await held.CommitAsync(ct);
             return Ok(ApiResponse<AutoRosterApplyResultDto>.Ok(result));
         }
@@ -1142,6 +1154,54 @@ public class RosteringController : ControllerBase
         {
             return Conflict(ApiResponse<AutoRosterApplyResultDto>.Fail(RosterGenerationLock.RosterBoardBusyMessage));
         }
+    }
+
+    /// <summary>
+    /// Auto-roster (R7, D9) applies one split under the apply's locks: the shift is cut at <see cref="AutoRosterApplySplitDto.CutAt"/> through the locked update, its other half is created through the
+    /// create path (so the budget and create gates run), then both halves are assigned through the assign body. Null when applied; otherwise the words of the refusal, with nothing left written for the shift.
+    /// shortcut: a refusal part-way is undone by hand (the other half removed, the cut and worker put back), not a savepoint, because the controller tests run on EF InMemory with no transaction; a Postgres savepoint is the upgrade if an undo ever misses a side effect.
+    /// </summary>
+    private async Task<string?> ApplySplitAsync(AutoRosterApplySplitDto split, CancellationToken ct)
+    {
+        var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == split.ShiftId, ct);
+        if (shift is null) return "Shift not found.";
+        if (shift.UserId is not null || shift.Status is not (ShiftStatus.Draft or ShiftStatus.Published) || shift.StartTime != split.StartTime || shift.EndTime != split.EndTime)
+            return "This shift has changed since the draft.";
+        if (shift.EndsNextDay || shift.NightType != SleepoverType.None || shift.Ratio != SupportRatio.OneToOne) return "This shift can't be split.";
+        if (split.FirstStaffId == split.SecondStaffId || Shift.HoursBetween(split.StartTime, split.CutAt, false) < AutoRosterRules.MinSplitSegmentHours
+            || Shift.HoursBetween(split.CutAt, split.EndTime, false) < AutoRosterRules.MinSplitSegmentHours)
+            return "This split is not valid.";
+
+        var (regularUserId, regularAwayReason) = (shift.RegularUserId, shift.RegularAwayReason);
+        var shrunk = await UpdateShiftLockedAsync(shift.Id, new UpdateShiftDto
+        {
+            ParticipantId = shift.ParticipantId, StaffId = null, ServiceDate = shift.ServiceDate, StartTime = shift.StartTime, EndTime = split.CutAt, Ratio = shift.Ratio, NightType = shift.NightType,
+            Notes = shift.Notes, Location = shift.Location, SupportGroupCode = shift.SupportGroupCode, Status = shift.Status,
+        }, ct);
+        if (shrunk.Result is not OkObjectResult) return AssignRefusalMessage(shrunk.Result);
+
+        Guid? halfId = null;
+        async Task<string> UndoAsync(string why)
+        {
+            if (halfId is { } id && await _db.Shifts.FirstOrDefaultAsync(s => s.Id == id, ct) is { } half) _db.Shifts.Remove(half);
+            (shift.UserId, shift.EndTime, shift.RegularUserId, shift.RegularAwayReason, shift.UpdatedAt) = (null, split.EndTime, regularUserId, regularAwayReason, DateTime.UtcNow);
+            await _db.SaveChangesAsync(ct);
+            return why;
+        }
+
+        var created = await CreateShiftCoreAsync(new CreateShiftDto
+        {
+            ParticipantId = shift.ParticipantId, StaffId = null, ServiceDate = shift.ServiceDate, StartTime = split.CutAt, EndTime = split.EndTime, Ratio = shift.Ratio, NightType = shift.NightType,
+            Notes = shift.Notes, Location = shift.Location, SupportGroupCode = shift.SupportGroupCode,
+        }, null, ct, copyFrom: shift);
+        if ((created.Result as OkObjectResult)?.Value is not ApiResponse<ShiftDto> { Data: { } half2 }) return await UndoAsync(AssignRefusalMessage(created.Result));
+        halfId = half2.Id;
+
+        var first = await AssignShiftLockedAsync(shift.Id, new AssignShiftDto { StaffId = split.FirstStaffId, ExpectedStaffId = null }, ct);
+        if (first.Result is not OkObjectResult) return await UndoAsync(AssignRefusalMessage(first.Result));
+        var second = await AssignShiftLockedAsync(half2.Id, new AssignShiftDto { StaffId = split.SecondStaffId, ExpectedStaffId = null }, ct);
+        if (second.Result is not OkObjectResult) return await UndoAsync(AssignRefusalMessage(second.Result));
+        return null;
     }
 
     /// <summary>The words of a refused assign (404, 400, 409 or the gate's 422), for the apply's skip list.</summary>
