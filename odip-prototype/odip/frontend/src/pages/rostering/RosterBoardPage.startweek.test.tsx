@@ -95,12 +95,12 @@ describe('the Publish banner', () => {
 
     const title = screen.getByText('3 shifts not visible to staff yet')
     expect(title.closest('[role="alert"]')).toBeNull()
-    const waiting = screen.getByText(/Shifts from a service agreement appear here/)
+    const waiting = screen.getByRole('button', { name: '1 agreement waiting' })
     expect(title.compareDocumentPosition(waiting) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     const banner = title.closest('[class*="color-warning-container"]') as HTMLElement
     expect(within(banner).getByRole('button', { name: 'Publish week' })).toHaveClass(PRIMARY)
     expect(screen.queryByText('4 drafts')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /New shift/ })).not.toHaveClass(PRIMARY)
+    expect(screen.getByRole('button', { name: 'New' })).not.toHaveClass(PRIMARY)
   })
 
   it('blocked drafts: the banner says so, Publish week sends only the rest, and all-blocked hides the button', async () => {
@@ -109,14 +109,14 @@ describe('the Publish banner', () => {
     const { unmount } = renderPage()
 
     expect(screen.getByText('4 shifts not visible to staff yet')).toBeInTheDocument()
-    expect(screen.getByText("1 of them can't be published until the worker changes: a rule that can't be overridden blocks it.")).toBeInTheDocument()
+    expect(screen.getByText("1 can't be published until its worker changes.")).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Publish week' }))
     expect(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Publish 3 shifts' })).toBeInTheDocument()
     unmount()
 
     showBoard(board([BLOCKED]))
     renderPage()
-    expect(screen.getByText(/^It can't be published/)).toBeInTheDocument()
+    expect(screen.getByText("1 can't be published until its worker changes.")).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Publish week' })).not.toBeInTheDocument()
   })
 
@@ -141,7 +141,7 @@ describe('the Publish banner', () => {
     renderPage()
     expect(screen.queryByText(/not visible to staff yet/)).not.toBeInTheDocument()
     expect(screen.getByText('All published')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /New shift/ })).toHaveClass(PRIMARY)
+    expect(screen.getByRole('button', { name: 'New' })).toHaveClass(PRIMARY)
   })
 
   it('after publishing, focus is on the week heading, never on body', async () => {
@@ -192,7 +192,7 @@ describe('Start rostering', () => {
     expect(screen.queryByText('Nothing rostered this week')).not.toBeInTheDocument()
     expect(screen.queryByText(/not visible to staff yet/)).not.toBeInTheDocument()
     expect(screen.queryByText('All published')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /New shift/ })).not.toHaveClass(PRIMARY)
+    expect(screen.getByRole('button', { name: 'New' })).not.toHaveClass(PRIMARY)
   })
 
   it('the Staff view shows the card too, with no strip and no drag', () => {
@@ -570,7 +570,7 @@ describe('Add agreement shifts', () => {
   const ADD = 'Add agreement shifts'
   const handMade = () => showBoard(board(published(DRAFTS), { canStart: true }))
 
-  it('shows beside New shift for a writer on a started week that can start, secondary, and posts the week', async () => {
+  it('shows in the title row beside New for a writer on a started week that can start, secondary, and posts the week', async () => {
     const user = userEvent.setup()
     const answer = deferred<typeof RESULT>()
     h.start.mockReturnValueOnce(answer.promise)

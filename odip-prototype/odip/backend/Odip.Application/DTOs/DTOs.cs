@@ -1363,6 +1363,7 @@ public record StaffListDto
     /// <summary>Display-only staff position/title — separate from and unrelated to <see cref="Role"/>.</summary>
     public Position Position { get; init; }
     public EmploymentType? EmploymentType { get; init; }
+    public decimal? GoalWeeklyHours { get; init; }
     public string? Email { get; init; }
     public string? Mobile { get; init; }
     public string? Region { get; init; }
@@ -1469,6 +1470,11 @@ public record CreateStaffDto
     public UserRole Role { get; init; } = UserRole.SupportWorker;
     public Position Position { get; init; }
     public EmploymentType? EmploymentType { get; init; }
+    /// <summary>Hours a week this person aims to work: 0 to 80 in half-hours, null to use the default for their employment type.</summary>
+    public decimal? GoalWeeklyHours { get; init; }
+    /// <summary>The 400 message for a goal outside 0 to 80 or off the half-hour, else null. Checked in the controller (not an attribute) so a direct call is refused too.</summary>
+    public string? GoalHoursError() =>
+        GoalWeeklyHours is { } hours && (hours < 0 || hours > 80 || hours % 0.5m != 0) ? "Goal hours a week must be from 0 to 80, in half-hours." : null;
     [StringLength(50)]
     public string? Mobile { get; init; }
     [StringLength(100)]
