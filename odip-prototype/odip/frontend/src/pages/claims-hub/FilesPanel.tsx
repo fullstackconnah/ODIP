@@ -69,7 +69,7 @@ export function FilesStrip({ batches, loading, failed, rejectedCount, onRetry, o
       {failed && (
         <p className="flex items-center gap-2 py-1 text-[13px] text-[var(--color-muted-foreground)]">
           Couldn't load files in progress.
-          <Button variant="ghost" size="sm" onClick={onRetry}>Try again</Button>
+          <Button variant="ghost" size="sm" className="max-md:min-h-11" onClick={onRetry}>Try again</Button>
         </p>
       )}
       {unfinished.length > 3 && <Button variant="ghost" size="sm" className="mt-1 max-md:min-h-11" onClick={onShowAll}>See all {unfinished.length} in Files</Button>}
