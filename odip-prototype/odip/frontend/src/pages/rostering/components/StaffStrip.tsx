@@ -1,4 +1,4 @@
-import { useContext, useId, useState } from 'react'
+import { useContext, useEffect, useId, useRef, useState } from 'react'
 import { useDndContext, useDraggable } from '@dnd-kit/core'
 import { AlertTriangle } from 'lucide-react'
 import type { StaffListDto } from '@/api/types'
@@ -43,11 +43,34 @@ export function StaffStrip({ staff, isLoading, hours, regionOptions, regionFilte
         <p className="text-[13px] text-muted-foreground">{q ? `No staff match “${query.trim()}”.` : 'No active staff.'}</p>
       ) : (
         // The list alone scrolls sideways (it is not an ancestor of the grid), so the strip is one row at any staff count.
-        <ul className="flex min-w-0 flex-1 gap-1 overflow-x-auto overflow-y-hidden p-0.5 [scrollbar-width:thin]">
+        <PuckList count={shown.length}>
           {shown.map(s => <li key={s.id} className="shrink-0"><StaffPuck person={s} hours={hours.get(s.id) ?? 0} /></li>)}
-        </ul>
+        </PuckList>
       )}
     </section>
+  )
+}
+
+/** The sideways list of pucks, with a 16px fade on its right edge (band background to clear) while more pucks wait past it. */
+function PuckList({ count, children }: { count: number; children: React.ReactNode }) {
+  const ref = useRef<HTMLUListElement>(null)
+  const [more, setMore] = useState(false)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const update = () => setMore(el.scrollLeft + el.clientWidth < el.scrollWidth - 1)
+    update()
+    el.addEventListener('scroll', update)
+    // Observed, not the window: collapsing the sidebar resizes the list with no window resize.
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update)
+    ro?.observe(el)
+    return () => { el.removeEventListener('scroll', update); ro?.disconnect() }
+  }, [count])
+  return (
+    <div className="relative min-w-0 flex-1">
+      <ul ref={ref} className="flex gap-1 overflow-x-auto overflow-y-hidden p-0.5 [scrollbar-width:thin]">{children}</ul>
+      {more && <div data-puck-fade className="pointer-events-none absolute inset-y-0 right-0 w-4 bg-gradient-to-l from-[var(--color-background)] to-transparent" aria-hidden="true" />}
+    </div>
   )
 }
 

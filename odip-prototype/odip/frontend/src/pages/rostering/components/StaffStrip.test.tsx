@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { DndContext } from '@dnd-kit/core'
 import type { StaffListDto } from '@/api/types'
@@ -114,5 +114,44 @@ describe('CarriedPuck', () => {
     expect(screen.getByText('Sam Wilson')).toBeInTheDocument()
     expect(screen.getByText('12 / 38 h')).toBeInTheDocument()
     expect(screen.queryByText(/Assign|Replace|New shift/)).not.toBeInTheDocument()
+  })
+
+  it('fades the right edge of the puck list only while it overflows', () => {
+    const widths = vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(900)
+    const client = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(300)
+    const { container, unmount } = renderStrip()
+    expect(container.querySelector('[data-puck-fade]')).not.toBeNull()
+    unmount()
+
+    widths.mockReturnValue(300)
+    const again = renderStrip()
+    expect(again.container.querySelector('[data-puck-fade]')).toBeNull()
+    widths.mockRestore()
+    client.mockRestore()
+  })
+
+  it('recomputes the fade when the list is resized without a window resize', () => {
+    const callbacks: (() => void)[] = []
+    // dnd-kit observes too; keep only the callback that watches the puck list.
+    class RO {
+      cb: () => void
+      constructor(cb: () => void) { this.cb = cb }
+      observe(el: Element) { if (el.tagName === 'UL') callbacks.push(this.cb) }
+      disconnect() {}
+    }
+    vi.stubGlobal('ResizeObserver', RO)
+    const widths = vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(900)
+    const client = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(300)
+    try {
+      const { container } = renderStrip()
+      expect(container.querySelector('[data-puck-fade]')).not.toBeNull()
+      widths.mockReturnValue(300)
+      act(() => callbacks.forEach(cb => cb()))
+      expect(container.querySelector('[data-puck-fade]')).toBeNull()
+    } finally {
+      widths.mockRestore()
+      client.mockRestore()
+      vi.unstubAllGlobals()
+    }
   })
 })

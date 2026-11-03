@@ -453,9 +453,9 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
         // The "Actions for …" trigger is Dropdown's icon variant, which hard-codes `p-1.5 rounded-lg` (a 26px
         // square, radius 8px) and takes no className or custom trigger. This wrapper gives that one button the
         // geometry of `<Button iconOnly>` — a --control-h-sm square (24px, 36px under a coarse pointer) at
-        // --radius-sm, centred icon — from outside. Delete these overrides once Dropdown's icon trigger renders
-        // through Button itself. It is the box's trailing cell, 4px in from the box's edge.
-        <span className="relative z-[1] col-start-3 row-start-2 flex shrink-0 items-center pr-1 [&_button]:inline-flex [&_button]:h-[var(--control-h-sm)] [&_button]:w-[var(--control-h-sm)] [&_button]:items-center [&_button]:justify-center [&_button]:rounded-[var(--radius-sm)] [&_button]:p-0">
+        // --radius-sm, centred icon — from outside, plus TAP_AREA's 44px pad (the string spelled as [&_button]: variants, since the class cannot reach
+        // the button). Delete these overrides once Dropdown's icon trigger renders through Button itself. It is the box's trailing cell, 4px in from the box's edge.
+        <span className="relative z-[1] col-start-3 row-start-2 flex shrink-0 items-center pr-1 [&_button]:inline-flex [&_button]:h-[var(--control-h-sm)] [&_button]:w-[var(--control-h-sm)] [&_button]:items-center [&_button]:justify-center [&_button]:rounded-[var(--radius-sm)] [&_button]:p-0 [&_button]:relative [&_button]:before:absolute [&_button]:before:left-1/2 [&_button]:before:top-1/2 [&_button]:before:h-full [&_button]:before:w-full [&_button]:before:min-h-[var(--tap-min)] [&_button]:before:min-w-[var(--tap-min)] [&_button]:before:-translate-x-1/2 [&_button]:before:-translate-y-1/2">
           <Dropdown
             variant="icon"
             icon={<MoreVertical className="h-3.5 w-3.5" />}

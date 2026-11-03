@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Check, Hourglass, ShieldAlert, UserPlus } from 'lucide-react'
+import { Hourglass, ShieldAlert, UserPlus } from 'lucide-react'
 import type { PendingAgreementDto, RosterParticipantRowDto, ShiftDto } from '@/api/types'
 import { RosterDayCell } from './RosterDayCell'
 import { ReadinessTrigger } from './ReadinessTrigger'
@@ -44,7 +44,7 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
   return (
     <>
       {/*
-        Row header: two tight lines inside the --row-h row, as StaffRow does (leading-4 name, h-4 chips: 32px in a 34px row).
+        Row header: two tight lines (leading-4 name, h-4 chips) in a 56px minimum, so a row with no shift chips still gives them room (a 34px row put them on the border).
         Line 1 is the name, which gets the column's full width and truncates with a title, then the restrictive-practice
         marker (a safety signal, so it must survive) and the pending-agreement hourglass, both shrink-0 glyphs.
         Line 2 is the readiness trigger on the left (ReadinessTrigger: one whole word, "Not ready" or "Blocked", that opens a peek
@@ -53,11 +53,11 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
         trigger's name and panel. The ratio and badge never shrink, so they form one right-aligned column down the board. Coverage is the
         visible signal for the gap this row-per-participant layout exists to surface; a trip bar rendered below can explain an
         otherwise-empty week without this reading as a failure. It is a COUNT BADGE (a person-plus, the glyph of the "Needs staff"
-        pucks in the row, and the number of unassigned shifts, or a check when fully covered); the words are its title and aria-label,
+        pucks in the row, and the number of unassigned shifts), drawn only when there is a gap: its absence says fully covered. The ratio chip is drawn only when it is not 1:1. The words are the badge's title and aria-label,
         with no sr-only text (a 1px clip box reads as clipped text in an audit). On touch the trigger's 44px tap pad needs room: the
         header gets gap-y-3 between its lines and pb-3 below, only on a row that has a trigger.
       */}
-      <div className={`sticky left-0 z-10 flex min-h-[var(--row-h)] flex-col justify-center border-b border-r border-border bg-card px-2 pointer-coarse:gap-y-3${hasTrigger ? ' pointer-coarse:pb-3' : ''}`}>
+      <div className={`sticky left-0 z-10 flex min-h-14 flex-col justify-center border-b border-r border-border bg-card px-2 py-1.5 pointer-coarse:gap-y-3${hasTrigger ? ' pointer-coarse:pb-3' : ''}`}>
         <div className="flex min-w-0 items-center gap-1">
           <Link
             to={participantWeekHref(row.participantId, days[0])}
@@ -93,21 +93,17 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
                 <span>Onboarding</span>
               </span>
             )}
-            <span
-              role="img"
-              aria-label={`${ratioLabel} support`}
-              title={`${ratioLabel} support`}
-              className="inline-flex h-4 items-center rounded-sm shrink-0 bg-surface-container px-1.5 text-xs font-semibold tabular-nums text-foreground"
-            >
-              {ratioLabel}
-            </span>
-            {hideCoverageBadge ? null : (
-              <span className="inline-flex w-11 shrink-0 justify-end">
-              {covered ? (
-              <span role="img" aria-label="Fully covered" title="Fully covered" className="inline-flex shrink-0 items-center text-muted-foreground">
-                <Check className="h-3.5 w-3.5" aria-hidden="true" />
+            {row.supportRatio && row.supportRatio !== 'OneToOne' && (
+              <span
+                role="img"
+                aria-label={`${ratioLabel} support`}
+                title={`${ratioLabel} support`}
+                className="inline-flex h-4 items-center rounded-sm shrink-0 bg-surface-container px-1.5 text-xs font-semibold tabular-nums text-foreground"
+              >
+                {ratioLabel}
               </span>
-            ) : (
+            )}
+            {!hideCoverageBadge && !covered && (
               <span
                 role="img"
                 aria-label={uncoveredLabel}
@@ -116,8 +112,6 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
               >
                 <UserPlus className="h-3 w-3" aria-hidden="true" />
                 <span className="tabular-nums">{unassignedCount}</span>
-              </span>
-            )}
               </span>
             )}
           </div>
