@@ -53,14 +53,14 @@ public class AutoRosterPlannerTests
             return shift;
         }
 
-        public async Task<AutoRosterPlan> PlanAsync(bool reversePool = false)
+        public async Task<AutoRosterPlan> PlanAsync(bool reversePool = false, Func<IAutoRosterOracle, IAutoRosterOracle>? wrap = null)
         {
             await Db.SaveChangesAsync();
             var availability = new RosterAvailability(Db, new StaffUnavailabilityQuery(Db));
             var snapshot = await availability.LoadAsync(Pool.Select(w => w.Id).ToList(), [Mia.Id], Monday, Monday.AddDays(6), default);
             var pool = reversePool ? Enumerable.Reverse(Pool).ToList() : Pool;
             var open = reversePool ? Enumerable.Reverse(Open).ToList() : Open;
-            return AutoRosterPlanner.Plan(new AutoRosterInput(open, pool, Regulars, Compat, NotReady), new SnapshotAutoRosterOracle(snapshot));
+            return AutoRosterPlanner.Plan(new AutoRosterInput(open, pool, Regulars, Compat, NotReady), (wrap ?? (o => o))(new SnapshotAutoRosterOracle(snapshot)));
         }
 
         public ValueTask DisposeAsync() => Db.DisposeAsync();
@@ -80,6 +80,23 @@ public class AutoRosterPlannerTests
         var placed = Assert.Single(plan.Placements);
         Assert.Equal(regular.Id, placed.StaffId);
         Assert.Equal(AutoRosterPick.Regular, placed.Pick);
+    }
+
+    /// <summary>The real rules never raise an override finding for a worker the away check passes, so this adds a RequiresReason finding for one worker to reach the NeedsOverride branch.</summary>
+    private sealed class NeedsReasonFor(IAutoRosterOracle inner, Guid workerId) : IAutoRosterOracle
+    {
+        public string? Away(Shift probe) => inner.Away(probe);
+
+        public List<RosterFinding> Check(Shift probe)
+        {
+            var findings = inner.Check(probe);
+            if (probe.UserId == workerId) findings.Add(new RosterFinding("TEST_NEEDS_REASON", RosterFindingSeverity.Warning, "needs a reason", RequiresReason: true));
+            return findings;
+        }
+
+        public bool NeedsOverride(IReadOnlyList<RosterFinding> findings) => inner.NeedsOverride(findings);
+
+        public void Book(Shift probe) => inner.Book(probe);
     }
 
     [Fact]
@@ -184,6 +201,24 @@ public class AutoRosterPlannerTests
         var placed = Assert.Single(plan.Placements);
         Assert.Equal(other.Id, placed.StaffId);
         Assert.Contains("Rae", placed.RegularAway);
+    }
+
+    [Fact]
+    public async Task Regular_WithPendingLeaveAndAnOverrideFinding_IsNotPlaced_AndAnotherWorkerTakesTheShift()
+    {
+        await using var w = new World();
+        var regular = w.Worker("Rae", 38);
+        var other = w.Worker("Zed", 38);
+        var shift = w.Shift(1, 9, 13);
+        w.Regulars[shift.ShiftPatternId!.Value] = regular.Id;
+        w.Db.LeaveRequests.Add(LeaveFor(regular, shift, LeaveStatus.Pending));
+
+        var plan = await w.PlanAsync(wrap: inner => new NeedsReasonFor(inner, regular.Id));
+
+        var placed = Assert.Single(plan.Placements);
+        Assert.Equal(other.Id, placed.StaffId);
+        Assert.Contains("Rae", placed.RegularAway);
+        Assert.Empty(plan.Uncovered);
     }
 
     [Fact]

@@ -119,17 +119,18 @@ public static class AutoRosterPlanner
                 var probe = Probe(shift, regular.Id);
                 if (oracle.Away(probe) is { } away) { rest.Add((shift, $"{regular.Name} is away: {away}")); continue; }
                 var findings = oracle.Check(probe);
+                // OPEN-4: a pending leave or recurring request disqualifies the regular, even when another finding needs a reason; pass 2 may place someone else.
+                if (findings.Where(f => f.Code is RosterConflictService.StaffLeavePending or RosterConflictService.StaffRecurringPending)
+                        .OrderBy(f => f.Code, StringComparer.Ordinal).ThenBy(f => f.Message, StringComparer.Ordinal).FirstOrDefault() is { } pending)
+                {
+                    rest.Add((shift, $"{regular.Name} has a pending request: {pending.Message}"));
+                    continue;
+                }
+
                 if (oracle.NeedsOverride(findings))
                 {
                     var why = string.Join(" ", findings.Where(f => f.Severity == RosterFindingSeverity.Blocking || f.RequiresReason).OrderBy(f => f.Code, StringComparer.Ordinal).ThenBy(f => f.Message, StringComparer.Ordinal).Select(f => f.Message));
                     uncovered.Add(new AutoRosterUncovered(shift.Id, UncoveredReason.NeedsOverride, [new(AutoRosterRecommendationKind.Soft, regular.Id, $"Regular {regular.Name}: {why}")]));
-                    continue;
-                }
-
-                // OPEN-4: a pending leave or recurring request disqualifies the regular; pass 2 may place someone else.
-                if (findings.FirstOrDefault(f => f.Code is RosterConflictService.StaffLeavePending or RosterConflictService.StaffRecurringPending) is { } pending)
-                {
-                    rest.Add((shift, $"{regular.Name} has a pending request: {pending.Message}"));
                     continue;
                 }
 
