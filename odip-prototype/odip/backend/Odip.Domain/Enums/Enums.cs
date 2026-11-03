@@ -455,7 +455,9 @@ public enum TripClaimStatus
 public enum ClaimKind
 {
     Trip = 0,
-    Shift = 1
+    Shift = 1,
+    /// <summary>A free-form one-off claim: a participant, one catalogue item and an amount, with no shift or booking behind it.</summary>
+    Manual = 2
 }
 
 public enum ClaimLineItemStatus

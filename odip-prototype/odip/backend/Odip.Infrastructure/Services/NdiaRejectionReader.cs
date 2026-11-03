@@ -47,11 +47,13 @@ public sealed class NdiaRejectionReader
             .Where(l => l.TenantId == tenantId && l.TripClaim.Status == TripClaimStatus.Rejected && l.TripClaim.RejectedDate != null
                 && l.TripClaim.RejectionCode != null && NdiaRejectionCodes.NotEnoughFunds.Contains(l.TripClaim.RejectionCode)
                 && ((l.Shift != null && l.Shift.TenantId == tenantId && participantIds.Contains(l.Shift.ParticipantId))
-                    || (l.ParticipantBooking != null && l.ParticipantBooking.TripInstance.TenantId == tenantId && participantIds.Contains(l.ParticipantBooking.ParticipantId))))
+                    || (l.ParticipantBooking != null && l.ParticipantBooking.TripInstance.TenantId == tenantId && participantIds.Contains(l.ParticipantBooking.ParticipantId))
+                    // A manual claim's line has neither: it is the claim's own participant's.
+                    || (l.Shift == null && l.ParticipantBooking == null && l.TripClaim.TenantId == tenantId && l.TripClaim.ParticipantId != null && participantIds.Contains(l.TripClaim.ParticipantId.Value))))
             .Select(l => new RejectedLineRow(
                 l.TripClaimId, l.TripClaim.ClaimReference, l.TripClaim.RejectionCode!, l.TripClaim.RejectedDate!.Value, l.SupportItemCode, l.SupportsDeliveredFrom,
-                l.Shift != null ? l.Shift.ParticipantId : l.ParticipantBooking!.ParticipantId,
-                l.Shift != null ? l.Shift.Participant!.PlanType : l.ParticipantBooking!.Participant!.PlanType,
+                l.Shift != null ? l.Shift.ParticipantId : l.ParticipantBooking != null ? l.ParticipantBooking.ParticipantId : l.TripClaim.ParticipantId!.Value,
+                l.Shift != null ? l.Shift.Participant!.PlanType : l.ParticipantBooking != null ? l.ParticipantBooking.Participant!.PlanType : l.TripClaim.Participant!.PlanType,
                 l.ParticipantBooking != null ? l.ParticipantBooking.PlanTypeOverride : null));
 
     /// <summary>

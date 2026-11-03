@@ -903,8 +903,8 @@ public class OdipDbContext : DbContext
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.ToTable(tb => tb.HasCheckConstraint(
-                "CK_ClaimLineItem_ExactlyOneParent",
-                "((\"ParticipantBookingId\" IS NOT NULL)::int + (\"ShiftId\" IS NOT NULL)::int) = 1"));
+                "CK_ClaimLineItem_AtMostOneParent",
+                "((\"ParticipantBookingId\" IS NOT NULL)::int + (\"ShiftId\" IS NOT NULL)::int) <= 1"));
 
             entity.HasIndex(e => e.TripClaimId);
             entity.HasIndex(e => e.ParticipantBookingId);
