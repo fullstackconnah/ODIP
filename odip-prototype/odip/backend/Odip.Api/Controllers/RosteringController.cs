@@ -1881,7 +1881,12 @@ public class RosteringController : ControllerBase
         if (participantId.HasValue) query = query.Where(c => c.ParticipantId == participantId.Value);
 
         var rows = await query.ToListAsync(ct);
-        return Ok(ApiResponse<List<CompatibilityRowDto>>.Ok(rows.Select(ToCompatibilityDto).ToList()));
+        // One participant: the CompatibilityOrder. All participants: by participant, then that order.
+        static (int Tier, int Rank, string Name) Key(StaffParticipantCompatibility c) => CompatibilityOrder.Key(c.Level, c.Rank, c.User?.FullName);
+        var ordered = participantId.HasValue
+            ? rows.OrderBy(Key, CompatibilityOrder.Comparer)
+            : rows.OrderBy(c => c.Participant?.FullName ?? string.Empty, StringComparer.OrdinalIgnoreCase).ThenBy(c => c.ParticipantId).ThenBy(Key, CompatibilityOrder.Comparer);
+        return Ok(ApiResponse<List<CompatibilityRowDto>>.Ok(ordered.Select(ToCompatibilityDto).ToList()));
     }
 
     /// <summary>Upsert one compatibility cell (StaffId, ParticipantId).</summary>
@@ -1889,6 +1894,8 @@ public class RosteringController : ControllerBase
     public async Task<ActionResult<ApiResponse<CompatibilityRowDto>>> UpsertCompatibility(
         [FromBody] UpsertCompatibilityDto dto, CancellationToken ct)
     {
+        if (dto.Rank is < 1)
+            return BadRequest(ApiResponse<CompatibilityRowDto>.Fail("Rank must be 1 or more."));
         if (!await _db.Users.AnyAsync(s => s.Id == dto.StaffId && s.IsActive, ct))
             return BadRequest(ApiResponse<CompatibilityRowDto>.Fail("Staff member not found."));
         if (!(await ParticipantReadiness.CheckAsync(_db, dto.ParticipantId, ct)).Allowed)
@@ -1917,6 +1924,9 @@ public class RosteringController : ControllerBase
         // Task 6d: reflect a Preferred mark (or a move off it) back onto the participant's
         // PreferredUserId, in the same transaction as this compatibility write.
         await _compatLink.SyncFromCompatibilityUpsertAsync(row, previousLevel, ct);
+
+        // R8a: place the row in its tier and renumber the tier(s) it touches, in this same save.
+        await _compatLink.PlaceAsync(row, previousLevel, dto.Rank, ct);
 
         await ParticipantGroupRevisions.SaveBumpingAsync(_db, ct);
 
@@ -2061,7 +2071,7 @@ public class RosteringController : ControllerBase
     {
         Id = c.Id, StaffId = c.UserId, StaffName = c.User?.FullName ?? string.Empty,
         ParticipantId = c.ParticipantId, ParticipantName = c.Participant?.FullName ?? string.Empty,
-        Level = c.Level, Reason = c.Reason, UpdatedAt = c.UpdatedAt
+        Level = c.Level, Rank = c.Rank, Reason = c.Reason, UpdatedAt = c.UpdatedAt
     };
 
     /// <summary>Maps a ShiftCompletion to its DTO — thin wrapper so this and PortalController's

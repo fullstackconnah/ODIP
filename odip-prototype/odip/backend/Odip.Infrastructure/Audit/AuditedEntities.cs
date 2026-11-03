@@ -38,7 +38,9 @@ public static class AuditedEntities
         // COMPATIBILITY_EXCLUDED finding (a Warning, per decision 2 — overridable with a
         // reason like any other Warning, not the one Blocking rule). Who set an Excluded
         // flag, when, and why it was later changed is exactly the kind of thing an audit
-        // needs to answer, so all three CompatibilityLevel transitions are audited.
+        // needs to answer, so every CompatibilityLevel transition is audited. R8a: Preferred, Backup and
+        // Emergency are ordered tiers, and every write renumbers its whole tier, so each sibling whose
+        // Rank moves writes its own Updated row (the Rank change is in Changes): who reordered whom is recoverable.
         typeof(StaffParticipantCompatibility),
 
         // Medication management: prescribing details (dose, PRN limits, chemical-restraint

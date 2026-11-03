@@ -6898,6 +6898,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<Guid>("ParticipantId")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("Rank")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Reason")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
