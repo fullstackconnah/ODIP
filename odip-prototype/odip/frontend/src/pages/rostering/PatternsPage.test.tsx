@@ -89,7 +89,7 @@ describe('PatternsPage — activating a pattern the server refuses', () => {
     const pattern = makePattern({ isActive: false })
     mockUsePatterns.mockReturnValue({ data: [pattern], isLoading: false, isError: false, refetch: vi.fn() })
     mockUpdateMutate.mockImplementation((_vars: unknown, opts?: { onError?: (e: unknown) => void }) => opts?.onError?.(badRequest(NOT_READY_MESSAGE)))
-    render(<PatternsPage />)
+    render(<MemoryRouter><PatternsPage /></MemoryRouter>)
 
     await user.click(screen.getByRole('button', { name: "Activate Mia Chen's Monday 9am–5pm pattern" }))
 
@@ -107,7 +107,7 @@ describe('PatternsPage — activating a pattern the server refuses', () => {
     const user = userEvent.setup()
     mockUsePatterns.mockReturnValue({ data: [makePattern({ isActive: false })], isLoading: false, isError: false, refetch: vi.fn() })
     mockUpdateMutate.mockImplementation((_vars: unknown, opts?: { onError?: (e: unknown) => void }) => opts?.onError?.(new Error('Network Error')))
-    render(<PatternsPage />)
+    render(<MemoryRouter><PatternsPage /></MemoryRouter>)
 
     await user.click(screen.getByRole('button', { name: "Activate Mia Chen's Monday 9am–5pm pattern" }))
 
@@ -119,7 +119,7 @@ describe('PatternsPage — activating a pattern the server refuses', () => {
     const user = userEvent.setup()
     mockUsePatterns.mockReturnValue({ data: [makePattern({ isActive: false })], isLoading: false, isError: false, refetch: vi.fn() })
     mockUpdateMutate.mockImplementationOnce((_vars: unknown, opts?: { onError?: (e: unknown) => void }) => opts?.onError?.(badRequest(NOT_READY_MESSAGE)))
-    render(<PatternsPage />)
+    render(<MemoryRouter><PatternsPage /></MemoryRouter>)
 
     await user.click(screen.getByRole('button', { name: "Activate Mia Chen's Monday 9am–5pm pattern" }))
     expect(await screen.findByText(NOT_READY_MESSAGE)).toBeInTheDocument()
@@ -141,7 +141,7 @@ describe('PatternsPage — deactivating a pattern the server refuses', () => {
     const pattern = makePattern({ isActive: true })
     mockUsePatterns.mockReturnValue({ data: [pattern], isLoading: false, isError: false, refetch: vi.fn() })
     mockUpdateMutateAsync.mockRejectedValueOnce(badRequest(NOT_READY_MESSAGE))
-    render(<PatternsPage />)
+    render(<MemoryRouter><PatternsPage /></MemoryRouter>)
 
     await user.click(screen.getByRole('button', { name: "Deactivate Mia Chen's Monday 9am–5pm pattern" }))
     expect(screen.getByRole('alertdialog')).toBeInTheDocument()
@@ -158,7 +158,7 @@ describe('PatternsPage — deactivating a pattern the server refuses', () => {
     const user = userEvent.setup()
     mockUsePatterns.mockReturnValue({ data: [makePattern({ isActive: true })], isLoading: false, isError: false, refetch: vi.fn() })
     mockUpdateMutateAsync.mockRejectedValueOnce({ response: { status: 500, data: {} } })
-    render(<PatternsPage />)
+    render(<MemoryRouter><PatternsPage /></MemoryRouter>)
 
     await user.click(screen.getByRole('button', { name: "Deactivate Mia Chen's Monday 9am–5pm pattern" }))
     await user.click(screen.getByRole('button', { name: 'Deactivate' }))
@@ -171,7 +171,7 @@ describe('PatternsPage — deactivating a pattern the server refuses', () => {
     const user = userEvent.setup()
     mockUsePatterns.mockReturnValue({ data: [makePattern({ isActive: true })], isLoading: false, isError: false, refetch: vi.fn() })
     mockUpdateMutateAsync.mockResolvedValueOnce(makePattern({ isActive: false }))
-    render(<PatternsPage />)
+    render(<MemoryRouter><PatternsPage /></MemoryRouter>)
 
     await user.click(screen.getByRole('button', { name: "Deactivate Mia Chen's Monday 9am–5pm pattern" }))
     await user.click(screen.getByRole('button', { name: 'Deactivate' }))
@@ -225,7 +225,7 @@ describe('PatternsPage — patterns made by an agreement', () => {
 
   it('badges a pattern with the version of the agreement it came from, and shows what it asks of a worker, on its own row', () => {
     mockUsePatterns.mockReturnValue({ data: [agreement(), makePattern({ id: 'pattern-hand', dayOfWeek: 'Wednesday' })], isLoading: false, isError: false, refetch: vi.fn() })
-    render(<PatternsPage />)
+    render(<MemoryRouter><PatternsPage /></MemoryRouter>)
 
     const row = screen.getByText('From agreement v2').closest('tr')!
     expect(row).toHaveTextContent('Tuesday')
@@ -239,7 +239,7 @@ describe('PatternsPage — patterns made by an agreement', () => {
 
   it('calls the column "Source": the badge under a header that says "From agreement" would say the same words twice', () => {
     mockUsePatterns.mockReturnValue({ data: [agreement()], isLoading: false, isError: false, refetch: vi.fn() })
-    render(<PatternsPage />)
+    render(<MemoryRouter><PatternsPage /></MemoryRouter>)
 
     expect(screen.getByRole('columnheader', { name: 'Source' })).toBeInTheDocument()
     expect(screen.queryByRole('columnheader', { name: 'From agreement' })).not.toBeInTheDocument()
@@ -254,7 +254,7 @@ describe('PatternsPage — patterns made by an agreement', () => {
       ],
       isLoading: false, isError: false, refetch: vi.fn(),
     })
-    render(<PatternsPage />)
+    render(<MemoryRouter><PatternsPage /></MemoryRouter>)
 
     expect(screen.getByText('From agreement v2 · worker 1 of 2')).toBeInTheDocument()
     expect(screen.getByText('From agreement v2 · worker 2 of 2')).toBeInTheDocument()
@@ -274,7 +274,7 @@ describe('PatternsPage — patterns made by an agreement', () => {
       ],
       isLoading: false, isError: false, refetch: vi.fn(),
     })
-    render(<PatternsPage />)
+    render(<MemoryRouter><PatternsPage /></MemoryRouter>)
 
     for (const action of ['Edit', 'Generate shifts for', 'Deactivate']) {
       expect(screen.getByRole('button', { name: `${action} Mia Chen's Sunday 10am–2pm pattern (worker 1 of 2)` })).toBeInTheDocument()
@@ -289,7 +289,7 @@ describe('PatternsPage — patterns made by an agreement', () => {
       data: [makePattern({ id: 'a', startTime: '09:00:00', endTime: '13:00:00' }), makePattern({ id: 'b', startTime: '14:00:00', endTime: '17:00:00', endsNextDay: false })],
       isLoading: false, isError: false, refetch: vi.fn(),
     })
-    render(<PatternsPage />)
+    render(<MemoryRouter><PatternsPage /></MemoryRouter>)
 
     expect(screen.getByRole('button', { name: "Edit Mia Chen's Monday 9am–1pm pattern" })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: "Edit Mia Chen's Monday 2pm–5pm pattern" })).toBeInTheDocument()
@@ -299,7 +299,7 @@ describe('PatternsPage — patterns made by an agreement', () => {
   it('says in the deactivate confirm that turning an agreement pattern off makes the roster differ from the agreement, and says nothing of the kind for another', async () => {
     const user = userEvent.setup()
     mockUsePatterns.mockReturnValue({ data: [agreement(), makePattern({ id: 'pattern-hand', dayOfWeek: 'Wednesday' })], isLoading: false, isError: false, refetch: vi.fn() })
-    render(<PatternsPage />)
+    render(<MemoryRouter><PatternsPage /></MemoryRouter>)
 
     await user.click(screen.getByRole('button', { name: /Deactivate Mia Chen's Tuesday 9am–5pm pattern/ }))
     expect(screen.getByText('This pattern came from agreement v2: turning it off makes the roster differ from the agreement.')).toBeInTheDocument()
@@ -311,7 +311,7 @@ describe('PatternsPage — patterns made by an agreement', () => {
 
   it('says "an agreement" when the revision is not known, and draws no chips for a pattern that asks for nothing', () => {
     mockUsePatterns.mockReturnValue({ data: [agreement({ sourceDraftVersion: undefined, requirements: { workerGender: 'NoPreference', driver: false, skills: [] } })], isLoading: false, isError: false, refetch: vi.fn() })
-    render(<PatternsPage />)
+    render(<MemoryRouter><PatternsPage /></MemoryRouter>)
 
     expect(screen.getByText('From an agreement')).toBeInTheDocument()
     expect(screen.queryByRole('list', { name: 'Asks for' })).not.toBeInTheDocument()
@@ -321,7 +321,7 @@ describe('PatternsPage — patterns made by an agreement', () => {
     const user = userEvent.setup()
     mockUsePatterns.mockReturnValue({ data: [agreement()], isLoading: false, isError: false, refetch: vi.fn() })
     mockUpdateMutateAsync.mockResolvedValue({})
-    render(<PatternsPage />)
+    render(<MemoryRouter><PatternsPage /></MemoryRouter>)
 
     await user.click(screen.getByRole('button', { name: /Deactivate Mia Chen's Tuesday 9am–5pm pattern/ }))
     await user.click(screen.getByRole('button', { name: 'Deactivate' }))
@@ -334,10 +334,25 @@ describe('PatternsPage — patterns made by an agreement', () => {
 describe('PatternsPage — row actions keep their touch areas apart', () => {
   it('widens the gap between the row buttons on a coarse pointer, and keeps all three labelled', () => {
     mockUsePatterns.mockReturnValue({ data: [makePattern()], isLoading: false, isError: false, refetch: vi.fn() })
-    render(<PatternsPage />)
+    render(<MemoryRouter><PatternsPage /></MemoryRouter>)
 
     const actions = screen.getByRole('button', { name: /^Edit / }).parentElement!
-    expect(actions).toHaveClass('gap-1', 'pointer-coarse:gap-2')
+    expect(actions).toHaveClass('pointer-coarse:gap-2')
     expect(within(actions).getAllByRole('button')).toHaveLength(3)
+  })
+
+  it('keeps Generate shifts in the menu, disabled with its reason, for an inactive pattern', () => {
+    mockUsePatterns.mockReturnValue({ data: [makePattern({ isActive: false })], isLoading: false, isError: false, refetch: vi.fn() })
+    render(<MemoryRouter><PatternsPage /></MemoryRouter>)
+
+    const generate = screen.getByRole('button', { name: /^Generate shifts for / })
+    expect(generate).toBeDisabled()
+    expect(generate).toHaveAttribute('title', 'Inactive patterns generate nothing')
+  })
+
+  it('drops the Source column while no pattern came from an agreement', () => {
+    mockUsePatterns.mockReturnValue({ data: [makePattern()], isLoading: false, isError: false, refetch: vi.fn() })
+    render(<MemoryRouter><PatternsPage /></MemoryRouter>)
+    expect(screen.queryByRole('columnheader', { name: 'Source' })).not.toBeInTheDocument()
   })
 })

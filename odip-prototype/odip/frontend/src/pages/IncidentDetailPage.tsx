@@ -85,6 +85,7 @@ export default function IncidentDetailPage() {
             { label: 'Date & time', value: <span className="tabular-nums">{formatWallClock(incident.incidentDateTime, { dateStyle: 'medium', timeStyle: 'short' })}</span> },
             { label: 'Location', value: incident.location || '—' },
             { label: 'Reported by', value: incident.reportedByName || '—' },
+            ...(incident.tripInstanceId && incident.tripName ? [{ label: 'Trip', value: <Link to={`/trips/${incident.tripInstanceId}`} className="underline">{incident.tripName}</Link> }] : []),
             { label: 'NDIS Commission', value: <ReportingDue incident={incident} /> },
             { label: 'Description', value: <span className="whitespace-pre-wrap">{incident.description}</span> },
           ]}

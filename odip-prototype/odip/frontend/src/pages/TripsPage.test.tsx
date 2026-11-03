@@ -95,13 +95,13 @@ describe('TripsPage — table view density', () => {
     expect(screen.getByText('Beach Weekend').parentElement?.children).toHaveLength(1)
   })
 
-  it('keeps the status pill at the 24px --control-h-sm token and outside the hover-revealed actions', () => {
+  it('shows the status as a read-only badge for every role: one pill per row, nothing in it to open', () => {
     renderPage()
 
     const row = screen.getByText('Beach Weekend').closest('tr') as HTMLElement
-    const pill = within(row).getByRole('button', { name: 'Confirmed' })
-    expect(pill).toHaveClass('h-[var(--control-h-sm)]')
-    expect(pill.closest('[class*="group-hover/row:opacity-100"]')).toBeNull()
+    expect(within(row).queryByRole('button', { name: 'Confirmed' })).toBeNull()
+    expect(within(row).getByText('Confirmed').closest('td')?.querySelector('[aria-haspopup]')).toBeNull()
+    expect(within(row).getByText('Confirmed')).toBeInTheDocument()
   })
 
   it('moves the edit pencil into a hover/focus-revealed cluster as a 24px icon square, with its label and title', () => {
@@ -114,7 +114,7 @@ describe('TripsPage — table view density', () => {
     const cluster = edit.parentElement as HTMLElement
     expect(cluster).toHaveClass('opacity-0', 'group-hover/row:opacity-100', 'group-focus-within/row:opacity-100', '[@media(pointer:coarse)]:opacity-100')
     // Not in the Status cell any more.
-    const statusCell = screen.getByRole('button', { name: 'Confirmed' }).closest('td') as HTMLElement
+    const statusCell = screen.getByText('Confirmed').closest('td') as HTMLElement
     expect(statusCell).not.toContainElement(edit)
   })
 
@@ -255,23 +255,6 @@ describe('TripsPage — narrow-desktop table', () => {
       expect(screen.getByRole('columnheader', { name: label }).className, label).not.toMatch(/hidden/)
     }
   })
-
-  it('keeps the status pill on one line, in a column wide enough for "Open for bookings" plus its caret', () => {
-    mockUseTrips.mockReturnValue({ data: [trip({ status: 'OpenForBookings' })], isLoading: false })
-    renderPage()
-
-    const pill = screen.getByRole('button', { name: 'Open for bookings' })
-    expect(pill).toHaveClass('whitespace-nowrap', 'h-[var(--control-h-sm)]')
-    const header = screen.getByRole('columnheader', { name: 'Status' })
-    const cell = pill.closest('td') as HTMLElement
-    for (const el of [header, cell]) {
-      expect(el).toHaveClass('md:min-w-[var(--col-min)]')
-      expect(el.getAttribute('style')).toContain('--col-min: 10.25rem')
-    }
-    // 10.25rem = 164px. The pill is 10px left padding + 104.3px of 12px/500 text + 24px right padding
-    // (room for the caret) = 138.3px, and the cell adds 2 x 12px: 162.3px. It fits with 1.7px to spare.
-    expect(10.25 * 16).toBeGreaterThanOrEqual(10 + 104.3 + 24 + 2 * 12)
-  })
 })
 
 // Density verdict, touch: every control on this page reaches a 44px hit area under `pointer: coarse` (spec §1)
@@ -280,19 +263,11 @@ describe('TripsPage — narrow-desktop table', () => {
 describe('TripsPage — 44px hit areas on a touch screen', () => {
   const pad = TAP_AREA.split(' ')
 
-  it('pads the "All Statuses" filter pill and every card status pill (24px pills, 44px targets)', () => {
+  it('pads the "All Statuses" filter pill (24px pill, 44px target)', () => {
     localStorage.setItem('odip.trips.view', 'cards')
     renderPage()
 
     expect(screen.getByRole('button', { name: 'All Statuses' })).toHaveClass(...pad)
-    expect(screen.getByRole('button', { name: 'Confirmed' })).toHaveClass(...pad)
-  })
-
-  it('pads the status pill in the table view too', () => {
-    renderPage()
-
-    const row = screen.getByText('Beach Weekend').closest('tr') as HTMLElement
-    expect(within(row).getByRole('button', { name: 'Confirmed' })).toHaveClass(...pad)
   })
 
   it('pads the table edit pencil (Button iconOnly) so the 36px square is a 44px target', () => {
@@ -373,12 +348,12 @@ describe('TripsPage — trip status pills use the shared tones', () => {
     const label = TRIP_STATUS_LABELS[status]
 
     const table = renderPage()
-    expect(screen.getByRole('button', { name: label })).toHaveClass(...TONE[tone].solid.split(' '))
+    expect(screen.getByText(label)).toHaveClass(...TONE[tone].solid.split(' '))
     table.unmount()
 
     localStorage.setItem('odip.trips.view', 'cards')
     renderPage()
-    expect(screen.getByRole('button', { name: label })).toHaveClass(...TONE[tone].solid.split(' '))
+    expect(screen.getByText(label)).toHaveClass(...TONE[tone].solid.split(' '))
   })
 
   it('shows the waitlist count in the warning tone (table and cards), not the old badge-pending class', () => {
@@ -406,7 +381,7 @@ describe('TripsPage — Pax ratio', () => {
 // Owner decision 2026-10-12 (TRIPS-5, TRIPS-6): a role the server refuses PATCH /trips/:id is shown the status as a badge, not a pill it can change,
 // and no New Trip or edit pencil, in the table and in the cards.
 describe('TripsPage — write controls follow the role', () => {
-  it.each(['ReadOnly', 'SupportWorker'])('shows %s the status as plain text with no pill, New Trip or edit, in both views', role => {
+  it.each(['ReadOnly', 'SupportWorker'])('shows %s no New Trip or edit, in both views', role => {
     localStorage.setItem('odip_user', JSON.stringify({ role }))
     const table = renderPage()
     expect(screen.getByText('Confirmed')).toBeInTheDocument()
@@ -422,10 +397,10 @@ describe('TripsPage — write controls follow the role', () => {
     expect(screen.queryByRole('button', { name: /Edit/ })).not.toBeInTheDocument()
   })
 
-  it.each(['Admin', 'Coordinator'])('offers %s the status pill, New Trip and edit', role => {
+  it.each(['Admin', 'Coordinator'])('offers %s New Trip and edit', role => {
     localStorage.setItem('odip_user', JSON.stringify({ role }))
     renderPage()
-    expect(screen.getByRole('button', { name: 'Confirmed' })).toBeInTheDocument()
+    expect(screen.getByText('Confirmed')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /New trip/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Edit trip' })).toBeInTheDocument()
   })
