@@ -23,9 +23,10 @@ import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/lib/utils'
 import { apiErrorCode, apiErrorStatus } from '@/lib/shiftPackageErrors'
 import { plural } from '@/lib/format'
-import { useRosterBoard, useAssignShift, useMoveStaff, usePublishWeek, useStartWeek, useSetRegular, useUpdateShift, useDeleteShift, useParticipants, useStaff, getRosterFindings } from '@/api/hooks'
+import { useRosterBoard, useAssignShift, useMoveStaff, usePublishWeek, useStartWeek, useAutoRosterDraft, useApplyAutoRoster, useSetRegular, useUpdateShift, useDeleteShift, useParticipants, useStaff, getRosterFindings } from '@/api/hooks'
 import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
-import type { ShiftDto, RosterFindingDto, MoveStaffMode, StartWeekResultDto } from '@/api/types'
+import type { ShiftDto, RosterFindingDto, MoveStaffMode, StartWeekResultDto, AutoRosterApplyResultDto } from '@/api/types'
+import { AutoRosterPanel, type AutoRosterPanelProps, type AutoRosterRowText } from './components/AutoRosterPanel'
 import {
   WeekToolbar, WEEK_HEADING_ID, RosterGrid, RosterGridSkeleton, ShiftSlideOver, FindingsList, ExceptionsDrawer, StaffStrip, CarriedPuck, StaffPicker, SwapPicker, PendingAgreementsPanel, RefreshBoardAction,
   type ShiftSlideOverTarget,
@@ -256,6 +257,19 @@ export default function RosterBoardPage() {
   const startsInFlight = useRef(new Set<string>())   // the state lags a render, so two clicks in one render both see "not starting"
   const starting = startingWeeks.has(weekStart)
   const startNoticeRef = useRef<HTMLDivElement>(null)
+  // Auto-roster (R7 PR2): the draft lives in the panel and is never saved until Apply. A run id drops the answer of a run whose panel was closed.
+  const autoDraft = useAutoRosterDraft()
+  const applyAuto = useApplyAutoRoster()
+  const [autoOpen, setAutoOpen] = useState(false)
+  const [autoArmed, setAutoArmed] = useState(false)
+  const [autoRun, setAutoRun] = useState<AutoRosterPanelProps['run']>({ status: 'loading' })
+  const autoRunId = useRef(0)
+  const autoWeek = useRef(weekStart)
+  const [skippedNotice, setSkippedNotice] = useState<{ title: string; lines: { shiftId: string; text: string }[] } | null>(null)
+  const [focusAfterAuto, setFocusAfterAuto] = useState(false)
+  const autoTriggerRef = useRef<HTMLButtonElement>(null)
+  const skippedRef = useRef<HTMLDivElement>(null)
+  const newMenuRef = useRef<HTMLDivElement>(null)
   // The week on screen now, for an answer that comes back after a week move (the brief, 2.4).
   const shownWeek = useRef(weekStart)
   useLayoutEffect(() => { shownWeek.current = weekStart }, [weekStart])
@@ -269,6 +283,7 @@ export default function RosterBoardPage() {
     setWeekStart(target)
     setStartNotice(null)
     setRegularNotice(null)
+    setSkippedNotice(null)
     // The week goes in the address (merged, so the filters stay), so Back from a profile comes home to it (spec 2026-10-28).
     setSearchParams(prev => { const p = new URLSearchParams(prev); p.set('date', target); return p }, { replace: true })
   }
@@ -301,9 +316,11 @@ export default function RosterBoardPage() {
 
   // The leave guard (the brief, section 4): a writer, a started week, and a draft Publish could send. Drafts only a rule blocks never ask: publishing can't fix them.
   const leaveArmed = canWrite && !unstarted && publishable.length > 0
+  const draftOpen = autoOpen && autoArmed
+  const draftLeaveCopy = { title: 'Leave without applying the draft?', message: `Your draft roster for ${formatWeekSpan(days)} hasn’t been applied. If you leave, it’s lost.`, confirmLabel: 'Leave without applying', stayLabel: 'Keep reviewing' }
   const leaveCopy = { title: LEAVE_TITLE, message: leaveMessage(publishable.length, formatWeekSpan(days)), confirmLabel: 'Leave without publishing', stayLabel: 'Stay' }
-  const { dialog: leaveDialog } = useUnsavedChangesWarning(leaveArmed, {
-    leaveCopy,
+  const { dialog: leaveDialog } = useUnsavedChangesWarning(leaveArmed || draftOpen, {
+    leaveCopy: draftOpen ? draftLeaveCopy : leaveCopy,
     // Another week by address (a bell or task link) leaves this one; the filters (?participant=, ?unfilled=) keep it.
     blockIf: (_current, next) => {
       const date = new URLSearchParams(next.search).get('date')
@@ -311,6 +328,39 @@ export default function RosterBoardPage() {
     },
   })
   const [pendingWeek, setPendingWeek] = useState<string | null>(null)
+
+  // The trigger counts open shifts across the whole board, as the draft does: Cancelled and started shifts are gaps nobody can fill (D4).
+  const openCount = useMemo(() => boardShifts.filter(s => isUnfilledShift(s) && !isLockedShift(s)).length, [boardShifts])
+  const autoRosterShown = canWrite && !unstarted && !!board && openCount > 0
+  function runAutoRoster() {
+    const id = ++autoRunId.current
+    setAutoRun({ status: 'loading' })
+    autoDraft.mutateAsync(autoWeek.current).then(
+      draft => { if (id === autoRunId.current) setAutoRun({ status: 'draft', draft }) },
+      err => { if (id === autoRunId.current) setAutoRun({ status: 'error', message: extractErrorMessage(err, 'Check your connection and try again.') }) },
+    )
+  }
+  function openAutoRoster() { autoWeek.current = weekStart; setAutoOpen(true); runAutoRoster() }
+  function closeAutoRoster() { autoRunId.current++; setAutoOpen(false); setAutoArmed(false) }
+  function autoRosterApplied(result: AutoRosterApplyResultDto, rows: AutoRosterRowText[], stillOpen: number) {
+    const n = result.applied.length, skipped = result.skipped.length
+    const changed = skipped === 1 ? '1 shift changed since the draft and was left as it was' : `${skipped} shifts changed since the draft and were left as they were`
+    const text = new Map(rows.map(r => [r.shiftId, r.text]))
+    if (skipped > 0) setSkippedNotice({ title: changed, lines: result.skipped.map(k => ({ shiftId: k.shiftId, text: `${text.get(k.shiftId) ?? 'A shift'}: ${k.message}` })) })
+    const rostered = n === 0 ? 'No shifts rostered.' : `Rostered ${plural(n, 'shift')}.`
+    setAnnouncement(skipped > 0 ? `${rostered} ${changed}.` : `${rostered}${stillOpen > 0 ? ` ${stillOpen} still ${stillOpen === 1 ? 'needs' : 'need'} someone.` : ''}`)
+    closeAutoRoster()
+    setFocusAfterAuto(true)
+  }
+  // After the panel closes and the refetch settles: the skipped notice, else the trigger, else the New menu (the trigger is gone once the week is full). A frame later, so the slide-over's own return-focus has run.
+  useEffect(() => {
+    if (!focusAfterAuto || autoOpen) return
+    const frame = requestAnimationFrame(() => {
+      ;(skippedRef.current ?? autoTriggerRef.current ?? newMenuRef.current?.querySelector('button'))?.focus()
+      setFocusAfterAuto(false)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [focusAfterAuto, autoOpen, skippedNotice, autoRosterShown])
 
   /** Prev, Next and This week are local state, out of useBlocker's sight, so they ask here. The week already shown asks nothing. */
   function moveToWeek(target: string, fromFill = false) {
@@ -643,11 +693,14 @@ export default function RosterBoardPage() {
           </span>
         </Button>
       )}
+      {autoRosterShown && (
+        <Button ref={autoTriggerRef} variant="secondary" size="md" className="whitespace-nowrap" onClick={openAutoRoster}>Auto-roster</Button>
+      )}
     </>
   )
   // One create control (owner, 2026-11-03): later create kinds become items here, never new buttons. One primary per page: New steps back while Start or Publish week is the page's.
   const newMenu = canWrite && (
-    <div className="pointer-coarse:[&_button]:min-h-11 pointer-coarse:[&_button]:min-w-11">
+    <div ref={newMenuRef} className="pointer-coarse:[&_button]:min-h-11 pointer-coarse:[&_button]:min-w-11">
       <Dropdown
         variant="menu"
         triggerVariant={unstarted || publishable.length > 0 ? 'secondary' : 'primary'}
@@ -683,7 +736,7 @@ export default function RosterBoardPage() {
       {null}
     </Callout>
   ) : null
-  const transientShown = !!assignError || !!startNotice || !!regularNotice
+  const transientShown = !!assignError || !!startNotice || !!regularNotice || !!skippedNotice
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
@@ -744,6 +797,14 @@ export default function RosterBoardPage() {
             </div>
           )}
           {/* Its own polite status is the announcement: nothing on the chip changes at rest (the brief, 5.2). */}
+          {skippedNotice && (
+            // Focus lands here after an apply that skipped rows (it is what needs reading); the page's region announces it.
+            <div ref={skippedRef} tabIndex={-1} className="outline-none">
+              <Callout tone="warning" announce={false} title={skippedNotice.title} actions={dismissNotice(() => setSkippedNotice(null))}>
+                <ul className="space-y-0.5">{skippedNotice.lines.map(l => <li key={l.shiftId}>{l.text}</li>)}</ul>
+              </Callout>
+            </div>
+          )}
           {regularNotice && <Callout tone="success" actions={dismissNotice(() => setRegularNotice(null))}>{regularNotice}</Callout>}
           {assignError && (
             // The action sits under the message (the text column), so only the dismiss X is in the shared actions slot. The success notice does not announce itself: the page's region already says it.
@@ -941,6 +1002,17 @@ export default function RosterBoardPage() {
         message={<p>{leaveCopy.message}</p>}
         cancelLabel={leaveCopy.stayLabel}
         confirmLabel={leaveCopy.confirmLabel}
+      />
+
+      <AutoRosterPanel
+        open={autoOpen}
+        onClose={closeAutoRoster}
+        description={participantFilter || regionFilter || unfilledOnly ? `${formatWeekSpan(days)}. Covers every participant, not just the filtered view.` : formatWeekSpan(days)}
+        run={autoRun}
+        onRetryRun={runAutoRoster}
+        onApply={rows => applyAuto.mutateAsync({ weekStart: autoWeek.current, rows })}
+        onApplied={autoRosterApplied}
+        onArmedChange={setAutoArmed}
       />
 
       <ConfirmDialog
