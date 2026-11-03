@@ -8,6 +8,7 @@ import type { BatchDto } from '@/api/types'
 import { formatRelative, plural } from '@/lib/format'
 import { formatCurrency } from '@/lib/utils'
 import { StepBadge } from './claimHubParts'
+import { rejectedLink } from './claimsPipeline'
 import { NEXT_ACTION, NEXT_TEXT, ROWS_PER_PAGE, STEP_NUMBER, actionStepOf, instantDay, isUnfinished, stepOf } from './claimHubSteps'
 
 const FILE_NAME = 'whitespace-nowrap text-sm font-semibold'
@@ -29,24 +30,27 @@ const resultsText = (b: BatchDto) => b.status === 'ResultsImported' ? `${b.succe
 /** Oldest step first: a Built file waits on a person sooner than one waiting on the NDIA. */
 const byStep = (a: BatchDto, b: BatchDto) => STEP_NUMBER[stepOf(a)] - STEP_NUMBER[stepOf(b)] || a.createdAt.localeCompare(b.createdAt)
 
-export function FilesStrip({ batches, loading, failed, onRetry, onOpen, onShowAll }: {
-  batches: BatchDto[] | undefined; loading: boolean; failed: boolean; onRetry: () => void; onOpen: (id: string) => void; onShowAll: () => void
+/** The To do strip: the rejected lines first (rejected money is the oldest work), then up to 3 unfinished files. The rejected row comes from the lines query, so a files failure keeps it. */
+export function FilesStrip({ batches, loading, failed, rejectedCount, onRetry, onOpen, onShowAll, onShowRejected }: {
+  batches: BatchDto[] | undefined; loading: boolean; failed: boolean; rejectedCount: number; onRetry: () => void; onOpen: (id: string) => void; onShowAll: () => void; onShowRejected: () => void
 }) {
-  const unfinished = useMemo(() => (batches ?? []).filter(isUnfinished).sort(byStep), [batches])
-  if (loading) return <p className="text-[13px] text-[var(--color-muted-foreground)]">Loading files in progress…</p>
-  if (failed) {
-    return (
-      <p className="flex items-center gap-2 text-[13px] text-[var(--color-muted-foreground)]">
-        Couldn't load files in progress.
-        <Button variant="ghost" size="sm" onClick={onRetry}>Try again</Button>
-      </p>
-    )
-  }
-  if (unfinished.length === 0) return null
+  const unfinished = useMemo(() => (loading || failed ? [] : (batches ?? []).filter(isUnfinished).sort(byStep)), [batches, loading, failed])
+  if (rejectedCount === 0 && !loading && !failed && unfinished.length === 0) return null
   return (
     <section data-testid="claims-strip" aria-labelledby="claims-strip-title" className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3">
-      <h2 id="claims-strip-title" className="mb-1 text-sm font-semibold">Files in progress</h2>
-      <ul className="divide-y divide-[var(--color-border)]">
+      <h2 id="claims-strip-title" className="mb-1 text-sm font-semibold">To do</h2>
+      {(rejectedCount > 0 || unfinished.length > 0) && <ul className="divide-y divide-[var(--color-border)]">
+        {rejectedCount > 0 && (
+          <li className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2 md:min-h-[var(--row-h)] md:flex-nowrap md:py-0.5">
+            <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-4 gap-y-0.5">
+              <span className="text-sm font-semibold">{rejectedLink(rejectedCount)}</span>
+              <span className="text-[13px] text-[var(--color-muted-foreground)]">The NDIA sent them back. Fix them or decide.</span>
+            </div>
+            <span className="max-md:basis-full">
+              <Button variant="secondary" size="sm" className="max-md:min-h-11 max-md:w-full" aria-label="Review rejected lines" onClick={onShowRejected}>Review</Button>
+            </span>
+          </li>
+        )}
         {unfinished.slice(0, 3).map(b => {
           const step = stepOf(b)
           return (
@@ -60,7 +64,14 @@ export function FilesStrip({ batches, loading, failed, onRetry, onOpen, onShowAl
             </li>
           )
         })}
-      </ul>
+      </ul>}
+      {loading && <p className="py-1 text-[13px] text-[var(--color-muted-foreground)]">Loading files in progress…</p>}
+      {failed && (
+        <p className="flex items-center gap-2 py-1 text-[13px] text-[var(--color-muted-foreground)]">
+          Couldn't load files in progress.
+          <Button variant="ghost" size="sm" onClick={onRetry}>Try again</Button>
+        </p>
+      )}
       {unfinished.length > 3 && <Button variant="ghost" size="sm" className="mt-1" onClick={onShowAll}>See all {unfinished.length} in Files</Button>}
     </section>
   )
