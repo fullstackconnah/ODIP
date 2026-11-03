@@ -419,7 +419,7 @@ describe('CompletionReviewPage: provider travel (travel PR-B)', () => {
       data: { preShiftTravelMinutes: 25, preShiftTravelKilometres: 12.3, postShiftTravelMinutes: 35, postShiftTravelKilometres: null },
     })
     expect(within(dialog).queryByRole('group', { name: 'Trip after the shift' })).not.toBeInTheDocument()
-    // Focus returns on a setTimeout(0) after the editor closes.
+    // Focus returns in an effect once the editor has closed.
     await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Edit travel' })).toHaveFocus())
   })
 

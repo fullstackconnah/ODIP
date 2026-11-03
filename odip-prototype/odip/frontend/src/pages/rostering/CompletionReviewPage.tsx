@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ClipboardCheck, AlertTriangle } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
@@ -109,7 +109,12 @@ function TravelEditor({ c, onOpenChange }: { c: ShiftCompletionDto; onOpenChange
   const toNum = (n?: number | null) => n ?? NaN
   const toApi = (n: number) => (Number.isNaN(n) ? null : n)
   const show = (next: boolean) => { setOpen(next); setBad({}); onOpenChange(next) }
-  const close = () => { show(false); setError(null); setTimeout(() => button.current?.focus(), 0) }
+  const refocus = useRef(false)
+  const close = () => { refocus.current = true; show(false); setError(null) }
+  // Focus the new Edit travel button after the commit that swaps it in; a timer can fire before that commit and drop focus on body.
+  useEffect(() => {
+    if (!open && refocus.current) { refocus.current = false; button.current?.focus() }
+  }, [open])
   function begin() {
     setV({ preMin: toNum(c.preShiftTravelMinutes), preKm: toNum(c.preShiftTravelKilometres), postMin: toNum(c.postShiftTravelMinutes), postKm: toNum(c.postShiftTravelKilometres) })
     show(true)
