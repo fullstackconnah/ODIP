@@ -132,7 +132,13 @@ describe('CarriedPuck', () => {
 
   it('recomputes the fade when the list is resized without a window resize', () => {
     const callbacks: (() => void)[] = []
-    class RO { constructor(cb: () => void) { callbacks.push(cb) } observe() {} disconnect() {} }
+    // dnd-kit observes too; keep only the callback that watches the puck list.
+    class RO {
+      cb: () => void
+      constructor(cb: () => void) { this.cb = cb }
+      observe(el: Element) { if (el.tagName === 'UL') callbacks.push(this.cb) }
+      disconnect() {}
+    }
     vi.stubGlobal('ResizeObserver', RO)
     const widths = vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(900)
     const client = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(300)
