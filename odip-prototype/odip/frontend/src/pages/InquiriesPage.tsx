@@ -288,8 +288,7 @@ function useInquiriesScreen() {
     {
       key: 'intakeStartsAt', header: 'Intake visit', sortable: true, wrap: true,
       // Room for the date and time unbroken; a narrower window scrolls the table in its box (the Column Rule) rather than crushing the cell.
-      // 14rem holds line 1 ("Fri 16 Oct, 10:00 am · Callum") unbroken; with Provenance capped at 8rem (9.5rem until the row menu joined Actions) the whole table, one-row Actions
-      // included, still fits its box at 1440.
+      // 14rem holds line 1 ("Fri 16 Oct, 10:00 am · Callum") unbroken; with Provenance capped at 8rem the whole table, including the Next step column, still fits its box at 1440.
       minWidth: '14rem',
       // ISO instants sort in time order. An empty cell sorts last on the ascending sort.
       sortFn: (a, b) => (a.intakeStartsAt ?? '9999').localeCompare(b.intakeStartsAt ?? '9999'),
