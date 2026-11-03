@@ -56,6 +56,8 @@ public sealed class CompatibilityPack : IDemoPack
                 UserId = staff.Id,
                 ParticipantId = participant.Id,
                 Level = cell.Level,
+                // Each demo participant has at most one Preferred cell, so it is #1 of its tier.
+                Rank = cell.Level == CompatibilityLevel.Preferred ? 1 : 0,
                 Reason = cell.Reason,
                 AutoLinked = cell.AutoLinked,
                 UpdatedAt = run.NowUtc,
