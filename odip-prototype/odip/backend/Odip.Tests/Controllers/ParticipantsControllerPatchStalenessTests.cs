@@ -58,7 +58,7 @@ public class ParticipantsControllerPatchStalenessTests
         await using var ctx = TestDb.Create(db);
         var ok = Assert.IsType<OkObjectResult>((await Controller(ctx).GetById(id, default)).Result);
         var dto = Assert.IsType<ApiResponse<ParticipantDetailDto>>(ok.Value).Data!;
-        Assert.Equal(16, dto.GroupRevisions!.Count);
+        Assert.Equal(17, dto.GroupRevisions!.Count);
         Assert.All(dto.GroupRevisions.Values, v => Assert.Equal(0, v));
     }
 
@@ -75,7 +75,7 @@ public class ParticipantsControllerPatchStalenessTests
         var body = Assert.IsType<ApiResponse<ParticipantDetailDto>>(Assert.IsType<OkObjectResult>(result).Value).Data!;
         Assert.Equal(1, body.GroupRevisions!["medical"]);
         Assert.Equal(1, body.GroupRevisions["aboutMe"]);
-        Assert.Equal(14, body.GroupRevisions.Values.Count(v => v == 0));
+        Assert.Equal(15, body.GroupRevisions.Values.Count(v => v == 0));
     }
 
     [Fact]

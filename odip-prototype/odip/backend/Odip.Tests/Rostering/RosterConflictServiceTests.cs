@@ -213,12 +213,12 @@ public class RosterConflictServiceTests
     }
 
     [Fact]
-    public void Worker_screening_expired_and_staff_not_started_are_the_only_blocking_findings_the_engine_can_emit()
+    public void Worker_screening_expired_staff_not_started_and_a_worker_marked_No_are_the_only_blocking_findings_the_engine_can_emit()
     {
         // Trigger every other rule at once: missing WSC would only add a Warning, so use a
         // staff/participant/context combination that also fires WSC_EXPIRED plus every
         // remaining Warning-producing rule, and assert no finding other than WSC_EXPIRED
-        // (or STAFF_NOT_STARTED, a start date still ahead) is ever Blocking - this guards
+        // or COMPATIBILITY_EXCLUDED (or STAFF_NOT_STARTED, a start date still ahead) is ever Blocking - this guards
         // the invariant against future drift.
         var staff = CompliantStaff();
         staff.WorkerScreeningExpiryDate = new DateOnly(2026, 2, 12); // expired -> WSC_EXPIRED
@@ -264,9 +264,10 @@ public class RosterConflictServiceTests
         Assert.True(HasCode(findings, RosterConflictService.OverHours));
         Assert.True(HasCode(findings, RosterConflictService.WscExpired));
 
-        var blocking = findings.Where(f => f.Severity == RosterFindingSeverity.Blocking).ToList();
-        var blockingFinding = Assert.Single(blocking);
-        Assert.Equal(RosterConflictService.WscExpired, blockingFinding.Code);
+        var blocking = findings.Where(f => f.Severity == RosterFindingSeverity.Blocking).Select(f => f.Code).ToList();
+        Assert.Equal(2, blocking.Count);
+        Assert.Contains(RosterConflictService.WscExpired, blocking);
+        Assert.Contains(RosterConflictService.CompatibilityExcluded, blocking);
     }
 
     // ── DOUBLE_BOOKED_SHIFT ──────────────────────────────────
@@ -492,7 +493,8 @@ public class RosterConflictServiceTests
         var findings = new RosterConflictService().Check(
             candidate, CompliantContext(staff, participant, compatibility: CompatibilityLevel.Excluded));
 
-        Assert.True(HasCode(findings, RosterConflictService.CompatibilityExcluded));
+        Assert.Equal(RosterFindingSeverity.Blocking, findings.Single(f => f.Code == RosterConflictService.CompatibilityExcluded).Severity);
+        Assert.False(findings.Single(f => f.Code == RosterConflictService.CompatibilityExcluded).RequiresReason);
     }
 
     [Fact]

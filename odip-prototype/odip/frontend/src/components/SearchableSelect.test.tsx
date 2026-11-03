@@ -202,6 +202,18 @@ describe('SearchableSelect — selection', () => {
     expect(onChange).not.toHaveBeenCalled()
   })
 
+  it('dims the name but not the reason of a disabled option that has a reason; one without a reason is dimmed whole', async () => {
+    const user = userEvent.setup()
+    render(<SearchableSelect items={[{ value: 'a', label: 'Alex Rivera', description: 'Can’t be rostered', disabled: true }, { value: 'b', label: 'Dana Ahmed', disabled: true }]} value='' onChange={vi.fn()} />)
+
+    await user.click(screen.getByRole('combobox'))
+
+    expect(screen.getByRole('option', { name: /Alex Rivera/ })).not.toHaveClass('opacity-40')
+    expect(screen.getByText('Alex Rivera')).toHaveClass('opacity-40')
+    expect(screen.getByText('Can’t be rostered')).not.toHaveClass('opacity-40')
+    expect(screen.getByRole('option', { name: 'Dana Ahmed' })).toHaveClass('opacity-40')
+  })
+
   it('calls onBlur when selecting an option', async () => {
     const user = userEvent.setup()
     const onBlur = vi.fn()

@@ -33,8 +33,9 @@ public enum CompatibilityLevel
 
 /// <summary>
 /// Severity of a <see cref="Odip.Domain.Rostering.Services.RosterFinding"/>. Blocking is
-/// reserved for the one regulatory hard stop (expired worker screening) — everything else is
-/// a Warning the coordinator may override with a reason.
+/// a hard stop no override reason lifts: an expired worker screening, a start date not yet reached, and a
+/// worker marked No (Excluded) for the participant. Everything else is a Warning the coordinator may
+/// override with a reason.
 /// </summary>
 public enum RosterFindingSeverity
 {

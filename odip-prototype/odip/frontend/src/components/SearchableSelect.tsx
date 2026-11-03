@@ -317,15 +317,16 @@ export function SearchableSelect({
             onMouseEnter={() => !item.disabled && setActiveIndex(idx)}
             className={`min-h-[var(--control-h)] flex items-center gap-3 px-3 py-1.5 text-sm text-[var(--color-foreground)] text-left transition-colors cursor-pointer ${
               item.disabled
-                ? 'opacity-40 cursor-not-allowed'
+                ? `cursor-not-allowed ${item.description ? '' : 'opacity-40'}`
                 : activeIndex === idx
                 ? 'bg-[var(--color-surface-container-low)]'
                 : 'hover:bg-[var(--color-surface-container-low)]'
             }`}
           >
-            {item.icon && <span className="shrink-0">{item.icon}</span>}
+            {item.icon && <span className={`shrink-0 ${item.disabled && item.description ? 'opacity-40' : ''}`}>{item.icon}</span>}
             <div className="min-w-0">
-              <p className={item.description ? 'font-semibold' : ''}>{item.label}</p>
+              {/* A disabled item with a reason dims the label and icon: the reason is the one place that says why, so it keeps its contrast (as in Dropdown). */}
+              <p className={item.description ? `font-semibold ${item.disabled ? 'opacity-40' : ''}` : ''}>{item.label}</p>
               {item.description && (
                 <p className="text-[13px] text-[var(--color-muted-foreground)]">{item.description}</p>
               )}

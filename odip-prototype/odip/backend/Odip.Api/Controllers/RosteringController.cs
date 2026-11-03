@@ -542,6 +542,9 @@ public class RosteringController : ControllerBase
         var saved = dto.Id is { } savedId ? await _db.Shifts.AsNoTracking().FirstOrDefaultAsync(x => x.Id == savedId, ct) : null;
         if (ClashIsInherited(saved, dto.Status, dto.StaffId, dto.ServiceDate, dto.StartTime, dto.EndTime, dto.EndsNextDay))
             findings.RemoveAll(f => f.Code == RosterConflictService.DoubleBookedShift);
+        // Cancelling a shift the worker already holds is always allowed, so the live check does not show their No as blocking (UpdateShift says the same).
+        if (dto.Status == ShiftStatus.Cancelled && saved?.UserId == dto.StaffId)
+            findings.RemoveAll(f => f.Code == RosterConflictService.CompatibilityExcluded);
 
         // Budget phase 3: after the domain check and OUTSIDE its early return for an unfilled shift (a budget is about the participant, not the worker). The envelope's message carries the one
         // informational line a shift the estimator cannot price gets; it is not a finding and never blocks.
@@ -748,9 +751,9 @@ public class RosteringController : ControllerBase
         // Like the length rule above: rows saved before the double-booking block may already clash, and cancelling one, or editing only its notes, must still work. Only an edit that sets the worker or the times can clash.
         if (ClashIsInherited(shift, dto.Status, dto.StaffId, dto.ServiceDate, dto.StartTime, dto.EndTime, dto.EndsNextDay))
             findings.RemoveAll(f => f.Code == RosterConflictService.DoubleBookedShift);
-        // A start date that moved later must not trap the shift: cancelling it always works. Only Cancelled is exempt, so a publish or a notes edit of it is still refused.
+        // A start date that moved later, or a No marked afterwards, must not trap the shift: cancelling it always works. Only Cancelled is exempt, so a publish or a notes edit of it is still refused.
         if (dto.Status == ShiftStatus.Cancelled)
-            findings.RemoveAll(f => f.Code == RosterConflictService.StaffNotStarted);
+            findings.RemoveAll(f => f.Code == RosterConflictService.StaffNotStarted || (f.Code == RosterConflictService.CompatibilityExcluded && dto.StaffId == shift.UserId));   // a No only frees a worker who already holds it, never a new one
         findings.AddRange((await CheckBudgetAsync(candidate, shift.Id, dto.Status, ct)).Findings);
 
         var budgetGate = ShiftBudgetGate.Resolve(findings, dto.Emergency, dto.OverrideReason);
@@ -997,16 +1000,18 @@ public class RosteringController : ControllerBase
                 .Where(s => s.TenantId == tenantId && s.Status == ShiftStatus.Draft && s.ServiceDate >= start && s.ServiceDate <= end && shown.Contains(s.ParticipantId))
                 .ToListAsync(ct);
             var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
-            // Only a draft whose worker's screening has lapsed, or who has not started by its day, can hit a Blocking finding, so only those need the full roster check: one query for every worker.
+            // Only a draft whose worker's screening has lapsed, who has not started by its day, or who is marked No for its participant can hit a Blocking finding, so only those need the full roster check: one query for every worker, one for the Nos.
             var workerIds = drafts.Where(s => s.UserId.HasValue).Select(s => s.UserId!.Value).Distinct().ToList();
             var gates = await _db.Users.Where(u => workerIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => (Expiry: u.WorkerScreeningExpiryDate, Start: u.EmploymentStartDate), ct);
+            var excluded = (await _db.StaffParticipantCompatibilities.Where(c => c.Level == CompatibilityLevel.Excluded && workerIds.Contains(c.UserId) && shown.Contains(c.ParticipantId)).Select(c => new { c.UserId, c.ParticipantId }).ToListAsync(ct))
+                .Select(c => (c.UserId, c.ParticipantId)).ToHashSet();
 
             var published = new List<Shift>();
             var skipped = 0;
             foreach (var shift in drafts.Where(s => s.UserId.HasValue))
             {
-                // shortcut: only a lapsed screening or a start date ahead is re-checked (the Blocking rules today); check every filled draft again if another Blocking rule is added.
-                var mayBeBlocked = shift.UserId is { } worker && gates.TryGetValue(worker, out var g) && (g.Expiry < shift.ServiceDate || g.Start > shift.ServiceDate);
+                // shortcut: only a lapsed screening, a start date ahead or a No is re-checked (the Blocking rules today); check every filled draft again if another Blocking rule is added.
+                var mayBeBlocked = shift.UserId is { } worker && ((gates.TryGetValue(worker, out var g) && (g.Expiry < shift.ServiceDate || g.Start > shift.ServiceDate)) || excluded.Contains((worker, shift.ParticipantId)));
                 if (mayBeBlocked && (await CheckAsync(shift, shift.Id, ct)).Any(f => f.Severity == RosterFindingSeverity.Blocking)) { skipped++; continue; }
                 shift.Status = ShiftStatus.Published;
                 shift.UpdatedAt = DateTime.UtcNow;

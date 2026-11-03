@@ -2277,6 +2277,9 @@ namespace Odip.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<int?>("MmLevel")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("MobilityAidWalker")
                         .HasColumnType("boolean");
 

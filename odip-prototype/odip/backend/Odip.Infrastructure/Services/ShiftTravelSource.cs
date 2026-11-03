@@ -7,8 +7,8 @@ using Odip.Infrastructure.Data;
 
 namespace Odip.Infrastructure.Services;
 
-/// <summary>A shift (or an agreement occurrence that has no shift yet) to read travel for: its id, and the pattern it came from. Either may be null; a hand-made shift has no pattern.</summary>
-public sealed record ShiftRef(Guid? ShiftId, Guid? ShiftPatternId);
+/// <summary>A shift (or an agreement occurrence that has no shift yet) to read travel for: its id, the pattern it came from, and its participant's MM level. Either id may be null; a hand-made shift has no pattern. The level has no default, so a caller that forgets it fails to compile instead of capping at 30 minutes.</summary>
+public sealed record ShiftRef(Guid? ShiftId, Guid? ShiftPatternId, int? ParticipantMm);
 
 /// <summary>What the organisation allows and the rows travel is priced from: its own switch, its kilometre rate, and the kilometre ("_799_") rows of the catalogue.</summary>
 public sealed record ShiftTravelPolicy(bool OrgClaims, decimal KmRate, IReadOnlyList<SupportCatalogueItem> TravelRows);
@@ -56,7 +56,7 @@ public static class ShiftTravelSource
                 var travel = block?.Travel;
                 return new ShiftTravelInput(
                     new TravelLeg(actual.PreMinutes ?? 0, actual.PreKm ?? 0m), new TravelLeg(actual.PostMinutes ?? 0, actual.PostKm ?? 0m),
-                    named ? block?.Location : null, SharingOf(block), !named || travel is { Claim: true }, !named || travel is { ReturnToBase: true });
+                    named ? block?.Location : ProviderTravelRule.LocationOf(r.ParticipantMm), SharingOf(block), !named || travel is { Claim: true }, !named || travel is { ReturnToBase: true });
             }
             if (block?.Travel is not { Claim: true } forecast) return null;
             var leg = new TravelLeg(forecast.MinutesEachWay, forecast.KmEachWay);

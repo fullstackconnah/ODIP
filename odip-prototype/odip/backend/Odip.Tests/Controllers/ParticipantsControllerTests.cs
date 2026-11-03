@@ -3396,7 +3396,7 @@ public class ParticipantsControllerTests
         Assert.IsType<OkObjectResult>((await controller.Update(participant.Id, dto, CancellationToken.None)).Result);
         var revisions = await RevisionsAsync(db, participant.Id);
         Assert.Equal(1, revisions["personalDetails"]);
-        Assert.Equal(15, revisions.Values.Count(v => v == 0));
+        Assert.Equal(16, revisions.Values.Count(v => v == 0));
     }
 
     [Fact]
