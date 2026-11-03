@@ -9,6 +9,8 @@ import { PageState } from './PageState'
 import { statusClass } from '@/lib/tone'
 import { Callout } from '@/components/Callout'
 import { retryingAfterError } from '@/lib/queryPhase'
+import { ToggleGroup } from './ToggleGroup'
+import { ItineraryList, formatTime, parseLocalDate } from './ItineraryList'
 
 interface ItineraryTabProps {
   tripId: string
@@ -30,18 +32,25 @@ function getCategoryStyle(category: string | null) {
   return categoryConfig[category ?? 'Other'] ?? categoryConfig.Other
 }
 
-function formatTime(time: string | null | undefined) {
-  if (!time) return null
-  const [h, m] = time.split(':')
-  const hour = parseInt(h)
-  const ampm = hour >= 12 ? 'pm' : 'am'
-  const h12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour
-  return `${h12}:${m}${ampm}`
+// shortcut: copy of TripsPage's stored-view helpers; extract to lib when a third view toggle needs them.
+const VIEW_STORAGE_KEY = 'odip.itinerary.view'
+type ScheduleView = 'days' | 'list'
+
+function readStoredView(): ScheduleView | null {
+  try {
+    const stored = localStorage.getItem(VIEW_STORAGE_KEY)
+    return stored === 'days' || stored === 'list' ? stored : null
+  } catch {
+    return null
+  }
 }
 
-function parseLocalDate(date: string) {
-  const [y, m, d] = date.split('-').map(Number)
-  return new Date(y, m - 1, d)
+function writeStoredView(view: ScheduleView): void {
+  try {
+    localStorage.setItem(VIEW_STORAGE_KEY, view)
+  } catch {
+    // private browsing / quota — the toggle still works for this session
+  }
 }
 
 function formatDayName(date: string) {
@@ -53,6 +62,11 @@ export default function ItineraryTab({ tripId }: ItineraryTabProps) {
   const { data: itinerary, isLoading, isError, refetch } = pageQuery
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
+  const [view, setView] = useState<ScheduleView>(() => readStoredView() ?? 'days')
+  const handleViewChange = (key: string) => {
+    setView(key as ScheduleView)
+    writeStoredView(key as ScheduleView)
+  }
 
   if (isLoading && !retryingAfterError(pageQuery)) return <PageState kind="loading" noun="itinerary" />
   if (!itinerary) {
@@ -85,6 +99,8 @@ export default function ItineraryTab({ tripId }: ItineraryTabProps) {
     }
   }
 
+  const shown: ScheduleView = itinerary.days.length ? view : 'days'
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Export buttons */}
@@ -110,14 +126,25 @@ export default function ItineraryTab({ tripId }: ItineraryTabProps) {
 
       {itinerary.notes && <p className="text-sm text-[var(--color-muted-foreground)]">{itinerary.notes}</p>}
 
-      {/* Day-by-day timeline */}
+      {/* By day timeline, or the flat list; with no days there is nothing to switch, so a stored List is ignored */}
       <div>
-        <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-[var(--color-foreground)]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-          <Calendar className="w-5 h-5 text-[var(--color-primary)]" />
-          Day-by-day schedule
-        </h3>
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <h3 className="font-bold text-lg flex items-center gap-2 text-[var(--color-foreground)]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+            <Calendar className="w-5 h-5 text-[var(--color-primary)]" />
+            Schedule
+          </h3>
+          {itinerary.days.length > 0 && (
+            <ToggleGroup
+              options={[{ key: 'days', label: 'By day' }, { key: 'list', label: 'List' }]}
+              value={view}
+              onChange={handleViewChange}
+              ariaLabel="Schedule view"
+            />
+          )}
+        </div>
 
-        <div className="relative">
+        {shown === 'list' && <ItineraryList days={itinerary.days} />}
+        {shown === 'days' && <div className="relative">
           {/* Timeline connector line */}
           <div className="absolute left-6 top-0 bottom-0 w-1 bg-[var(--color-secondary-container)] rounded-full hidden md:block" />
 
@@ -239,7 +266,7 @@ export default function ItineraryTab({ tripId }: ItineraryTabProps) {
               </div>
             ))}
           </div>
-        </div>
+        </div>}
       </div>
 
       {itinerary.days.length === 0 && (
