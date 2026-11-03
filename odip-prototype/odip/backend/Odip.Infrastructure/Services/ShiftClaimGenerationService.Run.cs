@@ -23,11 +23,20 @@ public partial class ShiftClaimGenerationService
 
     public Task<ShiftClaimRunDto> RunAsync(Guid tenantId, DateOnly from, DateOnly to, CancellationToken ct = default) => RunCoreAsync(tenantId, from, to, make: true, ct);
 
-    /// <summary>How many shifts the run would look at over the dates, for the dashboard. Counted before pricing, so it can be higher than what a preview claims.</summary>
-    public async Task<ShiftClaimWaitingDto> CountWaitingAsync(Guid tenantId, DateOnly from, DateOnly to, CancellationToken ct = default)
+    /// <summary>How many shifts the run would look at over the dates, for the dashboard, and how many more wait from before them back to <paramref name="olderFrom"/> (none when it is not given), of which <paramref name="overdueBefore"/> marks the ones too old.
+    /// Counted before pricing, so it can be higher than what a preview claims.</summary>
+    public async Task<ShiftClaimWaitingDto> CountWaitingAsync(Guid tenantId, DateOnly from, DateOnly to, CancellationToken ct = default, DateOnly? olderFrom = null, DateOnly? overdueBefore = null)
     {
-        var people = await UnclaimedCompletedShifts(tenantId, from, to).Select(s => s.ParticipantId).ToListAsync(ct);   // distinct in memory: Npgsql and Distinct
-        return new() { From = from, To = to, ShiftCount = people.Count, ParticipantCount = people.Distinct().Count() };
+        // One query over the whole range, split in memory; distinct and min in memory too: Npgsql and Distinct.
+        var rows = await UnclaimedCompletedShifts(tenantId, olderFrom is { } o && o < from ? o : from, to).Select(s => new { s.ParticipantId, s.ServiceDate }).ToListAsync(ct);
+        var recent = rows.Where(r => r.ServiceDate >= from).ToList();
+        var older = rows.Where(r => r.ServiceDate < from).ToList();
+        return new()
+        {
+            From = from, To = to, ShiftCount = recent.Count, ParticipantCount = recent.Select(r => r.ParticipantId).Distinct().Count(),
+            OlderShiftCount = older.Count, OverdueShiftCount = overdueBefore is { } d ? older.Count(r => r.ServiceDate < d) : 0,
+            OldestDate = older.Count == 0 ? null : older.Min(r => r.ServiceDate),
+        };
     }
 
     // The run's candidates; the predicate is CalculateAsync's. The tenant is named explicitly on top of the global filter: a SuperAdmin viewing an organisation has no filter, and the run writes money.

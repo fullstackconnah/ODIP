@@ -364,4 +364,73 @@ public class ShiftClaimRunTests
         // B's context asked for A's tenant sees nothing of A's.
         Assert.Equal(0, (await Engine(b).CountWaitingAsync(a.TenantId, From, To, Ct)).ShiftCount);
     }
+
+    // ── Older unclaimed shifts: the cue goes back two years (cue PR2) ─────────
+
+    private static readonly DateOnly Today = new(2026, 11, 2);   // a Monday
+
+    private static Shift DoneOn(LedgerKit kit, Participant person, DateOnly date, ShiftStatus status = ShiftStatus.Completed) => kit.SeedShift(person, date, status);
+
+    // What the dashboard endpoint asks for: the 14-day window up to yesterday, then back two years, 90 days marking "overdue".
+    private static Task<ShiftClaimWaitingDto> CountOlder(LedgerKit kit, Guid? tenantId = null) =>
+        Engine(kit).CountWaitingAsync(tenantId ?? kit.TenantId, Today.AddDays(-14), Today.AddDays(-1), Ct, Today.AddYears(-2), Today.AddDays(-90));
+
+    [Fact]
+    public async Task CountWaitingAsync_Older_EqualsWhatThePreviewOverTheSameRangeClaimsPlusLeavesOut()
+    {
+        var kit = Arrange();
+        var withNumber = kit.SeedParticipant(first: "Alex");
+        var noNumber = kit.SeedParticipant(ndisNumber: null, first: "Blake");
+        DoneOn(kit, withNumber, Today.AddDays(-20)); DoneOn(kit, withNumber, Today.AddDays(-102));
+        DoneOn(kit, noNumber, Today.AddDays(-31));   // priced out: no NDIS number
+        kit.SeedShiftClaim(withNumber, TripClaimStatus.Draft, 480m, DoneOn(kit, withNumber, Today.AddDays(-22)));   // held by a live claim
+        DoneOn(kit, withNumber, Today.AddDays(-25), ShiftStatus.Published);
+        DoneOn(kit, withNumber, Today.AddYears(-2).AddDays(-1));   // older than the NDIA pays
+        kit.Db.SaveChanges();
+
+        var waiting = await CountOlder(kit);
+        var preview = await Engine(kit).PreviewRunAsync(kit.TenantId, waiting.OldestDate!.Value, waiting.To, Ct);
+
+        Assert.Empty(preview.Skipped);
+        Assert.Single(preview.LeftOut);
+        Assert.Equal(0, waiting.ShiftCount);
+        Assert.Equal(3, waiting.OlderShiftCount);
+        Assert.Equal(1, waiting.OverdueShiftCount);
+        Assert.Equal(Today.AddDays(-102), waiting.OldestDate);
+        Assert.Equal(preview.ShiftCount + preview.LeftOut.Count, waiting.ShiftCount + waiting.OlderShiftCount);
+    }
+
+    [Fact]
+    public async Task CountWaitingAsync_Older_HasNoOlderRange_WhenTheCallerGivesNone()
+    {
+        var kit = Arrange();
+        DoneOn(kit, Person(kit, "Alex"), Today.AddDays(-40));
+
+        var waiting = await Engine(kit).CountWaitingAsync(kit.TenantId, Today.AddDays(-14), Today.AddDays(-1), Ct);
+
+        Assert.Equal((0, 0, 0), (waiting.ShiftCount, waiting.OlderShiftCount, waiting.OverdueShiftCount));
+        Assert.Null(waiting.OldestDate);
+    }
+
+    [Fact]
+    public async Task CountWaitingAsync_Older_NeverCountsAnotherOrganisationsShifts()
+    {
+        var db = Guid.NewGuid().ToString();
+        var a = LedgerKit.Create(LedgerKit.TenantA, db);
+        var b = LedgerKit.Create(LedgerKit.TenantB, db);
+        var (alex, blake) = (Person(a, "Alex"), Person(b, "Blake"));
+        DoneOn(a, alex, Today.AddDays(-3)); DoneOn(a, alex, Today.AddDays(-4));
+        DoneOn(a, alex, Today.AddDays(-30)); DoneOn(a, alex, Today.AddDays(-100));
+        foreach (var d in new[] { 5, 6, 7 }) DoneOn(b, blake, Today.AddDays(-d));
+        foreach (var d in new[] { 20, 40, 95, 200 }) DoneOn(b, blake, Today.AddDays(-d));
+
+        var forA = await CountOlder(a);
+        Assert.Equal((2, 2, 1), (forA.ShiftCount, forA.OlderShiftCount, forA.OverdueShiftCount));
+        var forB = await CountOlder(b);
+        Assert.Equal((3, 4, 2), (forB.ShiftCount, forB.OlderShiftCount, forB.OverdueShiftCount));
+        // B's context asked for A's tenant sees nothing of A's.
+        var cross = await CountOlder(b, a.TenantId);
+        Assert.Equal((0, 0, 0), (cross.ShiftCount, cross.OlderShiftCount, cross.OverdueShiftCount));
+        Assert.Null(cross.OldestDate);
+    }
 }
