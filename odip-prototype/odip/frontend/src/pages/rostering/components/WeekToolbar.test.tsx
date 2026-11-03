@@ -19,10 +19,6 @@ function renderToolbar(overrides: Partial<React.ComponentProps<typeof WeekToolba
     onRegionFilterChange: vi.fn(),
     unfilledOnly: false,
     onUnfilledOnlyChange: vi.fn(),
-    exceptionsCount: 0,
-    onOpenExceptions: vi.fn(),
-    canWrite: true,
-    onNewShift: vi.fn(),
     ...overrides,
   }
   return { ...render(<WeekToolbar {...props} />), props }
@@ -67,7 +63,6 @@ describe('WeekToolbar "Unfilled only" filter', () => {
     expect(toggle).toHaveClass('max-sm:w-full', 'max-sm:[&>button]:flex-1')
     const participant = screen.getByRole('button', { name: /All participants/ }).closest('.min-w-40')
     expect(participant).toHaveClass('max-sm:flex-1', 'max-sm:max-w-none')
-    expect(screen.getByRole('button', { name: 'New shift' }).parentElement).toHaveClass('max-sm:w-full', 'sm:contents')
   })
 
   it('reflects the checked state via aria-pressed', () => {
@@ -133,22 +128,6 @@ describe('WeekToolbar week navigation', () => {
     renderToolbar()
     expect(screen.getByRole('heading', { level: 2, name: '17 – 23 Aug 2026' })).toBeInTheDocument()
   })
-
-  it('keeps the exceptions count and New shift buttons at --control-h too', () => {
-    renderToolbar({ exceptionsCount: 2 })
-    expect(screen.getByRole('button', { name: '2 exceptions' })).toHaveClass('h-[var(--control-h)]')
-    expect(screen.getByRole('button', { name: 'New shift' })).toHaveClass('h-[var(--control-h)]')
-  })
-})
-
-describe('WeekToolbar — the exceptions button', () => {
-  it('is not drawn while there are no exceptions, and is drawn with its count when there are', () => {
-    const { unmount } = renderToolbar({ exceptionsCount: 0 })
-    expect(screen.queryByRole('button', { name: /exception/ })).not.toBeInTheDocument()
-    unmount()
-    renderToolbar({ exceptionsCount: 1 })
-    expect(screen.getByRole('button', { name: '1 exception' })).toBeInTheDocument()
-  })
 })
 
 describe('WeekToolbar: All published and the one primary (Start rostering, 2026-10-16)', () => {
@@ -157,25 +136,11 @@ describe('WeekToolbar: All published and the one primary (Start rostering, 2026-
     expect(screen.getByText('All published')).toBeInTheDocument()
     expect(screen.queryByText(/drafts/)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Publish week' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /New shift/ })).toHaveClass('bg-[var(--color-primary)]')
   })
 
   it('shows nothing beside the range by default', () => {
     renderToolbar()
     expect(screen.queryByText(/drafts|All published/)).not.toBeInTheDocument()
-  })
-
-  it("steps New shift back when the page's primary is elsewhere", () => {
-    renderToolbar({ newShiftSecondary: true })
-    expect(screen.getByRole('button', { name: /New shift/ })).not.toHaveClass('bg-[var(--color-primary)]')
-  })
-
-  it('keeps the Add agreement shifts width while it reads Adding…', () => {
-    const { container } = renderToolbar({ onAddAgreementShifts: vi.fn(), addingAgreementShifts: true })
-    expect(screen.getByRole('button', { name: 'Adding…' })).toHaveAttribute('aria-disabled', 'true')
-    const reserve = container.querySelector('[data-reserve]')
-    expect(reserve).toHaveAttribute('data-reserve', 'Add agreement shifts')
-    expect(reserve).toHaveAttribute('aria-hidden', 'true')
   })
 
   it('the week heading can take focus from the page', () => {
@@ -216,5 +181,15 @@ describe('WeekToolbar at a 200 %-equivalent layout width (R-57 reflow)', () => {
   it('keeps each week-navigation control on one line, so no button\'s words break across two', () => {
     renderToolbar()
     expect(screen.getByRole('button', { name: 'This week' })).toHaveClass('whitespace-nowrap')
+  })
+})
+
+describe('WeekToolbar: trailing actions (phone width)', () => {
+  it('draws what the page hands it in the toolbar, and nothing when it hands nothing', () => {
+    const { unmount } = renderToolbar()
+    expect(screen.queryByRole('button', { name: 'Next 8 weeks' })).not.toBeInTheDocument()
+    unmount()
+    renderToolbar({ trailing: <button type="button">Next 8 weeks</button> })
+    expect(screen.getByRole('button', { name: 'Next 8 weeks' })).toBeInTheDocument()
   })
 })

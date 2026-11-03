@@ -73,6 +73,16 @@ describe('RosterFillCard', () => {
     expect(window.localStorage.getItem('odip.roster.fillHidden')).toBe('0')
   })
 
+  it('in the Next 8 weeks panel: no title row, no hide toggle, never collapsed (even on a phone), the sentence and chart always shown', () => {
+    width = 300
+    render(<RosterFillCard boardWeek="2026-11-09" onSelectWeek={vi.fn()} inPanel />)
+    expect(screen.queryByRole('heading', { name: 'How full the next weeks are' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /chart$/ })).toBeNull()
+    expect(screen.getByText(/shifts in the next 8 weeks are open/)).toBeTruthy()
+    expect(plot()).toBeTruthy()
+    expect(window.localStorage.getItem('odip.roster.fillHidden')).toBeNull()
+  })
+
   it('keeps working when storage is unreadable or unwritable', async () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked') })
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked') })

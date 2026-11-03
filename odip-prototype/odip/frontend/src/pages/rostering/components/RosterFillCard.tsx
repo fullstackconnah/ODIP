@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { Fragment, useId, useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { useRosterFill } from '@/api/hooks'
 import { Button } from '@/components/Button'
@@ -18,7 +18,9 @@ import { FILL_ERROR, FILL_LOADING, FILL_SCOPE, FILL_STALE, FILL_TITLE, SENTENCE_
 const HIDDEN_KEY = 'odip.roster.fillHidden'
 const WIDE = 960 // the 1280 desktop card is ~982px inner (shape brief section 3)
 
-export function RosterFillCard({ boardWeek, onSelectWeek }: { boardWeek: string | undefined; onSelectWeek: (weekStart: string) => void }) {
+export function RosterFillCard({ boardWeek, onSelectWeek, inPanel }: { boardWeek: string | undefined; onSelectWeek: (weekStart: string) => void; inPanel?: boolean }) {
+  // In the page's "Next 8 weeks" slide-over (roster declutter, 2026-11-03) the panel is the card: its title is the panel's, nothing hides, no box inside the box.
+  const Box = inPanel ? Fragment : Card
   const query = useRosterFill()
   const [boxWidth, boxRef] = useElementWidth()
   const [measuredPlot, plotBoxRef] = useElementWidth()
@@ -27,11 +29,11 @@ export function RosterFillCard({ boardWeek, onSelectWeek }: { boardWeek: string 
   const bodyId = useId()
   const sentenceId = useId()
   // A phone-width card starts collapsed (the expanded rows are ~650px); a stored choice wins.
-  const hidden = stored ?? (boxWidth !== undefined && boxWidth < COLUMNS_MIN)
+  const hidden = !inPanel && (stored ?? (boxWidth !== undefined && boxWidth < COLUMNS_MIN))
   const toggle = () => { writeHidden(HIDDEN_KEY, !hidden); setStored(!hidden) }
   const wide = (boxWidth ?? 0) >= WIDE
 
-  const titleRow = (toggleButton: boolean) => (
+  const titleRow = (toggleButton: boolean) => inPanel ? null : (
     <div className={`flex flex-wrap items-center justify-between gap-x-4 gap-y-1 ${toggleButton ? 'min-h-8' : ''}`}>
       <h3 className="text-sm font-semibold">{FILL_TITLE}</h3>
       {toggleButton && (
@@ -46,7 +48,7 @@ export function RosterFillCard({ boardWeek, onSelectWeek }: { boardWeek: string 
   if (query.isLoading && !retryingAfterError(query)) {
     return (
       <div aria-busy="true">
-        <Card>
+        <Box>
           <div ref={boxRef}>
             {titleRow(true)}
             <div aria-hidden="true" className="animate-pulse rounded-[var(--radius-md)] bg-[var(--color-surface-container)]">
@@ -59,27 +61,27 @@ export function RosterFillCard({ boardWeek, onSelectWeek }: { boardWeek: string 
             </div>
           </div>
           <p role="status" className="sr-only">{FILL_LOADING}</p>
-        </Card>
+        </Box>
       </div>
     )
   }
 
   if (!query.data) {
     return (
-      <Card>
+      <Box>
         {titleRow(false)}
         <RetryCallout tone="warning" onRetry={() => query.refetch()}>{FILL_ERROR}</RetryCallout>
-      </Card>
+      </Box>
     )
   }
 
   const data = query.data
   if (data.weeks.every(w => w.shifts === 0)) {
     return (
-      <Card>
+      <Box>
         {titleRow(false)}
         <p className="mt-2 max-w-prose text-sm">{fillSentence(data)}</p>
-      </Card>
+      </Box>
     )
   }
 
@@ -98,7 +100,7 @@ export function RosterFillCard({ boardWeek, onSelectWeek }: { boardWeek: string 
   )
 
   return (
-    <Card>
+    <Box>
       <div ref={boxRef}>
         {titleRow(true)}
         {wide && !hidden ? (
@@ -122,6 +124,6 @@ export function RosterFillCard({ boardWeek, onSelectWeek }: { boardWeek: string 
           </div>
         )}
       </div>
-    </Card>
+    </Box>
   )
 }
