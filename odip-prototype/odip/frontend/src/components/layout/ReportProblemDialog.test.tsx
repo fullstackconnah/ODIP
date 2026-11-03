@@ -16,7 +16,7 @@ const PATH = '/participants/3f2a9c01-1111-4222-8333-444455556666/notes?tab=2#top
 const onClose = vi.fn()
 
 /** The copy keeps "Bunya Support" whole with a no-break space and a word joiner; compare without them. */
-const plain = (s: string | null | undefined) => (s ?? '').replace(/[ ⁠]/g, ' ').replace(/\s+/g, ' ').trim()
+const plain = (s: string | null | undefined) => (s ?? '').replace(/[\u00a0\u2060]/g, ' ').replace(/\s+/g, ' ').trim()
 const hasText = (expected: string) => (_: string, el: Element | null) => !!el && el.children.length === 0 && plain(el.textContent) === expected
 
 function renderDialog() {
