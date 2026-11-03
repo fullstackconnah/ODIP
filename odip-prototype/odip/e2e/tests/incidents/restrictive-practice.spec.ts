@@ -20,6 +20,7 @@ async function toRpStep(page: Page, title: string, participantName: string) {
   await page.getByRole('option', { name: participantName }).click();
   await page.getByLabel('Incident Type *', { exact: true }).click();
   await page.getByRole('option', { name: /Restrictive Practice Use/i }).click();
+  await page.getByRole('radio', { name: '2 Medium' }).click();
   await page.getByRole('button', { name: 'Next' }).click();
   await page.getByLabel(/Restrictive Practice Type/).click();
   await page.getByRole('option', { name: /^Physical restraint/ }).click();

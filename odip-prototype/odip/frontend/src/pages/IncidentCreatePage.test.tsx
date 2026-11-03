@@ -95,6 +95,12 @@ async function selectReportedByFirstAlexRivera(user: ReturnType<typeof userEvent
   await user.click(screen.getAllByRole('option', { name: 'Alex Rivera' })[0])
 }
 
+/** A new form starts with no type and no severity: choose Other and 2 Medium wherever the form has neither yet (a prefill may have set one). */
+async function pickTypeAndSeverity(user: ReturnType<typeof userEvent.setup>, type: string | RegExp = 'Other') {
+  if (screen.getByLabelText('Incident Type *').textContent === 'Choose a type') await openAndSelect(user, 'Incident Type *', type)
+  if (!screen.getAllByRole('radio').some((r) => r.getAttribute('aria-checked') === 'true')) await user.click(screen.getByRole('radio', { name: '2 Medium' }))
+}
+
 async function clickNext(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: 'Next' }))
 }
@@ -116,11 +122,8 @@ async function fillBasicsMinimallyAndNext(
     await user.click(screen.getByLabelText('Involved Participant'))
     await user.click(screen.getByRole('option', { name: 'Sophie Brown' }))
   }
-  if (incidentTypeOption) {
-    await openAndSelect(user, 'Incident Type *', incidentTypeOption)
-  }
-  // Default incidentType is 'Other', which requires the specify field, unless the caller picked
-  // a different incident type above.
+  await pickTypeAndSeverity(user, incidentTypeOption ?? 'Other')
+  // 'Other' requires the specify field, unless the caller picked a different incident type above.
   if (!incidentTypeOption || incidentTypeOption === 'Other' || (incidentTypeOption instanceof RegExp && incidentTypeOption.test('Other'))) {
     await user.type(screen.getByPlaceholderText('Describe the incident type'), otherTypeSpecify ?? 'Lost property')
   }
@@ -190,15 +193,14 @@ describe('IncidentCreatePage — the step rail names itself', () => {
 })
 
 describe('IncidentCreatePage — Severity is the first decision of Basics', () => {
-it('is a radio group above every other field, Medium by default, and moves with a click', async () => {
+it('is a radio group in the What card after Incident Type, nothing chosen by default, and moves with a click', async () => {
   const user = userEvent.setup()
   renderCreatePage()
   const group = screen.getByRole('radiogroup', { name: /^Severity/ })
-  const before = (el: Element) => !!(group.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING)
-  expect(before(screen.getByPlaceholderText('Brief incident summary'))).toBe(true)
-  expect(before(screen.getByLabelText('Involved Participant'))).toBe(true)
+  const after = (el: Element) => !!(group.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING)
+  expect(after(screen.getByLabelText('Incident Type *'))).toBe(true)
   expect(within(group).getAllByRole('radio').map(r => r.textContent)).toEqual(Object.values(INCIDENT_SEVERITY_LABELS))
-  expect(within(group).getByRole('radio', { checked: true })).toHaveTextContent(INCIDENT_SEVERITY_LABELS.Medium)
+  expect(within(group).queryByRole('radio', { checked: true })).not.toBeInTheDocument()
   await user.click(within(group).getByRole('radio', { name: INCIDENT_SEVERITY_LABELS.High }))
   expect(within(group).getByRole('radio', { checked: true })).toHaveTextContent(INCIDENT_SEVERITY_LABELS.High)
 })
@@ -233,6 +235,7 @@ describe('IncidentCreatePage — INC-01 service type / trip linkage', () => {
 
     await user.type(screen.getByPlaceholderText('Brief incident summary'), 'Slip near pool')
     await openAndSelect(user, /Service Type/i, 'Trip')
+    await pickTypeAndSeverity(user)
     await user.type(screen.getByPlaceholderText('Describe the incident type'), 'Slip and fall')
     await selectReportedByFirstAlexRivera(user)
 
@@ -252,6 +255,7 @@ describe('IncidentCreatePage — INC-01 service type / trip linkage', () => {
     await openAndSelect(user, /Service Type/i, 'Trip')
     await openAndSelect(user, /^Trip/, 'Gold Coast Beach Break')
     // incidentType defaults to 'Other', which requires the specify field too.
+    await pickTypeAndSeverity(user)
     await user.type(screen.getByPlaceholderText('Describe the incident type'), 'Slip and fall')
     await selectReportedByFirstAlexRivera(user)
     await clickNext(user) // Basics -> Incident Details
@@ -269,8 +273,12 @@ describe('IncidentCreatePage — INC-01 service type / trip linkage', () => {
 })
 
 describe('IncidentCreatePage — INC-02 "Other" incident type specify field', () => {
-  it('shows the specify field once Incident Type is Other (the default)', () => {
+  it('shows the specify field once Incident Type is Other, not on a new form', async () => {
+    const user = userEvent.setup()
     renderCreatePage()
+    expect(screen.queryByLabelText(/Specify Incident Type/i)).not.toBeInTheDocument()
+
+    await openAndSelect(user, 'Incident Type *', 'Other')
     expect(screen.getByLabelText(/Specify Incident Type/i)).toBeInTheDocument()
   })
 
@@ -287,6 +295,7 @@ describe('IncidentCreatePage — INC-02 "Other" incident type specify field', ()
     renderCreatePage()
 
     await user.type(screen.getByPlaceholderText('Brief incident summary'), 'Something happened')
+    await pickTypeAndSeverity(user)
     await selectReportedByFirstAlexRivera(user)
 
     await clickNext(user)
@@ -1389,9 +1398,10 @@ describe('IncidentCreatePage — IN-7 Witnesses step', () => {
       const { data: payload } = mockUpdateMutateAsync.mock.calls[0][0]
       expect(payload.title).toBe('Edited title')
       expect(Object.keys(payload).sort()).toEqual([
-        'awareAtLocal', 'commissionDetailedReportedAt', 'commissionFinalReportRequested', 'commissionFinalReportedAt', 'correctiveActions', 'description', 'emergencyServicesDetails', 'familyNotified', 'familyNotifiedAt',
+        'ambulanceOfficerName', 'ambulanceReference',
+        'awareAtLocal', 'commissionDetailedReportedAt', 'commissionFinalReportRequested', 'commissionFinalReportedAt', 'correctiveActions', 'description', 'emergencyServices', 'emergencyServicesDetails', 'familyNotified', 'familyNotifiedAt', 'fireOfficerName', 'fireReference',
         'immediateActionsTaken', 'incidentDateTime', 'incidentType', 'injuries', 'involvedParticipantId',
-        'involvedStaffId', 'location', 'medicationAdministrationId', 'otherTypeSpecify', 'participantBookingId',
+        'involvedStaffId', 'location', 'medicationAdministrationId', 'otherTypeSpecify', 'participantBookingId', 'policeOfficerName', 'policeReference',
         'qscReferenceNumber', 'qscReportedAt', 'qscReportingStatus', 'reportableClass', 'reportableClassReason', 'reportedByStaffId', 'restrictivePracticeId',
         'restrictivePracticeType', 'restrictivePracticeUseVaried', 'reviewNotes', 'reviewedByStaffId', 'serviceType', 'severity', 'shiftId',
         'shiftNoteId', 'status', 'supportCoordinatorNotified', 'supportCoordinatorNotifiedAt', 'title',
@@ -1877,6 +1887,7 @@ describe('IncidentCreatePage: the shift prefill from "Anything to report?"', () 
     const user = userEvent.setup()
     renderCreatePage({ pathname: '/incidents/new', state: shiftPrefill })
 
+    await pickTypeAndSeverity(user)
     await user.type(screen.getByPlaceholderText('Describe the incident type'), 'Fall in the garden')
     await selectReportedByFirstAlexRivera(user)
     await clickNext(user)   // Basics -> Incident Details (description and date are prefilled)
@@ -1893,6 +1904,7 @@ describe('IncidentCreatePage: the shift prefill from "Anything to report?"', () 
     const user = userEvent.setup()
     renderCreatePage({ pathname: '/incidents/new', state: { ...shiftPrefill, incidentAt: '2026-08-17T09:05' } })
 
+    await pickTypeAndSeverity(user)
     await user.type(screen.getByPlaceholderText('Describe the incident type'), 'Fall in the garden')
     await selectReportedByFirstAlexRivera(user)
     await clickNext(user)
@@ -1967,6 +1979,7 @@ describe('IncidentCreatePage — a support worker is the reporter', () => {
 
       expect(screen.getByLabelText('Reported By')).toHaveValue('Cora Lane')
       // The MAR prefill picks the incident type; the shift prefill leaves it for the worker to name.
+      await pickTypeAndSeverity(user)
       if (state.source === 'shift') await user.type(screen.getByPlaceholderText('Describe the incident type'), 'Fall in the garden')
       await clickNext(user) // Basics -> Incident Details
       await clickNext(user) // -> Witnesses
@@ -2053,5 +2066,46 @@ describe('IncidentCreatePage - incident clock on the Compliance step', () => {
     await user.click(screen.getByRole('button', { name: /Review$/i }))
     await user.click(screen.getByRole('button', { name: /^save$/i }))
     expect(mockUpdateMutateAsync.mock.calls[0][0].data).toEqual(expect.objectContaining({ reportableClass: 'Within24h', reportableClassReason: 'Family raised it as serious.' }))
+  })
+})
+
+describe('IncidentCreatePage — incident form: type, severity and emergency services', () => {
+  it('asks for a type and a severity before leaving Basics, with nothing chosen for the reporter', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await user.type(screen.getByPlaceholderText('Brief incident summary'), 'Slip near pool')
+    await selectReportedByFirstAlexRivera(user)
+
+    await clickNext(user)
+
+    expect(await screen.findByText('Choose an incident type.')).toBeInTheDocument()
+    expect(screen.getByText('Choose a severity level.')).toBeInTheDocument()
+    expect(mockCreateMutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('sends the chosen services with their officer and reference, and clears an unticked one', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await fillBasicsMinimallyAndNext(user, { incidentTypeOption: 'Illness' })
+    await user.type(screen.getByLabelText(/Date & Time/i), '2026-09-01T10:00')
+    await user.type(screen.getByPlaceholderText('Detailed description of the incident...'), 'Felt unwell.')
+    await user.click(screen.getByRole('checkbox', { name: 'Were Emergency Services Called?' }))
+    await user.click(screen.getByRole('checkbox', { name: 'Police' }))
+    await user.type(screen.getByLabelText("Police officer's name"), 'Sgt Jane Doe')
+    await user.type(screen.getByLabelText('Police reference number'), '2611-0042')
+    await user.click(screen.getByRole('checkbox', { name: 'Fire' }))
+    await user.type(screen.getByLabelText("Fire officer's name"), 'Temp')
+    await user.click(screen.getByRole('checkbox', { name: 'Fire' }))
+    await clickNext(user) // Incident Details -> Witnesses
+    await clickNext(user) // Witnesses -> Review
+    expect(reviewValueFor('Emergency Services Called')).toBe('Yes: Police')
+    expect(reviewValueFor('Police')).toBe('Sgt Jane Doe, ref 2611-0042')
+
+    await user.click(screen.getByRole('button', { name: /submit incident report/i }))
+
+    expect(mockCreateMutateAsync.mock.calls[0][0]).toMatchObject({
+      severity: 'Medium', wereEmergencyServicesCalled: true, emergencyServices: 'Police', policeOfficerName: 'Sgt Jane Doe', policeReference: '2611-0042',
+    })
+    expect(mockCreateMutateAsync.mock.calls[0][0].fireOfficerName).toBeUndefined()
   })
 })

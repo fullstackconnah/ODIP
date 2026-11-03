@@ -37,7 +37,8 @@ function baseIncident(overrides: Partial<IncidentDetailDto> = {}): IncidentDetai
     restrictivePracticeReviewDate: null, unapprovedRestrictivePracticeDetails: null, isRestrictivePracticeAuthorised: null,
     description: 'Evening insulin dose administered 90 minutes late after dinner ran over schedule.',
     immediateActionsTaken: 'BGL checked, on-call nurse consulted, dose given per protocol.',
-    wereEmergencyServicesCalled: false, emergencyServicesDetails: null,
+    wereEmergencyServicesCalled: false, emergencyServicesDetails: null, emergencyServices: 'None',
+    policeOfficerName: null, policeReference: null, ambulanceOfficerName: null, ambulanceReference: null, fireOfficerName: null, fireReference: null,
     witnessNames: null, witnessStatements: null, injuries: [], witnesses: [],
     qscReportedAt: null, qscReferenceNumber: null,
     awareAt: '2026-10-03T09:05:00Z', reportableClass: 'None', reportableClassReason: null, notifyDueAt: null, detailedReportDueAt: null, dueCountedWithoutHolidays: false,
@@ -324,5 +325,43 @@ describe('IncidentDetailPage — behaviour support plan row', () => {
     mockUseIncident.mockReturnValue({ data: baseIncident({ ...rp }), isLoading: false })
     renderPage()
     expect(screen.queryByText('Behaviour support plan')).not.toBeInTheDocument()
+  })
+})
+
+describe('IncidentDetailPage — Commission reference and emergency services', () => {
+  it('shows the severity as a numbered level', () => {
+    mockUseIncident.mockReturnValue({ data: baseIncident({ severity: 'High' }), isLoading: false })
+    renderPage()
+    expect(screen.getByText('3 High')).toBeInTheDocument()
+  })
+
+  it('shows the NDIS Commission reference only when one is set', () => {
+    mockUseIncident.mockReturnValue({ data: baseIncident(), isLoading: false })
+    const { unmount } = renderPage()
+    expect(screen.queryByText('NDIS Commission reference')).not.toBeInTheDocument()
+    unmount()
+
+    mockUseIncident.mockReturnValue({ data: baseIncident({ qscReferenceNumber: 'NDIS-77' }), isLoading: false })
+    renderPage()
+    expect(screen.getByText('NDIS Commission reference')).toBeInTheDocument()
+    expect(screen.getByText('NDIS-77')).toBeInTheDocument()
+  })
+
+  it('lists each attending service with its officer and reference, then the other details', () => {
+    mockUseIncident.mockReturnValue({ data: baseIncident({
+      wereEmergencyServicesCalled: true, emergencyServices: 'Police, Fire', policeOfficerName: 'Sgt Jane Doe', policeReference: '2611-0042',
+      fireReference: 'F-9', emergencyServicesDetails: 'Arrived within ten minutes.',
+    }), isLoading: false })
+    renderPage()
+    expect(screen.getByText('Police · Sgt Jane Doe · Ref 2611-0042')).toBeInTheDocument()
+    expect(screen.getByText('Fire · Ref F-9')).toBeInTheDocument()
+    expect(screen.getByText('Arrived within ten minutes.')).toBeInTheDocument()
+  })
+
+  it('says Called for an older report that ticked the gate and named nothing', () => {
+    mockUseIncident.mockReturnValue({ data: baseIncident({ wereEmergencyServicesCalled: true }), isLoading: false })
+    renderPage()
+    expect(screen.getByText('Emergency services')).toBeInTheDocument()
+    expect(screen.getByText('Called')).toBeInTheDocument()
   })
 })

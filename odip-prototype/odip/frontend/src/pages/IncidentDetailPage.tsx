@@ -20,6 +20,7 @@ import { INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS, INCIDENT_STATUS_LABELS 
 import type { IncidentDetailDto } from '@/api/types/incidents'
 import { retryingAfterError } from '@/lib/queryPhase'
 import { reportingDueLines } from './incidents/reportingDue'
+import { emergencyServiceEntries, parseEmergencyServices } from './incidents/emergencyServices'
 
 /**
  * Connection map: a small local chip for a shift note's flagged categories — the portal's own
@@ -33,6 +34,19 @@ function FlagChip({ category }: { category: ShiftNoteFlagCategory }) {
     <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[var(--color-error-container)] text-[var(--color-on-error-container)] capitalize">
       {SHIFT_NOTE_FLAG_LABELS[category]}
     </span>
+  )
+}
+
+/** One line per service that attended ("Police · Sgt Jane Doe · Ref 2611-0042"), then the other details; an older report with no services shows its text, or "Called". */
+function EmergencyServicesValue({ incident }: { incident: IncidentDetailDto }) {
+  const lines = emergencyServiceEntries(parseEmergencyServices(incident.emergencyServices), incident)
+  const details = incident.emergencyServicesDetails?.trim()
+  if (!lines.length && !details) return <>Called</>
+  return (
+    <div className="flex flex-col gap-1">
+      {lines.map((e) => <span key={e.service}>{[e.service, e.name, e.ref && `Ref ${e.ref}`].filter(Boolean).join(' · ')}</span>)}
+      {details && <span className="whitespace-pre-wrap">{details}</span>}
+    </div>
   )
 }
 
@@ -86,6 +100,8 @@ export default function IncidentDetailPage() {
             { label: 'Location', value: incident.location || '—' },
             { label: 'Reported by', value: incident.reportedByName || '—' },
             { label: 'NDIS Commission', value: <ReportingDue incident={incident} /> },
+            ...(incident.qscReferenceNumber ? [{ label: 'NDIS Commission reference', value: incident.qscReferenceNumber }] : []),
+            ...(incident.wereEmergencyServicesCalled ? [{ label: 'Emergency services', value: <EmergencyServicesValue incident={incident} /> }] : []),
             { label: 'Description', value: <span className="whitespace-pre-wrap">{incident.description}</span> },
           ]}
         />
