@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Trash2, AlertTriangle, ChevronRight } from 'lucide-react'
-import type { ShiftDto, CreateShiftDto, RosterFindingDto, SupportRatio, SleepoverType, ShiftStatus } from '@/api/types'
+import type { ShiftDto, CreateShiftDto, RosterFindingDto, SupportRatio, SleepoverType, ShiftStatus, CompatibilityLevel } from '@/api/types'
 import { SUPPORT_RATIOS, SLEEPOVER_TYPES, COORDINATOR_SETTABLE_SHIFT_STATUSES } from '@/api/types'
 import { ROUTINE_CATEGORY_LABELS } from '@/api/types/routines'
 import { Dropdown } from '@/components/Dropdown'
@@ -11,6 +11,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { Callout } from '@/components/Callout'
 import { RefreshBoardAction } from './RefreshBoardAction'
+import { compareCompatibility } from '../lib/compatibilityOrder'
 import { BOARD_REFRESHED, moveGoneSentence } from '../lib/boardChanged'
 import { ReadinessNote } from '@/components/ReadinessNote'
 import { RequirementChips } from '@/components/RequirementChips'
@@ -92,8 +93,8 @@ const BUDGET_REASON_COPY = {
   error: 'Add a reason to save this shift over budget.',
 } as const
 
-/** Sort-boost order for the Staff dropdown: Preferred first, then Allowed/no row, Excluded last. */
-const COMPATIBILITY_RANK = { Preferred: 0, Allowed: 1, Excluded: 2 } as const
+/** "Backup #2" for a ranked tier, the bare level for an unranked one. */
+const tierPlace = (level: string, rank: number) => (rank > 0 ? `${level} #${rank}` : level)
 
 export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, staffOptions, groupBy = 'participant', participantReadiness, onSaved }: ShiftSlideOverProps) {
   const staffCompatibilityNoticeId = useId()
@@ -199,25 +200,26 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   const [showAllNotes, setShowAllNotes] = useState(false)
   const visibleNotes = showAllNotes ? shiftNotes : shiftNotes.slice(0, 2)
   const compatibilityByStaffId = useMemo(() => {
-    const map = new Map<string, { level: 'Preferred' | 'Allowed' | 'Excluded'; reason: string | null }>()
-    compatibilityRows.forEach(row => map.set(row.staffId, { level: row.level, reason: row.reason }))
+    const map = new Map<string, { level: CompatibilityLevel; rank: number; reason: string | null }>()
+    compatibilityRows.forEach(row => map.set(row.staffId, { level: row.level, rank: row.rank, reason: row.reason }))
     return map
   }, [compatibilityRows])
   const sortedStaffOptions: DropdownItem[] = useMemo(() => {
     return staffOptions
       .map(option => {
-        const level = compatibilityByStaffId.get(option.value)?.level
+        const compat = compatibilityByStaffId.get(option.value)
+        const level = compat?.level
         return {
           ...option,
-          description: level === 'Preferred' ? 'Preferred for this participant'
+          description: level === 'Preferred' || level === 'Backup' || level === 'Emergency' ? `${tierPlace(level, compat!.rank)} for this participant`
             : level === 'Excluded' ? 'Can’t be rostered: marked No for this participant'
             : undefined,
           // The worker already on this shift stays pickable so the field keeps showing them; the server still lets the shift be reassigned, unassigned or cancelled.
           disabled: (level === 'Excluded' && option.value !== existing?.staffId),
         }
       })
-      // Array.prototype.sort is stable — ties (Allowed/no row) keep the caller's original order.
-      .sort((a, b) => COMPATIBILITY_RANK[compatibilityByStaffId.get(a.value)?.level ?? 'Allowed'] - COMPATIBILITY_RANK[compatibilityByStaffId.get(b.value)?.level ?? 'Allowed'])
+      // The one order (lib/compatibilityOrder): tiers by rank, unlisted, No last. The name tiebreak is the caller's own order, kept by the stable sort.
+      .sort((a, b) => compareCompatibility({ ...compatibilityByStaffId.get(a.value), name: '' }, { ...compatibilityByStaffId.get(b.value), name: '' }))
   }, [staffOptions, compatibilityByStaffId, existing?.staffId])
   const selectedStaffCompatibility = staffId ? compatibilityByStaffId.get(staffId) : undefined
   const selectedStaffLabel = staffOptions.find(s => s.value === staffId)?.label ?? 'This staff member'
@@ -503,13 +505,11 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
             // Links the Preferred/Excluded compatibility notice below (rendered outside this
             // FormField so it can carry its own role/styling) into the Staff control's
             // aria-describedby, so AT users focused on the field hear it — not just sighted
-            // users. Only Excluded/Preferred actually render the <p id={staffCompatibilityNoticeId}>
-            // below — an explicit Allowed row (or any other level) renders neither, so the guard
-            // must match those two levels exactly or this dangles a reference to a nonexistent id.
+            // users. Every level but Allowed renders the <p id={staffCompatibilityNoticeId}>
+            // below — an explicit Allowed row renders none, so the guard
+            // must match exactly or this dangles a reference to a nonexistent id.
             descriptionId={
-              selectedStaffCompatibility?.level === 'Excluded' || selectedStaffCompatibility?.level === 'Preferred'
-                ? staffCompatibilityNoticeId
-                : undefined
+              selectedStaffCompatibility && selectedStaffCompatibility.level !== 'Allowed' ? staffCompatibilityNoticeId : undefined
             }
           >
             <SearchableSelect
@@ -532,6 +532,11 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
           {selectedStaffCompatibility?.level === 'Preferred' && (
             <p id={staffCompatibilityNoticeId} className="mt-1.5 text-xs text-primary">
               {selectedStaffLabel} is a preferred staff member for this participant.
+            </p>
+          )}
+          {(selectedStaffCompatibility?.level === 'Backup' || selectedStaffCompatibility?.level === 'Emergency') && (
+            <p id={staffCompatibilityNoticeId} className="mt-1.5 text-xs text-muted-foreground">
+              {selectedStaffLabel} is {tierPlace(selectedStaffCompatibility.level, selectedStaffCompatibility.rank).toLowerCase()} for this participant.
             </p>
           )}
         </div>

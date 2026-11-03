@@ -29,6 +29,9 @@ function cellKey(staffId: string, participantId: string): string {
 // the moment you're interacting with a cell you get the real control with its native chrome.
 const LEVEL_SELECT_CLASS: Record<CompatibilityLevel, string> = {
   Allowed: 'bg-surface-container text-muted-foreground',
+  // Backup and Emergency are neutral and labelled: only Preferred (green) and No (red) carry colour.
+  Backup: 'bg-surface-container text-foreground font-medium',
+  Emergency: 'bg-surface-container text-foreground font-medium',
   Preferred: 'bg-primary-fixed text-on-primary-fixed font-medium',
   Excluded: 'bg-error-container text-on-error-container font-medium',
 }
@@ -41,15 +44,19 @@ const LEVEL_SELECT_CLASS: Record<CompatibilityLevel, string> = {
 // "editable but empty" is itself the signal, backed by the cell's hairline underline.
 const RESTING_LABEL_CLASS: Record<CompatibilityLevel, string> = {
   Allowed: '',
+  Backup: 'rounded-full bg-surface-container px-2 py-0.5 text-xs leading-none text-muted-foreground',
+  Emergency: 'rounded-full bg-surface-container px-2 py-0.5 text-xs leading-none text-muted-foreground',
   Preferred: 'rounded-full bg-primary/10 px-2 py-0.5 text-xs leading-none text-primary',
   Excluded: 'rounded-full bg-destructive/15 px-2 py-0.5 text-xs font-semibold leading-none text-destructive',
 }
 
 // Read-only (non-writer) rendering shares the same resting weight — there's nothing to reveal
 // on hover since there's no control underneath, so this IS the permanent state for viewers.
+const levelText = (level: CompatibilityLevel) => (level === 'Excluded' ? 'No' : level)
+
 function RestingMark({ level }: { level: CompatibilityLevel }) {
   if (level === 'Allowed') return null
-  return <span className={RESTING_LABEL_CLASS[level]}>{level}</span>
+  return <span className={RESTING_LABEL_CLASS[level]}>{levelText(level)}</span>
 }
 
 /** Loading state — a skeleton matching the final matrix's shape, no spinner. */
@@ -144,6 +151,7 @@ export default function CompatibilityPage() {
       participantId: participantRef.id,
       participantName: participantRef.fullName,
       level,
+      rank: 0, // the server places the row; the overlay only shows the level
       reason,
       updatedAt: new Date().toISOString(),
     }))
@@ -293,7 +301,7 @@ export default function CompatibilityPage() {
                     const participantRef: PersonRef = { id: participant.id, fullName: participant.fullName }
                     const { level, reason } = resolveCell(staffMember.id, participant.id)
                     const failed = failedKeys.has(cellKey(staffMember.id, participant.id))
-                    const accessibleName = `${staffMember.fullName} with ${participant.fullName}: ${level}`
+                    const accessibleName = `${staffMember.fullName} with ${participant.fullName}: ${levelText(level)}`
 
                     return (
                       <td key={participant.id} className="px-1.5 text-center align-middle" title={reason ?? undefined}>
@@ -322,6 +330,8 @@ export default function CompatibilityPage() {
                               className={`relative z-10 appearance-none rounded-full px-2 py-0.5 text-xs opacity-0 transition-opacity duration-100 hover:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100 group-focus-within:opacity-100 ${LEVEL_SELECT_CLASS[level]}`}
                             >
                               <option value="Preferred">Preferred</option>
+                              <option value="Backup">Backup</option>
+                              <option value="Emergency">Emergency</option>
                               <option value="Allowed">Allowed</option>
                               <option value="Excluded">No</option>
                             </select>
@@ -329,7 +339,7 @@ export default function CompatibilityPage() {
                               <button
                                 type="button"
                                 onClick={() => setExcludeDraft({ staff: staffRef, participant: participantRef, reason: reason ?? '' })}
-                                aria-label={`Edit exclusion reason for ${staffMember.fullName} with ${participant.fullName}`}
+                                aria-label={`Edit reason for ${staffMember.fullName} with ${participant.fullName}`}
                                 title="Edit reason"
                                 className="relative z-10 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity duration-100 hover:bg-accent hover:text-foreground focus:opacity-100 focus:outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100 group-focus-within:opacity-100"
                               >
@@ -367,12 +377,12 @@ export default function CompatibilityPage() {
               <strong className="text-foreground">{excludeDraft.staff.fullName}</strong> cannot be rostered for{' '}
               <strong className="text-foreground">{excludeDraft.participant.fullName}</strong>’s shifts. Shifts already rostered stay as they are, but cannot be edited until the worker is replaced or the shift is unassigned or cancelled.
             </p>
-            <FormField label="Reason" required hint="Stored with the exclusion and visible in audit.">
+            <FormField label="Reason" required hint="Stored with this choice and visible in audit.">
               <textarea
                 rows={2}
                 value={excludeDraft.reason}
                 onChange={e => setExcludeDraft(draft => draft && { ...draft, reason: e.target.value })}
-                placeholder="Why this pairing is excluded"
+                placeholder="Why can’t they work together?"
               />
             </FormField>
           </>
@@ -383,7 +393,7 @@ export default function CompatibilityPage() {
               Cancel
             </Button>
             <Button variant="danger" disabled={!excludeDraft?.reason.trim()} onClick={handleConfirmExclude}>
-              Exclude
+              Mark as No
             </Button>
           </>
         }
