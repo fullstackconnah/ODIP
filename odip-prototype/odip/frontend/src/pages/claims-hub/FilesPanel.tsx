@@ -72,7 +72,7 @@ export function FilesStrip({ batches, loading, failed, rejectedCount, onRetry, o
           <Button variant="ghost" size="sm" onClick={onRetry}>Try again</Button>
         </p>
       )}
-      {unfinished.length > 3 && <Button variant="ghost" size="sm" className="mt-1" onClick={onShowAll}>See all {unfinished.length} in Files</Button>}
+      {unfinished.length > 3 && <Button variant="ghost" size="sm" className="mt-1 max-md:min-h-11" onClick={onShowAll}>See all {unfinished.length} in Files</Button>}
     </section>
   )
 }
