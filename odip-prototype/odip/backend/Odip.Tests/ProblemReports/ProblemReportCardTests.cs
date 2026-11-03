@@ -62,13 +62,13 @@ public class ProblemReportCardTests
     {
         var title = ProblemReportCard.CardTitle(Report(r =>
         {
-            r.Text = "line one\nline two\r\nthree four five\tsix";
+            r.Text = "line one\nline two\r\nthree\u2028four\u2029five\tsix";
             r.OrganisationName = "Org\nName";
         }));
         Assert.DoesNotContain('\n', title);
         Assert.DoesNotContain('\r', title);
-        Assert.DoesNotContain(' ', title);
-        Assert.DoesNotContain(' ', title);
+        Assert.DoesNotContain('\u2028', title);
+        Assert.DoesNotContain('\u2029', title);
         Assert.DoesNotContain('\t', title);
         Assert.StartsWith("Org Name: line one line two three four five six", title);
     }
