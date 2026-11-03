@@ -1,11 +1,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   DndContext, DragOverlay, KeyboardSensor, MeasuringStrategy, MouseSensor, TouchSensor, useSensor, useSensors,
   type DragEndEvent, type DragStartEvent, type Modifier,
 } from '@dnd-kit/core'
-import { CalendarClock, CalendarPlus, X } from 'lucide-react'
+import { AlertTriangle, BarChart3, CalendarClock, CalendarPlus, Hourglass, Plus, X } from 'lucide-react'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
 import { useIsBelowMd } from '@/hooks/useIsBelowMd'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
@@ -13,7 +13,9 @@ import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
 import { Card } from '@/components/Card'
 import { BudgetWarnings } from '@/components/BudgetWarnings'
+import { Dropdown } from '@/components/Dropdown'
 import { PageHeader } from '@/components/PageHeader'
+import { SlideOver } from '@/components/SlideOver'
 import { RosterFillCard } from './components/RosterFillCard'
 import { EmptyState } from '@/components/EmptyState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -25,7 +27,7 @@ import { useRosterBoard, useAssignShift, useMoveStaff, usePublishWeek, useStartW
 import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
 import type { ShiftDto, RosterFindingDto, MoveStaffMode, StartWeekResultDto } from '@/api/types'
 import {
-  WeekToolbar, WEEK_HEADING_ID, RosterGrid, RosterGridSkeleton, ShiftSlideOver, FindingsList, ExceptionsDrawer, StaffStrip, CarriedPuck, StaffPicker, SwapPicker, PendingAgreementNotice, RefreshBoardAction,
+  WeekToolbar, WEEK_HEADING_ID, RosterGrid, RosterGridSkeleton, ShiftSlideOver, FindingsList, ExceptionsDrawer, StaffStrip, CarriedPuck, StaffPicker, SwapPicker, PendingAgreementsPanel, RefreshBoardAction,
   type ShiftSlideOverTarget,
 } from './components'
 import { BOARD_REFRESHED, isBoardChanged } from './lib/boardChanged'
@@ -101,6 +103,12 @@ export default function RosterBoardPage() {
     if (unfilledParam !== null) setUnfilledOnly(unfilledParam === '1')
   }
   const [exceptionsOpen, setExceptionsOpen] = useState(false)
+  // The two panels the status line and the title row open (roster declutter, 2026-11-03): the fill chart (Next 8 weeks) and the agreements waiting for approval.
+  const [fillOpen, setFillOpen] = useState(false)
+  const [agreementsOpen, setAgreementsOpen] = useState(false)
+  // Where focus returns when a week picked in the chart is held by the leave guard and the person stays (the chart has closed by then).
+  const fillButtonRef = useRef<HTMLButtonElement>(null)
+  const pendingFromFill = useRef(false)
   const [slideOverTarget, setSlideOverTarget] = useState<ShiftSlideOverTarget | null>(null)
   const [confirmDeleteTarget, setConfirmDeleteTarget] = useState<ShiftDto | null>(null)
   const [pendingAssign, setPendingAssign] = useState<PendingAssign | null>(null)
@@ -128,33 +136,6 @@ export default function RosterBoardPage() {
   // The menu's Swap with… (the lead's decision 1, 2026-10-15): one picker at a time, for an assigned shift. Read back from the CURRENT board like the staff picker.
   const [swapTarget, setSwapTarget] = useState<ShiftDto | null>(null)
   const [announcement, setAnnouncement] = useState('')
-  // How much taller than one row of controls the toolbar is: it wraps to two rows at 1280, which the board frame's fixed allowance does not know (finish review).
-  // Re-measured whenever the toolbar resizes, since the wrap follows the window's width.
-  const headerRef = useRef<HTMLDivElement>(null)
-  const [toolbarExtra, setToolbarExtra] = useState(0)
-  useLayoutEffect(() => {
-    const toolbar = headerRef.current?.lastElementChild as HTMLElement | null | undefined
-    if (!toolbar) return
-    const measure = () => setToolbarExtra(Math.max(0, toolbar.offsetHeight - (parseFloat(getComputedStyle(toolbar).getPropertyValue('--control-h')) || 0)))
-    measure()
-    if (typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(measure)
-    observer.observe(toolbar)
-    return () => observer.disconnect()
-  }, [])
-  // The fill card sits above the notices: its height (and the gap under it) comes off the board frame's cap, measured like the toolbar's.
-  const fillRef = useRef<HTMLDivElement>(null)
-  const [fillHeight, setFillHeight] = useState(0)
-  useLayoutEffect(() => {
-    const el = fillRef.current
-    if (!el) { setFillHeight(0); return }
-    const measure = () => setFillHeight(el.offsetHeight)
-    measure()
-    if (typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(measure)
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [showFill])
   const [hintDismissed, setHintDismissed] = useState(() => {
     try {
       return sessionStorage.getItem(HINT_DISMISSED_KEY) === '1'
@@ -185,6 +166,7 @@ export default function RosterBoardPage() {
   const updateShift = useUpdateShift()
   const moveStaff = useMoveStaff()
   const belowMd = useIsBelowMd()
+  const navigate = useNavigate()
   const deleteShift = useDeleteShift()
 
   const days = board?.days ?? daysOfWeek(weekStart)
@@ -267,12 +249,6 @@ export default function RosterBoardPage() {
   const publishable = useMemo(() => drafts.filter(s => !isBlocked(s)), [drafts])
   // The banner (the brief, 3.1): a started week with drafts, for writers and readers.
   const showBanner = !unstarted && drafts.length > 0
-  const noticesShown = showBanner || hasNotice || !!assignError || !!startNotice || !!regularNotice
-  // The height of what stands above the board (the banner, the notices and the error, in one wrapper), for the board frame (finish review fix 5): with them above it, strip and grid still share one screen.
-  // shortcut: measured when any of them changes, not when the window resizes; a ResizeObserver if a long message ever wraps differently after a resize.
-  const noticeRef = useRef<HTMLDivElement>(null)
-  const [noticeHeight, setNoticeHeight] = useState<number | null>(null)
-  useLayoutEffect(() => { setNoticeHeight(noticesShown ? noticeRef.current?.offsetHeight ?? 0 : null) }, [noticesShown, assignError, waiting, drafts.length, blocked.length, startNotice, regularNotice])
 
   const startWeek = useStartWeek()
   // Keyed to its week: a Start still out for a week no longer shown never says "Starting…" on this week's card, and one week settling never clears another's.
@@ -337,8 +313,9 @@ export default function RosterBoardPage() {
   const [pendingWeek, setPendingWeek] = useState<string | null>(null)
 
   /** Prev, Next and This week are local state, out of useBlocker's sight, so they ask here. The week already shown asks nothing. */
-  function moveToWeek(target: string) {
+  function moveToWeek(target: string, fromFill = false) {
     if (target === weekStart) return
+    pendingFromFill.current = fromFill
     if (leaveArmed) setPendingWeek(target)
     else showWeek(target)
   }
@@ -615,16 +592,11 @@ export default function RosterBoardPage() {
     </Button>
   )
 
-  // An unstarted week shows the Start card first; the chart moves below it so it never owns the fold.
   const startCardShown = !isLoading && !loadFailed && !!filteredBoard && unstarted
-  const fillCard = showFill && (
-    <div ref={fillRef}>
-      <RosterFillCard boardWeek={weekStart} onSelectWeek={moveToWeek} />
-    </div>
-  )
   const grid = filteredBoard && (
     <RosterGrid
       board={filteredBoard}
+      strip={dragOn ? <StaffStrip staff={staff} isLoading={staffLoading} hours={hours} regionOptions={regionOptions} regionFilter={regionFilter} onRegionFilterChange={setRegionFilter} /> : undefined}
       canWrite={canWrite}
       draggable={dragOn}
       unfilledOnly={unfilledOnly}
@@ -639,20 +611,91 @@ export default function RosterBoardPage() {
     />
   )
 
-  return (
-    <div
-      className="flex flex-col gap-[var(--section-gap)] animate-fade-in"
-      style={{
-        '--roster-toolbar-extra': `${toolbarExtra}px`,
-        ...(fillHeight === 0 ? {} : { '--roster-fill-h': `calc(${fillHeight}px + var(--section-gap))` }),
-        ...(noticeHeight === null ? {} : { '--roster-notice-h': `calc(${noticeHeight}px + var(--section-gap))` }),
-      } as React.CSSProperties}
+  // The title row's actions (roster declutter, 2026-11-03), right-aligned in this order. The R7 slot (Auto-roster) goes before New: nothing is built for it. Below md only New stays beside the title; the rest ride the toolbar's last row.
+  const secondaryActions = (
+    <>
+      {showFill && (
+        <Button ref={fillButtonRef} variant="ghost" size="md" className="whitespace-nowrap" onClick={() => setFillOpen(true)}>
+          <BarChart3 className="h-4 w-4" aria-hidden="true" />
+          Next 8 weeks
+        </Button>
+      )}
+      {/* Nothing to open at zero, so no button (V2-G). */}
+      {combinedExceptions.length > 0 && (
+        <Button variant="secondary" size="md" className="whitespace-nowrap" onClick={() => setExceptionsOpen(true)}>
+          <AlertTriangle className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          {plural(combinedExceptions.length, 'exception')}
+        </Button>
+      )}
+      {canWrite && !unstarted && board?.canStart === true && (
+        // aria-disabled, not disabled, while it runs: a disabled button drops focus to body, and a failure must leave focus here (as the Start card).
+        <Button
+          variant="secondary"
+          size="md"
+          className="whitespace-nowrap aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+          aria-disabled={starting || undefined}
+          onClick={() => { if (!starting) void handleStartWeek() }}
+        >
+          {/* The idle label sits invisible in the same grid cell, so the button keeps its width while it reads "Adding…" (as WizardNavFooter). */}
+          <span className="grid">
+            <span aria-hidden="true" data-reserve="Add agreement shifts" className="invisible col-start-1 row-start-1 before:content-[attr(data-reserve)]" />
+            <span className="col-start-1 row-start-1">{starting ? 'Adding…' : 'Add agreement shifts'}</span>
+          </span>
+        </Button>
+      )}
+    </>
+  )
+  // One create control (owner, 2026-11-03): later create kinds become items here, never new buttons. One primary per page: New steps back while Start or Publish week is the page's.
+  const newMenu = canWrite && (
+    <div className="pointer-coarse:[&_button]:min-h-11 pointer-coarse:[&_button]:min-w-11">
+      <Dropdown
+        variant="menu"
+        triggerVariant={unstarted || publishable.length > 0 ? 'secondary' : 'primary'}
+        label="New"
+        icon={<Plus aria-hidden="true" className="h-4 w-4" />}
+        items={[{ value: 'shift', label: 'Shift' }, { value: 'trip', label: 'Trip' }]}
+        onSelect={value => (value === 'trip' ? navigate('/trips/new') : setSlideOverTarget({ mode: 'create', serviceDate: weekStart }))}
+      />
+    </div>
+  )
+  // The status line (the shape, 3.2): one standing Callout. Drafts first (the week's main action), else the agreements waiting.
+  const agreementsButton = hasNotice && (
+    <Button variant="ghost" size="sm" className="whitespace-nowrap pointer-coarse:min-h-11" onClick={() => setAgreementsOpen(true)}>
+      <Hourglass className="h-4 w-4" aria-hidden="true" />
+      {plural(waiting.length, 'agreement')} waiting
+    </Button>
+  )
+  const publishButton = canWrite && publishable.length > 0 && <Button size="md" onClick={() => setPublishOpen(true)}>Publish week</Button>
+  const statusLine = showBanner ? (
+    <Callout
+      tone="warning"
+      // A standing state, not news: as role="alert" it would re-announce on every week change and refetch (the brief, 3.1). Publishing keeps its own sentence.
+      announce={false}
+      title={bannerTitle(drafts.length)}
+      // One line beside a 32px button: centred, or the 19px title sits at the top (the brief, 3.2).
+      className={blocked.length === 0 ? 'items-center!' : undefined}
+      actions={agreementsButton || publishButton ? <>{agreementsButton}{publishButton}</> : undefined}
     >
+      {bannerBlockedLine(blocked.length)}
+    </Callout>
+  ) : hasNotice ? (
+    <Callout tone="info" icon={Hourglass} announce={false} title={`${plural(waiting.length, 'agreement')} waiting for approval`} className="items-center!" actions={agreementsButton}>
+      {null}
+    </Callout>
+  ) : null
+  const transientShown = !!assignError || !!startNotice || !!regularNotice
+
+  return (
+    <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
       <AnnouncementRegion message={announcement} />
       {/* PageHeader is a fragment, so title row and toolbar sit in one tight block here (title 28px + 8px + toolbar 32px)
           instead of being spaced apart by the page's --section-gap. */}
-      <div ref={headerRef} className="flex flex-col gap-2">
-        <PageHeader title="Roster board" />
+      <div className="flex flex-col gap-2">
+        <PageHeader
+          title="Roster board"
+          actionsBesideTitle
+          action={(newMenu || !belowMd) ? <div className="flex flex-wrap items-center justify-end gap-2">{!belowMd && secondaryActions}{newMenu}</div> : undefined}
+        />
 
         <WeekToolbar
           days={days}
@@ -669,37 +712,15 @@ export default function RosterBoardPage() {
           onRegionFilterChange={setRegionFilter}
           unfilledOnly={unfilledOnly}
           onUnfilledOnlyChange={setUnfilledOnly}
-          exceptionsCount={combinedExceptions.length}
-          onOpenExceptions={() => setExceptionsOpen(true)}
-          canWrite={canWrite}
-          onNewShift={() => setSlideOverTarget({ mode: 'create', serviceDate: weekStart })}
           allPublished={!!board && !unstarted && !weekHasNoShifts && drafts.length === 0}
           heldBack={heldDrafts > 0}
-          newShiftSecondary={unstarted || publishable.length > 0}
-          onAddAgreementShifts={!unstarted && board?.canStart === true ? () => void handleStartWeek() : undefined}
-          addingAgreementShifts={starting}
+          trailing={belowMd ? secondaryActions : undefined}
         />
       </div>
 
-      {!startCardShown && fillCard}
-
-      {/* The banner, the standing notice, then the error, in ONE wrapper measured for the board frame: the notice never jumps when an error comes and goes (the brief, section 6). */}
-      {noticesShown && (
-        <div ref={noticeRef} className="flex flex-col gap-[var(--section-gap)]">
-          {showBanner && (
-            <Callout
-              tone="warning"
-              // A standing state, not news: as role="alert" it would re-announce on every week change and refetch (the brief, 3.1). Publishing keeps its own sentence.
-              announce={false}
-              title={bannerTitle(drafts.length)}
-              // One line beside a 32px button: centred, or the 19px title sits at the top (the brief, 3.2).
-              className={blocked.length === 0 ? 'items-center!' : undefined}
-              actions={canWrite && publishable.length > 0 ? <Button size="md" onClick={() => setPublishOpen(true)}>Publish week</Button> : undefined}
-            >
-              {bannerBlockedLine(drafts.length, blocked.length)}
-            </Callout>
-          )}
-          {hasNotice && <PendingAgreementNotice waiting={waiting} />}
+      {/* The transient notices (each dismissible) stack above the one status line, in one wrapper: the notice never jumps when an error comes and goes (the brief, section 6). */}
+      {(transientShown || statusLine) && (
+        <div className="flex flex-col gap-[var(--section-gap)]">
           {startNotice && (
             // Focus lands here after Start (the brief, 2.4), so neither Callout announces itself as well.
             <div ref={startNoticeRef} tabIndex={-1} className="flex flex-col gap-[var(--section-gap)] outline-none">
@@ -748,6 +769,7 @@ export default function RosterBoardPage() {
               {assignError.boardChanged && <RefreshBoardAction onRefreshed={boardRefreshed} announce={setAnnouncement} />}
             </Callout>
           )}
+          {statusLine}
         </div>
       )}
 
@@ -824,7 +846,6 @@ export default function RosterBoardPage() {
               )}
             </Card>
           </section>
-          {fillCard}
         </>
       )}
 
@@ -842,7 +863,6 @@ export default function RosterBoardPage() {
             // The new-shift slot mounts only once a person is carried; the default (measure while dragging) can miss a droppable that appears mid-drag (plan check S2).
             measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
             >
-              <StaffStrip staff={staff} isLoading={staffLoading} hours={hours} regionOptions={regionOptions} regionFilter={regionFilter} onRegionFilterChange={setRegionFilter} />
               {grid}
               {/* A portal (the brief, section 5), so no ancestor's overflow or transform clips or shifts it. No drop animation: the default flies the puck back to its source, which reads as a refusal.
                   pointer-events-none: rosterCollision asks what is on top at the pointer, and that must never be the carried puck itself. */}
@@ -895,6 +915,14 @@ export default function RosterBoardPage() {
         }}
       />
 
+      {/* Mounted only while open, as ExceptionsDrawer. Picking a week in the chart closes the panel and moves the board there. */}
+      {fillOpen && showFill && (
+        <SlideOver open onClose={() => setFillOpen(false)} title="Next 8 weeks" size="lg">
+          <RosterFillCard boardWeek={weekStart} inPanel onSelectWeek={week => { setFillOpen(false); moveToWeek(week, true) }} />
+        </SlideOver>
+      )}
+      {agreementsOpen && hasNotice && <PendingAgreementsPanel waiting={waiting} onClose={() => setAgreementsOpen(false)} />}
+
       {leaveDialog}
       <ConfirmDialog
         open={regularCopy !== null}
@@ -907,7 +935,7 @@ export default function RosterBoardPage() {
       />
       <ConfirmDialog
         open={pendingWeek !== null}
-        onCancel={() => setPendingWeek(null)}
+        onCancel={() => { setPendingWeek(null); if (pendingFromFill.current) requestAnimationFrame(() => fillButtonRef.current?.focus()) }}
         onConfirm={() => { if (pendingWeek) showWeek(pendingWeek); setPendingWeek(null) }}
         title={leaveCopy.title}
         message={<p>{leaveCopy.message}</p>}

@@ -1,11 +1,11 @@
-import { ChevronLeft, ChevronRight, AlertTriangle, Plus } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { Dropdown } from '@/components/Dropdown'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { StatusBadge } from '@/components/StatusBadge'
 import { formatWeekRange } from '../lib/roster'
 import type { BoardViewMode } from '../lib/useBoardViewMode'
-import { plural } from '@/lib/format'
 
 export type WeekToolbarProps = {
   days: string[]
@@ -22,19 +22,12 @@ export type WeekToolbarProps = {
   onRegionFilterChange: (value: string) => void
   unfilledOnly: boolean
   onUnfilledOnlyChange: (value: boolean) => void
-  exceptionsCount: number
-  onOpenExceptions: () => void
-  canWrite: boolean
-  onNewShift: () => void
   /** "All published" beside the range: a started week whose shifts are all published. The drafts count and Publish week are the page's banner now (2026-10-16). */
   allPublished?: boolean
   /** Unstaffed Drafts are still held back, so the week is not wholly out. */
   heldBack?: boolean
-  /** The page's one primary is elsewhere (Start, or the banner's Publish week), so New shift steps back. */
-  newShiftSecondary?: boolean
-  /** A started week Start would still add agreement shifts to (a hand-made week): the secondary button. Absent hides it. */
-  onAddAgreementShifts?: () => void
-  addingAgreementShifts?: boolean
+  /** Phone width only: the actions that do not fit the page's title row, in the last row of the toolbar. */
+  trailing?: ReactNode
 }
 
 /** The week heading's id: the page moves focus here when the button it came from goes (after a publish). */
@@ -55,15 +48,9 @@ export function WeekToolbar({
   onRegionFilterChange,
   unfilledOnly,
   onUnfilledOnlyChange,
-  exceptionsCount,
-  onOpenExceptions,
-  canWrite,
-  onNewShift,
   allPublished,
   heldBack,
-  newShiftSecondary,
-  onAddAgreementShifts,
-  addingAgreementShifts,
+  trailing,
 }: WeekToolbarProps) {
   // Every control here is a --control-h row: Button md / ToggleGroup / Dropdown form are all 32px at a
   // fine pointer and 44px under `pointer: coarse`, so the toolbar is one 32px line.
@@ -134,38 +121,8 @@ export function WeekToolbar({
         >
           Unfilled only
         </Button>
-        {/* The actions share the last row at a phone width; from sm up the wrapper vanishes and they flow with the filters as before. */}
-        <div className="max-sm:flex max-sm:w-full max-sm:flex-wrap max-sm:items-center max-sm:gap-2 sm:contents">
-        {/* Nothing to open at zero, so no button (V2-G). */}
-        {exceptionsCount > 0 && (
-          <Button variant="secondary" size="md" onClick={onOpenExceptions}>
-            <AlertTriangle className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-            {plural(exceptionsCount, 'exception')}
-          </Button>
-        )}
-        {canWrite && onAddAgreementShifts && (
-          // aria-disabled, not disabled, while it runs: a disabled button drops focus to body, and a failure must leave focus here (as the Start card).
-          <Button
-            variant="secondary"
-            size="md"
-            className="whitespace-nowrap aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-            aria-disabled={addingAgreementShifts || undefined}
-            onClick={() => { if (!addingAgreementShifts) onAddAgreementShifts() }}
-          >
-            {/* The idle label sits invisible in the same grid cell, so the button keeps its width while it reads "Adding…" (as WizardNavFooter). */}
-            <span className="grid">
-              <span aria-hidden="true" data-reserve="Add agreement shifts" className="invisible col-start-1 row-start-1 before:content-[attr(data-reserve)]" />
-              <span className="col-start-1 row-start-1">{addingAgreementShifts ? 'Adding…' : 'Add agreement shifts'}</span>
-            </span>
-          </Button>
-        )}
-        {canWrite && (
-          // One primary per page: New shift steps back while Start or Publish week is the page's.
-          <Button size="md" variant={newShiftSecondary ? 'secondary' : 'primary'} onClick={onNewShift}>
-            <Plus className="h-4 w-4" /> New shift
-          </Button>
-        )}
-        </div>
+        {/* Phone width only: the page hands the actions that do not fit the title row (Next 8 weeks, exceptions) to this last row. */}
+        {trailing}
       </div>
     </div>
   )

@@ -19,12 +19,10 @@ describe('the Start, banner and guard copy (2026-10-16)', () => {
     expect(bannerTitle(128)).toBe('128 shifts not visible to staff yet')
   })
 
-  it('bannerBlockedLine: nothing when none is blocked; some, all, singular and plural', () => {
-    expect(bannerBlockedLine(12, 0)).toBeNull()
-    expect(bannerBlockedLine(12, 2)).toBe("2 of them can't be published until the worker changes: a rule that can't be overridden blocks them.")
-    expect(bannerBlockedLine(12, 1)).toBe("1 of them can't be published until the worker changes: a rule that can't be overridden blocks it.")
-    expect(bannerBlockedLine(3, 3)).toBe("They can't be published until the worker changes: a rule that can't be overridden blocks them.")
-    expect(bannerBlockedLine(1, 1)).toBe("It can't be published until the worker changes: a rule that can't be overridden blocks it.")
+  it('bannerBlockedLine: nothing when none is blocked; one line with the count, singular and plural', () => {
+    expect(bannerBlockedLine(0)).toBeNull()
+    expect(bannerBlockedLine(1)).toBe("1 can't be published until its worker changes.")
+    expect(bannerBlockedLine(2)).toBe("2 can't be published until their workers change.")
   })
 
   it('leaveMessage', () => {
