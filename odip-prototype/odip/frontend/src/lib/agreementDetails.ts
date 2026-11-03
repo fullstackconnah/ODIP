@@ -16,6 +16,8 @@ export const withoutControlCharacters = (text: string) => text.replace(/[\t\r\n]
 export type Details = {
   state: AgreementState
   zone: PlanPriceZone
+  /** The participant's MM level when the agreement's blocks carry it (a new agreement's default, or a saved block's own); stamped only while it agrees with `zone`. */
+  mm?: number
   agreementStartDate: string
   agreementEndDate: string
   /** Ongoing: the end follows the NDIS plan end, so the agreement runs until the plan is renewed. */

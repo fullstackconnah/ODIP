@@ -11,6 +11,7 @@ import { writtenDay, writtenSpan } from '@/lib/fundingPlan'
 import { STATES, ZONES, withoutControlCharacters, type Details } from '@/lib/agreementDetails'
 import { parseDateOnly } from '@/lib/dateOnly'
 import { PRICING_FIRST_YEAR, PRICING_LAST_YEAR, addDays, addMonths } from '@/lib/planQuote'
+import { zoneOfMm } from '@/lib/planBlocks'
 
 /** The years the pricing engine answers for, as the bounds of every date box (a box that is left to run takes a year with six digits). */
 const DATE_MIN = `${PRICING_FIRST_YEAR}-01-01`
@@ -128,7 +129,7 @@ export function AgreementStep({ details, onEdit, recorded, plan, errors, readOnl
           <summary className="flex min-h-[var(--control-h)] cursor-pointer select-none items-center justify-between px-3 font-medium">More<ChevronDown className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" aria-hidden="true" /></summary>
           <div className="border-t border-[var(--color-border)] p-3">
             <div className={formGrid}>
-              <FormField label="Price zone" className={span.medium} hint="Where the supports are delivered. Remote and very remote add the NDIS loading.">
+              <FormField label="Price zone" className={span.medium} hint={`Where the supports are delivered. Remote and very remote add the NDIS loading.${details.mm !== undefined && zoneOfMm(details.mm) === details.zone ? " Set from the participant's remoteness (MM level)." : ''}`}>
                 <select value={details.zone} onChange={event => onEdit({ zone: event.target.value as PlanPriceZone })}>{ZONES.map(zone => <option key={zone.value} value={zone.value}>{zone.label}</option>)}</select>
               </FormField>
             </div>

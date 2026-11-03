@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { PlanBlock } from '@/api/types'
 import {
   blockProblems, canOfferSleepover, clock, daysSummary, defaultSleepoverWindow, durationMinutes, emptyBlock, endsNextDay, forTheServer, fromClock,
-  needsSleepoverWindow, normaliseBlock, offeredSupportTypes, registrationGroupFor, stampLocation, toMinutes, toWireTime,
+  needsSleepoverWindow, normaliseBlock, offeredSupportTypes, registrationGroupFor, stampLocation, toMinutes, zoneOfMm, toWireTime,
 } from './planBlocks'
 import { PLAN_TEMPLATES } from './planTemplates'
 
@@ -189,6 +189,16 @@ describe('normaliseBlock', () => {
 describe('blocks as the plan keeps them', () => {
   it('puts the agreement\'s delivery location on a block, whatever it carried', () => {
     expect(stampLocation(block(), 'VIC', 'Remote').location).toEqual({ state: 'VIC', zone: 'Remote' })
+  })
+
+  it("carries the participant's MM level when it agrees with the zone, and drops it when the coordinator chose another zone", () => {
+    expect(stampLocation(block(), 'VIC', 'National', 5).location).toEqual({ state: 'VIC', zone: 'National', mm: 5 })
+    expect(stampLocation(block(), 'VIC', 'Remote', 5).location).toEqual({ state: 'VIC', zone: 'Remote' })
+    expect(stampLocation(block(), 'VIC', 'National').location).toEqual({ state: 'VIC', zone: 'National' })
+  })
+
+  it('reads the MM level as the price zone the server reads it as (ProviderTravelRule.LocationOf)', () => {
+    expect([1, 3, 4, 5, 6, 7].map(zoneOfMm)).toEqual(['National', 'National', 'National', 'National', 'Remote', 'VeryRemote'])
   })
 })
 
