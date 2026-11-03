@@ -45,6 +45,8 @@ public class RestrictivePractice : ITenantEntity
     public DateOnly? ReportingFromMonth { get; set; }
     /// <summary>Whether this restraint needs reporting to the NDIS Commission; null until answered.</summary>
     public bool? RequiresReporting { get; set; }
+    /// <summary>The ID the NDIS Commission portal gave this practice or its behaviour support plan; optional, entered when the entry is edited.</summary>
+    public string? CommissionReference { get; set; }
 
     /// <summary>
     /// Only meaningful when <see cref="Type"/> is <see cref="RestrictivePracticeType.ChemicalRestraint"/> —

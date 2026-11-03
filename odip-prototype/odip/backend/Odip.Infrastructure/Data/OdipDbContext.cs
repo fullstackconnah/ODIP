@@ -697,6 +697,12 @@ public class OdipDbContext : DbContext
             e.HasKey(i => i.Id);
             e.Property(i => i.Title).HasMaxLength(300).IsRequired();
             e.Property(i => i.ReportableClassReason).HasMaxLength(500);
+            e.Property(i => i.PoliceOfficerName).HasMaxLength(100);
+            e.Property(i => i.AmbulanceOfficerName).HasMaxLength(100);
+            e.Property(i => i.FireOfficerName).HasMaxLength(100);
+            e.Property(i => i.PoliceReference).HasMaxLength(50);
+            e.Property(i => i.AmbulanceReference).HasMaxLength(50);
+            e.Property(i => i.FireReference).HasMaxLength(50);
 
             e.HasOne(i => i.TripInstance).WithMany(t => t.IncidentReports).HasForeignKey(i => i.TripInstanceId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(i => i.InvolvedParticipant).WithMany().HasForeignKey(i => i.InvolvedParticipantId);
@@ -1907,6 +1913,7 @@ public class OdipDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Description).HasMaxLength(2000).IsRequired();
             entity.Property(e => e.AuthorisedBy).HasMaxLength(200);
+            entity.Property(e => e.CommissionReference).HasMaxLength(50);
             // The version a save must still match: the PUT answers 409 if the entry changed since the form loaded it.
             entity.Property(e => e.UpdatedAt).IsConcurrencyToken();
 

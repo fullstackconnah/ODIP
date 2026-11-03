@@ -58,6 +58,33 @@ public class IncidentClockPostgresTests : IClassFixture<PostgresFixture>
     }
 
     [SkippableFact]
+    public async Task T_PG3_EmergencyServices_AndTheCommissionReference_SaveAndReadBackOverNpgsql()
+    {
+        Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
+        var (db, tenantId) = await _pg.NewTenantContextAsync();
+        await using var _ = db;
+        var reporter = Reporter(tenantId);
+        var row = Row(tenantId, reporter.Id, "Services", QscReportingStatus.NotRequired, DateTime.UtcNow);
+        row.IncidentType = IncidentType.SexualAbuse;
+        row.WereEmergencyServicesCalled = true;
+        row.EmergencyServices = EmergencyService.Police | EmergencyService.Fire;
+        row.PoliceOfficerName = "Sgt Jane Doe";
+        row.FireReference = "F-77";
+        var practice = new RestrictivePractice { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = Guid.NewGuid(), Type = RestrictivePracticeType.Seclusion, Description = "d", IsActive = true, CommissionReference = "QA-123" };
+        var participant = new Participant { Id = practice.ParticipantId, TenantId = tenantId, FirstName = "Sophie", LastName = "Brown", IsActive = true };
+        db.AddRange(reporter, row, participant, practice);
+        await db.SaveChangesAsync(Ct);
+
+        await using var check = PostgresFixture.NewContext(_pg.ConnectionString);
+        var saved = await check.IncidentReports.IgnoreQueryFilters().SingleAsync(i => i.Id == row.Id, Ct);
+        Assert.Equal(IncidentType.SexualAbuse, saved.IncidentType);
+        Assert.Equal(EmergencyService.Police | EmergencyService.Fire, saved.EmergencyServices);
+        Assert.Equal("Sgt Jane Doe", saved.PoliceOfficerName);
+        Assert.Equal("F-77", saved.FireReference);
+        Assert.Equal("QA-123", (await check.RestrictivePractices.IgnoreQueryFilters().SingleAsync(p => p.Id == practice.Id, Ct)).CommissionReference);
+    }
+
+    [SkippableFact]
     public async Task T_PG2_TheBackfill_KeepsOpenRequiredRowsOverdue_GivesReportedRowsAClass_AndLeavesPendingAlone_AndIsSafeToRunTwice()
     {
         Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");

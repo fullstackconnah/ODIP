@@ -142,6 +142,22 @@ public class RestraintRegisterSyncTests
     }
 
     [Fact]
+    public async Task UpdateMedication_LeavesTheEntrysCommissionReferenceAlone()
+    {
+        var (db, tenant) = CreateDb();
+        var p = SeedParticipant(db);
+        var c = new MedicationsController(db, tenant);
+        var med = await CreateOkAsync(c, p.Id, RestraintDto(true, "Dr Chen", AuthDate));
+        var entry = await db.RestrictivePractices.SingleAsync();
+        entry.CommissionReference = "NDIS-RP-9";
+        db.SaveChanges();
+
+        await UpdateOkAsync(c, med.Id, AsUpdate(RestraintDto(true, "Dr Chen", AuthDate.AddDays(60))));
+
+        Assert.Equal("NDIS-RP-9", (await db.RestrictivePractices.SingleAsync()).CommissionReference);
+    }
+
+    [Fact]
     public async Task CreateMedication_NotAuthorisedReportYes_FlagsUnauthorisedAndReportable()
     {
         var (db, tenant) = CreateDb();
