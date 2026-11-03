@@ -421,6 +421,16 @@ export function DataTable<T>({
     }
   }, [visibleColumns.length, sortedData.length])
 
+  // A press that reaches the edge unmounts its own cue; keyboard focus would fall to body. Hand it to the opposite cue once that renders.
+  const pressedCue = useRef<1 | -1 | null>(null)
+  useEffect(() => {
+    const pressed = pressedCue.current
+    if (pressed === null || (pressed === 1 ? edges.end : edges.start)) return
+    pressedCue.current = null
+    if (document.activeElement && document.activeElement !== document.body) return
+    scrollRef.current?.parentElement?.querySelector<HTMLElement>(`[data-scroll-cue="${-pressed}"]`)?.focus()
+  }, [edges.start, edges.end])
+
   function handleSort(key: string) {
     if (!canSort) return
     const col = columns.find(c => c.key === key)
@@ -738,27 +748,31 @@ export function DataTable<T>({
         </div>
       )}
     </div>
-      {edges.end && <span data-edge-fade="end" aria-hidden="true" style={{ right: edges.endPin }} className="pointer-events-none absolute inset-y-0 w-12 max-md:hidden bg-[linear-gradient(to_right,transparent,var(--color-card))]" />}
-      {edges.start && <span data-edge-fade="start" aria-hidden="true" style={{ left: edges.startPin }} className="pointer-events-none absolute inset-y-0 w-12 max-md:hidden bg-[linear-gradient(to_left,transparent,var(--color-card))]" />}
+      {edges.end && <span data-edge-fade="end" aria-hidden="true" style={{ right: edges.endPin }} className="pointer-events-none absolute inset-y-0 z-[1] w-12 max-md:hidden bg-[linear-gradient(to_right,transparent,var(--color-card))]" />}
+      {edges.start && <span data-edge-fade="start" aria-hidden="true" style={{ left: edges.startPin }} className="pointer-events-none absolute inset-y-0 z-[1] w-12 max-md:hidden bg-[linear-gradient(to_left,transparent,var(--color-card))]" />}
       {/* The fade says there is more; the chevron is the way there for a mouse, a finger or the keyboard. It sits in the header row, inside the fade. */}
-      {edges.end && <ScrollCue direction={1} style={{ right: edges.endPin + 4 }} box={scrollRef} />}
-      {edges.start && <ScrollCue direction={-1} style={{ left: edges.startPin + 4 }} box={scrollRef} />}
+      {edges.end && <ScrollCue direction={1} style={{ right: edges.endPin + 4 }} box={scrollRef} pressedRef={pressedCue} />}
+      {edges.start && <ScrollCue direction={-1} style={{ left: edges.startPin + 4 }} box={scrollRef} pressedRef={pressedCue} />}
     </div>
   )
 }
 
 /** One press moves the box 80% of its width toward the hidden columns; instantly under prefers-reduced-motion. */
-function ScrollCue({ direction, style, box }: { direction: 1 | -1; style: CSSProperties; box: RefObject<HTMLDivElement | null> }) {
+function ScrollCue({ direction, style, box, pressedRef }: { direction: 1 | -1; style: CSSProperties; box: RefObject<HTMLDivElement | null>; pressedRef: RefObject<1 | -1 | null> }) {
   const scroll = () => {
+    pressedRef.current = direction
     const el = box.current
     if (!el) return
     const reduced = typeof window.matchMedia !== 'function' || window.matchMedia('(prefers-reduced-motion: reduce)').matches
     el.scrollBy({ left: direction * el.clientWidth * 0.8, behavior: reduced ? 'auto' : 'smooth' })
   }
   return (
-    <Button variant="ghost" size="sm" iconOnly onClick={scroll} style={style} aria-label={direction === 1 ? 'Show more columns' : 'Show earlier columns'} className="absolute top-[calc(var(--table-head-h)/2-0.75rem)] z-10 max-md:hidden rounded-full bg-[var(--color-card)] shadow-sm">
-      {direction === 1 ? <ChevronRight className="w-4 h-4" aria-hidden="true" /> : <ChevronLeft className="w-4 h-4" aria-hidden="true" />}
-    </Button>
+    // The wrapper takes the position: a Button is `relative` (its tap area) and would win over `absolute`, dropping the cue below the table.
+    <span style={style} className="absolute top-[calc(var(--table-head-h)/2_-_0.75rem)] z-10 flex max-md:hidden">
+      <Button variant="ghost" size="sm" iconOnly onClick={scroll} data-scroll-cue={direction} aria-label={direction === 1 ? 'Show more columns' : 'Show earlier columns'} className="rounded-full bg-[var(--color-card)] shadow-sm">
+        {direction === 1 ? <ChevronRight className="w-4 h-4" aria-hidden="true" /> : <ChevronLeft className="w-4 h-4" aria-hidden="true" />}
+      </Button>
+    </span>
   )
 }
 

@@ -7,16 +7,14 @@ import type { TripListDto } from '@/api/types'
 import { TAP_AREA } from '@/components/tapArea'
 import { TONE, TRIP_STATUS_LABELS } from '@/lib/tone'
 
-const { mockUseTrips, mockUseTrip, mockPatchMutate } = vi.hoisted(() => ({
+const { mockUseTrips, mockUseTrip } = vi.hoisted(() => ({
   mockUseTrips: vi.fn(),
   mockUseTrip: vi.fn(),
-  mockPatchMutate: vi.fn(),
 }))
 
 vi.mock('@/api/hooks', () => ({
   useTrips: mockUseTrips,
   useTrip: mockUseTrip,
-  usePatchTrip: () => ({ mutate: mockPatchMutate, isPending: false }),
 }))
 
 // The edit modal has its own suite; a stub is enough to prove the pencil opens it.

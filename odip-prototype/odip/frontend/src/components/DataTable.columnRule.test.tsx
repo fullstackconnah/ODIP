@@ -227,6 +227,30 @@ describe('DataTable — the edge cue (a fade where content is cut off)', () => {
     expect(scrollBy).toHaveBeenCalledWith({ left: -400, behavior: 'auto' })
   })
 
+  it('keeps keyboard focus when the press reaches the edge and its button goes: focus moves to the opposite cue', () => {
+    const { container } = render(<DataTable data={items} columns={columns} keyField="id" />)
+    scrollBox(container, { scrollLeft: 0, clientWidth: 500, scrollWidth: 900 })
+    const box = container.querySelector('table')!.parentElement as HTMLElement
+    box.scrollBy = vi.fn() as unknown as typeof box.scrollBy
+    const more = screen.getByRole('button', { name: 'Show more columns' })
+    act(() => { more.focus(); more.click() })
+    scrollBox(container, { scrollLeft: 400, clientWidth: 500, scrollWidth: 900 })
+    expect(screen.queryByRole('button', { name: 'Show more columns' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Show earlier columns' })).toHaveFocus()
+  })
+
+  it('draws the start fade above the scrolling cells and below the pinned column', () => {
+    const { container } = render(<DataTable data={items} columns={columns} keyField="id" />)
+    scrollBox(container, { scrollLeft: 400, clientWidth: 500, scrollWidth: 900 })
+    expect(fade(container, 'start')).toHaveClass('z-[1]', 'w-12')
+  })
+
+  it('anchors the cue to the header row centre: its own wrapper is absolute (a Button is relative), with a calc Tailwind can read', () => {
+    const { container } = render(<DataTable data={items} columns={columns} keyField="id" />)
+    scrollBox(container, { scrollLeft: 0, clientWidth: 500, scrollWidth: 900 })
+    expect(screen.getByRole('button', { name: 'Show more columns' }).parentElement!.className).toContain('top-[calc(var(--table-head-h)/2_-_0.75rem)]')
+  })
+
   it('sits at the box edge when nothing is pinned to that side', () => {
     const unpinned: Column<Item>[] = [{ key: 'a', header: 'A', pin: false }, { key: 'b', header: 'B' }]
     const { container } = render(<DataTable data={items} columns={unpinned} keyField="id" />)

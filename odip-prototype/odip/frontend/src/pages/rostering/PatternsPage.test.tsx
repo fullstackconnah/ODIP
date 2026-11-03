@@ -8,14 +8,15 @@ import { MemoryRouter } from 'react-router-dom'
 // Activating and deactivating a pattern is a PUT the readiness gate can refuse. In Enforce mode the API answers 400
 // "Participant is not ready for booking or rostering."; the page used to swallow it (the activate had no error handler at all and
 // the deactivate was an unhandled rejection), so the click simply seemed to do nothing.
-const { mockUsePatterns, mockUpdateMutate, mockUpdateMutateAsync } = vi.hoisted(() => ({
+const { mockUsePatterns, mockUpdateMutate, mockUpdateMutateAsync, permissions } = vi.hoisted(() => ({
+  permissions: { canWrite: true },
   mockUsePatterns: vi.fn(),
   mockUpdateMutate: vi.fn(),
   mockUpdateMutateAsync: vi.fn(),
 }))
 
 vi.mock('@/lib/permissions', () => ({
-  usePermissions: () => ({ canWrite: true }),
+  usePermissions: () => permissions,
 }))
 
 // The slide-over and the generate dialog (both mounted by the page, closed) call these hooks on every render.
@@ -78,6 +79,7 @@ function badRequest(...errors: string[]) {
 }
 
 beforeEach(() => {
+  permissions.canWrite = true
   mockUsePatterns.mockReset()
   mockUpdateMutate.mockReset()
   mockUpdateMutateAsync.mockReset()
@@ -339,6 +341,15 @@ describe('PatternsPage — row actions keep their touch areas apart', () => {
     const actions = screen.getByRole('button', { name: /^Edit / }).parentElement!
     expect(actions).toHaveClass('pointer-coarse:gap-2')
     expect(within(actions).getAllByRole('button')).toHaveLength(3)
+  })
+
+  it('gives a read-only user no row menu and no Generate shifts', () => {
+    permissions.canWrite = false
+    mockUsePatterns.mockReturnValue({ data: [makePattern()], isLoading: false, isError: false, refetch: vi.fn() })
+    render(<MemoryRouter><PatternsPage /></MemoryRouter>)
+
+    expect(screen.queryByRole('button', { name: /^More actions/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Generate shifts/ })).toBeNull()
   })
 
   it('keeps Generate shifts in the menu, disabled with its reason, for an inactive pattern', () => {
