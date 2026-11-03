@@ -141,6 +141,17 @@ describe('StaffDetailPage — header', () => {
     expect(screen.queryByText(/Casual/)).not.toBeInTheDocument()
   })
 
+  it('shows the goal hours on the header line only when set', () => {
+    mockUseStaffOverview.mockReturnValue({ data: makeOverview({ staff: makeStaff({ goalWeeklyHours: 38 }) }), isLoading: false })
+    const { unmount } = renderAt('staff-1')
+    expect(screen.getByText(/Goal 38 h a week/)).toBeInTheDocument()
+    unmount()
+
+    mockUseStaffOverview.mockReturnValue({ data: makeOverview({ staff: makeStaff({ goalWeeklyHours: null }) }), isLoading: false })
+    renderAt('staff-1')
+    expect(screen.queryByText(/Goal \d+ h a week/)).not.toBeInTheDocument()
+  })
+
   it('starts the meta row at the region, with no stray leading separator, when the staff member has no position', () => {
     mockUseStaffOverview.mockReturnValue({ data: makeOverview({ staff: makeStaff({ position: undefined }) }), isLoading: false })
     renderAt('staff-1')

@@ -19,12 +19,9 @@ export const alreadyInWeekLine = (n: number) => `${plural(n, 'shift')} already i
 
 export const bannerTitle = (n: number) => `${plural(n, 'shift')} not visible to staff yet`
 
-/** The banner's body: only when some drafts can't be published. All of them blocked opens "They" (or "It"). */
-export function bannerBlockedLine(n: number, blocked: number): string | null {
-  if (blocked === 0) return null
-  const who = blocked === n ? either(n, 'It', 'They') : `${blocked} of them`
-  return `${who} can't be published until the worker changes: a rule that can't be overridden blocks ${either(blocked, 'it', 'them')}.`
-}
+/** The status line's body: only when some drafts can't be published (a rule that can't be overridden blocks them). */
+export const bannerBlockedLine = (blocked: number): string | null =>
+  blocked === 0 ? null : `${blocked} ${either(blocked, "can't be published until its worker changes.", "can't be published until their workers change.")}`
 
 export const leaveMessage = (n: number, span: string) =>
   `${plural(n, 'shift')} in ${span} ${either(n, "isn't", "aren't")} visible to staff yet. ${either(n, 'It stays saved as a draft', 'They stay saved as drafts')} until you publish the week.`

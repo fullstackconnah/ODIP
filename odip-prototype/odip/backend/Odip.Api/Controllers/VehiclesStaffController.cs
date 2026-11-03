@@ -390,7 +390,7 @@ public class StaffController : ControllerBase
         HasSignedIn = s.LastLoginAt != null,
         Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
         FullName = (s.FirstName + " " + s.LastName).Trim(), Username = s.Username,
-        Role = s.Role, Position = s.Position ?? Position.SupportWorker, EmploymentType = s.EmploymentType, Email = s.Email,
+        Role = s.Role, Position = s.Position ?? Position.SupportWorker, EmploymentType = s.EmploymentType, GoalWeeklyHours = s.GoalWeeklyHours, Email = s.Email,
         Mobile = s.Mobile, Region = s.Region, IsDriverEligible = s.IsDriverEligible,
         IsFirstAidQualified = s.IsFirstAidQualified, IsMedicationCompetent = s.IsMedicationCompetent,
         IsManualHandlingCompetent = s.IsManualHandlingCompetent, IsOvernightEligible = s.IsOvernightEligible,
@@ -442,7 +442,7 @@ public class StaffController : ControllerBase
             {
                 Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
                 FullName = (s.FirstName + " " + s.LastName).Trim(), Username = s.Username,
-                Role = s.Role, Position = s.Position ?? Position.SupportWorker, EmploymentType = s.EmploymentType, Email = s.Email,
+                Role = s.Role, Position = s.Position ?? Position.SupportWorker, EmploymentType = s.EmploymentType, GoalWeeklyHours = s.GoalWeeklyHours, Email = s.Email,
                 Mobile = s.Mobile, Region = s.Region, IsDriverEligible = s.IsDriverEligible,
                 IsFirstAidQualified = s.IsFirstAidQualified, IsMedicationCompetent = s.IsMedicationCompetent,
                 IsManualHandlingCompetent = s.IsManualHandlingCompetent, IsOvernightEligible = s.IsOvernightEligible,
@@ -476,7 +476,7 @@ public class StaffController : ControllerBase
         {
             Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
             FullName = (s.FirstName + " " + s.LastName).Trim(), Username = s.Username,
-            Role = s.Role, Position = s.Position ?? Position.SupportWorker, EmploymentType = s.EmploymentType, Email = s.Email,
+            Role = s.Role, Position = s.Position ?? Position.SupportWorker, EmploymentType = s.EmploymentType, GoalWeeklyHours = s.GoalWeeklyHours, Email = s.Email,
             Mobile = s.Mobile, Region = s.Region, IsDriverEligible = s.IsDriverEligible,
             IsFirstAidQualified = s.IsFirstAidQualified, IsMedicationCompetent = s.IsMedicationCompetent,
             IsManualHandlingCompetent = s.IsManualHandlingCompetent, IsOvernightEligible = s.IsOvernightEligible,
@@ -499,6 +499,7 @@ public class StaffController : ControllerBase
         // A connected organisation's staff come from Employment Hero, the master list (EmploymentHeroStaffSync). The frontend hides the button; this is the rule.
         if (await EmploymentHeroStaffSync.IsConnectedAsync(_db, _currentTenant?.TenantId, ct))
             return Conflict(ApiResponse<StaffDetailDto>.Fail(EmploymentHeroStaffSync.StaffFromEmploymentHeroMessage));
+        if (dto.GoalHoursError() is { } goalError) return BadRequest(ApiResponse<StaffDetailDto>.Fail(goalError));
         var staged = await _staffCreator.StageAsync(dto, User, _currentTenant?.TenantId, ct);
         if (staged.IsConflict) return Conflict(ApiResponse<StaffDetailDto>.Fail(staged.Error!));
         if (staged.ErrorCode is { } code) return BadRequest(ApiResponse<StaffDetailDto>.Fail(staged.Error!, code));
@@ -510,7 +511,7 @@ public class StaffController : ControllerBase
         {
             Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
             FullName = s.FullName, Username = s.Username,
-            Role = s.Role, Position = s.Position ?? Position.SupportWorker, EmploymentType = s.EmploymentType, Email = s.Email,
+            Role = s.Role, Position = s.Position ?? Position.SupportWorker, EmploymentType = s.EmploymentType, GoalWeeklyHours = s.GoalWeeklyHours, Email = s.Email,
             Mobile = s.Mobile, Region = s.Region, IsDriverEligible = s.IsDriverEligible,
             IsFirstAidQualified = s.IsFirstAidQualified, IsMedicationCompetent = s.IsMedicationCompetent,
             IsManualHandlingCompetent = s.IsManualHandlingCompetent, IsOvernightEligible = s.IsOvernightEligible,
@@ -532,6 +533,7 @@ public class StaffController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(dto.Email))
             return BadRequest(ApiResponse<StaffDetailDto>.Fail("Email is required."));
+        if (dto.GoalHoursError() is { } goalError) return BadRequest(ApiResponse<StaffDetailDto>.Fail(goalError));
 
         var s = await _db.Users.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (s == null) return NotFound(ApiResponse<StaffDetailDto>.Fail("Staff not found"));
@@ -576,7 +578,7 @@ public class StaffController : ControllerBase
                 return BadRequest(ApiResponse<StaffDetailDto>.Fail(AddressConfirmation.Message(emailLower, rowTenantDomain), AddressConfirmation.Code));
         }
 
-        s.FirstName = dto.FirstName; s.LastName = dto.LastName; s.Position = dto.Position; s.EmploymentType = dto.EmploymentType; s.Role = dto.Role;
+        s.FirstName = dto.FirstName; s.LastName = dto.LastName; s.Position = dto.Position; s.EmploymentType = dto.EmploymentType; s.GoalWeeklyHours = dto.GoalWeeklyHours; s.Role = dto.Role;
         s.Email = emailLower; s.Mobile = dto.Mobile; s.Region = dto.Region;
         if (addressChanged) s.SignInAddressUnconfirmed = false;   // the form asked about an unusual address above: it is person-confirmed now
         s.IsDriverEligible = dto.IsDriverEligible; s.IsFirstAidQualified = dto.IsFirstAidQualified;
@@ -601,7 +603,7 @@ public class StaffController : ControllerBase
         {
             Id = s.Id, FirstName = s.FirstName, LastName = s.LastName,
             FullName = s.FullName, Username = s.Username,
-            Role = s.Role, Position = s.Position ?? Position.SupportWorker, EmploymentType = s.EmploymentType, Email = s.Email,
+            Role = s.Role, Position = s.Position ?? Position.SupportWorker, EmploymentType = s.EmploymentType, GoalWeeklyHours = s.GoalWeeklyHours, Email = s.Email,
             Mobile = s.Mobile, Region = s.Region, IsDriverEligible = s.IsDriverEligible,
             IsFirstAidQualified = s.IsFirstAidQualified, IsMedicationCompetent = s.IsMedicationCompetent,
             IsManualHandlingCompetent = s.IsManualHandlingCompetent, IsOvernightEligible = s.IsOvernightEligible,

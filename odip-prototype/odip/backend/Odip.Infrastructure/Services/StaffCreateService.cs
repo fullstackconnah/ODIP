@@ -68,7 +68,7 @@ public sealed class StaffCreateService
         {
             Id = Guid.NewGuid(), FirstName = dto.FirstName, LastName = dto.LastName,
             Username = username, Email = emailLower,
-            Role = dto.Role, Position = dto.Position, EmploymentType = dto.EmploymentType,
+            Role = dto.Role, Position = dto.Position, EmploymentType = dto.EmploymentType, GoalWeeklyHours = dto.GoalWeeklyHours,
             Mobile = dto.Mobile, Region = dto.Region,
             IsDriverEligible = dto.IsDriverEligible, IsFirstAidQualified = dto.IsFirstAidQualified,
             IsMedicationCompetent = dto.IsMedicationCompetent, IsManualHandlingCompetent = dto.IsManualHandlingCompetent,
