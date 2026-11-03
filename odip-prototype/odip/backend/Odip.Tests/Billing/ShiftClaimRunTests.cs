@@ -384,7 +384,7 @@ public class ShiftClaimRunTests
         DoneOn(kit, withNumber, Today.AddDays(-20)); DoneOn(kit, withNumber, Today.AddDays(-102));
         DoneOn(kit, noNumber, Today.AddDays(-31));   // priced out: no NDIS number
         kit.SeedShiftClaim(withNumber, TripClaimStatus.Draft, 480m, DoneOn(kit, withNumber, Today.AddDays(-22)));   // held by a live claim
-        DoneOn(kit, withNumber, Today.AddDays(-25), ShiftStatus.Published);
+        DoneOn(kit, withNumber, Today.AddDays(-25), ShiftStatus.Draft);
         DoneOn(kit, withNumber, Today.AddYears(-2).AddDays(-1));   // older than the NDIA pays
         kit.Db.SaveChanges();
 
@@ -422,12 +422,21 @@ public class ShiftClaimRunTests
         DoneOn(a, alex, Today.AddDays(-3)); DoneOn(a, alex, Today.AddDays(-4));
         DoneOn(a, alex, Today.AddDays(-30)); DoneOn(a, alex, Today.AddDays(-100));
         foreach (var d in new[] { 5, 6, 7 }) DoneOn(b, blake, Today.AddDays(-d));
-        foreach (var d in new[] { 20, 40, 95, 200 }) DoneOn(b, blake, Today.AddDays(-d));
+        foreach (var d in new[] { 20, 95, 200 }) DoneOn(b, blake, Today.AddDays(-d));
+        var held = DoneOn(b, blake, Today.AddDays(-40));
 
         var forA = await CountOlder(a);
         Assert.Equal((2, 2, 1), (forA.ShiftCount, forA.OlderShiftCount, forA.OverdueShiftCount));
         var forB = await CountOlder(b);
         Assert.Equal((3, 4, 2), (forB.ShiftCount, forB.OlderShiftCount, forB.OverdueShiftCount));
+        // A live claim on one of B's older shifts takes it out of B's count and leaves A's alone.
+        b.EnsureCommunityAccessCatalogue();
+        b.SeedShiftClaim(blake, TripClaimStatus.Draft, 480m, held);
+        b.Db.SaveChanges();
+        var afterClaim = await CountOlder(b);
+        Assert.Equal((3, 3, 2), (afterClaim.ShiftCount, afterClaim.OlderShiftCount, afterClaim.OverdueShiftCount));
+        var aAgain = await CountOlder(a);
+        Assert.Equal((2, 2, 1), (aAgain.ShiftCount, aAgain.OlderShiftCount, aAgain.OverdueShiftCount));
         // B's context asked for A's tenant sees nothing of A's.
         var cross = await CountOlder(b, a.TenantId);
         Assert.Equal((0, 0, 0), (cross.ShiftCount, cross.OlderShiftCount, cross.OverdueShiftCount));

@@ -596,6 +596,11 @@ describe('ClaimsHubPage: New claim', () => {
     expect(screen.getByTestId('where')).not.toHaveTextContent('from=')
     unmount()
 
+    // the closed link, opened afresh, shows no run
+    const closed = renderPage('/claims?tab=action')
+    expect(screen.queryByRole('dialog', { name: 'Claim run' })).toBeNull()
+    closed.unmount()
+
     renderPage('/claims?run=shifts&from=bad')
     expect(screen.getByTestId('run-from')).toHaveTextContent('default')
   })

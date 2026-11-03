@@ -28,6 +28,7 @@ public partial class ShiftClaimGenerationService
     public async Task<ShiftClaimWaitingDto> CountWaitingAsync(Guid tenantId, DateOnly from, DateOnly to, CancellationToken ct = default, DateOnly? olderFrom = null, DateOnly? overdueBefore = null)
     {
         // One query over the whole range, split in memory; distinct and min in memory too: Npgsql and Distinct.
+        // shortcut: reads two fields per unclaimed completed shift for two years in memory; move Distinct/Min to SQL if a tenant has thousands unclaimed
         var rows = await UnclaimedCompletedShifts(tenantId, olderFrom is { } o && o < from ? o : from, to).Select(s => new { s.ParticipantId, s.ServiceDate }).ToListAsync(ct);
         var recent = rows.Where(r => r.ServiceDate >= from).ToList();
         var older = rows.Where(r => r.ServiceDate < from).ToList();
