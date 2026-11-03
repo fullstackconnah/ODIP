@@ -24,7 +24,7 @@ import { plural } from '@/lib/format'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { usePermissions } from '@/lib/permissions'
 import { formatWithTimeZone } from '@/lib/utils'
-import { SUPPORT_LABEL, normaliseBlock, stampLocation } from '@/lib/planBlocks'
+import { SUPPORT_LABEL, normaliseBlock, stampLocation, zoneOfMm } from '@/lib/planBlocks'
 import { PRICING_FIRST_YEAR, PRICING_LAST_YEAR, addDays, conflictVersionOf, describeRenewError, describeSaveError, friendlyMessage, isPricingDate, planNeededMessageOf, type SaveFailure } from '@/lib/planQuote'
 import { ApprovalDialog } from './agreement/ApprovalDialog'
 import { PopulateDialog } from './agreement/PopulateDialog'
@@ -167,7 +167,7 @@ function DraftPage() {
       const loadedPlan = { start: newest.planStartDate, end: newest.planEndDate }
       const derived = recorded ?? { start: newest.agreementStartDate, end: newest.agreementEndDate }
       const next: Details = {
-        state: newest.state, zone: newest.blocks[0].block.location.zone, agreementStartDate: newest.agreementStartDate, agreementEndDate: newest.agreementEndDate, ongoing: !!newest.isOngoing,
+        state: newest.state, zone: newest.blocks[0].block.location.zone, mm: newest.blocks[0].block.location.mm, agreementStartDate: newest.agreementStartDate, agreementEndDate: newest.agreementEndDate, ongoing: !!newest.isOngoing,
         representative: newest.representative ?? '', planOverride: loadedPlan.start === derived.start && loadedPlan.end === derived.end ? null : loadedPlan,
       }
       const storedShifts = blocksToShifts(newest.blocks)
@@ -179,7 +179,9 @@ function DraftPage() {
       setVisited(new Set(STEPS.map(entry => entry.key)))
     } else {
       const fromParticipant = participant.data.addressState as AgreementState | null
-      const start: Details = { ...EMPTY_DETAILS, state: fromParticipant && STATES.includes(fromParticipant) ? fromParticipant : EMPTY_DETAILS.state, agreementStartDate: recorded?.start ?? '', agreementEndDate: recorded?.end ?? '' }
+      // A NEW agreement only: its zone starts from the participant's MM level, which the coordinator can still change.
+      const mm = participant.data.mmLevel ?? undefined
+      const start: Details = { ...EMPTY_DETAILS, state: fromParticipant && STATES.includes(fromParticipant) ? fromParticipant : EMPTY_DETAILS.state, zone: mm === undefined ? EMPTY_DETAILS.zone : zoneOfMm(mm), mm, agreementStartDate: recorded?.start ?? '', agreementEndDate: recorded?.end ?? '' }
       setDetails(start)
       setBaseline(snapshotOf(start, []))
     }
@@ -214,7 +216,7 @@ function DraftPage() {
   const limits = useMemo(() => engineLimits(shifts), [shifts])
 
   const pricing = useAgreementPricing({
-    participantId: participantId ?? '', shifts, state: details.state, zone: details.zone, from: details.agreementStartDate, to: end,
+    participantId: participantId ?? '', shifts, state: details.state, zone: details.zone, mm: details.mm, from: details.agreementStartDate, to: end,
     canQuote: canEdit, stored: newest?.pricing ? { period: newest.pricing, weekly: null, week: null } : undefined, onRecordBudget: recordBudget?.onSelect,
   })
   const issues = useMemo<AgreementIssue[]>(() => {
@@ -276,7 +278,7 @@ function DraftPage() {
     if (create.isPending || loadingNewest || readOnly || blocking.length > 0) return
     setFailure(null)
     setSaved(false)
-    const blocks = pricing.groups.map(group => ({ block: stampLocation(normaliseBlock(group.entry.block), details.state, details.zone), requirements: group.entry.requirements }))
+    const blocks = pricing.groups.map(group => ({ block: stampLocation(normaliseBlock(group.entry.block), details.state, details.zone, details.mm), requirements: group.entry.requirements }))
     const data: CreateServiceAgreementDraftDto = {
       planStartDate: plan.start, planEndDate: plan.end, agreementStartDate: details.agreementStartDate, agreementEndDate: end, isOngoing: details.ongoing || undefined,
       state: details.state, serviceTypes: [...new Set(blocks.map(entry => SUPPORT_LABEL[entry.block.supportType]))], representative: details.representative.trim() || undefined, baseVersion, blocks,

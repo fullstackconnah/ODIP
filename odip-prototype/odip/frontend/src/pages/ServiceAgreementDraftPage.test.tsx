@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import type { AgreementCheck, ServiceAgreementDraftDto } from '@/api/types'
@@ -25,7 +25,7 @@ vi.mock('@/api/hooks', () => ({
   useRenewAgreement: () => ({ mutate: renewMutate, isPending: false }),
   useServiceAgreementDraft: () => oldDraft(),
   useAgreementsEnding: (enabled?: boolean) => endingRows(enabled),
-  usePlanBudget: () => budget(),
+  usePlanBudget: (...args: unknown[]) => budget(...args),
   usePlanPeriodQuote: () => ({ data: undefined, isError: false, isFetching: false, failureCount: 0 }),
   useAgreementCheck: () => check(),
 }))
@@ -161,6 +161,64 @@ describe('ServiceAgreementDraftPage: the wizard', () => {
     await user.click(screen.getByRole('button', { name: 'Save agreement' }))
     const [request] = createMutate.mock.calls[0]
     expect(request.data).toMatchObject({ isOngoing: true, agreementEndDate: '2027-06-30' })
+  })
+
+  describe("the price zone of a new agreement starts from the participant's MM level", () => {
+    const withMm = (mmLevel: number | null) => participant.mockReturnValue({ data: { id: 'p-1', fullName: 'Marcus Tran', addressState: 'VIC', planType: 'PlanManaged', mmLevel }, isLoading: false, isError: false, refetch: vi.fn() })
+    const saved = async (user: ReturnType<typeof userEvent.setup>) => {
+      await toTheSaveStep(user)
+      await user.click(screen.getByRole('button', { name: 'Save agreement' }))
+      return createMutate.mock.calls[0][0].data.blocks[0].block.location
+    }
+
+    it.each([[5, 'National'], [6, 'Remote'], [7, 'VeryRemote']])('MM %i opens at the %s zone and saves its block with the level', async (mm, zone) => {
+      withMm(mm)
+      const user = userEvent.setup()
+      renderPage()
+      expect(screen.getByLabelText('Price zone')).toHaveValue(zone)
+      expect(await saved(user)).toEqual({ state: 'VIC', zone, mm })
+      // The quote is asked for the same location the block saves with (quote and claim agree).
+      await waitFor(() => {
+        const quoted = budget.mock.calls.map(call => call[0] as { location: unknown }[]).filter(blocks => blocks.length > 0).at(-1)
+        expect(quoted?.[0].location).toEqual({ state: 'VIC', zone, mm })
+      })
+    })
+
+    it('leaves a participant with no MM level as it is today', async () => {
+      withMm(null)
+      const user = userEvent.setup()
+      renderPage()
+      expect(screen.getByLabelText('Price zone')).toHaveValue('National')
+      expect(await saved(user)).toEqual({ state: 'VIC', zone: 'National' })
+    })
+
+    it('lets the coordinator choose another zone, and then sends no level', async () => {
+      withMm(5)
+      const user = userEvent.setup()
+      renderPage()
+      await user.selectOptions(screen.getByLabelText('Price zone'), 'Remote')
+      expect(await saved(user)).toEqual({ state: 'VIC', zone: 'Remote' })
+    })
+
+    it('does not touch a saved agreement: it keeps its own zone and sends no level it never had', async () => {
+      withMm(7)
+      drafts.mockReturnValue({ data: [draft()], isLoading: false, isError: false, refetch: refetchDrafts })
+      const user = userEvent.setup()
+      renderPage()
+      expect(screen.getByLabelText('Price zone')).toHaveValue('National')
+      await next(user); await next(user); await next(user)
+      await user.click(screen.getByRole('button', { name: /^Save/ }))
+      expect(createMutate.mock.calls[0][0].data.blocks[0].block.location).toEqual({ state: 'NSW', zone: 'National' })
+    })
+
+    it('keeps the level a saved block carries when it is saved again', async () => {
+      drafts.mockReturnValue({ data: [draft({ blocks: [draftBlock(mondayWednesday('b1', { onPublicHoliday: 'Charge', location: { state: 'NSW', zone: 'National', mm: 5 } }))] })], isLoading: false, isError: false, refetch: refetchDrafts })
+      const user = userEvent.setup()
+      renderPage()
+      await next(user); await next(user); await next(user)
+      await user.click(screen.getByRole('button', { name: /^Save/ }))
+      expect(createMutate.mock.calls[0][0].data.blocks[0].block.location).toEqual({ state: 'NSW', zone: 'National', mm: 5 })
+    })
   })
 
   it('files the plan under the dates the coordinator gave when they differ from the funding plan', async () => {

@@ -184,9 +184,13 @@ export function forTheServer(block: PlanBlock): PlanBlock {
 }
 
 /** What a block looks like on the wire for a given agreement: the delivery location is the agreement's, whatever the block carried, and every number is one the server can read. */
-export function stampLocation(block: PlanBlock, state: AgreementState, zone: PlanPriceZone): PlanBlock {
-  return { ...forTheServer(block), location: { state, zone } }
+export function stampLocation(block: PlanBlock, state: AgreementState, zone: PlanPriceZone, mm?: number): PlanBlock {
+  // The level goes only while it agrees with the zone: a coordinator who picks another zone has overruled it, and the server refuses a level that disagrees with its zone.
+  return { ...forTheServer(block), location: { state, zone, ...(mm !== undefined && zoneOfMm(mm) === zone && { mm }) } }
 }
+
+/** The price zone of a participant's MM level: the twin of the server's ProviderTravelRule.LocationOf (MM6 Remote, MM7 Very Remote, the rest National). Keep the two in step. */
+export const zoneOfMm = (mm: number): PlanPriceZone => (mm >= 7 ? 'VeryRemote' : mm === 6 ? 'Remote' : 'National')
 
 // ── What is wrong with a block ────────────────────────────────────────────────
 
