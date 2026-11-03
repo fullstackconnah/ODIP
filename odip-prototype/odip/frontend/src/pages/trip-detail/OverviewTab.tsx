@@ -23,7 +23,9 @@ interface OverviewTabProps {
 const SHOWN = 2
 
 // A value that is missing, or only zeros, is "not recorded": FactList (hideEmpty) names it in the foot line.
-const joined = (parts: (string | number | false | null | undefined)[]) => parts.filter(Boolean).join(' · ') || null
+// A leading count (or "min 3") is glued to its noun with NBSP, so a figure never strands at a line end; " · " stays the only break.
+const glue = (s: string | number) => String(s).replace(/^(min )?(\d+) /, (_, min, n) => `${min ? 'min\u00A0' : ''}${n}\u00A0`)
+const joined = (parts: (string | number | false | null | undefined)[]) => parts.filter(Boolean).map(p => glue(p as string | number)).join(' · ') || null
 const count = (n: number | null | undefined, singular: string) => (n ? plural(n, singular) : null)
 
 export default function OverviewTab({ tripId, trip, bookings, accommodation, vehicles, onSwitchTab }: OverviewTabProps) {
@@ -43,7 +45,7 @@ export default function OverviewTab({ tripId, trip, bookings, accommodation, veh
   const payments = PAYMENT_STATUS_ITEMS
     .map(({ value, label }) => ({ label, n: bookings.filter(b => ((b.paymentStatus as string) || 'NotInvoiced') === value).length }))
     .filter(p => p.n > 0)
-    .map(p => `${p.n} ${p.label.toLowerCase()}`)
+    .map(p => glue(`${p.n} ${p.label.toLowerCase()}`))
 
   const items: FactListItem[] = [
     { label: 'Lead coordinator', value: trip.leadCoordinatorName },

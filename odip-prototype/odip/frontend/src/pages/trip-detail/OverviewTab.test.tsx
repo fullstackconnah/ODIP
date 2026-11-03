@@ -56,6 +56,15 @@ describe('OverviewTab — Trip facts', () => {
     expect(facts.queryByText('WC')).not.toBeInTheDocument()
   })
 
+  it('keeps each count with its noun, so a figure never strands at a line end', () => {
+    renderTab()
+    const facts = within(screen.getByRole('heading', { name: 'Trip facts' }).closest('section') as HTMLElement)
+    const valueOf = (label: string) => facts.getByText(label).nextElementSibling as HTMLElement
+    expect(valueOf('Support needs').textContent).toBe('2 high support · 2 overnight · 1 wheelchair')
+    expect(valueOf('Requirements').textContent).toContain('6 beds · 3 bedrooms')
+    expect(valueOf('Requirements').textContent).toContain('min 4 staff · min 3 participants')
+    expect(valueOf('Vehicles').textContent).toContain('8 seats · 2 wheelchair positions')
+  })
   it('shows the first stay and the first two vehicles, then "+n more" buttons that open Stay and transport', async () => {
     const user = userEvent.setup()
     const onSwitchTab = renderTab()
