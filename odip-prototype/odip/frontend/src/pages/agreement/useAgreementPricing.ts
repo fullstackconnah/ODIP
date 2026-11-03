@@ -12,6 +12,7 @@ type Args = {
   shifts: readonly Shift[]
   state: AgreementState
   zone: PlanPriceZone
+  mm?: number
   from: string
   to: string
   /** False for a person who only reads: nothing is quoted and the stored answer (if any) is what the screen shows. */
@@ -27,16 +28,16 @@ type Args = {
  * quotes one after the other so they never pass the organisation's limit of two in flight), and the answer is read back in shifts. A shift with something missing is left out of the quote and
  * counted. Nothing here decides whether anything can be saved: that is the engine's refusals, listed in `refused`.
  */
-export function useAgreementPricing({ participantId, shifts, state, zone, from, to, canQuote, stored, onRecordBudget }: Args) {
+export function useAgreementPricing({ participantId, shifts, state, zone, mm, from, to, canQuote, stored, onRecordBudget }: Args) {
   const settings = usePlanPricingSettings(canQuote).data
   const groups = useMemo(() => groupShifts(shifts), [shifts])
   const { quoted, leftOut } = useMemo(() => {
     const complete = groups.filter(group => blockProblems(group.entry.block).length === 0)
     return {
-      quoted: complete.map(group => stampLocation(group.entry.block, state, zone)),
+      quoted: complete.map(group => stampLocation(group.entry.block, state, zone, mm)),
       leftOut: groups.filter(group => !complete.includes(group)).reduce((sum, group) => sum + group.shiftIds.length, 0),
     }
-  }, [groups, state, zone])
+  }, [groups, state, zone, mm])
   const settled = useDebouncedValue(quoted)
   const settling = JSON.stringify(settled) !== JSON.stringify(quoted)
   const budget = usePlanBudget(settled, from, to, canQuote && settled.length > 0)
