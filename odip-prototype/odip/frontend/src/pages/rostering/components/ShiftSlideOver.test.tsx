@@ -582,7 +582,7 @@ describe('ShiftSlideOver staff compatibility (task 6d)', () => {
     expect(screen.getByText('Preferred for this participant')).toBeInTheDocument()
   })
 
-  it('sinks an Excluded staff member to the bottom of the Staff dropdown, with a warning label', async () => {
+  it('sinks an Excluded staff member to the bottom of the Staff dropdown, greyed out, with a "can’t be rostered" label', async () => {
     const user = userEvent.setup()
     mockUseCompatibility.mockReturnValue({
       data: [makeCompatibilityRow({ staffId: 'staff-1', staffName: 'Alex Rivera', level: 'Excluded' })],
@@ -603,10 +603,34 @@ describe('ShiftSlideOver staff compatibility (task 6d)', () => {
     const options = screen.getAllByRole('option')
     const labels = options.map(o => o.textContent)
     expect(labels.findIndex(l => l?.includes('Jordan Smith'))).toBeLessThan(labels.findIndex(l => l?.includes('Alex Rivera')))
-    expect(screen.getByText('Not compatible with this participant')).toBeInTheDocument()
+    expect(screen.getByText('Can’t be rostered: marked No for this participant')).toBeInTheDocument()
+    // A worker marked No can't be picked (R8): the option is disabled.
+    expect(options.find(o => o.textContent?.includes('Alex Rivera'))).toHaveAttribute('aria-disabled', 'true')
+    expect(options.find(o => o.textContent?.includes('Jordan Smith'))).not.toHaveAttribute('aria-disabled')
   })
 
-  it('shows a non-blocking warning when the currently selected staff member is marked Excluded', () => {
+  it('keeps the Excluded worker who already holds the shift pickable, so the field still shows them', async () => {
+    const user = userEvent.setup()
+    mockUseCompatibility.mockReturnValue({
+      data: [makeCompatibilityRow({ staffId: 'staff-1', staffName: 'Alex Rivera', level: 'Excluded' })],
+    })
+    // Default makeShift() staffId is staff-1 (Alex Rivera).
+    render(
+      <ShiftSlideOver
+        target={{ mode: 'edit', shift: makeShift({ findings: [] }) }}
+        onClose={noop}
+        canWrite
+        participantOptions={participantOptions}
+        staffOptions={twoStaffOptions}
+      />,
+    )
+
+    await user.click(screen.getByLabelText('Staff'))
+
+    expect(screen.getAllByRole('option').find(o => o.textContent?.includes('Alex Rivera'))).not.toHaveAttribute('aria-disabled')
+  })
+
+  it('says a selected Excluded staff member can’t be rostered', () => {
     mockUseCompatibility.mockReturnValue({
       data: [makeCompatibilityRow({ staffId: 'staff-1', staffName: 'Alex Rivera', level: 'Excluded' })],
     })
@@ -622,12 +646,9 @@ describe('ShiftSlideOver staff compatibility (task 6d)', () => {
       />,
     )
 
-    // role="status" (polite), not "alert" (assertive) — this is non-blocking, informational
-    // context, not a save-blocking error, so it shouldn't interrupt like the Blocking-finding alert does.
-    expect(screen.getByRole('status')).toHaveTextContent(/alex rivera is marked not compatible with this participant/i)
-    expect(screen.getByRole('status')).toHaveTextContent(/you can still save this shift/i)
-    // Non-blocking: no Blocking/Warning findings present, so Save stays enabled.
-    expect(screen.getByRole('button', { name: /^save$/i })).not.toBeDisabled()
+    // role="status" (polite), not "alert" (assertive): the server's Blocking finding is the assertive one.
+    expect(screen.getByRole('status')).toHaveTextContent(/alex rivera is marked no for this participant, so they can’t be rostered/i)
+    expect(screen.getByRole('status')).toHaveTextContent(/choose another worker or leave the shift unassigned/i)
   })
 
   it('includes the exclusion reason in the warning when one is recorded on the compatibility row', () => {
@@ -682,7 +703,7 @@ describe('ShiftSlideOver staff compatibility (task 6d)', () => {
     )
 
     expect(screen.queryByText(/preferred staff member/i)).not.toBeInTheDocument()
-    expect(screen.queryByText(/not compatible with this participant/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/can.t be rostered/i)).not.toBeInTheDocument()
   })
 
   it('does not dangle aria-describedby for an explicit Allowed-level compatibility row (no notice paragraph is rendered for it)', () => {
@@ -704,7 +725,7 @@ describe('ShiftSlideOver staff compatibility (task 6d)', () => {
     )
 
     expect(screen.queryByText(/preferred staff member/i)).not.toBeInTheDocument()
-    expect(screen.queryByText(/not compatible with this participant/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/can.t be rostered/i)).not.toBeInTheDocument()
 
     // aria-labelledby (wired by FormField for the custom SearchableSelect control) makes the
     // field's accessible name the "Staff" label text, not the combobox's placeholder/typed value.

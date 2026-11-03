@@ -270,12 +270,7 @@ public class RosteringControllerTests
 
     // ── Warning findings gate ────────────────────────────────────────────
 
-    // NOTE: this fixture was originally CompatibilityLevel.Excluded (COMPATIBILITY_EXCLUDED), which
-    // was a valid "Warning without a reason -> 422" example under the OLD "any Warning present"
-    // gate. Task 5 changes EvaluateFindings to gate on RosterFinding.RequiresReason instead — and
-    // CompatibilityExcluded (RosterConflictService.CheckCompatibility) never sets RequiresReason,
-    // so it no longer blocks without a reason. Approved leave (STAFF_ON_LEAVE) is the fixture that
-    // actually exercises the RequiresReason=true path this test is meant to cover.
+    // Approved leave (STAFF_ON_LEAVE) exercises the Warning + RequiresReason path: a worker marked No (Excluded) is Blocking since R8 and never reaches it.
     [Fact]
     public async Task CreateShift_WarningFindingsWithoutOverrideReason_Rejected422()
     {
@@ -297,15 +292,9 @@ public class RosteringControllerTests
         Assert.Empty(await db.Shifts.ToListAsync());
     }
 
-    /// <summary>
-    /// Spec §3 / RosterGate.ComputeOverride: a reason typed against a finding that does not
-    /// RequiresReason (COMPATIBILITY_EXCLUDED is a plain Warning) is discarded rather than
-    /// persisted — only the code is still recorded in AcknowledgedFindingCodes. Was
-    /// CreateShift_NonRequiredWarningWithOverrideReason_PersistsReasonAndCodes before the B1
-    /// ComputeOverride ruling; updated to the new rule rather than the old one it exercised.
-    /// </summary>
+    /// <summary>R8 block: a worker marked No for the participant (Excluded) is Blocking, so a manual create is refused with 422 even with an override reason, and nothing is saved.</summary>
     [Fact]
-    public async Task CreateShift_NonRequiredWarningWithOverrideReason_ReasonDiscarded_CodeStillRecorded()
+    public async Task CreateShift_WorkerMarkedNo_RejectedEvenWithOverrideReason()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());
         var staff = SeedStaff(db);
@@ -323,15 +312,11 @@ public class RosteringControllerTests
 
         var result = await controller.CreateShift(dto, CancellationToken.None);
 
-        var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var body = Assert.IsType<ApiResponse<ShiftDto>>(ok.Value);
-        Assert.True(body.Success);
-        Assert.Null(body.Data!.OverrideReason);
-        Assert.Contains(body.Data.Findings, f => f.Code == RosterConflictService.CompatibilityExcluded);
-
-        var saved = await db.Shifts.SingleAsync();
-        Assert.Null(saved.OverrideReason);
-        Assert.Equal(RosterConflictService.CompatibilityExcluded, saved.AcknowledgedFindingCodes);
+        var unprocessable = Assert.IsType<UnprocessableEntityObjectResult>(result.Result);
+        var body = Assert.IsType<ApiResponse<List<RosterFindingDto>>>(unprocessable.Value);
+        Assert.False(body.Success);
+        Assert.Contains(body.Data!, f => f.Code == RosterConflictService.CompatibilityExcluded && f.Severity == RosterFindingSeverity.Blocking);
+        Assert.Empty(await db.Shifts.ToListAsync());
     }
 
     // ── Clean create ─────────────────────────────────────────────────────

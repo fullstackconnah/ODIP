@@ -91,7 +91,7 @@ internal static class RosterCatalog
             OverrideReason: StudyReason, AcknowledgedCodes: "STAFF_RECURRING_UNAVAILABLE"),
         new("leave-pending", "emily", "charlotte", 4, T(14), T(22)),                              // 8  STAFF_LEAVE_PENDING
         new("recurring-pending", "emily", "grace", 1, T(7), T(11)),                               // 9  STAFF_RECURRING_PENDING
-        new("excluded", "emily", "ryan", 5, T(9), T(13)),                                         // 10 COMPATIBILITY_EXCLUDED
+        new("excluded", "emily", "ryan", 5, T(9), T(13)),                                         // 10 COMPATIBILITY_EXCLUDED (Blocking; seeded directly, the gate would refuse it)
         new("needs-mh", "daniel", "mason", 0, T(10), T(14)),                                      // 12 COMPETENCY_MISSING: wheelchair, Daniel not manual-handling
         new("needs-night", "daniel", "ryan", 1, T(22), T(6), true, SupportRatio.OneToOne, SleepoverType.ActiveNight),   // 12: not overnight-eligible
         new("needs-fa", "lachlan", "sophie", 4, T(10), T(14)),                                    // 12: high support, no first aid
