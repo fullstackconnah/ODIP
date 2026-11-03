@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { isAxiosError } from 'axios'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { ClipboardPlus, MoreVertical, Search } from 'lucide-react'
+import { AlertCircle, ClipboardPlus, MoreVertical, Search } from 'lucide-react'
 import { Button } from '@/components/Button'
+import { buttonClasses } from '@/components/buttonClasses'
 import { Callout } from '@/components/Callout'
 import { DataTable, type Column } from '@/components/DataTable'
-import { Dropdown } from '@/components/Dropdown'
+import { Dropdown, type DropdownItem } from '@/components/Dropdown'
 import { EmptyState } from '@/components/EmptyState'
-import { StatusBadge } from '@/components/StatusBadge'
 import { SearchInput } from '@/components/SearchInput'
 import { NoticesRegion } from '@/components/NoticesRegion'
 import { ROW_ACTIONS_CARD } from '@/components/tapArea'
@@ -21,7 +21,8 @@ import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/lib/utils'
 import { queryPhase, retryingAfterError } from '@/lib/queryPhase'
 import { cancelNotice, DEFAULT_DURATION, FALLBACK_ZONE, invitee, isPastVisit, refusalOf, visitDay, type EnquiryNotice } from '@/lib/intakeBooking'
-import { convertRefusal, fullName, startIntakeReason } from '@/lib/inquiryDetails'
+import { TONE } from '@/lib/tone'
+import { convertRefusal, fullName, nextStep } from '@/lib/inquiryDetails'
 import { CLOSE_OUTCOME_LABELS, closedNotice, reopenedNotice } from '@/lib/inquiryClose'
 import { CloseInquiryDialog } from './inquiries/CloseInquiryDialog'
 import { ContactCell } from './inquiries/ContactCell'
@@ -48,11 +49,6 @@ const isOpen = (stage: Stage) => stage === 'new' || stage === 'draftintake'
 
 /** A direct intake has no enquiry behind it, so no source: the cell says how it started instead of showing nothing. */
 const sourceLabel = (row: ParticipantInquiryDto) => (row.isDirectIntake ? 'Direct intake' : row.source)
-
-const DISABLED_LOOK = 'aria-disabled:opacity-50 aria-disabled:cursor-not-allowed'
-// Wraps at 15rem, so the longest reason never sets the Actions column's width (SHAPE numeric check 5); on a coarse pointer its own box is 44px tall,
-// so the cell's tap pad never reaches over the buttons above it.
-const REASON_LINK = 'self-start max-w-[15rem] md:whitespace-normal text-xs text-[var(--color-muted-foreground)] underline underline-offset-2 hover:text-[var(--color-primary)] pointer-coarse:py-3.5'
 
 /**
  * Body export — rendered by the ParticipantsHubPage tabbed container so the hub owns
@@ -150,19 +146,24 @@ function useInquiriesScreen() {
   // Only an enquiry that hasn't started intake can close (the server refuses the rest); a direct intake has no enquiry to close.
   const canClose = (row: ParticipantInquiryDto) => !row.participantId && !row.isDirectIntake
   const closeItem = (row: ParticipantInquiryDto) => (canClose(row) ? [{ value: 'close', label: 'Close enquiry' }] : [])
-  // Below md the booking's secondary actions sit behind More (SHAPE.md section 1); Close enquiry is the menu's last item at any width (section 11).
+  // The row's menu at every width: what the Next step button is not, then the visit's actions, Edit enquiry, and Close enquiry last. A blocked
+  // Start intake stays here as a disabled item that says why, rather than as a button that looks pressable and does nothing.
   const menuItems = (row: ParticipantInquiryDto) => {
-    const upcoming = !isPastVisit(row.intakeStartsAt!, row.intakeDurationMinutes ?? DEFAULT_DURATION)
+    const step = nextStep(row)
+    const upcoming = !!row.intakeStartsAt && !isPastVisit(row.intakeStartsAt, row.intakeDurationMinutes ?? DEFAULT_DURATION)
     return [
-      { value: 'reschedule', label: 'Reschedule' },
-      ...(upcoming ? [{ value: 'confirm', label: row.intakeConfirmedAt ? 'Mark not confirmed' : 'Mark confirmed' }] : []),
-      { value: 'edit', label: 'Edit enquiry' },
-      ...(upcoming ? [{ value: 'cancel', label: 'Cancel visit' }] : []),
+      ...(!row.participantId && step.kind !== 'start' ? [{ value: 'start', label: 'Start intake', ...(step.reason ? { disabled: true, description: step.reason.text } : {}) }] : []),
+      ...(!row.isDirectIntake && !row.intakeStartsAt && step.kind !== 'book' ? [{ value: 'book', label: 'Book intake' }] : []),
+      ...(!row.isDirectIntake && row.intakeStartsAt ? [{ value: 'reschedule', label: 'Reschedule' }] : []),
+      ...(!row.isDirectIntake && upcoming ? [{ value: 'confirm', label: row.intakeConfirmedAt ? 'Mark not confirmed' : 'Mark confirmed' }, { value: 'cancel', label: 'Cancel visit' }] : []),
+      ...(row.isDirectIntake ? [] : [{ value: 'edit', label: 'Edit enquiry' }]),
       ...closeItem(row),
     ]
   }
   const onMenu = (row: ParticipantInquiryDto, value: string) => {
-    if (value === 'reschedule') openBooking(row, true)
+    if (value === 'start') startIntake(row)
+    else if (value === 'book') openBooking(row)
+    else if (value === 'reschedule') openBooking(row, true)
     else if (value === 'confirm') void markConfirmed(row, !row.intakeConfirmedAt)
     else if (value === 'edit') editExisting(row)
     else if (value === 'cancel') setCancelling(row)
@@ -182,7 +183,7 @@ function useInquiriesScreen() {
     focusNotice.current = `a[href="${to}"]`
   }
   const setView = (next: string) => setSearchParams(p => { if (next === 'closed') p.set('view', 'closed'); else p.delete('view'); return p })
-  const moreMenu = (row: ParticipantInquiryDto, items: { value: string; label: string }[], className?: string) => (
+  const moreMenu = (row: ParticipantInquiryDto, items: DropdownItem[], className?: string) => (
     // The menu's items are portaled to <body>, but React still bubbles their clicks to the row, whose click opens the enquiry form or
     // the wizard. A menu inside a clickable row stops its clicks here, as TripsPage's pill menu does.
     <div className={className} onClick={e => e.stopPropagation()}>
@@ -229,29 +230,40 @@ function useInquiriesScreen() {
     return fields.filter(Boolean).some(field => String(field).toLowerCase().includes(term))
   })
 
-  // Only open enquiries are listed, so a row is New (no participant yet) or Draft intake (intake started, not complete).
-  const statusBadge = (row: ParticipantInquiryDto) => stageOf(row) === 'new'
-    ? <StatusBadge status="new" label="New" />
-    : <StatusBadge status="draftintake" label="Draft intake" />
   // The one next step that is real for each stage. Resuming an intake that is complete led to the L2-03 data loss, which is why such a row is not listed.
   // A row opens where its own buttons lead: a New enquiry's form, or a Draft intake's intake (starting an intake converts, so the row never does that).
   const openRow = (row: ParticipantInquiryDto) => stageOf(row) === 'new' ? editExisting(row) : navigate(`/participants/${row.participantId}/intake`)
-  // Start intake waits for the full address and a named main contact (L5, D1): the button stays, focusable and described by its reason, and does nothing.
-  const reasonOf = (row: ParticipantInquiryDto) => (stageOf(row) === 'new' && !row.isDirectIntake ? startIntakeReason(row) : null)
-  const primaryAction = (row: ParticipantInquiryDto) => {
-    if (stageOf(row) !== 'new') return <Button size="sm" onClick={() => navigate(`/participants/${row.participantId}/intake`)}>Resume intake<span className="sr-only"> for {nameOf(row)}</span></Button>
-    const reason = reasonOf(row)
-    return reason
-      ? <Button size="sm" aria-disabled="true" aria-describedby={`start-reason-${row.id}`} className={DISABLED_LOOK} onClick={() => {}}>Start intake<span className="sr-only"> for {nameOf(row)}</span></Button>
-      : <Button size="sm" disabled={convert.isPending} onClick={() => startIntake(row)}>Start intake<span className="sr-only"> for {nameOf(row)}</span></Button>
-  }
-  // The reason is a link to the field that fixes it, on its own line under the buttons (SHAPE section 12). DataTable ignores clicks on links.
-  const reasonLink = (row: ParticipantInquiryDto) => {
-    const reason = reasonOf(row)
-    return reason && <Link id={`start-reason-${row.id}`} to={reason.to} className={REASON_LINK}>{reason.text}</Link>
-  }
 
-  // Below 1440 the Open table is wider than its box (1280: 1006 px), so Actions take two lines and Contact and Provenance truncate harder; phone cards and 1440+ keep their composition.
+  // Next step (SHAPE section 3): one outline button that does the row's work, then the menu with the rest. A blocked row leads with the fix, which
+  // is the reason in three words; its full sentence is the link's description. A role that cannot act reads the same step as text. The control
+  // carries `data-intake-control` so focus lands on it after the booking panel closes when the row has no visit button.
+  const nextStepCell = (row: ParticipantInquiryDto) => {
+    const step = nextStep(row)
+    if (!canManageParticipantLifecycle) return <span className="text-sm text-[var(--color-muted-foreground)]">{step.waiting}</span>
+    const name = <span className="sr-only"> for {nameOf(row)}</span>
+    const items = menuItems(row)
+    return (
+      <div className={`flex items-center gap-2 whitespace-nowrap ${ROW_ACTIONS_CARD}`}>
+        {step.kind === 'fix' ? (
+          <>
+            <Link to={step.reason!.to} data-intake-control={row.id} aria-describedby={`start-reason-${row.id}`} className={buttonClasses('secondary', 'sm')}>
+              <AlertCircle className={`h-4 w-4 shrink-0 ${TONE.warning.ink}`} aria-hidden="true" />{step.label}{name}
+            </Link>
+            <span id={`start-reason-${row.id}`} className="sr-only">{step.reason!.text}</span>
+          </>
+        ) : (
+          <Button
+            size="sm" variant="secondary" data-intake-control={row.id}
+            disabled={step.kind === 'start' && convert.isPending}
+            onClick={() => step.kind === 'resume' ? navigate(`/participants/${row.participantId}/intake`) : step.kind === 'book' ? openBooking(row) : startIntake(row)}
+          >
+            {step.label}{name}
+          </Button>
+        )}
+        {items.length > 0 && moreMenu(row, items)}
+      </div>
+    )
+  }
   const columns: Column<ParticipantInquiryDto>[] = [
     // wrap: a long name (W) takes two lines rather than widening the table past its box at 1440.
     { key: 'firstName', header: 'Participant', sortable: true, wrap: true, render: row => nameOf(row) },
@@ -273,37 +285,16 @@ function useInquiriesScreen() {
         )
       },
     },
-    { key: 'participantId', header: 'Status', render: statusBadge },
     {
-      key: 'intakeStartsAt', header: 'Intake', sortable: true, wrap: true,
+      key: 'intakeStartsAt', header: 'Intake visit', sortable: true, wrap: true,
       // Room for the date and time unbroken; a narrower window scrolls the table in its box (the Column Rule) rather than crushing the cell.
-      // 14rem holds line 1 ("Fri 16 Oct, 10:00 am · Callum") unbroken; with Provenance capped at 8rem (9.5rem until the row menu joined Actions) the whole table, one-row Actions
-      // included, still fits its box at 1440.
+      // 14rem holds line 1 ("Fri 16 Oct, 10:00 am · Callum") unbroken; with Provenance capped at 8rem the whole table, including the Next step column, still fits its box at 1440.
       minWidth: '14rem',
       // ISO instants sort in time order. An empty cell sorts last on the ascending sort.
       sortFn: (a, b) => (a.intakeStartsAt ?? '9999').localeCompare(b.intakeStartsAt ?? '9999'),
       render: row => <IntakeCell row={row} canManage={canManageParticipantLifecycle} onOpen={r => openBooking(r)} />,
     },
-    {
-      key: 'id', header: 'Actions', type: 'custom', pin: 'end', wrap: true,
-      render: row => canManageParticipantLifecycle ? (
-        <div className="flex flex-col gap-1">
-          <div className={`flex flex-wrap whitespace-nowrap md:max-[1440px]:w-40 min-[1440px]:flex-nowrap items-center gap-2 ${ROW_ACTIONS_CARD}`}>
-            {primaryAction(row)}
-            {/* A direct intake has no enquiry record, so there is nothing to edit as one. On a booked row's phone card, Edit enquiry moves into More. */}
-            {!row.isDirectIntake && (
-              <Button size="sm" variant="secondary" className={row.intakeStartsAt ? 'max-md:hidden' : undefined} onClick={() => editExisting(row)}>
-                Edit enquiry<span className="sr-only"> for {nameOf(row)}</span>
-              </Button>
-            )}
-            {/* A booked row's phone menu holds its visit actions too; elsewhere the menu holds Close enquiry alone. */}
-            {!row.isDirectIntake && row.intakeStartsAt && moreMenu(row, menuItems(row), 'md:hidden')}
-            {canClose(row) && moreMenu(row, closeItem(row), row.intakeStartsAt ? 'max-md:hidden' : undefined)}
-          </div>
-          {reasonLink(row)}
-        </div>
-      ) : <span className="text-sm text-[var(--color-muted-foreground)]">Read-only</span>,
-    },
+    { key: 'id', header: 'Next step', type: 'custom', pin: 'end', render: nextStepCell },
   ]
   const zoneOf = (row: ParticipantInquiryDto) => row.timeZoneId || FALLBACK_ZONE
   // The Closed view (SHAPE section 11): why and when, and Reopen. No "closed by" on the row (lead decision 7); the audit trail keeps who.

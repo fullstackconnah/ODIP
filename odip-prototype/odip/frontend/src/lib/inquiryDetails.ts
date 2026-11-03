@@ -114,6 +114,19 @@ export function startIntakeReason(row: { id: string; hasAddress?: boolean; conta
   return { text, action, to: `/participants/new-inquiry?id=${encodeURIComponent(row.id)}&focus=${address ? 'address' : 'contact'}`, address, name }
 }
 
+export type NextStep = { kind: 'resume' | 'fix' | 'book' | 'start'; label: string; waiting: string; reason?: NonNullable<ReturnType<typeof startIntakeReason>> }
+
+/** The one thing to do next on an open enquiry's row, first match wins; `waiting` is the same step as plain text for a role that cannot act. */
+export function nextStep(row: { id: string; participantId?: string | null; hasAddress?: boolean; contactNeedsName?: boolean; intakeStartsAt?: string | null }): NextStep {
+  if (row.participantId) return { kind: 'resume', label: 'Resume intake', waiting: 'Intake started' }
+  const reason = startIntakeReason(row)
+  if (reason) {
+    const what = reason.address && reason.name ? 'address and name' : reason.address ? 'address' : 'contact name'
+    return { kind: 'fix', label: `Add ${what}`, waiting: `Needs ${what}`, reason }
+  }
+  return row.intakeStartsAt ? { kind: 'start', label: 'Start intake', waiting: 'Ready to start' } : { kind: 'book', label: 'Book intake', waiting: 'Not booked yet' }
+}
+
 /** A Start intake 400 in words: the address, the contact's name, or both; null for any other refusal. */
 export function convertRefusal(err: unknown, participantName: string): string | null {
   const keys = Object.keys(fieldErrors(err))

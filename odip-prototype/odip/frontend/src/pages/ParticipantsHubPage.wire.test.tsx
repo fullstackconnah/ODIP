@@ -122,7 +122,7 @@ describe('ParticipantsHubPage (wire) — the register has its controls back', ()
     renderHub('/participants?tab=enquiries')
 
     expect(await screen.findByText('Dana Draft')).toBeInTheDocument()
-    expect(screen.getByText('Draft intake')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Resume intake/ })).toBeInTheDocument()
     // A draft is resumed, not archived or switched on: the next step is the intake wizard.
     await user.click(screen.getByRole('button', { name: /^Resume intake/ }))
     expect(screen.getByText('Intake wizard destination')).toBeInTheDocument()

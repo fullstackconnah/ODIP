@@ -108,17 +108,39 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-describe('ClaimsHubPage: sent and paid by week', () => {
-  it('shows the card above the files, and its rejected link opens Needs action', async () => {
+describe('ClaimsHubPage: the To do strip and the chart', () => {
+  const two = () => hub({ rejected: [rejected(), rejected({ batchLineId: 'bl-2', lineId: 'l-2' })] })
+
+  it('puts the strip above the collapsed chart; the rejected row opens Needs action and focuses its tab', async () => {
     const user = userEvent.setup()
-    m.lines.mockReturnValue(query(hub({ rejected: [rejected(), rejected({ batchLineId: 'bl-2', lineId: 'l-2' })] })))
+    m.lines.mockReturnValue(query(two()))
     renderPage()
 
+    const strip = screen.getByTestId('claims-strip')
     const card = document.querySelector('[data-claims-pipeline]')!
-    expect(within(card as HTMLElement).getByText('Claims sent and paid by week')).toBeInTheDocument()
+    expect(within(strip).getByRole('heading', { name: 'To do' })).toBeInTheDocument()
+    expect(within(strip).getAllByRole('listitem')[0]).toHaveTextContent('2 rejected lines need action')
+    expect(within(strip).getByText('The NDIA sent them back. Fix them or decide.')).toBeInTheDocument()
+    expect(strip.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(card.compareDocumentPosition(screen.getByRole('tablist')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    await user.click(within(card as HTMLElement).getByRole('button', { name: '2 rejected lines need action' }))
+    expect(card).not.toHaveTextContent(/rejected line/)
+    expect(within(card as HTMLElement).getByRole('button', { name: 'Show chart' })).toHaveAttribute('aria-expanded', 'false')
+
+    await user.click(within(strip).getByRole('button', { name: 'Review rejected lines' }))
     expect(screen.getByTestId('where')).toHaveTextContent('tab=action')
+    await waitFor(() => expect(screen.getByRole('tab', { name: /Needs action/ })).toHaveFocus())
+  })
+
+  it('has no rejected row when nothing is rejected', () => {
+    m.batches.mockReturnValue(query([batch()]))
+    renderPage()
+    expect(within(screen.getByTestId('claims-strip')).queryByText(/rejected/)).toBeNull()
+  })
+
+  it('shows the rejected row alone, with no empty files list', () => {
+    m.lines.mockReturnValue(query(two()))
+    renderPage()
+    expect(within(screen.getByTestId('claims-strip')).getAllByRole('listitem')).toHaveLength(1)
   })
 })
 
@@ -202,6 +224,23 @@ describe('ClaimsHubPage: files', () => {
     m.batches.mockReturnValue(query([batch({ status: 'Discarded' })]))
     renderPage()
     expect(screen.queryByTestId('claims-strip')).toBeNull()
+  })
+
+  it('keeps the rejected row while the files load or fail, with the files line under it', () => {
+    m.lines.mockReturnValue(query(hub({ rejected: [rejected()] })))
+    m.batches.mockReturnValue({ ...query(undefined), isLoading: true })
+    renderPage()
+    let strip = screen.getByTestId('claims-strip')
+    expect(within(strip).getAllByRole('listitem')[0]).toHaveTextContent('1 rejected line needs action')
+    expect(within(strip).getByText('Loading files in progress…')).toBeInTheDocument()
+
+    cleanup()
+    m.batches.mockReturnValue({ ...query(undefined), isError: true })
+    renderPage()
+    strip = screen.getByTestId('claims-strip')
+    expect(within(strip).getAllByRole('listitem')[0]).toHaveTextContent('1 rejected line needs action')
+    expect(within(strip).getByText(/Couldn't load files in progress/)).toBeInTheDocument()
+    expect(within(strip).getByRole('button', { name: 'Try again' })).toBeInTheDocument()
   })
 
   it('confirms the upload with the claim and invoice counts, then marks the file uploaded', async () => {
