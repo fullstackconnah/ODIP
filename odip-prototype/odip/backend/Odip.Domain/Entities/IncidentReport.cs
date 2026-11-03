@@ -123,6 +123,14 @@ public class IncidentReport
     public string? ImmediateActionsTaken { get; set; }
     public bool WereEmergencyServicesCalled { get; set; }
     public string? EmergencyServicesDetails { get; set; }
+    /// <summary>Which services attended; None unless <see cref="WereEmergencyServicesCalled"/>. A legacy row can be called with None.</summary>
+    public EmergencyService EmergencyServices { get; set; }
+    public string? PoliceOfficerName { get; set; }
+    public string? AmbulanceOfficerName { get; set; }
+    public string? FireOfficerName { get; set; }
+    public string? PoliceReference { get; set; }
+    public string? AmbulanceReference { get; set; }
+    public string? FireReference { get; set; }
 
     // Witness/evidence
     public string? WitnessNames { get; set; }

@@ -22,7 +22,7 @@ public static class QscReporting
     /// <summary>Incident types that are reportable within 24 hours whatever the severity.</summary>
     public static readonly IncidentType[] RequiredTypes =
     {
-        IncidentType.Abuse, IncidentType.Neglect, IncidentType.Death,
+        IncidentType.Abuse, IncidentType.SexualAbuse, IncidentType.Neglect, IncidentType.Death,
         IncidentType.MissingPerson
     };
 

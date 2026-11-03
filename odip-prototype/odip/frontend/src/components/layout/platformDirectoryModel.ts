@@ -15,7 +15,7 @@ const DESCRIPTIONS: Record<string, string> = {
   '/caregiver-submissions': 'Review submitted caregiver forms.',
   '/rostering': 'Plan participant shifts and staff coverage.',
   '/rostering/patterns': 'Manage recurring shift patterns.',
-  '/rostering/compatibility': 'Review staff and participant compatibility.',
+  '/rostering/compatibility': 'See who is marked No or preferred for each participant.',
   '/rostering/leave': 'Review leave and unavailability requests.',
   '/rostering/completions': 'Review submitted shifts before billing.',
   '/reports': 'Hours, shift fulfilment and leave for any date range.',
