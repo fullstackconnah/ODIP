@@ -145,6 +145,8 @@ public class Participant : ITenantEntity
     public string? AddressState { get; set; }
     /// <summary>4-digit AU postcode, validated server-side (see ParticipantsController.ValidateAddressPostcode).</summary>
     public string? AddressPostcode { get; set; }
+    /// <summary>Modified Monash level 1-7 where supports are delivered; sets the travel cap of shifts not from an agreement. Null = unknown, the 30-minute cap.</summary>
+    public int? MmLevel { get; set; }
 
     // Mobility aids (multi-select — a participant may use several)
     public bool MobilityAidWheelchair { get; set; }

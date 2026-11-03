@@ -71,6 +71,9 @@ public static class CaregiverFieldPolicy
         // serviceProfile group except serviceStreams (PatchServiceProfileDto minus ServiceStreams).
         "region",
 
+        // remoteness group: an office pricing field (sets the travel cap), not caregiver-proposed.
+        "mmLevel",
+
         // Preferred staff.
         "preferredStaffId",
         "preferredStaffName",

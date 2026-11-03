@@ -36,6 +36,7 @@ export const PATCH_GROUP_FIELDS: Record<ScalarPatchGroup, readonly (keyof Partic
   personalDetails: ['firstName', 'lastName', 'preferredName', 'middleName', 'dateOfBirth', 'gender', 'genderSelfDescription', 'placeOfBirth', 'country', 'phone', 'email'],
   preferredStaff: ['preferredStaffId'],
   address: ['addressStreet', 'addressSuburb', 'addressState', 'addressPostcode'],
+  remoteness: [],  // not in the wizard form schema: only the participant detail card edits it
   livingArrangement: ['livingArrangement', 'mainSupportPersonName', 'mainSupportPersonRelationship', 'othersLivingInAccommodation', 'residentialInfo', 'livesWithOthers', 'whoLivesWith', 'silProviderName', 'silProviderContactPhone', 'accommodationType', 'onSiteSupportHours', 'livingArrangementNotes'],
   ndisPlan: ['ndisNumber', 'planStartDate', 'planEndDate', 'planType', 'fundingSource', 'fundingOrganisation', 'isDsoa', 'isRepeatClient'],
   serviceProfile: ['region', 'serviceStreams'],

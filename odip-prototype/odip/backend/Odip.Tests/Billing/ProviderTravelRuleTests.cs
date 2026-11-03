@@ -173,4 +173,21 @@ public class ProviderTravelRuleTests
         Assert.Equal(2m, part.Hours);                     // F-5 / T17: neither the travel time nor the km counts as support hours
         Assert.Equal(0m, part.Nights);
     }
+
+    // A participant's MM level as the cap location (MM level on the participant): none stays 30, 1-3 is 30, 4-5 is 60, 6-7 has no cap.
+    [Theory]
+    [InlineData(null, 30)]
+    [InlineData(1, 30)]
+    [InlineData(2, 30)]
+    [InlineData(3, 30)]
+    [InlineData(4, 60)]
+    [InlineData(5, 60)]
+    [InlineData(6, null)]
+    [InlineData(7, null)]
+    public void LocationOf_MapsTheLevelToTheCap(int? mm, int? cap) =>
+        Assert.Equal(cap, ProviderTravelRule.CapMinutes(ProviderTravelRule.LocationOf(mm)));
+
+    [Fact]
+    public void LocationOf_ReadsMm6AsRemote_AndMm7AsVeryRemote() =>
+        Assert.Equal(new[] { PriceZone.Remote, PriceZone.VeryRemote }, new[] { 6, 7 }.Select(m => ProviderTravelRule.LocationOf(m)!.Zone));
 }

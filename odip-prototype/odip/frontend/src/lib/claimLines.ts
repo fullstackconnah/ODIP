@@ -1,5 +1,8 @@
 import type { ClaimLineItemDto } from '@/api/types/claims'
 
+/** The words a claim's kind goes by on screen. */
+export const CLAIM_KIND_LABEL = { Trip: 'Trip claim', Shift: 'Shift claim', Manual: 'One-off claim' } as const
+
 export const dayTypeLabel = (dt: string) => {
   switch (dt) {
     case 'Weekday': return 'Weekday'
