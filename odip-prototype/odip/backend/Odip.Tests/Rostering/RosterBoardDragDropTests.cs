@@ -1129,6 +1129,44 @@ public class RosterBoardDragDropTests
     }
 
     [Fact]
+    public async Task UpdateShift_CancellingAShiftWhileNamingADifferentWorkerMarkedNo_StaysRefused()
+    {
+        using var db = TestDb.Create();
+        var participant = SeedParticipant(db);
+        var sam = SeedStaff(db);
+        var ben = SeedStaff(db, "Ben");
+        MarkNo(db, ben.Id, participant.Id);
+        var shift = SeedShift(db, participant.Id, sam.Id);
+
+        var result = await Controller(db).UpdateShift(shift.Id, Put(shift, ben.Id, ShiftStatus.Cancelled), default);
+
+        var refused = Assert.IsType<ApiResponse<List<RosterFindingDto>>>(Assert.IsType<UnprocessableEntityObjectResult>(result.Result).Value);
+        Assert.Contains(refused.Data!, f => f.Code == RosterConflictService.CompatibilityExcluded);
+        var saved = await Reload(db, shift.Id);
+        Assert.Equal(sam.Id, saved.UserId);
+        Assert.Equal(ShiftStatus.Draft, saved.Status);
+    }
+
+    [Fact]
+    public async Task CheckShift_CancelledShiftHeldByAOtherWorkerNamingOneMarkedNo_StillShowsTheBlock()
+    {
+        using var db = TestDb.Create();
+        var participant = SeedParticipant(db);
+        var sam = SeedStaff(db);
+        var ben = SeedStaff(db, "Ben");
+        MarkNo(db, ben.Id, participant.Id);
+        var shift = SeedShift(db, participant.Id, sam.Id);
+
+        var findings = Body(await Controller(db).CheckShift(new CheckShiftDto
+        {
+            Id = shift.Id, ParticipantId = participant.Id, StaffId = ben.Id, ServiceDate = shift.ServiceDate,
+            StartTime = shift.StartTime, EndTime = shift.EndTime, Ratio = shift.Ratio, NightType = shift.NightType, Status = ShiftStatus.Cancelled,
+        }, default));
+
+        Assert.Contains(findings, f => f.Code == RosterConflictService.CompatibilityExcluded && f.Severity == RosterFindingSeverity.Blocking);
+    }
+
+    [Fact]
     public async Task UpdateShift_PublishingAShiftHeldByAWorkerMarkedNo_StaysRefused()
     {
         using var db = TestDb.Create();

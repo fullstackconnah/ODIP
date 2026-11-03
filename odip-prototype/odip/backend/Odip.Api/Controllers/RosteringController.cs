@@ -1003,7 +1003,7 @@ public class RosteringController : ControllerBase
             // Only a draft whose worker's screening has lapsed, who has not started by its day, or who is marked No for its participant can hit a Blocking finding, so only those need the full roster check: one query for every worker, one for the Nos.
             var workerIds = drafts.Where(s => s.UserId.HasValue).Select(s => s.UserId!.Value).Distinct().ToList();
             var gates = await _db.Users.Where(u => workerIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => (Expiry: u.WorkerScreeningExpiryDate, Start: u.EmploymentStartDate), ct);
-            var excluded = (await _db.StaffParticipantCompatibilities.Where(c => c.Level == CompatibilityLevel.Excluded && workerIds.Contains(c.UserId)).Select(c => new { c.UserId, c.ParticipantId }).ToListAsync(ct))
+            var excluded = (await _db.StaffParticipantCompatibilities.Where(c => c.Level == CompatibilityLevel.Excluded && workerIds.Contains(c.UserId) && shown.Contains(c.ParticipantId)).Select(c => new { c.UserId, c.ParticipantId }).ToListAsync(ct))
                 .Select(c => (c.UserId, c.ParticipantId)).ToHashSet();
 
             var published = new List<Shift>();

@@ -239,7 +239,7 @@ export default function CompatibilityPage() {
         <EmptyState
           icon={Users}
           title="Nothing to match yet"
-          description="This matrix is how the roster board knows who works well with whom — mark a pairing Preferred to nudge assignment toward it, or No (Excluded) and that worker can’t be rostered for that participant. It needs at least one staff member and one participant before there's anything to mark."
+          description="This matrix is how the roster board knows who works well with whom — mark a pairing Preferred to nudge assignment toward it, or No and that worker can’t be rostered for that participant. It needs at least one staff member and one participant before there's anything to mark."
         />
       )}
 
@@ -323,7 +323,7 @@ export default function CompatibilityPage() {
                             >
                               <option value="Preferred">Preferred</option>
                               <option value="Allowed">Allowed</option>
-                              <option value="Excluded">Excluded</option>
+                              <option value="Excluded">No</option>
                             </select>
                             {level === 'Excluded' && (
                               <button
@@ -360,13 +360,12 @@ export default function CompatibilityPage() {
       <ConfirmDialog
         open={excludeDraft !== null}
         onCancel={() => setExcludeDraft(null)}
-        title="Exclude from roster matching"
+        title="Mark as No for this participant"
         message={excludeDraft && (
           <>
             <p>
-              <strong className="text-foreground">{excludeDraft.staff.fullName}</strong> won't be suggested for{' '}
-              <strong className="text-foreground">{excludeDraft.participant.fullName}</strong>'s shifts. Shifts already rostered aren't
-              touched, and rostering this pairing anyway still works — it just raises a warning the coordinator can override.
+              <strong className="text-foreground">{excludeDraft.staff.fullName}</strong> cannot be rostered for{' '}
+              <strong className="text-foreground">{excludeDraft.participant.fullName}</strong>’s shifts. Shifts already rostered stay as they are, but cannot be edited until the worker is replaced or the shift is unassigned or cancelled.
             </p>
             <FormField label="Reason" required hint="Stored with the exclusion and visible in audit.">
               <textarea
