@@ -9,6 +9,7 @@ import { Callout } from '@/components/Callout'
 import { PageState } from '@/components/PageState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Dropdown } from '@/components/Dropdown'
+import { TextField } from '@/components/TextField'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import {
   useCompletions, useCompletion, useApproveCompletion, useReturnCompletion, useApproveCompletionsBatch, useStaff,
@@ -412,14 +413,8 @@ export default function CompletionReviewPage() {
             aria-label="Filter by staff"
           />
         </div>
-        <div className="flex items-center gap-1.5">
-          <label htmlFor="completions-from-date" className="text-xs text-[var(--color-muted-foreground)]">From</label>
-          <input id="completions-from-date" type="date" value={fromFilter} onChange={e => { setFromFilter(e.target.value); setPage(1) }} />
-        </div>
-        <div className="flex items-center gap-1.5">
-          <label htmlFor="completions-to-date" className="text-xs text-[var(--color-muted-foreground)]">To</label>
-          <input id="completions-to-date" type="date" value={toFilter} onChange={e => { setToFilter(e.target.value); setPage(1) }} />
-        </div>
+        <TextField label="From" type="date" value={fromFilter} max={toFilter || undefined} onChange={e => { setFromFilter(e.target.value); setPage(1) }} />
+        <TextField label="To" type="date" value={toFilter} min={fromFilter || undefined} onChange={e => { setToFilter(e.target.value); setPage(1) }} />
       </div>
 
       {isLoading ? (

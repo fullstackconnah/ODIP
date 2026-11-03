@@ -654,6 +654,22 @@ describe('RestrictivePracticesTab — edit form authorised checkbox', () => {
     expect(screen.queryByLabelText(/^authorisation date/i)).not.toBeInTheDocument()
   })
 
+  it('shows the NDIS Commission reference on the row and saves an edit to it, trimmed', async () => {
+    const user = userEvent.setup()
+    mockUseRestrictivePractices.mockReturnValue({ data: [makePractice({ commissionReference: 'NDIS-42' })], isLoading: false })
+    render(<RestrictivePracticesTab participantId="participant-1" />)
+    expect(screen.getByText('Commission ref NDIS-42')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    const field = screen.getByLabelText('NDIS Commission reference')
+    expect(field).toHaveValue('NDIS-42')
+    await user.clear(field)
+    await user.type(field, '  NDIS-43 ')
+    await user.click(screen.getByRole('button', { name: /save entry/i }))
+
+    expect(mockUpdateMutateAsync.mock.calls[0][0].data.commissionReference).toBe('NDIS-43')
+  })
+
   it('unticking and saving sends null for both', async () => {
     const user = userEvent.setup()
     mockUseRestrictivePractices.mockReturnValue({ data: [makePractice({ authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01' })], isLoading: false })
@@ -664,7 +680,7 @@ describe('RestrictivePracticesTab — edit form authorised checkbox', () => {
     await user.click(screen.getByRole('button', { name: /save entry/i }))
 
     const [call] = mockUpdateMutateAsync.mock.calls[0]
-    expect(call).toEqual({ id: 'rp-1', data: { type: 'Unclassified', description: 'Locked doors overnight for safety.', reviewDate: null, relatedMedicationId: null, authorisedBy: null, authorisationDate: null, datesIncluded: true, authorisationEndDate: null, useKind: 'Routine', firstUsedOn: null, interimBspDate: null, comprehensiveBspDate: null, isActive: true, requiresReporting: null, expectedUpdatedAt: '2026-01-01T00:00:00Z' } })
+    expect(call).toEqual({ id: 'rp-1', data: { type: 'Unclassified', description: 'Locked doors overnight for safety.', reviewDate: null, commissionReference: '', relatedMedicationId: null, authorisedBy: null, authorisationDate: null, datesIncluded: true, authorisationEndDate: null, useKind: 'Routine', firstUsedOn: null, interimBspDate: null, comprehensiveBspDate: null, isActive: true, requiresReporting: null, expectedUpdatedAt: '2026-01-01T00:00:00Z' } })
   })
 
   it('ticked with a field emptied shows the field error and does not save', async () => {
@@ -692,7 +708,7 @@ describe('RestrictivePracticesTab — edit form authorised checkbox', () => {
     await user.click(screen.getByRole('button', { name: /save entry/i }))
 
     const [call] = mockUpdateMutateAsync.mock.calls[0]
-    expect(call).toEqual({ id: 'rp-1', data: { type: 'Unclassified', description: 'Locked doors overnight for safety.', reviewDate: null, relatedMedicationId: null, authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01', datesIncluded: true, authorisationEndDate: null, useKind: 'Routine', firstUsedOn: null, interimBspDate: null, comprehensiveBspDate: null, isActive: true, requiresReporting: null, expectedUpdatedAt: '2026-01-01T00:00:00Z' } })
+    expect(call).toEqual({ id: 'rp-1', data: { type: 'Unclassified', description: 'Locked doors overnight for safety.', reviewDate: null, commissionReference: '', relatedMedicationId: null, authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01', datesIncluded: true, authorisationEndDate: null, useKind: 'Routine', firstUsedOn: null, interimBspDate: null, comprehensiveBspDate: null, isActive: true, requiresReporting: null, expectedUpdatedAt: '2026-01-01T00:00:00Z' } })
   })
 
   it('opens ticked for an inactive record and a description-only edit posts both values unchanged', async () => {
@@ -707,7 +723,7 @@ describe('RestrictivePracticesTab — edit form authorised checkbox', () => {
     await user.click(screen.getByRole('button', { name: /save entry/i }))
 
     const [call] = mockUpdateMutateAsync.mock.calls[0]
-    expect(call).toEqual({ id: 'rp-1', data: { type: 'Unclassified', description: 'Locked doors overnight for safety. Reviewed.', reviewDate: null, relatedMedicationId: null, authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01', datesIncluded: true, authorisationEndDate: null, useKind: 'Routine', firstUsedOn: null, interimBspDate: null, comprehensiveBspDate: null, isActive: false, requiresReporting: null, expectedUpdatedAt: '2026-01-01T00:00:00Z' } })
+    expect(call).toEqual({ id: 'rp-1', data: { type: 'Unclassified', description: 'Locked doors overnight for safety. Reviewed.', reviewDate: null, commissionReference: '', relatedMedicationId: null, authorisedBy: 'Dr Lee', authorisationDate: '2026-03-01', datesIncluded: true, authorisationEndDate: null, useKind: 'Routine', firstUsedOn: null, interimBspDate: null, comprehensiveBspDate: null, isActive: false, requiresReporting: null, expectedUpdatedAt: '2026-01-01T00:00:00Z' } })
   })
 
   it('opens ticked for a date-only record, shows the date, and blocks the save asking who', async () => {

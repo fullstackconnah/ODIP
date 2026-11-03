@@ -283,6 +283,7 @@ public class RestrictivePracticesController : ControllerBase
         practice.AuthorisedBy = dto.AuthorisedBy;
         practice.AuthorisationDate = dto.AuthorisationDate;
         practice.ReviewDate = dto.ReviewDate;
+        if (dto.CommissionReference != null) practice.CommissionReference = dto.CommissionReference.Trim() is { Length: > 0 } commissionRef ? commissionRef : null;
         practice.AuthorisationEndDate = endDate;
         practice.FirstUsedOn = firstUsedOn;
         if (datesIncluded)
@@ -416,6 +417,7 @@ public class RestrictivePracticesController : ControllerBase
         AuthorisedBy = rp.AuthorisedBy,
         AuthorisationDate = rp.AuthorisationDate,
         ReviewDate = rp.ReviewDate,
+        CommissionReference = rp.CommissionReference,
         RelatedMedicationId = rp.RelatedMedicationId,
         RelatedMedicationName = rp.RelatedMedication?.Name,
         RelatedMedicationStatus = rp.RelatedMedication?.Status,

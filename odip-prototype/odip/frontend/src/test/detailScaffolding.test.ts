@@ -75,8 +75,8 @@ describe('PageState', () => {
 describe('useTabParam', () => {
   it('is the only code that reads or writes ?tab= for a page tab: no page keeps its own copy of the logic', () => {
     // useBackNavigation only PARSES a path string to name a hub tab for its accessible label; it never reads the live URL. Settings has no
-    // tabs since its redesign: settingsSections only maps an old ?tab= link to its ?section=, and the page rewrites it away. participantTabs.ts reads the OLD ?tab= key only to redirect it to its new tab.
-    expect(offendersOf(text => /\.get\(['"]tab['"]\)/.test(text), ['hooks/useTabParam.ts', 'hooks/useBackNavigation.tsx', 'pages/settings/settingsSections.ts', 'pages/participant-detail/participantTabs.ts'])).toEqual([])
+    // tabs since its redesign: settingsSections only maps an old ?tab= link to its ?section=, and the page rewrites it away. participantTabs.ts and TripDetailPage.tsx read the OLD ?tab= key only to redirect it to its new tab.
+    expect(offendersOf(text => /\.get\(['"]tab['"]\)/.test(text), ['hooks/useTabParam.ts', 'hooks/useBackNavigation.tsx', 'pages/settings/settingsSections.ts', 'pages/participant-detail/participantTabs.ts', 'pages/TripDetailPage.tsx'])).toEqual([])
   })
 
   it.each(['pages/TripDetailPage.tsx', 'pages/ParticipantDetailPage.tsx', 'pages/StaffDetailPage.tsx', 'pages/ParticipantsHubPage.tsx'])(

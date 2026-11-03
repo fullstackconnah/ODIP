@@ -147,6 +147,10 @@ export interface UpdateBudgetSettingsDto {
 export const BUDGET_STATUSES = ['None', 'OnTrack', 'Approaching', 'ForecastOver', 'Over'] as const
 export type BudgetStatus = typeof BUDGET_STATUSES[number]
 
+/** The one word the Budgets list prints for a row, in the order of risk: `BudgetStatus` with the NDIA's refusal and the pace warning folded in by the server. */
+export const BUDGET_LIST_STATUSES = ['Over', 'FundsRanOut', 'ForecastOver', 'Approaching', 'SpendingFast', 'OnTrack'] as const
+export type BudgetListStatus = typeof BUDGET_LIST_STATUSES[number]
+
 /** The words the screens print for each status. */
 export const BUDGET_STATUS_LABELS: Record<BudgetStatus, string> = {
   None: 'No budget',
@@ -380,6 +384,8 @@ export interface BudgetListRow {
   /** Used plus booked ahead. */
   forecast: number
   status: BudgetStatus
+  /** The one word the list prints for this row (the server's: the NDIA's refusal and the pace warning are folded in), and the order it is sorted by. */
+  listStatus: BudgetListStatus
   /** The date the money runs out at the pace so far, when that is before the period ends. Not a status: filters and counts ignore it. Left out when none. */
   paceRunsOutOn?: string
   /** How many shifts of this period the shift claim cannot price yet (a sleepover, a passive night, a group shift): each is $0 in every figure above, so they leave those shifts out. 0 when every shift priced. */

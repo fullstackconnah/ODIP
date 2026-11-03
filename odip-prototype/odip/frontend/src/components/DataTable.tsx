@@ -1,7 +1,7 @@
-import { type CSSProperties, type ReactNode, Children, Fragment, useState, useMemo, useRef, useEffect } from 'react'
+import { type CSSProperties, type ReactNode, type RefObject, Children, Fragment, useState, useMemo, useRef, useEffect } from 'react'
 import { formatDateAu, formatCurrency } from '@/lib/utils'
 import { StatusBadge } from '@/components/StatusBadge'
-import { ChevronUp, ChevronDown, ChevronsUpDown, Check, MoreHorizontal } from 'lucide-react'
+import { ChevronUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight, Check, MoreHorizontal } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/Button'
 import { Dropdown, type DropdownItem } from '@/components/Dropdown'
@@ -421,6 +421,16 @@ export function DataTable<T>({
     }
   }, [visibleColumns.length, sortedData.length])
 
+  // A press that reaches the edge unmounts its own cue; keyboard focus would fall to body. Hand it to the opposite cue once that renders.
+  const pressedCue = useRef<1 | -1 | null>(null)
+  useEffect(() => {
+    const pressed = pressedCue.current
+    if (pressed === null || (pressed === 1 ? edges.end : edges.start)) return
+    pressedCue.current = null
+    if (document.activeElement && document.activeElement !== document.body) return
+    scrollRef.current?.parentElement?.querySelector<HTMLElement>(`[data-scroll-cue="${-pressed}"]`)?.focus()
+  }, [edges.start, edges.end])
+
   function handleSort(key: string) {
     if (!canSort) return
     const col = columns.find(c => c.key === key)
@@ -738,9 +748,31 @@ export function DataTable<T>({
         </div>
       )}
     </div>
-      {edges.end && <span data-edge-fade="end" aria-hidden="true" style={{ right: edges.endPin }} className="pointer-events-none absolute inset-y-0 w-6 max-md:hidden bg-[linear-gradient(to_right,transparent,var(--color-card))]" />}
-      {edges.start && <span data-edge-fade="start" aria-hidden="true" style={{ left: edges.startPin }} className="pointer-events-none absolute inset-y-0 w-6 max-md:hidden bg-[linear-gradient(to_left,transparent,var(--color-card))]" />}
+      {edges.end && <span data-edge-fade="end" aria-hidden="true" style={{ right: edges.endPin }} className="pointer-events-none absolute inset-y-0 z-[1] w-12 max-md:hidden bg-[linear-gradient(to_right,transparent,var(--color-card))]" />}
+      {edges.start && <span data-edge-fade="start" aria-hidden="true" style={{ left: edges.startPin }} className="pointer-events-none absolute inset-y-0 z-[1] w-12 max-md:hidden bg-[linear-gradient(to_left,transparent,var(--color-card))]" />}
+      {/* The fade says there is more; the chevron is the way there for a mouse, a finger or the keyboard. It sits in the header row, inside the fade. */}
+      {edges.end && <ScrollCue direction={1} style={{ right: edges.endPin + 4 }} box={scrollRef} pressedRef={pressedCue} />}
+      {edges.start && <ScrollCue direction={-1} style={{ left: edges.startPin + 4 }} box={scrollRef} pressedRef={pressedCue} />}
     </div>
+  )
+}
+
+/** One press moves the box 80% of its width toward the hidden columns; instantly under prefers-reduced-motion. */
+function ScrollCue({ direction, style, box, pressedRef }: { direction: 1 | -1; style: CSSProperties; box: RefObject<HTMLDivElement | null>; pressedRef: RefObject<1 | -1 | null> }) {
+  const scroll = () => {
+    pressedRef.current = direction
+    const el = box.current
+    if (!el) return
+    const reduced = typeof window.matchMedia !== 'function' || window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    el.scrollBy({ left: direction * el.clientWidth * 0.8, behavior: reduced ? 'auto' : 'smooth' })
+  }
+  return (
+    // The wrapper takes the position: a Button is `relative` (its tap area) and would win over `absolute`, dropping the cue below the table.
+    <span style={style} className="absolute top-[calc(var(--table-head-h)/2_-_0.75rem)] z-10 flex max-md:hidden">
+      <Button variant="ghost" size="sm" iconOnly onClick={scroll} data-scroll-cue={direction} aria-label={direction === 1 ? 'Show more columns' : 'Show earlier columns'} className="rounded-full bg-[var(--color-card)] shadow-sm">
+        {direction === 1 ? <ChevronRight className="w-4 h-4" aria-hidden="true" /> : <ChevronLeft className="w-4 h-4" aria-hidden="true" />}
+      </Button>
+    </span>
   )
 }
 
@@ -813,7 +845,8 @@ export function RowActions({ children, overlay = false, className = '' }: { chil
   )
 }
 
-export type RowMenuItem = { label: string; icon: ReactNode; onSelect?: () => void; to?: string }
+/** `disabled` keeps the item visible with its reason in `description` (the icon's title from md up, the menu line on a phone). */
+export type RowMenuItem = { label: string; icon: ReactNode; onSelect?: () => void; to?: string; disabled?: boolean; description?: string; /** The icon button's accessible name when the label alone would not tell two rows apart. */ ariaLabel?: string }
 
 /**
  * One set of row actions, two presentations. From md up the items are icon buttons in a `RowActions overlay` (revealed on hover, the way a desk
@@ -828,9 +861,9 @@ export function RowMenu({ items, name }: { items: RowMenuItem[]; name: string })
     <>
       <RowActions overlay className="max-md:hidden">
         {items.map(item => item.to ? (
-          <Button key={item.label} to={item.to} variant="ghost" size="sm" iconOnly title={item.label} aria-label={item.label} onClick={e => e.stopPropagation()}>{item.icon}</Button>
+          <Button key={item.label} to={item.to} variant="ghost" size="sm" iconOnly title={item.label} aria-label={item.ariaLabel ?? item.label} onClick={e => e.stopPropagation()}>{item.icon}</Button>
         ) : (
-          <Button key={item.label} variant="ghost" size="sm" iconOnly title={item.label} aria-label={item.label} onClick={e => { e.stopPropagation(); item.onSelect?.() }}>{item.icon}</Button>
+          <Button key={item.label} variant="ghost" size="sm" iconOnly title={item.disabled && item.description ? item.description : item.label} aria-label={item.ariaLabel ?? item.label} disabled={item.disabled} onClick={e => { e.stopPropagation(); item.onSelect?.() }}>{item.icon}</Button>
         ))}
       </RowActions>
       {/* The panel is portalled, but React still bubbles its events to the row: keep a row that opens on click from opening. */}
@@ -839,7 +872,7 @@ export function RowMenu({ items, name }: { items: RowMenuItem[]; name: string })
           variant="icon"
           label={`More actions for ${name}`}
           icon={<MoreHorizontal className="w-5 h-5" aria-hidden="true" />}
-          items={items.map(item => ({ value: item.label, label: item.label, icon: item.icon }))}
+          items={items.map(item => ({ value: item.label, label: item.label, icon: item.icon, disabled: item.disabled, description: item.description }))}
           onSelect={value => { const item = items.find(i => i.label === value); if (item) run(item) }}
           triggerClassName="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] transition-colors"
         />

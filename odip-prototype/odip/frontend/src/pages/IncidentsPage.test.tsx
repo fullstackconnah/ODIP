@@ -207,27 +207,6 @@ describe('IncidentsPage — NDIS Commission overdue banner (C-1)', () => {
 })
 
 describe('IncidentsPage — cross-domain links', () => {
-  it('links the trip cell to the trip detail page when tripInstanceId is set', () => {
-    mockUseIncidents.mockReturnValue({
-      data: [baseIncident({ tripInstanceId: 'trip-1', tripName: 'Beach Day' })],
-      isLoading: false,
-    })
-    renderPage()
-
-    expect(screen.getByRole('link', { name: 'Beach Day' })).toHaveAttribute('href', '/trips/trip-1')
-  })
-
-  it('renders plain text (not a link) for the trip cell when tripInstanceId is not set', () => {
-    mockUseIncidents.mockReturnValue({
-      data: [baseIncident({ tripInstanceId: null, tripName: null })],
-      isLoading: false,
-    })
-    renderPage()
-
-    expect(screen.queryByRole('link', { name: 'Beach Day' })).not.toBeInTheDocument()
-    expect(screen.getAllByText('—').length).toBeGreaterThan(0)
-  })
-
   it('links the participant cell to the participant detail page when involvedParticipantId is set', () => {
     mockUseIncidents.mockReturnValue({
       data: [baseIncident({ involvedParticipantId: 'p-9', involvedParticipantName: 'Priya Nair' })],
@@ -455,7 +434,7 @@ describe('IncidentsPage — narrow-desktop columns', () => {
 
     const cells = within(screen.getByText('Slip in kitchen').closest('tr') as HTMLElement).getAllByRole('cell')
     // From md up (the Column Rule); max-md:hidden only leaves a field off the phone card.
-    for (const label of ['Title', 'Severity', 'Status', 'Date', 'NDIS Commission', 'Participant', 'Type', 'Trip', 'Reported By']) {
+    for (const label of ['Title', 'Severity', 'Status', 'Date', 'NDIS Commission', 'Participant', 'Type']) {
       const index = headerIndex(label)
       expect(index, label).toBeGreaterThanOrEqual(0)
       const th = screen.getAllByRole('columnheader')[index]
@@ -470,11 +449,11 @@ describe('IncidentsPage — narrow-desktop columns', () => {
   })
 
   // Polish PR1: Date moves from 9th to 5th, so the five a coordinator triages by (title, NDIS Commission, status, severity, date) are on screen at 1024.
-  it('orders the columns Title, NDIS Commission, Status, Severity, Date, Type, Trip, Participant, Reported By', () => {
+  it('orders the columns Title, NDIS Commission, Status, Severity, Date, Type, Participant (Trip and Reported By are on the detail page)', () => {
     mockUseIncidents.mockReturnValue({ data: [baseIncident()], isLoading: false })
     renderPage()
     const labels = screen.getAllByRole('columnheader').map((th) => (th.textContent || '').trim()).filter(Boolean)
-    expect(labels).toEqual(['Title', 'NDIS Commission', 'Status', 'Severity', 'Date', 'Type', 'Trip', 'Participant', 'Reported By', 'Actions'])
+    expect(labels).toEqual(['Title', 'NDIS Commission', 'Status', 'Severity', 'Date', 'Type', 'Participant', 'Actions'])
   })
 
   it('clamps a long title to two lines at a responsive cap, in ink, and keeps the full title in the tooltip', () => {
@@ -495,17 +474,13 @@ describe('IncidentsPage — narrow-desktop columns', () => {
     expect((title.closest('td') as HTMLElement).className).not.toMatch(/(^|\s)(p|py|pt|pb)-/)
   })
 
-  it('truncates the trip and participant links themselves (not a wrapper that would clip the focus ring)', () => {
+  it('truncates the participant link itself (not a wrapper that would clip the focus ring)', () => {
     mockUseIncidents.mockReturnValue({
       data: [baseIncident({ tripInstanceId: 't-1', tripName: 'Sunshine Coast Beach Escape', involvedParticipantId: 'p-1', involvedParticipantName: 'Grace Palmer-Hughes' })],
       isLoading: false,
     })
     renderPage()
 
-    const trip = screen.getByRole('link', { name: 'Sunshine Coast Beach Escape' })
-    expect(trip).toHaveAttribute('title', 'Sunshine Coast Beach Escape')
-    // Two non-overlapping ranges (below / from 1792px), so neither depends on CSS source order.
-    expect(trip).toHaveClass('inline-block', 'md:truncate', 'md:max-[1792px]:max-w-[11rem]', 'min-[1792px]:max-w-[13rem]')
     const participant = screen.getByRole('link', { name: 'Grace Palmer-Hughes' })
     expect(participant).toHaveAttribute('title', 'Grace Palmer-Hughes')
     expect(participant).toHaveClass('inline-block', 'md:truncate', 'md:max-w-[9rem]')
@@ -692,14 +667,14 @@ describe('IncidentsPage — row actions', () => {
 describe('IncidentsPage — 44px touch targets for its links', () => {
   const PAD = 'md:pointer-coarse:py-[calc((var(--tap-min)_-_1.25rem)_/_2)]'
 
-  it('gives the truncating participant and trip links vertical padding from md up on touch, keeping their truncation', () => {
+  it('gives the truncating participant link vertical padding from md up on touch, keeping their truncation', () => {
     mockUseIncidents.mockReturnValue({
       data: [baseIncident({ tripInstanceId: 'trip-1', tripName: 'Beach Day', involvedParticipantId: 'p-9', involvedParticipantName: 'Priya Nair' })],
       isLoading: false,
     })
     renderPage()
 
-    for (const name of ['Beach Day', 'Priya Nair']) {
+    for (const name of ['Priya Nair']) {
       const link = screen.getByRole('link', { name })
       expect(link, name).toHaveClass(PAD, 'inline-block', 'align-middle', 'md:truncate', 'underline')
       // Padding, not the pad: the ::before of an overflow-hidden link is clipped by the link itself.
@@ -818,12 +793,11 @@ describe('IncidentsPage — phone card', () => {
     expect(row.querySelector('td[data-label="Title"]')).toHaveAttribute('data-card', 'primary')
     expect(row.querySelector('td[data-label="Status"]')).toHaveAttribute('data-card', 'status')
     for (const label of ['Date', 'Severity', 'Type']) expect(row.querySelector('td[data-label="' + label + '"]'), label).toHaveAttribute('data-card', 'meta')
-    // The reporter is left off the card; it stays a column from md up.
-    const reporter = row.querySelector('td[data-label="Reported By"]')
-    expect(reporter).not.toHaveAttribute('data-card')
-    expect(reporter).toHaveClass('max-md:hidden')
-    // Card meta order is Date, Severity, NDIS, Type, Trip, Participant (a triage read), whatever the desktop column order.
-    const orders = { Date: 'max-md:-order-1!', Severity: 'max-md:order-0!', 'NDIS Commission': 'max-md:order-1!', Type: 'max-md:order-2!', Trip: 'max-md:order-3!', Participant: 'max-md:order-4!' }
+    // Trip and the reporter are not on the list at all: they are on the incident.
+    expect(row.querySelector('td[data-label="Reported By"]')).toBeNull()
+    expect(row.querySelector('td[data-label="Trip"]')).toBeNull()
+    // Card meta order is Date, Severity, NDIS, Type, Participant (a triage read), whatever the desktop column order.
+    const orders = { Date: 'max-md:-order-1!', Severity: 'max-md:order-0!', 'NDIS Commission': 'max-md:order-1!', Type: 'max-md:order-2!', Participant: 'max-md:order-3!' }
     for (const [label, cls] of Object.entries(orders)) expect(row.querySelector('td[data-label="' + label + '"]'), label).toHaveClass(cls)
     // A row with nothing to report to the Commission leaves that cell off the card, and the menu ends the meta line.
     expect(row.querySelector('td[data-label="NDIS Commission"]')).not.toHaveAttribute('data-card')

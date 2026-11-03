@@ -214,8 +214,9 @@ const demoItems = {
     row('o4', 'ClaimLine', 'Claimed', '2026-10-15', 'TC-4309-20261015 · 04_Weekday_Weekend · 7.5 h', 517.5, 'Submitted', '/claims/claim-303', 4, PLANNED),
     row('o5', 'CompletedShift', 'Pending', '2026-10-21', 'Shift 13:00–18:00 · 5 h', 345, 'Completed', '/rostering?date=2026-10-21', 4, PLANNED),
     row('o6', 'ClaimLine', 'Pending', '2026-10-29', 'TC-4309-20261029 · 04_Weekday_STD · 8 h', 552, 'Draft', '/claims/claim-304', 4, PLANNED),
-    // The stated pool in the current quarter is on track, so the participant has one pool of each risk.
+    // The stated pool in the current quarter is on track by its limit but spending fast: 74% used a third of the way in, so at this pace it runs out before the quarter ends (the list calls it Spending fast).
     row('o7', 'ClaimLine', 'Claimed', '2026-10-08', 'TC-4309-20261008 · 15_Weekday_STD · 4 h', 276, 'Submitted', '/claims/claim-305', 15, PLANNED),
+    row('o8', 'ClaimLine', 'Claimed', '2026-10-20', 'TC-4309-20261020 · 15_Weekday_STD · 17.7 h', 1224, 'Submitted', '/claims/claim-306', 15, PLANNED),
   ],
   // p-0004's plan: Core (flexible) is ON TRACK, and its single period carries $3,200 from nothing (a whole-year set-aside).
   'fplan-0002': [

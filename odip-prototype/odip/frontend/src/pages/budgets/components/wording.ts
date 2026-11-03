@@ -39,8 +39,14 @@ export const noBudgetNoteUpcoming = "Until a plan is running, we can't warn abou
 /** What the Budgets page says when no budget is being tracked for anybody, and what to do about it. */
 export const NOTHING_TRACKED = 'No budgets are being tracked yet. Record a participant’s plan to start.'
 
-/** The pill beside a row's status when the NDIA has refused a claim of the pool for want of funds: the label the participant alert has (ALERT_TYPE_LABELS), in the NDIA's own voice. */
-export const NDIA_FUNDS_RAN_OUT = 'NDIA says the funds ran out'
+/** The note under a "Funds ran out" row's pill: dates only, the full sentence is in its title and hidden text. */
+export const ndiaRefusedNote = (day: string) => `NDIA refused ${day}`
+/** The NDIA's word in full, for a pointer and a screen reader: the day (with its year) and the code. */
+export const ndiaRefusedSentence = (day: string, code: string) => `NDIA rejected a claim on ${day} (${code})`
+/** The note under a row's pill when its money runs out at the pace so far; the sentence is in its title and hidden text. */
+export const runsOutNote = (day: string) => `Runs out ${day}`
+/** What Available means on a "Funds ran out" row: the figure is ours, and the NDIA says the money is gone. After the amount, for a screen reader, and with it in the title. */
+export const availableByOurRecords = (day: string) => `by our records; the NDIA refused a claim for lack of funds on ${day}`
 
 // ── A forecast that leaves shifts out ───────────────────────────────────────────────────────────────────────────────────
 

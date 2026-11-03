@@ -1,17 +1,18 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { format } from 'date-fns'
-import { CalendarOff, Plus } from 'lucide-react'
+import { CalendarOff, Pencil, Plus, Trash2 } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
 import { useIsMdToXl } from '@/hooks/useIsMdToXl'
 import { PageHeader } from '@/components/PageHeader'
-import { CellText, DataTable, type Column } from '@/components/DataTable'
+import { CellText, DataTable, RowMenu, type Column, type RowMenuItem } from '@/components/DataTable'
 import { EmptyState } from '@/components/EmptyState'
 import { Callout } from '@/components/Callout'
 import { PageState } from '@/components/PageState'
 import { StatusBadge } from '@/components/StatusBadge'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Dropdown } from '@/components/Dropdown'
+import { TextField } from '@/components/TextField'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { FindingsList } from '@/pages/rostering/components/FindingsList'
 import {
@@ -515,7 +516,7 @@ export default function LeaveApprovalsPage() {
       </div>
     ) }
   const sharedTail: Column<ApprovalRow>[] = [
-    { key: 'status', header: 'Status', render: row => row.rowKind === 'legacy' ? (
+    { key: 'status', header: 'Status', hidden: statusFilter === 'Pending', render: row => row.rowKind === 'legacy' ? (
       <StatusBadge status="Record" colorMap={LEGACY_RECORD_COLOR} />
     ) : (
       <div>
@@ -531,54 +532,43 @@ export default function LeaveApprovalsPage() {
       </div>
     ) },
     ...(canApproveLeave ? [{
-      key: 'actions', header: '', align: 'right' as const, render: (row: ApprovalRow) => {
+      // The row's decision (Decline, Approve, Cancel) stays on screen; the rarer Edit and the legacy Delete are the hover menu, so the row has one filled button.
+      key: 'actions', header: '', align: 'right' as const, overlay: true, mobile: 'trail' as const, render: (row: ApprovalRow) => {
         // Every row has these, so each name carries the row's subject: who, and when. sm keeps the row at --row-h.
         const named = (label: string) => `${label}: ${row.data.userFullName}, ${rowWindow(row)}`
-        const edit = (
-          <Button variant="secondary" size="sm" onClick={() => openEdit(row)} aria-label={named('Edit')}>
-            Edit
-          </Button>
-        )
+        const menu = (items: RowMenuItem[]) => <RowMenu name={`${row.data.userFullName}, ${rowWindow(row)}`} items={items} />
+        const editItem: RowMenuItem = { label: 'Edit', ariaLabel: named('Edit'), icon: <Pencil className="w-4 h-4" />, onSelect: () => openEdit(row) }
+        // The overlay column has no padding on a mouse, so the visible buttons bring their own.
+        const cluster = (children: ReactNode) => <div className="flex items-center justify-end gap-1.5 pointer-coarse:gap-2 md:pointer-fine:px-3">{children}</div>
         if (fromEh(row)) {
           return stacked
-            ? <span className="inline-block whitespace-normal text-right text-[13px] text-[var(--color-muted-foreground)] md:max-w-[8.5rem]">{'Change it in Employment\u00a0Hero'}</span>
-            : <span className="text-[13px] text-[var(--color-muted-foreground)]">Change it in Employment Hero</span>
+            ? <span className="inline-block whitespace-normal text-right text-[13px] text-[var(--color-muted-foreground)] md:max-w-[8.5rem] md:pointer-fine:px-3">{'Change it in Employment\u00a0Hero'}</span>
+            : <span className="text-[13px] text-[var(--color-muted-foreground)] md:pointer-fine:px-3">Change it in Employment Hero</span>
         }
         if (row.rowKind === 'legacy') {
-          return (
-            <div className="flex justify-end gap-1.5 pointer-coarse:gap-2">
-              {edit}
-              <Button variant="ghost-danger" size="sm" onClick={() => setDeleteLegacyTarget(row)} aria-label={named('Delete')}>
-                Delete
-              </Button>
-            </div>
-          )
+          return menu([editItem, { label: 'Delete', ariaLabel: named('Delete'), icon: <Trash2 className="w-4 h-4" />, onSelect: () => setDeleteLegacyTarget(row) }])
         }
         // Your own: no Approve, Decline or Edit. An approved one keeps Cancel below (it only takes leave away).
         if (isOwn(row) && row.data.status !== 'Approved') return null
         if (row.data.status === 'Pending') {
-          return (
-            <div className="flex justify-end gap-1.5 pointer-coarse:gap-2">
-              {edit}
-              <Button variant="secondary" size="sm" onClick={() => setDeclineTarget(row)} aria-label={named('Decline')}>
-                Decline
-              </Button>
-              <Button size="sm" onClick={() => setApproveTarget(row)} aria-label={named('Approve')}>
-                Approve
-              </Button>
-            </div>
-          )
+          return cluster(<>
+            <Button variant="secondary" size="sm" onClick={() => setDeclineTarget(row)} aria-label={named('Decline')}>
+              Decline
+            </Button>
+            <Button size="sm" onClick={() => setApproveTarget(row)} aria-label={named('Approve')}>
+              Approve
+            </Button>
+            {menu([editItem])}
+          </>)
         }
         if (row.data.status === 'Approved') {
           const label = row.rowKind === 'leave' ? 'Cancel leave' : 'Cancel rule'
-          return (
-            <div className="flex justify-end gap-1.5 pointer-coarse:gap-2">
-              {!isOwn(row) && edit}
-              <Button variant="ghost-danger" size="sm" onClick={() => setCancelTarget(row)} aria-label={named(label)}>
-                {label}
-              </Button>
-            </div>
-          )
+          return cluster(<>
+            <Button variant="ghost-danger" size="sm" onClick={() => setCancelTarget(row)} aria-label={named(label)}>
+              {label}
+            </Button>
+            {!isOwn(row) && menu([editItem])}
+          </>)
         }
         return null
       },
@@ -631,14 +621,8 @@ export default function LeaveApprovalsPage() {
             placeholder="All staff"
           />
         </div>
-        <div className="flex items-center gap-1.5">
-          <label htmlFor="leave-approvals-from-date" className="text-xs text-[var(--color-muted-foreground)]">From</label>
-          <input id="leave-approvals-from-date" type="date" value={fromFilter} onChange={e => setFromFilter(e.target.value)} />
-        </div>
-        <div className="flex items-center gap-1.5">
-          <label htmlFor="leave-approvals-to-date" className="text-xs text-[var(--color-muted-foreground)]">To</label>
-          <input id="leave-approvals-to-date" type="date" value={toFilter} onChange={e => setToFilter(e.target.value)} />
-        </div>
+        <TextField label="From" type="date" value={fromFilter} max={toFilter || undefined} onChange={e => setFromFilter(e.target.value)} />
+        <TextField label="To" type="date" value={toFilter} min={fromFilter || undefined} onChange={e => setToFilter(e.target.value)} />
       </div>
 
       {isLoading ? (

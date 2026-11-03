@@ -1,223 +1,172 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, Pencil, Users, X } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { Pencil, Undo2, Users, X } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { FormField } from '@/components/FormField'
 import { Button } from '@/components/Button'
 import { Callout } from '@/components/Callout'
+import { SearchInput } from '@/components/SearchInput'
+import { SearchableSelect } from '@/components/SearchableSelect'
+import { ParticipantPicker } from '@/components/ParticipantPicker'
+import { StatusBadge } from '@/components/StatusBadge'
+import { ToggleGroup } from '@/components/ToggleGroup'
+import { DataTable, RowMenu, type Column } from '@/components/DataTable'
+import { TAP_FLOOR } from '@/components/tapArea'
 import { usePermissions } from '@/lib/permissions'
 import { extractErrorMessage } from '@/lib/utils'
-import { useParticipants, useStaff, useUpsertCompatibility } from '@/api/hooks'
+import type { Tone } from '@/lib/tone'
+import { useAllCompatibility, useParticipants, useStaff, useUpsertCompatibility } from '@/api/hooks'
 import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
 import type { CompatibilityLevel, CompatibilityRowDto } from '@/api/types'
-import { useCompatibilityMatrix } from './lib/useCompatibilityMatrix'
 
-type PersonRef = { id: string; fullName: string }
-
-type ExcludeDraft = {
-  staff: PersonRef
-  participant: PersonRef
-  reason: string
+// Only Preferred (green) and No (red) carry colour; Backup and Emergency stay neutral, as on the participant card.
+const MARK: Record<Exclude<CompatibilityLevel, 'Allowed'>, { label: string; tone: Tone }> = {
+  Preferred: { label: 'Preferred', tone: 'success' },
+  Backup: { label: 'Backup', tone: 'neutral' },
+  Emergency: { label: 'Emergency', tone: 'neutral' },
+  Excluded: { label: 'No', tone: 'danger' },
 }
 
-function cellKey(staffId: string, participantId: string): string {
-  return `${staffId}:${participantId}`
-}
+type View = 'all' | 'no' | 'prefs'
 
-// The full dropdown, revealed on hover/focus for editing: solid, saturated, unambiguous —
-// the moment you're interacting with a cell you get the real control with its native chrome.
-const LEVEL_SELECT_CLASS: Record<CompatibilityLevel, string> = {
-  Allowed: 'bg-surface-container text-muted-foreground',
-  // Backup and Emergency are neutral and labelled: only Preferred (green) and No (red) carry colour.
-  Backup: 'bg-surface-container text-foreground font-medium',
-  Emergency: 'bg-surface-container text-foreground font-medium',
-  Preferred: 'bg-primary-fixed text-on-primary-fixed font-medium',
-  Excluded: 'bg-error-container text-on-error-container font-medium',
-}
-
-// What a cell shows AT REST, before any hover/focus — quiet but never hidden. Preferred and
-// Excluded are the exceptions worth reading without interacting, so they keep a label, just at
-// accent weight (~10% tint) rather than the full-saturation fill reserved for the active
-// dropdown. Excluded carries more weight than Preferred (stronger tint, semibold) since it's
-// the state that stops a roster. Allowed — the sparse, uninformative default — gets no label;
-// "editable but empty" is itself the signal, backed by the cell's hairline underline.
-const RESTING_LABEL_CLASS: Record<CompatibilityLevel, string> = {
-  Allowed: '',
-  Backup: 'rounded-full bg-surface-container px-2 py-0.5 text-xs leading-none text-muted-foreground',
-  Emergency: 'rounded-full bg-surface-container px-2 py-0.5 text-xs leading-none text-muted-foreground',
-  Preferred: 'rounded-full bg-primary/10 px-2 py-0.5 text-xs leading-none text-primary',
-  Excluded: 'rounded-full bg-destructive/15 px-2 py-0.5 text-xs font-semibold leading-none text-destructive',
-}
-
-// Read-only (non-writer) rendering shares the same resting weight — there's nothing to reveal
-// on hover since there's no control underneath, so this IS the permanent state for viewers.
-const levelText = (level: CompatibilityLevel) => (level === 'Excluded' ? 'No' : level)
-
-function RestingMark({ level }: { level: CompatibilityLevel }) {
-  if (level === 'Allowed') return null
-  return <span className={RESTING_LABEL_CLASS[level]}>{levelText(level)}</span>
-}
-
-/** Loading state — a skeleton matching the final matrix's shape, no spinner. */
-function CompatibilityMatrixSkeleton() {
-  return (
-    <div className="overflow-x-auto rounded-[var(--radius-md)] border border-border" aria-hidden="true">
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr>
-            <th className="sticky left-0 z-10 border-b border-r border-border bg-surface-container-low px-[var(--cell-px)] py-[6px]" />
-            {Array.from({ length: 6 }, (_, i) => (
-              <th key={i} className="border-b border-border bg-surface-container-low px-[var(--cell-px)] py-[6px]">
-                <div className="h-3 w-16 animate-pulse rounded-sm bg-muted" />
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {Array.from({ length: 6 }, (_, rowIdx) => (
-            <tr key={rowIdx} className="h-[var(--row-h)] border-b border-border">
-              <td className="sticky left-0 z-10 border-r border-border bg-card px-[var(--cell-px)]">
-                <div className="h-3 w-24 animate-pulse rounded-sm bg-muted" />
-              </td>
-              {Array.from({ length: 6 }, (_, colIdx) => (
-                <td key={colIdx} className="px-[var(--cell-px)] text-center">
-                  <div className="mx-auto h-4 w-16 animate-pulse rounded-full bg-muted" />
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
+type Draft = { staffId: string; participantId: string; reason: string; fixedPair: boolean }
 
 export default function CompatibilityPage() {
   const { canWrite } = usePermissions()
-  // INTAKE-08: the compatibility matrix excludes drafts.
-  const { data: participants = [], isLoading: participantsLoading, isError: participantsError, refetch: refetchParticipants } = useParticipants(CAN_RECEIVE_SERVICES)
-  const { data: staff = [], isLoading: staffLoading, isError: staffError, refetch: refetchStaff } = useStaff()
+  const [params] = useSearchParams()
+  // INTAKE-08: drafts are out; the list keeps today's scope (active staff, ready participants).
+  const participants = useParticipants(CAN_RECEIVE_SERVICES)
+  const staff = useStaff()
+  const all = useAllCompatibility()
+  const upsert = useUpsertCompatibility()
 
-  // PP-53: text filters on a matrix that can otherwise grow unbrowsably wide/tall.
-  const [staffFilter, setStaffFilter] = useState('')
-  const [participantFilter, setParticipantFilter] = useState('')
-  const filteredStaff = useMemo(
-    () => staff.filter(s => s.fullName.toLowerCase().includes(staffFilter.trim().toLowerCase())),
-    [staff, staffFilter],
-  )
-  const filteredParticipants = useMemo(
-    () => participants.filter(p => p.fullName.toLowerCase().includes(participantFilter.trim().toLowerCase())),
-    [participants, participantFilter],
-  )
-
-  const participantIds = useMemo(() => participants.map(p => p.id), [participants])
-  const matrix = useCompatibilityMatrix(participantIds)
-  const upsertCompatibility = useUpsertCompatibility()
-
-  // Optimistic overlay: cell edits apply here immediately and clear once the server confirms
-  // (or roll back — removed here, tracked in failedKeys — on failure).
-  const [overrides, setOverrides] = useState<Map<string, CompatibilityRowDto>>(new Map())
-  const [failedKeys, setFailedKeys] = useState<Set<string>>(new Set())
-  // Each refused cell's warning icon clears itself after four seconds. The timers are kept, one per cell, so a second refusal of the same cell can
-  // replace its own and leaving the page can cancel them all: left running they fire setFailedKeys into a tree that is gone.
-  const failedKeyTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
-  useEffect(() => {
-    const timers = failedKeyTimers.current
-    return () => {
-      for (const timer of timers.values()) clearTimeout(timer)
-    }
-  }, [])
-  // Why the last edit was refused, in the server's words (e.g. Enforce mode's 400 "Participant is not ready for booking or rostering.").
-  // The rolled-back cell's icon only lasts 4s and says nothing, so this stays until dismissed or the next edit.
+  const [query, setQuery] = useState(params.get('q') ?? '')
+  const [view, setView] = useState<View>('all')
+  const [draft, setDraft] = useState<Draft | null>(null)
+  const [dialogError, setDialogError] = useState<string | null>(null)
+  const [removing, setRemoving] = useState<CompatibilityRowDto | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const [excludeDraft, setExcludeDraft] = useState<ExcludeDraft | null>(null)
+  const [announcement, setAnnouncement] = useState('')
 
-  const isLoading = participantsLoading || staffLoading || matrix.isLoading
-  const isError = participantsError || staffError || matrix.isError
+  const activeStaff = useMemo(
+    () => (staff.data ?? []).filter(s => s.isActive !== false).sort((a, b) => a.fullName.localeCompare(b.fullName)),
+    [staff.data],
+  )
+  const inScope = useMemo(() => {
+    const staffIds = new Set(activeStaff.map(s => s.id))
+    const participantIds = new Set((participants.data ?? []).map(p => p.id))
+    // Allowed rows are kept by the server (the upsert never deletes): they are the default, not an exception.
+    return (all.data ?? []).filter(r => r.level !== 'Allowed' && staffIds.has(r.staffId) && participantIds.has(r.participantId))
+  }, [all.data, activeStaff, participants.data])
 
-  function resolveCell(staffId: string, participantId: string): { level: CompatibilityLevel; reason: string | null } {
-    const key = cellKey(staffId, participantId)
-    const row = overrides.get(key) ?? matrix.byKey.get(key)
-    return { level: row?.level ?? 'Allowed', reason: row?.reason ?? null }
+  const searched = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return q ? inScope.filter(r => r.staffName.toLowerCase().includes(q) || r.participantName.toLowerCase().includes(q)) : inScope
+  }, [inScope, query])
+  const noCount = searched.filter(r => r.level === 'Excluded').length
+  const rows = view === 'no' ? searched.filter(r => r.level === 'Excluded') : view === 'prefs' ? searched.filter(r => r.level !== 'Excluded') : searched
+
+  const isLoading = participants.isLoading || staff.isLoading || all.isLoading
+  const isError = participants.isError || staff.isError || all.isError
+  const noPeopleYet = !isLoading && !isError && (activeStaff.length === 0 || (participants.data ?? []).length === 0)
+
+  const pair = draft && inScope.find(r => r.staffId === draft.staffId && r.participantId === draft.participantId)
+  const staffName = (id: string) => activeStaff.find(s => s.id === id)?.fullName ?? ''
+  const participantName = (id: string) => (participants.data ?? []).find(p => p.id === id)?.fullName ?? ''
+  const editing = !!draft && (draft.fixedPair || pair?.level === 'Excluded')
+
+  function openNew() {
+    setDialogError(null)
+    setDraft({ staffId: '', participantId: '', reason: '', fixedPair: false })
   }
 
-  function applyChange(staffRef: PersonRef, participantRef: PersonRef, level: CompatibilityLevel, reason: string | null) {
-    const key = cellKey(staffRef.id, participantRef.id)
-
-    setOverrides(prev => new Map(prev).set(key, {
-      staffId: staffRef.id,
-      staffName: staffRef.fullName,
-      participantId: participantRef.id,
-      participantName: participantRef.fullName,
-      level,
-      rank: 0, // the server places the row; the overlay only shows the level
-      reason,
-      updatedAt: new Date().toISOString(),
-    }))
-    setFailedKeys(prev => {
-      if (!prev.has(key)) return prev
-      const next = new Set(prev)
-      next.delete(key)
-      return next
+  function pick(next: Partial<Draft>) {
+    setDraft(d => {
+      if (!d) return d
+      const merged = { ...d, ...next }
+      // Choosing a pair that is already No opens it as an edit, with the reason kept.
+      const existing = inScope.find(r => r.staffId === merged.staffId && r.participantId === merged.participantId && r.level === 'Excluded')
+      return existing && !d.reason ? { ...merged, reason: existing.reason ?? '' } : merged
     })
-    setSaveError(null)
+  }
 
-    upsertCompatibility.mutate(
-      { staffId: staffRef.id, participantId: participantRef.id, level, reason },
+  function submit() {
+    if (!draft) return
+    const reason = draft.reason.trim()
+    upsert.mutate(
+      { staffId: draft.staffId, participantId: draft.participantId, level: 'Excluded', reason },
       {
         onSuccess: () => {
-          setOverrides(prev => {
-            const next = new Map(prev)
-            next.delete(key)
-            return next
-          })
+          setAnnouncement(editing ? 'Reason saved.' : `Marked No: ${staffName(draft.staffId)} and ${participantName(draft.participantId)}.`)
+          setDraft(null)
         },
-        onError: (err: unknown) => {
-          // Roll back to whatever the server last confirmed for this cell.
-          setOverrides(prev => {
-            const next = new Map(prev)
-            next.delete(key)
-            return next
-          })
-          setSaveError(extractErrorMessage(err, "Couldn't save that change. Please try again."))
-          setFailedKeys(prev => new Set(prev).add(key))
-          const earlier = failedKeyTimers.current.get(key)
-          if (earlier) clearTimeout(earlier)
-          failedKeyTimers.current.set(key, setTimeout(() => {
-            failedKeyTimers.current.delete(key)
-            setFailedKeys(prev => {
-              if (!prev.has(key)) return prev
-              const next = new Set(prev)
-              next.delete(key)
-              return next
-            })
-          }, 4000))
-        },
+        onError: err => setDialogError(extractErrorMessage(err, "Couldn't save that change. Please try again.")),
       },
     )
   }
 
-  function handleLevelChange(staffRef: PersonRef, participantRef: PersonRef, level: CompatibilityLevel) {
-    if (level === 'Excluded') {
-      const current = resolveCell(staffRef.id, participantRef.id)
-      setExcludeDraft({ staff: staffRef, participant: participantRef, reason: current.reason ?? '' })
-      return
-    }
-    applyChange(staffRef, participantRef, level, null)
+  function confirmRemove() {
+    if (!removing) return
+    const row = removing
+    setSaveError(null)
+    upsert.mutate(
+      { staffId: row.staffId, participantId: row.participantId, level: 'Allowed', reason: null },
+      {
+        onSuccess: () => setAnnouncement(`Removed No: ${row.staffName} and ${row.participantName}.`),
+        onError: err => setSaveError(extractErrorMessage(err, "Couldn't save that change. Please try again.")),
+      },
+    )
+    setRemoving(null)
   }
 
-  function handleConfirmExclude() {
-    if (!excludeDraft) return
-    applyChange(excludeDraft.staff, excludeDraft.participant, 'Excluded', excludeDraft.reason.trim() || null)
-    setExcludeDraft(null)
-  }
+  const columns: Column<CompatibilityRowDto & { id: string }>[] = [
+    {
+      key: 'participantName', header: 'Participant', minWidth: '11rem', mobile: 'primary',
+      render: r => (
+        <Link
+          to={`/participants/${r.participantId}?tab=roster`}
+          className={`${TAP_FLOOR} font-medium text-[var(--color-foreground)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded-sm`}
+        >
+          {r.participantName}
+        </Link>
+      ),
+    },
+    { key: 'staffName', header: 'Staff', minWidth: '11rem', mobile: 'meta' },
+    {
+      key: 'level', header: 'Mark', width: '7rem', mobile: 'status',
+      render: r => <StatusBadge tone={MARK[r.level as keyof typeof MARK].tone} label={MARK[r.level as keyof typeof MARK].label} />,
+    },
+    {
+      key: 'reason', header: 'Reason', wrap: true, maxWidth: '40rem', mobile: 'meta', hideWhenEmpty: true,
+      render: r => r.reason || '—',
+    },
+    { key: 'updatedAt', header: 'Updated', type: 'date', width: '7rem', mobile: 'meta' },
+    ...(canWrite ? [{
+      key: 'actions', header: '', overlay: true, mobile: 'trail' as const,
+      render: (r: CompatibilityRowDto & { id: string }) => r.level !== 'Excluded' ? null : (
+        <RowMenu
+          name={`${r.staffName} and ${r.participantName}`}
+          items={[
+            { label: 'Edit reason', icon: <Pencil className="w-4 h-4" aria-hidden="true" />, onSelect: () => { setDialogError(null); setDraft({ staffId: r.staffId, participantId: r.participantId, reason: r.reason ?? '', fixedPair: true }) } },
+            { label: 'Remove No', icon: <Undo2 className="w-4 h-4" aria-hidden="true" />, onSelect: () => setRemoving(r) },
+          ]}
+        />
+      ),
+    }] : []),
+  ]
 
-  const noPeopleYet = !isLoading && !isError && (staff.length === 0 || participants.length === 0)
+  const nothingMarked = !isLoading && !isError && !noPeopleYet && inScope.length === 0
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
-      <PageHeader title="Compatibility" />
+      <PageHeader
+        title="Compatibility"
+        subtitle="Pairings that differ from the default. A worker marked No can’t be rostered for that participant."
+        count={isLoading || isError ? undefined : inScope.length}
+        action={canWrite && !noPeopleYet ? <Button onClick={openNew}>Mark as No</Button> : undefined}
+      />
 
       {saveError && (
         <Callout
@@ -232,171 +181,120 @@ export default function CompatibilityPage() {
         </Callout>
       )}
 
-      {isLoading && <CompatibilityMatrixSkeleton />}
-
-      {!isLoading && isError && (
-        <EmptyState
-          icon={AlertTriangle}
-          title="Couldn't load the compatibility matrix"
-          description="Something went wrong fetching staff, participants, or their compatibility. Try again."
-          action={{ label: 'Retry', onClick: () => { refetchParticipants(); refetchStaff(); matrix.refetchAll() } }}
-        />
+      {noPeopleYet && (
+        <EmptyState icon={Users} title="Nothing to match yet" description="Add at least one staff member and one participant first." />
       )}
 
-      {noPeopleYet && (
+      {nothingMarked && (
         <EmptyState
           icon={Users}
-          title="Nothing to match yet"
-          description="This matrix is how the roster board knows who works well with whom — mark a pairing Preferred to nudge assignment toward it, or No and that worker can’t be rostered for that participant. It needs at least one staff member and one participant before there's anything to mark."
+          title="No pairings marked yet"
+          description="Every worker can be rostered for every participant. Mark a pairing No when a worker must not work with someone. Preferred, backup and emergency staff are set on each participant’s Rostering tab."
+          action={canWrite ? { label: 'Mark as No', onClick: openNew } : undefined}
         />
       )}
 
-      {!isLoading && !isError && !noPeopleYet && (
-        <div className="flex flex-wrap gap-3">
-          <input
-            type="text"
-            value={staffFilter}
-            onChange={e => setStaffFilter(e.target.value)}
-            placeholder="Filter staff…"
-            aria-label="Filter staff"
-            className="h-[var(--control-h)] w-48 rounded-[var(--radius-sm)] border border-border bg-card px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          />
-          <input
-            type="text"
-            value={participantFilter}
-            onChange={e => setParticipantFilter(e.target.value)}
-            placeholder="Filter participants…"
-            aria-label="Filter participants"
-            className="h-[var(--control-h)] w-48 rounded-[var(--radius-sm)] border border-border bg-card px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          />
-        </div>
+      {!noPeopleYet && !nothingMarked && (
+        <>
+          <div className="flex flex-wrap items-center gap-3">
+            <SearchInput value={query} onChange={setQuery} placeholder="Search staff or participants" className="w-full max-w-md sm:w-auto sm:flex-1" />
+            <ToggleGroup
+              ariaLabel="Show"
+              disabled={isLoading}
+              value={view}
+              onChange={key => setView(key as View)}
+              options={[
+                { key: 'all', label: `All ${searched.length}` },
+                { key: 'no', label: `No ${noCount}` },
+                { key: 'prefs', label: `Preferences ${searched.length - noCount}` },
+              ]}
+            />
+          </div>
+          <div>
+            <DataTable
+              data={rows.map(r => ({ ...r, id: `${r.staffId}:${r.participantId}` }))}
+              keyField="id"
+              columns={columns}
+              sortable={false}
+              loading={isLoading}
+              error={isError}
+              onRetry={() => { participants.refetch(); staff.refetch(); all.refetch() }}
+              emptyMessage="No pairings match."
+            />
+          </div>
+        </>
       )}
 
-      {!isLoading && !isError && !noPeopleYet && (
-        <div className="overflow-x-auto rounded-[var(--radius-md)] border border-border">
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr>
-                <th className="sticky left-0 top-0 z-30 whitespace-nowrap border-b border-r border-border bg-surface-container-low px-[var(--cell-px)] py-[6px] text-left text-xs font-medium text-muted-foreground">
-                  Staff
-                </th>
-                {filteredParticipants.map(participant => (
-                  <th
-                    key={participant.id}
-                    className="sticky top-0 z-20 min-w-[7rem] whitespace-nowrap border-b border-border bg-surface-container-low px-[var(--cell-px)] py-[6px] text-left text-xs font-medium text-muted-foreground"
-                  >
-                    {participant.fullName}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {filteredStaff.map(staffMember => (
-                <tr key={staffMember.id} className="h-[var(--row-h)]">
-                  <td className="sticky left-0 z-10 whitespace-nowrap border-r border-border bg-card px-[var(--cell-px)] text-sm font-medium text-foreground">
-                    {staffMember.fullName}
-                  </td>
-                  {filteredParticipants.map(participant => {
-                    const staffRef: PersonRef = { id: staffMember.id, fullName: staffMember.fullName }
-                    const participantRef: PersonRef = { id: participant.id, fullName: participant.fullName }
-                    const { level, reason } = resolveCell(staffMember.id, participant.id)
-                    const failed = failedKeys.has(cellKey(staffMember.id, participant.id))
-                    const accessibleName = `${staffMember.fullName} with ${participant.fullName}: ${levelText(level)}`
-
-                    return (
-                      <td key={participant.id} className="px-1.5 text-center align-middle" title={reason ?? undefined}>
-                        {canWrite ? (
-                          <div
-                            className={`group relative inline-flex h-6 min-w-[1.5rem] items-center justify-center gap-1 ${
-                              level === 'Allowed'
-                                ? 'border-b border-dashed border-border transition-colors duration-100 hover:border-transparent focus-within:border-transparent'
-                                : ''
-                            }`}
-                          >
-                            {/* Resting mark: the permanent, low-weight affordance — a visible label for the
-                                exceptions, a bare hairline underline for Allowed. Fades out once hover/focus
-                                reveals the real control underneath. Decorative — the select carries the
-                                actual accessible name and interaction. */}
-                            <span
-                              aria-hidden="true"
-                              className="pointer-events-none absolute inset-0 flex items-center justify-center transition-opacity duration-100 group-hover:opacity-0 group-focus-within:opacity-0"
-                            >
-                              <RestingMark level={level} />
-                            </span>
-                            <select
-                              aria-label={accessibleName}
-                              value={level}
-                              onChange={e => handleLevelChange(staffRef, participantRef, e.target.value as CompatibilityLevel)}
-                              className={`relative z-10 appearance-none rounded-full px-2 py-0.5 text-xs opacity-0 transition-opacity duration-100 hover:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100 group-focus-within:opacity-100 ${LEVEL_SELECT_CLASS[level]}`}
-                            >
-                              <option value="Preferred">Preferred</option>
-                              <option value="Backup">Backup</option>
-                              <option value="Emergency">Emergency</option>
-                              <option value="Allowed">Allowed</option>
-                              <option value="Excluded">No</option>
-                            </select>
-                            {level === 'Excluded' && (
-                              <button
-                                type="button"
-                                onClick={() => setExcludeDraft({ staff: staffRef, participant: participantRef, reason: reason ?? '' })}
-                                aria-label={`Edit reason for ${staffMember.fullName} with ${participant.fullName}`}
-                                title="Edit reason"
-                                className="relative z-10 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity duration-100 hover:bg-accent hover:text-foreground focus:opacity-100 focus:outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100 group-focus-within:opacity-100"
-                              >
-                                <Pencil className="h-3 w-3" />
-                              </button>
-                            )}
-                            {failed && (
-                              <span title="Couldn't save — try again." className="relative z-10 inline-flex">
-                                <AlertTriangle className="h-3.5 w-3.5 text-destructive" aria-hidden="true" />
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <span aria-label={accessibleName} className="inline-flex h-6 min-w-[1.5rem] items-center justify-center">
-                            <RestingMark level={level} />
-                          </span>
-                        )}
-                      </td>
-                    )
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <p role="status" className="sr-only">{announcement}</p>
 
       <ConfirmDialog
-        open={excludeDraft !== null}
-        onCancel={() => setExcludeDraft(null)}
-        title="Mark as No for this participant"
-        message={excludeDraft && (
+        open={draft !== null}
+        onCancel={() => setDraft(null)}
+        title={editing ? 'Edit reason' : 'Mark as No'}
+        message={draft && (
           <>
             <p>
-              <strong className="text-foreground">{excludeDraft.staff.fullName}</strong> cannot be rostered for{' '}
-              <strong className="text-foreground">{excludeDraft.participant.fullName}</strong>’s shifts. Shifts already rostered stay as they are, but cannot be edited until the worker is replaced or the shift is unassigned or cancelled.
+              {draft.staffId && draft.participantId ? (
+                <>
+                  <strong className="text-foreground">{staffName(draft.staffId)}</strong> cannot be rostered for{' '}
+                  <strong className="text-foreground">{participantName(draft.participantId)}</strong>’s shifts. Shifts already rostered stay as they are, but cannot be edited until the worker is replaced or the shift is unassigned or cancelled.
+                </>
+              ) : (
+                'A worker marked No cannot be rostered for that participant’s shifts. Shifts already rostered stay as they are, but cannot be edited until the worker is replaced or the shift is unassigned or cancelled.'
+              )}
             </p>
+            {!draft.fixedPair && (
+              <>
+                <FormField label="Staff" required>
+                  <SearchableSelect
+                    items={activeStaff.map(s => ({ value: s.id, label: s.fullName }))}
+                    value={draft.staffId}
+                    onChange={staffId => pick({ staffId })}
+                    placeholder="Choose a staff member"
+                  />
+                </FormField>
+                <FormField label="Participant" required>
+                  <ParticipantPicker value={draft.participantId} onChange={participantId => pick({ participantId })} placeholder="Choose a participant" />
+                </FormField>
+              </>
+            )}
+            {pair && pair.level !== 'Excluded' && (
+              <p className="text-sm text-muted-foreground">
+                {`${pair.staffName} is listed as ${MARK[pair.level as keyof typeof MARK].label} for ${pair.participantName}. Marking No takes them off that list${pair.level === 'Preferred' ? `, and off ${pair.participantName}’s profile as preferred staff member if set` : ''}.`}
+              </p>
+            )}
             <FormField label="Reason" required hint="Stored with this choice and visible in audit.">
               <textarea
                 rows={2}
-                value={excludeDraft.reason}
-                onChange={e => setExcludeDraft(draft => draft && { ...draft, reason: e.target.value })}
+                value={draft.reason}
+                onChange={e => setDraft(d => d && { ...d, reason: e.target.value })}
                 placeholder="Why can’t they work together?"
               />
             </FormField>
+            {dialogError && <Callout tone="error">{dialogError}</Callout>}
           </>
         )}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setExcludeDraft(null)}>
-              Cancel
-            </Button>
-            <Button variant="danger" disabled={!excludeDraft?.reason.trim()} onClick={handleConfirmExclude}>
-              Mark as No
+            <Button variant="secondary" onClick={() => setDraft(null)}>Cancel</Button>
+            <Button
+              variant={editing ? 'primary' : 'danger'}
+              disabled={!draft?.staffId || !draft.participantId || !draft.reason.trim() || upsert.isPending}
+              onClick={submit}
+            >
+              {upsert.isPending ? 'Saving…' : editing ? 'Save reason' : 'Mark as No'}
             </Button>
           </>
         }
+      />
+
+      <ConfirmDialog
+        open={removing !== null}
+        onCancel={() => setRemoving(null)}
+        onConfirm={confirmRemove}
+        title="Remove No?"
+        message={removing && `${removing.staffName} can be rostered for ${removing.participantName}’s shifts again.`}
+        confirmLabel="Remove No"
       />
     </div>
   )

@@ -112,6 +112,14 @@ export interface IncidentDetailDto extends IncidentListDto {
   immediateActionsTaken: string | null
   wereEmergencyServicesCalled: boolean
   emergencyServicesDetails: string | null
+  /** Wire names, comma-separated ("Police, Fire"); "None" when none, including legacy rows ticked before services existed. */
+  emergencyServices: string
+  policeOfficerName: string | null
+  ambulanceOfficerName: string | null
+  fireOfficerName: string | null
+  policeReference: string | null
+  ambulanceReference: string | null
+  fireReference: string | null
   witnessNames: string | null
   witnessStatements: string | null
   /** IN-5: recorded injuries, populated only when incidentType is 'Injury' (empty array otherwise). */
@@ -213,6 +221,14 @@ export interface CreateIncidentDto {
   immediateActionsTaken?: string
   wereEmergencyServicesCalled: boolean
   emergencyServicesDetails?: string
+  /** "Police, Fire" or "None"; the server clears the lot while wereEmergencyServicesCalled is false. */
+  emergencyServices: string
+  policeOfficerName?: string
+  ambulanceOfficerName?: string
+  fireOfficerName?: string
+  policeReference?: string
+  ambulanceReference?: string
+  fireReference?: string
   witnessNames?: string
   witnessStatements?: string
   /** IN-5: repeatable injury rows — only meaningful (server-validated as non-empty) when incidentType is 'Injury'. */
@@ -284,6 +300,13 @@ export function toUpdateIncidentDto(i: IncidentDetailDto, patch: Partial<UpdateI
     immediateActionsTaken: i.immediateActionsTaken ?? undefined,
     wereEmergencyServicesCalled: i.wereEmergencyServicesCalled,
     emergencyServicesDetails: i.emergencyServicesDetails ?? undefined,
+    emergencyServices: i.emergencyServices,
+    policeOfficerName: i.policeOfficerName ?? undefined,
+    ambulanceOfficerName: i.ambulanceOfficerName ?? undefined,
+    fireOfficerName: i.fireOfficerName ?? undefined,
+    policeReference: i.policeReference ?? undefined,
+    ambulanceReference: i.ambulanceReference ?? undefined,
+    fireReference: i.fireReference ?? undefined,
     witnessNames: i.witnessNames ?? undefined,
     witnessStatements: i.witnessStatements ?? undefined,
     injuries: i.injuries.map(({ region, injuryType, description }) => ({ region, injuryType, description })),

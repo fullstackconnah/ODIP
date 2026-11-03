@@ -64,10 +64,9 @@ describe('budgetRiskRow', () => {
     expect(a.id).toBe(budgetRiskRow(budgetRow({ participantId: 'p-1', poolId: 'pool-a' }), visible).id)
   })
 
-  it.each([
-    ['OnTrack', 'OnTrack'], ['Approaching', 'Approaching'], ['ForecastOver', 'ForecastOver'], ['Over', 'Over'], ['None', 'NoBudget'],
-  ] as const)('maps the server’s status %s to %s', (server, expected) => {
-    expect(budgetRiskRow(budgetRow({ status: server }), visible).status).toBe(expected)
+  // The row's word is the server's list status, not the ledger's: an On track ledger status with the NDIA's refusal arrives as FundsRanOut.
+  it.each(['Over', 'FundsRanOut', 'ForecastOver', 'Approaching', 'SpendingFast', 'OnTrack'] as const)('passes the server’s list status %s through as the row’s status', listStatus => {
+    expect(budgetRiskRow(budgetRow({ status: 'OnTrack', listStatus }), visible).status).toBe(listStatus)
   })
 
   it('carries the viewer’s visibility onto the row, so a withheld figure is withheld at the one renderer', () => {

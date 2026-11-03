@@ -496,11 +496,20 @@ export function useCompatibility(participantId: string | undefined) {
   })
 }
 
+/** Every pairing in one call (no participant): the Compatibility page lists the ones that differ from the default. */
+export function useAllCompatibility() {
+  return useQuery({
+    queryKey: ['roster-compatibility'],
+    queryFn: () => apiGet<CompatibilityRowDto[]>('/rostering/compatibility'),
+  })
+}
+
 export function useUpsertCompatibility() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data: UpsertCompatibilityDto) => apiPut<CompatibilityRowDto>('/rostering/compatibility', data),
-    onSuccess: (_, vars) => qc.invalidateQueries({ queryKey: ['roster-compatibility', vars.participantId] }),
+    // The prefix also refetches the all-rows list and every per-participant entry (the card, the shift slide-over).
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['roster-compatibility'] }),
   })
 }
 

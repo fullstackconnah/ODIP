@@ -29,6 +29,11 @@ export type FactBarSegment = {
    * never disagree with the chip it holds.
    */
   attention?: FactBarAttention
+  /**
+   * `glance` variant only: makes the cell a `<button type="button">` that calls this on click (a tile that states a gap and opens the
+   * place that fixes it). Its accessible name is label, figure and badge in source order. The default bar ignores it.
+   */
+  onSelect?: () => void
 }
 
 export type FactBarVariant = 'default' | 'glance'
@@ -118,6 +123,11 @@ function glanceCellClass(idx: number, count: number, attention: FactBarAttention
     .join(' ')
 }
 
+// A tile that opens something: one surface step on hover (a darker tint when already tinted), the house ring inside the clipped strip,
+// and press feedback on pointer-down (none under reduced motion).
+const GLANCE_BUTTON_CLASS =
+  'w-full cursor-pointer text-left transition-[transform,background-color,filter] duration-100 ease-out hover:bg-[var(--color-accent)]/50 data-[attention]:hover:bg-transparent data-[attention]:hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-ring)] active:scale-[0.99] motion-reduce:active:scale-100'
+
 function GlanceBar({ segments, className }: Pick<FactBarProps, 'segments' | 'className'>) {
   return (
     <div
@@ -125,11 +135,13 @@ function GlanceBar({ segments, className }: Pick<FactBarProps, 'segments' | 'cla
     >
       {segments.map((segment, idx) => {
         const tone = GLANCE_TONE[segment.attention ?? 'quiet']
+        const Cell = segment.onSelect ? 'button' : 'div'
         return (
-          <div
+          <Cell
             key={idx}
             data-attention={segment.attention}
-            className={glanceCellClass(idx, segments.length, segment.attention)}
+            className={`${glanceCellClass(idx, segments.length, segment.attention)}${segment.onSelect ? ` ${GLANCE_BUTTON_CLASS}` : ''}`}
+            {...(segment.onSelect ? { type: 'button' as const, onClick: segment.onSelect } : {})}
           >
             {/* Source order is label then value, so a screen reader announces "Outstanding Tasks, 2, Action
                 Needed"; `order` puts the figure on top visually. */}
@@ -141,7 +153,7 @@ function GlanceBar({ segments, className }: Pick<FactBarProps, 'segments' | 'cla
               <span className="text-display tabular-nums">{segment.value}</span>
               {segment.badge}
             </div>
-          </div>
+          </Cell>
         )
       })}
     </div>

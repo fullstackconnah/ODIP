@@ -47,8 +47,8 @@ describe('RosterGrid — always renders the full grid', () => {
     })
     renderGrid(<RosterGrid board={board} weekHasNoShifts={false} {...baseProps} />)
     expect(screen.getByText('Mia Chen')).toBeInTheDocument()
-    // The coverage state is a compact badge (a check here); "Fully covered" is its accessible name and title.
-    expect(screen.getByRole('img', { name: 'Fully covered' })).toBeInTheDocument()
+    // A covered row draws no badge (roster declutter): the absence says it.
+    expect(screen.queryByRole('img', { name: /Fully covered|unassigned shift/ })).not.toBeInTheDocument()
   })
 })
 
@@ -169,11 +169,11 @@ describe('RosterGrid — density', () => {
     expect(screen.getByRole('link', { name: 'Mia Chen' })).toBeInTheDocument()
   })
 
-  it('sizes row headers and day cells from --row-h so a row is 34px at a fine pointer and grows under a coarse one', () => {
+  it('sizes the participant header at 56px minimum (its two lines need the room) and the day cells from --row-h', () => {
     const board = makeParticipantBoard({ participantRows: [makeParticipantRow({ fullName: 'Mia Chen' })] })
     const { container } = renderGrid(<RosterGrid board={board} weekHasNoShifts {...baseProps} />)
 
-    expect(container.querySelector('.sticky.left-0.z-10')).toHaveClass('min-h-[var(--row-h)]')
+    expect(container.querySelector('.sticky.left-0.z-10')).toHaveClass('min-h-14', 'py-1.5')
     expect(screen.getAllByRole('button', { name: /^Add a shift for/ })[0]).toHaveClass('min-h-[calc(var(--row-h)_-_1px)]')
   })
 

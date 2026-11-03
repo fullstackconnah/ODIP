@@ -125,6 +125,38 @@ jobs:
           npm test
           npm run build
 
+  # Builds both images the way deploy.yml does, so a Dockerfile or publish error shows on the PR, not after merge.
+  docker:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.ci != 'false' }}
+    # the job name is pinned by the merge tooling (merge-chain.sh); keep it
+    name: Docker images (API and web)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # Same layout as deploy.yml's "Sync source into stack directory": compose.yaml sits beside backend/ and frontend/.
+      - name: Build both images with the deploy compose file
+        env:
+          # Placeholders only: the image is built and thrown away, never run or pushed.
+          VITE_FIREBASE_API_KEY: ''
+          VITE_FIREBASE_AUTH_DOMAIN: ''
+          VITE_FIREBASE_PROJECT_ID: ''
+          VITE_FIREBASE_APP_ID: ''
+          VITE_DEV_AUTH: 'false'
+          GIT_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          stack="$RUNNER_TEMP/odip-stack"
+          mkdir -p "$stack"
+          cp -a odip-prototype/odip/. "$stack"/
+          cp deploy/compose.yaml "$stack"/compose.yaml
+          cd "$stack"
+          docker compose build
+
   # Informational (not a required check yet): the real API + PostgreSQL + built frontend, driven by Playwright.
   # DEV_AUTH_ENABLED / VITE_DEV_AUTH are set only inside this job. Production keeps them off (deploy/compose.yaml).
   e2e:

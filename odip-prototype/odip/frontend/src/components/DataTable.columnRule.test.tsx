@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { act, render, screen } from '@testing-library/react'
-import { DataTable } from './DataTable'
+import { MemoryRouter } from 'react-router-dom'
+import { DataTable, RowMenu } from './DataTable'
 import type { Column } from './DataTable'
 
 // L3-04: the #161 overflow fix worked by DELETING columns below 1536px/1792px (Overnight, Manual, Trip, Type, Ref, Nights, Claimed...), so the
@@ -195,6 +196,61 @@ describe('DataTable — the edge cue (a fade where content is cut off)', () => {
     expect(fade(container, 'start')).not.toBeNull()
   })
 
+  it('draws a 48px fade, wide enough that a cut word does not read as a clipped cell', () => {
+    const { container } = render(<DataTable data={items} columns={columns} keyField="id" />)
+    scrollBox(container, { scrollLeft: 0, clientWidth: 500, scrollWidth: 900 })
+    expect(fade(container, 'end')).toHaveClass('w-12')
+  })
+
+  it('offers Show more columns only while there is more to the right, and a click scrolls 80% of the box', () => {
+    const { container } = render(<DataTable data={items} columns={columns} keyField="id" />)
+    scrollBox(container, { scrollLeft: 0, clientWidth: 500, scrollWidth: 500 })
+    expect(screen.queryByRole('button', { name: 'Show more columns' })).toBeNull()
+
+    scrollBox(container, { scrollLeft: 0, clientWidth: 500, scrollWidth: 900 })
+    const box = container.querySelector('table')!.parentElement as HTMLElement
+    const scrollBy = vi.fn()
+    box.scrollBy = scrollBy as unknown as typeof box.scrollBy
+    act(() => { screen.getByRole('button', { name: 'Show more columns' }).click() })
+    expect(scrollBy).toHaveBeenCalledWith({ left: 400, behavior: 'auto' })
+    expect(screen.queryByRole('button', { name: 'Show earlier columns' })).toBeNull()
+  })
+
+  it('offers Show earlier columns at the far end, and scrolls back by 80%', () => {
+    const { container } = render(<DataTable data={items} columns={columns} keyField="id" />)
+    scrollBox(container, { scrollLeft: 400, clientWidth: 500, scrollWidth: 900 })
+    const box = container.querySelector('table')!.parentElement as HTMLElement
+    const scrollBy = vi.fn()
+    box.scrollBy = scrollBy as unknown as typeof box.scrollBy
+    expect(screen.queryByRole('button', { name: 'Show more columns' })).toBeNull()
+    act(() => { screen.getByRole('button', { name: 'Show earlier columns' }).click() })
+    expect(scrollBy).toHaveBeenCalledWith({ left: -400, behavior: 'auto' })
+  })
+
+  it('keeps keyboard focus when the press reaches the edge and its button goes: focus moves to the opposite cue', () => {
+    const { container } = render(<DataTable data={items} columns={columns} keyField="id" />)
+    scrollBox(container, { scrollLeft: 0, clientWidth: 500, scrollWidth: 900 })
+    const box = container.querySelector('table')!.parentElement as HTMLElement
+    box.scrollBy = vi.fn() as unknown as typeof box.scrollBy
+    const more = screen.getByRole('button', { name: 'Show more columns' })
+    act(() => { more.focus(); more.click() })
+    scrollBox(container, { scrollLeft: 400, clientWidth: 500, scrollWidth: 900 })
+    expect(screen.queryByRole('button', { name: 'Show more columns' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Show earlier columns' })).toHaveFocus()
+  })
+
+  it('draws the start fade above the scrolling cells and below the pinned column', () => {
+    const { container } = render(<DataTable data={items} columns={columns} keyField="id" />)
+    scrollBox(container, { scrollLeft: 400, clientWidth: 500, scrollWidth: 900 })
+    expect(fade(container, 'start')).toHaveClass('z-[1]', 'w-12')
+  })
+
+  it('anchors the cue to the header row centre: its own wrapper is absolute (a Button is relative), with a calc Tailwind can read', () => {
+    const { container } = render(<DataTable data={items} columns={columns} keyField="id" />)
+    scrollBox(container, { scrollLeft: 0, clientWidth: 500, scrollWidth: 900 })
+    expect(screen.getByRole('button', { name: 'Show more columns' }).parentElement!.className).toContain('top-[calc(var(--table-head-h)/2_-_0.75rem)]')
+  })
+
   it('sits at the box edge when nothing is pinned to that side', () => {
     const unpinned: Column<Item>[] = [{ key: 'a', header: 'A', pin: false }, { key: 'b', header: 'B' }]
     const { container } = render(<DataTable data={items} columns={unpinned} keyField="id" />)
@@ -243,5 +299,17 @@ describe('DataTable — hideWhenEmpty and overlay columns', () => {
   it('never wraps a header above its sort icon', () => {
     render(<DataTable data={[row('1', 'Lead')]} columns={[{ key: 'a', header: 'Status', sortable: true }]} keyField="id" sortable />)
     expect(screen.getByRole('columnheader').firstElementChild!.className).not.toMatch(/flex-wrap/)
+  })
+})
+
+describe('RowMenu: a disabled item keeps its reason', () => {
+  it('shows it disabled with the reason as its title, and never runs it', () => {
+    const onSelect = vi.fn()
+    render(<MemoryRouter><RowMenu name="Pat" items={[{ label: 'Generate shifts', icon: <span />, onSelect, disabled: true, description: 'Activate the pattern first' }]} /></MemoryRouter>)
+    const button = screen.getAllByRole('button', { name: 'Generate shifts' })[0]
+    expect(button).toBeDisabled()
+    expect(button).toHaveAttribute('title', 'Activate the pattern first')
+    button.click()
+    expect(onSelect).not.toHaveBeenCalled()
   })
 })

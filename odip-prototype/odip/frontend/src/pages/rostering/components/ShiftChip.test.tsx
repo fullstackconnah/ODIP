@@ -320,6 +320,14 @@ describe('ShiftChip tray and box', () => {
     expect(grip).toHaveClass('pointer-coarse:mx-[13px]')
   })
 
+  it('gives the actions trigger the house 44px TAP_AREA pad under a coarse pointer, without growing the visible 36px button', () => {
+    renderChip(<ShiftChip shift={makeShift()} canWrite draggable onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)
+    const slot = screen.getByRole('button', { name: /^Actions for/ }).closest('span.relative') as HTMLElement
+    expect(slot.className).toContain('[&_button]:relative')
+    expect(slot.className).toContain('[&_button]:before:min-w-[var(--tap-min)]')
+    expect(slot.className).toContain('[&_button]:before:min-h-[var(--tap-min)]')
+  })
+
   it('keeps the grip and the menu out of the open control: siblings layered over the box row, in the order lead, open, menu', () => {
     const shift = makeShift()
     renderChip(<ShiftChip shift={shift} canWrite draggable context="participant" onOpen={noop} onAssignTo={noop} onUnassign={noop} onDelete={noop} />)

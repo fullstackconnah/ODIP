@@ -2204,6 +2204,13 @@ public record IncidentDetailDto : IncidentListDto
     public string? ImmediateActionsTaken { get; init; }
     public bool WereEmergencyServicesCalled { get; init; }
     public string? EmergencyServicesDetails { get; init; }
+    public EmergencyService EmergencyServices { get; init; }
+    public string? PoliceOfficerName { get; init; }
+    public string? AmbulanceOfficerName { get; init; }
+    public string? FireOfficerName { get; init; }
+    public string? PoliceReference { get; init; }
+    public string? AmbulanceReference { get; init; }
+    public string? FireReference { get; init; }
     public string? WitnessNames { get; init; }
     public string? WitnessStatements { get; init; }
     /// <summary>IN-5: recorded injuries, populated only when <see cref="IncidentListDto.IncidentType"/> is <see cref="IncidentType.Injury"/> (empty list otherwise).</summary>
@@ -2335,6 +2342,20 @@ public record CreateIncidentDto
     public bool WereEmergencyServicesCalled { get; init; }
     [StringLength(2000)]
     public string? EmergencyServicesDetails { get; init; }
+    /// <summary>Null = not sent (a client from before services existed): Update leaves the stored services and their names and references alone.</summary>
+    public EmergencyService? EmergencyServices { get; init; }
+    [StringLength(100)]
+    public string? PoliceOfficerName { get; init; }
+    [StringLength(100)]
+    public string? AmbulanceOfficerName { get; init; }
+    [StringLength(100)]
+    public string? FireOfficerName { get; init; }
+    [StringLength(50)]
+    public string? PoliceReference { get; init; }
+    [StringLength(50)]
+    public string? AmbulanceReference { get; init; }
+    [StringLength(50)]
+    public string? FireReference { get; init; }
     [StringLength(1000)]
     public string? WitnessNames { get; init; }
     [StringLength(4000)]
