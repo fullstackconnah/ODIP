@@ -18,15 +18,13 @@ import { budgetRiskRow, noBudgetEntry } from './budgets/budgetRows'
 // figure and the order (the ledger's own, GET api/v1/funding/budgets); this page filters what it was given by status and by a participant's name, and hands it to the table. It adds nothing up and
 // ranks nothing. A participant with no budget in force is kept at the end behind a count, never warned about.
 
-const STATUS_FILTERS = ['all', 'Over', 'ForecastOver', 'Approaching', 'OnTrack'] as const
+const STATUS_FILTERS = ['all', 'attention', 'OnTrack'] as const
 type StatusFilter = typeof STATUS_FILTERS[number]
 const isStatusFilter = (value: string | null): value is StatusFilter => !!value && (STATUS_FILTERS as readonly string[]).includes(value)
 
 const STATUS_LABEL: Record<StatusFilter, string> = {
   all: 'All',
-  Over: 'Over',
-  ForecastOver: 'Forecast over',
-  Approaching: 'Approaching',
+  attention: 'Needs attention',
   OnTrack: 'On track',
 }
 
@@ -38,7 +36,7 @@ export default function BudgetsPage() {
   const [params, setParams] = useSearchParams()
   const [search, setSearch] = useState('')
 
-  // The status filter lives in the URL (?status=Over), so a filtered list can be shared and the browser's back button undoes it. Anything that is not a status is "All".
+  // The status filter lives in the URL (?status=attention), so a filtered list can be shared and the browser's back button undoes it. Anything that is not a status is "All".
   const requested = params.get('status')
   const status: StatusFilter = isStatusFilter(requested) ? requested : 'all'
   const setStatus = (next: string) => {
@@ -58,14 +56,15 @@ export default function BudgetsPage() {
   // How many rows each filter holds, for the filter's own label: a count of the rows the server sent that the search leaves, not a figure of any kind. (Counting past the search promised rows it had
   // taken away: "Over (1)" with a name typed that no over row has, and then "No budgets match these filters".)
   const found = rows.filter(row => matchesName(row.participantName))
-  const counts: Record<StatusFilter, number> = { all: found.length, Over: 0, ForecastOver: 0, Approaching: 0, OnTrack: 0 }
-  for (const row of found) if (row.status in counts) counts[row.status as StatusFilter] += 1
+  // Needs attention is every row the server's one word does not call On track: the page groups the server's words and works nothing out.
+  const needsAttention = (row: BudgetListRow) => row.listStatus !== 'OnTrack'
+  const counts: Record<StatusFilter, number> = { all: found.length, attention: found.filter(needsAttention).length, OnTrack: found.filter(row => !needsAttention(row)).length }
 
   // Nobody has a budget in force (the commonest state at first): there is nothing to filter or rank, so the filters and the caption about risk order are not drawn, and the people who need a budget
   // recorded, the only useful thing on the page, are open.
   const nothingTracked = !!data && rows.length === 0
   const activeStatus: StatusFilter = nothingTracked ? 'all' : status
-  const shown: BudgetListRow[] = found.filter(row => activeStatus === 'all' || row.status === activeStatus)
+  const shown: BudgetListRow[] = found.filter(row => activeStatus === 'all' || needsAttention(row) === (activeStatus === 'attention'))
   // A participant with no budget has no status, so only "All" can show them; the search narrows them like everyone else.
   const noBudget = activeStatus === 'all' ? (data?.noBudget ?? []).filter(entry => matchesName(entry.participantName)).map(noBudgetEntry) : []
   const clearFilters = () => { setSearch(''); setStatus('all') }
@@ -96,7 +95,7 @@ export default function BudgetsPage() {
               options={STATUS_FILTERS.map(key => ({ key, label: `${STATUS_LABEL[key]} (${counts[key]})` }))}
               value={status}
               onChange={setStatus}
-              // Five words with counts do not fit one row at 390px: they wrap onto a second row whole, rather than squeezing into boxes that cut them (each label stays on one line).
+              // Words with counts may not fit one row at 390px: they wrap onto a second row whole, rather than squeezing into boxes that cut them (each label stays on one line).
               className="flex-wrap [&>button]:whitespace-nowrap"
             />
             <SearchInput value={search} onChange={setSearch} placeholder="Search participants..." label="Search participants" />
@@ -107,7 +106,7 @@ export default function BudgetsPage() {
       {matchesNothing ? (
         <>
           <div className="flex flex-wrap items-center gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)] px-[var(--card-pad)] py-6 text-sm text-[var(--color-muted-foreground)]" role="status">
-            <p>No budgets match these filters.</p>
+            <p>{status === 'attention' && search.trim() === '' ? 'No pool needs attention. Every budget is on track.' : 'No budgets match these filters.'}</p>
             <Button variant="secondary" size="sm" onClick={clearFilters}>Clear filters</Button>
           </div>
           <NoBudgetTail entries={noBudget} />
