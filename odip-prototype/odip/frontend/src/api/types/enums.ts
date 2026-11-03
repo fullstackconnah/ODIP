@@ -124,7 +124,8 @@ export const USER_ROLES = ['Admin', 'Coordinator', 'SupportWorker', 'ReadOnly', 
 export type UserRole = typeof USER_ROLES[number]
 
 // ── Incident Type ───────────────────────────────────────
-export const INCIDENT_TYPES = ['Injury', 'Illness', 'MedicationError', 'BehaviourOfConcern', 'RestrictivePracticeUse', 'PropertyDamage', 'MissingPerson', 'Abuse', 'Neglect', 'Death', 'Other'] as const
+/** The picker order, not the server's int order (SexualAbuse is appended there as 11): names travel on the wire. */
+export const INCIDENT_TYPES = ['Injury', 'MedicationError', 'Illness', 'RestrictivePracticeUse', 'SexualAbuse', 'Abuse', 'Neglect', 'BehaviourOfConcern', 'MissingPerson', 'PropertyDamage', 'Death', 'Other'] as const
 export type IncidentType = typeof INCIDENT_TYPES[number]
 
 /** IN-3: single source for the incident-type Dropdown's items and any read-only display elsewhere. */
@@ -136,6 +137,7 @@ export const INCIDENT_TYPE_LABELS: Record<IncidentType, string> = {
   RestrictivePracticeUse: 'Restrictive Practice Use',
   PropertyDamage: 'Property Damage',
   MissingPerson: 'Missing Person',
+  SexualAbuse: 'Sexual Abuse',
   Abuse: 'Abuse',
   Neglect: 'Neglect',
   Death: 'Death',
@@ -148,11 +150,23 @@ export type IncidentSeverity = typeof INCIDENT_SEVERITIES[number]
 
 /** IN-3: single source for the severity Dropdown's items and any read-only display elsewhere. */
 export const INCIDENT_SEVERITY_LABELS: Record<IncidentSeverity, string> = {
-  Low: 'Low',
-  Medium: 'Medium',
-  High: 'High',
-  Critical: 'Critical',
+  Low: '1 Low',
+  Medium: '2 Medium',
+  High: '3 High',
+  Critical: '4 Critical',
 }
+
+/** What each level means (owner-approved wording, 2026-11-03): each option's hover title and the hint after a choice. */
+export const INCIDENT_SEVERITY_DEFINITIONS: Record<IncidentSeverity, string> = {
+  Low: 'No injury or harm, or first aid only, with no lasting effect on the person.',
+  Medium: 'Harm treated by a GP or other health professional, with no lasting effect.',
+  High: "Harm needing urgent or ongoing treatment, or a real risk to the person's safety, that is not a reportable incident.",
+  Critical: 'Death, serious injury, abuse or neglect, sexual misconduct, or anything else the NDIS Commission must hear about within 24 hours.',
+}
+
+/** Which emergency services attended; the wire format is names, comma-separated ("Police, Fire"). */
+export const EMERGENCY_SERVICES = ['Police', 'Ambulance', 'Fire'] as const
+export type EmergencyService = typeof EMERGENCY_SERVICES[number]
 
 // ── Incident Status ─────────────────────────────────────
 export const INCIDENT_STATUSES = ['Draft', 'Submitted', 'UnderReview', 'Escalated', 'Resolved', 'Closed'] as const

@@ -207,6 +207,11 @@ public class IncidentsController : ControllerBase
     /// </summary>
     private static string? ValidateServiceTypeAndIncidentType(CreateIncidentDto dto)
     {
+        // The converter also takes a bare int, so a value no enum member names must not reach the int column.
+        if (!Enum.IsDefined(dto.IncidentType))
+            return "Unknown incident type.";
+        if (((dto.EmergencyServices ?? EmergencyService.None) & ~(EmergencyService.Police | EmergencyService.Ambulance | EmergencyService.Fire)) != 0)
+            return "Unknown emergency service.";
         if (dto.ServiceType == ServiceStreams.Trip && dto.TripInstanceId == null)
             return "A trip must be selected when the service type is Trip.";
         if (dto.IncidentType == IncidentType.Other && string.IsNullOrWhiteSpace(dto.OtherTypeSpecify))
@@ -233,6 +238,28 @@ public class IncidentsController : ControllerBase
         if (dto.Witnesses.Any(w => w.WitnessUserId.HasValue && w.WitnessUserId.Value == dto.ReportedByStaffId))
             return "A staff member cannot witness their own incident report.";
         return null;
+    }
+
+    /// <summary>
+    /// IC2: stores what was called and who attended. The gate stays the stored truth (a legacy row can be called with no services), so
+    /// nothing is required; unticking the gate clears the services and their names and references (the free-text details stay), and a service not in the flags loses its name and reference. A null set of services (a client from before services existed) leaves the stored services, names and references as they are.
+    /// </summary>
+    private static void ApplyEmergencyServices(IncidentReport i, CreateIncidentDto dto)
+    {
+        static string? Clean(string? v) => string.IsNullOrWhiteSpace(v) ? null : v.Trim();
+        var called = dto.WereEmergencyServicesCalled;
+        i.WereEmergencyServicesCalled = called;
+        i.EmergencyServicesDetails = dto.EmergencyServicesDetails;
+        if (called && dto.EmergencyServices is null) return;
+        var services = called ? dto.EmergencyServices!.Value : EmergencyService.None;
+        string? Pick(EmergencyService s, string? v) => services.HasFlag(s) ? Clean(v) : null;
+        i.EmergencyServices = services;
+        i.PoliceOfficerName = Pick(EmergencyService.Police, dto.PoliceOfficerName);
+        i.PoliceReference = Pick(EmergencyService.Police, dto.PoliceReference);
+        i.AmbulanceOfficerName = Pick(EmergencyService.Ambulance, dto.AmbulanceOfficerName);
+        i.AmbulanceReference = Pick(EmergencyService.Ambulance, dto.AmbulanceReference);
+        i.FireOfficerName = Pick(EmergencyService.Fire, dto.FireOfficerName);
+        i.FireReference = Pick(EmergencyService.Fire, dto.FireReference);
     }
 
     /// <summary>
@@ -430,6 +457,9 @@ public class IncidentsController : ControllerBase
                 ImmediateActionsTaken = i.ImmediateActionsTaken,
                 WereEmergencyServicesCalled = i.WereEmergencyServicesCalled,
                 EmergencyServicesDetails = i.EmergencyServicesDetails,
+                EmergencyServices = i.EmergencyServices,
+                PoliceOfficerName = i.PoliceOfficerName, AmbulanceOfficerName = i.AmbulanceOfficerName, FireOfficerName = i.FireOfficerName,
+                PoliceReference = i.PoliceReference, AmbulanceReference = i.AmbulanceReference, FireReference = i.FireReference,
                 WitnessNames = i.WitnessNames,
                 WitnessStatements = i.WitnessStatements,
                 Injuries = i.Injuries.Select(inj => new IncidentInjuryDto
@@ -582,8 +612,6 @@ public class IncidentsController : ControllerBase
             IncidentDateTime = dto.IncidentDateTime,
             Location = dto.Location,
             ImmediateActionsTaken = dto.ImmediateActionsTaken,
-            WereEmergencyServicesCalled = dto.WereEmergencyServicesCalled,
-            EmergencyServicesDetails = dto.EmergencyServicesDetails,
             WitnessNames = dto.WitnessNames,
             WitnessStatements = dto.WitnessStatements,
             MedicationAdministrationId = dto.MedicationAdministrationId,
@@ -601,6 +629,7 @@ public class IncidentsController : ControllerBase
         incident.ReportableClass = QscReporting.DefaultClass(dto.Severity, dto.IncidentType, isRpAuthorised, incident.RestrictivePracticeUseVaried);
         await ApplyClockAsync(incident, clock, ct);
         incident.QscReportingStatus = QscReporting.DeriveStatus(incident.ReportableClass, null, incident.NotifyDueAt);
+        ApplyEmergencyServices(incident, dto);
 
         _db.IncidentReports.Add(incident);
 
@@ -767,8 +796,7 @@ public class IncidentsController : ControllerBase
         i.IncidentDateTime = dto.IncidentDateTime;
         i.Location = dto.Location;
         i.ImmediateActionsTaken = dto.ImmediateActionsTaken;
-        i.WereEmergencyServicesCalled = dto.WereEmergencyServicesCalled;
-        i.EmergencyServicesDetails = dto.EmergencyServicesDetails;
+        ApplyEmergencyServices(i, dto);
         // No screen edits these legacy witness columns, so an update leaves them untouched.
         // Connection-map source links (Deliverable 1): may be newly set, cleared back to null, or
         // changed to a different source — assigning null clears the link.

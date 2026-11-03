@@ -5,6 +5,7 @@ describe('defaultReportableClass (same rows as the server DefaultClass table)', 
   it.each([
     ['Critical', 'Injury', null, 'Within24h'],
     ['Minor', 'Injury', null, 'None'],
+    ['Minor', 'SexualAbuse', null, 'Within24h'],
     ['Minor', 'Abuse', null, 'Within24h'],
     ['Minor', 'Neglect', undefined, 'Within24h'],
     ['Minor', 'Death', true, 'Within24h'],

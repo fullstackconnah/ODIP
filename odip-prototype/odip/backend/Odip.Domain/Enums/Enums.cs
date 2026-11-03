@@ -290,7 +290,19 @@ public enum IncidentType
     Abuse,
     Neglect,
     Death,
-    Other
+    Other,
+    // Int-stored (IncidentReports.IncidentType): append only, never insert or renumber.
+    SexualAbuse = 11
+}
+
+/// <summary>Which emergency services attended an incident. Stored as a bitmask int; the wire format is names, comma-separated, e.g. "Police, Fire" (same shape as <see cref="ServiceStreams"/>).</summary>
+[Flags]
+public enum EmergencyService
+{
+    None = 0,
+    Police = 1,
+    Ambulance = 2,
+    Fire = 4
 }
 
 public enum IncidentSeverity
