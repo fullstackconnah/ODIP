@@ -36,7 +36,7 @@ import {
 import type { StaffOverviewUpcomingShiftDto, StaffOverviewTripAssignmentDto } from '@/api/types/staff'
 import type { IncidentListDto } from '@/api/types/incidents'
 import type { CompletionQueueItemDto } from '@/api/types/rostering'
-import { POSITION_LABELS } from '@/api/types/enums'
+import { POSITION_LABELS, EMPLOYMENT_TYPE_LABELS } from '@/api/types/enums'
 import { retryingAfterError } from '@/lib/queryPhase'
 
 type Tab = 'availability' | 'credentials' | 'week' | 'upcoming' | 'incidents' | 'completions'
@@ -145,7 +145,7 @@ export default function StaffDetailPage() {
   ]
   // Join only the parts that exist: an empty position used to leave the row starting with a
   // stray " · " separator.
-  const positionAndRegion = [POSITION_LABELS[staff.position] ?? staff.position, staff.region || 'No region'].filter(Boolean).join(' · ')
+  const positionAndRegion = [POSITION_LABELS[staff.position] ?? staff.position, staff.employmentType && EMPLOYMENT_TYPE_LABELS[staff.employmentType], staff.region || 'No region'].filter(Boolean).join(' · ')
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">

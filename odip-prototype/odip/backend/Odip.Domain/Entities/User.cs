@@ -23,6 +23,9 @@ public class User : ITenantEntity
 
     /// <summary>Display-only staff position/title — separate from and unrelated to <see cref="Role"/>.</summary>
     public Position? Position { get; set; }
+
+    /// <summary>Full-time, part-time or casual; null = not set, which never triggers the casual fortnight warning.</summary>
+    public EmploymentType? EmploymentType { get; set; }
     public string? Mobile { get; set; }
     public string? Region { get; set; }
     public bool IsDriverEligible { get; set; }

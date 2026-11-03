@@ -275,3 +275,50 @@ describe('StaffCreatePage — the pre-save re-read of an edit', () => {
     await waitFor(() => expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1))
   })
 })
+
+describe('StaffCreatePage employment type (R6)', () => {
+  beforeEach(() => {
+    mockUsePermissions.mockReturnValue({ isCoordinator: false })
+    mockUseStaffDetail.mockReturnValue({ data: undefined, isLoading: false })
+  })
+
+  it('shows the field with its hint and "Not set" by default', () => {
+    renderCreatePage()
+
+    expect(screen.getByText('Employment type')).toBeInTheDocument()
+    expect(screen.getByText('Casual workers get a roster warning past 76 hours a fortnight.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /not set/i })).toBeInTheDocument()
+  })
+
+  it('submits the chosen type, and null when left as Not set', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await user.type(screen.getByLabelText(/First Name/), 'Jordan')
+    await user.type(screen.getByLabelText(/Last Name/), 'Blake')
+    await user.type(screen.getByLabelText(/Email/), 'jordan.blake@odip.com.au')
+    await user.click(screen.getByRole('button', { name: /not set/i }))
+    await user.click(screen.getByRole('option', { name: 'Casual' }))
+    await user.click(screen.getByRole('button', { name: /create staff member/i }))
+
+    await waitFor(() => expect(mockCreateMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ employmentType: 'Casual' })))
+  })
+
+  it('sends null for Not set', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await user.type(screen.getByLabelText(/First Name/), 'Jordan')
+    await user.type(screen.getByLabelText(/Last Name/), 'Blake')
+    await user.type(screen.getByLabelText(/Email/), 'jordan.blake@odip.com.au')
+    await user.click(screen.getByRole('button', { name: /create staff member/i }))
+
+    await waitFor(() => expect(mockCreateMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ employmentType: null })))
+  })
+
+  it('pre-fills the saved type when editing', async () => {
+    const staff = makeStaff({ employmentType: 'PartTime' })
+    mockUseStaffDetail.mockReturnValue({ data: staff, isLoading: false, refetch: vi.fn().mockResolvedValue({ data: staff }) })
+    renderEditPage('staff-1')
+
+    expect(await screen.findByRole('button', { name: /part-time/i })).toBeInTheDocument()
+  })
+})

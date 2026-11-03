@@ -73,6 +73,19 @@ public class RosterAvailabilityTests
     }
 
     [Fact]
+    public async Task Check_CountsACasualsHoursFromTheOtherWeekOfTheFortnight_WithoutChangingTheWeeklyRule()
+    {
+        await using var s = await SetUpAsync(kim => kim.EmploymentType = EmploymentType.Casual);
+        for (var i = 1; i <= 7; i++) s.Db.Shifts.Add(ShiftOf(s.Mia.Id, s.Kim.Id, Monday.AddDays(-i), 8, 18, ShiftStatus.Published));   // 70h in the week before, the same fortnight
+        await s.Db.SaveChangesAsync();
+
+        var findings = (await s.LoadAsync()).Check(ShiftOf(s.Mia.Id, s.Kim.Id, Monday, 9, 17));   // 8h: 78h in the fortnight, 8h in its own week
+
+        Assert.Contains(findings, f => f.Code == RosterConflictService.CasualFortnightHours);
+        Assert.DoesNotContain(findings, f => f.Code == RosterConflictService.OverHours);
+    }
+
+    [Fact]
     public async Task AwayReason_ForApprovedLeave()
     {
         await using var s = await SetUpAsync();

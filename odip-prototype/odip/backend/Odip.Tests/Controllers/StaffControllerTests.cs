@@ -60,6 +60,32 @@ public class StaffControllerTests
     }
 
     [Fact]
+    public async Task EmploymentType_RoundTripsThroughCreateUpdateAndGet_AndIsNullWhenNotSet()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString(), Guid.NewGuid());
+        var controller = new StaffController(db) { ControllerContext = AdminContext() };
+
+        var created = Assert.IsType<ApiResponse<StaffDetailDto>>(Assert.IsType<CreatedAtActionResult>((await controller.Create(
+            new CreateStaffDto { FirstName = "Cass", LastName = "Hart", Email = "cass.hart@example.com", Position = Position.SupportWorker, IsActive = true, EmploymentType = EmploymentType.Casual },
+            CancellationToken.None)).Result).Value).Data!;
+        Assert.Equal(EmploymentType.Casual, created.EmploymentType);
+        Assert.Equal(EmploymentType.Casual, (await db.Users.SingleAsync(u => u.Id == created.Id)).EmploymentType);
+
+        var updated = Assert.IsType<ApiResponse<StaffDetailDto>>(Assert.IsType<OkObjectResult>((await controller.Update(created.Id,
+            new UpdateStaffDto { FirstName = "Cass", LastName = "Hart", Email = "cass.hart@example.com", Position = Position.SupportWorker, IsActive = true, EmploymentType = EmploymentType.PartTime },
+            CancellationToken.None)).Result).Value).Data!;
+        Assert.Equal(EmploymentType.PartTime, updated.EmploymentType);
+
+        var fetched = Assert.IsType<ApiResponse<StaffDetailDto>>(Assert.IsType<OkObjectResult>((await controller.GetById(created.Id, CancellationToken.None)).Result).Value).Data!;
+        Assert.Equal(EmploymentType.PartTime, fetched.EmploymentType);
+
+        var unset = Assert.IsType<ApiResponse<StaffDetailDto>>(Assert.IsType<OkObjectResult>((await controller.Update(created.Id,
+            new UpdateStaffDto { FirstName = "Cass", LastName = "Hart", Email = "cass.hart@example.com", Position = Position.SupportWorker, IsActive = true },
+            CancellationToken.None)).Result).Value).Data!;
+        Assert.Null(unset.EmploymentType);
+    }
+
+    [Fact]
     public async Task Update_WithWorkerScreeningFields_RoundTripsThroughDtoAndEntity()
     {
         var tenantId = Guid.NewGuid();

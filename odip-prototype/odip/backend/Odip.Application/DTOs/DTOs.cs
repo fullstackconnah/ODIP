@@ -1362,6 +1362,7 @@ public record StaffListDto
     public UserRole Role { get; init; }
     /// <summary>Display-only staff position/title — separate from and unrelated to <see cref="Role"/>.</summary>
     public Position Position { get; init; }
+    public EmploymentType? EmploymentType { get; init; }
     public string? Email { get; init; }
     public string? Mobile { get; init; }
     public string? Region { get; init; }
@@ -1467,6 +1468,7 @@ public record CreateStaffDto
     public bool AddressConfirmed { get; init; }
     public UserRole Role { get; init; } = UserRole.SupportWorker;
     public Position Position { get; init; }
+    public EmploymentType? EmploymentType { get; init; }
     [StringLength(50)]
     public string? Mobile { get; init; }
     [StringLength(100)]

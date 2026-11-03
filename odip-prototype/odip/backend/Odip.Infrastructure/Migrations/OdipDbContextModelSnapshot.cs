@@ -770,7 +770,7 @@ namespace Odip.Infrastructure.Migrations
 
                     b.ToTable("ClaimLineItems", t =>
                         {
-                            t.HasCheckConstraint("CK_ClaimLineItem_ExactlyOneParent", "((\"ParticipantBookingId\" IS NOT NULL)::int + (\"ShiftId\" IS NOT NULL)::int) = 1");
+                            t.HasCheckConstraint("CK_ClaimLineItem_AtMostOneParent", "((\"ParticipantBookingId\" IS NOT NULL)::int + (\"ShiftId\" IS NOT NULL)::int) <= 1");
                         });
                 });
 
@@ -5260,6 +5260,9 @@ namespace Odip.Infrastructure.Migrations
 
                     b.Property<DateOnly?>("EmploymentStartDate")
                         .HasColumnType("date");
+
+                    b.Property<int?>("EmploymentType")
+                        .HasColumnType("integer");
 
                     b.Property<string>("ExternalPayrollId")
                         .HasMaxLength(50)

@@ -17,8 +17,9 @@ public sealed class RosterAvailability(OdipDbContext db, IStaffUnavailabilityQue
     /// <summary>Reads what the rules need about these workers and participants over [from - 1, to + 1] (the day either side catches an overnight shift across the edge), one query each.</summary>
     public async Task<Snapshot> LoadAsync(IReadOnlyList<Guid> userIds, IReadOnlyList<Guid> participantIds, DateOnly from, DateOnly to, CancellationToken ct)
     {
-        var first = from.AddDays(-1);
-        var last = to.AddDays(1);
+        // The casual fortnight rule needs the whole fortnight; CheckCore clips each other rule back to its own window.
+        var first = Min(from.AddDays(-1), RosterFortnight.StartOf(from));
+        var last = Max(to.AddDays(1), RosterFortnight.EndOf(to));
         var staff = await db.Users.Where(u => userIds.Contains(u.Id)).ToListAsync(ct);
         var participants = await db.Participants.Where(p => participantIds.Contains(p.Id)).ToListAsync(ct);
         var shifts = await db.Shifts
@@ -34,6 +35,10 @@ public sealed class RosterAvailability(OdipDbContext db, IStaffUnavailabilityQue
         return new Snapshot(staff, participants, shifts, trips, windows, compatibility, await PublicHolidaysAsync(from, to, ct),
             await WeeklyHoursAsync(db, staff.Select(u => u.TenantId), ct));
     }
+
+    private static DateOnly Min(DateOnly a, DateOnly b) => a < b ? a : b;
+
+    private static DateOnly Max(DateOnly a, DateOnly b) => a > b ? a : b;
 
     /// <summary>
     /// Each organisation's weekly-hours warning (Settings > Alert windows), by tenant id. Read by explicit tenant id rather than the ambient filter so a SuperAdmin's mixed board
@@ -93,7 +98,7 @@ public sealed class RosterAvailability(OdipDbContext db, IStaffUnavailabilityQue
     /// <summary>What the rules read for a set of shifts, held in memory; <see cref="Check"/> builds each shift's <see cref="RosterCheckContext"/> as the controller's check did.</summary>
     public sealed class Snapshot(IEnumerable<User> staff, IEnumerable<Participant> participants, IEnumerable<Shift> shifts, IReadOnlyList<StaffAssignment> trips,
         IReadOnlyList<UnavailabilityWindow> windows, IReadOnlyDictionary<(Guid UserId, Guid ParticipantId), CompatibilityLevel> compatibility, IReadOnlyList<PublicHolidayRef> holidays,
-        IReadOnlyDictionary<Guid, int>? weeklyHours = null)
+        IReadOnlyDictionary<Guid, int>? weeklyHours = null, IEnumerable<Shift>? fortnightShifts = null)
     {
         // L5 and L-b: what makes a regular "away", as the short reason the chip shows. Pending leave is not away; an expired screening (R3) is.
         private static readonly Dictionary<string, string> AwayReasons = new()
@@ -110,6 +115,8 @@ public sealed class RosterAvailability(OdipDbContext db, IStaffUnavailabilityQue
         private readonly Dictionary<Guid, User> _staff = staff.ToDictionary(u => u.Id);
         private readonly Dictionary<Guid, Participant> _participants = participants.ToDictionary(p => p.Id);
         private readonly List<Shift> _shifts = shifts.ToList();
+        // Casual workers' shifts in the rest of the board week's fortnight: read only by the fortnight rule, never shown or counted by any other.
+        private readonly List<Shift> _fortnightShifts = fortnightShifts?.ToList() ?? [];
         private readonly RosterConflictService _rules = new();
 
         /// <summary>Every finding for the candidate. Nothing when it has no worker, or its worker or participant is not in the snapshot (the board passes active staff only).</summary>
@@ -136,6 +143,7 @@ public sealed class RosterAvailability(OdipDbContext db, IStaffUnavailabilityQue
                 return new List<RosterFinding>();
             var exclude = excludeShiftId ?? candidate.Id;
             var week = RosterWeek.MondayOf(candidate.ServiceDate);
+            var fortnight = RosterFortnight.StartOf(candidate.ServiceDate);
             var ctx = new RosterCheckContext(worker, participant,
                 _shifts.Where(s => s.UserId == userId && s.ServiceDate >= week.AddDays(-1) && s.ServiceDate <= week.AddDays(7) && s.Id != exclude && s.Id != leavingShiftId
                                    && !(liveOnly && s.Status == ShiftStatus.Cancelled)).ToList(),
@@ -143,7 +151,9 @@ public sealed class RosterAvailability(OdipDbContext db, IStaffUnavailabilityQue
                 trips.Where(a => a.UserId == userId).ToList(),
                 windows.Where(w => w.UserId == userId).ToList(),
                 compatibility.TryGetValue((userId, candidate.ParticipantId), out var level) ? level : CompatibilityLevel.Allowed,
-                WeeklyHoursFor(weeklyHours, worker.TenantId), holidays, callerIsAdmin);
+                WeeklyHoursFor(weeklyHours, worker.TenantId), holidays, callerIsAdmin,
+                worker.EmploymentType != EmploymentType.Casual ? null
+                    : _shifts.Concat(_fortnightShifts).Where(s => s.UserId == userId && s.ServiceDate >= fortnight && s.ServiceDate <= fortnight.AddDays(13) && s.Id != exclude && s.Id != leavingShiftId).DistinctBy(s => s.Id).ToList());
             return _rules.Check(candidate, ctx).ToList();
         }
     }
