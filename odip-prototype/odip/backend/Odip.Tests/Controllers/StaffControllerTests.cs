@@ -128,6 +128,29 @@ public class StaffControllerTests
         Assert.Equal(new DateOnly(2028, 1, 15), reloaded.WorkerScreeningExpiryDate);
     }
 
+    [Fact]
+    public async Task Update_KeepsEmploymentTypeWhenSent_ClearsItWhenNull()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString(), Guid.NewGuid());
+        var controller = new StaffController(db) { ControllerContext = AdminContext() };
+
+        var created = Assert.IsType<ApiResponse<StaffDetailDto>>(Assert.IsType<CreatedAtActionResult>((await controller.Create(
+            new CreateStaffDto { FirstName = "Pia", LastName = "Doyle", Email = "pia.doyle@example.com", Position = Position.SupportWorker, IsActive = true, EmploymentType = EmploymentType.PartTime },
+            CancellationToken.None)).Result).Value).Data!;
+
+        var kept = Assert.IsType<ApiResponse<StaffDetailDto>>(Assert.IsType<OkObjectResult>((await controller.Update(created.Id,
+            new UpdateStaffDto { FirstName = "Pia", LastName = "Doyle", Email = "pia.doyle@example.com", Position = Position.SupportWorker, IsActive = false, EmploymentType = EmploymentType.PartTime },
+            CancellationToken.None)).Result).Value).Data!;
+        Assert.Equal(EmploymentType.PartTime, kept.EmploymentType);
+        Assert.Equal(EmploymentType.PartTime, (await db.Users.SingleAsync(u => u.Id == created.Id)).EmploymentType);
+
+        var cleared = Assert.IsType<ApiResponse<StaffDetailDto>>(Assert.IsType<OkObjectResult>((await controller.Update(created.Id,
+            new UpdateStaffDto { FirstName = "Pia", LastName = "Doyle", Email = "pia.doyle@example.com", Position = Position.SupportWorker, IsActive = false, EmploymentType = null },
+            CancellationToken.None)).Result).Value).Data!;
+        Assert.Null(cleared.EmploymentType);
+        Assert.Null((await db.Users.SingleAsync(u => u.Id == created.Id)).EmploymentType);
+    }
+
     private static UpdateStaffDto GoalDto(decimal? goal) => new()
     {
         FirstName = "Gail", LastName = "Hours", Email = "gail.hours@example.com", Position = Position.SupportWorker, IsActive = true, GoalWeeklyHours = goal,
