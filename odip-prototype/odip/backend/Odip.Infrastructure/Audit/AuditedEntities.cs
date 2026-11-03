@@ -35,8 +35,8 @@ public static class AuditedEntities
 
         // A StaffParticipantCompatibility row marking a pair Excluded is a safeguarding
         // decision with real consequences: RosterConflictService raises it as the
-        // COMPATIBILITY_EXCLUDED finding (a Warning, per decision 2 — overridable with a
-        // reason like any other Warning, not the one Blocking rule). Who set an Excluded
+        // COMPATIBILITY_EXCLUDED finding (Blocking since R8: no override reason lifts it, so
+        // the worker can't be rostered for that participant). Who set an Excluded
         // flag, when, and why it was later changed is exactly the kind of thing an audit
         // needs to answer, so every CompatibilityLevel transition is audited. R8a: Preferred, Backup and
         // Emergency are ordered tiers, and every write renumbers its whole tier, so each sibling whose

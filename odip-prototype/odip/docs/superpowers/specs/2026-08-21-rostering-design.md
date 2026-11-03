@@ -104,7 +104,7 @@ Finding codes, all Warning except where marked:
 | `DOUBLE_BOOKED_SHIFT` | Warning | another shift for that staff overlaps in time |
 | `DOUBLE_BOOKED_TRIP` | Warning | a StaffAssignment covers ServiceDate |
 | `STAFF_UNAVAILABLE` | Warning | an Availability record marks the window unavailable |
-| `COMPATIBILITY_EXCLUDED` | Warning | Level is Excluded |
+| `COMPATIBILITY_EXCLUDED` | **Blocking** (R8, 2026-11-02; was a Warning) | Level is Excluded: a worker marked No can't be rostered for that participant. A shift they already hold can still be reassigned, unassigned or cancelled |
 | `CREDENTIAL_EXPIRED` | Warning | first aid / licence / manual handling / medication expiry earlier than ServiceDate |
 | `COMPETENCY_MISSING` | Warning | see mapping below |
 | `RATIO_SHORTFALL` | Warning | Ratio is TwoToOne and fewer than 2 staff cover the slot |

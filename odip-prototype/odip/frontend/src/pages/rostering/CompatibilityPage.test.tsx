@@ -141,6 +141,18 @@ describe('CompatibilityPage — the server\'s refusal reaches the user', () => {
     expect(mockUpsertMutate).toHaveBeenCalledTimes(3)
   })
 
+  it('exclusion dialog says the worker cannot be rostered and what happens to shifts already rostered', async () => {
+    const user = userEvent.setup()
+    render(<CompatibilityPage />)
+
+    await user.selectOptions(screen.getByLabelText('Sam Taylor with Jamie Chen: Allowed'), 'Excluded')
+
+    const dialog = screen.getByRole('alertdialog')
+    expect(dialog).toHaveTextContent('Mark as No for this participant')
+    expect(dialog).toHaveTextContent('Sam Taylor cannot be rostered for Jamie Chen’s shifts. Shifts already rostered stay as they are, but cannot be edited until the worker is replaced or the shift is unassigned or cancelled.')
+    expect(screen.getAllByRole('option', { name: 'No' })[0]).toHaveAttribute('value', 'Excluded')
+  })
+
   it('exclusion: sends the reason with the full body and shows the refusal', async () => {
     const user = userEvent.setup()
     failNextUpsertWith(badRequest(NOT_READY_MESSAGE))

@@ -110,6 +110,7 @@ public sealed class RosterAvailability(OdipDbContext db, IStaffUnavailabilityQue
             [RosterConflictService.StaffRecurringUnavailable] = "unavailable",
             [RosterConflictService.DoubleBookedShift] = "booked on another shift",
             [RosterConflictService.DoubleBookedTrip] = "on a trip",
+            [RosterConflictService.CompatibilityExcluded] = "not compatible with this participant",
         };
 
         private readonly Dictionary<Guid, User> _staff = staff.ToDictionary(u => u.Id);
