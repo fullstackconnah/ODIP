@@ -48,10 +48,12 @@ export default function ClaimsHubPage() {
 
   // The claim run lives in the URL as well, so the dashboard's Unclaimed shifts tile can open it; closing it drops the param, and Back leaves the page.
   const claimRun = hasOrganisation && params.get('run') === 'shifts'
+  // The tile for older shifts also names the run's start date; anything but a plain date is ignored, so the default window is used.
+  const runFrom = /^\d{4}-\d{2}-\d{2}$/.test(params.get('from') ?? '') ? params.get('from')! : undefined
   const setClaimRun = useCallback((open: boolean) => setParams(p => {
     const next = new URLSearchParams(p)
     if (open) next.set('run', 'shifts')
-    else next.delete('run')
+    else { next.delete('run'); next.delete('from') }
     return next
   }, { replace: true }), [setParams])
 
@@ -148,7 +150,7 @@ export default function ClaimsHubPage() {
         }}
       />
       {howModal}
-      {claimRun && <ShiftClaimRunModal open onClose={() => setClaimRun(false)} />}
+      {claimRun && <ShiftClaimRunModal open from={runFrom} onClose={() => setClaimRun(false)} />}
       {chooser && <NewClaimModal onClose={() => setChooser(false)} onShifts={pickShifts} onTrip={pick} onCancellationMade={id => { setChooser(false); navigate(`/claims/${id}`) }} onManualMade={id => { setChooser(false); navigate(`/claims/${id}`) }} />}
       {claimTrip && (
         <GenerateClaimModal tripId={claimTrip.id} trip={claimTrip} onClose={() => setClaimTrip(null)} onSuccess={created => { setClaimTrip(null); navigate(`/claims/${created.id}`) }} />

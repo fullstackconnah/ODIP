@@ -222,14 +222,15 @@ public class ClaimsController : ControllerBase
         }
     }
 
-    // GET /api/v1/claims/from-shifts/waiting: how many completed shifts the claim run's default window holds that no live claim has taken (the dashboard cue).
+    // GET /api/v1/claims/from-shifts/waiting: how many completed shifts the claim run's default window holds that no live claim has taken, and how many more go back two years (the NDIA's payment-request limit; the dashboard cue).
     [HttpGet("claims/from-shifts/waiting")]
     [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
     public async Task<ActionResult<ApiResponse<ShiftClaimWaitingDto>>> GetShiftClaimsWaiting(CancellationToken ct)
     {
         if (_tenant.TenantId is not { } tenantId) return BadRequest(ApiResponse<ShiftClaimWaitingDto>.Fail("Choose an organisation first."));
         var (from, to) = await DefaultRunWindowAsync(tenantId, ct);
-        return Ok(ApiResponse<ShiftClaimWaitingDto>.Ok(await _shiftGenerator.CountWaitingAsync(tenantId, from, to, ct)));
+        var today = to.AddDays(1);   // the window ends yesterday
+        return Ok(ApiResponse<ShiftClaimWaitingDto>.Ok(await _shiftGenerator.CountWaitingAsync(tenantId, from, to, ct, olderFrom: today.AddYears(-2), overdueBefore: today.AddDays(-90))));
     }
 
     // The last 14 days up to yesterday on the organisation's calendar, never the server's: late in the evening UTC it is already tomorrow in Sydney.

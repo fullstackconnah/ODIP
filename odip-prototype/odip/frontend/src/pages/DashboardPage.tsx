@@ -275,14 +275,17 @@ export default function DashboardPage() {
     })
   }
   // Completed, then claimed: the band reads in the order the work goes.
+  // The figure is every unclaimed shift back two years; the link opens the run from the oldest, so it covers what the figure counts. The stronger fact (past 90 days) names itself first.
   if (canClaimShifts) {
+    const { older, overdue } = unclaimed
+    const aged = overdue > 0 ? { n: overdue, days: 90 } : { n: older, days: 14 }
     attentionItems.push({
       label: 'Unclaimed shifts',
       noun: 'unclaimed shifts',
-      count: unclaimed.count,
+      count: unclaimed.count + older,
       tone: 'warning',
-      detail: `Last 14 days, across ${plural(unclaimed.participants, 'participant')}.`,
-      action: { label: 'Claim shifts', to: '/claims?run=shifts' },
+      detail: older > 0 ? `${aged.n} ${aged.n === 1 ? 'is' : 'are'} more than ${aged.days} days old.` : `Last 14 days, across ${plural(unclaimed.participants, 'participant')}.`,
+      action: { label: 'Claim shifts', to: older > 0 && unclaimed.oldestDate ? `/claims?run=shifts&from=${unclaimed.oldestDate}` : '/claims?run=shifts' },
       to: '/claims',
       loading: unclaimed.loading,
       error: unclaimed.error,

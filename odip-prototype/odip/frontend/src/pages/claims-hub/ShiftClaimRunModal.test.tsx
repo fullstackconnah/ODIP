@@ -31,7 +31,8 @@ const made = (over: Partial<ShiftClaimRunDto> = {}): ShiftClaimRunDto => ({
 
 const answer = (fn: ReturnType<typeof vi.fn>, data: ShiftClaimRunDto) => fn.mockImplementation((_req, opts) => opts.onSuccess(data))
 const fail = (fn: ReturnType<typeof vi.fn>, err: unknown) => fn.mockImplementation((_req, opts) => opts.onError(err))
-const open = () => render(<MemoryRouter><ShiftClaimRunModal open onClose={vi.fn()} /></MemoryRouter>)
+const open = (from?: string) => render(<MemoryRouter><ShiftClaimRunModal open from={from} onClose={vi.fn()} /></MemoryRouter>)
+const NINETY_DAYS = /^Some of these dates are more than 90 days ago\./
 
 beforeEach(() => { m.preview.mockReset(); m.run.mockReset(); m.previewPending.value = false; m.runPending.value = false })
 afterEach(() => { cleanup(); vi.clearAllMocks() })
@@ -49,6 +50,26 @@ describe('ShiftClaimRunModal', () => {
     expect(screen.getByText('Wolfeschlegelsteinhausenbergerdorff Alexandra')).toBeInTheDocument()
     expect(screen.getByText('1 shift will be left out')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Make 2 claims' })).toBeEnabled()
+  })
+
+  it('opened from a start date, asks for the run from it and shows the 90-day callout when the range reaches back that far', () => {
+    answer(m.preview, { ...base, from: '2026-07-21', to: '2026-11-01' })
+    open('2026-07-21')
+
+    expect(m.preview).toHaveBeenCalledWith({ from: '2026-07-21' }, expect.anything())
+    expect(screen.getByLabelText('From')).toHaveValue('2026-07-21')
+    expect(screen.getByText(NINETY_DAYS)).toHaveTextContent('From December 2026, claims must be made within 90 days.')
+  })
+
+  it('shows no 90-day callout at the default window, or when the range starts exactly 90 days back', () => {
+    answer(m.preview, base)
+    const { unmount } = open()
+    expect(screen.queryByText(NINETY_DAYS)).toBeNull()
+    unmount()
+
+    answer(m.preview, { ...base, from: '2026-08-04', to: '2026-11-01' })   // 89 days before To: the NDIA 90-day line is not crossed
+    open('2026-08-04')
+    expect(screen.queryByText(NINETY_DAYS)).toBeNull()
   })
 
   it('says it is looking while the first preview loads', () => {

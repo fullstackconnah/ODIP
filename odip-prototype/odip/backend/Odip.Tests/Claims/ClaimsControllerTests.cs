@@ -658,6 +658,26 @@ public class ClaimsControllerTests
         Assert.Equal((preview.From, preview.To), (waiting.From, waiting.To));
     }
 
+    [Fact]
+    public async Task ShiftClaimsWaiting_GoesBackTwoYears_SplitAtTheWindowAndNinetyDays_InTheOrganisationsZone()
+    {
+        using var kit = LedgerKit.Create();
+        kit.SeedProvider("NSW").TimeZoneId = "Australia/Sydney";
+        kit.Db.SaveChanges();
+        var person = kit.SeedParticipant();
+        // 01 Nov 13:30 UTC is 02 Nov in Sydney. Window 19 Oct to 01 Nov; older goes back to 02 Nov 2024; overdue is before 04 Aug.
+        foreach (var d in new[] { new DateOnly(2026, 10, 19), new DateOnly(2026, 10, 18), new DateOnly(2026, 8, 4), new DateOnly(2026, 8, 3), new DateOnly(2024, 11, 2), new DateOnly(2024, 11, 1), new DateOnly(2026, 11, 2) })
+            kit.SeedShift(person, d, ShiftStatus.Completed);
+        var controller = RunController(kit, new FixedClock(new DateTimeOffset(2026, 11, 1, 13, 30, 0, TimeSpan.Zero)));
+
+        var waiting = Body(await controller.GetShiftClaimsWaiting(CancellationToken.None));
+
+        Assert.Equal(1, waiting.ShiftCount);                      // 14 days ago is in the window
+        Assert.Equal(4, waiting.OlderShiftCount);                 // 15 days, 90 days, 91 days and exactly 2 years; not the day before, not today
+        Assert.Equal(2, waiting.OverdueShiftCount);               // 91 days and 2 years; exactly 90 days is not overdue
+        Assert.Equal(new DateOnly(2024, 11, 2), waiting.OldestDate);
+    }
+
     // ── Short-notice cancellation claim (claims PR2) ───────────────────────
 
     private static readonly DateTimeOffset CancelNow = new(2026, 10, 22, 1, 0, 0, TimeSpan.Zero);   // 12:00 on 22 Oct in Sydney
