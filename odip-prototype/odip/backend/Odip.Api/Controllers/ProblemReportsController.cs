@@ -49,7 +49,7 @@ public class ProblemReportsController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] ProblemReportRequest request, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<ProblemReportCreated>>> Create([FromBody] ProblemReportRequest request, CancellationToken ct)
     {
         // A SuperAdmin viewing a tenant has TenantId set (IsSuperAdmin is false then); one with nothing in view has neither.
         if (_tenant.TenantId is not { } tenantId)
