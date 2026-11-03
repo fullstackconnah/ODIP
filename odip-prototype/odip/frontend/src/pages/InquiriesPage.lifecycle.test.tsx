@@ -61,17 +61,28 @@ describe('InquiriesPage — open enquiries only', () => {
     const user = userEvent.setup()
     renderPage()
 
-    expect(within(screen.getByRole('table')).getByText('Draft intake')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Resume intake/ })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /^Resume intake/ }))
     expect(screen.getByText('Intake wizard destination')).toBeInTheDocument()
   })
 
-  it('still offers Start intake for an enquiry that has no participant yet', () => {
+  it('still offers Start intake for an enquiry that has no participant yet, behind Book intake until a visit is booked', async () => {
     mocks.inquiries.mockReturnValue({ data: [row(NO_PARTICIPANT)], isLoading: false })
+    const user = userEvent.setup()
+    renderPage()
+
+    expect(screen.queryByRole('button', { name: /^Start intake/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Book intake/ })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'More actions for Ava Ng' }))
+    expect(screen.getByRole('option', { name: /^Start intake/ })).not.toHaveAttribute('aria-disabled')
+  })
+
+  it('leads with Start intake once a visit is booked', () => {
+    mocks.inquiries.mockReturnValue({ data: [row({ ...NO_PARTICIPANT, intakeStartsAt: '2030-10-15T23:00:00Z', timeZoneId: 'Australia/Sydney' })], isLoading: false })
     renderPage()
 
     expect(screen.getByRole('button', { name: /^Start intake/ })).toBeInTheDocument()
-    expect(within(screen.getByRole('table')).getByText('New')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Book intake/ })).not.toBeInTheDocument()
   })
 
   it('lists only the open enquiries, New and Draft intake, and leaves out an enquiry whose intake is complete or whose participant is finalised', () => {
@@ -131,7 +142,6 @@ describe('InquiriesPage — a draft intake started without an enquiry', () => {
 
     const table = screen.getByRole('table')
     expect(within(table).getByText('Dana Direct')).toBeInTheDocument()
-    expect(within(table).getByText('Draft intake')).toBeInTheDocument()
     expect(within(table).getByText('0411111111')).toBeInTheDocument()
     // No enquiry was captured, and the cell says so instead of showing an empty source.
     expect(within(table).getByText('Direct intake')).toBeInTheDocument()
@@ -143,10 +153,10 @@ describe('InquiriesPage — a draft intake started without an enquiry', () => {
     mocks.inquiries.mockReturnValue({ data: [directIntake(), row({ id: 'real', firstName: 'Real', lastName: 'Enquiry', ...NO_PARTICIPANT })], isLoading: false })
     renderPage()
 
-    // One Edit enquiry button, for the real enquiry only.
-    expect(screen.getAllByRole('button', { name: /^Edit enquiry/ })).toHaveLength(1)
+    // The real enquiry's menu offers Edit enquiry; the direct intake has no menu at all.
+    expect(screen.getAllByRole('button', { name: /^More actions for/ })).toHaveLength(1)
     const directRow = screen.getByText('Dana Direct').closest('tr') as HTMLElement
-    expect(within(directRow).queryByRole('button', { name: /^Edit enquiry/ })).not.toBeInTheDocument()
+    expect(within(directRow).queryByRole('button', { name: /^More actions/ })).not.toBeInTheDocument()
   })
 
   it('is found by the same search as an enquiry', async () => {
@@ -168,7 +178,8 @@ describe('InquiriesPage — Start intake failures', () => {
     const user = userEvent.setup()
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: /^Start intake/ }))
+    await user.click(screen.getByRole('button', { name: 'More actions for Ava Ng' }))
+    await user.click(screen.getByRole('option', { name: /^Start intake/ }))
 
     expect(screen.getByRole('alert')).toHaveTextContent('Inquiry has already been converted.')
   })

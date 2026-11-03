@@ -32,6 +32,7 @@ public record RestrictivePracticeDto
     public string? RelatedMedicationName { get; init; }
     public MedicationStatus? RelatedMedicationStatus { get; init; }
     public bool? RequiresReporting { get; init; }
+    public string? CommissionReference { get; init; }
     public bool IsActive { get; init; }
     /// <summary>The one "Authorised" rule (RestrictivePracticeAuthorisation), judged on the organisation's calendar date. The browser shows this and never recomputes it.</summary>
     public bool IsAuthorised { get; init; }
@@ -64,6 +65,10 @@ public record UpdateRestrictivePracticeDto
 
     /// <summary>Whether this needs reporting to the NDIS Commission; null = leave the stored answer as it is.</summary>
     public bool? RequiresReporting { get; init; }
+
+    /// <summary>The NDIS Commission ID for this practice. Null leaves the stored value (a tab opened before this field does not send it); a blank string clears it.</summary>
+    [StringLength(50)]
+    public string? CommissionReference { get; init; }
 
     /// <summary>The version the form loaded (RestrictivePracticeDto.UpdatedAt): the server answers 409 if the entry changed since. Absent from older open tabs, which save as before.</summary>
     public DateTime? ExpectedUpdatedAt { get; init; }

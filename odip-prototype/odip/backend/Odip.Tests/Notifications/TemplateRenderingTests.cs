@@ -157,8 +157,8 @@ public class TemplateRenderingTests
         var payload = new IncidentReportedPayload("coord@example.com", "Ben Turner", "Fall", "Major");
         var message = IncidentReportedTemplate.Render(payload, BaseUrl);
 
-        Assert.Equal("Incident reported: Fall (Major)", message.Subject);
-        Assert.Contains("Ben Turner reported a Major Fall incident.", message.PlainTextBody);
+        Assert.Equal("Incident reported: fall (Major)", message.Subject);
+        Assert.Contains("Ben Turner reported a Major fall incident.", message.PlainTextBody);
         Assert.Contains("https://odip.test/incidents", message.HtmlBody);
 
         Assert.DoesNotContain("Alice", message.Subject);
@@ -167,6 +167,15 @@ public class TemplateRenderingTests
         // The payload type itself has no participant-name property at all — this is a
         // compile-time guarantee, not just a runtime string check, but the runtime check above
         // documents the intent for anyone reading the test.
+    }
+
+    [Fact]
+    public void IncidentReportedTemplate_PrintsTheTypeInWords()
+    {
+        var message = IncidentReportedTemplate.Render(new IncidentReportedPayload("coord@example.com", "Ben Turner", "SexualAbuse", "High"), BaseUrl);
+
+        Assert.Equal("Incident reported: sexual abuse (High)", message.Subject);
+        Assert.Contains("Ben Turner reported a High sexual abuse incident.", message.PlainTextBody);
     }
 
     [Fact]

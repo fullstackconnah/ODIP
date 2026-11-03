@@ -1,9 +1,9 @@
-import { useParams } from 'react-router-dom'
+import { Navigate, useLocation, useParams } from 'react-router-dom'
 import { usePermissions } from '@/lib/permissions'
 import { useTrip, useTripBookings, useTripAccommodation, useTripVehicles, useTripStaff, useTripTasks, useTripSchedule, useTripClaims, useTripIncidents, useParticipants } from '@/api/hooks'
 import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
 import { formatDateRange } from '@/lib/dateRange'
-import { Users, Building2, Truck, UserCog, ListChecks, Calendar, Pencil, ClipboardList, ClockIcon, FileText, ShieldAlert } from 'lucide-react'
+import { Users, Building2, UserCog, ListChecks, Calendar, Pencil, ClipboardList, ClockIcon, FileText, ShieldAlert } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import AuditHistoryTab from '@/components/AuditHistoryTab'
 import { Tabs, type TabItem } from '@/components/Tabs'
@@ -25,19 +25,23 @@ import { retryingAfterError } from '@/lib/queryPhase'
  * tiles carried (people, checklist, wheelchair, shield). FactBar pins the size and colour. */
 const factIcon = (glyph: string) => <span className="material-symbols-outlined">{glyph}</span>
 
-type Tab = 'overview' | 'bookings' | 'accommodation' | 'vehicles' | 'staff' | 'tasks' | 'activities' | 'claims' | 'incidents' | 'history'
+type Tab = 'overview' | 'bookings' | 'staff' | 'stay' | 'tasks' | 'activities' | 'claims' | 'incidents' | 'history'
 
-const TAB_KEYS: Tab[] = ['overview', 'bookings', 'accommodation', 'vehicles', 'staff', 'tasks', 'activities', 'claims', 'incidents', 'history']
+const TAB_KEYS: Tab[] = ['overview', 'bookings', 'staff', 'stay', 'tasks', 'activities', 'claims', 'incidents', 'history']
+
+// Accommodation and Vehicles share the Stay and transport tab; a saved link to either still lands there.
+const LEGACY_TABS: Record<string, Tab> = { accommodation: 'stay', vehicles: 'stay' }
 
 // What a tab's failed list is called in its error: "Couldn't load this booking list".
 const LIST_NOUNS: Partial<Record<Tab, string>> = {
-  bookings: 'booking list', accommodation: 'accommodation list', vehicles: 'vehicle list', staff: 'staff list',
+  bookings: 'booking list', staff: 'staff list',
   tasks: 'task list', activities: 'activity schedule', claims: 'claim list', incidents: 'incident list',
 }
 
 export default function TripDetailPage() {
   const { canWrite, canAccessPage, isAdmin: isAdminRole, isSuperAdmin } = usePermissions()
   const { id } = useParams()
+  const location = useLocation()
   const isAdmin = isAdminRole || isSuperAdmin
   const canAccessIncidents = canAccessPage('incidents')
   // ClaimsController admits only SuperAdmin, Admin and Coordinator: anyone else gets no Claims tab and sends no claims request.
@@ -80,12 +84,20 @@ export default function TripDetailPage() {
   const incidents = tabLists.incidents.data ?? []
   // A refetch that fails over rows already on screen keeps them (Q4b): only a list with nothing loaded counts as failed.
   const activeList: { isError: boolean; data?: unknown[]; isFetching?: boolean; errorUpdateCount?: number; refetch: () => unknown } | undefined = tabLists[activeTab as keyof typeof tabLists]
-  const activeListFailed = !!activeList && (activeList.isError || retryingAfterError(activeList)) && !activeList.data?.length
+  const listFailed = (list: NonNullable<typeof activeList>) => (list.isError || retryingAfterError(list)) && !list.data?.length
+  const activeListFailed = !!activeList && listFailed(activeList)
   // INTAKE-08: the trip/booking picker (BookingsTab) excludes drafts.
   const { data: participants = [] } = useParticipants(CAN_RECEIVE_SERVICES)
 
   const isReadOnly = trip?.status === 'Cancelled' || trip?.status === 'Archived'
 
+  // Rewritten before anything renders, so the old tab key never flashes Overview.
+  const legacyTab = LEGACY_TABS[new URLSearchParams(location.search).get('tab') ?? '']
+  if (legacyTab) {
+    const params = new URLSearchParams(location.search)
+    params.set('tab', legacyTab)
+    return <Navigate to={{ search: params.toString() }} replace />
+  }
   if (!id) return null
   if (isLoading && !retryingAfterError(pageQuery)) return <PageState kind="loading" noun="trip" />
   if (!trip) {
@@ -97,9 +109,9 @@ export default function TripDetailPage() {
   const tabs: TabItem[] = [
     { id: 'overview', label: 'Overview', icon: ClipboardList },
     { id: 'bookings', label: 'Bookings', icon: Users, badge: bookings.length },
-    { id: 'accommodation', label: 'Accommodation', icon: Building2, badge: accommodation.length },
-    { id: 'vehicles', label: 'Vehicles', icon: Truck, badge: vehicles.length },
     { id: 'staff', label: 'Staff', icon: UserCog, badge: staff.length },
+    // No count: rooms plus vans sum to nothing meaningful.
+    { id: 'stay', label: 'Stay and transport', icon: Building2 },
     { id: 'tasks', label: 'Tasks', icon: ListChecks, badge: tasks.length },
     { id: 'activities', label: 'Activities', icon: Calendar, badge: schedule.reduce((sum: number, d: any) => sum + (d.scheduledActivities?.length || 0), 0) },
     ...(canAccessClaims ? [{ id: 'claims' as string, label: 'Claims', icon: FileText, badge: claims.length }] : []),
@@ -107,36 +119,41 @@ export default function TripDetailPage() {
     ...(isAdmin ? [{ id: 'history' as string, label: 'History', icon: ClockIcon }] : []),
   ]
 
-  // Each segment's chip AND its attention tint come from one tone (`glanceState`), so the strip can never tint a
-  // segment its own badge calls fine. Waitlist is warning; Action Needed and Outstanding are negative; the rest
-  // (the wheelchair count, and any all-clear, which carries no pill) are quiet and keep the card fill. Every "x / y" figure is spelled
-  // by `formatRatio`, so the ratios in one strip cannot drift apart at display size.
+  // Each tile is have / need of ONE noun (formatRatio), its chip AND its attention tint come from one tone (`glanceState`) so the
+  // strip can never tint a tile its own chip calls fine, and each tile opens the tab that fixes the gap it states. A Cancelled or
+  // Archived trip is past fixing, so its tiles keep the figures and drop the chips and tints. Waitlist is warning; a shortfall is negative.
   const insuranceConfirmed = trip.insuranceConfirmedCount ?? 0
   const insuranceOutstanding = trip.insuranceOutstandingCount ?? 0
+  const staffShort = Math.max(0, (trip.staffRequired ?? 0) - trip.staffAssignedCount)
+  const gap = (n: number, tone: 'warning' | 'negative', chip: string) => (n > 0 && !isReadOnly ? glanceState(tone, chip) : {})
   const factBarSegments: FactBarSegment[] = [
     {
-      label: 'Participants / Staff',
+      label: trip.maxParticipants != null ? 'Places booked' : 'Participants booked',
       icon: factIcon('groups'),
-      value: formatRatio(trip.currentParticipantCount, trip.staffAssignedCount),
-      ...((trip.waitlistCount ?? 0) > 0 ? glanceState('warning', 'Waitlist') : {}),
+      value: trip.maxParticipants != null ? formatRatio(trip.currentParticipantCount, trip.maxParticipants) : trip.currentParticipantCount,
+      ...gap(trip.waitlistCount ?? 0, 'warning', `${trip.waitlistCount} on waitlist`),
+      onSelect: () => setActiveTab('bookings'),
     },
     {
-      label: 'Outstanding Tasks',
+      label: 'Staff assigned',
+      icon: factIcon('badge'),
+      value: trip.staffRequired != null ? formatRatio(trip.staffAssignedCount, trip.staffRequired) : trip.staffAssignedCount,
+      ...gap(staffShort, 'negative', `${staffShort} short`),
+      onSelect: () => setActiveTab('staff'),
+    },
+    {
+      label: 'Insurance confirmed',
+      icon: factIcon('health_and_safety'),
+      value: insuranceConfirmed + insuranceOutstanding > 0 ? formatRatio(insuranceConfirmed, insuranceConfirmed + insuranceOutstanding) : 0,
+      ...gap(insuranceOutstanding, 'negative', `${insuranceOutstanding} to confirm`),
+      onSelect: () => setActiveTab('bookings'),
+    },
+    {
+      label: 'Open tasks',
       icon: factIcon('checklist'),
       value: trip.outstandingTaskCount ?? 0,
-      ...((trip.outstandingTaskCount ?? 0) > 0 ? glanceState('negative', 'Action Needed') : {}),
-    },
-    {
-      label: 'High Support / Overnight',
-      icon: factIcon('accessible'),
-      value: formatRatio(trip.highSupportCount ?? 0, trip.overnightSupportCount ?? 0),
-      ...glanceState('neutral', `${trip.wheelchairCount ?? 0} WC`),
-    },
-    {
-      label: 'Insurance',
-      icon: factIcon('health_and_safety'),
-      value: formatRatio(insuranceConfirmed, insuranceConfirmed + insuranceOutstanding),
-      ...(insuranceOutstanding > 0 ? glanceState('negative', 'Outstanding') : {}),
+      ...gap(trip.outstandingTaskCount ?? 0, 'negative', 'To do'),
+      onSelect: () => setActiveTab('tasks'),
     },
   ]
 
@@ -179,6 +196,7 @@ export default function TripDetailPage() {
           onChange={setActiveTab}
           ariaLabel="Trip detail sections"
           idPrefix="trip"
+          overflow="scroll"
         />
       </div>
 
@@ -194,23 +212,33 @@ export default function TripDetailPage() {
         ) : (
           <>
         {activeTab === 'overview' && id && (
-          <OverviewTab tripId={id} trip={trip} bookings={bookings} accommodation={accommodation} staff={staff} vehicles={vehicles} onSwitchTab={tab => setActiveTab(tab as Tab)} />
+          <OverviewTab tripId={id} trip={trip} bookings={bookings} accommodation={accommodation} vehicles={vehicles} onSwitchTab={setActiveTab} />
         )}
 
         {activeTab === 'bookings' && (
           <BookingsTab tripId={id} trip={trip} bookings={bookings} participants={participants} canWrite={canWrite} isReadOnly={isReadOnly} />
         )}
 
-        {activeTab === 'accommodation' && (
-          <AccommodationTab tripId={id} trip={trip} accommodation={accommodation} canWrite={canWrite} />
-        )}
-
-        {activeTab === 'vehicles' && (
-          <VehiclesTab tripId={id} vehicles={vehicles} staff={staff} canWrite={canWrite} />
-        )}
-
         {activeTab === 'staff' && (
           <StaffTab tripId={id} trip={trip} staff={staff} canWrite={canWrite} />
+        )}
+
+        {/* Two lists, so each section decides alone: a failed one shows its own retry and the other still renders. */}
+        {activeTab === 'stay' && (
+          <div className="flex flex-col gap-[var(--section-gap)]">
+            <section aria-labelledby="trip-stay-accommodation" className="flex flex-col gap-3">
+              <h2 id="trip-stay-accommodation" className="text-base font-semibold text-[var(--color-foreground)]">Accommodation</h2>
+              {listFailed(tabLists.accommodation)
+                ? <PageState kind="error" noun="accommodation list" onRetry={() => tabLists.accommodation.refetch()} />
+                : <AccommodationTab tripId={id} trip={trip} accommodation={accommodation} canWrite={canWrite} />}
+            </section>
+            <section aria-labelledby="trip-stay-vehicles" className="flex flex-col gap-3">
+              <h2 id="trip-stay-vehicles" className="text-base font-semibold text-[var(--color-foreground)]">Vehicles</h2>
+              {listFailed(tabLists.vehicles)
+                ? <PageState kind="error" noun="vehicle list" onRetry={() => tabLists.vehicles.refetch()} />
+                : <VehiclesTab tripId={id} vehicles={vehicles} staff={staff} canWrite={canWrite} />}
+            </section>
+          </div>
         )}
 
         {activeTab === 'tasks' && (

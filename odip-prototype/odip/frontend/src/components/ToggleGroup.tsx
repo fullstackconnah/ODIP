@@ -3,6 +3,8 @@ import type { AriaAttributes, KeyboardEvent } from 'react'
 export type ToggleOption = {
   key: string
   label: string
+  /** Hover tooltip for the option (what it means); the visible label stays the accessible name. */
+  title?: string
 }
 
 export type ToggleGroupProps = {
@@ -72,6 +74,7 @@ export function ToggleGroup({ options, value, onChange, className, ariaLabel, ar
             type="button"
             role="radio"
             aria-checked={checked}
+            title={opt.title}
             tabIndex={isTabStop ? 0 : -1}
             disabled={disabled}
             onClick={() => onChange(opt.key)}

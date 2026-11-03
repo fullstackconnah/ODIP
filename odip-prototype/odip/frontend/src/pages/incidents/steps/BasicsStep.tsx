@@ -6,7 +6,8 @@ import { ToggleGroup } from '@/components/ToggleGroup'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { ParticipantPicker } from '@/components/ParticipantPicker'
 import { ReadOnlyField } from '@/pages/profile/profileHelpers'
-import { INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS, INCIDENT_TYPES, INCIDENT_SEVERITIES } from '@/api/types/enums'
+import { INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS, INCIDENT_SEVERITY_DEFINITIONS, INCIDENT_TYPES, INCIDENT_SEVERITIES } from '@/api/types/enums'
+import type { IncidentSeverity } from '@/api/types/enums'
 import { SERVICE_STREAM_LABELS } from '@/api/types/participants'
 import type { TripListDto, StaffListDto } from '@/api/types'
 import type { IncidentFormData } from '../incidentFormSchema'
@@ -51,16 +52,6 @@ export function BasicsStep({
     <div className="flex flex-col gap-[var(--section-gap)]">
       <Card title="Who">
         <div className={formGrid}>
-          <FormField label="Severity" required className={span.long}>
-            <ToggleGroup
-              ariaLabel="Severity"
-              options={INCIDENT_SEVERITIES.map((s) => ({ key: s, label: INCIDENT_SEVERITY_LABELS[s] }))}
-              value={severity ?? ''}
-              onChange={(v) => setValue('severity', v as IncidentFormData['severity'], { shouldDirty: true })}
-              className="max-md:w-full max-md:[&>button]:flex-1"
-            />
-          </FormField>
-
           <FormField label="Involved Participant" className={span.medium}>
             <ParticipantPicker
               allowNone
@@ -130,9 +121,10 @@ export function BasicsStep({
             </FormField>
           )}
 
-          <FormField label="Incident Type" required className={span.medium}>
+          <FormField label="Incident Type" required error={errors.incidentType?.message} className={span.medium}>
             <Dropdown
               variant="form"
+              label="Choose a type"
               value={incidentType ?? ''}
               onChange={(v) => setValue('incidentType', v as IncidentFormData['incidentType'], { shouldDirty: true, shouldValidate: true })}
               items={INCIDENT_TYPES.map((t) => ({ value: t, label: INCIDENT_TYPE_LABELS[t] }))}
@@ -144,6 +136,20 @@ export function BasicsStep({
               <input {...register('otherTypeSpecify')} placeholder="Describe the incident type" />
             </FormField>
           )}
+
+          <FormField
+            label="Severity" required error={errors.severity?.message} className={span.long}
+            hint={severity ? INCIDENT_SEVERITY_DEFINITIONS[severity as IncidentSeverity] : '1 is the least serious, 4 the most.'}
+            keepHint
+          >
+            <ToggleGroup
+              ariaLabel="Severity"
+              options={INCIDENT_SEVERITIES.map((s) => ({ key: s, label: INCIDENT_SEVERITY_LABELS[s], title: INCIDENT_SEVERITY_DEFINITIONS[s] }))}
+              value={severity ?? ''}
+              onChange={(v) => setValue('severity', v as IncidentFormData['severity'], { shouldDirty: true, shouldValidate: true })}
+              className="max-md:grid max-md:grid-cols-2 max-md:w-full"
+            />
+          </FormField>
         </div>
       </Card>
     </div>

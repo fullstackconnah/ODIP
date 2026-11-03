@@ -77,6 +77,12 @@ export default function ClaimsHubPage() {
     if (batchId) setFile(batchId)
   }
 
+  // The strip's Review button unmounts nothing, so focus would stay behind on it: move it to the tab it opened.
+  const showRejected = () => {
+    setTab('action')
+    document.querySelector<HTMLElement>('[role="tab"][id$="-tab-action"]')?.focus()
+  }
+
   const header = (
     <PageHeader
       title="Claims"
@@ -126,8 +132,8 @@ export default function ClaimsHubPage() {
     <div className="flex flex-col gap-4">
       {header}
       <AnnouncementRegion message={message} />
-      <ClaimsPipelineCard rejectedCount={data?.rejected.length ?? 0} onShowRejected={() => setTab('action')} />
-      <FilesStrip {...filesProps} onShowAll={() => setTab('files')} />
+      <FilesStrip {...filesProps} rejectedCount={data?.rejected.length ?? 0} onShowAll={() => setTab('files')} onShowRejected={showRejected} />
+      <ClaimsPipelineCard />
       <Tabs tabs={tabs} active={tab} onChange={setTab} ariaLabel="Claims sections" overflow="scroll" />
       {tab === 'ready' && (
         <ReadyPanel lines={data?.ready ?? []} {...linesProps} registrationProblem={data?.registrationProblem} canEditSettings={canEditProviderSettings} onBuilt={onBuilt} />
