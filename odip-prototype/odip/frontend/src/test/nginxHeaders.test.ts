@@ -46,10 +46,14 @@ describe.skipIf(!existsSync(CONF))('nginx/default.conf', () => {
   // The nginx trust list and the compose network are one decision in two files; if they drift, tunnel visitors share one bucket.
   it.skipIf(!existsSync(COMPOSE))('compose gives the frontend 10.250.0.2 on an odip-tunnel network whose subnet is the one nginx trusts', () => {
     const compose = readFileSync(COMPOSE, 'utf8')
-    const trusted = readFileSync(CONF, 'utf8').match(/^\s*set_real_ip_from\s+(10\.[\d./]+);/m)?.[1]
-    expect(trusted).toBeDefined()
+    const conf = readFileSync(CONF, 'utf8').split('\n').map((l) => l.replace(/#.*/, '')).join('\n')
+    expect(conf).toMatch(/^\s*set_real_ip_from\s+10\.250\.0\.0\/29;/m)
     expect(compose).toMatch(/name:\s*odip-tunnel/)
-    expect(compose).toMatch(/ipv4_address:\s*10\.250\.0\.2\b/)
-    expect(compose).toContain(`subnet: ${trusted}`)
+    expect(compose).toMatch(/^\s*-\s*subnet:\s*10\.250\.0\.0\/29\s*$/m)
+    // The frontend service block runs from `  frontend:` to the next top-level key; its own networks: must keep default and hold .2.
+    const frontend = compose.match(/^ {2}frontend:\n(?:(?: {3,}.*|\s*)\n)*/m)?.[0] ?? ''
+    const networks = frontend.match(/^ {4}networks:\n((?: {6,}.*\n)+)/m)?.[1] ?? ''
+    expect(networks).toMatch(/^ {6}default:/m)
+    expect(networks).toMatch(/^ {6}tunnel:\n\s+ipv4_address:\s*10\.250\.0\.2\s*$/m)
   })
 })
