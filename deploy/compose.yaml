@@ -110,15 +110,26 @@ services:
       options:
         max-size: "10m"
         max-file: "5"
-    # Public access: the homelab Cloudflare tunnel (remotely managed) maps https://bunya.connah.com.au -> http://192.168.4.70:8475.
-    # nginx trusts CF-Connecting-IP only from hops inside the Docker range (nginx/default.conf): cloudflared and other containers on
-    # this host arrive from the bridge gateway, LAN devices keep their own 192.168.x address and are not trusted. So the API rate
-    # limiter and the "login" flood limiter (60 per 5 minutes) see each visitor, not the gateway.
+    # Public access: the homelab Cloudflare tunnel (remotely managed) maps https://bunya.connah.com.au to this container. It joins the
+    # odip-tunnel network (cloudflared at 10.250.0.3) and targets odip-frontend:80; nginx trusts CF-Connecting-IP only from that /29
+    # (nginx/default.conf), so the API rate limiter and the "login" flood limiter (60 per 5 minutes) see each visitor. Until the tunnel
+    # has moved, it still arrives via the host port below. LAN devices keep their own address.
+    networks:
+      default:
+      tunnel:
+        ipv4_address: 10.250.0.2
     ports:
       - "8475:80"
     depends_on:
       api:
         condition: service_healthy
+
+networks:
+  tunnel:
+    name: odip-tunnel
+    ipam:
+      config:
+        - subnet: 10.250.0.0/29
 
 volumes:
   pgdata:

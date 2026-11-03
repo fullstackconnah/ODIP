@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const CONF = resolve(__dirname, '../../../nginx/default.conf')
+const COMPOSE = resolve(__dirname, '../../../../../deploy/compose.yaml')
 
 // nginx: a location block with its own add_header (directly, or nested in an `if`) drops every add_header inherited from the
 // server block, so the security headers silently vanish from whatever that location serves (the static assets, before this test).
@@ -26,8 +27,10 @@ describe.skipIf(!existsSync(CONF))('nginx/default.conf', () => {
   // Without these, every tunnel visitor reaches the API as the Docker gateway and shares one rate-limit and sign-in-lockout bucket.
   it('takes the visitor from CF-Connecting-IP, trusting only Docker-internal hops, and forwards that single address', () => {
     const conf = readFileSync(CONF, 'utf8').split('\n').map((l) => l.replace(/#.*/, '')).join('\n')
+    expect(conf).toMatch(/^\s*set_real_ip_from\s+10\.250\.0\.0\/29;/m)
+    // Phase 1 only: phase 2 drops the 172.16.0.0/12 line once cloudflared has moved to the odip-tunnel network.
     expect(conf).toMatch(/^\s*set_real_ip_from\s+172\.16\.0\.0\/12;/m)
-    expect(conf.match(/set_real_ip_from/g)).toHaveLength(1)
+    expect(conf.match(/set_real_ip_from/g)).toHaveLength(2)
     // Server level, so /api sees the rewritten address too: inside `location /` it would only reach the SPA.
     const firstLocation = conf.indexOf('location ')
     for (const d of ['set_real_ip_from', 'real_ip_header', 'real_ip_recursive']) {
@@ -38,5 +41,15 @@ describe.skipIf(!existsSync(CONF))('nginx/default.conf', () => {
     expect(conf).toMatch(/^\s*real_ip_recursive\s+off;/m)
     expect(conf).toMatch(/proxy_set_header\s+X-Forwarded-For\s+\$remote_addr;/)
     expect(conf).not.toMatch(/proxy_add_x_forwarded_for/)
+  })
+
+  // The nginx trust list and the compose network are one decision in two files; if they drift, tunnel visitors share one bucket.
+  it.skipIf(!existsSync(COMPOSE))('compose gives the frontend 10.250.0.2 on an odip-tunnel network whose subnet is the one nginx trusts', () => {
+    const compose = readFileSync(COMPOSE, 'utf8')
+    const trusted = readFileSync(CONF, 'utf8').match(/^\s*set_real_ip_from\s+(10\.[\d./]+);/m)?.[1]
+    expect(trusted).toBeDefined()
+    expect(compose).toMatch(/name:\s*odip-tunnel/)
+    expect(compose).toMatch(/ipv4_address:\s*10\.250\.0\.2\b/)
+    expect(compose).toContain(`subnet: ${trusted}`)
   })
 })
