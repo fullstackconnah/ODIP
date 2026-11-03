@@ -1098,6 +1098,64 @@ public class RosteringController : ControllerBase
         return Ok(ApiResponse<AutoRosterDraftDto>.Ok(await new AutoRosterDraftBuilder(_db, _availability).BuildAsync(tenantId, WeekStart(weekStart), _clock.GetUtcNow().UtcDateTime, ct)));
     }
 
+    private const int AutoRosterApplyMaxRows = 500;
+
+    /// <summary>
+    /// Auto-roster (R7) apply: gives each kept row of a draft to its worker, in the request's order, through the same body as /assign (readiness, the gate, LeaveCoverage closing, notices). It runs under
+    /// the board lock and the rows' locks, inside the lock's one transaction: a failure part-way rolls back every row. A row that is not placeable now (filled or changed since the draft, refused by the
+    /// gate, in another organisation or week) is skipped with its message and the rest still apply; skipping is never an error.
+    /// </summary>
+    [HttpPost("weeks/{weekStart}/auto-roster/apply")]
+    public async Task<ActionResult<ApiResponse<AutoRosterApplyResultDto>>> AutoRosterApply(DateOnly weekStart, [FromBody] AutoRosterApplyDto dto, CancellationToken ct)
+    {
+        if (_tenant?.TenantId is not { } tenantId) return BadRequest(ApiResponse<AutoRosterApplyResultDto>.Fail("Choose an organisation to auto-roster its week."));
+        if (dto?.Rows is null) return BadRequest(ApiResponse<AutoRosterApplyResultDto>.Fail("Choose the shifts to apply."));
+        if (dto.Rows.Count > AutoRosterApplyMaxRows) return BadRequest(ApiResponse<AutoRosterApplyResultDto>.Fail($"Apply at most {AutoRosterApplyMaxRows} shifts at a time."));
+        var start = WeekStart(weekStart);
+        var end = start.AddDays(6);
+        var shiftIds = dto.Rows.Select(r => r.ShiftId).Distinct().ToList();
+        var staffIds = dto.Rows.Select(r => r.StaffId).Distinct().ToList();
+        try
+        {
+            await using var held = await RosterBoardLockAsync(ct);
+            await LockShiftRowsAsync("\"Id\" = ANY({0})", new object[] { shiftIds.ToArray() }, ct);
+            // The assign body reads through the query filter, which SuperAdmin and the tests lack: name the organisation (and the week) here so another organisation's row is never written.
+            var shiftsHere = (await _db.Shifts.Where(s => shiftIds.Contains(s.Id) && s.TenantId == tenantId && s.ServiceDate >= start && s.ServiceDate <= end).Select(s => s.Id).ToListAsync(ct)).ToHashSet();
+            var staffHere = (await _db.Users.Where(u => staffIds.Contains(u.Id) && u.TenantId == tenantId).Select(u => u.Id).ToListAsync(ct)).ToHashSet();
+
+            var result = new AutoRosterApplyResultDto();
+            var seen = new HashSet<Guid>();
+            foreach (var row in dto.Rows)
+            {
+                if (!seen.Add(row.ShiftId)) { result.Skipped.Add(new() { ShiftId = row.ShiftId, Message = "Listed twice." }); continue; }
+                if (!shiftsHere.Contains(row.ShiftId)) { result.Skipped.Add(new() { ShiftId = row.ShiftId, Message = "Shift not found." }); continue; }
+                if (!staffHere.Contains(row.StaffId)) { result.Skipped.Add(new() { ShiftId = row.ShiftId, Message = "Staff member not found." }); continue; }
+                // ExpectedStaffId null: the draft only fills open shifts, so a shift someone filled since is a 409 here, never a replacement.
+                var assigned = await AssignShiftLockedAsync(row.ShiftId, new AssignShiftDto { StaffId = row.StaffId, ExpectedStaffId = null }, ct);
+                if (assigned.Result is OkObjectResult) result.Applied.Add(row.ShiftId);
+                else result.Skipped.Add(new() { ShiftId = row.ShiftId, Message = AssignRefusalMessage(assigned.Result) });
+            }
+            await held.CommitAsync(ct);
+            return Ok(ApiResponse<AutoRosterApplyResultDto>.Ok(result));
+        }
+        catch (RosterBusyException)
+        {
+            return Conflict(ApiResponse<AutoRosterApplyResultDto>.Fail(RosterGenerationLock.RosterBoardBusyMessage));
+        }
+    }
+
+    /// <summary>The words of a refused assign (404, 400, 409 or the gate's 422), for the apply's skip list.</summary>
+    private static string AssignRefusalMessage(IActionResult? refused)
+    {
+        var (errors, message) = (refused as ObjectResult)?.Value switch
+        {
+            ApiResponse<ShiftDto> r => (r.Errors, r.Message),
+            ApiResponse<List<RosterFindingDto>> r => (r.Errors, r.Message),
+            _ => (null, null),
+        };
+        return errors?.FirstOrDefault() ?? message ?? "This shift could not be filled.";
+    }
+
     /// <summary>
     /// Read-only shift notes for the roster slide-over (NOTES-01) — coordinators/admins read
     /// via this surface; only the assigned support worker creates/edits their own, through

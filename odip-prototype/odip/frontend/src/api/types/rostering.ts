@@ -4,7 +4,7 @@ import type {
   PortalDoseOutcomeDto,
   PortalShiftRoutineDto,
 } from './shift-package'
-import type { SupportRatio, SleepoverType, ShiftStatus, CompatibilityLevel, RosterFindingSeverity, RosterComplianceLevel, IncidentSeverity, IncidentStatus } from './enums'
+import type { SupportRatio, SleepoverType, ShiftStatus, EmploymentType, CompatibilityLevel, RosterFindingSeverity, RosterComplianceLevel, IncidentSeverity, IncidentStatus } from './enums'
 import type { LeaveStatus, UnavailabilityKind } from './leave'
 import type { PlanBlockRequirements } from './plan-pricing'
 import type { ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
@@ -677,4 +677,79 @@ export interface UpsertCompatibilityDto {
   reason?: string | null
   /** 1-based target place in the tier; leave out to keep the row where it is (or append on a tier change). */
   rank?: number
+}
+
+// ── Auto-roster (R7): a draft of who could take a week's open shifts. Nothing is saved until Apply. ──
+export type AutoRosterPick = 'Regular' | 'Preferred' | 'Backup' | 'Emergency' | 'Allowed'
+export type UncoveredReason = 'ParticipantNotReady' | 'NoStaff' | 'OnlyNoStaff' | 'HoursCapReached' | 'NeedsOverride' | 'NobodyFree'
+export type AutoRosterRecommendationKind = 'OverGoal' | 'Override' | 'Soft' | 'Other'
+
+export interface AutoRosterAlternateDto {
+  staffId: string
+  staffName: string
+  pick: AutoRosterPick
+  rank?: number | null
+}
+
+export interface AutoRosterChangeDto {
+  shiftId: string
+  participantId: string
+  participantName: string
+  serviceDate: string
+  startTime: string
+  endTime: string
+  staffId: string
+  staffName: string
+  pick: AutoRosterPick
+  rank?: number | null
+  underGoal: boolean
+  /** "Sam Lee is away: on approved leave" when the shift's regular was away and someone else was proposed. */
+  regularAway?: string | null
+  warnings: RosterFindingDto[]
+  alternates: AutoRosterAlternateDto[]
+}
+
+export interface AutoRosterHoursDto {
+  staffId: string
+  staffName: string
+  employmentType?: EmploymentType | null
+  goalHours: number
+  goalIsDefault: boolean
+  rosteredHours: number
+  draftHours: number
+}
+
+export interface AutoRosterRecommendationDto {
+  kind: AutoRosterRecommendationKind
+  staffId?: string | null
+  text: string
+}
+
+export interface AutoRosterUncoveredDto {
+  shiftId: string
+  participantName: string
+  serviceDate: string
+  startTime: string
+  endTime: string
+  reason: UncoveredReason
+  /** Display-only: the coordinator acts on the board, where the normal assign path asks for any override reason. */
+  recommendations: AutoRosterRecommendationDto[]
+}
+
+export interface AutoRosterDraftDto {
+  weekStart: string
+  generatedAt: string
+  changes: AutoRosterChangeDto[]
+  hours: AutoRosterHoursDto[]
+  uncovered: AutoRosterUncoveredDto[]
+}
+
+export interface AutoRosterApplyDto {
+  rows: { shiftId: string; staffId: string }[]
+}
+
+/** Rows left as they were (changed since the draft, now refused, not found) are not a failure: the others still apply. */
+export interface AutoRosterApplyResultDto {
+  applied: string[]
+  skipped: { shiftId: string; message: string }[]
 }

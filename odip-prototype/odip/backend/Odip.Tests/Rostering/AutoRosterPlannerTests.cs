@@ -83,14 +83,14 @@ public class AutoRosterPlannerTests
     }
 
     /// <summary>The real rules never raise an override finding for a worker the away check passes, so this adds a RequiresReason finding for one worker to reach the NeedsOverride branch.</summary>
-    private sealed class NeedsReasonFor(IAutoRosterOracle inner, Guid workerId) : IAutoRosterOracle
+    private sealed class NeedsReasonFor(IAutoRosterOracle inner, Guid workerId, string code = "TEST_NEEDS_REASON") : IAutoRosterOracle
     {
         public string? Away(Shift probe) => inner.Away(probe);
 
         public List<RosterFinding> Check(Shift probe)
         {
             var findings = inner.Check(probe);
-            if (probe.UserId == workerId) findings.Add(new RosterFinding("TEST_NEEDS_REASON", RosterFindingSeverity.Warning, "needs a reason", RequiresReason: true));
+            if (probe.UserId == workerId) findings.Add(new RosterFinding(code, RosterFindingSeverity.Warning, "needs a reason", RequiresReason: true));
             return findings;
         }
 
@@ -337,5 +337,48 @@ public class AutoRosterPlannerTests
         static string Key(AutoRosterPlan p) => string.Join("|", p.Placements.Select(x => $"{x.ShiftId}:{x.StaffId}:{x.Pick}")) + "/" + string.Join("|", p.Uncovered.Select(x => $"{x.ShiftId}:{x.Reason}:" + string.Join(",", x.Recommendations.Select(c => $"{c.Kind}:{c.StaffId}:{c.Text}"))))
             + "/" + string.Join("|", p.Placements.Select(x => $"{x.ShiftId}:" + string.Join(",", x.Alternates.Select(a => $"{a.StaffId}:{a.Pick}"))));
         Assert.Equal(Key(first), Key(second));
+    }
+
+    [Fact]
+    public async Task AFreeNoListedWorker_AndOneWhoNeedsAReason_IsOnlyNoStaff_WithAnOverrideRecommendation()
+    {
+        await using var w = new World();
+        w.Worker("Abe", 38, level: CompatibilityLevel.Excluded);
+        var pat = w.Worker("Pat", 38);
+        w.Shift(1, 9, 13);
+
+        var plan = await w.PlanAsync(wrap: inner => new NeedsReasonFor(inner, pat.Id, RosterConflictService.PublicHoliday));
+
+        var uncovered = Assert.Single(plan.Uncovered);
+        Assert.Equal(UncoveredReason.OnlyNoStaff, uncovered.Reason);
+        var rec = uncovered.Recommendations[0];
+        Assert.Equal(AutoRosterRecommendationKind.Override, rec.Kind);
+        Assert.Equal(pat.Id, rec.StaffId);
+        Assert.Equal("Pat Test can take it with a reason: needs a reason", rec.Text);
+    }
+
+    [Fact]
+    public async Task Recommendations_AreListedOverGoal_ThenOverride_ThenSoft()
+    {
+        await using var w = new World();
+        var hal = w.Worker("Hal", 38, rostered: 38);
+        var pat = w.Worker("Pat", 38);
+        var sue = w.Worker("Sue", 38);
+        for (var day = 0; day < 5; day++)
+            w.Db.Shifts.Add(new Shift
+            {
+                Id = Guid.NewGuid(), TenantId = TenantA, ParticipantId = w.Mia.Id, UserId = hal.Id, ServiceDate = Monday.AddDays(day), StartTime = new TimeOnly(6, 0), EndTime = new TimeOnly(13, 36),
+                Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, Status = ShiftStatus.Published, ShiftPatternId = Guid.NewGuid(),
+            });
+        var shift = w.Shift(5, 9, 13);
+        w.Db.LeaveRequests.Add(LeaveFor(sue, shift, LeaveStatus.Pending));
+
+        var plan = await w.PlanAsync(wrap: inner => new NeedsReasonFor(inner, pat.Id, RosterConflictService.PublicHoliday));
+
+        var uncovered = Assert.Single(plan.Uncovered);
+        Assert.Equal(
+            [AutoRosterRecommendationKind.OverGoal, AutoRosterRecommendationKind.Override, AutoRosterRecommendationKind.Soft],
+            uncovered.Recommendations.Select(r => r.Kind));
+        Assert.Equal([hal.Id, pat.Id, sue.Id], uncovered.Recommendations.Select(r => r.StaffId!.Value));
     }
 }

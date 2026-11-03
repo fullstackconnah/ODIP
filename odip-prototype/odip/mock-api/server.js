@@ -1253,6 +1253,7 @@ const HTTP = Symbol('http-status')
 /** Lets a route answer with a non-200 status (the dispatcher below honours it). */
 const respond = (status, body) => ({ [HTTP]: status, body })
 const rosterFill = require('./mock-roster-fill.js')
+const autoRosterMock = require('./mock-auto-roster.js')
 const incidentTrend = require('./mock-incident-trend.js')
 const claimsPipeline = require('./mock-claims-pipeline.js')
 const failEnvelope = (data, errors, code) => {
@@ -3027,6 +3028,7 @@ const routes = [
 // with its new status/decision fields, plus the one pure-preview endpoint (staff-assignments/check)
 // that must return an array of findings, not an echoed object.
 const postRoutes = [
+  ...autoRosterMock.post,
   ...importMock.post,
   ...earlyAccessFollowedUp,
   ...funding.post,

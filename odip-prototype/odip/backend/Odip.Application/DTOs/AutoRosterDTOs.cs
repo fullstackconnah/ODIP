@@ -76,3 +76,28 @@ public record AutoRosterRecommendationDto
     public Guid? StaffId { get; init; }
     public string Text { get; init; } = string.Empty;
 }
+
+/// <summary>The rows a coordinator kept from a draft, in the order to apply them. Each is judged again under the board's locks; none is trusted from the draft.</summary>
+public record AutoRosterApplyDto
+{
+    public List<AutoRosterApplyRowDto> Rows { get; init; } = new();
+}
+
+public record AutoRosterApplyRowDto
+{
+    public Guid ShiftId { get; init; }
+    public Guid StaffId { get; init; }
+}
+
+public record AutoRosterApplyResultDto
+{
+    public List<Guid> Applied { get; init; } = new();
+    /// <summary>Rows left as they were (changed since the draft, now refused, not found): not a failure, and the other rows still apply.</summary>
+    public List<AutoRosterSkippedDto> Skipped { get; init; } = new();
+}
+
+public record AutoRosterSkippedDto
+{
+    public Guid ShiftId { get; init; }
+    public string Message { get; init; } = string.Empty;
+}

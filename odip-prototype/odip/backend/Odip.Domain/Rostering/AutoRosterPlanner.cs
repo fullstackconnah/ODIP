@@ -35,7 +35,7 @@ public sealed record AutoRosterAlternate(Guid StaffId, AutoRosterPick Pick, int 
 public sealed record AutoRosterPlacement(Guid ShiftId, Guid StaffId, AutoRosterPick Pick, int Rank, bool UnderGoal, string? RegularAway,
     IReadOnlyList<RosterFinding> Warnings, IReadOnlyList<AutoRosterAlternate> Alternates);
 
-public enum AutoRosterRecommendationKind { OverGoal, Soft, Other }
+public enum AutoRosterRecommendationKind { OverGoal, Override, Soft, Other }
 
 public sealed record AutoRosterRecommendation(AutoRosterRecommendationKind Kind, Guid? StaffId, string Text);
 
@@ -192,6 +192,10 @@ public static class AutoRosterPlanner
             var takes = (hoursOf(over.Worker) + shift.DurationHours).ToString("0.##", CultureInfo.InvariantCulture);
             recs.Add(new(AutoRosterRecommendationKind.OverGoal, over.Worker.Id, $"Ask {over.Worker.Name}: takes them to {takes} h (goal {over.Worker.Goal.ToString("0.##", CultureInfo.InvariantCulture)} h)"));
         }
+
+        // Display-only: asking for a reason is gentler than overriding a rule, and both beat a pending request. The coordinator assigns on the board, where the gate asks for the reason.
+        if (ordered(all.Where(c => c.Kind == Kind.Override), shift).FirstOrDefault() is { } stretch)
+            recs.Add(new(AutoRosterRecommendationKind.Override, stretch.Worker.Id, $"{stretch.Worker.Name} can take it with a reason: {stretch.Findings.OrderByDescending(f => f.RequiresReason).ThenBy(f => f.Code, StringComparer.Ordinal).ThenBy(f => f.Message, StringComparer.Ordinal).First().Message}"));
 
         if (ordered(all.Where(c => c.Kind == Kind.Soft), shift).FirstOrDefault() is { } soft)
             recs.Add(new(AutoRosterRecommendationKind.Soft, soft.Worker.Id, $"{soft.Worker.Name}: {soft.Hard.OrderBy(f => f.Code, StringComparer.Ordinal).ThenBy(f => f.Message, StringComparer.Ordinal).First().Message}"));

@@ -14,6 +14,9 @@ import type {
   MoveStaffDto,
   PublishWeekResultDto,
   StartWeekResultDto,
+  AutoRosterDraftDto,
+  AutoRosterApplyDto,
+  AutoRosterApplyResultDto,
   CheckShiftDto,
   ShiftCheckResult,
   RosterFindingDto,
@@ -178,6 +181,24 @@ export function useStartWeek() {
   return useMutation({
     mutationFn: (weekStart: string) => apiPost<StartWeekResultDto>(`/rostering/weeks/${weekStart}/start`),
     onSuccess: () => refreshBudgetFigures(qc),   // the shifts it makes are booked ahead
+    onSettled: () => qc.invalidateQueries({ queryKey: ['roster-board'] }),
+  })
+}
+
+/** Auto-roster (R7): a draft of who could take the week's open shifts. Nothing is saved, so there is nothing to refetch. */
+export function useAutoRosterDraft() {
+  return useMutation({
+    mutationFn: (weekStart: string) => apiPost<AutoRosterDraftDto>(`/rostering/weeks/${weekStart}/auto-roster`),
+  })
+}
+
+/** Apply the rows a coordinator kept from a draft, in one transaction. A row that changed since is skipped, not a failure. The board and the fill chart (both under 'roster-board') refetch, as Start rostering does. */
+export function useApplyAutoRoster() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ weekStart, ...body }: AutoRosterApplyDto & { weekStart: string }) =>
+      apiPost<AutoRosterApplyResultDto>(`/rostering/weeks/${weekStart}/auto-roster/apply`, body),
+    onSuccess: () => refreshBudgetFigures(qc),   // the shifts it staffs are booked ahead
     onSettled: () => qc.invalidateQueries({ queryKey: ['roster-board'] }),
   })
 }
