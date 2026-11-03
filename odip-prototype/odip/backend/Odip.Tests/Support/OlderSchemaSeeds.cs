@@ -26,6 +26,7 @@ internal static class OlderSchemaSeeds
         ("ServiceAgreementDrafts", "OriginalAgreementEndDate", "date"),
         ("ShiftBreaks", "WithParticipant", "boolean"),
         ("Shifts", "CancelledAt", "timestamp without time zone"),
+        ("StaffParticipantCompatibilities", "Rank", "integer"),
         ("Users", "EmploymentType", "integer"),
     ];
 
