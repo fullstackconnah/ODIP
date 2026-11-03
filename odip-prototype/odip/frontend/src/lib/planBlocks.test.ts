@@ -198,7 +198,7 @@ describe('blocks as the plan keeps them', () => {
   })
 
   it('reads the MM level as the price zone the server reads it as (ProviderTravelRule.LocationOf)', () => {
-    expect([1, 3, 4, 5, 6, 7].map(zoneOfMm)).toEqual(['National', 'National', 'National', 'National', 'Remote', 'VeryRemote'])
+    expect([1, 2, 3, 4, 5, 6, 7].map(zoneOfMm)).toEqual(['National', 'National', 'National', 'National', 'National', 'Remote', 'VeryRemote'])
   })
 })
 
