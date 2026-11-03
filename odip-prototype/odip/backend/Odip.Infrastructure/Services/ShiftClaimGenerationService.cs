@@ -23,9 +23,10 @@ namespace Odip.Infrastructure.Services;
 /// active-hours that have no shift equivalent, and mixing the two would force every trip call
 /// site to reason about shift-only parameters.
 ///
-/// Billing is against ROSTERED hours (<see cref="Shift.DurationHours"/>), never
-/// <c>ShiftCompletion</c>'s clocked times — the office already accepted any variance at
-/// Approve time, so re-deriving hours here would silently relitigate that decision.
+/// Billing is against ROSTERED hours (<see cref="Shift.DurationHours"/>) minus the breaks the worker took on their own
+/// (owner, 2026-11-03, W9; <see cref="ShiftBreakRules.UnclaimedSpans"/>), never <c>ShiftCompletion</c>'s clocked times — the
+/// office already accepted any variance at Approve time, so re-deriving hours here would silently relitigate that decision.
+/// Breaks with the participant are still claimed.
 ///
 /// TripClaim/ClaimLineItem are NOT ITenantEntity (standing ruling) — every query here is scoped
 /// through the tenant-filtered Participants/Shifts sets, never queried directly by a caller-
@@ -279,6 +280,9 @@ public partial class ShiftClaimGenerationService
         var travelInputs = await ShiftTravelSource.ForShiftsAsync(_db, participant.TenantId, travelPolicy, shifts.Select(s => new ShiftRef(s.Id, s.ShiftPatternId)).ToList(), ct);
         var travelOf = shifts.Select((s, i) => (s.Id, Input: travelInputs[i])).ToDictionary(t => t.Id, t => t.Input);
 
+        // The breaks taken alone, read once for preview, run and claim again alike. A cancellation passes none: a cancelled shift was never worked, so it has no completion and no breaks.
+        var aloneBreaks = cancelToday is null ? await ShiftAloneBreaks.LoadAsync(_db, shifts.Select(s => s.Id).ToList(), ct) : new();
+
         var lineItems = new List<ShiftLineCalc>();
         var leftOut = new List<ShiftClaimLeftOutDto>();
         // No line for an NDIS-funded participant without an NDIS number: services can begin before the profile is complete, so this is reachable. The
@@ -309,7 +313,8 @@ public partial class ShiftClaimGenerationService
             // The one pricing rule, shared with the budget ledger so an estimate is exactly what this claim will say.
             var outcome = ShiftPriceEstimator.Price(
                 new ShiftRateRows(catalogueItems, personalCareRows, sleepoverRows), shift.SupportGroupCode, shift.ServiceDate, shift.StartTime, shift.EndTime, shift.EndsNextDay, shift.Ratio, shift.NightType,
-                participant.IsIntensiveSupport, state, publicHolidays, zone);
+                participant.IsIntensiveSupport, state, publicHolidays, zone,
+                ShiftAloneBreaks.SpansOf(aloneBreaks, shift.Id, shift.ServiceDate, shift.StartTime, shift.EndTime, shift.EndsNextDay, shift.NightType, zone));
             if (!outcome.IsPriced)
             {
                 // A shift that cannot be priced is not claimed, and it is not dropped silently either: it is listed with the reason, and it stays completed and unclaimed.
