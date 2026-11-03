@@ -123,9 +123,9 @@ public sealed class BudgetLedgerService
         var pricing = new Pricing(catalogue, holidays, providerState, providerZone.Zone);
         // Provider travel (travel plan D5): the worker's submitted legs, else the agreement's forecast, read once for every shift, the same source the claim reads.
         var travelPolicy = await ShiftTravelSource.PolicyAsync(_db, tenantId, ct);
-        var travelInputs = await ShiftTravelSource.ForShiftsAsync(_db, tenantId, travelPolicy, shiftRows.Select(s => new ShiftRef(s.Id, s.ShiftPatternId)).ToList(), ct);
-        var itemsByPerson = withPlan.ToDictionary(p => p.Id, _ => new List<LedgerItem>());
         var peopleById = withPlan.ToDictionary(p => p.Id);
+        var travelInputs = await ShiftTravelSource.ForShiftsAsync(_db, tenantId, travelPolicy, shiftRows.Select(s => new ShiftRef(s.Id, s.ShiftPatternId, peopleById[s.ParticipantId].MmLevel)).ToList(), ct);
+        var itemsByPerson = withPlan.ToDictionary(p => p.Id, _ => new List<LedgerItem>());
 
         foreach (var line in lineRows) itemsByPerson[line.ParticipantId].Add(ClaimLineItemOf(line, peopleById[line.ParticipantId], pricing));
         for (var i = 0; i < shiftRows.Count; i++) itemsByPerson[shiftRows[i].ParticipantId].AddRange(ShiftItemsOf(shiftRows[i], peopleById[shiftRows[i].ParticipantId], today, pricing, travelInputs[i], travelPolicy));
@@ -156,7 +156,7 @@ public sealed class BudgetLedgerService
     private Task<List<PersonRow>> PeopleAsync(Guid tenantId, IReadOnlyCollection<Guid> participantIds, CancellationToken ct) =>
         _db.Participants.AsNoTracking()
             .Where(p => p.TenantId == tenantId && participantIds.Contains(p.Id))
-            .Select(p => new PersonRow(p.Id, p.FirstName, p.LastName, p.PreferredName, p.PlanType, p.IsIntensiveSupport, p.AddressState, p.NdisNumber, p.FundingSource))
+            .Select(p => new PersonRow(p.Id, p.FirstName, p.LastName, p.PreferredName, p.PlanType, p.IsIntensiveSupport, p.AddressState, p.NdisNumber, p.FundingSource, p.MmLevel))
             .ToListAsync(ct);
 
     private Task<List<FundingPlan>> PlansAsync(Guid tenantId, IReadOnlyCollection<Guid> participantIds, CancellationToken ct) =>
@@ -281,7 +281,7 @@ public sealed class BudgetLedgerService
 
     // ── Loading ─────────────────────────────────────────────────────────────
 
-    private sealed record PersonRow(Guid Id, string FirstName, string LastName, string? PreferredName, PlanType PlanType, bool IsIntensive, string? AddressState, string? NdisNumber, ParticipantFundingSource FundingSource)
+    private sealed record PersonRow(Guid Id, string FirstName, string LastName, string? PreferredName, PlanType PlanType, bool IsIntensive, string? AddressState, string? NdisNumber, ParticipantFundingSource FundingSource, int? MmLevel)
     {
         // The participant's own full name rule (preferred name, else first name, then last).
         public string Name => string.IsNullOrWhiteSpace(PreferredName) ? $"{FirstName} {LastName}".Trim() : $"{PreferredName} {LastName}".Trim();

@@ -11,6 +11,7 @@ internal static class OlderSchemaSeeds
 {
     private static readonly (string Table, string Column, string Type)[] LaterColumns =
     [
+        ("Participants", "MmLevel", "integer"),
         ("Participants", "ServicesStartedAt", "timestamp without time zone"),
         ("ProviderSettings", "ContactEmail", "character varying(254)"),
         ("ProviderSettings", "ContactPhone", "character varying(30)"),

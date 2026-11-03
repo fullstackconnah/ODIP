@@ -276,7 +276,7 @@ public partial class ShiftClaimGenerationService
 
         // The travel of every shift, read once inside the same lock as the shifts (the staff edit of the travel legs takes the same lock): the worker's submitted legs, else the agreement's forecast.
         var travelPolicy = await ShiftTravelSource.PolicyAsync(_db, participant.TenantId, ct);
-        var travelInputs = await ShiftTravelSource.ForShiftsAsync(_db, participant.TenantId, travelPolicy, shifts.Select(s => new ShiftRef(s.Id, s.ShiftPatternId)).ToList(), ct);
+        var travelInputs = await ShiftTravelSource.ForShiftsAsync(_db, participant.TenantId, travelPolicy, shifts.Select(s => new ShiftRef(s.Id, s.ShiftPatternId, participant.MmLevel)).ToList(), ct);
         var travelOf = shifts.Select((s, i) => (s.Id, Input: travelInputs[i])).ToDictionary(t => t.Id, t => t.Input);
 
         var lineItems = new List<ShiftLineCalc>();

@@ -16,6 +16,10 @@ public static class ProviderTravelRule
         _ => null,
     };
 
+    /// <summary>A participant's MM level as a location for the cap, for a shift not made from an agreement block: null (unknown) stays null, which caps at 30. MM6 is Remote and MM7 Very Remote, as on the price zones.</summary>
+    public static PlanLocation? LocationOf(int? mm) => mm is null ? null
+        : new PlanLocation { Zone = mm >= 7 ? PriceZone.VeryRemote : mm == 6 ? PriceZone.Remote : PriceZone.National, Mm = mm };
+
     /// <summary>The kilometre dollars of a shift: the summed legs at the rate, shared by the participants, floored to the cent.</summary>
     public static decimal KmDollars(decimal totalKm, decimal ratePerKm, int sharing) => PlanMoney.FloorToCent(totalKm * ratePerKm / Math.Max(1, sharing));
 }

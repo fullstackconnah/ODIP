@@ -21,6 +21,7 @@ public static class ParticipantGroupRevisions
         ("personalDetails", d => d.PersonalDetails, ["FirstName", "LastName", "PreferredName", "MiddleName", "DateOfBirth", "Gender", "GenderSelfDescription", "PlaceOfBirth", "Country", "Phone", "Email"]),
         ("preferredStaff", d => d.PreferredStaff, ["PreferredUserId"]),
         ("address", d => d.Address, ["AddressStreet", "AddressSuburb", "AddressState", "AddressPostcode"]),
+        ("remoteness", d => d.Remoteness, ["MmLevel"]),
         ("livingArrangement", d => d.LivingArrangement, ["LivingArrangement", "MainSupportPersonName", "MainSupportPersonRelationship", "OthersLivingInAccommodation", "ResidentialInfo", "LivesWithOthers", "WhoLivesWith", "SilProviderName", "SilProviderContactPhone", "AccommodationType", "OnSiteSupportHours", "LivingArrangementNotes"]),
         ("ndisPlan", d => d.NdisPlan, ["NdisNumber", "PlanStartDate", "PlanEndDate", "PlanType", "FundingSource", "FundingOrganisation", "IsDsoa", "IsRepeatClient"]),
         ("serviceProfile", d => d.ServiceProfile, ["Region", "ServiceStreams"]),
@@ -46,7 +47,7 @@ public static class ParticipantGroupRevisions
     public static IEnumerable<string> SentGroups(PatchParticipantDto dto) =>
         Groups.Where(g => g.Sent(dto) != null).Select(g => g.Key);
 
-    /// <summary>All 16 keys; 0 where there is no row.</summary>
+    /// <summary>All 17 keys; 0 where there is no row.</summary>
     public static async Task<Dictionary<string, int>> ReadAsync(OdipDbContext db, Guid participantId, CancellationToken ct)
     {
         var rows = await db.ParticipantGroupRevisions.AsNoTracking()

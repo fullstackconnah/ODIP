@@ -36,6 +36,20 @@ export const LIVING_ARRANGEMENT_LABELS: Record<LivingArrangement, string> = {
   SharedHousehold: 'Shared household with other tenants',
 }
 
+// A word joiner after each en dash stops a line break right after it.
+const WJ = String.fromCharCode(0x2060)
+/** Participant MM level (Modified Monash remoteness) options, 1 to 7; the cap each sets is in MM_LEVEL_HINT. */
+export const MM_LEVEL_LABELS: Record<number, string> = {
+  1: `MM 1 –${WJ} Metropolitan`,
+  2: `MM 2 –${WJ} Regional centre`,
+  3: `MM 3 –${WJ} Large rural town`,
+  4: `MM 4 –${WJ} Medium rural town`,
+  5: `MM 5 –${WJ} Small rural town`,
+  6: `MM 6 –${WJ} Remote`,
+  7: `MM 7 –${WJ} Very Remote`,
+}
+export const MM_LEVEL_HINT = `Sets the travel time cap on shifts not made from an agreement: 30 minutes (MM 1–${WJ}3), 60 (MM 4–${WJ}5), none (MM 6–${WJ}7). Not set uses 30.`
+
 export const MOBILITY_SUPPORT_OPTIONS = [
   'Wheelchair in vehicle',
   'Full vehicle',
@@ -325,6 +339,8 @@ export interface ParticipantDetailDto extends ParticipantListDto {
   addressSuburb: string | null
   addressState: string | null
   addressPostcode: string | null
+  /** Remoteness (Modified Monash level 1-7); sets the travel cap on hand-made shifts. Null = not set. */
+  mmLevel: number | null
   /** DIAG-01. */
   primaryDiagnosis: string | null
   otherDiagnoses: string[]

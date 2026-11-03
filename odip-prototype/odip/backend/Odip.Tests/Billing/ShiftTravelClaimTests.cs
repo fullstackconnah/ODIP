@@ -253,14 +253,14 @@ public class ShiftTravelClaimTests
         Assert.True(policy.OrgClaims);   // no settings row for the other organisation: on by default, and org A's row is not read
 
         // org B asks for org A's shift (the filter is off in this context): it gets no travel, never org A's completion.
-        var inputs = await ShiftTravelSource.ForShiftsAsync(a.Db, otherTenant, policy, new[] { new ShiftRef(shiftA.Id, null) }, default);
+        var inputs = await ShiftTravelSource.ForShiftsAsync(a.Db, otherTenant, policy, new[] { new ShiftRef(shiftA.Id, null, null) }, default);
         Assert.Null(Assert.Single(inputs));
 
         // org B's pattern naming org A's draft (a crafted row) gets no forecast.
         var crafted = new ShiftPattern { Id = Guid.NewGuid(), TenantId = otherTenant, ParticipantId = Guid.NewGuid(), SourceDraftId = foreignPattern.SourceDraftId, SourceBlockKey = "blk", DayOfWeek = DayOfWeek.Monday, EffectiveFrom = Monday };
         a.Db.ShiftPatterns.Add(crafted);
         await a.Db.SaveChangesAsync();
-        Assert.Null(Assert.Single(await ShiftTravelSource.ForShiftsAsync(a.Db, otherTenant, policy, new[] { new ShiftRef(null, crafted.Id) }, default)));
+        Assert.Null(Assert.Single(await ShiftTravelSource.ForShiftsAsync(a.Db, otherTenant, policy, new[] { new ShiftRef(null, crafted.Id, null) }, default)));
     }
 
     [Fact]
@@ -286,7 +286,7 @@ public class ShiftTravelClaimTests
         await fx.Db.SaveChangesAsync();
         var policy = await ShiftTravelSource.PolicyAsync(fx.Db, fx.TenantId, default);
         var inputs = await ShiftTravelSource.ForShiftsAsync(fx.Db, fx.TenantId, policy,
-            new[] { new ShiftRef(null, back.Id), new ShiftRef(null, oneWay.Id), new ShiftRef(null, off.Id), new ShiftRef(null, null), new ShiftRef(done.Id, back.Id) }, default);
+            new[] { new ShiftRef(null, back.Id, null), new ShiftRef(null, oneWay.Id, null), new ShiftRef(null, off.Id, null), new ShiftRef(null, null, null), new ShiftRef(done.Id, back.Id, null) }, default);
 
         Assert.Equal((20, 3m, 20, 3m), (inputs[0]!.Pre.Minutes, inputs[0]!.Pre.Km, inputs[0]!.Post.Minutes, inputs[0]!.Post.Km));
         Assert.Equal((20, 3m, 0, 0m), (inputs[1]!.Pre.Minutes, inputs[1]!.Pre.Km, inputs[1]!.Post.Minutes, inputs[1]!.Post.Km));
@@ -359,7 +359,72 @@ public class ShiftTravelClaimTests
         await a.Db.SaveChangesAsync();
         var otherTenant = Guid.NewGuid();
         var policy = await ShiftTravelSource.PolicyAsync(a.Db, otherTenant, default);
-        Assert.Null(Assert.Single(await ShiftTravelSource.ForShiftsAsync(a.Db, otherTenant, policy, new[] { new ShiftRef(null, pattern.Id) }, default)));
-        Assert.NotNull(Assert.Single(await ShiftTravelSource.ForShiftsAsync(a.Db, a.TenantId, await ShiftTravelSource.PolicyAsync(a.Db, a.TenantId, default), new[] { new ShiftRef(null, pattern.Id) }, default)));
+        Assert.Null(Assert.Single(await ShiftTravelSource.ForShiftsAsync(a.Db, otherTenant, policy, new[] { new ShiftRef(null, pattern.Id, null) }, default)));
+        Assert.NotNull(Assert.Single(await ShiftTravelSource.ForShiftsAsync(a.Db, a.TenantId, await ShiftTravelSource.PolicyAsync(a.Db, a.TenantId, default), new[] { new ShiftRef(null, pattern.Id, null) }, default)));
+    }
+
+    private static decimal TravelHours(IEnumerable<ClaimLineItem> lines) => Assert.Single(lines, l => l.ClaimType == ClaimType.ProviderTravel).Hours;
+
+    // MM level on the participant (hand-made shift): the cap follows the level; no level keeps 30.
+    [Theory]
+    [InlineData(null, 0.50)]
+    [InlineData(1, 0.50)]
+    [InlineData(3, 0.50)]
+    [InlineData(4, 0.83)]
+    [InlineData(5, 0.83)]
+    [InlineData(6, 0.83)]
+    [InlineData(7, 0.83)]
+    public async Task M1_AHandMadeShift_CapsAFiftyMinuteLeg_ByTheParticipantsLevel(int? mm, double hours)
+    {
+        var fx = Fx.Create();
+        fx.Participant.MmLevel = mm;
+        fx.Completion(fx.Shift(), preMin: 50);
+        Assert.Equal((decimal)hours, TravelHours(await fx.Lines(await fx.Generate())));
+    }
+
+    [Theory]
+    [InlineData(5, 1.00)]
+    [InlineData(6, 1.50)]
+    [InlineData(7, 1.50)]
+    public async Task M2_AHandMadeShift_CapsANinetyMinuteLeg_At60InMm5_AndNotAtAllInMm6And7(int mm, double hours)
+    {
+        var fx = Fx.Create();
+        fx.Participant.MmLevel = mm;
+        fx.Completion(fx.Shift(), preMin: 90);
+        Assert.Equal((decimal)hours, TravelHours(await fx.Lines(await fx.Generate())));
+    }
+
+    [Fact]
+    public async Task M3_AnAgreementShift_KeepsItsBlocksCap_WhateverTheParticipantsLevel()
+    {
+        var fx = Fx.Create();
+        fx.Participant.MmLevel = 5;
+        var national = fx.Pattern(new PlanProviderTravel { Claim = true, MinutesEachWay = 50, ReturnToBase = true }, new PlanLocation { State = "VIC", Zone = PriceZone.National, Mm = null });
+        fx.Completion(fx.Shift(patternId: national.Id), preMin: 50);
+        Assert.Equal(0.50m, TravelHours(await fx.Lines(await fx.Generate())));   // block National with no level: 30, the participant is not asked
+
+        var other = Fx.Create();
+        other.Participant.MmLevel = 1;
+        var remote = other.Pattern(new PlanProviderTravel { Claim = true, MinutesEachWay = 90, ReturnToBase = true }, new PlanLocation { State = "VIC", Zone = PriceZone.Remote, Mm = 6 });
+        other.Completion(other.Shift(patternId: remote.Id), preMin: 90);
+        Assert.Equal(1.50m, TravelHours(await other.Lines(await other.Generate())));   // block Remote: no cap, whatever the participant
+    }
+
+    [Fact]
+    public async Task M4_AClaimAlreadyGenerated_IsFrozen_WhenTheLevelChangesAfterwards()
+    {
+        var fx = Fx.Create();
+        fx.Participant.MmLevel = 4;
+        fx.Completion(fx.Shift(), preMin: 50);
+        var first = await fx.Lines(await fx.Generate());
+        var total = first.Sum(l => l.TotalAmount);
+        Assert.Equal(0.83m, TravelHours(first));
+
+        fx.Participant.MmLevel = 6;
+        await fx.Db.SaveChangesAsync();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => new ShiftClaimGenerationService(fx.Db).GenerateAsync(fx.Participant.Id, Monday, Monday.AddDays(7)));   // nothing left to claim: no second claim
+        var after = await fx.Db.ClaimLineItems.OrderBy(l => l.ShiftPart).ToListAsync();
+        Assert.Equal(first.Select(l => (l.ShiftPart, l.Hours, l.TotalAmount)), after.Select(l => (l.ShiftPart, l.Hours, l.TotalAmount)));
+        Assert.Equal(total, after.Sum(l => l.TotalAmount));
     }
 }
