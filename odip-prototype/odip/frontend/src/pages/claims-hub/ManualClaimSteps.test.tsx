@@ -45,7 +45,7 @@ async function fill({ price, qty = '2', date = '2026-10-20', code = /01_011_0107
 }
 
 beforeEach(() => {
-  m.participants.mockReturnValue({ data: [{ id: 'p-1', fullName: 'Sam Lee', firstName: 'Sam', lastName: 'Lee' }], isLoading: false, isError: false, refetch: vi.fn() })
+  m.participants.mockReturnValue({ data: [{ id: 'p-1', fullName: 'Sam Lee', firstName: 'Sam', lastName: 'Lee', maskedNdisNumber: '430***789' }, { id: 'p-2', fullName: 'No Number', firstName: 'No', lastName: 'Number', maskedNdisNumber: null }], isLoading: false, isError: false, refetch: vi.fn() })
   m.participant.mockReturnValue({ data: { id: 'p-1', addressState: 'NSW' } })
   m.provider.mockReturnValue({ data: { state: 'VIC' } })
   m.catalogue.mockReturnValue({ data: groups, isLoading: false, isError: false, refetch: vi.fn() })
@@ -69,6 +69,30 @@ describe('ManualClaimSteps: fill in the claim', () => {
   it('opens on the participant field', () => {
     setup()
     expect(screen.getByLabelText('Participant')).toHaveFocus()
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  })
+
+  it("shows each participant's NDIS number under the name, and none when there is no number", async () => {
+    setup()
+    await userEvent.click(screen.getByLabelText('Participant'))
+    expect(within(await screen.findByRole('option', { name: /Sam Lee/ })).getByText('430***789')).toBeInTheDocument()
+    expect(within(screen.getByRole('option', { name: /No Number/ })).queryByText(/\d/)).toBeNull()
+  })
+
+  it('puts the price guide limit under Unit price, not under Support item', async () => {
+    setup()
+    await fill()
+    const hint = screen.getByText('Price guide limit $72.00 in NSW')
+    expect(screen.getByLabelText('Unit price').closest('div')).toContainElement(hint)
+    expect(screen.getByLabelText('Support item').closest('div')).not.toContainElement(hint)
+  })
+
+  it('waits for the date field to be left before it says the day is in the future', async () => {
+    setup()
+    await userEvent.type(screen.getByLabelText('Service date'), '2999-01-01')
+    expect(screen.queryByText("You can't claim for a day that hasn't happened yet.")).not.toBeInTheDocument()
+    await userEvent.tab()
+    expect(screen.getByText("You can't claim for a day that hasn't happened yet.")).toBeInTheDocument()
   })
 
   it("prefills the item's limit in the participant's state and says so; the label follows the unit", async () => {
@@ -160,6 +184,12 @@ describe('ManualClaimSteps: check the claim', () => {
     expect(within(row).getByText('$72.00')).toBeInTheDocument()
     expect(within(row).getAllByText('$144.00').length).toBeGreaterThan(0)
     expect(screen.getByText(/Bills against the plan 1 Jul 2026 – 30 Jun 2027/)).toBeInTheDocument()
+  })
+
+  it('says so when there is no plan on file', async () => {
+    await toCheck({ data: previewOf({ plan: undefined }) })
+    expect(screen.getByText('No plan on file, so the budget is not checked.')).toBeInTheDocument()
+    expect(screen.queryByText(/Bills against the plan/)).not.toBeInTheDocument()
   })
 
   it('opens on Make claim, and Back returns to Preview', async () => {

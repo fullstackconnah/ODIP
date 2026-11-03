@@ -399,7 +399,7 @@ describe('ClaimsTab: a one-off claim', () => {
       isLoading: false,
     })
     renderTab()
-    expect(screen.getByText('Manual')).toBeInTheDocument()
+    expect(screen.getByText('One-off claim')).toBeInTheDocument()
     expect(screen.getByText('5 Jan 2026')).toBeInTheDocument()
     expect(screen.queryByText('—')).not.toBeInTheDocument()
   })

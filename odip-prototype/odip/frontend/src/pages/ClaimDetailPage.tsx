@@ -23,7 +23,7 @@ import { Callout } from '@/components/Callout'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { FactBar } from '@/components/FactBar'
 import { useUnsavedChangesWarning } from '@/hooks/useUnsavedChangesWarning'
-import { hasPartlyRejectedShift, lineKindLabel, lineQuantity } from '@/lib/claimLines'
+import { CLAIM_KIND_LABEL, hasPartlyRejectedShift, lineKindLabel, lineQuantity } from '@/lib/claimLines'
 import { ClaimBudgetBlock } from '@/components/ClaimBudgetBlock'
 import { retryingAfterError } from '@/lib/queryPhase'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
@@ -43,7 +43,6 @@ function refusalOf(err: unknown): string {
   return extractErrorMessage(err, "Couldn't update the claim status. Please try again.")
 }
 
-const KIND_LABEL = { Trip: 'Trip claim', Shift: 'Shift claim', Manual: 'One-off claim' } as const
 
 export default function ClaimDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -196,7 +195,7 @@ export default function ClaimDetailPage() {
               <div className="flex flex-wrap items-center gap-3">
                 <StatusBadge status={claim.status} />
                 <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--color-surface-container-low)] text-[var(--color-muted-foreground)] font-medium">
-                  {KIND_LABEL[claim.kind]}
+                  {CLAIM_KIND_LABEL[claim.kind]}
                 </span>
               </div>
             }

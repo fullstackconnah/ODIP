@@ -95,7 +95,7 @@ export function ManualClaimSteps({ onBack, onClose, onMade }: { onBack: () => vo
   const price = typedPrice ?? (limit !== undefined ? String(limit) : '')
 
   const errors = {
-    date: date > today ? "You can't claim for a day that hasn't happened yet." : undefined,
+    date: touched.date && date > today ? "You can't claim for a day that hasn't happened yet." : undefined,
     quantity: touched.quantity && !moreThanZero(quantity) ? 'Enter more than 0.' : undefined,
     price: !touched.price ? undefined : !moreThanZero(price) ? 'Enter more than 0.' : limit !== undefined && Number(price) > limit ? `Over the ${state} limit of ${formatCurrency(limit)}.` : undefined,
   }
@@ -149,12 +149,9 @@ export function ManualClaimSteps({ onBack, onClose, onMade }: { onBack: () => vo
           <FormField label="Participant">
             {participants.isError
               ? <PageState kind="error" noun="participants" onRetry={() => participants.refetch()} />
-              : <ParticipantPicker id={PARTICIPANT_FIELD_ID} value={participantId} onChange={setParticipantId} />}
+              : <ParticipantPicker id={PARTICIPANT_FIELD_ID} value={participantId} onChange={setParticipantId} showNdis openOnFocus={false} />}
           </FormField>
-          <FormField
-            label="Support item"
-            hint={item ? (limit !== undefined ? `Price guide limit ${formatCurrency(limit)} in ${state}` : 'No price guide limit for this item') : undefined}
-          >
+          <FormField label="Support item">
             {catalogue.isError
               ? <PageState kind="error" noun="price guide" onRetry={() => catalogue.refetch()} />
               : (
@@ -186,6 +183,7 @@ export function ManualClaimSteps({ onBack, onClose, onMade }: { onBack: () => vo
           </div>
           <TextField
             label="Unit price"
+            hint={item ? (limit !== undefined ? `Price guide limit ${formatCurrency(limit)} in ${state}` : 'No price guide limit for this item') : undefined}
             inputMode="decimal"
             style={NUMBER_STYLE}
             value={price}
@@ -248,7 +246,7 @@ export function ManualClaimSteps({ onBack, onClose, onMade }: { onBack: () => vo
             <span className="text-sm text-[var(--color-muted-foreground)]">Total</span>
             <span className="whitespace-nowrap tabular-nums text-xl font-semibold">{formatCurrency(previewed.total)}</span>
           </div>
-          {previewed.plan && <p className="text-sm text-[var(--color-muted-foreground)]">Bills against the plan {formatDateRange(previewed.plan.start, previewed.plan.end)}</p>}
+          <p className="text-sm text-[var(--color-muted-foreground)]">{previewed.plan ? `Bills against the plan ${formatDateRange(previewed.plan.start, previewed.plan.end)}` : 'No plan on file, so the budget is not checked.'}</p>
           <ClaimBudgetBlock budget={previewed.budget} />
           {previewed.warnings.length > 0 && (
             <Callout tone="warning">
