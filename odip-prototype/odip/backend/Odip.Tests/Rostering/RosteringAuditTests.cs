@@ -108,7 +108,7 @@ public class RosteringAuditTests
 
         // Coordinator rosters against a Warning finding and records why.
         shift.OverrideReason = "Preferred worker unavailable; backup screened and compliant.";
-        shift.AcknowledgedFindingCodes = "COMPATIBILITY_EXCLUDED";
+        shift.AcknowledgedFindingCodes = "STAFF_ON_LEAVE";
         await db.SaveChangesAsync();
 
         var updateLog = db.AuditLogs

@@ -7,7 +7,7 @@ namespace Odip.Infrastructure.DemoData.Packs;
 /// <summary>
 /// The staff-participant compatibility matrix (plan 3a): ten cells, seven Preferred (one of them carrying the AutoLinked marker, the way
 /// a cell created from a participant's preferred-staff pick does) and three Excluded, each with a reason a coordinator would write. The
-/// Emily/Ryan exclusion is the COMPATIBILITY_EXCLUDED roster story (check 10); the other two exclusions are never rostered together, so they
+/// Emily/Ryan exclusion is the COMPATIBILITY_EXCLUDED roster story (check 10; a Blocking finding the roster gate would now refuse, so the demo seeds that shift directly); the other two exclusions are never rostered together, so they
 /// only show in the matrix. Absence of a cell means Allowed.
 ///
 /// A cell the owner already has for a pair (the table is unique on tenant, user and participant) is left exactly as it is, even when it

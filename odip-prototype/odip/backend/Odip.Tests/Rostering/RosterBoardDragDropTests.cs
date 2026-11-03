@@ -1036,6 +1036,166 @@ public class RosterBoardDragDropTests
         Assert.Equal(ShiftStatus.Published, (await Reload(db, late.Id)).Status);
     }
 
+    // ── A worker marked No (Excluded) for a participant can't be rostered (R8 block): a shift they already hold can still be reassigned, unassigned or cancelled ──
+
+    private static void MarkNo(OdipDbContext db, Guid staffId, Guid participantId)
+    {
+        db.StaffParticipantCompatibilities.Add(new StaffParticipantCompatibility { Id = Guid.NewGuid(), UserId = staffId, ParticipantId = participantId, Level = CompatibilityLevel.Excluded });
+        db.SaveChangesAsync().GetAwaiter().GetResult();
+    }
+
+    [Fact]
+    public async Task UpdateShift_AssigningAWorkerMarkedNo_Is422EvenWithAnOverrideReason()
+    {
+        using var db = TestDb.Create();
+        var participant = SeedParticipant(db);
+        var sam = SeedStaff(db);
+        MarkNo(db, sam.Id, participant.Id);
+        var shift = SeedShift(db, participant.Id, null);
+
+        var result = await Controller(db).UpdateShift(shift.Id, Put(shift, sam.Id, ShiftStatus.Draft) with { OverrideReason = "Coordinator approved" }, default);
+
+        var refused = Assert.IsType<ApiResponse<List<RosterFindingDto>>>(Assert.IsType<UnprocessableEntityObjectResult>(result.Result).Value);
+        Assert.Contains(refused.Data!, f => f.Code == RosterConflictService.CompatibilityExcluded && f.Severity == RosterFindingSeverity.Blocking);
+        Assert.Null((await Reload(db, shift.Id)).UserId);
+    }
+
+    [Fact]
+    public async Task UpdateShift_ReassigningAShiftHeldByAWorkerMarkedNo_Succeeds()
+    {
+        using var db = TestDb.Create();
+        var participant = SeedParticipant(db);
+        var sam = SeedStaff(db);
+        var alex = SeedStaff(db, "Alex", "Ng");
+        MarkNo(db, sam.Id, participant.Id);
+        var shift = SeedShift(db, participant.Id, sam.Id);
+
+        var result = await Controller(db).UpdateShift(shift.Id, Put(shift, alex.Id, ShiftStatus.Draft), default);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(alex.Id, (await Reload(db, shift.Id)).UserId);
+    }
+
+    [Fact]
+    public async Task UpdateShift_UnassigningAShiftHeldByAWorkerMarkedNo_Succeeds()
+    {
+        using var db = TestDb.Create();
+        var participant = SeedParticipant(db);
+        var sam = SeedStaff(db);
+        MarkNo(db, sam.Id, participant.Id);
+        var shift = SeedShift(db, participant.Id, sam.Id);
+
+        var result = await Controller(db).UpdateShift(shift.Id, Put(shift, null, ShiftStatus.Draft), default);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Null((await Reload(db, shift.Id)).UserId);
+    }
+
+    [Theory]
+    [InlineData(ShiftStatus.Draft)]
+    [InlineData(ShiftStatus.Published)]
+    public async Task UpdateShift_CancellingAShiftHeldByAWorkerMarkedNo_Succeeds(ShiftStatus from)
+    {
+        using var db = TestDb.Create();
+        var participant = SeedParticipant(db);
+        var sam = SeedStaff(db);
+        MarkNo(db, sam.Id, participant.Id);
+        var shift = SeedShift(db, participant.Id, sam.Id, from);
+
+        var result = await Controller(db).UpdateShift(shift.Id, Put(shift, sam.Id, ShiftStatus.Cancelled), default);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(ShiftStatus.Cancelled, (await Reload(db, shift.Id)).Status);
+    }
+
+    [Theory]
+    [InlineData(ShiftStatus.Cancelled, false)]   // the cancel the slide-over is about to save: not shown as blocking
+    [InlineData(ShiftStatus.Draft, true)]
+    public async Task CheckShift_ForAShiftHeldByAWorkerMarkedNo_ShowsTheBlockUnlessItIsBeingCancelled(ShiftStatus status, bool blocking)
+    {
+        using var db = TestDb.Create();
+        var participant = SeedParticipant(db);
+        var sam = SeedStaff(db);
+        MarkNo(db, sam.Id, participant.Id);
+        var shift = SeedShift(db, participant.Id, sam.Id);
+
+        var findings = Body(await Controller(db).CheckShift(new CheckShiftDto
+        {
+            Id = shift.Id, ParticipantId = participant.Id, StaffId = sam.Id, ServiceDate = shift.ServiceDate,
+            StartTime = shift.StartTime, EndTime = shift.EndTime, Ratio = shift.Ratio, NightType = shift.NightType, Status = status,
+        }, default));
+
+        Assert.Equal(blocking, findings.Any(f => f.Code == RosterConflictService.CompatibilityExcluded && f.Severity == RosterFindingSeverity.Blocking));
+    }
+
+    [Fact]
+    public async Task UpdateShift_PublishingAShiftHeldByAWorkerMarkedNo_StaysRefused()
+    {
+        using var db = TestDb.Create();
+        var participant = SeedParticipant(db);
+        var sam = SeedStaff(db);
+        MarkNo(db, sam.Id, participant.Id);
+        var shift = SeedShift(db, participant.Id, sam.Id);
+
+        var result = await Controller(db).UpdateShift(shift.Id, Put(shift, sam.Id, ShiftStatus.Published), default);
+
+        var refused = Assert.IsType<ApiResponse<List<RosterFindingDto>>>(Assert.IsType<UnprocessableEntityObjectResult>(result.Result).Value);
+        Assert.Contains(refused.Data!, f => f.Code == RosterConflictService.CompatibilityExcluded);
+        Assert.Equal(ShiftStatus.Draft, (await Reload(db, shift.Id)).Status);
+    }
+
+    [Theory]
+    [InlineData(false)]   // reassign to another worker
+    [InlineData(true)]    // the menu's Unassign
+    public async Task AssignShift_TakingAShiftOffAWorkerMarkedNo_Succeeds(bool clearing)
+    {
+        using var db = TestDb.Create();
+        var participant = SeedParticipant(db);
+        var sam = SeedStaff(db);
+        var alex = SeedStaff(db, "Alex", "Ng");
+        MarkNo(db, sam.Id, participant.Id);
+        var shift = SeedShift(db, participant.Id, sam.Id);
+
+        var result = await Controller(db).AssignShift(shift.Id, new AssignShiftDto { StaffId = clearing ? null : alex.Id }, default);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(clearing ? null : alex.Id, (await Reload(db, shift.Id)).UserId);
+    }
+
+    [Fact]
+    public async Task AssignShift_ToAWorkerMarkedNo_Is422()
+    {
+        using var db = TestDb.Create();
+        var participant = SeedParticipant(db);
+        var sam = SeedStaff(db);
+        MarkNo(db, sam.Id, participant.Id);
+        var shift = SeedShift(db, participant.Id, null);
+
+        var result = await Controller(db).AssignShift(shift.Id, new AssignShiftDto { StaffId = sam.Id }, default);
+
+        Assert.IsType<UnprocessableEntityObjectResult>(result.Result);
+        Assert.Null((await Reload(db, shift.Id)).UserId);
+    }
+
+    [Fact]
+    public async Task PublishWeek_RefusesADraftHeldByAWorkerMarkedNo_CountsItAsSkipped_AndPublishesTheRest()
+    {
+        var tenant = Guid.NewGuid();
+        using var db = TestDb.ForTenant(Guid.NewGuid().ToString(), tenant);
+        var sam = SeedStaff(db);
+        var mia = SeedParticipant(db);
+        var ben = SeedParticipant(db, "Ben", "Ito");
+        MarkNo(db, sam.Id, mia.Id);
+        var barred = SeedShift(db, mia.Id, sam.Id, ShiftStatus.Draft, day: Monday);
+        var fine = SeedShift(db, ben.Id, sam.Id, ShiftStatus.Draft, day: Monday.AddDays(2));
+
+        var result = Body(await Controller(db, tenant).PublishWeek(Monday, default));
+
+        Assert.Equal((1, 1), (result.Published, result.Skipped));
+        Assert.Equal(ShiftStatus.Draft, (await Reload(db, barred.Id)).Status);
+        Assert.Equal(ShiftStatus.Published, (await Reload(db, fine.Id)).Status);
+    }
+
     [Fact]
     public async Task UpdateShift_CancellingAShiftPlacedBeforeAStartDateThatMovedLater_Succeeds()
     {

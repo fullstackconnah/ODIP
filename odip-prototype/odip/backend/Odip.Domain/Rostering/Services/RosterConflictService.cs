@@ -373,7 +373,7 @@ public sealed class RosterConflictService
 
         if (ctx.Compatibility == CompatibilityLevel.Excluded)
         {
-            findings.Add(new RosterFinding(CompatibilityExcluded, RosterFindingSeverity.Warning,
+            findings.Add(new RosterFinding(CompatibilityExcluded, RosterFindingSeverity.Blocking,
                 $"{ctx.Staff.FullName} is marked Excluded for {ctx.Participant.FullName}."));
         }
     }

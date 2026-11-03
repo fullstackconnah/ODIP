@@ -239,7 +239,7 @@ export default function CompatibilityPage() {
         <EmptyState
           icon={Users}
           title="Nothing to match yet"
-          description="This matrix is how the roster board knows who works well with whom — mark a pairing Preferred to nudge assignment toward it, or Excluded to keep it out of the board's suggestions and raise a warning if someone rosters it anyway. It needs at least one staff member and one participant before there's anything to mark."
+          description="This matrix is how the roster board knows who works well with whom — mark a pairing Preferred to nudge assignment toward it, or No (Excluded) and that worker can’t be rostered for that participant. It needs at least one staff member and one participant before there's anything to mark."
         />
       )}
 

@@ -186,10 +186,10 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
   const { data: participantRoutines = [] } = useParticipantRoutines(participantId || undefined)
 
   // Compatibility matrix (task 6d): the same POST /shifts/check dry-run below already surfaces
-  // an Excluded pairing as a Warning finding once staff + date/time are all filled in, but that
+  // an Excluded pairing as a Blocking finding once staff + date/time are all filled in, but that
   // only tells you AFTER picking someone. This gives the hint before/without a selection —
-  // Preferred staff sort to the top of the dropdown and carry a hint; Excluded staff carry a
-  // non-blocking warning both in the dropdown and inline once selected.
+  // Preferred staff sort to the top of the dropdown and carry a hint; Excluded staff (marked No)
+  // can't be rostered (R8): greyed out in the dropdown, and the notice shows inline once selected.
   const { data: compatibilityRows = [] } = useCompatibility(participantId || undefined)
 
   // NOTES-01: read-only for the coordinator — only the assigned worker creates/edits their own,
@@ -210,13 +210,15 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
         return {
           ...option,
           description: level === 'Preferred' ? 'Preferred for this participant'
-            : level === 'Excluded' ? 'Not compatible with this participant'
+            : level === 'Excluded' ? 'Can’t be rostered: marked No for this participant'
             : undefined,
+          // The worker already on this shift stays pickable so the field keeps showing them; the server still lets the shift be reassigned, unassigned or cancelled.
+          disabled: (level === 'Excluded' && option.value !== existing?.staffId),
         }
       })
       // Array.prototype.sort is stable — ties (Allowed/no row) keep the caller's original order.
       .sort((a, b) => COMPATIBILITY_RANK[compatibilityByStaffId.get(a.value)?.level ?? 'Allowed'] - COMPATIBILITY_RANK[compatibilityByStaffId.get(b.value)?.level ?? 'Allowed'])
-  }, [staffOptions, compatibilityByStaffId])
+  }, [staffOptions, compatibilityByStaffId, existing?.staffId])
   const selectedStaffCompatibility = staffId ? compatibilityByStaffId.get(staffId) : undefined
   const selectedStaffLabel = staffOptions.find(s => s.value === staffId)?.label ?? 'This staff member'
   const relevantRoutines = participantId && serviceDate && startTime && endTime
@@ -519,13 +521,12 @@ export function ShiftSlideOver({ target, onClose, canWrite, participantOptions, 
             />
           </FormField>
           {selectedStaffCompatibility?.level === 'Excluded' && (
-            // status, not alert: this is informational and non-blocking (save still works), so an
-            // assertive interruption would overstate it — polite matches the Blocking-finding alert
-            // below it in severity terms while still surfacing on selection without needing focus.
+            // status, not alert: the Blocking finding below is the assertive one; this says why
+            // before it arrives, and surfaces on selection without needing focus.
             <p id={staffCompatibilityNoticeId} role="status" className="mt-1.5 text-xs font-medium text-destructive">
-              {selectedStaffLabel} is marked not compatible with this participant
+              {selectedStaffLabel} is marked No for this participant, so they can’t be rostered
               {selectedStaffCompatibility.reason ? `: ${selectedStaffCompatibility.reason}.` : '.'}
-              {' '}You can still save this shift — it just won't be suggested as a match.
+              {' '}Choose another worker or leave the shift unassigned.
             </p>
           )}
           {selectedStaffCompatibility?.level === 'Preferred' && (
