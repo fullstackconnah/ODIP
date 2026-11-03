@@ -8,6 +8,8 @@ type CommonFieldProps = {
   hint?: string
   className?: string
   descriptionId?: string
+  /** Passed to `FormField`: the hint stays on screen under an error. */
+  keepHint?: boolean
 }
 
 /**
@@ -25,6 +27,8 @@ type CommonFieldProps = {
 export type TextAreaFieldProps = CommonFieldProps & Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, 'className'> & {
   /** Optional callback when the underlying `<textarea>` fires `change`. */
   onChange?: (e: ChangeEvent<HTMLTextAreaElement>) => void
+  /** React 19 passes `ref` as a prop; it lands on the `<textarea>` through `...textareaProps`. For a caller that moves focus (a dialog's initialFocusRef). */
+  ref?: React.Ref<HTMLTextAreaElement>
 }
 
 export function TextAreaField({
@@ -34,6 +38,7 @@ export function TextAreaField({
   hint,
   className,
   descriptionId,
+  keepHint,
   ...textareaProps
 }: TextAreaFieldProps) {
   return (
@@ -44,6 +49,7 @@ export function TextAreaField({
       hint={hint}
       className={className}
       descriptionId={descriptionId}
+      keepHint={keepHint}
     >
       <textarea required={required} {...textareaProps} />
     </FormField>

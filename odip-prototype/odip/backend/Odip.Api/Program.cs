@@ -273,6 +273,13 @@ builder.Services.AddScoped<Odip.Application.Interfaces.INotificationChannel, Odi
 builder.Services.AddScoped<Odip.Infrastructure.Notifications.IntakeInviteSender>();
 builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.NotificationDispatchBackgroundService>();
 
+// ── Report a problem (sidebar foot → Work Board card) ──────────────────
+// The token (WorkBoard:Token) travels only in the Authorization header, which is kept out of HttpClient's request logging.
+// WorkBoard:BaseUrl must be the Work Board's LAN address: from inside the api container 127.0.0.1 is the container itself.
+builder.Services.AddHttpClient<Odip.Application.Interfaces.IProblemReportSender, Odip.Infrastructure.ProblemReports.VikunjaProblemReportSender>(c => c.Timeout = TimeSpan.FromSeconds(30))
+    .RedactLoggedHeaders(new[] { "Authorization" });
+builder.Services.AddHostedService<Odip.Infrastructure.BackgroundServices.ProblemReportSendBackgroundService>();
+
 // ── Employment Hero Payroll (Settings → Integrations) ────────────────
 // The key store reads Integrations:MasterKey, else INTEGRATIONS_MASTER_KEY (32 bytes, base64). With neither, connecting is refused and the rest of ODIP runs.
 builder.Services.AddSingleton<Odip.Infrastructure.Integrations.IntegrationKeyProtector>();

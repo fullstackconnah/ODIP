@@ -2,13 +2,14 @@ import { Link, Outlet, useLocation } from 'react-router-dom'
 import { usePreviousAppPathTracker } from '@/hooks/useBackNavigation'
 import { useDialogBehavior } from '@/hooks/useDialogBehavior'
 import { useIsBelowLg } from '@/hooks/useIsBelowLg'
-import { LogOut, Menu, X, ChevronDown } from 'lucide-react'
+import { LogOut, Menu, MessageSquareWarning, X, ChevronDown } from 'lucide-react'
 import { Suspense, useCallback, useEffect, useId, useLayoutEffect, useState, useRef, type RefObject } from 'react'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import TenantSwitcher from '@/components/layout/TenantSwitcher'
 import UserSwitcher from '@/components/layout/UserSwitcher'
 import NotificationBell from '@/components/layout/NotificationBell'
 import WhatsNewButton from '@/components/layout/WhatsNewButton'
+import ReportProblemDialog from '@/components/layout/ReportProblemDialog'
 import ThemeMenu from '@/components/layout/ThemeMenu'
 import { NavCountBadge } from '@/components/layout/NavCountBadge'
 import { navBadgeLabel } from '@/components/layout/navBadgeLabel'
@@ -395,6 +396,16 @@ export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const unsent = useQueueRecords().length
   const [confirmSignOut, setConfirmSignOut] = useState(false)
+  const [reportOpen, setReportOpen] = useState(false)
+  // Opened from the drawer, the row that opened it is gone with the drawer: the menu button takes the focus back when the dialog closes.
+  const reportFromDrawer = useRef(false)
+  const menuButtonRef = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    if (!reportOpen && reportFromDrawer.current) {
+      reportFromDrawer.current = false
+      menuButtonRef.current?.focus()
+    }
+  }, [reportOpen])
   const drawerRef = useRef<HTMLElement>(null)
   const location = useLocation()
   const { prefs, setPref } = useUiPreferences()
@@ -529,6 +540,7 @@ export default function AppLayout() {
         onCancel={() => setConfirmSignOut(false)}
         onConfirm={() => { offlineQueue.wipeAll(); void endSession() }}
       />
+      <ReportProblemDialog open={reportOpen} onClose={() => setReportOpen(false)} />
       {/*
         Mobile overlay. Below lg the open drawer (z-[60]) and its scrim (z-[55]) sit ABOVE the fixed bottom nav
         (z-50). They used to be z-50 and z-40: the nav comes later in the DOM, so it painted over the drawer's own
@@ -634,6 +646,17 @@ export default function AppLayout() {
 
         {/* Bottom */}
         <div data-foot className={`pt-2 shrink-0 ${footRail ? 'space-y-0.5' : ''}`}>
+          {/* A SuperAdmin with no organisation in view has none to report from (the server refuses it), so the row is not offered. */}
+          {!(permissions.isSuperAdmin && !viewingTenantId) && (
+            <button type="button"
+              onClick={() => { reportFromDrawer.current = isBelowLg; setSidebarOpen(false); setReportOpen(true) }}
+              data-glide="report"
+              className={`${footRail ? RAIL_ITEM : WIDE_FOOT_ROW} text-[var(--color-secondary)] hover:bg-[var(--color-sidebar-accent)]`}
+              {...(rail ? rail.tip('Report a problem', 0) : {})}>
+              {footRail ? <MessageSquareWarning className="w-4 h-4" /> : <span className="inline-flex w-[18px] justify-center"><MessageSquareWarning className="w-4 h-4" /></span>}
+              {footRail ? <span className="sr-only">Report a problem</span> : <span data-fold="label">Report a problem</span>}
+            </button>
+          )}
           <button onClick={() => (unsent > 0 ? setConfirmSignOut(true) : endSession())}
             data-glide="signout"
             className={`${footRail ? RAIL_ITEM : WIDE_FOOT_ROW} text-[var(--color-secondary)] hover:bg-[var(--color-sidebar-accent)]`}
@@ -669,6 +692,7 @@ export default function AppLayout() {
           <div className="flex items-center justify-between gap-2 h-full pl-[max(var(--gutter,20px),var(--safe-left))] pr-[max(var(--gutter,20px),var(--safe-right))]">
             <div className={`flex min-w-0 items-center gap-4 ${isSuperAdmin ? 'max-sm:gap-2' : ''}`}>
               <button
+                ref={menuButtonRef}
                 className="flex items-center justify-center lg:hidden shrink-0 size-8 pointer-coarse:size-[var(--tap-min)] rounded-full text-[var(--color-muted-foreground)] hover:bg-[var(--color-accent)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
                 onClick={() => setSidebarOpen(!sidebarOpen)}
                 title={sidebarOpen ? 'Close menu' : 'Open menu'}
