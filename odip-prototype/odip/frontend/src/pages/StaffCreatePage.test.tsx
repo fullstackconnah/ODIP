@@ -321,4 +321,47 @@ describe('StaffCreatePage employment type (R6)', () => {
 
     expect(await screen.findByRole('button', { name: /part-time/i })).toBeInTheDocument()
   })
+
+  it('pre-fills the saved goal hours when editing', async () => {
+    const staff = makeStaff({ goalWeeklyHours: 24.5 })
+    mockUseStaffDetail.mockReturnValue({ data: staff, isLoading: false, refetch: vi.fn().mockResolvedValue({ data: staff }) })
+    renderEditPage('staff-1')
+
+    expect(await screen.findByLabelText('Goal hours a week')).toHaveValue(24.5)
+  })
+
+  it('sends null for goal hours when the box is left empty', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await user.type(screen.getByLabelText(/First Name/), 'Jordan')
+    await user.type(screen.getByLabelText(/Last Name/), 'Blake')
+    await user.type(screen.getByLabelText(/Email/), 'jordan.blake@odip.com.au')
+    await user.click(screen.getByRole('button', { name: /create staff member/i }))
+
+    await waitFor(() => expect(mockCreateMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ goalWeeklyHours: null })))
+  })
+
+  it('sends the goal hours that were typed', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await user.type(screen.getByLabelText(/First Name/), 'Jordan')
+    await user.type(screen.getByLabelText(/Last Name/), 'Blake')
+    await user.type(screen.getByLabelText(/Email/), 'jordan.blake@odip.com.au')
+    await user.type(screen.getByLabelText('Goal hours a week'), '38')
+    await user.click(screen.getByRole('button', { name: /create staff member/i }))
+    await waitFor(() => expect(mockCreateMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ goalWeeklyHours: 38 })))
+  })
+
+  it('refuses 81 hours with the inline message and does not submit', async () => {
+    const user = userEvent.setup()
+    renderCreatePage()
+    await user.type(screen.getByLabelText(/First Name/), 'Jordan')
+    await user.type(screen.getByLabelText(/Last Name/), 'Blake')
+    await user.type(screen.getByLabelText(/Email/), 'jordan.blake@odip.com.au')
+    await user.type(screen.getByLabelText('Goal hours a week'), '81')
+    await user.click(screen.getByRole('button', { name: /create staff member/i }))
+
+    expect(await screen.findByText('Enter 0 to 80 hours, in half-hours')).toBeInTheDocument()
+    expect(mockCreateMutateAsync).not.toHaveBeenCalled()
+  })
 })
