@@ -182,14 +182,14 @@ export function StaffPreferencesCard({ participantId }: { participantId: string 
           <div>
             <p className="mb-1 text-xs font-semibold text-muted-foreground">Add staff</p>
             <div className="flex flex-wrap items-center gap-2 pointer-coarse:gap-3">
-              <select aria-label="Staff to add" value={addStaffId} disabled={busy} onChange={e => setAddStaffId(e.target.value)} className={`${SELECT_CLASS} min-w-0 max-w-full`}>
+              <select aria-label="Staff to add" value={addStaffId} disabled={busy} onChange={e => setAddStaffId(e.target.value)} className={`${SELECT_CLASS} min-w-0 max-w-full max-md:flex-1`}>
                 <option value="">Choose staff</option>
                 {addable.map(s => <option key={s.id} value={s.id}>{s.fullName}</option>)}
               </select>
-              <select aria-label="Tier to add to" value={addTier} disabled={busy} onChange={e => setAddTier(e.target.value as RankedLevel)} className={SELECT_CLASS}>
+              <select aria-label="Tier to add to" value={addTier} disabled={busy} onChange={e => setAddTier(e.target.value as RankedLevel)} className={`${SELECT_CLASS} min-w-0 max-md:flex-1`}>
                 {RANKED_LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
               </select>
-              <Button variant="secondary" disabled={busy || !addStaffId} onClick={add}>Add</Button>
+              <Button variant="secondary" className="max-md:w-full" disabled={busy || !addStaffId} onClick={add}>Add</Button>
             </div>
           </div>
         )}

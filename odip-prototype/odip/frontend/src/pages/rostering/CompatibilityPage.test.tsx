@@ -167,6 +167,8 @@ describe('CompatibilityPage — the server\'s refusal reaches the user', () => {
     expect(screen.getByRole('button', { name: 'Mark as No' })).toBeDisabled()
     expect(screen.queryByRole('button', { name: /^exclude$/i })).not.toBeInTheDocument()
     expect(screen.queryByPlaceholderText(/exclude/i)).not.toBeInTheDocument()
+    expect(screen.getByText('Stored with this choice and visible in audit.')).toBeInTheDocument()
+    expect(screen.queryByText(/exclusion/i)).not.toBeInTheDocument()
   })
 
   it('sends a Backup pick without a rank, so the server appends it', async () => {
