@@ -1,18 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { TripDetailDto, TripListDto } from '@/api/types'
 import { NewClaimModal } from './NewClaimModal'
 
 // The "New claim" chooser: what each row says, and how a trip is picked. The two modals it launches have their own tests.
 
-const m = vi.hoisted(() => ({ waiting: vi.fn(), trips: vi.fn(), trip: vi.fn(), cancellations: vi.fn(), previewCancellation: vi.fn(), makeCancellation: vi.fn() }))
+const m = vi.hoisted(() => ({ waiting: vi.fn(), trips: vi.fn(), trip: vi.fn(), cancellations: vi.fn(), previewCancellation: vi.fn(), makeCancellation: vi.fn(), previewManual: vi.fn(), makeManual: vi.fn(), participants: vi.fn(), participant: vi.fn(), provider: vi.fn(), catalogue: vi.fn() }))
 vi.mock('@/api/hooks/claimHub', () => ({
   useUnclaimedShifts: m.waiting,
   useCancellationCandidates: m.cancellations,
   usePreviewCancellationClaim: m.previewCancellation,
   useMakeCancellationClaim: m.makeCancellation,
+  usePreviewManualClaim: m.previewManual,
+  useMakeManualClaim: m.makeManual,
 }))
+vi.mock('@/api/hooks', () => ({ useParticipants: m.participants, useParticipant: m.participant, useProviderSettings: m.provider, useSupportCatalogue: m.catalogue }))
 vi.mock('@/api/hooks/trips', () => ({ useTrips: m.trips, useTrip: m.trip }))
 
 const trip = (over: Partial<TripListDto> = {}): TripListDto => ({
@@ -35,7 +38,7 @@ const cancelled = (n: number) => ({
 const mutation = () => ({ mutate: vi.fn(), reset: vi.fn(), data: undefined, error: null, isPending: false, isError: false })
 
 function setup() {
-  const props = { onShifts: vi.fn(), onTrip: vi.fn<(t: TripDetailDto) => void>(), onCancellationMade: vi.fn(), onClose: vi.fn() }
+  const props = { onShifts: vi.fn(), onTrip: vi.fn<(t: TripDetailDto) => void>(), onCancellationMade: vi.fn(), onManualMade: vi.fn(), onClose: vi.fn() }
   const view = render(<NewClaimModal {...props} />)
   return { ...props, view }
 }
@@ -53,6 +56,12 @@ beforeEach(() => {
   m.cancellations.mockReturnValue(cancelled(3))
   m.previewCancellation.mockReturnValue(mutation())
   m.makeCancellation.mockReturnValue(mutation())
+  m.previewManual.mockReturnValue(mutation())
+  m.makeManual.mockReturnValue(mutation())
+  m.participants.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: vi.fn() })
+  m.participant.mockReturnValue({ data: undefined })
+  m.provider.mockReturnValue({ data: undefined })
+  m.catalogue.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: vi.fn() })
 })
 afterEach(() => {
   cleanup()
@@ -60,12 +69,15 @@ afterEach(() => {
 })
 
 describe('NewClaimModal: the chooser', () => {
-  it('offers Shifts, A trip and A cancellation with their hints and what is waiting', () => {
+  it('offers Shifts, A trip, A cancellation and A one-off claim, in that order, with their hints and what is waiting', () => {
     setup()
     expect(screen.getByRole('dialog', { name: 'New claim' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Shifts Completed shifts in a date range 12 waiting' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'A trip A completed trip with no claim 2 waiting' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'A cancellation A cancelled shift at short notice 3 waiting' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'A one-off claim Any catalogue item and amount' })).toBeInTheDocument()
+    const rows = screen.getAllByRole('listitem').map(li => within(li).getByRole('button').textContent ?? '')
+    expect(rows.map(r => ['Shifts', 'A trip', 'A cancellation', 'A one-off claim'].findIndex(t => r.startsWith(t)))).toEqual([0, 1, 2, 3])
   })
 
   it('disables the cancellation row when none is waiting: focusable, with its reason, and activating it does nothing', async () => {
@@ -257,5 +269,37 @@ describe('NewClaimModal: the cancellation step', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Preview' }))
     await userEvent.click(screen.getByRole('button', { name: 'Make claim' }))
     expect(onCancellationMade).toHaveBeenCalledWith('claim-9')
+  })
+})
+
+describe('NewClaimModal: the one-off claim step', () => {
+  it('opens the one-off claim step from the A one-off claim row, always enabled', async () => {
+    setup()
+    const row = screen.getByRole('button', { name: /^A one-off claim/ })
+    expect(row).not.toHaveAttribute('aria-disabled')
+    await userEvent.click(row)
+    expect(screen.getByRole('dialog', { name: 'A one-off claim' })).toBeInTheDocument()
+  })
+
+  it('Back returns to the chooser with focus on the A one-off claim row', async () => {
+    setup()
+    await userEvent.click(screen.getByRole('button', { name: /^A one-off claim/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }))
+    expect(screen.getByRole('dialog', { name: 'New claim' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^A one-off claim/ })).toHaveFocus()
+  })
+
+  it('closing from the step returns focus to the button that opened the chooser', async () => {
+    const opener = document.createElement('button')
+    document.body.appendChild(opener)
+    opener.focus()
+    const { onClose } = setup()
+    onClose.mockImplementation(() => cleanup())
+    await userEvent.click(screen.getByRole('button', { name: /^A one-off claim/ }))
+    // The first Escape closes the participant list that opens with the focus; the second closes the dialog.
+    await userEvent.keyboard('{Escape}{Escape}')
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(opener).toHaveFocus()
+    opener.remove()
   })
 })

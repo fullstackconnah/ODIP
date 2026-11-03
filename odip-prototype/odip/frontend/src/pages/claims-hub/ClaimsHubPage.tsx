@@ -149,7 +149,7 @@ export default function ClaimsHubPage() {
       />
       {howModal}
       {claimRun && <ShiftClaimRunModal open onClose={() => setClaimRun(false)} />}
-      {chooser && <NewClaimModal onClose={() => setChooser(false)} onShifts={pickShifts} onTrip={pick} onCancellationMade={id => { setChooser(false); navigate(`/claims/${id}`) }} />}
+      {chooser && <NewClaimModal onClose={() => setChooser(false)} onShifts={pickShifts} onTrip={pick} onCancellationMade={id => { setChooser(false); navigate(`/claims/${id}`) }} onManualMade={id => { setChooser(false); navigate(`/claims/${id}`) }} />}
       {claimTrip && (
         <GenerateClaimModal tripId={claimTrip.id} trip={claimTrip} onClose={() => setClaimTrip(null)} onSuccess={created => { setClaimTrip(null); navigate(`/claims/${created.id}`) }} />
       )}

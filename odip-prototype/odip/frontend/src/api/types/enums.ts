@@ -376,7 +376,7 @@ export const COORDINATOR_SETTABLE_SHIFT_STATUSES = ['Draft', 'Published', 'Cance
 // Discriminates a TripClaim's origin (shift-completion design spec §1, PR 3): Trip claims are
 // generated from a TripInstance's confirmed bookings; Shift claims are generated from a
 // participant's completed, unclaimed Shifts. Append-only, mirrors backend ClaimKind exactly.
-export const CLAIM_KINDS = ['Trip', 'Shift'] as const
+export const CLAIM_KINDS = ['Trip', 'Shift', 'Manual'] as const
 export type ClaimKind = typeof CLAIM_KINDS[number]
 
 // ── Compatibility Level ──────────────────────────────────

@@ -4,7 +4,7 @@ import { apiClient, apiGet, apiPost } from '../client'
 import { readText, serverSentence } from './data-export'
 import { awaitsData } from '@/lib/queryPhase'
 import { refreshBudgetWarnings, refreshLedgers } from './funding-ledger'
-import type { BatchDetailDto, BatchDto, BatchLineDto, BuildBatchRequestDto, BuildProblemDto, CancellationCandidatesDto, HubLinesDto, MarkPaidRequestDto, PipelineDto, ResultsImportDto, ShiftClaimGeneratedDto, ShiftClaimPreviewResponseDto, ShiftClaimWaitingDto } from '../types'
+import type { BatchDetailDto, BatchDto, BatchLineDto, BuildBatchRequestDto, BuildProblemDto, CancellationCandidatesDto, HubLinesDto, ManualClaimPreviewDto, ManualClaimRequestDto, MarkPaidRequestDto, PipelineDto, ResultsImportDto, ShiftClaimGeneratedDto, ShiftClaimPreviewResponseDto, ShiftClaimWaitingDto } from '../types'
 
 // The NDIA claims hub: the claimable lines, the bulk payment request files built from them, and what comes back.
 
@@ -45,6 +45,23 @@ export function useMakeCancellationClaim() {
     mutationFn: ({ shiftId, cancellationReason }: { shiftId: string; cancellationReason: string }) => apiPost<ShiftClaimGeneratedDto>('/claims/cancellations', { shiftId, cancellationReason }),
     onSettled: (created) => {
       for (const key of ['claims', 'trip-claims', 'participant-claims', 'rostering-completions', 'roster-board', 'claim-hub', 'claim-batches']) qc.invalidateQueries({ queryKey: [key] })
+      refreshLedgers(qc, created?.participantId ? [created.participantId] : [])
+      refreshBudgetWarnings(qc)
+    },
+  })
+}
+
+export function usePreviewManualClaim() {
+  return useMutation({ mutationFn: (request: ManualClaimRequestDto) => apiPost<ManualClaimPreviewDto>('/claims/manual/preview', request) })
+}
+
+/** Makes a one-off claim. Refreshes what the cancellation claim refreshes: the claim lists, the hub, the participant's ledger and the budget warnings. */
+export function useMakeManualClaim() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (request: ManualClaimRequestDto) => apiPost<ShiftClaimGeneratedDto>('/claims/manual', request),
+    onSettled: (created) => {
+      for (const key of ['claims', 'trip-claims', 'participant-claims', 'claim-hub', 'claim-batches']) qc.invalidateQueries({ queryKey: [key] })
       refreshLedgers(qc, created?.participantId ? [created.participantId] : [])
       refreshBudgetWarnings(qc)
     },
