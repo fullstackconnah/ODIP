@@ -9,7 +9,8 @@ namespace Odip.Domain.Rostering;
 ///
 /// A break is either paid (<see cref="WithParticipant"/>: ate with the participant, counted as worked) or unpaid
 /// (on my own: deducted from pay by <see cref="ShiftBreakRules.NetWorked"/>, the one rule Payroll, Reports and the
-/// completion record all read). Claims still use ROSTERED hours (<c>ShiftClaimGenerationService</c>); that is a later change.
+/// completion record all read). A claim covers the ROSTERED window minus the breaks taken alone inside it (<see cref="ShiftBreakRules.UnclaimedSpans"/>);
+/// breaks with the participant are still claimed.
 ///
 /// At most ONE break per completion may be running (<see cref="EndedAt"/> null); a partial unique index
 /// (<see cref="OneRunningIndexName"/>) enforces it in the database, the service checks it first so the worker
@@ -140,6 +141,26 @@ public static class ShiftBreakRules
         var gross = (int)Math.Round((end - actualStartUtc).TotalMinutes, MidpointRounding.AwayFromZero);
         var breakMinutes = (int)Math.Round(breakSpan.TotalMinutes, MidpointRounding.AwayFromZero);
         return (gross, breakMinutes, Math.Max(0, gross - breakMinutes));
+    }
+
+    /// <summary>
+    /// The stretches of the ROSTERED window a claim leaves out: each break taken on the worker's own, clamped to the window, as whole-minute offsets from the rostered start. Offsets come from
+    /// UTC instants, so a day the clocks change counts elapsed minutes, as <c>ShiftBands</c> does. Nothing outside the window was claimed, so it deducts nothing; a sleepover is claimed as a flat item, so it has none.
+    /// </summary>
+    /// <param name="aloneBreaks">The shift's breaks with <see cref="ShiftBreak.WithParticipant"/> false, from its ACTIVE completion; a running break ends at the actual end.</param>
+    public static IReadOnlyList<(int From, int To)> UnclaimedSpans(
+        DateOnly serviceDate, TimeOnly start, TimeOnly end, bool endsNextDay, SleepoverType nightType, IEnumerable<(DateTime From, DateTime To)> aloneBreaks, TimeZoneInfo zone)
+    {
+        if (nightType == SleepoverType.Sleepover) return Array.Empty<(int, int)>();
+
+        var startUtc = ProviderLocalTime.LocalToUtc(serviceDate.ToDateTime(start), zone);
+        var endUtc = ProviderLocalTime.LocalToUtc(serviceDate.AddDays(endsNextDay ? 1 : 0).ToDateTime(end), zone);
+        var rostered = WholeMinutes(endUtc - startUtc);
+        return aloneBreaks
+            .Select(b => (From: Math.Max(0, WholeMinutes(b.From - startUtc)), To: Math.Min(rostered, WholeMinutes(b.To - startUtc))))
+            .Where(s => s.To > s.From)
+            .OrderBy(s => s.From)
+            .ToList();
     }
 
     /// <summary>
