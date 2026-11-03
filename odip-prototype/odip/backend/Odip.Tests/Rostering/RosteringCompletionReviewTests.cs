@@ -1791,6 +1791,27 @@ public class RosteringCompletionReviewTests
     }
 
     [Fact]
+    public async Task SetBreakKind_AfterALiveClaim_Is409_AndTheClaimLineHoursAreUnchanged()   // [D] W9 D12
+    {
+        using var db = CreateDb();
+        var staff = SeedStaff(db);
+        var participant = SeedParticipant(db);
+        var shift = SeedShift(db, participant.Id, staff.Id, ShiftStatus.Completed);
+        var brk = SeedBreak(db, SeedCompletion(db, shift.Id, staff.Id), staff.Id, 120, 30);
+        var claim = Seed(db, new TripClaim { Id = Guid.NewGuid(), TenantId = shift.TenantId, Kind = ClaimKind.Shift, ParticipantId = participant.Id, Status = TripClaimStatus.Draft, ClaimReference = "TC-W9", TotalAmount = 450m });
+        Seed(db, new ClaimLineItem
+        {
+            Id = Guid.NewGuid(), TenantId = shift.TenantId, TripClaimId = claim.Id, ShiftId = shift.Id, SupportItemCode = "04_104_0125_6_1", DayType = ClaimDayType.Weekday,
+            SupportsDeliveredFrom = shift.ServiceDate, SupportsDeliveredTo = shift.ServiceDate, Hours = 7.5m, UnitPrice = 60m, TotalAmount = 450m, Status = ClaimLineItemStatus.Draft,
+        });
+
+        Refusal(await MakeController(db).SetCompletionBreakKind(shift.Id, brk.Id, new SetShiftBreakKindDto { WithParticipant = true }, CancellationToken.None), 409);
+
+        Assert.False((await db.ShiftBreaks.SingleAsync()).WithParticipant);
+        Assert.Equal(7.5m, (await db.ClaimLineItems.SingleAsync()).Hours);
+    }
+
+    [Fact]
     public async Task SetBreakKind_AfterApprove_Is409_AndAfterReturn_Is409()   // M1/S2: the sequential half of the race; the locked half is the Postgres class
     {
         using var db = CreateDb();

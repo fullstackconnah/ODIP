@@ -407,11 +407,11 @@ public class ClaimBatchFlowTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task A_double_claim_across_files_warns_on_both_lines_in_either_order_and_never_blocks_the_build(bool shiftFirst)
+    public async Task A_double_claim_across_files_warns_on_both_lines_for_a_booking_and_shift_pair_and_a_shift_and_manual_pair_and_never_blocks_the_build(bool shiftAndManualPair)
     {
         using var f = new BatchFixture();
-        var (claim, lines, person) = f.AddClaim(shiftLines: shiftFirst);
-        var (twinClaim, twin) = AddTwin(f, person, lines[0], manual: shiftFirst);
+        var (claim, lines, person) = f.AddClaim(shiftLines: shiftAndManualPair);
+        var (twinClaim, twin) = AddTwin(f, person, lines[0], manual: shiftAndManualPair);
 
         var hub = await f.Service.HubAsync(f.TenantId, default);
 
@@ -420,6 +420,32 @@ public class ClaimBatchFlowTests
         Assert.Contains(twinClaim.ClaimReference, mine.Message);
         Assert.Contains(claim.ClaimReference, Assert.Single(hub.Ready.Single(r => r.LineId == twin.Id).Problems, p => p.Rule == "DoubleClaimAcrossFiles").Message);
         Assert.True((await f.BuildAsync(lines[0].Id)).Ok);
+    }
+
+    [Fact]
+    public async Task A_double_claim_warning_ignores_a_cancelled_claim()
+    {
+        using var f = new BatchFixture();
+        var (_, lines, person) = f.AddClaim();
+        AddTwin(f, person, lines[0], manual: true, TripClaimStatus.Cancelled);
+
+        var hub = await f.Service.HubAsync(f.TenantId, default);
+
+        Assert.DoesNotContain(hub.Ready.Single(r => r.LineId == lines[0].Id).Problems, p => p.Rule == "DoubleClaimAcrossFiles");
+    }
+
+    [Fact]
+    public async Task A_double_claim_warning_ignores_a_travel_line_of_the_same_item_and_day()
+    {
+        using var f = new BatchFixture();
+        var (_, lines, person) = f.AddClaim();
+        var travel = AddTwin(f, person, lines[0], manual: false);
+        travel.Line.ClaimType = ClaimType.ProviderTravel;
+        f.Db.SaveChanges();
+
+        var hub = await f.Service.HubAsync(f.TenantId, default);
+
+        Assert.DoesNotContain(hub.Ready.Single(r => r.LineId == lines[0].Id).Problems, p => p.Rule == "DoubleClaimAcrossFiles");
     }
 
     [Fact]

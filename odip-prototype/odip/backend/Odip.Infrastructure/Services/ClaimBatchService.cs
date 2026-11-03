@@ -213,7 +213,7 @@ public sealed partial class ClaimBatchService(OdipDbContext db, BprCsvService bp
     }
 
     /// <summary>
-    /// For each row, the references of other claims whose counting lines (the budget ledger's definition) share its participant, item and an overlapping date. The participant is the line's shift's, else its booking's, else a manual claim's own.
+    /// For each row, the references of other claims whose counting lines (the budget ledger's definition) share its participant, item and an overlapping date; a provider-travel line only matches another travel line, as DuplicateInFile does. The participant is the line's shift's, else its booking's, else a manual claim's own.
     /// </summary>
     private async Task<Dictionary<Guid, string>> DoubleClaimedAsync(Guid t, IReadOnlyList<BprRow> selected, CancellationToken ct)
     {
@@ -226,11 +226,11 @@ public sealed partial class ClaimBatchService(OdipDbContext db, BprCsvService bp
             .Where(l => l.TenantId == t && codes.Contains(l.SupportItemCode) && l.SupportsDeliveredFrom <= to && l.SupportsDeliveredTo >= from)
             .Select(l => new
             {
-                l.TripClaimId, l.TripClaim.ClaimReference, l.SupportItemCode, l.SupportsDeliveredFrom, l.SupportsDeliveredTo,
+                l.TripClaimId, l.TripClaim.ClaimReference, l.SupportItemCode, l.SupportsDeliveredFrom, l.SupportsDeliveredTo, IsTravel = l.ClaimType == ClaimType.ProviderTravel,
                 ParticipantId = l.Shift != null ? l.Shift.ParticipantId : l.ParticipantBooking != null ? l.ParticipantBooking.ParticipantId : l.TripClaim.ParticipantId,
             }).ToListAsync(ct);
         return rows.Select(r => (r.Line.Id, Refs: others
-                .Where(o => o.TripClaimId != r.Claim.Id && o.ParticipantId == r.Participant!.Id && o.SupportItemCode == r.Line.SupportItemCode
+                .Where(o => o.TripClaimId != r.Claim.Id && o.ParticipantId == r.Participant!.Id && o.SupportItemCode == r.Line.SupportItemCode && o.IsTravel == (r.Line.ClaimType == ClaimType.ProviderTravel)
                     && o.SupportsDeliveredFrom <= r.Line.SupportsDeliveredTo && o.SupportsDeliveredTo >= r.Line.SupportsDeliveredFrom)
                 .Select(o => o.ClaimReference).Distinct().Order().ToList()))
             .Where(x => x.Refs.Count > 0).ToDictionary(x => x.Id, x => string.Join(", ", x.Refs));

@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { FileText } from 'lucide-react'
 import { useParticipantClaims, usePreviewShiftClaim, useGenerateShiftClaim } from '@/api/hooks'
 import { Callout } from '@/components/Callout'
-import { lineQuantity } from '@/lib/claimLines'
+import { CLAIM_KIND_LABEL, lineQuantity } from '@/lib/claimLines'
 import { FlaggedShifts } from '@/components/FlaggedShifts'
 import { LeftOutCallout, SHIFT_LEFT_OUT_FOOTER } from '@/components/LeftOutCallout'
 import { heldClaimLink } from '@/components/heldClaimLink'
@@ -16,6 +16,7 @@ import { Modal } from '@/components/Modal'
 import { StatusBadge } from '@/components/StatusBadge'
 import { EmptyState } from '@/components/EmptyState'
 import { FormField } from '@/components/FormField'
+import { formatDateRange } from '@/lib/dateRange'
 import { plural } from '@/lib/format'
 import { extractErrorMessage, formatCurrency, formatDateAu } from '@/lib/utils'
 import type { TripClaimListDto, ShiftClaimGeneratedDto, ShiftClaimLeftOutDto, ShiftClaimPreviewLineItemDto, ShiftClaimPreviewResponseDto } from '@/api/types'
@@ -32,6 +33,7 @@ import { TAP_FLOOR } from '@/components/tapArea'
 const KIND_COLOR_MAP: Record<string, Tone> = {
   trip: 'info',
   shift: 'accessible',
+  manual: 'neutral',
 }
 
 /** yyyy-MM-dd in the viewer's local time — never UTC, which can silently shift the date near
@@ -101,16 +103,16 @@ export default function ClaimsTab({ participantId, canWrite, otherFunded = false
               key: 'kind',
               header: 'Kind',
               sortable: true,
-              render: (c: TripClaimListDto) => <StatusBadge status={c.kind} colorMap={KIND_COLOR_MAP} />,
+              render: (c: TripClaimListDto) => <StatusBadge status={c.kind} label={c.kind === 'Manual' ? CLAIM_KIND_LABEL.Manual : undefined} colorMap={KIND_COLOR_MAP} />,
             },
             { key: 'claimReference', header: 'Reference', sortable: true, className: 'font-medium font-mono text-sm' },
             {
               key: 'tripName',
               header: 'Trip / Period',
               render: (c: TripClaimListDto) =>
-                c.kind === 'Shift' ? (
+                c.kind !== 'Trip' ? (
                   <span className="text-[var(--color-muted-foreground)]">
-                    {formatDateAu(c.periodFrom)} – {formatDateAu(c.periodTo)}
+                    {c.kind === 'Manual' ? formatDateRange(c.periodFrom, c.periodTo) : `${formatDateAu(c.periodFrom)} – ${formatDateAu(c.periodTo)}`}
                   </span>
                 ) : c.tripInstanceId ? (
                   <Link to={`/trips/${c.tripInstanceId}`} className="text-[var(--color-primary)] hover:underline">
