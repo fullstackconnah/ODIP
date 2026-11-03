@@ -153,6 +153,9 @@ public class OdipDbContext : DbContext
 
     /// <summary>Transactional outbox — see <see cref="NotificationOutbox"/>'s type doc. docs/specs/2026-09-08-notifications-design.md.</summary>
     public DbSet<NotificationOutbox> NotificationOutbox => Set<NotificationOutbox>();
+
+    /// <summary>"Report a problem" notes waiting to go, or already gone, to the Work Board. See <see cref="ProblemReport"/>.</summary>
+    public DbSet<ProblemReport> ProblemReports => Set<ProblemReport>();
     public DbSet<NotificationPreference> NotificationPreferences => Set<NotificationPreference>();
     public DbSet<NotificationLog> NotificationLogs => Set<NotificationLog>();
     /// <summary>The bell's inbox — see <see cref="InAppNotification"/>.</summary>
@@ -1423,6 +1426,24 @@ public class OdipDbContext : DbContext
             entity.HasIndex(e => new { e.EntityId, e.RecipientUserId, e.CreatedAt });  // dedupe lookup (NotificationRaiser)
         });
 
+        // Report a problem: the saved note and its Work Board retry state. Status is the default int, like the outbox.
+        modelBuilder.Entity<ProblemReport>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ReporterName).HasMaxLength(200);
+            entity.Property(e => e.ReporterRole).HasMaxLength(32);
+            entity.Property(e => e.OrganisationName).HasMaxLength(200);
+            entity.Property(e => e.Text).HasMaxLength(2000);
+            entity.Property(e => e.PagePath).HasMaxLength(200);
+            entity.Property(e => e.AppVersion).HasMaxLength(64);
+            entity.Property(e => e.ApiVersion).HasMaxLength(64);
+            entity.Property(e => e.UserAgent).HasMaxLength(300);
+            entity.Property(e => e.LastError).HasMaxLength(500);
+
+            entity.HasIndex(e => new { e.Status, e.NextAttemptAt });          // the retry loop's poll
+            entity.HasIndex(e => new { e.ReporterUserId, e.CreatedAt });      // the per-user cap
+        });
+
         modelBuilder.Entity<NotificationPreference>(entity =>
         {
             entity.HasKey(e => e.Id);
@@ -2306,6 +2327,11 @@ public class OdipDbContext : DbContext
         modelBuilder.Entity<NotificationOutbox>()
             .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
         modelBuilder.Entity<NotificationOutbox>()
+            .HasIndex(e => e.TenantId);
+
+        modelBuilder.Entity<ProblemReport>()
+            .HasQueryFilter(TenantFilter.Name, e => _tenant.IsSuperAdmin || e.TenantId == _tenant.TenantId);
+        modelBuilder.Entity<ProblemReport>()
             .HasIndex(e => e.TenantId);
 
         modelBuilder.Entity<NotificationPreference>()
