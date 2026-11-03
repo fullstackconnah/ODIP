@@ -418,7 +418,7 @@ public partial class ShiftClaimGenerationService
 
     // ─── Helpers ─
 
-    private static string BuildClaimReference(Participant participant, Guid claimId) =>
+    internal static string BuildClaimReference(Participant participant, Guid claimId) =>
         TripClaim.ReferenceFor(!string.IsNullOrWhiteSpace(participant.NdisNumber) ? participant.NdisNumber : participant.Id.ToString("N")[..8].ToUpper(), claimId);
 
     /// <summary>The label a shift claim line reads as ("Weekday Evening", not "WeekdayEvening"); a sleepover is its own line.</summary>

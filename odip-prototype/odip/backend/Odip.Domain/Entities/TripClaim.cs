@@ -3,13 +3,13 @@ using Odip.Domain.Enums;
 namespace Odip.Domain.Entities;
 
 /// <summary>
-/// A draft/submitted NDIS claim. <see cref="Kind"/> discriminates two shapes (shift-completion
+/// A draft/submitted NDIS claim. <see cref="Kind"/> discriminates three shapes (shift-completion
 /// design spec §1): <c>Trip</c> (the original shape) has <see cref="TripInstanceId"/> set and
 /// <see cref="ParticipantId"/>/<see cref="PeriodFrom"/>/<see cref="PeriodTo"/> null; <c>Shift</c>
-/// has the reverse. This invariant is documented here and enforced in
+/// has the reverse; <c>Manual</c> (a one-off) takes the Shift shape, with a line that has no shift or booking. This invariant is documented here and enforced in
 /// <c>ShiftClaimGenerationService</c>/<c>ClaimGenerationService</c> (the two writers), not by a
 /// DB constraint — a check spanning five nullable columns was judged not worth the complexity
-/// for a single-writer invariant. <see cref="ClaimLineItem"/>'s exactly-one-parent invariant
+/// for a single-writer invariant. <see cref="ClaimLineItem"/>'s at-most-one-parent invariant
 /// (the line-item-level equivalent) IS a DB check constraint — see that entity's doc comment.
 /// </summary>
 public class TripClaim
@@ -29,7 +29,7 @@ public class TripClaim
     public Guid? TripInstanceId { get; set; }
     public TripInstance? TripInstance { get; set; }
 
-    /// <summary>Set for Kind == Shift; null for Kind == Trip.</summary>
+    /// <summary>Set for Kind == Shift and Manual; null for Kind == Trip.</summary>
     public Guid? ParticipantId { get; set; }
     public Participant? Participant { get; set; }
     public DateOnly? PeriodFrom { get; set; }

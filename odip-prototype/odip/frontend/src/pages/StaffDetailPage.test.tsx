@@ -130,6 +130,17 @@ describe('StaffDetailPage — header', () => {
     expect(screen.getByRole('link', { name: /leave.*availability/i })).toHaveAttribute('href', '/rostering/leave?userId=staff-1')
   })
 
+  it('shows the employment type on the header line, and nothing extra when it is not set', () => {
+    mockUseStaffOverview.mockReturnValue({ data: makeOverview({ staff: makeStaff({ employmentType: 'Casual' }) }), isLoading: false })
+    const { unmount } = renderAt('staff-1')
+    expect(screen.getByText(/Support worker.*Casual.*North/)).toBeInTheDocument()
+    unmount()
+
+    mockUseStaffOverview.mockReturnValue({ data: makeOverview({ staff: makeStaff({ employmentType: null }) }), isLoading: false })
+    renderAt('staff-1')
+    expect(screen.queryByText(/Casual/)).not.toBeInTheDocument()
+  })
+
   it('starts the meta row at the region, with no stray leading separator, when the staff member has no position', () => {
     mockUseStaffOverview.mockReturnValue({ data: makeOverview({ staff: makeStaff({ position: undefined }) }), isLoading: false })
     renderAt('staff-1')

@@ -72,11 +72,11 @@ public sealed partial class ClaimBatchService
         }).ToList();
     }
 
-    /// <summary>The participant of each claim line (a trip line's through its booking, a shift line's through its shift), by line id.</summary>
+    /// <summary>The participant of each claim line (a trip line's through its booking, a shift line's through its shift, a manual line's through its claim), by line id.</summary>
     private async Task<Dictionary<Guid, (Guid Id, string Name)>> ParticipantNamesAsync(Guid t, IReadOnlyCollection<Guid> lineIds, CancellationToken ct)
     {
         var pairs = await db.ClaimLineItems.AsNoTracking().Where(l => lineIds.Contains(l.Id))
-            .Select(l => new { l.Id, ParticipantId = l.ParticipantBookingId != null ? l.ParticipantBooking!.ParticipantId : l.Shift != null ? l.Shift.ParticipantId : (Guid?)null })
+            .Select(l => new { l.Id, ParticipantId = l.ParticipantBookingId != null ? l.ParticipantBooking!.ParticipantId : l.Shift != null ? l.Shift.ParticipantId : l.TripClaim.ParticipantId })
             .ToListAsync(ct);
         var participantIds = pairs.Select(p => p.ParticipantId).OfType<Guid>().Distinct().ToList();
         var people = await db.Participants.AsNoTracking().Where(p => p.TenantId == t && participantIds.Contains(p.Id))

@@ -1,4 +1,4 @@
-import type { Position, UserRole, AvailabilityType, AssignmentStatus, SleepoverType, ShiftStatus } from './enums'
+import type { Position, EmploymentType, UserRole, AvailabilityType, AssignmentStatus, SleepoverType, ShiftStatus } from './enums'
 import type { ScheduleAvailabilityItemDto } from './schedule'
 import type { IncidentListDto } from './incidents'
 import type { CompletionQueueItemDto } from './rostering'
@@ -15,6 +15,8 @@ export interface StaffListDto {
   username: string
   role: UserRole
   position: Position
+  /** Null when an admin has not set it. */
+  employmentType?: EmploymentType | null
   email: string | null
   mobile: string | null
   region: string | null

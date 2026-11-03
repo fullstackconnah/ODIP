@@ -179,6 +179,7 @@ else
 // ── NDIS Claiming Services ────────────────────────────────────
 builder.Services.AddScoped<Odip.Infrastructure.Services.ClaimGenerationService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.ShiftClaimGenerationService>();
+builder.Services.AddScoped<Odip.Infrastructure.Services.ManualClaimService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.BprCsvService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.ClaimBatchService>();
 builder.Services.AddScoped<Odip.Infrastructure.Services.InvoiceService>();
