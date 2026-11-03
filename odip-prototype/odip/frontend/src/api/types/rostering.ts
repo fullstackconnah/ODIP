@@ -736,16 +736,31 @@ export interface AutoRosterUncoveredDto {
   recommendations: AutoRosterRecommendationDto[]
 }
 
+/** One shift two people cover between them: `first` works startTime to cutAt, `second` works cutAt to endTime. */
+export interface AutoRosterSplitDto {
+  shiftId: string
+  participantId: string
+  participantName: string
+  serviceDate: string
+  startTime: string
+  endTime: string
+  cutAt: string
+  first: { staffId: string; staffName: string }
+  second: { staffId: string; staffName: string }
+}
+
 export interface AutoRosterDraftDto {
   weekStart: string
   generatedAt: string
   changes: AutoRosterChangeDto[]
   hours: AutoRosterHoursDto[]
   uncovered: AutoRosterUncoveredDto[]
+  splits: AutoRosterSplitDto[]
 }
 
 export interface AutoRosterApplyDto {
   rows: { shiftId: string; staffId: string }[]
+  splits?: { shiftId: string; startTime: string; endTime: string; cutAt: string; firstStaffId: string; secondStaffId: string }[]
 }
 
 /** Rows left as they were (changed since the draft, now refused, not found) are not a failure: the others still apply. */

@@ -53,7 +53,11 @@ public sealed class AutoRosterDraftBuilder(OdipDbContext db, RosterAvailability 
         var names = workers.ToDictionary(w => w.Id, w => w.Name);
         string PersonName(Shift s) => participants.TryGetValue(s.ParticipantId, out var p) ? p.FullName : "Participant";
         int? RankOf(int rank) => rank > 0 ? rank : null;
-        var draftHours = plan.Placements.GroupBy(p => p.StaffId).ToDictionary(g => g.Key, g => g.Sum(p => shiftsById[p.ShiftId].DurationHours));
+        // A split's two parts count towards each person's draft hours (the Hours tab counts each half's own hours).
+        var draftHours = plan.Placements.Select(p => (Staff: p.StaffId, Hours: shiftsById[p.ShiftId].DurationHours))
+            .Concat(plan.Splits.Select(x => (Staff: x.FirstStaffId, Hours: Shift.HoursBetween(shiftsById[x.ShiftId].StartTime, x.CutAt, false))))
+            .Concat(plan.Splits.Select(x => (Staff: x.SecondStaffId, Hours: Shift.HoursBetween(x.CutAt, shiftsById[x.ShiftId].EndTime, false))))
+            .GroupBy(x => x.Staff).ToDictionary(g => g.Key, g => g.Sum(x => x.Hours));
         var byId = staff.ToDictionary(u => u.Id);
 
         return new AutoRosterDraftDto
@@ -74,6 +78,16 @@ public sealed class AutoRosterDraftBuilder(OdipDbContext db, RosterAvailability 
             {
                 StaffId = w.Id, StaffName = w.Name, EmploymentType = byId[w.Id].EmploymentType, GoalHours = w.Goal, GoalIsDefault = w.GoalIsDefault,
                 RosteredHours = w.RosteredHours, DraftHours = draftHours.GetValueOrDefault(w.Id),
+            }).ToList(),
+            Splits = plan.Splits.Select(x =>
+            {
+                var s = shiftsById[x.ShiftId];
+                return new AutoRosterSplitDto
+                {
+                    ShiftId = s.Id, ParticipantId = s.ParticipantId, ParticipantName = PersonName(s), ServiceDate = s.ServiceDate, StartTime = s.StartTime, EndTime = s.EndTime, CutAt = x.CutAt,
+                    First = new AutoRosterSegmentDto { StaffId = x.FirstStaffId, StaffName = names[x.FirstStaffId] },
+                    Second = new AutoRosterSegmentDto { StaffId = x.SecondStaffId, StaffName = names[x.SecondStaffId] },
+                };
             }).ToList(),
             Uncovered = plan.Uncovered.Select(u =>
             {

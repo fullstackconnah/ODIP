@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useState } from 'react'
 import { format, parseISO } from 'date-fns'
 import { CalendarX2, CheckCircle2, Loader2, X } from 'lucide-react'
 import type {
-  AutoRosterApplyResultDto, AutoRosterChangeDto, AutoRosterDraftDto, AutoRosterHoursDto, AutoRosterPick, AutoRosterUncoveredDto, UncoveredReason,
+  AutoRosterApplyDto, AutoRosterApplyResultDto, AutoRosterDraftDto, AutoRosterHoursDto, AutoRosterPick, AutoRosterSplitDto, AutoRosterUncoveredDto, UncoveredReason,
 } from '@/api/types'
 import { EMPLOYMENT_TYPE_LABELS } from '@/api/types/enums'
 import { Button } from '@/components/Button'
@@ -16,7 +16,7 @@ import { StatusBadge } from '@/components/StatusBadge'
 import { Tabs } from '@/components/Tabs'
 import { plural } from '@/lib/format'
 import { extractErrorMessage } from '@/lib/utils'
-import { formatShiftTimeRange } from '../lib/roster'
+import { formatShiftTime, formatShiftTimeRange } from '../lib/roster'
 
 /** One row's text, kept for the board's skipped-rows notice: "Tue 8 Sep, 7pm–7am, Grace Palmer-Hughes". */
 export type AutoRosterRowText = { shiftId: string; text: string }
@@ -29,8 +29,8 @@ export type AutoRosterPanelProps = {
   /** The run: pending, failed, or the draft. */
   run: { status: 'loading' } | { status: 'error'; message: string } | { status: 'draft'; draft: AutoRosterDraftDto }
   onRetryRun: () => void
-  /** Sends the kept rows. A rejection leaves the draft on screen. */
-  onApply: (rows: { shiftId: string; staffId: string }[]) => Promise<AutoRosterApplyResultDto>
+  /** Sends the kept rows and splits. A rejection leaves the draft on screen. */
+  onApply: (rows: AutoRosterApplyDto['rows'], splits: NonNullable<AutoRosterApplyDto['splits']>) => Promise<AutoRosterApplyResultDto>
   /** After the server answered: what it applied and skipped, with each row's display text. */
   onApplied: (result: AutoRosterApplyResultDto, rows: AutoRosterRowText[], stillOpen: number) => void
   /** True while the draft has at least one kept row: the board's leave guard reads it. */
@@ -50,11 +50,16 @@ const minutes = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5)
 /** A shift's length in hours: an end at or before its start runs past midnight. */
 const durationHours = (c: { startTime: string; endTime: string }) => ((minutes(c.endTime) - minutes(c.startTime) + 1440) % 1440 || 1440) / 60
 const hours = (n: number) => String(Math.round(n * 100) / 100)
+/** A split's two halves as plain shifts for one person each: the first from the start to the cut, the second from the cut to the end. */
+const halvesOf = (s: AutoRosterSplitDto) => [
+  { staffId: s.first.staffId, staffName: s.first.staffName, serviceDate: s.serviceDate, startTime: s.startTime, endTime: s.cutAt },
+  { staffId: s.second.staffId, staffName: s.second.staffName, serviceDate: s.serviceDate, startTime: s.cutAt, endTime: s.endTime },
+]
 const byTime = (a: { serviceDate: string; startTime: string; participantName: string; shiftId: string }, b: typeof a) =>
   a.serviceDate.localeCompare(b.serviceDate) || a.startTime.localeCompare(b.startTime) || a.participantName.localeCompare(b.participantName) || a.shiftId.localeCompare(b.shiftId)
 
-// shortcut: overnight rows are compared on their service date only, until PR3 or a real report.
-const overlaps = (a: AutoRosterChangeDto, b: AutoRosterChangeDto) => a.serviceDate === b.serviceDate && a.startTime < b.endTime && b.startTime < a.endTime
+// shortcut: overnight rows are compared on their service date only, until a real report.
+const overlaps = (a: { serviceDate: string; startTime: string; endTime: string }, b: typeof a) => a.serviceDate === b.serviceDate && a.startTime < b.endTime && b.startTime < a.endTime
 
 const REASON: Record<UncoveredReason, (u: AutoRosterUncoveredDto) => string> = {
   ParticipantNotReady: u => `${u.participantName} isn't ready to be rostered yet.`,
@@ -98,7 +103,7 @@ function DayGroups<T extends { serviceDate: string; shiftId: string }>({ rows, r
 /** The draft roster: review the proposed placements, change or drop some, then apply them in one go. The draft lives only in this component. */
 export function AutoRosterPanel({ open, onClose, description, run, onRetryRun, onApply, onApplied, onArmedChange }: AutoRosterPanelProps) {
   const draft = run.status === 'draft' ? run.draft : null
-  const firstTab = (d: AutoRosterDraftDto | null) => (d && d.changes.length === 0 && d.uncovered.length > 0 ? 'cant' : 'changes')
+  const firstTab = (d: AutoRosterDraftDto | null) => (d && d.changes.length === 0 && d.splits.length === 0 && d.uncovered.length > 0 ? 'cant' : 'changes')
   const [tab, setTab] = useState(() => firstTab(draft))
   const [edits, setEdits] = useState<Record<string, Edit>>({})
   const [removed, setRemoved] = useState<Set<string>>(new Set())
@@ -120,13 +125,18 @@ export function AutoRosterPanel({ open, onClose, description, run, onRetryRun, o
   )
   const kept = rows.filter(r => !removed.has(r.shiftId))
   const left = rows.filter(r => removed.has(r.shiftId))
+  const splits = useMemo(() => [...(draft?.splits ?? [])].sort(byTime), [draft])
+  const keptSplits = splits.filter(s => !removed.has(s.shiftId))
+  const leftSplits = splits.filter(s => removed.has(s.shiftId))
+  const keptCount = kept.length + keptSplits.length, leftCount = left.length + leftSplits.length
   const uncoveredCount = draft?.uncovered.length ?? 0
-  useEffect(() => { onArmedChange(open && kept.length > 0) }, [open, kept.length, onArmedChange])
+  useEffect(() => { onArmedChange(open && keptCount > 0) }, [open, keptCount, onArmedChange])
   useEffect(() => () => onArmedChange(false), [onArmedChange])
 
   const choicesFor = (row: (typeof rows)[number]): Choice[] => {
     const original = draft!.changes.find(c => c.shiftId === row.shiftId)!
     const busy = (id: string) => kept.some(k => k.shiftId !== row.shiftId && k.staffId === id && overlaps(k, row))
+      || keptSplits.some(s => halvesOf(s).some(h => h.staffId === id && overlaps(h, row)))   // a split's halves count as that person's shifts
     return [{ staffId: original.staffId, staffName: original.staffName, pick: original.pick, rank: original.rank }, ...original.alternates]
       .filter(c => c.staffId !== row.staffId && !busy(c.staffId))
   }
@@ -136,22 +146,27 @@ export function AutoRosterPanel({ open, onClose, description, run, onRetryRun, o
   const hoursRows = useMemo(() => {
     const added = new Map<string, number>()
     for (const r of kept) added.set(r.staffId, (added.get(r.staffId) ?? 0) + durationHours(r))
+    for (const s of keptSplits) for (const h of halvesOf(s)) added.set(h.staffId, (added.get(h.staffId) ?? 0) + durationHours(h))   // each half counts its own hours
     const listed = new Set((draft?.hours ?? []).map(h => h.staffId))
     const missing: AutoRosterHoursDto[] = []   // a person on a row but not in the pool list still gets a row
-    for (const r of rows) if (!listed.has(r.staffId)) { listed.add(r.staffId); missing.push({ staffId: r.staffId, staffName: r.staffName, goalHours: 0, goalIsDefault: false, rosteredHours: 0, draftHours: 0 }) }
+    for (const r of [...rows, ...splits.flatMap(halvesOf)]) if (!listed.has(r.staffId)) { listed.add(r.staffId); missing.push({ staffId: r.staffId, staffName: r.staffName, goalHours: 0, goalIsDefault: false, rosteredHours: 0, draftHours: 0 }) }
     const load = (h: { goalHours: number; total: number }) => (h.goalHours > 0 ? h.total / h.goalHours : h.total > 0 ? Infinity : -1)
     return [...(draft?.hours ?? []), ...missing]
       .map(h => ({ ...h, draftHours: added.get(h.staffId) ?? 0, total: h.rosteredHours + (added.get(h.staffId) ?? 0) }))
       .sort((a, b) => load(b) - load(a) || a.staffName.localeCompare(b.staffName, undefined, { sensitivity: 'base' }))
-  }, [draft, kept, rows])
+  }, [draft, kept, keptSplits, rows, splits])
 
   const apply = async () => {
     const sent = kept.map(r => ({ shiftId: r.shiftId, staffId: r.staffId }))
-    const texts = kept.map(r => ({ shiftId: r.shiftId, text: `${dayLabel(r.serviceDate)}, ${formatShiftTimeRange(r.startTime, r.endTime)}, ${r.staffName}` }))
+    const sentSplits = keptSplits.map(s => ({ shiftId: s.shiftId, startTime: s.startTime, endTime: s.endTime, cutAt: s.cutAt, firstStaffId: s.first.staffId, secondStaffId: s.second.staffId }))
+    const texts = [
+      ...kept.map(r => ({ shiftId: r.shiftId, text: `${dayLabel(r.serviceDate)}, ${formatShiftTimeRange(r.startTime, r.endTime)}, ${r.staffName}` })),
+      ...keptSplits.map(s => ({ shiftId: s.shiftId, text: `${dayLabel(s.serviceDate)}, ${formatShiftTimeRange(s.startTime, s.endTime)}, ${s.first.staffName} and ${s.second.staffName}` })),
+    ]
     setApplying(true); setApplyError(null)
     try {
-      const result = await onApply(sent)
-      onApplied(result, texts, uncoveredCount + left.length)
+      const result = await onApply(sent, sentSplits)
+      onApplied(result, texts, uncoveredCount + leftCount)
     } catch (err) {
       const response = (err as { response?: { status?: number } })?.response
       const busy = response?.status === 409
@@ -189,14 +204,36 @@ export function AutoRosterPanel({ open, onClose, description, run, onRetryRun, o
     )
   }
 
+  const splitText = (s: AutoRosterSplitDto) => `${s.participantName} ${formatShiftTimeRange(s.startTime, s.endTime)}`
   const changesTab = (
     <div>
-      {kept.length === 0 && left.length === 0 && (
+      {keptCount === 0 && leftCount === 0 && (
         uncoveredCount > 0
           ? <EmptyState size="inline" icon={CalendarX2} title="No one could be placed" description="See Can't cover for why and who to ask." />
           : <EmptyState size="inline" icon={CheckCircle2} title="No open shifts to fill" description="Every shift this week already has someone." />
       )}
-      <DayGroups rows={kept} render={row => (
+      <DayGroups rows={[...kept, ...keptSplits].sort(byTime)} render={row => 'cutAt' in row ? (
+        <>
+          <div className="min-w-0 flex-1 text-sm">
+            <p className="flex min-w-0 items-baseline gap-1">
+              <span className="whitespace-nowrap tabular-nums">{range(row)}</span><span aria-hidden="true">·</span>
+              <span className="truncate" title={row.participantName}>{row.participantName}</span>
+            </p>
+            {halvesOf(row).map(h => (
+              <p key={h.staffId} className="flex min-w-0 items-baseline gap-2">
+                <span className="truncate font-semibold" title={h.staffName}>{h.staffName}</span>
+                <span className="whitespace-nowrap tabular-nums text-muted-foreground">{range(h)}</span>
+              </p>
+            ))}
+            <p className="text-muted-foreground">Split at {formatShiftTime(row.cutAt)}</p>
+          </div>
+          <div className="flex shrink-0 items-start gap-2 pointer-coarse:[&_button]:min-h-11 pointer-coarse:[&_button]:min-w-11">
+            <Button iconOnly variant="ghost" aria-label={`Leave ${splitText(row)} open`} onClick={() => setGone(row.shiftId, true)}>
+              <X className="h-4 w-4" aria-hidden="true" />
+            </Button>
+          </div>
+        </>
+      ) : (
         <>
           <div className="min-w-0 flex-1 text-sm">
             <p className="flex min-w-0 items-baseline gap-1">
@@ -218,9 +255,9 @@ export function AutoRosterPanel({ open, onClose, description, run, onRetryRun, o
           {rowActions(row)}
         </>
       )} />
-      {left.length > 0 && (
+      {leftCount > 0 && (
         <div className="mt-3">
-          <DisclosureToggle label={`Left open (${left.length})`} open={leftOpenShown} onToggle={() => setLeftOpenShown(v => !v)} controls={leftOpenId} />
+          <DisclosureToggle label={`Left open (${leftCount})`} open={leftOpenShown} onToggle={() => setLeftOpenShown(v => !v)} controls={leftOpenId} />
           <ul id={leftOpenId} hidden={!leftOpenShown}>
             {left.map(row => (
               <li key={row.shiftId} className="flex min-h-14 items-start gap-2 border-b border-border py-2 text-sm">
@@ -229,6 +266,15 @@ export function AutoRosterPanel({ open, onClose, description, run, onRetryRun, o
                   <p className="text-muted-foreground">Was {row.staffName}</p>
                 </div>
                 <Button variant="ghost" size="sm" className="pointer-coarse:min-h-11" aria-label={`Put ${row.staffName} back on ${row.participantName} ${formatShiftTimeRange(row.startTime, row.endTime)}`} onClick={() => setGone(row.shiftId, false)}>Undo</Button>
+              </li>
+            ))}
+            {leftSplits.map(s => (
+              <li key={s.shiftId} className="flex min-h-14 items-start gap-2 border-b border-border py-2 text-sm">
+                <div className="min-w-0 flex-1">
+                  <p className="flex min-w-0 items-baseline gap-1"><span className="whitespace-nowrap tabular-nums">{dayLabel(s.serviceDate)}, {range(s)}</span><span aria-hidden="true">·</span><span className="truncate" title={s.participantName}>{s.participantName}</span></p>
+                  <p className="text-muted-foreground">Was {s.first.staffName} and {s.second.staffName}</p>
+                </div>
+                <Button variant="ghost" size="sm" className="pointer-coarse:min-h-11" aria-label={`Put the split of ${splitText(s)} back`} onClick={() => setGone(s.shiftId, false)}>Undo</Button>
               </li>
             ))}
           </ul>
@@ -273,19 +319,19 @@ export function AutoRosterPanel({ open, onClose, description, run, onRetryRun, o
         </Callout>
       )}
       <Tabs variant="underline" ariaLabel="Draft roster" active={tab} onChange={setTab} tabs={[
-        { id: 'changes', label: 'Changes', badge: kept.length || undefined, content: changesTab },
+        { id: 'changes', label: 'Changes', badge: keptCount || undefined, content: changesTab },
         { id: 'hours', label: 'Hours', content: <DataTable data={hoursRows} columns={hoursColumns} keyField="staffId" /> },
         { id: 'cant', label: "Can't cover", badge: uncoveredCount || undefined, content: cantTab },
       ]} />
     </div>
   )
 
-  const applyLabel = kept.length === 0 ? 'Apply changes' : `Apply ${plural(kept.length, 'change')}`
+  const applyLabel = keptCount === 0 ? 'Apply changes' : `Apply ${plural(keptCount, 'change')}`
   const footer = (
     <div className="flex justify-end gap-2 max-sm:[&>button]:flex-1">
       <Button variant="secondary" aria-disabled={applying || undefined} onClick={() => { if (!applying) onClose() }}>{draft ? 'Discard' : 'Cancel'}</Button>
       {draft && (
-        <Button disabled={kept.length === 0} aria-disabled={applying || undefined} className="aria-disabled:cursor-not-allowed aria-disabled:opacity-50" onClick={() => { if (!applying) void apply() }}>
+        <Button disabled={keptCount === 0} aria-disabled={applying || undefined} className="aria-disabled:cursor-not-allowed aria-disabled:opacity-50" onClick={() => { if (!applying) void apply() }}>
           <span className="grid">
             <span aria-hidden="true" data-reserve={applyLabel} className="invisible col-start-1 row-start-1 before:content-[attr(data-reserve)]" />
             <span className="col-start-1 row-start-1">{applying ? 'Applying…' : applyLabel}</span>

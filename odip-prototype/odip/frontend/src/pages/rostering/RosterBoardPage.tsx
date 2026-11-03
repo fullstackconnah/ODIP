@@ -344,7 +344,7 @@ export default function RosterBoardPage() {
   function closeAutoRoster() { autoRunId.current++; setAutoOpen(false); setAutoArmed(false) }
   function autoRosterApplied(result: AutoRosterApplyResultDto, rows: AutoRosterRowText[], stillOpen: number) {
     const n = result.applied.length, skipped = result.skipped.length
-    const changed = skipped === 1 ? '1 shift changed since the draft and was left as it was' : `${skipped} shifts changed since the draft and were left as they were`
+    const changed = skipped === 1 ? '1 shift was left as it was' : `${skipped} shifts were left as they were`
     const text = new Map(rows.map(r => [r.shiftId, r.text]))
     if (skipped > 0) setSkippedNotice({ title: changed, lines: result.skipped.map(k => ({ shiftId: k.shiftId, text: `${text.get(k.shiftId) ?? 'A shift'}: ${k.message}` })) })
     const rostered = n === 0 ? 'No shifts rostered.' : `Rostered ${plural(n, 'shift')}.`
@@ -1010,7 +1010,7 @@ export default function RosterBoardPage() {
         description={participantFilter || regionFilter || unfilledOnly ? `${formatWeekRange(days)}. Covers every participant, not just the filtered view.` : formatWeekRange(days)}
         run={autoRun}
         onRetryRun={runAutoRoster}
-        onApply={rows => applyAuto.mutateAsync({ weekStart: autoWeek.current, rows })}
+        onApply={(rows, splits) => applyAuto.mutateAsync({ weekStart: autoWeek.current, rows, splits })}
         onApplied={autoRosterApplied}
         onArmedChange={setAutoArmed}
       />

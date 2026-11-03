@@ -39,12 +39,17 @@ function draftFor(weekStart, name) {
       recommendations: [{ kind: 'OverGoal', staffId: 'w-ava', text: 'Ava Nguyen would be 4 h over their goal' }] },
     { shiftId: 'auto-open-3', participantName: 'Dan Osei', serviceDate: addDays(weekStart, 3), startTime: '16:00:00', endTime: '20:00:00', reason: 'NobodyFree', recommendations: [] },
   ]
-  return { weekStart, generatedAt: new Date().toISOString(), changes, hours, uncovered }
+  // One shift nobody could work whole: Jo Park until 1pm, Eli Brooks after (a split, PR3).
+  const splits = [{
+    shiftId: 'auto-split-1', participantId: 'p-2', participantName: 'Dan Osei', serviceDate: addDays(weekStart, 1), startTime: '09:00:00', endTime: '17:00:00', cutAt: '13:00:00',
+    first: { staffId: 'w-jo', staffName: 'Jo Park' }, second: { staffId: 'w-eli', staffName: 'Eli Brooks' },
+  }]
+  return { weekStart, generatedAt: new Date().toISOString(), changes, hours, uncovered, splits }
 }
 
 const post = [
   ['rostering/weeks/:id/auto-roster', (weekStart, _body, searchParams) => draftFor(weekStart, searchParams && searchParams.get('fixture'))],
-  ['rostering/weeks/:id/auto-roster/apply', (_weekStart, body) => ({ applied: ((body && body.rows) || []).map((r) => r.shiftId), skipped: [] })],
+  ['rostering/weeks/:id/auto-roster/apply', (_weekStart, body) => ({ applied: [...((body && body.rows) || []), ...((body && body.splits) || [])].map((r) => r.shiftId), skipped: [] })],
 ]
 
 module.exports = { post, draftFor }

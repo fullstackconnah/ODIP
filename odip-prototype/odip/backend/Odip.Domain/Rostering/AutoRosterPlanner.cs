@@ -18,6 +18,9 @@ public interface IAutoRosterOracle
 
     /// <summary>The probe is placed: later checks see its worker as booked.</summary>
     void Book(Shift probe);
+
+    /// <summary>The stretches of the probe's day (start to end) its worker has no unavailability window over (approved leave, a marked-unavailable row, a recurring rule), in time order. Empty when nothing is free.</summary>
+    IReadOnlyList<(TimeOnly Start, TimeOnly End)> FreeSegments(Shift probe);
 }
 
 /// <summary>A person in the candidate pool, with the goal and the hours already rostered this week.</summary>
@@ -41,7 +44,10 @@ public sealed record AutoRosterRecommendation(AutoRosterRecommendationKind Kind,
 
 public sealed record AutoRosterUncovered(Guid ShiftId, UncoveredReason Reason, IReadOnlyList<AutoRosterRecommendation> Recommendations);
 
-public sealed record AutoRosterPlan(IReadOnlyList<AutoRosterPlacement> Placements, IReadOnlyList<AutoRosterUncovered> Uncovered);
+/// <summary>A shift two people cover: <see cref="FirstStaffId"/> from the shift's start to <see cref="CutAt"/>, <see cref="SecondStaffId"/> from there to its end (R7 PR3, D9).</summary>
+public sealed record AutoRosterSplit(Guid ShiftId, TimeOnly CutAt, Guid FirstStaffId, Guid SecondStaffId);
+
+public sealed record AutoRosterPlan(IReadOnlyList<AutoRosterPlacement> Placements, IReadOnlyList<AutoRosterUncovered> Uncovered, IReadOnlyList<AutoRosterSplit> Splits);
 
 /// <summary>
 /// R7 auto-roster: a deterministic greedy fill of a week's open shifts (D8). Pass 1 gives each shift to its live regular when they are free; pass 2 fills the rest, most-constrained shift
@@ -71,6 +77,7 @@ public static class AutoRosterPlanner
         var draft = pool.ToDictionary(w => w.Id, _ => 0m);
         var placements = new List<AutoRosterPlacement>();
         var uncovered = new List<AutoRosterUncovered>();
+        var stuck = new List<Shift>();
         var shifts = input.OpenShifts.OrderBy(s => s.ServiceDate).ThenBy(s => s.StartTime).ThenBy(s => s.Id).ToList();
 
         Candidate Evaluate(Shift shift, AutoRosterWorker worker)
@@ -156,12 +163,60 @@ public static class AutoRosterPlanner
             }
 
             uncovered.Add(new AutoRosterUncovered(shift.Id, ReasonFor(pool.Count, all), RecommendationsFor(shift, all, Ordered, HoursOf)));
+            stuck.Add(shift);
+        }
+
+        // Pass 3 (D9): a shift nobody could take whole may go to two people, cut where one person's availability ends. Each part is probed like any placement.
+        // shortcut: never an overnight, sleepover or group (above 1:1) shift, and only a free prefix or suffix of one person's day is cut (not a gap in the middle); the pair is chosen by
+        // tier, rank and load without balancing towards goal hours. Widen if coordinators ask.
+        var splits = new List<AutoRosterSplit>();
+        foreach (var shift in stuck)
+        {
+            if (shift.EndsNextDay || shift.NightType != SleepoverType.None || shift.Ratio != SupportRatio.OneToOne) continue;
+            var options = new List<(Candidate First, Candidate Second, TimeOnly Cut)>();
+            foreach (var worker in pool)
+                foreach (var (from, to) in oracle.FreeSegments(Probe(shift, worker.Id)))
+                {
+                    var prefix = from == shift.StartTime && to < shift.EndTime;
+                    if (!prefix && !(to == shift.EndTime && from > shift.StartTime)) continue;
+                    var cut = prefix ? to : from;
+                    var (first, second) = (Part(shift, shift.StartTime, cut), Part(shift, cut, shift.EndTime));
+                    if (first.DurationHours < AutoRosterRules.MinSplitSegmentHours || second.DurationHours < AutoRosterRules.MinSplitSegmentHours) continue;
+                    var (mine, theirs) = prefix ? (first, second) : (second, first);
+                    var own = Evaluate(mine, worker);
+                    if (own.Kind != Kind.Eligible) continue;
+                    var other = Ordered(pool.Where(w => w.Id != worker.Id).Select(w => Evaluate(theirs, w)).Where(c => c.Kind == Kind.Eligible), theirs).FirstOrDefault();
+                    if (other is null) continue;
+                    options.Add(prefix ? (own, other, cut) : (other, own, cut));
+                }
+
+            if (options.Count == 0) continue;
+            var (a, b, at) = options
+                .OrderBy(o => o.First.Tier + o.Second.Tier).ThenBy(o => o.First.Rank + o.Second.Rank).ThenBy(o => Load(o.First.Worker) + Load(o.Second.Worker))
+                .ThenBy(o => o.First.Worker.Name, StringComparer.OrdinalIgnoreCase).ThenBy(o => o.First.Worker.Id)
+                .ThenBy(o => o.Second.Worker.Name, StringComparer.OrdinalIgnoreCase).ThenBy(o => o.Second.Worker.Id).ThenBy(o => o.Cut).First();
+            foreach (var (part, c) in new[] { (Part(shift, shift.StartTime, at), a), (Part(shift, at, shift.EndTime), b) })
+            {
+                oracle.Book(Probe(part, c.Worker.Id));
+                draft[c.Worker.Id] += part.DurationHours;
+            }
+
+            splits.Add(new AutoRosterSplit(shift.Id, at, a.Worker.Id, b.Worker.Id));
+            uncovered.RemoveAll(u => u.ShiftId == shift.Id);
         }
 
         // shifts is already in (date, start, id) order, so a shift's index is its sort key.
         var position = shifts.Select((s, i) => (s.Id, i)).ToDictionary(x => x.Id, x => x.i);
-        return new AutoRosterPlan(placements.OrderBy(p => position[p.ShiftId]).ToList(), uncovered.OrderBy(u => position[u.ShiftId]).ToList());
+        return new AutoRosterPlan(placements.OrderBy(p => position[p.ShiftId]).ToList(), uncovered.OrderBy(u => position[u.ShiftId]).ToList(),
+            splits.OrderBy(s => position[s.ShiftId]).ToList());
     }
+
+    /// <summary>One part of a split shift, start to end, for the roster rules to judge. Never the tracked row.</summary>
+    private static Shift Part(Shift shift, TimeOnly start, TimeOnly end) => new()
+    {
+        Id = shift.Id, ParticipantId = shift.ParticipantId, ServiceDate = shift.ServiceDate, StartTime = start, EndTime = end,
+        EndsNextDay = false, Ratio = shift.Ratio, NightType = shift.NightType,
+    };
 
     private static AutoRosterPick PickOf(CompatibilityLevel? level) => level switch
     {

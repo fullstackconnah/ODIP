@@ -12,9 +12,9 @@ namespace Odip.Tests.Rostering;
 /// <summary>R7 auto-roster planner (D8): the ordering key, the regular pass, the away and hours refusals, and that the same input always gives the same plan. Runs on the real roster rules via a Snapshot.</summary>
 public class AutoRosterPlannerTests
 {
-    private static readonly DateOnly Monday = new(2026, 11, 2);
+    internal static readonly DateOnly Monday = new(2026, 11, 2);
 
-    private sealed class World : IAsyncDisposable
+    internal sealed class World : IAsyncDisposable
     {
         public OdipDbContext Db { get; } = NewDb(Guid.NewGuid().ToString());
         public Participant Mia { get; }
@@ -97,6 +97,8 @@ public class AutoRosterPlannerTests
         public bool NeedsOverride(IReadOnlyList<RosterFinding> findings) => inner.NeedsOverride(findings);
 
         public void Book(Shift probe) => inner.Book(probe);
+
+        public IReadOnlyList<(TimeOnly Start, TimeOnly End)> FreeSegments(Shift probe) => inner.FreeSegments(probe);
     }
 
     [Fact]

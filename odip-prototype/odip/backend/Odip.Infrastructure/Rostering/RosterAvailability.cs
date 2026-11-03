@@ -135,6 +135,23 @@ public sealed class RosterAvailability(OdipDbContext db, IStaffUnavailabilityQue
         public static string? ReasonOf(RosterFinding finding) =>
             AwayReasons.GetValueOrDefault(finding.Code) ?? (finding.Severity == RosterFindingSeverity.Blocking ? "can't work this shift" : null);
 
+        /// <summary>The stretches of the candidate's day (not overnight) its worker has no approved leave, unavailable row or recurring rule over, in time order. Pending requests do not cut the day: the planner's own check of each part still refuses them.</summary>
+        public IReadOnlyList<(TimeOnly Start, TimeOnly End)> FreeSegments(Shift candidate)
+        {
+            if (candidate.UserId is not { } userId || candidate.EndsNextDay) return [];
+            var (dayStart, dayEnd) = (candidate.ServiceDate.ToDateTime(candidate.StartTime), candidate.ServiceDate.ToDateTime(candidate.EndTime));
+            var free = new List<(TimeOnly Start, TimeOnly End)>();
+            var cursor = dayStart;
+            foreach (var w in windows.Where(w => w.UserId == userId && w.Kind is not (UnavailabilityKind.PendingLeave or UnavailabilityKind.PendingRecurringRule) && w.End > dayStart && w.Start < dayEnd).OrderBy(w => w.Start))
+            {
+                if (w.Start > cursor) free.Add((TimeOnly.FromDateTime(cursor), TimeOnly.FromDateTime(w.Start)));
+                if (w.End > cursor) cursor = w.End;
+            }
+
+            if (cursor < dayEnd) free.Add((TimeOnly.FromDateTime(cursor), TimeOnly.FromDateTime(dayEnd)));
+            return free;
+        }
+
         /// <summary>A shift placed in this batch: later checks see the worker as booked.</summary>
         public void Add(Shift shift) => _shifts.Add(shift);
 
