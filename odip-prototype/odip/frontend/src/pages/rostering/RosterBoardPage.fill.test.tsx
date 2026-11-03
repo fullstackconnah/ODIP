@@ -52,6 +52,7 @@ function renderPage() {
   const router = createMemoryRouter([{ path: '/rostering', element: <RosterBoardPage /> }], { initialEntries: ['/rostering?date=2026-08-17'] })
   return render(<QueryClientProvider client={queryClient}><RouterProvider router={router} /></QueryClientProvider>)
 }
+const openFill = () => userEvent.click(screen.getByRole('button', { name: 'Next 8 weeks' }))
 const plot = () => screen.getByRole('group', { name: /Shifts filled and open for each of the next 8 weeks/ })
 const heading = () => document.getElementById('roster-week-heading')
 const lastWeekAsked = () => h.board.mock.calls[h.board.mock.calls.length - 1][0]
@@ -61,49 +62,55 @@ beforeEach(() => {
   h.fill.mockReturnValue({ data: FILL, isLoading: false, isError: false, error: null, refetch: vi.fn() })
   showBoard(board(PUBLISHED))
   localStorage.clear()
-  localStorage.setItem('odip.roster.fillHidden', '0') // jsdom measures 0px wide, which would start the card collapsed
   sessionStorage.clear()
 })
 
-describe('the fill card on the Rostering page', () => {
-  it.each(['SuperAdmin', 'Admin', 'Coordinator'])('%s sees the card', role => {
+describe('the fill chart on the Rostering page (Next 8 weeks, roster declutter 2026-11-03)', () => {
+  it.each(['SuperAdmin', 'Admin', 'Coordinator'])('%s gets a Next 8 weeks button, and the chart is not on the page until it is pressed', async role => {
     as(role)
     renderPage()
-    expect(screen.getByRole('heading', { name: 'How full the next weeks are' })).toBeTruthy()
+    expect(screen.queryByRole('group', { name: /Shifts filled and open/ })).toBeNull()
+    await openFill()
+    const panel = screen.getByRole('dialog', { name: 'Next 8 weeks' })
+    expect(within(panel).getByRole('group', { name: /Shifts filled and open for each of the next 8 weeks/ })).toBeTruthy()
+    expect(within(panel).queryByRole('heading', { name: 'How full the next weeks are' })).toBeNull()
   })
 
-  it('an unstarted week puts the Start card first and the chart below it', () => {
+  it('an unstarted week shows the Start card, and the fill chart stays behind its button', () => {
     as('Admin')
     showBoard({ ...board(DRAFTS), weekStarted: false, canStart: true } as RosterBoardDto)
     const { container } = renderPage()
-    const card = screen.getByRole('region', { name: "This week hasn't been started" })
-    const chart = screen.getByRole('heading', { name: 'How full the next weeks are' })
-    expect(card.compareDocumentPosition(chart) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByRole('region', { name: "This week hasn't been started" })).toBeTruthy()
+    expect(screen.queryByRole('group', { name: /Shifts filled and open/ })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Next 8 weeks' })).toBeTruthy()
     expect(container.querySelector('[inert]')).toBeNull()
   })
 
-  it.each(['SupportWorker', 'ReadOnly'])('%s does not see the card', role => {
+  it.each(['SupportWorker', 'ReadOnly'])('%s has no Next 8 weeks button', role => {
     as(role)
     renderPage()
-    expect(screen.queryByRole('heading', { name: 'How full the next weeks are' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Next 8 weeks' })).toBeNull()
   })
 
-  it('choosing a week with nothing to publish moves the board there', () => {
+  it('choosing a week with nothing to publish closes the panel and moves the board there', async () => {
     as('Admin')
     renderPage()
+    await openFill()
     const p = plot()
     p.focus()
     fireEvent.keyDown(p, { key: 'ArrowRight' })
     fireEvent.keyDown(p, { key: 'Enter' })
     expect(screen.queryByRole('alertdialog')).toBeNull()
+    expect(screen.queryByRole('dialog', { name: 'Next 8 weeks' })).toBeNull()
     expect(lastWeekAsked()).toBe('2026-08-24')
   })
 
-  it('choosing a week with publishable drafts asks first; Stay keeps the week and returns focus to the chart, Leave moves', async () => {
+  it('choosing a week with publishable drafts asks first; Stay keeps the week and returns focus to Next 8 weeks, Leave moves', async () => {
     as('Admin')
     showBoard(board(DRAFTS))
     renderPage()
     const week = heading()?.textContent
+    await openFill()
     const p = plot()
     p.focus()
     fireEvent.keyDown(p, { key: 'ArrowRight' })
@@ -111,8 +118,9 @@ describe('the fill card on the Rostering page', () => {
     const dialog = screen.getByRole('alertdialog', { name: 'Leave without publishing?' })
     await userEvent.click(within(dialog).getByRole('button', { name: 'Stay' }))
     expect(heading()?.textContent).toBe(week)
-    await waitFor(() => expect(plot()).toHaveFocus())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next 8 weeks' })).toHaveFocus())
 
+    await openFill()
     fireEvent.keyDown(plot(), { key: 'ArrowRight' })
     fireEvent.keyDown(plot(), { key: 'Enter' })
     await userEvent.click(screen.getByRole('button', { name: 'Leave without publishing' }))

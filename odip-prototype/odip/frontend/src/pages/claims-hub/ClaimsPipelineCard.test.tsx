@@ -16,7 +16,7 @@ const PIPE: PipelineDto = {
   withNdia: 300, acceptedUnpaid: 0, undatedPaid: 0,
 }
 const ok = (data: PipelineDto = PIPE, extra = {}) => mockUsePipeline.mockReturnValue({ data, isLoading: false, isError: false, error: null, refetch: vi.fn(), ...extra })
-const renderCard = (props: { rejectedCount?: number; onShowRejected?: () => void } = {}) => render(<ClaimsPipelineCard rejectedCount={props.rejectedCount ?? 0} onShowRejected={props.onShowRejected ?? vi.fn()} />)
+const renderCard = () => render(<ClaimsPipelineCard />)
 
 let width = 700
 beforeAll(() => {
@@ -92,32 +92,34 @@ describe('ClaimsPipelineCard', () => {
     expect(xLabels()).toEqual(['24 Aug', '14 Sep', '5 Oct', '26 Oct', 'so far'])
   })
 
-  it('the hide toggle persists, hides the chart body and keeps the sentence', async () => {
+  it('starts hidden with no stored choice; Show chart opens the body and the sentence stays', async () => {
     renderCard()
-    expect(screen.getByRole('button', { name: 'Hide chart' }).getAttribute('aria-expanded')).toBe('true')
-    await userEvent.click(screen.getByRole('button', { name: 'Hide chart' }))
-    expect(window.localStorage.getItem('odip.claims.pipelineHidden')).toBe('1')
     const toggle = screen.getByRole('button', { name: 'Show chart' })
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
     expect(document.getElementById(toggle.getAttribute('aria-controls')!)?.hasAttribute('hidden')).toBe(true)
     expect(screen.getByText(/sent to the NDIA in the last 12 weeks/)).toBeTruthy()
+    await userEvent.click(toggle)
+    expect(window.localStorage.getItem('odip.claims.pipelineHidden')).toBe('0')
+    expect(screen.getByRole('button', { name: 'Hide chart' }).getAttribute('aria-expanded')).toBe('true')
+  })
+
+  it('a stored choice of shown wins over the hidden default', () => {
+    window.localStorage.setItem('odip.claims.pipelineHidden', '0')
+    renderCard()
+    expect(screen.getByRole('button', { name: 'Hide chart' }).getAttribute('aria-expanded')).toBe('true')
   })
 
   it('keeps working when storage is unreadable or unwritable', async () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked') })
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked') })
     renderCard()
-    await userEvent.click(screen.getByRole('button', { name: 'Hide chart' }))
-    expect(screen.getByRole('button', { name: 'Show chart' })).toBeTruthy()
+    await userEvent.click(screen.getByRole('button', { name: 'Show chart' }))
+    expect(screen.getByRole('button', { name: 'Hide chart' })).toBeTruthy()
   })
 
-  it('the rejected link shows only when there are rejected lines, and calls onShowRejected', async () => {
-    const onShowRejected = vi.fn()
-    const none = renderCard({ rejectedCount: 0, onShowRejected })
-    expect(screen.queryByRole('button', { name: /rejected/ })).toBeNull()
-    none.unmount()
-    renderCard({ rejectedCount: 1, onShowRejected })
-    await userEvent.click(screen.getByRole('button', { name: '1 rejected line needs action' }))
-    expect(onShowRejected).toHaveBeenCalledOnce()
+  it('carries no rejected link: the To do strip owns it', () => {
+    renderCard()
+    expect(document.body.textContent).not.toMatch(/rejected line/)
   })
 
   it('the undated footnote shows only when dollars were paid before payments were dated', () => {
@@ -130,6 +132,7 @@ describe('ClaimsPipelineCard', () => {
   })
 
   it('keyboard: focus lands on this week and speaks it; the keys move; Escape hides the readout', () => {
+    window.localStorage.setItem('odip.claims.pipelineHidden', '0') // the chart starts collapsed; the keys need it open
     renderCard()
     fireEvent.focus(plot())
     expect(document.body.textContent).toContain('Week of 26 October: $300.00 sent, $0.00 paid, $0.00 rejected.')

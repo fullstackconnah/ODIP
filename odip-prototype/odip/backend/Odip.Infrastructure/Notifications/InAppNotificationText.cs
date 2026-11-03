@@ -69,7 +69,7 @@ public static class InAppNotificationText
     private static string Leave(string leaveType) => leaveType == "Other" ? "leave" : $"{Words(leaveType)} leave";
 
     /// <summary>An enum name the payloads carry, in words: "BehaviourOfConcern" reads "behaviour of concern".</summary>
-    private static string Words(string? name)
+    internal static string Words(string? name)
     {
         if (string.IsNullOrEmpty(name)) return string.Empty; // a null must not throw inside the caller's save
         var words = new StringBuilder(name.Length + 4);
