@@ -41,6 +41,8 @@ vi.mock('@/api/hooks', async (importOriginal) => {
     useWhatsNew: () => ({ data: { entries: [], unreadCount: 0, popup: [] }, isError: false, refetch: vi.fn() }),
     useMarkWhatsNewSeen: () => ({ mutate: vi.fn() }),
     useMarkWhatsNewPopupSeen: () => ({ mutate: vi.fn() }),
+    // The Report a problem dialog sends through a mutation; this suite only opens and closes it (ReportProblemDialog.test.tsx covers sending).
+    useSendProblemReport: () => ({ mutate: vi.fn(), isPending: false }),
   }
 })
 
@@ -690,11 +692,15 @@ describe('AppLayout — no New Trip shortcut in the sidebar, the drawer or the b
     expect(container).not.toHaveTextContent(/new trip/i)
   })
 
-  it.each(ROLES)('has no call to action in the sidebar for %s: outside the Main nav its only control is Sign out', role => {
+  // The foot above Sign out carries "Report a problem" for everyone signed in to an organisation; a SuperAdmin with no organisation in view has no
+  // organisation to report from (the server refuses with a 400), so the row is hidden for them.
+  const footControls = (role: string) => (role === 'SuperAdmin' ? ['Sign out'] : ['Report a problem', 'Sign out'])
+
+  it.each(ROLES)('has no call to action in the sidebar for %s: outside the Main nav its only controls are Report a problem and Sign out', role => {
     signIn(role)
     renderAt('/trips')
 
-    expect(controlsOutsideNav()).toEqual(['Sign out'])
+    expect(controlsOutsideNav()).toEqual(footControls(role))
     expect(sidebar().querySelector('a[href^="/trips/new"]')).toBeNull()
     expect(sidebar()).not.toHaveTextContent(/new trip/i)
   })
@@ -707,7 +713,7 @@ describe('AppLayout — no New Trip shortcut in the sidebar, the drawer or the b
     // Open: the same <aside> slides in, so this is the drawer a phone user sees.
     expect(screen.getByRole('button', { name: 'Close menu' })).toHaveAttribute('aria-expanded', 'true')
     expect(sidebar()).toHaveClass('translate-x-0')
-    expect(controlsOutsideNav()).toEqual(['Sign out'])
+    expect(controlsOutsideNav()).toEqual(footControls(role))
     expect(sidebar().querySelector('a[href^="/trips/new"]')).toBeNull()
     expect(sidebar()).not.toHaveTextContent(/new trip/i)
   })
@@ -1363,6 +1369,56 @@ describe('AppLayout — Sign out', () => {
     fireEvent.click(screen.getByRole('button', { name: /Sign out$/ }))
 
     expect(mockEndSession).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('AppLayout — Report a problem', () => {
+  const signIn = (role: string) => localStorage.setItem('odip_user', JSON.stringify({ role }))
+  afterEach(() => {
+    localStorage.clear()
+    sessionStorage.clear()
+  })
+
+  it('sits in the foot above Sign out and opens the dialog', () => {
+    signIn('Coordinator')
+    renderAt('/trips')
+    const foot = document.querySelector('[data-foot]') as HTMLElement
+    const names = Array.from(foot.querySelectorAll('button')).map(b => b.textContent?.trim())
+    expect(names.slice(0, 2)).toEqual(['Report a problem', 'Sign out'])
+
+    fireEvent.click(within(foot).getByRole('button', { name: 'Report a problem' }))
+    expect(screen.getByRole('dialog', { name: 'Report a problem' })).toBeInTheDocument()
+  })
+
+  it('is there for a SupportWorker on the portal', () => {
+    signIn('SupportWorker')
+    renderAt('/portal')
+    expect(screen.getAllByRole('button', { name: 'Report a problem' }).length).toBeGreaterThan(0)
+  })
+
+  it('is hidden for a SuperAdmin with no organisation in view, and back once one is', () => {
+    signIn('SuperAdmin')
+    const { unmount } = renderAt('/trips')
+    expect(screen.queryByRole('button', { name: 'Report a problem' })).not.toBeInTheDocument()
+    unmount()
+
+    sessionStorage.setItem('odip_viewing_tenant', 'b0b0b0b0-0000-4000-8000-000000000001')
+    renderAt('/trips')
+    expect(screen.getByRole('button', { name: 'Report a problem' })).toBeInTheDocument()
+  })
+
+  it('from the drawer: closes the drawer, opens the dialog, and gives the focus back to the menu button when it closes', () => {
+    signIn('Coordinator')
+    renderAt('/trips')
+    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }))
+    fireEvent.click(within(document.querySelector('aside') as HTMLElement).getByRole('button', { name: 'Report a problem' }))
+
+    expect(screen.getByRole('dialog', { name: 'Report a problem' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open menu' })).toHaveAttribute('aria-expanded', 'false')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog', { name: 'Report a problem' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open menu' })).toHaveFocus()
   })
 })
 

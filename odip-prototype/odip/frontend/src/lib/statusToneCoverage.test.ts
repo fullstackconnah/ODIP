@@ -73,6 +73,7 @@ const NOT_A_PILL: Record<string, string> = {
   ClaimBatchStatus: `a claim file's stage; the Claims page shows a step badge derived from it (claimHubSteps), never the word`,
   EndEarlyStatus: 'what a call to End early came to, between the service and its controller; the controller turns it into an HTTP status and the screen reads the sentence, never this word',
   DraftDeleteStatus: 'what a call to delete an agreement draft came to, between the service and its controller; the controller turns it into an HTTP status and the screen reads the sentence, never this word',
+  ProblemReportStatus: 'whether a "Report a problem" note has reached the Work Board; the dialog prints its own Sent or Saved sentence from the answer, never a pill',
 }
 
 /** The extra enums the walk treats as statuses although their names do not end in "Status" (they are pills too). */

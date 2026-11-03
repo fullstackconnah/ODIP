@@ -3276,6 +3276,10 @@ const postRoutes = [
   ['notifications/inbox/:id/read', (id) => markInAppRead(id)],
   ['whats-new/seen', () => true],
   ['whats-new/popup-seen', () => true],
+  // Report a problem: the real endpoint saves the note and tries the Work Board once; the mock always reaches it. Blank text is the one 400.
+  ['problem-reports', (body) => (typeof body.text === 'string' && body.text.trim()
+    ? respond(201, ok({ id: 'pr-' + Date.now(), status: 'Sent' }))
+    : respond(400, failEnvelope(null, ['Write a few words about what went wrong.'])))],
   ['admin/whats-new', (body) => {
     const row = whatsNewSave({ id: 'wn-' + String(whatsNewRows.length + 1).padStart(4, '0'), key: 'admin-' + Date.now(), publishedAtUtc: new Date().toISOString() }, body)
     whatsNewRows.unshift(row)
