@@ -62,13 +62,15 @@ public sealed class BudgetListService
                 foreach (var pool in plan.Pools)
                 {
                     if (pool.Periods.FirstOrDefault(p => p.IsCurrent) is not { } period) continue;
+                    var refusal = NdiaWordOn(ndia, participantId, pool.Pool.Id);
+                    var pace = period.PaceAt(ledger.Today)?.RunsOutOn;
                     rows.Add((new BudgetListRowDto
                     {
                         ParticipantId = participantId, ParticipantName = ledger.Name, PoolId = pool.Pool.Id, PoolName = BudgetText.PoolLabel(pool.Pool, severalCorePools), Kind = pool.Pool.Kind,
                         ManagementType = pool.Pool.ManagementType, PeriodStart = period.Period.PeriodStart, PeriodEnd = period.Period.PeriodEnd, Available = period.Available, Carried = period.Carried,
                         Used = period.Used, Remaining = period.Available - period.Used, BookedAhead = period.BookedAhead, Forecast = period.Forecast, Status = period.Status,
-                        PaceRunsOutOn = period.PaceAt(ledger.Today)?.RunsOutOn,
-                        UnpricedShiftCount = period.UnpricedShiftCount, NdiaRejection = NdiaWordOn(ndia, participantId, pool.Pool.Id),
+                        ListStatus = ListStatusOf(period.Status, refusal is not null, pace is not null), PaceRunsOutOn = pace,
+                        UnpricedShiftCount = period.UnpricedShiftCount, NdiaRejection = refusal,
                     }, pool.Pool.Position));
                     added++;
                 }
@@ -92,7 +94,7 @@ public sealed class BudgetListService
         return new BudgetListDto
         {
             AsOf = first.Today, ApproachingPercent = first.ApproachingPercent,
-            Rows = rows.OrderBy(r => Rank(r.Row.Status, r.Row.NdiaRejection is not null, r.Row.PaceRunsOutOn is not null)).ThenBy(r => r.Row.ParticipantName, StringComparer.OrdinalIgnoreCase).ThenBy(r => r.Row.ParticipantId).ThenBy(r => r.PoolPosition).Select(r => r.Row).ToList(),
+            Rows = rows.OrderBy(r => r.Row.ListStatus).ThenBy(r => r.Row.ParticipantName, StringComparer.OrdinalIgnoreCase).ThenBy(r => r.Row.ParticipantId).ThenBy(r => r.PoolPosition).Select(r => r.Row).ToList(),
             NoBudget = noBudget.OrderBy(n => n.ParticipantName, StringComparer.OrdinalIgnoreCase).ThenBy(n => n.ParticipantId).ToList(),
         };
     }
@@ -104,17 +106,17 @@ public sealed class BudgetListService
             : null;
 
     /// <summary>
-    /// The order of risk: Over first, then a pool the NDIA has refused a claim of for want of funds (its word is as Critical as Over, whatever ODIP's arithmetic says, and a list that buried it under On
-    /// track would be silent about the one case the feature exists to catch), then Forecast over, then Approaching, then On track with a pace warning, then On track.
+    /// The one word a row is printed as, and so the order of risk (the enum is in that order): Over first, then a pool the NDIA has refused a claim of for want of funds (its word is as Critical as Over,
+    /// whatever ODIP's arithmetic says, and a list that buried it under On track would be silent about the one case the feature exists to catch), then Forecast over, then Approaching, then On track
+    /// with a pace warning, then On track.
     /// </summary>
-    private static int Rank(BudgetStatus status, bool refusedByNdia, bool paced) => status switch
+    private static BudgetListStatus ListStatusOf(BudgetStatus status, bool refusedByNdia, bool paced) => status switch
     {
-        BudgetStatus.Over => 0,
-        _ when refusedByNdia => 1,
-        BudgetStatus.ForecastOver => 2,
-        BudgetStatus.Approaching => 3,
-        BudgetStatus.OnTrack when paced => 4,
-        BudgetStatus.OnTrack => 5,
-        _ => 6,
+        BudgetStatus.Over => BudgetListStatus.Over,
+        _ when refusedByNdia => BudgetListStatus.FundsRanOut,
+        BudgetStatus.ForecastOver => BudgetListStatus.ForecastOver,
+        BudgetStatus.Approaching => BudgetListStatus.Approaching,
+        BudgetStatus.OnTrack when paced => BudgetListStatus.SpendingFast,
+        _ => BudgetListStatus.OnTrack,
     };
 }
