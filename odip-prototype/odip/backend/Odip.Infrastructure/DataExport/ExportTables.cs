@@ -44,6 +44,7 @@ public static class ExportTables
         [typeof(EmploymentHeroConnection)] = "Integration credentials (encrypted API key) and connection settings: never exported.",
         [typeof(AuditLog)] = "The change history (audit log). It has no organisation column, so it can't yet be separated safely from other organisations' history.",
         [typeof(NotificationOutbox)] = "Queued notification messages and their contents.",
+        [typeof(ProblemReport)] = "\"Report a problem\" notes sent to the Bunya Support team. Free text that is kept for 90 days once sent, and the Work Board card is the record.",
         [typeof(InAppNotification)] = "Bell notices for each person. They are short-lived and purged after 90 days, like the queued notification messages.",
         [typeof(SupportCatalogueItem)] = "The NDIS support catalogue, which is the same for every organisation.",
         [typeof(SupportActivityGroup)] = "The support catalogue's activity groups, which are the same for every organisation.",

@@ -37,12 +37,14 @@ public class ReadOnlyMiddleware
     private static readonly string[] AuthPrefix = { "api", "v1", "auth" };
     private static readonly string[] MicrosoftAuthPrefix = { "api", "v1", "auth", "microsoft" };
     private static readonly string[] WhatsNewPrefix = { "api", "v1", "whats-new" };
+    private static readonly string[] ProblemReportsPath = { "api", "v1", "problem-reports" };
 
     /// <summary>
     /// The bell's two read marks change only the caller's own read state (NotificationsController keys them on the JWT
     /// subject), so a ReadOnly user can clear their own badge (dashboard SHAPE call 9). Exactly
     /// POST api/v1/notifications/inbox/{guid}/read and POST api/v1/notifications/inbox/read-all, matched segment by segment.
     /// What's new works the same way: POST api/v1/whats-new/seen and POST api/v1/whats-new/popup-seen only change the caller's own read marks.
+    /// A ReadOnly user can also tell us about a problem: exactly POST api/v1/problem-reports (no further segments) adds one note and changes no organisation data.
     /// </summary>
     private static bool IsOwnReadMark(HttpRequest request)
     {
@@ -51,6 +53,7 @@ public class ReadOnlyMiddleware
         // Signing out and renewing a Microsoft session change no data, and a ReadOnly user must be able to do both.
         if (segments.Length == 4 && segments.Take(3).SequenceEqual(AuthPrefix, StringComparer.OrdinalIgnoreCase) && string.Equals(segments[3], "logout", StringComparison.OrdinalIgnoreCase)) return true;
         if (segments.Length == 5 && segments.Take(4).SequenceEqual(MicrosoftAuthPrefix, StringComparer.OrdinalIgnoreCase) && string.Equals(segments[4], "refresh", StringComparison.OrdinalIgnoreCase)) return true;
+        if (segments.Length == 3 && segments.SequenceEqual(ProblemReportsPath, StringComparer.OrdinalIgnoreCase)) return true;
         if (segments.Length == 4 && segments.Take(3).SequenceEqual(WhatsNewPrefix, StringComparer.OrdinalIgnoreCase))
             return string.Equals(segments[3], "seen", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(segments[3], "popup-seen", StringComparison.OrdinalIgnoreCase);

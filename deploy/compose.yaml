@@ -58,6 +58,13 @@ services:
       - Microsoft__ClientId=${MICROSOFT_CLIENT_ID:-}
       - Microsoft__ClientSecret=${MICROSOFT_CLIENT_SECRET:-}
       - Microsoft__PublicBaseUrl=${MICROSOFT_PUBLIC_BASE_URL:-}
+      # Problem reports (Report a problem) go to the Work Board. BaseUrl is the board's LAN address, not 127.0.0.1 (that is this container). Empty = reports stay saved.
+      - WorkBoard__BaseUrl=${WORKBOARD_BASE_URL:-}
+      - WorkBoard__Token=${WORKBOARD_TOKEN:-}
+      - WorkBoard__ProjectId=${WORKBOARD_PROJECT_ID:-}
+      - WorkBoard__ViewId=${WORKBOARD_VIEW_ID:-}
+      - WorkBoard__BucketId=${WORKBOARD_BUCKET_ID:-}
+      - WorkBoard__LabelId=${WORKBOARD_LABEL_ID:-}
       - DataProtection__KeysPath=/keys
     depends_on:
       db:

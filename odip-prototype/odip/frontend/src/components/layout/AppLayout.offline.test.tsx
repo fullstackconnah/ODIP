@@ -27,6 +27,7 @@ vi.mock('@/api/hooks', async (importOriginal) => {
     useWhatsNew: () => ({ data: { entries: [], unreadCount: 0, popup: [] }, isError: false, refetch: vi.fn() }),
     useMarkWhatsNewSeen: () => ({ mutate: vi.fn() }),
     useMarkWhatsNewPopupSeen: () => ({ mutate: vi.fn() }),
+    useSendProblemReport: () => ({ mutate: vi.fn(), isPending: false }),
   }
 })
 vi.mock('@/api/client', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/api/client')>()), endSession: mockEndSession,
