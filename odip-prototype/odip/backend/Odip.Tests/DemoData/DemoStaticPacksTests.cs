@@ -353,7 +353,7 @@ public class DemoStaticPacksTests
         var only = Assert.Single(cell);
         Assert.Equal(CompatibilityLevel.Excluded, only.Level);
         Assert.Equal("Owner decision", only.Reason);
-        Assert.Equal(10, await check.StaffParticipantCompatibilities.CountAsync());           // 9 new + the owner's
+        Assert.Equal(12, await check.StaffParticipantCompatibilities.CountAsync());           // 11 new + the owner's
     }
 
     // ── emergency contacts ───────────────────────────────────────────────────
