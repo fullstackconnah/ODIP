@@ -142,6 +142,28 @@ public class BudgetLedgerServiceTests
     }
 
     [Fact]
+    public async Task D_ACompletedUnclaimedShiftIsEstimatedMinusItsAloneBreaks_SoTheEstimateEqualsTheClaim()   // W9 S5
+    {
+        var (kit, person, _) = Arrange();
+        kit.Db.ProviderSettings.Single().TimeZoneId = "Australia/Sydney";
+        var shift = kit.SeedShift(person, new DateOnly(2026, 10, 1), ShiftStatus.Completed);   // Thursday 09:00-17:00: 8 h x $60
+        var sydney = TimeZoneInfo.FindSystemTimeZoneById("Australia/Sydney");
+        DateTime At(int h, int m = 0) => ProviderLocalTime.LocalToUtc(new DateTime(2026, 10, 1, h, m, 0), sydney);
+        var completion = new ShiftCompletion { Id = Guid.NewGuid(), TenantId = kit.TenantId, ShiftId = shift.Id, TimeZoneId = "Australia/Sydney", IsActive = true, SubmittedByUserId = Guid.NewGuid(), ActualStart = At(9), ActualEnd = At(17) };
+        kit.Db.ShiftCompletions.Add(completion);
+        kit.Db.ShiftBreaks.Add(new ShiftBreak { Id = Guid.NewGuid(), TenantId = kit.TenantId, ShiftCompletionId = completion.Id, CreatedByUserId = Guid.NewGuid(), StartedAt = At(12), EndedAt = At(12, 30) });
+        kit.Db.ShiftBreaks.Add(new ShiftBreak { Id = Guid.NewGuid(), TenantId = kit.TenantId, ShiftCompletionId = completion.Id, CreatedByUserId = Guid.NewGuid(), StartedAt = At(14), EndedAt = At(14, 30), WithParticipant = true });
+        kit.Db.SaveChanges();
+
+        var q2 = Q2Of(await LedgerOf(kit, person));
+        var claim = await new ShiftClaimGenerationService(kit.Db, kit.Ledger, kit.Tenant).PreviewAsync(person.Id, new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 1));
+
+        Assert.Equal(450m, q2.Pending);   // 7.5 h x $60: only the break on their own comes off
+        Assert.Equal(claim.TotalAmount, q2.Pending);
+        Assert.Contains("7.5 h", Assert.Single(q2.Items).Description);
+    }
+
+    [Fact]
     public async Task ACompletedShiftThatHasAClaimLineIsCountedOnceThroughTheLine_NotAgainAsAShift()
     {
         var (kit, person, _) = Arrange();
@@ -1054,7 +1076,7 @@ public class BudgetLedgerServiceTests
         Assert.Equal(40, largeAnswer.Count);
         Assert.All(largeAnswer.Values, l => Assert.Equal(480m + 100m, Q2Of(l.Ledger!).Used));
         Assert.Equal(smallCount, largeCount);        // the catalogue and the holidays are read once, and nothing is a query per participant
-        Assert.InRange(largeCount, 1, 16);   // provider travel adds its fixed reads: settings, completions, patterns, agreement blocks
+        Assert.InRange(largeCount, 1, 17);   // provider travel adds its fixed reads: settings, completions, patterns, agreement blocks; the alone breaks add one (W9)
     }
 
     [Fact]
@@ -1073,7 +1095,7 @@ public class BudgetLedgerServiceTests
         await kit.Ledger.ForClaimAsync(kit.TenantId, claim.Id, Ct);
         var detailCount = detail[0];
 
-        Assert.InRange(previewCount, 1, 17);
-        Assert.InRange(detailCount, 1, 17);
+        Assert.InRange(previewCount, 1, 18);   // the alone breaks add one (W9)
+        Assert.InRange(detailCount, 1, 18);   // likewise
     }
 }

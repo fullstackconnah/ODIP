@@ -29,7 +29,7 @@ export function statedPool(overrides: Partial<FundingPoolDto> = {}): FundingPool
 
 export function plan(overrides: Partial<FundingPlanDto> = {}): FundingPlanDto {
   return {
-    id: 'plan-1', participantId: 'participant-1', planStart: '2026-07-01', planEnd: '2027-06-30', reassessmentDate: '2027-05-01', periodLengthMonths: 3, evidence: 'PlanCopy',
+    id: 'plan-1', participantId: 'participant-1', planStart: '2026-07-01', planEnd: '2027-06-30', reassessmentDate: '2027-05-01', periodLengthMonths: 3, evidence: 'PlanCopy', myProvider: 'Unknown',
     confirmedOn: '2026-09-20', confirmedByName: 'Priya Coordinator', notes: 'From the plan the participant shared.', revision: 1,
     createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-01T00:00:00Z',
     pools: [pool({ periods: quarters(2000, 1000) }), statedPool()], ...overrides,

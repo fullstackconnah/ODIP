@@ -13,16 +13,18 @@ import { PageState } from '@/components/PageState'
 import { formatDateRange } from '@/lib/dateRange'
 import { plural } from '@/lib/format'
 import { CancellationClaimSteps } from './CancellationClaimSteps'
+import { ManualClaimSteps } from './ManualClaimSteps'
 
 const TRIP_FIELD_ID = 'new-claim-trip'
 
-type ChoiceId = 'shifts' | 'trip' | 'cancellation'
+type ChoiceId = 'shifts' | 'trip' | 'cancellation' | 'manual'
 
-/** One row of the chooser. A later claim kind (a one-off) is one more entry here and one more handler. */
+/** One row of the chooser. A later claim kind is one more entry here and one more handler. */
 const CHOICES: { id: ChoiceId; title: string; hint: string }[] = [
   { id: 'shifts', title: 'Shifts', hint: 'Completed shifts in a date range' },
   { id: 'trip', title: 'A trip', hint: 'A completed trip with no claim' },
   { id: 'cancellation', title: 'A cancellation', hint: 'A cancelled shift at short notice' },
+  { id: 'manual', title: 'A one-off claim', hint: 'Any catalogue item and amount' },
 ]
 
 /** `count` undefined draws nothing; null draws the loading pulse. A disabled row keeps its focus but does nothing. */
@@ -64,17 +66,20 @@ function ChoiceRow({ title, hint, count, disabled, onClick, rowRef }: {
  * The launcher for "New claim": pick what is being claimed. Shifts and a trip each open their own existing modal (the caller does that once this has closed, so
  * the opener of the next modal is the page's button, not a row that is gone); a trip is picked on a second step here.
  */
-export function NewClaimModal({ onClose, onShifts, onTrip, onCancellationMade }: {
+export function NewClaimModal({ onClose, onShifts, onTrip, onCancellationMade, onManualMade }: {
   onClose: () => void
   onShifts: () => void
   onTrip: (trip: TripDetailDto) => void
   /** A cancellation claim was made on its second step: the page closes the chooser and opens the claim. */
   onCancellationMade: (claimId: string) => void
+  /** A one-off claim was made on its second step: the same. */
+  onManualMade: (claimId: string) => void
 }) {
-  const [step, setStep] = useState<'choose' | 'trip' | 'cancellation'>('choose')
+  const [step, setStep] = useState<'choose' | 'trip' | 'cancellation' | 'manual'>('choose')
   const shiftsRow = useRef<HTMLButtonElement>(null)
   const tripRow = useRef<HTMLButtonElement>(null)
   const cancellationRow = useRef<HTMLButtonElement>(null)
+  const manualRow = useRef<HTMLButtonElement>(null)
   const lastRow = useRef<RefObject<HTMLButtonElement | null> | null>(null)   // the row that opened the step being left, so Back lands on it
   const [chosen, setChosen] = useState('')
   const [opening, setOpening] = useState<string | undefined>()
@@ -108,6 +113,7 @@ export function NewClaimModal({ onClose, onShifts, onTrip, onCancellationMade }:
   const noCancellations = !cancellations.isLoading && !cancellations.isError && cancellationCount === 0
   const count = (c: ChoiceId) => {
     if (c === 'cancellation') return cancellations.isLoading ? null : cancellations.isError || !cancellationCount ? undefined : `${cancellationCount} waiting`
+    if (c === 'manual') return undefined   // any participant can have one, so there is nothing to count
     if (c === 'shifts') return waiting.loading ? null : waiting.error ? undefined : waiting.count === 0 ? 'None waiting' : `${waiting.count} waiting`
     return trips.isLoading ? null : trips.isError || tripCount === undefined || tripCount === 0 ? undefined : `${tripCount} waiting`
   }
@@ -130,6 +136,8 @@ export function NewClaimModal({ onClose, onShifts, onTrip, onCancellationMade }:
             <ChoiceRow key={c.id} title={c.title} hint={c.hint} count={count('shifts')} onClick={onShifts} rowRef={shiftsRow} />
           ) : c.id === 'trip' ? (
             <ChoiceRow key={c.id} title={c.title} hint={noTrips ? 'No completed trips are waiting' : c.hint} count={count('trip')} disabled={noTrips} onClick={() => { lastRow.current = tripRow; setStep('trip') }} rowRef={tripRow} />
+          ) : c.id === 'manual' ? (
+            <ChoiceRow key={c.id} title={c.title} hint={c.hint} onClick={() => { lastRow.current = manualRow; setStep('manual') }} rowRef={manualRow} />
           ) : (
             <ChoiceRow key={c.id} title={c.title} hint={noCancellations ? 'No short-notice cancellations to claim' : c.hint} count={count('cancellation')} disabled={noCancellations} onClick={() => { lastRow.current = cancellationRow; setStep('cancellation') }} rowRef={cancellationRow} />
           ))}
@@ -140,6 +148,10 @@ export function NewClaimModal({ onClose, onShifts, onTrip, onCancellationMade }:
 
   if (step === 'cancellation') {
     return <CancellationClaimSteps candidates={cancellations} onBack={() => setStep('choose')} onClose={close} onMade={onCancellationMade} />
+  }
+
+  if (step === 'manual') {
+    return <ManualClaimSteps onBack={() => setStep('choose')} onClose={close} onMade={onManualMade} />
   }
 
   return (

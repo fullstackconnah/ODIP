@@ -123,12 +123,14 @@ public sealed class BudgetLedgerService
         var pricing = new Pricing(catalogue, holidays, providerState, providerZone.Zone);
         // Provider travel (travel plan D5): the worker's submitted legs, else the agreement's forecast, read once for every shift, the same source the claim reads.
         var travelPolicy = await ShiftTravelSource.PolicyAsync(_db, tenantId, ct);
+        // A completed, unclaimed shift is estimated at what its claim will say: rostered hours minus the breaks taken alone (W9).
+        var aloneBreaks = await ShiftAloneBreaks.LoadAsync(_db, shiftRows.Where(s => s.Status == ShiftStatus.Completed).Select(s => s.Id).ToList(), ct);
         var peopleById = withPlan.ToDictionary(p => p.Id);
         var travelInputs = await ShiftTravelSource.ForShiftsAsync(_db, tenantId, travelPolicy, shiftRows.Select(s => new ShiftRef(s.Id, s.ShiftPatternId, peopleById[s.ParticipantId].MmLevel)).ToList(), ct);
         var itemsByPerson = withPlan.ToDictionary(p => p.Id, _ => new List<LedgerItem>());
 
         foreach (var line in lineRows) itemsByPerson[line.ParticipantId].Add(ClaimLineItemOf(line, peopleById[line.ParticipantId], pricing));
-        for (var i = 0; i < shiftRows.Count; i++) itemsByPerson[shiftRows[i].ParticipantId].AddRange(ShiftItemsOf(shiftRows[i], peopleById[shiftRows[i].ParticipantId], today, pricing, travelInputs[i], travelPolicy));
+        for (var i = 0; i < shiftRows.Count; i++) itemsByPerson[shiftRows[i].ParticipantId].AddRange(ShiftItemsOf(shiftRows[i], peopleById[shiftRows[i].ParticipantId], today, pricing, travelInputs[i], travelPolicy, aloneBreaks));
         AddBookingItems(bookingRows, tripDays, peopleById, today, pricing, itemsByPerson);
 
         foreach (var person in withPlan)
@@ -465,11 +467,12 @@ public sealed class BudgetLedgerService
     /// The ledger items of a shift: one for each part of it, a date and a PACE category (<see cref="ShiftPriceEstimator.PartsOf"/>), so the ledger counts the shift exactly as the claim lines it becomes are filed. Kind and group come
     /// from the shift (completed, past or ahead); only the part's own date places it in a period. A shift with no price is one $0 item that says why.
     /// </summary>
-    private static IEnumerable<LedgerItem> ShiftItemsOf(ShiftRow shift, PersonRow person, DateOnly today, Pricing pricing, ShiftTravelInput? travel, ShiftTravelPolicy travelPolicy)
+    private static IEnumerable<LedgerItem> ShiftItemsOf(ShiftRow shift, PersonRow person, DateOnly today, Pricing pricing, ShiftTravelInput? travel, ShiftTravelPolicy travelPolicy, Dictionary<Guid, List<(DateTime From, DateTime To)>> aloneBreaks)
     {
         var state = ShiftPriceEstimator.StateFor(person.AddressState, pricing.ProviderState);
         var hours = Shift.HoursBetween(shift.Start, shift.End, shift.EndsNextDay);
-        var outcome = ShiftPriceEstimator.Price(pricing.ShiftRates(shift.SupportGroupCode), shift.SupportGroupCode, shift.ServiceDate, shift.Start, shift.End, shift.EndsNextDay, shift.Ratio, shift.NightType, person.IsIntensive, state, pricing.Holidays.For(state), pricing.Zone);
+        var unclaimed = ShiftAloneBreaks.SpansOf(aloneBreaks, shift.Id, shift.ServiceDate, shift.Start, shift.End, shift.EndsNextDay, shift.NightType, pricing.Zone);
+        var outcome = ShiftPriceEstimator.Price(pricing.ShiftRates(shift.SupportGroupCode), shift.SupportGroupCode, shift.ServiceDate, shift.Start, shift.End, shift.EndsNextDay, shift.Ratio, shift.NightType, person.IsIntensive, state, pricing.Holidays.For(state), pricing.Zone, unclaimed);
         // The travel counts in the shift's pool like the claim lines it becomes; its caveat is for the claim, not a ledger note, so the note below is the estimator's own.
         var counted = outcome.IsPriced ? ShiftTravelPricer.Apply(outcome, travel, shift.ServiceDate, state, travelPolicy.KmRate, pricing.ShiftRows(shift.SupportGroupCode).Concat(pricing.PersonalCare).ToList(), travelPolicy.TravelRows) : outcome;
 
@@ -481,7 +484,7 @@ public sealed class BudgetLedgerService
             // One part keeps the shift's own wording (its elapsed hours, or the night of a sleepover); a shift cut into parts says what each part holds.
             var quantity = part.Nights > 0
                 ? (part.Hours > 0 ? string.Create(CultureInfo.InvariantCulture, $"{part.Hours:0.##} h + {ClaimPricing.Quantity(part.Nights, true)}") : ClaimPricing.Quantity(part.Nights, true))
-                : ClaimPricing.Quantity(parts.Count == 1 ? hours : part.Hours, false);
+                : ClaimPricing.Quantity(parts.Count == 1 && (unclaimed is null || !outcome.IsPriced) ? hours : part.Hours, false);
             yield return new LedgerItem
             {
                 Kind = completed ? LedgerRowKind.CompletedShift : past ? LedgerRowKind.PastShift : LedgerRowKind.FutureShift,

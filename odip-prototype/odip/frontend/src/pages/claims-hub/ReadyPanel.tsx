@@ -247,8 +247,9 @@ export function ReadyPanel({ lines, loading, failed, onRetry, registrationProble
 /** The Checks cell: a quiet "Ready", or the first hard-check failure in danger ink with its fix. The disabled box is described by it. */
 function Checks({ line, heldBack }: { line: HubLineDto; heldBack: boolean }) {
   const blocks = line.problems.filter(p => p.severity === 'block')
-  const warn = line.problems.find(p => p.severity === 'warn')
-  if (!heldBack) return <PassMark warning={warn?.message} />
+  // Every warning, not the first: a line can carry several (my provider and its age), and a coordinator should read them all before sending.
+  const warns = line.problems.filter(p => p.severity === 'warn').map(p => p.message).join(' ')
+  if (!heldBack) return <PassMark warning={warns || undefined} />
   if (!blocks.length) {
     return (
       <span id={reasonId(line)} className="block text-[var(--color-muted-foreground)] md:max-w-[14rem] md:truncate" title={`Another line on ${line.claimReference} needs fixing first. A claim is sent whole.`}>

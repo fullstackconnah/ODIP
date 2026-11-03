@@ -163,6 +163,11 @@ public static class ShiftPriceEstimator
 
     public const string TimesMismatchKind = "times do not match";
 
+    /// <summary>Why a shift has no price when its breaks taken alone cover every hourly stretch of it (W9: those minutes come off the claim).</summary>
+    public const string AllBreaksBecause = "it was all breaks";
+
+    public const string AllBreaksKind = "all breaks";
+
     public const string SleepoverTooShortKind = "sleepover too short";
 
     public const string NoSleepoverItemBecause = "no catalogue sleepover item covers this date";
@@ -208,9 +213,10 @@ public static class ShiftPriceEstimator
     /// <param name="groupCode">The shift's support group, or null for community access; a short-term accommodation group takes the short-term accommodation sleepover item.</param>
     /// <param name="publicHolidays">The whole-day holidays that apply in <paramref name="state"/>, loaded to the day after the last service date (a shift runs past midnight).</param>
     /// <param name="zone">The organisation's time zone, where the clocks change.</param>
+    /// <param name="unclaimed">Minute offsets from the rostered start (<see cref="ShiftBreakRules.UnclaimedSpans"/>): breaks taken alone come off the hourly stretches they fall in, before each line is rounded. A sleepover item is flat and never changes. Null (a future shift, a cancellation) deducts nothing.</param>
     public static ShiftPriceOutcome Price(
         ShiftRateRows rows, string? groupCode, DateOnly serviceDate, TimeOnly start, TimeOnly end, bool endsNextDay, SupportRatio ratio, SleepoverType nightType, bool isIntensive, string state,
-        IReadOnlySet<DateOnly> publicHolidays, TimeZoneInfo zone)
+        IReadOnlySet<DateOnly> publicHolidays, TimeZoneInfo zone, IReadOnlyList<(int From, int To)>? unclaimed = null)
     {
         // A shift with no length has no price. Priced as hours x rate it was a zero or NEGATIVE item that the budget ledger summed with the real ones (the phase 3 review, C1): the data is what is wrong,
         // so this is said before the shift's kind.
@@ -231,8 +237,11 @@ public static class ShiftPriceEstimator
         var lines = new List<ShiftPrice>();
         // Adjacent stretches that land on the same row on the same date are one line, rounded once.
         var stretches = new List<(SupportCatalogueItem Item, ClaimDayType DayType, DateOnly Date, int Minutes)>();
+        var at = 0;   // elapsed minutes from the rostered start, to place the alone breaks in the parts
         foreach (var part in split.Parts)
         {
+            var from = at;
+            at += part.Minutes;
             if (part.Sleepover)
             {
                 var sleepover = SleepoverLine(rows.Sleepover, groupCode, part.Date, publicHolidays, state, out var refusal);
@@ -249,11 +258,16 @@ public static class ShiftPriceEstimator
                     ? ShiftPriceOutcome.Unpriced(NoCatalogueRateBecause, NoCatalogueRateKind)
                     : ShiftPriceOutcome.Unpriced(NoBandRateBecause(part.Band, part.Date), NoBandRateKind);
 
+            var minutes = part.Minutes - (unclaimed?.Sum(u => Math.Max(0, Math.Min(u.To, at) - Math.Max(u.From, from))) ?? 0);
+            if (minutes <= 0) continue;
+
             if (stretches.Count > 0 && stretches[^1].Item.Id == item.Id && stretches[^1].Date == part.Date)
-                stretches[^1] = (item, part.DayType, part.Date, stretches[^1].Minutes + part.Minutes);
+                stretches[^1] = (item, part.DayType, part.Date, stretches[^1].Minutes + minutes);
             else
-                stretches.Add((item, part.DayType, part.Date, part.Minutes));
+                stretches.Add((item, part.DayType, part.Date, minutes));
         }
+
+        if (lines.Count == 0 && stretches.Count == 0) return ShiftPriceOutcome.Unpriced(AllBreaksBecause, AllBreaksKind);
 
         foreach (var s in stretches)
         {

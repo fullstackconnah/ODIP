@@ -10,6 +10,11 @@ namespace Odip.Tests.ClaimBatches;
 public class ClaimBatchChecksTests
 {
     private static readonly DateOnly Today = new(2026, 10, 30);
+    private static readonly Guid Pid = Guid.NewGuid();
+    /// <summary>The clean row's participant is recorded as my provider on a plan that covers every date used here, so only the test's own change shows.</summary>
+    private static readonly IReadOnlyDictionary<Guid, IReadOnlyList<PlanSpan>> Covered = Plans(new PlanSpan(Today.AddYears(-5), Today.AddYears(5), MyProviderRecord.Recorded));
+
+    private static IReadOnlyDictionary<Guid, IReadOnlyList<PlanSpan>> Plans(params PlanSpan[] plans) => new Dictionary<Guid, IReadOnlyList<PlanSpan>> { [Pid] = plans };
 
     private static BprRow Clean(Action<ClaimLineItem>? line = null, Action<TripClaim>? claim = null, Action<Participant>? person = null, Action<SupportCatalogueItem>? item = null)
     {
@@ -19,14 +24,14 @@ public class ClaimBatchChecksTests
             SupportsDeliveredFrom = Today.AddDays(-5), SupportsDeliveredTo = Today.AddDays(-5), GSTCode = GSTCode.P2, ClaimType = ClaimType.Standard,
         };
         var c = new TripClaim { Id = l.TripClaimId, ClaimReference = "TC-1", Status = TripClaimStatus.Draft };
-        var p = new Participant { Id = Guid.NewGuid(), NdisNumber = "430000001" };
+        var p = new Participant { Id = Pid, NdisNumber = "430000001" };
         var i = new SupportCatalogueItem { ItemNumber = l.SupportItemCode, Unit = "H", PriceNational = 70m, PriceLimit_VIC = 70m };
         line?.Invoke(l); claim?.Invoke(c); person?.Invoke(p); item?.Invoke(i);
         return new BprRow(l, c, p, PlanType.AgencyManaged, i, null, "VIC", new ProviderSettings { RegistrationNumber = "4050012345" });
     }
 
     private static string[] Rules(BprRow row, BatchContext? ctx = null) =>
-        ClaimBatchChecks.For(row, ctx ?? new BatchContext { Today = Today }).Select(p => p.Rule).ToArray();
+        ClaimBatchChecks.For(row, ctx ?? new BatchContext { Today = Today, Plans = Covered }).Select(p => p.Rule).ToArray();
 
     [Fact]
     public void A_clean_line_has_no_problems() => Assert.Empty(Rules(Clean()));
@@ -92,7 +97,7 @@ public class ClaimBatchChecksTests
         var row = Clean(line: l => { l.ClaimType = ClaimType.Cancellation; l.CancellationReason = "NSDH"; }, item: i => i.ShortNoticeCancellation = flag);
         if (hasTwin) row = row with { CancelledItem = new SupportCatalogueItem { ItemNumber = row.Line.SupportItemCode + "_CA" } };
 
-        var problems = ClaimBatchChecks.For(row, new BatchContext { Today = Today });
+        var problems = ClaimBatchChecks.For(row, new BatchContext { Today = Today, Plans = Covered });
 
         Assert.Equal(blocked, problems.Any(p => p.Rule == "CancellationNotAllowed" && p.Severity == ClaimBatchChecks.Block));
         if (blocked) Assert.Contains("04_104_0125_6_1 can't be claimed as a short-notice cancellation in the price guide.", problems.Single(p => p.Rule == "CancellationNotAllowed").Message);
@@ -119,7 +124,7 @@ public class ClaimBatchChecksTests
         var l = row.Line;
         var ctx = new BatchContext
         {
-            Today = Today,
+            Today = Today, Plans = Covered,
             OtherFunded = new Dictionary<Guid, string> { [l.TripClaimId] = "Other funded." },
             PendingFiles = new Dictionary<Guid, string> { [l.Id] = "BPR261030001.csv" },
             Accepted = [new AcceptedLine("430000001", l.SupportItemCode, l.SupportsDeliveredFrom, l.SupportsDeliveredTo, "BPR261001001.csv")],
@@ -188,19 +193,81 @@ public class ClaimBatchChecksTests
 
     [Fact]
     public void Age_is_a_warning_never_a_block() =>
-        Assert.All(ClaimBatchChecks.For(Clean(line: l => { l.SupportsDeliveredFrom = Today.AddDays(-100); l.SupportsDeliveredTo = l.SupportsDeliveredFrom; }), new BatchContext { Today = Today }),
+        Assert.All(ClaimBatchChecks.For(Clean(line: l => { l.SupportsDeliveredFrom = Today.AddDays(-100); l.SupportsDeliveredTo = l.SupportsDeliveredFrom; }), new BatchContext { Today = Today, Plans = Covered }),
             p => Assert.Equal("warn", p.Severity));
 
     [Fact]
     public void OutsidePlan_warns_only_when_the_participant_has_plans_and_none_covers()
     {
         var row = Clean();
-        var pid = row.Participant!.Id;
-        BatchContext With(params (DateOnly, DateOnly)[] plans) => new() { Today = Today, Plans = new Dictionary<Guid, IReadOnlyList<(DateOnly, DateOnly)>> { [pid] = plans } };
+        BatchContext With(params (DateOnly Start, DateOnly End)[] plans) => new() { Today = Today, Plans = Plans(plans.Select(p => new PlanSpan(p.Start, p.End, MyProviderRecord.Recorded)).ToArray()) };
         Assert.Contains("OutsidePlan", Rules(row, With((Today.AddDays(-400), Today.AddDays(-100)))));
         Assert.DoesNotContain("OutsidePlan", Rules(row, With((Today.AddDays(-100), Today.AddDays(100)))));
         Assert.DoesNotContain("OutsidePlan", Rules(row, With()));
     }
+
+    // ---- my provider ----
+
+    private static BatchContext OnPlan(MyProviderRecord record, DateOnly? on = null) =>
+        new() { Today = Today, Plans = Plans(new PlanSpan(Today.AddDays(-100), Today.AddDays(100), record, on)) };
+
+    private static string MyProviderMessage(BprRow row, BatchContext ctx) => ClaimBatchChecks.For(row, ctx).Single(p => p.Rule == "MyProvider").Message;
+
+    [Fact]
+    public void MyProvider_warns_when_the_covering_plan_is_Unknown()
+    {
+        var problem = ClaimBatchChecks.For(Clean(), OnPlan(MyProviderRecord.Unknown)).Single(p => p.Rule == "MyProvider");
+        Assert.Equal((ClaimBatchChecks.Warn, "Not recorded as this participant's my provider for this plan. The NDIA may reject this line or pay it late."), (problem.Severity, problem.Message));
+    }
+
+    [Fact]
+    public void MyProvider_warns_that_a_Requested_plan_is_not_confirmed_yet() =>
+        Assert.Equal("Your my provider request for this plan isn't confirmed yet. The NDIA may reject this line or pay it late.", MyProviderMessage(Clean(), OnPlan(MyProviderRecord.Requested, Today.AddDays(-3))));
+
+    [Fact]
+    public void MyProvider_warns_when_the_line_is_before_the_Recorded_date()
+    {
+        var row = Clean(); // delivered 5 days before Today
+        Assert.Equal("This line is before the date you were recorded as my provider (28 Oct 2026).", MyProviderMessage(row, OnPlan(MyProviderRecord.Recorded, Today.AddDays(-2))));
+    }
+
+    [Fact]
+    public void MyProvider_is_quiet_when_Recorded_on_or_before_the_line_or_with_no_date()
+    {
+        Assert.DoesNotContain("MyProvider", Rules(Clean(), OnPlan(MyProviderRecord.Recorded, Today.AddDays(-5))));
+        Assert.DoesNotContain("MyProvider", Rules(Clean(), OnPlan(MyProviderRecord.Recorded, Today.AddDays(-50))));
+        Assert.DoesNotContain("MyProvider", Rules(Clean(), OnPlan(MyProviderRecord.Recorded)));
+    }
+
+    [Fact]
+    public void MyProvider_warns_with_no_plans_but_stays_silent_when_no_plan_covers_the_line()
+    {
+        const string text = "Not recorded as this participant's my provider for this plan. The NDIA may reject this line or pay it late.";
+        Assert.Equal(text, MyProviderMessage(Clean(), new BatchContext { Today = Today }));
+        Assert.DoesNotContain("MyProvider", Rules(Clean(), new BatchContext { Today = Today, Plans = Plans(new PlanSpan(Today.AddDays(-400), Today.AddDays(-100), MyProviderRecord.Recorded)) }));
+    }
+
+    [Theory]
+    [InlineData(PlanType.PlanManaged)]
+    [InlineData(PlanType.SelfManaged)]
+    public void MyProvider_reaches_only_NDIA_managed_lines(PlanType plan)
+    {
+        var rules = Rules(Clean() with { PlanType = plan }, new BatchContext { Today = Today });
+        Assert.Contains("NotAgency", rules);
+        Assert.DoesNotContain("MyProvider", rules);
+    }
+
+    [Fact]
+    public void MyProvider_comes_before_Age()
+    {
+        var row = Clean(line: l => { l.SupportsDeliveredFrom = Today.AddDays(-70); l.SupportsDeliveredTo = l.SupportsDeliveredFrom; });
+        var rules = Rules(row, new BatchContext { Today = Today, Plans = Plans(new PlanSpan(Today.AddDays(-200), Today.AddDays(100))) });
+        Assert.Equal(["MyProvider", "Age"], rules);
+    }
+
+    [Fact]
+    public void MyProvider_is_a_warning_never_a_block() =>
+        Assert.All(ClaimBatchChecks.For(Clean(), OnPlan(MyProviderRecord.Unknown)), p => Assert.Equal("warn", p.Severity));
 
     [Fact]
     public void DuplicateInFile_warns_on_the_same_participant_item_and_dates()
@@ -209,9 +276,9 @@ public class ClaimBatchChecksTests
         var b = Clean() with { Participant = a.Participant };
         b.Line.SupportsDeliveredFrom = a.Line.SupportsDeliveredFrom;
         b.Line.SupportsDeliveredTo = a.Line.SupportsDeliveredTo;
-        var ctx = new BatchContext { Today = Today, BuildRows = [a, b] };
+        var ctx = new BatchContext { Today = Today, Plans = Covered, BuildRows = [a, b] };
         Assert.Contains("DuplicateInFile", Rules(a, ctx));
-        Assert.DoesNotContain("DuplicateInFile", Rules(a, new BatchContext { Today = Today, BuildRows = [a] }));
+        Assert.DoesNotContain("DuplicateInFile", Rules(a, new BatchContext { Today = Today, Plans = Covered, BuildRows = [a] }));
     }
 
     [Fact]
@@ -274,7 +341,7 @@ public class ClaimBatchChecksTests
     {
         var band = Clean();
         var travel = Clean(line: l => l.ClaimType = ClaimType.ProviderTravel) with { Participant = band.Participant };
-        var ctx = new BatchContext { Today = Today, BuildRows = [band, travel], Accepted = [new AcceptedLine("430000001", band.Line.SupportItemCode, band.Line.SupportsDeliveredFrom, band.Line.SupportsDeliveredTo, "BPR1.csv", ClaimType.Standard)] };
+        var ctx = new BatchContext { Today = Today, Plans = Covered, BuildRows = [band, travel], Accepted = [new AcceptedLine("430000001", band.Line.SupportItemCode, band.Line.SupportsDeliveredFrom, band.Line.SupportsDeliveredTo, "BPR1.csv", ClaimType.Standard)] };
         Assert.DoesNotContain("DuplicateInFile", Rules(travel, ctx));
         Assert.DoesNotContain("AlreadyAccepted", Rules(travel, ctx));
         Assert.Contains("AlreadyAccepted", Rules(band, ctx));   // (b) the same type, item and dates still blocks
@@ -286,7 +353,7 @@ public class ClaimBatchChecksTests
         var a = Clean(line: l => l.ClaimType = ClaimType.ProviderTravel);
         var b = Clean(line: l => l.ClaimType = ClaimType.ProviderTravel) with { Participant = a.Participant };
         b.Line.SupportsDeliveredFrom = a.Line.SupportsDeliveredFrom; b.Line.SupportsDeliveredTo = a.Line.SupportsDeliveredTo;
-        Assert.Contains("DuplicateInFile", Rules(a, new BatchContext { Today = Today, BuildRows = [a, b] }));
+        Assert.Contains("DuplicateInFile", Rules(a, new BatchContext { Today = Today, Plans = Covered, BuildRows = [a, b] }));
     }
 
     [Theory]
@@ -311,7 +378,7 @@ public class ClaimBatchChecksTests
     {
         var accepted = Clean();
         var cancel = Clean(line: l => l.ClaimType = ClaimType.Cancellation) with { Participant = accepted.Participant };
-        var ctx = new BatchContext { Today = Today, BuildRows = [accepted, cancel], Accepted = [new AcceptedLine("430000001", accepted.Line.SupportItemCode, accepted.Line.SupportsDeliveredFrom, accepted.Line.SupportsDeliveredTo, "BPR1.csv", ClaimType.Standard)] };
+        var ctx = new BatchContext { Today = Today, Plans = Covered, BuildRows = [accepted, cancel], Accepted = [new AcceptedLine("430000001", accepted.Line.SupportItemCode, accepted.Line.SupportsDeliveredFrom, accepted.Line.SupportsDeliveredTo, "BPR1.csv", ClaimType.Standard)] };
         Assert.Contains("AlreadyAccepted", Rules(cancel, ctx));
         Assert.Contains("DuplicateInFile", Rules(cancel, ctx));
     }

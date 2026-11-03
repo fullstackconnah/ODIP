@@ -13,7 +13,7 @@ export interface HubLineDto {
   lineId: string
   claimId: string
   claimReference: string
-  claimKind: 'trip' | 'shift'
+  claimKind: 'trip' | 'shift' | 'manual'
   participantId: string
   participantName: string
   supportNumber: string

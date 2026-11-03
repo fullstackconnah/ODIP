@@ -106,6 +106,29 @@ public class FundingPostgresTests : IClassFixture<PostgresFixture>
     // ── The migration ───────────────────────────────────────────────────────
 
     [SkippableFact]
+    public async Task APlanSavedBeforeTheMyProviderColumns_ReadsBackUnknownWithNoDate()
+    {
+        RequirePostgres();
+        var connectionString = await _pg.CreateDatabaseAsync();
+        await using var db = PostgresFixture.NewContext(connectionString);
+        var migrator = db.GetService<IMigrator>();
+        var all = db.Database.GetMigrations().ToList();
+        await migrator.MigrateAsync(all[all.IndexOf(all.Single(m => m.EndsWith("_AddFundingPlanMyProvider", StringComparison.Ordinal))) - 1]);
+
+        var tenantId = Guid.NewGuid();
+        var participantId = Guid.NewGuid();
+        db.Tenants.Add(new Tenant { Id = tenantId, Name = "Live Provider", EmailDomain = $"{tenantId:N}.example.com" });
+        db.Participants.Add(new Participant { Id = participantId, TenantId = tenantId, FirstName = "Live", LastName = "Participant", IsActive = true });
+        db.FundingPlans.Add(new FundingPlan { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = participantId, PlanStart = D(2026, 7, 1), PlanEnd = D(2027, 6, 30), CreatedBy = "u", UpdatedBy = "u" });
+        await OlderSchemaSeeds.SaveWithLaterColumnsAsync(db);
+
+        await migrator.MigrateAsync();
+        await using var after = PostgresFixture.NewContext(connectionString);
+        var plan = await after.FundingPlans.AsNoTracking().IgnoreQueryFilters().SingleAsync();
+        Assert.Equal((MyProviderRecord.Unknown, (DateOnly?)null, (string?)null), (plan.MyProvider, plan.MyProviderOn, plan.MyProviderSetBy));
+    }
+
+    [SkippableFact]
     public async Task TheMigration_AppliesOverLiveRows_KeepsThemUntouched_AndTheDefaultsAndTheUniqueIndexHold()
     {
         RequirePostgres();

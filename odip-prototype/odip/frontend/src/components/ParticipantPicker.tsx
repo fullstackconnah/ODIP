@@ -14,6 +14,10 @@ export type ParticipantPickerProps = {
   /** INTAKE-08 convention: exclude draft participants. Default true. */
   excludeDrafts?: boolean
   placeholder?: string
+  /** Shows each participant's NDIS number under the name. Default false. */
+  showNdis?: boolean
+  /** Passed to `SearchableSelect`: open the list when the field is focused. Default true. */
+  openOnFocus?: boolean
   disabled?: boolean
   id?: string
   'aria-labelledby'?: string
@@ -46,6 +50,8 @@ export function ParticipantPicker({
   noneLabel = 'None',
   excludeDrafts = true,
   placeholder,
+  showNdis = false,
+  openOnFocus,
   disabled,
   id,
   'aria-labelledby': ariaLabelledBy,
@@ -60,7 +66,7 @@ export function ParticipantPicker({
 
   const items: SearchableSelectItem[] = [
     ...(allowNone ? [{ value: '', label: noneLabel }] : []),
-    ...participants.map((p: ParticipantListDto) => ({ value: p.id, label: p.fullName || `${p.firstName} ${p.lastName}` })),
+    ...participants.map((p: ParticipantListDto) => ({ value: p.id, label: p.fullName || `${p.firstName} ${p.lastName}`, ...(showNdis ? { description: (p.ndisNumber ?? p.maskedNdisNumber) || undefined } : {}) })),
   ]
 
   return (
@@ -77,6 +83,7 @@ export function ParticipantPicker({
         disabled={disabled}
         loading={isLoading}
         placeholder={placeholder}
+        openOnFocus={openOnFocus}
         emptyMessage="No participants available"
         items={items}
       />

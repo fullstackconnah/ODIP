@@ -9,6 +9,10 @@ export const PLAN_TYPE_LABELS: Record<PlanType, string> = {
   AgencyManaged: 'Agency Managed',
 }
 
+// ── My provider (whether the provider is recorded as the participant's my provider, per funding plan) ──
+export const MY_PROVIDER_RECORDS = ['Unknown', 'Requested', 'Recorded'] as const
+export type MyProviderRecord = typeof MY_PROVIDER_RECORDS[number]
+
 // ── Gender (participant identity, INTAKE-05) ────────────
 export const GENDERS = ['Male', 'Female', 'NonBinary', 'PreferNotToSay', 'Other'] as const
 export type Gender = typeof GENDERS[number]
@@ -372,7 +376,7 @@ export const COORDINATOR_SETTABLE_SHIFT_STATUSES = ['Draft', 'Published', 'Cance
 // Discriminates a TripClaim's origin (shift-completion design spec §1, PR 3): Trip claims are
 // generated from a TripInstance's confirmed bookings; Shift claims are generated from a
 // participant's completed, unclaimed Shifts. Append-only, mirrors backend ClaimKind exactly.
-export const CLAIM_KINDS = ['Trip', 'Shift'] as const
+export const CLAIM_KINDS = ['Trip', 'Shift', 'Manual'] as const
 export type ClaimKind = typeof CLAIM_KINDS[number]
 
 // ── Compatibility Level ──────────────────────────────────

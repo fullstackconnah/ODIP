@@ -123,6 +123,17 @@ describe('ClaimsHubPage: sent and paid by week', () => {
 })
 
 describe('ClaimsHubPage: Ready to send', () => {
+  it('reads every warning on a ready line, not only the first', () => {
+    m.lines.mockReturnValue(query(hub({ ready: [line({ lineId: 'w', problems: [
+      { rule: 'MyProvider', severity: 'warn', message: "Not recorded as this participant's my provider for this plan. The NDIA may reject this line or pay it late." },
+      { rule: 'Age', severity: 'warn', message: '62 days since the service.' },
+    ] })] })))
+    renderPage()
+
+    const cell = screen.getAllByText(/Not recorded as this participant's my provider/)[0].parentElement as HTMLElement
+    expect(cell).toHaveTextContent('The NDIA may reject this line or pay it late. 62 days since the service.')
+  })
+
   it('badges the tabs with their counts and marks ages at 59, 60, 80 and 91 days by band', () => {
     m.lines.mockReturnValue(query(hub({ ready: [
       line({ lineId: 'a', ageDays: 59, ageBand: 'none' }), line({ lineId: 'b', ageDays: 60, ageBand: 'amber' }),

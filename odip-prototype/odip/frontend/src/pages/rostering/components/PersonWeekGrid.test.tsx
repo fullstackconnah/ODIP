@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
@@ -19,7 +19,16 @@ function setup(over: Partial<PersonWeekGridProps> = {}) {
   return { props, ...view }
 }
 
-afterEach(() => vi.restoreAllMocks())
+// The fixture week is fixed, so pin the clock outside it: "today" must not depend on the real date.
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-10-14T02:00:00Z'))
+})
+
+afterEach(() => {
+  vi.useRealTimers()
+  vi.restoreAllMocks()
+})
 
 describe('PersonWeekGrid', () => {
   it('seven columns with gutter labels 1am-11pm and no 12am', () => {
@@ -120,5 +129,12 @@ describe('PersonWeekGrid', () => {
     expect(tabs[6]).toHaveAttribute('aria-selected', 'true')
     const panel = within(screen.getByRole('tabpanel'))
     expect(panel.queryAllByRole('button')).toHaveLength(0)
+  })
+
+  it('under 672px the one-day view opens on today when today is in the week', () => {
+    vi.setSystemTime(new Date('2026-11-04T02:00:00Z')) // 4 Nov in Sydney and UTC
+    setup({ width: 390 })
+    expect(screen.getAllByRole('tab')[2]).toHaveAttribute('aria-selected', 'true')
+    expect(document.querySelector('[data-day="2026-11-04"]')).not.toBeNull()
   })
 })

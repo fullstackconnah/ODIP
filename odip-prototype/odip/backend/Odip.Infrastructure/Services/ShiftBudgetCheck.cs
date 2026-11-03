@@ -84,6 +84,7 @@ public sealed class LedgerShiftCostSource : IShiftCostSource
         return shifts.Select((shift, index) =>
         {
             var groupRows = rowsByGroup.GetValueOrDefault(shift.SupportGroupCode ?? CatalogueGroups.CommunityAccessGroupCode) ?? new List<SupportCatalogueItem>();
+            // Future shifts have no breaks yet: no spans (W9).
             var outcome = ShiftPriceEstimator.Price(new ShiftRateRows(groupRows, personalCareRows, sleepoverRows), shift.SupportGroupCode, shift.ServiceDate, shift.StartTime, shift.EndTime, shift.EndsNextDay, shift.Ratio, shift.NightType,
                 person.IsIntensiveSupport, state, holidays.For(state), zone);
             if (outcome.IsPriced) outcome = ShiftTravelPricer.Apply(outcome, travelInputs[index], shift.ServiceDate, state, travelPolicy.KmRate, groupRows.Concat(personalCareRows).ToList(), travelPolicy.TravelRows);

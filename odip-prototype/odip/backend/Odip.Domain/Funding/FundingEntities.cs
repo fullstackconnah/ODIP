@@ -41,6 +41,13 @@ public class FundingPlan : ITenantEntity
     public string? ConfirmedByName { get; set; }
     public string? Notes { get; set; }
 
+    /// <summary>Whether we are recorded as the participant's my provider for this plan. A new plan starts Unknown. Set on its own endpoint, never by the plan save, and it does not bump <see cref="Revision"/>.</summary>
+    public MyProviderRecord MyProvider { get; set; } = MyProviderRecord.Unknown;
+    /// <summary>The request date when Requested, the my-provider start date when Recorded; null when Unknown.</summary>
+    public DateOnly? MyProviderOn { get; set; }
+    /// <summary>The NameIdentifier claim of the user who last set <see cref="MyProvider"/>, like <see cref="UpdatedBy"/>; null when Unknown.</summary>
+    public string? MyProviderSetBy { get; set; }
+
     /// <summary>Starts at 1 and goes up by 1 on every save. A save carries the revision it was made from, and a mismatch is a 409 (somebody saved in between).</summary>
     public int Revision { get; set; } = 1;
 

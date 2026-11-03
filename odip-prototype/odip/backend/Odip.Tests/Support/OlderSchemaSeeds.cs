@@ -12,6 +12,9 @@ internal static class OlderSchemaSeeds
     private static readonly (string Table, string Column, string Type)[] LaterColumns =
     [
         ("Participants", "MmLevel", "integer"),
+        ("FundingPlans", "MyProvider", "integer"),
+        ("FundingPlans", "MyProviderOn", "date"),
+        ("FundingPlans", "MyProviderSetBy", "character varying(100)"),
         ("Participants", "ServicesStartedAt", "timestamp without time zone"),
         ("ProviderSettings", "ContactEmail", "character varying(254)"),
         ("ProviderSettings", "ContactPhone", "character varying(30)"),
@@ -27,6 +30,7 @@ internal static class OlderSchemaSeeds
         ("ServiceAgreementDrafts", "OriginalAgreementEndDate", "date"),
         ("ShiftBreaks", "WithParticipant", "boolean"),
         ("Shifts", "CancelledAt", "timestamp without time zone"),
+        ("StaffParticipantCompatibilities", "Rank", "integer"),
         ("Users", "EmploymentType", "integer"),
     ];
 
