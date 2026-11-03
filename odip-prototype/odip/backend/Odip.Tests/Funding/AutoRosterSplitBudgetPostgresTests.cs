@@ -87,4 +87,61 @@ public class AutoRosterSplitBudgetPostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal((new TimeOnly(9, 0), new TimeOnly(17, 0), (Guid?)null), (whole.StartTime, whole.EndTime, whole.UserId));
         Assert.Equal(sam.Id, (await kit.Db.Shifts.AsNoTracking().SingleAsync(s => s.Id == other.Id, Ct)).UserId);
     }
+
+    [SkippableFact] // [D]
+    public async Task ASplitWhoseSecondWorkerIsBooked_LeavesNoTrace_WhileTheRowAfterItIsSaved()
+    {
+        Skip.IfNot(_pg.Available, "POSTGRES_CONNECTION_STRING is not set - no PostgreSQL to test against.");
+        var cs = await _pg.CreateDatabaseAsync();
+        await using (var migrate = PostgresFixture.NewContext(cs)) await migrate.Database.MigrateAsync(Ct);
+        var (db, tenantId) = await _pg.NewTenantContextAsync(cs);
+        using var kit = LedgerKit.Wrap(db, tenantId);
+        kit.SeedProvider("NSW");
+        kit.EnsureCommunityAccessCatalogue();
+        var tenant = new Mock<ICurrentTenant>();
+        tenant.Setup(t => t.TenantId).Returns(tenantId);
+        tenant.Setup(t => t.IsSuperAdmin).Returns(false);
+
+        var person = kit.SeedParticipant();
+        kit.SeedPlan(person, LedgerKit.Core(PlanType.PlanManaged, LedgerKit.Q(2, 10000.00m)));
+        var split = kit.SeedShift(person, Wed14Oct);                   // 09:00 to 17:00, Published
+        var after = kit.SeedShift(person, Wed14Oct.AddDays(1), startHour: 9, endHour: 13);
+        var pat = Worker(kit.Db, tenantId, "Pat");
+        var quinn = Worker(kit.Db, tenantId, "Quinn");
+        var sam = Worker(kit.Db, tenantId, "Sam");
+        var regular = Worker(kit.Db, tenantId, "Rhys");
+        var elsewhere = kit.SeedParticipant(first: "Rae", last: "Green");
+        var booked = kit.SeedShift(elsewhere, Wed14Oct, startHour: 14, endHour: 15);   // Quinn is already working 14:00 to 15:00
+        await kit.Db.SaveChangesAsync(Ct);
+        split.RegularUserId = regular.Id; split.RegularAwayReason = "Annual leave";
+        booked.UserId = quinn.Id;
+        kit.Db.BookingTasks.Add(new BookingTask
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId, ShiftId = split.Id, TaskType = TaskType.LeaveCoverage, Title = "Cover Rhys", SourceKey = $"leave-coverage:{split.Id}:{Guid.NewGuid()}", Status = TaskItemStatus.NotStarted,
+        });
+        await kit.Db.SaveChangesAsync(Ct);
+
+        var controller = new RosteringController(kit.Db, new StaffCompatibilityLinkService(kit.Db), new StaffUnavailabilityQuery(kit.Db), clock: kit.Clock, tenant: tenant.Object)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity(new[] { new Claim(ClaimTypes.Role, "Coordinator") }, "test")) } },
+        };
+        var dto = new AutoRosterApplyDto
+        {
+            Rows = [new() { ShiftId = after.Id, StaffId = sam.Id }],
+            Splits = [new() { ShiftId = split.Id, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(17, 0), CutAt = new TimeOnly(13, 0), FirstStaffId = pat.Id, SecondStaffId = quinn.Id }],
+        };
+
+        var applied = Assert.IsType<ApiResponse<AutoRosterApplyResultDto>>(Assert.IsType<OkObjectResult>((await controller.AutoRosterApply(Mon12Oct, dto, Ct)).Result).Value).Data!;
+
+        Assert.Equal(new[] { after.Id }, applied.Applied);
+        Assert.Equal(split.Id, Assert.Single(applied.Skipped).ShiftId);
+        kit.Db.ChangeTracker.Clear();
+        var whole = await kit.Db.Shifts.AsNoTracking().SingleAsync(s => s.Id == split.Id, Ct);
+        Assert.Equal((new TimeOnly(9, 0), new TimeOnly(17, 0), (Guid?)null, (Guid?)regular.Id), (whole.StartTime, whole.EndTime, whole.UserId, whole.RegularUserId));
+        Assert.Equal(1, await kit.Db.Shifts.AsNoTracking().CountAsync(s => s.ParticipantId == person.Id && s.ServiceDate == Wed14Oct, Ct));   // no second half
+        Assert.Empty(await kit.Db.NotificationOutbox.AsNoTracking().Where(o => o.EntityId == split.Id).ToListAsync(Ct));
+        Assert.Empty(await kit.Db.InAppNotifications.AsNoTracking().Where(n => n.RecipientUserId == pat.Id || n.RecipientUserId == quinn.Id).ToListAsync(Ct));
+        Assert.Equal(TaskItemStatus.NotStarted, (await kit.Db.BookingTasks.AsNoTracking().SingleAsync(t => t.ShiftId == split.Id, Ct)).Status);   // the coverage task is still open
+        Assert.Equal(sam.Id, (await kit.Db.Shifts.AsNoTracking().SingleAsync(s => s.Id == after.Id, Ct)).UserId);
+    }
 }

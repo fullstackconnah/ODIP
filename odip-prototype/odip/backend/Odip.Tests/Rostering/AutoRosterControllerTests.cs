@@ -311,6 +311,46 @@ public class AutoRosterControllerTests
     }
 
     [Fact] // [D]
+    public async Task AutoRosterApply_ASplitOfAPublishedShift_GivesAPublishedHalf_AndTellsBothWorkers()
+    {
+        using var db = TestDb.Create();
+        var pat = Staff(db, "Pat", TenantA);
+        var quinn = Staff(db, "Quinn", TenantA);
+        var (person, shift) = OpenShift(db, "Mia", TenantA);
+        shift.EndTime = new TimeOnly(17, 0);
+        shift.Status = ShiftStatus.Published;
+        await db.SaveChangesAsync();
+
+        Result(await Controller(db, TenantA).AutoRosterApply(Monday, OneSplit(shift, 13, pat.Id, quinn.Id), default));
+
+        var halves = await db.Shifts.AsNoTracking().Where(s => s.ParticipantId == person.Id).ToListAsync();
+        Assert.All(halves, h => Assert.Equal(ShiftStatus.Published, h.Status));
+        var told = await db.NotificationOutbox.ToListAsync();
+        Assert.Equal(halves.Select(h => h.Id).Order(), told.Select(o => o.EntityId).Order());   // one notice per worker, one per half
+    }
+
+    [Fact] // [D]
+    public async Task AutoRosterApply_ASplitThenARegenerate_LeavesTwoShiftsForThePatternAndDay()
+    {
+        using var db = TestDb.Create();
+        var pat = Staff(db, "Pat", TenantA);
+        var quinn = Staff(db, "Quinn", TenantA);
+        var (person, shift) = OpenShift(db, "Mia", TenantA);
+        shift.EndTime = new TimeOnly(17, 0);
+        db.ShiftPatterns.Add(new ShiftPattern
+        {
+            Id = shift.ShiftPatternId!.Value, TenantId = TenantA, ParticipantId = person.Id, DayOfWeek = shift.ServiceDate.DayOfWeek, StartTime = shift.StartTime, EndTime = shift.EndTime,
+            Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, EffectiveFrom = Monday, EffectiveTo = Monday.AddDays(60), IsActive = true,
+        });
+        await db.SaveChangesAsync();
+        Result(await Controller(db, TenantA).AutoRosterApply(Monday, OneSplit(shift, 13, pat.Id, quinn.Id), default));
+
+        await new RosterShiftGenerator().GenerateAsync(db, person.Id, new[] { shift.ShiftPatternId!.Value }, Monday, Monday.AddDays(6), default);
+
+        Assert.Equal(2, await db.Shifts.CountAsync(s => s.ShiftPatternId == shift.ShiftPatternId && s.ServiceDate == shift.ServiceDate));
+    }
+
+    [Fact] // [D]
     public async Task AutoRosterApply_ASplitOfAnotherOrganisationsShift_IsSkipped_AndNothingIsWritten()
     {
         using var db = TestDb.Create();

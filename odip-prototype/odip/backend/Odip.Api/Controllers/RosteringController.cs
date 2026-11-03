@@ -612,7 +612,7 @@ public class RosteringController : ControllerBase
             // Only the server's own split of a shift (copyFrom, R7 auto-roster) carries the link and requirements of the shift it was cut from.
             ShiftPatternId = copyFrom?.ShiftPatternId, RequirementsJson = copyFrom?.RequirementsJson,
             Ratio = dto.Ratio, NightType = dto.NightType, Notes = dto.Notes, Location = location, SupportGroupCode = supportCode,
-            Status = ShiftStatus.Draft
+            Status = copyFrom?.Status ?? ShiftStatus.Draft   // a split's other half keeps the shift's status, so a Published week tells the second worker too
         };
 
         // A person moving here is judged without the shift they leave (no false DOUBLE_BOOKED_SHIFT against it).
@@ -1159,7 +1159,7 @@ public class RosteringController : ControllerBase
     /// <summary>
     /// Auto-roster (R7, D9) applies one split under the apply's locks: the shift is cut at <see cref="AutoRosterApplySplitDto.CutAt"/> through the locked update, its other half is created through the
     /// create path (so the budget and create gates run), then both halves are assigned through the assign body. Null when applied; otherwise the words of the refusal, with nothing left written for the shift.
-    /// shortcut: a refusal part-way is undone by hand (the other half removed, the cut and worker put back), not a savepoint, because the controller tests run on EF InMemory with no transaction; a Postgres savepoint is the upgrade if an undo ever misses a side effect.
+    /// A refusal part-way rolls back to a savepoint taken before the cut, so nothing the halves saved (notices, the closed LeaveCoverage task, overrides) survives.
     /// </summary>
     private async Task<string?> ApplySplitAsync(AutoRosterApplySplitDto split, CancellationToken ct)
     {
@@ -1173,21 +1173,30 @@ public class RosteringController : ControllerBase
             return "This split is not valid.";
 
         var (regularUserId, regularAwayReason) = (shift.RegularUserId, shift.RegularAwayReason);
-        var shrunk = await UpdateShiftLockedAsync(shift.Id, new UpdateShiftDto
-        {
-            ParticipantId = shift.ParticipantId, StaffId = null, ServiceDate = shift.ServiceDate, StartTime = shift.StartTime, EndTime = split.CutAt, Ratio = shift.Ratio, NightType = shift.NightType,
-            Notes = shift.Notes, Location = shift.Location, SupportGroupCode = shift.SupportGroupCode, Status = shift.Status,
-        }, ct);
-        if (shrunk.Result is not OkObjectResult) return AssignRefusalMessage(shrunk.Result);
-
+        var tx = _db.Database.CurrentTransaction;
+        if (tx is not null) await tx.CreateSavepointAsync("split", ct);
         Guid? halfId = null;
         async Task<string> UndoAsync(string why)
         {
+            if (tx is not null)
+            {
+                await tx.RollbackToSavepointAsync("split", ct);
+                _db.ChangeTracker.Clear();   // the loaded entities hold the rolled-back values; the apply loop only ever re-reads by id
+                return why;
+            }
+            // No transaction (EF InMemory in the controller tests): put back by hand what the halves saved.
             if (halfId is { } id && await _db.Shifts.FirstOrDefaultAsync(s => s.Id == id, ct) is { } half) _db.Shifts.Remove(half);
             (shift.UserId, shift.EndTime, shift.RegularUserId, shift.RegularAwayReason, shift.UpdatedAt) = (null, split.EndTime, regularUserId, regularAwayReason, DateTime.UtcNow);
             await _db.SaveChangesAsync(ct);
             return why;
         }
+
+        var shrunk = await UpdateShiftLockedAsync(shift.Id, new UpdateShiftDto
+        {
+            ParticipantId = shift.ParticipantId, StaffId = null, ServiceDate = shift.ServiceDate, StartTime = shift.StartTime, EndTime = split.CutAt, Ratio = shift.Ratio, NightType = shift.NightType,
+            Notes = shift.Notes, Location = shift.Location, SupportGroupCode = shift.SupportGroupCode, Status = shift.Status,
+        }, ct);
+        if (shrunk.Result is not OkObjectResult) return await UndoAsync(AssignRefusalMessage(shrunk.Result));
 
         var created = await CreateShiftCoreAsync(new CreateShiftDto
         {
