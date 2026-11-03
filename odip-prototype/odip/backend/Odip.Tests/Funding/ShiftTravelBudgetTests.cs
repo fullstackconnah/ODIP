@@ -154,4 +154,36 @@ public class ShiftTravelBudgetTests
 
         Assert.Equal(480m, Assert.IsType<ShiftCostEstimate.Priced>(Assert.Single(estimates)).Amount);
     }
+
+    // MM level on the participant (hand-made shift): the ledger and the roster estimate read the same 60-minute cap as the claim.
+    [Fact]
+    public async Task M5_AHandMadeCompletedShift_CountsTheParticipantsCap_AndTwoParticipantsInOneBatchKeepTheirOwn()
+    {
+        var (kit, mm4) = Arrange();
+        mm4.MmLevel = 4;
+        var unknown = kit.SeedParticipant(first: "Kim", last: "Lee");
+        kit.SeedPlan(unknown, LedgerKit.Core(PlanType.PlanManaged, LedgerKit.Q(1, 5000m), LedgerKit.Q(2, 5000m), LedgerKit.Q(3, 5000m), LedgerKit.Q(4, 5000m)));
+        Submit(kit, kit.SeedShift(mm4, Past, ShiftStatus.Completed), preMin: 60);
+        Submit(kit, kit.SeedShift(unknown, Past, ShiftStatus.Completed), preMin: 60);
+        kit.Db.SaveChanges();
+
+        var both = await kit.Ledger.ComputeAsync(kit.TenantId, new[] { mm4.Id, unknown.Id }, Ct);
+
+        Assert.Equal(480m + 60.00m, both[mm4.Id].Ledger!.Pools[0].Periods[1].Items.Sum(i => i.Amount));   // 60 min = 1.00 h x 60
+        Assert.Equal(480m + 30.00m, both[unknown.Id].Ledger!.Pools[0].Periods[1].Items.Sum(i => i.Amount));   // no level: 30
+    }
+
+    [Fact]
+    public async Task M6_TheRosterEstimate_OfAHandMadeShiftWithASubmittedCompletion_UsesTheParticipantsLevel()
+    {
+        var (kit, person) = Arrange();
+        person.MmLevel = 4;
+        var shift = kit.SeedShift(person, Past, ShiftStatus.Completed);
+        Submit(kit, shift, preMin: 60);
+        var spec = new ShiftSpec(Past, new TimeOnly(9, 0), new TimeOnly(17, 0), false, SupportRatio.OneToOne, SleepoverType.None, ShiftId: shift.Id);
+
+        var estimates = await new LedgerShiftCostSource(kit.Db, kit.Ledger).EstimateAsync(kit.TenantId, person.Id, new[] { spec }, Ct);
+
+        Assert.Equal(480m + 60.00m, Assert.IsType<ShiftCostEstimate.Priced>(Assert.Single(estimates)).Amount);
+    }
 }

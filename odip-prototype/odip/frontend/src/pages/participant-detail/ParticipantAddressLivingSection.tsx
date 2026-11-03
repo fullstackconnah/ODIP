@@ -1,20 +1,23 @@
 import { useState } from 'react'
 import { usePatchParticipant } from '@/api/hooks'
 import { FormField } from '@/components/FormField'
+import { Dropdown } from '@/components/Dropdown'
 import { FactList } from '@/components/FactList'
 import { formGrid, span } from '@/lib/formGrid'
 import { SectionEditPanel } from './SectionEditPanel'
 import { AU_STATES, LIVING_ARRANGEMENTS } from '@/api/types/enums'
-import { LIVING_ARRANGEMENT_LABELS } from '@/api/types/participants'
+import { LIVING_ARRANGEMENT_LABELS, MM_LEVEL_HINT, MM_LEVEL_LABELS } from '@/api/types/participants'
 import type { LivingArrangement } from '@/api/types/enums'
 import type { ParticipantDetailDto } from '@/api/types/participants'
 import { rethrowSectionError } from '@/lib/sectionConflict'
 import type { PatchParticipantDto } from '@/api/types/participant-patch'
+import { hasAddressLiving } from './recorded'
 
 /**
  * PD-7: Address & Living Arrangements card — covers TWO CORE-02 groups in one section, saved
  * together in a single PATCH: `address` (addressStreet/Suburb/State/Postcode) and
- * `livingArrangement` (livingArrangement + its 8 per-type conditional fields + notes). Both
+ * `livingArrangement` (livingArrangement + its 8 per-type conditional fields + notes), plus the
+ * participant's MM level in its own `remoteness` group (so an address save can never clear it). All
  * groups are fully rendered by this section's edit form across every livingArrangement branch,
  * so no snapshot merge is needed for either group. `country` is NOT part of either group here —
  * it lives in `personalDetails` and is edited from the Identity section (see that file's doc) —
@@ -22,6 +25,7 @@ import type { PatchParticipantDto } from '@/api/types/participant-patch'
  */
 type AddressLivingDraft = {
   addressStreet: string; addressSuburb: string; addressState: string; addressPostcode: string
+  mmLevel: string  // '' = not set
   livingArrangement: string
   mainSupportPersonName: string; mainSupportPersonRelationship: string
   othersLivingInAccommodation: string; residentialInfo: string
@@ -33,6 +37,7 @@ type AddressLivingDraft = {
 function readAddressLiving(p: ParticipantDetailDto): AddressLivingDraft {
   return {
     addressStreet: p.addressStreet ?? '', addressSuburb: p.addressSuburb ?? '', addressState: p.addressState ?? '', addressPostcode: p.addressPostcode ?? '',
+    mmLevel: p.mmLevel == null ? '' : String(p.mmLevel),
     livingArrangement: p.livingArrangement ?? '',
     mainSupportPersonName: p.mainSupportPersonName ?? '', mainSupportPersonRelationship: p.mainSupportPersonRelationship ?? '',
     othersLivingInAccommodation: p.othersLivingInAccommodation ?? '', residentialInfo: p.residentialInfo ?? '',
@@ -61,6 +66,7 @@ export function ParticipantAddressLivingSection({ p, participantId, canEdit }: {
             addressState: draft.addressState || null,
             addressPostcode: draft.addressPostcode.trim() || null,
           },
+          remoteness: { mmLevel: draft.mmLevel ? Number(draft.mmLevel) : null },
           livingArrangement: {
             livingArrangement: (type || null) as LivingArrangement | null,
             mainSupportPersonName: type === 'Family' ? (draft.mainSupportPersonName.trim() || null) : null,
@@ -84,7 +90,7 @@ export function ParticipantAddressLivingSection({ p, participantId, canEdit }: {
   }
 
   return (
-    <SectionEditPanel title="Address & Living Arrangements" groups={['address', 'livingArrangement']} revisions={p.groupRevisions} canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
+    <SectionEditPanel title="Address & Living Arrangements" groups={['address', 'remoteness', 'livingArrangement']} revisions={p.groupRevisions} canEdit={canEdit} isDirty={isDirty} onEditStart={() => setDraft(saved)} onCancel={() => setDraft(saved)} onSave={handleSave}>
       {(editing, startEdit) => editing ? (
         <div className="space-y-4">
           <div className={formGrid}>
@@ -104,6 +110,15 @@ export function ParticipantAddressLivingSection({ p, participantId, canEdit }: {
               <input value={draft.addressPostcode} onChange={(e) => setDraft((d) => ({ ...d, addressPostcode: e.target.value }))} inputMode="numeric" maxLength={4} />
             </FormField>
           </div>
+          <FormField label="Remoteness (MM level)" hint={MM_LEVEL_HINT}>
+            <Dropdown
+              variant="form"
+              maxPanelHeight={400}   // 8 rows of 44 px do not fit the default 320 cap
+              value={draft.mmLevel}
+              onChange={(v) => setDraft((d) => ({ ...d, mmLevel: v }))}
+              items={[{ value: '', label: 'Not set' }, ...Object.entries(MM_LEVEL_LABELS).map(([value, label]) => ({ value, label }))]}
+            />
+          </FormField>
           <FormField label="Living Arrangement">
             <select value={draft.livingArrangement} onChange={(e) => setDraft((d) => ({ ...d, livingArrangement: e.target.value }))}>
               <option value="">Not specified</option>
@@ -164,6 +179,7 @@ export function ParticipantAddressLivingSection({ p, participantId, canEdit }: {
         <FactList hideEmpty onAdd={canEdit ? () => startEdit('first-empty') : undefined}
           items={[
             { label: 'Address', value: [p.addressStreet, p.addressSuburb, p.addressState, p.addressPostcode, p.country].filter(Boolean).join(', ') || undefined },
+            { label: 'Remoteness (MM level)', value: p.mmLevel != null ? MM_LEVEL_LABELS[p.mmLevel] : hasAddressLiving(p) ? <span className="text-[var(--color-muted-foreground)]">Not set</span> : undefined },
             { label: 'Living Arrangement', value: p.livingArrangement ? LIVING_ARRANGEMENT_LABELS[p.livingArrangement as LivingArrangement] : undefined },
             ...(p.livingArrangement === 'Family' ? [
               { label: 'Main Support Person', value: p.mainSupportPersonName ? `${p.mainSupportPersonName}${p.mainSupportPersonRelationship ? ` (${p.mainSupportPersonRelationship})` : ''}` : undefined },

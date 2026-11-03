@@ -92,6 +92,7 @@ public record ParticipantDetailDto : ParticipantListDto
     public string? AddressSuburb { get; init; }
     public string? AddressState { get; init; }
     public string? AddressPostcode { get; init; }
+    public int? MmLevel { get; init; }
     public List<string> MobilitySupportOptions { get; init; } = new();
     /// <summary>DIAG-01.</summary>
     public string? PrimaryDiagnosis { get; init; }
