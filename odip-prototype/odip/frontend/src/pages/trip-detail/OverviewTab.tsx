@@ -23,7 +23,7 @@ interface OverviewTabProps {
 const SHOWN = 2
 
 // A value that is missing, or only zeros, is "not recorded": FactList (hideEmpty) names it in the foot line.
-const joined = (parts: (string | false | null | undefined)[]) => parts.filter(Boolean).join(' · ') || null
+const joined = (parts: (string | number | false | null | undefined)[]) => parts.filter(Boolean).join(' · ') || null
 const count = (n: number | null | undefined, singular: string) => (n ? plural(n, singular) : null)
 
 export default function OverviewTab({ tripId, trip, bookings, accommodation, vehicles, onSwitchTab }: OverviewTabProps) {
