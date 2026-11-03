@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  addressLine, convertRefusal, detailFacts, FACT_LIST_WRAP, fullName, hasFullAddress, hasStoredDetails, inquiryErrors, INQUIRY_MESSAGES, mainContactFacts, startIntakeReason,
+  addressLine, convertRefusal, detailFacts, FACT_LIST_WRAP, fullName, hasFullAddress, hasStoredDetails, inquiryErrors, INQUIRY_MESSAGES, mainContactFacts, nextStep, startIntakeReason,
   type InquiryFormValues,
 } from './inquiryDetails'
 
@@ -114,5 +114,23 @@ describe('the read-only facts (E5, E6)', () => {
     ])
     expect(hasStoredDetails({})).toBe(false)
     expect(hasStoredDetails({ ndisNumber: '430123456' })).toBe(true)
+  })
+})
+
+describe('nextStep', () => {
+  const ready = { id: 'q1', hasAddress: true, contactNeedsName: false }
+  it.each([
+    ['intake started', { ...ready, participantId: 'p1' }, 'resume', 'Resume intake', 'Intake started'],
+    ['address missing', { ...ready, hasAddress: false }, 'fix', 'Add address', 'Needs address'],
+    ['contact name missing', { ...ready, contactNeedsName: true }, 'fix', 'Add contact name', 'Needs contact name'],
+    ['both missing', { ...ready, hasAddress: false, contactNeedsName: true }, 'fix', 'Add address and name', 'Needs address and name'],
+    ['ready, no visit', ready, 'book', 'Book intake', 'Not booked yet'],
+    ['ready, visit booked', { ...ready, intakeStartsAt: '2030-10-15T23:00:00Z' }, 'start', 'Start intake', 'Ready to start'],
+  ])('%s', (_name, row, kind, label, waiting) => {
+    expect(nextStep(row)).toMatchObject({ kind, label, waiting })
+  })
+  it('a fix carries the reason and where to fix it; the others carry none', () => {
+    expect(nextStep({ ...ready, hasAddress: false })).toMatchObject({ reason: { text: 'Add an address to start intake', to: '/participants/new-inquiry?id=q1&focus=address' } })
+    expect(nextStep(ready).reason).toBeUndefined()
   })
 })

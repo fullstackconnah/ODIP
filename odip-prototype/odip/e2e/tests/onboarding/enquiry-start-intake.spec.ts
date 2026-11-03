@@ -14,12 +14,15 @@ test("Start intake waits for the address, then makes the main contact the partic
   const id: string = created.data.id;
   let started = false;
   try {
-    // 1. The button is there but held, with its reason linking to the address.
     await page.goto('/participants?tab=enquiries');
     await page.getByRole('textbox', { name: /search enquiries/i }).fill(token);
-    const start = page.getByRole('button', { name: `Start intake for Ari ${token}` });
-    await expect(start).toHaveAttribute('aria-disabled', 'true');
-    await page.getByRole('link', { name: 'Add an address to start intake' }).click();
+    // 1. The row leads with the fix, described by the reason; Start intake waits in the menu, disabled, saying why.
+    const fix = page.getByRole('link', { name: `Add address for Ari ${token}` });
+    await expect(fix).toHaveAccessibleDescription('Add an address to start intake');
+    await page.getByRole('button', { name: `More actions for Ari ${token}` }).click();
+    await expect(page.getByRole('option', { name: /^Start intake/ })).toHaveAttribute('aria-disabled', 'true');
+    await page.keyboard.press('Escape');
+    await fix.click();
     await expect(page).toHaveURL(/focus=address/);
     await expect(page.locator('#inquiry-address-street')).toBeFocused();
 
@@ -31,6 +34,9 @@ test("Start intake waits for the address, then makes the main contact the partic
     await page.getByRole('button', { name: 'Save enquiry' }).click();
     await expect(page).toHaveURL(/\/participants\?tab=enquiries/);
     await page.getByRole('textbox', { name: /search enquiries/i }).fill(token);
+    await expect(page.getByRole('link', { name: `Add address for Ari ${token}` })).toHaveCount(0);
+    await page.getByRole('button', { name: `More actions for Ari ${token}` }).click();
+    const start = page.getByRole('option', { name: /^Start intake/ });
     await expect(start).not.toHaveAttribute('aria-disabled', 'true');
     await start.click();
     await expect(page).toHaveURL(/\/participants\/[0-9a-f-]+\/intake/);

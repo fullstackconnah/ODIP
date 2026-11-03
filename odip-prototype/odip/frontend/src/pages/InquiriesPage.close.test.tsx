@@ -58,7 +58,9 @@ describe('closing an enquiry from the table', () => {
     await user.click(screen.getByRole('button', { name: 'More actions for Noah Fitzgerald' }))
     expect(screen.getByRole('option', { name: 'Close enquiry' })).toBeInTheDocument()
     await user.keyboard('{Escape}')
-    expect(screen.queryByRole('button', { name: 'More actions for Mei Tanaka' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'More actions for Mei Tanaka' })) // a started row has a menu, but no Close enquiry in it
+    expect(screen.queryByRole('option', { name: 'Close enquiry' })).not.toBeInTheDocument()
+    await user.keyboard('{Escape}')
     expect(screen.queryByRole('button', { name: 'More actions for Tomas Becker' })).not.toBeInTheDocument()
   })
 

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { InquiriesTable } from './InquiriesPage'
@@ -20,6 +20,11 @@ vi.mock('@/api/hooks', () => ({
 }))
 
 const inquiry = (overrides: Record<string, unknown> = {}) => ({ id: 'inquiry-1', firstName: 'Ava', lastName: 'Ng', phone: '0400000000', email: null, source: 'Phone', provenance: 'Referral', participantId: null, hasAddress: true, ...overrides })
+/** Start intake sits in the row's menu unless the visit is booked (Book intake leads then). */
+async function startFromMenu(user: ReturnType<typeof userEvent.setup>, name: string) {
+  await user.click(screen.getByRole('button', { name: `More actions for ${name}` }))
+  await user.click(screen.getByRole('option', { name: /^Start intake/ }))
+}
 function page() {
   return render(
     <MemoryRouter initialEntries={['/inquiries']}>
@@ -53,7 +58,7 @@ describe('InquiriesPage lifecycle handoff', () => {
     mocks.inquiries.mockReturnValue({ data: [inquiry()], isLoading: false })
     mocks.convert.mockImplementation((_data: unknown, options: { onSuccess: (value: unknown) => void }) => options.onSuccess(inquiry({ participantId: 'draft-9' })))
     page()
-    await user.click(screen.getByRole('button', { name: /^Start intake/ }))
+    await startFromMenu(user, 'Ava Ng')
     expect(mocks.convert).toHaveBeenCalledWith({ id: 'inquiry-1' }, expect.any(Object))
     expect(screen.getByText('Draft intake destination')).toBeInTheDocument()
   })
@@ -62,7 +67,7 @@ describe('InquiriesPage lifecycle handoff', () => {
     const user = userEvent.setup()
     mocks.inquiries.mockReturnValue({ data: [inquiry({ participantId: 'draft-3' })], isLoading: false })
     page()
-    expect(screen.getByRole('button', { name: /^Edit enquiry/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Edit enquiry/ })).not.toBeInTheDocument() // Edit enquiry lives in the menu now
     expect(screen.queryByRole('button', { name: /^Start intake/ })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /^Resume intake/ }))
     expect(screen.getByText('Draft intake destination')).toBeInTheDocument()
@@ -90,7 +95,11 @@ describe('InquiriesPage lifecycle handoff', () => {
     mocks.inquiries.mockReturnValue({ data: [inquiry()], isLoading: false })
     page()
     expect(screen.getByText(/cannot capture, edit, or start/i)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /capture enquiry|edit enquiry|start intake/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /capture enquiry|edit enquiry|start intake|book intake|more actions/i })).not.toBeInTheDocument()
+    // The step reads as text, not a button, and no cell says Read-only.
+    expect(within(screen.getByRole('row', { name: /Ava Ng/ })).queryByRole('button')).not.toBeInTheDocument()
+    expect(screen.getByText('Not booked yet')).toBeInTheDocument()
+    expect(screen.queryByText('Read-only')).not.toBeInTheDocument()
   })
 
   it('keeps loading visible and announces conversion errors', async () => {
@@ -102,7 +111,7 @@ describe('InquiriesPage lifecycle handoff', () => {
     mocks.inquiries.mockReturnValue({ data: [inquiry()], isLoading: false })
     mocks.convert.mockImplementation((_data: unknown, options: { onError: () => void }) => options.onError())
     page()
-    await user.click(screen.getByRole('button', { name: /^Start intake/ }))
+    await startFromMenu(user, 'Ava Ng')
     expect(screen.getByRole('alert')).toHaveTextContent('Could not start intake. Please try again.')
   })
 
@@ -143,18 +152,17 @@ describe('InquiriesPage lifecycle handoff', () => {
 
   const LONG_PROVENANCE = "Referral from a long GP letter about mobility supports and behaviours. Referral from a long GP letter about mobility supports and behaviours. Referral from a long GP letter about mobility supports and behaviours. Referral from a long GP letter about mobility supports and behaviours."
 
-  it('leads each row with the primary action and caps the Provenance cell', () => {
+  it('caps the Provenance cell, and a started row has one Next step button beside its menu, neither solid', () => {
     mocks.inquiries.mockReturnValue({ data: [
       { id: 'q-1', firstName: 'Row', lastName: 'Order', phone: '0400', source: 'Phone', provenance: LONG_PROVENANCE, participantId: 'p-1' },
     ], isLoading: false })
     page()
-    const resume = screen.getByRole('button', { name: /^Resume intake/ })
-    const editBtn = screen.getByRole('button', { name: /^Edit enquiry/ })
-    // the primary CTA must precede the outlined secondary in DOM reading order
-    expect(resume.compareDocumentPosition(editBtn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    // provenance is truncated and carries the full text for hover; capped at 8rem (since the row menu joined Actions) so the table, Intake on two lines and one-row Actions included, fits at 1440
-    const prov = screen.getByTitle(LONG_PROVENANCE)
-    expect(prov).toHaveClass('truncate', 'max-w-[8rem]')
+    const row = screen.getByRole('row', { name: /Row Order/ })
+    const buttons = within(row).getAllByRole('button')
+    expect(buttons.map(b => b.getAttribute('aria-label') ?? b.textContent)).toEqual(['Resume intake for Row Order', 'More actions for Row Order'])
+    expect(buttons[0]).not.toHaveClass('bg-[var(--color-primary)]')
+    // provenance is truncated and carries the full text for hover
+    expect(screen.getByTitle(LONG_PROVENANCE)).toHaveClass('truncate', 'max-w-[8rem]')
   })
 })
 
@@ -210,29 +218,43 @@ describe('InquiriesPage: the participant and the main contact (spec 2026-10-16 r
     expect(screen.queryByText('Dana Reyes')).not.toBeInTheDocument()
   })
 
-  it('Start intake without the address is aria-disabled, described by a reason link to the address, and does nothing; with it, it is enabled', async () => {
+  it('a row missing its address leads with one Add address link described by the reason; Start intake waits in the menu, disabled, saying why', async () => {
     mocks.inquiries.mockReturnValue({ data: [inquiry({ hasAddress: false })], isLoading: false })
     const user = userEvent.setup()
     const { unmount } = page()
-    const start = screen.getByRole('button', { name: /^Start intake/ })
+    expect(screen.queryByRole('button', { name: /^Start intake/ })).not.toBeInTheDocument() // nothing pressable-but-dead on the row
+    const fix = screen.getByRole('link', { name: 'Add address for Ava Ng' })
+    expect(fix).toHaveAttribute('href', '/participants/new-inquiry?id=inquiry-1&focus=address')
+    expect(fix).toHaveAccessibleDescription('Add an address to start intake')
+    await user.click(screen.getByRole('button', { name: 'More actions for Ava Ng' }))
+    const start = screen.getByRole('option', { name: /^Start intake/ })
     expect(start).toHaveAttribute('aria-disabled', 'true')
-    const reason = screen.getByRole('link', { name: 'Add an address to start intake' })
-    expect(reason).toHaveAttribute('href', '/participants/new-inquiry?id=inquiry-1&focus=address')
-    expect(start).toHaveAttribute('aria-describedby', reason.id)
+    expect(start).toHaveTextContent('Add an address to start intake')
     await user.click(start)
     expect(mocks.convert).not.toHaveBeenCalled()
     unmount()
 
     mocks.inquiries.mockReturnValue({ data: [inquiry({ hasAddress: true })], isLoading: false })
     page()
-    expect(screen.getByRole('button', { name: /^Start intake/ })).not.toHaveAttribute('aria-disabled')
-    expect(screen.queryByRole('link', { name: /to start intake/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /^Add address/ })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'More actions for Ava Ng' }))
+    expect(screen.getByRole('option', { name: /^Start intake/ })).not.toHaveAttribute('aria-disabled')
   })
 
-  it("contactNeedsName gives the name reason, to the contact's fields", () => {
+  it('a ready row with no visit has Book intake as its only button besides the menu', () => {
+    mocks.inquiries.mockReturnValue({ data: [inquiry()], isLoading: false })
+    page()
+    const row = screen.getByRole('row', { name: /Ava Ng/ })
+    expect(within(row).getAllByRole('button').map(b => b.textContent)).toEqual(['Book intake for Ava Ng', ''])
+    expect(within(row).getByText('Not booked')).toBeInTheDocument()
+  })
+
+  it('contactNeedsName gives the name step, to the contact fields', () => {
     mocks.inquiries.mockReturnValue({ data: [inquiry({ contactNeedsName: true })], isLoading: false })
     page()
-    expect(screen.getByRole('link', { name: "Add the main contact's name to start intake" })).toHaveAttribute('href', '/participants/new-inquiry?id=inquiry-1&focus=contact')
+    const fix = screen.getByRole('link', { name: 'Add contact name for Ava Ng' })
+    expect(fix).toHaveAttribute('href', '/participants/new-inquiry?id=inquiry-1&focus=contact')
+    expect(fix).toHaveAccessibleDescription("Add the main contact's name to start intake")
   })
 
   it("a 400 for the address says what Start intake needs, in the participant's name", async () => {
@@ -240,7 +262,7 @@ describe('InquiriesPage: the participant and the main contact (spec 2026-10-16 r
     mocks.convert.mockImplementation((_data: unknown, options: { onError: (e: unknown) => void }) => options.onError(addressRefusal))
     const user = userEvent.setup()
     page()
-    await user.click(screen.getByRole('button', { name: /^Start intake/ }))
+    await startFromMenu(user, 'Ari Walsh')
     expect(screen.getByRole('alert')).toHaveTextContent("Add Ari Walsh's full address before starting intake: street, suburb, state and postcode.")
   })
 
@@ -250,7 +272,7 @@ describe('InquiriesPage: the participant and the main contact (spec 2026-10-16 r
     mocks.convert.mockImplementation((_data: unknown, options: { onError: (e: unknown) => void }) => options.onError(refused))
     const user = userEvent.setup()
     page()
-    await user.click(screen.getByRole('button', { name: /^Start intake/ }))
+    await startFromMenu(user, 'Jo Smith')
     expect(screen.getByRole('alert')).toHaveTextContent("Jo Smith's intake didn't start. Plan Nominee is not available for a participant under 18.")
   })
 })

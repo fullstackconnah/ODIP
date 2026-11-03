@@ -234,7 +234,7 @@ public class RosteringController : ControllerBase
         var shiftSources = await ShiftSourcesAsync(weekShifts.Select(s => s.ShiftPatternId), ct);
         // Budget phase 3: where the Admin's review of each emergency or safety booking stands (one query, and only when the week holds one).
         var budgetReviews = await BudgetReviewsAsync(weekShifts, ct);
-        var regulars = await RegularsAsync(weekShifts.Select(s => s.ShiftPatternId), ct);
+        var regulars = await RosterRegulars.ByPatternAsync(_db, weekShifts.Select(s => s.ShiftPatternId), ct);
         var claimReferences = await ClaimReferencesAsync(weekShifts.Where(s => s.Status == ShiftStatus.Completed).Select(s => s.Id), ct);
         var weekStarted = await WeekStartedAsync(_tenant?.TenantId, start, ct);
         var canStart = (await StartedWeeks.MondaysAsync(_db, _tenant?.TenantId, start, start, ct)).Count == 0;
@@ -1084,6 +1084,18 @@ public class RosteringController : ControllerBase
         {
             return WeekAlreadyStarted();
         }
+    }
+
+    /// <summary>
+    /// Auto-roster (R7), read-only: a draft of who could take the open shifts of the Monday-start week holding <paramref name="weekStart"/>. Nothing is saved or sent, and no lock is taken;
+    /// the draft says what the rules allow now, and anything applied later is checked again.
+    /// </summary>
+    [HttpPost("weeks/{weekStart}/auto-roster")]
+    public async Task<ActionResult<ApiResponse<AutoRosterDraftDto>>> AutoRoster(DateOnly weekStart, CancellationToken ct)
+    {
+        // As Start rostering: a SuperAdmin with no organisation chosen has no tenant filter.
+        if (_tenant?.TenantId is not { } tenantId) return BadRequest(ApiResponse<AutoRosterDraftDto>.Fail("Choose an organisation to auto-roster its week."));
+        return Ok(ApiResponse<AutoRosterDraftDto>.Ok(await new AutoRosterDraftBuilder(_db, _availability).BuildAsync(tenantId, WeekStart(weekStart), _clock.GetUtcNow().UtcDateTime, ct)));
     }
 
     /// <summary>
@@ -2191,14 +2203,6 @@ public class RosteringController : ControllerBase
         return Ok(ApiResponse<ShiftPatternDto>.Ok(await LoadPatternDtoAsync(pattern.Id, ct)));
     }
 
-    /// <summary>By pattern id, the pattern's regular (its default worker): one query for the board's "Regular" marker.</summary>
-    private async Task<Dictionary<Guid, Guid>> RegularsAsync(IEnumerable<Guid?> patternIds, CancellationToken ct)
-    {
-        var ids = patternIds.Where(id => id.HasValue).Select(id => id!.Value).Distinct().ToList();
-        if (ids.Count == 0) return new();
-        return await _db.ShiftPatterns.AsNoTracking().Where(p => ids.Contains(p.Id) && p.DefaultUserId != null).ToDictionaryAsync(p => p.Id, p => p.DefaultUserId!.Value, ct);
-    }
-
     private static Guid? LiveRegular(Shift shift, Dictionary<Guid, Guid> regulars) =>
         shift.ShiftPatternId is { } patternId && regulars.TryGetValue(patternId, out var regular) ? regular : null;
 
@@ -2236,7 +2240,7 @@ public class RosteringController : ControllerBase
         var readinessIssues = await ParticipantReadiness.IssuesAsync(_db, new[] { shift.ParticipantId }, ct);
         int? sourceVersion = null;
         var fromAgreement = shift.ShiftPatternId is { } patternId && (await ShiftSourcesAsync(new[] { shift.ShiftPatternId }, ct)).TryGetValue(patternId, out sourceVersion);
-        var regulars = await RegularsAsync(new[] { shift.ShiftPatternId }, ct);
+        var regulars = await RosterRegulars.ByPatternAsync(_db, new[] { shift.ShiftPatternId }, ct);
 
         return new ShiftDto
         {
