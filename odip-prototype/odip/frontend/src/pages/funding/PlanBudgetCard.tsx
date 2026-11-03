@@ -52,7 +52,7 @@ function PlanBudgetCardBody({ participantId, planType }: { participantId?: strin
   } else if (!current) {
     body = (
       <div className="flex flex-col items-start gap-2">
-        <p className="text-sm">Not recorded</p>
+        <p className="text-sm text-[var(--color-muted-foreground)]">Not recorded</p>
         <p className="max-w-prose text-[13px] text-[var(--color-muted-foreground)]">
           The figures come from the plan the participant shares, or their plan manager. If the plan has not been shared yet, leave this and record it later on the participant&rsquo;s Funding tab.
         </p>
