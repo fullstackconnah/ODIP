@@ -214,6 +214,45 @@ public class AutoRosterControllerTests
     }
 
     [Fact]
+    public async Task AutoRosterApply_WithNullRows_Is400()
+    {
+        using var db = TestDb.Create();
+
+        var bad = Assert.IsType<BadRequestObjectResult>((await Controller(db, TenantA).AutoRosterApply(Monday, new AutoRosterApplyDto { Rows = null! }, default)).Result);
+        Assert.False(Assert.IsType<ApiResponse<AutoRosterApplyResultDto>>(bad.Value).Success);
+    }
+
+    [Fact]
+    public async Task AutoRosterApply_AShiftListedTwice_AppliesOnce_AndSkipsTheSecondAsListedTwice()
+    {
+        using var db = TestDb.Create();
+        var pat = Staff(db, "Pat", TenantA);
+        var (_, shift) = OpenShift(db, "Mia", TenantA);
+        await db.SaveChangesAsync();
+
+        var result = Result(await Controller(db, TenantA).AutoRosterApply(Monday, Rows((shift.Id, pat.Id), (shift.Id, pat.Id)), default));
+
+        Assert.Equal([shift.Id], result.Applied);
+        Assert.Equal("Listed twice.", Assert.Single(result.Skipped).Message);
+    }
+
+    [Fact]
+    public async Task AutoRosterApply_OneWorkerOnTwoOverlappingShifts_AppliesTheFirst_AndLeavesTheSecondOpen()
+    {
+        using var db = TestDb.Create();
+        var pat = Staff(db, "Pat", TenantA);
+        var (_, first) = OpenShift(db, "Mia", TenantA);
+        var (_, second) = OpenShift(db, "Zoe", TenantA);   // same day and hours as the first
+        await db.SaveChangesAsync();
+
+        var result = Result(await Controller(db, TenantA).AutoRosterApply(Monday, Rows((first.Id, pat.Id), (second.Id, pat.Id)), default));
+
+        Assert.Equal([first.Id], result.Applied);
+        Assert.Equal(second.Id, Assert.Single(result.Skipped).ShiftId);
+        Assert.Null((await db.Shifts.AsNoTracking().SingleAsync(s => s.Id == second.Id)).UserId);
+    }
+
+    [Fact]
     public async Task AutoRosterApply_WithNoOrganisationOnTheRequest_Is400()
     {
         using var db = TestDb.Create();

@@ -11,7 +11,6 @@ import { DataTable, type Column } from '@/components/DataTable'
 import { DisclosureToggle } from '@/components/DisclosureToggle'
 import { Dropdown } from '@/components/Dropdown'
 import { EmptyState } from '@/components/EmptyState'
-import { ProgressBar } from '@/components/ProgressBar'
 import { SlideOver } from '@/components/SlideOver'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Tabs } from '@/components/Tabs'
@@ -66,6 +65,16 @@ const REASON: Record<UncoveredReason, (u: AutoRosterUncoveredDto) => string> = {
   NobodyFree: () => 'No one on the list is free at this time.',
 }
 
+/** Hours against goal as a 56 px track (the segmented ProgressBar draws a segment per goal hour, far wider than the panel); the numbers sit in the Total column. */
+function GoalBar({ total, goal }: { total: number; goal: number }) {
+  const label = `${hours(total)} of ${hours(goal)} h`
+  return (
+    <div role="progressbar" aria-label={label} title={label} aria-valuenow={Math.min(total, goal)} aria-valuemin={0} aria-valuemax={goal} className="h-1.5 w-14 overflow-hidden rounded-full bg-[var(--color-surface-container)]">
+      <div className="h-full rounded-full bg-[var(--color-primary-fixed)]" style={{ width: `${Math.min(100, (total / goal) * 100)}%` }} />
+    </div>
+  )
+}
+
 /** Groups rows under a sticky day heading with a muted count. */
 function DayGroups<T extends { serviceDate: string; shiftId: string }>({ rows, render }: { rows: T[]; render: (row: T) => React.ReactNode }) {
   const days = [...new Set(rows.map(r => r.serviceDate))]
@@ -95,7 +104,7 @@ export function AutoRosterPanel({ open, onClose, description, run, onRetryRun, o
   const [removed, setRemoved] = useState<Set<string>>(new Set())
   const [leftOpenShown, setLeftOpenShown] = useState(false)
   const [applying, setApplying] = useState(false)
-  const [applyError, setApplyError] = useState<{ busy: boolean; message: string } | null>(null)
+  const [applyError, setApplyError] = useState<{ busy: boolean; unconfirmed: boolean; message: string } | null>(null)
   const leftOpenId = useId()
 
   // A new draft starts clean, on the tab that has something to show (state adjusted during render, not in an effect).
@@ -144,23 +153,24 @@ export function AutoRosterPanel({ open, onClose, description, run, onRetryRun, o
       const result = await onApply(sent)
       onApplied(result, texts, uncoveredCount + left.length)
     } catch (err) {
-      const busy = (err as { response?: { status?: number } })?.response?.status === 409
+      const response = (err as { response?: { status?: number } })?.response
+      const busy = response?.status === 409
       const message = extractErrorMessage(err, 'Check your connection and try again.')
-      setApplyError({ busy, message })
+      setApplyError({ busy, unconfirmed: !response, message })   // no response: the apply may have landed, so never say nothing was saved
     } finally { setApplying(false) }
   }
 
   const hoursColumns: Column<(typeof hoursRows)[number]>[] = [
     { key: 'staffName', header: 'Name', mobile: 'primary', render: h => (
-      <div className="min-w-0"><div className="truncate" title={h.staffName}>{h.staffName}</div>
+      <div className="max-w-[8rem]"><div className="truncate" title={h.staffName}>{h.staffName}</div>
         {h.employmentType && <div className="text-xs text-muted-foreground">{EMPLOYMENT_TYPE_LABELS[h.employmentType]}</div>}</div>) },
     { key: 'goalHours', header: 'Goal', align: 'right', mobile: 'hidden', render: h => (
       <div className="tabular-nums">{hours(h.goalHours)} h{h.goalIsDefault && <div className="text-xs text-muted-foreground">default</div>}</div>) },
-    { key: 'rosteredHours', header: 'This week', align: 'right', mobile: 'meta', render: h => <span className="tabular-nums whitespace-nowrap">{hours(h.rosteredHours)} + {hours(h.draftHours)} h</span> },
+    { key: 'rosteredHours', header: 'This week', align: 'right', mobile: 'meta', render: h => (<span className="tabular-nums whitespace-nowrap"><span className="sm:hidden">{hours(h.rosteredHours)} h rostered + {hours(h.draftHours)} h draft</span><span className="max-sm:hidden">{hours(h.rosteredHours)} + {hours(h.draftHours)} h</span></span>) },
     { key: 'total', header: 'Total', align: 'right', mobile: 'trail', render: h => (
       <div className="tabular-nums whitespace-nowrap">{hours(h.total)} h{h.goalHours > 0 && h.total > h.goalHours && <div className="text-xs text-warning-text">{hours(h.total - h.goalHours)} h over</div>}</div>) },
     { key: 'progress', header: '', srHeader: 'Progress', mobile: 'hidden', render: h => (h.goalHours > 0
-      ? <ProgressBar className="w-[72px]" value={Math.round(h.total)} total={Math.round(h.goalHours)} label={`${hours(h.total)} of ${hours(h.goalHours)} h`} /> : null) },
+      ? <GoalBar total={h.total} goal={h.goalHours} /> : null) },
   ]
 
   const rowActions = (row: (typeof rows)[number]) => {
@@ -193,11 +203,14 @@ export function AutoRosterPanel({ open, onClose, description, run, onRetryRun, o
               <span className="whitespace-nowrap tabular-nums">{range(row)}</span><span aria-hidden="true">·</span>
               <span className="truncate" title={row.participantName}>{row.participantName}</span>
             </p>
-            <p className="flex min-w-0 items-center gap-2">
-              <span className="truncate font-semibold" title={row.staffName}>{row.staffName}</span>
-              <StatusBadge size="sm" tone="neutral" label={pickLabel(row)} className="shrink-0" />
-              {row.underGoal && <span className="whitespace-nowrap text-muted-foreground">· under goal</span>}
-            </p>
+            <div className="sm:flex sm:items-center sm:gap-2">
+              <p className="flex min-w-0 items-center gap-2">
+                <span className="truncate font-semibold" title={row.staffName}>{row.staffName}</span>
+                <StatusBadge size="sm" tone="neutral" label={pickLabel(row)} className="shrink-0" />
+              </p>
+              {/* Below sm it is its own muted line, so line 2 is the name and the badge only. */}
+              {row.underGoal && <p className="whitespace-nowrap text-muted-foreground"><span className="max-sm:hidden" aria-hidden="true">· </span>under goal</p>}
+            </div>
             {row.regularAway && <p className="text-muted-foreground">{row.regularAway}</p>}
             {row.warnings.map(w => <p key={w.code + w.message} className="text-muted-foreground">{w.message}</p>)}
             {row.was && <p className="text-muted-foreground">Was {row.was}</p>}
@@ -254,9 +267,9 @@ export function AutoRosterPanel({ open, onClose, description, run, onRetryRun, o
   ) : (
     <div className="space-y-3" inert={applying || undefined}>
       {applyError && (
-        <Callout tone={applyError.busy ? 'warning' : 'danger'} title={applyError.busy ? 'Someone else is saving this week’s roster' : 'Couldn’t apply the draft'}
+        <Callout tone={applyError.busy ? 'warning' : 'danger'} title={applyError.busy ? 'Someone else is saving this week’s roster' : applyError.unconfirmed ? 'We couldn’t confirm the apply' : 'Couldn’t apply the draft'}
           actions={<Button size="sm" variant="secondary" onClick={() => void apply()}>Try again</Button>}>
-          {applyError.message} {applyError.busy ? 'Your draft is kept.' : 'Nothing was saved.'}
+          {applyError.unconfirmed ? 'Check the board before you apply again.' : `${applyError.message} ${applyError.busy ? 'Your draft is kept.' : 'Nothing was saved.'}`}
         </Callout>
       )}
       <Tabs variant="underline" ariaLabel="Draft roster" active={tab} onChange={setTab} tabs={[

@@ -46,7 +46,7 @@ describe('the draft roster panel', () => {
     expect(screen.getByRole('region', { name: 'Mon 7 Sep' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Tue 8 Sep' })).toBeInTheDocument()
     expect(screen.getByText('Preferred #2')).toBeInTheDocument()
-    expect(screen.getByText('· under goal')).toBeInTheDocument()
+    expect(screen.getByText('under goal')).toBeInTheDocument()
     expect(screen.getByText('Pat Kim is away: on approved leave')).toBeInTheDocument()
     expect(screen.getByText('Public holiday')).toBeInTheDocument()
     expect(applyButton()).toHaveTextContent('Apply 3 changes')
@@ -146,6 +146,14 @@ describe('the draft roster panel', () => {
     await user.click(applyButton())
     expect(await screen.findByText('Couldn’t apply the draft')).toBeInTheDocument()
     expect(screen.getByText(/Nothing was saved\./)).toBeInTheDocument()
+  })
+
+  it('a failure with no response does not claim nothing was saved', async () => {
+    const { user } = setup({ onApply: vi.fn().mockRejectedValue(new Error('Network Error')) })
+    await user.click(applyButton())
+    expect(await screen.findByText('We couldn’t confirm the apply')).toBeInTheDocument()
+    expect(screen.getByText('Check the board before you apply again.')).toBeInTheDocument()
+    expect(screen.queryByText(/Nothing was saved/)).not.toBeInTheDocument()
   })
 
   it('loading and a failed run each have one home, and the run error offers Try again', async () => {

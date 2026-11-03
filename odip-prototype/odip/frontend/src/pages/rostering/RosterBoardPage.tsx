@@ -33,7 +33,7 @@ import {
 } from './components'
 import { BOARD_REFRESHED, isBoardChanged } from './lib/boardChanged'
 import { blockedOnlyByDoubleBooking } from './lib/rosterGate'
-import { weekStartOf, weekStartFromDateParam, shiftWeek, daysOfWeek, isUnfilledShift, formatWeekSpan, allBoardShifts } from './lib/roster'
+import { weekStartOf, weekStartFromDateParam, shiftWeek, daysOfWeek, isUnfilledShift, formatWeekSpan, formatWeekRange, allBoardShifts } from './lib/roster'
 import { useBoardViewMode } from './lib/useBoardViewMode'
 import {
   DropStateContext, ROSTER_SCREEN_READER_INSTRUCTIONS, assignedSentence, dropOutcome, movedSentence, publishFailedPrefix, publishWeekMessage, publishedShiftSentence, publishedSentence, replacePromptLines, rosterAnnouncements,
@@ -1007,7 +1007,7 @@ export default function RosterBoardPage() {
       <AutoRosterPanel
         open={autoOpen}
         onClose={closeAutoRoster}
-        description={participantFilter || regionFilter || unfilledOnly ? `${formatWeekSpan(days)}. Covers every participant, not just the filtered view.` : formatWeekSpan(days)}
+        description={participantFilter || regionFilter || unfilledOnly ? `${formatWeekRange(days)}. Covers every participant, not just the filtered view.` : formatWeekRange(days)}
         run={autoRun}
         onRetryRun={runAutoRoster}
         onApply={rows => applyAuto.mutateAsync({ weekStart: autoWeek.current, rows })}

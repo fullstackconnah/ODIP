@@ -1109,6 +1109,7 @@ public class RosteringController : ControllerBase
     public async Task<ActionResult<ApiResponse<AutoRosterApplyResultDto>>> AutoRosterApply(DateOnly weekStart, [FromBody] AutoRosterApplyDto dto, CancellationToken ct)
     {
         if (_tenant?.TenantId is not { } tenantId) return BadRequest(ApiResponse<AutoRosterApplyResultDto>.Fail("Choose an organisation to auto-roster its week."));
+        if (dto?.Rows is null) return BadRequest(ApiResponse<AutoRosterApplyResultDto>.Fail("Choose the shifts to apply."));
         if (dto.Rows.Count > AutoRosterApplyMaxRows) return BadRequest(ApiResponse<AutoRosterApplyResultDto>.Fail($"Apply at most {AutoRosterApplyMaxRows} shifts at a time."));
         var start = WeekStart(weekStart);
         var end = start.AddDays(6);
@@ -1123,8 +1124,10 @@ public class RosteringController : ControllerBase
             var staffHere = (await _db.Users.Where(u => staffIds.Contains(u.Id) && u.TenantId == tenantId).Select(u => u.Id).ToListAsync(ct)).ToHashSet();
 
             var result = new AutoRosterApplyResultDto();
+            var seen = new HashSet<Guid>();
             foreach (var row in dto.Rows)
             {
+                if (!seen.Add(row.ShiftId)) { result.Skipped.Add(new() { ShiftId = row.ShiftId, Message = "Listed twice." }); continue; }
                 if (!shiftsHere.Contains(row.ShiftId)) { result.Skipped.Add(new() { ShiftId = row.ShiftId, Message = "Shift not found." }); continue; }
                 if (!staffHere.Contains(row.StaffId)) { result.Skipped.Add(new() { ShiftId = row.ShiftId, Message = "Staff member not found." }); continue; }
                 // ExpectedStaffId null: the draft only fills open shifts, so a shift someone filled since is a 409 here, never a replacement.
