@@ -2,10 +2,11 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, within, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import ItineraryTab from './ItineraryTab'
-import { itineraryRows } from './ItineraryList'
+import { itineraryRows } from '@/lib/itineraryRows'
+import type { ItineraryDayDto } from '@/api/types/itinerary'
 
 const act = (o: object) => ({ status: 'Confirmed', category: 'Leisure', ...o })
-const days: any[] = [
+const days = [
   {
     dayNumber: 1, date: '2026-11-06', dayTitle: 'Travel and settle in', staffOnDuty: [],
     accommodationEvents: [{ eventType: 'Check-in', propertyName: 'Kings Beach Lodge', address: '1 Beach Rd' }],
@@ -16,8 +17,8 @@ const days: any[] = [
     ],
   },
   { dayNumber: 2, date: '2026-11-07', staffOnDuty: [], accommodationEvents: [], activities: [act({ title: 'Museum', startTime: '09:00' })] },
-]
-const itinerary: any = {
+] as unknown as ItineraryDayDto[]
+const itinerary = {
   tripName: 'Beach Escape', totalEstimatedCost: 0, participants: [], staff: [], vehicles: [], accommodation: [], days,
 }
 vi.mock('@/api/hooks', () => ({

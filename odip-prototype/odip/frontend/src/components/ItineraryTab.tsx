@@ -10,7 +10,8 @@ import { statusClass } from '@/lib/tone'
 import { Callout } from '@/components/Callout'
 import { retryingAfterError } from '@/lib/queryPhase'
 import { ToggleGroup } from './ToggleGroup'
-import { ItineraryList, formatTime, parseLocalDate } from './ItineraryList'
+import { ItineraryList } from './ItineraryList'
+import { formatTime, parseLocalDate } from '@/lib/itineraryRows'
 
 interface ItineraryTabProps {
   tripId: string
