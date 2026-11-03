@@ -380,6 +380,7 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
       description: buildShiftNoteIncidentDescriptionSkeleton(shiftNotePrefill),
       involvedParticipantId: shiftNotePrefill.participantId,
       reportedByStaffId: lockedReporterId ?? shiftNotePrefill.reportedByUserId ?? '',
+      severity: '',
       incidentDateTime: buildShiftNoteIncidentDateTime(shiftNotePrefill),
       status: 'Draft',
       qscReportingStatus: 'NotRequired',

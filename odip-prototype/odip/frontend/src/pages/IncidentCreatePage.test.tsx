@@ -522,6 +522,15 @@ describe('IncidentCreatePage — NOTES-02 shift-note prefill acknowledges flags 
     })
   })
 
+  it('asks for a severity, not a generic type error, when the shift-note pre-fill leaves it unchosen', async () => {
+    const user = userEvent.setup()
+    renderCreatePage({ pathname: '/incidents/new', state: shiftNotePrefill })
+
+    await clickNext(user)
+
+    expect(await screen.findByText('Choose a severity level.')).toBeInTheDocument()
+  })
+
   it('shows a compact "Linked to" line naming the shift note\'s date', () => {
     renderCreatePage({ pathname: '/incidents/new', state: shiftNotePrefill })
 
