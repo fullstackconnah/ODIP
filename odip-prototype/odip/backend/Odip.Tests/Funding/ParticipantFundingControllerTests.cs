@@ -388,6 +388,103 @@ public class ParticipantFundingControllerTests
         Assert.Equal(1, (await mine.Db.FundingPlans.SingleAsync()).Revision);
     }
 
+    // ── My provider ─────────────────────────────────────────────────────────
+
+    private static SetMyProviderDto Mine(MyProviderRecord record, DateOnly? on) => new() { MyProvider = record, MyProviderOn = on };
+
+    [Fact]
+    public async Task SetMyProvider_StoresTheRecordAndTheCallersId_AnswersThePlan_KeepsTheRevision_AndAudits()
+    {
+        using var kit = Create();
+        var participant = kit.SeedParticipant();
+        var created = await kit.CreatePlanAsync(participant.Id);
+        Assert.Equal(MyProviderRecord.Unknown, created.MyProvider);
+        kit.ClearAudit();
+
+        var plan = Body(await kit.Controller.SetMyProvider(participant.Id, created.Id, Mine(MyProviderRecord.Recorded, D(2026, 9, 1)), CancellationToken.None));
+
+        Assert.Equal((MyProviderRecord.Recorded, D(2026, 9, 1), 1), (plan.MyProvider, plan.MyProviderOn, plan.Revision));
+        var stored = await kit.Db.FundingPlans.SingleAsync();
+        Assert.Equal((MyProviderRecord.Recorded, D(2026, 9, 1), FundingTestKit.UserId.ToString(), 1), (stored.MyProvider, stored.MyProviderOn, stored.MyProviderSetBy, stored.Revision));
+        var row = Assert.Single(await kit.Db.AuditLogs.ToListAsync());
+        Assert.Equal((nameof(FundingPlan), AuditAction.Updated, FundingTestKit.UserId), (row.EntityType, row.Action, row.ChangedById));
+        Assert.Contains("MyProvider", row.Changes, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SetMyProvider_ToUnknown_ClearsTheDateAndWho()
+    {
+        using var kit = Create();
+        var participant = kit.SeedParticipant();
+        var created = await kit.CreatePlanAsync(participant.Id);
+        Body(await kit.Controller.SetMyProvider(participant.Id, created.Id, Mine(MyProviderRecord.Requested, D(2026, 9, 1)), CancellationToken.None));
+
+        var plan = Body(await kit.Controller.SetMyProvider(participant.Id, created.Id, Mine(MyProviderRecord.Unknown, D(2026, 9, 1)), CancellationToken.None));
+
+        Assert.Equal((MyProviderRecord.Unknown, (DateOnly?)null), (plan.MyProvider, plan.MyProviderOn));
+        Assert.Null((await kit.Db.FundingPlans.SingleAsync()).MyProviderSetBy);
+    }
+
+    [Theory]
+    [InlineData(MyProviderRecord.Requested, null, "Enter the date.")]
+    [InlineData(MyProviderRecord.Recorded, null, "Enter the date.")]
+    [InlineData(MyProviderRecord.Recorded, "1989-12-31", "Enter a date after 1990.")]
+    [InlineData(MyProviderRecord.Requested, "2026-10-10", "The date cannot be in the future.")]
+    public async Task SetMyProvider_RefusesABadDate_With400AndTheReason_AndChangesNothing(MyProviderRecord record, string? on, string reason)
+    {
+        using var kit = Create();
+        var participant = kit.SeedParticipant();
+        var created = await kit.CreatePlanAsync(participant.Id);
+
+        var result = await kit.Controller.SetMyProvider(participant.Id, created.Id, Mine(record, on is null ? null : DateOnly.Parse(on)), CancellationToken.None);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, Assert.IsType<BadRequestObjectResult>(result.Result).StatusCode);
+        Assert.Equal([reason], ErrorsOf(((BadRequestObjectResult)result.Result!).Value));
+        Assert.Equal(MyProviderRecord.Unknown, (await kit.Db.FundingPlans.SingleAsync()).MyProvider);
+    }
+
+    [Fact]
+    public async Task SetMyProvider_ARecordedStartDateMayBeInTheFuture_ANewPlanThatHasNotStarted()
+    {
+        using var kit = Create();
+        var participant = kit.SeedParticipant();
+        var created = await kit.CreatePlanAsync(participant.Id);
+
+        var plan = Body(await kit.Controller.SetMyProvider(participant.Id, created.Id, Mine(MyProviderRecord.Recorded, D(2026, 11, 1)), CancellationToken.None));
+
+        Assert.Equal(D(2026, 11, 1), plan.MyProviderOn);
+    }
+
+    [Fact]
+    public async Task SetMyProvider_ForAnotherTenantOrAParticipantThatDoesNotOwnThePlan_Is404_AndChangesNothing()
+    {
+        var database = Guid.NewGuid().ToString();
+        using var mine = Create(TenantA, database: database);
+        var a = mine.SeedParticipant();
+        var b = mine.SeedParticipant();
+        var plan = await mine.CreatePlanAsync(a.Id);
+        using var other = Create(TenantB, database: database);
+
+        Assert.IsType<NotFoundObjectResult>((await mine.Controller.SetMyProvider(b.Id, plan.Id, Mine(MyProviderRecord.Recorded, D(2026, 9, 1)), CancellationToken.None)).Result);
+        Assert.IsType<NotFoundObjectResult>((await other.Controller.SetMyProvider(a.Id, plan.Id, Mine(MyProviderRecord.Recorded, D(2026, 9, 1)), CancellationToken.None)).Result);
+        Assert.Equal(MyProviderRecord.Unknown, (await mine.Db.FundingPlans.SingleAsync()).MyProvider);
+    }
+
+    [Fact]
+    public async Task UpdatePlan_LeavesTheMyProviderRecordAlone()
+    {
+        using var kit = Create();
+        var participant = kit.SeedParticipant();
+        var created = await kit.CreatePlanAsync(participant.Id);
+        Body(await kit.Controller.SetMyProvider(participant.Id, created.Id, Mine(MyProviderRecord.Recorded, D(2026, 9, 1)), CancellationToken.None));
+
+        var saved = Body(await kit.Controller.UpdatePlan(participant.Id, created.Id, Plan() with { Revision = 1 }, CancellationToken.None));
+
+        Assert.Equal((MyProviderRecord.Recorded, D(2026, 9, 1), 2), (saved.MyProvider, saved.MyProviderOn, saved.Revision));
+        var stored = await kit.Db.FundingPlans.SingleAsync();
+        Assert.Equal((FundingTestKit.UserId.ToString(), D(2026, 9, 1)), (stored.MyProviderSetBy, stored.MyProviderOn));
+    }
+
     // ── Deleting ────────────────────────────────────────────────────────────
 
     [Fact]

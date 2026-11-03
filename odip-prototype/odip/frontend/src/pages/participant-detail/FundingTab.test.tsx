@@ -471,3 +471,22 @@ describe('Funding tab: loading and failing', () => {
     expect(refetch).toHaveBeenCalled()
   })
 })
+
+describe('Funding tab: my provider', () => {
+  it('shows the line on the current plan, with its state', () => {
+    useFundingPlans.mockReturnValue(plansReply([plan({ myProvider: 'Recorded', myProviderOn: '2026-09-01' })]))
+    renderTab()
+
+    expect(screen.getByText('My provider')).toBeInTheDocument()
+    expect(screen.getByText('Recorded')).toBeInTheDocument()
+    expect(screen.getByText('from 1 Sep 2026')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Update' })).toBeInTheDocument()
+  })
+
+  it('has no line for a self-managed participant', () => {
+    useFundingPlans.mockReturnValue(plansReply([plan()]))
+    render(<MemoryRouter><FundingTab participantId="participant-1" planType="SelfManaged" /></MemoryRouter>)
+
+    expect(screen.queryByText('My provider')).not.toBeInTheDocument()
+  })
+})

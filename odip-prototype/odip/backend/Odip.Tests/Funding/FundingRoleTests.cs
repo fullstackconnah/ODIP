@@ -53,7 +53,8 @@ public class FundingRoleTests
             new[]
             {
                 nameof(ParticipantFundingController.ApplyDatesToProfile), nameof(ParticipantFundingController.CreatePlan),
-                nameof(ParticipantFundingController.DeletePlan), nameof(ParticipantFundingController.Plans), nameof(ParticipantFundingController.UpdatePlan),
+                nameof(ParticipantFundingController.DeletePlan), nameof(ParticipantFundingController.Plans), nameof(ParticipantFundingController.SetMyProvider),
+                nameof(ParticipantFundingController.UpdatePlan),
             },
             Actions(typeof(ParticipantFundingController)).Select(m => m.Name).OrderBy(n => n, StringComparer.Ordinal));
     }
@@ -124,6 +125,7 @@ public class FundingRoleTests
     [Theory]
     [InlineData("POST", "/api/v1/participants/11111111-1111-1111-1111-111111111111/funding/plans")]
     [InlineData("PUT", "/api/v1/participants/11111111-1111-1111-1111-111111111111/funding/plans/22222222-2222-2222-2222-222222222222")]
+    [InlineData("PUT", "/api/v1/participants/11111111-1111-1111-1111-111111111111/funding/plans/22222222-2222-2222-2222-222222222222/my-provider")]
     [InlineData("DELETE", "/api/v1/participants/11111111-1111-1111-1111-111111111111/funding/plans/22222222-2222-2222-2222-222222222222")]
     [InlineData("POST", "/api/v1/participants/11111111-1111-1111-1111-111111111111/funding/plans/22222222-2222-2222-2222-222222222222/apply-dates-to-profile")]
     [InlineData("PUT", "/api/v1/funding/settings")]

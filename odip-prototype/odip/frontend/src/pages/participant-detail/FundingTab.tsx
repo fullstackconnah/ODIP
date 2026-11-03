@@ -11,6 +11,7 @@ import { retryingAfterError } from '@/lib/queryPhase'
 import { StatusBadge } from '@/components/StatusBadge'
 import { localIsoDate } from '@/lib/dateOnly'
 import { currentPlanOf, planStatus, planTitle, writtenDay, writtenSpan, type PlanStatus } from '@/lib/fundingPlan'
+import { MyProviderLine } from '@/pages/funding/MyProviderLine'
 import { PlanRecord } from '@/pages/funding/PlanRecord'
 import { FundingPlanEditor } from '@/pages/funding/FundingPlanEditor'
 import FundingLedger from './FundingLedger'
@@ -129,6 +130,7 @@ export default function FundingTab({ participantId, planType, otherFunded }: { p
             {!ended && <Button variant="secondary" size="sm" onClick={() => setEditing({ previousPlan: current })}>Record a new plan</Button>}
           </div>
         </div>
+        <MyProviderLine participantId={participantId} plan={current} planType={planType} />
         <PlanRecord plan={current} />
       </Card>
 

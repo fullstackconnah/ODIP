@@ -243,6 +243,20 @@ function create({ respond, people = [], priceLines = () => [], agreementAlertsOf
   ]
 
   const put = [
+    // Whether the provider is recorded as the participant's my provider for one plan: only these fields change, the revision stays. The server's own messages.
+    ['participants/:id/funding/plans/:id/my-provider', (id, planId, body) => {
+      const existing = plansOf(id).find((p) => p.id === planId)
+      if (!existing) return respond(404, fail(['Plan not found.']))
+      if (!['Unknown', 'Requested', 'Recorded'].includes(body.myProvider)) return respond(400, fail(["Choose whether you're recorded."]))
+      if (body.myProvider !== 'Unknown') {
+        if (!body.myProviderOn) return respond(400, fail(['Enter the date.']))
+        if (body.myProviderOn < '1990-01-01') return respond(400, fail(['Enter a date after 1990.']))
+        if (body.myProvider === 'Requested' && body.myProviderOn > todayIso()) return respond(400, fail(['The date cannot be in the future.']))
+      }
+      existing.myProvider = body.myProvider
+      existing.myProviderOn = body.myProvider === 'Unknown' ? undefined : body.myProviderOn
+      return existing
+    }],
     ['participants/:id/funding/plans/:id', (id, planId, body) => {
       const existing = plansOf(id).find((p) => p.id === planId)
       if (!existing) return respond(404, fail(['Plan not found.']))

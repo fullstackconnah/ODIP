@@ -13,6 +13,9 @@ public sealed record LineProblem(string Rule, string Severity, string Message);
 /// <summary>An NDIA-accepted line, kept so the same participant, item and dates are not sent twice.</summary>
 public sealed record AcceptedLine(string NdisNumber, string SupportNumber, DateOnly From, DateOnly To, string FileName, ClaimType ClaimType = ClaimType.Standard);
 
+/// <summary>One funding plan as the checks need it: its dates and whether we are recorded as the participant's my provider for it.</summary>
+public sealed record PlanSpan(DateOnly Start, DateOnly End, MyProviderRecord MyProvider = MyProviderRecord.Unknown, DateOnly? MyProviderOn = null);
+
 /// <summary>
 /// What the checks need beyond the row itself, read once. The same context serves a build (blocks refuse it) and the hub list (problems shown inline), so the two never disagree.
 /// </summary>
@@ -33,8 +36,8 @@ public sealed class BatchContext
     /// <summary>Line id to the code of its last rejection, for a resubmit.</summary>
     public IReadOnlyDictionary<Guid, string> LastRejectCode { get; init; } = new Dictionary<Guid, string>();
     public IReadOnlySet<Guid> ConfirmedLineIds { get; init; } = new HashSet<Guid>();
-    /// <summary>Participant id to the dates of their funding plans.</summary>
-    public IReadOnlyDictionary<Guid, IReadOnlyList<(DateOnly Start, DateOnly End)>> Plans { get; init; } = new Dictionary<Guid, IReadOnlyList<(DateOnly, DateOnly)>>();
+    /// <summary>Participant id to their funding plans (dates and my-provider record).</summary>
+    public IReadOnlyDictionary<Guid, IReadOnlyList<PlanSpan>> Plans { get; init; } = new Dictionary<Guid, IReadOnlyList<PlanSpan>>();
 }
 
 public static partial class ClaimBatchChecks
@@ -114,6 +117,20 @@ public static partial class ClaimBatchChecks
         if (ctx.HeldBy.TryGetValue(l.TripClaimId, out var holder)) Add("HeldByAnotherClaim", Block, $"Another claim already holds this shift ({holder}).");
         if (ctx.LastRejectCode.TryGetValue(l.Id, out var code) && NdiaRejectCodes.For(code) is { NeedsDecision: true } info && !ctx.ConfirmedLineIds.Contains(l.Id))
             Add("NeedsDecision", Block, $"The NDIA said: {info.Hint} Confirm you've checked this before sending it again.");
+
+        if (row.PlanType == PlanType.AgencyManaged)
+        {
+            // The plan that covers the whole line; no plans at all reads as not recorded, a line outside every plan is OutsidePlan's to report.
+            var covering = row.Participant is { } mp && ctx.Plans.TryGetValue(mp.Id, out var spans)
+                ? spans.FirstOrDefault(pl => pl.Start <= l.SupportsDeliveredFrom && l.SupportsDeliveredTo <= pl.End) : null;
+            var hasPlans = row.Participant is { } hp && ctx.Plans.TryGetValue(hp.Id, out var all) && all.Count > 0;
+            if (covering is null ? !hasPlans : covering.MyProvider == MyProviderRecord.Unknown)
+                Add("MyProvider", Warn, "Not recorded as this participant's my provider for this plan. The NDIA may reject this line or pay it late.");
+            else if (covering?.MyProvider == MyProviderRecord.Requested)
+                Add("MyProvider", Warn, "Your my provider request for this plan isn't confirmed yet. The NDIA may reject this line or pay it late.");
+            else if (covering?.MyProviderOn is { } since && l.SupportsDeliveredFrom < since)
+                Add("MyProvider", Warn, $"This line is before the date you were recorded as my provider ({since.ToString("d MMM yyyy", CultureInfo.InvariantCulture)}).");
+        }
 
         var age = AgeDays(ctx.Today, l.SupportsDeliveredFrom);
         if (age > 90) Add("Age", Warn, "Over 90 days since the service. From 1 December 2026 the NDIA rejects claims this old.");
