@@ -240,11 +240,11 @@ public class ClaimBatchChecksTests
     }
 
     [Fact]
-    public void MyProvider_warns_with_no_plans_or_when_no_plan_covers_the_line()
+    public void MyProvider_warns_with_no_plans_but_stays_silent_when_no_plan_covers_the_line()
     {
         const string text = "Not recorded as this participant's my provider for this plan. The NDIA may reject this line or pay it late.";
         Assert.Equal(text, MyProviderMessage(Clean(), new BatchContext { Today = Today }));
-        Assert.Equal(text, MyProviderMessage(Clean(), new BatchContext { Today = Today, Plans = Plans(new PlanSpan(Today.AddDays(-400), Today.AddDays(-100), MyProviderRecord.Recorded)) }));
+        Assert.DoesNotContain("MyProvider", Rules(Clean(), new BatchContext { Today = Today, Plans = Plans(new PlanSpan(Today.AddDays(-400), Today.AddDays(-100), MyProviderRecord.Recorded)) }));
     }
 
     [Theory]

@@ -102,14 +102,15 @@ public static partial class ClaimBatchChecks
 
         if (row.PlanType == PlanType.AgencyManaged)
         {
-            // The plan that covers the whole line; none known (or none covering) reads as not recorded.
+            // The plan that covers the whole line; no plans at all reads as not recorded, a line outside every plan is OutsidePlan's to report.
             var covering = row.Participant is { } mp && ctx.Plans.TryGetValue(mp.Id, out var spans)
                 ? spans.FirstOrDefault(pl => pl.Start <= l.SupportsDeliveredFrom && l.SupportsDeliveredTo <= pl.End) : null;
-            if (covering is null || covering.MyProvider == MyProviderRecord.Unknown)
+            var hasPlans = row.Participant is { } hp && ctx.Plans.TryGetValue(hp.Id, out var all) && all.Count > 0;
+            if (covering is null ? !hasPlans : covering.MyProvider == MyProviderRecord.Unknown)
                 Add("MyProvider", Warn, "Not recorded as this participant's my provider for this plan. The NDIA may reject this line or pay it late.");
-            else if (covering.MyProvider == MyProviderRecord.Requested)
+            else if (covering?.MyProvider == MyProviderRecord.Requested)
                 Add("MyProvider", Warn, "Your my provider request for this plan isn't confirmed yet. The NDIA may reject this line or pay it late.");
-            else if (covering.MyProviderOn is { } since && l.SupportsDeliveredFrom < since)
+            else if (covering?.MyProviderOn is { } since && l.SupportsDeliveredFrom < since)
                 Add("MyProvider", Warn, $"This line is before the date you were recorded as my provider ({since.ToString("d MMM yyyy", CultureInfo.InvariantCulture)}).");
         }
 
