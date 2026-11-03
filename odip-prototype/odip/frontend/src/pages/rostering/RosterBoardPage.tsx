@@ -660,7 +660,7 @@ export default function RosterBoardPage() {
   )
   // The status line (the shape, 3.2): one standing Callout. Drafts first (the week's main action), else the agreements waiting.
   const agreementsButton = hasNotice && (
-    <Button variant="ghost" size="sm" className="whitespace-nowrap" onClick={() => setAgreementsOpen(true)}>
+    <Button variant="ghost" size="sm" className="whitespace-nowrap pointer-coarse:min-h-11" onClick={() => setAgreementsOpen(true)}>
       <Hourglass className="h-4 w-4" aria-hidden="true" />
       {plural(waiting.length, 'agreement')} waiting
     </Button>
