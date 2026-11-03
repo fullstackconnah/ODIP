@@ -7,16 +7,19 @@ import { Card } from '@/components/Card'
 import { DataTable } from '@/components/DataTable'
 import { StatusBadge } from '@/components/StatusBadge'
 import { EmptyState } from '@/components/EmptyState'
+import { StaffPreferencesCard } from './StaffPreferencesCard'
 import { formatShiftTimeRange } from '@/pages/rostering/lib/roster'
 import type { ParticipantRosteringShiftDto, ParticipantRosteringStaffDto } from '@/api/types/participants'
 import { plural } from '@/lib/format'
 
 /** Maps CompatibilityLevel onto StatusBadge's existing colour vocabulary rather than adding a new
  * one — Preferred reads as a positive ("active" green), Excluded as a negative ("expired" red),
- * Allowed as the neutral default. */
+ * Allowed, Backup and Emergency as the neutral default (the badge's label carries the tier). */
 const COMPATIBILITY_BADGE_STATUS: Record<string, string> = {
   Preferred: 'active',
   Allowed: 'draft',
+  Backup: 'draft',
+  Emergency: 'draft',
   Excluded: 'expired',
 }
 
@@ -44,6 +47,8 @@ export default function RosteringTab({ participantId }: { participantId: string 
         </Link>
       </div>
 
+      <StaffPreferencesCard participantId={participantId} />
+
       <Card title="Assigned staff">
         {assignedStaff.length === 0 ? (
           <EmptyState
@@ -63,7 +68,7 @@ export default function RosteringTab({ participantId }: { participantId: string 
                     {plural(s.shiftCount, 'shift')}
                   </p>
                 </div>
-                <StatusBadge status={COMPATIBILITY_BADGE_STATUS[s.compatibility] ?? 'draft'} label={s.compatibility} />
+                <StatusBadge status={COMPATIBILITY_BADGE_STATUS[s.compatibility] ?? 'draft'} label={s.compatibility === 'Excluded' ? 'No' : s.compatibility} />
               </div>
             ))}
           </div>

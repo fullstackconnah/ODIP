@@ -254,7 +254,7 @@ public partial class DemoDataPostgresTests : IClassFixture<DemoDataPostgresFixtu
         await using var db = env.AdminDb();
         Assert.Equal(13, await db.ShiftPatterns.CountAsync());
         Assert.Equal(await db.ShiftCompletions.CountAsync(), await db.ShiftCompletions.Select(c => c.ShiftId).Distinct().CountAsync());   // one active completion per shift
-        Assert.Equal(10, await db.StaffParticipantCompatibilities.CountAsync());
+        Assert.Equal(12, await db.StaffParticipantCompatibilities.CountAsync());
         Assert.True(await db.Shifts.CountAsync() > 80);
         Assert.Equal(2, await db.BookingTasks.CountAsync(t => t.SourceKey != null && t.SourceKey.StartsWith("leave-coverage:")));
     }

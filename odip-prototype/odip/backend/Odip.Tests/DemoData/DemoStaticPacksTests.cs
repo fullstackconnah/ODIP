@@ -293,7 +293,7 @@ public class DemoStaticPacksTests
     // ── compatibility ────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Compatibility_HasSevenPreferred_ThreeExcluded_AndOneAutoLinkedRow()
+    public async Task Compatibility_HasSevenPreferred_OneBackup_OneEmergency_ThreeExcluded_AndOneAutoLinkedRow()
     {
         var env = await EnvWithPeopleAsync();
 
@@ -301,13 +301,17 @@ public class DemoStaticPacksTests
 
         await using var db = env.AdminDb();
         var rows = await db.StaffParticipantCompatibilities.ToListAsync();
-        Assert.Equal(10, rows.Count);
+        Assert.Equal(12, rows.Count);
         Assert.Equal(7, rows.Count(r => r.Level == CompatibilityLevel.Preferred));
+        Assert.Equal(1, rows.Count(r => r.Level == CompatibilityLevel.Backup));
+        Assert.Equal(1, rows.Count(r => r.Level == CompatibilityLevel.Emergency));
         Assert.Equal(3, rows.Count(r => r.Level == CompatibilityLevel.Excluded));
+        Assert.All(rows.Where(r => r.Level != CompatibilityLevel.Excluded), r => Assert.Equal(1, r.Rank));   // one per tier per participant, so #1
+        Assert.All(rows.Where(r => r.Level == CompatibilityLevel.Excluded), r => Assert.Equal(0, r.Rank));
         Assert.Equal(1, rows.Count(r => r.AutoLinked));
         Assert.True(rows.Single(r => r.AutoLinked).Level == CompatibilityLevel.Preferred);
         Assert.All(rows, r => Assert.Equal(DemoTestEnv.DemoTenantId, r.TenantId));
-        Assert.Equal(10, rows.Select(r => (r.UserId, r.ParticipantId)).Distinct().Count());   // the unique (tenant, user, participant) cell
+        Assert.Equal(12, rows.Select(r => (r.UserId, r.ParticipantId)).Distinct().Count());   // the unique (tenant, user, participant) cell
         Assert.All(rows.Where(r => r.Level == CompatibilityLevel.Excluded), r => Assert.False(string.IsNullOrWhiteSpace(r.Reason)));
     }
 
@@ -349,7 +353,7 @@ public class DemoStaticPacksTests
         var only = Assert.Single(cell);
         Assert.Equal(CompatibilityLevel.Excluded, only.Level);
         Assert.Equal("Owner decision", only.Reason);
-        Assert.Equal(10, await check.StaffParticipantCompatibilities.CountAsync());           // 9 new + the owner's
+        Assert.Equal(12, await check.StaffParticipantCompatibilities.CountAsync());           // 11 new + the owner's
     }
 
     // ── emergency contacts ───────────────────────────────────────────────────
