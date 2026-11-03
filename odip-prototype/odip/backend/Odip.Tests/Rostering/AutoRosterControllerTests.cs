@@ -102,6 +102,8 @@ public class AutoRosterControllerTests
         Assert.Equal("weeks/{weekStart}/auto-roster", action.GetCustomAttribute<HttpPostAttribute>()!.Template);
         Assert.Null(action.GetCustomAttribute<AllowAnonymousAttribute>());
         Assert.Null(action.GetCustomAttribute<AuthorizeAttribute>());
-        Assert.Contains("Coordinator", typeof(RosteringController).GetCustomAttribute<AuthorizeAttribute>()!.Roles!);
+        var roles = typeof(RosteringController).GetCustomAttribute<AuthorizeAttribute>()!.Roles!;
+        Assert.Contains("Coordinator", roles);
+        Assert.DoesNotContain("SupportWorker", roles);
     }
 }

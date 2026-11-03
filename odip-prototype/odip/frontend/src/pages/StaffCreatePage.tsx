@@ -362,7 +362,7 @@ export default function StaffCreatePage() {
               render={({ field }) => (
                 <NumberField
                   label="Goal hours a week"
-                  hint="Auto-roster balances hours towards this. Empty uses the default for their employment type."
+                  hint="Auto-roster aims for this. Empty uses the default for their employment type."
                   className={span.medium}
                   inputMode="decimal"
                   step={0.5}

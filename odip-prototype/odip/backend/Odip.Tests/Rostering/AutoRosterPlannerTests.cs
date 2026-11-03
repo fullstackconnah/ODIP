@@ -59,7 +59,8 @@ public class AutoRosterPlannerTests
             var availability = new RosterAvailability(Db, new StaffUnavailabilityQuery(Db));
             var snapshot = await availability.LoadAsync(Pool.Select(w => w.Id).ToList(), [Mia.Id], Monday, Monday.AddDays(6), default);
             var pool = reversePool ? Enumerable.Reverse(Pool).ToList() : Pool;
-            return AutoRosterPlanner.Plan(new AutoRosterInput(Open, pool, Regulars, Compat, NotReady), new SnapshotAutoRosterOracle(snapshot));
+            var open = reversePool ? Enumerable.Reverse(Open).ToList() : Open;
+            return AutoRosterPlanner.Plan(new AutoRosterInput(open, pool, Regulars, Compat, NotReady), new SnapshotAutoRosterOracle(snapshot));
         }
 
         public ValueTask DisposeAsync() => Db.DisposeAsync();
@@ -132,6 +133,79 @@ public class AutoRosterPlannerTests
 
         Assert.Empty(plan.Placements);
         Assert.Equal(UncoveredReason.OnlyNoStaff, Assert.Single(plan.Uncovered).Reason);
+    }
+
+    private static LeaveRequest LeaveFor(AutoRosterWorker worker, Shift shift, LeaveStatus status) => new()
+    {
+        Id = Guid.NewGuid(), TenantId = TenantA, UserId = worker.Id, LeaveType = LeaveType.Annual, StartDate = shift.ServiceDate, EndDate = shift.ServiceDate,
+        Status = status, RequestedByUserId = worker.Id, RequestedAt = DateTime.UtcNow,
+    };
+
+    [Fact]
+    public async Task OneFreeNoListedWorker_WithEveryoneElseOnLeave_IsOnlyNoStaff()
+    {
+        await using var w = new World();
+        w.Worker("Abe", 38, level: CompatibilityLevel.Excluded);
+        var pat = w.Worker("Pat", 38);
+        var shift = w.Shift(1, 9, 13);
+        w.Db.LeaveRequests.Add(LeaveFor(pat, shift, LeaveStatus.Approved));
+
+        var plan = await w.PlanAsync();
+
+        Assert.Empty(plan.Placements);
+        Assert.Equal(UncoveredReason.OnlyNoStaff, Assert.Single(plan.Uncovered).Reason);
+    }
+
+    [Fact]
+    public async Task NoListedWorkerOnLeave_IsNobodyFree_NotOnlyNoStaff()
+    {
+        await using var w = new World();
+        var abe = w.Worker("Abe", 38, level: CompatibilityLevel.Excluded);
+        var shift = w.Shift(1, 9, 13);
+        w.Db.LeaveRequests.Add(LeaveFor(abe, shift, LeaveStatus.Approved));
+
+        var plan = await w.PlanAsync();
+
+        Assert.Equal(UncoveredReason.NobodyFree, Assert.Single(plan.Uncovered).Reason);
+    }
+
+    [Fact]
+    public async Task Regular_WithPendingLeave_IsNotPlaced_AndAnotherWorkerTakesTheShift()
+    {
+        await using var w = new World();
+        var regular = w.Worker("Rae", 38);
+        var other = w.Worker("Zed", 38);
+        var shift = w.Shift(1, 9, 13);
+        w.Regulars[shift.ShiftPatternId!.Value] = regular.Id;
+        w.Db.LeaveRequests.Add(LeaveFor(regular, shift, LeaveStatus.Pending));
+
+        var plan = await w.PlanAsync();
+
+        var placed = Assert.Single(plan.Placements);
+        Assert.Equal(other.Id, placed.StaffId);
+        Assert.Contains("Rae", placed.RegularAway);
+    }
+
+    [Fact]
+    public async Task Regular_WithPendingRecurringRequest_IsNotPlaced_AndAnotherWorkerTakesTheShift()
+    {
+        await using var w = new World();
+        var regular = w.Worker("Rae", 38);
+        var other = w.Worker("Zed", 38);
+        var shift = w.Shift(1, 9, 13);
+        w.Regulars[shift.ShiftPatternId!.Value] = regular.Id;
+        w.Db.RecurringUnavailabilities.Add(new RecurringUnavailability
+        {
+            Id = Guid.NewGuid(), TenantId = TenantA, UserId = regular.Id, DayOfWeek = shift.ServiceDate.DayOfWeek, StartTime = new TimeOnly(8, 0), EndTime = new TimeOnly(14, 0),
+            EffectiveFrom = Monday, EffectiveTo = null, Status = LeaveStatus.Pending, RequestedByUserId = regular.Id, RequestedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+        });
+
+        var plan = await w.PlanAsync();
+
+        var placed = Assert.Single(plan.Placements);
+        Assert.Equal(other.Id, placed.StaffId);
+        Assert.Contains("Rae", placed.RegularAway);
     }
 
     [Fact]
@@ -225,7 +299,8 @@ public class AutoRosterPlannerTests
         var first = await w.PlanAsync();
         var second = await w.PlanAsync(reversePool: true);
 
-        static string Key(AutoRosterPlan p) => string.Join("|", p.Placements.Select(x => $"{x.ShiftId}:{x.StaffId}:{x.Pick}")) + "/" + string.Join("|", p.Uncovered.Select(x => $"{x.ShiftId}:{x.Reason}"));
+        static string Key(AutoRosterPlan p) => string.Join("|", p.Placements.Select(x => $"{x.ShiftId}:{x.StaffId}:{x.Pick}")) + "/" + string.Join("|", p.Uncovered.Select(x => $"{x.ShiftId}:{x.Reason}:" + string.Join(",", x.Recommendations.Select(c => $"{c.Kind}:{c.StaffId}:{c.Text}"))))
+            + "/" + string.Join("|", p.Placements.Select(x => $"{x.ShiftId}:" + string.Join(",", x.Alternates.Select(a => $"{a.StaffId}:{a.Pick}"))));
         Assert.Equal(Key(first), Key(second));
     }
 }

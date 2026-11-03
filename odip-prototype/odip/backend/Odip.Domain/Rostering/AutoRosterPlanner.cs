@@ -78,9 +78,9 @@ public static class AutoRosterPlanner
             var (level, rank) = input.Compatibility.TryGetValue((worker.Id, shift.ParticipantId), out var row) ? (row.Level, row.Rank) : (CompatibilityLevel.Allowed, 0);
             var (tier, normalRank, _) = CompatibilityOrder.Key(level, rank, null);
             Candidate Result(Kind kind, List<RosterFinding>? all = null, List<RosterFinding>? blocking = null) => new(worker, level, tier, normalRank, kind, all ?? [], blocking ?? []);
-            if (tier == 4) return Result(Kind.Excluded);
             var probe = Probe(shift, worker.Id);
             if (oracle.Away(probe) is not null) return Result(Kind.Away);
+            if (tier == 4) return Result(Kind.Excluded); // a free No-listed person is never placed, but counts for OnlyNoStaff
             var findings = oracle.Check(probe);
             var hard = findings.Where(f => !AutoRosterRules.SoftCodes.Contains(f.Code)).ToList();
             if (hard.Count == 0) return Result(oracle.NeedsOverride(findings) ? Kind.Override : Kind.Eligible, findings, hard);
@@ -121,8 +121,15 @@ public static class AutoRosterPlanner
                 var findings = oracle.Check(probe);
                 if (oracle.NeedsOverride(findings))
                 {
-                    var why = string.Join(" ", findings.Where(f => f.Severity == RosterFindingSeverity.Blocking || f.RequiresReason).Select(f => f.Message));
+                    var why = string.Join(" ", findings.Where(f => f.Severity == RosterFindingSeverity.Blocking || f.RequiresReason).OrderBy(f => f.Code, StringComparer.Ordinal).ThenBy(f => f.Message, StringComparer.Ordinal).Select(f => f.Message));
                     uncovered.Add(new AutoRosterUncovered(shift.Id, UncoveredReason.NeedsOverride, [new(AutoRosterRecommendationKind.Soft, regular.Id, $"Regular {regular.Name}: {why}")]));
+                    continue;
+                }
+
+                // OPEN-4: a pending leave or recurring request disqualifies the regular; pass 2 may place someone else.
+                if (findings.FirstOrDefault(f => f.Code is RosterConflictService.StaffLeavePending or RosterConflictService.StaffRecurringPending) is { } pending)
+                {
+                    rest.Add((shift, $"{regular.Name} has a pending request: {pending.Message}"));
                     continue;
                 }
 
@@ -167,8 +174,8 @@ public static class AutoRosterPlanner
     private static UncoveredReason ReasonFor(int poolSize, List<Candidate> all)
     {
         if (poolSize == 0) return UncoveredReason.NoStaff;
-        var offered = all.Where(c => c.Kind != Kind.Excluded).ToList();
-        if (offered.Count == 0) return UncoveredReason.OnlyNoStaff;
+        if (all.Any(c => c.Kind == Kind.Excluded)) return UncoveredReason.OnlyNoStaff;
+        var offered = all;
         if (offered.All(c => c.Kind == Kind.Hours)) return UncoveredReason.HoursCapReached;
         if (offered.All(c => c.Kind is Kind.Hours or Kind.Override) && offered.Any(c => c.Kind == Kind.Override)) return UncoveredReason.NeedsOverride;
         return UncoveredReason.NobodyFree;
@@ -186,7 +193,7 @@ public static class AutoRosterPlanner
         }
 
         if (ordered(all.Where(c => c.Kind == Kind.Soft), shift).FirstOrDefault() is { } soft)
-            recs.Add(new(AutoRosterRecommendationKind.Soft, soft.Worker.Id, $"{soft.Worker.Name}: {soft.Hard[0].Message}"));
+            recs.Add(new(AutoRosterRecommendationKind.Soft, soft.Worker.Id, $"{soft.Worker.Name}: {soft.Hard.OrderBy(f => f.Code, StringComparer.Ordinal).ThenBy(f => f.Message, StringComparer.Ordinal).First().Message}"));
 
         if (recs.Count == 0)
             recs.Add(new(AutoRosterRecommendationKind.Other, null, "No one on the list can take this. Add a casual to the participant's list, or move the shift."));
