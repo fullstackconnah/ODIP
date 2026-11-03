@@ -115,4 +115,18 @@ describe('CarriedPuck', () => {
     expect(screen.getByText('12 / 38 h')).toBeInTheDocument()
     expect(screen.queryByText(/Assign|Replace|New shift/)).not.toBeInTheDocument()
   })
+
+  it('fades the right edge of the puck list only while it overflows', () => {
+    const widths = vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(900)
+    const client = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(300)
+    const { container, unmount } = renderStrip()
+    expect(container.querySelector('[data-puck-fade]')).not.toBeNull()
+    unmount()
+
+    widths.mockReturnValue(300)
+    const again = renderStrip()
+    expect(again.container.querySelector('[data-puck-fade]')).toBeNull()
+    widths.mockRestore()
+    client.mockRestore()
+  })
 })

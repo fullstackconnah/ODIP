@@ -54,7 +54,7 @@ describe('ParticipantRow header — two lines: the name above the readiness chip
     const line2 = ratio.parentElement!.parentElement as HTMLElement
     const readiness = screen.getByRole('button', { name: /^Not ready/ })
 
-    expect(head).toHaveClass('flex', 'flex-col', 'justify-center', 'min-h-[var(--row-h)]')
+    expect(head).toHaveClass('flex', 'flex-col', 'justify-center', 'min-h-14', 'py-1.5')
     expect(line1).not.toBe(line2)
     expect(line1.parentElement).toBe(head)
     expect(line2.parentElement).toBe(head)
@@ -78,7 +78,7 @@ describe('ParticipantRow header — name, ratio chip, coverage badge', () => {
     const badge = screen.getByRole('img', { name: '6 unassigned shifts' })
 
     // Two stacked lines, vertically centred, still --row-h tall.
-    expect(head).toHaveClass('flex', 'flex-col', 'justify-center', 'min-h-[var(--row-h)]')
+    expect(head).toHaveClass('flex', 'flex-col', 'justify-center', 'min-h-14', 'py-1.5')
     // DOM order is visual order.
     expect(isBefore(name, chip)).toBe(true)
     expect(isBefore(chip, badge)).toBe(true)
@@ -126,11 +126,11 @@ describe('ParticipantRow header — name, ratio chip, coverage badge', () => {
   })
 
   it('keeps the restrictive-practice marker with the name, ahead of the chips', () => {
-    renderRow({ fullName: 'Grace Palmer-Hughes', hasRestrictivePractice: true, daysWithoutCover: 3 })
+    renderRow({ fullName: 'Grace Palmer-Hughes', hasRestrictivePractice: true, supportRatio: 'TwoToOne', daysWithoutCover: 3 })
 
     const name = screen.getByRole('link', { name: 'Grace Palmer-Hughes' })
     const marker = screen.getByRole('img', { name: 'Restrictive practice authorised' })
-    const chip = screen.getByRole('img', { name: '1:1 support' })
+    const chip = screen.getByRole('img', { name: '2:1 support' })
 
     expect(name.parentElement).toContainElement(marker)
     expect(marker).toHaveClass('shrink-0')
@@ -168,8 +168,7 @@ describe('ParticipantRow header — coverage badge (a compact count; the words a
   it('reports zero unassigned shifts for an otherwise empty week', () => {
     renderRow({ daysWithoutCover: 7, shifts: [] })
 
-    expect(screen.getByRole('img', { name: 'Fully covered' })).toBeInTheDocument()
-    expect(screen.queryByRole('img', { name: /unassigned shift/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: /unassigned shift|Fully covered/ })).not.toBeInTheDocument()
   })
 
   it('shows "6 unassigned shifts" as a warning icon + the count, with the full wording as its title and accessible name', () => {
@@ -196,15 +195,20 @@ describe('ParticipantRow header — coverage badge (a compact count; the words a
     expect(badge).toHaveTextContent(/^1$/)
   })
 
-  it('shows "Fully covered" as a check, with the words as its title and accessible name', () => {
-    renderRow({ daysWithoutCover: 0 })
+  it('draws no check glyph for a covered row: the absence of the badge says it', () => {
+    const { container } = renderRow({ daysWithoutCover: 0 })
 
-    const badge = screen.getByRole('img', { name: 'Fully covered' })
-    expect(badge).toHaveAttribute('title', 'Fully covered')
-    expect(badge).toHaveTextContent('')
-    expect(badge.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
-    expect(screen.queryByText('Fully covered')).not.toBeInTheDocument()
-    expect(screen.queryByRole('img', { name: /unassigned shift/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: /Fully covered|unassigned shift/ })).not.toBeInTheDocument()
+    expect(container.querySelector('.lucide-check')).toBeNull()
+  })
+
+  it('draws the ratio chip only when the ratio is not 1:1', () => {
+    const { unmount } = renderRow({ supportRatio: 'OneToOne' })
+    expect(screen.queryByRole('img', { name: /support$/ })).not.toBeInTheDocument()
+    unmount()
+
+    renderRow({ supportRatio: 'TwoToOne' })
+    expect(screen.getByRole('img', { name: '2:1 support' })).toHaveTextContent('2:1')
   })
 
   it('leaves the name the room the badge used to take: the badge is the compact size, not a 110px pill', () => {
@@ -220,10 +224,10 @@ describe('ParticipantRow header — coverage badge (a compact count; the words a
   })
 
   it('shows no coverage state at all on a week with no shifts anywhere, but still the ratio chip', () => {
-    renderRow({ daysWithoutCover: 7 }, { hideCoverageBadge: true })
+    renderRow({ supportRatio: 'TwoToOne', daysWithoutCover: 7 }, { hideCoverageBadge: true })
 
-    expect(screen.queryByRole('img', { name: /unassigned shift|Fully covered/ })).not.toBeInTheDocument()
-    expect(screen.getByRole('img', { name: '1:1 support' })).toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: /unassigned shift/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('img', { name: '2:1 support' })).toBeInTheDocument()
   })
 
   it('draws no visually-hidden text: an sr-only span is a 1px clip box, i.e. text clipped without an ellipsis', () => {
@@ -255,12 +259,12 @@ describe('ParticipantRow header — readiness trigger', () => {
   })
 
   it('puts the trigger on line 2, after the name and the restrictive-practice marker and ahead of the ratio chip and coverage badge', () => {
-    renderRow({ fullName: 'Grace Palmer-Hughes', hasRestrictivePractice: true, daysWithoutCover: 6, readinessIssues: ISSUES })
+    renderRow({ fullName: 'Grace Palmer-Hughes', hasRestrictivePractice: true, supportRatio: 'TwoToOne', daysWithoutCover: 6, readinessIssues: ISSUES })
 
     const name = screen.getByRole('link', { name: 'Grace Palmer-Hughes' })
     const marker = screen.getByRole('img', { name: 'Restrictive practice authorised' })
     const trigger = triggerOf()
-    const ratio = screen.getByRole('img', { name: '1:1 support' })
+    const ratio = screen.getByRole('img', { name: '2:1 support' })
     const badge = screen.getByRole('img', { name: '6 unassigned shifts' })
 
     expect(name.parentElement).not.toContainElement(trigger)
@@ -305,11 +309,11 @@ describe('ParticipantRow header — readiness trigger', () => {
   })
 
   it('stays on line 2 as a quiet inline word: not truncated, not a pill, never stretched', () => {
-    renderRow({ fullName: 'Grace Palmer-Hughes', hasRestrictivePractice: true, daysWithoutCover: 6, readinessIssues: ISSUES })
+    renderRow({ fullName: 'Grace Palmer-Hughes', hasRestrictivePractice: true, supportRatio: 'TwoToOne', daysWithoutCover: 6, readinessIssues: ISSUES })
 
     const head = headerOf('Grace Palmer-Hughes')
     const trigger = triggerOf()
-    expect(head).toHaveClass('flex', 'flex-col', 'min-h-[var(--row-h)]')
+    expect(head).toHaveClass('flex', 'flex-col', 'min-h-14', 'py-1.5')
     expect(trigger).toHaveClass('h-4', 'shrink-0')
     expect(trigger.className).not.toMatch(/truncate|overflow-hidden|rounded-full|flex-1|max-w-max/)
     expect(trigger.querySelector('.truncate')).toBeNull()
@@ -325,9 +329,9 @@ describe('ParticipantRow header — readiness trigger', () => {
   })
 
   it('leaves the ratio chip and coverage badge as they were: shrink-0 and in the right-hand group', () => {
-    renderRow({ daysWithoutCover: 6, readinessIssues: ISSUES })
+    renderRow({ supportRatio: 'TwoToOne', daysWithoutCover: 6, readinessIssues: ISSUES })
 
-    const ratio = screen.getByRole('img', { name: '1:1 support' })
+    const ratio = screen.getByRole('img', { name: '2:1 support' })
     const badge = screen.getByRole('img', { name: '6 unassigned shifts' })
     const tail = ratio.parentElement as HTMLElement
     expect(tail).toHaveClass('min-w-0', 'ml-auto', 'gap-2')
