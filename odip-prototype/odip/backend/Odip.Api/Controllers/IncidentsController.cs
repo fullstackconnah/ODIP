@@ -210,7 +210,7 @@ public class IncidentsController : ControllerBase
         // The converter also takes a bare int, so a value no enum member names must not reach the int column.
         if (!Enum.IsDefined(dto.IncidentType))
             return "Unknown incident type.";
-        if ((dto.EmergencyServices & ~(EmergencyService.Police | EmergencyService.Ambulance | EmergencyService.Fire)) != 0)
+        if (((dto.EmergencyServices ?? EmergencyService.None) & ~(EmergencyService.Police | EmergencyService.Ambulance | EmergencyService.Fire)) != 0)
             return "Unknown emergency service.";
         if (dto.ServiceType == ServiceStreams.Trip && dto.TripInstanceId == null)
             return "A trip must be selected when the service type is Trip.";
@@ -242,16 +242,17 @@ public class IncidentsController : ControllerBase
 
     /// <summary>
     /// IC2: stores what was called and who attended. The gate stays the stored truth (a legacy row can be called with no services), so
-    /// nothing is required; unticking the gate clears the lot, and a service not in the flags loses its name and reference.
+    /// nothing is required; unticking the gate clears the services and their names and references (the free-text details stay), and a service not in the flags loses its name and reference. A null set of services (a client from before services existed) leaves the stored services, names and references as they are.
     /// </summary>
     private static void ApplyEmergencyServices(IncidentReport i, CreateIncidentDto dto)
     {
         static string? Clean(string? v) => string.IsNullOrWhiteSpace(v) ? null : v.Trim();
         var called = dto.WereEmergencyServicesCalled;
-        var services = called ? dto.EmergencyServices : EmergencyService.None;
-        string? Pick(EmergencyService s, string? v) => services.HasFlag(s) ? Clean(v) : null;
         i.WereEmergencyServicesCalled = called;
         i.EmergencyServicesDetails = dto.EmergencyServicesDetails;
+        if (called && dto.EmergencyServices is null) return;
+        var services = called ? dto.EmergencyServices!.Value : EmergencyService.None;
+        string? Pick(EmergencyService s, string? v) => services.HasFlag(s) ? Clean(v) : null;
         i.EmergencyServices = services;
         i.PoliceOfficerName = Pick(EmergencyService.Police, dto.PoliceOfficerName);
         i.PoliceReference = Pick(EmergencyService.Police, dto.PoliceReference);

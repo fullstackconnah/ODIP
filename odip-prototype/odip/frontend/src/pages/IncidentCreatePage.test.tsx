@@ -505,6 +505,7 @@ describe('IncidentCreatePage — NOTES-02 shift-note prefill acknowledges flags 
     const user = userEvent.setup()
     renderCreatePage({ pathname: '/incidents/new', state: shiftNotePrefill })
 
+    await pickTypeAndSeverity(user)
     await clickNext(user) // Basics -> Incident Details
     // Falls -> Injury: at least one injury row is required before Next succeeds.
     await addMinimalInjury(user)
@@ -544,6 +545,7 @@ describe('IncidentCreatePage — NOTES-02 shift-note prefill acknowledges flags 
     mockApiPost.mockRejectedValue(new Error('network error'))
     renderCreatePage({ pathname: '/incidents/new', state: shiftNotePrefill })
 
+    await pickTypeAndSeverity(user)
     await clickNext(user) // Basics -> Incident Details
     await addMinimalInjury(user)
     await clickNext(user) // Incident Details -> Witnesses
@@ -663,7 +665,8 @@ describe('IncidentCreatePage — IN-8 producer field trace through to Review', (
     expect(screen.getByLabelText('Involved Participant')).toHaveValue(shiftNotePrefill.participantName)
     expect(screen.getByLabelText('Reported By *')).toHaveValue('Alex Rivera')
     expect(screen.getByLabelText('Incident Type *')).toHaveTextContent(INCIDENT_TYPE_LABELS[expectedType])
-    expect(within(screen.getByRole('radiogroup', { name: /^Severity/ })).getByRole('radio', { checked: true })).toHaveTextContent(INCIDENT_SEVERITY_LABELS.Medium)
+    expect(within(screen.getByRole('radiogroup', { name: /^Severity/ })).queryByRole('radio', { checked: true })).toBeNull()
+    await user.click(within(screen.getByRole('radiogroup', { name: /^Severity/ })).getByRole('radio', { name: INCIDENT_SEVERITY_LABELS.Medium }))
 
     await clickNext(user) // Basics -> Incident Details
 
@@ -1936,6 +1939,7 @@ describe('IncidentCreatePage — a support worker is the reporter', () => {
     expect(screen.getByLabelText('Reported By')).toHaveAttribute('readonly')
     expect(screen.queryByLabelText('Reported By *')).not.toBeInTheDocument()
 
+    await pickTypeAndSeverity(user)
     await clickNext(user) // Basics -> Incident Details
     await addMinimalInjury(user)
     await clickNext(user) // -> Witnesses
@@ -1949,6 +1953,7 @@ describe('IncidentCreatePage — a support worker is the reporter', () => {
     signInAs('SupportWorker')
     const user = userEvent.setup()
     renderCreatePage({ pathname: '/incidents/new', state: colleagueNote })
+    await pickTypeAndSeverity(user)
     await clickNext(user)
     await addMinimalInjury(user)
     await clickNext(user) // -> Witnesses

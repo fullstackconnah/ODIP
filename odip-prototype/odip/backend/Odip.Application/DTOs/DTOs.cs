@@ -2336,7 +2336,8 @@ public record CreateIncidentDto
     public bool WereEmergencyServicesCalled { get; init; }
     [StringLength(2000)]
     public string? EmergencyServicesDetails { get; init; }
-    public EmergencyService EmergencyServices { get; init; }
+    /// <summary>Null = not sent (a client from before services existed): Update leaves the stored services and their names and references alone.</summary>
+    public EmergencyService? EmergencyServices { get; init; }
     [StringLength(100)]
     public string? PoliceOfficerName { get; init; }
     [StringLength(100)]

@@ -353,8 +353,9 @@ describe('IncidentDetailPage — Commission reference and emergency services', (
       fireReference: 'F-9', emergencyServicesDetails: 'Arrived within ten minutes.',
     }), isLoading: false })
     renderPage()
-    expect(screen.getByText('Police · Sgt Jane Doe · Ref 2611-0042')).toBeInTheDocument()
-    expect(screen.getByText('Fire · Ref F-9')).toBeInTheDocument()
+    expect(screen.getByText('Ref 2611-0042')).toHaveClass('whitespace-nowrap')
+    expect(screen.getByText('Police · Sgt Jane Doe ·', { exact: false })).toBeInTheDocument()
+    expect(screen.getByText('Ref F-9')).toHaveClass('whitespace-nowrap')
     expect(screen.getByText('Arrived within ten minutes.')).toBeInTheDocument()
   })
 

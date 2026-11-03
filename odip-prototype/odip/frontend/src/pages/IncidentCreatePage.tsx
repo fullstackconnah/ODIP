@@ -376,7 +376,6 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
     reset({
       serviceType: 'None',
       incidentType: suggestedIncidentTypeForShiftNote(shiftNotePrefill),
-      severity: 'Medium',
       title: buildShiftNoteIncidentTitleSkeleton(shiftNotePrefill),
       description: buildShiftNoteIncidentDescriptionSkeleton(shiftNotePrefill),
       involvedParticipantId: shiftNotePrefill.participantId,

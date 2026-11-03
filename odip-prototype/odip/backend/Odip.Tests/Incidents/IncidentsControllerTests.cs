@@ -634,6 +634,27 @@ public class IncidentsControllerTests
     }
 
     [Fact]
+    public async Task Update_FromAClientThatOmitsEmergencyServices_KeepsTheSavedServicesNamesAndReferences()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var reporter = SeedUser(db);
+        var controller = new IncidentsController(db);
+        await controller.Create(EmergencyDto(reporter.Id, true, EmergencyService.Police), CancellationToken.None);
+        var id = (await db.IncidentReports.SingleAsync()).Id;
+
+        var stale = AsUpdate(EmergencyDto(reporter.Id, true, EmergencyService.Police)) with
+        {
+            EmergencyServices = null, PoliceOfficerName = null, PoliceReference = null,
+        };
+        Assert.IsType<OkObjectResult>((await controller.Update(id, stale, CancellationToken.None)).Result);
+
+        var saved = await db.IncidentReports.SingleAsync();
+        Assert.Equal(EmergencyService.Police, saved.EmergencyServices);
+        Assert.Equal("Sgt Jane Doe", saved.PoliceOfficerName);
+        Assert.Equal("2611-0042", saved.PoliceReference);
+    }
+
+    [Fact]
     public async Task Create_AnUnknownEmergencyServiceFlagOrIncidentType_ReturnsBadRequest()
     {
         using var db = CreateDb(Guid.NewGuid().ToString());

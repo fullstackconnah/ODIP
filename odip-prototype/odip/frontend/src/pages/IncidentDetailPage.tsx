@@ -44,7 +44,7 @@ function EmergencyServicesValue({ incident }: { incident: IncidentDetailDto }) {
   if (!lines.length && !details) return <>Called</>
   return (
     <div className="flex flex-col gap-1">
-      {lines.map((e) => <span key={e.service}>{[e.service, e.name, e.ref && `Ref ${e.ref}`].filter(Boolean).join(' · ')}</span>)}
+      {lines.map((e) => <span key={e.service}>{[e.service, e.name].filter(Boolean).join(' · ')}{e.ref && <>{' · '}<span className="whitespace-nowrap">Ref {e.ref}</span></>}</span>)}
       {details && <span className="whitespace-pre-wrap">{details}</span>}
     </div>
   )
