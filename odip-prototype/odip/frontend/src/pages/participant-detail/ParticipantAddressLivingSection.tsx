@@ -113,6 +113,7 @@ export function ParticipantAddressLivingSection({ p, participantId, canEdit }: {
           <FormField label="Remoteness (MM level)" hint={MM_LEVEL_HINT}>
             <Dropdown
               variant="form"
+              maxPanelHeight={400}   // 8 rows of 44 px do not fit the default 320 cap
               value={draft.mmLevel}
               onChange={(v) => setDraft((d) => ({ ...d, mmLevel: v }))}
               items={[{ value: '', label: 'Not set' }, ...Object.entries(MM_LEVEL_LABELS).map(([value, label]) => ({ value, label }))]}

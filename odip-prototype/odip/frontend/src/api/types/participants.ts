@@ -48,7 +48,7 @@ export const MM_LEVEL_LABELS: Record<number, string> = {
   6: `MM 6 –${WJ} Remote`,
   7: `MM 7 –${WJ} Very Remote`,
 }
-export const MM_LEVEL_HINT = `Sets the travel time cap on shifts not made from an agreement: 30 minutes (MM 1–${WJ}3), 60 (MM 4–${WJ}5), none (MM 6–${WJ}7). Not set uses 30.`
+export const MM_LEVEL_HINT = `Sets the travel time cap on shifts not made from an agreement: 30 minutes (MM\u00a01–${WJ}3), 60 (MM\u00a04–${WJ}5), none (MM\u00a06–${WJ}7). Not set uses 30.`
 
 export const MOBILITY_SUPPORT_OPTIONS = [
   'Wheelchair in vehicle',

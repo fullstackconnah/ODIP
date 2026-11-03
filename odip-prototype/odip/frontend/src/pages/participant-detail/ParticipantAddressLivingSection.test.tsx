@@ -138,7 +138,8 @@ describe('ParticipantAddressLivingSection — MM level (remoteness)', () => {
     render(<ParticipantAddressLivingSection p={makeParticipant({ mmLevel: 4 })} participantId="participant-1" canEdit />)
 
     await user.click(screen.getByRole('button', { name: /edit/i }))
-    expect(screen.getByText(MM_LEVEL_HINT)).toBeInTheDocument()
+    expect(screen.getByText(MM_LEVEL_HINT, { normalizer: (t) => t })).toBeInTheDocument()
+    expect(MM_LEVEL_HINT).toBe("Sets the travel time cap on shifts not made from an agreement: 30 minutes (MM 1–⁠3), 60 (MM 4–⁠5), none (MM 6–⁠7). Not set uses 30.")   // NBSP keeps MM with its number
     await user.click(screen.getByLabelText('Remoteness (MM level)'))
     expect(within(screen.getByRole('listbox')).getAllByRole('option').map((o) => o.textContent)).toEqual(['Not set', ...Object.values(MM_LEVEL_LABELS)])
     await user.click(within(screen.getByRole('listbox')).getByRole('option', { name: MM_LEVEL_LABELS[6] }))
