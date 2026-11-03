@@ -24,6 +24,7 @@ import { extractErrorMessage } from '@/lib/utils'
 import { formGrid, span } from '@/lib/formGrid'
 import { useFillOnce } from '@/hooks/useFillOnce'
 import { Callout } from '@/components/Callout'
+import { NumberField } from '@/components/NumberField'
 import { PageState } from '@/components/PageState'
 import { isNotFoundError } from '@/lib/httpStatus'
 import { retryingAfterError } from '@/lib/queryPhase'
@@ -42,11 +43,15 @@ const EMPLOYMENT_TYPE_ITEMS: DropdownItem[] = [
   ...EMPLOYMENT_TYPES.map(value => ({ value, label: EMPLOYMENT_TYPE_LABELS[value] })),
 ]
 
+// Matches the server's check (CreateStaffDto.GoalHoursError): 0 to 80, in half-hours.
+const GOAL_HOURS_ERROR = 'Enter 0 to 80 hours, in half-hours'
+
 const staffSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
   lastName: z.string().min(1, 'Last name is required'),
   position: z.string().min(1, 'Position is required'),
   employmentType: z.string().nullable().optional(),
+  goalWeeklyHours: z.number().min(0, GOAL_HOURS_ERROR).max(80, GOAL_HOURS_ERROR).refine(hours => hours * 2 === Math.floor(hours * 2), GOAL_HOURS_ERROR).nullable().optional(),
   role: z.string().min(1, 'Account role is required'),
   email: z.string().min(1, 'Email is required').email('Enter a valid email address'),
   mobile: z.string().optional(),
@@ -165,6 +170,7 @@ export default function StaffCreatePage() {
       lastName: record.lastName ?? '',
       position: record.position ?? 'SupportWorker',
       employmentType: record.employmentType ?? null,
+      goalWeeklyHours: record.goalWeeklyHours ?? null,
       role: record.role ?? 'SupportWorker',
       email: record.email ?? '',
       mobile: record.mobile ?? '',
@@ -349,6 +355,23 @@ export default function StaffCreatePage() {
                 )}
               />
             </FormField>
+
+            <Controller
+              control={control}
+              name="goalWeeklyHours"
+              render={({ field }) => (
+                <NumberField
+                  label="Goal hours a week"
+                  hint="Auto-roster aims for this. Empty uses the default for their employment type."
+                  className={span.medium}
+                  inputMode="decimal"
+                  step={0.5}
+                  value={field.value ?? Number.NaN}
+                  onChange={hours => field.onChange(Number.isNaN(hours) ? null : hours)}
+                  error={errors.goalWeeklyHours?.message}
+                />
+              )}
+            />
 
             <FormField label="Region" className={span.short}>
               <input {...register('region')} placeholder="e.g. South East QLD" />
