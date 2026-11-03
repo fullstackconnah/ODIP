@@ -756,3 +756,33 @@ describe('ClaimDetailPage, shift billing PR4 words', () => {
     expect(screen.queryByText(NOTE)).toBeNull()
   })
 })
+
+// Claims PR4b, a one-off claim (Kind === 'Manual'): no trip, no shift. The period (one day) stands in for the trip, and a line has no booking to toggle.
+describe('ClaimDetailPage: Kind === Manual claim', () => {
+  const manualClaim = () => shiftClaim([shiftLineItem({ shiftId: undefined })], { kind: 'Manual', periodFrom: '2026-02-03', periodTo: '2026-02-03' })
+
+  it('says "One-off claim" in the header, not "Trip claim" or "Shift claim"', () => {
+    mockUseClaim.mockReturnValue({ data: manualClaim(), isLoading: false })
+    renderPage('/claims/claim-2')
+    expect(screen.getByText('One-off claim')).toBeInTheDocument()
+    expect(screen.queryByText('Trip claim')).not.toBeInTheDocument()
+    expect(screen.queryByText('Shift claim')).not.toBeInTheDocument()
+  })
+
+  it('shows the one day as the period, in the breadcrumb and the summary, with no Trip card', () => {
+    mockUseClaim.mockReturnValue({ data: manualClaim(), isLoading: false })
+    renderPage('/claims/claim-2')
+    expect(screen.getAllByText('3 Feb 2026')).toHaveLength(2)
+    expect(screen.getByText('Period')).toBeInTheDocument()
+    expect(screen.queryByText('Trip')).not.toBeInTheDocument()
+  })
+
+  it('shows the line as a plain one-off, with no booking actions', () => {
+    mockUseClaim.mockReturnValue({ data: manualClaim(), isLoading: false })
+    renderPage('/claims/claim-2')
+    expect(screen.getByText('2026-02-03')).toBeInTheDocument()
+    expect(screen.queryByText('2026-02-03 – 2026-02-03')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'No Show' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Invoice' })).not.toBeInTheDocument()
+  })
+})

@@ -57,7 +57,7 @@ public sealed class LedgerShiftCostSource : IShiftCostSource
         if (shifts.Count == 0) return Array.Empty<ShiftCostEstimate>();
 
         var person = await _db.Participants.AsNoTracking().Where(p => p.TenantId == tenantId && p.Id == participantId)
-            .Select(p => new { p.IsIntensiveSupport, p.AddressState }).FirstOrDefaultAsync(ct);
+            .Select(p => new { p.IsIntensiveSupport, p.AddressState, p.MmLevel }).FirstOrDefaultAsync(ct);
         if (person is null) return shifts.Select(_ => (ShiftCostEstimate)new ShiftCostEstimate.NotPriced("the participant was not found")).ToList();
 
         var providerState = await _db.ProviderSettings.AsNoTracking().Where(s => s.TenantId == tenantId).Select(s => s.State).FirstOrDefaultAsync(ct);
@@ -79,11 +79,12 @@ public sealed class LedgerShiftCostSource : IShiftCostSource
         var state = ShiftPriceEstimator.StateFor(person.AddressState, providerState);
         // Provider travel (travel plan D5): the submitted legs of a saved shift, else the forecast of its agreement block; a hand-made shift forecasts none. The same source the claim and the ledger read.
         var travelPolicy = await ShiftTravelSource.PolicyAsync(_db, tenantId, ct);
-        var travelInputs = await ShiftTravelSource.ForShiftsAsync(_db, tenantId, travelPolicy, shifts.Select(s => new ShiftRef(s.ShiftId, s.ShiftPatternId)).ToList(), ct);
+        var travelInputs = await ShiftTravelSource.ForShiftsAsync(_db, tenantId, travelPolicy, shifts.Select(s => new ShiftRef(s.ShiftId, s.ShiftPatternId, person.MmLevel)).ToList(), ct);
 
         return shifts.Select((shift, index) =>
         {
             var groupRows = rowsByGroup.GetValueOrDefault(shift.SupportGroupCode ?? CatalogueGroups.CommunityAccessGroupCode) ?? new List<SupportCatalogueItem>();
+            // Future shifts have no breaks yet: no spans (W9).
             var outcome = ShiftPriceEstimator.Price(new ShiftRateRows(groupRows, personalCareRows, sleepoverRows), shift.SupportGroupCode, shift.ServiceDate, shift.StartTime, shift.EndTime, shift.EndsNextDay, shift.Ratio, shift.NightType,
                 person.IsIntensiveSupport, state, holidays.For(state), zone);
             if (outcome.IsPriced) outcome = ShiftTravelPricer.Apply(outcome, travelInputs[index], shift.ServiceDate, state, travelPolicy.KmRate, groupRows.Concat(personalCareRows).ToList(), travelPolicy.TravelRows);

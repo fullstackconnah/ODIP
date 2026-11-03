@@ -8,7 +8,7 @@ import type { TopicField } from './SupportProfileTopicCard'
 // React Fast Refresh wants a component file to export only components.
 
 export function hasAddressLiving(p: ParticipantDetailDto): boolean {
-  return !!(p.addressStreet || p.addressSuburb || p.addressState || p.addressPostcode || p.country || p.livingArrangement)
+  return !!(p.addressStreet || p.addressSuburb || p.addressState || p.addressPostcode || p.country || p.livingArrangement || p.mmLevel != null)
 }
 
 export function hasKeyIdentifiers(p: ParticipantDetailDto): boolean {

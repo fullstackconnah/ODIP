@@ -17,7 +17,7 @@ import type { CreateParticipantChecklistItemDto } from './checklist-items'
 
 /**
  * CORE-02: the canonical unit for a partial participant save is a semantic FIELD GROUP, not a
- * wizard step or a detail-tab section — both compose from these 20 groups (16 scalar + 4
+ * wizard step or a detail-tab section — both compose from these 21 groups (17 scalar + 4
  * collections), neither defines them. See backend ParticipantPatchDTOs.cs / SPEC-00's CORE-02
  * section for the full field-group partition and reasoning.
  *
@@ -27,11 +27,12 @@ import type { CreateParticipantChecklistItemDto } from './checklist-items'
  * leaves every one of its fields completely untouched. There is no IsDraft/IsActive here at
  * all — those stay the dedicated status, restore, begin-services and make-active endpoints' job.
  */
-/** The 16 scalar field groups of {@link PatchParticipantDto}; each has its own save revision. */
+/** The 17 scalar field groups of {@link PatchParticipantDto}; each has its own save revision. */
 export const SCALAR_GROUP_KEYS = [
   'personalDetails',
   'preferredStaff',
   'address',
+  'remoteness',
   'livingArrangement',
   'ndisPlan',
   'serviceProfile',
@@ -58,6 +59,7 @@ export interface PatchParticipantDto {
   personalDetails?: PatchPersonalDetailsDto
   preferredStaff?: PatchPreferredStaffDto
   address?: PatchAddressDto
+  remoteness?: PatchRemotenessDto
   livingArrangement?: PatchLivingArrangementDto
   ndisPlan?: PatchNdisPlanDto
   serviceProfile?: PatchServiceProfileDto
@@ -123,6 +125,11 @@ export interface PatchAddressDto {
   addressSuburb?: string | null
   addressState?: string | null
   addressPostcode?: string | null
+}
+
+/** remoteness group — the participant MM level (own group so an address save that omits it cannot clear it). */
+export interface PatchRemotenessDto {
+  mmLevel?: number | null
 }
 
 /** livingArrangement group — Identity (wizard step 0) / Address & Living Arrangements (detail tab). */

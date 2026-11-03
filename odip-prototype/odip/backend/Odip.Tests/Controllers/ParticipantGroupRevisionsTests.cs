@@ -38,7 +38,7 @@ public class ParticipantGroupRevisionsTests
     public void Keys_match_the_patch_dto_scalar_groups()
     {
         var groups = ScalarGroupProps().Select(p => char.ToLowerInvariant(p.Name[0]) + p.Name[1..]).ToHashSet();
-        Assert.Equal(16, groups.Count);
+        Assert.Equal(17, groups.Count);
         Assert.True(groups.SetEquals(ParticipantGroupRevisions.Keys));
 
         var props = ScalarGroupProps().ToList();
@@ -47,7 +47,7 @@ public class ParticipantGroupRevisionsTests
         object boxed = all;
         foreach (var prop in props)
             dtoType.GetProperty(prop.Name)!.SetValue(boxed, Activator.CreateInstance(Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType));
-        Assert.Equal(16, ParticipantGroupRevisions.SentGroups((PatchParticipantDto)boxed).Count());
+        Assert.Equal(17, ParticipantGroupRevisions.SentGroups((PatchParticipantDto)boxed).Count());
         Assert.Empty(ParticipantGroupRevisions.SentGroups(new PatchParticipantDto()));
         var some = new PatchParticipantDto { Medical = new PatchMedicalDto(), AboutMe = new PatchAboutMeDto() };
         Assert.Equal(["aboutMe", "medical"], ParticipantGroupRevisions.SentGroups(some).Order());
@@ -108,9 +108,9 @@ public class ParticipantGroupRevisionsTests
         var id = await SeedAsync(db, null, ("aboutMe", 3));
         await using var ctx = TestDb.Create(db);
         var read = await ParticipantGroupRevisions.ReadAsync(ctx, id, default);
-        Assert.Equal(16, read.Count);
+        Assert.Equal(17, read.Count);
         Assert.Equal(3, read["aboutMe"]);
-        Assert.Equal(15, read.Values.Count(v => v == 0));
+        Assert.Equal(16, read.Values.Count(v => v == 0));
     }
 
     [Fact]
