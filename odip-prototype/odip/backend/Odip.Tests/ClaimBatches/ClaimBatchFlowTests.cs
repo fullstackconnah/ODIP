@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Odip.Domain.Entities;
 using Odip.Domain.Enums;
+using Odip.Domain.Rostering;
 using Odip.Infrastructure.Services;
 using Xunit;
 
@@ -383,6 +384,62 @@ public class ClaimBatchFlowTests
         Assert.Contains(inFile.Problems, p => p.Rule == "AlreadyPending");
         // The fixture records no funding plan, so its NDIA-managed lines carry the my-provider warning and nothing else.
         Assert.Empty(hub.Ready.Single(r => r.LineId == b[0].Id).Problems.Where(p => p.Rule != "MyProvider"));
+    }
+
+    /// <summary>A second claim for the same participant, item and day as <paramref name="line"/>: a manual one (no shift or booking on its line) or a shift one.</summary>
+    private static (TripClaim Claim, ClaimLineItem Line) AddTwin(BatchFixture f, Participant who, ClaimLineItem line, bool manual, TripClaimStatus status = TripClaimStatus.Draft, Guid? tenant = null)
+    {
+        var tenantId = tenant ?? f.TenantId;
+        var claim = new TripClaim { TenantId = tenantId, Id = Guid.NewGuid(), ParticipantId = who.Id, ClaimReference = "TC-TWIN-" + Guid.NewGuid().ToString("N")[..6], Kind = manual ? ClaimKind.Manual : ClaimKind.Shift, Status = status, TotalAmount = 120m };
+        var shift = manual ? null : new Shift { Id = Guid.NewGuid(), TenantId = tenantId, ParticipantId = who.Id, ServiceDate = line.SupportsDeliveredFrom, StartTime = new TimeOnly(9, 0), EndTime = new TimeOnly(11, 0), Ratio = SupportRatio.OneToOne, NightType = SleepoverType.None, Status = ShiftStatus.Completed };
+        var twin = new ClaimLineItem
+        {
+            TenantId = tenantId, Id = Guid.NewGuid(), TripClaimId = claim.Id, ShiftId = shift?.Id, SupportItemCode = line.SupportItemCode, DayType = ClaimDayType.Weekday,
+            SupportsDeliveredFrom = line.SupportsDeliveredFrom, SupportsDeliveredTo = line.SupportsDeliveredTo, Hours = 2m, UnitPrice = 60m, TotalAmount = 120m, GSTCode = GSTCode.P2, Status = ClaimLineItemStatus.Draft,
+        };
+        f.Db.TripClaims.Add(claim);
+        if (shift != null) f.Db.Shifts.Add(shift);
+        f.Db.ClaimLineItems.Add(twin);
+        f.Db.SaveChanges();
+        return (claim, twin);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_double_claim_across_files_warns_on_both_lines_in_either_order_and_never_blocks_the_build(bool shiftFirst)
+    {
+        using var f = new BatchFixture();
+        var (claim, lines, person) = f.AddClaim(shiftLines: shiftFirst);
+        var (twinClaim, twin) = AddTwin(f, person, lines[0], manual: shiftFirst);
+
+        var hub = await f.Service.HubAsync(f.TenantId, default);
+
+        var mine = Assert.Single(hub.Ready.Single(r => r.LineId == lines[0].Id).Problems, p => p.Rule == "DoubleClaimAcrossFiles");
+        Assert.Equal(ClaimBatchChecks.Warn, mine.Severity);
+        Assert.Contains(twinClaim.ClaimReference, mine.Message);
+        Assert.Contains(claim.ClaimReference, Assert.Single(hub.Ready.Single(r => r.LineId == twin.Id).Problems, p => p.Rule == "DoubleClaimAcrossFiles").Message);
+        Assert.True((await f.BuildAsync(lines[0].Id)).Ok);
+    }
+
+    [Fact]
+    public async Task A_double_claim_warning_ignores_a_rejected_line_a_rejected_claim_another_item_and_another_organisation()
+    {
+        using var f = new BatchFixture();
+        var (_, lines, person) = f.AddClaim();
+        var rejectedClaim = AddTwin(f, person, lines[0], manual: true, TripClaimStatus.Rejected);
+        var rejectedLine = AddTwin(f, person, lines[0], manual: true);
+        rejectedLine.Line.Status = ClaimLineItemStatus.Rejected;
+        var otherItem = AddTwin(f, person, lines[0], manual: true);
+        otherItem.Line.SupportItemCode = "04_999_0125_6_1";
+        var otherDay = AddTwin(f, person, lines[0], manual: true);
+        otherDay.Line.SupportsDeliveredFrom = otherDay.Line.SupportsDeliveredTo = lines[0].SupportsDeliveredFrom.AddDays(3);
+        AddTwin(f, person, lines[0], manual: true, tenant: f.OtherTenantId);
+        f.Db.SaveChanges();
+
+        var hub = await f.Service.HubAsync(f.TenantId, default);
+
+        Assert.DoesNotContain(hub.Ready.Single(r => r.LineId == lines[0].Id).Problems, p => p.Rule == "DoubleClaimAcrossFiles");
     }
 
     [Fact]

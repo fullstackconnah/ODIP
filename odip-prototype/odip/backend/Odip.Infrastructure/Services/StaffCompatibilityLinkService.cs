@@ -55,6 +55,9 @@ public class StaffCompatibilityLinkService
     {
         if (oldUserId == newUserId) return;
 
+        var removed = false;
+        StaffParticipantCompatibility? appended = null;
+
         if (oldUserId.HasValue)
         {
             var oldRow = await _db.StaffParticipantCompatibilities
@@ -65,7 +68,10 @@ public class StaffCompatibilityLinkService
             // is left exactly as they set it — clearing PreferredUserId is not, by itself,
             // evidence the compatibility judgement should change too.
             if (oldRow != null && oldRow.AutoLinked)
+            {
                 _db.StaffParticipantCompatibilities.Remove(oldRow);
+                removed = true;
+            }
         }
 
         if (newUserId.HasValue && !isDraft)
@@ -75,7 +81,7 @@ public class StaffCompatibilityLinkService
 
             if (newRow == null)
             {
-                _db.StaffParticipantCompatibilities.Add(new StaffParticipantCompatibility
+                appended = new StaffParticipantCompatibility
                 {
                     Id = Guid.NewGuid(),
                     UserId = newUserId.Value,
@@ -84,18 +90,69 @@ public class StaffCompatibilityLinkService
                     Reason = AutoLinkReason,
                     AutoLinked = true,
                     UpdatedAt = DateTime.UtcNow,
-                });
+                };
+                _db.StaffParticipantCompatibilities.Add(appended);
             }
             else if (newRow.AutoLinked)
             {
                 // Refresh a row this service still owns (e.g. the same staff member was picked
                 // again after briefly being changed away).
+                if (newRow.Level != CompatibilityLevel.Preferred) appended = newRow;
                 newRow.Level = CompatibilityLevel.Preferred;
                 newRow.UpdatedAt = DateTime.UtcNow;
             }
             // else: a human already has an explicit opinion on this pair (Allowed or Excluded)
             // — leave it untouched rather than upgrading it to Preferred underneath them.
         }
+
+        // R8a: a new pick goes to the end of Preferred, and a removed one closes its gap, in the caller's save.
+        if (removed || appended != null)
+            await RenumberTierAsync(participantId, CompatibilityLevel.Preferred, ct, appended, append: appended != null);
+    }
+
+    /// <summary>
+    /// R8a: places a row the matrix writer just changed. A tier change renumbers the old tier (closing the gap) and puts the row last in the new one,
+    /// unless <paramref name="position"/> asks for a place; a same-tier write keeps the row where it is unless a position is given. Allowed and Excluded rows have rank 0.
+    /// </summary>
+    public async Task PlaceAsync(StaffParticipantCompatibility row, CompatibilityLevel previousLevel, int? position, CancellationToken ct)
+    {
+        var moved = row.Level != previousLevel;
+        if (moved && CompatibilityOrder.IsRanked(previousLevel))
+            await RenumberTierAsync(row.ParticipantId, previousLevel, ct);
+        if (CompatibilityOrder.IsRanked(row.Level))
+            await RenumberTierAsync(row.ParticipantId, row.Level, ct, row, position, append: moved);
+        else
+            row.Rank = 0;
+    }
+
+    /// <summary>
+    /// Renumbers one participant's tier 1..n from its CURRENT order (rank, then name), not from the stored numbers, so every write also heals gaps and duplicates.
+    /// The <paramref name="mover"/> goes to <paramref name="position"/> (clamped), or last when <paramref name="append"/>, else stays where it sits.
+    /// Works on the change tracker (pending adds, moves and deletes included) and never saves. No lock and no unique index: two concurrent writes may leave a duplicate that the next write heals.
+    /// </summary>
+    public async Task RenumberTierAsync(Guid participantId, CompatibilityLevel tier, CancellationToken ct,
+        StaffParticipantCompatibility? mover = null, int? position = null, bool append = false)
+    {
+        if (!CompatibilityOrder.IsRanked(tier)) return;
+
+        // Loads the stored siblings into the tracker (tenant-filtered); the tracker then holds the truth, this unsaved write included.
+        await _db.StaffParticipantCompatibilities.Where(c => c.ParticipantId == participantId && c.Level == tier).ToListAsync(ct);
+        var rows = _db.ChangeTracker.Entries<StaffParticipantCompatibility>()
+            .Where(e => e.State is not (EntityState.Deleted or EntityState.Detached) && e.Entity.ParticipantId == participantId && e.Entity.Level == tier)
+            .Select(e => e.Entity).ToList();
+
+        var userIds = rows.Select(r => r.UserId).ToList();
+        var names = (await _db.Users.Where(u => userIds.Contains(u.Id)).ToListAsync(ct)).ToDictionary(u => u.Id, u => u.FullName);
+        var ordered = rows.OrderBy(r => CompatibilityOrder.Key(tier, r.Rank, names.GetValueOrDefault(r.UserId)), CompatibilityOrder.Comparer).ToList();
+
+        if (mover != null && ordered.IndexOf(mover) is var at and >= 0)
+        {
+            ordered.RemoveAt(at);
+            ordered.Insert(position.HasValue ? Math.Min(position.Value - 1, ordered.Count) : append ? ordered.Count : at, mover);
+        }
+
+        for (var i = 0; i < ordered.Count; i++)
+            if (ordered[i].Rank != i + 1) ordered[i].Rank = i + 1;
     }
 
     /// <summary>

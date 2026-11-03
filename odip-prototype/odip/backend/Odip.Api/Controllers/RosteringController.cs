@@ -139,6 +139,14 @@ public class RosteringController : ControllerBase
         var staffIds = activeStaff.Select(s => s.Id).ToList();
         var staffById = activeStaff.ToDictionary(s => s.Id);
 
+        // CASUAL_FORTNIGHT_HOURS: the casuals' shifts in the other week of this fortnight, so a chip can warn about hours that sit outside the week on screen (the board display and weekly meters never see them).
+        var fortnightStart = RosterFortnight.StartOf(start);
+        var casualIds = activeStaff.Where(s => s.EmploymentType == EmploymentType.Casual).Select(s => s.Id).ToList();
+        var otherWeekShifts = casualIds.Count == 0 ? new List<Shift>() : await _db.Shifts
+            .Where(s => s.UserId != null && casualIds.Contains(s.UserId.Value) && s.Status != ShiftStatus.Cancelled
+                        && s.ServiceDate >= fortnightStart && s.ServiceDate <= fortnightStart.AddDays(13) && (s.ServiceDate < start || s.ServiceDate > end))
+            .ToListAsync(ct);
+
         var weekTripAssignments = await _db.StaffAssignments
             .Include(a => a.TripInstance)
             .Where(a => staffIds.Contains(a.UserId) && a.Status != AssignmentStatus.Cancelled
@@ -196,7 +204,7 @@ public class RosteringController : ControllerBase
             .ToDictionaryAsync(c => (c.UserId, c.ParticipantId), c => c.Level, ct);
 
         var weeklyHours = await RosterAvailability.WeeklyHoursAsync(_db, activeStaff.Select(u => u.TenantId), ct);
-        var availability = new RosterAvailability.Snapshot(activeStaff, participantById.Values, weekShifts, weekTripAssignments, weekWindows, compatByPair, weekPublicHolidays, weeklyHours);
+        var availability = new RosterAvailability.Snapshot(activeStaff, participantById.Values, weekShifts, weekTripAssignments, weekWindows, compatByPair, weekPublicHolidays, weeklyHours, otherWeekShifts);
 
         List<RosterFinding> FindingsFor(Shift shift)
         {
@@ -1873,7 +1881,12 @@ public class RosteringController : ControllerBase
         if (participantId.HasValue) query = query.Where(c => c.ParticipantId == participantId.Value);
 
         var rows = await query.ToListAsync(ct);
-        return Ok(ApiResponse<List<CompatibilityRowDto>>.Ok(rows.Select(ToCompatibilityDto).ToList()));
+        // One participant: the CompatibilityOrder. All participants: by participant, then that order.
+        static (int Tier, int Rank, string Name) Key(StaffParticipantCompatibility c) => CompatibilityOrder.Key(c.Level, c.Rank, c.User?.FullName);
+        var ordered = participantId.HasValue
+            ? rows.OrderBy(Key, CompatibilityOrder.Comparer)
+            : rows.OrderBy(c => c.Participant?.FullName ?? string.Empty, StringComparer.OrdinalIgnoreCase).ThenBy(c => c.ParticipantId).ThenBy(Key, CompatibilityOrder.Comparer);
+        return Ok(ApiResponse<List<CompatibilityRowDto>>.Ok(ordered.Select(ToCompatibilityDto).ToList()));
     }
 
     /// <summary>Upsert one compatibility cell (StaffId, ParticipantId).</summary>
@@ -1881,6 +1894,8 @@ public class RosteringController : ControllerBase
     public async Task<ActionResult<ApiResponse<CompatibilityRowDto>>> UpsertCompatibility(
         [FromBody] UpsertCompatibilityDto dto, CancellationToken ct)
     {
+        if (dto.Rank is < 1)
+            return BadRequest(ApiResponse<CompatibilityRowDto>.Fail("Rank must be 1 or more."));
         if (!await _db.Users.AnyAsync(s => s.Id == dto.StaffId && s.IsActive, ct))
             return BadRequest(ApiResponse<CompatibilityRowDto>.Fail("Staff member not found."));
         if (!(await ParticipantReadiness.CheckAsync(_db, dto.ParticipantId, ct)).Allowed)
@@ -1909,6 +1924,9 @@ public class RosteringController : ControllerBase
         // Task 6d: reflect a Preferred mark (or a move off it) back onto the participant's
         // PreferredUserId, in the same transaction as this compatibility write.
         await _compatLink.SyncFromCompatibilityUpsertAsync(row, previousLevel, ct);
+
+        // R8a: place the row in its tier and renumber the tier(s) it touches, in this same save.
+        await _compatLink.PlaceAsync(row, previousLevel, dto.Rank, ct);
 
         await ParticipantGroupRevisions.SaveBumpingAsync(_db, ct);
 
@@ -2053,7 +2071,7 @@ public class RosteringController : ControllerBase
     {
         Id = c.Id, StaffId = c.UserId, StaffName = c.User?.FullName ?? string.Empty,
         ParticipantId = c.ParticipantId, ParticipantName = c.Participant?.FullName ?? string.Empty,
-        Level = c.Level, Reason = c.Reason, UpdatedAt = c.UpdatedAt
+        Level = c.Level, Rank = c.Rank, Reason = c.Reason, UpdatedAt = c.UpdatedAt
     };
 
     /// <summary>Maps a ShiftCompletion to its DTO — thin wrapper so this and PortalController's

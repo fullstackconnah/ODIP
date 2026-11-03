@@ -282,6 +282,23 @@ public class ClaimBatchChecksTests
     }
 
     [Fact]
+    public void DoubleClaimAcrossFiles_warns_with_the_other_reference_right_after_DuplicateInFile()
+    {
+        var a = Clean();
+        var b = Clean() with { Participant = a.Participant };
+        b.Line.SupportsDeliveredFrom = a.Line.SupportsDeliveredFrom;
+        b.Line.SupportsDeliveredTo = a.Line.SupportsDeliveredTo;
+        var ctx = new BatchContext { Today = Today, BuildRows = [a, b], DoubleClaimed = new Dictionary<Guid, string> { [a.Line.Id] = "TC-9" } };
+        var problems = ClaimBatchChecks.For(a, ctx);
+        var rules = problems.Select(p => p.Rule).ToList();
+        Assert.Equal(rules.IndexOf("DuplicateInFile") + 1, rules.IndexOf("DoubleClaimAcrossFiles"));
+        var warn = problems.Single(p => p.Rule == "DoubleClaimAcrossFiles");
+        Assert.Equal(ClaimBatchChecks.Warn, warn.Severity);
+        Assert.Contains("TC-9", warn.Message);
+        Assert.DoesNotContain("DoubleClaimAcrossFiles", Rules(b, ctx));
+    }
+
+    [Fact]
     public void HoursNotWholeMinutes_applies_only_to_the_hour_unit()
     {
         Assert.Contains("HoursNotWholeMinutes", Rules(Clean(line: l => l.Hours = 1.333m)));

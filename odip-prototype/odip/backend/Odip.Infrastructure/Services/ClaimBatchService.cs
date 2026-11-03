@@ -202,12 +202,38 @@ public sealed partial class ClaimBatchService(OdipDbContext db, BprCsvService bp
                 .Select(p => new { p.ParticipantId, p.PlanStart, p.PlanEnd, p.MyProvider, p.MyProviderOn }).ToListAsync(ct))
             .GroupBy(p => p.ParticipantId).ToDictionary(g => g.Key, g => (IReadOnlyList<PlanSpan>)g.Select(p => new PlanSpan(p.PlanStart, p.PlanEnd, p.MyProvider, p.MyProviderOn)).ToList());
 
+        var doubleClaimed = await DoubleClaimedAsync(t, selected, ct);
+
         var context = new BatchContext
         {
             Today = today, BuildRows = buildRows ? selected : [], PendingFiles = pending.GroupBy(p => p.LineId).ToDictionary(g => g.Key, g => g.First().FileName),
-            Accepted = accepted, OtherFunded = otherFunded, HeldBy = heldBy, LastRejectCode = lastCode, ConfirmedLineIds = confirmed, Plans = plans,
+            Accepted = accepted, OtherFunded = otherFunded, HeldBy = heldBy, DoubleClaimed = doubleClaimed, LastRejectCode = lastCode, ConfirmedLineIds = confirmed, Plans = plans,
         };
         return (context, attempts, lastCode);
+    }
+
+    /// <summary>
+    /// For each row, the references of other claims whose counting lines (the budget ledger's definition) share its participant, item and an overlapping date. The participant is the line's shift's, else its booking's, else a manual claim's own.
+    /// </summary>
+    private async Task<Dictionary<Guid, string>> DoubleClaimedAsync(Guid t, IReadOnlyList<BprRow> selected, CancellationToken ct)
+    {
+        var rows = selected.Where(r => r.Participant != null).ToList();
+        if (rows.Count == 0) return [];
+        var codes = rows.Select(r => r.Line.SupportItemCode).Distinct().ToList();
+        var from = rows.Min(r => r.Line.SupportsDeliveredFrom);
+        var to = rows.Max(r => r.Line.SupportsDeliveredTo);
+        var others = await db.ClaimLineItems.AsNoTracking().Where(BudgetLedgerService.ClaimLineStillCounts)
+            .Where(l => l.TenantId == t && codes.Contains(l.SupportItemCode) && l.SupportsDeliveredFrom <= to && l.SupportsDeliveredTo >= from)
+            .Select(l => new
+            {
+                l.TripClaimId, l.TripClaim.ClaimReference, l.SupportItemCode, l.SupportsDeliveredFrom, l.SupportsDeliveredTo,
+                ParticipantId = l.Shift != null ? l.Shift.ParticipantId : l.ParticipantBooking != null ? l.ParticipantBooking.ParticipantId : l.TripClaim.ParticipantId,
+            }).ToListAsync(ct);
+        return rows.Select(r => (r.Line.Id, Refs: others
+                .Where(o => o.TripClaimId != r.Claim.Id && o.ParticipantId == r.Participant!.Id && o.SupportItemCode == r.Line.SupportItemCode
+                    && o.SupportsDeliveredFrom <= r.Line.SupportsDeliveredTo && o.SupportsDeliveredTo >= r.Line.SupportsDeliveredFrom)
+                .Select(o => o.ClaimReference).Distinct().Order().ToList()))
+            .Where(x => x.Refs.Count > 0).ToDictionary(x => x.Id, x => string.Join(", ", x.Refs));
     }
 
     // ---- per-claim download (G9) ----

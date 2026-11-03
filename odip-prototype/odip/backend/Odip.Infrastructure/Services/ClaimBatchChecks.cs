@@ -31,6 +31,8 @@ public sealed class BatchContext
     public IReadOnlyDictionary<Guid, string> OtherFunded { get; init; } = new Dictionary<Guid, string>();
     /// <summary>Claim id to the reference of the other claim that holds the same shift.</summary>
     public IReadOnlyDictionary<Guid, string> HeldBy { get; init; } = new Dictionary<Guid, string>();
+    /// <summary>Line id to the references of the other claims that already count for the same participant, item and an overlapping date.</summary>
+    public IReadOnlyDictionary<Guid, string> DoubleClaimed { get; init; } = new Dictionary<Guid, string>();
     /// <summary>Line id to the code of its last rejection, for a resubmit.</summary>
     public IReadOnlyDictionary<Guid, string> LastRejectCode { get; init; } = new Dictionary<Guid, string>();
     public IReadOnlySet<Guid> ConfirmedLineIds { get; init; } = new HashSet<Guid>();
@@ -50,6 +52,22 @@ public static partial class ClaimBatchChecks
     [GeneratedRegex(@"^\d+$")] private static partial Regex Digits();
 
     private static string Money(decimal value) => value.ToString("0.00", CultureInfo.InvariantCulture);
+
+    /// <summary>The CatalogueItem sentence, shared with the manual claim's create-time check so the two can never say different things.</summary>
+    public static string NotInPriceGuide(string code, DateOnly on) =>
+        $"Support item {code} isn't in the price guide on {on.ToString("d MMM yyyy", CultureInfo.InvariantCulture)}.";
+
+    public static string PriceLimitSentence(decimal price, string state, decimal limit) =>
+        $"The price ${Money(price)} is over the {state} limit of ${Money(limit)}.";
+
+    /// <summary>
+    /// Whether a unit price is over the item's limit in a state: the one rule behind the PriceLimit block and the manual claim's cap. An item with no national price (a quote item) or no limit in the state has no cap here.
+    /// </summary>
+    public static bool OverPriceLimit(SupportCatalogueItem item, string state, decimal unitPrice, out decimal limit)
+    {
+        limit = CatalogueStatePrice.For(item, state);
+        return item.PriceNational != null && limit > 0 && unitPrice > limit;
+    }
 
     /// <summary>The registration number problem, once: it is the organisation's, not a line's.</summary>
     public static string? RegistrationProblem(ProviderSettings? settings) =>
@@ -74,9 +92,9 @@ public static partial class ClaimBatchChecks
         if (l.SupportsDeliveredFrom > l.SupportsDeliveredTo) Add("DateOrder", Block, "The start date is after the end date.");
         if (l.SupportsDeliveredTo > ctx.Today) Add("FutureDate", Block, "You can't claim for a day that hasn't happened yet.");
         if (row.Item is null)
-            Add("CatalogueItem", Block, $"Support item {l.SupportItemCode} isn't in the price guide on {l.SupportsDeliveredFrom.ToString("d MMM yyyy", CultureInfo.InvariantCulture)}.");
-        else if (row.Item.PriceNational != null && CatalogueStatePrice.For(row.Item, row.State) is var limit && limit > 0 && l.UnitPrice > limit)
-            Add("PriceLimit", Block, $"The price ${Money(l.UnitPrice)} is over the {row.State} limit of ${Money(limit)}.");
+            Add("CatalogueItem", Block, NotInPriceGuide(l.SupportItemCode, l.SupportsDeliveredFrom));
+        else if (OverPriceLimit(row.Item, row.State, l.UnitPrice, out var limit))
+            Add("PriceLimit", Block, PriceLimitSentence(l.UnitPrice, row.State, limit));
         if (l.GSTCode is not (GSTCode.P1 or GSTCode.P2 or GSTCode.P5)) Add("GstCode", Block, "The GST code must be P1, P2 or P5.");
         if (l.ClaimType == ClaimType.Cancellation && !CancellationReasons.Contains((l.CancellationReason ?? "").Trim().ToUpperInvariant()))
             Add("CancellationReason", Block, "Choose why the participant cancelled: health, family, transport or other.");
@@ -125,6 +143,8 @@ public static partial class ClaimBatchChecks
         if (ctx.BuildRows.Any(o => o.Line.Id != l.Id && o.Participant?.NdisNumber?.Trim() == ndis && o.Line.SupportItemCode == l.SupportItemCode && (o.Line.ClaimType == ClaimType.ProviderTravel) == (l.ClaimType == ClaimType.ProviderTravel)
                 && o.Line.SupportsDeliveredFrom == l.SupportsDeliveredFrom && o.Line.SupportsDeliveredTo == l.SupportsDeliveredTo))
             Add("DuplicateInFile", Warn, "Another line in this file has the same participant, item and dates. The NDIA may reject one as a duplicate.");
+        if (ctx.DoubleClaimed.TryGetValue(l.Id, out var others))
+            Add("DoubleClaimAcrossFiles", Warn, $"{others} already claims this participant, item and dates, so the NDIA may reject one as a duplicate. Check before you send both.");
         if ((row.Item?.Unit ?? "H") == "H" && l.Hours * 60 != decimal.Truncate(l.Hours * 60))
             Add("HoursNotWholeMinutes", Warn, $"{l.Hours.ToString("0.####", CultureInfo.InvariantCulture)} hours isn't a whole number of minutes. The file rounds it to {BprCsvService.FormatHours(l.Hours)}.");
 

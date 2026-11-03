@@ -17,14 +17,18 @@ public enum ShiftStatus
 }
 
 /// <summary>
-/// A staff-participant pairing preference. Three states, not a score — the absence of a
-/// <see cref="StaffParticipantCompatibility"/> row for a pair means Allowed.
+/// A staff-participant pairing preference. Preferred, Backup and Emergency are ordered tiers (see
+/// <see cref="StaffParticipantCompatibility.Rank"/>); Excluded is the hard "No". The absence of a
+/// <see cref="StaffParticipantCompatibility"/> row for a pair means Allowed. Values are appended, never renumbered:
+/// ordering goes through <see cref="CompatibilityOrder"/>, never the stored int.
 /// </summary>
 public enum CompatibilityLevel
 {
     Preferred = 0,
     Allowed = 1,
-    Excluded = 2
+    Excluded = 2,
+    Backup = 3,
+    Emergency = 4
 }
 
 /// <summary>
@@ -199,6 +203,19 @@ public class RosterWeek : ITenantEntity
 }
 
 /// <summary>
+/// The fixed two-week pay periods the casual-hours warning counts in: Monday to the Sunday 13 days on, counted from 5 Jan 2026 (R6, owner 2026-11-02). Every roster week sits wholly inside one fortnight.
+/// </summary>
+public static class RosterFortnight
+{
+    public static readonly DateOnly Anchor = new(2026, 1, 5);
+
+    /// <summary>The Monday the fortnight holding <paramref name="date"/> starts; floor division, so dates before the anchor work.</summary>
+    public static DateOnly StartOf(DateOnly date) => Anchor.AddDays(14 * (int)Math.Floor((date.DayNumber - Anchor.DayNumber) / 14.0));
+
+    public static DateOnly EndOf(DateOnly date) => StartOf(date).AddDays(13);
+}
+
+/// <summary>
 /// One cell of the staff-participant compatibility matrix. Absence of a row for a given
 /// (StaffId, ParticipantId) pair means <see cref="CompatibilityLevel.Allowed"/>. Unique on
 /// (TenantId, StaffId, ParticipantId) — enforced at the persistence layer.
@@ -217,6 +234,10 @@ public class StaffParticipantCompatibility : ITenantEntity
     public CompatibilityLevel Level { get; set; }
     public string? Reason { get; set; }
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>1-based position inside this participant's Preferred, Backup or Emergency tier; 0 for Allowed and Excluded.
+    /// Every write renumbers the whole tier, so it is 1..n; two concurrent writes may leave a duplicate that the next write heals.</summary>
+    public int Rank { get; set; }
 
     /// <summary>
     /// Origin marker (task 6d): true iff this row was created/is still owned by

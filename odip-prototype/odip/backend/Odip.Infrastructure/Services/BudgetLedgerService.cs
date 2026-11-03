@@ -219,7 +219,7 @@ public sealed class BudgetLedgerService
     {
         var participantIds = await _db.ClaimLineItems.AsNoTracking()
             .Where(l => l.TripClaimId == claimId)
-            .Select(l => l.Shift != null ? (Guid?)l.Shift.ParticipantId : l.ParticipantBooking != null ? (Guid?)l.ParticipantBooking.ParticipantId : null)
+            .Select(l => l.Shift != null ? (Guid?)l.Shift.ParticipantId : l.ParticipantBooking != null ? (Guid?)l.ParticipantBooking.ParticipantId : l.TripClaim.ParticipantId)
             .Distinct()
             .ToListAsync(ct);
         var ids = participantIds.Where(id => id is not null).Select(id => id!.Value).ToList();
@@ -315,11 +315,13 @@ public sealed class BudgetLedgerService
         _db.ClaimLineItems.AsNoTracking()
             .Where(ClaimLineStillCounts)
             .Where(l => l.TenantId == tenantId && l.SupportsDeliveredFrom >= from && l.SupportsDeliveredFrom <= to
-                && ((l.Shift != null && participantIds.Contains(l.Shift.ParticipantId)) || (l.ParticipantBooking != null && participantIds.Contains(l.ParticipantBooking.ParticipantId))))
+                && ((l.Shift != null && participantIds.Contains(l.Shift.ParticipantId)) || (l.ParticipantBooking != null && participantIds.Contains(l.ParticipantBooking.ParticipantId))
+                    // A manual claim's line has neither: it is the claim's own participant's.
+                    || (l.Shift == null && l.ParticipantBooking == null && l.TripClaim.ParticipantId != null && participantIds.Contains(l.TripClaim.ParticipantId.Value))))
             .Select(l => new LineRow(
                 l.Id, l.TripClaimId, l.TripClaim.ClaimReference, l.TripClaim.Status, l.Status, l.SupportItemCode, l.SupportsDeliveredFrom, l.Hours, l.TotalAmount, l.PaidAmount,
                 l.ShiftId, l.ParticipantBookingId,
-                l.Shift != null ? l.Shift.ParticipantId : l.ParticipantBooking!.ParticipantId,
+                l.Shift != null ? l.Shift.ParticipantId : l.ParticipantBooking != null ? l.ParticipantBooking.ParticipantId : l.TripClaim.ParticipantId!.Value,
                 l.ParticipantBooking != null ? l.ParticipantBooking.PlanTypeOverride : null));
 
     /// <summary>The shifts that can still cost something: not cancelled, and a completed one only while no claim line that counts has taken it.</summary>
