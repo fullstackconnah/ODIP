@@ -70,7 +70,7 @@ internal static class ParticipantDetailMapper
             AccommodationType = p.AccommodationType, OnSiteSupportHours = p.OnSiteSupportHours,
             LivingArrangementNotes = p.LivingArrangementNotes,
             AddressStreet = p.AddressStreet, AddressSuburb = p.AddressSuburb,
-            AddressState = p.AddressState, AddressPostcode = p.AddressPostcode,
+            AddressState = p.AddressState, AddressPostcode = p.AddressPostcode, MmLevel = p.MmLevel,
             MobilityAidWheelchair = p.MobilityAidWheelchair, MobilityAidWalker = p.MobilityAidWalker,
             IsHighSupport = p.IsHighSupport, IsIntensiveSupport = p.IsIntensiveSupport, SupportRatio = p.SupportRatio,
             MobilitySupportOptions = p.MobilitySupportOptions,

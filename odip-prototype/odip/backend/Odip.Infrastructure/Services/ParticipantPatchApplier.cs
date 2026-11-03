@@ -71,6 +71,9 @@ public static class ParticipantPatchApplier
             if (postcodeError != null) return postcodeError;
         }
 
+        if (dto.Remoteness is { MmLevel: < 1 or > 7 })
+            return "Choose a level from 1 to 7.";
+
         if (dto.LivingArrangement is { } ladValidate)
         {
             var transient = new CreateParticipantDto
@@ -140,6 +143,8 @@ public static class ParticipantPatchApplier
             p.AddressStreet = ad.AddressStreet; p.AddressSuburb = ad.AddressSuburb;
             p.AddressState = ad.AddressState; p.AddressPostcode = ad.AddressPostcode;
         }
+
+        if (dto.Remoteness is { } rm) p.MmLevel = rm.MmLevel;
 
         if (dto.LivingArrangement is { } lad)
         {

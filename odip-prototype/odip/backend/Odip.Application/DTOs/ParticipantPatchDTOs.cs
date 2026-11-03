@@ -41,6 +41,7 @@ public record PatchParticipantDto
     public PatchPersonalDetailsDto? PersonalDetails { get; init; }
     public PatchPreferredStaffDto? PreferredStaff { get; init; }
     public PatchAddressDto? Address { get; init; }
+    public PatchRemotenessDto? Remoteness { get; init; }
     public PatchLivingArrangementDto? LivingArrangement { get; init; }
     public PatchNdisPlanDto? NdisPlan { get; init; }
     public PatchServiceProfileDto? ServiceProfile { get; init; }
@@ -167,6 +168,12 @@ public record PatchAddressDto
     public string? AddressState { get; init; }
     [StringLength(4)]
     public string? AddressPostcode { get; init; }
+}
+
+/// <summary>remoteness group: the MM level (1-7, null = not set). Its own group so an address save that omits it can never clear it; the detail tab sends both together.</summary>
+public record PatchRemotenessDto
+{
+    public int? MmLevel { get; init; }
 }
 
 /// <summary>livingArrangement group — Identity (wizard step 0) / Address &amp; Living Arrangements (detail tab). See PatchParticipantDto's doc.</summary>
