@@ -55,13 +55,13 @@ beforeEach(() => {
 })
 
 describe('the Intake column', () => {
-  // Constrained desktop rows may wrap their actions; wide rows keep the single-line cluster.
-  it('lets constrained desktop actions wrap while wide rows keep one line', () => {
+  // Next step: one nowrap cluster at every width, so a row is one line high.
+  it('keeps the Next step cluster on one line at every width', () => {
     page()
 
-    const cluster = screen.getByRole('button', { name: 'Start intake for Noah Fitzgerald' }).parentElement!
-    expect(cluster).toHaveClass('flex-wrap', 'whitespace-nowrap', 'md:max-[1440px]:w-40', 'min-[1440px]:flex-nowrap')
-    expect(cluster.closest('td')).not.toHaveClass('md:whitespace-nowrap')
+    const cluster = screen.getByRole('button', { name: 'Book intake for Noah Fitzgerald' }).parentElement!
+    expect(cluster).toHaveClass('whitespace-nowrap')
+    expect(cluster).not.toHaveClass('flex-wrap')
   })
 
   // Fix round 2 (FINISH review 2): two lines in every row. Line 1 is the visit alone; the reply badge leads line 2, beside what the invite did, so a
@@ -88,8 +88,8 @@ describe('the Intake column', () => {
     expect(screen.getAllByText('Invite sent')).toHaveLength(2) // Priya and Liam
     expect(screen.getByText("Invite not sent: email isn't set up yet")).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Book intake for Tomas Becker/ })).not.toBeInTheDocument() // a direct intake has no enquiry to book
-    expect(screen.getByRole('button', { name: 'Edit enquiry for Noah Fitzgerald' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Start intake for Noah Fitzgerald' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit enquiry for Noah Fitzgerald' })).not.toBeInTheDocument() // Edit enquiry is in the menu
+    expect(screen.queryByRole('button', { name: 'Start intake for Noah Fitzgerald' })).not.toBeInTheDocument() // Book intake leads until a visit is booked
   })
 
   it('offers no booking to a read-only viewer: line 1 is text, not a button', () => {
@@ -121,7 +121,7 @@ describe('the phone menu', () => {
 
     // A row with no booking has one menu, with Close enquiry alone (spec addendum E1); a booked row's phone menu comes first.
     await user.click(screen.getByRole('button', { name: 'More actions for Noah Fitzgerald' }))
-    expect(screen.getAllByRole('option').map(o => o.textContent)).toEqual(['Close enquiry'])
+    expect(screen.getAllByRole('option').map(o => o.textContent)).toEqual(['Start intake', 'Edit enquiry', 'Close enquiry'])
     await user.keyboard('{Escape}')
     await user.click(screen.getAllByRole('button', { name: 'More actions for Priya Nair' })[0])
     await user.click(screen.getByRole('option', { name: 'Mark confirmed' }))

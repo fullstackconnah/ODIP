@@ -204,7 +204,9 @@ const findRow = async (text: string) => (await screen.findByText(text)).closest(
 
 /** Enquiries tab -> Start intake -> the Intake wizard, to the end: lands on the Onboarding tab. */
 async function startAndCompleteIntake(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(within(await findRow('Ada Lovelace')).getByRole('button', { name: /^Start intake/ }))
+  const ada = within(await findRow('Ada Lovelace'))
+  await user.click(ada.getByRole('button', { name: /^More actions for/ }))
+  await user.click(await screen.findByRole('option', { name: /^Start intake/ }))
   await screen.findByDisplayValue('Ada')
   for (let i = 0; i < 8; i++) await next(user)
   await user.click(await screen.findByRole('button', { name: /complete intake/i }))
@@ -239,8 +241,8 @@ describe('Participants lifecycle (wire) — readiness in Warn mode', () => {
 
     // 1. Enquiries: the open enquiry, and the intake nobody enquired about. The finalised participant is not an enquiry.
     expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument()
-    expect(within(await findRow('Ada Lovelace')).getByText('New')).toBeInTheDocument()
-    expect(within(await findRow('Dana Direct')).getByText('Draft intake')).toBeInTheDocument()
+    expect(within(await findRow('Ada Lovelace')).getByRole('button', { name: /^Book intake/ })).toBeInTheDocument()
+    expect(within(await findRow('Dana Direct')).getByRole('button', { name: /^Resume intake/ })).toBeInTheDocument()
     expect(within(await findRow('Dana Direct')).getByRole('button', { name: /^Resume intake/ })).toBeInTheDocument()
     expect(screen.queryByText('Alex Active')).not.toBeInTheDocument()
 
@@ -308,7 +310,7 @@ describe('Participants lifecycle (wire) — readiness in Warn mode', () => {
     const user = userEvent.setup()
     renderApp('/participants?tab=enquiries')
 
-    expect(within(await findRow('Priya Preseed')).getByText('Draft intake')).toBeInTheDocument()
+    expect(within(await findRow('Priya Preseed')).getByRole('button', { name: /^Resume intake/ })).toBeInTheDocument()
     await user.click(within(await findRow('Priya Preseed')).getByRole('button', { name: /^Resume intake/ }))
     await screen.findByDisplayValue('Priya')
     for (let i = 0; i < 8; i++) await next(user)

@@ -13,6 +13,7 @@ test('a coordinator books an intake visit, sees it on the schedules, and cancels
   const name = `${first} ${last}`;
   const created = await expectStatus('create an enquiry', 200, await call(session, 'POST', '/inquiries', {
     firstName: first, lastName: last, phone: '0400 000 111', email: `ivy.${token}@example.com`, source: 'Phone', contactIsParticipant: true, // so the invite names Ivy (spec 2026-10-16: the phone and email are her own)
+    addressStreet: '12 Smith St', addressSuburb: 'Parramatta', addressState: 'NSW', addressPostcode: '2150', // a full address, so Book intake leads the row (a missing one leads with Add address)
   }));
   const day = addDays(sydneyToday(), 2);
   // From 10 am, at a time the coordinator is free: booking refuses a staff member with a shift or another visit then (plan check S5).
