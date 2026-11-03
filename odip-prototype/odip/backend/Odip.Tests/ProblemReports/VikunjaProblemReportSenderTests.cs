@@ -184,6 +184,7 @@ public class VikunjaProblemReportSenderTests
         var firstResult = await Sender(first).TrySendAsync(report, CancellationToken.None);
         all.AddRange(first.Calls);
         report.LastError = firstResult.Error;
+        report.Attempts = 1;
 
         var second = new StubHandler(c => c.Method == HttpMethod.Get
             ? Json(HttpStatusCode.OK, "[{\"id\":5,\"title\":\"other [R-aaaaaaaa]\",\"project_id\":7},{\"id\":99,\"title\":\"Sample Support Co: The roster will not save. [R-3f2a9c01]\",\"project_id\":7},{\"id\":98,\"title\":\"[R-3f2a9c01]\",\"project_id\":8}]")
@@ -204,7 +205,7 @@ public class VikunjaProblemReportSenderTests
     [Fact]
     public async Task ARetryWithNoMatchInTheSearch_CreatesTheCard()
     {
-        var report = ProblemReportCardTests.Report(r => r.LastError = ProblemReportSendResult.UnknownOutcome);
+        var report = ProblemReportCardTests.Report(r => r.Attempts = 1);
         var handler = new StubHandler(c => c.Method == HttpMethod.Get ? Json(HttpStatusCode.OK, "[]") : HappyPath(c));
 
         var result = await Sender(handler).TrySendAsync(report, CancellationToken.None);
@@ -212,6 +213,32 @@ public class VikunjaProblemReportSenderTests
         Assert.True(result.Sent);
         Assert.Equal(42, result.CardId);
         Assert.Equal(1, handler.Calls.Count(c => c.Method == HttpMethod.Put && c.Url.EndsWith("/projects/7/tasks")));
+    }
+
+    [Fact]
+    public async Task EveryRetrySearchesFirst_WhateverTheEarlierError_AndAdoptsTheCard()
+    {
+        var report = ProblemReportCardTests.Report(r => { r.Attempts = 1; r.LastError = "503"; });
+        var handler = new StubHandler(c => c.Method == HttpMethod.Get
+            ? Json(HttpStatusCode.OK, "[{\"id\":99,\"title\":\"x [R-3f2a9c01]\",\"project_id\":7}]")
+            : Json(HttpStatusCode.OK, "{}"));
+
+        var result = await Sender(handler).TrySendAsync(report, CancellationToken.None);
+
+        Assert.Equal(99, result.CardId);
+        Assert.DoesNotContain(handler.Calls, c => c.Method == HttpMethod.Put && c.Url.EndsWith("/projects/7/tasks"));
+    }
+
+    [Fact]
+    public async Task ASearchBodyThatIsNotAnArray_IsNoMatch_AndTheCardIsCreated()
+    {
+        var report = ProblemReportCardTests.Report(r => r.Attempts = 1);
+        var handler = new StubHandler(c => c.Method == HttpMethod.Get ? Json(HttpStatusCode.OK, "null") : HappyPath(c));
+
+        var result = await Sender(handler).TrySendAsync(report, CancellationToken.None);
+
+        Assert.True(result.Sent);
+        Assert.Equal(42, result.CardId);
     }
 
     [Fact]

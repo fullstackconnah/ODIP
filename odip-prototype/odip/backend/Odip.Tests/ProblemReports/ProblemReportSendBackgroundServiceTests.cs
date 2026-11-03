@@ -156,6 +156,27 @@ public class ProblemReportSendBackgroundServiceTests
     }
 
     [Fact]
+    public async Task AStopBetweenRows_KeepsTheCardIdOfTheRowAlreadySent_AndLeavesTheNextOneUntouched()
+    {
+        using var stop = new CancellationTokenSource();
+        var sender = new RecordingSender(_ =>
+        {
+            stop.Cancel(); // the host begins to stop while the first card is being made
+            return new ProblemReportSendResult(true, 42, null);
+        });
+        var (service, db) = Build(sender);
+        await SeedAsync(db, r => r.CreatedAt = DateTime.UtcNow.AddMinutes(-10), r => r.CreatedAt = DateTime.UtcNow.AddMinutes(-5));
+
+        await service.RunTickAsync(stop.Token);
+
+        var rows = await RowsAsync(db);
+        Assert.Single(sender.Seen);
+        Assert.Equal(ProblemReportStatus.Sent, rows[0].Status);
+        Assert.Equal(42, rows[0].CardId);
+        Assert.Equal(ProblemReportStatus.Saved, rows[1].Status);
+    }
+
+    [Fact]
     public async Task EveryTenantsRows_AreHandled_AndStayInTheirOwnTenant()
     {
         var (service, db) = Build(new RecordingSender(_ => new ProblemReportSendResult(true, 5, null)));

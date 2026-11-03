@@ -55,7 +55,7 @@ public sealed class VikunjaProblemReportSender : IProblemReportSender
         var dispatched = false;
         try
         {
-            if (report.LastError == ProblemReportSendResult.UnknownOutcome)
+            if (report.Attempts > 0) // any retry searches first: an earlier attempt may have made the card without recording it
             {
                 dispatched = true; // a search that fails leaves the outcome as unknown, so the next try searches again
                 var found = await FindExistingCardAsync(board, report, ct);
@@ -107,6 +107,7 @@ public sealed class VikunjaProblemReportSender : IProblemReportSender
         using var response = await _http.SendAsync(request, ct);
         response.EnsureSuccessStatusCode();
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+        if (json.RootElement.ValueKind != JsonValueKind.Array) return null;
         foreach (var task in json.RootElement.EnumerateArray())
         {
             if (task.TryGetProperty("project_id", out var project) && project.TryGetInt64(out var projectId) && projectId == board.ProjectId

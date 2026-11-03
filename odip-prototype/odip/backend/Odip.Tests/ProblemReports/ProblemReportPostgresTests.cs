@@ -138,7 +138,7 @@ public class ProblemReportPostgresTests : IClassFixture<PostgresFixture>
     }
 
     [SkippableFact]
-    public async Task ThePurge_RemovesSentAndFailedRowsOlderThan90Days_InEveryTenant_AndKeepsTheRest()
+    public async Task ThePurge_RemovesRowsOlderThan90Days_OfAnyStatus_InEveryTenant_AndKeepsTheRecentOnes()
     {
         Skip.IfNot(_pg.Available, _pg.UnavailableReason);
         var (a, b) = await TwoTenantsAsync();
@@ -155,10 +155,10 @@ public class ProblemReportPostgresTests : IClassFixture<PostgresFixture>
 
         var removed = await Service().PurgeExpiredAsync(DateTime.UtcNow, CancellationToken.None);
 
-        Assert.True(removed >= 2);
+        Assert.True(removed >= 3);
         await using var check = Db(new ScopedTenantOverride { IsSuperAdmin = true });
         var left = await check.ProblemReports.AsNoTracking()
             .Where(r => new[] { oldSentA.Id, oldFailedB.Id, oldSaved.Id, recentSent.Id }.Contains(r.Id)).Select(r => r.Id).ToListAsync();
-        Assert.Equal(new[] { oldSaved.Id, recentSent.Id }.Order(), left.Order());
+        Assert.Equal(new[] { recentSent.Id }, left);
     }
 }

@@ -15,8 +15,8 @@ namespace Odip.Infrastructure.BackgroundServices;
 /// <c>WorkBoard:SendIntervalSeconds</c> (60) it sends the due Saved rows, with the notification outbox's backoff
 /// (1, 5, 15, 60, 240 minutes) and five attempts before a row is Failed. The tick follows
 /// <see cref="NotificationDispatchBackgroundService"/>: rows are read in a superadmin context and each is written back
-/// through a context scoped to its own tenant, one SaveChanges per tenant group. Once a day it removes Sent and Failed
-/// reports older than 90 days. Single instance, like the dispatcher.
+/// through a context scoped to its own tenant, one SaveChanges per tenant group. Once a day it removes reports
+/// older than 90 days. Single instance, like the dispatcher.
 /// </summary>
 public class ProblemReportSendBackgroundService : BackgroundService
 {
@@ -58,7 +58,7 @@ public class ProblemReportSendBackgroundService : BackgroundService
                 _logger.LogError("Problem report send tick failed unexpectedly: {ErrorType}", ex.GetType().Name);
             }
 
-            // The purge does not depend on the board being configured: Saved rows are never purged, so only Sent and Failed ones go.
+            // The purge does not depend on the board being configured: Saved rows older than the retention go too, so free text never outlives it while the board is unconfigured.
             if (DateTime.UtcNow >= nextPurgeAt)
             {
                 try
@@ -83,14 +83,14 @@ public class ProblemReportSendBackgroundService : BackgroundService
         }
     }
 
-    /// <summary>Deletes Sent and Failed reports made more than <see cref="RetentionDays"/> days ago, in every organisation, and returns how many went. PostgreSQL only (ExecuteDeleteAsync).</summary>
+    /// <summary>Deletes reports of any status made more than <see cref="RetentionDays"/> days ago, in every organisation, and returns how many went. PostgreSQL only (ExecuteDeleteAsync).</summary>
     public async Task<int> PurgeExpiredAsync(DateTime nowUtc, CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
         var dbOptions = scope.ServiceProvider.GetRequiredService<DbContextOptions<OdipDbContext>>();
         await using var db = new OdipDbContext(dbOptions, new Notifications.ScopedTenantOverride { IsSuperAdmin = true });
         var cutoff = nowUtc.AddDays(-RetentionDays);
-        return await db.ProblemReports.Where(r => r.Status != ProblemReportStatus.Saved && r.CreatedAt < cutoff).ExecuteDeleteAsync(ct);
+        return await db.ProblemReports.Where(r => r.CreatedAt < cutoff).ExecuteDeleteAsync(ct);
     }
 
     public async Task RunTickAsync(CancellationToken ct)
@@ -115,18 +115,25 @@ public class ProblemReportSendBackgroundService : BackgroundService
         foreach (var group in batch.GroupBy(r => r.TenantId))
         {
             await using var tenantDb = new OdipDbContext(dbOptions, new Notifications.ScopedTenantOverride { TenantId = group.Key });
-            foreach (var item in group)
+            try
             {
-                var row = await tenantDb.ProblemReports.FirstOrDefaultAsync(r => r.Id == item.Id, ct);
-                if (row is null || row.Status != ProblemReportStatus.Saved) continue;
+                foreach (var item in group)
+                {
+                    // The stop token is checked only between rows, and a row is read without it, so a stop never loses a recorded CardId.
+                    if (ct.IsCancellationRequested) break;
+                    var row = await tenantDb.ProblemReports.FirstOrDefaultAsync(r => r.Id == item.Id, CancellationToken.None);
+                    if (row is null || row.Status != ProblemReportStatus.Saved) continue;
 
-                var result = await SendAsync(sender, row, ct);
-                if (result.Error == ProblemReportSendResult.NotConfigured) continue;
-                Apply(row, result);
+                    var result = await SendAsync(sender, row, ct);
+                    if (result.Error == ProblemReportSendResult.NotConfigured) continue;
+                    Apply(row, result);
+                }
             }
-
-            // Saved without the stop token: a card that was made must have its id recorded even as the host shuts down.
-            await tenantDb.SaveChangesAsync(CancellationToken.None);
+            finally
+            {
+                // Saved without the stop token: a card that was made must have its id recorded even as the host shuts down.
+                await tenantDb.SaveChangesAsync(CancellationToken.None);
+            }
         }
     }
 

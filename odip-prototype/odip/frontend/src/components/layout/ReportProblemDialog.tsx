@@ -18,7 +18,7 @@ const COPY = {
   label: 'What happened?',
   hint: "Don't include participant names. We add this page, the app version, your browser, your organisation and your name.",
   empty: 'Write a few words about what went wrong.',
-  sent: `Sent. Thanks, the ${PRODUCT} team has your report.`,
+  sent: `Sent. Thanks, the ${PRODUCT} team has your\u00A0report.`,
   saved: `Saved. We couldn't reach the ${PRODUCT} team just now, so we'll send it shortly. You don't need to send it again.`,
   failed: "Your report wasn't sent. Check your connection and try again.",
   tooMany: "You've sent a few reports in a row. Try again in a few minutes.",
@@ -142,13 +142,12 @@ export default function ReportProblemDialog({ open, onClose }: { open: boolean; 
               readOnly={isPending}
               hint={COPY.hint}
               keepHint
-              error={fieldError}
+              error={fieldError ?? sendError}
               descriptionId={countId}
-              onChange={e => { setText(e.target.value); if (fieldError) setFieldError(undefined) }}
+              onChange={e => { setText(e.target.value); if (fieldError) setFieldError(undefined); if (sendError) setSendError(undefined) }}
             />
             <CharCount id={countId} used={text.length} max={MAX} />
           </div>
-          {sendError && <p role="alert" className="text-sm text-[var(--color-destructive)]">{sendError}</p>}
         </div>
       ) : (
         <p className="text-sm" role="status">{phase === 'sent' ? COPY.sent : COPY.saved}</p>
