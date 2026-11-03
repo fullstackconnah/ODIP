@@ -53,7 +53,8 @@ export const pendingLeave = (count: number, o: { loading?: boolean; error?: bool
 // The shift completions awaiting review, read the same way (the nav badge on Staff & roster adds this queue to the leave queue).
 export const pendingCompletions = pendingLeave
 // The completed shifts nobody has claimed yet, read the same way (the claim run's window).
-export const unclaimedShifts = (count: number, participants: number, o: { loading?: boolean; error?: boolean } = {}) => ({ count, participants, loading: false, error: false, ...o })
+export const unclaimedShifts = (count: number, participants: number, o: { older?: number; overdue?: number; oldestDate?: string | null; loading?: boolean; error?: boolean } = {}) =>
+  ({ count, participants, older: 0, overdue: 0, oldestDate: null, loading: false, error: false, ...o })
 
 // ── Bolder dashboard: a greeting and the date as the title, and the needs-attention band as the peak ──
 

@@ -36,6 +36,13 @@ describe('useUnclaimedShifts', () => {
     expect(result.current).toMatchObject({ count: 6, participants: 2, error: false })
   })
 
+  it('returns the older, overdue and oldest-date figures', async () => {
+    apiClient.defaults.adapter = async () => reply({ shiftCount: 6, participantCount: 2, olderShiftCount: 3, overdueShiftCount: 1, oldestDate: '2026-07-21' })
+    const { result } = renderHook(() => useUnclaimedShifts(true), { wrapper })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current).toMatchObject({ count: 6, older: 3, overdue: 1, oldestDate: '2026-07-21' })
+  })
+
   it('makes no request when disabled', () => {
     const { result } = renderHook(() => useUnclaimedShifts(false), { wrapper })
     expect(urls).toEqual([])

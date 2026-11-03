@@ -338,13 +338,20 @@ public record ShiftClaimRunRequestDto
     public DateOnly? To { get; init; }
 }
 
-/// <summary>The dashboard cue: completed shifts in the claim run's window that no live claim line holds. A candidate count: the run's pricing may still leave some out, and the modal says which and why.</summary>
+/// <summary>The dashboard cue: completed shifts that no live claim line holds. A candidate count: the run's pricing may still leave some out, and the modal says which and why.
+/// ShiftCount and ParticipantCount are the run's window; the Older counts go back two years before it (the NDIA's payment-request limit).</summary>
 public record ShiftClaimWaitingDto
 {
     public DateOnly From { get; init; }
     public DateOnly To { get; init; }
     public int ShiftCount { get; init; }
     public int ParticipantCount { get; init; }
+    /// <summary>Unclaimed shifts from before the window, back two years.</summary>
+    public int OlderShiftCount { get; init; }
+    /// <summary>Of those, the ones more than 90 days old: the NDIA checks claims made later than that.</summary>
+    public int OverdueShiftCount { get; init; }
+    /// <summary>The earliest older service date, to open the claim run from; null when there are none.</summary>
+    public DateOnly? OldestDate { get; init; }
 }
 
 /// <summary>What a claim run did (or, for a preview, would do) over the dates, for every participant in the organisation with completed, unclaimed shifts.</summary>

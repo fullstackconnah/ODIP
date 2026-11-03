@@ -22,6 +22,25 @@ describe('DashboardPage: Unclaimed shifts', () => {
     expect(tile).toHaveAttribute('data-attention')
   })
 
+  it.each([
+    ['older and recent', unclaimedShifts(6, 2, { older: 3, oldestDate: '2026-10-06' }), '9', '3 are more than 14 days old.', '/claims?run=shifts&from=2026-10-06'],
+    ['older only', unclaimedShifts(0, 0, { older: 3, oldestDate: '2026-10-06' }), '3', '3 are more than 14 days old.', '/claims?run=shifts&from=2026-10-06'],
+    ['one older', unclaimedShifts(6, 2, { older: 1, oldestDate: '2026-10-06' }), '7', '1 is more than 14 days old.', '/claims?run=shifts&from=2026-10-06'],
+    ['past 90 days', unclaimedShifts(6, 2, { older: 3, overdue: 1, oldestDate: '2026-07-21' }), '9', '1 is more than 90 days old.', '/claims?run=shifts&from=2026-07-21'],
+    ['several past 90 days', unclaimedShifts(6, 2, { older: 3, overdue: 2, oldestDate: '2026-07-21' }), '9', '2 are more than 90 days old.', '/claims?run=shifts&from=2026-07-21'],
+  ])('older shifts, %s: the figure is the total, the line names the older part, the link starts at the oldest', (_name, kit, figure, detail, href) => {
+    asRole('Coordinator')
+    mockUseUnclaimedShifts.mockReturnValue(kit)
+    renderPage()
+
+    const tile = screen.getByRole('group', { name: `Unclaimed shifts ${figure}` })
+    expect(within(tile).getByText(figure)).toBeInTheDocument()
+    expect(within(tile).getByText(detail)).toBeInTheDocument()
+    expect(within(tile).queryByText(/Last 14 days/)).toBeNull()
+    expect(within(tile).getByRole('link', { name: 'Claim shifts' })).toHaveAttribute('href', href)
+    expect(tile).toHaveAttribute('data-attention')
+  })
+
   it('says "1 participant" for one', () => {
     asRole('Admin')
     mockUseUnclaimedShifts.mockReturnValue(unclaimedShifts(1, 1))

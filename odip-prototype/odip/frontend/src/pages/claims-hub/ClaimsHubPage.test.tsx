@@ -39,7 +39,7 @@ vi.mock('@/components/GenerateClaimModal', async () => {
 })
 vi.mock('./ShiftClaimRunModal', async () => {
   const { Modal } = await import('@/components/Modal')
-  return { ShiftClaimRunModal: ({ onClose }: { onClose: () => void }) => <Modal open onClose={onClose} title="Claim run"><button onClick={onClose}>Close run</button></Modal> }
+  return { ShiftClaimRunModal: ({ onClose, from }: { onClose: () => void; from?: string }) => <Modal open onClose={onClose} title="Claim run"><p data-testid="run-from">{from ?? 'default'}</p><button onClick={onClose}>Close run</button></Modal> }
 })
 
 const query = <T,>(data: T) => ({ data, isLoading: false, isError: false, error: null, refetch: vi.fn() })
@@ -583,6 +583,26 @@ describe('ClaimsHubPage: New claim', () => {
 
     expect(screen.queryByRole('dialog', { name: 'Claim run' })).toBeNull()
     expect(screen.getByTestId('where')).toHaveTextContent('?tab=action')
+  })
+
+  it('opens the run from the start date in the link (older shifts), ignores one that is not a date, and closing removes both params', async () => {
+    const { unmount } = renderPage('/claims?run=shifts&from=2026-07-21&tab=action')
+    expect(screen.getByTestId('run-from')).toHaveTextContent('2026-07-21')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close run' }))
+
+    expect(screen.queryByRole('dialog', { name: 'Claim run' })).toBeNull()
+    expect(screen.getByTestId('where')).toHaveTextContent('?tab=action')
+    expect(screen.getByTestId('where')).not.toHaveTextContent('from=')
+    unmount()
+
+    // the closed link, opened afresh, shows no run
+    const closed = renderPage('/claims?tab=action')
+    expect(screen.queryByRole('dialog', { name: 'Claim run' })).toBeNull()
+    closed.unmount()
+
+    renderPage('/claims?run=shifts&from=bad')
+    expect(screen.getByTestId('run-from')).toHaveTextContent('default')
   })
 
   it('a trip: choose it, Continue opens the trip claim; closing returns focus to New claim', async () => {
