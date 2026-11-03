@@ -382,7 +382,8 @@ public class ClaimBatchFlowTests
 
         var inFile = hub.Ready.Single(r => r.LineId == a[0].Id);
         Assert.Contains(inFile.Problems, p => p.Rule == "AlreadyPending");
-        Assert.Empty(hub.Ready.Single(r => r.LineId == b[0].Id).Problems);
+        // The fixture records no funding plan, so its NDIA-managed lines carry the my-provider warning and nothing else.
+        Assert.Empty(hub.Ready.Single(r => r.LineId == b[0].Id).Problems.Where(p => p.Rule != "MyProvider"));
     }
 
     /// <summary>A second claim for the same participant, item and day as <paramref name="line"/>: a manual one (no shift or booking on its line) or a shift one.</summary>

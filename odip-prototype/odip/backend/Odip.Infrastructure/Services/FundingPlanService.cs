@@ -286,6 +286,35 @@ public sealed class FundingPlanService
         }
     }
 
+    /// <summary>
+    /// Records whether the provider is recorded as the participant's my provider for one plan. It touches only the three my-provider columns: no Revision bump (an open plan editor's save is not made stale by it),
+    /// and the plan PUT leaves them alone. Unknown clears the date and who. A Requested date is a day that has happened; a Recorded date may be ahead (a plan that has not started).
+    /// </summary>
+    public async Task<FundingSaveResult> SetMyProviderAsync(Guid tenantId, Guid participantId, Guid planId, SetMyProviderDto dto, string actor, CancellationToken ct)
+    {
+        var plan = await _db.FundingPlans
+            .Include(p => p.Pools).ThenInclude(p => p.Periods)
+            .AsSplitQuery()
+            .FirstOrDefaultAsync(p => p.Id == planId && p.ParticipantId == participantId && p.TenantId == tenantId, ct);
+        if (plan is null) return Missing(PlanNotFound);
+
+        if (dto.MyProvider is not { } record || !Enum.IsDefined(record)) return Refused(new[] { "Choose whether you're recorded." });
+        if (record != MyProviderRecord.Unknown)
+        {
+            if (dto.MyProviderOn is not { } on) return Refused(new[] { "Enter the date." });
+            if (on.Year < 1990) return Refused(new[] { "Enter a date after 1990." });
+            if (record == MyProviderRecord.Requested && on > await ProviderTimeZoneResolver.TodayAsync(_db, tenantId, _clock, ct)) return Refused(new[] { "The date cannot be in the future." });
+        }
+
+        plan.MyProvider = record;
+        plan.MyProviderOn = record == MyProviderRecord.Unknown ? null : dto.MyProviderOn;
+        plan.MyProviderSetBy = record == MyProviderRecord.Unknown ? null : actor;
+        plan.UpdatedAt = _clock.GetUtcNow().UtcDateTime;
+        plan.UpdatedBy = actor;
+        await _db.SaveChangesAsync(ct);
+        return new FundingSaveResult { Plan = ToDto(plan) };
+    }
+
     private static void ApplyPlanFields(FundingPlan plan, SaveFundingPlanDto dto)
     {
         plan.PlanStart = dto.PlanStart!.Value;
@@ -380,6 +409,7 @@ public sealed class FundingPlanService
     {
         Id = plan.Id, ParticipantId = plan.ParticipantId, PlanStart = plan.PlanStart, PlanEnd = plan.PlanEnd, ReassessmentDate = plan.ReassessmentDate,
         PeriodLengthMonths = plan.PeriodLengthMonths, Evidence = plan.Evidence, ConfirmedOn = plan.ConfirmedOn, ConfirmedByName = plan.ConfirmedByName, Notes = plan.Notes,
+        MyProvider = plan.MyProvider, MyProviderOn = plan.MyProviderOn,
         Revision = plan.Revision, CreatedAt = plan.CreatedAt, UpdatedAt = plan.UpdatedAt,
         Pools = plan.Pools.OrderBy(p => p.Position).Select(ToDto).ToList(),
     };
