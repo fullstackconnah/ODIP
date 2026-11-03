@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Pencil, Undo2, Users, X } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
@@ -12,7 +12,6 @@ import { SearchableSelect } from '@/components/SearchableSelect'
 import { ParticipantPicker } from '@/components/ParticipantPicker'
 import { StatusBadge } from '@/components/StatusBadge'
 import { ToggleGroup } from '@/components/ToggleGroup'
-import { useShowAll } from '@/components/ShowAllButton'
 import { DataTable, RowMenu, type Column } from '@/components/DataTable'
 import { TAP_FLOOR } from '@/components/tapArea'
 import { usePermissions } from '@/lib/permissions'
@@ -50,7 +49,6 @@ export default function CompatibilityPage() {
   const [removing, setRemoving] = useState<CompatibilityRowDto | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [announcement, setAnnouncement] = useState('')
-  const tableRef = useRef<HTMLDivElement>(null)
 
   const activeStaff = useMemo(
     () => (staff.data ?? []).filter(s => s.isActive !== false).sort((a, b) => a.fullName.localeCompare(b.fullName)),
@@ -69,7 +67,6 @@ export default function CompatibilityPage() {
   }, [inScope, query])
   const noCount = searched.filter(r => r.level === 'Excluded').length
   const rows = view === 'no' ? searched.filter(r => r.level === 'Excluded') : view === 'prefs' ? searched.filter(r => r.level !== 'Excluded') : searched
-  const showAll = useShowAll(rows.length, tableRef, 'tbody tr')
 
   const isLoading = participants.isLoading || staff.isLoading || all.isLoading
   const isError = participants.isError || staff.isError || all.isError
@@ -200,7 +197,7 @@ export default function CompatibilityPage() {
       {!noPeopleYet && !nothingMarked && (
         <>
           <div className="flex flex-wrap items-center gap-3">
-            <SearchInput value={query} onChange={setQuery} placeholder="Search staff or participants" />
+            <SearchInput value={query} onChange={setQuery} placeholder="Search staff or participants" className="w-full max-w-md sm:w-auto sm:flex-1" />
             <ToggleGroup
               ariaLabel="Show"
               disabled={isLoading}
@@ -213,19 +210,17 @@ export default function CompatibilityPage() {
               ]}
             />
           </div>
-          <div ref={tableRef}>
+          <div>
             <DataTable
               data={rows.map(r => ({ ...r, id: `${r.staffId}:${r.participantId}` }))}
               keyField="id"
               columns={columns}
               sortable={false}
-              limit={showAll.limit}
               loading={isLoading}
               error={isError}
               onRetry={() => { participants.refetch(); staff.refetch(); all.refetch() }}
               emptyMessage="No pairings match."
             />
-            {showAll.button}
           </div>
         </>
       )}

@@ -23,6 +23,8 @@ vi.mock('@/api/hooks', async orig => ({
       { id: 's1', fullName: 'Sam Taylor', isActive: true },
       { id: 's2', fullName: 'Morgan Lee', isActive: true },
       { id: 's3', fullName: 'Gone Person', isActive: false },
+      { id: 's4', fullName: 'Casey Wong', isActive: true },
+      { id: 's5', fullName: 'Robin Hall', isActive: true },
     ],
     isLoading: false,
     isError: false,
@@ -116,7 +118,22 @@ describe('CompatibilityPage: the exceptions list', () => {
     expect(mockApiPut).toHaveBeenCalledWith('/rostering/compatibility', { staffId: 's1', participantId: 'p2', level: 'Excluded', reason: 'Not a fit' })
     expect(await screen.findByText('Not a fit')).toBeInTheDocument()
     expect(dataRows()).toHaveLength(4)
+    expect(screen.queryByRole('button', { name: /show all/i })).not.toBeInTheDocument()
     expect(screen.getByRole('radio', { name: 'No 2' })).toBeInTheDocument()
+  })
+
+  it('shows every pairing in the default view, with no Show all', async () => {
+    const staffNames = [['s1', 'Sam Taylor'], ['s2', 'Morgan Lee'], ['s4', 'Casey Wong']]
+    rows = [
+      ...staffNames.map(([id, name]) => row(id, name, 'p1', 'Alex Rivera', 'Preferred')),
+      ...staffNames.map(([id, name]) => row(id, name, 'p2', 'Jamie Chen', 'Preferred')),
+      row('s5', 'Robin Hall', 'p1', 'Alex Rivera', 'Excluded', 'Past conflict'),
+      row('s5', 'Robin Hall', 'p2', 'Jamie Chen', 'Excluded', 'Left the team'),
+    ]
+    renderPage()
+    await screen.findByText('Left the team')
+    expect(dataRows()).toHaveLength(8)
+    expect(screen.queryByRole('button', { name: /show all/i })).not.toBeInTheDocument()
   })
 
   it('keeps the reason when only the reason is edited, and sends the new one', async () => {
