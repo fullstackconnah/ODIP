@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, within, type RenderResult } from '@testing-library/react'
+import { render, screen, within, fireEvent, type RenderResult } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { RosterGrid, RosterGridSkeleton } from './RosterGrid'
@@ -177,16 +177,6 @@ describe('RosterGrid — density', () => {
     expect(screen.getAllByRole('button', { name: /^Add a shift for/ })[0]).toHaveClass('min-h-[calc(var(--row-h)_-_1px)]')
   })
 
-  it('pins the day header row and scrolls inside its own frame from md up, so the sticky header actually engages', () => {
-    const board = makeParticipantBoard({ participantRows: [makeParticipantRow({ fullName: 'Mia Chen' })] })
-    const { container } = renderGrid(<RosterGrid board={board} weekHasNoShifts {...baseProps} />)
-
-    const frame = container.firstElementChild as HTMLElement
-    expect(frame).toHaveClass('overflow-auto')
-    expect(frame.className).toMatch(/md:max-h-/)
-    expect(screen.getByText('Mon').parentElement).toHaveClass('sticky', 'top-0')
-  })
-
   it('widens the sticky first column to 280px from a 1500px viewport through a CSS variable; below that it keeps the 195px column', () => {
     const board = makeParticipantBoard({ participantRows: [makeParticipantRow({ fullName: 'Mia Chen' })] })
     const { container } = renderGrid(<RosterGrid board={board} weekHasNoShifts {...baseProps} />)
@@ -204,37 +194,53 @@ describe('RosterGrid — density', () => {
   it('gives the loading skeleton the same frame, so the column does not jump when the real board arrives', () => {
     const { container } = render(<RosterGridSkeleton days={WEEK_DAYS} />)
 
-    expect(container.firstElementChild).toHaveClass('min-[1500px]:[--roster-sticky-col:280px]', 'overflow-auto')
+    expect(container.firstElementChild).toHaveClass('min-[1500px]:[--roster-sticky-col:280px]')
   })
 })
 
-describe('RosterGrid frame with the staff strip (roster drag and drop)', () => {
-  it('grows the frame’s chrome allowance by the staff strip when draggable, and only then', () => {
-    const { container, unmount } = renderGrid(<RosterGrid board={makeParticipantBoard()} weekHasNoShifts={false} draggable {...baseProps} />)
-    expect(container.firstElementChild?.className).toContain('2*var(--control-h)')
-    unmount()
-    const plain = renderGrid(<RosterGrid board={makeParticipantBoard()} weekHasNoShifts={false} {...baseProps} />)
-    expect(plain.container.firstElementChild?.className).not.toContain('2*var(--control-h)')
-  })
-})
+describe('RosterGrid: the week is the page (roster declutter, 2026-11-03)', () => {
+  const frames = (container: HTMLElement) => {
+    const root = container.firstElementChild as HTMLElement
+    const band = root.firstElementChild as HTMLElement
+    const head = band.lastElementChild as HTMLElement
+    const body = root.lastElementChild as HTMLElement
+    return { root, band, head, body }
+  }
 
-describe('RosterGrid frame under an error notice (finish review fix 5)', () => {
-  it('takes the notice the page reports (--roster-notice-h) off its height, with and without the strip', () => {
-    const { container, unmount } = renderGrid(<RosterGrid board={makeParticipantBoard()} weekHasNoShifts={false} draggable {...baseProps} />)
-    expect(container.firstElementChild?.className).toContain('var(--roster-notice-h,0px)')
-    unmount()
-    const plain = renderGrid(<RosterGrid board={makeParticipantBoard()} weekHasNoShifts={false} {...baseProps} />)
-    expect(plain.container.firstElementChild?.className).toContain('var(--roster-notice-h,0px)')
+  it('has no height cap: the body scrolls sideways only, so the window is the one vertical scroller', () => {
+    const { container } = renderGrid(<RosterGrid board={makeParticipantBoard()} weekHasNoShifts={false} draggable {...baseProps} />)
+    const { body } = frames(container)
+    expect(body).toHaveClass('overflow-x-auto', 'overflow-y-hidden')
+    expect(container.innerHTML).not.toMatch(/max-h-|roster-notice-h|roster-toolbar-extra|roster-fill-h/)
   })
-})
 
-describe('RosterGrid frame under a wrapped toolbar (finish review, 1280)', () => {
-  it('takes the extra toolbar row the page reports (--roster-toolbar-extra) off its height, with and without the strip', () => {
-    const { container, unmount } = renderGrid(<RosterGrid board={makeParticipantBoard()} weekHasNoShifts={false} draggable {...baseProps} />)
-    expect(container.firstElementChild?.className).toContain('var(--roster-toolbar-extra,0px)')
-    unmount()
-    const plain = renderGrid(<RosterGrid board={makeParticipantBoard()} weekHasNoShifts={false} {...baseProps} />)
-    expect(plain.container.firstElementChild?.className).toContain('var(--roster-toolbar-extra,0px)')
+  it('pins the day header in an opaque band under the app bar, outside the sideways scroller, with the strip above it', () => {
+    const board = makeParticipantBoard({ participantRows: [makeParticipantRow({ fullName: 'Mia Chen' })] })
+    const { container } = renderGrid(<RosterGrid board={board} weekHasNoShifts {...baseProps} draggable strip={<p>The strip</p>} />)
+    const { band, head, body } = frames(container)
+    expect(band).toHaveClass('sticky', 'top-[calc(3rem+var(--safe-top))]', 'bg-[var(--color-background)]')
+    expect(within(band).getByText('The strip')).toBeInTheDocument()
+    expect(within(head).getByText('Mon')).toBeInTheDocument()
+    expect(within(body).queryByText('Mon')).not.toBeInTheDocument()
+    expect(head).toHaveClass('overflow-x-auto')
+  })
+
+  it('keeps the header and the body on one scrollLeft, copying only when they differ', () => {
+    const { container } = renderGrid(<RosterGrid board={makeParticipantBoard()} weekHasNoShifts={false} {...baseProps} />)
+    const { head, body } = frames(container)
+    body.scrollLeft = 120
+    fireEvent.scroll(body)
+    expect(head.scrollLeft).toBe(120)
+    head.scrollLeft = 40
+    fireEvent.scroll(head)
+    expect(body.scrollLeft).toBe(40)
+  })
+
+  it('draws the day header on the rows’ own strip (gap-x-1 px-1), so each day sits over its cells', () => {
+    const { container } = renderGrid(<RosterGrid board={makeParticipantBoard()} weekHasNoShifts={false} {...baseProps} />)
+    const strip = frames(container).head.querySelector('.grid .grid') as HTMLElement
+    expect(strip).toHaveClass('gap-x-1', 'px-1')
+    expect(strip.children).toHaveLength(7)
   })
 })
 

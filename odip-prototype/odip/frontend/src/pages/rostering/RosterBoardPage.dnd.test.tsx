@@ -215,20 +215,6 @@ describe('RosterBoardPage drag and drop: when the server says no', () => {
     await drop(samOffWed, onShift(OPEN))
     expect((await screen.findByText(STALE)).closest('[role="alert"]')).not.toBeNull()
   })
-
-  it('tells the board frame how tall the error notice is, so strip and grid still share one screen (finish review fix 5)', async () => {
-    h.move.mockRejectedValueOnce({ response: { status: 409, data: { success: false, errors: ['Another change to the roster is still running.'] } } })
-    // All published, so no Publish banner stands in the notice wrapper before the error comes (2026-10-16: the banner is measured there too).
-    if (BOARD.groupBy !== 'Participant') throw new Error('participant board')
-    h.board.mockReturnValue({ data: { ...BOARD, participantRows: BOARD.participantRows.map(r => ({ ...r, shifts: r.shifts.map(s => ({ ...s, status: 'Published' as const })) })) }, isLoading: false, isError: false, refetch: vi.fn() })
-    const { container } = renderPage()
-    const page = container.querySelector('.animate-fade-in') as HTMLElement
-    expect(page.style.getPropertyValue('--roster-notice-h')).toBe('')
-    await drop(samOffWed, onShift(OPEN))
-    await screen.findByText('Another change to the roster is still running.')
-    // jsdom has no layout (offsetHeight 0); the 1440 capture measures the real thing.
-    expect(page.style.getPropertyValue('--roster-notice-h')).toBe('calc(0px + var(--section-gap))')
-  })
 })
 
 describe('RosterBoardPage drag and drop: a drop on an empty day', () => {
@@ -387,14 +373,5 @@ describe('RosterBoardPage: Publish week', () => {
     await user.click(screen.getByRole('button', { name: 'Publish week' }))
     await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Publish 3 shifts' }))
     expect((await screen.findByText('Another change to the roster is still running.')).closest('[role="alert"]')).not.toBeNull()
-  })
-})
-
-describe('RosterBoardPage: the toolbar the board frame makes room for (finish review, 1280)', () => {
-  it('reports how much taller than one row of controls the toolbar is, so a wrapped toolbar never pushes the board off the screen', () => {
-    const { container } = renderPage()
-    const page = container.querySelector('.animate-fade-in') as HTMLElement
-    // jsdom has no layout, so the toolbar is "one row" here; the 1280x800 capture measures the wrapped case.
-    expect(page.style.getPropertyValue('--roster-toolbar-extra')).toBe('0px')
   })
 })

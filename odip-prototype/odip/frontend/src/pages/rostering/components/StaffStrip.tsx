@@ -20,7 +20,7 @@ export type StaffStripProps = {
 
 /**
  * The staff strip (roster drag and drop, the brief section 3): every active person as a puck to carry onto a shift or an empty day. The page shows it in the Participant view, for
- * writers, from md up. Fixed height: two control rows beside two puck rows. More pucks wrap and scroll inside it, and search is the fast path (no sorting, no paging).
+ * writers, from md up. One row (roster declutter, 2026-11-03), inside the grid's sticky band: label, search, region, then the pucks in a list that scrolls sideways. Search is the fast path (no sorting, no paging).
  */
 export function StaffStrip({ staff, isLoading, hours, regionOptions, regionFilter, onRegionFilterChange }: StaffStripProps) {
   const [query, setQuery] = useState('')
@@ -29,25 +29,22 @@ export function StaffStrip({ staff, isLoading, hours, regionOptions, regionFilte
   const shown = staff.filter(s => s.isActive && (!regionFilter || s.region === regionFilter) && (!q || s.fullName.toLowerCase().includes(q)))
 
   return (
-    <section
-      aria-labelledby={captionId}
-      className="relative flex h-[calc(2*var(--control-h)_+_0.5rem_+_2*var(--card-pad)_+_2px)] gap-3 rounded-[var(--radius-md)] border border-border bg-surface-container-low p-[var(--card-pad)]"
-    >
-      {/* The caption sits on the top border, as in the brief's sketch. */}
-      <h2 id={captionId} className="absolute -top-2.5 left-3 bg-[var(--color-background)] px-1 text-xs font-semibold text-muted-foreground">Staff</h2>
-      <div className="flex w-56 shrink-0 flex-col gap-2">
-        <SearchInput value={query} onChange={setQuery} placeholder="Find staff" className="w-full" />
+    <section aria-labelledby={captionId} className="flex items-center gap-2 pb-2">
+      <h2 id={captionId} className="shrink-0 text-xs font-semibold text-muted-foreground">Staff</h2>
+      <SearchInput value={query} onChange={setQuery} placeholder="Find staff" className="w-48 shrink-0" />
+      <div className="w-36 shrink-0">
         <Dropdown variant="form" value={regionFilter} onChange={onRegionFilterChange} label="All regions" items={[{ value: '', label: 'All regions' }, ...regionOptions]} />
       </div>
       {isLoading ? (
-        <div className="flex min-w-0 flex-1 flex-wrap content-start gap-1" aria-hidden="true">
+        <div className="flex min-w-0 flex-1 gap-1" aria-hidden="true">
           {[0, 1, 2].map(i => <div key={i} className="h-[calc(var(--row-h)_-_6px)] w-40 animate-pulse rounded-sm bg-muted" />)}
         </div>
       ) : shown.length === 0 ? (
-        <p className="self-center text-[13px] text-muted-foreground">{q ? `No staff match “${query.trim()}”.` : 'No active staff.'}</p>
+        <p className="text-[13px] text-muted-foreground">{q ? `No staff match “${query.trim()}”.` : 'No active staff.'}</p>
       ) : (
-        <ul className="flex min-w-0 flex-1 flex-wrap content-start gap-1 overflow-y-auto">
-          {shown.map(s => <li key={s.id}><StaffPuck person={s} hours={hours.get(s.id) ?? 0} /></li>)}
+        // The list alone scrolls sideways (it is not an ancestor of the grid), so the strip is one row at any staff count.
+        <ul className="flex min-w-0 flex-1 gap-1 overflow-x-auto overflow-y-hidden p-0.5 [scrollbar-width:thin]">
+          {shown.map(s => <li key={s.id} className="shrink-0"><StaffPuck person={s} hours={hours.get(s.id) ?? 0} /></li>)}
         </ul>
       )}
     </section>
