@@ -5276,6 +5276,9 @@ namespace Odip.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<decimal?>("GoalWeeklyHours")
+                        .HasColumnType("numeric");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
