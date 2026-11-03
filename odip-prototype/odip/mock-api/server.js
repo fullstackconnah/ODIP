@@ -223,7 +223,7 @@ const trips = [
     id: 't-0001', tripName: 'Sunshine Coast Beach Escape', tripCode: 'SCB-2608',
     destination: 'Caloundra QLD', region: 'Sunshine Coast',
     startDate: '2026-08-14', endDate: '2026-08-17', durationDays: 4,
-    status: 'Confirmed', maxParticipants: 6, currentParticipantCount: 5,
+    status: 'Confirmed', maxParticipants: 6, currentParticipantCount: 2,
     waitlistCount: 1, leadCoordinatorName: 'Priya Nadarajah',
   },
   {
@@ -255,9 +255,9 @@ const tripDetailExtras = {
     leadCoordinatorId: 's-0002', minParticipants: 4, requiredWheelchairCapacity: 1,
     requiredBeds: 8, requiredBedrooms: 5, minStaffRequired: 3, calculatedStaffRequired: 3,
     notes: 'Beachfront house confirmed. Check hoist availability for Sienna.',
-    highSupportCount: 2, wheelchairCount: 1, overnightSupportCount: 2,
+    highSupportCount: 1, wheelchairCount: 1, overnightSupportCount: 1,
     staffAssignedCount: 3, outstandingTaskCount: 2,
-    insuranceConfirmedCount: 4, insuranceOutstandingCount: 1,
+    insuranceConfirmedCount: 1, insuranceOutstandingCount: 1,
     departureTime: '09:00', returnTime: '15:30',
   },
   't-0002': {

@@ -583,7 +583,7 @@ The read-only counterpart to the form. `FactList` is a `<dl>` with a fixed 10rem
 and a flowing value column (14px), 24px row pitch; empty values render an em dash. `FactBar` is a single
 bordered strip of label/value segments (12px label, 14px medium value) separated by 1px rules, at least
 44px tall, with a 16px icon slot. Use them on detail pages instead of a card of disabled inputs.
-`FactBar` also has an opt-in `variant="glance"` (big figures, attention tint); it is part of the Detail header
+`FactBar` also has an opt-in `variant="glance"` (big figures, attention tint, and a tile may open the tab that fixes the gap it states via `onSelect`); it is part of the Detail header
 pattern below and the default bar is untouched by it.
 
 ### Tables
@@ -690,10 +690,13 @@ their own facts to tones. It stops at the header: the tab strip and every panel 
   dashboard's meta row has no status: it is one line of the everyday counts ("3 upcoming trips · 5 active participants · 4 outstanding tasks"),
   each noun agreeing with its count ("1 upcoming trip", "0 active participants"), in tabular figures.
 - **Glance strip.** `FactBar variant="glance"`: equal cells in one ruled `--radius-md` strip. Each cell is a display-step tabular figure
-  with the state chip beside it and the icon and a 13px label beneath (source order is label then value, so a screen reader hears "Outstanding
-  Tasks, 2, Action Needed"). Two columns (2×2) below 768px, one row from there; a chip that does not fit wraps under its figure instead
-  of overflowing. Figures are counts, ratios or short amounts: anything longer belongs in a `FactList`. A ratio is always spelled
+  with the state chip beside it and the icon and a 13px label beneath (source order is label then value, so a screen reader hears "Staff
+  assigned, 3 / 4, 1 short"). Two columns (2×2) below 768px, one row from there; a chip that does not fit wraps under its figure instead
+  of overflowing. Figures are counts, ratios or short amounts: anything longer belongs in a `FactList`. **A figure is *have / need* of one noun**
+  ("3 / 4" staff assigned, never "5 / 3" participants over staff), and the label names that noun. A ratio is always spelled
   "x / y", a space each side of the slash, through the one `formatRatio` formatter (`glanceRatio` is its earlier name), so no two figures drift ("12 / 10" beside "12/14").
+  A tile that states a gap may open the tab that fixes it (`FactBarSegment.onSelect`): the cell becomes a button, hovers one surface step, takes
+  the house focus ring and presses in on pointer-down (none under reduced motion). The tab strip below it is one row (`Tabs overflow="scroll"`), never two.
 
 - **Back.** `BackButton` is the header's first action: secondary, an arrow and the word "Back", and it names its destination when it is known ("Back to staff"; otherwise it reads "Go back") in its
   accessible name, so the one word on screen never leaves a screen-reader user guessing. It is always a real link, 44px on touch, and has three shapes: the secondary

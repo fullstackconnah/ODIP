@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { Star } from 'lucide-react'
 import { FactBar, FactChip, type FactBarAttention, type FactBarSegment } from './FactBar'
 
@@ -343,5 +344,35 @@ describe('FactChip', () => {
     const asOlder = container.innerHTML
     rerender(<FactChip tone={word} onTint>Label</FactChip>)
     expect(container.innerHTML).toBe(asOlder)
+  })
+})
+
+describe('FactBar glance — onSelect makes a segment a button', () => {
+  it('renders a button named label, figure and chip in source order, and calls onSelect on click', async () => {
+    const user = userEvent.setup()
+    const onSelect = vi.fn()
+    render(
+      <FactBar
+        variant="glance"
+        segments={[
+          { label: 'Staff assigned', value: '3 / 4', badge: <FactChip tone="negative">1 short</FactChip>, attention: 'error', onSelect },
+          { label: 'Open tasks', value: 0 },
+        ]}
+      />,
+    )
+
+    const tile = screen.getByRole('button', { name: /Staff assigned.*3 \/ 4.*1 short/ })
+    expect(tile).toHaveAttribute('type', 'button')
+    expect(tile).toHaveAttribute('data-attention', 'error')
+    expect(tile).toHaveClass('active:scale-[0.99]', 'motion-reduce:active:scale-100')
+    await user.click(tile)
+    expect(onSelect).toHaveBeenCalledTimes(1)
+    // The segment without onSelect stays a plain cell.
+    expect(screen.getAllByRole('button')).toHaveLength(1)
+  })
+
+  it('ignores onSelect in the default variant', () => {
+    render(<FactBar segments={[{ label: 'Fact', value: 1, onSelect: () => {} }]} />)
+    expect(screen.queryByRole('button')).toBeNull()
   })
 })

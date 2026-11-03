@@ -1,7 +1,7 @@
 import { useTripItinerary } from '@/api/hooks'
 import { formatCurrency, formatDateAu } from '@/lib/utils'
 import { MapPin, Clock, Users, Building2, UserCog, FileDown, Calendar, Utensils, Camera, Bus, Compass, Palette, Dumbbell, Star } from 'lucide-react'
-import { Fragment, useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Dropdown } from './Dropdown'
 import { EmptyState } from './EmptyState'
@@ -10,20 +10,8 @@ import { statusClass } from '@/lib/tone'
 import { Callout } from '@/components/Callout'
 import { retryingAfterError } from '@/lib/queryPhase'
 
-interface TripAdminData {
-  eventTemplateName?: string | null
-  oopDueDate?: string
-  bookingCutoffDate?: string | null
-  minParticipants?: number | null
-  minStaffRequired?: number | null
-  requiredWheelchairCapacity?: number | null
-  requiredBeds?: number | null
-  requiredBedrooms?: number | null
-}
-
 interface ItineraryTabProps {
   tripId: string
-  trip?: TripAdminData
 }
 
 // Palette tokens only (DESIGN.md, The Semantic Colour Rule): there are fewer tokens than categories, so some share a fill; the icon and the label tell them apart.
@@ -60,7 +48,7 @@ function formatDayName(date: string) {
   return parseLocalDate(date).toLocaleDateString('en-AU', { weekday: 'long' })
 }
 
-export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
+export default function ItineraryTab({ tripId }: ItineraryTabProps) {
   const pageQuery = useTripItinerary(tripId)
   const { data: itinerary, isLoading, isError, refetch } = pageQuery
   const [exporting, setExporting] = useState(false)
@@ -81,26 +69,6 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
       />
     )
   }
-
-  // [label, value] facts with a value; a 0 minimum or requirement counts as not set, as it always has.
-  const recorded = (facts: [string, ReactNode][]) => facts.filter(([, value]) => !!value)
-  const factGroups = ([
-    ['Trip details', recorded([
-      ['Event template', trip?.eventTemplateName],
-      ['Region', itinerary.region],
-      ['OOP due date', trip?.oopDueDate && formatDateAu(trip.oopDueDate)],
-      ['Booking cutoff', trip?.bookingCutoffDate && formatDateAu(trip.bookingCutoffDate)],
-      ['Lead coordinator', itinerary.leadCoordinatorName],
-      ['Min participants', trip?.minParticipants],
-      ['Min staff', trip?.minStaffRequired],
-      ['Est. cost', Number(itinerary.totalEstimatedCost) > 0 && formatCurrency(Number(itinerary.totalEstimatedCost))],
-    ])],
-    ['Requirements', recorded([
-      ['Wheelchair capacity', trip?.requiredWheelchairCapacity],
-      ['Required beds', trip?.requiredBeds],
-      ['Required bedrooms', trip?.requiredBedrooms],
-    ])],
-  ] as [string, [string, ReactNode][]][]).filter(([, facts]) => facts.length > 0)
 
   const handleExport = async (version: 'staff' | 'participant') => {
     setExporting(true)
@@ -123,7 +91,9 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
       {exportError && (
         <Callout tone="error">{exportError}</Callout>
       )}
-      <div className="flex items-center justify-end">
+      <div className="flex items-center justify-between gap-3">
+        {/* The one fact that stays with the plan; the rest of the trip facts are the Overview side card. */}
+        <p className="text-sm text-[var(--color-muted-foreground)]">{Number(itinerary.totalEstimatedCost) > 0 && `Est. cost ${formatCurrency(Number(itinerary.totalEstimatedCost))}`}</p>
         <Dropdown
           variant="menu"
           triggerVariant="secondary"
@@ -139,23 +109,6 @@ export default function ItineraryTab({ tripId, trip }: ItineraryTabProps) {
       </div>
 
       {itinerary.notes && <p className="text-sm text-[var(--color-muted-foreground)]">{itinerary.notes}</p>}
-
-      {/* Admin details (from trip data): only what is recorded. The title, dates, days and head counts are in the header and the glance strip.
-          Label and value sit side by side at every width: stacked on a phone, seven facts took ~450px. */}
-      {factGroups.length > 0 && (
-        <div className="grid md:grid-cols-2 gap-4">
-          {factGroups.map(([title, facts]) => (
-            <div key={title} className="bg-[var(--color-surface-container-low)] rounded-[var(--radius-md)] p-5 space-y-3">
-              <h3 className="font-semibold text-[var(--color-foreground)]">{title}</h3>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-                {facts.map(([label, value]) => (
-                  <Fragment key={label}><span className="text-[var(--color-muted-foreground)]">{label}</span><span className="text-[var(--color-foreground)]">{value}</span></Fragment>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* Day-by-day timeline */}
       <div>
