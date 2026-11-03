@@ -93,7 +93,7 @@ export function ParticipantRow({ row, days, canWrite, onOpen, onAssignTo, onUnas
                 <span>Onboarding</span>
               </span>
             )}
-            {row.supportRatio !== 'OneToOne' && (
+            {row.supportRatio && row.supportRatio !== 'OneToOne' && (
               <span
                 role="img"
                 aria-label={`${ratioLabel} support`}

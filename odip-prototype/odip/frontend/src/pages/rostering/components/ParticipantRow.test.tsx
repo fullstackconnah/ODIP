@@ -211,6 +211,11 @@ describe('ParticipantRow header — coverage badge (a compact count; the words a
     expect(screen.getByRole('img', { name: '2:1 support' })).toHaveTextContent('2:1')
   })
 
+  it('draws no ratio chip when the ratio is missing', () => {
+    renderRow({ supportRatio: undefined as never })
+    expect(screen.queryByRole('img', { name: /support$/ })).not.toBeInTheDocument()
+  })
+
   it('leaves the name the room the badge used to take: the badge is the compact size, not a 110px pill', () => {
     renderRow({ fullName: 'Grace Palmer-Hughes', hasRestrictivePractice: true, daysWithoutCover: 6 })
 

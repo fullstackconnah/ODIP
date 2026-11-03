@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { DndContext } from '@dnd-kit/core'
 import type { StaffListDto } from '@/api/types'
@@ -128,5 +128,24 @@ describe('CarriedPuck', () => {
     expect(again.container.querySelector('[data-puck-fade]')).toBeNull()
     widths.mockRestore()
     client.mockRestore()
+  })
+
+  it('recomputes the fade when the list is resized without a window resize', () => {
+    const callbacks: (() => void)[] = []
+    class RO { constructor(cb: () => void) { callbacks.push(cb) } observe() {} disconnect() {} }
+    vi.stubGlobal('ResizeObserver', RO)
+    const widths = vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(900)
+    const client = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(300)
+    try {
+      const { container } = renderStrip()
+      expect(container.querySelector('[data-puck-fade]')).not.toBeNull()
+      widths.mockReturnValue(300)
+      act(() => callbacks.forEach(cb => cb()))
+      expect(container.querySelector('[data-puck-fade]')).toBeNull()
+    } finally {
+      widths.mockRestore()
+      client.mockRestore()
+      vi.unstubAllGlobals()
+    }
   })
 })

@@ -43,7 +43,7 @@ export function StaffStrip({ staff, isLoading, hours, regionOptions, regionFilte
         <p className="text-[13px] text-muted-foreground">{q ? `No staff match “${query.trim()}”.` : 'No active staff.'}</p>
       ) : (
         // The list alone scrolls sideways (it is not an ancestor of the grid), so the strip is one row at any staff count.
-        <PuckList>
+        <PuckList count={shown.length}>
           {shown.map(s => <li key={s.id} className="shrink-0"><StaffPuck person={s} hours={hours.get(s.id) ?? 0} /></li>)}
         </PuckList>
       )}
@@ -52,7 +52,7 @@ export function StaffStrip({ staff, isLoading, hours, regionOptions, regionFilte
 }
 
 /** The sideways list of pucks, with a 16px fade on its right edge (band background to clear) while more pucks wait past it. */
-function PuckList({ children }: { children: React.ReactNode }) {
+function PuckList({ count, children }: { count: number; children: React.ReactNode }) {
   const ref = useRef<HTMLUListElement>(null)
   const [more, setMore] = useState(false)
   useEffect(() => {
@@ -61,9 +61,11 @@ function PuckList({ children }: { children: React.ReactNode }) {
     const update = () => setMore(el.scrollLeft + el.clientWidth < el.scrollWidth - 1)
     update()
     el.addEventListener('scroll', update)
-    window.addEventListener('resize', update)
-    return () => { el.removeEventListener('scroll', update); window.removeEventListener('resize', update) }
-  }, [children])
+    // Observed, not the window: collapsing the sidebar resizes the list with no window resize.
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update)
+    ro?.observe(el)
+    return () => { el.removeEventListener('scroll', update); ro?.disconnect() }
+  }, [count])
   return (
     <div className="relative min-w-0 flex-1">
       <ul ref={ref} className="flex gap-1 overflow-x-auto overflow-y-hidden p-0.5 [scrollbar-width:thin]">{children}</ul>

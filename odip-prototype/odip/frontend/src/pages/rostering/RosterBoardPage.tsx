@@ -672,7 +672,7 @@ export default function RosterBoardPage() {
       // A standing state, not news: as role="alert" it would re-announce on every week change and refetch (the brief, 3.1). Publishing keeps its own sentence.
       announce={false}
       title={bannerTitle(drafts.length)}
-      // One line beside a 32px button: centred, or the 19px title sits at the top (the brief, 3.2). py-2.5 keeps that line at 52px, under the 56px check 10 (p-3 made it 58).
+      // One line beside a 32px button: centred, or the 19px title sits at the top (the brief, 3.2). py-2.5 keeps that line at 54px, under the 56px check 10 (p-3 made it 58).
       className={blocked.length === 0 ? 'items-center! py-2.5!' : 'py-2.5!'}
       actions={agreementsButton || publishButton ? <>{agreementsButton}{publishButton}</> : undefined}
     >
