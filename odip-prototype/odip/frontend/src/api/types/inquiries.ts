@@ -187,7 +187,7 @@ export interface ParticipantInquiryDetailDto extends ParticipantInquiryDto, Inqu
 
 /** One onboarding checklist item. `key` names the item and its fix: profile (Edit profile), serviceNeeds (the agreement draft), agreement, complaints and rights (Record it), funding (the Funding tab). */
 export interface OnboardingChecklistItem {
-  key: 'profile' | 'serviceNeeds' | 'agreement' | 'complaints' | 'rights' | 'funding'
+  key: 'profile' | 'serviceNeeds' | 'agreement' | 'complaints' | 'rights' | 'funding' | 'myProvider'
   label: string
   done: boolean
   /** One line saying what is missing; null when the item is done. */

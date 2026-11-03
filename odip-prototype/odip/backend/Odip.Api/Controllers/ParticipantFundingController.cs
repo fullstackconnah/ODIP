@@ -80,6 +80,14 @@ public class ParticipantFundingController : ControllerBase
         return result.Plan is { } plan ? Ok(ApiResponse<FundingPlanDto>.Ok(plan)) : Refusal(result);
     }
 
+    [HttpPut("plans/{planId:guid}/my-provider")]
+    [EnableRateLimiting("api")]
+    public async Task<ActionResult<ApiResponse<FundingPlanDto>>> SetMyProvider(Guid participantId, Guid planId, [FromBody] SetMyProviderDto dto, CancellationToken ct)
+    {
+        var result = await _service.SetMyProviderAsync(_tenant.TenantId!.Value, participantId, planId, dto, Actor(), ct);
+        return result.Plan is { } plan ? Ok(ApiResponse<FundingPlanDto>.Ok(plan)) : Refusal(result);
+    }
+
     /// <summary>Deletes a plan with its pools and periods (audited). Admin and SuperAdmin only: a Coordinator records and corrects budgets but does not remove a plan's history.</summary>
     [HttpDelete("plans/{planId:guid}")]
     [Authorize(Roles = "SuperAdmin,Admin")]

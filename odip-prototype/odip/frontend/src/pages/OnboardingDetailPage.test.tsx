@@ -119,6 +119,36 @@ describe('OnboardingDetailPage: the list', () => {
   })
 })
 
+const MINE = "Record on the Funding tab that you're this participant's my provider."
+const withMyProvider: ParticipantOnboardingDto = {
+  ...open,
+  items: [...open.items, { key: 'myProvider', label: 'Recorded as my provider', done: false, missing: MINE }],
+}
+
+describe('OnboardingDetailPage: the my provider item', () => {
+  it('sends the coordinator to the Funding tab, and says what to record there', () => {
+    mockUseOnboarding.mockReturnValue({ data: withMyProvider, isLoading: false, isError: false })
+    renderPage()
+
+    const rows = within(screen.getByRole('list', { name: '1 of 7 done' })).getAllByRole('listitem')
+    expect(within(rows[6]).getByRole('heading')).toHaveTextContent('Recorded as my provider')
+    expect(within(rows[6]).getByText(MINE)).toBeInTheDocument()
+    expect(within(rows[6]).getByRole('link', { name: 'Funding tab' })).toHaveAttribute('href', '/participants/p-1?tab=funding')
+  })
+
+  it('is listed in the Make active warning and does not stop it', async () => {
+    mockUseOnboarding.mockReturnValue({ data: withMyProvider, isLoading: false, isError: false })
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: 'Make active' }))
+    const dialog = screen.getByRole('alertdialog', { name: 'Make Jamie Rivers active?' })
+    expect(within(dialog).getByText(/6 checklist items are still open/)).toBeInTheDocument()
+    expect(within(dialog).getByText('Recorded as my provider')).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Make active' })).toBeEnabled()
+  })
+})
+
 describe('OnboardingDetailPage: Begin services and Make active', () => {
   it('Begin services confirms first, naming the open items, then posts for this participant', async () => {
     const user = userEvent.setup()

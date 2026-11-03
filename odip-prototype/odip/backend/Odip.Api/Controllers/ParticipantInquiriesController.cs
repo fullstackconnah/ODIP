@@ -396,19 +396,25 @@ public class ParticipantInquiriesController : ControllerBase
     /// The derived checks are <see cref="ParticipantReadinessGate.ProfileDetailsRule"/> and <see cref="ParticipantReadinessGate.ServiceNeedsParticipants"/>,
     /// the same ones the roster issues and the strict gate read.
     /// </summary>
-    private sealed record OnboardingFacts(HashSet<Guid> ServiceNeedsDone, HashSet<Guid> FundingRecorded, HashSet<Guid> AnyPlan);
+    private sealed record OnboardingFacts(HashSet<Guid> ServiceNeedsDone, HashSet<Guid> FundingRecorded, HashSet<Guid> AnyPlan, HashSet<Guid> MyProviderRecorded);
 
-    /// <summary>The checklist's three queried facts for a set of participants of one tenant, one query each (the plan history only when asked), so the worklist costs two queries however many are listed.</summary>
+    /// <summary>The checklist's three queried facts for a set of participants of one tenant, one query each (the plan history only when asked), plus one for the my-provider record of each current plan, so the worklist costs a fixed few queries however many are listed.</summary>
     private async Task<OnboardingFacts> LoadFactsAsync(List<Guid> ids, Guid tenantId, DateOnly today, bool withPlanHistory, CancellationToken ct)
     {
-        if (ids.Count == 0) return new(new(), new(), new());
+        if (ids.Count == 0) return new(new(), new(), new(), new());
         var serviceNeeds = (await ParticipantReadinessGate.ServiceNeedsParticipants(_db).Where(p => ids.Contains(p.Id)).Select(p => p.Id).ToListAsync(ct)).ToHashSet();
         var funding = (await ParticipantReadinessGate.FundingRecordedParticipants(_db, today).Where(p => ids.Contains(p.Id)).Select(p => p.Id).ToListAsync(ct)).ToHashSet();
         // The worklist shows only Done, the counts and the label, so it doesn't need the plan history behind the funding "Missing" wording.
         var anyPlan = withPlanHistory
             ? (await _db.FundingPlans.Where(f => ids.Contains(f.ParticipantId) && f.TenantId == tenantId).Select(f => f.ParticipantId).Distinct().ToListAsync(ct)).ToHashSet()
             : new HashSet<Guid>();
-        return new(serviceNeeds, funding, anyPlan);
+        // Per participant the plan that runs today, else the latest one, decides: a Recorded plan that has ended says nothing about the one running now.
+        var plans = await _db.FundingPlans.Where(f => ids.Contains(f.ParticipantId) && f.TenantId == tenantId)
+            .Select(f => new { f.ParticipantId, f.PlanStart, f.PlanEnd, f.MyProvider }).ToListAsync(ct);
+        var myProvider = plans.GroupBy(f => f.ParticipantId)
+            .Where(g => (g.FirstOrDefault(f => f.PlanStart <= today && today <= f.PlanEnd) ?? g.OrderByDescending(f => f.PlanStart).First()).MyProvider == MyProviderRecord.Recorded)
+            .Select(g => g.Key).ToHashSet();
+        return new(serviceNeeds, funding, anyPlan, myProvider);
     }
 
     private async Task<ParticipantOnboardingDto> BuildDetailAlone(Participant participant, ParticipantOnboarding onboarding, CancellationToken ct) =>
@@ -435,6 +441,9 @@ public class ParticipantInquiriesController : ControllerBase
                 ? "The plan budget has ended: record the new plan."
                 : "No plan budget recorded.";
             items.Add(Item("funding", "Funding", fundingDone, missing));
+            // Self-managed funds have no NDIA claim to be recorded for. Open items never stop Make active, this one included.
+            if (participant.PlanType is PlanType.AgencyManaged or PlanType.PlanManaged)
+                items.Add(Item("myProvider", "Recorded as my provider", facts.MyProviderRecorded.Contains(participant.Id), "Record on the Funding tab that you're this participant's my provider."));
         }
         return new ParticipantOnboardingDto
         {

@@ -7,6 +7,14 @@ public enum PlanType
     AgencyManaged
 }
 
+/// <summary>Whether the provider is recorded as the participant's "my provider" for one plan. The NDIA pays a PACE plan's claims fastest (for some plans, only) to a provider recorded this way. Not named *Status: it is not a pill.</summary>
+public enum MyProviderRecord
+{
+    Unknown = 0,
+    Requested = 1,
+    Recorded = 2
+}
+
 /// <summary>
 /// FUND-02: participant funding source, replacing free-text-only <c>FundingOrganisation</c> as
 /// the primary signal. <see cref="Ndis"/> (the default/backfill value) means the participant's
