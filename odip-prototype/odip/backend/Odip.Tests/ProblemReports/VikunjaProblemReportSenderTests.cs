@@ -184,7 +184,6 @@ public class VikunjaProblemReportSenderTests
         var firstResult = await Sender(first).TrySendAsync(report, CancellationToken.None);
         all.AddRange(first.Calls);
         report.LastError = firstResult.Error;
-        report.Attempts = 1;
 
         var second = new StubHandler(c => c.Method == HttpMethod.Get
             ? Json(HttpStatusCode.OK, "[{\"id\":5,\"title\":\"other [R-aaaaaaaa]\",\"project_id\":7},{\"id\":99,\"title\":\"Sample Support Co: The roster will not save. [R-3f2a9c01]\",\"project_id\":7},{\"id\":98,\"title\":\"[R-3f2a9c01]\",\"project_id\":8}]")

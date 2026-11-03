@@ -55,7 +55,7 @@ public sealed class VikunjaProblemReportSender : IProblemReportSender
         var dispatched = false;
         try
         {
-            if (report.Attempts > 0) // any retry searches first: an earlier attempt may have made the card without recording it
+            if (report.Attempts > 0 || report.LastError is not null) // any retry searches first: an earlier attempt may have made the card without recording it
             {
                 dispatched = true; // a search that fails leaves the outcome as unknown, so the next try searches again
                 var found = await FindExistingCardAsync(board, report, ct);
