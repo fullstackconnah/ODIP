@@ -4,10 +4,11 @@ using Odip.Domain.Rostering;
 namespace Odip.Domain.Entities;
 
 /// <summary>
-/// One billable line within a <see cref="TripClaim"/>. Exactly one of
+/// One billable line within a <see cref="TripClaim"/>. At most one of
 /// <see cref="ParticipantBookingId"/> (trip-kind claims) or <see cref="ShiftId"/> (shift-kind
-/// claims) is set — enforced by the <c>CK_ClaimLineItem_ExactlyOneParent</c> DB check
-/// constraint (shift-completion design spec §1) — never both, never neither.
+/// claims) is set — enforced by the <c>CK_ClaimLineItem_AtMostOneParent</c> DB check
+/// constraint — never both. A manual claim's line has neither: its participant is the claim's own.
+/// A trip line having a booking and a shift line a shift is kept by the two writers, not by the constraint.
 /// </summary>
 public class ClaimLineItem
 {
@@ -22,11 +23,11 @@ public class ClaimLineItem
     public Guid TripClaimId { get; set; }
     public TripClaim TripClaim { get; set; } = null!;
 
-    /// <summary>Set for Kind == Trip line items; null for Kind == Shift.</summary>
+    /// <summary>Set for Kind == Trip line items; null for Shift and Manual.</summary>
     public Guid? ParticipantBookingId { get; set; }
     public ParticipantBooking? ParticipantBooking { get; set; }
 
-    /// <summary>Set for Kind == Shift line items (design spec §1/§3); null for Kind == Trip.</summary>
+    /// <summary>Set for Kind == Shift line items (design spec §1/§3); null for Trip and Manual.</summary>
     public Guid? ShiftId { get; set; }
     public Shift? Shift { get; set; }
     /// <summary>The band part of a shift's claim, 0 first; with <see cref="ShiftId"/> it is unique among the lines that still count.</summary>

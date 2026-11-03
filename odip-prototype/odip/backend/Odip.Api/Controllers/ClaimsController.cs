@@ -29,17 +29,19 @@ public class ClaimsController : ControllerBase
     private readonly BudgetLedgerService _ledger;
     private readonly ICurrentTenant _tenant;
     private readonly TimeProvider _clock;
+    private readonly ManualClaimService _manual;
 
     /// <summary>A claim generation waited for another one for the same trip or participant (see the generators' advisory lock) and gave up.</summary>
     private const string ClaimBusy = "Another claim is still being generated for this trip or participant. Wait a moment, then try again.";
 
     public ClaimsController(OdipDbContext db, ClaimGenerationService generator,
         ShiftClaimGenerationService shiftGenerator, BprCsvService bprService, InvoiceService invoiceService,
-        BudgetLedgerService ledger, ICurrentTenant tenant, TimeProvider? clock = null)
+        BudgetLedgerService ledger, ICurrentTenant tenant, TimeProvider? clock = null, ManualClaimService? manual = null)
     {
         _ledger = ledger;
         _tenant = tenant;
         _clock = clock ?? TimeProvider.System;
+        _manual = manual ?? new ManualClaimService(db, ledger, _clock);
         _db = db;
         _generator = generator;
         _shiftGenerator = shiftGenerator;
@@ -299,6 +301,28 @@ public class ClaimsController : ControllerBase
         }
     }
 
+    // POST /api/v1/claims/manual/preview: what a one-off claim would be (the lines, the total, the plan, the budget and any warnings). Nothing is saved.
+    [HttpPost("claims/manual/preview")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<ManualClaimPreviewDto>>> PreviewManualClaim([FromBody] ManualClaimRequestDto dto, CancellationToken ct)
+    {
+        if (_tenant.TenantId is not { } tenantId) return BadRequest(ApiResponse<ManualClaimPreviewDto>.Fail("Choose an organisation first."));
+        try { return Ok(ApiResponse<ManualClaimPreviewDto>.Ok(await _manual.PreviewAsync(tenantId, dto, ct))); }
+        catch (KeyNotFoundException ex) { return NotFound(ApiResponse<ManualClaimPreviewDto>.Fail(ex.Message)); }
+        catch (InvalidOperationException ex) { return BadRequest(ApiResponse<ManualClaimPreviewDto>.Fail(ex.Message)); }
+    }
+
+    // POST /api/v1/claims/manual: the draft claim for one free-form line. The server works out everything again; it takes nothing from the preview.
+    [HttpPost("claims/manual")]
+    [Authorize(Roles = "Admin,Coordinator,SuperAdmin")]
+    public async Task<ActionResult<ApiResponse<ShiftClaimGeneratedDto>>> MakeManualClaim([FromBody] ManualClaimRequestDto dto, CancellationToken ct)
+    {
+        if (_tenant.TenantId is not { } tenantId) return BadRequest(ApiResponse<ShiftClaimGeneratedDto>.Fail("Choose an organisation first."));
+        try { return Ok(ApiResponse<ShiftClaimGeneratedDto>.Ok(ToGeneratedDto(await _manual.MakeAsync(tenantId, dto, ct)))); }
+        catch (KeyNotFoundException ex) { return NotFound(ApiResponse<ShiftClaimGeneratedDto>.Fail(ex.Message)); }
+        catch (InvalidOperationException ex) { return BadRequest(ApiResponse<ShiftClaimGeneratedDto>.Fail(ex.Message)); }
+    }
+
     // POST /api/v1/claims/{claimId}/claim-again/preview: what claiming a rejected shift claim again would make. Nothing is deleted or saved.
     // A SuperAdmin with no organisation chosen gets 400, as the other claim-making actions do: the claim is looked up by the caller's organisation, never by its id alone.
     [HttpPost("claims/{claimId:guid}/claim-again/preview")]
@@ -342,6 +366,7 @@ public class ClaimsController : ControllerBase
     {
         var c = await _db.TripClaims
             .Include(x => x.TripInstance)
+            .Include(x => x.Participant)
             .Include(x => x.AuthorisedByUser)
             .Include(x => x.LineItems)
                 .ThenInclude(l => l.ParticipantBooking)
@@ -374,17 +399,18 @@ public class ClaimsController : ControllerBase
             AuthorisedByStaffId = c.AuthorisedByUserId,
             AuthorisedByStaffName = c.AuthorisedByUser != null ? $"{c.AuthorisedByUser.FirstName} {c.AuthorisedByUser.LastName}".Trim() : null,
             Notes = c.Notes,
-            // Nullability audit (shift-completion design spec, delivery PR 3): exactly one of
+            // Nullability audit (shift-completion design spec, delivery PR 3): at most one of
             // ParticipantBooking/Shift is set per line item — branch on whichever is present
-            // rather than assuming ParticipantBooking, which is null for Kind == Shift lines.
+            // rather than assuming ParticipantBooking, which is null for Kind == Shift lines. A
+            // manual claim's line has neither: its participant is the claim's own.
             LineItems = c.LineItems.Select(l =>
             {
-                var participant = l.ParticipantBooking?.Participant ?? l.Shift?.Participant;
+                var participant = l.ParticipantBooking?.Participant ?? l.Shift?.Participant ?? c.Participant;
                 return new ClaimLineItemDto
                 {
                     Id = l.Id, TripClaimId = l.TripClaimId,
                     ParticipantBookingId = l.ParticipantBookingId, ShiftId = l.ShiftId,
-                    ParticipantId = l.ParticipantBooking?.ParticipantId ?? l.Shift?.ParticipantId,
+                    ParticipantId = l.ParticipantBooking?.ParticipantId ?? l.Shift?.ParticipantId ?? c.ParticipantId,
                     ParticipantName = participant?.FullName ?? string.Empty,
                     NdisNumber = participant?.NdisNumber ?? string.Empty,
                     PlanType = l.ParticipantBooking != null

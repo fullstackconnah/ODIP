@@ -279,6 +279,58 @@ public record MakeCancellationClaimRequestDto
     public string? CancellationReason { get; init; }
 }
 
+/// <summary>One line of a manual (one-off) claim. There is no total field: the server works the amount out from the quantity and the unit price.</summary>
+public record ManualClaimLineRequestDto
+{
+    public string SupportItemCode { get; init; } = string.Empty;
+    public DateOnly ServiceDate { get; init; }
+    /// <summary>Hours for an hourly item, else the quantity of its unit.</summary>
+    public decimal Quantity { get; init; }
+    public decimal UnitPrice { get; init; }
+}
+
+/// <summary>A free-form one-off claim for one participant. Exactly one line for now; the list keeps the API as it is if a claim may have several.</summary>
+public record ManualClaimRequestDto
+{
+    public Guid ParticipantId { get; init; }
+    public List<ManualClaimLineRequestDto> Lines { get; init; } = new();
+    [StringLength(500)]
+    public string? Notes { get; init; }
+}
+
+public record ManualClaimPreviewLineDto
+{
+    public string Code { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
+    public string Unit { get; init; } = string.Empty;
+    public DateOnly Date { get; init; }
+    public ClaimDayType DayType { get; init; }
+    public decimal Quantity { get; init; }
+    public decimal UnitPrice { get; init; }
+    public decimal Total { get; init; }
+    /// <summary>The price guide limit in <see cref="State"/>; null when the item has none.</summary>
+    public decimal? Limit { get; init; }
+    public string State { get; init; } = string.Empty;
+}
+
+public record ManualClaimPlanDto
+{
+    public DateOnly Start { get; init; }
+    public DateOnly End { get; init; }
+}
+
+/// <summary>What a manual claim would be, worked out by the same planner the make uses. A refusal is a 400 with its sentence; <see cref="Warnings"/> never block.</summary>
+public record ManualClaimPreviewDto
+{
+    public string ParticipantName { get; init; } = string.Empty;
+    public List<ManualClaimPreviewLineDto> Lines { get; init; } = new();
+    public decimal Total { get; init; }
+    /// <summary>The funding plan that covers the service date; null when the participant has none on file.</summary>
+    public ManualClaimPlanDto? Plan { get; init; }
+    public ClaimBudgetDto? Budget { get; init; }
+    public List<string> Warnings { get; init; } = new();
+}
+
 /// <summary>The claim run: dates are optional, and the server fills the missing ones with the last 14 days up to yesterday in the organisation's time zone.</summary>
 public record ShiftClaimRunRequestDto
 {
