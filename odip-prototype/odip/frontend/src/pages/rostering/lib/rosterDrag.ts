@@ -32,7 +32,7 @@ export type PendingDrop = { targetId: string; sourceId?: string; staffName: stri
  * `pick` opens the staff picker for a Needs staff shift: the chip's plus, and its menu's "Assign to…" (spec 2026-10-15). `swap` opens the swap picker for an assigned shift: its menu's
  * "Swap with…" (the lead's decision 1, 2026-10-15). `pickingId` is the shift whose picker, either one, is open; the chip rings it.
  */
-export type DropState = { disabled: boolean; pending: PendingDrop | null; pick?: (shift: ShiftDto) => void; swap?: (shift: ShiftDto) => void; pickingId?: string | null; /** The chip menu's Publish (a writer, one Draft shift) and the shifts whose publish is out. */ publish?: (shift: ShiftDto) => void; publishingIds?: ReadonlySet<string> }
+export type DropState = { disabled: boolean; pending: PendingDrop | null; pick?: (shift: ShiftDto) => void; swap?: (shift: ShiftDto) => void; pickingId?: string | null; /** The chip menu's Publish (a writer, one Draft shift) and the shifts whose publish is out. */ publish?: (shift: ShiftDto) => void; publishingIds?: ReadonlySet<string>; /** Select mode (R3): the Draft shifts that can be ticked, the ticked ones, and the toggle. A chip not in `selectable` is inert. */ select?: { ids: ReadonlySet<string>; selectable: ReadonlySet<string>; toggle: (shift: ShiftDto) => void } }
 
 /** Shared by the page with the strip and every puck, so neither is threaded through the grid's rows. Outside a provider nothing is disabled or pending, and no chip has a plus. */
 export const DropStateContext = createContext<DropState>({ disabled: false, pending: null })
