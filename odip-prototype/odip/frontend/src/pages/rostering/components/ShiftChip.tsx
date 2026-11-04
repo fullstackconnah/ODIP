@@ -86,9 +86,13 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
   const onLeaveTitle = `${shift.staffName} has approved leave covering this shift — this slot needs a new assignee.`
 
   // Roster drag and drop: the grip lifts this shift's person; the chip is a drop target, locked ones included, so a drag over one can say why it is refused.
-  const { disabled: dragsOff, pending, pick, swap, pickingId, publish, publishingIds } = useContext(DropStateContext)
+  const { disabled: dragsOff, pending, pick, swap, pickingId, publish, publishingIds, select } = useContext(DropStateContext)
+  // Select mode (R3): the chip is a checkbox when it can be ticked and inert when it cannot; no grip, plus, menu or name link.
+  const selecting = Boolean(select)
+  const selectable = select?.selectable.has(shift.id) ?? false
+  const selected = select?.ids.has(shift.id) ?? false
   const locked = isLockedShift(shift)
-  const canLift = draggable && canWrite && isFilled && !locked
+  const canLift = draggable && canWrite && isFilled && !locked && !selecting
   const carry: DragCarry = { staffId: shift.staffId ?? '', staffName: shift.staffName ?? '', fromShift: shift }
   const { attributes, listeners, setNodeRef: setDragNode, isDragging } = useDraggable({ id: `shift:${shift.id}`, data: carry, disabled: !canLift || dragsOff })
   const target: DropTarget = { kind: 'shift', shift }
@@ -103,7 +107,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
   const fading = pending?.sourceId === shift.id
   const lockTitle = `${lockedWords(shift.status)}: can't be changed here`
   // The plus (spec 2026-10-15, decision C): every Needs staff chip a writer may change, in both views and on phones, wherever the page can open a picker.
-  const canPick = Boolean(pick) && canWrite && isUnfilledShift(shift) && !locked
+  const canPick = Boolean(pick) && canWrite && isUnfilledShift(shift) && !locked && !selecting
   const picking = pickingId === shift.id
   const pickLabel = pickName(shift)
   // Where the shift came from (spec 2026-10-15, decision B), derived: Agreed, Pattern or Ad hoc. Neutral ink for all three: colour on a chip means something is wrong.
@@ -138,7 +142,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
   // so hit testing skips them and their own titles can never show; the pointer lands on the chip, and this is what it shows. Their aria-labels, and the control's accessible name, are unchanged.
   // The regular in words only (the brief, 5.3: no mark): why an open shift's regular isn't on it, and who the regular is.
   const awayLine = shift.regularAwayReason ? `Regular away: ${shift.regularAwayReason}` : null
-  const chipTitle = [onApprovedLeave ? onLeaveTitle : null, awayLine, shift.isRegular ? `${shift.staffName} is the regular` : null, budgetMarkerTitle, hasFindings ? findingsSeverityLabel(shift.findings) : null, statusWords].filter(Boolean).join('\n')
+  const chipTitle = [selecting && hasBlocking && isDraft ? 'A rule stops this shift. Open it after you finish selecting.' : null, onApprovedLeave ? onLeaveTitle : null, awayLine, shift.isRegular ? `${shift.staffName} is the regular` : null, budgetMarkerTitle, hasFindings ? findingsSeverityLabel(shift.findings) : null, statusWords].filter(Boolean).join('\n')
 
   const menuItems = [
     { value: 'edit', label: 'Edit' },
@@ -170,7 +174,8 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
   function handleOpenKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault()
-      onOpen(shift)
+      if (!selecting) onOpen(shift)
+      else if (selectable) select?.toggle(shift)
     }
   }
 
@@ -208,14 +213,16 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
       <span className="hidden truncate @[11rem]:inline">Regular away</span>
     </span>
   )
-  const hasLead = canPick || (canWrite && draggable) || (!canWrite && locked)
-  const hasMenu = canWrite && !busy && !carrying
+  const hasLead = selecting || canPick || (canWrite && draggable) || (!canWrite && locked)
+  const hasMenu = canWrite && !busy && !carrying && !selecting
 
   // A link to the person's roster week on their profile (the week this shift is in), or plain "Needs staff" text in a participant row when nobody covers
   // the shift (a staff-row chip is never unfilled: it exists because that staff member holds it).
   // stopPropagation keeps a name click from also bubbling up to the open-shift div.
   const label = busy
     ? <span className="min-w-0 flex-1 truncate italic text-muted-foreground">{labelText}</span>
+    : selecting
+    ? <span className="min-w-0 flex-1 truncate text-foreground" title={context === 'participant' ? (shift.staffName ?? undefined) : subjectLabel}>{labelText}</span>
     : context === 'participant'
     ? isFilled
       ? (
@@ -254,7 +261,7 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
       // A 2px pad and a 2px row gap make 56px with a mouse and 68px under a coarse pointer; a marked chip grows only for its marker line.
       className={`group @container relative grid grid-cols-[auto_minmax(0,1fr)_auto] ${markedChip ? 'grid-rows-[auto_var(--control-h)_auto]' : 'grid-rows-[auto_var(--control-h)]'} gap-y-0.5 rounded-sm border border-border ${isDraft ? TONE.warning.soft : 'bg-surface-container-low'} p-0.5 text-[13px] transition-opacity duration-150 ${
         isDragging || fading ? 'opacity-50' : ''
-      } ${overKind === 'locked' ? 'cursor-not-allowed' : ''} ${hasFindings || budgetMarker ? 'my-2' : ''}`}
+      } ${overKind === 'locked' ? 'cursor-not-allowed' : ''} ${hasFindings || budgetMarker ? 'my-2' : ''} ${selecting ? `transition-[box-shadow] duration-[120ms] ease-out motion-reduce:transition-none ${selected ? 'ring-2 ring-inset ring-[var(--color-primary)]' : ''} ${selectable ? '' : 'opacity-60'}` : ''}`}
     >
       {/* Drag activation lives on its own handle, separate from the open button below. Both used
           to share one element with dnd-kit's listeners spread onto the same button that opens the
@@ -262,7 +269,18 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
           turned "open this shift" into "start a keyboard drag" for anyone tabbing to the chip.
           Splitting them keeps keyboard drag working (from the handle) without hijacking Enter on
           the primary control. */}
-      {canPick && busy ? (
+      {selecting ? (
+        // The chip is the checkbox, by role; this is its drawn box, in the grip's slot. Visual only: the click lands on the chip's own control.
+        selectable ? (
+          <span data-select-box aria-hidden="true" className="pointer-events-none relative z-[1] col-start-1 row-start-2 ml-0.5 flex w-[18px] shrink-0 items-center justify-center pointer-coarse:mx-[13px]">
+            <span className={`flex h-4 w-4 items-center justify-center rounded-[4px] border-[1.5px] transition-[background-color] duration-[120ms] ease-out motion-reduce:transition-none ${selected ? 'border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-primary-foreground)]' : 'border-border bg-card'}`}>
+              {selected && <Check className="h-3 w-3" strokeWidth={3} />}
+            </span>
+          </span>
+        ) : (
+          <span className="col-start-1 row-start-2 ml-0.5 w-[18px] shrink-0 pointer-coarse:mx-[13px]" aria-hidden="true" />
+        )
+      ) : canPick && busy ? (
         // The plus is gone while its write is out, but its column stays (phones and the Staff view too), so the text does not jump.
         <span className="col-start-1 row-start-2 w-[18px] shrink-0 pointer-coarse:w-11" aria-hidden="true" />
       ) : canPick ? (
@@ -313,11 +331,13 @@ export function ShiftChip({ shift, canWrite, dashed, context = 'staff', draggabl
           participant/staff name as an <a> (via react-router Link) so the name can navigate on its own
           — a <button> can't validly contain interactive descendants, but a div can. */}
       <div
-        role="button"
-        tabIndex={0}
+        role={selecting && selectable ? 'checkbox' : 'button'}
+        aria-checked={selecting && selectable ? selected : undefined}
+        aria-disabled={selecting && !selectable ? true : undefined}
+        tabIndex={selecting && !selectable ? -1 : 0}
         aria-label={openName}
         data-shift-open={shift.id}
-        onClick={() => onOpen(shift)}
+        onClick={() => { if (!selecting) onOpen(shift); else if (selectable) select?.toggle(shift) }}
         onKeyDown={handleOpenKeyDown}
         className={`col-span-full ${markedChip ? 'row-[1/span_3]' : 'row-[1/span_2]'} grid grid-cols-subgrid grid-rows-subgrid rounded-sm text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring`}
       >

@@ -628,3 +628,185 @@ describe('Add agreement shifts', () => {
     expect(screen.queryByRole('button', { name: ADD })).not.toBeInTheDocument()
   })
 })
+
+describe('picking several drafts to publish (R3)', () => {
+  const SELECT = 'Select shifts'
+  const chip = (id: string) => document.querySelector(`[data-shift-open="${id}"]`) as HTMLElement
+  const bar = () => document.querySelector('[data-publish-bar]') as HTMLElement
+  const enter = async (user: ReturnType<typeof userEvent.setup>) => { await user.click(screen.getByRole('button', { name: SELECT })) }
+  const conflict = () => Object.assign(new Error('busy'), { response: { status: 409, data: { success: false, errors: ['The roster is being changed right now. Please try again.'] } } })
+
+  it('Select shifts shows beside Publish week for a writer with two or more publishable drafts, and for no one else', () => {
+    const { unmount } = renderPage()
+    expect(within(bar()).getByRole('button', { name: SELECT })).toBeInTheDocument()
+    expect(within(bar()).getByRole('button', { name: 'Publish week' })).toBeInTheDocument()
+    unmount()
+
+    showBoard(board([DRAFTS[1]]))   // one publishable draft: Publish week or the chip menu already does the job
+    const one = renderPage()
+    expect(screen.queryByRole('button', { name: SELECT })).not.toBeInTheDocument()
+    one.unmount()
+
+    showBoard(board(DRAFTS))
+    asReader()
+    renderPage()
+    expect(screen.queryByRole('button', { name: SELECT })).not.toBeInTheDocument()
+  })
+
+  it('the bar counts 0, 1 and n in a polite live region, and the verb carries the count', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await enter(user)
+
+    const live = within(bar()).getByText('Select the shifts to publish')
+    expect(live).toHaveAttribute('aria-live', 'polite')
+    expect(live).toHaveFocus()
+    expect(within(bar()).getByRole('button', { name: 'Publish' })).toBeDisabled()
+    expect(within(bar()).getByRole('button', { name: 'Select all' })).toBeInTheDocument()
+
+    await user.click(chip('sam-wed'))
+    expect(within(bar()).getByText('1 shift selected')).toBe(live)
+    expect(within(bar()).getByRole('button', { name: 'Publish 1 shift' })).toBeEnabled()
+    await user.click(chip('alex-fri'))
+    expect(within(bar()).getByText('2 shifts selected')).toBeInTheDocument()
+    expect(within(bar()).getByRole('button', { name: 'Publish 2 shifts' })).toHaveClass(PRIMARY)
+    // Only the staffed, unblocked Drafts can be ticked: the open Tuesday and the Published Monday are inert.
+    expect(chip('open-tue')).toHaveAttribute('aria-disabled', 'true')
+    expect(chip('alex-mon')).toHaveAttribute('aria-disabled', 'true')
+    expect(chip('sam-sat')).toHaveAttribute('aria-checked', 'false')
+  })
+
+  it('Publish week and the agreements button are hidden while selecting, and Select all and Clear work', async () => {
+    const user = userEvent.setup()
+    showBoard(board(DRAFTS, { pendingAgreements: [{ participantId: 'p-2', displayName: 'Daniel Osei', draftId: 'd-2', version: 2, canReceiveServices: true }] }))
+    renderPage()
+    await enter(user)
+
+    expect(screen.queryByRole('button', { name: 'Publish week' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '1 agreement waiting' })).not.toBeInTheDocument()
+    await user.click(within(bar()).getByRole('button', { name: 'Select all' }))
+    expect(within(bar()).getByText('3 shifts selected')).toBeInTheDocument()
+    expect(chip('sam-sat')).toHaveAttribute('aria-checked', 'true')
+    expect(within(bar()).queryByRole('button', { name: 'Select all' })).not.toBeInTheDocument()
+    await user.click(within(bar()).getByRole('button', { name: 'Clear' }))
+    expect(within(bar()).getByText('Select the shifts to publish')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+  })
+
+  it('Publish confirms, sends the chosen ids, then exits select mode, announces, and focuses the week heading', async () => {
+    const user = userEvent.setup()
+    h.publish.mockResolvedValueOnce({ published: 2, notified: 2, unfilled: 0, skipped: 0 })
+    renderPage()
+    await enter(user)
+    await user.click(chip('sam-wed'))
+    await user.click(chip('alex-fri'))
+    await user.click(within(bar()).getByRole('button', { name: 'Publish 2 shifts' }))
+
+    const dialog = screen.getByRole('alertdialog', { name: 'Publish 2 shifts?' })
+    expect(dialog).toHaveTextContent('2 draft shifts go out to staff. The 2 people on them are notified.')
+    showBoard(board(DRAFTS.map(s => (s.id === 'sam-wed' || s.id === 'alex-fri' ? { ...s, status: 'Published' as const } : s))))
+    await user.click(within(dialog).getByRole('button', { name: 'Publish 2 shifts' }))
+
+    expect(h.publish).toHaveBeenCalledWith({ weekStart: '2026-08-17', shiftIds: ['sam-wed', 'alex-fri'] })
+    await waitFor(() => expect(document.getElementById('roster-week-heading')).toHaveFocus())
+    expect(screen.getByText('Published 2 shifts. 2 people notified.')).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+  })
+
+  it('a chosen shift that changed meanwhile is named in the announcement', async () => {
+    const user = userEvent.setup()
+    h.publish.mockResolvedValueOnce({ published: 1, notified: 1, unfilled: 0, skipped: 0 })
+    renderPage()
+    await enter(user)
+    await user.click(chip('sam-wed'))
+    await user.click(chip('alex-fri'))
+    await user.click(within(bar()).getByRole('button', { name: 'Publish 2 shifts' }))
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Publish 2 shifts' }))
+
+    expect(await screen.findByText('Published 1 shift. 1 person notified. 1 shift had changed since you selected it and was left alone.')).toBeInTheDocument()
+  })
+
+  it('a refused publish (409 busy) keeps select mode and the selection, so a retry is one press', async () => {
+    const user = userEvent.setup()
+    h.publish.mockRejectedValueOnce(conflict())
+    renderPage()
+    await enter(user)
+    await user.click(chip('sam-wed'))
+    await user.click(chip('sam-sat'))
+    await user.click(within(bar()).getByRole('button', { name: 'Publish 2 shifts' }))
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Publish 2 shifts' }))
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    expect(screen.getByText(/roster is being changed/i)).toBeInTheDocument()
+    expect(chip('sam-wed')).toHaveAttribute('aria-checked', 'true')
+    expect(chip('sam-sat')).toHaveAttribute('aria-checked', 'true')
+    expect(within(bar()).getByRole('button', { name: 'Publish 2 shifts' })).toBeEnabled()
+  })
+
+  it('Cancel and Escape leave select mode and give focus back to Select shifts; Escape in the confirm only closes the confirm', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await enter(user)
+    await user.click(chip('sam-wed'))
+    await user.click(within(bar()).getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: SELECT })).toHaveFocus())
+
+    await enter(user)
+    await user.click(chip('sam-wed'))
+    await user.click(within(bar()).getByRole('button', { name: 'Publish 1 shift' }))
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(chip('sam-wed')).toHaveAttribute('aria-checked', 'true')   // still selecting
+
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: SELECT })).toHaveFocus())
+    // Re-entering starts clean.
+    await enter(user)
+    expect(within(bar()).getByText('Select the shifts to publish')).toBeInTheDocument()
+  })
+
+  it('a retry that succeeds clears the 409 banner', async () => {
+    const user = userEvent.setup()
+    h.publish.mockRejectedValueOnce(conflict()).mockResolvedValueOnce({ published: 2, notified: 2, unfilled: 0, skipped: 0 })
+    renderPage()
+    await enter(user)
+    await user.click(chip('sam-wed'))
+    await user.click(chip('sam-sat'))
+    await user.click(within(bar()).getByRole('button', { name: 'Publish 2 shifts' }))
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Publish 2 shifts' }))
+    expect(await screen.findByText(/roster is being changed/i)).toBeInTheDocument()
+
+    await user.click(within(bar()).getByRole('button', { name: 'Publish 2 shifts' }))
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Publish 2 shifts' }))
+    await waitFor(() => expect(screen.queryByText(/roster is being changed/i)).not.toBeInTheDocument())
+    expect(await screen.findByText(/^Published 2 shifts/)).toBeInTheDocument()
+  })
+
+  it('Escape with an open listbox or menu leaves select mode alone', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await enter(user)
+    await user.click(chip('sam-wed'))
+    const menu = document.body.appendChild(document.createElement('div'))
+    menu.setAttribute('role', 'menu')
+    await user.keyboard('{Escape}')
+    expect(chip('sam-wed')).toHaveAttribute('aria-checked', 'true')
+    menu.remove()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+  })
+
+  it('moving to another week leaves select mode and clears the selection', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await enter(user)
+    await user.click(chip('sam-wed'))
+    await user.click(screen.getByRole('button', { name: 'Next week' }))
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Leave without publishing' }))
+
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+    expect(screen.queryByText(/shifts? selected/)).not.toBeInTheDocument()
+  })
+})

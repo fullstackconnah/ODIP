@@ -1202,3 +1202,75 @@ describe('ShiftChip Draft: tinted, worded, and publishable from its menu (card r
     expect(publish).not.toHaveBeenCalled()
   })
 })
+
+describe('ShiftChip in select mode (R3: publish several)', () => {
+  const draft = makeShift({ id: 'd-1', status: 'Draft', staffId: 'staff-1', staffName: 'Kim Lee' })
+
+  function chipSelecting(shift: ShiftDto, selected: string[] = [], selectable: string[] = [shift.id]) {
+    const toggle = vi.fn()
+    const onOpen = vi.fn()
+    const state: DropState = { disabled: true, pending: null, publish: vi.fn(), select: { ids: new Set(selected), selectable: new Set(selectable), toggle } }
+    renderChip(
+      <DropStateContext.Provider value={state}>
+        <ShiftChip shift={shift} canWrite draggable context="participant" onOpen={onOpen} onAssignTo={noop} onUnassign={noop} onDelete={noop} />
+      </DropStateContext.Provider>,
+    )
+    return { toggle, onOpen }
+  }
+
+  it('a selectable Draft is a checkbox that toggles on click and Space, and never opens the shift', async () => {
+    const user = userEvent.setup()
+    const { toggle, onOpen } = chipSelecting(draft)
+    const box = screen.getByRole('checkbox', { name: new RegExp(`^${formatShiftTimeRange(draft.startTime, draft.endTime)}`) })
+    expect(box).toHaveAttribute('aria-checked', 'false')
+    await user.click(box)
+    box.focus()
+    await user.keyboard(' ')
+    await user.keyboard('{Enter}')
+    expect(toggle).toHaveBeenCalledTimes(3)
+    expect(toggle).toHaveBeenCalledWith(draft)
+    expect(onOpen).not.toHaveBeenCalled()
+  })
+
+  it('a ticked chip shows the tick and the 2px ring; an unticked one shows neither', () => {
+    chipSelecting(draft, [draft.id])
+    expect(screen.getByRole('checkbox')).toHaveAttribute('aria-checked', 'true')
+    expect(document.querySelector('[data-shift-chip]')).toHaveClass('ring-2')
+    expect(document.querySelector('[data-select-box] svg')).not.toBeNull()
+    cleanup()
+    chipSelecting(draft, [])
+    expect(document.querySelector('[data-shift-chip]')).not.toHaveClass('ring-2')
+    expect(document.querySelector('[data-select-box] svg')).toBeNull()
+  })
+
+  it('a Published, Needs staff or blocked chip is inert: aria-disabled, no checkbox role, no box', async () => {
+    const user = userEvent.setup()
+    for (const shift of [makeShift({ id: 'p-1', status: 'Published' }), makeUnfilledShift({ id: 'u-1', status: 'Draft' }), { ...draft, id: 'b-1', findings: [makeFinding({ severity: 'Blocking' })] }]) {
+      const { toggle, onOpen } = chipSelecting(shift, [], [])
+      const control = document.querySelector(`[data-shift-open="${shift.id}"]`)!
+      expect(control).toHaveAttribute('aria-disabled', 'true')
+      expect(control).not.toHaveAttribute('aria-checked')
+      expect(control).toHaveAttribute('tabindex', '-1')
+      expect(document.querySelector('[data-select-box]')).toBeNull()
+      await user.click(control)
+      expect(toggle).not.toHaveBeenCalled()
+      expect(onOpen).not.toHaveBeenCalled()
+      cleanup()
+    }
+  })
+
+  it('a blocked Draft says why it cannot be ticked', () => {
+    chipSelecting({ ...draft, findings: [makeFinding({ severity: 'Blocking' })] }, [], [])
+    expect(document.querySelector('[data-shift-chip]')).toHaveAttribute('title', expect.stringContaining('A rule stops this shift. Open it after you finish selecting.'))
+  })
+
+  it('has no menu, no grip, no plus and no name link while selecting', () => {
+    chipSelecting(draft)
+    expect(screen.queryByRole('button', { name: /^Actions for/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Drag to move/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+    cleanup()
+    chipSelecting(makeUnfilledShift({ status: 'Draft' }), [], [])
+    expect(document.querySelector('[data-shift-plus]')).toBeNull()
+  })
+})
