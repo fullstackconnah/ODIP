@@ -82,8 +82,12 @@ public static class ShiftCompletionMapper
     /// The review queue's flag rule, read off the same figures the queue row carries (the client's completionFlags / isClean): an incident on the
     /// shift, a scheduled dose without an outcome, outlier time, a manual start, or times the worker moved at Finish. Any one means a person looks first.
     /// </summary>
-    public static bool NeedsReview(QueueExtras extras, bool isOutlier, bool startWasManual, bool timesAdjusted) =>
-        extras.IncidentCount > 0 || extras.DosesWithoutOutcome > 0 || isOutlier || startWasManual || timesAdjusted;
+    public static bool NeedsReview(QueueExtras extras, bool isOutlier, bool startWasManual, bool timesAdjusted, bool offRoster) =>
+        extras.IncidentCount > 0 || extras.DosesWithoutOutcome > 0 || isOutlier || startWasManual || timesAdjusted || offRoster;
+
+    /// <summary>A start more than 5 minutes off the roster, or a finish that is set and is. VarianceMinutesEnd is 0 until Finish, so an unset finish is never off roster.</summary>
+    public static bool IsOffRoster(int varianceMinutesStart, int varianceMinutesEnd, DateTime? actualEnd) =>
+        ShiftTimeRules.IsOffRoster(varianceMinutesStart) || (actualEnd is not null && ShiftTimeRules.IsOffRoster(varianceMinutesEnd));
 
     /// <summary>
     /// For a clean-only approve (the dashboard's): which of these shifts need review NOW, by <see cref="NeedsReview"/> over the queue's own joins
@@ -101,7 +105,8 @@ public static class ShiftCompletionMapper
                 extras[r.Completion.Id],
                 IsOutlierVariance(r.Completion.VarianceMinutesStart, r.Completion.VarianceMinutesEnd, OrganisationRules.For(rules, r.Shift.TenantId).VarianceReviewMinutes),
                 r.Completion.StartWasManual,
-                r.Completion.OriginalActualStart != null || r.Completion.OriginalActualEnd != null))
+                r.Completion.OriginalActualStart != null || r.Completion.OriginalActualEnd != null,
+                IsOffRoster(r.Completion.VarianceMinutesStart, r.Completion.VarianceMinutesEnd, r.Completion.ActualEnd)))
             .Select(r => r.Shift.Id).ToHashSet();
     }
 
@@ -158,7 +163,8 @@ public static class ShiftCompletionMapper
                 completion.TimeZoneId, isOutlier, varianceReviewMinutes, row.ReturnCount,
                 extras[completion.Id].DosesWithoutOutcome, extras[completion.Id].BreakMinutes, completion.StartWasManual,
                 completion.OriginalActualStart is not null || completion.OriginalActualEnd is not null,
-                extras[completion.Id].IncidentCount));
+                extras[completion.Id].IncidentCount,
+                IsOffRoster(completion.VarianceMinutesStart, completion.VarianceMinutesEnd, completion.ActualEnd)));
         }
         return items;
     }
@@ -217,7 +223,8 @@ public static class ShiftCompletionMapper
             c.OriginalActualStart is not null || c.OriginalActualEnd is not null,
             c.OriginalActualStart, c.OriginalActualEnd, c.TimeAdjustmentReason, c.Kilometres,
             c.PreShiftTravelMinutes, c.PreShiftTravelKilometres, c.PostShiftTravelMinutes, c.PostShiftTravelKilometres, c.AnythingToReport,
-            c.SentFromOffline, c.LocationCheck, c.LocationDistanceMetres, c.LocationAccuracyMetres, c.LocationReason);
+            c.SentFromOffline, c.LocationCheck, c.LocationDistanceMetres, c.LocationAccuracyMetres, c.LocationReason,
+            c.StartTimeReason, c.FinishTimeReason, ShiftTimeRules.IsOffRoster(c.VarianceMinutesStart), c.ActualEnd is not null && ShiftTimeRules.IsOffRoster(c.VarianceMinutesEnd));
     }
 
     /// <summary>

@@ -436,6 +436,75 @@ public class ShiftCompletionStateMachineTests
     }
 
     [Fact]
+    public async Task Start_SavesStartTimeReason_TrimmedAndCut()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, user.Id);
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        var result = await controller.StartShift(shift.Id, new StartShiftDto { StartTimeReason = "  " + new string('x', 600) + "  " }, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);   // the reason never refuses a Start
+        Assert.Equal(500, (await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id)).StartTimeReason!.Length);
+    }
+
+    [Fact]
+    public async Task Start_WithNoTimeReason_SavesNone()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, user.Id);
+
+        await MakeController(db, tenant.Object, user.Id).StartShift(shift.Id, new StartShiftDto { StartTimeReason = "   " }, CancellationToken.None);
+
+        Assert.Null((await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id)).StartTimeReason);
+    }
+
+    [Fact]
+    public async Task Finish_SavesFinishTimeReason_OverwritesOnRefinish()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, user.Id, ShiftStatus.InProgress);
+        Seed(db, new ShiftCompletion
+        {
+            Id = Guid.NewGuid(), ShiftId = shift.Id, ActualStart = DateTime.UtcNow.AddHours(-1), TimeZoneId = "Australia/Sydney",
+            SubmittedByUserId = user.Id, StartedAt = DateTime.UtcNow.AddHours(-1), IsActive = true,
+        });
+        AddNote(db, shift.Id, user.Id);
+        var controller = MakeController(db, tenant.Object, user.Id);
+
+        var first = await controller.FinishShift(shift.Id, new FinishShiftDto { FinishTimeReason = "  Traffic  " }, CancellationToken.None);
+        Assert.IsType<OkObjectResult>(first.Result);
+        Assert.Equal("Traffic", (await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id)).FinishTimeReason);
+
+        (await db.Shifts.SingleAsync(s => s.Id == shift.Id)).Status = ShiftStatus.InProgress;   // a Return puts the shift back in progress
+        await db.SaveChangesAsync();
+        await controller.FinishShift(shift.Id, new FinishShiftDto { FinishTimeReason = new string('y', 600) }, CancellationToken.None);
+
+        Assert.Equal(500, (await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id)).FinishTimeReason!.Length);
+    }
+
+    [Fact]
+    public async Task Finish_StartTimeReason_SavedOnlyWhenTheStartHasNone()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var shift = SeedShift(db, SeedParticipant(db).Id, user.Id, ShiftStatus.InProgress);
+        Seed(db, new ShiftCompletion
+        {
+            Id = Guid.NewGuid(), ShiftId = shift.Id, ActualStart = DateTime.UtcNow.AddHours(-1), TimeZoneId = "Australia/Sydney",
+            SubmittedByUserId = user.Id, StartedAt = DateTime.UtcNow.AddHours(-1), IsActive = true, StartTimeReason = "Asked to come early",
+        });
+        AddNote(db, shift.Id, user.Id);
+
+        await MakeController(db, tenant.Object, user.Id).FinishShift(shift.Id, new FinishShiftDto { StartTimeReason = "Something else" }, CancellationToken.None);
+
+        Assert.Equal("Asked to come early", (await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id)).StartTimeReason);
+    }
+
+    [Fact]
     public async Task StartShift_GeolocationDeclined_RecordsDeclineWithNoCoordinates()
     {
         var (db, tenant) = CreateDb();

@@ -22,6 +22,8 @@ public record StartShiftDto
     public double? AccuracyMetres { get; init; }
     /// <summary>Why there is no fix, typed before Start. Trimmed and cut to 300 by the server (never a 400 on Start).</summary>
     public string? LocationReason { get; init; }
+    /// <summary>Why the start is more than 5 minutes off roster (optional). Trimmed and cut to 500 by the server (never a 400 on Start).</summary>
+    public string? StartTimeReason { get; init; }
     /// <summary>When the phone recorded the tap, if it was sent late (UTC). Null: the server clock stamps it.</summary>
     public DateTime? StartedAt { get; init; }
 }
@@ -57,6 +59,11 @@ public record FinishShiftDto
     /// within 15 minutes of the stamped start (compared to the minute), with a reason. Null keeps the stamp.
     /// </summary>
     public DateTime? ActualStart { get; init; }
+
+    /// <summary>Why the finish is more than 5 minutes off roster (optional). Trimmed and cut to 500 by the server (never a 400); a re-Finish replaces it.</summary>
+    public string? FinishTimeReason { get; init; }
+    /// <summary>Why the start is off roster, asked at Finish when Start was skipped or the start was moved. Saved only when the completion has no start reason yet.</summary>
+    public string? StartTimeReason { get; init; }
 
     /// <summary>
     /// The handover note for the next worker (max 2000 chars; blank is allowed - the handover is prompted but
@@ -203,7 +210,12 @@ public record ShiftCompletionDto(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] LocationCheckStatus? LocationCheck = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] int? LocationDistanceMetres = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] int? LocationAccuracyMetres = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? LocationReason = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? LocationReason = null,
+    // ── Early or late Start and Finish: the reasons, and whether each side is more than 5 minutes off the roster ──
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? StartTimeReason = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? FinishTimeReason = null,
+    bool OffRosterStart = false,
+    bool OffRosterFinish = false);
 
 /// <summary>Connection-map reverse link (Deliverable 2) summary row — one active IncidentReport
 /// raised against a shift, as surfaced on <see cref="ShiftCompletionDto.Incidents"/>.</summary>
@@ -272,7 +284,9 @@ public record CompletionQueueItemDto(
     bool TimesAdjusted,
     /// <summary>How many active incidents are linked to the shift: the rows the completion review's <c>incidents</c> list shows (ShiftId and IsActive), so a row the
     /// queue calls clean is one whose review lists no incident. No default value: an unknown count must never read as "no incident".</summary>
-    int IncidentCount);
+    int IncidentCount,
+    /// <summary>True when the start, or a set finish, is more than 5 minutes off the roster (<c>ShiftTimeRules.OffRosterMinutes</c>); a flagged row needs review.</summary>
+    bool OffRoster = false);
 
 /// <summary>Body of PUT rostering/shifts/{id}/completion/travel: replaces all four travel values (an omitted one is cleared). Doubles, so an out-of-range
 /// number gets the action's coded refusal, never an uncoded model-binding 400 (the FinishShiftDto precedent).</summary>

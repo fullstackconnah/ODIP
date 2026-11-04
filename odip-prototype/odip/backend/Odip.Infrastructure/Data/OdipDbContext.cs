@@ -1312,6 +1312,8 @@ public class OdipDbContext : DbContext
             entity.Property(e => e.ReturnReason).HasMaxLength(2000);
             entity.Property(e => e.HandoverText).HasMaxLength(2000);
             entity.Property(e => e.TimeAdjustmentReason).HasMaxLength(500);
+            entity.Property(e => e.StartTimeReason).HasMaxLength(Odip.Domain.Rostering.ShiftTimeRules.MaxReasonLength);
+            entity.Property(e => e.FinishTimeReason).HasMaxLength(Odip.Domain.Rostering.ShiftTimeRules.MaxReasonLength);
             entity.Property(e => e.LocationReason).HasMaxLength(Odip.Domain.Rostering.LocationCheck.MaxReasonLength);
             entity.Property(e => e.Kilometres).HasPrecision(6, 1);
             entity.Property(e => e.PreShiftTravelKilometres).HasPrecision(6, 1);

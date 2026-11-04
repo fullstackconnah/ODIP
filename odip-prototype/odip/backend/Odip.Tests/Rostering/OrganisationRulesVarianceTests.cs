@@ -35,7 +35,7 @@ public class OrganisationRulesVarianceTests
         };
 
     /// <summary>One pending-review shift in <paramref name="org"/> whose completion drifted <paramref name="start"/> minutes at the start.</summary>
-    private static Shift SeedPending(OdipDbContext db, Guid org, int start, int day = 8)
+    private static Shift SeedPending(OdipDbContext db, Guid org, int start, int day = 8, int end = 0)
     {
         var participant = new Participant { Id = Guid.NewGuid(), TenantId = org, FirstName = "Amy", LastName = "Ng", IsActive = true };
         var shift = new Shift
@@ -48,7 +48,7 @@ public class OrganisationRulesVarianceTests
         db.ShiftCompletions.Add(new ShiftCompletion
         {
             Id = Guid.NewGuid(), TenantId = org, ShiftId = shift.Id, ActualStart = DateTime.UtcNow.AddHours(-8), ActualEnd = DateTime.UtcNow, TimeZoneId = "Australia/Sydney",
-            SubmittedByUserId = StaffId, StartedAt = DateTime.UtcNow.AddHours(-8), SubmittedAt = DateTime.UtcNow, VarianceMinutesStart = start, VarianceMinutesEnd = 0, IsActive = true,
+            SubmittedByUserId = StaffId, StartedAt = DateTime.UtcNow.AddHours(-8), SubmittedAt = DateTime.UtcNow, VarianceMinutesStart = start, VarianceMinutesEnd = end, IsActive = true,
         });
         db.SaveChanges();
         return shift;
@@ -154,7 +154,53 @@ public class OrganisationRulesVarianceTests
 
         var flagged = await ShiftCompletionMapper.ShiftsNeedingReviewAsync(db, rows, default);
 
-        Assert.Equal([b.Id], flagged);
+        // 20 minutes is past the 5-minute off-roster line in both organisations, so the gate flags both whatever the outlier setting says.
+        Assert.Equal(new HashSet<Guid> { a.Id, b.Id }, flagged);
+    }
+
+    [Theory]
+    [InlineData(5, 0, false)] [InlineData(-5, 0, false)] [InlineData(6, 0, true)] [InlineData(-6, 0, true)]
+    [InlineData(0, 5, false)] [InlineData(0, 6, true)] [InlineData(0, -6, true)]
+    public async Task OffRoster_FlagsTheQueueRow_AndTheCleanOnlyGate_EvenInsideTheOrganisationsOutlierMinutes(int start, int end, bool offRoster)
+    {
+        using var db = TestDb.Create();
+        SeedRules(db, OrgA, 15);   // 6 minutes is far inside the 15-minute outlier badge
+        var shift = SeedPending(db, OrgA, start, end: end);
+        var row = (shift, db.ShiftCompletions.Single(c => c.ShiftId == shift.Id));
+
+        var item = Assert.Single(await Queue(MakeController(db)));
+        var flagged = await ShiftCompletionMapper.ShiftsNeedingReviewAsync(db, [row], default);
+        var detail = Assert.Single(Assert.IsType<ApiResponse<List<ShiftCompletionDto>>>(Assert.IsType<OkObjectResult>((await MakeController(db).GetShiftCompletions(shift.Id, default)).Result).Value).Data!);
+
+        Assert.False(item.IsOutlierVariance);
+        Assert.Equal(offRoster, item.OffRoster);
+        Assert.Equal(offRoster, flagged.Contains(shift.Id));
+        Assert.Equal((ShiftTimeRules.IsOffRoster(start), ShiftTimeRules.IsOffRoster(end)), (detail.OffRosterStart, detail.OffRosterFinish));
+    }
+
+    [Fact]
+    public async Task OffRoster_TheStaffOverviewQuery_FlagsTheRowToo()
+    {
+        using var db = TestDb.Create();
+        var shift = SeedPending(db, OrgA, 0, end: 7);
+
+        var item = Assert.Single(await ShiftCompletionMapper.BuildQueueItemsAsync(db, db.Shifts.Where(s => s.Id == shift.Id), default));
+
+        Assert.True(item.OffRoster);
+    }
+
+    [Fact]
+    public async Task OffRoster_AFinishNotYetSet_IsNotFlagged()
+    {
+        using var db = TestDb.Create();
+        var shift = SeedPending(db, OrgA, 0, end: 30);
+        var completion = db.ShiftCompletions.Single(c => c.ShiftId == shift.Id);
+        completion.ActualEnd = null;   // VarianceMinutesEnd is 0 until Finish; a stale figure must not flag an unfinished shift
+        db.SaveChanges();
+
+        var dto = await ShiftCompletionMapper.ToDtoAsync(db, completion, 0, default);
+
+        Assert.False(dto.OffRosterFinish);
     }
 
     [Fact]
