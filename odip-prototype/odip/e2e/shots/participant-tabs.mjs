@@ -55,6 +55,10 @@ try {
     const context = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, locale: 'en-AU', timezoneId: 'Australia/Sydney', isMobile: !!vp.mobile, hasTouch: !!vp.mobile })
     const page = await context.newPage()
     page.on('pageerror', (err) => problems.push(`[${vp.name}] page error: ${err.message}`))
+    const histErrors = [], histResponses = []
+    page.on('pageerror', (err) => histErrors.push(`pageerror: ${err.message}`))
+    page.on('console', (m) => { if (m.type() === 'error') histErrors.push(`console: ${m.text()}`) })
+    page.on('response', (r) => { if (/audit|histor/i.test(r.url())) histResponses.push(`${r.status()} ${r.url().replace(BASE_URL, '')}`) })
     await page.route('**/api/v1/auth/dev-users', (r) => r.fulfill({ json: devUsersFor(role) }))
     await page.route('**/api/v1/auth/dev-login', (r) => r.fulfill({ json: devLoginFor(role) }))
     await page.goto(`${BASE_URL}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
@@ -152,6 +156,22 @@ try {
     }
 
     if (vp.name === '1280') check(`${vp.name} 7 h1 left identical on every tab and chip (within 1 px)`, [...new Set(geos.map((g) => g.h1))], geos.length > 0 && Math.max(...geos.map((g) => g.h1 ?? NaN).filter(Number.isFinite)) - Math.min(...geos.map((g) => g.h1 ?? NaN).filter(Number.isFinite)) <= 1)
+
+    // 8. Records > History (chip 2) at 1280: what <main> shows, the errors raised and the audit-history responses, plus a viewport shot.
+    if (vp.name === '1280') {
+      await goto(page, '/participants/p-0001?tab=records')
+      histErrors.length = 0; histResponses.length = 0
+      await page.evaluate(() => {
+        const strip = [...document.querySelectorAll('[role="tablist"]')].find((l) => l.getAttribute('aria-label') !== 'Participant sections')
+        strip.querySelectorAll('[role="tab"]')[2].click()
+      })
+      await page.waitForTimeout(1500)
+      const mainText = await page.evaluate(() => (document.querySelector('main')?.innerText ?? '').replace(/\s+/g, ' ').slice(0, 300))
+      await page.screenshot({ path: path.join(OUT_DIR, '1280-Admin-records-history.png'), fullPage: false })
+      check('1280 8 records history main text', mainText, true)
+      check('1280 8 records history errors', histErrors, true)
+      check('1280 8 records history audit responses', histResponses, true)
+    }
 
     // 2. A nested section= selects the merged chip, keeps the URL as written, and brings the card into view.
     const nested = [
