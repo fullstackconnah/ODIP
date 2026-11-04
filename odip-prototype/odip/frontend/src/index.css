@@ -566,6 +566,12 @@ aside[data-folding] [data-fold="word"] { transform: translateX(-12px); }
   .install-card[data-leaving] { animation: installFadeOut 150ms linear forwards !important; }
 }
 
+/* The roster's Publish pill (owner, 2026-11-05) enters like the install card. No exit: it leaves with the publish, and a fading Publish week would stay live. */
+.publish-float { animation: installIn 200ms cubic-bezier(0.2, 0, 0, 1); }
+@media (prefers-reduced-motion: reduce) {
+  .publish-float { animation: installFadeIn 150ms linear !important; }
+}
+
 /* Windows High Contrast removes box-shadows (every Tailwind ring) and many controls are outline-none: give keyboard focus a real outline. Unlayered, so it beats the outline-none utility. */
 @media (forced-colors: active) {
   :focus-visible { outline: 2px solid CanvasText; outline-offset: 2px; }

@@ -680,14 +680,14 @@ describe('picking several drafts to publish (R3)', () => {
     expect(chip('sam-sat')).toHaveAttribute('aria-checked', 'false')
   })
 
-  it('Publish week and the agreements button are hidden while selecting, and Select all and Clear work', async () => {
+  it('Publish week is hidden while selecting, the agreements button is not in the bar, and Select all and Clear work', async () => {
     const user = userEvent.setup()
     showBoard(board(DRAFTS, { pendingAgreements: [{ participantId: 'p-2', displayName: 'Daniel Osei', draftId: 'd-2', version: 2, canReceiveServices: true }] }))
     renderPage()
     await enter(user)
 
     expect(screen.queryByRole('button', { name: 'Publish week' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '1 agreement waiting' })).not.toBeInTheDocument()
+    expect(within(bar()).queryByRole('button', { name: '1 agreement waiting' })).not.toBeInTheDocument()
     await user.click(within(bar()).getByRole('button', { name: 'Select all' }))
     expect(within(bar()).getByText('3 shifts selected')).toBeInTheDocument()
     expect(chip('sam-sat')).toHaveAttribute('aria-checked', 'true')
