@@ -113,6 +113,7 @@ export function ComplianceStep({
             </FormField>
           )}
         </div>
+        <p className={`${span.long} text-xs text-[var(--color-muted-foreground)]`}>Reporting status and resolved date: worked out by Bunya Support.</p>
       </div>
     </Card>
   )

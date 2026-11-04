@@ -630,7 +630,7 @@ describe('IncidentsPage — OVERDUE NDIS Commission pill contrast', () => {
 })
 
 describe('IncidentsPage — row actions', () => {
-  it('reveals archive/edit actions on row hover and focus (opacity only) inside a 24px-icon cluster', () => {
+  it('reveals the archive action on row hover and focus (opacity only) inside a 24px-icon cluster', () => {
     mockUseIncidents.mockReturnValue({ data: [baseIncident()], isLoading: false })
     renderPage()
 
@@ -641,8 +641,8 @@ describe('IncidentsPage — row actions', () => {
     expect(cluster.className).not.toMatch(/(^|\s)(hidden|invisible)(\s|$)/)
     // On a mouse the cluster overlays the row's last cells; the actions column costs no width.
     expect(cluster).toHaveClass('md:pointer-fine:absolute')
-    // The edit link is in the same cluster and still a real, focusable link.
-    expect(within(cluster).getByRole('link', { name: 'Edit' })).toHaveAttribute('href', '/incidents/inc-1/edit')
+    // The row opens the full view, where each part is edited, so the cluster has no Edit.
+    expect(within(cluster).queryByRole('link', { name: 'Edit' })).not.toBeInTheDocument()
   })
 
   it('files an incident from a flagged note with a 24px always-visible button, not a 44px hand-rolled one', async () => {

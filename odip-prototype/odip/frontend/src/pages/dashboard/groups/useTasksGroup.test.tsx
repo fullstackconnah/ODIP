@@ -85,10 +85,10 @@ describe('Tasks due group — Done', () => {
   })
 
   it('offers Open beside Done for a task with somewhere to go', async () => {
-    answer([task({ linkTo: '/incidents/inc-2/edit' })])
+    answer([task({ linkTo: '/incidents/inc-2' })])
     render()
 
-    expect(await screen.findByRole('link', { name: 'Open task: Chase travel insurance certificate' })).toHaveAttribute('href', '/incidents/inc-2/edit')
+    expect(await screen.findByRole('link', { name: 'Open task: Chase travel insurance certificate' })).toHaveAttribute('href', '/incidents/inc-2')
     expect(screen.getByRole('button', { name: 'Done: Chase travel insurance certificate' })).toBeInTheDocument()
   })
 

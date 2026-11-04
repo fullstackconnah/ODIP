@@ -1,9 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { act, render, screen, within } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import IncidentCreatePage from './IncidentCreatePage'
-import { refetchable } from '@/test/refetchable'
 import type { MarIncidentPrefillState, ShiftNoteIncidentPrefillState, ShiftIncidentPrefillState } from '@/lib/incidentPrefill'
 import {
   buildIncidentTitleSkeleton, buildIncidentDescriptionSkeleton, buildIncidentDateTime, suggestedIncidentSeverity,
@@ -13,12 +12,10 @@ import {
 import { INCIDENT_TYPE_LABELS, INCIDENT_SEVERITY_LABELS } from '@/api/types/enums'
 
 const {
-  mockUseIncident, mockCreateMutateAsync, mockUpdateMutateAsync, mockUseRestrictivePractices, mockApiPost,
+  mockCreateMutateAsync, mockUseRestrictivePractices, mockApiPost,
   mockUseCreateIncident, mockBulkCreateMutateAsync, staffList,
 } = vi.hoisted(() => ({
-  mockUseIncident: vi.fn(),
   mockCreateMutateAsync: vi.fn(),
-  mockUpdateMutateAsync: vi.fn(),
   mockUseRestrictivePractices: vi.fn(),
   mockApiPost: vi.fn(),
   mockUseCreateIncident: vi.fn(),
@@ -41,8 +38,6 @@ const {
 // wizard shell (useWizard/WizardStepRail/WizardNavFooter/WizardReviewStep).
 vi.mock('@/api/hooks', () => ({
   useCreateIncident: mockUseCreateIncident,
-  useUpdateIncident: () => ({ mutateAsync: mockUpdateMutateAsync, isPending: false, isError: false }),
-  useIncident: mockUseIncident,
   useTrips: () => ({ data: [{ id: 'trip-1', tripName: 'Gold Coast Beach Break' }, { id: 'trip-2', tripName: 'Blue Mountains Adventure' }] }),
   useStaff: () => ({ data: staffList.loading ? [] : staffList.all }),
   useParticipants: () => ({ data: [{ id: 'participant-1', firstName: 'Sophie', lastName: 'Brown', fullName: 'Sophie Brown' }] }),
@@ -69,7 +64,6 @@ function renderCreatePage(initialEntry: string | { pathname: string; state?: unk
   const router = createMemoryRouter(
     [
       { path: '/incidents/new', element: <IncidentCreatePage /> },
-      { path: '/incidents/:id/edit', element: <IncidentCreatePage /> },
       { path: '/incidents', element: <div>Incidents list</div> },
       { path: '/portal/shifts/:id', element: <div>Shift page</div> },
     ],
@@ -80,7 +74,7 @@ function renderCreatePage(initialEntry: string | { pathname: string; state?: unk
 
 // ── IN-1/IN-3/IN-4/IN-6 wizard navigation helpers ──────────────────────────────────────────
 // The form's fields are now split across wizard steps (Basics / Restrictive Practice
-// [conditional] / Incident Details / Compliance [edit-only] / Review), and three of
+// [conditional] / Incident Details / Review), and three of
 // Basics' native <select>s became Dropdown ('form' variant, GEN-1) — opened by clicking the
 // labelled trigger, then picking a `role="option"` by its visible label text, exactly like the
 // pre-existing restrictivePracticeType Dropdown already did on the old single-page form.
@@ -144,7 +138,7 @@ async function fillUnapprovedRpAndNext(user: ReturnType<typeof userEvent.setup>,
 
 /** Fills Incident Details' two required fields (description, date/time) and clicks Next twice —
  * once off Incident Details onto the (always-optional, so immediately-passable) Witnesses step,
- * once more off Witnesses — landing on Review (create mode) or Compliance (edit mode). */
+ * once more off Witnesses — landing on Review. */
 async function fillDetailsMinimallyAndNext(user: ReturnType<typeof userEvent.setup>, description = 'Details here') {
   await user.type(screen.getByPlaceholderText('Detailed description of the incident...'), description)
   await user.type(screen.getByLabelText(/Date & Time/i), '2026-09-01T10:00')
@@ -170,9 +164,7 @@ function reviewValueFor(label: string) {
 const AUTHORISED = { authorisedBy: 'Dr Chen', authorisationDate: '2026-09-01', isAuthorised: true }
 
 beforeEach(() => {
-  mockUseIncident.mockReturnValue({ data: undefined })
   mockCreateMutateAsync.mockReset()
-  mockUpdateMutateAsync.mockReset()
   mockCreateMutateAsync.mockResolvedValue({ success: true, data: { id: 'new-incident-1' } })
   mockUseCreateIncident.mockReturnValue({ mutateAsync: mockCreateMutateAsync, isPending: false, isError: false, error: null })
   mockUseRestrictivePractices.mockReturnValue({ data: [] })
@@ -445,26 +437,6 @@ describe('IncidentCreatePage — INC-03 MAR drop-into-draft prefill', () => {
     expect((screen.getByPlaceholderText('Brief incident summary') as HTMLInputElement).value).toBe('')
   })
 
-  it('ignores MAR prefill state when editing an existing incident', () => {
-    mockUseIncident.mockReturnValue({
-      data: {
-        id: 'incident-1', serviceType: 'None', tripInstanceId: null, incidentType: 'Injury', otherTypeSpecify: null,
-        severity: 'Low', status: 'Draft', title: 'Existing incident', incidentDateTime: '2026-08-01T09:00',
-        location: null, reportedByStaffId: 'staff-1', description: 'Existing description', reportedByName: 'Alex Rivera',
-        involvedParticipantName: null, qscReportingStatus: 'NotRequired', isOverdue24h: false, createdAt: '2026-08-01T09:00:00Z',
-        participantBookingId: null, involvedParticipantId: null, involvedStaffId: null, involvedStaffName: null,
-        immediateActionsTaken: null, wereEmergencyServicesCalled: false, emergencyServicesDetails: null,
-        witnessNames: null, witnessStatements: null, injuries: [], qscReportedAt: null, qscReferenceNumber: null,
-        reviewedByStaffId: null, reviewedByName: null, reviewedAt: null, reviewNotes: null, correctiveActions: null,
-        resolvedAt: null, familyNotified: false, familyNotifiedAt: null, supportCoordinatorNotified: false,
-        supportCoordinatorNotifiedAt: null, updatedAt: '2026-08-01T09:00:00Z',
-      },
-    })
-    renderCreatePage({ pathname: '/incidents/incident-1/edit', state: marPrefill })
-
-    expect(screen.queryByText(/pre-filled from the medication record/i)).not.toBeInTheDocument()
-    expect((screen.getByPlaceholderText('Brief incident summary') as HTMLInputElement).value).toBe('Existing incident')
-  })
 })
 
 // NOTES-02: closing the loop on the shift-note-sourced prefill — a successful submission that
@@ -919,154 +891,6 @@ describe('IncidentCreatePage — INC-05 link to an authorised practice', () => {
   })
 })
 
-// INC-04: the determination is frozen at creation — editing an existing incident must never
-// silently re-run it against today's register, even if the participant/type fields are changed.
-// Edit mode's initialVisited: 'all' (same jump-anywhere convention as the retired single-step wizard) means
-// every step's rail button is clickable immediately — these tests jump directly rather than
-// stepping through Next, since nothing here is testing the Next-validation gate itself.
-describe('IncidentCreatePage — INC-04 determination frozen on edit', () => {
-  const existingRpIncident = {
-    id: 'incident-1', serviceType: 'None', tripInstanceId: null, incidentType: 'RestrictivePracticeUse', otherTypeSpecify: null,
-    restrictivePracticeType: 'Seclusion', restrictivePracticeId: 'rp-1', restrictivePracticeDescription: 'Seclusion room, acute crisis.',
-    restrictivePracticeReviewDate: '2026-12-01', unapprovedRestrictivePracticeDetails: null, isRestrictivePracticeAuthorised: false,
-    severity: 'High', status: 'Draft', title: 'Existing RP incident', incidentDateTime: '2026-08-01T09:00',
-    location: null, reportedByStaffId: 'staff-1', description: 'Existing description', reportedByName: 'Alex Rivera',
-    involvedParticipantName: 'Sophie Brown', qscReportingStatus: 'Required', isOverdue24h: false, createdAt: '2026-08-01T09:00:00Z',
-    participantBookingId: null, involvedParticipantId: 'participant-1', involvedStaffId: null, involvedStaffName: null,
-    immediateActionsTaken: null, wereEmergencyServicesCalled: false, emergencyServicesDetails: null,
-    witnessNames: null, witnessStatements: null, injuries: [], qscReportedAt: null, qscReferenceNumber: null,
-    reviewedByStaffId: null, reviewedByName: null, reviewedAt: null, reviewNotes: null, correctiveActions: null,
-    resolvedAt: null, familyNotified: false, familyNotifiedAt: null, supportCoordinatorNotified: false,
-    supportCoordinatorNotifiedAt: null, updatedAt: '2026-08-01T09:00:00Z',
-  }
-
-  it('shows the frozen unauthorised banner from the record, even though the register now has a matching active practice', async () => {
-    mockUseIncident.mockReturnValue({ data: existingRpIncident })
-    // If the banner were recomputed live, this active matching entry would flip it to authorised.
-    mockUseRestrictivePractices.mockReturnValue({ data: [
-      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room, acute crisis.', reviewDate: '2026-12-01', isActive: true, ...AUTHORISED },
-    ] })
-    const user = userEvent.setup()
-    renderCreatePage({ pathname: '/incidents/incident-1/edit' })
-
-    await user.click(await screen.findByRole('button', { name: /Restrictive Practice/i }))
-
-    expect(await screen.findByText(/not authorised — this may be a reportable incident/i)).toBeInTheDocument()
-    expect(screen.getByText(/determined when this incident was created/i)).toBeInTheDocument()
-  })
-
-  it('ticks "This use was not authorised" for a linked incident stored unauthorised, without locking it while the link is unchanged', async () => {
-    mockUseIncident.mockReturnValue({ data: existingRpIncident })
-    // The entry now reads Not authorised; the incident keeps what it was stored with, so nothing is forced.
-    mockUseRestrictivePractices.mockReturnValue({ data: [
-      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room, acute crisis.', reviewDate: '2026-12-01', isActive: true, authorisedBy: null, authorisationDate: null, isAuthorised: false },
-    ] })
-    const user = userEvent.setup()
-    renderCreatePage({ pathname: '/incidents/incident-1/edit' })
-
-    await user.click(await screen.findByRole('button', { name: /Restrictive Practice/i }))
-
-    const box = await screen.findByRole('checkbox', { name: 'This use was not authorised' })
-    expect(box).toBeChecked()
-    expect(box).toBeEnabled()
-  })
-
-  // RP register PR 1 review D2: the varied question is hidden on edit, so nothing on the step may clear its stored answer.
-  it('keeps the stored varied answer when the tick is ticked and unticked, so Next still passes', async () => {
-    mockUseIncident.mockReturnValue({ data: { ...existingRpIncident, isRestrictivePracticeAuthorised: true, restrictivePracticeUseVaried: false } })
-    mockUseRestrictivePractices.mockReturnValue({ data: [
-      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room, acute crisis.', reviewDate: '2026-12-01', isActive: true, ...AUTHORISED },
-    ] })
-    const user = userEvent.setup()
-    renderCreatePage({ pathname: '/incidents/incident-1/edit' })
-
-    await user.click(await screen.findByRole('button', { name: /Restrictive Practice/i }))
-    const box = await screen.findByRole('checkbox', { name: 'This use was not authorised' })
-    await user.click(box)
-    await user.click(box)
-    await clickNext(user)
-
-    expect(await screen.findByPlaceholderText('Detailed description of the incident...')).toBeInTheDocument() // moved on: the hidden answer was not wiped
-  })
-
-  // Review N1: the banner agrees with the Review row and with what the server stores on save.
-  it('shows the lowered state in the edit banner once "This use was not authorised" is ticked', async () => {
-    mockUseIncident.mockReturnValue({ data: { ...existingRpIncident, isRestrictivePracticeAuthorised: true } })
-    mockUseRestrictivePractices.mockReturnValue({ data: [
-      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room, acute crisis.', reviewDate: '2026-12-01', isActive: true, ...AUTHORISED },
-    ] })
-    const user = userEvent.setup()
-    renderCreatePage({ pathname: '/incidents/incident-1/edit' })
-
-    await user.click(await screen.findByRole('button', { name: /Restrictive Practice/i }))
-    expect(await screen.findByText('Authorised at the time this was reported.')).toBeInTheDocument()
-    await user.click(screen.getByRole('checkbox', { name: 'This use was not authorised' }))
-
-    expect(screen.getByText(/not authorised — this may be a reportable incident/i)).toBeInTheDocument()
-    expect(screen.getByText('Saving records this use as not authorised.')).toBeInTheDocument()
-    expect(screen.queryByText('Authorised at the time this was reported.')).not.toBeInTheDocument()
-  })
-
-  // Review S1: the API leaves a null flag out of the JSON, so "not determined" arrives as a missing key.
-  it('shows "no determination on record" when the flag is missing from the payload', async () => {
-    const { isRestrictivePracticeAuthorised: _omitted, ...withoutFlag } = existingRpIncident
-    void _omitted
-    mockUseIncident.mockReturnValue({ data: withoutFlag })
-    const user = userEvent.setup()
-    renderCreatePage({ pathname: '/incidents/incident-1/edit' })
-
-    await user.click(await screen.findByRole('button', { name: /Restrictive Practice/i }))
-
-    expect(await screen.findByText('No authorisation determination on record for this incident.')).toBeInTheDocument()
-  })
-
-  it('keeps showing the frozen determination even after changing the RP type in the edit form', async () => {
-    mockUseIncident.mockReturnValue({ data: existingRpIncident })
-    mockUseRestrictivePractices.mockReturnValue({ data: [
-      { id: 'rp-1', type: 'Seclusion', description: 'Seclusion room, acute crisis.', reviewDate: '2026-12-01', isActive: true, ...AUTHORISED },
-    ] })
-    const user = userEvent.setup()
-    renderCreatePage({ pathname: '/incidents/incident-1/edit' })
-
-    await user.click(await screen.findByRole('button', { name: /Restrictive Practice/i }))
-    await screen.findByText(/not authorised — this may be a reportable incident/i)
-    await openAndSelect(user, /Restrictive Practice Type/i, /^physical restraint/i)
-
-    expect(screen.getByText(/not authorised — this may be a reportable incident/i)).toBeInTheDocument()
-  })
-})
-
-// I1 (final review): useParticipants() is server-capped at 50 and the mocked lookup here only
-// ever carries 'participant-1' (Sophie Brown) — this fixture's involvedParticipantId deliberately
-// doesn't match it, standing in for a participant that sorted past the cap. The Review step must
-// still show the correct name because IncidentDetailDto.involvedParticipantName already carries it.
-describe('IncidentCreatePage — I1 Review prefers the server-resolved participant name over the capped lookup', () => {
-  const existingIncidentWithUncachedParticipant = {
-    id: 'incident-2', serviceType: 'None', tripInstanceId: null, incidentType: 'PropertyDamage', otherTypeSpecify: null,
-    restrictivePracticeType: null, restrictivePracticeId: null, restrictivePracticeDescription: null,
-    restrictivePracticeReviewDate: null, unapprovedRestrictivePracticeDetails: null, isRestrictivePracticeAuthorised: null,
-    severity: 'Low', status: 'Draft', title: 'Existing incident', incidentDateTime: '2026-08-01T09:00',
-    location: null, reportedByStaffId: 'staff-1', description: 'Existing description', reportedByName: 'Alex Rivera',
-    involvedParticipantName: 'Jordan Blake', qscReportingStatus: 'NotRequired', isOverdue24h: false, createdAt: '2026-08-01T09:00:00Z',
-    participantBookingId: null, involvedParticipantId: 'participant-99', involvedStaffId: null, involvedStaffName: null,
-    immediateActionsTaken: null, wereEmergencyServicesCalled: false, emergencyServicesDetails: null,
-    witnessNames: null, witnessStatements: null, injuries: [], witnesses: [], qscReportedAt: null, qscReferenceNumber: null,
-    reviewedByStaffId: null, reviewedByName: null, reviewedAt: null, reviewNotes: null, correctiveActions: null,
-    resolvedAt: null, familyNotified: false, familyNotifiedAt: null, supportCoordinatorNotified: false,
-    supportCoordinatorNotifiedAt: null, updatedAt: '2026-08-01T09:00:00Z',
-  }
-
-  it('shows the DTO\'s involvedParticipantName on Review when the participant is not in the (capped) lookup list', async () => {
-    mockUseIncident.mockReturnValue({ data: existingIncidentWithUncachedParticipant })
-    const user = userEvent.setup()
-    renderCreatePage({ pathname: '/incidents/incident-2/edit' })
-
-    await user.click(await screen.findByRole('button', { name: /Review$/i }))
-
-    expect(reviewValueFor('Involved Participant')).toBe('Jordan Blake')
-  })
-})
-
 // UX-01: the four staff/participant pickers migrated from native <select>/register() to
 // SearchableSelect — one keyboard-only smoke test per picker (open, arrow to an option, Enter).
 describe('IncidentCreatePage — UX-01 SearchableSelect keyboard support', () => {
@@ -1278,120 +1102,6 @@ describe('IncidentCreatePage — IN-7 Witnesses step', () => {
     expect(mockCreateMutateAsync.mock.calls[0][0].witnesses).toEqual([])
   })
 
-  // Edit mode: a witness who has already responded must show their live status, and resubmitting
-  // the form unmodified must echo their persisted id back so the backend preserves it (rather
-  // than resetting to Pending) — see IncidentsController.Update's own regression coverage for the
-  // server-side half of this contract.
-  describe('edit mode — approval status display and preservation', () => {
-    const existingIncidentWithWitnesses = {
-      id: 'incident-1', serviceType: 'None', tripInstanceId: null, incidentType: 'PropertyDamage', otherTypeSpecify: null,
-      severity: 'Low', status: 'Draft', title: 'Existing incident', incidentDateTime: '2026-08-01T09:00',
-      location: null, reportedByStaffId: 'staff-1', description: 'Existing description', reportedByName: 'Alex Rivera',
-      involvedParticipantName: null, qscReportingStatus: 'NotRequired', isOverdue24h: false, createdAt: '2026-08-01T09:00:00Z',
-      participantBookingId: null, involvedParticipantId: null, involvedStaffId: null, involvedStaffName: null,
-      immediateActionsTaken: null, wereEmergencyServicesCalled: false, emergencyServicesDetails: null,
-      witnessNames: null, witnessStatements: null, injuries: [],
-      witnesses: [
-        { id: 'witness-1', witnessUserId: 'staff-3', witnessName: 'Alex Rivera', isStaffWitness: true, witnessStatus: 'Approved', witnessRequestedAt: '2026-08-01T09:00:00Z', witnessRespondedAt: '2026-08-01T10:00:00Z', statementText: 'I saw it.' },
-      ],
-      qscReportedAt: null, qscReferenceNumber: null,
-      reviewedByStaffId: null, reviewedByName: null, reviewedAt: null, reviewNotes: null, correctiveActions: null,
-      resolvedAt: null, familyNotified: false, familyNotifiedAt: null, supportCoordinatorNotified: false,
-      supportCoordinatorNotifiedAt: null, updatedAt: '2026-08-01T09:00:00Z',
-    }
-
-    it('shows the persisted witness\'s live approval status, not the unsubmitted hint', async () => {
-      mockUseIncident.mockReturnValue({ data: existingIncidentWithWitnesses })
-      const user = userEvent.setup()
-      renderCreatePage({ pathname: '/incidents/incident-1/edit' })
-
-      await user.click(await screen.findByRole('button', { name: /Witnesses$/i }))
-
-      expect(screen.getByText('Approved')).toBeInTheDocument()
-      expect(screen.queryByText(/will be asked to approve/i)).not.toBeInTheDocument()
-      expect(screen.getByText('I saw it.')).toBeInTheDocument()
-    })
-
-    it('echoes the persisted witness id back on an unmodified resubmit, so the server can preserve its Approved status', async () => {
-      mockUseIncident.mockReturnValue({ data: existingIncidentWithWitnesses })
-      mockUpdateMutateAsync.mockResolvedValue({ success: true, data: { id: 'incident-1' } })
-      const user = userEvent.setup()
-      renderCreatePage({ pathname: '/incidents/incident-1/edit' })
-
-      await user.click(await screen.findByRole('button', { name: /Review$/i }))
-      await user.click(screen.getByRole('button', { name: /^save$/i }))
-
-      expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
-      const { data: payload } = mockUpdateMutateAsync.mock.calls[0][0]
-      expect(payload.witnesses).toEqual([
-        { id: 'witness-1', witnessUserId: 'staff-3', witnessName: 'Alex Rivera' },
-      ])
-    })
-
-    // UpdateIncident sets the three source links from the body ("assigning null clears the link"), and the router-state hand-offs that carry them exist only on
-    // create. An edit used to send them absent, so saving any change to an incident filed from a MAR or a shift note cut it loose from its source.
-    it('sends the stored source links back on an edit, so saving does not clear them', async () => {
-      mockUseIncident.mockReturnValue({
-        data: { ...existingIncidentWithWitnesses, medicationAdministrationId: 'mar-1', shiftId: 'shift-1', shiftNoteId: 'note-1' },
-      })
-      mockUpdateMutateAsync.mockResolvedValue({ success: true, data: { id: 'incident-1' } })
-      const user = userEvent.setup()
-      renderCreatePage({ pathname: '/incidents/incident-1/edit' })
-
-      await user.click(await screen.findByRole('button', { name: /Review$/i }))
-      await user.click(screen.getByRole('button', { name: /^save$/i }))
-
-      expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
-      const { data: payload } = mockUpdateMutateAsync.mock.calls[0][0]
-      expect(payload).toMatchObject({ medicationAdministrationId: 'mar-1', shiftId: 'shift-1', shiftNoteId: 'note-1' })
-    })
-
-    it('sends no source links for an edit of an incident that has none', async () => {
-      mockUseIncident.mockReturnValue({ data: { ...existingIncidentWithWitnesses, medicationAdministrationId: null, shiftId: null, shiftNoteId: null } })
-      mockUpdateMutateAsync.mockResolvedValue({ success: true, data: { id: 'incident-1' } })
-      const user = userEvent.setup()
-      renderCreatePage({ pathname: '/incidents/incident-1/edit' })
-
-      await user.click(await screen.findByRole('button', { name: /Review$/i }))
-      await user.click(screen.getByRole('button', { name: /^save$/i }))
-
-      const { data: payload } = mockUpdateMutateAsync.mock.calls[0][0]
-      expect(payload.medicationAdministrationId).toBeUndefined()
-      expect(payload.shiftId).toBeUndefined()
-      expect(payload.shiftNoteId).toBeUndefined()
-    })
-
-    // The form never shows the legacy witness text, so an edit must not send it: the server leaves the stored columns alone (IncidentsController.Update).
-    it('sends no legacy witness text on an edit, so saving a title change keeps it', async () => {
-      mockUseIncident.mockReturnValue({
-        data: { ...existingIncidentWithWitnesses, witnessNames: 'Mei Zhang', witnessStatements: 'slip' },
-      })
-      mockUpdateMutateAsync.mockResolvedValue({ success: true, data: { id: 'incident-1' } })
-      const user = userEvent.setup()
-      renderCreatePage({ pathname: '/incidents/incident-1/edit' })
-
-      const title = await screen.findByPlaceholderText('Brief incident summary')
-      await user.clear(title)
-      await user.type(title, 'Edited title')
-      await user.click(screen.getByRole('button', { name: /Review$/i }))
-      await user.click(screen.getByRole('button', { name: /^save$/i }))
-
-      expect(mockUpdateMutateAsync).toHaveBeenCalledTimes(1)
-      const { data: payload } = mockUpdateMutateAsync.mock.calls[0][0]
-      expect(payload.title).toBe('Edited title')
-      expect(Object.keys(payload).sort()).toEqual([
-        'ambulanceOfficerName', 'ambulanceReference',
-        'awareAtLocal', 'commissionDetailedReportedAt', 'commissionFinalReportRequested', 'commissionFinalReportedAt', 'description', 'emergencyServices', 'emergencyServicesDetails', 'familyNotified', 'familyNotifiedAt', 'fireOfficerName', 'fireReference',
-        'immediateActionsTaken', 'incidentDateTime', 'incidentType', 'injuries', 'involvedParticipantId',
-        'involvedStaffId', 'location', 'medicationAdministrationId', 'otherTypeSpecify', 'participantBookingId', 'policeOfficerName', 'policeReference',
-        'qscReferenceNumber', 'qscReportedAt', 'qscReportingStatus', 'reportableClass', 'reportableClassReason', 'reportedByStaffId', 'restrictivePracticeId',
-        'restrictivePracticeType', 'restrictivePracticeUseVaried', 'serviceType', 'severity', 'shiftId',
-        'shiftNoteId', 'status', 'supportCoordinatorNotified', 'supportCoordinatorNotifiedAt', 'title',
-        'tripInstanceId', 'unapprovedRestrictivePracticeDetails', 'usedWithoutAuthorisation',
-        'wereEmergencyServicesCalled', 'witnesses',
-      ])
-    })
-  })
 })
 
 // PP-28: a 403 (ReadOnly/SupportWorker reaching the save action, per lib/permissions.ts's
@@ -1432,56 +1142,6 @@ describe('IncidentCreatePage — Back', () => {
     expect(back).toHaveAttribute('href', '/incidents')
     expect(back).toHaveClass('min-w-[var(--tap-min)]')
     expect(back.compareDocumentPosition(screen.getByRole('heading', { level: 1 })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-  })
-})
-
-// The page builds the form's starting values from the incident once, when it mounts (it waits for the incident to load). A second effect used to reset the form from
-// every later copy of the incident, so a background refetch (window refocus, the 30 s stale time) replaced what the person had typed with the server's values.
-describe('IncidentCreatePage — editing', () => {
-  const incident = {
-    id: 'incident-1', serviceType: 'None', tripInstanceId: null, incidentType: 'Other', otherTypeSpecify: 'Spilled drink', severity: 'Low', status: 'Draft',
-    title: 'Existing incident', incidentDateTime: '2026-08-01T09:00', location: null, reportedByStaffId: 'staff-1', description: 'Existing description',
-    participantBookingId: null, involvedParticipantId: null, involvedStaffId: null, immediateActionsTaken: null, wereEmergencyServicesCalled: false,
-    emergencyServicesDetails: null, injuries: [], witnesses: [], qscReportingStatus: 'NotRequired', qscReportedAt: null, qscReferenceNumber: null,
-    familyNotified: false, familyNotifiedAt: null,
-    supportCoordinatorNotified: false, supportCoordinatorNotifiedAt: null,
-  }
-
-  it('keeps what was typed when the incident is fetched again', async () => {
-    const user = userEvent.setup()
-    const query = refetchable(incident)
-    mockUseIncident.mockImplementation(() => ({ data: query.useValue() }))
-    renderCreatePage('/incidents/incident-1/edit')
-
-    const title = screen.getByPlaceholderText('Brief incident summary')
-    expect(title).toHaveValue('Existing incident')
-    await user.clear(title)
-    await user.type(title, 'My own title')
-
-    act(() => query.refetchWith({ ...incident, title: 'Changed on the server' }))
-
-    expect(title).toHaveValue('My own title')
-  })
-})
-
-// STAFF-7: editing an id the server does not know says so, instead of "Loading incident…" for ever.
-describe('IncidentCreatePage — editing an unknown incident', () => {
-  it('says it is loading while the incident loads', () => {
-    mockUseIncident.mockReturnValue({ data: undefined, isError: false })
-    renderCreatePage('/incidents/missing/edit')
-    expect(screen.getByRole('status')).toHaveTextContent('Loading incident…')
-  })
-
-  it('says the incident was not found on a 404', () => {
-    mockUseIncident.mockReturnValue({ data: undefined, isError: true, error: { response: { status: 404 } } })
-    renderCreatePage('/incidents/missing/edit')
-    expect(screen.getByText('Incident not found')).toBeInTheDocument()
-  })
-
-  it('offers a retry when the load failed for another reason', () => {
-    mockUseIncident.mockReturnValue({ data: undefined, isError: true, error: { response: { status: 500 } }, refetch: vi.fn() })
-    renderCreatePage('/incidents/missing/edit')
-    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
   })
 })
 
@@ -1989,67 +1649,6 @@ describe('IncidentCreatePage — a support worker is the reporter', () => {
     renderCreatePage({ pathname: '/incidents/new', state: colleagueNote })
 
     expect(screen.getByLabelText('Reported By *')).toHaveValue('Alex Rivera')
-  })
-})
-
-// N1 incident clock: the Compliance step edits the aware time and the reporting deadline; the reason is asked for only when the class leaves its default.
-describe('IncidentCreatePage - incident clock on the Compliance step', () => {
-  const existing = {
-    id: 'incident-1', serviceType: 'None', tripInstanceId: null, incidentType: 'PropertyDamage', otherTypeSpecify: null,
-    severity: 'Low', status: 'Draft', title: 'Existing incident', incidentDateTime: '2026-08-01T09:00',
-    location: null, reportedByStaffId: 'staff-1', description: 'Existing description', reportedByName: 'Alex Rivera',
-    involvedParticipantName: null, qscReportingStatus: 'NotRequired', isOverdue24h: false, createdAt: '2026-08-01T00:00:00Z',
-    participantBookingId: null, involvedParticipantId: null, involvedStaffId: null, involvedStaffName: null,
-    immediateActionsTaken: null, wereEmergencyServicesCalled: false, emergencyServicesDetails: null,
-    witnessNames: null, witnessStatements: null, injuries: [], witnesses: [],
-    qscReportedAt: null, qscReferenceNumber: null,
-    awareAt: '2026-08-01T00:00:00Z', reportableClass: 'None', reportableClassReason: null, notifyDueAt: null, detailedReportDueAt: null,
-    dueCountedWithoutHolidays: false, commissionDetailedReportedAt: null, commissionFinalReportRequested: false, commissionFinalReportedAt: null,
-    timeZoneId: 'Australia/Sydney',
-    reviewedByStaffId: null, reviewedByName: null, reviewedAt: null, reviewNotes: null, correctiveActions: null,
-    resolvedAt: null, familyNotified: false, familyNotifiedAt: null, supportCoordinatorNotified: false,
-    supportCoordinatorNotifiedAt: null, updatedAt: '2026-08-01T09:00:00Z',
-  }
-
-  it('sends the aware time in the provider zone and the stored class back on an unchanged save', async () => {
-    mockUseIncident.mockReturnValue({ data: existing })
-    mockUpdateMutateAsync.mockResolvedValue({ success: true, data: { id: 'incident-1' } })
-    const user = userEvent.setup()
-    renderCreatePage({ pathname: '/incidents/incident-1/edit' })
-
-    await user.click(await screen.findByRole('button', { name: /Review$/i }))
-    await user.click(screen.getByRole('button', { name: /^save$/i }))
-
-    const { data: payload } = mockUpdateMutateAsync.mock.calls[0][0]
-    expect(payload).toEqual(expect.objectContaining({
-      awareAtLocal: '2026-08-01T10:00', reportableClass: 'None', reportableClassReason: undefined,
-      commissionDetailedReportedAt: undefined, commissionFinalReportRequested: false, commissionFinalReportedAt: undefined,
-    }))
-  })
-
-  it('asks for a reason only once the class is moved off its default, and blocks the save without one', async () => {
-    mockUseIncident.mockReturnValue({ data: existing })
-    mockUpdateMutateAsync.mockResolvedValue({ success: true, data: { id: 'incident-1' } })
-    const user = userEvent.setup()
-    renderCreatePage({ pathname: '/incidents/incident-1/edit' })
-
-    await user.click(await screen.findByRole('button', { name: /Compliance/ }))
-    expect(screen.queryByLabelText(/^Reason for the change/)).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('5-day report sent')).not.toBeInTheDocument()
-
-    await openAndSelect(user, 'Reporting deadline', 'Within 24 hours')
-    expect(screen.getByLabelText(/^Reason for the change/)).toHaveAttribute('aria-required', 'true')
-    expect(screen.getByLabelText('5-day report sent')).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: /Review$/i }))
-    await user.click(screen.getByRole('button', { name: /^save$/i }))
-    expect(mockUpdateMutateAsync).not.toHaveBeenCalled()
-
-    await user.click(screen.getByRole('button', { name: /Compliance/ }))
-    await user.type(screen.getByLabelText(/^Reason for the change/), 'Family raised it as serious.')
-    await user.click(screen.getByRole('button', { name: /Review$/i }))
-    await user.click(screen.getByRole('button', { name: /^save$/i }))
-    expect(mockUpdateMutateAsync.mock.calls[0][0].data).toEqual(expect.objectContaining({ reportableClass: 'Within24h', reportableClassReason: 'Family raised it as serious.' }))
   })
 })
 
