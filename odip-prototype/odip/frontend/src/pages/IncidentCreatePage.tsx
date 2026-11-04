@@ -158,9 +158,6 @@ function buildDefaultValues(isEdit: boolean, existingIncident: IncidentDetailDto
       commissionDetailedReportedAt: i.commissionDetailedReportedAt ? i.commissionDetailedReportedAt.slice(0, 16) : '',
       commissionFinalReportRequested: i.commissionFinalReportRequested ?? false,
       commissionFinalReportedAt: i.commissionFinalReportedAt ? i.commissionFinalReportedAt.slice(0, 16) : '',
-      reviewedByStaffId: i.reviewedByStaffId ?? '',
-      reviewNotes: i.reviewNotes ?? '',
-      correctiveActions: i.correctiveActions ?? '',
       familyNotified: i.familyNotified ?? false,
       familyNotifiedAt: i.familyNotifiedAt ? i.familyNotifiedAt.slice(0, 16) : '',
       supportCoordinatorNotified: i.supportCoordinatorNotified ?? false,
@@ -283,12 +280,11 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
   const incidentDateTime = useWatch({ control, name: 'incidentDateTime' })
   const description = useWatch({ control, name: 'description' })
   const witnesses = useWatch({ control, name: 'witnesses' })
-  // UX-01: reportedByStaffId/involvedStaffId/reviewedByStaffId are SearchableSelect, which isn't
+  // UX-01: reportedByStaffId/involvedStaffId are SearchableSelect, which isn't
   // a native input register() can bind to, so it's tracked the same way: watched here, written
   // back via setValue on change.
   const reportedByStaffId = useWatch({ control, name: 'reportedByStaffId' })
   const involvedStaffId = useWatch({ control, name: 'involvedStaffId' })
-  const reviewedByStaffId = useWatch({ control, name: 'reviewedByStaffId' })
   const status = useWatch({ control, name: 'status' })
   const reportableClass = useWatch({ control, name: 'reportableClass' })
   const commissionFinalReportRequested = useWatch({ control, name: 'commissionFinalReportRequested' })
@@ -505,9 +501,6 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
           commissionFinalReportRequested: data.commissionFinalReportRequested ?? false,
           commissionFinalReportedAt: data.commissionFinalReportedAt || undefined,
           qscReferenceNumber: data.qscReferenceNumber || undefined,
-          reviewedByStaffId: data.reviewedByStaffId || undefined,
-          reviewNotes: data.reviewNotes || undefined,
-          correctiveActions: data.correctiveActions || undefined,
           familyNotified: data.familyNotified ?? false,
           familyNotifiedAt: data.familyNotifiedAt || undefined,
           supportCoordinatorNotified: data.supportCoordinatorNotified ?? false,
@@ -626,7 +619,6 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
       rows: [
         { label: 'Status', value: status ? (INCIDENT_STATUS_LABELS[status as IncidentStatus] ?? status) : '—' },
         { label: 'Reporting deadline', value: reportableClass ? (REPORTABLE_CLASS_LABELS[reportableClass as ReportableClass] ?? reportableClass) : '—' },
-        { label: 'Reviewed By', value: reviewedByStaffId ? staffName(reviewedByStaffId) : 'Not reviewed' },
         { label: 'Family Notified', value: familyNotified ? 'Yes' : 'No' },
         { label: 'Support Coordinator Notified', value: supportCoordinatorNotified ? 'Yes' : 'No' },
       ],
@@ -784,10 +776,8 @@ function IncidentWizardForm({ id, existingIncident }: { id?: string; existingInc
             restrictivePracticeUseVaried={existingIncident?.restrictivePracticeUseVaried}
             reportableClass={reportableClass}
             commissionFinalReportRequested={commissionFinalReportRequested}
-            reviewedByStaffId={reviewedByStaffId}
             familyNotified={familyNotified}
             supportCoordinatorNotified={supportCoordinatorNotified}
-            staff={staff}
           />
         )}
 

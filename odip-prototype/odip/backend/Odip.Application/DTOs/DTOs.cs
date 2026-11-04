@@ -2245,7 +2245,7 @@ public record IncidentDetailDto : IncidentListDto
     /// <summary>The provider zone (IANA id) the due lines and the Compliance step are shown in.</summary>
     public string TimeZoneId { get; init; } = string.Empty;
     public Guid? ReviewedByStaffId { get; init; }
-    public string? ReviewedByName { get; init; }
+    public string? ReviewedByName { get; set; }
     public DateTime? ReviewedAt { get; init; }
     public string? ReviewNotes { get; init; }
     public string? CorrectiveActions { get; init; }
@@ -2468,9 +2468,6 @@ public record UpdateIncidentDto : CreateIncidentDto
     public bool? CommissionFinalReportRequested { get; init; }
     [WallClock]
     public DateTime? CommissionFinalReportedAt { get; init; }
-    public Guid? ReviewedByStaffId { get; init; }
-    public string? ReviewNotes { get; init; }
-    public string? CorrectiveActions { get; init; }
     public bool FamilyNotified { get; init; }
     [WallClock]
     public DateTime? FamilyNotifiedAt { get; init; }
@@ -2478,6 +2475,17 @@ public record UpdateIncidentDto : CreateIncidentDto
     [WallClock]
     public DateTime? SupportCoordinatorNotifiedAt { get; init; }
 }
+
+/// <summary>The Admin review of an incident. The reviewer is the caller and the date is the server clock; neither is read from the body.</summary>
+public record RecordIncidentReviewDto
+{
+    public string ReviewNotes { get; init; } = string.Empty;
+    public string? CorrectiveActions { get; init; }
+    public IncidentStatus Status { get; init; }
+}
+
+/// <summary>One change of an incident status, read from the audit trail (never the review text).</summary>
+public record IncidentStatusChangeDto(DateTime At, string? ByName, IncidentStatus? From, IncidentStatus To);
 
 // ── Tenant DTOs ─────────────────────────────────────────────────────────────
 

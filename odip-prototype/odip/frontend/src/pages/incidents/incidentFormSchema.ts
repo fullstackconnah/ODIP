@@ -85,9 +85,6 @@ export const incidentBaseSchema = z.object({
   commissionDetailedReportedAt: z.string().optional(),
   commissionFinalReportRequested: z.boolean().optional(),
   commissionFinalReportedAt: z.string().optional(),
-  reviewedByStaffId: z.string().optional(),
-  reviewNotes: z.string().optional(),
-  correctiveActions: z.string().optional(),
   familyNotified: z.boolean().optional(),
   familyNotifiedAt: z.string().optional(),
   supportCoordinatorNotified: z.boolean().optional(),
@@ -123,8 +120,8 @@ export const STEP_WITNESSES_FIELDS = [
 
 export const STEP_COMPLIANCE_FIELDS = [
   'status', 'awareAt', 'reportableClass', 'reportableClassReason', 'qscReferenceNumber', 'qscReportedAt',
-  'commissionDetailedReportedAt', 'commissionFinalReportRequested', 'commissionFinalReportedAt', 'reviewedByStaffId',
-  'reviewNotes', 'correctiveActions', 'familyNotified', 'familyNotifiedAt',
+  'commissionDetailedReportedAt', 'commissionFinalReportRequested', 'commissionFinalReportedAt',
+  'familyNotified', 'familyNotifiedAt',
   'supportCoordinatorNotified', 'supportCoordinatorNotifiedAt',
 ] as const satisfies readonly (keyof IncidentFormData)[]
 

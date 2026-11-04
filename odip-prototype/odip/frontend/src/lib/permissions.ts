@@ -126,6 +126,13 @@ export function usePermissions() {
     canManageParticipantLifecycle: isSuperAdmin || isAdmin || isCoordinator,
 
     /**
+     * IncidentsController: the review (and the status history) is office-only. Admins and SuperAdmin write it (PUT /incidents/:id/review);
+     * Coordinators read it. Support workers and ReadOnly never receive the fields, so the section is absent for them.
+     */
+    canReadIncidentReview: isSuperAdmin || isAdmin || isCoordinator,
+    canWriteIncidentReview: isSuperAdmin || isAdmin,
+
+    /**
      * SupportWorker can create incidents (their only write action).
      * ReadOnly: false — ReadOnlyMiddleware refuses the save, so the button is hidden.
      */

@@ -7,8 +7,8 @@ const props = (over: Partial<ComplianceStepProps> = {}): ComplianceStepProps => 
   setValue: (() => {}) as ComplianceStepProps['setValue'],
   status: 'Draft', errors: {}, awareAtMax: '2026-11-02T11:30',
   severity: 'Low', incidentType: 'PropertyDamage', isRestrictivePracticeAuthorised: false, restrictivePracticeUseVaried: null,
-  reportableClass: 'None', commissionFinalReportRequested: false, reviewedByStaffId: '',
-  familyNotified: false, supportCoordinatorNotified: false, staff: [],
+  reportableClass: 'None', commissionFinalReportRequested: false,
+  familyNotified: false, supportCoordinatorNotified: false,
   ...over,
 })
 

@@ -330,7 +330,7 @@ public class IncidentReportingClockTests
         using var _d = db;
         var legacy = await AddLegacyReportableAsync(db, reporter, IncidentStatus.Submitted, null);
 
-        await controller.Update(legacy.Id, UpdateDto(legacy) with { ReviewNotes = "Looked at it." }, CancellationToken.None);
+        await controller.Update(legacy.Id, UpdateDto(legacy) with { Title = "Looked at it." }, CancellationToken.None);
 
         Assert.NotNull((await db.IncidentReports.SingleAsync()).DetailedReportDueAt);
         Assert.DoesNotContain(await db.BookingTasks.ToListAsync(), t => t.TaskType == TaskType.IncidentCommissionDetailedReport);
@@ -343,8 +343,8 @@ public class IncidentReportingClockTests
         using var _d = db;
         var legacy = await AddLegacyReportableAsync(db, reporter, IncidentStatus.Submitted, null);
 
-        await controller.Update(legacy.Id, UpdateDto(legacy) with { ReviewNotes = "First look." }, CancellationToken.None);
-        await controller.Update(legacy.Id, UpdateDto(legacy) with { ReviewNotes = "Second look." }, CancellationToken.None);
+        await controller.Update(legacy.Id, UpdateDto(legacy) with { Title = "First look." }, CancellationToken.None);
+        await controller.Update(legacy.Id, UpdateDto(legacy) with { Title = "Second look." }, CancellationToken.None);
 
         Assert.DoesNotContain(await db.BookingTasks.ToListAsync(), t => t.TaskType == TaskType.IncidentCommissionDetailedReport);
     }
@@ -362,13 +362,13 @@ public class IncidentReportingClockTests
     }
 
     [Fact]
-    public async Task Update_ReviewNotesOnly_KeepsTheFiveDayTaskOpen()
+    public async Task Update_TitleOnly_KeepsTheFiveDayTaskOpen()
     {
         var (db, controller, reporter) = Arrange();
         using var _d = db;
         var created = await CreateCriticalAsync(db, controller, reporter.Id);
 
-        await controller.Update(created.Id, UpdateDto(created) with { ReviewNotes = "Reviewed.", Title = "Renamed incident" }, CancellationToken.None);
+        await controller.Update(created.Id, UpdateDto(created) with { Title = "Renamed incident" }, CancellationToken.None);
 
         // The task is still owed and kept in step with the incident: it stays open and takes the new title.
         var task = await db.BookingTasks.SingleAsync(t => t.TaskType == TaskType.IncidentCommissionDetailedReport);
