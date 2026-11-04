@@ -314,6 +314,8 @@ export function toUpdateIncidentDto(i: IncidentDetailDto, patch: Partial<UpdateI
     shiftId: i.shiftId ?? undefined,
     shiftNoteId: i.shiftNoteId ?? undefined,
     status: i.status,
+    // Restore reads a fresh GET and saves at once, so it skips the stale-form check.
+    expectedUpdatedAt: undefined,
     qscReportingStatus: i.qscReportingStatus,
     qscReportedAt: i.qscReportedAt ?? undefined,
     qscReferenceNumber: i.qscReferenceNumber ?? undefined,
