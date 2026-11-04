@@ -12,7 +12,7 @@ import { formatWithTimeZone } from '@/lib/utils'
 import { apiErrorMessages } from '@/lib/shiftPackageErrors'
 import { formatFlaggedCategoryList, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 import { formatMinutesSpan } from '@/pages/rostering/lib/roster'
-import { offRosterMinutes, rosteredInstants } from '../lib/portal'
+import { minutesWords, offRosterMinutes, rosteredInstants } from '../lib/portal'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { breaksLabel, clockLabel, FINISH_STEPS, unpaidBreakMinutes, dosesSummary, REASON_MAX, timeBounds, travelLabel, type FinishStepKey, type TimesField, type TravelField } from './checklist'
 import { PrnRow, RoutineRow } from './DuringSection'
@@ -219,10 +219,9 @@ const early = (m: number) => (m < 0 ? 'early' : 'late')
 
 /** The label for the one box: the start question, the finish question, or both. */
 function timeQuestionLabel({ start, finish }: { start: number | null; finish: number | null }) {
-  const s = start !== null ? `start ${plural(Math.abs(start), 'minute')} ${early(start)}` : ''
-  const f = finish !== null ? `finishing ${plural(Math.abs(finish), 'minute')} ${early(finish)}` : ''
-  if (s && f) return `Why did you ${s} and why are you ${f}? (optional)`
-  return s ? `Why did you ${s}? (optional)` : `Why are you ${f}? (optional)`
+  // A start question (a manual or moved start) takes the general wording; a finish alone names how far off it is.
+  if (start !== null || finish === null) return 'Why are your times off roster? (optional)'
+  return `Why are you finishing ${minutesWords(finish)} ${early(finish)}? (optional)`
 }
 
 /** Step 1, Your times (SHAPE §4): change either time by up to 15 minutes with a reason, correct the breaks, add kilometres. */
@@ -278,11 +277,12 @@ export function TimesStep({ shift, online, now, draft, set, invalid, invalidMess
       {asking && (
         <div className="space-y-1">
           <label htmlFor="finish-time-reason" className="text-sm font-medium">{timeQuestionLabel(asks)}</label>
-          <p id="finish-time-reason-help" className={muted}>Your coordinator sees this. You can leave it empty.</p>
+          <p id="finish-time-reason-help" className={muted}>Your coordinator sees this.</p>
           <textarea
             id="finish-time-reason" rows={3} maxLength={REASON_MAX} className={fieldClass} aria-describedby="finish-time-reason-help"
             value={draft.timeReason} onChange={e => set({ timeReason: e.target.value })}
           />
+          <p className={muted}>{draft.timeReason.length} of {REASON_MAX}</p>
         </div>
       )}
       <section aria-labelledby="finish-breaks" className="space-y-2">
@@ -470,7 +470,7 @@ export function SubmitStep({ shift, draft, noteCount, now, refusals, go, moved, 
       {finishOff !== null && !draft.finishAsked && !draft.timeReason.trim() && (
         <Callout
           tone="info"
-          title={`You're now finishing ${plural(Math.abs(finishOff), 'minute')} ${finishOff < 0 ? 'early' : 'late'}. Add a reason? It's optional.`}
+          title={`You're now finishing ${minutesWords(finishOff)} ${finishOff < 0 ? 'early' : 'late'}. Add a reason? It's optional.`}
           actions={<Button variant="secondary" size="md" onClick={() => go('times')}>Add a reason</Button>}
         />
       )}

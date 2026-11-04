@@ -99,17 +99,17 @@ describe('TimesStep: why off roster (W2)', () => {
 
   it('asks about a start moved to 6 minutes early', () => {
     render(<Times now={new Date('2026-08-17T07:00:00Z')} over={{ startOverride: '2026-08-17T08:54' }} />)
-    expect(screen.getByLabelText('Why did you start 6 minutes early? (optional)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Why are your times off roster? (optional)')).toBeInTheDocument()
   })
 
   it('asks about both in one box', () => {
     render(<Times now={NOW_LATE_8} over={{ startOverride: '2026-08-17T08:54' }} />)
-    expect(screen.getByLabelText('Why did you start 6 minutes early and why are you finishing 8 minutes late? (optional)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Why are your times off roster? (optional)')).toBeInTheDocument()
   })
 
   it('does not ask again about a start that already has its reason', () => {
     render(<Times now={new Date('2026-08-17T07:00:00Z')} start={timeShift({ startTimeReason: 'Early handover' })} over={{ startOverride: '2026-08-17T08:54' }} />)
-    expect(screen.queryByLabelText(/^Why did you start/)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/^Why are your times off roster/)).not.toBeInTheDocument()
   })
 })
 

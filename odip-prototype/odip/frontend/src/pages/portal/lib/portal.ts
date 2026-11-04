@@ -1,4 +1,5 @@
 import { addDays, format, parseISO } from 'date-fns'
+import { plural } from '@/lib/format'
 import type { PortalShiftSummaryDto, ShiftStatus } from '@/api/types'
 import { NIGHT_TYPE_LABELS, RATIO_LABELS } from '@/pages/rostering/lib/roster'
 import { providerLocalToUtcInstant, utcInstantToProviderLocal } from '../shift/shiftTime'
@@ -59,6 +60,14 @@ export const OFF_ROSTER_MINUTES = 5
 export function offRosterMinutes(actualIso: string | Date, rosteredIso: string | Date): number | null {
   const m = Math.round((new Date(actualIso).getTime() - new Date(rosteredIso).getTime()) / 60_000)
   return Math.abs(m) > OFF_ROSTER_MINUTES ? m : null
+}
+
+/** "12 minutes", "1 hour", "1 hour 5 minutes": a late start has no upper limit, so past an hour the words switch to hours. */
+export function minutesWords(minutes: number): string {
+  const m = Math.abs(minutes)
+  if (m < 60) return plural(m, 'minute')
+  const h = Math.floor(m / 60)
+  return m % 60 === 0 ? plural(h, 'hour') : `${plural(h, 'hour')} ${plural(m % 60, 'minute')}`
 }
 
 /** The rostered start and end as instants, read in the provider's zone (the end on the next day for an overnight shift). */

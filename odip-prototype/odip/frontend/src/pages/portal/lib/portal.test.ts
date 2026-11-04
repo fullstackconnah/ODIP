@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { hasEnded, offRosterMinutes, pickCurrentShift, portalStatusLabel, rosteredInstants } from './portal'
+import { hasEnded, minutesWords, offRosterMinutes, pickCurrentShift, portalStatusLabel, rosteredInstants } from './portal'
 import { formatMinutesSpan } from '@/pages/rostering/lib/roster'
 import type { PortalShiftSummaryDto } from '@/api/types'
 
@@ -72,4 +72,8 @@ it('names the minutes off roster only past five whole minutes, signed (early is 
   expect(offRosterMinutes('2026-08-17T09:05:31Z', '2026-08-17T09:00:00Z')).toBe(6)
   expect(offRosterMinutes('2026-08-17T08:54:00Z', '2026-08-17T09:00:00Z')).toBe(-6)
   expect(offRosterMinutes('2026-08-17T08:55:00Z', '2026-08-17T09:00:00Z')).toBeNull()
+})
+
+it('words minutes, switching to hours from 60', () => {
+  expect([12, -12, 1, 60, 65, 120].map(minutesWords)).toEqual(['12 minutes', '12 minutes', '1 minute', '1 hour', '1 hour 5 minutes', '2 hours'])
 })

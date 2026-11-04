@@ -32,7 +32,7 @@ import { HandoverSection, GlanceSection, ContactsSection, MustKnowLine } from '.
 import { DuringSection } from './shift/DuringSection'
 import { FinishFlow } from './shift/FinishFlow'
 import { DoseSheet, type DoseTarget } from './shift/DoseSheet'
-import { dueDoseKeys } from './shift/checklist'
+import { clockLabel, dueDoseKeys } from './shift/checklist'
 import { loadEndDraft } from './shift/endDraft'
 import { requestGeolocation, type GeoCause } from './shift/geolocation'
 import { NoFixSheet, OffSiteSheet } from './shift/LocationSheets'
@@ -507,6 +507,7 @@ export default function PortalShiftDetailPage() {
       {timeCheck != null && (
         <TimeCheckSheet
           minutes={timeCheck}
+          rosteredLabel={clockLabel(shift.startTime)}
           starting={starting}
           error={actionError}
           onStart={async reason => {

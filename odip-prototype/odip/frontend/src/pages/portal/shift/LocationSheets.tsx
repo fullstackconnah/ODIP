@@ -20,11 +20,17 @@ const CAUSE_LINE: Record<GeoCause, string> = {
 const CAN_RETRY: ReadonlySet<GeoCause> = new Set(['denied', 'timeout'])
 
 /** The note box the location sheets and the time check sheet share. The server cuts at the same length, so the box stops there too. */
-export function ReasonField({ id, label, value, onChange, max = REASON_MAX }: { id: string; label: string; value: string; onChange: (v: string) => void; max?: number }) {
+export function ReasonField({ id, label, value, onChange, max = REASON_MAX, hint, autoFocus }: {
+  id: string; label: string; value: string; onChange: (v: string) => void; max?: number
+  /** A helper line under the label, and with it the "n of max" counter (the time check sheet). */
+  hint?: string; autoFocus?: boolean
+}) {
   return (
     <div>
       <label htmlFor={id} className="text-sm font-medium">{label}</label>
-      <textarea id={id} rows={3} maxLength={max} className={fieldClass} value={value} onChange={e => onChange(e.target.value)} />
+      {hint && <p id={`${id}-help`} className="text-xs text-[var(--color-muted-foreground)]">{hint}</p>}
+      <textarea id={id} rows={3} maxLength={max} className={fieldClass} value={value} onChange={e => onChange(e.target.value)} autoFocus={autoFocus} aria-describedby={hint ? `${id}-help` : undefined} />
+      {hint && <p className="text-xs text-[var(--color-muted-foreground)]">{value.length} of {max}</p>}
     </div>
   )
 }
