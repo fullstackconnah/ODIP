@@ -53,7 +53,11 @@ try {
     const context = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, locale: 'en-AU', timezoneId: 'Australia/Sydney', hasTouch: vp.touch, isMobile: vp.touch, colorScheme: 'light', reducedMotion: 'reduce' })
     const page = await context.newPage()
     const opts = { touch: vp.touch }
-    const shot = async (locator, name) => checks.push(checkCropHolds(await cropElement(page, locator, path.join(OUT_DIR, `${vp.name}-${name}.png`), opts)))
+    const shot = async (locator, name, extra = {}) => {
+      const result = await cropElement(page, locator, path.join(OUT_DIR, `${vp.name}-${name}.png`), { ...opts, ...extra })
+      checks.push(checkCropHolds(result))
+      return result
+    }
     await page.route('**/api/v1/auth/dev-users', (route) => route.fulfill({ json: devUsers }))
     await page.route('**/api/v1/auth/dev-login', (route) => route.fulfill({ json: devLogin }))
     await page.goto(`${BASE_URL}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
@@ -134,13 +138,28 @@ try {
     check(vp.name, 'approval: How starts on Email', (await approval.getByLabel('How').inputValue()) === 'Email')
     // The dialog is taller than the 390 viewport, so the crop is the Who agreed box itself: the Agreed by and How selects, then the typed name below.
     const whoBox = approval.locator('section[aria-labelledby="agreed-heading"]')
-    await shot(whoBox, 'approval-agreed-by')
+    // The sticky Cancel / Approve footer must not sit over the box: scroll the dialog so the box is at its top, measure once the crop has settled.
+    const footer = approval.locator('div.sticky.bottom-0')
+    const how = approval.getByLabel('How')
+    const theirName = approval.getByRole('textbox', { name: 'Their name' })
+    const scrollWho = () => whoBox.evaluate((box) => box.scrollIntoView({ block: 'start' }))
+    const measure = (withInput) => async () => {
+      const handles = await Promise.all([footer, how, ...(withInput ? [theirName] : [])].map((l) => l.elementHandle()))
+      return whoBox.evaluate((box, [footerEl, howEl, inputEl]) => ({
+        boxBottom: box.getBoundingClientRect().bottom, footerTop: footerEl.getBoundingClientRect().top,
+        inputBottom: inputEl ? inputEl.getBoundingClientRect().bottom : null, howTop: howEl.getBoundingClientRect().top, howBottom: howEl.getBoundingClientRect().bottom,
+      }), handles)
+    }
+    const checkClear = (label, { measured: m, clip }, withInput) => check(vp.name, `approval ${label}: Who agreed box (and name input) above the footer, How inside the crop`,
+      m.boxBottom <= m.footerTop && (!withInput || m.inputBottom <= m.footerTop) && m.howTop >= clip.y && m.howBottom <= clip.y + clip.height, JSON.stringify({ ...m, clipY: clip.y, clipH: clip.height }))
+    await scrollWho()
+    checkClear('agreed by', await shot(whoBox, 'approval-agreed-by', { during: measure(false) }), false)
     await hitTargets(vp, 'approval dialog', approval)
     await approval.getByLabel('Agreed by').selectOption('other')
-    await approval.getByRole('textbox', { name: 'Their name' }).waitFor({ state: 'visible' })
-    const theirName = approval.getByRole('textbox', { name: 'Their name' })
+    await theirName.waitFor({ state: 'visible' })
     await theirName.fill('Pat Lee')
-    await shot(whoBox, 'approval-someone-else')
+    await scrollWho()
+    checkClear('someone else', await shot(whoBox, 'approval-someone-else', { during: measure(true) }), true)
     check(vp.name, 'approval: someone else shows the typed name in a visible input', (await theirName.inputValue()) === 'Pat Lee' && await theirName.isVisible() && (await whoBox.evaluate((box, input) => box.contains(input), await theirName.elementHandle())))
     await hitTargets(vp, 'approval dialog, someone else', approval)
     check(vp.name, 'approval: no horizontal scroll', await noHScroll(page))
@@ -167,7 +186,10 @@ try {
     await hitTargets(vp, 'public page', page.locator('main'))
     check(vp.name, 'public: no horizontal scroll', await noHScroll(page))
     await page.evaluate(() => window.scrollTo(0, 0))
-    await shot(page.locator('main'), 'public-valid-main')
+    // The header sits above main: widen the crop to it so the crop starts above the h1 (the pad alone is clamped at the page top).
+    const pub = await shot(page.locator('main'), 'public-valid-main', { also: page.locator('header').first() })
+    const h1Top = await page.locator('h1').first().evaluate((el) => el.getBoundingClientRect().top)
+    check(vp.name, 'public: h1 top is at least 8 px inside the crop', h1Top - pub.clip.y >= 8, `h1 top ${Math.round(h1Top)}, crop top ${Math.round(pub.clip.y)}`)
     // The Download PDF icon and label share one row (the link must be inline-flex at every width, not only under a coarse pointer).
     check(vp.name, 'public: Download PDF icon and label share one row', await download.evaluate((link) => {
       const icon = link.querySelector('svg').getBoundingClientRect()
