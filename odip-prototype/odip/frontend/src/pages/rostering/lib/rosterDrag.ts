@@ -32,7 +32,7 @@ export type PendingDrop = { targetId: string; sourceId?: string; staffName: stri
  * `pick` opens the staff picker for a Needs staff shift: the chip's plus, and its menu's "Assign to…" (spec 2026-10-15). `swap` opens the swap picker for an assigned shift: its menu's
  * "Swap with…" (the lead's decision 1, 2026-10-15). `pickingId` is the shift whose picker, either one, is open; the chip rings it.
  */
-export type DropState = { disabled: boolean; pending: PendingDrop | null; pick?: (shift: ShiftDto) => void; swap?: (shift: ShiftDto) => void; pickingId?: string | null; /** The chip menu's Publish (a writer, one Draft shift) and the shifts whose publish is out. */ publish?: (shift: ShiftDto) => void; publishingIds?: ReadonlySet<string> }
+export type DropState = { disabled: boolean; pending: PendingDrop | null; pick?: (shift: ShiftDto) => void; swap?: (shift: ShiftDto) => void; pickingId?: string | null; /** The chip menu's Publish (a writer, one Draft shift) and the shifts whose publish is out. */ publish?: (shift: ShiftDto) => void; publishingIds?: ReadonlySet<string>; /** Select mode (R3): the Draft shifts that can be ticked, the ticked ones, and the toggle. A chip not in `selectable` is inert. */ select?: { ids: ReadonlySet<string>; selectable: ReadonlySet<string>; toggle: (shift: ShiftDto) => void } }
 
 /** Shared by the page with the strip and every puck, so neither is threaded through the grid's rows. Outside a provider nothing is disabled or pending, and no chip has a plus. */
 export const DropStateContext = createContext<DropState>({ disabled: false, pending: null })
@@ -219,11 +219,14 @@ export function publishedShiftSentence(shift: ShiftDto): string {
 }
 
 /** "Published 14 shifts. 9 people notified." and, when a blocking problem kept some back (gap 2), how many stayed in draft. */
-export function publishedSentence(result: PublishWeekResultDto): string {
+export function publishedSentence(result: PublishWeekResultDto, requested?: number): string {
   const kept = result.skipped > 0
     ? ` ${plural(result.skipped, 'shift')} stayed in draft: a rule that can't be overridden stops ${result.skipped === 1 ? 'it' : 'them'}.`
     : ''
-  return `Published ${plural(result.published, 'shift')}. ${plural(result.notified, 'person', 'people')} notified.${kept}`
+  // Chosen shifts someone published, deleted or unstaffed since the pick are left alone by the server (R3).
+  const changed = requested === undefined ? 0 : requested - result.published - result.skipped
+  const left = changed > 0 ? ` ${plural(changed, 'shift')} had changed since you selected ${changed === 1 ? 'it and was' : 'them and were'} left alone.` : ''
+  return `Published ${plural(result.published, 'shift')}. ${plural(result.notified, 'person', 'people')} notified.${kept}${left}`
 }
 
 /** The Replace/Swap prompt's body (the brief, section 10), a sentence a line. */

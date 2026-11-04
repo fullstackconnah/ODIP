@@ -244,10 +244,12 @@ describe('the writes that move a participant’s money', () => {
   it('sends move-staff and publish-week to their endpoints with the whole body', async () => {
     await run(newClient(), useMoveStaff, { fromShiftId: 's-1', toShiftId: 's-2', mode: 'Swap', staffId: 'st-1', expectedToStaffId: 'st-9', overrideReason: 'Sick call', acknowledgedFindingCodes: ['STAFF_ON_LEAVE'] })
     await run(newClient(), usePublishWeek, '2026-08-17')
+    await run(newClient(), usePublishWeek, { weekStart: '2026-08-17', shiftIds: ['s-1', 's-2'] })
 
     expect(calls).toEqual([
       { method: 'post', url: '/rostering/shifts/move-staff', body: { fromShiftId: 's-1', toShiftId: 's-2', mode: 'Swap', staffId: 'st-1', expectedToStaffId: 'st-9', overrideReason: 'Sick call', acknowledgedFindingCodes: ['STAFF_ON_LEAVE'] } },
       { method: 'post', url: '/rostering/weeks/2026-08-17/publish', body: undefined },
+      { method: 'post', url: '/rostering/weeks/2026-08-17/publish', body: { shiftIds: ['s-1', 's-2'] } },
     ])
   })
 

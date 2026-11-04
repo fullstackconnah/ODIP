@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -1005,13 +1006,16 @@ public class RosteringController : ControllerBase
     /// shows, that has someone on it, becomes Published, and each worker on one from the provider's today on is told (ShiftAssigned). A Draft nobody is on stays Draft (counted as unfilled, owner
     /// 2026-10-28: hold until staffed) and goes out at the first publish after someone is put on it. A staffed Draft whose worker now has a Blocking finding stays Draft and is counted as skipped,
     /// as a PUT publishing it alone would be refused. Under the organisation's roster lock: a second publish at the same time waits, finds nothing left, and
-    /// tells nobody twice.
+    /// tells nobody twice. An optional <c>shiftIds</c> body narrows the publish to those Drafts (R3, 2026-11-04); an empty list is refused so it can never mean the whole week.
     /// </summary>
     [HttpPost("weeks/{weekStart}/publish")]
-    public async Task<ActionResult<ApiResponse<PublishWeekResultDto>>> PublishWeek(DateOnly weekStart, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<PublishWeekResultDto>>> PublishWeek(DateOnly weekStart, CancellationToken ct, [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] PublishShiftsRequest? body = null)
     {
         // A SuperAdmin who has not chosen an organisation has no tenant filter: a publish then would reach every organisation's week.
         if (_tenant?.TenantId is not { } tenantId) return BadRequest(ApiResponse<PublishWeekResultDto>.Fail("Choose an organisation to publish its week."));
+        if (body?.ShiftIds is { Count: 0 }) return BadRequest(ApiResponse<PublishWeekResultDto>.Fail("Choose at least one shift to publish."));
+        if (body?.ShiftIds is { Count: > 500 }) return BadRequest(ApiResponse<PublishWeekResultDto>.Fail("Choose 500 shifts or fewer."));
+        var chosen = body?.ShiftIds?.ToHashSet();
         var start = WeekStart(weekStart);
         var end = start.AddDays(6);
         try
@@ -1023,7 +1027,7 @@ public class RosteringController : ControllerBase
                 new object[] { tenantId, (int)ShiftStatus.Draft, start, end }, ct);
             var shown = _db.Participants.Where(Participant.CanReceiveServicesRule).Select(p => p.Id);
             var drafts = await _db.Shifts
-                .Where(s => s.TenantId == tenantId && s.Status == ShiftStatus.Draft && s.ServiceDate >= start && s.ServiceDate <= end && shown.Contains(s.ParticipantId))
+                .Where(s => s.TenantId == tenantId && s.Status == ShiftStatus.Draft && s.ServiceDate >= start && s.ServiceDate <= end && shown.Contains(s.ParticipantId) && (chosen == null || chosen.Contains(s.Id)))
                 .ToListAsync(ct);
             var today = await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
             // Only a draft whose worker's screening has lapsed, who has not started by its day, or who is marked No for its participant can hit a Blocking finding, so only those need the full roster check: one query for every worker, one for the Nos.
