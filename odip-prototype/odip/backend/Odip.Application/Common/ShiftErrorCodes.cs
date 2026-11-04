@@ -13,6 +13,8 @@ public static class ShiftErrorCodes
     public const string ShiftCancelled = "SHIFT_CANCELLED";
     public const string ShiftNotPublished = "SHIFT_NOT_PUBLISHED";
     public const string ShiftNotInProgress = "SHIFT_NOT_IN_PROGRESS";
+    /// <summary>A location reason was sent for a Start that was at the place (or never checked), so there is nothing to explain.</summary>
+    public const string ShiftLocationReasonNotNeeded = "SHIFT_LOCATION_REASON_NOT_NEEDED";
     public const string ShiftNoteRequired = "SHIFT_NOTE_REQUIRED";
     public const string ShiftActualStartInFuture = "SHIFT_ACTUAL_START_IN_FUTURE";
     public const string ShiftStartTooEarly = "SHIFT_START_TOO_EARLY";

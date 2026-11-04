@@ -394,6 +394,14 @@ public class PortalController : ControllerBase
                 $"It's too early to start this shift. You can start from {openClock} on {openDay}.", ShiftErrorCodes.ShiftStartTooEarly));
         }
 
+        // The location check (location PR2): the coordinates live only in `dto` here. They go into Evaluate by value and nothing keeps them - the
+        // completion gets the answer, the distance and the accuracy, never a latitude or longitude. It runs after every guard above and cannot fail the Start.
+        var place = shift.ServiceLocationId is { } placeId
+            ? await _db.ServiceLocations.AsNoTracking().FirstOrDefaultAsync(l => l.Id == placeId && l.TenantId == shift.TenantId, ct)
+            : null;
+        var check = LocationCheck.Evaluate(place, dto.Latitude, dto.Longitude, dto.AccuracyMetres, dto.GeolocationDeclined, queued: dto.StartedAt is not null);
+        var typedReason = check.Status is LocationCheckStatus.Unavailable or LocationCheckStatus.NotAtLocation ? LocationCheck.CleanReason(dto.LocationReason) : null;
+
         var completion = new ShiftCompletion
         {
             Id = Guid.NewGuid(),
@@ -401,9 +409,12 @@ public class PortalController : ControllerBase
             ShiftId = shift.Id,
             ActualStart = startStamp,
             TimeZoneId = timeZoneId,
-            StartLatitude = dto.Latitude,
-            StartLongitude = dto.Longitude,
             GeolocationDeclined = dto.GeolocationDeclined,
+            LocationCheck = check.Status,
+            LocationDistanceMetres = check.DistanceMetres,
+            LocationAccuracyMetres = check.AccuracyMetres,
+            LocationReason = typedReason ?? check.DefaultReason,
+            LocationCheckedAt = startStamp,
             StartWasManual = false,
             SubmittedByUserId = shift.UserId!.Value,
             StartedAt = now,
@@ -428,6 +439,31 @@ public class PortalController : ControllerBase
             return Conflict(ApiResponse<PortalShiftDetailDto>.Fail(
                 "This shift can't be started right now.", ShiftErrorCodes.ShiftNotStartable));
         }
+        return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
+    }
+
+    /// <summary>
+    /// The worker's reason for starting away from the place, asked AFTER Start because only the server knows the distance. Text only, never a coordinate.
+    /// The shift's own worker (the same 404 ownership check as Start); it saves on the active completion while the shift is InProgress and the check was
+    /// NotAtLocation or Unavailable. Saving again overwrites.
+    /// </summary>
+    [HttpPost("shifts/{id:guid}/location-reason")]
+    public async Task<ActionResult<ApiResponse<PortalShiftDetailDto>>> SaveLocationReason(
+        Guid id, [FromBody] LocationReasonDto dto, CancellationToken ct)
+    {
+        var (shift, error) = await ResolveOwnedShiftAsync(id, ct);
+        if (error is not null) return error;
+
+        if (shift!.Status != ShiftStatus.InProgress)
+            return Conflict(ApiResponse<PortalShiftDetailDto>.Fail("This shift isn't in progress.", ShiftErrorCodes.ShiftNotInProgress));
+
+        var completion = await _db.ShiftCompletions.FirstOrDefaultAsync(c => c.ShiftId == shift.Id && c.IsActive, ct);
+        if (completion is null || completion.LocationCheck is not (LocationCheckStatus.NotAtLocation or LocationCheckStatus.Unavailable))
+            return Conflict(ApiResponse<PortalShiftDetailDto>.Fail("There's nothing to explain for this start.", ShiftErrorCodes.ShiftLocationReasonNotNeeded));
+
+        completion.LocationReason = LocationCheck.CleanReason(dto.Reason);
+        completion.UpdatedAt = NowUtc;
+        await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<PortalShiftDetailDto>.Ok(await BuildShiftDetailDtoAsync(shift, ct)));
     }
 
@@ -646,8 +682,7 @@ public class PortalController : ControllerBase
         completion.HandoverText = handoverText;
         completion.NothingToHandOver = dto.NothingToHandOver;
         completion.NothingToNoteConfirmed = dto.NothingToNote && !hasNote;
-        completion.EndLatitude = dto.Latitude;
-        completion.EndLongitude = dto.Longitude;
+        // Finish no longer asks for the phone's location, and any latitude or longitude an older client still sends is ignored (owner, 2026-11-04).
         completion.GeolocationDeclined = completion.GeolocationDeclined || dto.GeolocationDeclined;
 
         var (rosteredStartUtc, rosteredEndUtc) = ShiftVarianceCalculator.ResolveRosteredTimesUtc(shift, completion.TimeZoneId);

@@ -217,7 +217,7 @@ public static class ShiftCompletionMapper
             c.OriginalActualStart is not null || c.OriginalActualEnd is not null,
             c.OriginalActualStart, c.OriginalActualEnd, c.TimeAdjustmentReason, c.Kilometres,
             c.PreShiftTravelMinutes, c.PreShiftTravelKilometres, c.PostShiftTravelMinutes, c.PostShiftTravelKilometres, c.AnythingToReport,
-            c.SentFromOffline);
+            c.SentFromOffline, c.LocationCheck, c.LocationDistanceMetres, c.LocationAccuracyMetres, c.LocationReason);
     }
 
     /// <summary>
