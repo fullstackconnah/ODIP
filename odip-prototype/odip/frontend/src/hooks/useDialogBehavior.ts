@@ -152,7 +152,9 @@ export function useDialogBehavior({
     latest.current = { onClose, closeOnEscape }
   })
 
-  useEffect(() => {
+  // A layout effect, not a passive one: the layer must be on the stack the moment its dialog is in the DOM, or an Escape that
+  // lands in that gap (a test's findByRole under CPU load, a fast keypress) is lost.
+  useLayoutEffect(() => {
     if (!open) return
     const layer: Layer = {
       container: containerRef,
