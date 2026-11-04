@@ -99,6 +99,11 @@ export interface PayrollShiftDto {
   sentAt: string | null
   /** Send missing would queue this shift. */
   sendable: boolean
+  /** What Employment Hero is paid for (instants): the actual times, or the rostered ones while extra time is held. */
+  paidStart: string
+  paidEnd: string | null
+  /** True when unapproved extra time is held at rostered hours. */
+  extraTimeHeld: boolean
 }
 export interface PayrollWorkerDto { userId: string; name: string; linked: boolean; rosteredMinutes: number; paidMinutes: number; shifts: PayrollShiftDto[] }
 export interface PayrollCheckDto {

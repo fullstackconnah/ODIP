@@ -187,6 +187,28 @@ public class EmploymentHeroPayrollControllerTests
     }
 
     [Theory]
+    [InlineData(ExtraTimeDecision.Pending, true, 360)]     // held at rostered hours: 09:00-15:00
+    [InlineData(ExtraTimeDecision.Declined, true, 360)]
+    [InlineData(ExtraTimeDecision.Approved, false, 400)]   // actual 08:40-15:20
+    public async Task The_check_shows_the_paid_window_and_holds_unapproved_extra_time_at_rostered_hours(ExtraTimeDecision decision, bool held, int paidMinutes)
+    {
+        var (db, tenant) = await OrgAsync();
+        await using var _ = db;
+        var sam = await EhTimesheetFixture.WorkerAsync(db, tenant, "42");
+        var (_, c) = await EhTimesheetFixture.ApprovedShiftAsync(db, tenant, sam, new DateOnly(2026, 10, 14), Nine, Three);
+        c.ActualStart = c.ActualStart.AddMinutes(-20);
+        c.ActualEnd = c.ActualEnd!.Value.AddMinutes(20);
+        (c.VarianceMinutesStart, c.VarianceMinutesEnd, c.ExtraTime) = (-20, 20, decision);
+        await db.SaveChangesAsync();
+
+        var shift = Data(await Controller(db, tenant, new StubHttpHandler()).Check(From, To, CancellationToken.None)).Workers.Single().Shifts.Single();
+
+        Assert.Equal((held, paidMinutes), (shift.ExtraTimeHeld, shift.PaidMinutes));
+        Assert.Equal(held ? c.ActualStart.AddMinutes(20) : c.ActualStart, shift.PaidStart);
+        Assert.Equal(held ? c.ActualEnd.Value.AddMinutes(-20) : c.ActualEnd, shift.PaidEnd);
+    }
+
+    [Theory]
     [InlineData("2026-10-19", "2026-10-06")]
     [InlineData("2026-08-01", "2026-10-19")]
     public async Task A_range_over_62_days_or_backwards_is_refused(string from, string to)

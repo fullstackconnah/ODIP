@@ -14,15 +14,17 @@ import { TextField } from '@/components/TextField'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import {
   useCompletions, useCompletion, useApproveCompletion, useReturnCompletion, useApproveCompletionsBatch, useStaff,
-  useEditCompletionTravel, usePlanPricingSettings, useSetBreakKind,
+  useEditCompletionTravel, usePlanPricingSettings, useSetBreakKind, useDecideExtraTime,
 } from '@/api/hooks'
-import type { CompletionQueueItemDto, ShiftStatus, ShiftCompletionDto, ApproveBatchResultDto } from '@/api/types'
+import type { CompletionQueueItemDto, ShiftStatus, ShiftCompletionDto, ApproveBatchResultDto, ExtraTimeChoice, ExtraTimeDecision } from '@/api/types'
 import { formatDateAu, formatWithTimeZone, extractErrorMessage } from '@/lib/utils'
 import { formatVarianceMinutes } from './lib/roster'
 import { formatServiceDate, plural } from '@/lib/format'
 import { unbroken } from '@/lib/intakeBooking'
 import { Button } from '@/components/Button'
 import { ToggleGroup } from '@/components/ToggleGroup'
+import { Modal } from '@/components/Modal'
+import { formatDuration } from '@/lib/planBlocks'
 import { firstNameOf as firstName } from '@/lib/greeting'
 import { TONE } from '@/lib/tone'
 import { NumberField } from '@/components/NumberField'
@@ -44,6 +46,33 @@ function varianceBadgeClass(isOutlier: boolean): string {
   return isOutlier
     ? 'bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]'
     : 'bg-[var(--color-primary-fixed)] text-[var(--color-on-primary-fixed)]'
+}
+
+const EXTRA_TIME_LABEL: Record<ExtraTimeDecision, string> = { Pending: 'Extra time to decide', Approved: 'Extra time paid', Declined: 'Extra time not paid' }
+const EXTRA_TIME_CHOICE: Record<ExtraTimeDecision, ExtraTimeChoice | ''> = { Pending: '', Approved: 'approve', Declined: 'decline' }
+const SYNC_WINDOW_DAYS = 62   // the sender's change window (EmploymentHeroTimesheetSender.ChangeWindowDays)
+
+const spanMinutes = (from: string, to: string) => Math.round((Date.parse(to) - Date.parse(from)) / 60000)
+
+/** Pay the actual times or the rostered hours. No option is checked until the coordinator picks; the caller says what picking does. */
+function ExtraTimeChoiceGroup({ row, value, onChange, disabled, saving }: {
+  row: CompletionQueueItemDto; value: ExtraTimeChoice | ''; onChange: (choice: ExtraTimeChoice) => void; disabled?: boolean; saving?: ExtraTimeChoice | null
+}) {
+  const actual = row.actualEnd ? ` (${formatDuration(spanMinutes(row.actualStart, row.actualEnd))})` : ''
+  const rostered = ` (${formatDuration(spanMinutes(row.rosteredStart, row.rosteredEnd))})`
+  return (
+    <ToggleGroup
+      ariaLabel="Extra time"
+      value={value}
+      onChange={key => onChange(key as ExtraTimeChoice)}
+      disabled={disabled}
+      className="flex-wrap"
+      options={[
+        { key: 'approve', label: saving === 'approve' ? 'Saving…' : `Pay actual time${actual}` },
+        { key: 'decline', label: saving === 'decline' ? 'Saving…' : `Pay rostered hours${rostered}` },
+      ]}
+    />
+  )
 }
 
 function rosteredVsActual(row: CompletionQueueItemDto) {
@@ -262,6 +291,9 @@ export default function CompletionReviewPage() {
   const [batchConfirmOpen, setBatchConfirmOpen] = useState(false)
   const [travelEditing, setTravelEditing] = useState(false)
   const [kindError, setKindError] = useState(false)
+  const [extraChoice, setExtraChoice] = useState<ExtraTimeChoice | ''>('')   // the Approve dialog's optional extra-time choice
+  const [decideTarget, setDecideTarget] = useState<CompletionQueueItemDto | null>(null)
+  const [decideError, setDecideError] = useState(false)
   const [batchResults, setBatchResults] = useState<ApproveBatchResultDto[] | null>(null)
 
   const detailShiftId = approveTarget?.shiftId ?? returnTarget?.shiftId
@@ -270,6 +302,7 @@ export default function CompletionReviewPage() {
   const { data: pricing } = usePlanPricingSettings(canReviewCompletions)
   const approveCompletion = useApproveCompletion()
   const setBreakKind = useSetBreakKind()
+  const decideExtraTime = useDecideExtraTime()
   const returnCompletion = useReturnCompletion()
   const approveBatch = useApproveCompletionsBatch()
 
@@ -283,6 +316,7 @@ export default function CompletionReviewPage() {
 
   function closeApprove() {
     setKindError(false)
+    setExtraChoice('')
     setApproveTarget(null)
     setActionError(null)
     setTravelEditing(false)
@@ -298,11 +332,27 @@ export default function CompletionReviewPage() {
     if (!approveTarget) return
     setActionError(null)
     try {
-      await approveCompletion.mutateAsync(approveTarget.shiftId)
+      await approveCompletion.mutateAsync(extraChoice ? { shiftId: approveTarget.shiftId, extraTime: extraChoice } : approveTarget.shiftId)
       closeApprove()
     } catch (err) {
       setActionError(extractErrorMessage(err, 'Could not approve this shift. Please try again.'))
     }
+  }
+
+  // Saves at once on the tap; a failure keeps the old choice on screen.
+  async function decide(decision: ExtraTimeChoice) {
+    if (!decideTarget) return
+    setDecideError(false)
+    try {
+      const saved = await decideExtraTime.mutateAsync({ shiftId: decideTarget.shiftId, decision })
+      setDecideTarget({ ...decideTarget, extraTime: saved.extraTime ?? decideTarget.extraTime })
+    } catch { setDecideError(true) }
+  }
+
+  function closeDecide() {
+    if (decideExtraTime.isPending) return
+    setDecideError(false)
+    setDecideTarget(null)
   }
 
   async function handleReturnConfirm() {
@@ -355,6 +405,9 @@ export default function CompletionReviewPage() {
           {row.returnCount > 0 && (
             <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${TONE.neutral.solid}`}>Returned {plural(row.returnCount, 'time')}</span>
           )}
+          {row.extraTime && (
+            <span className={`inline-block text-xs px-2 py-0.5 rounded-full ${TONE.neutral.solid}`}>{EXTRA_TIME_LABEL[row.extraTime]}</span>
+          )}
           <IncidentIndicator shiftId={row.shiftId} />
         </div>
       ),
@@ -369,6 +422,13 @@ export default function CompletionReviewPage() {
             </Button>
             <Button size="sm" onClick={() => setApproveTarget(row)} aria-label={`Approve ${row.staffName} with ${row.participantName} on ${formatServiceDate(row.serviceDate)}`}>
               Approve
+            </Button>
+          </div>
+        ) : row.status === 'Completed' && row.extraTime ? (
+          // Decided later: the shift is already approved, so this is the one place to pay the actual times or the rostered hours.
+          <div className="flex justify-end">
+            <Button variant="secondary" size="sm" onClick={() => setDecideTarget(row)} aria-label={`Extra time for ${row.staffName} with ${row.participantName} on ${formatServiceDate(row.serviceDate)}`}>
+              Extra time
             </Button>
           </div>
         ) : null
@@ -469,6 +529,13 @@ export default function CompletionReviewPage() {
               <WorkerAnswers c={detail} canEditTravel={pricing?.claimProviderTravel === true} onTravelOpenChange={setTravelEditing}
                 breaks={{ first: firstName(approveTarget.participantName), staffFirst: firstName(approveTarget.staffName), pendingKind: setBreakKind.isPending, onChange: changeKind }} />
             )}
+            {approveTarget?.extraTime === 'Pending' && (
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium">Extra time</p>
+                <ExtraTimeChoiceGroup row={approveTarget} value={extraChoice} onChange={setExtraChoice} />
+                <p className="text-xs text-[var(--color-muted-foreground)]">If you don't choose now, Employment Hero gets the rostered hours until you do.</p>
+              </div>
+            )}
             {kindError && <p role="alert" className="text-xs text-[var(--color-destructive)]">Couldn't change the break. Try again.</p>}
             {detail && <IncidentsList incidents={detail.incidents} />}
             {travelEditing && <p className="text-xs text-[var(--color-muted-foreground)]">Save or cancel the travel change first.</p>}
@@ -476,6 +543,28 @@ export default function CompletionReviewPage() {
           </div>
         }
       />
+
+      <Modal
+        open={decideTarget !== null}
+        onClose={closeDecide}
+        title="Extra time"
+        size="sm"
+        hideClose={decideExtraTime.isPending}
+        footer={<div className="flex justify-end"><Button variant="secondary" onClick={closeDecide} disabled={decideExtraTime.isPending}>Done</Button></div>}
+      >
+        {decideTarget?.extraTime && (
+          <div className="space-y-3 text-sm">
+            <p>{decideTarget.staffName} with {decideTarget.participantName} on {unbroken(formatServiceDate(decideTarget.serviceDate))}.</p>
+            <p className="text-xs font-medium">{EXTRA_TIME_LABEL[decideTarget.extraTime]}</p>
+            <ExtraTimeChoiceGroup row={decideTarget} value={EXTRA_TIME_CHOICE[decideTarget.extraTime]} onChange={decide}
+              disabled={decideExtraTime.isPending} saving={decideExtraTime.isPending ? decideExtraTime.variables?.decision : null} />
+            {decideError && <p role="alert" className="text-xs text-[var(--color-destructive)]">Couldn't save. Try again.</p>}
+            {(Date.now() - Date.parse(decideTarget.serviceDate)) / 86_400_000 > SYNC_WINDOW_DAYS && (
+              <p className="text-xs text-[var(--color-muted-foreground)]">Employment Hero won't be updated: this shift is more than {SYNC_WINDOW_DAYS} days old.</p>
+            )}
+          </div>
+        )}
+      </Modal>
 
       <ConfirmDialog
         open={returnTarget !== null}

@@ -5,6 +5,7 @@ import { UNCLAIMED_SHIFTS_KEY } from './claimHub'
 import { awaitsData } from '@/lib/queryPhase'
 import { providerSettingsQuery } from './catalogue'
 import type {
+  ExtraTimeChoice,
   RosterBoardDto,
   RosterFillDto,
   ShiftDto,
@@ -339,14 +340,34 @@ export function useCompletion(shiftId: string | undefined) {
 export function useApproveCompletion({ requireClean = false }: { requireClean?: boolean } = {}) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (shiftId: string) => apiPost<ShiftCompletionDto>(`/rostering/shifts/${shiftId}/completion/approve${requireClean ? '?requireClean=true' : ''}`),
-    onSuccess: (_, shiftId) => {
+    // A bare id approves as before; `extraTime` rides along only when the coordinator chose in the dialog (the server leaves extra time Pending otherwise).
+    mutationFn: (v: string | { shiftId: string; extraTime?: ExtraTimeChoice }) => {
+      const { shiftId, extraTime } = typeof v === 'string' ? { shiftId: v, extraTime: undefined } : v
+      const url = `/rostering/shifts/${shiftId}/completion/approve${requireClean ? '?requireClean=true' : ''}`
+      return extraTime ? apiPost<ShiftCompletionDto>(url, { extraTime }) : apiPost<ShiftCompletionDto>(url)
+    },
+    onSuccess: (_, v) => {
+      const shiftId = typeof v === 'string' ? v : v.shiftId
       qc.invalidateQueries({ queryKey: ['rostering-completions'] })
       qc.invalidateQueries({ queryKey: ['rostering-completion', shiftId] })
       qc.invalidateQueries({ queryKey: ['rostering-completion-review', shiftId] })
       qc.invalidateQueries({ queryKey: ['roster-board'] })
       qc.invalidateQueries({ queryKey: UNCLAIMED_SHIFTS_KEY })   // an approved completion is a completed shift the claim run can now take
       refreshBudgetFigures(qc)   // an approved completion is a completed shift: booked ahead becomes pending
+    },
+  })
+}
+
+/** A coordinator decides (or changes) the extra time on a PendingReview or Completed shift: pay the actual times, or the rostered hours. Employment Hero follows by itself. */
+export function useDecideExtraTime() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ shiftId, decision }: { shiftId: string; decision: ExtraTimeChoice }) =>
+      apiPost<ShiftCompletionDto>(`/rostering/shifts/${shiftId}/completion/extra-time`, { decision }),
+    onSuccess: (_, { shiftId }) => {
+      qc.invalidateQueries({ queryKey: ['rostering-completions'] })
+      qc.invalidateQueries({ queryKey: ['rostering-completion', shiftId] })
+      qc.invalidateQueries({ queryKey: ['employment-hero', 'payroll'] })   // the Payroll check shows the paid window
     },
   })
 }
