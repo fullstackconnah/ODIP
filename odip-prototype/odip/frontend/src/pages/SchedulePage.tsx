@@ -20,6 +20,7 @@ import {
   formatDate, tripAccentText,
 } from './schedule'
 import { IntakeVisitsSection } from './schedule/IntakeVisitsSection'
+import { useModuleVisibility } from '@/api/hooks'
 import { retryingAfterError } from '@/lib/queryPhase'
 import type {
   ScheduleTripDto, ScheduleStaffDto, ScheduleVehicleDto,
@@ -49,6 +50,7 @@ export default function SchedulePage() {
   const { canWrite, canManageParticipantLifecycle } = usePermissions()
   const queryClient = useQueryClient()
   const pageQuery = useScheduleOverview()
+  const visibility = useModuleVisibility()
   const { data, isLoading, refetch } = pageQuery
   const [expandedStaff, setExpandedStaff] = useState<Set<string>>(new Set())
   const [sectionStaff, setSectionStaff] = useState(true)
@@ -116,6 +118,7 @@ export default function SchedulePage() {
 
   const { trips, staff, vehicles } = data
   const tripCount = trips?.length || 0
+  const tripsOff = !visibility.isError && visibility.data?.hiddenTrips === true && tripCount === 0
 
   // Resource health stats
   const staffAssigned = staff?.filter((s: ScheduleStaffDto) => s.tripStatuses?.some((ts: ScheduleStaffTripStatusDto) => ts.status === 'Assigned')).length || 0
@@ -135,7 +138,7 @@ export default function SchedulePage() {
       <PageHeader title="Schedule" />
 
       {/* ── Summary strip (one line: trips + resource health) ── */}
-      <ScheduleSummary
+      {!tripsOff && <ScheduleSummary
         tripCount={tripCount}
         staffAssigned={staffAssigned}
         staffTotal={staff?.length || 0}
@@ -143,20 +146,20 @@ export default function SchedulePage() {
         vehiclesTotal={vehicles?.length || 0}
         conflicts={conflictsCount}
         utilization={utilization}
-      />
+      />}
 
       {canManageParticipantLifecycle && <IntakeVisitsSection />}
 
       {/* ── Empty State ── */}
-      {tripCount === 0 ? (
+      {tripCount === 0 ? (tripsOff && canManageParticipantLifecycle ? null : (
         <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)]">
           <EmptyState
             icon={CalendarRange}
-            title="No trips scheduled"
-            description="Create a trip first to see the schedule overview."
+            title={tripsOff ? 'Nothing scheduled' : 'No trips scheduled'}
+            description={tripsOff ? 'Trips and holidays are switched off for your organisation.' : 'Create a trip first to see the schedule overview.'}
           />
         </div>
-      ) : (
+      )) : (
         /* ── Schedule Grid Table ── */
         <div className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-card)]">
           <p className="px-[var(--cell-px)] pt-2 text-[13px] text-[var(--color-muted-foreground)] md:hidden">Swipe to see all trips →</p>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useModuleVisibility } from '@/api/hooks'
 import { useProviderSettings } from '@/api/hooks/catalogue'
 import { usePlanPricingSettings } from '@/api/hooks/plan-pricing'
 import { AnnouncementRegion } from '@/components/AnnouncementRegion'
@@ -12,6 +13,7 @@ import { queryPhase } from '@/lib/queryPhase'
 export default function OrganisationSetupSection() {
   const provider = useProviderSettings(true, 'always')
   const pricing = usePlanPricingSettings()
+  const visibility = useModuleVisibility()
   const { refetch: refreshPricing } = pricing
   // The app caches fresh settings for 30 seconds; a return to this guide still reads current facts.
   useEffect(() => { void refreshPricing() }, [refreshPricing])
@@ -21,6 +23,12 @@ export default function OrganisationSetupSection() {
   const pricingPhase = queryPhase(pricing)
   const detailsRecorded = organisationDetailsRecorded(provider.data)
   const rows = [
+    {
+      title: 'What you run', purpose: 'Choose whether your organisation runs trips and holidays. Turning them off tidies the menu; nothing is deleted.',
+      destination: 'workspace-visibility', action: 'Open workspace visibility', phase: queryPhase(visibility),
+      status: visibility.data?.hiddenTrips === true ? 'Trips and holidays hidden' : 'Trips and holidays shown',
+      recorded: false, noun: 'workspace visibility settings', retry: () => visibility.refetch(),
+    },
     {
       title: 'Organisation details', purpose: 'Review the legal name and address used on your documents.',
       destination: 'organisation', action: 'Open organisation profile', phase: providerPhase,

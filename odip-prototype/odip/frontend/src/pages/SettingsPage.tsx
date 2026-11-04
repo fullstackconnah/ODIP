@@ -36,7 +36,7 @@ import SafetyChecksSection from '@/pages/settings/SafetyChecksSection'
 import PublicHolidaysSection from '@/pages/settings/PublicHolidaysSection'
 import SettingsNav from '@/pages/settings/SettingsNav'
 import { SettingsSection, type SectionFrame } from '@/pages/settings/SettingsSection'
-import { requestedSection, visibleSections, type SectionDef, type SectionKey } from '@/pages/settings/settingsSections'
+import { railSections, requestedSection, visibleSections, type SectionDef, type SectionKey } from '@/pages/settings/settingsSections'
 import SupportCatalogueSection from '@/pages/settings/SupportCatalogueSection'
 import TenantDetailView from '@/pages/settings/TenantDetailView'
 import TenantFormPanel from '@/pages/settings/TenantFormPanel'
@@ -182,7 +182,7 @@ export default function SettingsPage() {
       <div className="md:grid md:grid-cols-[13rem_minmax(0,1fr)] md:items-start md:gap-8">
         {!sectionScreen && (
           <SettingsNav
-            sections={visible}
+            sections={railSections(perms)}
             current={belowMd ? null : key}
             noOrganisation={perms.isSuperAdmin && !perms.hasOrganisation}
             returnFocusTo={key === null && switched ? shown.from : null}

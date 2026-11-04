@@ -8,7 +8,7 @@ import { SETTINGS_PERMS } from '@/test/fixtures/settingsPermissions'
 import SettingsPage from './SettingsPage'
 
 const { mockUseAuthConfig, mockUsePermissions, mockWorkspaceRead, mockUseEventTemplates, settingsData, mockSyncMutate, holidayRows, screenSize } = vi.hoisted(() => ({
-  mockWorkspaceRead: vi.fn().mockReturnValue({ data: { hiddenAccommodation: false, hiddenVehicles: false }, isError: false, isFetching: false }),
+  mockWorkspaceRead: vi.fn().mockReturnValue({ data: { hiddenAccommodation: false, hiddenVehicles: false, hiddenTrips: false }, isError: false, isFetching: false }),
   mockUsePermissions: vi.fn(),
   // GET /auth/config: Microsoft sign-in is off unless a test says otherwise.
   mockUseAuthConfig: vi.fn(() => ({ data: { microsoft: false, microsoftStartUrl: null } as { microsoft: boolean; microsoftStartUrl: string | null } | undefined, isPending: false })),
@@ -714,7 +714,8 @@ describe('SettingsPage workspace visibility boundary', () => {
     mockUsePermissions.mockReturnValue(perms)
     renderSettingsPage('/settings?section=workspace-visibility')
     expect(screen.queryByRole('heading', { name: 'Workspace visibility' })).not.toBeInTheDocument()
-    expect(mockWorkspaceRead).not.toHaveBeenCalled()
+    // The read feeds the rail (trips off drops two sections); the section itself, with its boxes and Save, must not mount.
+    expect(screen.queryByRole('checkbox', { name: 'Show Vehicles' })).not.toBeInTheDocument()
   })
   it('keeps the mobile Back link behind the existing unsaved guard', async () => {
     screenSize.belowMd = true

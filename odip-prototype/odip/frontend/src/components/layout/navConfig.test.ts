@@ -264,8 +264,29 @@ describe('navConfig — the bottom bar', () => {
   })
 })
 
+describe('trips and holidays switched off', () => {
+  const off = { hiddenAccommodation: true, hiddenVehicles: true, hiddenTrips: true }
+  const paths = (entries: ReturnType<typeof resolveNav>) => entries.flatMap(e => e.kind === 'group' ? e.children.map(c => c.to) : [e.leaf.to])
+  it('hides Trips and Bookings only, never Schedule or Tasks', () => {
+    const after = paths(resolveNav(navItems, everything, off))
+    expect(after).not.toContain('/trips')
+    expect(after).not.toContain('/bookings')
+    expect(after).toContain('/schedule')
+    expect(after).toContain('/tasks')
+    expect(paths(resolveNav(navItems, everything, { ...off, hiddenTrips: false }))).toContain('/trips')
+    expect(paths(resolveNav(navItems, everything, { hiddenAccommodation: false, hiddenVehicles: false } as never))).toContain('/bookings')
+  })
+  it('relabels what is left of the group "Schedule", and collapses to a Schedule link in bar slot 2', () => {
+    const group = resolveNav(navItems, everything, { ...off, hiddenVehicles: false }).find(e => e.kind === 'group' && e.group.id === 'trips')
+    expect(group).toMatchObject({ kind: 'group', group: { label: 'Schedule' } })
+    const link = resolveNav(navItems, everything, off).find(e => e.kind === 'link' && e.leaf.to === '/schedule')
+    expect(link).toMatchObject({ kind: 'link', bar: { order: 2 } })
+    expect(toBarItem(link!, '/', NO_COUNTS).label).toBe('Schedule')
+  })
+})
+
 describe('optional workspace presentation visibility', () => {
-  const hidden = { hiddenAccommodation: true, hiddenVehicles: true }
+  const hidden = { hiddenAccommodation: true, hiddenVehicles: true, hiddenTrips: false }
   const paths = (entries: ReturnType<typeof resolveNav>) => entries.flatMap(e => e.kind === 'group' ? e.children.map(c => c.to) : [e.leaf.to])
   it('moves only the two optional destinations out of primary navigation', () => {
     const before = paths(resolveNav(navItems, everything))
@@ -276,7 +297,7 @@ describe('optional workspace presentation visibility', () => {
     expect(isLeafVisible(navLeaves.find(l => l.to === '/vehicles')!, everything)).toBe(true)
   })
   it('restores both links when visible and never changes role permissions', () => {
-    expect(paths(resolveNav(navItems, everything, { hiddenAccommodation: false, hiddenVehicles: false }))).toEqual(paths(resolveNav(navItems, everything)))
+    expect(paths(resolveNav(navItems, everything, { hiddenAccommodation: false, hiddenVehicles: false, hiddenTrips: false }))).toEqual(paths(resolveNav(navItems, everything)))
     const worker = accessFor('SupportWorker')
     expect(paths(resolveNav(navItems, worker, hidden))).toEqual(paths(resolveNav(navItems, worker)))
   })

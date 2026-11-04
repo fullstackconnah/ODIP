@@ -269,6 +269,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<bool>("HiddenAccommodation")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("HiddenTrips")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("HiddenVehicles")
                         .HasColumnType("boolean");
 
