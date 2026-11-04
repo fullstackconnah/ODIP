@@ -8,13 +8,15 @@ const COMPOSE = resolve(__dirname, '../../../../../deploy/compose.yaml')
 // nginx: a location block with its own add_header (directly, or nested in an `if`) drops every add_header inherited from the
 // server block, so the security headers silently vanish from whatever that location serves (the static assets, before this test).
 describe.skipIf(!existsSync(CONF))('nginx/default.conf', () => {
-  it('has no add_header anywhere inside a location block, which would drop the server-level security headers', () => {
+  it('has no add_header anywhere inside a location block, except the agreement link\'s, which would drop the server-level security headers', () => {
     const lines = readFileSync(CONF, 'utf8').split('\n').map((l) => l.replace(/#.*/, ''))
     const offenders: string[] = []
     const stack: boolean[] = []   // one entry per open block: is it a location?
+    let inAgreement = false       // the one location that repeats every server header (checked by the next test)
     for (const line of lines) {
       const opensLocation = /^\s*location\s/.test(line)
-      if (/\badd_header\b/.test(line) && (opensLocation || stack.some(Boolean))) offenders.push(line.trim())
+      if (opensLocation) inAgreement = /^\s*location\s+\/agreement\/\s*\{/.test(line)
+      if (/\badd_header\b/.test(line) && (opensLocation || stack.some(Boolean)) && !inAgreement) offenders.push(line.trim())
       let first = true
       for (const ch of line.match(/[{}]/g) ?? []) {
         if (ch === '}') stack.pop()
@@ -24,13 +26,28 @@ describe.skipIf(!existsSync(CONF))('nginx/default.conf', () => {
     expect(offenders).toEqual([])
   })
 
-  // Without these, every tunnel visitor reaches the API as the Docker gateway and shares one rate-limit and sign-in-lockout bucket.
-  it('takes the visitor from CF-Connecting-IP, trusting only Docker-internal hops, and forwards that single address', () => {
+  // The emailed agreement link is a page under a secret token. Its location adds noindex and no referrer, so it must repeat every server-level header (nginx drops the inherited ones).
+  it('serves /agreement/ with noindex, no referrer and every server-level security header', () => {
     const conf = readFileSync(CONF, 'utf8').split('\n').map((l) => l.replace(/#.*/, '')).join('\n')
-    expect(conf).toMatch(/^\s*set_real_ip_from\s+10\.250\.0\.0\/29;/m)
-    // Phase 1 only: phase 2 drops the 172.16.0.0/12 line once cloudflared has moved to the odip-tunnel network.
-    expect(conf).toMatch(/^\s*set_real_ip_from\s+172\.16\.0\.0\/12;/m)
-    expect(conf.match(/set_real_ip_from/g)).toHaveLength(2)
+    const headerNames = (text: string) => [...text.matchAll(/^\s*add_header\s+(\S+)/gm)].map((m) => m[1].toLowerCase())
+    const block = conf.match(/^\s*location\s+\/agreement\/\s*\{([^}]*)\}/m)?.[1] ?? ''
+    const server = [...conf.matchAll(/^ {4}add_header\s+(\S+)/gm)].map((m) => m[1].toLowerCase())
+    expect(server.length).toBeGreaterThan(0)
+    for (const name of server) expect(headerNames(block)).toContain(name)
+    expect(block).toMatch(/add_header\s+X-Robots-Tag\s+"noindex, nofollow"/)
+    expect(block).toMatch(/add_header\s+Referrer-Policy\s+"no-referrer"/)
+    expect(block).toMatch(/try_files\s+\/index\.html\s+=404;/)
+  })
+
+  // Without these, every tunnel visitor reaches the API as the Docker gateway and shares one rate-limit and sign-in-lockout bucket.
+  it('takes the visitor from CF-Connecting-IP, trusting only cloudflared and loopback, and forwards that single address', () => {
+    const conf = readFileSync(CONF, 'utf8').split('\n').map((l) => l.replace(/#.*/, '')).join('\n')
+    // Exactly these two /32s: no 172.16.0.0/12 (any container on the host), no /29 (it would include the gateway 10.250.0.1).
+    // 127.0.0.1 is safe: only a process inside the frontend container connects from loopback; a published port arrives from the gateway.
+    expect(conf.match(/^\s*set_real_ip_from\s+\S+;/gm)?.map((l) => l.trim())).toEqual([
+      'set_real_ip_from 10.250.0.3/32;',
+      'set_real_ip_from 127.0.0.1/32;',
+    ])
     // Server level, so /api sees the rewritten address too: inside `location /` it would only reach the SPA.
     const firstLocation = conf.indexOf('location ')
     for (const d of ['set_real_ip_from', 'real_ip_header', 'real_ip_recursive']) {
@@ -44,10 +61,11 @@ describe.skipIf(!existsSync(CONF))('nginx/default.conf', () => {
   })
 
   // The nginx trust list and the compose network are one decision in two files; if they drift, tunnel visitors share one bucket.
-  it.skipIf(!existsSync(COMPOSE))('compose gives the frontend 10.250.0.2 on an odip-tunnel network whose subnet is the one nginx trusts', () => {
+  it.skipIf(!existsSync(COMPOSE))('compose gives the frontend 10.250.0.2 on an odip-tunnel network that contains the cloudflared address nginx trusts', () => {
     const compose = readFileSync(COMPOSE, 'utf8')
     const conf = readFileSync(CONF, 'utf8').split('\n').map((l) => l.replace(/#.*/, '')).join('\n')
-    expect(conf).toMatch(/^\s*set_real_ip_from\s+10\.250\.0\.0\/29;/m)
+    // cloudflared (.3) and the frontend (.2) must both sit inside the compose subnet, or the trusted address is not on the network.
+    expect(conf).toMatch(/^\s*set_real_ip_from\s+10\.250\.0\.3\/32;/m)
     expect(compose).toMatch(/name:\s*odip-tunnel/)
     expect(compose).toMatch(/^\s*-\s*subnet:\s*10\.250\.0\.0\/29\s*$/m)
     // The frontend service block runs from `  frontend:` to the next top-level key; its own networks: must keep default and hold .2.

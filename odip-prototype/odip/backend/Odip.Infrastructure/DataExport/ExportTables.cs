@@ -190,6 +190,10 @@ public static class ExportTables
         Via("service-agreement-blocks.csv", "The weekly support blocks of each service agreement.",
             (db, t) => { var drafts = Drafts(db, t); return db.ServiceAgreementDraftBlocks.Where(b => drafts.Any(d => d.Id == b.DraftId)); }),
         Own<ServiceAgreementDraftApproval>("service-agreement-approvals.csv", "Approvals of service agreements."),
+        Own<ServiceAgreementShare>("service-agreement-shares.csv", "Service agreements emailed to a contact as a link: who, when, opened or revoked.") with
+        {
+            Omit = new Dictionary<string, string> { [nameof(ServiceAgreementShare.TokenHash)] = "the secret behind the emailed link, which nobody needs to read" },
+        },
         Own<ElectronicSigningSnapshot>("signing-snapshots.csv", "Each agreement document as it was sent for signing."),
         Own<ElectronicSigningEvidence>("signing-evidence.csv", "Signing evidence: who signed, in what capacity, when, and the evidence hashes."),
 

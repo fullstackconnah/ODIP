@@ -35,13 +35,18 @@ internal static class OlderSchemaSeeds
         ("ProviderSettings", "TradingName", "character varying(200)"),
         ("ProviderSettings", "UpdatedAt", "timestamp without time zone"),
         ("ProviderSettings", "Website", "character varying(500)"),
+        ("ServiceAgreementDraftApprovals", "AgreedByName", "character varying(200)"),
+        ("ServiceAgreementDraftApprovals", "AgreedByPersonId", "uuid"),
+        ("ServiceAgreementDraftApprovals", "AgreedHow", "integer"),
         ("ServiceAgreementDrafts", "IsOngoing", "boolean"),
         ("ServiceAgreementDrafts", "OriginalAgreementEndDate", "date"),
         ("ShiftBreaks", "WithParticipant", "boolean"),
         ("Shifts", "CancelledAt", "timestamp without time zone"),
         ("StaffParticipantCompatibilities", "Rank", "integer"),
+        ("Users", "CprExpiryDate", "date"),
         ("Users", "EmploymentType", "integer"),
         ("Users", "GoalWeeklyHours", "numeric"),
+        ("Users", "IsCprQualified", "boolean NOT NULL DEFAULT false"),
     ];
 
     public static async Task SaveWithLaterColumnsAsync(DbContext db)

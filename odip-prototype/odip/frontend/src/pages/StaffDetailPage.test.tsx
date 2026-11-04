@@ -661,3 +661,24 @@ describe('StaffDetailPage — Employment Hero start date', () => {
     expect(screen.queryByText(/Start date/)).toBeNull()
   })
 })
+
+describe('StaffDetailPage — CPR credential', () => {
+  it('lists CPR right after First Aid on the Credentials tab, with its date and state', () => {
+    mockUseStaffOverview.mockReturnValue({
+      data: makeOverview({
+        staff: makeStaff({
+          isFirstAidQualified: true, firstAidExpiryDate: daysFromToday(400),
+          isCprQualified: true, cprExpiryDate: daysFromToday(-5),
+          isDriverEligible: true, driverLicenceExpiryDate: daysFromToday(400),
+        }),
+      }),
+      isLoading: false,
+    })
+    renderAtTab('staff-1', 'credentials')
+
+    const order = ['First Aid', 'CPR', 'Driver Licence'].map(label => screen.getByText(label))
+    expect(order[0].compareDocumentPosition(order[1]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(order[1].compareDocumentPosition(order[2]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByText('Expired')).toBeInTheDocument()
+  })
+})

@@ -33,10 +33,12 @@ public class User : ITenantEntity
     public string? Region { get; set; }
     public bool IsDriverEligible { get; set; }
     public bool IsFirstAidQualified { get; set; }
+    public bool IsCprQualified { get; set; }
     public bool IsMedicationCompetent { get; set; }
     public bool IsManualHandlingCompetent { get; set; }
     public bool IsOvernightEligible { get; set; }
     public DateOnly? FirstAidExpiryDate { get; set; }
+    public DateOnly? CprExpiryDate { get; set; }
     public DateOnly? DriverLicenceExpiryDate { get; set; }
     public DateOnly? ManualHandlingExpiryDate { get; set; }
     public DateOnly? MedicationCompetencyExpiryDate { get; set; }
@@ -53,6 +55,7 @@ public class User : ITenantEntity
     /// </summary>
     public bool HasExpiredQualificationsOn(DateOnly today) =>
         (IsFirstAidQualified && FirstAidExpiryDate.HasValue && FirstAidExpiryDate.Value < today)
+        || (IsCprQualified && CprExpiryDate.HasValue && CprExpiryDate.Value < today)
         || (IsDriverEligible && DriverLicenceExpiryDate.HasValue && DriverLicenceExpiryDate.Value < today)
         || (IsManualHandlingCompetent && ManualHandlingExpiryDate.HasValue && ManualHandlingExpiryDate.Value < today)
         || (IsMedicationCompetent && MedicationCompetencyExpiryDate.HasValue && MedicationCompetencyExpiryDate.Value < today)
