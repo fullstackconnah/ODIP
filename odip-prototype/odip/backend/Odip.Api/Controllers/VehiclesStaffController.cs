@@ -392,10 +392,10 @@ public class StaffController : ControllerBase
         FullName = (s.FirstName + " " + s.LastName).Trim(), Username = s.Username,
         Role = s.Role, Position = s.Position ?? Position.SupportWorker, EmploymentType = s.EmploymentType, GoalWeeklyHours = s.GoalWeeklyHours, Email = s.Email,
         Mobile = s.Mobile, Region = s.Region, IsDriverEligible = s.IsDriverEligible,
-        IsFirstAidQualified = s.IsFirstAidQualified, IsMedicationCompetent = s.IsMedicationCompetent,
+        IsFirstAidQualified = s.IsFirstAidQualified, IsCprQualified = s.IsCprQualified, IsMedicationCompetent = s.IsMedicationCompetent,
         IsManualHandlingCompetent = s.IsManualHandlingCompetent, IsOvernightEligible = s.IsOvernightEligible,
         IsActive = s.IsActive, Notes = s.Notes,
-        FirstAidExpiryDate = s.FirstAidExpiryDate,
+        FirstAidExpiryDate = s.FirstAidExpiryDate, CprExpiryDate = s.CprExpiryDate,
         DriverLicenceExpiryDate = s.DriverLicenceExpiryDate,
         ManualHandlingExpiryDate = s.ManualHandlingExpiryDate,
         MedicationCompetencyExpiryDate = s.MedicationCompetencyExpiryDate,
@@ -444,10 +444,10 @@ public class StaffController : ControllerBase
                 FullName = (s.FirstName + " " + s.LastName).Trim(), Username = s.Username,
                 Role = s.Role, Position = s.Position ?? Position.SupportWorker, EmploymentType = s.EmploymentType, GoalWeeklyHours = s.GoalWeeklyHours, Email = s.Email,
                 Mobile = s.Mobile, Region = s.Region, IsDriverEligible = s.IsDriverEligible,
-                IsFirstAidQualified = s.IsFirstAidQualified, IsMedicationCompetent = s.IsMedicationCompetent,
+                IsFirstAidQualified = s.IsFirstAidQualified, IsCprQualified = s.IsCprQualified, IsMedicationCompetent = s.IsMedicationCompetent,
                 IsManualHandlingCompetent = s.IsManualHandlingCompetent, IsOvernightEligible = s.IsOvernightEligible,
                 IsActive = s.IsActive,
-                FirstAidExpiryDate = s.FirstAidExpiryDate,
+                FirstAidExpiryDate = s.FirstAidExpiryDate, CprExpiryDate = s.CprExpiryDate,
                 DriverLicenceExpiryDate = s.DriverLicenceExpiryDate,
                 ManualHandlingExpiryDate = s.ManualHandlingExpiryDate,
                 MedicationCompetencyExpiryDate = s.MedicationCompetencyExpiryDate,
@@ -457,6 +457,7 @@ public class StaffController : ControllerBase
                 Notes = s.Notes,
                 HasExpiredQualifications =
                     (s.IsFirstAidQualified && s.FirstAidExpiryDate != null && s.FirstAidExpiryDate < today)
+                    || (s.IsCprQualified && s.CprExpiryDate != null && s.CprExpiryDate < today)
                     || (s.IsDriverEligible && s.DriverLicenceExpiryDate != null && s.DriverLicenceExpiryDate < today)
                     || (s.IsManualHandlingCompetent && s.ManualHandlingExpiryDate != null && s.ManualHandlingExpiryDate < today)
                     || (s.IsMedicationCompetent && s.MedicationCompetencyExpiryDate != null && s.MedicationCompetencyExpiryDate < today)
@@ -478,10 +479,10 @@ public class StaffController : ControllerBase
             FullName = (s.FirstName + " " + s.LastName).Trim(), Username = s.Username,
             Role = s.Role, Position = s.Position ?? Position.SupportWorker, EmploymentType = s.EmploymentType, GoalWeeklyHours = s.GoalWeeklyHours, Email = s.Email,
             Mobile = s.Mobile, Region = s.Region, IsDriverEligible = s.IsDriverEligible,
-            IsFirstAidQualified = s.IsFirstAidQualified, IsMedicationCompetent = s.IsMedicationCompetent,
+            IsFirstAidQualified = s.IsFirstAidQualified, IsCprQualified = s.IsCprQualified, IsMedicationCompetent = s.IsMedicationCompetent,
             IsManualHandlingCompetent = s.IsManualHandlingCompetent, IsOvernightEligible = s.IsOvernightEligible,
             IsActive = s.IsActive, Notes = s.Notes,
-            FirstAidExpiryDate = s.FirstAidExpiryDate,
+            FirstAidExpiryDate = s.FirstAidExpiryDate, CprExpiryDate = s.CprExpiryDate,
             DriverLicenceExpiryDate = s.DriverLicenceExpiryDate,
             ManualHandlingExpiryDate = s.ManualHandlingExpiryDate,
             MedicationCompetencyExpiryDate = s.MedicationCompetencyExpiryDate,
@@ -513,10 +514,10 @@ public class StaffController : ControllerBase
             FullName = s.FullName, Username = s.Username,
             Role = s.Role, Position = s.Position ?? Position.SupportWorker, EmploymentType = s.EmploymentType, GoalWeeklyHours = s.GoalWeeklyHours, Email = s.Email,
             Mobile = s.Mobile, Region = s.Region, IsDriverEligible = s.IsDriverEligible,
-            IsFirstAidQualified = s.IsFirstAidQualified, IsMedicationCompetent = s.IsMedicationCompetent,
+            IsFirstAidQualified = s.IsFirstAidQualified, IsCprQualified = s.IsCprQualified, IsMedicationCompetent = s.IsMedicationCompetent,
             IsManualHandlingCompetent = s.IsManualHandlingCompetent, IsOvernightEligible = s.IsOvernightEligible,
             IsActive = s.IsActive, Notes = s.Notes,
-            FirstAidExpiryDate = s.FirstAidExpiryDate,
+            FirstAidExpiryDate = s.FirstAidExpiryDate, CprExpiryDate = s.CprExpiryDate,
             DriverLicenceExpiryDate = s.DriverLicenceExpiryDate,
             ManualHandlingExpiryDate = s.ManualHandlingExpiryDate,
             MedicationCompetencyExpiryDate = s.MedicationCompetencyExpiryDate,
@@ -581,11 +582,12 @@ public class StaffController : ControllerBase
         s.FirstName = dto.FirstName; s.LastName = dto.LastName; s.Position = dto.Position; s.EmploymentType = dto.EmploymentType; s.GoalWeeklyHours = dto.GoalWeeklyHours; s.Role = dto.Role;
         s.Email = emailLower; s.Mobile = dto.Mobile; s.Region = dto.Region;
         if (addressChanged) s.SignInAddressUnconfirmed = false;   // the form asked about an unusual address above: it is person-confirmed now
-        s.IsDriverEligible = dto.IsDriverEligible; s.IsFirstAidQualified = dto.IsFirstAidQualified;
+        s.IsDriverEligible = dto.IsDriverEligible; s.IsFirstAidQualified = dto.IsFirstAidQualified; s.IsCprQualified = dto.IsCprQualified;
         s.IsMedicationCompetent = dto.IsMedicationCompetent; s.IsManualHandlingCompetent = dto.IsManualHandlingCompetent;
         s.IsOvernightEligible = dto.IsOvernightEligible; s.IsActive = dto.IsActive;
         s.Notes = dto.Notes;
         s.FirstAidExpiryDate = dto.FirstAidExpiryDate;
+        s.CprExpiryDate = dto.CprExpiryDate;
         s.DriverLicenceExpiryDate = dto.DriverLicenceExpiryDate;
         s.ManualHandlingExpiryDate = dto.ManualHandlingExpiryDate;
         s.MedicationCompetencyExpiryDate = dto.MedicationCompetencyExpiryDate;
@@ -605,10 +607,10 @@ public class StaffController : ControllerBase
             FullName = s.FullName, Username = s.Username,
             Role = s.Role, Position = s.Position ?? Position.SupportWorker, EmploymentType = s.EmploymentType, GoalWeeklyHours = s.GoalWeeklyHours, Email = s.Email,
             Mobile = s.Mobile, Region = s.Region, IsDriverEligible = s.IsDriverEligible,
-            IsFirstAidQualified = s.IsFirstAidQualified, IsMedicationCompetent = s.IsMedicationCompetent,
+            IsFirstAidQualified = s.IsFirstAidQualified, IsCprQualified = s.IsCprQualified, IsMedicationCompetent = s.IsMedicationCompetent,
             IsManualHandlingCompetent = s.IsManualHandlingCompetent, IsOvernightEligible = s.IsOvernightEligible,
             IsActive = s.IsActive, Notes = s.Notes,
-            FirstAidExpiryDate = s.FirstAidExpiryDate,
+            FirstAidExpiryDate = s.FirstAidExpiryDate, CprExpiryDate = s.CprExpiryDate,
             DriverLicenceExpiryDate = s.DriverLicenceExpiryDate,
             ManualHandlingExpiryDate = s.ManualHandlingExpiryDate,
             MedicationCompetencyExpiryDate = s.MedicationCompetencyExpiryDate,

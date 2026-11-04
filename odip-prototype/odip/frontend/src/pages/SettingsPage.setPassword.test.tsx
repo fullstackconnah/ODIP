@@ -28,6 +28,7 @@ const { mockCreate, mockEnsure, sendPasswordResetEmail, settingsData, usersPage 
 
 // The same hooks the other SettingsPage tests stub, plus the ones the Users tab and the user panel call.
 vi.mock('@/api/hooks', () => ({
+  useModuleVisibility: () => ({ data: { hiddenAccommodation: false, hiddenVehicles: false, hiddenTrips: false }, isError: false }),
   useAuthConfig: () => ({ data: { microsoft: false, microsoftStartUrl: null }, isPending: false }),
   useMicrosoftAccount: () => ({ data: undefined, isError: false }),
   useEventTemplates: () => ({ data: [] }),

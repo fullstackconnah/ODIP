@@ -63,7 +63,7 @@ describe('Organisation setup read-only facts', () => {
     expect(storage).not.toHaveBeenCalled()
     expect(log).not.toHaveBeenCalled()
     for (const write of [api.put, api.post, api.patch, api.delete]) expect(write).not.toHaveBeenCalled()
-    expect(api.get.mock.calls.map(call => call[0]).sort()).toEqual(['/plan-pricing/settings', '/provider-settings'])
+    expect(api.get.mock.calls.map(call => call[0]).sort()).toEqual(['/plan-pricing/settings', '/provider-settings', '/settings/module-visibility'])
   })
 
   it.each([
@@ -89,6 +89,7 @@ describe('Organisation setup read-only facts', () => {
     let pricingFails = true
     api.get.mockImplementation((url: string) => url === '/provider-settings'
       ? new Promise(resolve => { resolveProvider = resolve })
+      : url === '/settings/module-visibility' ? Promise.resolve(null)
       : pricingFails ? Promise.reject(new Error('synthetic failure')) : Promise.resolve(pricing))
     const user = userEvent.setup()
     show()
@@ -107,7 +108,7 @@ describe('Organisation setup read-only facts', () => {
   it('has checking states while offline instead of inventing missing or confirmed facts', () => {
     onlineManager.setOnline(false)
     show()
-    expect(screen.getAllByText('Checking')).toHaveLength(2)
+    expect(screen.getAllByText('Checking')).toHaveLength(3)
     expect(screen.queryByText('Not recorded')).not.toBeInTheDocument()
     expect(screen.queryByText('Details recorded')).not.toBeInTheDocument()
     expect(api.get).not.toHaveBeenCalled()
@@ -173,5 +174,17 @@ describe('Show setup steps on the dashboard', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Show setup steps on the dashboard' }))
     expect(screen.getByText('Setup steps will show on the dashboard.')).toHaveAttribute('role', 'status')
     expect(screen.getByRole('heading', { name: 'Setup' })).toHaveFocus()
+  })
+})
+
+describe('What you run row', () => {
+  it('is the first row, neutral, and links to workspace visibility', async () => {
+    api.get.mockImplementation(async (url: string) => url.includes('module-visibility') ? { hiddenAccommodation: false, hiddenVehicles: false, hiddenTrips: true } : url.includes('plan-pricing') ? pricing : provider)
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } }); clients.push(client)
+    render(<QueryClientProvider client={client}><MemoryRouter><OrganisationSetupSection /></MemoryRouter></QueryClientProvider>)
+    const first = (await screen.findAllByRole('listitem'))[0]
+    expect(within(first).getByRole('heading', { name: 'What you run' })).toBeInTheDocument()
+    expect(await within(first).findByText('Trips and holidays hidden')).toBeInTheDocument()
+    expect(within(first).getByRole('link', { name: 'Open workspace visibility' })).toHaveAttribute('href', '/settings?section=workspace-visibility')
   })
 })

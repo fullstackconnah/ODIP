@@ -24,11 +24,14 @@ export interface StaffListDto {
   region: string | null
   isDriverEligible: boolean
   isFirstAidQualified: boolean
+  /** Optional so the many literal rows in tests need not carry it; the server always sends it. */
+  isCprQualified?: boolean
   isMedicationCompetent: boolean
   isManualHandlingCompetent: boolean
   isOvernightEligible: boolean
   isActive: boolean
   firstAidExpiryDate: string | null
+  cprExpiryDate?: string | null
   driverLicenceExpiryDate: string | null
   manualHandlingExpiryDate: string | null
   medicationCompetencyExpiryDate: string | null
@@ -58,16 +61,19 @@ export interface CreateStaffDto {
   addressConfirmed?: boolean
   role: UserRole
   position: Position
+  employmentType?: EmploymentType | null
   mobile?: string
   region?: string
   isDriverEligible: boolean
   isFirstAidQualified: boolean
+  isCprQualified?: boolean
   isMedicationCompetent: boolean
   isManualHandlingCompetent: boolean
   isOvernightEligible: boolean
   isActive?: boolean
   notes?: string
   firstAidExpiryDate?: string
+  cprExpiryDate?: string
   driverLicenceExpiryDate?: string
   manualHandlingExpiryDate?: string
   medicationCompetencyExpiryDate?: string
@@ -199,16 +205,19 @@ export function toUpdateStaffDto(row: StaffListDto, patch: Partial<UpdateStaffDt
     email: row.email ?? '',
     role: row.role,
     position: row.position,
+    employmentType: row.employmentType,
     mobile: row.mobile ?? undefined,
     region: row.region ?? undefined,
     isDriverEligible: row.isDriverEligible,
     isFirstAidQualified: row.isFirstAidQualified,
+    isCprQualified: row.isCprQualified ?? false,
     isMedicationCompetent: row.isMedicationCompetent,
     isManualHandlingCompetent: row.isManualHandlingCompetent,
     isOvernightEligible: row.isOvernightEligible,
     isActive: row.isActive,
     notes: row.notes ?? undefined,
     firstAidExpiryDate: row.firstAidExpiryDate ?? undefined,
+    cprExpiryDate: row.cprExpiryDate ?? undefined,
     driverLicenceExpiryDate: row.driverLicenceExpiryDate ?? undefined,
     manualHandlingExpiryDate: row.manualHandlingExpiryDate ?? undefined,
     medicationCompetencyExpiryDate: row.medicationCompetencyExpiryDate ?? undefined,

@@ -145,6 +145,8 @@ public static class ImportFields
             new("driversLicenceExpiry", "Driver's licence expiry", false, ["licence expiry", "license expiry"], date),
             new("firstAid", "First aid", false, ["first aid certificate"], yesNo),
             new("firstAidExpiry", "First aid expiry", false, [], date),
+            new("cpr", "CPR", false, ["cpr certificate"], yesNo),
+            new("cprExpiry", "CPR expiry", false, [], date),
             new("medication", "Medication competent", false, ["medication", "medication competency"], yesNo),
             new("medicationExpiry", "Medication competency expiry", false, ["medication expiry"], date),
             new("manualHandling", "Manual handling", false, [], yesNo),

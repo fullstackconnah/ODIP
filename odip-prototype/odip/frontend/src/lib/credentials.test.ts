@@ -17,6 +17,17 @@ describe('staffCredentials: which credentials apply', () => {
     expect(keys({ isMedicationCompetent: true })).toEqual(['medication'])
   })
 
+  it('applies CPR only when its flag is set, with no date meaning state none, and lists it right after First Aid', () => {
+    expect(keys({ isCprQualified: false, cprExpiryDate: '2020-01-01' })).toEqual([])
+    const cpr = staffCredentials({ isCprQualified: true }, OPTS)[0]
+    expect([cpr.key, cpr.label, cpr.field, cpr.state.status]).toEqual(['cpr', 'CPR', 'cprExpiryDate', 'none'])
+    expect(keys({ isDriverEligible: true, isCprQualified: true, isFirstAidQualified: true })).toEqual(['firstAid', 'cpr', 'driver'])
+  })
+
+  it('counts an expired CPR as an issue', () => {
+    expect(credentialIssueCount(staffCredentials({ isCprQualified: true, cprExpiryDate: '2026-08-22' }, OPTS))).toBe(1)
+  })
+
   it('does not apply an unflagged credential, even when it carries a date', () => {
     expect(keys({ isFirstAidQualified: false, firstAidExpiryDate: '2020-01-01', driverLicenceExpiryDate: '2020-01-01' })).toEqual([])
   })
@@ -39,11 +50,11 @@ describe('staffCredentials: which credentials apply', () => {
 
   it('returns the credentials in the order of CREDENTIALS, each with the field an edit writes back', () => {
     const all = staffCredentials({
-      isFirstAidQualified: true, isDriverEligible: true, isManualHandlingCompetent: true, isMedicationCompetent: true, workerScreeningExpiryDate: '2027-01-01',
+      isFirstAidQualified: true, isCprQualified: true, isDriverEligible: true, isManualHandlingCompetent: true, isMedicationCompetent: true, workerScreeningExpiryDate: '2027-01-01',
     }, OPTS)
     expect(all.map(c => c.key)).toEqual(CREDENTIALS.map(c => c.key))
-    expect(all.map(c => c.field)).toEqual(['firstAidExpiryDate', 'driverLicenceExpiryDate', 'manualHandlingExpiryDate', 'medicationCompetencyExpiryDate', 'workerScreeningExpiryDate'])
-    expect(all.map(c => c.label)).toEqual(['First Aid', 'Driver Licence', 'Manual Handling', 'Medication Competency', 'Worker Screening'])
+    expect(all.map(c => c.field)).toEqual(['firstAidExpiryDate', 'cprExpiryDate', 'driverLicenceExpiryDate', 'manualHandlingExpiryDate', 'medicationCompetencyExpiryDate', 'workerScreeningExpiryDate'])
+    expect(all.map(c => c.label)).toEqual(['First Aid', 'CPR', 'Driver Licence', 'Manual Handling', 'Medication Competency', 'Worker Screening'])
   })
 })
 

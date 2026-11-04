@@ -44,6 +44,7 @@ describe('Plan budget card', () => {
     render(<PlanBudgetCard participantId="participant-1" planType="AgencyManaged" />)
 
     expect(screen.getByText('Not recorded')).toBeInTheDocument()
+    expect(screen.getByText('Not recorded')).toHaveClass('text-[var(--color-muted-foreground)]')
     await user().click(screen.getByRole('button', { name: 'Record plan budget' }))
 
     const opened = screen.getByTestId('editor')
