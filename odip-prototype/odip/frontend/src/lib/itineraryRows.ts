@@ -42,7 +42,7 @@ export function itineraryRows(days: ItineraryDayDto[]): ItineraryRow[] {
       const end = formatTime(a.endTime)
       const time = start && (end ? start + RANGE_DASH + end : start)
       return {
-        key: `${day.dayNumber}-a-${i}`, when: time ? `${date} · ${time}` : date, time, title: a.title,
+        key: `${day.dayNumber}-a-${i}`, when: date, time, title: a.title,
         place: a.location ?? null, status: a.status ?? null, accessibilityNotes: a.accessibilityNotes ?? null,
       }
     })

@@ -4,12 +4,20 @@ import { itineraryRows, type ItineraryRow } from '@/lib/itineraryRows'
 import { DataTable, CellText, type Column } from './DataTable'
 
 const columns: Column<ItineraryRow>[] = [
-  { key: 'when', header: 'When', wrap: true, mobile: 'meta' },
+  {
+    key: 'when', header: 'When', wrap: true, mobile: 'meta',
+    render: r => (
+      <>
+        <span>{r.when}</span>
+        {r.time && <span className="md:block text-xs text-[var(--color-muted-foreground)]"> {r.time}</span>}
+      </>
+    ),
+  },
   {
     key: 'title', header: 'Item', mobile: 'primary',
     render: r => (
       <>
-        <CellText className="font-medium md:max-w-[12rem]">{r.title}</CellText>
+        <CellText lines={2} className="font-medium md:max-w-[12rem]">{r.title}</CellText>
         {r.accessibilityNotes && (
           <CellText lines={2} title={r.accessibilityNotes} className={`text-xs md:max-w-[12rem] ${TONE.warning.ink}`}>
             <span className="material-symbols-outlined text-base leading-none">accessible</span> {r.accessibilityNotes}

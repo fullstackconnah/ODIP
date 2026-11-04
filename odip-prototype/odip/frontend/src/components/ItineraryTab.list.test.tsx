@@ -36,9 +36,10 @@ describe('itineraryRows', () => {
     ])
   })
 
-  it('merges date and time into When (Sydney-safe)', () => {
+  it('keeps the date in When and the time range in time (Sydney-safe)', () => {
     const [, timed, untimed] = itineraryRows(days)
-    expect(timed.when).toBe('Fri 06/11 · 8:30am –⁠ 11:00am')
+    expect(timed.when).toBe('Fri 06/11')
+    expect(timed.time).toMatch(/^8:30am.*11:00am$/)
     expect(untimed.when).toBe('Fri 06/11')
   })
 
