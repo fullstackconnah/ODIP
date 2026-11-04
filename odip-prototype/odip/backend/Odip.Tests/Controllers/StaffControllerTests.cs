@@ -296,7 +296,7 @@ public class StaffControllerTests
     }
 
     [Fact]
-    public async Task Update_BuiltFromTheGetResponse_KeepsCprWhenOnlyAnotherExpiryChanges()
+    public async Task Update_BuiltFromTheGetResponse_SavesTheCprExpiryAndKeepsTheFlag()
     {
         using var db = CreateDb(Guid.NewGuid().ToString(), Guid.NewGuid());
         var controller = new StaffController(db) { ControllerContext = AdminContext() };
@@ -309,12 +309,12 @@ public class StaffControllerTests
         await controller.Update(created.Id, new UpdateStaffDto
         {
             FirstName = got.FirstName, LastName = got.LastName, Email = got.Email, Position = got.Position, IsActive = got.IsActive,
-            IsCprQualified = got.IsCprQualified, CprExpiryDate = got.CprExpiryDate, ManualHandlingExpiryDate = new DateOnly(2028, 1, 1),
+            IsCprQualified = got.IsCprQualified, CprExpiryDate = new DateOnly(2027, 6, 1), ManualHandlingExpiryDate = new DateOnly(2028, 1, 1),
         }, CancellationToken.None);
 
         var saved = await db.Users.SingleAsync(u => u.Id == created.Id);
         Assert.True(saved.IsCprQualified);
-        Assert.Equal(new DateOnly(2027, 2, 1), saved.CprExpiryDate);
+        Assert.Equal(new DateOnly(2027, 6, 1), saved.CprExpiryDate);
         Assert.Equal(new DateOnly(2028, 1, 1), saved.ManualHandlingExpiryDate);
     }
 }
