@@ -26,6 +26,8 @@ type SaveStepProps = {
   downloadFailed: boolean
   /** Undefined when the agreement cannot be approved from here (nothing saved, already approved, a role that may not). */
   approval?: { mayApprove: boolean; approverRoles?: string[]; notReady: boolean; onOpen: () => void }
+  /** For a role that may approve, on the newest unapproved save with nothing unsaved: the send button and the line saying where it went (SendToContact, ShareStatus). */
+  send?: ReactNode
   /** Once the newest save is approved (S11): who and when, the way into Populate roster, and what the last populate said. Undefined when it cannot be populated from here. */
   populate?: { approvedLine: string; onOpen: () => void; result: string | null }
 }
@@ -36,7 +38,7 @@ const SECTION = 'flex flex-col gap-2'
  * Step 4: save, get the one PDF, hand the agreement to rostering. The footer holds Save; this step says what saving did and what comes next. Approval is "Mark approved for rostering" (its
  * dialog carries the budget warnings of phase 3); it needs a saved agreement with no unsaved changes. Nothing here signs anything.
  */
-export function SaveStep({ readOnly, locked, hasSaved, dirty, notices, saved, blocking, onGoToCheck, history, onDownload, downloading, downloadFailed, approval, populate }: SaveStepProps) {
+export function SaveStep({ readOnly, locked, hasSaved, dirty, notices, saved, blocking, onGoToCheck, history, onDownload, downloading, downloadFailed, approval, populate, send }: SaveStepProps) {
   return (
     <div className="flex max-w-4xl flex-col gap-[var(--section-gap)]">
       {notices}
@@ -62,6 +64,14 @@ export function SaveStep({ readOnly, locked, hasSaved, dirty, notices, saved, bl
             </Button>
           </div>
           {downloadFailed && <Callout tone="error" className="max-w-prose">Could not download the PDF. Try again.</Callout>}
+        </section>
+      )}
+
+      {send && (
+        <section aria-labelledby="save-send" className={SECTION}>
+          <h3 id="save-send" className="text-sm font-semibold">Send for reading</h3>
+          <p className="text-[13px] text-[var(--color-muted-foreground)]">Email the saved agreement to a guardian, plan nominee or the participant as a link to read and download. They can&apos;t approve it there.</p>
+          {send}
         </section>
       )}
 

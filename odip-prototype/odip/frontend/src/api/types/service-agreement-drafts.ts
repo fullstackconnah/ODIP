@@ -69,7 +69,12 @@ export interface DraftApprovalDto {
   horizonEnd?: string
   /** The first day it made a shift for; absent on a new approval. */
   firstShiftDate?: string
+  /** Who agreed to it and how, when the approver said. Absent otherwise. */
+  agreedByName?: string
+  agreedHow?: AgreementAgreedHow
 }
+
+export type AgreementAgreedHow = 'Email' | 'Phone' | 'InPerson' | 'Other'
 
 /** The shifts of the previous approved revisions from the day the new one starts (or today): approval removes the unfilled Draft ones, carries those of a support that did not change, and lists the rest. */
 export interface OldShiftsRemainingDto {
@@ -181,6 +186,66 @@ export interface PopulateResultDto {
 export interface ApproveDraftDto {
   /** Required (true) when hand-made patterns overlap the ones the approval makes. */
   acknowledgeOverlaps: boolean
+  /** Optional: the contact of this participant who agreed (their name is copied at approval). */
+  agreedByPersonId?: string
+  /** Optional: who agreed, when they are not a contact. Used only when `agreedByPersonId` is absent. */
+  agreedByName?: string
+  agreedHow?: AgreementAgreedHow
+}
+
+/** One person the agreement can be sent to. `personId` is absent for the participant themselves; no `email` means they cannot be chosen. */
+export interface AgreementContactDto {
+  personId?: string
+  name: string
+  roles: string
+  email?: string
+  isDefault: boolean
+}
+
+/** One send of a revision, newest first. Never carries the link. A row with `sendError` did not go and is never shown as sent. */
+export interface AgreementShareRowDto {
+  id: string
+  draftId: string
+  draftVersion: number
+  recipientName: string
+  recipientEmail: string
+  sentByName: string
+  sentAt: string
+  expiresAt: string
+  openedAt?: string
+  revokedAt?: string
+  sendError?: string
+}
+
+export interface AgreementSharingDto {
+  contacts: AgreementContactDto[]
+  shares: AgreementShareRowDto[]
+}
+
+export interface SendAgreementDto {
+  /** Absent means the default recipient. */
+  personId?: string
+  expectedVersion: number
+}
+
+export interface SendAgreementResultDto {
+  sent: boolean
+  error?: 'NotConfigured' | 'Failed'
+}
+
+/** What the person with the emailed link sees (the public page). No NDIS number or date of birth: those are only in the PDF. */
+export interface SharedAgreementDto {
+  providerName: string
+  participantName: string
+  startDate: string
+  endDate?: string
+  isOngoing: boolean
+  periodText: string
+  lines: { item: string; quantity: number; unit: string; unitPrice: number; total: number }[]
+  total: number
+  contactEmail?: string
+  contactPhone?: string
+  expiresAt: string
 }
 
 export interface ServiceAgreementDraftLineDto {
