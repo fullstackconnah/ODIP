@@ -294,6 +294,7 @@ export default function CompletionReviewPage() {
   const [extraChoice, setExtraChoice] = useState<ExtraTimeChoice | ''>('')   // the Approve dialog's optional extra-time choice
   const [decideTarget, setDecideTarget] = useState<CompletionQueueItemDto | null>(null)
   const [decideError, setDecideError] = useState(false)
+  const [decideStale, setDecideStale] = useState(false)   // set on open: Date.now() is impure in render
   const [batchResults, setBatchResults] = useState<ApproveBatchResultDto[] | null>(null)
 
   const detailShiftId = approveTarget?.shiftId ?? returnTarget?.shiftId
@@ -427,7 +428,7 @@ export default function CompletionReviewPage() {
         ) : row.status === 'Completed' && row.extraTime ? (
           // Decided later: the shift is already approved, so this is the one place to pay the actual times or the rostered hours.
           <div className="flex justify-end">
-            <Button variant="secondary" size="sm" onClick={() => setDecideTarget(row)} aria-label={`Extra time for ${row.staffName} with ${row.participantName} on ${formatServiceDate(row.serviceDate)}`}>
+            <Button variant="secondary" size="sm" onClick={() => { setDecideStale((Date.now() - Date.parse(row.serviceDate)) / 86_400_000 > SYNC_WINDOW_DAYS); setDecideTarget(row) }} aria-label={`Extra time for ${row.staffName} with ${row.participantName} on ${formatServiceDate(row.serviceDate)}`}>
               Extra time
             </Button>
           </div>
@@ -559,7 +560,7 @@ export default function CompletionReviewPage() {
             <ExtraTimeChoiceGroup row={decideTarget} value={EXTRA_TIME_CHOICE[decideTarget.extraTime]} onChange={decide}
               disabled={decideExtraTime.isPending} saving={decideExtraTime.isPending ? decideExtraTime.variables?.decision : null} />
             {decideError && <p role="alert" className="text-xs text-[var(--color-destructive)]">Couldn't save. Try again.</p>}
-            {(Date.now() - Date.parse(decideTarget.serviceDate)) / 86_400_000 > SYNC_WINDOW_DAYS && (
+            {decideStale && (
               <p className="text-xs text-[var(--color-muted-foreground)]">Employment Hero won't be updated: this shift is more than {SYNC_WINDOW_DAYS} days old.</p>
             )}
           </div>
