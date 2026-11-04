@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import type { FieldErrors, UseFormRegister, UseFormSetValue } from 'react-hook-form'
 import { FormField } from '@/components/FormField'
 import { Card } from '@/components/Card'
@@ -29,6 +30,8 @@ export type BasicsStepProps = {
   trips: TripListDto[]
   staff: StaffListDto[]
   incidentServiceTypes: readonly string[]
+  /** Muted line under the type field when a type change adds or removes fields elsewhere. */
+  typeNote?: ReactNode
 }
 
 /**
@@ -46,7 +49,7 @@ export type BasicsStepProps = {
 export function BasicsStep({
   register, errors, setValue,
   serviceType, incidentType, severity, tripInstanceId, involvedParticipantId, reportedByStaffId, reporterName, involvedStaffId,
-  trips, staff, incidentServiceTypes,
+  trips, staff, incidentServiceTypes, typeNote,
 }: BasicsStepProps) {
   return (
     <div className="flex flex-col gap-[var(--section-gap)]">
@@ -130,6 +133,8 @@ export function BasicsStep({
               items={INCIDENT_TYPES.map((t) => ({ value: t, label: INCIDENT_TYPE_LABELS[t] }))}
             />
           </FormField>
+
+          {typeNote && <p role="status" className={`${span.long} text-xs text-[var(--color-muted-foreground)]`}>{typeNote}</p>}
 
           {incidentType === 'Other' && (
             <FormField label="Specify Incident Type" required error={errors.otherTypeSpecify?.message} className={span.medium}>
