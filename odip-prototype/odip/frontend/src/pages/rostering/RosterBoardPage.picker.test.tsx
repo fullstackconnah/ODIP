@@ -273,3 +273,43 @@ describe('RosterBoardPage: Swap with… from the menu', () => {
     expect(within(document.querySelector('[data-shift-chip="sam-wed"]') as HTMLElement).getByRole('button', { name: /^Actions for/ })).toHaveFocus()
   })
 })
+
+describe('RosterBoardPage: the picker lists who is available that day', () => {
+  const withDays = (days: { staffId: string; date: string; preferred: boolean }[]) =>
+    h.board.mockReturnValue({ data: { ...BOARD, staffAvailableDays: days }, isLoading: false, isError: false, refetch: vi.fn() })
+
+  it('puts Available that day before Free at this time and names the Preferred option', async () => {
+    const user = userEvent.setup()
+    withDays([{ staffId: 'staff-6', date: '2026-08-18', preferred: true }])
+    renderPage()
+    await user.click(screen.getByRole('button', { name: TUE_PLUS }))
+    expect(groupLabels(picker())).toEqual(['Available that day', 'On another shift at this time', 'On leave that day'])
+    expect(option(/^Kim Lee/)).toHaveAccessibleName(expect.stringContaining('prefers this day'))
+    expect(within(option(/^Kim Lee/)).getByText('Prefers this day')).toBeInTheDocument()
+  })
+
+  it('makes the first Available row the active one on ArrowDown, ahead of someone free with no record', async () => {
+    const user = userEvent.setup()
+    h.staff.push({ id: 'staff-7', fullName: 'Abe Ray', isActive: true, region: 'North', hasExpiredQualifications: false })   // free at that time, no Available record
+    try {
+      withDays([{ staffId: 'staff-6', date: '2026-08-18', preferred: false }])
+      renderPage()
+      await user.click(screen.getByRole('button', { name: TUE_PLUS }))
+      expect(groupLabels(picker())).toEqual(['Available that day', 'Free at this time', 'On another shift at this time', 'On leave that day'])
+      await user.keyboard('{ArrowDown}')
+      const active = option(/^Kim Lee/)
+      expect(active).toHaveAttribute('aria-selected', 'true')
+      const group = active.closest('[role="group"]') as HTMLElement
+      expect(document.getElementById(group.getAttribute('aria-labelledby') ?? '')).toHaveTextContent('Available that day')
+      expect(option(/^Abe Ray/)).toHaveAttribute('aria-selected', 'false')
+    } finally { h.staff.pop() }
+  })
+
+  it('draws no Available group when no days are sent', async () => {
+    const user = userEvent.setup()
+    withDays([])
+    renderPage()
+    await user.click(screen.getByRole('button', { name: TUE_PLUS }))
+    expect(within(picker()).queryByText('Available that day')).not.toBeInTheDocument()
+  })
+})
