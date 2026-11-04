@@ -27,38 +27,42 @@ export const OLD_KEY_TARGET: Record<string, { tab: ParticipantTabKey; hash?: str
   routines: { tab: 'daily', hash: 'routines' },
   'restrictive-practices': { tab: 'health', hash: 'restrictive-practices' },
   claims: { tab: 'funding', hash: 'claims' }, rostering: { tab: 'people', hash: 'roster' },
-  history: { tab: 'records', hash: 'history' },
+  // The Compatibility page linked `?tab=roster` (an id of no tab); links already sent still land on the roster.
+  roster: { tab: 'people', hash: 'roster' }, history: { tab: 'records', hash: 'history' },
 }
 
-/** What hides a section, beyond the tab itself. The page computes each from the role and the participant. */
-export type SectionGate = 'rostering' | 'planBudget' | 'claims' | 'history' | 'communityStream' | 'earlierChecklist'
+/** What hides a section, beyond the tab itself. The page computes each from the role. */
+export type SectionGate = 'rostering' | 'planBudget' | 'claims' | 'history'
 export type CountKey = 'health' | 'daily' | 'people' | 'records' // useParticipantTabCounts' keys, which are also tab ids
-/** `list`: never quiet, it owns its empty state. `nested`: ids of elements inside this section that a `#hash` may name. */
+/**
+ * `list`: never quiet, it owns its empty state. `nested`: ids of the sections that share this chip (the page stacks their cards under the row's
+ * own, in card order) and of elements inside one; a `#hash` or `section=` naming any of them selects this chip.
+ */
 export type SubTab = { id: string; label: string; list?: true; count?: CountKey; gate?: SectionGate; nested?: readonly string[] }
 export type GroupedTabKey = Exclude<ParticipantTabKey, 'overview'>
 
-/** The sections of each grouped tab in page order, one sub-tab each. Labels are the short chip labels; a section's card keeps its full heading. */
+/**
+ * The chips of each grouped tab in page order. A list feature people work in keeps its own chip; short field cards on one topic share one
+ * (listed in `nested`). Labels are the short chip labels; a section's card keeps its full heading. The community-stream cards (Typical day,
+ * Earlier checklist) are in `nested` and the page only builds them for that stream.
+ */
 export const SUB_TABS: Record<GroupedTabKey, readonly SubTab[]> = {
   about: [
-    { id: 'identity', label: 'Identity' }, { id: 'home-and-living', label: 'Address & living' }, { id: 'ndis-plan', label: 'NDIS & funding' },
-    { id: 'services', label: 'Services' }, { id: 'key-identifiers', label: 'Key identifiers' }, { id: 'culture-and-rights', label: 'Cultural background' },
-    { id: 'about-me', label: 'About me' },
+    { id: 'identity', label: 'Profile', nested: ['home-and-living', 'key-identifiers', 'culture-and-rights', 'about-me'] },
+    { id: 'ndis-plan', label: 'NDIS & services', nested: ['services'] },
   ],
   health: [
-    { id: 'emergency', label: 'Emergency' }, { id: 'medical', label: 'Medical' }, { id: 'health-conditions', label: 'Conditions', list: true },
-    { id: 'medications', label: 'Medications', list: true }, { id: 'behaviour-and-communication', label: 'Behaviour & communication' },
-    { id: 'behaviour-support', label: 'Behaviour support' }, { id: 'risks', label: 'Risks', list: true, count: 'health', nested: ['risks-summary'] },
-    { id: 'restrictive-practices', label: 'Restrictive practices', list: true }, { id: 'community-access-risk', label: 'Earlier checklist', gate: 'earlierChecklist' },
+    { id: 'emergency', label: 'Medical', nested: ['medical', 'health-conditions'] },
+    { id: 'medications', label: 'Medications', list: true },
+    { id: 'risks', label: 'Risks & practices', list: true, count: 'health', nested: ['risks-summary', 'restrictive-practices', 'community-access-risk'] },
+    { id: 'behaviour-and-communication', label: 'Behaviour', nested: ['behaviour-support'] },
   ],
   daily: [
-    { id: 'support-needs', label: 'Support needs' }, { id: 'mobility-and-personal-care', label: 'Mobility & personal care' },
-    { id: 'equipment-and-overnight', label: 'Equipment & overnight' }, { id: 'daily-living', label: 'Daily living', list: true },
-    { id: 'routines', label: 'Routines', list: true, count: 'daily' }, { id: 'meals', label: 'Meals & diet' },
-    { id: 'typical-day', label: 'Typical day', gate: 'communityStream' }, { id: 'transport-and-travel', label: 'Transport & travel' },
+    { id: 'support-needs', label: 'Care & ADL', nested: ['mobility-and-personal-care', 'equipment-and-overnight', 'daily-living', 'transport-and-travel'] },
+    { id: 'routines', label: 'Routines & meals', count: 'daily', nested: ['meals', 'typical-day'] },
   ],
   people: [
-    { id: 'contacts', label: 'Contacts', list: true, count: 'people' }, { id: 'roster', label: 'Rostering', list: true, gate: 'rostering' },
-    { id: 'week', label: 'Week', list: true, gate: 'rostering' },
+    { id: 'contacts', label: 'Contacts', list: true, count: 'people' }, { id: 'roster', label: 'Roster & staff match', list: true, gate: 'rostering', nested: ['week'] },
     { id: 'trips', label: 'Bookings', list: true },
   ],
   funding: [{ id: 'plan-budget', label: 'Plan budget', gate: 'planBudget' }, { id: 'claims', label: 'Claims', list: true, gate: 'claims' }],
@@ -74,9 +78,13 @@ export const visibleSubTabs = (tab: GroupedTabKey, gates: Record<SectionGate, bo
 /** The section a hash names on this tab: a row id, or an element nested in one (`risks-summary` is in `risks`). Another tab's id is null. */
 export const sectionForHash = (rows: readonly SubTab[], hashId: string) => rows.find(r => r.id === hashId || r.nested?.includes(hashId))?.id ?? null
 
-/** The shown section: the hash's, else a visible `section=`, else the first visible row. An unknown or hidden `section=` falls back. */
+/** The shown chip: the hash's, else the one a visible `section=` names (a row id or a merged section), else the first visible row. An unknown or hidden `section=` falls back. */
 export const resolveSection = (rows: readonly SubTab[], hashId: string, param: string | null) =>
-  sectionForHash(rows, hashId) ?? (rows.some(r => r.id === param) ? param! : rows[0]?.id)
+  sectionForHash(rows, hashId) ?? sectionForHash(rows, param ?? '') ?? rows[0]?.id
+
+/** The merged section a `section=` points inside a chip (`week` in Roster & staff match): the hook scrolls to it, as it does for a hash. A row id is null, since choosing a chip must not scroll. */
+export const nestedSectionTarget = (rows: readonly SubTab[], param: string | null) =>
+  param && !rows.some(r => r.id === param) && sectionForHash(rows, param) ? param : null
 
 /** The hash is read during render now, so a malformed one (`#%E0`) must not throw: it matches no row. */
 export const safeDecode = (s: string) => { try { return decodeURIComponent(s) } catch { return s } }
@@ -144,13 +152,14 @@ export function useParticipantGoTo(visible: readonly ParticipantTabKey[]) {
 /**
  * Scrolls to `#section` and focuses its heading, once per hash, when the element exists and none of this participant's queries is fetching (cards
  * mount after their data, so an early scroll lands short). It stops waiting after 5 s. An enclosing <details> (a fixed-list fold) opens first.
+ * With no hash it takes `nested` (see `nestedSectionTarget`): a `section=` that names a section inside a merged chip.
  */
-export function useScrollToHash(participantId: string | undefined) {
+export function useScrollToHash(participantId: string | undefined, nested?: string | null) {
   const { hash, key } = useLocation()
   const qc = useQueryClient()
   useEffect(() => {
-    if (!hash) return
-    const id = safeDecode(hash.slice(1))
+    const id = hash ? safeDecode(hash.slice(1)) : nested
+    if (!id) return
     let done = false
     const holds: (() => void)[] = []
     const go = (force: boolean) => {
@@ -180,5 +189,5 @@ export function useScrollToHash(participantId: string | undefined) {
     const unsubscribe = qc.getQueryCache().subscribe(() => go(false))
     const giveUp = setTimeout(() => go(true), 5000)
     return () => { done = true; holds.forEach(h => h()); clearTimeout(first); clearTimeout(giveUp); unsubscribe() }
-  }, [hash, key, participantId, qc])
+  }, [hash, key, nested, participantId, qc])
 }

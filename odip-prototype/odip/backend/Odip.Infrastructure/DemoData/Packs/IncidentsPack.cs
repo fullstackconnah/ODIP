@@ -53,6 +53,8 @@ public sealed class IncidentsPack : IDemoPack
         public bool Due(DateTime utc) => utc.AddMinutes(GraceMinutes) <= A.NowUtc;
         public DateTime Local(DateTime utc) => ProviderLocalTime.UtcToLocal(ProviderLocalTime.AsUtc(utc), A.Zone);
         public User? Reviewer => Staff.GetValueOrDefault("sarah");
+        /// <summary>IC7: the review belongs to an Admin (Coordinators only read it). A Demo tenant with no Admin falls back to the coordinator.</summary>
+        public User? Admin => Run.Directory.AllUsers.Where(u => u.IsActive && u.Role == UserRole.Admin).OrderBy(u => u.Id).FirstOrDefault();
     }
 
     public async Task RunAsync(DemoRun run, CancellationToken ct)
@@ -413,7 +415,7 @@ public sealed class IncidentsPack : IDemoPack
         {
             case IncidentStepKind.Review:
                 incident.Status = IncidentStatus.UnderReview;
-                incident.ReviewedByUserId = coordinator.Id;
+                incident.ReviewedByUserId = (c.Admin ?? coordinator).Id;
                 incident.ReviewedAt = when;
                 RecordTold(c, incident, story);
                 break;

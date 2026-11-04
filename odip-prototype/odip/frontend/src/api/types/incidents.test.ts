@@ -28,8 +28,8 @@ describe('toUpdateIncidentDto', () => {
       injuries: [{ region: 'Knee', injuryType: 'Bruise', description: 'Bruised knee' }],
       witnesses: [{ id: 'w-1', witnessUserId: 'staff-2', witnessName: 'Pat Lee' }],
       medicationAdministrationId: 'mar-1', shiftId: 'shift-1',
-      status: 'Draft', qscReportingStatus: 'Reported', qscReportedAt: '2026-08-02T08:00:00', qscReferenceNumber: 'QSC-9', reviewedByStaffId: 'staff-3', reviewNotes: 'Reviewed',
-      correctiveActions: 'Wet-floor sign', familyNotified: true, familyNotifiedAt: '2026-08-01T13:00:00', supportCoordinatorNotified: false,
+      status: 'Draft', qscReportingStatus: 'Reported', qscReportedAt: '2026-08-02T08:00:00', qscReferenceNumber: 'QSC-9',
+      familyNotified: true, familyNotifiedAt: '2026-08-01T13:00:00', supportCoordinatorNotified: false,
     })
   })
 

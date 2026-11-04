@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, cleanup } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { FixedListFrame } from './FixedListFrame'
 
@@ -50,5 +50,24 @@ describe('FixedListFrame — zero rows is the same as zero answered', () => {
     expect(screen.queryByText('b')).not.toBeInTheDocument()
     expect(screen.getByText('1 of 2 not assessed')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add an assessment' })).toBeInTheDocument()
+  })
+})
+
+describe('FixedListFrame — framed', () => {
+  const framedFrame = (rows: Row[], canAdd: boolean) => render(
+    <FixedListFrame framed title="Daily living" rows={rows} isAnswered={r => r.done} unit="not assessed" addLabel="Add" canAdd={canAdd} rowSelector="[data-row]">
+      {visible => <ul>{visible.map(r => <li key={r.id} data-row>{r.id}</li>)}</ul>}
+    </FixedListFrame>,
+  )
+
+  it('puts the plain line and the fold inside a card; an unframed one stays bare', () => {
+    framedFrame([], false)
+    expect(screen.getByText('Not recorded: Daily living').closest('.rounded-md')).not.toBeNull()
+    cleanup()
+    framedFrame([{ id: 'a', done: false }], true)
+    expect(screen.getByText('Not recorded: Daily living').closest('.rounded-md')).not.toBeNull()
+    cleanup()
+    frame([], false)
+    expect(screen.getByText('Not recorded: Daily living').closest('.rounded-md')).toBeNull()
   })
 })

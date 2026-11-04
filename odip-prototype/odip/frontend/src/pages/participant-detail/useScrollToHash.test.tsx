@@ -36,3 +36,28 @@ describe('useScrollToHash focus', () => {
     expect(document.activeElement?.closest('details:not([open])')).toBeNull()
   })
 })
+
+describe('useScrollToHash with a nested section=', () => {
+  beforeEach(() => { Element.prototype.scrollIntoView = vi.fn() })
+  function NestedHarness({ target }: { target: string | null }) {
+    useScrollToHash('p-1', target)
+    return <section id="week"><h3>Roster week</h3></section>
+  }
+  const renderNested = (target: string | null) => render(
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter initialEntries={['/participants/p-1?tab=people&section=week']}><NestedHarness target={target} /></MemoryRouter>
+    </QueryClientProvider>,
+  )
+
+  it('scrolls to and focuses the nested section when the URL has no hash', async () => {
+    renderNested('week')
+    await waitFor(() => expect(document.activeElement).toBe(document.querySelector('h3')))
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
+  })
+
+  it('does nothing with no hash and no target', async () => {
+    renderNested(null)
+    await new Promise(r => setTimeout(r, 20))
+    expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled()
+  })
+})

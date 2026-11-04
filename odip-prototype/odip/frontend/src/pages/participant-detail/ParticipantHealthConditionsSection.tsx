@@ -133,6 +133,7 @@ export default function ParticipantHealthConditionsSection({ participantId }: { 
         <PageState kind="error" noun="health condition list" onRetry={() => conditionsQuery.refetch()} />
       ) : (
         <FixedListFrame
+          framed
           title="Health conditions"
           rows={ordered}
           isAnswered={(c) => c.has != null}

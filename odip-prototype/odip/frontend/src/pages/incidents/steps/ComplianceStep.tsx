@@ -2,9 +2,7 @@ import type { FieldErrors, UseFormRegister, UseFormSetValue } from 'react-hook-f
 import { FormField } from '@/components/FormField'
 import { Card } from '@/components/Card'
 import { Dropdown } from '@/components/Dropdown'
-import { SearchableSelect } from '@/components/SearchableSelect'
 import { INCIDENT_STATUSES, INCIDENT_STATUS_LABELS, REPORTABLE_CLASSES, REPORTABLE_CLASS_LABELS } from '@/api/types/enums'
-import type { StaffListDto } from '@/api/types'
 import type { IncidentFormData } from '../incidentFormSchema'
 import { formGrid, span } from '@/lib/formGrid'
 import { defaultReportableClass } from '../reportingDue'
@@ -23,10 +21,8 @@ export type ComplianceStepProps = {
   restrictivePracticeUseVaried: boolean | null | undefined
   reportableClass: string | undefined
   commissionFinalReportRequested: boolean | undefined
-  reviewedByStaffId: string | undefined
   familyNotified: boolean | undefined
   supportCoordinatorNotified: boolean | undefined
-  staff: StaffListDto[]
 }
 
 /**
@@ -38,8 +34,7 @@ export type ComplianceStepProps = {
  */
 export function ComplianceStep({
   register, setValue,
-  status, errors, awareAtMax, severity, incidentType, isRestrictivePracticeAuthorised, restrictivePracticeUseVaried, reportableClass, commissionFinalReportRequested, reviewedByStaffId, familyNotified, supportCoordinatorNotified,
-  staff,
+  status, errors, awareAtMax, severity, incidentType, isRestrictivePracticeAuthorised, restrictivePracticeUseVaried, reportableClass, commissionFinalReportRequested, familyNotified, supportCoordinatorNotified,
 }: ComplianceStepProps) {
   return (
     <Card title="Compliance">
@@ -96,25 +91,6 @@ export function ComplianceStep({
             </FormField>
           )}
         </div>
-
-        <FormField label="Reviewed By" className={span.medium}>
-          <SearchableSelect
-            value={reviewedByStaffId ?? ''}
-            onChange={(v) => setValue('reviewedByStaffId', v, { shouldDirty: true })}
-            items={[
-              { value: '', label: 'Not reviewed' },
-              ...staff.map((s: StaffListDto) => ({ value: s.id, label: s.fullName })),
-            ]}
-          />
-        </FormField>
-
-        <FormField label="Review Notes" className={span.long}>
-          <textarea {...register('reviewNotes')} rows={3} placeholder="Notes from the reviewer..." />
-        </FormField>
-
-        <FormField label="Corrective Actions" className={span.long}>
-          <textarea {...register('correctiveActions')} rows={3} placeholder="Actions to prevent recurrence..." />
-        </FormField>
 
         <div className={`${span.medium} space-y-1`}>
           <FormField label="Family Notified" layout="checkbox">
