@@ -408,7 +408,7 @@ public sealed class BudgetLedgerService
 
         public Dictionary<Guid, TimeZoneInfo> PlaceZones { get; init; } = new();
 
-        public TimeZoneInfo ZoneOf(ShiftRow shift) => shift.ServiceLocationId is { } id && PlaceZones.TryGetValue(id, out var zone) ? zone : Zone;
+        public TimeZoneInfo ZoneOf(ShiftRow shift) => ProviderTimeZoneResolver.ZoneOf(shift.ServiceLocationId, PlaceZones, Zone);
 
         public Pricing(List<CatalogueRow> catalogue, HolidayCalendar holidays, string? providerState, TimeZoneInfo zone)
         {

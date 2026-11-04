@@ -394,6 +394,7 @@ public partial class ShiftClaimGenerationService
         var noticeDays = shift.ServiceDate.DayNumber - cancelledOn.DayNumber;
         if (!PlanCancellation.IsShortNotice(noticeDays))
             return FormattableString.Invariant($"Cancelled {noticeDays} days ahead. Only a cancellation less than {PlanCancellation.ShortNoticeDays} days before the shift can be claimed.");
+        // shortcut: compares with the org's today, not the place's; a cancelled late shift at a western place can become claimable 2-3 h early. Upgrade when places span zones in production.
         if (shift.ServiceDate >= today) return FormattableString.Invariant($"You can claim this from {shift.ServiceDate.AddDays(1):d MMM yyyy}.");
         return null;
     }

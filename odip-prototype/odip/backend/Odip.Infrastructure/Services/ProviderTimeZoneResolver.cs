@@ -56,8 +56,10 @@ public static class ProviderTimeZoneResolver
     }
 
     /// <summary>One shift's zone from <see cref="ZonesOfLocationsAsync"/>: its place's, else the organisation's.</summary>
-    public static TimeZoneInfo ZoneOf(Shift shift, IReadOnlyDictionary<Guid, TimeZoneInfo> byLocation, TimeZoneInfo orgZone) =>
-        shift.ServiceLocationId is { } id && byLocation.TryGetValue(id, out var zone) ? zone : orgZone;
+    public static TimeZoneInfo ZoneOf(Shift shift, IReadOnlyDictionary<Guid, TimeZoneInfo> byLocation, TimeZoneInfo orgZone) => ZoneOf(shift.ServiceLocationId, byLocation, orgZone);
+
+    public static TimeZoneInfo ZoneOf(Guid? locationId, IReadOnlyDictionary<Guid, TimeZoneInfo> byLocation, TimeZoneInfo orgZone) =>
+        locationId is { } id && byLocation.TryGetValue(id, out var zone) ? zone : orgZone;
 
     /// <summary>
     /// The provider's calendar date now (see <see cref="ProviderLocalTime.TodayIn"/>): the "today" every calendar rule uses. Pass the

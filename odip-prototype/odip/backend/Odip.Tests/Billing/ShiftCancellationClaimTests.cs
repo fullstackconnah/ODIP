@@ -91,23 +91,6 @@ public class ShiftCancellationClaimTests
         Assert.Contains("Cancelled 7 days ahead", Assert.Single(result.LeftOut).Reason);
     }
 
-    [Fact]
-    public void D_ABreakAtAPerthPlace_IsPlacedInPerthTime()
-    {
-        var perth = TimeZoneInfo.FindSystemTimeZoneById("Australia/Perth");
-        var sydney = TimeZoneInfo.FindSystemTimeZoneById("Australia/Sydney");
-        var shiftId = Guid.NewGuid();
-        // 12:00-12:30 Perth is 04:00-04:30 UTC; the shift is rostered 09:00-17:00 local.
-        var breaks = new Dictionary<Guid, List<(DateTime From, DateTime To)>> { [shiftId] = [(new DateTime(2026, 12, 18, 4, 0, 0, DateTimeKind.Utc), new DateTime(2026, 12, 18, 4, 30, 0, DateTimeKind.Utc))] };
-        var day = new DateOnly(2026, 12, 18);
-
-        var inPerth = ShiftAloneBreaks.SpansOf(breaks, shiftId, day, new TimeOnly(9, 0), new TimeOnly(17, 0), false, SleepoverType.None, perth);
-        var inSydney = ShiftAloneBreaks.SpansOf(breaks, shiftId, day, new TimeOnly(9, 0), new TimeOnly(17, 0), false, SleepoverType.None, sydney);
-
-        Assert.Equal([(180, 210)], inPerth);   // 3 h after the 09:00 start
-        Assert.NotEqual(inPerth, inSydney);    // the org zone would put it at 15:00, six hours in
-    }
-
     [Theory]
     [InlineData(CatalogueClaimFlag.No)]
     [InlineData(null)]
