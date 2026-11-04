@@ -119,7 +119,7 @@ describe('BudgetTrackChart', () => {
   it('the hidden table has one row per point, the caption, and "none" for an empty cell', () => {
     render(<BudgetTrackChart series={series} width={900} />)
     const table = document.querySelector<HTMLTableElement>('[data-table]')!
-    expect(table).toHaveClass('sr-only')
+    expect(table.parentElement).toHaveClass('sr-only')
     expect(table.tBodies[0].rows).toHaveLength(stopsOf().length)
     expect(table.caption!.textContent).toBe(`Weekly figures for The whole plan, ${writtenSpan('2026-07-01', '2027-06-30')}`)
     expect(within(table).getAllByRole('columnheader').map(h => h.textContent)).toEqual(['Week to', 'Budget, spread evenly', 'Used', 'Used and booked', 'Expected'])
