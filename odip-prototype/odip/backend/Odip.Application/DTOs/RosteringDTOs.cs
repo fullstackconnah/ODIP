@@ -91,6 +91,8 @@ public record ShiftDto
     public string? Notes { get; init; }
     /// <summary>Where the shift happens, as a coordinator typed it for this shift; null when none.</summary>
     public string? Location { get; init; }
+    /// <summary>The saved place the shift is at (Settings > Service locations); null when none.</summary>
+    public Guid? ServiceLocationId { get; init; }
     /// <summary>The support type (catalogue group code) the shift is claimed under; null is community access.</summary>
     public string? SupportGroupCode { get; init; }
     /// <summary>The reference of the claim this shift is on, when one still counts; the support type cannot change while it is set.</summary>
@@ -350,6 +352,10 @@ public record CreateShiftDto
     /// <summary>Where the shift happens, as the coordinator typed it: trimmed, blank is null, at most 200. Never filled from the participant's address. A PUT that leaves it out keeps the stored value (same left-out-versus-null rule as <see cref="UpdateShiftDto.ExpectedStaffId"/>); null or blank clears it. A POST treats both as none.</summary>
     public string? Location { get => _location; init { _location = value; HasLocation = true; } }
     [System.Text.Json.Serialization.JsonIgnore] public bool HasLocation { get; private init; }
+    private readonly Guid? _serviceLocationId;
+    /// <summary>The saved place (Settings > Service locations) the shift is at; null clears it. Must be an active place of the shift's organisation, unless the shift already has it. A PUT that leaves it out keeps the stored value (same left-out-versus-null rule as <c>Location</c>).</summary>
+    public Guid? ServiceLocationId { get => _serviceLocationId; init { _serviceLocationId = value; HasServiceLocationId = true; } }
+    [System.Text.Json.Serialization.JsonIgnore] public bool HasServiceLocationId { get; private init; }
     private readonly string? _supportGroupCode;
     /// <summary>The shift's support type (a catalogue group code); blank is null, which is community access. A PUT that leaves it out keeps the stored value (same left-out-versus-null rule as <c>Location</c>); a POST treats both as none.</summary>
     public string? SupportGroupCode { get => _supportGroupCode; init { _supportGroupCode = value; HasSupportGroupCode = true; } }

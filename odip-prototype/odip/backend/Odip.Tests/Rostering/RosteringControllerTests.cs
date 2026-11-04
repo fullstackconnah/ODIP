@@ -1881,6 +1881,108 @@ public class RosteringControllerTests
         Assert.Null((await db.Shifts.AsNoTracking().SingleAsync()).Location);
     }
 
+    // ── Service locations PR1: a shift can point at a saved place of its own organisation ──
+
+    private static ServiceLocation SeedPlace(OdipDbContext db, Guid tenantId, bool active = true, string name = "Southside Library")
+    {
+        var place = new ServiceLocation { Id = Guid.NewGuid(), TenantId = tenantId, Name = name, IsActive = active, Latitude = -33.8688m, Longitude = 151.2093m };
+        db.ServiceLocations.Add(place);
+        db.SaveChanges();
+        return place;
+    }
+
+    private static Participant SeedParticipantIn(OdipDbContext db, Guid tenantId)
+    {
+        var participant = SeedParticipant(db);
+        participant.TenantId = tenantId;
+        db.SaveChanges();
+        return participant;
+    }
+
+    private static string RefusalOf(ActionResult<ApiResponse<ShiftDto>> result) => Assert.Single(Assert.IsType<ApiResponse<ShiftDto>>(Assert.IsType<BadRequestObjectResult>(result.Result).Value).Errors!);
+
+    [Fact]
+    public async Task CreateShift_StoresAnActiveServiceLocation_AndTheDtoCarriesIt()
+    {
+        var tenant = Guid.NewGuid();
+        using var db = TestDb.Create(Guid.NewGuid().ToString(), tenant);
+        var participant = SeedParticipantIn(db, tenant);
+        var place = SeedPlace(db, tenant);
+
+        var created = Data(await LocationController(db).CreateShift(CleanCreateDto(participant.Id, null) with { ServiceLocationId = place.Id }, default));
+
+        Assert.Equal(place.Id, created.ServiceLocationId);
+        Assert.Equal(place.Id, (await db.Shifts.AsNoTracking().SingleAsync()).ServiceLocationId);
+    }
+
+    [Fact]
+    public async Task CreateShift_RefusesAnotherOrganisationsPlace_EvenForASuperAdminViewingAsThisOne()
+    {
+        var tenantA = Guid.NewGuid();
+        using var db = TestDb.Create(Guid.NewGuid().ToString(), tenantA);
+        var participant = SeedParticipantIn(db, tenantA);
+        var theirs = SeedPlace(db, Guid.NewGuid());
+
+        var refused = await LocationController(db).CreateShift(CleanCreateDto(participant.Id, null) with { ServiceLocationId = theirs.Id }, default);
+
+        Assert.Equal("Pick one of your service locations.", RefusalOf(refused));
+        Assert.Empty(await db.Shifts.ToListAsync());
+    }
+
+    [Fact]
+    public async Task CreateShift_RefusesAnArchivedPlace()
+    {
+        var tenant = Guid.NewGuid();
+        using var db = TestDb.Create(Guid.NewGuid().ToString(), tenant);
+        var participant = SeedParticipantIn(db, tenant);
+        var archived = SeedPlace(db, tenant, active: false);
+
+        var refused = await LocationController(db).CreateShift(CleanCreateDto(participant.Id, null) with { ServiceLocationId = archived.Id }, default);
+
+        Assert.Equal("Pick one of your service locations.", RefusalOf(refused));
+    }
+
+    [Fact]
+    public async Task UpdateShift_LeftOutKeepsThePlace_NullClearsIt_AndAnotherActivePlaceReplacesIt()
+    {
+        var tenant = Guid.NewGuid();
+        using var db = TestDb.Create(Guid.NewGuid().ToString(), tenant);
+        var participant = SeedParticipantIn(db, tenant);
+        var first = SeedPlace(db, tenant);
+        var second = SeedPlace(db, tenant, name: "Hub");
+        var created = Data(await LocationController(db).CreateShift(CleanCreateDto(participant.Id, null) with { ServiceLocationId = first.Id }, default));
+
+        var leftOut = PutJson(created, "");
+        Assert.False(leftOut.HasServiceLocationId);
+        Assert.Equal(first.Id, Data(await LocationController(db).UpdateShift(created.Id, leftOut, default)).ServiceLocationId);
+
+        Assert.Equal(second.Id, Data(await LocationController(db).UpdateShift(created.Id, PutJson(created, $$""", "serviceLocationId": "{{second.Id}}" """), default)).ServiceLocationId);
+
+        var cleared = PutJson(created, """, "serviceLocationId": null""");
+        Assert.True(cleared.HasServiceLocationId);
+        Assert.Null(Data(await LocationController(db).UpdateShift(created.Id, cleared, default)).ServiceLocationId);
+        Assert.Null((await db.Shifts.AsNoTracking().SingleAsync()).ServiceLocationId);
+    }
+
+    [Fact]
+    public async Task UpdateShift_RefusesAForeignPlace_ButAnArchivedPlaceAlreadyOnTheShiftMayStay()
+    {
+        var tenant = Guid.NewGuid();
+        using var db = TestDb.Create(Guid.NewGuid().ToString(), tenant);
+        var participant = SeedParticipantIn(db, tenant);
+        var place = SeedPlace(db, tenant);
+        var theirs = SeedPlace(db, Guid.NewGuid(), name: "Elsewhere");
+        var created = Data(await LocationController(db).CreateShift(CleanCreateDto(participant.Id, null) with { ServiceLocationId = place.Id }, default));
+
+        var foreign = await LocationController(db).UpdateShift(created.Id, PutJson(created, $$""", "serviceLocationId": "{{theirs.Id}}" """), default);
+        Assert.Equal("Pick one of your service locations.", RefusalOf(foreign));
+
+        place.IsActive = false;
+        await db.SaveChangesAsync();
+        var kept = Data(await LocationController(db).UpdateShift(created.Id, PutJson(created, $$""", "serviceLocationId": "{{place.Id}}" """), default));
+        Assert.Equal(place.Id, kept.ServiceLocationId);
+    }
+
     [Fact]
     public async Task GetBoard_StaffMode_ComplianceNote_NamesAnExpiredCpr()
     {

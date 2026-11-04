@@ -251,6 +251,7 @@ public partial class ShiftClaimGenerationService
         // One day past the range: a shift on its last day runs past midnight into the next, which can be a holiday.
         var publicHolidays = PublicHolidayLoader.WholeDayCalendarOf(await PublicHolidayLoader.LoadAsync(_db, from, to.AddDays(1), includePartDay: false, ct)).For(state);
         // The organisation's zone (the shifts are its own and the clocks change there), not the participant's state.
+        // shortcut: multi-zone providers price DST days in the org zone until a batched ForShiftsAsync exists; revisit when a provider has places in zones that change clocks differently.
         var zone = (await ProviderTimeZoneResolver.ResolveAsync(_db, participant.TenantId, ct)).Zone;
 
         // Only the community access group is priced from here. It is the only group that existed when this engine picked "the first active item for the

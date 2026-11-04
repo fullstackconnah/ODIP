@@ -4305,6 +4305,59 @@ namespace Odip.Infrastructure.Migrations
                     b.ToTable("ReferralSources");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Entities.ServiceLocation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Address")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal>("Latitude")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)");
+
+                    b.Property<decimal>("Longitude")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("RadiusMetres")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TimeZoneId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "Name")
+                        .IsUnique()
+                        .HasFilter("\"IsActive\"");
+
+                    b.ToTable("ServiceLocations");
+                });
+
             modelBuilder.Entity("Odip.Domain.Entities.RestrictivePractice", b =>
                 {
                     b.Property<Guid>("Id")
@@ -6684,6 +6737,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateOnly>("ServiceDate")
                         .HasColumnType("date");
 
+                    b.Property<Guid?>("ServiceLocationId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid?>("ShiftPatternId")
                         .HasColumnType("uuid");
 
@@ -6711,6 +6767,8 @@ namespace Odip.Infrastructure.Migrations
                     b.HasIndex("ParticipantId");
 
                     b.HasIndex("RegularUserId");
+
+                    b.HasIndex("ServiceLocationId");
 
                     b.HasIndex("TenantId");
 
@@ -8002,6 +8060,17 @@ namespace Odip.Infrastructure.Migrations
                     b.Navigation("Tenant");
                 });
 
+            modelBuilder.Entity("Odip.Domain.Entities.ServiceLocation", b =>
+                {
+                    b.HasOne("Odip.Domain.Entities.Tenant", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Tenant");
+                });
+
             modelBuilder.Entity("Odip.Domain.Entities.RestrictivePractice", b =>
                 {
                     b.HasOne("Odip.Domain.Entities.Participant", "Participant")
@@ -8439,12 +8508,19 @@ namespace Odip.Infrastructure.Migrations
                         .HasForeignKey("RegularUserId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("Odip.Domain.Entities.ServiceLocation", "ServiceLocation")
+                        .WithMany()
+                        .HasForeignKey("ServiceLocationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Odip.Domain.Entities.User", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Participant");
+
+                    b.Navigation("ServiceLocation");
 
                     b.Navigation("User");
                 });

@@ -251,7 +251,7 @@ public class RosteringController : ControllerBase
                 StaffId = shift.UserId, StaffName = staff?.FullName,
                 ServiceDate = shift.ServiceDate, StartTime = shift.StartTime, EndTime = shift.EndTime, EndsNextDay = shift.EndsNextDay,
                 DurationHours = shift.DurationHours, Ratio = shift.Ratio, NightType = shift.NightType, Status = shift.Status,
-                ShiftPatternId = shift.ShiftPatternId, Notes = shift.Notes, Location = shift.Location, SupportGroupCode = shift.SupportGroupCode, ClaimReference = claimReferences.GetValueOrDefault(shift.Id), OverrideReason = shift.OverrideReason, Requirements = RequirementsOf(shift.RequirementsJson),
+                ShiftPatternId = shift.ShiftPatternId, Notes = shift.Notes, Location = shift.Location, ServiceLocationId = shift.ServiceLocationId, SupportGroupCode = shift.SupportGroupCode, ClaimReference = claimReferences.GetValueOrDefault(shift.Id), OverrideReason = shift.OverrideReason, Requirements = RequirementsOf(shift.RequirementsJson),
                 AcknowledgedFindingCodes = AcknowledgedCodesOf(shift), BudgetReview = budgetReviews.GetValueOrDefault(shift.Id),
                 FromAgreement = fromAgreement ? true : null, SourceDraftVersion = sourceVersion,
                 Findings = findings.Select(ToFindingDto).ToList(),
@@ -591,6 +591,11 @@ public class RosteringController : ControllerBase
     private static string? TidyLocation(string? raw) => string.IsNullOrWhiteSpace(raw) ? null : raw.Trim();
     private const int LocationMaxLength = 200;
     private const string LocationTooLongMessage = "Keep the location to 200 characters or fewer.";
+    private const string ServiceLocationRefusedMessage = "Pick one of your service locations.";
+
+    /// <summary>A saved place a shift may point at: an active one of the SHIFT's own organisation (a SuperAdmin has no query filter, so the tenant is named here), or the one the shift already has, which may since have been archived.</summary>
+    private async Task<bool> ServiceLocationUsableAsync(Guid placeId, Guid tenantId, Guid? alreadyOnShift, CancellationToken ct) =>
+        placeId == alreadyOnShift || await _db.ServiceLocations.AnyAsync(l => l.Id == placeId && l.TenantId == tenantId && l.IsActive, ct);
 
     /// <summary>The body of <see cref="CreateShift"/>. With <paramref name="movingFrom"/> (already locked and checked) the person leaves it in the same save.</summary>
     private async Task<ActionResult<ApiResponse<ShiftDto>>> CreateShiftCoreAsync(CreateShiftDto dto, Shift? movingFrom, CancellationToken ct, Shift? copyFrom = null)
@@ -604,6 +609,10 @@ public class RosteringController : ControllerBase
         var refError = await ValidateRefsAsync(dto.ParticipantId, dto.StaffId, ct);
         if (refError != null) return BadRequest(ApiResponse<ShiftDto>.Fail(refError));
 
+        if (dto.ServiceLocationId is { } placeId
+            && !await ServiceLocationUsableAsync(placeId, await _db.Participants.Where(p => p.Id == dto.ParticipantId).Select(p => p.TenantId).FirstOrDefaultAsync(ct), copyFrom?.ServiceLocationId, ct))
+            return BadRequest(ApiResponse<ShiftDto>.Fail(ServiceLocationRefusedMessage));
+
         var shift = new Shift
         {
             Id = Guid.NewGuid(), ParticipantId = dto.ParticipantId, UserId = dto.StaffId,
@@ -611,7 +620,7 @@ public class RosteringController : ControllerBase
             // No ShiftPatternId from the request: a pattern link is the server's (the generator sets it). One a request names is dropped, or a hand-made shift could call itself routine and walk round the hard limit (C3).
             // Only the server's own split of a shift (copyFrom, R7 auto-roster) carries the link and requirements of the shift it was cut from.
             ShiftPatternId = copyFrom?.ShiftPatternId, RequirementsJson = copyFrom?.RequirementsJson,
-            Ratio = dto.Ratio, NightType = dto.NightType, Notes = dto.Notes, Location = location, SupportGroupCode = supportCode,
+            Ratio = dto.Ratio, NightType = dto.NightType, Notes = dto.Notes, Location = location, ServiceLocationId = dto.ServiceLocationId, SupportGroupCode = supportCode,
             Status = copyFrom?.Status ?? ShiftStatus.Draft   // a split's other half keeps the shift's status, so a Published week tells the second worker too
         };
 
@@ -673,6 +682,8 @@ public class RosteringController : ControllerBase
         if (dto.HasLocation && location?.Length > LocationMaxLength) return BadRequest(ApiResponse<ShiftDto>.Fail(LocationTooLongMessage));
         var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == id, ct);
         if (shift == null) return NotFound(ApiResponse<ShiftDto>.Fail("Shift not found."));
+        if (dto.HasServiceLocationId && dto.ServiceLocationId is { } newPlaceId && !await ServiceLocationUsableAsync(newPlaceId, shift.TenantId, shift.ServiceLocationId, ct))
+            return BadRequest(ApiResponse<ShiftDto>.Fail(ServiceLocationRefusedMessage));
         if (dto.ExpectsStaff && dto.ExpectedStaffId != shift.UserId)
             return Conflict(ApiResponse<ShiftDto>.Fail(BoardChangedMessage, ShiftErrorCodes.ShiftBoardChanged));
         // A started, finished or cancelled shift keeps its worker here too, as /assign and a drop do (decision 8; post-merge review S2): its completion and timesheet
@@ -779,6 +790,7 @@ public class RosteringController : ControllerBase
         if (dto.Status != ShiftStatus.Cancelled) shift.CancelledAt = null;
         else if (previousStatus == ShiftStatus.Published) shift.CancelledAt = _clock.GetUtcNow().UtcDateTime;
         if (dto.HasLocation) shift.Location = location;
+        if (dto.HasServiceLocationId) shift.ServiceLocationId = dto.ServiceLocationId;
         shift.SupportGroupCode = supportCode;
         shift.UpdatedAt = DateTime.UtcNow;
         ApplyOverride(shift, findings, budgetGate, dto.OverrideReason, dto.AcknowledgedFindingCodes, previousReason, previousCodes);
@@ -1194,14 +1206,14 @@ public class RosteringController : ControllerBase
         var shrunk = await UpdateShiftLockedAsync(shift.Id, new UpdateShiftDto
         {
             ParticipantId = shift.ParticipantId, StaffId = null, ServiceDate = shift.ServiceDate, StartTime = shift.StartTime, EndTime = split.CutAt, Ratio = shift.Ratio, NightType = shift.NightType,
-            Notes = shift.Notes, Location = shift.Location, SupportGroupCode = shift.SupportGroupCode, Status = shift.Status,
+            Notes = shift.Notes, Location = shift.Location, ServiceLocationId = shift.ServiceLocationId, SupportGroupCode = shift.SupportGroupCode, Status = shift.Status,
         }, ct);
         if (shrunk.Result is not OkObjectResult) return await UndoAsync(AssignRefusalMessage(shrunk.Result));
 
         var created = await CreateShiftCoreAsync(new CreateShiftDto
         {
             ParticipantId = shift.ParticipantId, StaffId = null, ServiceDate = shift.ServiceDate, StartTime = split.CutAt, EndTime = split.EndTime, Ratio = shift.Ratio, NightType = shift.NightType,
-            Notes = shift.Notes, Location = shift.Location, SupportGroupCode = shift.SupportGroupCode,
+            Notes = shift.Notes, Location = shift.Location, ServiceLocationId = shift.ServiceLocationId, SupportGroupCode = shift.SupportGroupCode,
         }, null, ct, copyFrom: shift);
         if ((created.Result as OkObjectResult)?.Value is not ApiResponse<ShiftDto> { Data: { } half2 }) return await UndoAsync(AssignRefusalMessage(created.Result));
         halfId = half2.Id;
@@ -2375,7 +2387,7 @@ public class RosteringController : ControllerBase
             StaffId = shift.UserId, StaffName = staff?.FullName,
             ServiceDate = shift.ServiceDate, StartTime = shift.StartTime, EndTime = shift.EndTime, EndsNextDay = shift.EndsNextDay,
             DurationHours = shift.DurationHours, Ratio = shift.Ratio, NightType = shift.NightType, Status = shift.Status,
-            ShiftPatternId = shift.ShiftPatternId, Notes = shift.Notes, Location = shift.Location, SupportGroupCode = shift.SupportGroupCode, ClaimReference = (await ClaimReferencesAsync(new[] { shift.Id }, ct)).GetValueOrDefault(shift.Id), OverrideReason = shift.OverrideReason, Requirements = RequirementsOf(shift.RequirementsJson),
+            ShiftPatternId = shift.ShiftPatternId, Notes = shift.Notes, Location = shift.Location, ServiceLocationId = shift.ServiceLocationId, SupportGroupCode = shift.SupportGroupCode, ClaimReference = (await ClaimReferencesAsync(new[] { shift.Id }, ct)).GetValueOrDefault(shift.Id), OverrideReason = shift.OverrideReason, Requirements = RequirementsOf(shift.RequirementsJson),
             AcknowledgedFindingCodes = AcknowledgedCodesOf(shift), BudgetReview = (await BudgetReviewsAsync(new[] { shift }, ct)).GetValueOrDefault(shift.Id),
             FromAgreement = fromAgreement ? true : null, SourceDraftVersion = sourceVersion,
             Findings = findings.Select(ToFindingDto).ToList(),
@@ -2511,6 +2523,9 @@ public class RosteringController : ControllerBase
     /// <summary>What a shift held before a PUT changed it: the one input <see cref="NotifyStaffChangeAsync"/> needs to tell the worker what moved.</summary>
     private readonly record struct ShiftWas(DateOnly Date, TimeOnly Start, TimeOnly End, bool EndsNextDay, Guid ParticipantId);
 
+    private async Task<DateOnly> ShiftTodayAsync(Shift shift, CancellationToken ct) =>
+        ProviderLocalTime.TodayIn(_clock.GetUtcNow().UtcDateTime, (await ProviderTimeZoneResolver.ForShiftAsync(_db, shift, ct)).Zone);
+
     /// <summary>
     /// Roster drag and drop (2026-10-14), decision 9: a worker hears about a shift only once it is Published. Call it once the shift holds its new worker and status, before the
     /// caller's one save, so the outbox rows commit with the change (a refused write sends nothing). The worker on a Published shift gets ShiftAssigned when it is newly theirs or
@@ -2521,14 +2536,15 @@ public class RosteringController : ControllerBase
     /// </summary>
     private async Task NotifyStaffChangeAsync(Shift shift, Guid? previousUserId, bool wasPublished, CancellationToken ct, ShiftWas? was = null)
     {
+        Task<DateOnly> TodayHereAsync() => ShiftTodayAsync(shift, ct);   // the date at the shift's place, which can be in another zone
         var assignedTo = shift.Status == ShiftStatus.Published && shift.UserId is { } now && (now != previousUserId || !wasPublished) ? now : (Guid?)null;
         var cancelled = wasPublished && shift.Status == ShiftStatus.Cancelled && previousUserId is not null
-            && shift.ServiceDate >= await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
+            && shift.ServiceDate >= await TodayHereAsync();
         var takenOff = wasPublished && previousUserId is { } before && (cancelled || before != shift.UserId) ? before : (Guid?)null;
         // shift-change-notice (2026-10-29): the worker who stays on a Published shift hears when its time, day or participant changed, unless the shift is wholly in the past. Only the PUT passes `was`.
         var changed = was is { } w && wasPublished && shift.Status == ShiftStatus.Published && shift.UserId is not null && shift.UserId == previousUserId
             && (w.Date != shift.ServiceDate || w.Start != shift.StartTime || w.End != shift.EndTime || w.EndsNextDay != shift.EndsNextDay || w.ParticipantId != shift.ParticipantId)
-            && (w.Date > shift.ServiceDate ? w.Date : shift.ServiceDate) >= await ProviderTimeZoneResolver.TodayAsync(_db, _clock, ct);
+            && (w.Date > shift.ServiceDate ? w.Date : shift.ServiceDate) >= await TodayHereAsync();
         if (assignedTo is null && takenOff is null && !changed) return;
 
         async Task<string?> NameOf(Guid id) => await _db.Participants.Where(p => p.Id == id)

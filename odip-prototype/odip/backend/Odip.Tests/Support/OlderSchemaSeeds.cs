@@ -14,6 +14,7 @@ internal static class OlderSchemaSeeds
         ("AppSettings", "HiddenTrips", "boolean NOT NULL DEFAULT FALSE"),
         ("AppSettings", "AutoRosterReach", "integer NOT NULL DEFAULT 3"),
         ("IncidentReports", "AmbulanceOfficerName", "character varying(100)"),
+        ("Shifts", "ServiceLocationId", "uuid"),
         ("IncidentReports", "AmbulanceReference", "character varying(50)"),
         ("IncidentReports", "EmergencyServices", "integer NOT NULL DEFAULT 0"),
         ("IncidentReports", "FireOfficerName", "character varying(100)"),

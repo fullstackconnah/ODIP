@@ -32,6 +32,21 @@ public static class ProviderTimeZoneResolver
     }
 
     /// <summary>
+    /// The zone of ONE shift: its service location's zone when it has a valid one, else the zone of the shift's organisation. The location is read by id AND the shift's tenant, so a
+    /// SuperAdmin's unfiltered context cannot pick up another organisation's place. An archived place still gives its zone. Every call that resolves the zone for one shift uses this;
+    /// calls that cover many shifts, pay periods or claims stay on <see cref="ResolveAsync(OdipDbContext, Guid, CancellationToken)"/> (one query per shift is not allowed).
+    /// </summary>
+    public static async Task<ProviderTimeZone> ForShiftAsync(OdipDbContext db, Shift shift, CancellationToken ct)
+    {
+        if (shift.ServiceLocationId is { } locationId)
+        {
+            var zoneId = await db.ServiceLocations.Where(l => l.Id == locationId && l.TenantId == shift.TenantId).Select(l => l.TimeZoneId).FirstOrDefaultAsync(ct);
+            if (zoneId is not null && StateTimeZoneMap.Zones.Contains(zoneId)) return new ProviderTimeZone(zoneId, ProviderLocalTime.ResolveZone(zoneId));
+        }
+        return await ResolveAsync(db, shift.TenantId, ct);
+    }
+
+    /// <summary>
     /// The provider's calendar date now (see <see cref="ProviderLocalTime.TodayIn"/>): the "today" every calendar rule uses. Pass the
     /// request's <see cref="TimeProvider"/> so a test can fix the clock.
     /// </summary>
