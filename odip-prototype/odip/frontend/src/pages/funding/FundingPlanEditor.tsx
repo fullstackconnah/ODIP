@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { Trash2 } from 'lucide-react'
 import { useCreateFundingPlan, useFundingLedger, useFundingPlans, usePaceCategories, useUpdateFundingPlan } from '@/api/hooks'
@@ -19,7 +19,7 @@ import { categoriesLabel, managementLabel, paceNumber, writtenSpan } from '@/lib
 import { apiErrorCode, apiErrorMessages, apiErrorStatus } from '@/lib/shiftPackageErrors'
 import { cn, formatCurrency } from '@/lib/utils'
 import {
-  addCorePool, addStatedPool, applySetAside, editorStateFromPlan, hasPool, isZeroSetAside, moneyText, nextPlanState, noPeriodsReason, poolSums, removePool, resplit, SET_ASIDE_NOT_APPLIED, toSaveBody, updatePool, validate,
+  addCorePool, addStatedPool, applySetAside, clearedRollovers, editorStateFromPlan, hasPool, isZeroSetAside, moneyText, nextPlanState, noPeriodsReason, poolSums, removePool, resplit, SET_ASIDE_NOT_APPLIED, toSaveBody, updatePool, validate,
   withPeriodEdit, withPlanFields, withPoolTotals, withSetAsideZeroConfirmed, type EditorPool, type EditorState, type PoolProblems, type Problems,
 } from './fundingEditorState'
 
@@ -133,6 +133,7 @@ function EditorBody({ onClose, participantId, plan, previousPlan, defaultManagem
   const [revealed, setRevealed] = useState<ReadonlySet<string>>(() => new Set())
   const [failure, setFailure] = useState<Failure | null>(null)
   const [rewrote, setRewrote] = useState(false)
+  const [clearedRollover, setClearedRollover] = useState(false)
   const [management, setManagement] = useState<PlanType>(defaultManagement)
   const [category, setCategory] = useState('')
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -192,6 +193,7 @@ function EditorBody({ onClose, participantId, plan, previousPlan, defaultManagem
     const { state: next, rewroteEdits } = withPlanFields(state, patch)
     setState(next)
     if (rewroteEdits) setRewrote(true)
+    if (clearedRollovers(state, next)) setClearedRollover(true)
   }
 
   const addPool = (next: EditorState) => {
@@ -291,6 +293,7 @@ function EditorBody({ onClose, participantId, plan, previousPlan, defaultManagem
 
         <PlanFields state={state} problems={attempted ? problems : null} onChange={change} />
         {rewrote && <Callout tone="info">The periods were worked out again from the new dates, so amounts you had edited were replaced.</Callout>}
+        {clearedRollover && <Callout tone="info">Rolled-over amounts you typed were cleared because the periods changed.</Callout>}
 
         <section className="flex flex-col gap-3" aria-labelledby="funding-pools-heading">
           <h3 id="funding-pools-heading" tabIndex={-1} className="text-sm font-semibold focus:outline-none">Pools</h3>
@@ -305,7 +308,7 @@ function EditorBody({ onClose, participantId, plan, previousPlan, defaultManagem
               defaultName={defaultNameOf(pool)}
               noPeriodsReason={periodsReason}
               workedOutFor={workedOutFor}
-              onState={next => { setState(next); startedOn(pool.key) }}
+              onState={next => { setState(next); startedOn(pool.key); if (clearedRollovers(state, next)) setClearedRollover(true) }}
               onRemove={() => remove(pool.key)}
             />
           ))}
@@ -507,6 +510,7 @@ function PeriodsTable(
 
 /** The rolled-over amount of one period after the first: a box that is empty while the ledger works it out (its figure is the hint inside it), and the words that say which of the two governs. */
 function RolloverRow({ span, value, problem, workedOut, onChange }: { span: string; value: string; problem: string | undefined; workedOut: WorkedOut; onChange: (text: string) => void }) {
+  const errorId = useId()
   const byHand = value.trim() !== ''
   const ready = workedOut.status === 'ready' ? workedOut : null
   const hint = byHand
@@ -520,13 +524,13 @@ function RolloverRow({ span, value, problem, workedOut, onChange }: { span: stri
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <span className="text-[13px] text-[var(--color-muted-foreground)]" aria-hidden="true">Rolled over</span>
         <input
-          className={cn(periodInputClass, 'w-28')} inputMode="decimal" aria-label={`Rolled over, ${span}`} aria-invalid={problem ? true : undefined}
+          className={cn(periodInputClass, 'w-28')} inputMode="decimal" aria-label={`Rolled over, ${span}`} aria-invalid={problem ? true : undefined} aria-describedby={problem ? errorId : undefined}
           placeholder={ready ? moneyText(ready.amount) : undefined} value={value} onChange={event => onChange(event.target.value)}
         />
+        {problem && <p id={errorId} className="basis-full text-[13px] text-[var(--color-destructive)]">{problem}</p>}
         {byHand && <Button variant="ghost" size="sm" className="min-h-11" onClick={() => onChange('')}>Use worked-out amount</Button>}
       </div>
       <p className="text-[13px] text-[var(--color-muted-foreground)]">{hint}</p>
-      {problem && <p className="text-[13px] text-[var(--color-destructive)]">{problem}</p>}
     </div>
   )
 }

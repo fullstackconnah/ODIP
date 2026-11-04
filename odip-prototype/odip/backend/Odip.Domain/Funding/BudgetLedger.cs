@@ -76,7 +76,7 @@ public readonly record struct LedgerPlace(LedgerPlacement Placement, FundingPool
 /// </summary>
 public sealed record PeriodLedger(
     FundingPeriod Period, bool IsCurrent, decimal Limit, decimal Carried, decimal Claimed, decimal Pending, decimal BookedAhead, int PastUnresolvedCount, int UnpricedTripDayCount,
-    BudgetStatus Status, IReadOnlyList<LedgerItem> Items, int StartedUnclaimedTripCount, int UnpricedShiftCount, decimal CarriedWorkedOut)
+    BudgetStatus Status, IReadOnlyList<LedgerItem> Items, int StartedUnclaimedTripCount, int UnpricedShiftCount, decimal CarriedWorkedOut, bool CarriedSetByHand)
 {
     /// <summary>The limit plus what earlier periods of the plan left unspent (rolled over, not confirmed: somebody else may have used it).</summary>
     public decimal Available => Limit + Carried;
@@ -236,7 +236,7 @@ public static class BudgetLedgerCalculator
                 StatusOf(available, used, used + booked, approachingPercent), held,
                 // A booking priced in more than one category has an item for each: it is one trip however many parts it is split into.
                 held.Where(i => i.IsStartedUnclaimedTrip).Select(i => i.BookingId).Distinct().Count(),
-                held.Count(i => i.IsUnpricedShift), workedOut));
+                held.Count(i => i.IsUnpricedShift), workedOut, periods.Count > 0 && period.RolloverOverride is not null));
             carried = Math.Max(0m, available - used);   // what this period leaves unspent rolls into the next, and chains
         }
 

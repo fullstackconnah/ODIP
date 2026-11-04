@@ -1369,6 +1369,29 @@ describe('editor: the rolled-over amount of each period', () => {
     expect(within(coreCard()).getAllByText('Worked out once the period before has ended.')).toHaveLength(3)
   })
 
+  it('puts the error right under the box, before the use-worked-out button, and links it to the box', async () => {
+    ledger.mockReturnValue({ data: participantLedger(), isLoading: false, isError: false })
+    const { user } = renderEditor({ plan: stored })
+
+    await user.type(rolled(1), '-5')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    const error = within(coreCard()).getByText("A rolled-over amount can't be less than $0.00.")
+    const button = within(coreCard()).getAllByRole('button', { name: 'Use worked-out amount' })[0]
+
+    expect(error.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(rolled(1)).toHaveAttribute('aria-describedby', error.id)
+  })
+
+  it('says typed rollovers were cleared when the periods are split again', async () => {
+    ledger.mockReturnValue({ data: participantLedger(), isLoading: false, isError: false })
+    const { user } = renderEditor({ plan: stored })
+
+    await user.type(rolled(1), '750')
+    day('Plan end', '2027-03-31')
+
+    expect(screen.getByText('Rolled-over amounts you typed were cleared because the periods changed.')).toBeInTheDocument()
+  })
+
   it('refuses an amount above the most a rolled-over amount can be, beside the box, and saves nothing', async () => {
     ledger.mockReturnValue({ data: participantLedger(), isLoading: false, isError: false })
     const { user } = renderEditor({ plan: stored })

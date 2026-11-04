@@ -239,6 +239,18 @@ public class AgreementCheckTests
     }
 
     [Fact]
+    public async Task A_stored_rollover_on_the_pools_first_period_is_not_reported_as_set_by_hand()
+    {
+        using var a = await ArrangeAsync();
+        // Nothing rolls into a pool's first period, so a stored amount there changes nothing and must not be called a typed one.
+        a.Kit.SeedPlan(a.Person, D(2026, 10, 1), D(2026, 12, 31), Core(PlanType.PlanManaged, Month(10, 1000m) with { Rollover = 500m }, Month(11, 100m), Month(12, 1000m)));
+
+        var ledger = (await a.Kit.Ledger.GetLedgerAsync(a.Kit.TenantId, a.Person.Id, CancellationToken.None))!.Pools.Single().Periods;
+
+        Assert.Equal((0m, false), (ledger[0].Carried, ledger[0].CarriedSetByHand));
+    }
+
+    [Fact]
     public async Task An_agreement_that_spends_in_the_first_period_does_not_change_the_hand_set_rollover()
     {
         using var a = await ArrangeAsync();

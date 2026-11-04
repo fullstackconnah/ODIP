@@ -217,6 +217,14 @@ export function resplitAll(state: EditorState): { state: EditorState; rewroteEdi
   return { state: { ...state, pools: state.pools.map(pool => resplit(state, pool)) }, rewroteEdits }
 }
 
+/** True when a re-split (not the person clearing a box) dropped a rolled-over amount that was typed: the pool had one before, and now has none and is no longer marked edited. */
+export function clearedRollovers(before: EditorState, after: EditorState): boolean {
+  return before.pools.some(pool => {
+    const next = after.pools.find(p => p.key === pool.key)
+    return next !== undefined && !next.edited && pool.periods.some(p => !isBlank(p.rollover)) && next.periods.every(p => isBlank(p.rollover))
+  })
+}
+
 const sameDates = (a: EditorState, b: EditorState) => a.planStart === b.planStart && a.planEnd === b.planEnd && a.periodLengthMonths === b.periodLengthMonths
 
 /** Applies a change to the plan's fields. A change to its dates or period length works every pool's periods out again. */
@@ -394,6 +402,8 @@ function amountProblem(text: string, required: boolean, requiredMessage: string)
 function rolloverProblem(text: string, index: number): string | undefined {
   if (isBlank(text)) return undefined
   if (index === 0) return 'Nothing rolls over into the first period.'
+  const signed = text.replace(/[\s$,]/g, '')
+  if (/^-\d+(\.\d{1,2})?$/.test(signed) && Number(signed) < 0) return "A rolled-over amount can't be less than $0.00."
   const value = moneyOf(text)
   if (value === null) return NOT_AN_AMOUNT
   return value > MAX_AMOUNT ? 'The most a rolled-over amount can be is $99,999,999.99.' : undefined

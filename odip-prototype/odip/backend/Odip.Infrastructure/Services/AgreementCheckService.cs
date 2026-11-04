@@ -134,7 +134,7 @@ public sealed class AgreementCheckService
                 periods.Add(new AgreementCheckPeriodDto
                 {
                     PeriodId = p.Period.Id, PeriodStart = p.Period.PeriodStart, PeriodEnd = p.Period.PeriodEnd, IsCurrent = p.IsCurrent, AgreementCost = cost,
-                    Available = walk[i].Available, CarriedIn = walk[i].CarriedIn, CarriedSetByHand = p.Period.RolloverOverride is not null, Used = p.Used, Remaining = walk[i].Remaining, OverBy = walk[i].OverBy,
+                    Available = walk[i].Available, CarriedIn = walk[i].CarriedIn, CarriedSetByHand = p.CarriedSetByHand, Used = p.Used, Remaining = walk[i].Remaining, OverBy = walk[i].OverBy,
                 });
                 alreadyOver += walk[i].AlreadyOverBy;
             }

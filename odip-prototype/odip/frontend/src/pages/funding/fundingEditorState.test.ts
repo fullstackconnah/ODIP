@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { FundingPlanDto } from '@/api/types'
 import {
   addCorePool, addStatedPool, applySetAside, editorStateFromPlan, emptyEditorState, hasPool, moneyOf, moneyText, nextPlanState, noPeriodsReason, poolSums, removePool, resplit, SET_ASIDE_NOT_APPLIED, setAsideOf,
-  toSaveBody, validate, withPeriodEdit, withPlanFields, withPoolTotals, withSetAsideZeroConfirmed, type EditorState,
+  clearedRollovers, resplitAll, toSaveBody, validate, withPeriodEdit, withPlanFields, withPoolTotals, withSetAsideZeroConfirmed, type EditorState,
 } from './fundingEditorState'
 
 // The editor's form as plain data: what the person typed, how the periods follow the dates and the totals, what is wrong in plain words, and the body that is saved.
@@ -877,6 +877,24 @@ describe('the rolled-over amount of a period', () => {
     expect(problemsOf(state)[1].rollover).toBe('Enter dollars and cents, like 8000.00.')
     expect(problemsOf(state)[2].rollover).toBe('The most a rolled-over amount can be is $99,999,999.99.')
     expect(problemsOf(state)[0].rollover).toBe('Nothing rolls over into the first period.')
+  })
+
+  it('says a negative amount is below zero, and keeps the not-an-amount words for anything else', () => {
+    let state = planWith()
+    state = withPeriodEdit(state, key(state), 1, { rollover: '-5' })
+    state = withPeriodEdit(state, key(state), 2, { rollover: '-$1,250.50' })
+    state = withPeriodEdit(state, key(state), 3, { rollover: '--' })
+    expect(problemsOf(state)[1].rollover).toBe("A rolled-over amount can't be less than $0.00.")
+    expect(problemsOf(state)[2].rollover).toBe("A rolled-over amount can't be less than $0.00.")
+    expect(problemsOf(state)[3].rollover).toBe('Enter dollars and cents, like 8000.00.')
+  })
+
+  it('reports a re-split that dropped typed rollovers, and not the person clearing the box', () => {
+    let state = planWith()
+    state = withPeriodEdit(state, key(state), 1, { rollover: '750' })
+    expect(clearedRollovers(state, resplitAll(state).state)).toBe(true)
+    expect(clearedRollovers(state, withPeriodEdit(state, key(state), 1, { rollover: '' }))).toBe(false)
+    expect(clearedRollovers(planWith(), resplitAll(planWith()).state)).toBe(false)
   })
 
   it('accepts a zero and a blank (a zero is a real amount: nothing rolls over)', () => {

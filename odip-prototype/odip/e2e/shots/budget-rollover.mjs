@@ -4,7 +4,7 @@
 // and the agreement check answer is patched to carry a rolled-over amount. Time-driven inputs: the Funding hints read the ledger's saved figures only, so the date does not move a number.
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
-import { AU_CONTEXT, prepareOutDir, cropElement, checkCropHolds, writeChecks } from '../shots/lib/capture.mjs'
+import { AU_CONTEXT, prepareOutDir, cropElement, checkCropHolds, fullPage, writeChecks } from '../shots/lib/capture.mjs'
 
 let chromium
 try { ;({ chromium } = await import('playwright')) } catch { ;({ chromium } = await import('@playwright/test')) }
@@ -74,7 +74,7 @@ async function openEditor(page) {
   return dialog
 }
 
-const crop = async (page, locator, name, vp, pad = 12) => {
+const crop = async (page, locator, name, vp, pad = 8) => {
   const r = await cropElement(page, locator, path.join(OUT_DIR, name), { touch: vp.touch, natural: true, pad })
   checks.push(checkCropHolds({ ...r, touch: vp.touch }))
 }
@@ -158,9 +158,18 @@ for (const vp of VPS) {
     const message = dialog.locator('p', { hasText: /rolled-over amount|rolled over/i }).filter({ hasText: /at least|can't be|cannot|must/i }).first()
     if (!(await message.isVisible().catch(() => false))) await dialog.getByRole('button', { name: /^Save/ }).first().click().catch(() => {})
     await page.waitForTimeout(400)
-    const errText = await box.evaluate((el) => [...el.parentElement.parentElement.querySelectorAll(':scope > p')].slice(1).map((p) => p.textContent).join(' '))
-    check(t('error: the rollover row shows a message under the box for -5'), errText.length > 0, errText)
+    const err = await box.evaluate((el) => {
+      const p = el.parentElement.querySelector(':scope > p'); const b = [...el.parentElement.querySelectorAll(':scope > button')][0]
+      if (!p) return { text: '', above: false, described: false }
+      const pb = p.getBoundingClientRect(), bb = b ? b.getBoundingClientRect() : null
+      return { text: p.textContent, above: !!b && !!(p.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) && pb.bottom <= bb.top + 1, described: el.getAttribute('aria-describedby') === p.id }
+    })
+    check(t('error: the exact negative copy sits beside the box'), err.text === "A rolled-over amount can't be less than $0.00.", err.text)
+    check(t('error: above the use-worked-out button, and described by the box'), err.above && err.described, err)
     await crop(page, pool, `editor-rollover-error-${tag}.png`, vp)
+    const full = await fullPage(page, path.join(OUT_DIR, 'full', `dialog-rollover-error-${tag}.png`), { touch: vp.touch })
+    checks.push(...full.checks)
+    check(t('dialog has no horizontal scroll'), await page.evaluate(() => { const d = document.querySelector('[role=dialog]'); return d.scrollWidth <= d.clientWidth && document.documentElement.scrollWidth <= document.documentElement.clientWidth }))
     await context.close()
   } catch (e) { check(t('editor states ran'), false, String(e.message).split('\n')[0]) }
 
