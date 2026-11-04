@@ -1570,7 +1570,7 @@ public class RosteringController : ControllerBase
     /// Return raise one (deferred to the notifications spec, out of scope for this PR).
     /// </summary>
     [HttpPost("shifts/{id:guid}/completion/approve")]
-    public async Task<ActionResult<ApiResponse<ShiftCompletionDto>>> ApproveCompletion(Guid id, CancellationToken ct, [FromQuery] bool requireClean = false)
+    public async Task<ActionResult<ApiResponse<ShiftCompletionDto>>> ApproveCompletion(Guid id, CancellationToken ct, [FromQuery] bool requireClean = false, [FromBody] ApproveCompletionDto? dto = null)
     {
         var reviewerId = ResolveCurrentUserId();
         if (reviewerId is null)
@@ -1600,6 +1600,9 @@ public class RosteringController : ControllerBase
         await rowLock.CommitAsync(ct);
         return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, shift.ReturnCount, ct)));
     }
+
+    [HttpPost("shifts/{id:guid}/completion/extra-time")]
+    public Task<ActionResult<ApiResponse<ShiftCompletionDto>>> DecideExtraTime(Guid id, [FromBody] DecideExtraTimeDto dto, CancellationToken ct) => throw new NotImplementedException();
 
     /// <summary>
     /// Staff set the four provider-travel values on a shift's ACTIVE completion (travel PR-A1): how staff add travel on a hand-made shift, or correct the
