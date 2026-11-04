@@ -3,7 +3,8 @@ import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import DashboardPage from './DashboardPage'
 
-const { mockUseParticipantAlertsAggregate, mockUseDashboard, mockUsePendingLeaveQueue, mockUsePendingCompletionQueue, mockUseStaff } = vi.hoisted(() => ({
+const { flags, mockUseParticipantAlertsAggregate, mockUseDashboard, mockUsePendingLeaveQueue, mockUsePendingCompletionQueue, mockUseStaff } = vi.hoisted(() => ({
+  flags: { hiddenTrips: false },
   mockUseParticipantAlertsAggregate: vi.fn(),
   mockUseDashboard: vi.fn(),
   mockUsePendingLeaveQueue: vi.fn(),
@@ -13,7 +14,7 @@ const { mockUseParticipantAlertsAggregate, mockUseDashboard, mockUsePendingLeave
 
 vi.mock('./dashboard/useDecisionGroups', () => ({ useDecisionGroups: () => [] }))
 vi.mock('@/api/hooks', () => ({
-  useModuleVisibility: () => ({ data: { hiddenAccommodation: false, hiddenVehicles: false }, isError: false }),
+  useModuleVisibility: () => ({ data: { hiddenAccommodation: false, hiddenVehicles: false, hiddenTrips: flags.hiddenTrips }, isError: false }),
   useDashboard: mockUseDashboard,
   useSettings: () => ({ data: undefined }),
   useStaff: mockUseStaff,
@@ -26,6 +27,7 @@ vi.mock('@/api/hooks', () => ({
 }))
 
 afterEach(() => {
+  flags.hiddenTrips = false
   localStorage.clear()
   vi.clearAllMocks()
 })
@@ -110,5 +112,23 @@ describe('Dashboard "Qualification issues" figure', () => {
     const tile = screen.getByRole('group', { name: 'Qualification issues 6' })
     expect(tile).toHaveTextContent('6')
     expect(tile).toHaveTextContent('2 staff members')
+  })
+})
+
+describe('Dashboard with trips and holidays switched off', () => {
+  const trips = { upcomingTripCount: 3, activeParticipantCount: 1, outstandingTaskCount: 0, overdueTaskCount: 0, conflictCount: 0, tripsMissingAccommodation: 2, tripsMissingVehicles: 1, tripsMissingStaff: 1, openIncidentCount: 0, qscOverdueCount: 0, upcomingTrips: [{ id: 't1', tripName: 'Gold Coast', startDate: '2026-11-20', status: 'Confirmed', destination: 'QLD', currentParticipantCount: 1, maxParticipants: 4 }] }
+  const withTrips = () => mockUseDashboard.mockReturnValue({ data: trips, isLoading: false, isError: false })
+  it('shows the trip figures, Missing items and card when trips are shown', () => {
+    withTrips(); renderPage()
+    expect(screen.getByRole('heading', { name: 'Upcoming trips' })).toBeInTheDocument()
+    expect(screen.getByText(/upcoming trip/i, { selector: 'span' })).toBeInTheDocument()
+    expect(screen.getAllByText(/Missing (accommodation|vehicles|staff)/).length).toBeGreaterThan(0)
+  })
+  it('drops the trip meta, the three Missing items and the Upcoming trips card', () => {
+    flags.hiddenTrips = true
+    withTrips(); renderPage()
+    expect(screen.queryByRole('heading', { name: 'Upcoming trips' })).toBeNull()
+    expect(screen.queryByText(/upcoming trip/i)).toBeNull()
+    expect(screen.queryByText(/Missing (accommodation|vehicles|staff)/)).toBeNull()
   })
 })

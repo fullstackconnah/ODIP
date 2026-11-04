@@ -12,7 +12,7 @@ type Action = { label: string; to: string }
 type Row = { title: string; status: string; purpose?: string; done: boolean; optional?: boolean; actions: Action[] }
 
 /** The setup steps, in order. Done rows fold to a line with no actions; the first required row not done carries the card's one primary. */
-function buildRows(status: SetupStatusDto, provider: ProviderSettingsDto | null, canManageIntegrations: boolean): Row[] {
+function buildRows(status: SetupStatusDto, provider: ProviderSettingsDto | null, canManageIntegrations: boolean, hiddenTrips?: boolean): Row[] {
   const { staffCount: staff, participantCount: people, participantsWithPlanCount: plans } = status
   const fromEh = !!provider?.employmentHeroConnected
   const staffActions: Action[] = fromEh
@@ -24,6 +24,9 @@ function buildRows(status: SetupStatusDto, provider: ProviderSettingsDto | null,
       ]
   const staffNoun = plural(staff, 'staff member')
   return [
+    // Optional and neutral: a business that runs trips is not nagged. Done once trips are switched off. Left out until the answer is known.
+    ...(hiddenTrips === undefined ? [] : [{ title: 'What you run', optional: true, done: hiddenTrips, status: hiddenTrips ? 'Trips and holidays hidden' : 'Trips and holidays shown',
+      purpose: 'Choose whether your organisation runs trips and holidays. Turning them off tidies the menu; nothing is deleted.', actions: [{ label: 'Choose what shows', to: '/settings?section=workspace-visibility' }] }]),
     { title: 'Organisation details', done: organisationDetailsRecorded(provider), status: organisationDetailsRecorded(provider) ? 'Details recorded' : 'Not recorded',
       purpose: 'Check the legal name, address and state that go on your invoices and claims.', actions: [{ label: 'Review details', to: '/settings?section=setup' }] },
     { title: 'Staff', done: staff >= 1,
@@ -44,7 +47,7 @@ function buildRows(status: SetupStatusDto, provider: ProviderSettingsDto | null,
   ]
 }
 
-export function SetupSteps({ status, provider, card, onHide }: { status: SetupStatusDto; provider: ProviderSettingsDto | null; card: 'steps' | 'done'; onHide: () => void }) {
+export function SetupSteps({ status, provider, hiddenTrips, card, onHide }: { status: SetupStatusDto; provider: ProviderSettingsDto | null; hiddenTrips?: boolean; card: 'steps' | 'done'; onHide: () => void }) {
   const { canManageIntegrations } = usePermissions()
   const hide = (
     <Button variant="ghost" size="sm" aria-label="Hide setup steps" className="ml-auto" onClick={() => {
@@ -64,8 +67,8 @@ export function SetupSteps({ status, provider, card, onHide }: { status: SetupSt
     )
   }
 
-  const rows = buildRows(status, provider, canManageIntegrations)
-  const required = rows.slice(0, 5)
+  const rows = buildRows(status, provider, canManageIntegrations, hiddenTrips)
+  const required = rows.filter(r => !r.optional)
   const doneCount = required.filter((r) => r.done).length
   const next = required.find((r) => !r.done)
   return (
@@ -76,12 +79,12 @@ export function SetupSteps({ status, provider, card, onHide }: { status: SetupSt
         {hide}
       </div>
       <ol className="mt-3 divide-y divide-[var(--color-border)]">
-        {rows.map((row, i) => (
+        {rows.map(row => (
           <li key={row.title} className="grid grid-cols-[24px_minmax(0,1fr)] gap-x-2 py-[var(--card-pad)] first:pt-0 last:pb-0 lg:grid-cols-[24px_minmax(0,1fr)_auto]">
             <span aria-hidden="true" className="mt-0.5">
               {row.done
                 ? <CircleCheck className={`h-5 w-5 ${TONE.success.ink}`} />
-                : <span className={`flex h-5 w-5 items-center justify-center rounded-full text-xs tabular-nums ${row === next ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)]' : 'border border-[var(--color-border)] text-[var(--color-muted-foreground)]'}`}>{i + 1}</span>}
+                : <span className={`flex h-5 w-5 items-center justify-center rounded-full text-xs tabular-nums ${row === next ? 'bg-[var(--color-primary)] text-[var(--color-primary-foreground)]' : 'border border-[var(--color-border)] text-[var(--color-muted-foreground)]'}`}>{required.indexOf(row) + 1 || ''}</span>}
             </span>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-x-3">

@@ -99,6 +99,7 @@ public class SettingsController : ControllerBase
         {
             HiddenAccommodation = s?.HiddenAccommodation ?? false,
             HiddenVehicles = s?.HiddenVehicles ?? false,
+            HiddenTrips = s?.HiddenTrips ?? false,
             EmploymentHeroConnected = await EmploymentHeroStaffSync.IsConnectedAsync(_db, tenantId, ct),
         }));
     }
@@ -110,8 +111,9 @@ public class SettingsController : ControllerBase
     {
         if (_tenant.TenantId is not { } tenantId)
             return BadRequest(ApiResponse<ModuleVisibilityDto>.Fail("Choose an organisation before changing workspace visibility."));
-        if (dto.HiddenAccommodation is not { } accommodation || dto.HiddenVehicles is not { } vehicles)
-            return BadRequest(ApiResponse<ModuleVisibilityDto>.Fail("Choose whether to show both workspaces."));
+        if (dto.HiddenAccommodation is not { } accommodation || dto.HiddenVehicles is not { } vehicles
+            || dto.HiddenTrips is not { } trips)
+            return BadRequest(ApiResponse<ModuleVisibilityDto>.Fail("Choose whether to show each workspace."));
         var s = await _db.AppSettings.FirstOrDefaultAsync(s => s.TenantId == tenantId, ct);
         if (s == null)
         {
@@ -124,13 +126,18 @@ public class SettingsController : ControllerBase
         if (s.HiddenVehicles != vehicles)
             _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(nameof(AppSettings), s.Id,
                 nameof(AppSettings.HiddenVehicles), s.HiddenVehicles.ToString(), vehicles.ToString(), User));
+        if (s.HiddenTrips != trips)
+            _db.AuditLogs.Add(SettingChangeAudit.ForFieldChange(nameof(AppSettings), s.Id,
+                nameof(AppSettings.HiddenTrips), s.HiddenTrips.ToString(), trips.ToString(), User));
         s.HiddenAccommodation = accommodation;
         s.HiddenVehicles = vehicles;
+        s.HiddenTrips = trips;
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<ModuleVisibilityDto>.Ok(new()
         {
             HiddenAccommodation = accommodation,
             HiddenVehicles = vehicles,
+            HiddenTrips = trips,
             EmploymentHeroConnected = await EmploymentHeroStaffSync.IsConnectedAsync(_db, tenantId, ct),
         }));
     }}

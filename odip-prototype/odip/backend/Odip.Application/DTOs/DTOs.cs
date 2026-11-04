@@ -2678,6 +2678,7 @@ public record ModuleVisibilityDto
 {
     public bool HiddenAccommodation { get; init; }
     public bool HiddenVehicles { get; init; }
+    public bool HiddenTrips { get; init; }
     /// <summary>Whether payslips (and, later, payroll pages) apply: presentation only, the server refuses on its own.</summary>
     public bool EmploymentHeroConnected { get; init; }
 }
@@ -2688,6 +2689,8 @@ public record UpdateModuleVisibilityDto
     public bool? HiddenAccommodation { get; init; }
     [System.ComponentModel.DataAnnotations.Required]
     public bool? HiddenVehicles { get; init; }
+    [System.ComponentModel.DataAnnotations.Required]
+    public bool? HiddenTrips { get; init; }
 }
 
 // ── Incident trend (incidents and restrictive practice uses by month)
