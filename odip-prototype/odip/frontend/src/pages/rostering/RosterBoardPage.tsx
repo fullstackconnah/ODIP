@@ -765,7 +765,7 @@ export default function RosterBoardPage() {
   )
   // The drafts banner is the Publish bar (owner, 2026-11-04): the foot of the page, pinned, so Publish week stays in reach while the board scrolls. A reader sees it without the button. It sits in the page flow after the board, so it never covers the last row; bg-background because rows scroll under it.
   const publishBar = showBanner ? (
-    <div data-publish-bar className="sticky bottom-[var(--mobile-nav-h)] z-20 bg-background lg:bottom-0">
+    <div data-publish-bar className="sticky bottom-[var(--mobile-nav-h)] z-20 bg-background pb-[var(--section-gap)] lg:bottom-0">
       <Callout
         tone="warning"
         // A standing state, not news: as role="alert" it would re-announce on every week change and refetch (the brief, 3.1). Publishing keeps its own sentence.

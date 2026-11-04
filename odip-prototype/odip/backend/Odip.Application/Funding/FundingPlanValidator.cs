@@ -203,9 +203,19 @@ public static class FundingPlanValidator
 
     private static void CheckMoney(List<SaveFundingPeriodDto> periods, string label, List<string> errors)
     {
+        var firstStart = periods.Where(p => p.PeriodStart is not null).Select(p => p.PeriodStart!.Value).DefaultIfEmpty().Min();
         foreach (var period in periods)
         {
             var where = period.PeriodStart is { } s ? $"the period starting {Say(s)} in {label}" : $"a period in {label}";
+            if (period.RolloverOverride is { } rollover)
+            {
+                if (rollover < 0m) errors.Add($"A rolled-over amount cannot be negative ({where}).");
+                else if (rollover > MaxAmount) errors.Add($"A rolled-over amount can be at most ${Money(MaxAmount)} ({where}).");
+                else if (decimal.Round(rollover, 2) != rollover) errors.Add($"A rolled-over amount is in dollars and cents ({where}).");
+                else if (period.PeriodStart is { } start && start == firstStart)
+                    errors.Add($"Nothing rolls over into the first period ({where}). Leave the rolled-over amount empty.");
+            }
+
             if (period.PlanAmount is { } amount)
             {
                 if (amount < 0m) errors.Add($"A plan amount cannot be negative ({where}).");

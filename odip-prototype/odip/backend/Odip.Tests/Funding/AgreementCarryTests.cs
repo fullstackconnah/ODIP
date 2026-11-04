@@ -15,6 +15,23 @@ public class AgreementCarryTests
     private static (decimal CarriedIn, decimal Available, decimal Remaining, decimal OverBy) Of(PeriodOutcome o) => (o.CarriedIn, o.Available, o.Remaining, o.OverBy);
 
     [Fact]
+    public void Walk_honours_carry_override()
+    {
+        // (1000, used 200) leaves 800; the second period's override of 500 replaces it: available 1500, which chains into the third.
+        var walk = Walk(0m, new[] { Period(1000m, 200m, 0m), new PeriodInput(1000m, 0m, 0m, 500m), Period(1000m, 0m, 0m) });
+
+        Assert.Equal(new[] { 0m, 500m, 1500m }, walk.Select(w => w.CarriedIn));
+    }
+
+    [Fact]
+    public void Walk_ignores_an_override_on_the_first_period()
+    {
+        var walk = Walk(0m, new[] { new PeriodInput(1000m, 0m, 0m, 700m), Period(1000m, 0m, 0m) });
+
+        Assert.Equal(new[] { 0m, 1000m }, walk.Select(w => w.CarriedIn));
+    }
+
+    [Fact]
     public void AnAgreementThatOverspendsThePoolAsAWholeIsOverInTheLaterPeriod_NotWithinInBoth()
     {
         // The reviewer's case: October $600 and November $1,000 with nothing used; the agreement costs $600 in October and $1,400 in November, $2,000 against the pool's $1,600.

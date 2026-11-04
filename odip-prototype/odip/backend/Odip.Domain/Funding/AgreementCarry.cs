@@ -12,7 +12,7 @@ namespace Odip.Domain.Funding;
 public static class AgreementCarry
 {
     /// <summary>One period of the pool: its limit, what is used in it already (claimed plus pending), and what the agreement costs in it (0 for a period the agreement does not touch).</summary>
-    public readonly record struct PeriodInput(decimal Limit, decimal Used, decimal AgreementCost);
+    public readonly record struct PeriodInput(decimal Limit, decimal Used, decimal AgreementCost, decimal? CarryOverride = null);
 
     /// <summary>
     /// What a period has once the agreement has spent its share of the earlier ones: what carried in, the limit plus that, what is left after what is used, and how far the agreement passes it.
@@ -27,8 +27,10 @@ public static class AgreementCarry
     {
         var outcomes = new List<PeriodOutcome>(periods.Count);
         var carry = Math.Max(0m, carriedIntoFirst);
-        foreach (var period in periods)
+        for (var i = 0; i < periods.Count; i++)
         {
+            var period = periods[i];
+            if (i > 0) carry = period.CarryOverride ?? carry;   // a hand-set rollover replaces the chain from the second period on; the first takes what the ledger says
             var available = period.Limit + carry;
             var remaining = available - period.Used;
             outcomes.Add(new PeriodOutcome(carry, available, remaining, Math.Max(0m, period.AgreementCost - remaining), Math.Max(0m, -remaining)));

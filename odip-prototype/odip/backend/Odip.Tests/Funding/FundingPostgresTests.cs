@@ -263,6 +263,24 @@ public class FundingPostgresTests : IClassFixture<PostgresFixture>
         Assert.Equal("99999999.99", await TextAsync(connectionString, "SELECT \"PlanAmount\"::text FROM \"FundingPeriods\" WHERE \"PlanAmount\" > 1000000"));
     }
 
+    [SkippableFact]
+    public async Task ARolloverSetByHand_RoundTripsToTheCent_AndNullClearsIt_OnNpgsql()
+    {
+        RequirePostgres();
+        var (connectionString, tenantId, participants) = await SetUpAsync();
+        await using var db = Open(connectionString, tenantId);
+        var service = new FundingPlanService(db, TimeProvider.System);
+        var periods = Quarters();
+        periods[1] = periods[1] with { RolloverOverride = 250.50m };
+        var saved = (await service.CreateAsync(tenantId, participants[0], Plan(Core(periods: periods)), "user-1", default)).Plan!;
+        Assert.Equal(250.50m, saved.Pools.Single().Periods[1].RolloverOverride);
+        Assert.Equal("250.50", await TextAsync(connectionString, "SELECT \"RolloverOverride\"::text FROM \"FundingPeriods\" WHERE \"RolloverOverride\" IS NOT NULL"));
+
+        periods[1] = periods[1] with { RolloverOverride = null };
+        var cleared = (await service.UpdateAsync(tenantId, participants[0], saved.Id, Plan(Core(periods: periods)) with { Revision = saved.Revision }, "user-1", default)).Plan!;
+        Assert.Null(cleared.Pools.Single().Periods[1].RolloverOverride);
+    }
+
     private static async Task<string> TextAsync(string connectionString, string sql)
     {
         await using var conn = new NpgsqlConnection(connectionString);

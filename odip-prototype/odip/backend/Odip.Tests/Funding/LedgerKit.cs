@@ -17,7 +17,7 @@ using Odip.Tests.Medications;
 namespace Odip.Tests.Funding;
 
 /// <summary>One funding period of a pool in a ledger test: its dates, its plan amount and, when the pool has set-asides, its set-aside.</summary>
-internal sealed record PeriodSpec(DateOnly Start, DateOnly End, decimal Amount, decimal? SetAside = null);
+internal sealed record PeriodSpec(DateOnly Start, DateOnly End, decimal Amount, decimal? SetAside = null, decimal? Rollover = null);
 
 /// <summary>One pool of a plan in a ledger test.</summary>
 internal sealed record PoolSpec(FundingPoolKind Kind, int PaceCategory, PlanType Management, params PeriodSpec[] Periods);
@@ -212,7 +212,7 @@ internal sealed class LedgerKit : IDisposable
             {
                 pool.Periods.Add(new FundingPeriod
                 {
-                    Id = Guid.NewGuid(), TenantId = participant.TenantId, FundingPoolId = pool.Id, Position = order++, PeriodStart = period.Start, PeriodEnd = period.End, PlanAmount = period.Amount, SetAside = period.SetAside,
+                    Id = Guid.NewGuid(), TenantId = participant.TenantId, FundingPoolId = pool.Id, Position = order++, PeriodStart = period.Start, PeriodEnd = period.End, PlanAmount = period.Amount, SetAside = period.SetAside, RolloverOverride = period.Rollover,
                 });
             }
             plan.Pools.Add(pool);

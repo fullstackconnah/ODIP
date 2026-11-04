@@ -61,8 +61,13 @@ export const UNPRICED_LEGEND = 'A triangle beside a forecast means it leaves out
 // ── Money rolled over from an earlier period ───────────────────────────────────────────────────────────────────────────
 
 /** What the mark beside Available says: the figure includes money rolled over from earlier periods, which is not confirmed (somebody else may have used it, as the Funding tab says). `amount` is already written. */
-export function rolledOverLabel(amount: string): string {
-  return `Includes ${amount} rolled over, not confirmed`
+export function rolledOverLabel(amount: string, setByHand = false): string {
+  return setByHand ? `Includes ${amount} rolled over (set by hand)` : `Includes ${amount} rolled over, not confirmed`
+}
+
+/** The Check step line under an agreement line, when money rolled into its period: worked out is "not confirmed", typed in the plan is "set by hand". `amount` is already written. */
+export function agreementRolledOverLine(amount: string, setByHand: boolean): string {
+  return `Includes ${amount} rolled over from the last period${setByHand ? ' (set by hand)' : ', not confirmed'}.`
 }
 
 /** Under the table, once, when any row has the mark: what it is. */

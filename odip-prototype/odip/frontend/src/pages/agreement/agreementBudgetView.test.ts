@@ -21,10 +21,16 @@ describe('agreementBudgetView', () => {
       status: 'ready',
       figures: { visible: true },
       refreshing: false,
-      pools: [{ poolLabel: 'Core', cost: 2355.5, overBy: null, alreadyOverBy: null, lines: [{ periodStart: '2026-10-01', periodEnd: '2026-12-31', cost: 2355.5, remaining: 3120, withinLimit: true, overBy: null }] }],
+      pools: [{ poolLabel: 'Core', cost: 2355.5, overBy: null, alreadyOverBy: null, lines: [{ periodStart: '2026-10-01', periodEnd: '2026-12-31', cost: 2355.5, carriedIn: 0, carriedSetByHand: false, remaining: 3120, withinLimit: true, overBy: null }] }],
       notInARecordedPool: 0,
       outsideThePlan: 0,
     })
+  })
+
+  it('carries what rolled into each period, and whether it was set by hand, without working either out', () => {
+    const view = agreementBudgetView('p-1', state({ data: agreementCheck({ pools: [agreementPool({ periods: [agreementPeriod({ carriedIn: 500, carriedSetByHand: true })] })] }) }))
+
+    expect(view?.status === 'ready' && view.pools[0].lines[0]).toMatchObject({ carriedIn: 500, carriedSetByHand: true })
   })
 
   it('takes the verdict from the server\'s over-by and nothing else: more than nothing is over, nothing is within, and the cost is never compared with what is left here', () => {

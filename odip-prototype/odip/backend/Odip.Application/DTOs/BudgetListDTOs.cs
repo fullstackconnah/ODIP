@@ -26,6 +26,8 @@ public record BudgetListRowDto
     /// says so beside Available so a row that is on track by rolled-over money does not read as if it were the period's own.
     /// </summary>
     public decimal Carried { get; init; }
+    /// <summary>True when the carried amount was typed into the funding plan rather than worked out from what was left unspent.</summary>
+    public bool CarriedSetByHand { get; init; }
     /// <summary>Claimed plus pending.</summary>
     public decimal Used { get; init; }
     /// <summary>

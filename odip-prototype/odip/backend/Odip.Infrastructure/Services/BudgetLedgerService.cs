@@ -650,7 +650,7 @@ public sealed class BudgetLedgerService
     {
         Id = period.Period.Id, Position = period.Period.Position, PeriodStart = period.Period.PeriodStart, PeriodEnd = period.Period.PeriodEnd, IsCurrent = period.IsCurrent,
         PaceRunsOutOn = period.PaceAt(today)?.RunsOutOn,
-        Limit = period.Limit, Carried = period.Carried, Available = period.Available, Claimed = period.Claimed, Pending = period.Pending, Used = period.Used, BookedAhead = period.BookedAhead,
+        Limit = period.Limit, Carried = period.Carried, CarriedWorkedOut = period.CarriedWorkedOut, CarriedSetByHand = period.CarriedSetByHand, Available = period.Available, Claimed = period.Claimed, Pending = period.Pending, Used = period.Used, BookedAhead = period.BookedAhead,
         Forecast = period.Forecast, UnpricedTripDayCount = period.UnpricedTripDayCount,
         Remaining = period.Available - period.Used, ForecastRemaining = period.Available - period.Forecast, Status = period.Status,
         PastUnresolvedCount = period.PastUnresolvedCount, StartedUnclaimedTripCount = period.StartedUnclaimedTripCount, UnpricedShiftCount = period.UnpricedShiftCount,

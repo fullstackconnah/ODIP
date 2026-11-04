@@ -27,6 +27,8 @@ public record FundingPeriodDto
     public decimal PlanAmount { get; init; }
     /// <summary>The organisation's share of the amount; omitted when none is recorded (then the limit is the plan amount).</summary>
     public decimal? SetAside { get; init; }
+    /// <summary>The rolled-over amount set by hand; omitted when it is worked out.</summary>
+    public decimal? RolloverOverride { get; init; }
 }
 
 public record FundingPoolDto
@@ -94,6 +96,7 @@ public record SaveFundingPeriodDto
     public DateOnly? PeriodEnd { get; init; }
     public decimal? PlanAmount { get; init; }
     public decimal? SetAside { get; init; }
+    public decimal? RolloverOverride { get; init; }
 }
 
 public record SaveFundingPoolDto
