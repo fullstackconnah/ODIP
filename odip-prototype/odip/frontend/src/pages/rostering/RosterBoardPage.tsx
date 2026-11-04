@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
@@ -40,7 +40,7 @@ import {
   rosterCollision, staffWeekHours, swappedSentence, keepInWindow, isLockedShift, leaveFromStaffRows, type DragCarry, type DropTarget, type PendingDrop, type PickRow,
 } from './lib/rosterDrag'
 import {
-  ALREADY_STARTED, LEAVE_TITLE, START_FAILED, alreadyInWeekLine, leaveMessage, regularConfirm, regularDone, bannerBlockedLine, bannerTitle, isBlocked, startBudgetWarnings, startResultBody, startResultTitle,
+  ALREADY_STARTED, LEAVE_TITLE, START_FAILED, alreadyInWeekLine, leaveMessage, regularConfirm, regularDone, bannerBlockedLine, bannerTitle, isBlocked, selectionTitle, startBudgetWarnings, startResultBody, startResultTitle,
 } from './lib/rosterWeek'
 
 /** One roster write, given the reason and the codes a warnings dialog collected (none the first time). */
@@ -248,6 +248,37 @@ export default function RosterBoardPage() {
   const unstarted = board?.weekStarted === false
   const blocked = useMemo(() => drafts.filter(isBlocked), [drafts])
   const publishable = useMemo(() => drafts.filter(s => !isBlocked(s)), [drafts])
+  // Select mode (R3, publish several): a writer ticks Drafts on the board and publishes just those. Keyed to the toolbar (week, view, filters), so any toolbar change leaves the mode with the selection; a render-time reset, as the pickers above.
+  const toolbarKey = [weekStart, groupBy, participantFilter, regionFilter, unfilledOnly].join('|')
+  const [selection, setSelection] = useState<{ key: string; ids: ReadonlySet<string> } | null>(null)
+  if (selection && (selection.key !== toolbarKey || !canWrite || publishable.length === 0)) setSelection(null)
+  const selecting = selection !== null
+  const publishableIds = useMemo(() => new Set(publishable.map(s => s.id)), [publishable])
+  // A draft someone else published, deleted or blocked drops out of the selection on the next render, and the count follows.
+  const chosen = useMemo(() => (selection ? publishable.filter(s => selection.ids.has(s.id)) : []), [selection, publishable])
+  const chosenIds = useMemo(() => new Set(chosen.map(s => s.id)), [chosen])
+  const toggleChosen = useCallback((shift: ShiftDto) => setSelection(prev => {
+    if (!prev) return prev
+    const ids = new Set(prev.ids)
+    if (!ids.delete(shift.id)) ids.add(shift.id)
+    return { ...prev, ids }
+  }), [])
+  // Focus: the count when the mode opens (it mounts then), Select shifts when Cancel or Escape closes it (it mounts then).
+  const returnFocusToSelect = useRef(false)
+  const focusCount = useCallback((el: HTMLElement | null) => el?.focus(), [])
+  const focusSelectButton = useCallback((el: HTMLButtonElement | null) => { if (el && returnFocusToSelect.current) { returnFocusToSelect.current = false; el.focus() } }, [])
+  const leaveSelecting = () => { returnFocusToSelect.current = true; setSelection(null) }
+  // Escape closes the topmost layer only: a capture listener sees a dialog that Escape is about to close, so it leaves the mode alone.
+  useEffect(() => {
+    if (!selecting) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented || document.querySelector('[role="alertdialog"], [role="dialog"]')) return
+      returnFocusToSelect.current = true
+      setSelection(null)
+    }
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
+  }, [selecting])
   // The banner (the brief, 3.1): a started week with drafts, for writers and readers.
   const showBanner = !unstarted && drafts.length > 0
 
@@ -396,11 +427,13 @@ export default function RosterBoardPage() {
 
   async function handlePublishWeek() {
     try {
-      setAnnouncement(publishedSentence(await publishWeek.mutateAsync(weekStart)))
+      const ids = selecting ? chosen.map(s => s.id) : null
+      setAnnouncement(publishedSentence(await publishWeek.mutateAsync(ids ? { weekStart, shiftIds: ids } : weekStart), ids?.length))
+      if (ids) setSelection(null)
       // The banner's button is about to go (nothing left to publish) or to hide (only blocked drafts left): focus goes to the week heading, never to body (the brief, 3.4).
       requestAnimationFrame(() => document.getElementById(WEEK_HEADING_ID)?.focus())
     } catch (err: unknown) {
-      showWriteError(err, 'Something went wrong publishing this week. Please try again.')
+      showWriteError(err, selecting ? 'Something went wrong publishing these shifts. Please try again.' : 'Something went wrong publishing this week. Please try again.')
     } finally {
       setPublishOpen(false)
     }
@@ -719,6 +752,15 @@ export default function RosterBoardPage() {
     </Button>
   )
   const publishButton = canWrite && publishable.length > 0 && <Button size="md" onClick={() => setPublishOpen(true)}>Publish week</Button>
+  const selectButton = canWrite && publishable.length >= 2 && <Button ref={focusSelectButton} variant="secondary" size="md" onClick={() => setSelection({ key: toolbarKey, ids: new Set() })}>Select shifts</Button>
+  const allChosen = chosen.length === publishable.length
+  const selectActions = (
+    <>
+      <Button variant="ghost" size="md" onClick={() => setSelection(prev => (prev ? { ...prev, ids: allChosen ? new Set() : new Set(publishable.map(s => s.id)) } : prev))}>{allChosen ? 'Clear' : 'Select all'}</Button>
+      <Button variant="ghost" size="md" onClick={leaveSelecting}>Cancel</Button>
+      <Button size="md" disabled={chosen.length === 0} onClick={() => setPublishOpen(true)}>{chosen.length === 0 ? 'Publish' : `Publish ${plural(chosen.length, 'shift')}`}</Button>
+    </>
+  )
   // The drafts banner is the Publish bar (owner, 2026-11-04): the foot of the page, pinned, so Publish week stays in reach while the board scrolls. A reader sees it without the button. It sits in the page flow after the board, so it never covers the last row; bg-background because rows scroll under it.
   const publishBar = showBanner ? (
     <div data-publish-bar className="sticky bottom-[var(--mobile-nav-h)] z-20 bg-background lg:bottom-0">
@@ -726,10 +768,10 @@ export default function RosterBoardPage() {
         tone="warning"
         // A standing state, not news: as role="alert" it would re-announce on every week change and refetch (the brief, 3.1). Publishing keeps its own sentence.
         announce={false}
-        title={bannerTitle(drafts.length)}
+        title={selecting ? <span ref={focusCount} tabIndex={-1} aria-live="polite" className="outline-none">{selectionTitle(chosen.length)}</span> : bannerTitle(drafts.length)}
         // One line beside a 32px button: centred, or the 19px title sits at the top (the brief, 3.2). py-2.5 keeps that line at 54px, under the 56px check 10 (p-3 made it 58).
         className={blocked.length === 0 ? 'items-center! py-2.5!' : 'py-2.5!'}
-        actions={agreementsButton || publishButton ? <>{agreementsButton}{publishButton}</> : undefined}
+        actions={selecting ? selectActions : agreementsButton || publishButton ? <>{agreementsButton}{selectButton}{publishButton}</> : undefined}
       >
         {bannerBlockedLine(blocked.length)}
       </Callout>
@@ -916,7 +958,7 @@ export default function RosterBoardPage() {
 
       {!isLoading && !loadFailed && grid && !unstarted && (
         // In every mode, not only while drag is on: the plus, and a pick's pending look, reach phones and the Staff view too (SHAPE departure 15). The DndContext stays drag-only.
-        <DropStateContext.Provider value={{ disabled: dragsOff, pending: dropPending, pick: canWrite ? togglePicker : undefined, swap: canWrite ? openSwap : undefined, publish: canWrite ? publishShift : undefined, publishingIds, pickingId: pickerShift?.id ?? swapShift?.id ?? null }}>
+        <DropStateContext.Provider value={{ disabled: dragsOff || selecting, select: selecting ? { ids: chosenIds, selectable: publishableIds, toggle: toggleChosen } : undefined, pending: dropPending, pick: canWrite ? togglePicker : undefined, swap: canWrite ? openSwap : undefined, publish: canWrite ? publishShift : undefined, publishingIds, pickingId: pickerShift?.id ?? swapShift?.id ?? null }}>
           {dragOn ? (
             <DndContext
               sensors={sensors}
@@ -1036,9 +1078,9 @@ export default function RosterBoardPage() {
         open={publishOpen}
         onCancel={() => setPublishOpen(false)}
         onConfirm={handlePublishWeek}
-        title={`Publish ${formatWeekSpan(days)}?`}
-        message={<p>{publishWeekMessage(publishable, heldDrafts)}</p>}
-        confirmLabel={`Publish ${plural(publishable.length, 'shift')}`}
+        title={selecting ? `Publish ${plural(chosen.length, 'shift')}?` : `Publish ${formatWeekSpan(days)}?`}
+        message={<p>{selecting ? publishWeekMessage(chosen, 0) : publishWeekMessage(publishable, heldDrafts)}</p>}
+        confirmLabel={`Publish ${plural(selecting ? chosen.length : publishable.length, 'shift')}`}
         loading={publishWeek.isPending}
       />
 
