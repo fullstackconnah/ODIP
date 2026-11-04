@@ -55,7 +55,7 @@ function baseIncident(overrides: Partial<IncidentDetailDto> = {}): IncidentDetai
   }
 }
 
-describe('IncidentDetailPage — Context panel', () => {
+describe('IncidentDetailPage — Linked records card', () => {
   it('shows a loading state before the incident resolves', () => {
     mockUseIncident.mockReturnValue({ data: undefined, isLoading: true })
     renderPage()
@@ -69,7 +69,7 @@ describe('IncidentDetailPage — Context panel', () => {
   })
 
   it('names the trip, linked, once the list no longer carries it, and shows no Trip line for a non-trip incident', () => {
-    mockUseIncident.mockReturnValue({ data: baseIncident({ tripInstanceId: 'trip-1', tripName: 'Beach Day' }), isLoading: false })
+    mockUseIncident.mockReturnValue({ data: baseIncident({ serviceType: 'Trip', tripInstanceId: 'trip-1', tripName: 'Beach Day' }), isLoading: false })
     const { unmount } = renderPage()
     expect(screen.getByRole('link', { name: 'Beach Day' })).toHaveAttribute('href', '/trips/trip-1')
     unmount()
@@ -79,12 +79,13 @@ describe('IncidentDetailPage — Context panel', () => {
     expect(screen.queryByText('Trip')).not.toBeInTheDocument()
   })
 
-  it('renders no Context panel when medication/shift/shiftNote are all null', () => {
+  it('says a bare incident is not linked to anything, instead of hiding the card', () => {
     mockUseIncident.mockReturnValue({ data: baseIncident(), isLoading: false })
     renderPage()
 
-    expect(screen.getByText('Missed evening medication dose')).toBeInTheDocument()
-    expect(screen.queryByText('Context')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Missed evening medication dose' })).toBeInTheDocument()
+    expect(screen.getByText('Linked records')).toBeInTheDocument()
+    expect(screen.getByText('Not linked to a medication, shift or shift note.')).toBeInTheDocument()
   })
 
   it('shows the medication context — name, status, timestamp, recorded-by, and a link to the participant\'s Medications tab', () => {
@@ -102,7 +103,7 @@ describe('IncidentDetailPage — Context panel', () => {
     })
     renderPage()
 
-    expect(screen.getByText('Context')).toBeInTheDocument()
+    expect(screen.getByText('Linked records')).toBeInTheDocument()
     expect(screen.getByText('Insulin · Missed')).toBeInTheDocument()
     expect(screen.getByText(/Tom Beattie/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Open medications' })).toHaveAttribute(
@@ -123,7 +124,7 @@ describe('IncidentDetailPage — Context panel', () => {
     })
     renderPage()
 
-    expect(screen.getByText('Context')).toBeInTheDocument()
+    expect(screen.getByText('Linked records')).toBeInTheDocument()
     expect(screen.getByText('11/07/2026 · 08:00–16:00')).toBeInTheDocument()
     expect(screen.getByText('Grace Palmer-Hughes · Tom Beattie')).toBeInTheDocument()
     // Plain text, not a link — there is no coordinator shift detail page.
@@ -142,7 +143,7 @@ describe('IncidentDetailPage — Context panel', () => {
     })
     renderPage()
 
-    expect(screen.getByText('Context')).toBeInTheDocument()
+    expect(screen.getByText('Linked records')).toBeInTheDocument()
     expect(screen.getByText('"She had a fall near the bathroom."')).toBeInTheDocument()
     expect(screen.getByText('falls')).toBeInTheDocument()
     expect(screen.getByText('injury')).toBeInTheDocument()
@@ -212,7 +213,7 @@ describe('IncidentDetailPage — failed request vs. missing record (PageState)',
   })
 })
 
-// PUT /incidents/:id is Admin, Coordinator and SuperAdmin only (IncidentsController.Update): ReadOnly and SupportWorker read the incident without an Edit.
+// PUT /incidents/:id is Admin, Coordinator and SuperAdmin only (IncidentsController.Update): ReadOnly and SupportWorker read the whole incident without an Edit.
 describe('IncidentDetailPage — Edit by role', () => {
   it.each([['ReadOnly', false], ['SupportWorker', false], ['Admin', true], ['Coordinator', true]] as const)('%s: Edit offered %s', (role, offered) => {
     localStorage.setItem('odip_user', JSON.stringify({ role }))
@@ -220,7 +221,8 @@ describe('IncidentDetailPage — Edit by role', () => {
     renderPage()
 
     expect(screen.getByRole('heading', { name: 'Missed evening medication dose' })).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Edit' }) !== null).toBe(offered)
+    expect(screen.queryAllByRole('button', { name: /^Edit / }).length > 0).toBe(offered)
+    expect(screen.getByRole('heading', { name: 'Witnesses' })).toBeInTheDocument()
     localStorage.clear()
   })
 })
@@ -229,13 +231,13 @@ describe('IncidentDetailPage — Edit by role', () => {
 describe('IncidentDetailPage — restrictive practice', () => {
   function block() {
     // The Card: its title row, then the card itself.
-    return screen.getByRole('heading', { name: 'Restrictive practice' }).parentElement!.parentElement!
+    return screen.getByRole('heading', { name: 'Restrictive practice details' }).parentElement!.parentElement!
   }
 
   it('shows no restrictive practice block for another incident type', () => {
     mockUseIncident.mockReturnValue({ data: baseIncident(), isLoading: false })
     renderPage()
-    expect(screen.queryByRole('heading', { name: 'Restrictive practice' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Restrictive practice details' })).not.toBeInTheDocument()
   })
 
   it('shows the type, the linked practice and Not authorised for a use that was not authorised', () => {
@@ -282,7 +284,7 @@ describe('IncidentDetailPage — restrictive practice not determined', () => {
     mockUseIncident.mockReturnValue({ data: incident, isLoading: false })
     renderPage()
 
-    const card = screen.getByRole('heading', { name: 'Restrictive practice' }).parentElement!.parentElement!
+    const card = screen.getByRole('heading', { name: 'Restrictive practice details' }).parentElement!.parentElement!
     expect(within(card).getByText('Not determined')).toBeInTheDocument()
     expect(within(card).queryByText('Not authorised')).not.toBeInTheDocument()
   })
@@ -298,7 +300,8 @@ describe('IncidentDetailPage - NDIS Commission reporting row', () => {
     mockUseIncident.mockReturnValue({ data: baseIncident(), isLoading: false })
     renderPage()
     expect(screen.getByText('NDIS Commission')).toBeInTheDocument()
-    expect(screen.getByText('Not reportable')).toBeInTheDocument()
+    // Once as the reporting deadline, once as the Commission line.
+    expect(screen.getAllByText('Not reportable')).toHaveLength(2)
   })
 
   it('marks an empty value cell with a dash the screen reader names', () => {
@@ -346,13 +349,14 @@ describe('IncidentDetailPage — Commission reference and emergency services', (
   it('shows the severity as a numbered level', () => {
     mockUseIncident.mockReturnValue({ data: baseIncident({ severity: 'High' }), isLoading: false })
     renderPage()
-    expect(screen.getByText('3 High')).toBeInTheDocument()
+    // In the header and in the What card.
+    expect(screen.getAllByText('3 High')).toHaveLength(2)
   })
 
-  it('shows the NDIS Commission reference only when one is set', () => {
+  it('shows the NDIS Commission reference, a dash until one is set', () => {
     mockUseIncident.mockReturnValue({ data: baseIncident(), isLoading: false })
     const { unmount } = renderPage()
-    expect(screen.queryByText('NDIS Commission reference')).not.toBeInTheDocument()
+    expect(screen.getByText('NDIS Commission reference').nextElementSibling).toHaveTextContent('—')
     unmount()
 
     mockUseIncident.mockReturnValue({ data: baseIncident({ qscReferenceNumber: 'NDIS-77' }), isLoading: false })
@@ -378,5 +382,50 @@ describe('IncidentDetailPage — Commission reference and emergency services', (
     renderPage()
     expect(screen.getByText('Emergency services')).toBeInTheDocument()
     expect(screen.getByText('Called')).toBeInTheDocument()
+  })
+})
+
+describe('IncidentDetailPage — the full view', () => {
+  const titles = () => screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)
+
+  it('lists the cards in the pinned order, with Injuries only for an injury and the practice card only for a restrictive practice', () => {
+    mockUseIncident.mockReturnValue({ data: baseIncident({ incidentType: 'Injury', injuries: [{ id: 'inj-1', region: 'Head', injuryType: 'Bruise', description: 'Left side' }] }), isLoading: false })
+    const { unmount } = renderPage()
+    expect(titles()).toEqual(['Incident details', 'Injuries', 'Who', 'What', 'Witnesses', 'Compliance', 'Linked records'])
+    unmount()
+
+    mockUseIncident.mockReturnValue({ data: baseIncident({ incidentType: 'RestrictivePracticeUse', restrictivePracticeType: 'Seclusion' }), isLoading: false })
+    renderPage()
+    expect(titles()).toEqual(['Incident details', 'Who', 'What', 'Restrictive practice details', 'Witnesses', 'Compliance', 'Linked records'])
+  })
+
+  it('shows each witness with when they were asked and when they answered, and a responded staff witness with their statement', () => {
+    mockUseIncident.mockReturnValue({ data: baseIncident({ witnesses: [
+      { id: 'w-1', witnessUserId: 'staff-2', witnessName: 'Sam Okafor', isStaffWitness: true, witnessStatus: 'Approved', witnessRequestedAt: '2026-07-11T10:00:00Z', witnessRespondedAt: '2026-07-11T11:00:00Z', statementText: 'I saw her slip.' },
+      { id: 'w-2', witnessUserId: 'staff-3', witnessName: 'Lee Tran', isStaffWitness: true, witnessStatus: 'Pending', witnessRequestedAt: '2026-07-11T10:00:00Z', witnessRespondedAt: null, statementText: null },
+      { id: 'w-3', witnessUserId: null, witnessName: 'Pat Visitor', isStaffWitness: false, witnessStatus: 'NotRequired', witnessRequestedAt: null, witnessRespondedAt: null, statementText: null },
+    ] }), isLoading: false })
+    renderPage()
+
+    const [responded, pending, external] = screen.getAllByTestId('witness-row')
+    expect(within(responded).getByText(/^Asked .* · Responded /)).toBeInTheDocument()
+    expect(within(responded).getByText('I saw her slip.')).toBeInTheDocument()
+    expect(within(pending).getByText('Waiting for their response.')).toBeInTheDocument()
+    expect(within(pending).queryByText('Statement')).not.toBeInTheDocument()
+    expect(within(external).getByText('External witness, no response needed')).toBeInTheDocument()
+  })
+
+  it('says so when there are no witnesses', () => {
+    mockUseIncident.mockReturnValue({ data: baseIncident(), isLoading: false })
+    renderPage()
+    expect(screen.getByText('No witnesses recorded.')).toBeInTheDocument()
+  })
+
+  it('shows the older free-text witness notes read only, below the list', () => {
+    mockUseIncident.mockReturnValue({ data: baseIncident({ witnessNames: 'Mei Zhang', witnessStatements: 'Saw the slip.' }), isLoading: false })
+    renderPage()
+    expect(screen.getByText('Earlier witness notes')).toBeInTheDocument()
+    expect(screen.getByText('Mei Zhang', { selector: 'dd span' })).toBeInTheDocument()
+    expect(screen.getByText('Saw the slip.')).toBeInTheDocument()
   })
 })

@@ -125,6 +125,7 @@ function IncidentView({ incident, fetching, onStale }: { incident: IncidentDetai
         message={`Your changes to ${switchLabel} haven't been saved.`}
         confirmLabel="Discard changes"
         cancelLabel="Keep editing"
+        focusCancel
         onConfirm={() => { if (switchTo) begin(switchTo.target, switchTo.card); setSwitchTo(null) }}
         onCancel={() => setSwitchTo(null)}
       />

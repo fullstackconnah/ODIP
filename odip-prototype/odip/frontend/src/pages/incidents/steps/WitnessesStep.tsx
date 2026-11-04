@@ -183,6 +183,7 @@ export function WitnessesStep({ control, errors, reportedByStaffId, staff, exist
         message={`${pending?.witnessName} has ${pending?.witnessStatus === 'Declined' ? 'declined' : 'approved'} this report. Removing them deletes their response and statement when you save. This can't be undone.`}
         confirmLabel="Remove witness"
         cancelLabel="Keep witness"
+        focusCancel
         onConfirm={() => { if (removing !== null) remove(removing); setRemoving(null) }}
         onCancel={() => setRemoving(null)}
       />
