@@ -12,7 +12,7 @@ import { formatWithTimeZone } from '@/lib/utils'
 import { apiErrorMessages } from '@/lib/shiftPackageErrors'
 import { formatFlaggedCategoryList, type ShiftNoteFlagCategory } from '@/lib/shiftNoteKeywords'
 import { formatMinutesSpan } from '@/pages/rostering/lib/roster'
-import { minutesWords, offRosterMinutes, rosteredInstants } from '../lib/portal'
+import { minutesWords, rosteredInstants } from '../lib/portal'
 import { ToggleGroup } from '@/components/ToggleGroup'
 import { breaksLabel, clockLabel, FINISH_STEPS, unpaidBreakMinutes, dosesSummary, REASON_MAX, timeBounds, travelLabel, type FinishStepKey, type TimesField, type TravelField } from './checklist'
 import { PrnRow, RoutineRow } from './DuringSection'
@@ -20,7 +20,7 @@ import { minutesBetween, providerLocalToUtcInstant, utcInstantToProviderLocal } 
 import { Fold, WaitingToSend } from './ui'
 import { plural } from '@/lib/format'
 import type { DoseTarget } from './DoseSheet'
-import type { EndDraft } from './endDraft'
+import { timeQuestions, type EndDraft } from './endDraft'
 import type { PortalFinishBlockerDto, PortalShiftDetailDto, ShiftBreakDto, ShiftNoteDto } from '@/api/types'
 
 const HANDOVER_MAX = 2000
@@ -199,20 +199,6 @@ function TravelLeg({ id, legend, help, draft, set, invalid, message }: {
       {bad && message && <p id={`finish-${id}-error`} className="text-xs text-[var(--color-destructive)]">{message}</p>}
     </fieldset>
   )
-}
-
-/** Minutes off the rostered finish, and off the rostered start when Start did not already ask (a moved or manual start with no reason saved); null within 5. */
-export function timeQuestions(shift: PortalShiftDetailDto, draft: EndDraft, now: Date): { start: number | null; finish: number | null } {
-  const tz = shift.timeZoneId
-  const c = shift.completion
-  const rostered = rosteredInstants(shift)
-  const startIso = (draft.startOverride ? providerLocalToUtcInstant(draft.startOverride, tz) : null) ?? c?.actualStart ?? null
-  const endIso = (draft.endOverride ? providerLocalToUtcInstant(draft.endOverride, tz) : null) ?? now.toISOString()
-  const startAsked = !!startIso && !c?.startTimeReason && (draft.startOverride !== null || !c?.actualStart)
-  return {
-    start: startAsked && rostered.start ? offRosterMinutes(startIso, rostered.start) : null,
-    finish: rostered.end ? offRosterMinutes(endIso, rostered.end) : null,
-  }
 }
 
 const early = (m: number) => (m < 0 ? 'early' : 'late')
