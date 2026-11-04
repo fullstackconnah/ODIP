@@ -169,6 +169,8 @@ jobs:
       DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: '0'
       E2E_API_URL: http://127.0.0.1:5000
       E2E_BASE_URL: http://127.0.0.1:8475
+      # client-ip-budgets.spec.ts: nginx trusts CF-Connecting-IP only from loopback and cloudflared, so the spec goes through a forwarder inside odip-web
+      E2E_TRUSTED_URL: http://127.0.0.1:8476
     services:
       postgres:
         image: postgres:16-alpine
@@ -258,10 +260,13 @@ jobs:
       - name: Start the web tier (nginx with the repo production config)
         run: |
           set -euo pipefail
-          docker run -d --name odip-web --add-host=api:host-gateway -p 8475:80 \
+          docker run -d --name odip-web --add-host=api:host-gateway -p 8475:80 -p 8476:8081 \
             -v "$GITHUB_WORKSPACE/odip-prototype/odip/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro" \
             -v "$GITHUB_WORKSPACE/odip-prototype/odip/frontend/dist:/usr/share/nginx/html:ro" \
             nginx:alpine
+          # A second nginx in the same network namespace: its upstream connection to 127.0.0.1:80 arrives from loopback, the trusted test hop.
+          docker run -d --name odip-web-fwd --network container:odip-web --entrypoint sh nginx:alpine -c \
+            'echo "server { listen 8081; location / { proxy_pass http://127.0.0.1:80; } }" > /etc/nginx/conf.d/default.conf && exec nginx -g "daemon off;"'
           for i in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:8475/api/health/live > /dev/null 2>&1; then exit 0; fi
             sleep 1
