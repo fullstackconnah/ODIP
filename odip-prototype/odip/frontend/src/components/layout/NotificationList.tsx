@@ -55,9 +55,12 @@ export function NotificationList({ inbox, onChoose, markAllFailed }: Notificatio
             const unread = !item.readAt
             const body = (
               <>
-                <span aria-hidden="true" className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${unread ? 'bg-[var(--color-primary)]' : ''}`} />
+                {/* An urgent item keeps its destructive dot after it is read. */}
+                <span aria-hidden="true" className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${item.urgent ? 'bg-[var(--color-destructive)]' : unread ? 'bg-[var(--color-primary)]' : ''}`} />
                 <span className="min-w-0 flex-1">
                   {unread && <span className="sr-only">Unread: </span>}
+                  {/* The server's title already begins "Urgent:", so the label is for the eye only: it is not colour alone, and it is not read twice. */}
+                  {item.urgent && <span data-urgent-label aria-hidden="true" className="block text-xs font-semibold uppercase tracking-wide text-[var(--color-destructive)]">Urgent</span>}
                   <span title={item.title} className={`line-clamp-2 text-sm text-[var(--color-foreground)] ${unread ? 'font-semibold' : ''}`}>{item.title}</span>
                   {/* The space keeps the title and the time apart in the item's accessible name. */}{' '}
                   <time dateTime={item.createdAt} title={formatNoteTimestamp(item.createdAt)} className={`mt-0.5 block text-xs ${MUTED}`}>

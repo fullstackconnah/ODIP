@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Pencil, Undo2, Users, X } from 'lucide-react'
+import { Users, X } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -10,18 +10,19 @@ import { Callout } from '@/components/Callout'
 import { SearchInput } from '@/components/SearchInput'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { ParticipantPicker } from '@/components/ParticipantPicker'
-import { StatusBadge } from '@/components/StatusBadge'
 import { ToggleGroup } from '@/components/ToggleGroup'
-import { DataTable, RowMenu, type Column } from '@/components/DataTable'
 import { BackButton } from '@/components/BackButton'
-import { TAP_FLOOR } from '@/components/tapArea'
+import { PageState } from '@/components/PageState'
 import { usePermissions } from '@/lib/permissions'
+import { useIsBelowMd } from '@/hooks/useIsBelowMd'
 import { cn, extractErrorMessage } from '@/lib/utils'
 import type { Tone } from '@/lib/tone'
 import { useAllCompatibility, useParticipants, useStaff, useUpsertCompatibility } from '@/api/hooks'
 import { CAN_RECEIVE_SERVICES } from '@/api/types/participants'
 import type { CompatibilityLevel, CompatibilityRowDto } from '@/api/types'
 import { TierBoard } from './components/TierBoard'
+import { CompatibilityMatrix, type NoUndo } from './components/CompatibilityMatrix'
+import { CompatibilityReachLine } from './components/CompatibilityReachLine'
 
 // Only Preferred (green) and No (red) carry colour; Backup and Emergency stay neutral, as on the participant card.
 const MARK: Record<Exclude<CompatibilityLevel, 'Allowed'>, { label: string; tone: Tone }> = {
@@ -31,15 +32,16 @@ const MARK: Record<Exclude<CompatibilityLevel, 'Allowed'>, { label: string; tone
   Excluded: { label: 'No', tone: 'danger' },
 }
 
-type Filter = 'all' | 'no' | 'prefs'
-
 // fixedPair: both people are known (the dialog shows no pickers). fixedParticipant: only the participant is (the board's "+ Mark No").
 type Draft = { staffId: string; participantId: string; reason: string; fixedPair: boolean; fixedParticipant?: boolean }
 
 export default function CompatibilityPage() {
-  const { canWrite } = usePermissions()
+  const { canWrite, isAdmin } = usePermissions()
   const [params, setParams] = useSearchParams()
-  const allPairings = params.get('view') === 'all'
+  // An old ?view=all link opens the table. The table needs room: below md the board is the one view.
+  const belowMd = useIsBelowMd()
+  const tableView = params.get('view') === 'table' || params.get('view') === 'all'
+  const showTable = tableView && !belowMd
   // INTAKE-08: drafts are out; the list keeps today's scope (active staff, ready participants).
   const participants = useParticipants(CAN_RECEIVE_SERVICES)
   const staff = useStaff()
@@ -47,12 +49,13 @@ export default function CompatibilityPage() {
   const upsert = useUpsertCompatibility()
 
   const [query, setQuery] = useState(params.get('q') ?? '')
-  const [filter, setFilter] = useState<Filter>('all')
   const [draft, setDraft] = useState<Draft | null>(null)
   const [dialogError, setDialogError] = useState<string | null>(null)
   const [removing, setRemoving] = useState<CompatibilityRowDto | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [announcement, setAnnouncement] = useState('')
+  const [noUndo, setNoUndo] = useState<NoUndo | null>(null)
+  if (!showTable && noUndo) setNoUndo(null) // leaving the table drops its Undo
 
   const activeStaff = useMemo(
     () => (staff.data ?? []).filter(s => s.isActive !== false).sort((a, b) => a.fullName.localeCompare(b.fullName)),
@@ -64,13 +67,6 @@ export default function CompatibilityPage() {
     // Allowed rows are kept by the server (the upsert never deletes): they are the default, not an exception.
     return (all.data ?? []).filter(r => r.level !== 'Allowed' && staffIds.has(r.staffId) && participantIds.has(r.participantId))
   }, [all.data, activeStaff, participants.data])
-
-  const searched = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    return q ? inScope.filter(r => r.staffName.toLowerCase().includes(q) || r.participantName.toLowerCase().includes(q)) : inScope
-  }, [inScope, query])
-  const noCount = searched.filter(r => r.level === 'Excluded').length
-  const rows = filter === 'no' ? searched.filter(r => r.level === 'Excluded') : filter === 'prefs' ? searched.filter(r => r.level !== 'Excluded') : searched
 
   // The board's participant list: the same scope, filtered by the search, with each one's counts.
   const counts = useMemo(() => {
@@ -127,6 +123,14 @@ export default function CompatibilityPage() {
     })
   }
 
+  // The table's Undo puts the pair back as `before` had it (no row: Allowed). The board has no Undo.
+  function offerUndo(staffId: string, participantId: string, before: CompatibilityRowDto | undefined, message: string) {
+    if (!showTable) return
+    const level = before?.level ?? 'Allowed'
+    const rank = before && before.rank > 0 ? before.rank : null
+    setNoUndo({ message, writes: [{ staffId, participantId, level, rank, reason: before?.reason ?? null }] })
+  }
+
   function submit() {
     if (!draft) return
     const reason = draft.reason.trim()
@@ -134,7 +138,9 @@ export default function CompatibilityPage() {
       { staffId: draft.staffId, participantId: draft.participantId, level: 'Excluded', reason },
       {
         onSuccess: () => {
-          setAnnouncement(editing ? 'Reason saved.' : `Marked No: ${staffName(draft.staffId)} and ${participantName(draft.participantId)}.`)
+          const message = editing ? 'Reason saved.' : `Marked No: ${staffName(draft.staffId)} and ${participantName(draft.participantId)}.`
+          setAnnouncement(message)
+          offerUndo(draft.staffId, draft.participantId, pair || undefined, message)
           setDraft(null)
         },
         onError: err => setDialogError(extractErrorMessage(err, "Couldn't save that change. Please try again.")),
@@ -149,50 +155,16 @@ export default function CompatibilityPage() {
     upsert.mutate(
       { staffId: row.staffId, participantId: row.participantId, level: 'Allowed', reason: null },
       {
-        onSuccess: () => setAnnouncement(`Removed No: ${row.staffName} and ${row.participantName}.`),
+        onSuccess: () => {
+          const message = `Removed No: ${row.staffName} and ${row.participantName}.`
+          setAnnouncement(message)
+          offerUndo(row.staffId, row.participantId, row, message)
+        },
         onError: err => setSaveError(extractErrorMessage(err, "Couldn't save that change. Please try again.")),
       },
     )
     setRemoving(null)
   }
-
-  const columns: Column<CompatibilityRowDto & { id: string }>[] = [
-    {
-      key: 'participantName', header: 'Participant', minWidth: '11rem', mobile: 'primary',
-      render: r => (
-        <Link
-          to={`/participants/${r.participantId}?tab=people&section=roster`}
-          className={`${TAP_FLOOR} font-medium text-[var(--color-foreground)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] rounded-sm`}
-        >
-          {r.participantName}
-        </Link>
-      ),
-    },
-    { key: 'staffName', header: 'Staff', minWidth: '11rem', mobile: 'meta' },
-    {
-      key: 'level', header: 'Mark', width: '7rem', mobile: 'status',
-      render: r => <StatusBadge tone={MARK[r.level as keyof typeof MARK].tone} label={MARK[r.level as keyof typeof MARK].label} />,
-    },
-    {
-      key: 'reason', header: 'Reason', wrap: true, maxWidth: '40rem', mobile: 'meta', hideWhenEmpty: true,
-      render: r => r.reason || '—',
-    },
-    { key: 'updatedAt', header: 'Updated', type: 'date', width: '7rem', mobile: 'meta' },
-    ...(canWrite ? [{
-      key: 'actions', header: '', overlay: true, mobile: 'trail' as const,
-      render: (r: CompatibilityRowDto & { id: string }) => r.level !== 'Excluded' ? null : (
-        <RowMenu
-          name={`${r.staffName} and ${r.participantName}`}
-          items={[
-            { label: 'Edit reason', icon: <Pencil className="w-4 h-4" aria-hidden="true" />, onSelect: () => openEdit(r) },
-            { label: 'Remove No', icon: <Undo2 className="w-4 h-4" aria-hidden="true" />, onSelect: () => setRemoving(r) },
-          ]}
-        />
-      ),
-    }] : []),
-  ]
-
-  const nothingMarked = !isLoading && !isError && !noPeopleYet && inScope.length === 0
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] animate-fade-in">
@@ -203,12 +175,15 @@ export default function CompatibilityPage() {
         action={canWrite && !noPeopleYet ? <Button onClick={() => openNew()}>Mark as No</Button> : undefined}
       />
 
+      <CompatibilityReachLine canChange={isAdmin} />
+
       {!noPeopleYet && (
         <ToggleGroup
+          className="max-md:hidden"
           ariaLabel="View"
-          value={allPairings ? 'all' : 'participant'}
-          onChange={key => setParam('view', key === 'all' ? 'all' : null)}
-          options={[{ key: 'participant', label: 'By participant' }, { key: 'all', label: 'All pairings' }]}
+          value={tableView ? 'table' : 'participant'}
+          onChange={key => setParam('view', key === 'table' ? 'table' : null)}
+          options={[{ key: 'participant', label: 'By participant' }, { key: 'table', label: 'Table' }]}
         />
       )}
 
@@ -229,7 +204,7 @@ export default function CompatibilityPage() {
         <EmptyState icon={Users} title="Nothing to match yet" description="Add at least one staff member and one participant first." />
       )}
 
-      {!noPeopleYet && !allPairings && (
+      {!noPeopleYet && !showTable && (
         <div className="md:grid md:grid-cols-[15.5rem_minmax(0,1fr)] md:items-start md:gap-6">
           {/* Below md the list and the board are two steps: the list until a participant is chosen, then the board. */}
           <nav aria-label="Participants" className={cn('space-y-2 md:sticky md:top-4 md:max-h-[calc(100vh-2rem)] md:overflow-y-auto', chosen && 'max-md:hidden')}>
@@ -273,44 +248,28 @@ export default function CompatibilityPage() {
         </div>
       )}
 
-      {allPairings && nothingMarked && (
-        <EmptyState
-          icon={Users}
-          title="No pairings marked yet"
-          description="Every worker can be rostered for every participant. Mark a pairing No when a worker must not work with someone. Preferred, backup and emergency staff are set on each participant’s Rostering tab."
-          action={canWrite ? { label: 'Mark as No', onClick: () => openNew() } : undefined}
-        />
+      {!noPeopleYet && showTable && isLoading && <PageState kind="loading" noun="compatibility" />}
+      {!noPeopleYet && showTable && isError && (
+        <PageState kind="error" noun="compatibility" onRetry={() => { participants.refetch(); staff.refetch(); all.refetch() }} />
       )}
-
-      {allPairings && !noPeopleYet && !nothingMarked && (
-        <>
-          <div className="flex flex-wrap items-center gap-3">
-            <SearchInput value={query} onChange={setQuery} placeholder="Search staff or participants" className="w-full max-w-md sm:w-auto sm:flex-1" />
-            <ToggleGroup
-              ariaLabel="Show"
-              disabled={isLoading}
-              value={filter}
-              onChange={key => setFilter(key as Filter)}
-              options={[
-                { key: 'all', label: `All ${searched.length}` },
-                { key: 'no', label: `No ${noCount}` },
-                { key: 'prefs', label: `Preferences ${searched.length - noCount}` },
-              ]}
-            />
-          </div>
-          <div>
-            <DataTable
-              data={rows.map(r => ({ ...r, id: `${r.staffId}:${r.participantId}` }))}
-              keyField="id"
-              columns={columns}
-              sortable={false}
-              loading={isLoading}
-              error={isError}
-              onRetry={() => { participants.refetch(); staff.refetch(); all.refetch() }}
-              emptyMessage="No pairings match."
-            />
-          </div>
-        </>
+      {!noPeopleYet && showTable && !isLoading && !isError && (
+        <CompatibilityMatrix
+          rows={all.data ?? []}
+          participants={participants.data ?? []}
+          staff={activeStaff}
+          canWrite={canWrite}
+          participantQuery={query}
+          onParticipantQuery={q => { setQuery(q); setParam('q', q || null) }}
+          staffQuery={params.get('sq') ?? ''}
+          onStaffQuery={q => setParam('sq', q || null)}
+          onMarkNo={(staffId, participantId) => {
+            const no = inScope.find(r => r.staffId === staffId && r.participantId === participantId && r.level === 'Excluded')
+            if (no) openEdit(no)
+            else openNew({ staffId, participantId, fixedPair: true })
+          }}
+          onRemoveNo={setRemoving}
+          noUndo={noUndo}
+        />
       )}
 
       <p role="status" className="sr-only">{announcement}</p>

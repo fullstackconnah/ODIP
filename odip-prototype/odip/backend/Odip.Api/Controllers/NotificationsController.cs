@@ -95,7 +95,9 @@ public class NotificationsController : ControllerBase
         var rows = await mine
             .OrderBy(n => n.ReadAt != null).ThenByDescending(n => n.CreatedAt).ThenByDescending(n => n.Id)
             .Take(take + 1)
-            .Select(n => new InAppNotificationDto { Id = n.Id, Title = n.Title, LinkTo = n.LinkTo, CreatedAt = n.CreatedAt, ReadAt = n.ReadAt })
+            .Select(n => new InAppNotificationDto { Id = n.Id, Title = n.Title, LinkTo = n.LinkTo, CreatedAt = n.CreatedAt, ReadAt = n.ReadAt,
+                // shortcut: urgency is one event type, add a column when a second urgent type appears
+                Urgent = n.EventType == NotificationEventType.IncidentReportable24h })
             .ToListAsync(ct);
         var unread = await mine.CountAsync(n => n.ReadAt == null, ct);
 

@@ -47,6 +47,8 @@ public static class InAppNotificationText
                 ($"{Who(p.CaregiverName)} sent a profile update for {Whom(p.ParticipantName)}.", $"/caregiver-submissions/{entityId}"),
             (NotificationEventType.IncidentReported, IncidentReportedPayload p) =>
                 ($"{Who(p.ReportedByName)} reported an incident: {Words(p.IncidentType)}, {Words(p.Severity)} severity.", $"/incidents/{entityId}"),
+            (NotificationEventType.IncidentReportable24h, IncidentReportable24hPayload p) =>
+                ($"Urgent: report an incident to the NDIS Commission by {p.DueLocal}.", $"/incidents/{entityId}"),
             // The entity id is a fresh one per revision, so this links to My shifts, where the visit and Start intake are; same words as the email's subject.
             (NotificationEventType.IntakeBooked, IntakeVisitStaffPayload p) => (IntakeVisit(p), "/portal"),
             (NotificationEventType.StaffJoinedViaMicrosoft, StaffJoinedViaMicrosoftPayload p) =>
@@ -80,6 +82,9 @@ public static class InAppNotificationText
         }
         return words.ToString();
     }
+
+    /// <summary>A provider-local deadline in words: "Tue 3 Nov, 11:30 am".</summary>
+    public static string DueWording(DateTime local) => $"{Day(DateOnly.FromDateTime(local))}, {Clock(TimeOnly.FromDateTime(local))}";
 
     private static string Day(DateOnly d) => d.ToString("ddd d MMM", Inv);
 

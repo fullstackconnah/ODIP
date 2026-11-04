@@ -1548,6 +1548,9 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp without time zone");
 
+                    b.Property<DateTime?>("UrgentAlertSentAt")
+                        .HasColumnType("timestamp without time zone");
+
                     b.Property<bool>("WereEmergencyServicesCalled")
                         .HasColumnType("boolean");
 
