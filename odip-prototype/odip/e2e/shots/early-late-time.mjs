@@ -240,7 +240,7 @@ for (const vp of VPS) {
     const radios = group.getByRole('radio')
     const facts = await radios.evaluateAll((els) => els.map((e) => ({ text: e.textContent.trim(), h: Math.round(e.getBoundingClientRect().height * 10) / 10, cut: e.scrollWidth > e.clientWidth, on: e.getAttribute('aria-checked') })))
     check(t('approve-extra-time-choice: two options, nothing chosen'), facts.length === 2 && facts.every((f) => f.on === 'false'), facts)
-    check(t('approve-extra-time-choice: option labels read Pay actual time / Pay rostered hours with their durations'), /^Pay actual time (d+ h 40 min)$/.test(facts[0]?.text) && /^Pay rostered hours (d+ h)$/.test(facts[1]?.text), facts.map((f) => f.text))
+    check(t('approve-extra-time-choice: option labels read Pay actual time / Pay rostered hours with their durations'), /^Pay actual time \(\d+ h 40 min\)$/.test(facts[0]?.text) && /^Pay rostered hours \(\d+ h\)$/.test(facts[1]?.text), facts.map((f) => f.text))
     if (vp.touch) check(t('approve-extra-time-choice: each option at least 44 high'), facts.every((f) => f.h >= 43.5), facts.map((f) => f.h))
     check(t('approve-extra-time-choice: option text not truncated'), facts.every((f) => !f.cut), facts.map((f) => f.cut))
     const helper = dialog.getByText("If you don't choose now, Employment Hero gets the rostered hours until you do.")
