@@ -51,7 +51,7 @@ import BudgetTrackCard from './participant-detail/BudgetTrackCard'
 import { ParticipantMoreMenu } from './participant-detail/ParticipantMoreMenu'
 import { useParticipantTabCounts } from './participant-detail/useParticipantTabCounts'
 import {
-  NEW_TABS, PARTICIPANT_TAB_KEYS, useParticipantTabRedirect, useParticipantGoTo, useScrollToHash, useParticipantSection, visibleSubTabs,
+  NEW_TABS, PARTICIPANT_TAB_KEYS, useParticipantTabRedirect, useParticipantGoTo, useScrollToHash, useParticipantSection, visibleSubTabs, nestedSectionTarget,
   type ParticipantTabKey, type GroupedTabKey, type SubTab,
 } from './participant-detail/participantTabs'
 import { plural, formatRelative } from '@/lib/format'
@@ -93,7 +93,7 @@ function Section({ id, label, srHeading, wide, children }: { id: string; label: 
 }
 
 /** A section's card: `has` is false while nothing is recorded, which makes its sub-tab quiet. */
-type ShortCard = { id: string; title: string; has: boolean; node: ReactNode }
+type ShortCard = { id: string; title: string; has: boolean; wide?: boolean; node: ReactNode }
 
 export default function ParticipantDetailPage() {
   const { canWrite, canViewAlerts, canWriteParticipantDetails, canWriteSupportProfile, canWriteRestrictivePractices, canManageFunding, canManageParticipantLifecycle, canAccessPage, isAdmin, isSuperAdmin } = usePermissions()
@@ -119,7 +119,6 @@ export default function ParticipantDetailPage() {
   const [tab] = useTabParam(tabKeys, 'overview')
   const goTo = useParticipantGoTo(tabKeys)
   useParticipantTabRedirect(tabKeys)
-  useScrollToHash(id)
   const counts = useParticipantTabCounts(id)
   const pageQuery = useParticipant(id)
   const supportProfile = useSupportProfile(id)
@@ -130,9 +129,9 @@ export default function ParticipantDetailPage() {
   // The sub-tabs of the open tab: the rows this role and participant can see. Above the early returns, so the hooks keep their order.
   const rows = tab === 'overview' ? [] : visibleSubTabs(tab, {
     rostering: canAccessRostering, planBudget: canManageFunding, claims: canAccessClaims, history: canSeeHistory,
-    communityStream: inCommunityStream, earlierChecklist: earlierChecklist > 0,
   })
   const { section, setSection, selectTab } = useParticipantSection(tab, rows)
+  useScrollToHash(id, nestedSectionTarget(rows, searchParams.get('section')))
   // An open SectionEditPanel with unsaved edits holds the register; a tab or sub-tab switch then asks before it unmounts the draft.
   const holds = useRef(0)
   const dirtyEdits = useMemo(() => ({ hold: () => { holds.current++; let on = true; return () => { if (on) { on = false; holds.current-- } } } }), [])
@@ -188,7 +187,7 @@ export default function ParticipantDetailPage() {
   // The sections of a tab in page order. `has` is false for one with nothing recorded yet (its sub-tab goes quiet). A section that always has
   // content (Identity, NDIS & Funding, the lists that fold themselves) passes true. `wide` spans the grid.
   const card = (cid: string, title: string, has: boolean, node: ReactNode, opts?: { wide?: boolean; srHeading?: boolean }): ShortCard => ({
-    id: cid, title, has, node: <Section key={cid} id={cid} label={title} wide={opts?.wide} srHeading={opts?.srHeading}>{node}</Section>,
+    id: cid, title, has, wide: opts?.wide, node: <Section key={cid} id={cid} label={title} wide={opts?.wide} srHeading={opts?.srHeading}>{node}</Section>,
   })
   // The support profile, read once for Health, Daily and Overview. A 404 is a participant with no profile yet, so an empty one, not an error.
   // While it loads (or failed) the cards built from it count as recorded, so nothing folds on data that has not arrived.
@@ -283,11 +282,31 @@ export default function ParticipantDetailPage() {
     card('history', 'History', true, <AuditHistoryTab entityType="Participant" entityId={String(p.id)} />, { wide: true, srHeading: true }),
   ]
   const cards: Record<GroupedTabKey, ShortCard[]> = { about: aboutCards, health: healthCards, daily: dailyCards, people: peopleCards, funding: fundingCards, agreements: agreementsCards, records: recordsCards }
-  // Counts ride on the four list rows: the numeral for sight, the spoken noun for a screen reader. An empty non-list section is a quiet chip.
+  // A chip shows its own card and the cards merged into it (`nested`), in card order.
+  const members = (tab: GroupedTabKey, r: SubTab) => cards[tab].filter(c => c.id === r.id || r.nested?.includes(c.id))
+  // One card renders as it is; a merged chip stacks its cards in the page grid, a list (wide) taking the full row.
+  const panelBody = (tab: GroupedTabKey, r: SubTab) => {
+    const ms = members(tab, r)
+    if (ms.length === 1) return ms[0].node
+    // Runs of narrow cards pack into CSS columns (no row alignment, so no holes; DOM order stays the reading order); a wide card breaks the run.
+    const runs: ShortCard[][] = []
+    ms.forEach((c, i) => { if (c.wide || i === 0 || ms[i - 1].wide) runs.push([c]); else runs[runs.length - 1].push(c) })
+    return (
+      <div className="flex flex-col gap-[var(--section-gap)]">
+        {runs.map(run => run[0].wide ? <div key={run[0].id}>{run[0].node}</div> : (
+          // The negative bottom margin cancels the last card's trailing margin.
+          <div key={run[0].id} className="mb-[calc(-1*var(--section-gap))] [column-gap:var(--section-gap)] [columns:26rem]">
+            {run.map(c => <div key={c.id} className="mb-[var(--section-gap)] break-inside-avoid">{c.node}</div>)}
+          </div>
+        ))}
+      </div>
+    )
+  }
+  // Counts ride on the four list rows: the numeral for sight, the spoken noun for a screen reader. A non-list chip whose cards are all empty is quiet.
   const subItems = (tab: GroupedTabKey, rows: readonly SubTab[], active: string | undefined) => rows.map(r => {
     const n = r.count ? counts[r.count] : undefined
     const noun = r.count ? NEW_TABS.find(t => t.id === r.count)?.noun : undefined
-    const quiet = !r.list && r.id !== active && !cards[tab].find(c => c.id === r.id)?.has
+    const quiet = !r.list && r.id !== active && !members(tab, r).some(c => c.has)
     return {
       id: r.id,
       label: <span className="relative">{r.label}{n && noun ? <span className="sr-only">, {plural(n, noun[0], noun[1])}</span> : null}{quiet ? <span className="sr-only">, not recorded</span> : null}</span>,
@@ -395,7 +414,8 @@ export default function ParticipantDetailPage() {
 
         {tab !== 'overview' && section && (
           <>
-            <div ref={stripRef} className="mt-3">
+            {/* A tab with one chip (Agreements, Funding for a role with one gate) has no strip: it would only repeat the tab. */}
+            {rows.length > 1 && <div ref={stripRef} className="mt-3">
               <Tabs
                 variant="sub"
                 tabs={subItems(tab, rows, section)}
@@ -412,9 +432,9 @@ export default function ParticipantDetailPage() {
                 ariaLabel={`${NEW_TABS.find(t => t.id === tab)!.label} sections`}
                 idPrefix={`sub-${tab}`}
               />
-            </div>
-            <div role="tabpanel" id={`sub-${tab}-panel`} aria-labelledby={`sub-${tab}-tab-${section}`} tabIndex={0} className="mt-6 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2">
-              <div key={section}>{cards[tab].find(c => c.id === section)?.node}</div>
+            </div>}
+            <div role="tabpanel" id={`sub-${tab}-panel`} {...(rows.length > 1 ? { 'aria-labelledby': `sub-${tab}-tab-${section}` } : { 'aria-label': NEW_TABS.find(t => t.id === tab)!.label })} tabIndex={0} className={`${rows.length > 1 ? 'mt-6' : 'mt-3'} rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2`}>
+              <div key={section}>{panelBody(tab, rows.find(r => r.id === section)!)}</div>
             </div>
           </>
         )}
