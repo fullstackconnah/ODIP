@@ -657,3 +657,17 @@ describe('StaffPage — a missing worker screening', () => {
     expect(screen.queryByText('Everyone here has a screening date')).not.toBeInTheDocument()
   })
 })
+
+describe('StaffPage — CPR chip', () => {
+  it('shows a CPR chip after First aid for a flagged person', () => {
+    mockUseStaff.mockReturnValue({
+      data: [makeStaff({ id: 's1', fullName: 'Alex Rivera', isFirstAidQualified: true, isCprQualified: true, workerScreeningExpiryDate: '2099-01-01' })],
+      isLoading: false,
+    })
+    renderPage()
+
+    const row = screen.getByText('Alex Rivera').closest('tr') as HTMLElement
+    const chips = within(row).getByRole('list', { name: 'Qualifications' })
+    expect(within(chips).getAllByRole('listitem').map(li => li.textContent)).toEqual(['First aid', 'CPR', '+1'])
+  })
+})

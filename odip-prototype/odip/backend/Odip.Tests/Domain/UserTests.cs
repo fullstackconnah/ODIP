@@ -53,4 +53,17 @@ public class UserTests
 
         Assert.True(user.HasExpiredQualifications);
     }
+
+    [Fact]
+    public void HasExpiredQualifications_IsTrue_WhenCprIsTickedAndExpired_AndFalseWhenTheFlagIsOff()
+    {
+        var yesterday = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1);
+        var user = BuildUser();
+        user.IsCprQualified = true;
+        user.CprExpiryDate = yesterday;
+        Assert.True(user.HasExpiredQualifications);
+
+        user.IsCprQualified = false;
+        Assert.False(user.HasExpiredQualifications);
+    }
 }

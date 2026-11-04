@@ -40,8 +40,10 @@ internal static class OlderSchemaSeeds
         ("ShiftBreaks", "WithParticipant", "boolean"),
         ("Shifts", "CancelledAt", "timestamp without time zone"),
         ("StaffParticipantCompatibilities", "Rank", "integer"),
+        ("Users", "CprExpiryDate", "date"),
         ("Users", "EmploymentType", "integer"),
         ("Users", "GoalWeeklyHours", "numeric"),
+        ("Users", "IsCprQualified", "boolean NOT NULL DEFAULT false"),
     ];
 
     public static async Task SaveWithLaterColumnsAsync(DbContext db)

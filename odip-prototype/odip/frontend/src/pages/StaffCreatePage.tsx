@@ -58,10 +58,12 @@ const staffSchema = z.object({
   region: z.string().optional(),
   isDriverEligible: z.boolean().optional(),
   isFirstAidQualified: z.boolean().optional(),
+  isCprQualified: z.boolean().optional(),
   isMedicationCompetent: z.boolean().optional(),
   isManualHandlingCompetent: z.boolean().optional(),
   isOvernightEligible: z.boolean().optional(),
   firstAidExpiryDate: z.string().optional(),
+  cprExpiryDate: z.string().optional(),
   driverLicenceExpiryDate: z.string().optional(),
   manualHandlingExpiryDate: z.string().optional(),
   medicationCompetencyExpiryDate: z.string().optional(),
@@ -156,6 +158,7 @@ export default function StaffCreatePage() {
       role: 'SupportWorker',
       isDriverEligible: false,
       isFirstAidQualified: false,
+      isCprQualified: false,
       isMedicationCompetent: false,
       isManualHandlingCompetent: false,
       isOvernightEligible: false,
@@ -177,10 +180,12 @@ export default function StaffCreatePage() {
       region: record.region ?? '',
       isDriverEligible: record.isDriverEligible ?? false,
       isFirstAidQualified: record.isFirstAidQualified ?? false,
+      isCprQualified: record.isCprQualified ?? false,
       isMedicationCompetent: record.isMedicationCompetent ?? false,
       isManualHandlingCompetent: record.isManualHandlingCompetent ?? false,
       isOvernightEligible: record.isOvernightEligible ?? false,
       firstAidExpiryDate: record.firstAidExpiryDate ?? '',
+      cprExpiryDate: record.cprExpiryDate ?? '',
       driverLicenceExpiryDate: record.driverLicenceExpiryDate ?? '',
       manualHandlingExpiryDate: record.manualHandlingExpiryDate ?? '',
       medicationCompetencyExpiryDate: record.medicationCompetencyExpiryDate ?? '',
@@ -450,6 +455,17 @@ export default function StaffCreatePage() {
               <div className="ml-7">
                 <FormField label="Expiry date">
                   <input type="date" {...register('firstAidExpiryDate')} />
+                </FormField>
+              </div>
+            </div>
+
+            <div className={`${span.medium} space-y-1`}>
+              <FormField label="CPR Qualified" layout="checkbox">
+                <input type="checkbox" {...register('isCprQualified')} className="w-4 h-4 rounded border-[var(--color-border)]" />
+              </FormField>
+              <div className="ml-7">
+                <FormField label="Expiry date">
+                  <input type="date" {...register('cprExpiryDate')} />
                 </FormField>
               </div>
             </div>

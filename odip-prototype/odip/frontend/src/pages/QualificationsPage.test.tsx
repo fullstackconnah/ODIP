@@ -329,3 +329,22 @@ describe('QualificationsPage — staff from Employment Hero', () => {
     expect(screen.queryByRole('link', { name: 'New staff member' })).toBeNull()
   })
 })
+
+describe('QualificationsPage: CPR', () => {
+  beforeEach(() => { mockMutate.mockReset(); mockApiGet.mockReset(); mockPending.current = false })
+
+  it('shows an expired CPR as its own row, and its pencil saves cprExpiryDate', async () => {
+    const cleo = person('s9', 'Cleo Pulse', { isCprQualified: true, cprExpiryDate: '2026-08-22' })
+    mockUseStaff.mockReturnValue({ data: [cleo], isLoading: false })
+    mockApiGet.mockResolvedValue(cleo)
+    renderList()
+    fireEvent.click(screen.getByRole('button', { name: /Cleo Pulse/ }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit: CPR, Cleo Pulse' }))
+    fireEvent.change(screen.getByLabelText('Expiry date'), { target: { value: '2027-08-22' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(mockMutate).toHaveBeenCalledTimes(1))
+    expect(mockMutate.mock.calls[0][0]).toEqual({ id: 's9', data: expect.objectContaining({ isCprQualified: true, cprExpiryDate: '2027-08-22' }) })
+  })
+})
