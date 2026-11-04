@@ -66,14 +66,12 @@ describe('ItineraryTab — By day | List', () => {
     expect(screen.getByRole('radio', { name: 'List' })).toBeChecked()
   })
 
-  it('separates the date from the time with a text space (phone meta line)', () => {
+  it('gaps the time from the date below md (the phone meta row is flex, so a text space paints nothing)', () => {
     renderTab()
     fireEvent.click(screen.getByRole('radio', { name: 'List' }))
-    const cells = screen.getAllByText('Fri 06/11').map(d => d.parentElement?.textContent ?? '')
-    expect(cells.some(t => /^Fri 06\/11 \d/.test(t))).toBe(true)
-    // a space inside the time span collapses at the start of an inline run, so it must sit between the spans
-    const time = screen.getAllByText('Fri 06/11')[0].nextElementSibling
-    expect(time?.textContent).toBe(time?.textContent?.trim())
+    const time = screen.getAllByText('Fri 06/11').map(d => d.nextElementSibling).find(Boolean)
+    expect(time?.className).toContain('ml-1')
+    expect(time?.className).toContain('md:ml-0')
   })
 
   it('falls back to By day on a garbage stored value', () => {
