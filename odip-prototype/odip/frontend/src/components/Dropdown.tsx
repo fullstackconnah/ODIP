@@ -127,7 +127,8 @@ export function Dropdown({
       style.left = variant === 'form' ? rect.left : Math.max(8, Math.min(rect.left, window.innerWidth - (panelRef.current?.offsetWidth ?? 0) - 8))
       if (variant === 'form') style.width = rect.width
     } else {
-      style.right = window.innerWidth - rect.right
+      // Right-anchored to the trigger, but a trigger near the left edge (a chip in the first column) must not push the panel off screen: keep it within 8px.
+      style.right = Math.min(window.innerWidth - rect.right, window.innerWidth - (panelRef.current?.offsetWidth ?? 0) - 8)
     }
     setPanelStyle(style)
   }, [resolvedAlign, variant, maxPanelHeight])

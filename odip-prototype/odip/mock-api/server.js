@@ -3329,8 +3329,20 @@ const putRoutes = [
     if (!staffRow || !participantRow) return respond(400, failEnvelope(null, ['Staff member not found.']))
     const next = { staffId: body.staffId, staffName: staffRow.fullName, participantId: body.participantId, participantName: participantRow.fullName, level: body.level, rank: 0, reason: body.reason ?? null, updatedAt: new Date().toISOString() }
     const i = compatibilityRows.findIndex((r) => r.staffId === body.staffId && r.participantId === body.participantId)
-    if (i >= 0) compatibilityRows[i] = next
+    const prev = i >= 0 ? compatibilityRows[i] : null
+    if (prev) compatibilityRows[i] = next
     else compatibilityRows.push(next)
+    // Place the row as StaffCompatibilityLinkService.PlaceAsync does: last in a tier it enters, the sent rank honoured, the tier it left renumbered. Allowed and No keep rank 0.
+    const ranked = ['Preferred', 'Backup', 'Emergency']
+    const tierOf = (level) => compatibilityRows.filter((r) => r.participantId === body.participantId && r.level === level).sort((a, b) => (a.rank || 1e9) - (b.rank || 1e9))
+    if (ranked.includes(body.level)) {
+      const others = tierOf(body.level).filter((r) => r !== next)
+      const stays = prev && prev.level === body.level
+      const place = Math.min(Math.max(body.rank ?? (stays ? prev.rank : others.length + 1), 1), others.length + 1)
+      others.splice(place - 1, 0, next)
+      others.forEach((r, k) => { r.rank = k + 1 })
+    }
+    if (prev && prev.level !== body.level && ranked.includes(prev.level)) tierOf(prev.level).forEach((r, k) => { r.rank = k + 1 })
     return next
   }],
   ['admin/whats-new/:id', (id, body) => { const row = whatsNewRows.find((r) => r.id === id); return row ? { ...whatsNewSave(row, body) } : null }],

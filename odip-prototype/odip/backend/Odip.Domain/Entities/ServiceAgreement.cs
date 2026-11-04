@@ -76,6 +76,11 @@ public class ServiceAgreementDraftApproval : ITenantEntity
     public DateOnly? FirstShiftDate { get; set; }
     /// <summary>The last day shifts were generated to (the provider's today plus the horizon, held to the agreement's end); null when none were generated.</summary>
     public DateOnly? HorizonEnd { get; set; }
+    /// <summary>Who agreed to it, as the coordinator recorded when marking it approved: a snapshot of the contact's name (or a typed one). Null when not recorded.</summary>
+    public string? AgreedByName { get; set; }
+    /// <summary>The contact (Person) who agreed; null for the participant or a typed name.</summary>
+    public Guid? AgreedByPersonId { get; set; }
+    public Enums.AgreementAgreedHow? AgreedHow { get; set; }
 }
 
 /// <summary>
