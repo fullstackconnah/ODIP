@@ -47,6 +47,8 @@ const WRAPPED: [RegExp, unknown][] = [
 ]
 
 function answer(url: string): unknown {
+  // The incident page lists witnesses and injuries on every card, so its record carries both lists.
+  if (new RegExp(`/incidents/${ID}$`).test(url)) return { ...RECORD, witnesses: [], injuries: [] }
   if (DETAIL.test(url)) return RECORD
   // An empty list in both shapes: a plain array, and a paged result (items + totalCount).
   return WRAPPED.find(([re]) => re.test(url))?.[1] ?? Object.assign([], { items: [], totalCount: 0 })
