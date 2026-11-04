@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -38,7 +38,7 @@ function row(staffId: string, staffName: string, participantId: string, particip
 
 let rows: CompatibilityRowDto[]
 
-function renderPage(url = '/rostering/compatibility') {
+function renderPage(url = '/rostering/compatibility?view=all') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={qc}>
@@ -57,10 +57,11 @@ beforeEach(() => {
     row('s3', 'Gone Person', 'p2', 'Jamie Chen', 'Excluded', 'Left'),
     row('s1', 'Sam Taylor', 'p9', 'Exited Person', 'Preferred'),
   ]
-  mockApiGet.mockReset().mockImplementation(async () => rows)
+  mockApiGet.mockReset().mockImplementation(async (_url: string, params?: { participantId?: string }) => (params?.participantId ? rows.filter(r => r.participantId === params.participantId) : [...rows]))
   mockApiPut.mockReset().mockImplementation(async (_url: string, body: { staffId: string; participantId: string; level: CompatibilityRowDto['level']; reason: string | null }) => {
     const i = rows.findIndex(r => r.staffId === body.staffId && r.participantId === body.participantId)
-    const next = row(body.staffId, body.staffId === 's1' ? 'Sam Taylor' : 'Morgan Lee', body.participantId, body.participantId === 'p1' ? 'Alex Rivera' : 'Jamie Chen', body.level, body.reason)
+    const staffNames: Record<string, string> = { s1: 'Sam Taylor', s2: 'Morgan Lee', s4: 'Casey Wong', s5: 'Robin Hall' }
+    const next = row(body.staffId, staffNames[body.staffId], body.participantId, body.participantId === 'p1' ? 'Alex Rivera' : 'Jamie Chen', body.level, body.reason)
     if (i >= 0) rows[i] = next
     else rows.push(next)
     return next
@@ -91,7 +92,7 @@ describe('CompatibilityPage: the exceptions list', () => {
 
   it('filters by the No / Preferences toggle and the search, and opens on ?q=', async () => {
     const user = userEvent.setup()
-    renderPage('/rostering/compatibility?q=Jamie')
+    renderPage('/rostering/compatibility?view=all&q=Jamie')
     await screen.findByText('Morgan Lee')
     expect(dataRows()).toHaveLength(1)
 
@@ -210,5 +211,106 @@ describe('CompatibilityPage: the exceptions list', () => {
     renderPage()
     expect(await screen.findByText('No pairings marked yet')).toBeInTheDocument()
     expect(screen.getByText(/can’t be rostered|can't be rostered/)).toBeInTheDocument()
+  })
+})
+
+describe('CompatibilityPage: the participant board', () => {
+  const list = () => within(screen.getByRole('navigation', { name: 'Participants' }))
+
+  it('opens by participant: a list with counts, and the first participant on the board', async () => {
+    renderPage('/rostering/compatibility')
+    await screen.findByRole('heading', { name: 'Alex Rivera' })
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    await waitFor(() => expect(list().getByRole('link', { name: /Alex Rivera/ })).toHaveTextContent('1 listed · 1 No'))
+    expect(list().getByRole('link', { name: /Jamie Chen/ })).toHaveTextContent('1 listed')
+    expect(list().getByRole('link', { name: /Jamie Chen/ })).not.toHaveTextContent('No')
+    expect(list().getByRole('link', { name: /Alex Rivera/ })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('radio', { name: 'By participant' })).toBeChecked()
+    expect(document.querySelectorAll('select')).toHaveLength(0)
+  })
+
+  it('opens All pairings on ?view=all, and the toggle moves between the two', async () => {
+    const user = userEvent.setup()
+    renderPage('/rostering/compatibility')
+    await screen.findByRole('heading', { name: 'Alex Rivera' })
+    await user.click(screen.getByRole('radio', { name: 'All pairings' }))
+    expect(await screen.findByRole('table')).toBeInTheDocument()
+    await user.click(screen.getByRole('radio', { name: 'By participant' }))
+    expect(await screen.findByRole('heading', { name: 'Alex Rivera' })).toBeInTheDocument()
+  })
+
+  it('deep-links a participant and filters the list on ?q=', async () => {
+    renderPage('/rostering/compatibility?participant=p2')
+    expect(await screen.findByRole('heading', { name: 'Jamie Chen' })).toBeInTheDocument()
+    expect(list().getByRole('link', { name: /Jamie Chen/ })).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('filters the participant list on ?q= and says when nobody matches', async () => {
+    const user = userEvent.setup()
+    renderPage('/rostering/compatibility?q=Jam')
+    await screen.findByRole('heading', { name: 'Jamie Chen' })
+    expect(list().queryByRole('link', { name: /Alex Rivera/ })).not.toBeInTheDocument()
+    await user.clear(screen.getByLabelText('Search participants'))
+    await user.type(screen.getByLabelText('Search participants'), 'zzz')
+    expect(screen.getByText('No participants match “zzz”.')).toBeInTheDocument()
+  })
+
+  it('updates the list counts after an add, without a reload', async () => {
+    const user = userEvent.setup()
+    renderPage('/rostering/compatibility?participant=p2')
+    await screen.findByRole('heading', { name: 'Jamie Chen' })
+    await user.click(await screen.findByRole('button', { name: 'Add to Emergency' }))
+    await user.click(await screen.findByRole('checkbox', { name: 'Casey Wong' }))
+    await user.click(screen.getByRole('button', { name: 'Add 1 as Emergency' }))
+    await waitFor(() => expect(list().getByRole('link', { name: /Jamie Chen/ })).toHaveTextContent('2 listed'))
+  })
+
+  it('marks No from a chip as a new mark, not an edit, and says what the person is leaving', async () => {
+    const user = userEvent.setup()
+    renderPage('/rostering/compatibility')
+    await screen.findByRole('heading', { name: 'Alex Rivera' })
+    await user.click(await screen.findByRole('button', { name: 'Options for Sam Taylor' }))
+    await user.click(await screen.findByRole('option', { name: 'Mark No…' }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).queryByRole('button', { name: 'Save reason' })).not.toBeInTheDocument()
+    expect(within(dialog).queryByLabelText(/^Staff/)).not.toBeInTheDocument()
+    expect(within(dialog).getByText(/Sam Taylor is listed as Preferred for Alex Rivera\. Marking No takes them off that list/)).toBeInTheDocument()
+    await user.type(within(dialog).getByLabelText(/Reason/), 'Asked to be apart')
+    await user.click(within(dialog).getByRole('button', { name: 'Mark as No' }))
+    expect(mockApiPut).toHaveBeenCalledWith('/rostering/compatibility', { staffId: 's1', participantId: 'p1', level: 'Excluded', reason: 'Asked to be apart' })
+  })
+
+  it('marks No from the column foot with the participant fixed and the staff picked', async () => {
+    const user = userEvent.setup()
+    renderPage('/rostering/compatibility?participant=p2')
+    await screen.findByRole('heading', { name: 'Jamie Chen' })
+    await user.click(await screen.findByRole('button', { name: '+ Mark No' }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).queryByLabelText(/^Participant/)).not.toBeInTheDocument()
+    await user.click(within(dialog).getByLabelText(/^Staff/))
+    await user.click(await screen.findByRole('option', { name: 'Casey Wong' }))
+    await user.type(within(dialog).getByLabelText(/Reason/), 'Not a fit')
+    await user.click(within(dialog).getByRole('button', { name: 'Mark as No' }))
+    expect(mockApiPut).toHaveBeenCalledWith('/rostering/compatibility', { staffId: 's4', participantId: 'p2', level: 'Excluded', reason: 'Not a fit' })
+  })
+
+  it('edits and removes a No from its chip', async () => {
+    const user = userEvent.setup()
+    renderPage('/rostering/compatibility')
+    await screen.findByText('Past conflict')
+    await user.click(screen.getByRole('button', { name: 'Options for Morgan Lee' }))
+    await user.click(await screen.findByRole('option', { name: 'Edit reason…' }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).getByLabelText(/Reason/)).toHaveValue('Past conflict')
+    expect(within(dialog).getByRole('button', { name: 'Save reason' })).toBeInTheDocument()
+  })
+
+  it('shows a reader the board with no menus and no Add buttons', async () => {
+    perms.canWrite = false
+    renderPage('/rostering/compatibility')
+    await screen.findByText('Past conflict')
+    expect(screen.queryByRole('button', { name: /^Options for/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Add to/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '+ Mark No' })).not.toBeInTheDocument()
   })
 })
