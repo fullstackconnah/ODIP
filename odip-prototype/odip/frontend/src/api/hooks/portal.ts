@@ -2,7 +2,7 @@ import { useCallback, useEffect, useSyncExternalStore } from 'react'
 import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { apiGet, apiPost, apiPostRaw, apiPut, apiDeleteRaw } from '../client'
 import type {
-  PortalShiftsResponseDto, PortalShiftDetailDto, PortalWitnessRequestDto, ShiftNoteDto, StartShiftDto, FinishShiftDto,
+  PortalShiftsResponseDto, PortalShiftDetailDto, PortalWitnessRequestDto, ShiftNoteDto, StartShiftDto, FinishShiftDto, LocationReasonDto,
   EditShiftBreakDto, AcknowledgeHandoverDto, CreateAdministrationDto, AdministrationDto,
 } from '../types'
 import { apiErrorStatus } from '@/lib/shiftPackageErrors'
@@ -141,6 +141,12 @@ export function useStartShift() {
     ({ id, data }) => ({ kind: 'start', path: `/portal/shifts/${id}/start`, method: 'POST', body: data, clientTimeField: 'startedAt' }),
     (qc, _, vars) => refreshShift(qc, vars.id),
   )
+}
+
+/** POST portal/shifts/{id}/location-reason: the worker's note after an off-site Start. Sent live only (a note is not worth queueing); 409 once the shift is no longer in progress. */
+export function useSaveLocationReason() {
+  return useShiftDetailWrite(({ id, reason }: { id: string; reason: string }) =>
+    apiPost<PortalShiftDetailDto>(`/portal/shifts/${id}/location-reason`, { reason } satisfies LocationReasonDto))
 }
 
 /** Queued while offline; the replay carries `finishedAt` (the moment of the tap) with every other field as entered. */

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ClipboardCheck, AlertTriangle } from 'lucide-react'
 import { usePermissions } from '@/lib/permissions'
+import { locationCheckLine } from '@/lib/locationCheck'
 import { PageHeader } from '@/components/PageHeader'
 import { DataTable, type Column } from '@/components/DataTable'
 import { EmptyState } from '@/components/EmptyState'
@@ -191,6 +192,7 @@ function WorkerAnswers({ c, canEditTravel = false, onTravelOpenChange = () => {}
   const t = (iso: string) => formatWithTimeZone(iso, c.timeZoneId, { hour: 'numeric', minute: '2-digit' })
   const lines = [
     c.originalActualStart && `Start ${t(c.originalActualStart)}, changed to ${t(c.actualStart)}.`,
+    locationCheckLine(c),
     c.originalActualEnd && c.actualEnd && `Finish ${t(c.originalActualEnd)}, changed to ${t(c.actualEnd)}.`,
     c.timeAdjustmentReason && `Reason: ${c.timeAdjustmentReason}`,
     c.kilometres != null && `${c.kilometres} km driven with the participant`,

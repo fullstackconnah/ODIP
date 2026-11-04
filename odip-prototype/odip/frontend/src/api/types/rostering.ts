@@ -194,6 +194,8 @@ export interface FlaggedShiftNoteDto {
 // this is the data contract only, added ahead of the review UI that will render `incidents`. ──
 export type ShiftCompletionReviewOutcome = 'Approved' | 'Returned'
 
+export type LocationCheckStatus = 'AtLocation' | 'NotAtLocation' | 'Unavailable' | 'NoLocationSet'
+
 export interface ShiftCompletionDto {
   id: string
   shiftId: string
@@ -201,6 +203,12 @@ export interface ShiftCompletionDto {
   actualEnd: string | null
   timeZoneId: string
   geolocationDeclined: boolean
+  /** The Start location check: the result and the distance only, never where the phone was. Null before it ran (older completions). */
+  locationCheck?: LocationCheckStatus | null
+  locationDistanceMetres?: number | null
+  locationAccuracyMetres?: number | null
+  /** The worker's note, or the system's ("Started offline"). */
+  locationReason?: string | null
   startWasManual: boolean
   submittedByUserId: string
   submittedByName: string
