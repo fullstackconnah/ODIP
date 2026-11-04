@@ -1430,6 +1430,7 @@ public class RosteringController : ControllerBase
                 CompletionId = x.Completion.Id, x.Completion.TimeZoneId, x.Completion.ActualStart, x.Completion.ActualEnd,
                 x.Completion.VarianceMinutesStart, x.Completion.VarianceMinutesEnd, x.Completion.StartWasManual,
                 TimesAdjusted = x.Completion.OriginalActualStart != null || x.Completion.OriginalActualEnd != null,
+                x.Completion.ExtraTime,
             })
             .ToListAsync(ct);
 
@@ -1455,7 +1456,7 @@ public class RosteringController : ControllerBase
                 row.TimeZoneId, isOutlier, row.Threshold, row.ReturnCount,
                 extras[row.CompletionId].DosesWithoutOutcome, extras[row.CompletionId].BreakMinutes, row.StartWasManual, row.TimesAdjusted,
                 extras[row.CompletionId].IncidentCount,
-                ShiftCompletionMapper.IsOffRoster(row.VarianceMinutesStart, row.VarianceMinutesEnd, row.ActualEnd));
+                ShiftCompletionMapper.IsOffRoster(row.VarianceMinutesStart, row.VarianceMinutesEnd, row.ActualEnd), row.ExtraTime);
         }).ToList();
 
         return Ok(ApiResponse<PagedResult<CompletionQueueItemDto>>.Ok(
@@ -1585,11 +1586,16 @@ public class RosteringController : ControllerBase
         // a flagged shift deliberately, after its review, so it leaves this off.
         if (requireClean && (await ShiftCompletionMapper.ShiftsNeedingReviewAsync(_db, [(shift!, completion!)], ct)).Count > 0)
             return Conflict(ApiResponse<ShiftCompletionDto>.Fail(NeedsReviewMessage, ShiftErrorCodes.ShiftNeedsReview));
+        // The Approve dialog may carry the extra-time choice. No choice approves as before and leaves extra time Pending (held at rostered hours); a choice for a completion with none is ignored.
+        ExtraTimeDecision? choice = null;
+        if (dto?.ExtraTime is not null && !TryParseExtraTimeChoice(dto.ExtraTime, out choice))
+            return BadRequest(ApiResponse<ShiftCompletionDto>.Fail(ExtraTimeChoiceMessage, ShiftErrorCodes.ShiftExtraTimeChoiceInvalid));
 
         var now = DateTime.UtcNow;
         completion!.ReviewedByUserId = reviewerId;
         completion.ReviewedAt = now;
         completion.ReviewOutcome = ReviewOutcome.Approved;
+        if (choice is not null && completion.ExtraTime is not null) completion.ExtraTime = choice;
         completion.UpdatedAt = now;
 
         shift!.Status = ShiftStatus.Completed;
@@ -1601,8 +1607,39 @@ public class RosteringController : ControllerBase
         return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, shift.ReturnCount, ct)));
     }
 
+    private const string ExtraTimeChoiceMessage = "Choose to approve or decline the extra time.";
+
+    private static bool TryParseExtraTimeChoice(string? word, out ExtraTimeDecision? choice)
+    {
+        choice = word?.Trim().ToLowerInvariant() switch { "approve" => ExtraTimeDecision.Approved, "decline" => ExtraTimeDecision.Declined, _ => null };
+        return choice is not null;
+    }
+
+    /// <summary>
+    /// A coordinator decides, or changes, the extra time on a completion: "approve" pays the actual times, "decline" pays rostered hours. Allowed while the shift is
+    /// PendingReview or Completed with an active completion; 404 otherwise, 409 SHIFT_NO_EXTRA_TIME when the completion has none. Employment Hero is updated by the
+    /// sender's change check (the paid window changes the line's hash), so nothing is sent from here.
+    /// </summary>
     [HttpPost("shifts/{id:guid}/completion/extra-time")]
-    public Task<ActionResult<ApiResponse<ShiftCompletionDto>>> DecideExtraTime(Guid id, [FromBody] DecideExtraTimeDto dto, CancellationToken ct) => throw new NotImplementedException();
+    public async Task<ActionResult<ApiResponse<ShiftCompletionDto>>> DecideExtraTime(Guid id, [FromBody] DecideExtraTimeDto dto, CancellationToken ct)
+    {
+        if (!TryParseExtraTimeChoice(dto.Decision, out var choice))
+            return BadRequest(ApiResponse<ShiftCompletionDto>.Fail(ExtraTimeChoiceMessage, ShiftErrorCodes.ShiftExtraTimeChoiceInvalid));
+
+        await using var rowLock = await ShiftRowLock.AcquireAsync(_db, id, ct);
+        var shift = await _db.Shifts.FirstOrDefaultAsync(s => s.Id == id, ct);
+        var completion = shift is null ? null : await _db.ShiftCompletions.FirstOrDefaultAsync(c => c.ShiftId == id && c.IsActive, ct);
+        if (shift is null || completion is null || shift.Status is not (ShiftStatus.PendingReview or ShiftStatus.Completed))
+            return NotFound(ApiResponse<ShiftCompletionDto>.Fail("Completion not found.", ShiftErrorCodes.ShiftCompletionNotFound));
+        if (completion.ExtraTime is null)
+            return Conflict(ApiResponse<ShiftCompletionDto>.Fail("This shift has no extra time to decide.", ShiftErrorCodes.ShiftNoExtraTime));
+
+        completion.ExtraTime = choice;
+        completion.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+        await rowLock.CommitAsync(ct);
+        return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, shift.ReturnCount, ct)));
+    }
 
     /// <summary>
     /// Staff set the four provider-travel values on a shift's ACTIVE completion (travel PR-A1): how staff add travel on a hand-made shift, or correct the

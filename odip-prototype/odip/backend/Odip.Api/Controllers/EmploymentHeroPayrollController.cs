@@ -166,10 +166,12 @@ public class EmploymentHeroPayrollController : ControllerBase
             var built = EmploymentHeroTimesheets.Build(shift, c, shiftBreaks, payrollId, map, shiftZone);
             var (status, reason, sendable) = EmploymentHeroTimesheets.StatusOf(row, payrollId is not null, built.WaitReason, zone);
             var (rostered, breakMinutes, paid) = ShiftBreakRules.PaidMinutes(shift, c, now, shiftBreaks);
+            var (paidStart, paidEnd, held) = EmploymentHeroTimesheets.PaidWindow(shift, c, shiftZone);   // unapproved extra time is held at rostered hours, here as in what is sent
+            if (held) (_, breakMinutes, paid) = ShiftBreakRules.NetWorked(paidStart, paidEnd, now, shiftBreaks);
             items.Add(new Item(c.Id, row, sendable));
             if (!byWorker.TryGetValue(c.SubmittedByUserId, out var list)) byWorker[c.SubmittedByUserId] = list = [];
             list.Add(new PayrollShiftDto(shift.Id, shift.ServiceDate, participants.GetValueOrDefault(shift.ParticipantId, ""), shift.StartTime, shift.EndTime, shift.EndsNextDay,
-                rostered, c.ActualStart, c.ActualEnd, c.TimeZoneId, breakMinutes, paid, shift.NightType, status, reason, row?.SentAt, sendable));
+                rostered, c.ActualStart, c.ActualEnd, c.TimeZoneId, breakMinutes, paid, shift.NightType, status, reason, row?.SentAt, sendable, paidStart, c.ActualEnd is null ? null : paidEnd, held));
         }
 
         static int Rank(PayrollShiftStatus s) => s switch

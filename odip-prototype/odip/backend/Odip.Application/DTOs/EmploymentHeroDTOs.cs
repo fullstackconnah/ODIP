@@ -32,7 +32,9 @@ public record PayPeriodsDto(bool Connected, DateOnly Today, List<PayPeriodDto> P
 
 public record PayrollShiftDto(Guid ShiftId, DateOnly ServiceDate, string ParticipantName, TimeOnly RosteredStart, TimeOnly RosteredEnd, bool EndsNextDay,
     int RosteredMinutes, DateTime ActualStart, DateTime? ActualEnd, string TimeZoneId, int BreakMinutes, int PaidMinutes, SleepoverType NightType,
-    PayrollShiftStatus Status, string? Reason, DateTime? SentAt, bool Sendable);
+    PayrollShiftStatus Status, string? Reason, DateTime? SentAt, bool Sendable,
+    /// <summary>What Employment Hero is paid for: the actual times, or the rostered ones for a side of extra time nobody has approved. <c>ExtraTimeHeld</c> is true in the second case.</summary>
+    DateTime PaidStart = default, DateTime? PaidEnd = null, bool ExtraTimeHeld = false);
 public record PayrollWorkerDto(Guid UserId, string Name, bool Linked, int RosteredMinutes, int PaidMinutes, List<PayrollShiftDto> Shifts);
 public record PayrollCheckDto(DateOnly From, DateOnly To, int Approved, int Sent, int Waiting, int Failed, int Changed, int NotLinked, int Sendable,
     int AwaitingApproval, List<PayrollWorkerDto> Workers);
