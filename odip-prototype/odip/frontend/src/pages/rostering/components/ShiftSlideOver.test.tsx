@@ -5,12 +5,13 @@ import userEvent from '@testing-library/user-event'
 import { ShiftSlideOver } from './ShiftSlideOver'
 import { makeShift, makeUnfilledShift, makeFinding } from '../test-fixtures'
 import { lockedWords } from '../lib/rosterDrag'
-import type { ParticipantRoutineDto, CompatibilityRowDto, ShiftDto, ShiftNoteDto } from '@/api/types'
+import type { ParticipantRoutineDto, CompatibilityRowDto, ServiceLocationDto, ShiftDto, ShiftNoteDto } from '@/api/types'
 
 const {
   mockCheckMutate, mockCreateMutateAsync, mockUpdateMutateAsync, mockDeleteMutateAsync, mockGetRosterFindings,
-  mockUseParticipantRoutines, mockUseCompatibility, mockUseShiftNotes,
+  mockUseParticipantRoutines, mockUseCompatibility, mockUseShiftNotes, mockUseServiceLocations,
 } = vi.hoisted(() => ({
+  mockUseServiceLocations: vi.fn(() => ({ data: [] as ServiceLocationDto[] })),
   mockCheckMutate: vi.fn(),
   mockCreateMutateAsync: vi.fn(),
   mockUpdateMutateAsync: vi.fn(),
@@ -34,6 +35,7 @@ vi.mock('@/api/hooks', () => ({
   useParticipantRoutines: mockUseParticipantRoutines,
   useCompatibility: mockUseCompatibility,
   useRosterShiftNotes: mockUseShiftNotes,
+  useServiceLocations: mockUseServiceLocations,
   getRosterFindings: mockGetRosterFindings,
 }))
 
@@ -277,6 +279,59 @@ describe('ShiftSlideOver at a 200 %-equivalent layout width (R-57 reflow)', () =
     // Each control keeps its own words on one line.
     expect(cancel).toHaveClass('whitespace-nowrap')
     expect(save).toHaveClass('whitespace-nowrap')
+  })
+})
+
+// The Staff list's options, without the native options of the Service location picker.
+const staffTierOptions = () => screen.getAllByRole('option').filter(o => o.tagName !== 'OPTION')
+
+function makePlace(overrides: Partial<ServiceLocationDto> = {}): ServiceLocationDto {
+  return { id: 'place-1', name: 'Southside day centre', address: '12 Park Rd', latitude: -33.9, longitude: 151.2, radiusMetres: 200, timeZoneId: null, isActive: true, ...overrides }
+}
+
+describe('ShiftSlideOver service location picker', () => {
+  const props = { onClose: noop, canWrite: true, participantOptions, staffOptions }
+  afterEach(() => { mockUseServiceLocations.mockReturnValue({ data: [] }) })
+
+  it('offers None and the active places, and sends the chosen place id on save', async () => {
+    mockUseServiceLocations.mockReturnValue({ data: [makePlace(), makePlace({ id: 'place-2', name: 'Old hub', isActive: false })] })
+    const user = userEvent.setup()
+    render(<ShiftSlideOver target={{ mode: 'edit', shift: makeShift({ status: 'Draft', findings: [], serviceLocationId: null }) }} {...props} />)
+
+    const picker = screen.getByLabelText('Service location')
+    expect(within(picker).getByRole('option', { name: 'None' })).toBeInTheDocument()
+    expect(within(picker).getByRole('option', { name: 'Southside day centre' })).toBeInTheDocument()
+    expect(within(picker).queryByRole('option', { name: /Old hub/ })).not.toBeInTheDocument()
+    await user.selectOptions(picker, 'place-1')
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(mockUpdateMutateAsync.mock.calls[0][0].data.serviceLocationId).toBe('place-1')
+  })
+
+  it('keeps an archived place on the shift that has it, labelled archived', () => {
+    mockUseServiceLocations.mockReturnValue({ data: [makePlace({ id: 'place-2', name: 'Old hub', isActive: false })] })
+    render(<ShiftSlideOver target={{ mode: 'edit', shift: makeShift({ status: 'Draft', findings: [], serviceLocationId: 'place-2' }) }} {...props} />)
+
+    expect(screen.getByLabelText('Service location')).toHaveValue('place-2')
+    expect(screen.getByRole('option', { name: 'Old hub (archived)' })).toBeInTheDocument()
+  })
+
+  it('sends null when None is chosen, and points at Settings when there are no places', async () => {
+    const user = userEvent.setup()
+    render(<ShiftSlideOver target={{ mode: 'edit', shift: makeShift({ status: 'Draft', findings: [], serviceLocationId: null }) }} {...props} />)
+
+    expect(screen.getByText('Add places in Settings, Service locations.')).toBeInTheDocument()
+    expect(screen.getByText('Location details')).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Location details'), 'Room 2')
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect(mockUpdateMutateAsync.mock.calls[0][0].data).toMatchObject({ serviceLocationId: null, location: 'Room 2' })
+  })
+
+  it('disables the picker for a reader', () => {
+    mockUseServiceLocations.mockReturnValue({ data: [makePlace()] })
+    render(<ShiftSlideOver target={{ mode: 'edit', shift: makeShift({ status: 'Draft', findings: [] }) }} {...props} canWrite={false} />)
+    expect(screen.getByLabelText('Service location')).toBeDisabled()
   })
 })
 
@@ -779,7 +834,7 @@ describe('ShiftSlideOver staff tiers (R8b)', () => {
 
     await user.click(screen.getByLabelText('Staff'))
 
-    const labels = screen.getAllByRole('option').map(o => o.textContent ?? '')
+    const labels = staffTierOptions().map(o => o.textContent ?? '')
     const names = ['Paul Preferred One', 'Pat Preferred Two', 'Bea Backup', 'Eli Emergency', 'Nia None', 'Nora No']
     expect(names.map(n => labels.findIndex(l => l.includes(n)))).toEqual([1, 2, 3, 4, 5, 6])
     expect(screen.getByText('Preferred #1 for this participant')).toBeInTheDocument()
@@ -826,11 +881,11 @@ describe('ShiftSlideOver Staff field — SearchableSelect (DS-01/UX-01 migration
 
     const field = screen.getByRole('combobox', { name: 'Staff' })
     await user.click(field)
-    expect(screen.getAllByRole('option')).toHaveLength(4) // Unassigned + 3 staff
+    expect(staffTierOptions()).toHaveLength(4) // Unassigned + 3 staff
 
     await user.type(field, 'jordan')
 
-    const options = screen.getAllByRole('option')
+    const options = staffTierOptions()
     expect(options).toHaveLength(1)
     expect(options[0]).toHaveTextContent('Jordan Smith')
   })
@@ -1048,6 +1103,7 @@ describe('ShiftSlideOver — the server\'s refusal reaches the user', () => {
       status: 'Draft',
       notes: 'Bring the sling',
       location: null,
+      serviceLocationId: null,
       overrideReason: null,
       acknowledgedFindingCodes: [],
     })
@@ -1093,6 +1149,7 @@ describe('ShiftSlideOver — the server\'s refusal reaches the user', () => {
         status: 'Published',
         notes: 'Swap with Tuesday',
         location: null,
+        serviceLocationId: null,
         overrideReason: null,
         acknowledgedFindingCodes: [],
       },
@@ -1244,6 +1301,7 @@ describe('ShiftSlideOver — readiness note (WARN mode)', () => {
       status: 'Draft',
       notes: null,
       location: null,
+      serviceLocationId: null,
       overrideReason: null,
       acknowledgedFindingCodes: [],
     })
@@ -1498,6 +1556,7 @@ describe('ShiftSlideOver — the live dry-run\'s refusal', () => {
       status: 'Draft',
       notes: null,
       location: null,
+      serviceLocationId: null,
       overrideReason: null,
       acknowledgedFindingCodes: [],
     })
@@ -2006,7 +2065,7 @@ describe('ShiftSlideOver create from a time-grid slot', () => {
 
 describe('ShiftSlideOver location (coordinator-typed, never the participant address)', () => {
   const props = { canWrite: true, participantOptions, staffOptions }
-  const location = () => screen.getByRole('textbox', { name: 'Location' })
+  const location = () => screen.getByRole('textbox', { name: 'Location details' })
 
   it('is a text field above Notes with the hint, a 200 limit and no browser address suggestions', () => {
     render(<ShiftSlideOver {...props} target={{ mode: 'edit', shift: makeShift({ location: 'Southside Library', findings: [] }) }} onClose={noop} />)
@@ -2014,7 +2073,7 @@ describe('ShiftSlideOver location (coordinator-typed, never the participant addr
     expect(location()).toHaveValue('Southside Library')
     expect(location()).toHaveAttribute('maxlength', '200')
     expect(location()).toHaveAttribute('autocomplete', 'off')
-    expect(location()).toHaveAccessibleDescription('The support worker sees this on their shift. Leave it empty for a shift at home.')
+    expect(location()).toHaveAccessibleDescription('Anything extra the worker needs, like a room or a meeting point. Leave it empty for a shift at home.')
     expect(location().compareDocumentPosition(screen.getByLabelText('Notes')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 

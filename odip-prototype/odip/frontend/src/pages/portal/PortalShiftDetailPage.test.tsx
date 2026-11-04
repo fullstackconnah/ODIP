@@ -278,6 +278,20 @@ describe('PortalShiftDetailPage', () => {
     expect(screen.queryByText('From the office')).not.toBeInTheDocument()
   })
 
+  it('shows the service location name and address above the office notes', () => {
+    show(makeDetail({ notes: 'Bring the red bag.', serviceLocation: { name: 'Southside day centre', address: '12 Park Rd, Southside' } }))
+    expect(screen.getByText('Southside day centre')).toBeInTheDocument()
+    expect(screen.getByText('12 Park Rd, Southside')).toBeInTheDocument()
+    const where = screen.getByText('Southside day centre').closest('section')!
+    const office = screen.getByText('From the office').closest('section')!
+    expect(where.compareDocumentPosition(office) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('shows no place block when the shift has no service location', () => {
+    show(makeDetail({ serviceLocation: null }))
+    expect(screen.queryByText('Where')).not.toBeInTheDocument()
+  })
+
   it('shows a not-found message when the shift is a 404', () => {
     mockUsePortalShiftDetail.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: { response: { status: 404 } } })
     renderAt('shift-1')

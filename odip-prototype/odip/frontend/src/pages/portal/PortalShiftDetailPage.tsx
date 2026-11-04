@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useParams } from 'react-router-dom'
 import { format, parseISO } from 'date-fns'
-import { AlertTriangle, Armchair, Clock, ScrollText, WifiOff } from 'lucide-react'
+import { AlertTriangle, Armchair, Clock, MapPin, ScrollText, WifiOff } from 'lucide-react'
 import { usePortalShiftDetail, useShiftNotes, useStartShift, useStartBreak, useEndBreak } from '@/api/hooks'
 import { useQueueRecords, savedAtFor } from '@/api/hooks/portal'
 import { waitingBreak, waitingKind } from '@/lib/offline/overlay'
@@ -284,6 +284,12 @@ export default function PortalShiftDetailPage() {
       )}
       {handoverOnNow && <HandoverSection shift={shift} canAct={canAct} />}
       {showBefore && <MustKnowLine shift={shift} onAbout={showAbout} />}
+      {shift.serviceLocation && (
+        <Section id="service-location" title="Where" icon={<MapPin className="w-4 h-4" aria-hidden="true" />}>
+          <p className="text-sm font-medium">{shift.serviceLocation.name}</p>
+          {shift.serviceLocation.address && <p className="text-sm text-[var(--color-muted-foreground)] break-words">{shift.serviceLocation.address}</p>}
+        </Section>
+      )}
       {shift.notes && (
         <Section id="roster-notes" title="From the office" icon={<ScrollText className="w-4 h-4" aria-hidden="true" />}>
           <p className="text-sm whitespace-pre-wrap">{shift.notes}</p>

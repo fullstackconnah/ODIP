@@ -27,9 +27,9 @@ const groupsOf = (role: RoleCase) => [...new Set(visibleSections(ROLES[role]()).
 
 describe('who sees which section', () => {
   it('gives each role its sections in rail order', () => {
-    expect(keysOf('Admin')).toEqual(['profile', 'notifications', 'appearance', 'setup', 'workspace-visibility', 'organisation', 'billing', 'safety', 'alerts', 'rostering', 'security', 'pricing', 'budgets', 'templates', 'activities', 'referral-sources', 'holidays', 'import', 'export', 'integrations', 'failed-sends'])
-    expect(keysOf('Coordinator')).toEqual(['profile', 'notifications', 'appearance', 'organisation', 'billing', 'safety', 'alerts', 'rostering', 'security', 'templates', 'activities', 'referral-sources', 'holidays'])
-    expect(keysOf('SuperAdmin')).toEqual(['profile', 'notifications', 'appearance', 'setup', 'workspace-visibility', 'organisation', 'billing', 'safety', 'alerts', 'rostering', 'security', 'pricing', 'budgets', 'templates', 'activities', 'referral-sources', 'import', 'export', 'integrations', 'tenants', 'users', 'catalogue', 'holidays', 'failed-sends', 'alpha-signups', 'whats-new'])
+    expect(keysOf('Admin')).toEqual(['profile', 'notifications', 'appearance', 'setup', 'workspace-visibility', 'organisation', 'billing', 'safety', 'alerts', 'rostering', 'locations', 'security', 'pricing', 'budgets', 'templates', 'activities', 'referral-sources', 'holidays', 'import', 'export', 'integrations', 'failed-sends'])
+    expect(keysOf('Coordinator')).toEqual(['profile', 'notifications', 'appearance', 'organisation', 'billing', 'safety', 'alerts', 'rostering', 'locations', 'security', 'templates', 'activities', 'referral-sources', 'holidays'])
+    expect(keysOf('SuperAdmin')).toEqual(['profile', 'notifications', 'appearance', 'setup', 'workspace-visibility', 'organisation', 'billing', 'safety', 'alerts', 'rostering', 'locations', 'security', 'pricing', 'budgets', 'templates', 'activities', 'referral-sources', 'import', 'export', 'integrations', 'tenants', 'users', 'catalogue', 'holidays', 'failed-sends', 'alpha-signups', 'whats-new'])
     expect(keysOf('SuperAdminNoOrg')).toEqual(['profile', 'notifications', 'appearance', 'tenants', 'users', 'catalogue', 'holidays', 'failed-sends', 'alpha-signups', 'whats-new'])
   })
 
@@ -153,6 +153,8 @@ describe('Rostering rules and Alert windows entries', () => {
     expect(keys.indexOf('rostering')).toBe(keys.indexOf('alerts') + 1)
     expect(entry('rostering')).toMatchObject({ label: 'Rostering rules', group: 'Organisation' })
     expect(entry('rostering')?.description).toBe('How many hours a week the roster allows before it warns, and how far a finished shift can drift from the roster before it needs review.')
+    expect(keys.indexOf('locations')).toBe(keys.indexOf('rostering') + 1)
+    expect(entry('locations')).toMatchObject({ label: 'Service locations', group: 'Organisation' })
   })
   it('words Alert windows as the two expiry warnings only', () => {
     expect(entry('alerts')?.description).toBe("How early we warn before a staff qualification or a participant's plan expires.")

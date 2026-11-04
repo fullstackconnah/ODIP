@@ -196,6 +196,13 @@ export interface PortalShiftDetailDto {
   sensitiveInfoWithheldReason: string | null
   /** The organisation claims provider travel: show the four travel fields at Finish only when true. Derived on the server. Optional until the Finish UI reads it. */
   travelAsked?: boolean
+  /** The saved place the shift is at (name and address only; the pin and distance are not the worker's to read). Null or absent when the shift has none. A place archived since still shows. */
+  serviceLocation?: PortalServiceLocationDto | null
+}
+
+export interface PortalServiceLocationDto {
+  name: string
+  address: string | null
 }
 
 // ── Shift completion write bodies (design spec §2) ───────

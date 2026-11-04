@@ -8,19 +8,10 @@ import { SelectField } from '@/components/SelectField'
 import { formGrid, span } from '@/lib/formGrid'
 import { SettingsGroup, SettingsSection, type SectionFrame } from './SettingsSection'
 import { contactEmailProblem, useProviderRow, websiteProblem } from './providerRow'
+import { ZONES } from './timeZones'
 
 const STATES = ['ACT', 'NSW', 'NT', 'QLD', 'SA', 'TAS', 'VIC', 'WA'].map(s => ({ key: s, label: s }))
 
-/** The 7 zones the server accepts (StateTimeZoneMap.Zones), in picker order; `states` = the States each is the default for. */
-const ZONES = [
-  { value: 'Australia/Sydney', label: 'Sydney (NSW, ACT)', states: ['NSW', 'ACT'] },
-  { value: 'Australia/Melbourne', label: 'Melbourne (VIC)', states: ['VIC'] },
-  { value: 'Australia/Hobart', label: 'Hobart (TAS)', states: ['TAS'] },
-  { value: 'Australia/Brisbane', label: 'Brisbane (QLD)', states: ['QLD'] },
-  { value: 'Australia/Adelaide', label: 'Adelaide (SA)', states: ['SA'] },
-  { value: 'Australia/Perth', label: 'Perth (WA)', states: ['WA'] },
-  { value: 'Australia/Darwin', label: 'Darwin (NT)', states: ['NT'] },
-]
 const ZONE_HINT = 'Changing this moves what counts as today for rosters, the portal and reminders. Times already saved stay the same.'
 // The server's fallback: a blank or unknown State is Sydney.
 const defaultZoneFor = (state?: string | null) => ZONES.find(z => z.states.includes(state ?? ''))?.value ?? 'Australia/Sydney'

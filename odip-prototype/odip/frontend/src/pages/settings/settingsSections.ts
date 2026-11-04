@@ -17,7 +17,7 @@ export type SettingsPerms = Pick<
 
 export type SectionKey =
   | 'profile' | 'notifications' | 'appearance'
-  | 'setup' | 'workspace-visibility' | 'organisation' | 'microsoft' | 'billing' | 'safety' | 'alerts' | 'rostering' | 'security'
+  | 'setup' | 'workspace-visibility' | 'organisation' | 'microsoft' | 'billing' | 'safety' | 'alerts' | 'rostering' | 'locations' | 'security'
   | 'pricing' | 'budgets'
   | 'templates' | 'activities' | 'referral-sources' | 'holidays'
   | 'import' | 'export' | 'integrations' | 'failed-sends'
@@ -63,6 +63,7 @@ export const SECTIONS: SectionDef[] = [
   { key: 'safety', label: 'Safety checks', group: 'Organisation', visible: withOrganisation, readOnly: onlyAdminsChange, description: "What we stop, and what we only warn about, when something isn't in place. These apply to everyone in your organisation, and every change is recorded in the audit log." },
   { key: 'alerts', label: 'Alert windows', group: 'Organisation', visible: withOrganisation, readOnly: onlyAdminsChange, description: "How early we warn before a staff qualification or a participant's plan expires." },
   { key: 'rostering', label: 'Rostering rules', group: 'Organisation', visible: withOrganisation, readOnly: onlyAdminsChange, description: 'How many hours a week the roster allows before it warns, and how far a finished shift can drift from the roster before it needs review.' },
+  { key: 'locations', label: 'Service locations', group: 'Organisation', visible: withOrganisation, description: 'The places your team works, like a day centre or a hub. A shift can point at one, so the worker sees where to go.' },
   { key: 'security', label: 'Security', group: 'Organisation', visible: withOrganisation, readOnly: onlyAdminsChange, description: 'How long people stay signed in before they must sign in again.' },
   { key: 'pricing', label: 'Plan pricing', group: 'Pricing and budgets', visible: managesOrganisation, description: 'The answers the plan builder uses to price supports: the registration groups you hold, price boundaries, provider travel, group outings, and who may approve an agreement.' },
   { key: 'budgets', label: 'Budgets', group: 'Pricing and budgets', visible: managesOrganisation, description: 'What the roster does when a one-off shift would put a participant over budget, and when a participant counts as approaching it.' },
