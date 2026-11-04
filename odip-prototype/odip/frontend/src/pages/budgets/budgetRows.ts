@@ -22,6 +22,7 @@ export function budgetRiskRow(row: BudgetListRow, figures: BudgetFigureVisibilit
     figures,
     available: row.available,
     carried: row.carried,
+    carriedSetByHand: row.carriedSetByHand,
     used: row.used,
     remaining: row.remaining,
     bookedAhead: row.bookedAhead,

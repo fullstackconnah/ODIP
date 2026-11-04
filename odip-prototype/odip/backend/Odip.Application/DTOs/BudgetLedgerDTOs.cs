@@ -17,6 +17,10 @@ public record LedgerFiguresDto
     public decimal Limit { get; init; }
     /// <summary>What the pool's earlier periods left unspent, rolled forward and chained. Not confirmed: others may have used it.</summary>
     public decimal Carried { get; init; }
+    /// <summary>What the earlier periods left unspent, worked out from the ledger alone; differs from <see cref="Carried"/> only when the amount was set by hand. Null on a pool's plan total.</summary>
+    public decimal? CarriedWorkedOut { get; init; }
+    /// <summary>True when <see cref="Carried"/> was typed into the funding plan.</summary>
+    public bool CarriedSetByHand { get; init; }
     /// <summary>Limit plus carried.</summary>
     public decimal Available { get; init; }
     /// <summary>The lines of submitted, approved and paid claims.</summary>

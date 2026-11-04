@@ -31,6 +31,11 @@ describe('budgetRiskRow', () => {
     expect(budgetRiskRow(budgetRow(), visible)).not.toHaveProperty('unpricedShifts')
   })
 
+  it('carries whether the rolled-over amount was set by hand, as the server sent it', () => {
+    expect(budgetRiskRow(budgetRow({ carried: 500, carriedSetByHand: true }), visible).carriedSetByHand).toBe(true)
+    expect(budgetRiskRow(budgetRow({ carried: 500 }), visible).carriedSetByHand).toBeFalsy()
+  })
+
   it('carries what is left and what rolled over as the server sent them, and adds nothing up', () => {
     const row = budgetRiskRow(budgetRow({ available: 3473.32, carried: 448.66, used: 1932, remaining: 1541.32 }), visible)
 

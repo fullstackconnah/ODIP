@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { FundingPlanDto } from '@/api/types'
 import {
   addCorePool, addStatedPool, applySetAside, editorStateFromPlan, emptyEditorState, hasPool, moneyOf, moneyText, nextPlanState, noPeriodsReason, poolSums, removePool, resplit, SET_ASIDE_NOT_APPLIED, setAsideOf,
-  toSaveBody, validate, withPeriodEdit, withPlanFields, withPoolTotals, withSetAsideZeroConfirmed, type EditorState,
+  clearedRollovers, resplitAll, toSaveBody, validate, withPeriodEdit, withPlanFields, withPoolTotals, withSetAsideZeroConfirmed, type EditorState,
 } from './fundingEditorState'
 
 // The editor's form as plain data: what the person typed, how the periods follow the dates and the totals, what is wrong in plain words, and the body that is saved.
@@ -122,7 +122,7 @@ describe('the periods follow the plan until a person edits them', () => {
   it('is one period for a plan with no funding periods, equal to the totals', () => {
     const state = addCorePool({ ...yearPlan(), periodLengthMonths: null }, 'PlanManaged', { totalText: '8000', setAsideText: '6000' })
 
-    expect(state.pools[0].periods).toEqual([{ periodStart: '2026-07-01', periodEnd: '2027-06-30', planAmount: '8000.00', setAside: '6000.00' }])
+    expect(state.pools[0].periods).toEqual([{ periodStart: '2026-07-01', periodEnd: '2027-06-30', planAmount: '8000.00', setAside: '6000.00', rollover: '' }])
   })
 })
 
@@ -843,5 +843,64 @@ describe('a set-aside box that disagrees with the periods refuses the save, in t
 
     expect(poolSums(state.pools[0]).planMismatch).toBe(true)
     expect(validate(state).any).toBe(false)
+  })
+})
+
+describe('the rolled-over amount of a period', () => {
+  const planWith = (): EditorState => addCorePool(yearPlan(), 'PlanManaged', { totalText: '8000' })
+  const key = (state: EditorState) => state.pools[0].key
+  const problemsOf = (state: EditorState) => validate(state).pools[key(state)]?.periods ?? {}
+
+  it('is empty on a new period shape, saved only when typed, and sent back as the plan was read (a save replaces the plan)', () => {
+    let state = planWith()
+    expect(state.pools[0].periods.map(p => p.rollover)).toEqual(['', '', '', ''])
+    expect(toSaveBody(state).pools[0].periods.every(p => !('rolloverOverride' in p))).toBe(true)
+
+    state = withPeriodEdit(state, key(state), 1, { rollover: '750.50' })
+    expect(toSaveBody(state).pools[0].periods.map(p => p.rolloverOverride)).toEqual([undefined, 750.5, undefined, undefined])
+
+    const stored = toSaveBody(state)
+    const reread = editorStateFromPlan({
+      id: 'plan-1', participantId: 'p1', planStart: '2026-07-01', planEnd: '2027-06-30', periodLengthMonths: 3, evidence: 'PlanManager', revision: 1, createdAt: '', updatedAt: '',
+      pools: [{ id: 'pool-1', position: 0, kind: 'CoreFlexible', paceCategory: 0, managementType: 'PlanManaged', name: 'Core (flexible)', planTotal: 8000,
+        periods: stored.pools[0].periods.map((p, i) => ({ id: String(i), position: i, ...p })) }],
+    })
+    expect(reread.pools[0].periods.map(p => p.rollover)).toEqual(['', '750.50', '', ''])
+  })
+
+  it('is said to be wrong beside its box: not an amount, above the most, or on the first period', () => {
+    let state = planWith()
+    state = withPeriodEdit(state, key(state), 1, { rollover: 'lots' })
+    state = withPeriodEdit(state, key(state), 2, { rollover: '100000000' })
+    state = withPeriodEdit(state, key(state), 0, { rollover: '5' })
+
+    expect(problemsOf(state)[1].rollover).toBe('Enter dollars and cents, like 8000.00.')
+    expect(problemsOf(state)[2].rollover).toBe('The most a rolled-over amount can be is $99,999,999.99.')
+    expect(problemsOf(state)[0].rollover).toBe('Nothing rolls over into the first period.')
+  })
+
+  it('says a negative amount is below zero, and keeps the not-an-amount words for anything else', () => {
+    let state = planWith()
+    state = withPeriodEdit(state, key(state), 1, { rollover: '-5' })
+    state = withPeriodEdit(state, key(state), 2, { rollover: '-$1,250.50' })
+    state = withPeriodEdit(state, key(state), 3, { rollover: '--' })
+    expect(problemsOf(state)[1].rollover).toBe("A rolled-over amount can't be less than $0.00.")
+    expect(problemsOf(state)[2].rollover).toBe("A rolled-over amount can't be less than $0.00.")
+    expect(problemsOf(state)[3].rollover).toBe('Enter dollars and cents, like 8000.00.')
+  })
+
+  it('reports a re-split that dropped typed rollovers, and not the person clearing the box', () => {
+    let state = planWith()
+    state = withPeriodEdit(state, key(state), 1, { rollover: '750' })
+    expect(clearedRollovers(state, resplitAll(state).state)).toBe(true)
+    expect(clearedRollovers(state, withPeriodEdit(state, key(state), 1, { rollover: '' }))).toBe(false)
+    expect(clearedRollovers(planWith(), resplitAll(planWith()).state)).toBe(false)
+  })
+
+  it('accepts a zero and a blank (a zero is a real amount: nothing rolls over)', () => {
+    let state = planWith()
+    state = withPeriodEdit(state, key(state), 1, { rollover: '0' })
+    expect(problemsOf(state)[1]).toBeUndefined()
+    expect(toSaveBody(state).pools[0].periods[1].rolloverOverride).toBe(0)
   })
 })

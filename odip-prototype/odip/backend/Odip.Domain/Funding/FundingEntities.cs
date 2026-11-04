@@ -114,6 +114,9 @@ public class FundingPeriod : ITenantEntity
     /// period of a pool or on none; null everywhere means the limit is the plan amount.
     /// </summary>
     public decimal? SetAside { get; set; }
+
+    /// <summary>Rolled-over amount set by hand, in dollars: decimal(18,2), zero or more; null = worked out by the ledger. Never on a pool's first period.</summary>
+    public decimal? RolloverOverride { get; set; }
 }
 
 /// <summary>

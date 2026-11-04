@@ -75,6 +75,12 @@ describe('the sentence of a pool', () => {
     expect(poolSentence(core(), q2({ carried: 1000 }))).toContain('(to 31 Dec), including $1,000 rolled over, not confirmed. Booked shifts')
   })
 
+  it('says "set by hand" instead of "not confirmed" when the rolled-over amount was typed into the plan', () => {
+    const sentence = poolSentence(core(), q2({ carried: 1000, carriedSetByHand: true }))
+    expect(sentence).toContain('(to 31 Dec), including $1,000 rolled over (set by hand). Booked shifts')
+    expect(sentence).not.toContain('not confirmed')
+  })
+
   it('names a stated pool by its name, and says "the last period" for a period that is not this one', () => {
     const stated = ledgerPool({ kind: 'Stated', paceCategory: 15, name: 'Improved Daily Living Skills', hasSetAside: false })
 

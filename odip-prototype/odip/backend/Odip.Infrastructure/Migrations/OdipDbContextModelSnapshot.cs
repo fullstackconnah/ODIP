@@ -5901,6 +5901,10 @@ namespace Odip.Infrastructure.Migrations
                     b.Property<int>("Position")
                         .HasColumnType("integer");
 
+                    b.Property<decimal?>("RolloverOverride")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
                     b.Property<decimal?>("SetAside")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");

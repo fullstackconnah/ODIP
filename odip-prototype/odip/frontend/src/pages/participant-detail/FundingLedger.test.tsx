@@ -84,6 +84,15 @@ describe('the glance strip and the sentence', () => {
     expect(screen.getByText(/Booked shifts would finish \$140 over\./)).toBeInTheDocument()
   })
 
+  it('says "set by hand" in place of "not confirmed" for a rolled-over amount that was typed into the plan', () => {
+    const base = participantLedger()
+    const pools = base.pools.map(pool => ({ ...pool, periods: pool.periods.map(period => period.carried > 0 ? { ...period, carriedSetByHand: true } : period) }))
+    renderLedger({ ...base, pools })
+
+    expect(screen.getAllByText('$2,000 set aside, plus $500 rolled over (set by hand)').length).toBeGreaterThan(0)
+    expect(screen.getByText(/, including \$500 rolled over \(set by hand\)\./)).toBeInTheDocument()
+  })
+
   it('names what was rolled over as rolled over, not confirmed', () => {
     renderLedger(participantLedger())
 
