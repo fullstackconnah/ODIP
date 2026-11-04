@@ -420,7 +420,7 @@ export function HandoverStep({ noteCount, draft, set, onEditNotes }: {
 
 /** Step 5, Check and submit (SHAPE §4): what will be sent, grouped by step with a way back to each, then the server's answer if it refused. */
 export function SubmitStep({ shift, draft, noteCount, now, refusals, go, moved, kilometres, travel, drifted, onUseSubmitTime, onChangeTimes }: {
-  shift: PortalShiftDetailDto; draft: EndDraft; noteCount: number; now: Date; refusals: Refusal[]; go: (step: FinishStepKey) => void
+  shift: PortalShiftDetailDto; draft: EndDraft; noteCount: number; now: Date; refusals: Refusal[]; go: (step: FinishStepKey, focusId?: string) => void
   moved: { start: string | null; end: string | null }; kilometres: number | null; travel: Record<TravelField, number | null>; drifted: boolean; onUseSubmitTime: () => void; onChangeTimes: () => void
 }) {
   const tz = shift.timeZoneId
@@ -456,8 +456,12 @@ export function SubmitStep({ shift, draft, noteCount, now, refusals, go, moved, 
       {finishOff !== null && !draft.finishAsked && !draft.timeReason.trim() && (
         <Callout
           tone="info"
-          title={`You're now finishing ${minutesWords(finishOff)} ${finishOff < 0 ? 'early' : 'late'}. Add a reason? It's optional.`}
-          actions={<Button variant="secondary" size="md" onClick={() => go('times')}>Add a reason</Button>}
+          title={(
+            <>
+              {`You're now finishing ${minutesWords(finishOff)} ${finishOff < 0 ? 'early' : 'late'}. `}
+              <Button variant="ghost" size="lg" className="underline" onClick={() => go('times', 'finish-time-reason')}>Add a reason</Button>?
+            </>
+          )}
         />
       )}
       {drifted && (

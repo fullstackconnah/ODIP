@@ -479,11 +479,47 @@ public class ShiftCompletionStateMachineTests
         Assert.IsType<OkObjectResult>(first.Result);
         Assert.Equal("Traffic", (await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id)).FinishTimeReason);
 
-        (await db.Shifts.SingleAsync(s => s.Id == shift.Id)).Status = ShiftStatus.InProgress;   // a Return puts the shift back in progress
+        (await db.Shifts.SingleAsync(s => s.Id == shift.Id)).Status = ShiftStatus.InProgress;   // the same in-progress completion is finished again (a Return would deactivate it and the next Finish would make a new one)
         await db.SaveChangesAsync();
         await controller.FinishShift(shift.Id, new FinishShiftDto { FinishTimeReason = new string('y', 600) }, CancellationToken.None);
 
         Assert.Equal(500, (await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id)).FinishTimeReason!.Length);
+    }
+
+    // Client and server round minutes differently and clocks skew, so a typed reason must survive whatever minute count the server derives.
+    [Fact]
+    public async Task Start_FiveAndAHalfMinutesLate_KeepsTheTypedReason()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var now = OrdinaryDayNoon.AddSeconds(30);
+        var shift = SeedShiftStartingIn(db, SeedParticipant(db).Id, user.Id, now, TimeSpan.FromMinutes(-6));   // rostered 11:54 (the minute floor), started 11:59:30
+        var controller = MakeController(db, tenant.Object, user.Id, new FakeClock(now));
+
+        await controller.StartShift(shift.Id, new StartShiftDto { StartTimeReason = "Bus was late" }, CancellationToken.None);
+
+        Assert.Equal("Bus was late", (await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id)).StartTimeReason);
+    }
+
+    [Fact]
+    public async Task Finish_FiveAndAHalfMinutesLate_KeepsTheTypedReason()
+    {
+        var (db, tenant) = CreateDb();
+        var user = SeedUser(db);
+        var now = OrdinaryDayNoon.AddSeconds(30);
+        var shift = SeedShiftStartingIn(db, SeedParticipant(db).Id, user.Id, now, TimeSpan.FromMinutes(-6));
+        shift.EndTime = shift.StartTime;   // rostered end 11:54, finished at 11:59:30
+        shift.Status = ShiftStatus.InProgress;
+        Seed(db, new ShiftCompletion
+        {
+            Id = Guid.NewGuid(), ShiftId = shift.Id, ActualStart = now.UtcDateTime.AddHours(-1), TimeZoneId = "Australia/Sydney",
+            SubmittedByUserId = user.Id, StartedAt = now.UtcDateTime.AddHours(-1), IsActive = true,
+        });
+        AddNote(db, shift.Id, user.Id);
+
+        await MakeController(db, tenant.Object, user.Id, new FakeClock(now)).FinishShift(shift.Id, new FinishShiftDto { FinishTimeReason = "Handover ran over" }, CancellationToken.None);
+
+        Assert.Equal("Handover ran over", (await db.ShiftCompletions.SingleAsync(c => c.ShiftId == shift.Id)).FinishTimeReason);
     }
 
     [Fact]

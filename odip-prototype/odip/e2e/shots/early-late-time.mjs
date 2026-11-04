@@ -87,6 +87,7 @@ async function routeWorkerShift(page, { startOff, endOff, status = 'Published', 
       Object.assign(body.data, { id: SHIFT_ID, status, serviceDate: s.date, startTime: s.time, endTime: e.time, endsNextDay: e.date !== s.date, serviceLocation: null })
       if (status === 'InProgress') body.data.completion = { ...(body.data.completion ?? {}), actualStart: at(startOff).toISOString(), startTimeReason: null }
       last = body
+      page.rosteredStart = s.time
     }
     await r.fulfill({ response, json: body })
   })
@@ -128,6 +129,10 @@ for (const vp of VPS) {
       check(t(`${state}: Not yet and Start shift are both offered`), (await dialog.getByRole('button', { name: 'Not yet' }).isVisible()) && (await dialog.getByRole('button', { name: 'Start shift' }).isVisible()))
       await maxLines(dialog.getByRole('heading').first(), 2, t(`${state} title`))
       await fontAtLeast(dialog.getByText(/^Your shift is rostered to start at/), 14, t(`${state} body`))
+      const [hh, mm] = page.rosteredStart.split(':').map(Number)
+      const expected = `Your shift is rostered to start at ${hh % 12 || 12}:${String(mm).padStart(2, '0')} ${hh < 12 ? 'am' : 'pm'}.`
+      const bodyText = (await dialog.getByText(/^Your shift is rostered to start at/).innerText()).trim()
+      check(t(`${state}: body names the real rostered start`), bodyText === expected, `${bodyText} | want ${expected}`)
       await fontAtLeast(dialog.locator('#start-time-reason-help'), 12, t(`${state} helper`))
       await noHScroll(page, t(state))
       if (vp.touch) await tapTargets(dialog, t(state))
@@ -172,7 +177,11 @@ for (const vp of VPS) {
     await line.waitFor({ state: 'visible', timeout: 60_000 })
     await page.waitForTimeout(400)
     const add = page.getByRole('button', { name: 'Add a reason' })
-    check(t('submit-drift-line: Add a reason is offered'), await add.isVisible())
+    const addBox = await add.boundingBox()
+    const lineText = (await add.locator('xpath=..').innerText()).replace(/\s+/g, ' ').trim()
+    check(t('submit-drift-line: Add a reason is a visible control'), await add.isVisible() && addBox !== null, addBox)
+    check(t('submit-drift-line: the line reads as the plan copy'), lineText === "You're now finishing 8 minutes late. Add a reason?", lineText)
+    if (vp.touch) check(t('submit-drift-line: Add a reason is at least 44 high'), addBox !== null && addBox.height >= 43.5, addBox)
     await noHScroll(page, t('submit-drift-line'))
     if (vp.touch) await tapTargets(page.locator('main').first(), t('submit-drift-line'))
     await crop(page, line.locator('xpath=ancestor::div[1]'), `submit-drift-line-${tag}.png`, vp, 24)

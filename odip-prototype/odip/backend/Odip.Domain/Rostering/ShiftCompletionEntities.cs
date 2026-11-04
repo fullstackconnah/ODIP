@@ -132,6 +132,24 @@ public class ShiftCompletion : ITenantEntity
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }
 
+/// <summary>The fixed off-roster line and the worker's time-reason rules (separate from the organisation's VarianceReviewMinutes).</summary>
+public static class ShiftTimeRules
+{
+    /// <summary>A start or finish more than this many whole minutes either side of the roster is "off roster". Fixed, separate from the org's VarianceReviewMinutes.</summary>
+    public const int OffRosterMinutes = 5;
+    public const int MaxReasonLength = 500;
+
+    public static bool IsOffRoster(int varianceMinutes) => Math.Abs(varianceMinutes) > OffRosterMinutes;
+
+    /// <summary>The worker's typed reason: trimmed, empty is none, cut to the column length (never a 400 on Start or Finish).</summary>
+    public static string? CleanReason(string? reason)
+    {
+        var trimmed = reason?.Trim();
+        if (string.IsNullOrEmpty(trimmed)) return null;
+        return trimmed.Length > MaxReasonLength ? trimmed[..MaxReasonLength] : trimmed;
+    }
+}
+
 /// <summary>
 /// Design spec §3: TimeZoneId is resolved once, at Start, from a static AU-state → IANA-zone
 /// map keyed off ProviderSettings.State — the only geographic signal that exists on the tenant
@@ -169,23 +187,6 @@ public static class StateTimeZoneMap
 /// converted to UTC. Variance is the signed minute difference against ActualStart/ActualEnd
 /// (positive = late/over, negative = early/under).
 /// </summary>
-public static class ShiftTimeRules
-{
-    /// <summary>A start or finish more than this many whole minutes either side of the roster is "off roster". Fixed, separate from the org's VarianceReviewMinutes.</summary>
-    public const int OffRosterMinutes = 5;
-    public const int MaxReasonLength = 500;
-
-    public static bool IsOffRoster(int varianceMinutes) => Math.Abs(varianceMinutes) > OffRosterMinutes;
-
-    /// <summary>The worker's typed reason: trimmed, empty is none, cut to the column length (never a 400 on Start or Finish).</summary>
-    public static string? CleanReason(string? reason)
-    {
-        var trimmed = reason?.Trim();
-        if (string.IsNullOrEmpty(trimmed)) return null;
-        return trimmed.Length > MaxReasonLength ? trimmed[..MaxReasonLength] : trimmed;
-    }
-}
-
 public static class ShiftVarianceCalculator
 {
     public static (DateTime RosteredStartUtc, DateTime RosteredEndUtc) ResolveRosteredTimesUtc(Shift shift, string timeZoneId)

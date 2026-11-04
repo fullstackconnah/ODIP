@@ -507,7 +507,7 @@ export default function PortalShiftDetailPage() {
       {timeCheck != null && (
         <TimeCheckSheet
           minutes={timeCheck}
-          rosteredLabel={clockLabel(shift.startTime)}
+          rosteredLabel={clockLabel(`${shift.serviceDate.slice(0, 10)}T${shift.startTime}`)}
           starting={starting}
           error={actionError}
           onStart={async reason => {

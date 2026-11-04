@@ -1250,6 +1250,15 @@ describe('PortalShiftDetailPage: your times, kilometres and drift (Review Focus 
     expect(finishMutateAsync.mock.calls[0][0].data).not.toHaveProperty('startTimeReason')
   })
 
+  it('Add a reason on the Submit step lands on step 1 with focus in the reason box', async () => {
+    sessionStorage.setItem('odip-shift-end-draft:shift-1', JSON.stringify({ step: 'submit', reached: 'submit', finishAsked: false, nothingToNote: true, nothingToHandOver: true, anythingToReport: 'no' }))
+    vi.setSystemTime(new Date('2026-08-17T07:07:30Z'))   // 17:07:30, seven minutes past the 17:00 rostered end
+    show(inProgress())
+    fireEvent.click(screen.getByRole('button', { name: 'Add a reason' }))
+    expect(heading('Your times')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByLabelText(/^Why are you finishing \d+ minutes late/)).toHaveFocus())
+  })
+
   it('leaves finishTimeReason out when the box is empty, and never blocks Submit', async () => {
     open()
     moveFinish('2026-08-17T16:50', 'Left early.')
@@ -1699,7 +1708,7 @@ describe('PortalShiftDetailPage: the time check before Start (W2)', () => {
     show(makeDetail())
     fireEvent.click(startButton())
     const sheet = await screen.findByRole('dialog')
-    expect(within(sheet).getByText(/Your shift is rostered to start at/)).toBeInTheDocument()
+    expect(within(sheet).getByText('Your shift is rostered to start at 9:00 am.')).toBeInTheDocument()
     expect(within(sheet).getByLabelText('Why are you starting early? (optional)')).toHaveFocus()
     fireEvent.change(within(sheet).getByLabelText('Why are you starting early? (optional)'), { target: { value: '  Bus was early  ' } })
     fireEvent.click(within(sheet).getByRole('button', { name: 'Start shift' }))

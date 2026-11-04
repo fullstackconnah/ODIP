@@ -34,7 +34,9 @@ test('a worker starts a shift and writes a note offline, and both reach the serv
   await context.setOffline(true)
   await bar.getByRole('button', { name: 'Start shift' }).tap()
   // Rostered 00:01, so Start is more than 5 minutes off roster and asks why first; the reason is optional.
-  await page.getByRole('dialog', { name: /You're starting/ }).getByRole('button', { name: 'Start shift' }).tap({ timeout: 3_000 }).catch(() => {})
+  const sheet = page.getByRole('dialog', { name: /You're starting/ })
+  await expect(sheet).toBeVisible()
+  await sheet.getByRole('button', { name: 'Start shift' }).tap()
   await page.getByRole('tab', { name: /Notes/ }).tap()
   await page.getByLabel('Add a note').fill('Written without signal.')
   await page.getByRole('button', { name: 'Add note' }).tap()

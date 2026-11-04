@@ -147,15 +147,15 @@ public class OrganisationRulesVarianceTests
     public async Task TheCleanOnlyApproveGate_JudgesMixedShiftsByTheirOwnOrganisation()
     {
         using var db = TestDb.Create();
-        SeedRules(db, OrgA, 60);
-        var a = SeedPending(db, OrgA, 20);
-        var b = SeedPending(db, OrgB, 20);   // no row: 15
+        SeedRules(db, OrgA, 3);
+        var a = SeedPending(db, OrgA, 4);    // inside the 5-minute roster line, past A's own 3
+        var b = SeedPending(db, OrgB, 4);    // no row: 15
         var rows = new[] { a, b }.Select(s => (s, db.ShiftCompletions.Single(c => c.ShiftId == s.Id))).ToList();
 
         var flagged = await ShiftCompletionMapper.ShiftsNeedingReviewAsync(db, rows, default);
 
-        // 20 minutes is past the 5-minute off-roster line in both organisations, so the gate flags both whatever the outlier setting says.
-        Assert.Equal(new HashSet<Guid> { a.Id, b.Id }, flagged);
+        // 4 minutes is on roster in both organisations, so only each organisation's own threshold decides: A (3) flags it, B (15) does not.
+        Assert.Equal(new HashSet<Guid> { a.Id }, flagged);
     }
 
     [Theory]

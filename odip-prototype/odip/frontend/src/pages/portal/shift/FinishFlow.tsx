@@ -115,7 +115,8 @@ export function FinishFlow({ shift, online, canAct, onRecord, onClose, onEditNot
     el?.scrollIntoView?.({ block: 'end' })   // honours its scroll-margin, so the callout ends above the sticky bar
   }, [refusals])
 
-  function go(key: FinishStepKey) {
+  function go(key: FinishStepKey, focusId?: string) {
+    if (focusId) focusAfterStep.current = focusId
     refreshClock()
     setError(null)
     setRefusals([])
@@ -204,7 +205,7 @@ export function FinishFlow({ shift, online, canAct, onRecord, onClose, onEditNot
           actualStart: sent.start,
           actualEnd: sent.end,
           timeAdjustmentReason: sent.start || sent.end ? d.adjustmentReason.trim() : null,
-          ...(timeReason && asks.finish !== null && { finishTimeReason: timeReason }),
+          ...(timeReason && { finishTimeReason: timeReason }),   // a typed note is never dropped at the 5-minute line; the server shows it only where it is off roster
           ...(timeReason && asks.start !== null && { startTimeReason: timeReason }),
           kilometres: km === 'invalid' ? null : km,
           ...(shift.travelAsked && {
