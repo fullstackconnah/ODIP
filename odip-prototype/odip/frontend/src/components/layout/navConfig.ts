@@ -242,10 +242,12 @@ export function resolveNav(entries: NavEntry[], access: NavAccess, visibility?: 
       if (isLeafVisible(entry, access) && !isWorkspaceHidden(entry, visibility) && !needsEmploymentHero(entry, visibility)) resolved.push({ kind: 'link', leaf: entry, bar: entry.bar })
       continue
     }
+    // Trips off: what is left of the group (Schedule, and Accommodation or Vehicles if kept) is no longer "Trips".
+    const group = entry.id === 'trips' && visibility?.hiddenTrips === true ? { ...entry, label: 'Schedule', msIcon: 'calendar_month' } : entry
     const children = entry.children.filter(child => isLeafVisible(child, access) && !isWorkspaceHidden(child, visibility) && !needsEmploymentHero(child, visibility))
     if (children.length === 0) continue
     if (children.length === 1) resolved.push({ kind: 'link', leaf: children[0], bar: entry.bar ?? children[0].bar })
-    else resolved.push({ kind: 'group', group: entry, children })
+    else resolved.push({ kind: 'group', group, children })
   }
   return resolved
 }
@@ -326,6 +328,7 @@ export const NAV_IDLE = 'text-[var(--color-secondary)] font-medium hover:bg-[var
 export function isWorkspaceHidden(leaf: NavLeaf, visibility?: ModuleVisibilityDto): boolean {
   return (leaf.page === 'accommodation' && visibility?.hiddenAccommodation === true)
     || (leaf.page === 'vehicles' && visibility?.hiddenVehicles === true)
+    || ((leaf.page === 'trips' || leaf.page === 'bookings') && visibility?.hiddenTrips === true)
 }
 
 /** A leaf only a connected organisation has. Hidden until the answer is known (`!== true`), so an unconnected organisation never sees it flash. Not a hidden workspace: AppLayout lists those under "other workspaces". */

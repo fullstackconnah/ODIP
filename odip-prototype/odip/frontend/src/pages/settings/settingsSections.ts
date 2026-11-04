@@ -7,6 +7,8 @@ export type SettingsPerms = Pick<
   ReturnType<typeof usePermissions>,
   'isSuperAdmin' | 'isAdmin' | 'isCoordinator' | 'hasOrganisation' | 'canEditProviderSettings' | 'canImportData' | 'canManageIntegrations'
 > & {
+  /** Trips and holidays are switched off for the organisation: their Settings sections leave the rail (links still open). */
+  hiddenTrips?: boolean
   /** The server offers Microsoft sign-in (GET /auth/config). */
   microsoftSignIn: boolean
   /** A SuperAdmin is viewing as someone: the browser carries that person's role, but the server still sees a SuperAdmin and refuses the Microsoft endpoints. */
@@ -34,6 +36,8 @@ export type SectionDef = {
   visible: (p: SettingsPerms) => boolean
   /** Seen but not changed: every field locked, a note says why, and there is no Save. */
   readOnly?: (p: SettingsPerms) => boolean
+  /** A trips-only section: the rail and the phone list drop it when trips are switched off. */
+  trips?: true
 }
 
 const everyone = () => true
@@ -62,8 +66,8 @@ export const SECTIONS: SectionDef[] = [
   { key: 'security', label: 'Security', group: 'Organisation', visible: withOrganisation, readOnly: onlyAdminsChange, description: 'How long people stay signed in before they must sign in again.' },
   { key: 'pricing', label: 'Plan pricing', group: 'Pricing and budgets', visible: managesOrganisation, description: 'The answers the plan builder uses to price supports: the registration groups you hold, price boundaries, provider travel, group outings, and who may approve an agreement.' },
   { key: 'budgets', label: 'Budgets', group: 'Pricing and budgets', visible: managesOrganisation, description: 'What the roster does when a one-off shift would put a participant over budget, and when a participant counts as approaching it.' },
-  { key: 'templates', label: 'Event templates', group: 'Content', wide: true, visible: withOrganisation, description: 'Starting points for new trips: destination, region, length and accommodation notes. Used by everyone who creates a trip.' },
-  { key: 'activities', label: 'Activity library', group: 'Content', wide: true, visible: withOrganisation, description: 'The activities your coordinators pick from when planning a trip.' },
+  { key: 'templates', label: 'Event templates', group: 'Content', wide: true, trips: true, visible: withOrganisation, description: 'Starting points for new trips: destination, region, length and accommodation notes. Used by everyone who creates a trip.' },
+  { key: 'activities', label: 'Activity library', group: 'Content', wide: true, trips: true, visible: withOrganisation, description: 'The activities your coordinators pick from when planning a trip.' },
   { key: 'referral-sources', label: 'Referral sources', group: 'Content', visible: withOrganisation, description: 'Who sends you enquiries. Coordinators pick one on each enquiry.' },
   { key: 'holidays', label: 'Public holidays', group: 'Content', wide: true, visible: p => !p.isSuperAdmin && p.hasOrganisation, description: HOLIDAYS },
   { key: 'import', label: 'Import data', group: 'Data', wide: true, visible: p => p.canImportData, description: 'Bring participants and staff in from a spreadsheet, and undo an import that went wrong.' },
@@ -86,6 +90,9 @@ export const SECTIONS: SectionDef[] = [
 export const LEGACY_TAB: Partial<Record<string, SectionKey>> = { provider: 'organisation', qualifications: 'alerts', 'notifications-admin': 'failed-sends' }
 
 export const visibleSections = (p: SettingsPerms): SectionDef[] => SECTIONS.filter(s => s.visible(p))
+
+/** What the rail and the phone list draw: the visible sections less the trip ones when trips are off. Links still resolve against visibleSections. */
+export const railSections = (p: SettingsPerms): SectionDef[] => visibleSections(p).filter(s => !(s.trips && p.hiddenTrips))
 
 /** The section the URL asks for (`?section=`, else a legacy `?tab=` mapped to its section) when this person can see it; otherwise null. */
 export function requestedSection(params: URLSearchParams, visible: readonly SectionDef[]): SectionDef | null {

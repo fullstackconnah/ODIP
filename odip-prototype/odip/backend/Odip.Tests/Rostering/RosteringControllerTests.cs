@@ -1880,4 +1880,21 @@ public class RosteringControllerTests
         Assert.Null(Data(await LocationController(db).UpdateShift(created.Id, put, default)).Location);
         Assert.Null((await db.Shifts.AsNoTracking().SingleAsync()).Location);
     }
+
+    [Fact]
+    public async Task GetBoard_StaffMode_ComplianceNote_NamesAnExpiredCpr()
+    {
+        using var db = CreateDb(Guid.NewGuid().ToString());
+        var staff = SeedStaff(db);
+        staff.IsCprQualified = true;
+        staff.CprExpiryDate = new DateOnly(2025, 9, 20);
+        await db.SaveChangesAsync();
+        var controller = new RosteringController(db, new StaffCompatibilityLinkService(db), new StaffUnavailabilityQuery(db));
+
+        var result = await controller.GetBoard(ServiceDate, "staff", CancellationToken.None);
+
+        var body = Assert.IsType<ApiResponse<RosterBoardDto>>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        var row = body.Data!.StaffRows!.Single(r => r.StaffId == staff.Id);
+        Assert.Contains(row.ComplianceNotes, n => n.Contains("CPR certificate expired 20 Sep 2025"));
+    }
 }

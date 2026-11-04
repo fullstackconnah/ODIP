@@ -39,7 +39,7 @@ export function installDashboardDefaults() {
     mockUsePendingCompletionQueue.mockReturnValue(pendingCompletions(0))
     mockUseUnclaimedShifts.mockReturnValue(unclaimedShifts(0, 0))
     mockUseStaff.mockReturnValue({ data: [] })
-    mockUseModuleVisibility.mockReturnValue({ data: { hiddenAccommodation: false, hiddenVehicles: false }, isError: false })
+    mockUseModuleVisibility.mockReturnValue({ data: { hiddenAccommodation: false, hiddenVehicles: false, hiddenTrips: false }, isError: false })
     // A finished organisation: its first week was published long ago, so the setup card is not drawn and no existing assertion moves.
     mockUseSetupStatus.mockReturnValue(settled({ ...FINISHED_ORG }))
     mockUseProviderSettings.mockReturnValue(settled({ organisationName: 'Sunrise Care', address: '1 Main St', state: 'NSW' }))

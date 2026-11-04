@@ -82,4 +82,10 @@ describe('BudgetTrackCard', () => {
     const { container } = render(<BudgetTrackCard participantId="p-1" />)
     expect(container).toBeEmptyDOMElement()
   })
+
+  it('a reply with no scopes renders nothing instead of crashing', () => {
+    useBudgetSeries.mockReturnValue(reply({ data: { chart: null } }))
+    const { container } = render(<BudgetTrackCard participantId="p-1" />)
+    expect(container).toBeEmptyDOMElement()
+  })
 })
