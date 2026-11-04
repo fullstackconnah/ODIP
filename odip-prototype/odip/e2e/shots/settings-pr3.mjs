@@ -16,6 +16,7 @@ prepareOutDir(OUT_DIR)
 const HINTS = {
   hours: 'Warn on the roster when a worker is rostered more than this many hours in a week. 38 unless you change it.',
   minutes: 'Send a finished shift to review when its start or finish is more than this many minutes from the roster. 15 unless you change it.',
+  reach: 'Past this, auto-roster still suggests someone but leaves the shift for you to look at. Anyone not marked No unless you change it.',
   qualifications: 'Warn this many days before a qualification expires. Shown on Qualifications and the dashboard.',
   plans: "Warn this many days before a participant's plan ends. Shown on Participants and the dashboard.",
 }
@@ -41,7 +42,7 @@ const browser = await chromium.launch({ headless: true })
 const open = async ({ section, role = 'Admin', width, height, touch, scheme = 'light', putDelay = 0, putStatus = 200 }) => {
   const context = await browser.newContext({ viewport: { width, height }, hasTouch: !!touch, isMobile: !!touch, locale: 'en-AU', timezoneId: 'Australia/Sydney', colorScheme: scheme, reducedMotion: 'reduce' })
   const page = await context.newPage()
-  const state = { settings: { qualificationWarningDays: 30, weeklyHoursWarning: 38, varianceReviewMinutes: 15, planExpiryWarningDays: 30 }, putDelay, putStatus, bodies: [] }
+  const state = { settings: { qualificationWarningDays: 30, weeklyHoursWarning: 38, varianceReviewMinutes: 15, planExpiryWarningDays: 30, autoRosterReach: 3 }, putDelay, putStatus, bodies: [] }
   await page.route('**/api/v1/auth/dev-users', (r) => r.fulfill({ json: envelope([{ username: 'dev.user', role, tenantName: 'Sample Support Co' }]) }))
   await page.route('**/api/v1/auth/dev-login', (r) => r.fulfill({ json: login(role) }))
   await page.route('**/api/v1/settings', async (r) => {
@@ -85,6 +86,14 @@ try {
     }
     check(vp.touch ? '2 rules: inputs >= 44 tall' : '1 rules: inputs 32 tall', ctx, [hb.height, mb.height], vp.touch ? hb.height >= 44 && mb.height >= 44 : near(hb.height, 32, 0.5) && near(mb.height, 32, 0.5))
     check('1/2 rules: no horizontal overflow', ctx, await t.page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), (await t.page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)))
+    // Compat 1b: the reach select shares the grid, is as tall as its siblings and keeps its hint within the line budget.
+    const reachSel = t.page.getByLabel('Auto-roster places freely')
+    const rb = await reachSel.boundingBox()
+    const reachHint = t.page.getByText(HINTS.reach, { exact: true })
+    const reachLines = await lines(reachHint)
+    check('1b reach select: width equals the minutes input, height matches (32 / >= 44)', ctx, { rb, mb }, near(rb.width, mb.width) && (vp.touch ? rb.height >= 44 : near(rb.height, 32, 0.5)))
+    check('1b reach select: default value 3, four options', ctx, [await reachSel.inputValue(), await reachSel.locator('option').count()], (await reachSel.inputValue()) === '3' && (await reachSel.locator('option').count()) === 4)
+    check(`1b reach hint: exact text, lines <= ${vp.touch ? 4 : 3}`, ctx, { count: await reachHint.count(), lines: reachLines }, (await reachHint.count()) === 1 && reachLines <= (vp.touch ? 4 : 3))
     // 3: hints.
     for (const key of ['hours', 'minutes']) {
       const hint = t.page.getByText(HINTS[key], { exact: true })
@@ -115,7 +124,7 @@ try {
     check('6 button reads Saving… with aria-busy and is disabled', ctx, await save.getAttribute('aria-busy'), (await save.getAttribute('aria-busy')) === 'true' && (await save.isDisabled()))
     await s.foot.getByRole('status').filter({ hasText: /^Saved$/ }).waitFor({ timeout: 10_000 })
     check('6 foot reads Saved', ctx, await s.status(), (await s.status()) === 'Saved')
-    check('5 rules PUT sends exactly weeklyHoursWarning and varianceReviewMinutes', ctx, s.state.bodies[0], JSON.stringify(Object.keys(s.state.bodies[0]).sort()) === JSON.stringify(['varianceReviewMinutes', 'weeklyHoursWarning']) && s.state.bodies[0].varianceReviewMinutes === 20)
+    check('5 rules PUT sends exactly weeklyHoursWarning, varianceReviewMinutes and autoRosterReach', ctx, s.state.bodies[0], JSON.stringify(Object.keys(s.state.bodies[0]).sort()) === JSON.stringify(['autoRosterReach', 'varianceReviewMinutes', 'weeklyHoursWarning']) && s.state.bodies[0].varianceReviewMinutes === 20 && s.state.bodies[0].autoRosterReach === 3)
     s.state.putDelay = 0
     s.state.putStatus = 500
     await rules(s).hours.fill('40')
@@ -173,12 +182,13 @@ try {
         const bg = getComputedStyle(probe).color; probe.remove()
         const inputs = [...document.querySelectorAll('main input[type=number]')]
         const triggers = [...document.querySelectorAll('main button[aria-haspopup]')]
+        const selects = [...document.querySelectorAll('main select')]
         const text = (el) => getComputedStyle(el).color
-        return { bg, inputs: inputs.map((e) => ({ readOnly: e.readOnly, color: text(e) })), triggers: triggers.map((e) => ({ disabled: e.disabled, opacity: getComputedStyle(e).opacity, color: text(e) })) }
+        return { bg, selects: selects.map((e) => ({ disabled: e.disabled, color: text(e) })), inputs: inputs.map((e) => ({ readOnly: e.readOnly, color: text(e) })), triggers: triggers.map((e) => ({ disabled: e.disabled, opacity: getComputedStyle(e).opacity, color: text(e) })) }
       })
-      const locked = section === 'rostering' ? m.inputs.length === 2 && m.inputs.every((i) => i.readOnly === true) : m.triggers.length >= 2 && m.triggers.every((x) => x.disabled === true && x.opacity === '1')
+      const locked = section === 'rostering' ? m.inputs.length === 2 && m.inputs.every((i) => i.readOnly === true) && m.selects.length === 1 && m.selects[0].disabled === true : m.triggers.length >= 2 && m.triggers.every((x) => x.disabled === true && x.opacity === '1')
       check('7 inputs readOnly / dropdown triggers disabled at opacity 1', ctx, m, locked)
-      const colours = [...m.inputs.map((i) => i.color), ...m.triggers.map((x) => x.color)]
+      const colours = [...m.inputs.map((i) => i.color), ...m.selects.map((x) => x.color), ...m.triggers.map((x) => x.color)]
       const worst = Math.min(...colours.map((c) => contrast(nums(c), nums(m.bg))))
       check('7 text contrast against the background >= 4.5', ctx, worst, worst >= 4.5)
       if (section === 'rostering' && scheme === 'light') await crop(r, 'rules-readonly-390-touch-light.png', true)

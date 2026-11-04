@@ -54,6 +54,7 @@ public class SettingsController : ControllerBase
         if (dto.WeeklyHoursWarning is { } hours) s.WeeklyHoursWarning = hours;
         if (dto.VarianceReviewMinutes is { } minutes) s.VarianceReviewMinutes = minutes;
         if (dto.PlanExpiryWarningDays is { } planDays) s.PlanExpiryWarningDays = planDays;
+        if (dto.AutoRosterReach is { } reach) s.AutoRosterReach = reach;
         await _db.SaveChangesAsync(ct);
         return Ok(ApiResponse<AppSettingsDto>.Ok(ToDto(s)));
     }
@@ -64,7 +65,8 @@ public class SettingsController : ControllerBase
         WeeklyHoursWarning = s?.WeeklyHoursWarning ?? (int)RosterConflictService.DefaultWeeklyHoursThreshold,
         VarianceReviewMinutes = s?.VarianceReviewMinutes ?? OrganisationRules.Default.VarianceReviewMinutes,
         PlanExpiryWarningDays = s?.PlanExpiryWarningDays ?? OrganisationRules.Default.PlanExpiryWarningDays,
-        SessionLengthMinutes = s?.SessionLengthMinutes
+        SessionLengthMinutes = s?.SessionLengthMinutes,
+        AutoRosterReach = s?.AutoRosterReach ?? 3
     };
 
     // Its own PUT: the alert windows PUT requires QualificationWarningDays, and "No limit" (null) must be told apart from a field left out.

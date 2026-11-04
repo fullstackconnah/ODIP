@@ -266,6 +266,9 @@ namespace Odip.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<int>("AutoRosterReach")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("HiddenAccommodation")
                         .HasColumnType("boolean");
 

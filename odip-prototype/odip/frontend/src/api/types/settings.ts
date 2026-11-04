@@ -6,6 +6,8 @@ export interface AppSettingsDto {
   varianceReviewMinutes?: number
   /** Days before a participant's plan ends that the alert starts; 30 until an Admin changes it. */
   planExpiryWarningDays?: number
+  /** How far down the compatibility tiers auto-roster places without a look: 0 Preferred, 1 Backup, 2 Emergency, 3 anyone not marked No; 3 until an Admin changes it. */
+  autoRosterReach?: number
   /** Minutes a sign-in lasts before the person must sign in again (Settings > Security); null or absent = no limit, as before. */
   sessionLengthMinutes?: number | null
 }
@@ -37,6 +39,7 @@ export interface UpdateAppSettingsDto {
   weeklyHoursWarning?: number
   varianceReviewMinutes?: number
   planExpiryWarningDays?: number
+  autoRosterReach?: number
 }
 
 export interface ModuleVisibilityDto {
