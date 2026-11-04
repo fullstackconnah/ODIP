@@ -108,3 +108,25 @@ describe('IncidentReviewCard', () => {
     expect(refetch).toHaveBeenCalled()
   })
 })
+
+describe('IncidentReviewCard — the parent controls editing', () => {
+  it('opens and closes from the editing prop, asks the parent when Record review is pressed, and reports changes', async () => {
+    const user = userEvent.setup()
+    const onEditingChange = vi.fn()
+    const onDirtyChange = vi.fn()
+    const { rerender } = render(<IncidentReviewCard incident={incident()} canEdit editing={false} onEditingChange={onEditingChange} onDirtyChange={onDirtyChange} />)
+
+    // The button asks; it is the parent that opens the form.
+    await user.click(screen.getByRole('button', { name: 'Record review' }))
+    expect(onEditingChange).toHaveBeenCalledWith(true)
+    expect(screen.queryByLabelText(/Review notes/)).not.toBeInTheDocument()
+
+    rerender(<IncidentReviewCard incident={incident()} canEdit editing onEditingChange={onEditingChange} onDirtyChange={onDirtyChange} />)
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false)
+    await user.type(screen.getByLabelText(/Review notes/), 'Looked into it.')
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true)
+
+    rerender(<IncidentReviewCard incident={incident()} canEdit editing={false} onEditingChange={onEditingChange} onDirtyChange={onDirtyChange} />)
+    expect(screen.queryByLabelText(/Review notes/)).not.toBeInTheDocument()
+  })
+})
