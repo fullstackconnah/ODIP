@@ -1641,7 +1641,9 @@ public class RosteringController : ControllerBase
         completion.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
         await rowLock.CommitAsync(ct);
-        return Ok(ApiResponse<ShiftCompletionDto>.Ok(await ToShiftCompletionDtoAsync(completion, shift.ReturnCount, ct)));
+        // A shift already on a claim is never billed again (W2 PR3), so a decision after the claim changes pay, not the claim: say which claim holds it.
+        var claimReference = await _db.ClaimLineItems.Where(BudgetLedgerService.ClaimLineStillCounts).Where(l => l.ShiftId == id).Select(l => l.TripClaim.ClaimReference).FirstOrDefaultAsync(ct);
+        return Ok(ApiResponse<ShiftCompletionDto>.Ok((await ToShiftCompletionDtoAsync(completion, shift.ReturnCount, ct)) with { ClaimReference = claimReference }));
     }
 
     /// <summary>

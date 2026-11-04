@@ -1,3 +1,4 @@
+using Odip.Domain.Entities;
 using Odip.Domain.Enums;
 using Odip.Domain.Funding;
 using Odip.Domain.Rostering;
